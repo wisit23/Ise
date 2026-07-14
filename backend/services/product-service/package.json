@@ -1,0 +1,16 @@
+{
+  "name": "@reloop/product-service",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@reloop/shared": "file:../../shared",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}

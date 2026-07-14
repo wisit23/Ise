@@ -1,0 +1,104 @@
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const { signAccessToken, signRefreshToken, verifyRefreshToken, badRequest, conflict } = require('@reloop/shared');
+const prisma = require('../models/prismaClient');
+
+const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches JWT_REFRESH_EXPIRES
+
+function toPublicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    phone: user.phone,
+    role: user.role,
+  };
+}
+
+async function issueTokenPair(user) {
+  // jti guarantees uniqueness even if a user logs in twice within the same second
+  // (same sub+role+iat would otherwise sign to the identical JWT string).
+  const accessToken = signAccessToken({ sub: user.id, role: user.role });
+  const refreshToken = signRefreshToken({ sub: user.id, role: user.role, jti: crypto.randomUUID() });
+
+  await prisma.refreshToken.create({
+    data: {
+      userId: user.id,
+      token: refreshToken,
+      expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+    },
+  });
+
+  return { accessToken, refreshToken };
+}
+
+async function register({ email, password, firstName, lastName, phone }) {
+  if (!email || !password || !firstName || !lastName) {
+    throw badRequest('email, password, firstName, lastName are required');
+  }
+  if (password.length < 8) {
+    throw badRequest('password must be at least 8 characters');
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) throw conflict('email is already registered');
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await prisma.user.create({
+    data: { email, passwordHash, firstName, lastName, phone },
+  });
+
+  const tokens = await issueTokenPair(user);
+  return { user: toPublicUser(user), ...tokens };
+}
+
+async function login({ email, password, ipAddress }) {
+  if (!email || !password) throw badRequest('email and password are required');
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) throw badRequest('invalid email or password');
+
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) throw badRequest('invalid email or password');
+
+  await prisma.loginLog.create({ data: { userId: user.id, ipAddress } });
+
+  const tokens = await issueTokenPair(user);
+  return { user: toPublicUser(user), ...tokens };
+}
+
+async function refresh(refreshToken) {
+  if (!refreshToken) throw badRequest('refreshToken is required');
+
+  let payload;
+  try {
+    payload = verifyRefreshToken(refreshToken);
+  } catch (err) {
+    throw badRequest('invalid or expired refresh token');
+  }
+
+  const stored = await prisma.refreshToken.findUnique({ where: { token: refreshToken } });
+  if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+    throw badRequest('refresh token is no longer valid');
+  }
+
+  const accessToken = signAccessToken({ sub: payload.sub, role: payload.role });
+  return { accessToken };
+}
+
+async function logout(refreshToken) {
+  if (!refreshToken) return;
+  await prisma.refreshToken.updateMany({
+    where: { token: refreshToken, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}
+
+async function getById(userId) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw badRequest('user not found');
+  return toPublicUser(user);
+}
+
+module.exports = { register, login, refresh, logout, getById };

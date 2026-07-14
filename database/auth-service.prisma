@@ -1,0 +1,112 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+enum KycStatus {
+  NONE
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWED
+  ACTIONED
+  DISMISSED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  firstName    String   @map("f_name")
+  lastName     String   @map("l_name")
+  phone        String?
+  role         Role     @default(BUYER)
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  buyerProfile  BuyerProfile?
+  sellerProfile SellerProfile?
+  loginLogs     LoginLog[]
+  refreshTokens RefreshToken[]
+  reports       Report[]
+
+  @@map("users")
+}
+
+// ER: Buyer — style/size/brand preference, filled in during the Phase 2 style quiz.
+model BuyerProfile {
+  userId          String  @id @map("user_id")
+  user            User    @relation(fields: [userId], references: [id])
+  stylePreference String? @map("style_preference")
+  sizePreference  String? @map("size_preference")
+  brandPreference String? @map("brand_preference")
+
+  @@map("buyer_profiles")
+}
+
+// ER: Seller — shop info + KYC fields (KYC upload/verification flow lands in a later phase).
+model SellerProfile {
+  userId         String    @id @map("user_id")
+  user           User      @relation(fields: [userId], references: [id])
+  shopName       String    @map("shop_name")
+  idCardNumber   String?   @map("id_card_number")
+  bankAccount    String?   @map("bank_account")
+  kycStatus      KycStatus @default(NONE) @map("kyc_status")
+  kycDocumentUrl String?   @map("kyc_document_url")
+  verifiedAt     DateTime? @map("verified_at")
+
+  @@map("seller_profiles")
+}
+
+// ER: Login_Log — audit trail of sign-ins (NFR-SP-03).
+model LoginLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  loginAt   DateTime @default(now()) @map("login_at")
+  ipAddress String?  @map("ip_address")
+
+  @@map("login_logs")
+}
+
+// Not in the ER diagram — required to support JWT refresh/revoke (see database/ER-changes.md).
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
+}
+
+// ER: Reports — table created now per plan (no tables cut from ER); report/moderation UI is a later phase.
+model Report {
+  id         String       @id @default(uuid())
+  reporterId String       @map("reporter_id")
+  reporter   User         @relation(fields: [reporterId], references: [id])
+  targetId   String?      @map("target_id")
+  productId  String?      @map("product_id")
+  reason     String
+  status     ReportStatus @default(OPEN)
+  reportedAt DateTime     @default(now()) @map("reported_at")
+
+  @@map("reports")
+}

@@ -1,0 +1,162 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  gateway:
+    build:
+      context: .
+      dockerfile: backend/gateway/Dockerfile
+    env_file: .env
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:3001
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      ORDER_SERVICE_URL: http://order-service:3003
+      CHAT_SERVICE_URL: http://chat-service:3004
+      REVIEW_SERVICE_URL: http://review-service:3005
+    ports:
+      - "${GATEWAY_PORT}:8080"
+    depends_on:
+      - auth-service
+      - product-service
+      - order-service
+      - chat-service
+      - review-service
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: backend/services/auth-service/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_AUTH}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  product-service:
+    build:
+      context: .
+      dockerfile: backend/services/product-service/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_PRODUCT}
+    volumes:
+      - product_uploads:/app/services/product-service/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  order-service:
+    build:
+      context: .
+      dockerfile: backend/services/order-service/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_ORDER}
+      PRODUCT_SERVICE_URL: http://product-service:3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3003/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  chat-service:
+    build:
+      context: .
+      dockerfile: backend/services/chat-service/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_CHAT}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3004/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  review-service:
+    build:
+      context: .
+      dockerfile: backend/services/review-service/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_REVIEW}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3005/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    env_file: .env
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+      - /app/frontend/.next
+    ports:
+      - "${FRONTEND_PORT}:3000"
+    depends_on:
+      - gateway
+
+volumes:
+  pgdata:
+  product_uploads:

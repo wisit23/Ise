@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* MVP has no dark theme yet - pin a light background so text stays readable
+   regardless of the visitor's OS/browser color-scheme preference. */
+body {
+  @apply bg-white text-gray-900;
+}

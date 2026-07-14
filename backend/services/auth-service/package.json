@@ -1,0 +1,19 @@
+{
+  "name": "@reloop/auth-service",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.18.0",
+    "@reloop/shared": "file:../../shared",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "prisma": "^5.18.0"
+  }
+}

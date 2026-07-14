@@ -1,0 +1,16 @@
+{
+  "name": "reloop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "RE-LOOP - second-hand fashion marketplace (microservices monorepo)",
+  "workspaces": [
+    "backend/shared",
+    "backend/gateway",
+    "backend/services/*",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "docker compose up --build",
+    "down": "docker compose down"
+  }
+}
