@@ -5,6 +5,11 @@ the browser. **Scoped down from the master plan on user's request**: KYC upload/
 seller-profile creation, and the report-submission endpoint are deferred — their DB tables
 exist (see `database/ER-changes.md`) but have no routes yet.
 
+**Update:** added [`database/schema.md`](../database/schema.md) — a full data-dictionary of
+every table that currently exists (all 6 in `reloop_auth`: columns, types, constraints, an ER
+mermaid diagram), separate from `ER-changes.md` which explains *why* each table looks the way
+it does versus the original diagram. Will grow a new section per service as their schemas land.
+
 ## What was built
 - `reloop_auth` Prisma schema: `User`, `BuyerProfile`, `SellerProfile`, `LoginLog`,
   `RefreshToken`, `Report` (see `database/auth-service.prisma` +

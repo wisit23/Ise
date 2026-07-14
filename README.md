@@ -2,7 +2,8 @@
 
 Second-hand fashion marketplace — a microservices monorepo.
 
-Full plan: [`plan/00-master-plan.md`](./plan/00-master-plan.md) · Schema decisions:
+Full plan: [`plan/00-master-plan.md`](./plan/00-master-plan.md) · Current DB tables:
+[`database/schema.md`](./database/schema.md) · Schema decisions:
 [`database/ER-changes.md`](./database/ER-changes.md) · Work log: [`log/`](./log/)
 
 ## Tech stack
