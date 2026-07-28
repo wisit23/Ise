@@ -131,6 +131,26 @@ Root Cause: `docker-compose.yml` ใช้ `env_file: .env` ทุก Service �
 
 **บทเรียนสำคัญ (ยืนยันซ้ำสองครั้ง):** การจำลอง CI ด้วยมือ (Local Simulation) แม้จะรันคำสั่งเดียวกันทุกคำสั่งก็ยังไม่เท่ากับ CI Run จริง 100% เพราะเครื่อง Local ของผู้พัฒนามักมีไฟล์/สถานะที่ CI ไม่มี (เช่น `.env`) — ต้องดู CI Run จริงอย่างน้อยหนึ่งครั้งที่ **ผ่านทุก Step จริง** ก่อนถือว่า Pipeline นี้ "ใช้งานได้จริง" ยังไม่ถือว่าจบจนกว่าจะเห็น CI Run ล่าสุดเขียวทั้งหมด
 
+### การตรวจโดย AI Reviewer อิสระ (รอบที่ 1)
+
+Reviewer (Opus 5, คนเดียวกับที่ตรวจ `FOUND-001`) ตรวจ `FOUND-002` แบบไม่เชื่อคำอธิบายของผู้ทำ — สร้าง Postgres แยกเอง, รัน Test ซ้ำ, เขียน Test ที่ตั้งใจให้ Fail เอง, และตรวจ CI History ผ่าน GitHub API เอง (ไม่ใช้ `gh` CLI เพราะไม่มีในเครื่อง) ยืนยันว่าเรื่องราว CI Fail 2 ครั้งด้านบนตรงกับความจริงทุกจุด
+
+**คำตัดสิน: Partially verified, CHANGES REQUESTED** พบ 9 ประเด็น (S1–S9) 3 ข้อสำคัญที่ต้องแก้ก่อนอนุมัติ:
+
+- **S1 (สำคัญ):** Regex ของ Generic Pattern (`\b(?:SECRET|TOKEN|...)`) ต้องการให้ Keyword ขึ้นต้นชื่อตัวแปรเท่านั้น แต่ Env Var จริงของโปรเจกต์นี้ (`JWT_ACCESS_SECRET`, `POSTGRES_PASSWORD`, `INTERNAL_SERVICE_TOKEN`) มี Keyword อยู่ท้ายชื่อ — ถ้ามีคนเผลอใส่รหัสผ่านจริงแทน Placeholder ใน `.env.example` แล้ว Commit, Scanner จะไม่จับ **แก้แล้ว:** เปลี่ยน Regex ให้ Keyword อยู่ตรงไหนของชื่อตัวแปรก็ได้ เพิ่ม `"ci-test"` เป็น Placeholder Marker (กัน False Positive กับ Secret ปลอมใน CI เอง) และเพิ่ม Test 2 ข้อยืนยัน (`JWT_ACCESS_SECRET=...`, `POSTGRES_PASSWORD=...`) — Reviewer จำลอง Regex ใหม่กับทุกไฟล์ใน Repo ก่อนแนะนำ ยืนยันว่าไม่เกิด False Positive ใหม่
+- **S3 (สำคัญ):** Acceptance Criteria ของ Task ระบุตรงๆ ว่า CI ต้องรัน "install, lint/static, tests, **build**, scans" แต่ `.github/workflows/ci.yml` ไม่มี Build Step เลย (`docker compose config --quiet` แค่ตรวจ YAML ไม่ได้ Compile อะไร) **แก้แล้ว:** เพิ่ม Step `npm --workspace frontend run build` ต่อจาก Frontend Test
+- **S4 (ปานกลาง):** Evidence ที่ Task ต้องการระบุ "Coverage Artifact" แต่ CI ไม่เคยอัปโหลดอะไรเลย (`coverage/` อยู่ใน `.gitignore` ด้วย) **แก้แล้ว:** เพิ่ม `actions/upload-artifact@v4` เก็บ `coverage/` และ `frontend/coverage/`; เปลี่ยน Backend Test ให้เขียน `coverage/lcov.info` จริงด้วย `--test-reporter=lcov` (ไม่ใช่แค่พิมพ์ตาราง Console) — ระหว่างทำเจอ Bug คนละเรื่อง: `mkdir -p coverage` ใน `package.json` Script รันไม่ผ่านตอนเรียกผ่าน `npm test` บนเครื่องนี้ (Windows เรียก Script ผ่าน `cmd.exe` ซึ่งไม่รู้จัก `-p`) แก้เป็น `pretest` Hook ที่ใช้ `node -e "fs.mkdirSync(...)"` แทน เพื่อไม่ผูกกับ Shell ใดๆ
+
+ประเด็นที่ตอบตรงๆ ตามที่ผู้ทำถามเอง:
+
+- **S2:** การยกเว้น `*.test.js` จาก Generic Pattern เป็นช่องโหว่จริง (Secret จริงที่แปะในไฟล์ Test จะไม่ถูกจับ) แต่ Reviewer เห็นว่าเป็นช่องโหว่ที่เล็กกว่า S1 และการแก้แบบถูกต้อง (Inline Allowlist Comment ต่อบรรทัด แบบ `gitleaks`) เป็นงานที่ควรทำทีหลังเมื่อมีไฟล์ Test มากขึ้น ไม่ Block — บันทึกเป็น Debt
+- **S6:** การไม่ตั้ง Coverage Threshold เป็นการตัดสินใจที่ถูกต้อง ไม่ใช่ข้ออ้าง เพราะ Threshold ที่ตรงกับตัวเลขวันนี้ (Backend ~63%, Frontend ~44%, บาง File ต่ำถึง 16-20%) จะ "ดูเหมือนมาตรฐานคุณภาพ" ทั้งที่ไม่ได้ป้องกันอะไรจริง — ตรงกับคำว่า "non-deceptive" ใน Task Card เป๊ะ Reviewer แนะนำ (ไม่บังคับ) ให้ทำ Ratchet Floor ต่ำกว่าปัจจุบันเล็กน้อยเพื่อกัน Coverage ไหลลงเงียบๆ — ยังไม่ทำ บันทึกเป็นแนวทางในอนาคต
+- **S7:** การแก้ ESLint Config (False Positive ของ `FOUND-001`) ไม่ใช่ Scope Creep เพราะ Scope ของ `FOUND-002` เองระบุ "lint/static ... scans, PR gate" ตรงๆ — Gate ที่ยังแดงอยู่บังคับเป็น Required Check ไม่ได้ นี่คือ Reviewer แก้ไขคำตัดสินของตัวเองจากรอบตรวจ `FOUND-001` (ตอนนั้นเชื่อคำอธิบายของผู้ทำโดยไม่ได้ทดสอบว่า Tool พูดถูกไหม) เป็นตัวอย่างว่า Reviewer เองก็ต้องพร้อมแก้คำตัดสินเมื่อเจอหลักฐานใหม่
+
+ประเด็นที่ไม่ Block แต่บันทึกเป็น Technical Debt (ดูหัวข้อด้านล่าง): **S8** (Branch Protection เปิดใช้จริงหรือยังตรวจไม่ได้ ต้องใช้สิทธิ์ Admin), **S9** (`--experimental-test-coverage` ยังเป็น Experimental Flag ของ Node.js)
+
+**แก้ไขหลัง Review รอบ 1:** ทำครบ S1, S3, S4 (Blocking) และ S5 (ทำเพิ่มเพราะราคาถูกและตรงกับ DoD "no false tested claim" ตรงๆ) ยืนยัน Local ด้วย Postgres จริงอีกครั้ง (สร้าง-ทดสอบ Register/Login/REQUIRE_INTEGRATION แล้ว Container ลบทิ้ง) ก่อน Commit
+
 ### ไฟล์หลักที่เป็นหลักฐาน
 
 - `backend/shared/src/jwt.test.js`

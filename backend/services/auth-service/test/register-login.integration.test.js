@@ -5,7 +5,9 @@
 //
 // If DATABASE_URL is not set or the database is unreachable, every test in
 // this file skips cleanly instead of failing, so `npm test` still passes on
-// a machine with no database configured.
+// a machine with no database configured. Set REQUIRE_INTEGRATION=1 (the CI
+// workflow does) to turn that skip into a hard failure instead — a broken
+// database in CI must show up as red, not as a quietly skipped test.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
@@ -30,10 +32,13 @@ async function databaseIsReachable() {
 
 test("register then login against a real database", async (t) => {
   if (!(await databaseIsReachable())) {
-    t.skip(
+    const message =
       "DATABASE_URL not set or database unreachable — set it to a disposable test database " +
-        "(after running `npx prisma db push` against it from backend/services/auth-service) to run this test",
-    );
+      "(after running `npx prisma db push` against it from backend/services/auth-service) to run this test";
+    if (process.env.REQUIRE_INTEGRATION === "1") {
+      throw new Error(`REQUIRE_INTEGRATION=1 but ${message}`);
+    }
+    t.skip(message);
     return;
   }
 

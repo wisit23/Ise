@@ -41,3 +41,13 @@ test("still flags a real-looking secret even if the line also contains the word 
   );
   assert.ok(findings.some((f) => f.pattern.includes("assignment")));
 });
+
+test("flags a real-looking secret even when the keyword is a suffix, matching this repo's own env var names", () => {
+  const findings = findSecrets("JWT_ACCESS_SECRET=RealProdSecretValue123456\n");
+  assert.ok(findings.some((f) => f.pattern.includes("assignment")));
+});
+
+test("flags POSTGRES_PASSWORD the same way it flags PASSWORD", () => {
+  const findings = findSecrets("POSTGRES_PASSWORD=RealProdPw123456\n");
+  assert.ok(findings.some((f) => f.pattern.includes("assignment")));
+});

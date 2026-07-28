@@ -28,6 +28,11 @@ jobs:
       DATABASE_URL: postgresql://reloop:reloop_test@localhost:5432/reloop_auth_test
       JWT_ACCESS_SECRET: ci-test-access-secret
       JWT_REFRESH_SECRET: ci-test-refresh-secret
+      # Turns the integration test's "skip if no database" fallback (meant for
+      # a laptop with no Postgres running) into a hard failure in CI, so a
+      # broken service container reports a red build instead of a quietly
+      # skipped test and a false "tests passed".
+      REQUIRE_INTEGRATION: "1"
 
     steps:
       - name: Checkout
@@ -66,6 +71,20 @@ jobs:
 
       - name: Frontend component tests (with coverage)
         run: npm run test:frontend
+
+      - name: Frontend production build
+        run: npm --workspace frontend run build
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage/
+            frontend/coverage/
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Create local .env for Compose (dev placeholders only, see .env.example)
         run: cp .env.example .env

@@ -22,15 +22,18 @@ const PLACEHOLDER_MARKERS = [
   "your_",
   "your-",
   "dev_",
+  "ci-test",
   "xxxx",
   "<",
   "{{",
 ];
 
 // Matches both quoted string literals ("token: 'value'") and unquoted
-// .env-style assignments (TOKEN=value).
+// .env-style assignments (TOKEN=value). The keyword may appear anywhere in
+// the identifier, not just at the start — this repo's own env vars are named
+// like JWT_ACCESS_SECRET and POSTGRES_PASSWORD, with the keyword last.
 const GENERIC_ASSIGNMENT_PATTERN =
-  /\b(?:SECRET|TOKEN|PASSWORD|API_KEY)\w*\s*[:=]\s*(['"]?)([A-Za-z0-9+/=_-]{12,})\1/gi;
+  /\b[A-Za-z0-9_]*(?:SECRET|TOKEN|PASSWORD|API_KEY)\w*\s*[:=]\s*(['"]?)([A-Za-z0-9+/=_-]{12,})\1/gi;
 
 function isPlaceholder(value) {
   const lower = value.toLowerCase();
