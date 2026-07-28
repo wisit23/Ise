@@ -71,9 +71,9 @@
 
 > วันที่ทำ: 2026-07-28
 >
-> สถานะตามหลักฐาน: ลงมือทำ, จำลอง CI Pipeline ด้วยมือครบ, และ **ยืนยันด้วย CI Run จริงบน GitHub Actions ที่ผ่านทุก Step แล้ว** (หลัง Fail ไป 2 ครั้งจาก Bug ที่ Local Simulation จับไม่ได้ — ดูรายละเอียดด้านล่าง) รอ AI Reviewer ตรวจอิสระ (ตามรอบของ `FOUND-001`) ก่อนถือว่าเสร็จ
+> สถานะตามหลักฐาน: ลงมือทำ, จำลอง CI Pipeline ด้วยมือครบ, ยืนยันด้วย CI Run จริงบน GitHub Actions, ตรวจโดย AI Reviewer อิสระ 2 รอบ (รอบ 1 พบ 9 ประเด็น, รอบ 2 ยืนยันว่าแก้ครบตามที่ต้อง) — **ผลตรวจล่าสุด: APPROVED, สถานะหลักฐาน `Partially verified`**
 >
-> หมายเหตุ: สถานะนี้ไม่ใช่การยืนยันว่า Acceptance Criteria ผ่านครบทุกข้อ — ยังไม่มี Coverage Threshold (ตั้งใจ ดูเหตุผลด้านล่าง) และ Test ที่เขียนไว้เป็นเพียง "หนึ่งชุดต่อชั้น" ตาม Scope ไม่ใช่ Test ครอบคลุมทุกกรณี (นั่นคืองานของ `TEST-001`/`TEST-002`)
+> หมายเหตุ: `Partially verified` ไม่ใช่ `Verified` เพราะยังมี 4 ข้อที่เปิดไว้โดยตั้งใจ (ดูหัวข้อ Review รอบ 2): ยังไม่ยืนยันว่า Branch Protection เปิดใช้บังคับจริงบน `main` (ต้องมีสิทธิ์ Admin, Reviewer แนะนำว่าเป็นขั้นตอนสำคัญที่สุดที่เหลือ), ยังไม่มี Coverage Threshold บังคับ (ตัดสินใจไว้ตรงๆ ไม่ใช่ลืม), Secret Scanner ยังมีจุดบอดกับไฟล์ `.test.js`, และ `--experimental-test-coverage` ยังเป็น Flag ทดลองของ Node.js — Test ที่เขียนไว้ก็เป็นเพียง "หนึ่งชุดต่อชั้น" ตาม Scope ไม่ใช่ Test ครอบคลุมทุกกรณี (นั่นคืองานของ `TEST-001`/`TEST-002`)
 
 ### งานที่ทำ
 
@@ -152,6 +152,14 @@ Reviewer (Opus 5, คนเดียวกับที่ตรวจ `FOUND-001
 **แก้ไขหลัง Review รอบ 1:** ทำครบ S1, S3, S4 (Blocking) และ S5 (ทำเพิ่มเพราะราคาถูกและตรงกับ DoD "no false tested claim" ตรงๆ) ยืนยัน Local ด้วย Postgres จริงอีกครั้ง (สร้าง-ทดสอบ Register/Login/REQUIRE_INTEGRATION แล้ว Container ลบทิ้ง) ก่อน Commit
 
 **ยืนยันด้วย CI Run จริงหลังแก้ (Commit `9e22670`, `id 30372362430`):** ผ่านทุก Step รวม Step ใหม่ทั้งสอง — "Frontend production build" และ "Upload coverage reports" ตรวจ Artifact ผ่าน API ตรงๆ (`https://api.github.com/repos/wisit23/Ise/actions/runs/30372362430/artifacts`) พบไฟล์ `coverage-reports` ขนาด 30,698 Bytes จริง ไม่ใช่แค่ Step ไม่ Error
+
+### การตรวจโดย AI Reviewer อิสระ (รอบที่ 2 — Spot-check หลังแก้)
+
+Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนที่แก้ (ไม่ตรวจใหม่ทั้งหมด) โดยรัน Probe เดิม 10 ชุดซ้ำกับ Regex ใหม่ (ผ่านครบ รวมกรณีสำคัญที่สุดคือ "แทนค่าจริงใน `.env.example`" ซึ่งตอนนี้จับได้แล้ว), ตรวจ CI Run จริงผ่าน API เอง, ดาวน์โหลดและตรวจ Artifact จริง, และรัน `REQUIRE_INTEGRATION=1` ทั้งกรณีมี/ไม่มี Database เพื่อยืนยันพฤติกรรมทั้งสองด้าน
+
+**คำตัดสินสุดท้าย: APPROVED, สถานะหลักฐาน `Partially verified`** — S1, S3, S4, S5 ยืนยันแล้วว่า `Verified` ทั้งหมด (S5 มีผลพลอยได้คือพิสูจน์ย้อนหลังว่า Integration Test เคยรันจริงใน CI Run รอบก่อนๆ ด้วย ไม่ใช่แค่อนุมาน) เหตุผลที่ยังไม่ใช่ `Verified` เต็มคือ 4 ข้อที่เปิดไว้โดยตั้งใจ: S2 (จุดบอด `.test.js`), S6 (ไม่มี Coverage Threshold), **S8 (ยังไม่ยืนยันว่า Branch Protection บังคับ Gate นี้จริงบน `main` — Reviewer ระบุว่าเป็นขั้นตอนที่มีค่าที่สุดที่เหลืออยู่ ต้องทำโดยมนุษย์ที่มีสิทธิ์ Admin ของ Repository)**, S9 (Flag ทดลอง) — คำพูด Reviewer ตรงๆ: "everything is built and working, but at the moment passing it is still voluntary"
+
+**ขั้นตอนถัดไปสำหรับมนุษย์ (AI ทำแทนไม่ได้):** เปิด Branch Protection Rule บน `main` ใน GitHub Repository Settings ให้ Required Status Check คือ Job `quality-gate` จาก `.github/workflows/ci.yml`
 
 ### ไฟล์หลักที่เป็นหลักฐาน
 
