@@ -194,12 +194,12 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ | ผลที่เกิดขึ้นจริง |
-| --- | --- |
-| `npm run lint` | Exit 0 |
-| `npm run format:check` (หลัง `prettier --write` ไฟล์ที่แก้/เพิ่ม) | ไฟล์ที่แก้ไขในงานนี้ผ่านสะอาด (ไฟล์เดิมทั้ง Repo ที่ไม่ได้แตะยัง Flag เพราะ `core.autocrlf=true` บนเครื่องนี้ทำให้ Checkout เป็น CRLF — ปัญหา Pre-existing ของ Environment ไม่เกี่ยวกับงานนี้ ไม่ได้แก้เพราะนอก Scope) |
-| `npm test` (Backend, หลัง `prisma generate`) | 24/24 ผ่าน รวม Test ใหม่ 8 ข้อของ `product-service`/`order-service` |
-| `npm run test:frontend` | 2/2 ผ่าน (ของเดิม ไม่กระทบจาก `NavBar.js`/`page.js` ที่แก้) |
+| การตรวจ                                                                                                                                                                                          | ผลที่เกิดขึ้นจริง                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                                                                                                                                                                                   | Exit 0                                                                                                                                                                                                                                                                                                      |
+| `npm run format:check` (หลัง `prettier --write` ไฟล์ที่แก้/เพิ่ม)                                                                                                                                | ไฟล์ที่แก้ไขในงานนี้ผ่านสะอาด (ไฟล์เดิมทั้ง Repo ที่ไม่ได้แตะยัง Flag เพราะ `core.autocrlf=true` บนเครื่องนี้ทำให้ Checkout เป็น CRLF — ปัญหา Pre-existing ของ Environment ไม่เกี่ยวกับงานนี้ ไม่ได้แก้เพราะนอก Scope)                                                                                      |
+| `npm test` (Backend, หลัง `prisma generate`)                                                                                                                                                     | 24/24 ผ่าน รวม Test ใหม่ 8 ข้อของ `product-service`/`order-service`                                                                                                                                                                                                                                         |
+| `npm run test:frontend`                                                                                                                                                                          | 2/2 ผ่าน (ของเดิม ไม่กระทบจาก `NavBar.js`/`page.js` ที่แก้)                                                                                                                                                                                                                                                 |
 | Manual Smoke Test จริงผ่าน Browser (ไม่ใช้ Docker เพราะ Docker Desktop ไม่ได้เปิดอยู่บนเครื่องนี้ตอนทดสอบ — รัน `product-service`/`order-service`/`gateway`/`next dev` ตรงด้วย `node`/`npx` แทน) | `GET /api/products/feed` ผ่าน Gateway คืนสินค้า Mock ที่ `status=available` เท่านั้น (4 จาก 5 ชิ้น, ตัดชิ้นที่ `sold` ออกถูกต้อง); หน้า `/products` และ `/products/p1` Render ข้อมูลจริงจาก API; กดปุ่ม "ซื้อสินค้านี้" ตอนยังไม่ Login ยืนยันด้วย `window.location.pathname` ว่า Redirect ไป `/login` จริง |
 
 ### ผลลัพธ์ปัจจุบัน
@@ -244,20 +244,20 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ | ผลที่เกิดขึ้นจริง |
-| --- | --- |
-| `npm run lint` | Exit 0 |
-| `npm run format:check` (เฉพาะไฟล์ที่แก้ในงานนี้) | สะอาด |
-| `npm test` (Backend) | 29 Test, ผ่าน 28 (Integration Test 1 ข้อ Skip เพราะไม่ได้ตั้ง `REQUIRE_INTEGRATION`), Fail 0 — รวม Test ใหม่ 4 ข้อของงานนี้ |
-| `npm run test:frontend` | 2/2 ผ่าน (ของเดิม ไม่กระทบ) |
-| `docker compose up -d --build` | ทุก Container ขึ้นและ Healthy (Postgres จริง, Redis, ทั้ง 7 Service, Frontend) |
-| E2E จริงผ่าน Browser: สมัครบัญชีผู้ขาย (`seller1@example.com`, `role=SELLER`, `shopName` มีจริง) | สมัครสำเร็จ, `localStorage` มี `role: "SELLER"` จริงจาก Response ของ Backend |
-| ลงขายสินค้าใหม่ (`p6`) ด้วยบัญชีผู้ขาย | POST `/api/products` คืน 201 พร้อม `sellerId` ตรงกับผู้ขาย |
-| สมัครบัญชีผู้ซื้อ (`buyer1@example.com`) แล้วกด "เพิ่มลงตะกร้า" สินค้า `p6` | สินค้าเปลี่ยนสถานะเป็น "อยู่ในตะกร้าคนอื่น (ล็อกแล้ว)" ทันที — ยืนยัน Lock ทำงานจริง |
-| หน้า `/cart` แสดงสินค้าที่ล็อกพร้อมยอดรวม แล้วกด "ชำระเงิน" | Order เปลี่ยนเป็น `completed`, ตะกร้าว่างทันที, หน้า `/orders` แสดง "ชำระเงินสำเร็จ" |
-| สลับกลับไป Login ด้วยบัญชีผู้ขาย แล้วเปิด `/seller/dashboard` | เห็นยอดขายจริง ฿259, สินค้าสถานะ "ขายแล้ว", คำสั่งขายสถานะ "ขายสำเร็จ" — ตรงกับที่ฝั่งผู้ซื้อชำระเงินไป |
+| การตรวจ                                                                                                  | ผลที่เกิดขึ้นจริง                                                                                                             |
+| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                                                                                           | Exit 0                                                                                                                        |
+| `npm run format:check` (เฉพาะไฟล์ที่แก้ในงานนี้)                                                         | สะอาด                                                                                                                         |
+| `npm test` (Backend)                                                                                     | 29 Test, ผ่าน 28 (Integration Test 1 ข้อ Skip เพราะไม่ได้ตั้ง `REQUIRE_INTEGRATION`), Fail 0 — รวม Test ใหม่ 4 ข้อของงานนี้   |
+| `npm run test:frontend`                                                                                  | 2/2 ผ่าน (ของเดิม ไม่กระทบ)                                                                                                   |
+| `docker compose up -d --build`                                                                           | ทุก Container ขึ้นและ Healthy (Postgres จริง, Redis, ทั้ง 7 Service, Frontend)                                                |
+| E2E จริงผ่าน Browser: สมัครบัญชีผู้ขาย (`seller1@example.com`, `role=SELLER`, `shopName` มีจริง)         | สมัครสำเร็จ, `localStorage` มี `role: "SELLER"` จริงจาก Response ของ Backend                                                  |
+| ลงขายสินค้าใหม่ (`p6`) ด้วยบัญชีผู้ขาย                                                                   | POST `/api/products` คืน 201 พร้อม `sellerId` ตรงกับผู้ขาย                                                                    |
+| สมัครบัญชีผู้ซื้อ (`buyer1@example.com`) แล้วกด "เพิ่มลงตะกร้า" สินค้า `p6`                              | สินค้าเปลี่ยนสถานะเป็น "อยู่ในตะกร้าคนอื่น (ล็อกแล้ว)" ทันที — ยืนยัน Lock ทำงานจริง                                          |
+| หน้า `/cart` แสดงสินค้าที่ล็อกพร้อมยอดรวม แล้วกด "ชำระเงิน"                                              | Order เปลี่ยนเป็น `completed`, ตะกร้าว่างทันที, หน้า `/orders` แสดง "ชำระเงินสำเร็จ"                                          |
+| สลับกลับไป Login ด้วยบัญชีผู้ขาย แล้วเปิด `/seller/dashboard`                                            | เห็นยอดขายจริง ฿259, สินค้าสถานะ "ขายแล้ว", คำสั่งขายสถานะ "ขายสำเร็จ" — ตรงกับที่ฝั่งผู้ซื้อชำระเงินไป                       |
 | ทดสอบ Backend Role Gate ตรงๆ ด้วย `fetch` จาก Browser (บัญชีผู้ซื้อยิง `POST /api/products` เอง ข้าม UI) | คืน `403 {"error":"only seller accounts can list products for sale"}` — ยืนยันว่า Gate อยู่ที่ Backend จริง ไม่ใช่แค่ซ่อนปุ่ม |
-| ทดสอบบัญชีผู้ซื้อเปิด `/sell` ตรงๆ | เห็นข้อความปฏิเสธพร้อมลิงก์สมัครผู้ขาย ไม่เห็นฟอร์ม |
+| ทดสอบบัญชีผู้ซื้อเปิด `/sell` ตรงๆ                                                                       | เห็นข้อความปฏิเสธพร้อมลิงก์สมัครผู้ขาย ไม่เห็นฟอร์ม                                                                           |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -315,19 +315,19 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ | ผลที่เกิดขึ้นจริง |
-| --- | --- |
-| `npm run lint` | Exit 0 |
-| `npm run format:check` (เฉพาะไฟล์ที่แก้ในงานนี้) | สะอาด |
-| `npm test` (Backend) | 26 Test: ผ่าน 24, Skip 2 (Integration Test Skip เพราะรอบนี้รันจาก Root ไม่ได้ตั้ง `DATABASE_URL`), Fail 0 |
-| `DATABASE_URL=...reloop_product REQUIRE_INTEGRATION=1 node --test .../product-crud.integration.test.js` | **ผ่านจริงกับ Database จริง** (สร้าง/อ่าน/ค้นหา/ลบ Fixture ของตัวเองสำเร็จ) |
-| `npm run test:frontend` | 2/2 ผ่าน |
-| `npx prisma db push` กับ `reloop_product`/`reloop_order` ผ่าน `localhost:5432` | Schema Sync สำเร็จทั้งสอง Database |
-| `docker compose up -d --build` (Rebuild ทุก Service รวม Prisma Client ใหม่) | ทุก Container Healthy รวม `product-service`/`order-service` ที่เพิ่ง Build ใหม่ |
-| `curl http://localhost:8080/api/products/feed` หลัง Rebuild | คืนสินค้าที่ Seed ไว้ก่อนหน้า (`p1`-`p4`, `status=available`) — **ยืนยันข้อมูลรอดจาก Container Restart จริง** ไม่ใช่แค่คาดเดา |
-| E2E จริงผ่าน Browser (รอบใหม่หลังเปลี่ยน Backing Store): สมัครผู้ขาย (`seller2@example.com`) → ลงขายสินค้าใหม่ (ได้ UUID จริงจาก Postgres ไม่ใช่ `p6` แบบ In-memory เดิม) → สมัครผู้ซื้อ (`buyer2@example.com`) → กด "ซื้อเลย" ที่หน้าสินค้า | Redirect ไป `/cart` ทันที, Cart Badge ที่ Header ขึ้น "1", Checkbox เลือกไว้ล่วงหน้า, แถบสรุปยอด Sticky แสดง ฿450 ถูกต้อง |
-| กด "ชำระเงิน (1)" ที่ตะกร้า | ชำระสำเร็จ, ตะกร้าว่างทันที, Cart Badge หายไป, หน้า `/orders` Tab "สำเร็จ" แสดงรายการถูกต้อง |
-| สลับ Login เป็นบัญชีผู้ขาย เปิด `/seller/dashboard` | ยอดขายสำเร็จ ฿450 ตรงกับที่ผู้ซื้อจ่ายจริง, สินค้าสถานะ "ขายแล้ว" — ข้อมูลทั้งหมดมาจาก Postgres จริงผ่าน Prisma ไม่ใช่ Mock |
+| การตรวจ                                                                                                                                                                                                                                      | ผลที่เกิดขึ้นจริง                                                                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                                                                                                                                                                                                                               | Exit 0                                                                                                                        |
+| `npm run format:check` (เฉพาะไฟล์ที่แก้ในงานนี้)                                                                                                                                                                                             | สะอาด                                                                                                                         |
+| `npm test` (Backend)                                                                                                                                                                                                                         | 26 Test: ผ่าน 24, Skip 2 (Integration Test Skip เพราะรอบนี้รันจาก Root ไม่ได้ตั้ง `DATABASE_URL`), Fail 0                     |
+| `DATABASE_URL=...reloop_product REQUIRE_INTEGRATION=1 node --test .../product-crud.integration.test.js`                                                                                                                                      | **ผ่านจริงกับ Database จริง** (สร้าง/อ่าน/ค้นหา/ลบ Fixture ของตัวเองสำเร็จ)                                                   |
+| `npm run test:frontend`                                                                                                                                                                                                                      | 2/2 ผ่าน                                                                                                                      |
+| `npx prisma db push` กับ `reloop_product`/`reloop_order` ผ่าน `localhost:5432`                                                                                                                                                               | Schema Sync สำเร็จทั้งสอง Database                                                                                            |
+| `docker compose up -d --build` (Rebuild ทุก Service รวม Prisma Client ใหม่)                                                                                                                                                                  | ทุก Container Healthy รวม `product-service`/`order-service` ที่เพิ่ง Build ใหม่                                               |
+| `curl http://localhost:8080/api/products/feed` หลัง Rebuild                                                                                                                                                                                  | คืนสินค้าที่ Seed ไว้ก่อนหน้า (`p1`-`p4`, `status=available`) — **ยืนยันข้อมูลรอดจาก Container Restart จริง** ไม่ใช่แค่คาดเดา |
+| E2E จริงผ่าน Browser (รอบใหม่หลังเปลี่ยน Backing Store): สมัครผู้ขาย (`seller2@example.com`) → ลงขายสินค้าใหม่ (ได้ UUID จริงจาก Postgres ไม่ใช่ `p6` แบบ In-memory เดิม) → สมัครผู้ซื้อ (`buyer2@example.com`) → กด "ซื้อเลย" ที่หน้าสินค้า | Redirect ไป `/cart` ทันที, Cart Badge ที่ Header ขึ้น "1", Checkbox เลือกไว้ล่วงหน้า, แถบสรุปยอด Sticky แสดง ฿450 ถูกต้อง     |
+| กด "ชำระเงิน (1)" ที่ตะกร้า                                                                                                                                                                                                                  | ชำระสำเร็จ, ตะกร้าว่างทันที, Cart Badge หายไป, หน้า `/orders` Tab "สำเร็จ" แสดงรายการถูกต้อง                                  |
+| สลับ Login เป็นบัญชีผู้ขาย เปิด `/seller/dashboard`                                                                                                                                                                                          | ยอดขายสำเร็จ ฿450 ตรงกับที่ผู้ซื้อจ่ายจริง, สินค้าสถานะ "ขายแล้ว" — ข้อมูลทั้งหมดมาจาก Postgres จริงผ่าน Prisma ไม่ใช่ Mock   |
 
 ### ผลลัพธ์ปัจจุบัน
 
