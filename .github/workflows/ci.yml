@@ -67,5 +67,8 @@ jobs:
       - name: Frontend component tests (with coverage)
         run: npm run test:frontend
 
+      - name: Create local .env for Compose (dev placeholders only, see .env.example)
+        run: cp .env.example .env
+
       - name: Verify Docker Compose config
         run: docker compose config --quiet
