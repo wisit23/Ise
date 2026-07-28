@@ -47,13 +47,25 @@ function looksLikeBareIdentifier(quote, value) {
   );
 }
 
+// Test files legitimately construct credential-shaped string literals to
+// exercise register/login/auth flows (e.g. a hardcoded test password). The
+// low-confidence generic heuristic is skipped there; the high-confidence
+// patterns (real key/token formats) still apply everywhere, since a real
+// private key or cloud credential has no legitimate reason to appear in a
+// test file either.
+function isTestFile(filename) {
+  return /\.test\.js$/.test(filename) || /(^|\/)tests?\//.test(filename);
+}
+
 /**
- * Scans file content for likely secrets. Returns an array of
- * { line, pattern, excerpt } findings — empty if none found.
+ * Scans file content for likely secrets. `filename` is optional context used
+ * only to relax the generic low-confidence heuristic for test files. Returns
+ * an array of { line, pattern, excerpt } findings — empty if none found.
  */
-function findSecrets(content) {
+function findSecrets(content, filename = "") {
   const findings = [];
   const lines = content.split("\n");
+  const skipGenericHeuristic = isTestFile(filename);
 
   lines.forEach((line, index) => {
     for (const { name, regex } of HIGH_CONFIDENCE_PATTERNS) {
@@ -65,6 +77,8 @@ function findSecrets(content) {
         });
       }
     }
+
+    if (skipGenericHeuristic) return;
 
     let match;
     GENERIC_ASSIGNMENT_PATTERN.lastIndex = 0;
@@ -91,12 +105,17 @@ if (require.main === module) {
   const path = require("path");
 
   const repoRoot = path.resolve(__dirname, "..");
+  // This file's own test fixtures deliberately contain every pattern type
+  // (including high-confidence ones like a fake private key header) to prove
+  // detection works — scanning it here would always self-flag, exactly like
+  // scanning .env.example for its intentional placeholder values would.
+  const SELF_EXCLUDED_PATH = "scripts/secretScan.test.js";
   const trackedFiles = execFileSync("git", ["ls-files"], {
     cwd: repoRoot,
     encoding: "utf8",
   })
     .split("\n")
-    .filter(Boolean);
+    .filter((file) => file && file !== SELF_EXCLUDED_PATH);
 
   let totalFindings = 0;
   for (const relativePath of trackedFiles) {
@@ -107,7 +126,7 @@ if (require.main === module) {
     } catch {
       continue; // binary or unreadable file — skip rather than crash the scan
     }
-    const findings = findSecrets(content);
+    const findings = findSecrets(content, relativePath);
     for (const finding of findings) {
       totalFindings += 1;
       console.error(
