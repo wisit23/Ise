@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: reloop
+          POSTGRES_PASSWORD: reloop_test
+          POSTGRES_DB: reloop_auth_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reloop"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://reloop:reloop_test@localhost:5432/reloop_auth_test
+      JWT_ACCESS_SECRET: ci-test-access-secret
+      JWT_REFRESH_SECRET: ci-test-refresh-secret
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies (all workspaces)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Secret scan
+        run: npm run secret-scan
+
+      - name: Dependency audit (known debt, does not fail the build — see docs/progress.md)
+        run: npm run audit
+        continue-on-error: true
+
+      - name: Generate Prisma client (auth-service)
+        run: npx prisma generate --schema backend/services/auth-service/prisma/schema.prisma
+
+      - name: Push test database schema (disposable CI database only)
+        run: npx prisma db push --schema backend/services/auth-service/prisma/schema.prisma --skip-generate
+
+      - name: Backend unit + integration tests (with coverage)
+        run: npm test
+
+      - name: Frontend component tests (with coverage)
+        run: npm run test:frontend
+
+      - name: Verify Docker Compose config
+        run: docker compose config --quiet

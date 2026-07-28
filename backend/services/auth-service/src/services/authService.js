@@ -84,7 +84,7 @@ async function refresh(refreshToken) {
   let payload;
   try {
     payload = verifyRefreshToken(refreshToken);
-  } catch (err) {
+  } catch {
     throw badRequest("invalid or expired refresh token");
   }
 
