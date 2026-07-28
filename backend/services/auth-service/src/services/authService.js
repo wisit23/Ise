@@ -43,7 +43,17 @@ async function issueTokenPair(user) {
   return { accessToken, refreshToken };
 }
 
-async function register({ email, password, firstName, lastName, phone }) {
+const REGISTERABLE_ROLES = ["BUYER", "SELLER"];
+
+async function register({
+  email,
+  password,
+  firstName,
+  lastName,
+  phone,
+  role,
+  shopName,
+}) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
   }
@@ -51,12 +61,30 @@ async function register({ email, password, firstName, lastName, phone }) {
     throw badRequest("password must be at least 8 characters");
   }
 
+  const resolvedRole = role || "BUYER";
+  if (!REGISTERABLE_ROLES.includes(resolvedRole)) {
+    throw badRequest("role must be BUYER or SELLER");
+  }
+  if (resolvedRole === "SELLER" && !shopName) {
+    throw badRequest("shopName is required to register a seller account");
+  }
+
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw conflict("email is already registered");
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { email, passwordHash, firstName, lastName, phone },
+    data: {
+      email,
+      passwordHash,
+      firstName,
+      lastName,
+      phone,
+      role: resolvedRole,
+      ...(resolvedRole === "SELLER"
+        ? { sellerProfile: { create: { shopName } } }
+        : {}),
+    },
   });
 
   const tokens = await issueTokenPair(user);

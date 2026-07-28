@@ -1,0 +1,35 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Custom output path: this is an npm workspace monorepo where @prisma/client
+// hoists to a single shared node_modules — without this, generating this
+// service's client would silently overwrite every other service's client
+// (they'd all fight over the same physical folder). Docker builds each
+// service in isolation so they wouldn't collide there, but local `npm test`
+// runs every service's tests in one process and needs them to coexist.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-client"
+}
+
+// Status lifecycle: available -> reserved (in a buyer's cart) -> sold, or removed by the seller.
+model Product {
+  id          String   @id @default(uuid())
+  sellerId    String   @map("seller_id")
+  title       String
+  description String   @default("")
+  price       Int
+  category    String
+  condition   String   @default("ไม่ระบุ")
+  size        String   @default("Free size")
+  images      String[]
+  status      String   @default("available")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([sellerId])
+  @@index([status, category])
+  @@map("products")
+}

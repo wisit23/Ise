@@ -1,0 +1,30 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Custom output path — see the comment in product-service/prisma/schema.prisma:
+// this npm workspace hoists @prisma/client to one shared location, so every
+// service that generates a client there fights over the same physical folder.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-client"
+}
+
+// Status lifecycle: pending (cart, product locked) -> completed (paid), or cancelled (product unlocked).
+// confirmed/shipped are reserved for a future fulfillment flow and are not driven by the UI yet.
+model Order {
+  id           String   @id @default(uuid())
+  buyerId      String   @map("buyer_id")
+  sellerId     String   @map("seller_id")
+  productId    String   @map("product_id")
+  productTitle String   @map("product_title")
+  price        Int
+  status       String   @default("pending")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@map("orders")
+}

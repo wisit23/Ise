@@ -10,6 +10,7 @@ module.exports = [
       "**/.next/**",
       "**/dist/**",
       "**/coverage/**",
+      "**/generated/**",
       "frontend/next-env.d.ts",
     ],
   },

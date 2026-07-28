@@ -16,6 +16,9 @@ const PUBLIC_PATHS = [
   /^\/api\/auth\/(register|login|refresh)/,
   /^\/api\/products\/feed/,
   /^\/api\/products\/search/,
+  // Single-item browsing must stay open to guests; write/delete routes on the
+  // same path are still gated by product-service's own requireAuth middleware.
+  /^\/api\/products\/[^/]+$/,
 ];
 
 function isPublic(path) {
