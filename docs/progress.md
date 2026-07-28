@@ -71,7 +71,7 @@
 
 > วันที่ทำ: 2026-07-28
 >
-> สถานะตามหลักฐาน: ลงมือทำและตรวจสอบเองครบ (จำลอง CI Pipeline ทั้งหมดด้วย Postgres จริงที่สร้างและลบทิ้ง) รอ AI Reviewer ตรวจอิสระ (ตามรอบของ `FOUND-001`) ก่อนถือว่าเสร็จ
+> สถานะตามหลักฐาน: ลงมือทำ, จำลอง CI Pipeline ด้วยมือครบ, และ **ยืนยันด้วย CI Run จริงบน GitHub Actions ที่ผ่านทุก Step แล้ว** (หลัง Fail ไป 2 ครั้งจาก Bug ที่ Local Simulation จับไม่ได้ — ดูรายละเอียดด้านล่าง) รอ AI Reviewer ตรวจอิสระ (ตามรอบของ `FOUND-001`) ก่อนถือว่าเสร็จ
 >
 > หมายเหตุ: สถานะนี้ไม่ใช่การยืนยันว่า Acceptance Criteria ผ่านครบทุกข้อ — ยังไม่มี Coverage Threshold (ตั้งใจ ดูเหตุผลด้านล่าง) และ Test ที่เขียนไว้เป็นเพียง "หนึ่งชุดต่อชั้น" ตาม Scope ไม่ใช่ Test ครอบคลุมทุกกรณี (นั่นคืองานของ `TEST-001`/`TEST-002`)
 
@@ -106,8 +106,9 @@
 
 - มี Test อัตโนมัติจริงครอบคลุม "หนึ่งชุดต่อชั้น" ตามที่ Scope ของ Task กำหนด ไม่ใช่ Test ครอบคลุมทุก Feature
 - Lint Gate ผ่านจริงเป็นครั้งแรกของโปรเจกต์ (ไม่ใช่แค่ตั้งเครื่องมือไว้เฉยๆ)
-- มี Secret Scanner ที่ทดสอบแล้วว่าจับ Secret ปลอมได้จริง — **แต่การทดสอบ Local ก่อน Commit พลาดไม่เจอ False Positive จริงที่เกิดขึ้นตอน CI Run จริงครั้งแรก** (ดูหัวข้อถัดไป) แก้ไขแล้วและยืนยันด้วย Local Re-run ว่ากลับมา 0 พบ แต่ **ยังไม่ได้ยืนยันด้วย CI Run จริงครั้งที่สอง ณ เวลาที่เขียนบรรทัดนี้**
-- มี CI Pipeline พร้อมใช้งานจริงใน `.github/workflows/ci.yml` (ผู้ใช้อนุมัติให้ Push แล้ว) — **CI Run จริงครั้งแรกล้มเหลว** เป็นหลักฐานว่าการจำลอง CI ด้วยมือไม่เท่ากับ CI Run จริง 100%
+- มี Secret Scanner ที่ทดสอบแล้วว่าจับ Secret ปลอมได้จริง — เจอ False Positive ของตัวเองผ่าน CI Run จริงครั้งแรก (ไม่ใช่ตอนทดสอบ Local) แก้ไขแล้วและยืนยันผ่าน CI Run จริงครั้งที่ 3 (`e929750`) ว่า Secret scan ผ่านสะอาด
+- **CI Pipeline ที่ `.github/workflows/ci.yml` ผ่าน CI Run จริงครบทุก Step แล้ว (Run #3, Commit `e929750`, `id 30370166025`)** — ไม่ใช่แค่จำลองด้วยมือหรือคาดเดา: Checkout, Setup Node, Install, Lint, Format check, Secret scan, Dependency audit (Non-blocking ตามออกแบบ), Prisma generate/db push, Backend test, Frontend test, Compose config — เขียวทั้งหมด ตรวจผ่าน GitHub public API โดยตรง (`https://api.github.com/repos/wisit23/Ise/actions/runs/30370166025`)
+- กว่าจะถึงจุดนี้ CI Run จริงล้มเหลว **2 ครั้งติดต่อกัน** ด้วยสาเหตุที่ Local Simulation จับไม่ได้ทั้งคู่ (ดูหัวข้อถัดไป) — เป็นหลักฐานว่าการจำลอง CI ด้วยมือไม่เท่ากับ CI Run จริง 100%
 - ยังไม่มี Coverage Threshold บังคับ (ตัดสินใจไว้ตรงๆ ไม่ใช่ลืม)
 - ยังไม่ผ่านการตรวจจาก AI Reviewer อิสระเหมือน `FOUND-001` — เป็นขั้นตอนถัดไป
 
