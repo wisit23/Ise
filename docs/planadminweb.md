@@ -29,19 +29,19 @@ Customer Support/SLA, Marketing/Campaign, Executive BI, Auction, and automated R
 
 This is **Proposed** and must be confirmed in `ADMIN-002`; permissions are capabilities, not merely route visibility.
 
-| Capability | Buyer | Seller | Admin | Notes |
-|---|---:|---:|---:|---|
-| View public catalog | ✓ | ✓ | ✓ | public projection |
-| Manage own listing | — | ✓ | moderation only | Seller requires approved test-KYC |
-| View own order/chat | ✓ | ✓ | only with case permission/reason | resource check required |
-| Submit test-KYC | — | ✓ | — | fake/test document warning |
-| Review test-KYC | — | — | ✓ | short-lived private access + audit |
-| Search users/products/reports | — | — | ✓ | bounded fields/results |
-| Moderate product/report | — | — | ✓ | reason + confirmation + audit |
-| Ban/unban account | — | — | ✓ | re-authentication proposed |
-| Decide dispute/hold mock payout | — | — | ✓ | simulation only |
-| Bulk action/export/import | — | — | conditional | separate permissions, limits, preview |
-| Read audit log | — | — | conditional | sensitive view and export controls |
+| Capability                      | Buyer | Seller |                            Admin | Notes                                 |
+| ------------------------------- | ----: | -----: | -------------------------------: | ------------------------------------- |
+| View public catalog             |     ✓ |      ✓ |                                ✓ | public projection                     |
+| Manage own listing              |     — |      ✓ |                  moderation only | Seller requires approved test-KYC     |
+| View own order/chat             |     ✓ |      ✓ | only with case permission/reason | resource check required               |
+| Submit test-KYC                 |     — |      ✓ |                                — | fake/test document warning            |
+| Review test-KYC                 |     — |      — |                                ✓ | short-lived private access + audit    |
+| Search users/products/reports   |     — |      — |                                ✓ | bounded fields/results                |
+| Moderate product/report         |     — |      — |                                ✓ | reason + confirmation + audit         |
+| Ban/unban account               |     — |      — |                                ✓ | re-authentication proposed            |
+| Decide dispute/hold mock payout |     — |      — |                                ✓ | simulation only                       |
+| Bulk action/export/import       |     — |      — |                      conditional | separate permissions, limits, preview |
+| Read audit log                  |     — |      — |                      conditional | sensitive view and export controls    |
 
 ## 3. Dependency and parallel map
 

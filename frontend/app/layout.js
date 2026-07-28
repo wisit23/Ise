@@ -1,8 +1,8 @@
-import './globals.css';
+import "./globals.css";
 
 export const metadata = {
-  title: 'RE-LOOP',
-  description: 'Second-hand fashion marketplace',
+  title: "RE-LOOP",
+  description: "Second-hand fashion marketplace",
 };
 
 export default function RootLayout({ children }) {

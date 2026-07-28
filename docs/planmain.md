@@ -23,20 +23,20 @@ RE-LOOP is a coursework web marketplace for second-hand fashion. Release A prior
 
 ### Requirement traceability
 
-| ID | Confirmed source or unresolved status | Scope | ADR | Tasks | Required evidence |
-|---|---|---|---|---|---|
-| `REQ-001` | Customer Buyer/Seller first; minimum safe Admin — confirmed conversation | A | `ADR-002`, `ADR-010` | `CUST-*`, `ADMIN-001`–`ADMIN-003` | critical E2E/UAT |
-| `REQ-002` | Multi-role Buyer/Seller/Admin — confirmed | A | `ADR-003` | `DB-001`, `AUTH-001` | permission matrix |
-| `REQ-003` | Memory access token + HttpOnly refresh — confirmed | A | `ADR-003` | `AUTH-002` | cookie/replay/CSRF tests |
-| `REQ-004` | Mock payment only — confirmed | A | `ADR-007` | `DB-003`, `API-003`, `CUST-004` | mock-state E2E; no payment fields |
-| `REQ-005` | Synthetic test-KYC upload/decision — confirmed | A | `ADR-006`, `ADR-012` | `AUTH-003`, `INT-001`, `INT-004`, `ADMIN-002` | private access/purge/audit |
-| `REQ-006` | Algorithm/AI choice deferred — confirmed | A | `ADR-008` | `INT-003` | JIT approval + benchmark |
-| `REQ-007` | Public URL/registration — confirmed; privacy model unresolved | A | `ADR-010`, `ADR-012` | `DISC-001`, `AUTH-004`, `SEC-001`, `DEPLOY-002` | approved lifecycle/privacy model |
-| `REQ-008` | GCP primary; AWS portability Stretch — confirmed | A/Stretch | `ADR-005` | `INFRA-001`, `INFRA-002` | GCP release; optional AWS smoke |
-| `REQ-009` | Approx. 20 Sep 2026; six rotating beginners — confirmed | constraint | `ADR-001` | all | owner/reviewer/teach-back |
-| `REQ-010` | B/C seams only, no Release A implementation — confirmed | future | `ADR-001` | `ARCH-001` | scope review |
-| `REQ-011` | Account privacy/recovery/retention | unresolved blocker | `ADR-012` | `DISC-001`, `AUTH-004` | human approval |
-| `REQ-012` | Admin strong authentication/bootstrap | unresolved blocker | `ADR-013` | `DISC-001`, `AUTH-005` | human approval + recovery drill |
+| ID        | Confirmed source or unresolved status                                    | Scope              | ADR                  | Tasks                                           | Required evidence                 |
+| --------- | ------------------------------------------------------------------------ | ------------------ | -------------------- | ----------------------------------------------- | --------------------------------- |
+| `REQ-001` | Customer Buyer/Seller first; minimum safe Admin — confirmed conversation | A                  | `ADR-002`, `ADR-010` | `CUST-*`, `ADMIN-001`–`ADMIN-003`               | critical E2E/UAT                  |
+| `REQ-002` | Multi-role Buyer/Seller/Admin — confirmed                                | A                  | `ADR-003`            | `DB-001`, `AUTH-001`                            | permission matrix                 |
+| `REQ-003` | Memory access token + HttpOnly refresh — confirmed                       | A                  | `ADR-003`            | `AUTH-002`                                      | cookie/replay/CSRF tests          |
+| `REQ-004` | Mock payment only — confirmed                                            | A                  | `ADR-007`            | `DB-003`, `API-003`, `CUST-004`                 | mock-state E2E; no payment fields |
+| `REQ-005` | Synthetic test-KYC upload/decision — confirmed                           | A                  | `ADR-006`, `ADR-012` | `AUTH-003`, `INT-001`, `INT-004`, `ADMIN-002`   | private access/purge/audit        |
+| `REQ-006` | Algorithm/AI choice deferred — confirmed                                 | A                  | `ADR-008`            | `INT-003`                                       | JIT approval + benchmark          |
+| `REQ-007` | Public URL/registration — confirmed; privacy model unresolved            | A                  | `ADR-010`, `ADR-012` | `DISC-001`, `AUTH-004`, `SEC-001`, `DEPLOY-002` | approved lifecycle/privacy model  |
+| `REQ-008` | GCP primary; AWS portability Stretch — confirmed                         | A/Stretch          | `ADR-005`            | `INFRA-001`, `INFRA-002`                        | GCP release; optional AWS smoke   |
+| `REQ-009` | Approx. 20 Sep 2026; six rotating beginners — confirmed                  | constraint         | `ADR-001`            | all                                             | owner/reviewer/teach-back         |
+| `REQ-010` | B/C seams only, no Release A implementation — confirmed                  | future             | `ADR-001`            | `ARCH-001`                                      | scope review                      |
+| `REQ-011` | Account privacy/recovery/retention                                       | unresolved blocker | `ADR-012`            | `DISC-001`, `AUTH-004`                          | human approval                    |
+| `REQ-012` | Admin strong authentication/bootstrap                                    | unresolved blocker | `ADR-013`            | `DISC-001`, `AUTH-005`                          | human approval + recovery drill   |
 
 ## 3. Assumptions and constraints
 
@@ -77,17 +77,17 @@ RE-LOOP is a coursework web marketplace for second-hand fashion. Release A prior
 
 ## 5. Current state
 
-| Area | Verified state | Evidence |
-|---|---|---|
-| Frontend | `/`, `/login`, `/register`; localStorage session | `frontend/app/`, `frontend/lib/auth.js` |
-| Gateway | Five proxy paths; bearer verification | `backend/gateway/src/server.js` |
-| Auth | Register/login/refresh/logout/me | `backend/services/auth-service/src/` |
-| Other services | Health endpoints only | `backend/services/*-service/src/app.js` |
-| Database | Auth schema only; four empty DBs; `db push` | Prisma schema, `docker-compose.yml` |
-| Admin | Not started | no admin route/component |
-| Cache/jobs/storage | Containers/volume declarations only | `docker-compose.yml` |
-| Tests/CI/IaC/cloud | Not found | repository scan |
-| Operations | health endpoints and console logs only | service source |
+| Area               | Verified state                                   | Evidence                                |
+| ------------------ | ------------------------------------------------ | --------------------------------------- |
+| Frontend           | `/`, `/login`, `/register`; localStorage session | `frontend/app/`, `frontend/lib/auth.js` |
+| Gateway            | Five proxy paths; bearer verification            | `backend/gateway/src/server.js`         |
+| Auth               | Register/login/refresh/logout/me                 | `backend/services/auth-service/src/`    |
+| Other services     | Health endpoints only                            | `backend/services/*-service/src/app.js` |
+| Database           | Auth schema only; four empty DBs; `db push`      | Prisma schema, `docker-compose.yml`     |
+| Admin              | Not started                                      | no admin route/component                |
+| Cache/jobs/storage | Containers/volume declarations only              | `docker-compose.yml`                    |
+| Tests/CI/IaC/cloud | Not found                                        | repository scan                         |
+| Operations         | health endpoints and console logs only           | service source                          |
 
 ## 6. Target state
 
@@ -95,19 +95,19 @@ A publicly reachable, clearly labelled demo on GCP with tested Buyer/Seller life
 
 ## 7. Workstreams and epics
 
-| Workstream | Epics | Task IDs |
-|---|---|---|
-| Discovery | Launch and course validation | `DISC-001` |
-| Foundation | standards, dependency/test gates | `FOUND-001`, `FOUND-002` |
-| Architecture | contracts and ownership | `ARCH-001` |
-| Data | auth, product, transaction, interaction schemas | `DB-001`–`DB-004` |
-| API | platform, catalog, order, interaction APIs | `API-001`–`API-004` |
-| Identity | RBAC, sessions, test-KYC, account lifecycle, Admin assurance | `AUTH-001`–`AUTH-005` |
-| Customer | shared shell and Buyer/Seller journeys | `CUST-001`–`CUST-005` |
-| Integration | storage, jobs/notification, recommendation choice | `INT-001`–`INT-004` |
-| Quality/security | layered tests and hardening | `TEST-001`, `TEST-002`, `SEC-001` |
-| Cloud/release/ops | GCP, staging, production, operations, AWS stretch | `INFRA-001`, `DEPLOY-001`, `DEPLOY-002`, `OPS-001`, `INFRA-002` |
-| Documentation | evidence and team learning | `DOC-001` |
+| Workstream        | Epics                                                        | Task IDs                                                        |
+| ----------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
+| Discovery         | Launch and course validation                                 | `DISC-001`                                                      |
+| Foundation        | standards, dependency/test gates                             | `FOUND-001`, `FOUND-002`                                        |
+| Architecture      | contracts and ownership                                      | `ARCH-001`                                                      |
+| Data              | auth, product, transaction, interaction schemas              | `DB-001`–`DB-004`                                               |
+| API               | platform, catalog, order, interaction APIs                   | `API-001`–`API-004`                                             |
+| Identity          | RBAC, sessions, test-KYC, account lifecycle, Admin assurance | `AUTH-001`–`AUTH-005`                                           |
+| Customer          | shared shell and Buyer/Seller journeys                       | `CUST-001`–`CUST-005`                                           |
+| Integration       | storage, jobs/notification, recommendation choice            | `INT-001`–`INT-004`                                             |
+| Quality/security  | layered tests and hardening                                  | `TEST-001`, `TEST-002`, `SEC-001`                               |
+| Cloud/release/ops | GCP, staging, production, operations, AWS stretch            | `INFRA-001`, `DEPLOY-001`, `DEPLOY-002`, `OPS-001`, `INFRA-002` |
+| Documentation     | evidence and team learning                                   | `DOC-001`                                                       |
 
 ## 8. Standard task contract
 
@@ -935,7 +935,7 @@ Every task below is a delivery unit for one owner and a different reviewer. “E
 - **Beginner explanation:** Keep the map, diary, checklist, and lesson notes in sync after every trip.
 - **Business reason:** Rotating ownership requires shared understanding.
 - **Technical reason:** Existing README/plan/schema paths and current-versus-target claims conflict.
-- **Scope:** update architecture/ADR/task/progress/handoff/teachme/deployment; evidence links; owner/reviewer/teach-back; command verification labels; changelog.
+- **Scope:** update architecture/ADR/task/progress/handoff/teachme/tasklessons/deployment; append a verified post-task lesson; evidence links; owner/reviewer/teach-back; command verification labels; changelog.
 - **Out of scope:** changing requirements history silently or marking work complete from file presence.
 - **Prerequisites / Dependencies:** starts now and accompanies every task.
 - **Inputs:** source, tests, deploy evidence, decisions, human answers.
@@ -945,7 +945,7 @@ Every task below is a delivery unit for one owner and a different reviewer. “E
 - **Security / Privacy / Performance / Observability:** redact evidence; document controls/measurements honestly.
 - **Test cases:** link/ID/status/command checks; current/proposed label audit; human newcomer walkthrough.
 - **Acceptance criteria:** all nine documents agree on IDs/status/next task and evidence; newcomer can identify safe next action.
-- **Definition of Done:** consistency verification passes after each completed task.
+- **Definition of Done:** consistency verification passes and `tasklessons.md` contains a reviewer-approved evidence-based lesson after each completed Task.
 - **Evidence required:** verification report, reviewer sign-off, teach-back note.
 - **Risks / Rollback or recovery:** stale docs; revert incorrect claim and restore last evidence-backed status.
 - **Complexity / Parallel / Blocks:** M recurring / all tasks / blocks honest handoff and completion claims.
@@ -992,39 +992,39 @@ Critical path: `DISC-001` + `FOUND-001` → `ARCH-001` + `FOUND-002` → schemas
 
 ### Execution-safe dependency edges
 
-| Task | Completion dependencies |
-|---|---|
-| `FOUND-002` | `FOUND-001` |
-| `ARCH-001` | `FOUND-001`; decisions from `DISC-001` where available |
-| `DB-001`–`DB-004` | `ARCH-001` |
-| `API-001` | `FOUND-002`, `ARCH-001` |
-| `API-002` | `API-001`, `DB-002`, `INT-001` |
-| `API-003` | `API-001`, `DB-003`, Product reservation contract, `INT-002` |
-| `API-004` | `API-001`, `DB-004`, Order eligibility contract |
-| `AUTH-001`, `AUTH-002` | `DB-001`, `API-001` |
-| `AUTH-003` | `AUTH-001`, `AUTH-002`, `DB-001`, `INT-001` |
-| `AUTH-004` | accepted `ADR-012`, `DB-001`, `API-001` |
-| `AUTH-005` | accepted `ADR-013`, `AUTH-001`, `AUTH-002`, infrastructure identity/ingress |
-| `CUST-001` | `FOUND-002`, `AUTH-002` |
-| `CUST-002` | `CUST-001`, `API-002` |
-| `CUST-003` | `CUST-001`, `AUTH-003`, `API-002`, `INT-001` |
-| `CUST-004` | `CUST-001`, `API-003` |
-| `CUST-005` | `CUST-001`, `API-003` eligibility, `API-004` |
-| `ADMIN-001` | `CUST-001`, `AUTH-001`, `AUTH-002`, `AUTH-005` |
-| `ADMIN-002` | `ADMIN-001`, `AUTH-003`, `INT-001` |
-| `ADMIN-003` | `ADMIN-001`, `ADMIN-002`, `API-002`, `API-003`, `API-004`, `DB-004` |
-| `ADMIN-004` | explicit Release A approval, `ADMIN-003`, `SEC-001`, `OPS-001` |
-| `INT-001` | `ARCH-001` |
-| `INT-002` | `ARCH-001`, `DB-003`, `DB-004` |
-| `INT-003` | JIT `ADR-008`, `API-002`, representative approved data |
-| `INT-004` | `INT-001`, `INFRA-001`, accepted retention/storage decisions |
-| `INFRA-001` | `DISC-001` non-prod inputs, architecture review |
-| `DEPLOY-001` | `FOUND-002`, `INFRA-001`, first deployable slice and migrations |
-| `TEST-002` | `DEPLOY-001`, deployable critical journeys |
-| `SEC-001` final | Staging plus all public/Admin trust boundaries |
-| `OPS-001` final | `INFRA-001`, service instrumentation, confirmed objectives |
-| `DEPLOY-002` | `INT-004`, `TEST-001`, `TEST-002`, `SEC-001`, `OPS-001`, minimum `ADMIN-001`–`ADMIN-003`, accepted `ADR-011`–`ADR-013` |
-| `INFRA-002` | successful `DEPLOY-002`, spare time/budget |
+| Task                   | Completion dependencies                                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `FOUND-002`            | `FOUND-001`                                                                                                            |
+| `ARCH-001`             | `FOUND-001`; decisions from `DISC-001` where available                                                                 |
+| `DB-001`–`DB-004`      | `ARCH-001`                                                                                                             |
+| `API-001`              | `FOUND-002`, `ARCH-001`                                                                                                |
+| `API-002`              | `API-001`, `DB-002`, `INT-001`                                                                                         |
+| `API-003`              | `API-001`, `DB-003`, Product reservation contract, `INT-002`                                                           |
+| `API-004`              | `API-001`, `DB-004`, Order eligibility contract                                                                        |
+| `AUTH-001`, `AUTH-002` | `DB-001`, `API-001`                                                                                                    |
+| `AUTH-003`             | `AUTH-001`, `AUTH-002`, `DB-001`, `INT-001`                                                                            |
+| `AUTH-004`             | accepted `ADR-012`, `DB-001`, `API-001`                                                                                |
+| `AUTH-005`             | accepted `ADR-013`, `AUTH-001`, `AUTH-002`, infrastructure identity/ingress                                            |
+| `CUST-001`             | `FOUND-002`, `AUTH-002`                                                                                                |
+| `CUST-002`             | `CUST-001`, `API-002`                                                                                                  |
+| `CUST-003`             | `CUST-001`, `AUTH-003`, `API-002`, `INT-001`                                                                           |
+| `CUST-004`             | `CUST-001`, `API-003`                                                                                                  |
+| `CUST-005`             | `CUST-001`, `API-003` eligibility, `API-004`                                                                           |
+| `ADMIN-001`            | `CUST-001`, `AUTH-001`, `AUTH-002`, `AUTH-005`                                                                         |
+| `ADMIN-002`            | `ADMIN-001`, `AUTH-003`, `INT-001`                                                                                     |
+| `ADMIN-003`            | `ADMIN-001`, `ADMIN-002`, `API-002`, `API-003`, `API-004`, `DB-004`                                                    |
+| `ADMIN-004`            | explicit Release A approval, `ADMIN-003`, `SEC-001`, `OPS-001`                                                         |
+| `INT-001`              | `ARCH-001`                                                                                                             |
+| `INT-002`              | `ARCH-001`, `DB-003`, `DB-004`                                                                                         |
+| `INT-003`              | JIT `ADR-008`, `API-002`, representative approved data                                                                 |
+| `INT-004`              | `INT-001`, `INFRA-001`, accepted retention/storage decisions                                                           |
+| `INFRA-001`            | `DISC-001` non-prod inputs, architecture review                                                                        |
+| `DEPLOY-001`           | `FOUND-002`, `INFRA-001`, first deployable slice and migrations                                                        |
+| `TEST-002`             | `DEPLOY-001`, deployable critical journeys                                                                             |
+| `SEC-001` final        | Staging plus all public/Admin trust boundaries                                                                         |
+| `OPS-001` final        | `INFRA-001`, service instrumentation, confirmed objectives                                                             |
+| `DEPLOY-002`           | `INT-004`, `TEST-001`, `TEST-002`, `SEC-001`, `OPS-001`, minimum `ADMIN-001`–`ADMIN-003`, accepted `ADR-011`–`ADR-013` |
+| `INFRA-002`            | successful `DEPLOY-002`, spare time/budget                                                                             |
 
 `DOC-001` accompanies every edge but does not block technical execution until the task’s evidence/status/handoff update is due. This edge table is the canonical DAG input; the Mermaid diagram is only a readable summary.
 
@@ -1039,15 +1039,15 @@ Critical path: `DISC-001` + `FOUND-001` → `ARCH-001` + `FOUND-002` → schemas
 
 ## 13. Integration points
 
-| Consumer | Provider | Contract |
-|---|---|---|
-| Frontend | Gateway | versioned HTTP/WS, session cookie, safe errors |
-| Gateway/services | Auth | verified identity and permission policy |
-| Order | Product | atomic reservation/mark-sold/release |
-| Chat/Review | Order | participant/review eligibility |
-| Auth/Product | Object storage | separate private/public adapter contracts |
-| Services | Worker/outbox | versioned idempotent events |
-| Customer/Admin | Shared backend | same APIs with different permissions/projections |
+| Consumer         | Provider       | Contract                                         |
+| ---------------- | -------------- | ------------------------------------------------ |
+| Frontend         | Gateway        | versioned HTTP/WS, session cookie, safe errors   |
+| Gateway/services | Auth           | verified identity and permission policy          |
+| Order            | Product        | atomic reservation/mark-sold/release             |
+| Chat/Review      | Order          | participant/review eligibility                   |
+| Auth/Product     | Object storage | separate private/public adapter contracts        |
+| Services         | Worker/outbox  | versioned idempotent events                      |
+| Customer/Admin   | Shared backend | same APIs with different permissions/projections |
 
 ## 14. Release criteria
 
@@ -1080,4 +1080,4 @@ The system is Done only when implementation, tests, security review, documentati
 - [ ] GCP IaC, CI/CD, TLS, secrets, IAM, budgets (`INFRA-001`, `DEPLOY-001`)
 - [ ] Logs, metrics, alerts, runbooks, backup/restore/incident drill (`OPS-001`)
 - [ ] Go/no-go and rollback rehearsal (`DEPLOY-002`)
-- [ ] Progress/handoff/teachme evidence synchronized (`DOC-001`)
+- [ ] Progress/handoff/teachme/tasklessons evidence synchronized (`DOC-001`)

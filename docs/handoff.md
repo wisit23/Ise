@@ -110,31 +110,34 @@ Current local setup is documented in `README.md`, but links and Production claim
 ## Required tools
 
 - Git
-- Node.js/npm version: **Unverified; `FOUND-001` must pin it**
+- Node.js/npm version: **22.x / npm 10+, pinned by `FOUND-001`** (`.nvmrc`, `package.json#engines`, `.npmrc engine-strict`) — pending reviewer sign-off
 - Docker Engine and Docker Compose
 - GCP CLI/IaC tools: **Proposed; exact tool pending `INFRA-001`**
 - AWS CLI/IaC tools: **Stretch/Proposed only**
 
 ## Environment variables
 
-Verified names exist in `.env.example`: PostgreSQL settings and five DB URLs, Redis URL, JWT secrets/expiry, internal-service token, service ports, frontend public API URL. Values and future cloud-secret mapping are not documented here. `FOUND-001` must add validation; `INFRA-001` must split secrets per identity/environment.
+Verified names exist in `.env.example`: PostgreSQL settings and five DB URLs, Redis URL, JWT secrets/expiry, internal-service token, service ports, frontend public API URL. Values and future cloud-secret mapping are not documented here. `FOUND-001` added a `requireEnv()` startup check (`backend/shared/src/env.js`), wired so far into `gateway` (`JWT_ACCESS_SECRET`) and `auth-service` (`DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`) — the other four services do not yet consume any required variable, so nothing was added there. `INFRA-001` must still split secrets per identity/environment.
 
 ## Important commands
 
 Verified from repository definitions, not necessarily executed in this planning round:
 
 ```powershell
+npm install
 npm run dev
 npm run down
+npm run lint
+npm run format:check
 docker compose config --quiet
 docker compose up --build
 docker compose ps
 npm --workspace frontend run build
 ```
 
-- Root `dev`/`down` come from `package.json`.
+- Root `dev`/`down`/`lint`/`format`/`format:check` come from `package.json` (`FOUND-001`).
 - Frontend `build` comes from `frontend/package.json`.
-- Test/lint/type/CI/migration/deployment commands are **Not available yet** and must not be invented.
+- Test/type/CI/migration/deployment commands are **Not available yet** and must not be invented.
 
 ## Testing commands
 
@@ -152,9 +155,10 @@ None verified because no cloud/IaC/CI/CD implementation exists. `deployment.md` 
 4. `planmain.md` or `planadminweb.md` canonical task card
 5. `deployment.md`
 6. `roadmap.md`
-7. source files touched by the chosen Task ID
-8. `docs/S2G5_RE-LOOP_ISE.md`
-9. `log/phase-0.md`, `log/phase-1.md` as historical evidence only
+7. `tasklessons.md` for lessons from Tasks that are actually verified
+8. source files touched by the chosen Task ID
+9. `docs/S2G5_RE-LOOP_ISE.md`
+10. `log/phase-0.md`, `log/phase-1.md` as historical evidence only
 
 ## Current Task ID
 
@@ -178,7 +182,7 @@ None verified because no cloud/IaC/CI/CD implementation exists. `deployment.md` 
 
 ## Definition of Done
 
-For any Task ID: acceptance criteria pass; tests and security/privacy/performance/observability concerns are handled; reviewer signs; evidence is linked; rollback/recovery is tested or justified; progress/handoff/decision/architecture/deployment/teachme are updated where affected; team teach-back is recorded.
+For any Task ID: acceptance criteria pass; tests and security/privacy/performance/observability concerns are handled; reviewer signs; evidence is linked; rollback/recovery is tested or justified; progress/handoff/decision/architecture/deployment/teachme are updated where affected; a detailed evidence-based lesson is appended to `tasklessons.md`; team teach-back is recorded.
 
 ## Evidence requirements
 

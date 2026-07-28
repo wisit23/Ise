@@ -1,6 +1,6 @@
-const ACCESS_KEY = 'reloop_access_token';
-const REFRESH_KEY = 'reloop_refresh_token';
-const USER_KEY = 'reloop_user';
+const ACCESS_KEY = "reloop_access_token";
+const REFRESH_KEY = "reloop_refresh_token";
+const USER_KEY = "reloop_user";
 
 export function saveSession({ accessToken, refreshToken, user }) {
   localStorage.setItem(ACCESS_KEY, accessToken);
@@ -9,17 +9,17 @@ export function saveSession({ accessToken, refreshToken, user }) {
 }
 
 export function getAccessToken() {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
   return localStorage.getItem(ACCESS_KEY);
 }
 
 export function getRefreshToken() {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
   return localStorage.getItem(REFRESH_KEY);
 }
 
 export function getStoredUser() {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(USER_KEY);
   return raw ? JSON.parse(raw) : null;
 }

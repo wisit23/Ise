@@ -1,6 +1,6 @@
-require('dotenv').config();
-const http = require('http');
-const app = require('./app');
+require("dotenv").config();
+const http = require("http");
+const app = require("./app");
 
 const PORT = process.env.CHAT_PORT || 3004;
 const server = http.createServer(app);

@@ -1,0 +1,7 @@
+node_modules
+.next
+dist
+package-lock.json
+frontend/.next
+docs/S2G5_RE-LOOP_ISE.md
+log/

@@ -1,15 +1,15 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { apiFetch } from '../../lib/api';
-import { saveSession } from '../../lib/auth';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { apiFetch } from "../../lib/api";
+import { saveSession } from "../../lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   function update(field) {
@@ -18,12 +18,15 @@ export default function LoginPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
     try {
-      const data = await apiFetch('/api/auth/login', { method: 'POST', body: form });
+      const data = await apiFetch("/api/auth/login", {
+        method: "POST",
+        body: form,
+      });
       saveSession(data);
-      router.push('/');
+      router.push("/");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,7 +43,7 @@ export default function LoginPage() {
           type="email"
           placeholder="อีเมล"
           value={form.email}
-          onChange={update('email')}
+          onChange={update("email")}
           className="rounded-md border border-gray-300 px-3 py-2"
         />
         <input
@@ -48,7 +51,7 @@ export default function LoginPage() {
           type="password"
           placeholder="รหัสผ่าน"
           value={form.password}
-          onChange={update('password')}
+          onChange={update("password")}
           className="rounded-md border border-gray-300 px-3 py-2"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -57,11 +60,11 @@ export default function LoginPage() {
           disabled={loading}
           className="rounded-md bg-emerald-600 py-2 text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
+          {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
         </button>
       </form>
       <p className="mt-4 text-sm text-gray-600">
-        ยังไม่มีบัญชี?{' '}
+        ยังไม่มีบัญชี?{" "}
         <Link href="/register" className="text-emerald-600 hover:underline">
           สมัครสมาชิก
         </Link>

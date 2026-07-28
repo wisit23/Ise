@@ -25,11 +25,11 @@
   3. Keep Auth separate and consolidate the other four services.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Complexity/cost | Security/operations |
-|---|---|---|---|---|
-| Five services | Matches current code and likely course narrative; clear domain ownership | More deployments, contracts, failure modes | High relative to project size | More IAM, secrets, logs, networking |
-| Modular monolith | Simplest transactions and local operations | May conflict with rubric; migration work | Lower runtime cost | Smaller attack/ops surface |
-| Hybrid | Reduces deployables while preserving Auth boundary | Creates a new topology with migration ambiguity | Medium | Still needs distributed auth/contracts |
+| Option           | Benefits                                                                 | Trade-offs                                      | Complexity/cost               | Security/operations                    |
+| ---------------- | ------------------------------------------------------------------------ | ----------------------------------------------- | ----------------------------- | -------------------------------------- |
+| Five services    | Matches current code and likely course narrative; clear domain ownership | More deployments, contracts, failure modes      | High relative to project size | More IAM, secrets, logs, networking    |
+| Modular monolith | Simplest transactions and local operations                               | May conflict with rubric; migration work        | Lower runtime cost            | Smaller attack/ops surface             |
+| Hybrid           | Reduces deployables while preserving Auth boundary                       | Creates a new topology with migration ambiguity | Medium                        | Still needs distributed auth/contracts |
 
 - **Decision:** Retain the current five service boundaries for Release A, introduce no additional services, and use strict ownership/contracts.
 - **Reason:** It minimizes destructive restructuring and preserves the demonstrated course architecture while the rubric remains unconfirmed.
@@ -55,10 +55,10 @@
   2. Separate Customer and Admin Next.js applications.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Cost | Security implication |
-|---|---|---|---|---|
-| One app | Reuses auth/design/API client; one deployment | Larger blast radius; requires disciplined route separation | Lower | Backend authorization remains mandatory |
-| Separate apps | Independent releases and bundles | Duplicate setup, deployments, session integration | Higher | Smaller UI blast radius, same API authorization need |
+| Option        | Benefits                                      | Trade-offs                                                 | Cost   | Security implication                                 |
+| ------------- | --------------------------------------------- | ---------------------------------------------------------- | ------ | ---------------------------------------------------- |
+| One app       | Reuses auth/design/API client; one deployment | Larger blast radius; requires disciplined route separation | Lower  | Backend authorization remains mandatory              |
+| Separate apps | Independent releases and bundles              | Duplicate setup, deployments, session integration          | Higher | Smaller UI blast radius, same API authorization need |
 
 - **Decision:** Use one Next.js deployable for Release A, with distinct layouts, navigation, route guards, tests, and permission-aware Admin controls.
 - **Reason:** Best fit for current code and capacity without duplicating frontend infrastructure.
@@ -85,11 +85,11 @@
   3. Server-side opaque session cookie only.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Security |
-|---|---|---|---|
-| Memory + refresh cookie | Limits token theft persistence; API-friendly | Requires refresh/CSRF design | Recommended working direction |
-| localStorage | Simple | XSS can steal both long-lived credentials | Rejected |
-| Opaque session | Simple revocation and role freshness | Requires shared session store/gateway pattern change | Viable alternative |
+| Option                  | Benefits                                     | Trade-offs                                           | Security                      |
+| ----------------------- | -------------------------------------------- | ---------------------------------------------------- | ----------------------------- |
+| Memory + refresh cookie | Limits token theft persistence; API-friendly | Requires refresh/CSRF design                         | Recommended working direction |
+| localStorage            | Simple                                       | XSS can steal both long-lived credentials            | Rejected                      |
+| Opaque session          | Simple revocation and role freshness         | Requires shared session store/gateway pattern change | Viable alternative            |
 
 - **Decision:** Use short-lived access tokens held in memory; rotate a hashed refresh-token/session record via HttpOnly, Secure, SameSite cookie; reload user status/roles on refresh. Model roles through assignments and permissions.
 - **Reason:** Explicitly confirmed by the user and reduces the current XSS/session risk while retaining the API topology.
@@ -116,11 +116,11 @@
   3. One shared database/schema for all services.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Cost/ops | Security |
-|---|---|---|---|---|
-| Logical DB per service | Keeps ownership at reasonable cost | Shared instance failure domain | Medium-low | Distinct least-privilege users |
-| Instance per service | Strong isolation | Excessive cost/ops | High | Strongest infrastructure isolation |
-| Shared DB | Easy reporting/transactions | Violates current ownership, tight coupling | Low | Broad privileges likely |
+| Option                 | Benefits                           | Trade-offs                                 | Cost/ops   | Security                           |
+| ---------------------- | ---------------------------------- | ------------------------------------------ | ---------- | ---------------------------------- |
+| Logical DB per service | Keeps ownership at reasonable cost | Shared instance failure domain             | Medium-low | Distinct least-privilege users     |
+| Instance per service   | Strong isolation                   | Excessive cost/ops                         | High       | Strongest infrastructure isolation |
+| Shared DB              | Easy reporting/transactions        | Violates current ownership, tight coupling | Low        | Broad privileges likely            |
 
 - **Decision:** Use one managed PostgreSQL platform per environment, logical database and least-privilege credential per service, versioned migrations, no cross-service foreign keys.
 - **Reason:** Matches current topology while remaining affordable and operable.
@@ -147,11 +147,11 @@
   3. Active-active or failover multi-cloud.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Cost/ops | Security |
-|---|---|---|---|---|
-| GCP only | Lowest burden | No portability demonstration | Lowest | One IAM model |
-| GCP + AWS demo | Shows portability | Duplicate minimal infra, drift risk | Medium | Two IAM/secrets surfaces |
-| Active multi-cloud | Resilience narrative | Disproportionate complexity | Very high | Complex identity/data boundaries |
+| Option             | Benefits             | Trade-offs                          | Cost/ops  | Security                         |
+| ------------------ | -------------------- | ----------------------------------- | --------- | -------------------------------- |
+| GCP only           | Lowest burden        | No portability demonstration        | Lowest    | One IAM model                    |
+| GCP + AWS demo     | Shows portability    | Duplicate minimal infra, drift risk | Medium    | Two IAM/secrets surfaces         |
+| Active multi-cloud | Resilience narrative | Disproportionate complexity         | Very high | Complex identity/data boundaries |
 
 - **Decision:** Build and launch on GCP. If Release A gates pass and time remains, deploy the same immutable container artifact to AWS with independent demo DB/seed. No replication, global routing, shared sessions, or automatic failover.
 - **Reason:** Matches the explicit priority and stretch definition.
@@ -178,11 +178,11 @@
   3. Local container volume.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Security |
-|---|---|---|---|
-| Separate storage | Clear IAM/lifecycle boundary | More resources/config | Strong default separation |
-| One bucket/prefix | Fewer resources | Policy mistakes cross boundary | Higher misconfiguration risk |
-| Local volume | Simple locally | Not durable/scalable; hard backup | Not suitable for public production |
+| Option            | Benefits                     | Trade-offs                        | Security                           |
+| ----------------- | ---------------------------- | --------------------------------- | ---------------------------------- |
+| Separate storage  | Clear IAM/lifecycle boundary | More resources/config             | Strong default separation          |
+| One bucket/prefix | Fewer resources              | Policy mistakes cross boundary    | Higher misconfiguration risk       |
+| Local volume      | Simple locally               | Not durable/scalable; hard backup | Not suitable for public production |
 
 - **Decision:** Separate product media and private test-KYC storage, each with dedicated IAM/lifecycle. Access through an `ObjectStorage` adapter.
 - **Reason:** Sensitivity and access patterns differ materially.
@@ -209,11 +209,11 @@
   3. Real payment provider.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Security/compliance |
-|---|---|---|---|
-| Internal mock | Predictable, no credentials/real data | Less integration realism | Avoids card scope |
-| Provider sandbox | Real API practice | Credentials/webhooks/provider complexity | Still must prevent real data entry |
-| Real provider | Production realism | Not needed and high risk | Rejected |
+| Option           | Benefits                              | Trade-offs                               | Security/compliance                |
+| ---------------- | ------------------------------------- | ---------------------------------------- | ---------------------------------- |
+| Internal mock    | Predictable, no credentials/real data | Less integration realism                 | Avoids card scope                  |
+| Provider sandbox | Real API practice                     | Credentials/webhooks/provider complexity | Still must prevent real data entry |
+| Real provider    | Production realism                    | Not needed and high risk                 | Rejected                           |
 
 - **Decision:** Implement only a mock adapter with explicit simulated approve/decline/refund/hold/release states and persistent audit.
 - **Reason:** Explicit user scope and safest coursework boundary.
@@ -240,11 +240,11 @@
   3. Popular/recent fallback only.
 - **Comparison:**
 
-| Option | Suitable when | Benefits | Trade-offs/cost | Security/privacy |
-|---|---|---|---|---|
-| Algorithm | Sparse data, explainability, short deadline | Cheap, deterministic, testable | May be less personalized | Minimal data exposure |
-| AI/ML | Adequate interaction data, evaluation metric, budget | Can model richer patterns | Data/MLOps/cost/latency | Profiling and provider-data concerns |
-| Fallback | Cold start or outage | Always available | Limited personalization | Lowest risk |
+| Option    | Suitable when                                        | Benefits                       | Trade-offs/cost          | Security/privacy                     |
+| --------- | ---------------------------------------------------- | ------------------------------ | ------------------------ | ------------------------------------ |
+| Algorithm | Sparse data, explainability, short deadline          | Cheap, deterministic, testable | May be less personalized | Minimal data exposure                |
+| AI/ML     | Adequate interaction data, evaluation metric, budget | Can model richer patterns      | Data/MLOps/cost/latency  | Profiling and provider-data concerns |
+| Fallback  | Cold start or outage                                 | Always available               | Limited personalization  | Lowest risk                          |
 
 - **Decision:** Do not select or build both now. Define `RecommendationStrategy` input/output, fallback behavior, and evaluation dataset/metrics. Ask the user immediately before `INT-003` implementation.
 - **Reason:** This directly follows the confirmed answer and avoids speculative AI.
@@ -271,11 +271,11 @@
   3. Distributed transaction/two-phase commit.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Operations |
-|---|---|---|---|
-| Outbox | Durable intent, retry/replay | Eventual consistency, worker needed | Monitor lag/dead letters |
-| Direct dual write | Simple happy path | Partial failure/lost updates | Manual reconciliation |
-| Distributed transaction | Strong atomicity | Unsupported/complex across services | Excessive |
+| Option                  | Benefits                     | Trade-offs                          | Operations               |
+| ----------------------- | ---------------------------- | ----------------------------------- | ------------------------ |
+| Outbox                  | Durable intent, retry/replay | Eventual consistency, worker needed | Monitor lag/dead letters |
+| Direct dual write       | Simple happy path            | Partial failure/lost updates        | Manual reconciliation    |
+| Distributed transaction | Strong atomicity             | Unsupported/complex across services | Excessive                |
 
 - **Decision:** Persist domain change and outbox record atomically; deliver asynchronously with idempotent consumer and reconciliation.
 - **Reason:** Standard reliable pattern that fits current database ownership.
@@ -302,11 +302,11 @@
   3. Local-only demonstration.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Risk |
-|---|---|---|---|
-| Public controlled demo | Easy presentation and testing | Abuse/ops burden | Highest, mitigated by controls |
-| Invite-only | Lower abuse | Less accessible | Medium |
-| Local-only | Lowest exposure | Fails public-cloud goal | Low |
+| Option                 | Benefits                      | Trade-offs              | Risk                           |
+| ---------------------- | ----------------------------- | ----------------------- | ------------------------------ |
+| Public controlled demo | Easy presentation and testing | Abuse/ops burden        | Highest, mitigated by controls |
+| Invite-only            | Lower abuse                   | Less accessible         | Medium                         |
+| Local-only             | Lowest exposure               | Fails public-cloud goal | Low                            |
 
 - **Decision:** Public controlled demo with prominent warnings, rate/size/count limits, private KYC storage, minimum Admin moderation, no real-data fields, and an approved cleanup policy.
 - **Reason:** Matches the explicit public-URL goal.
@@ -333,11 +333,11 @@
   3. Use provider defaults without review.
 - **Comparison:**
 
-| Option | Benefits | Trade-offs | Risk |
-|---|---|---|---|
-| Evidence-based selection | Defensible and affordable | Requires early discovery | Lowest |
-| Copy course NFRs | Fast | May be infeasible/unfunded | High |
-| Provider defaults | Fastest | Hidden cost/residency/recovery assumptions | High |
+| Option                   | Benefits                  | Trade-offs                                 | Risk   |
+| ------------------------ | ------------------------- | ------------------------------------------ | ------ |
+| Evidence-based selection | Defensible and affordable | Requires early discovery                   | Lowest |
+| Copy course NFRs         | Fast                      | May be infeasible/unfunded                 | High   |
+| Provider defaults        | Fastest                   | Hidden cost/residency/recovery assumptions | High   |
 
 - **Decision:** Keep parameters pending. `DISC-001` must obtain rubric/owner/budget/traffic/data answers and record them before `INFRA-001` finalizes production resources.
 - **Reason:** The user prohibited inventing traffic, budget, compliance, or cloud choices.
@@ -351,23 +351,23 @@
 
 ## Decision status summary
 
-| ID | Status | Blocking scope |
-|---|---|---|
-| `ADR-001` | Temporary working assumption | Backend/IaC topology |
-| `ADR-002` | Proposed | Frontend organization |
-| `ADR-003` | Accepted | Auth/RBAC |
-| `ADR-004` | Proposed | Data/IaC |
-| `ADR-005` | Accepted | Cloud scope |
-| `ADR-006` | Proposed | Upload/storage |
-| `ADR-007` | Accepted | Order/payment simulation |
-| `ADR-008` | Pending | Recommendation implementation only |
-| `ADR-009` | Proposed | Async consistency |
-| `ADR-010` | Accepted direction | Public launch safety |
-| `ADR-011` | Pending | Production resource and launch approval |
-| `ADR-012` | Pending | Public registration/privacy/account lifecycle |
-| `ADR-013` | Pending | Admin Production access |
-| `ADR-014` | Proposed | Audit/case ownership |
-| `ADR-015` | Proposed | Frontend runtime configuration |
+| ID        | Status                       | Blocking scope                                |
+| --------- | ---------------------------- | --------------------------------------------- |
+| `ADR-001` | Temporary working assumption | Backend/IaC topology                          |
+| `ADR-002` | Proposed                     | Frontend organization                         |
+| `ADR-003` | Accepted                     | Auth/RBAC                                     |
+| `ADR-004` | Proposed                     | Data/IaC                                      |
+| `ADR-005` | Accepted                     | Cloud scope                                   |
+| `ADR-006` | Proposed                     | Upload/storage                                |
+| `ADR-007` | Accepted                     | Order/payment simulation                      |
+| `ADR-008` | Pending                      | Recommendation implementation only            |
+| `ADR-009` | Proposed                     | Async consistency                             |
+| `ADR-010` | Accepted direction           | Public launch safety                          |
+| `ADR-011` | Pending                      | Production resource and launch approval       |
+| `ADR-012` | Pending                      | Public registration/privacy/account lifecycle |
+| `ADR-013` | Pending                      | Admin Production access                       |
+| `ADR-014` | Proposed                     | Audit/case ownership                          |
+| `ADR-015` | Proposed                     | Frontend runtime configuration                |
 
 ## ADR-012 — Public account data and recovery model
 

@@ -1,4 +1,4 @@
-import NavBar from '../components/NavBar';
+import NavBar from "../components/NavBar";
 
 export default function HomePage() {
   return (
@@ -9,7 +9,8 @@ export default function HomePage() {
           RE-LOOP — แพลตฟอร์มซื้อ-ขายแฟชั่นมือสอง
         </h1>
         <p className="mt-4 text-lg text-gray-600">
-          ค้นหาเสื้อผ้ามือสองที่ตรงสไตล์คุณ ซื้อขายอย่างปลอดภัยด้วยระบบชำระเงินคนกลาง
+          ค้นหาเสื้อผ้ามือสองที่ตรงสไตล์คุณ
+          ซื้อขายอย่างปลอดภัยด้วยระบบชำระเงินคนกลาง
         </p>
       </section>
     </main>

@@ -43,17 +43,38 @@ Backend services are **not** bind-mounted — after editing a service, rebuild j
 docker compose up -d --build auth-service
 ```
 
+## Local dependency and quality baseline
+
+Node version is pinned in `.nvmrc` / `package.json#engines` (`>=22.11.0 <23.0.0`, npm 10+),
+matching the `node:22-alpine` base image used by every Dockerfile; `npm install` refuses to run
+outside that range (`engine-strict=true` in `.npmrc`).
+
+```bash
+npm install        # installs all workspaces, writes package-lock.json
+npm run lint        # ESLint across backend + frontend
+npm run format:check # Prettier check (use `npm run format` to auto-fix)
+```
+
+`npm run lint` currently **exits 1** — it reports 7 pre-existing issues in application code
+(unused catch-error bindings and unused imports) that predate this baseline — see `docs/progress.md` evidence
+manifest for the tracked list; fixing them is separate feature/cleanup work, not part of the
+tooling baseline itself.
+
+Each service validates its own required environment variables at startup via
+`requireEnv()` (`backend/shared/src/env.js`) and fails immediately with a clear error if one is
+missing, instead of failing later with a confusing runtime error.
+
 ## Current status
 
-| Service | State |
-|---|---|
-| `gateway` | ✅ routes to all 5 services, verifies JWT |
-| `auth-service` | ✅ register / login / refresh / logout / me — KYC & seller onboarding not built yet |
-| `product-service` | 🔲 skeleton only (`/health`) |
-| `order-service` | 🔲 skeleton only (`/health`) |
-| `chat-service` | 🔲 skeleton only (`/health`) |
-| `review-service` | 🔲 skeleton only (`/health`) |
-| `frontend` | ✅ home page, login, register — rest of the pages not built yet |
+| Service           | State                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `gateway`         | ✅ routes to all 5 services, verifies JWT                                           |
+| `auth-service`    | ✅ register / login / refresh / logout / me — KYC & seller onboarding not built yet |
+| `product-service` | 🔲 skeleton only (`/health`)                                                        |
+| `order-service`   | 🔲 skeleton only (`/health`)                                                        |
+| `chat-service`    | 🔲 skeleton only (`/health`)                                                        |
+| `review-service`  | 🔲 skeleton only (`/health`)                                                        |
+| `frontend`        | ✅ home page, login, register — rest of the pages not built yet                     |
 
 See `log/phase-*.md` for what was actually done in each phase, including bugs found and fixed.
 
@@ -87,13 +108,13 @@ middleware, and standardized error handling.
 
 ## Auth API (implemented)
 
-| Method | Path | Auth | Notes |
-|---|---|---|---|
-| POST | `/api/auth/register` | — | `{email, password, firstName, lastName, phone?}` |
-| POST | `/api/auth/login` | — | `{email, password}` |
-| POST | `/api/auth/refresh` | — | `{refreshToken}` → new access token |
-| POST | `/api/auth/logout` | — | `{refreshToken}` → revokes it |
-| GET | `/api/auth/me` | Bearer access token | current user |
+| Method | Path                 | Auth                | Notes                                            |
+| ------ | -------------------- | ------------------- | ------------------------------------------------ |
+| POST   | `/api/auth/register` | —                   | `{email, password, firstName, lastName, phone?}` |
+| POST   | `/api/auth/login`    | —                   | `{email, password}`                              |
+| POST   | `/api/auth/refresh`  | —                   | `{refreshToken}` → new access token              |
+| POST   | `/api/auth/logout`   | —                   | `{refreshToken}` → revokes it                    |
+| GET    | `/api/auth/me`       | Bearer access token | current user                                     |
 
 ## Database
 

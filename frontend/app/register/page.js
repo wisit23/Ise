@@ -1,15 +1,21 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { apiFetch } from '../../lib/api';
-import { saveSession } from '../../lib/auth';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { apiFetch } from "../../lib/api";
+import { saveSession } from "../../lib/auth";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', password: '' });
-  const [error, setError] = useState('');
+  const [form, setForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    password: "",
+  });
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   function update(field) {
@@ -18,12 +24,15 @@ export default function RegisterPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
     try {
-      const data = await apiFetch('/api/auth/register', { method: 'POST', body: form });
+      const data = await apiFetch("/api/auth/register", {
+        method: "POST",
+        body: form,
+      });
       saveSession(data);
-      router.push('/');
+      router.push("/");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,14 +49,14 @@ export default function RegisterPage() {
             required
             placeholder="ชื่อ"
             value={form.firstName}
-            onChange={update('firstName')}
+            onChange={update("firstName")}
             className="w-1/2 rounded-md border border-gray-300 px-3 py-2"
           />
           <input
             required
             placeholder="นามสกุล"
             value={form.lastName}
-            onChange={update('lastName')}
+            onChange={update("lastName")}
             className="w-1/2 rounded-md border border-gray-300 px-3 py-2"
           />
         </div>
@@ -56,13 +65,13 @@ export default function RegisterPage() {
           type="email"
           placeholder="อีเมล"
           value={form.email}
-          onChange={update('email')}
+          onChange={update("email")}
           className="rounded-md border border-gray-300 px-3 py-2"
         />
         <input
           placeholder="เบอร์โทรศัพท์ (ไม่บังคับ)"
           value={form.phone}
-          onChange={update('phone')}
+          onChange={update("phone")}
           className="rounded-md border border-gray-300 px-3 py-2"
         />
         <input
@@ -70,7 +79,7 @@ export default function RegisterPage() {
           type="password"
           placeholder="รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)"
           value={form.password}
-          onChange={update('password')}
+          onChange={update("password")}
           className="rounded-md border border-gray-300 px-3 py-2"
         />
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -79,11 +88,11 @@ export default function RegisterPage() {
           disabled={loading}
           className="rounded-md bg-emerald-600 py-2 text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {loading ? 'กำลังสมัคร...' : 'สมัครสมาชิก'}
+          {loading ? "กำลังสมัคร..." : "สมัครสมาชิก"}
         </button>
       </form>
       <p className="mt-4 text-sm text-gray-600">
-        มีบัญชีอยู่แล้ว?{' '}
+        มีบัญชีอยู่แล้ว?{" "}
         <Link href="/login" className="text-emerald-600 hover:underline">
           เข้าสู่ระบบ
         </Link>

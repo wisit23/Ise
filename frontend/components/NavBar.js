@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { getStoredUser, clearSession } from '../lib/auth';
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { getStoredUser, clearSession } from "../lib/auth";
 
 export default function NavBar() {
   const [user, setUser] = useState(null);
@@ -14,7 +14,7 @@ export default function NavBar() {
   function handleLogout() {
     clearSession();
     setUser(null);
-    window.location.href = '/';
+    window.location.href = "/";
   }
 
   return (
@@ -27,13 +27,19 @@ export default function NavBar() {
           {user ? (
             <>
               <span className="text-gray-600">สวัสดี, {user.firstName}</span>
-              <button onClick={handleLogout} className="text-gray-600 hover:text-emerald-600">
+              <button
+                onClick={handleLogout}
+                className="text-gray-600 hover:text-emerald-600"
+              >
                 ออกจากระบบ
               </button>
             </>
           ) : (
             <>
-              <Link href="/login" className="text-gray-600 hover:text-emerald-600">
+              <Link
+                href="/login"
+                className="text-gray-600 hover:text-emerald-600"
+              >
                 เข้าสู่ระบบ
               </Link>
               <Link

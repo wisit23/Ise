@@ -1,14 +1,14 @@
-const jwt = require('jsonwebtoken');
+const jwt = require("jsonwebtoken");
 
 function signAccessToken(payload) {
   return jwt.sign(payload, process.env.JWT_ACCESS_SECRET, {
-    expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m',
+    expiresIn: process.env.JWT_ACCESS_EXPIRES || "15m",
   });
 }
 
 function signRefreshToken(payload) {
   return jwt.sign(payload, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: process.env.JWT_REFRESH_EXPIRES || '7d',
+    expiresIn: process.env.JWT_REFRESH_EXPIRES || "7d",
   });
 }
 
@@ -20,4 +20,9 @@ function verifyRefreshToken(token) {
   return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 }
 
-module.exports = { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken };
+module.exports = {
+  signAccessToken,
+  signRefreshToken,
+  verifyAccessToken,
+  verifyRefreshToken,
+};

@@ -8,21 +8,21 @@
 - Frontend runs `next dev`; Auth starts with `prisma db push`.
 - PostgreSQL and Redis ports are exposed to the host.
 - One root `.env` is passed to all containers.
-- There is no lockfile, CI/CD, IaC, registry workflow, cloud environment, migration history, backup, restore, central logging, monitoring, alerting, DNS, or TLS configuration.
+- There is no CI/CD, IaC, registry workflow, cloud environment, migration history, backup, restore, central logging, monitoring, alerting, DNS, or TLS configuration. A `package-lock.json` (generated, not yet committed) and a Node/npm version pin consistent with all 7 Dockerfiles (`node:22-alpine`) landed under `FOUND-001` (see `docs/progress.md`) — but the lockfile governs only the host workspace `npm install`; no Dockerfile copies it or uses `npm ci`, so container builds still resolve dependency versions fresh at build time, not from the lockfile. A CI pipeline is still `FOUND-002`.
 - Historical logs claim prior local runtime verification; this planning round did not reproduce a full container run because no Production implementation was authorized.
 
 ## 2. Cloud selection criteria
 
-| Criterion | GCP primary candidate | AWS stretch candidate | Required evidence |
-|---|---|---|---|
-| Coursework/learning fit | Confirmed user preference | Optional learning | rubric and presentation needs |
-| Managed container support | Evaluate Cloud Run or approved alternative | Evaluate App Runner/ECS/Fargate equivalent | WebSocket, worker, min instances, health |
-| Managed PostgreSQL | Cloud SQL candidate | RDS candidate | price, backup/PITR, connection limits |
-| Object storage | GCS | S3 | IAM, signed access, lifecycle, adapter tests |
-| Cache/queue | Memorystore/managed alternatives | ElastiCache/managed alternatives | actual need, cost, failure behavior |
-| Region/latency | **Pending `ADR-011`** | only if Stretch approved | user location, service availability, cost |
-| Credits/budget | **TBD** | **TBD** | named owner and spending cap |
-| Operations | one primary IAM/logging model | duplicate minimal model | team capacity |
+| Criterion                 | GCP primary candidate                      | AWS stretch candidate                      | Required evidence                            |
+| ------------------------- | ------------------------------------------ | ------------------------------------------ | -------------------------------------------- |
+| Coursework/learning fit   | Confirmed user preference                  | Optional learning                          | rubric and presentation needs                |
+| Managed container support | Evaluate Cloud Run or approved alternative | Evaluate App Runner/ECS/Fargate equivalent | WebSocket, worker, min instances, health     |
+| Managed PostgreSQL        | Cloud SQL candidate                        | RDS candidate                              | price, backup/PITR, connection limits        |
+| Object storage            | GCS                                        | S3                                         | IAM, signed access, lifecycle, adapter tests |
+| Cache/queue               | Memorystore/managed alternatives           | ElastiCache/managed alternatives           | actual need, cost, failure behavior          |
+| Region/latency            | **Pending `ADR-011`**                      | only if Stretch approved                   | user location, service availability, cost    |
+| Credits/budget            | **TBD**                                    | **TBD**                                    | named owner and spending cap                 |
+| Operations                | one primary IAM/logging model              | duplicate minimal model                    | team capacity                                |
 
 `ADR-005` chooses GCP as primary and only a Level-1 AWS portability demonstration after launch. It does not claim multi-cloud resilience.
 
@@ -43,13 +43,13 @@ Production resources remain parameterized until these are answered.
 
 ## 4. Accounts, projects, and environments
 
-| Environment | Purpose | Data | Access | Deployment |
-|---|---|---|---|---|
-| Local | developer feedback | synthetic | individual machine | Docker Compose |
-| Test | CI integration | disposable synthetic | CI identity only | ephemeral where practical |
-| Development | shared integration if needed | synthetic | team | Proposed |
-| Staging | Production-like UAT/load/security | synthetic, resettable | team/reviewers | `DEPLOY-001` |
-| Production | public coursework demo | minimized account data under `ADR-012`; no real KYC/payment data | least privilege | `DEPLOY-002` |
+| Environment | Purpose                           | Data                                                             | Access             | Deployment                |
+| ----------- | --------------------------------- | ---------------------------------------------------------------- | ------------------ | ------------------------- |
+| Local       | developer feedback                | synthetic                                                        | individual machine | Docker Compose            |
+| Test        | CI integration                    | disposable synthetic                                             | CI identity only   | ephemeral where practical |
+| Development | shared integration if needed      | synthetic                                                        | team               | Proposed                  |
+| Staging     | Production-like UAT/load/security | synthetic, resettable                                            | team/reviewers     | `DEPLOY-001`              |
+| Production  | public coursework demo            | minimized account data under `ADR-012`; no real KYC/payment data | least privilege    | `DEPLOY-002`              |
 
 Prefer separate GCP projects for Staging and Production. Development/Test may share a non-production project only if IAM, naming, quotas, and data isolation remain clear. Never copy Production user content to non-production.
 
@@ -264,15 +264,15 @@ Required before launch:
 
 ## 23. Deployment section mapping
 
-| Task | Sections |
-|---|---|
-| `DISC-001` | 2–4, 16, 18–20 |
-| `FOUND-001`, `FOUND-002` | 6, 11, 13, 16 |
-| `DB-001`–`DB-004` | 7, 12, 18 |
+| Task                             | Sections             |
+| -------------------------------- | -------------------- |
+| `DISC-001`                       | 2–4, 16, 18–20       |
+| `FOUND-001`, `FOUND-002`         | 6, 11, 13, 16        |
+| `DB-001`–`DB-004`                | 7, 12, 18            |
 | `AUTH-001`–`AUTH-003`, `SEC-001` | 5, 8, 10, 13, 16, 19 |
-| `INT-001`, `INT-002` | 8–9, 17–18 |
-| `INFRA-001` | 4–11, 13, 17, 20 |
-| `DEPLOY-001` | 11–16 |
-| `DEPLOY-002` | 14–21 |
-| `OPS-001` | 15, 17–20 |
-| `INFRA-002` | 22 |
+| `INT-001`, `INT-002`             | 8–9, 17–18           |
+| `INFRA-001`                      | 4–11, 13, 17, 20     |
+| `DEPLOY-001`                     | 11–16                |
+| `DEPLOY-002`                     | 14–21                |
+| `OPS-001`                        | 15, 17–20            |
+| `INFRA-002`                      | 22                   |

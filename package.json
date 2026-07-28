@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "description": "RE-LOOP - second-hand fashion marketplace (microservices monorepo)",
+  "engines": {
+    "node": ">=22.11.0 <23.0.0",
+    "npm": ">=10.0.0"
+  },
   "workspaces": [
     "backend/shared",
     "backend/gateway",
@@ -11,6 +15,17 @@
   ],
   "scripts": {
     "dev": "docker compose up --build",
-    "down": "docker compose down"
+    "down": "docker compose down",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "eslint": "^9.9.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3"
   }
 }

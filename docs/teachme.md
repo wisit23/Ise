@@ -213,11 +213,11 @@ Senior Engineer ลด “การตีความใหม่” ระห�
 2. อยู่ที่ Root package, CI และ Shared contract
 3. แก้ “เครื่องฉันรันได้” และ Service เดาคนละแบบ
 4. ทำเพื่อให้หกคนกับ Agent ทำงานร่วมกัน
-5. ต้องทำเพราะไม่มี Lockfile/Test/CI
+5. ต้องทำเพราะไม่มี Test/CI; Lockfile/Lint/Format เพิ่งกลายเป็น Current จาก `FOUND-001` (ดู `progress.md`) แต่ยังรอ Reviewer เซ็น ไม่นับ Done
 6. หลัง Phase 0 บางส่วน ก่อน Schema/API
 7. Input คือ Current package, Gateway และ Workflow
 8. Pin version → Test wiring → Contract/State/Error
-9. npm, lint/static/test, CI, API schema
+9. npm (Lockfile+ESLint+Prettier = Current), static/test/CI (ยัง Proposed ใน `FOUND-002`), API schema
 10. Lockfile และ Contract คือกติกาที่ Machine ตรวจได้
 11. CI รันกติกาเดิมทุก Change
 12. เลือกของน้อยแต่ชัดเพราะทีมเล็ก
@@ -235,6 +235,8 @@ Senior Engineer ลด “การตีความใหม่” ระห�
 24. ทำผิดแล้ว Tool ขวางงานโดยไม่ลด Risk
 25. DoD ตามสาม Task card
 26. Senior มอง Contract เป็นเครื่องมือประสานทีม
+
+**สถานะปัจจุบัน (Current, 2026-07-28):** `FOUND-001` มี `.nvmrc`/`engines` ล็อก Node 22.x, `package-lock.json`, ESLint+Prettier (`npm run lint`/`format:check`), `.dockerignore`, และ `requireEnv()` เช็ค env ตอน start service — implement เสร็จแล้วแต่ยังรอ Reviewer เซ็นตามกติกา Task contract จึงยังไม่นับเป็น Done ส่วน `FOUND-002` (Test/CI) และ `ARCH-001` ยังเป็น Proposed ทั้งคู่ ดูหลักฐานเต็มที่ `progress.md`
 
 **Production View:** Foundation ไม่ใช่งานตกแต่ง มันคือระบบป้องกันความผิดพลาดซ้ำ
 
@@ -581,20 +583,20 @@ Senior Engineer ลด “การตีความใหม่” ระห�
 
 ## 5. แผนที่ Epic และ Task
 
-| Epic | มันแก้อะไร / อยู่ตรงไหน | Task | Input → Output | Test/Security/Performance | ถ้าไม่ทำ / DoD / Senior view |
-|---|---|---|---|---|---|
-| Discovery | Unknown ที่บังคับ Architecture | `DISC-001` | Answer → ADR | Evidence review | เดา Requirement / ทุก Critical ชัด / ลด irreversible choice |
-| Foundation | งานทำซ้ำไม่ได้ | `FOUND-001`, `FOUND-002` | Repo → deterministic gate | clean install, scan, CI time | Integration แตก / gate ผ่าน / feedback เร็ว |
-| Architecture | Owner/Contract ไม่ชัด | `ARCH-001` | workflow → contract | contract/negative/replay | Service ชนกัน / reviewer approve / boundary ชัด |
-| Database | ไม่มี migration/domain schema | `DB-001`–`DB-004` | invariant → schema | migration/concurrency/privacy | data เสีย / restore ได้ / DB บังคับกฎ |
-| API | skeleton ไม่มีธุรกิจ | `API-001`–`API-004` | contract → endpoints | validation/authz/load | UI หลอก / contract pass / owner ตัดสิน |
-| Auth | session/role ไม่ปลอดภัย | `AUTH-001`–`AUTH-003` | identity policy → secure session/KYC | CSRF/replay/permission/upload | takeover / negative pass / default deny |
-| Customer | ไม่มี Buyer/Seller journey | `CUST-001`–`CUST-005` | APIs → usable lifecycle | E2E/a11y/conflict | ไม่มี Value / UAT pass / server state truthful |
-| Admin | ไม่มี safety operation | `ADMIN-001`–`ADMIN-004` | case → audited action | permission/stale/recovery | public risk / audit+rollback / limit blast radius |
-| Integration | provider/failure ผูกแน่น | `INT-001`–`INT-003` | adapter/data → provider result | contract/fallback/cost | lost work / replay/fallback / choose JIT |
-| Test/Security | confidence ไม่มีหลักฐาน | `TEST-*`, `SEC-001` | risk → evidence | all relevant layers | launch blind / no blocker / test risk |
-| Infra/Deploy/Ops | local-only | `INFRA-*`, `DEPLOY-*`, `OPS-001` | artifact/IaC → operated service | smoke/rollback/restore/alert | public chaos / recoverable / design operations |
-| Documentation | คนถัดไปต้องเดา | `DOC-001` | evidence → synced docs | ID/link/status check | knowledge loss / handoff works / docs are interface |
+| Epic             | มันแก้อะไร / อยู่ตรงไหน        | Task                             | Input → Output                       | Test/Security/Performance     | ถ้าไม่ทำ / DoD / Senior view                                |
+| ---------------- | ------------------------------ | -------------------------------- | ------------------------------------ | ----------------------------- | ----------------------------------------------------------- |
+| Discovery        | Unknown ที่บังคับ Architecture | `DISC-001`                       | Answer → ADR                         | Evidence review               | เดา Requirement / ทุก Critical ชัด / ลด irreversible choice |
+| Foundation       | งานทำซ้ำไม่ได้                 | `FOUND-001`, `FOUND-002`         | Repo → deterministic gate            | clean install, scan, CI time  | Integration แตก / gate ผ่าน / feedback เร็ว                 |
+| Architecture     | Owner/Contract ไม่ชัด          | `ARCH-001`                       | workflow → contract                  | contract/negative/replay      | Service ชนกัน / reviewer approve / boundary ชัด             |
+| Database         | ไม่มี migration/domain schema  | `DB-001`–`DB-004`                | invariant → schema                   | migration/concurrency/privacy | data เสีย / restore ได้ / DB บังคับกฎ                       |
+| API              | skeleton ไม่มีธุรกิจ           | `API-001`–`API-004`              | contract → endpoints                 | validation/authz/load         | UI หลอก / contract pass / owner ตัดสิน                      |
+| Auth             | session/role ไม่ปลอดภัย        | `AUTH-001`–`AUTH-003`            | identity policy → secure session/KYC | CSRF/replay/permission/upload | takeover / negative pass / default deny                     |
+| Customer         | ไม่มี Buyer/Seller journey     | `CUST-001`–`CUST-005`            | APIs → usable lifecycle              | E2E/a11y/conflict             | ไม่มี Value / UAT pass / server state truthful              |
+| Admin            | ไม่มี safety operation         | `ADMIN-001`–`ADMIN-004`          | case → audited action                | permission/stale/recovery     | public risk / audit+rollback / limit blast radius           |
+| Integration      | provider/failure ผูกแน่น       | `INT-001`–`INT-003`              | adapter/data → provider result       | contract/fallback/cost        | lost work / replay/fallback / choose JIT                    |
+| Test/Security    | confidence ไม่มีหลักฐาน        | `TEST-*`, `SEC-001`              | risk → evidence                      | all relevant layers           | launch blind / no blocker / test risk                       |
+| Infra/Deploy/Ops | local-only                     | `INFRA-*`, `DEPLOY-*`, `OPS-001` | artifact/IaC → operated service      | smoke/rollback/restore/alert  | public chaos / recoverable / design operations              |
+| Documentation    | คนถัดไปต้องเดา                 | `DOC-001`                        | evidence → synced docs               | ID/link/status check          | knowledge loss / handoff works / docs are interface         |
 
 ทุก Epic ใช้กรอบ 26 ข้อในส่วน 3 และรายละเอียดจริงของ Input, Step, Technology, Alternative, Risk, Rollback และ DoD อยู่ใน Task card ที่อ้าง
 
@@ -660,7 +662,7 @@ Debug แปลว่าหาสาเหตุ ไม่ใช่ลองแ�
 
 ### World-Class View
 
-สิ่งที่แยกผู้เชี่ยวชาญออกจากมือใหม่ไม่ใช่การจำ Technology ได้มากกว่า แต่คือการมองเห็น Invariant, Boundary, Failure และ Evidence เขาจะลดความเสียหายเมื่อผิดพลาด ทำทางย้อนกลับ และไม่เรียกสิ่งที่ยังไม่ได้พิสูจน์ว่า “เสร็จ”  
+สิ่งที่แยกผู้เชี่ยวชาญออกจากมือใหม่ไม่ใช่การจำ Technology ได้มากกว่า แต่คือการมองเห็น Invariant, Boundary, Failure และ Evidence เขาจะลดความเสียหายเมื่อผิดพลาด ทำทางย้อนกลับ และไม่เรียกสิ่งที่ยังไม่ได้พิสูจน์ว่า “เสร็จ”
 
 ### Production View สุดท้าย
 

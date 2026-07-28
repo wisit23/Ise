@@ -63,18 +63,18 @@ Evidence:
 
 ### 2.2 Current containers and boundaries
 
-| Boundary | Current state | Evidence | Limitation |
-|---|---|---|---|
-| Customer frontend | One Next.js application with home, login, register | `frontend/app/` | No marketplace lifecycle |
-| Admin frontend | Not started | No admin routes/components found | Role enum alone is not an Admin feature |
-| Shared frontend | `api.js`, `auth.js`, `NavBar.js` only | `frontend/lib/`, `frontend/components/` | No design system, form library, route guard, or test harness |
-| Gateway | Proxies `/api/auth`, `/api/products`, `/api/orders`, `/api/chat`, `/api/reviews`; validates bearer access token | `backend/gateway/src/server.js` | Open CORS; WebSocket upgrade bypasses normal auth middleware |
-| Auth service | Register, login, refresh, logout, `/me` | `backend/services/auth-service/src/` | Single role, localStorage tokens, plaintext stored refresh JWT, no rotation |
-| Product/Order/Chat/Review | Health endpoints only | each service `src/app.js` | No routes, domain logic, schema, tests |
-| Database | One PostgreSQL container, one logical database per service; auth tables only | `docker-compose.yml`, Prisma schema | `db push`, no migration history, four empty databases |
-| Cache/jobs | Redis container exists | `docker-compose.yml` | No Redis/BullMQ/pub-sub implementation |
-| Storage | Local named volume declared for product uploads | `docker-compose.yml` | No upload handler; no private KYC storage |
-| Infrastructure | Docker Compose development topology | `docker-compose.yml` | No IaC, environments, cloud, CI/CD, backup, monitoring |
+| Boundary                  | Current state                                                                                                   | Evidence                                | Limitation                                                                  |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------- |
+| Customer frontend         | One Next.js application with home, login, register                                                              | `frontend/app/`                         | No marketplace lifecycle                                                    |
+| Admin frontend            | Not started                                                                                                     | No admin routes/components found        | Role enum alone is not an Admin feature                                     |
+| Shared frontend           | `api.js`, `auth.js`, `NavBar.js` only                                                                           | `frontend/lib/`, `frontend/components/` | No design system, form library, route guard, or test harness                |
+| Gateway                   | Proxies `/api/auth`, `/api/products`, `/api/orders`, `/api/chat`, `/api/reviews`; validates bearer access token | `backend/gateway/src/server.js`         | Open CORS; WebSocket upgrade bypasses normal auth middleware                |
+| Auth service              | Register, login, refresh, logout, `/me`                                                                         | `backend/services/auth-service/src/`    | Single role, localStorage tokens, plaintext stored refresh JWT, no rotation |
+| Product/Order/Chat/Review | Health endpoints only                                                                                           | each service `src/app.js`               | No routes, domain logic, schema, tests                                      |
+| Database                  | One PostgreSQL container, one logical database per service; auth tables only                                    | `docker-compose.yml`, Prisma schema     | `db push`, no migration history, four empty databases                       |
+| Cache/jobs                | Redis container exists                                                                                          | `docker-compose.yml`                    | No Redis/BullMQ/pub-sub implementation                                      |
+| Storage                   | Local named volume declared for product uploads                                                                 | `docker-compose.yml`                    | No upload handler; no private KYC storage                                   |
+| Infrastructure            | Docker Compose development topology                                                                             | `docker-compose.yml`                    | No IaC, environments, cloud, CI/CD, backup, monitoring                      |
 
 ## 3. Target architecture principles
 
@@ -207,14 +207,14 @@ Extracting a separately published frontend package is out of scope unless reuse 
 
 ### 6.1 Service ownership
 
-| Service | Owns | Must not own |
-|---|---|---|
-| Gateway | edge routing, coarse authentication, CORS, rate limit, request ID, secure headers | business decisions or direct DB access |
-| Auth | users, multi-role assignments, sessions, seller profile/KYC state, login/audit identity | product/order records |
-| Product | products, media metadata, inventory/listing state, search/filter data, recommendation inputs | payment/order state |
-| Order | cart reservation, order, mock payment, shipping state, dispute financial state | authentication source of truth |
-| Chat | rooms/messages and access checks based on participating users/orders | general notifications or moderation decisions |
-| Review | reviews, reports/moderation cases, seller aggregates, in-app notifications where retained by final design | user passwords or payment details |
+| Service | Owns                                                                                                      | Must not own                                  |
+| ------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Gateway | edge routing, coarse authentication, CORS, rate limit, request ID, secure headers                         | business decisions or direct DB access        |
+| Auth    | users, multi-role assignments, sessions, seller profile/KYC state, login/audit identity                   | product/order records                         |
+| Product | products, media metadata, inventory/listing state, search/filter data, recommendation inputs              | payment/order state                           |
+| Order   | cart reservation, order, mock payment, shipping state, dispute financial state                            | authentication source of truth                |
+| Chat    | rooms/messages and access checks based on participating users/orders                                      | general notifications or moderation decisions |
+| Review  | reviews, reports/moderation cases, seller aggregates, in-app notifications where retained by final design | user passwords or payment details             |
 
 `ARCH-001` must turn this table into versioned API/event contracts before domain implementation.
 
@@ -487,18 +487,18 @@ GCP is the confirmed primary cloud. Exact compute products, region, domain, budg
 
 ## 16. Testing architecture
 
-| Layer | Proposed purpose | Gate |
-|---|---|---|
-| Unit | pure domain rules, state transitions, permission predicates | every service PR |
-| Integration | Prisma/PostgreSQL, storage/queue adapters, auth sessions | every affected PR |
-| API/contract | gateway/service schemas, error and auth contracts | CI |
-| Component | frontend forms/states/accessibility semantics | CI |
-| E2E | Buyer, Seller, Admin critical flows | staging/release |
-| Security | SAST, dependency/secret scan, authz negative tests, upload abuse | CI + release |
-| Accessibility | keyboard, labels, contrast, responsive checks | CI + manual UAT |
-| Performance/load | reservation concurrency, feed/search, public abuse controls | before launch |
-| Smoke | deploy, health, login, core transaction, admin safety | every deployment |
-| Restore | backup recovery and application reconciliation | before launch and scheduled |
+| Layer            | Proposed purpose                                                 | Gate                        |
+| ---------------- | ---------------------------------------------------------------- | --------------------------- |
+| Unit             | pure domain rules, state transitions, permission predicates      | every service PR            |
+| Integration      | Prisma/PostgreSQL, storage/queue adapters, auth sessions         | every affected PR           |
+| API/contract     | gateway/service schemas, error and auth contracts                | CI                          |
+| Component        | frontend forms/states/accessibility semantics                    | CI                          |
+| E2E              | Buyer, Seller, Admin critical flows                              | staging/release             |
+| Security         | SAST, dependency/secret scan, authz negative tests, upload abuse | CI + release                |
+| Accessibility    | keyboard, labels, contrast, responsive checks                    | CI + manual UAT             |
+| Performance/load | reservation concurrency, feed/search, public abuse controls      | before launch               |
+| Smoke            | deploy, health, login, core transaction, admin safety            | every deployment            |
+| Restore          | backup recovery and application reconciliation                   | before launch and scheduled |
 
 No current automated test suite was found.
 
@@ -516,23 +516,23 @@ No current automated test suite was found.
 
 ## 18. Decision register
 
-| Decision | Architecture impact | Status |
-|---|---|---|
-| `ADR-001` | Preserve current five service boundaries for Release A | Temporary working assumption |
-| `ADR-002` | Customer and Admin in one Next.js deployment with separated route groups | Proposed |
-| `ADR-003` | Multi-role RBAC; memory access token; HttpOnly refresh cookie | Confirmed direction |
-| `ADR-004` | Database-per-service with managed PostgreSQL and migrations | Proposed |
-| `ADR-005` | GCP primary; AWS portability stretch only | Confirmed direction |
-| `ADR-006` | Separate public-media and private test-KYC storage | Proposed |
-| `ADR-007` | Mock PaymentGateway only | Confirmed |
-| `ADR-008` | Swappable Algorithm/AI recommendation strategy; selection pending | Pending |
-| `ADR-009` | Transactional outbox + idempotent consumers | Proposed |
-| `ADR-010` | Public demo safety and automatic test-data cleanup | Confirmed direction / retention pending |
-| `ADR-011` | Region, domain, SLO, RPO/RTO and launch capacity | Pending |
-| `ADR-012` | Public account privacy, lifecycle, and retention | Pending |
-| `ADR-013` | Admin MFA/SSO or restricted ingress | Pending |
-| `ADR-014` | Service-local audit with Review-owned read projection | Proposed |
-| `ADR-015` | Same-origin/runtime frontend configuration | Proposed |
+| Decision  | Architecture impact                                                      | Status                                  |
+| --------- | ------------------------------------------------------------------------ | --------------------------------------- |
+| `ADR-001` | Preserve current five service boundaries for Release A                   | Temporary working assumption            |
+| `ADR-002` | Customer and Admin in one Next.js deployment with separated route groups | Proposed                                |
+| `ADR-003` | Multi-role RBAC; memory access token; HttpOnly refresh cookie            | Confirmed direction                     |
+| `ADR-004` | Database-per-service with managed PostgreSQL and migrations              | Proposed                                |
+| `ADR-005` | GCP primary; AWS portability stretch only                                | Confirmed direction                     |
+| `ADR-006` | Separate public-media and private test-KYC storage                       | Proposed                                |
+| `ADR-007` | Mock PaymentGateway only                                                 | Confirmed                               |
+| `ADR-008` | Swappable Algorithm/AI recommendation strategy; selection pending        | Pending                                 |
+| `ADR-009` | Transactional outbox + idempotent consumers                              | Proposed                                |
+| `ADR-010` | Public demo safety and automatic test-data cleanup                       | Confirmed direction / retention pending |
+| `ADR-011` | Region, domain, SLO, RPO/RTO and launch capacity                         | Pending                                 |
+| `ADR-012` | Public account privacy, lifecycle, and retention                         | Pending                                 |
+| `ADR-013` | Admin MFA/SSO or restricted ingress                                      | Pending                                 |
+| `ADR-014` | Service-local audit with Review-owned read projection                    | Proposed                                |
+| `ADR-015` | Same-origin/runtime frontend configuration                               | Proposed                                |
 
 ## 19. Related plan sections
 

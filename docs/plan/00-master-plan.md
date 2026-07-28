@@ -7,19 +7,20 @@ Tech stack ตามโจทย์: **Next.js (frontend) / JavaScript (backend)
 
 การตัดสินใจที่ grill กับผู้ใช้แล้ว (ยืนยันครบ):
 
-| หัวข้อ | คำตอบ |
-|---|---|
-| Scope | **Core Marketplace ก่อน** — Buyer+Seller ครบวงจร (KYC, ลงขาย, feed/ค้นหา/swipe, cart lock 10 นาที, order+escrow, ติดตามออเดอร์, แชท, รีวิว) — Admin/MKT/CEO dashboard เป็น phase ถัดไป |
-| Services | **5 microservices + API Gateway** แต่ละตัวเป็น MVC ภายใน |
-| Backend | **Express.js + Prisma** (plain JavaScript) |
-| Database | **Postgres container เดียว แยก database ต่อ service** — ห้าม service ข้าม DB, คุยผ่าน API/event เท่านั้น |
-| Comms | **REST ระหว่าง service + Redis**: BullMQ (delayed jobs/timers), Redis pub/sub (events), Socket.IO + Redis adapter (chat) |
-| Payment | **Mock Payment Gateway** (adapter interface สลับเป็นของจริงได้) + Escrow states ใน DB |
-| Repo | **Monorepo** — docker-compose เดียวรันทั้งระบบ |
-| Frontend | Next.js 15 App Router, JavaScript, Tailwind CSS + shadcn/ui, TanStack Query, Socket.IO client |
-| ER | อิง `erdatabase.png` เป็นหลัก ปรับได้ **แต่ทุกการปรับต้องรายงาน + ให้เหตุผล** (ดูตารางด้านล่าง) |
+| หัวข้อ   | คำตอบ                                                                                                                                                                                  |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope    | **Core Marketplace ก่อน** — Buyer+Seller ครบวงจร (KYC, ลงขาย, feed/ค้นหา/swipe, cart lock 10 นาที, order+escrow, ติดตามออเดอร์, แชท, รีวิว) — Admin/MKT/CEO dashboard เป็น phase ถัดไป |
+| Services | **5 microservices + API Gateway** แต่ละตัวเป็น MVC ภายใน                                                                                                                               |
+| Backend  | **Express.js + Prisma** (plain JavaScript)                                                                                                                                             |
+| Database | **Postgres container เดียว แยก database ต่อ service** — ห้าม service ข้าม DB, คุยผ่าน API/event เท่านั้น                                                                               |
+| Comms    | **REST ระหว่าง service + Redis**: BullMQ (delayed jobs/timers), Redis pub/sub (events), Socket.IO + Redis adapter (chat)                                                               |
+| Payment  | **Mock Payment Gateway** (adapter interface สลับเป็นของจริงได้) + Escrow states ใน DB                                                                                                  |
+| Repo     | **Monorepo** — docker-compose เดียวรันทั้งระบบ                                                                                                                                         |
+| Frontend | Next.js 15 App Router, JavaScript, Tailwind CSS + shadcn/ui, TanStack Query, Socket.IO client                                                                                          |
+| ER       | อิง `erdatabase.png` เป็นหลัก ปรับได้ **แต่ทุกการปรับต้องรายงาน + ให้เหตุผล** (ดูตารางด้านล่าง)                                                                                        |
 
 **ข้อกำหนดเพิ่มจากผู้ใช้:** ตอนลงมือทำ ให้สร้างโฟลเดอร์ใน `D:\ise`:
+
 - `D:\ise\plan\` — เก็บสำเนาแผนนี้ + แผนย่อยแต่ละ phase
 - `D:\ise\database\` — เก็บ schema.prisma ทุก service, ER ฉบับปรับแล้ว (markdown/mermaid), ตารางการเปลี่ยนแปลงจาก ER เดิม
 - `D:\ise\log\` — เก็บ log บันทึกการทำงาน/การตัดสินใจแต่ละ phase (append ทุกครั้งที่จบ phase)
@@ -50,6 +51,7 @@ D:\ise\
 ```
 
 **โครง MVC ในแต่ละ service (เหมือนกันทุกตัว):**
+
 ```
 services/<name>/
 ├── src/
@@ -70,6 +72,7 @@ services/<name>/
 **Auth flow:** JWT (access 15m + refresh 7d) ออกโดย auth-service, ตรวจที่ gateway ด้วย shared middleware (public key/secret ร่วม), ส่ง `x-user-id`, `x-user-role` ต่อไปยัง services
 
 **Event flow หลัก (Redis pub/sub):**
+
 - `order.paid` → product-service เปลี่ยน Product เป็น Sold, review-service ยังไม่ทำอะไร
 - `order.completed` → review-service เปิดสิทธิ์รีวิว (14 วัน), notification แจ้งผู้ซื้อ
 - `product.sold` → chat-service ซ่อนปุ่มเริ่มแชทใหม่
@@ -86,50 +89,50 @@ services/<name>/
 
 ### 2.1 ตารางที่ **เก็บตาม ER** (ปรับชื่อ/ที่อยู่)
 
-| ER เดิม | ใหม่ (service.table) | การปรับ + เหตุผล |
-|---|---|---|
-| User | auth.users | เก็บ FName/LName/email/status → เพิ่ม `password_hash`, `phone` (ER ไม่มีช่องรหัสผ่าน — จำเป็นต่อ login) |
-| Role | auth.users.role (enum) | ยุบตาราง Role เป็น enum column `BUYER/SELLER/ADMIN` — เหตุผล: MVP ผู้ใช้มี role เดียว+อัปเกรดเป็น seller, แยกตารางเพิ่ม join โดยไม่ได้อะไร (ถ้าอนาคตต้อง multi-role ค่อย migrate เป็น user_roles) |
-| Buyer (style/size/brand_preference) | auth.buyer_profiles | ตาม ER — เก็บ preference เริ่มต้น (แบบสอบถาม cold start) |
-| Seller (shop_name, id_card_number, bank_account) | auth.seller_profiles | ตาม ER + เพิ่ม `kyc_status (PENDING/VERIFIED/REJECTED)`, `kyc_document_url`, `verified_at` — เหตุผล: WF-01 ต้องมีสถานะ KYC และไฟล์เอกสาร ซึ่ง ER ไม่มี |
-| Login_Log | auth.login_logs | ตาม ER — รองรับ audit (NFR-SP-03) |
-| Product | product.products | ตาม ER (name, brand, price, type→category, seller_id) + เพิ่ม `condition_level`, `size`, `status enum(DRAFT/AVAILABLE/LOCKED_IN_CART/LOCKED_IN_CHECKOUT/SOLD/HIDDEN)`, `view_count` — เหตุผล: FR-1.3.1 บังคับระบุสภาพสินค้า, WF-04 ต้องมี state machine ของสต็อก ซึ่ง ER ไม่ได้ระบุ |
-| Photo | product.product_photos | ตาม ER — บังคับ ≥4 รูปที่ application layer (FR-1.3.1), บีบอัด ≤500KB/1080px ด้วย sharp (NFR-P-05) |
-| Swipe | product.swipes | ตาม ER (user_id, product_id, date) + เพิ่ม `direction (LEFT/RIGHT)` — เหตุผล: WF-03 ต้องรู้ปัดซ้าย/ขวาเพื่อปรับ weight ของ Style Profile แต่ ER ไม่มี field ทิศทาง |
-| Book_Mark | product.bookmarks | ตาม ER (= Wishlist ใน FR-1.4.2) — rename เป็น bookmarks ให้สื่อความหมาย |
-| basket | order.cart_items | ตาม ER (buyer_id, product_id, locked_at) + เพิ่ม `locked_until` — เหตุผล: การล็อก 10 นาทีต้องรู้เวลาหมดอายุตรงๆ เพื่อกัน race และให้ scheduler ปลดล็อกถูกตัว (NFR-AR-02) |
-| Order | order.orders | ตาม ER + `status enum(PENDING_PAYMENT/TO_SHIP/TO_RECEIVE/COMPLETED/CANCELLED/DISPUTED/REFUNDED/CLOSED)` — เหตุผล: ER มีแค่ Order_Type/date แต่ WF-04/05 กำหนด state machine ละเอียด |
-| Order_Items | order.order_items | ตาม ER (order_id, product_id, price) |
-| Payments | order.payments | ตาม ER (amount, payment_status, hold_status, paid_at) + เพิ่ม `escrow_status enum(NONE/HELD/RELEASED/REFUNDED)`, `gateway_ref` — เหตุผล: ER มี hold_status อยู่แล้ว แต่ escrow ตาม WF-04/05 มีวงจรชัดเจนต้องแยก field |
-| Shippings | order.shipments | ตาม ER (tracking_number, shipping_company, status, order_id) |
-| message | chat.messages | ตาม ER (text, sender, date, chat_id) + เพิ่มตาราง `chat.chat_rooms (buyer_id, seller_id, product_id)` — เหตุผล: ER ผูก message กับ Chat_ID แต่ไม่มีตารางห้องแชท; WF-06 ต้องผูกห้องกับสินค้า (Context Link) และเช็คห้องเดิมก่อนสร้างใหม่ |
-| Auto_messages | chat.auto_messages | ตาม ER — quick replies / Instant FAQ ของผู้ขาย (FR-2.2.3) |
+| ER เดิม                                          | ใหม่ (service.table)   | การปรับ + เหตุผล                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User                                             | auth.users             | เก็บ FName/LName/email/status → เพิ่ม `password_hash`, `phone` (ER ไม่มีช่องรหัสผ่าน — จำเป็นต่อ login)                                                                                                                                                                             |
+| Role                                             | auth.users.role (enum) | ยุบตาราง Role เป็น enum column `BUYER/SELLER/ADMIN` — เหตุผล: MVP ผู้ใช้มี role เดียว+อัปเกรดเป็น seller, แยกตารางเพิ่ม join โดยไม่ได้อะไร (ถ้าอนาคตต้อง multi-role ค่อย migrate เป็น user_roles)                                                                                   |
+| Buyer (style/size/brand_preference)              | auth.buyer_profiles    | ตาม ER — เก็บ preference เริ่มต้น (แบบสอบถาม cold start)                                                                                                                                                                                                                            |
+| Seller (shop_name, id_card_number, bank_account) | auth.seller_profiles   | ตาม ER + เพิ่ม `kyc_status (PENDING/VERIFIED/REJECTED)`, `kyc_document_url`, `verified_at` — เหตุผล: WF-01 ต้องมีสถานะ KYC และไฟล์เอกสาร ซึ่ง ER ไม่มี                                                                                                                              |
+| Login_Log                                        | auth.login_logs        | ตาม ER — รองรับ audit (NFR-SP-03)                                                                                                                                                                                                                                                   |
+| Product                                          | product.products       | ตาม ER (name, brand, price, type→category, seller_id) + เพิ่ม `condition_level`, `size`, `status enum(DRAFT/AVAILABLE/LOCKED_IN_CART/LOCKED_IN_CHECKOUT/SOLD/HIDDEN)`, `view_count` — เหตุผล: FR-1.3.1 บังคับระบุสภาพสินค้า, WF-04 ต้องมี state machine ของสต็อก ซึ่ง ER ไม่ได้ระบุ |
+| Photo                                            | product.product_photos | ตาม ER — บังคับ ≥4 รูปที่ application layer (FR-1.3.1), บีบอัด ≤500KB/1080px ด้วย sharp (NFR-P-05)                                                                                                                                                                                  |
+| Swipe                                            | product.swipes         | ตาม ER (user_id, product_id, date) + เพิ่ม `direction (LEFT/RIGHT)` — เหตุผล: WF-03 ต้องรู้ปัดซ้าย/ขวาเพื่อปรับ weight ของ Style Profile แต่ ER ไม่มี field ทิศทาง                                                                                                                  |
+| Book_Mark                                        | product.bookmarks      | ตาม ER (= Wishlist ใน FR-1.4.2) — rename เป็น bookmarks ให้สื่อความหมาย                                                                                                                                                                                                             |
+| basket                                           | order.cart_items       | ตาม ER (buyer_id, product_id, locked_at) + เพิ่ม `locked_until` — เหตุผล: การล็อก 10 นาทีต้องรู้เวลาหมดอายุตรงๆ เพื่อกัน race และให้ scheduler ปลดล็อกถูกตัว (NFR-AR-02)                                                                                                            |
+| Order                                            | order.orders           | ตาม ER + `status enum(PENDING_PAYMENT/TO_SHIP/TO_RECEIVE/COMPLETED/CANCELLED/DISPUTED/REFUNDED/CLOSED)` — เหตุผล: ER มีแค่ Order_Type/date แต่ WF-04/05 กำหนด state machine ละเอียด                                                                                                 |
+| Order_Items                                      | order.order_items      | ตาม ER (order_id, product_id, price)                                                                                                                                                                                                                                                |
+| Payments                                         | order.payments         | ตาม ER (amount, payment_status, hold_status, paid_at) + เพิ่ม `escrow_status enum(NONE/HELD/RELEASED/REFUNDED)`, `gateway_ref` — เหตุผล: ER มี hold_status อยู่แล้ว แต่ escrow ตาม WF-04/05 มีวงจรชัดเจนต้องแยก field                                                               |
+| Shippings                                        | order.shipments        | ตาม ER (tracking_number, shipping_company, status, order_id)                                                                                                                                                                                                                        |
+| message                                          | chat.messages          | ตาม ER (text, sender, date, chat_id) + เพิ่มตาราง `chat.chat_rooms (buyer_id, seller_id, product_id)` — เหตุผล: ER ผูก message กับ Chat_ID แต่ไม่มีตารางห้องแชท; WF-06 ต้องผูกห้องกับสินค้า (Context Link) และเช็คห้องเดิมก่อนสร้างใหม่                                             |
+| Auto_messages                                    | chat.auto_messages     | ตาม ER — quick replies / Instant FAQ ของผู้ขาย (FR-2.2.3)                                                                                                                                                                                                                           |
 
 ### 2.2 ตารางที่ **เพิ่มใหม่** (ER ไม่มี แต่ requirement บังคับ)
 
-| ตารางใหม่ | เหตุผล |
-|---|---|
-| review.reviews (order_id UNIQUE, rating 1-5, text, photos, published_at) | **ER ไม่มีตาราง Review เลย** แต่ FR-2.1.1/2.1.2 + WF-07 บังคับมีรีวิว, 1 order = 1 รีวิว, สิทธิ์ 14 วัน |
-| review.seller_stats (seller_id, avg_rating, review_count, sales_count) | คะแนนเฉลี่ยหน้าโปรไฟล์ร้าน (denormalized เพื่อความเร็ว ≤2s ตาม NFR-P-01) |
-| review.notifications (user_id, type, payload, read_at) | ระบบแจ้งเตือน in-app ที่ WF ทุกตัวอ้างถึง แต่ ER ไม่มี |
-| product.tags + product.product_tags + product.user_tag_scores | อัลกอริทึม Tag-Matching & Scoring ใน WF-03 (Style Profile) ต้องมีที่เก็บ tag และคะแนน weight ต่อผู้ใช้ — ER เก็บ preference เป็น string เดี่ยวใน Buyer ซึ่งคำนวณ scoring ไม่ได้ |
-| product.product_views (product_id, viewer_id, viewed_at) | สถิติยอดเข้าชมต่อโพสต์ (FR-1.4.3) + กติกาไม่นับซ้ำใน 5 นาที (NFR-AR-04) ต้องมี raw data |
-| auth.refresh_tokens | JWT refresh rotation — ความจำเป็นด้าน auth ที่ ER ไม่ครอบคลุม |
+| ตารางใหม่                                                                | เหตุผล                                                                                                                                                                          |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| review.reviews (order_id UNIQUE, rating 1-5, text, photos, published_at) | **ER ไม่มีตาราง Review เลย** แต่ FR-2.1.1/2.1.2 + WF-07 บังคับมีรีวิว, 1 order = 1 รีวิว, สิทธิ์ 14 วัน                                                                         |
+| review.seller_stats (seller_id, avg_rating, review_count, sales_count)   | คะแนนเฉลี่ยหน้าโปรไฟล์ร้าน (denormalized เพื่อความเร็ว ≤2s ตาม NFR-P-01)                                                                                                        |
+| review.notifications (user_id, type, payload, read_at)                   | ระบบแจ้งเตือน in-app ที่ WF ทุกตัวอ้างถึง แต่ ER ไม่มี                                                                                                                          |
+| product.tags + product.product_tags + product.user_tag_scores            | อัลกอริทึม Tag-Matching & Scoring ใน WF-03 (Style Profile) ต้องมีที่เก็บ tag และคะแนน weight ต่อผู้ใช้ — ER เก็บ preference เป็น string เดี่ยวใน Buyer ซึ่งคำนวณ scoring ไม่ได้ |
+| product.product_views (product_id, viewer_id, viewed_at)                 | สถิติยอดเข้าชมต่อโพสต์ (FR-1.4.3) + กติกาไม่นับซ้ำใน 5 นาที (NFR-AR-04) ต้องมี raw data                                                                                         |
+| auth.refresh_tokens                                                      | JWT refresh rotation — ความจำเป็นด้าน auth ที่ ER ไม่ครอบคลุม                                                                                                                   |
 
 ### 2.3 ตารางที่เหลือจาก ER — **สร้างครบทุกตัวใน MVP** (ตามคำสั่งผู้ใช้: ห้ามตัดตาราง)
 
 ตารางเหล่านี้ถูกสร้างใน schema ตั้งแต่ MVP โดยระบุ service เจ้าของ; ส่วน "ระดับฟีเจอร์" ระบุว่า MVP เปิดใช้แค่ไหน:
 
-| ER เดิม | ใหม่ (service.table) | ระดับฟีเจอร์ใน MVP + เหตุผลการจัดวาง |
-|---|---|---|
-| Video | product.product_videos | สร้างตาราง + อัปโหลดวิดีโอประกอบสินค้าได้ (optional) — อยู่กับ product เพราะเป็นสื่อของโพสต์เหมือน Photo |
-| Dispute | order.disputes (dispute_id, order_id, requester_id, reason, status, solved_id) | ผู้ซื้อ**เปิดเคสได้จริงใน MVP** (WF-08 ฝั่งผู้ใช้): เปิดเคส → order เป็น DISPUTED + Hold Payout อัตโนมัติ; หน้าจอเจ้าหน้าที่พิจารณาเป็น phase ถัดไป (MVP มี dev-endpoint approve/reject) — อยู่กับ order เพราะผูก order_id |
-| Reports | auth.reports (report_id, reporter_id, target_id, product_id, reason, status, reported_at) | ผู้ใช้**กด Report สินค้า/ผู้ขายได้จริงใน MVP** (FR-4.2.4); หน้าศูนย์รวมของ Admin (FR-4.2.5) เป็น phase ถัดไป — อยู่กับ auth เพราะเป็นเรื่อง governance ของบัญชีผู้ใช้ (นำไปสู่ ban) |
-| Auction | product.auctions (auction_id, product_id, user_id, min_step_bid, current_max_price, start_price, start_time, end_time) | สร้างตาราง + relation กับ product ครบ (รองรับ UR-10 "สถาปัตยกรรมขยายสู่ auction ได้") — ตัว flow ประมูลจริงเป็น phase ถัดไป |
-| Campaign | product.campaigns (campaign_id, campaign_name, description, budget, status, start_date, end_date) | สร้างตารางครบ — เครื่องมือสร้าง/อนุมัติแคมเปญ (WF-11) เป็น phase ถัดไป; อยู่กับ product เพราะแคมเปญโปรโมตสินค้า (Product_Campaign ผูกตรง) |
-| Product_Campaign | product.product_campaigns (junction) | สร้างตาราง — ใช้จริงเมื่อเปิดฟีเจอร์แคมเปญ |
-| Campaign_KPIs | product.campaign_kpis (kpi_id, campaign_id, target_value, current_value) | สร้างตาราง — dashboard MKT เป็น phase ถัดไป |
-| Evaluation_Criteria | product.evaluation_criteria (criteria_id, criteria_name, description, unit, passing_value) | สร้างตาราง — ผูกกับ campaign_kpis ตาม ER |
+| ER เดิม             | ใหม่ (service.table)                                                                                                   | ระดับฟีเจอร์ใน MVP + เหตุผลการจัดวาง                                                                                                                                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Video               | product.product_videos                                                                                                 | สร้างตาราง + อัปโหลดวิดีโอประกอบสินค้าได้ (optional) — อยู่กับ product เพราะเป็นสื่อของโพสต์เหมือน Photo                                                                                                                   |
+| Dispute             | order.disputes (dispute_id, order_id, requester_id, reason, status, solved_id)                                         | ผู้ซื้อ**เปิดเคสได้จริงใน MVP** (WF-08 ฝั่งผู้ใช้): เปิดเคส → order เป็น DISPUTED + Hold Payout อัตโนมัติ; หน้าจอเจ้าหน้าที่พิจารณาเป็น phase ถัดไป (MVP มี dev-endpoint approve/reject) — อยู่กับ order เพราะผูก order_id |
+| Reports             | auth.reports (report_id, reporter_id, target_id, product_id, reason, status, reported_at)                              | ผู้ใช้**กด Report สินค้า/ผู้ขายได้จริงใน MVP** (FR-4.2.4); หน้าศูนย์รวมของ Admin (FR-4.2.5) เป็น phase ถัดไป — อยู่กับ auth เพราะเป็นเรื่อง governance ของบัญชีผู้ใช้ (นำไปสู่ ban)                                        |
+| Auction             | product.auctions (auction_id, product_id, user_id, min_step_bid, current_max_price, start_price, start_time, end_time) | สร้างตาราง + relation กับ product ครบ (รองรับ UR-10 "สถาปัตยกรรมขยายสู่ auction ได้") — ตัว flow ประมูลจริงเป็น phase ถัดไป                                                                                                |
+| Campaign            | product.campaigns (campaign_id, campaign_name, description, budget, status, start_date, end_date)                      | สร้างตารางครบ — เครื่องมือสร้าง/อนุมัติแคมเปญ (WF-11) เป็น phase ถัดไป; อยู่กับ product เพราะแคมเปญโปรโมตสินค้า (Product_Campaign ผูกตรง)                                                                                  |
+| Product_Campaign    | product.product_campaigns (junction)                                                                                   | สร้างตาราง — ใช้จริงเมื่อเปิดฟีเจอร์แคมเปญ                                                                                                                                                                                 |
+| Campaign_KPIs       | product.campaign_kpis (kpi_id, campaign_id, target_value, current_value)                                               | สร้างตาราง — dashboard MKT เป็น phase ถัดไป                                                                                                                                                                                |
+| Evaluation_Criteria | product.evaluation_criteria (criteria_id, criteria_name, description, unit, passing_value)                             | สร้างตาราง — ผูกกับ campaign_kpis ตาม ER                                                                                                                                                                                   |
 
 ### 2.4 กติกา cross-service
 
@@ -142,11 +145,13 @@ services/<name>/
 ## 3. หน้าที่ของแต่ละ Service (mapping กับ FR/WF)
 
 ### 3.1 auth-service (3001)
+
 - สมัคร/ล็อกอิน (JWT + refresh), โปรไฟล์ buyer/seller
 - เปิดร้าน + อัปโหลดเอกสาร KYC → สถานะ KYC_PENDING (WF-01) — **MVP: มี endpoint ให้ approve KYC แบบ dev-tool/seed ไปก่อน** (หน้าจอ Admin จริงคือ phase 2)
 - login_logs
 
 ### 3.2 product-service (3002)
+
 - CRUD ประกาศขาย (แก้ไขได้ตลอด — FR-1.3.2), บังคับรูป ≥4, sharp บีบอัด ≤500KB/1080px, เก็บไฟล์ที่ Docker volume `/uploads` เสิร์ฟผ่าน gateway
 - สถานะสินค้า state machine + endpoint ภายใน `POST /internal/products/:id/lock|unlock|sold` (เรียกโดย order-service, ป้องกันด้วย service token)
 - Feed: ผู้ใช้ใหม่ = Popularity & Recency (Cold Start), ผู้ใช้เดิม = Tag-Matching & Scoring (WF-03)
@@ -156,6 +161,7 @@ services/<name>/
 - Price Suggestion: คำนวณ min/max/avg จากราคาขายสำเร็จ ≤6 เดือน ตาม brand+category+condition (WF-02, NFR-AR-04) — ข้อมูลขายสำเร็จรับผ่าน event `order.completed`
 
 ### 3.3 order-service (3003)
+
 - Cart: กดใส่ตะกร้า → **atomic lock** (`UPDATE products SET status='LOCKED' WHERE id=? AND status='AVAILABLE'` ผ่าน internal API ของ product-service ซึ่งใช้ conditional update กัน race ตาม NFR-AR-02) + BullMQ delayed job 10 นาที
 - Checkout: kill cart timer → สร้าง checkout timer 10 นาทีใหม่ (Timer Overwrite ตาม WF-04), สร้าง order PENDING_PAYMENT
 - Mock Payment adapter (`PaymentGateway` interface: `charge()`, `refund()`) → สำเร็จ = Escrow HELD, product SOLD, order TO_SHIP
@@ -163,21 +169,25 @@ services/<name>/
 - ผู้ขายไม่ส่งใน 3 วัน → auto-cancel + refund
 
 ### 3.4 chat-service (3004)
+
 - Socket.IO (+Redis adapter), REST สำหรับประวัติ
 - สร้าง/เปิดห้องผูกกับสินค้า (Context Link), บล็อกแชทใหม่เมื่อ Sold (WF-06)
 - Instant FAQ: สแกนข้อความเข้ากับ auto_messages ของผู้ขาย → ตอบอัตโนมัติ
 - Quick Replies ฝั่งผู้ขาย
 
 ### 3.5 review-service (3005)
+
 - สิทธิ์รีวิวเมื่อ order CLOSED (event), หมดอายุ 14 วัน (BullMQ), 1 order = 1 review, profanity filter คำหยาบพื้นฐาน (WF-07)
 - คำนวณ seller_stats ใหม่เมื่อรีวิว published
 - Notifications: subscriber รวมของทุก event → เก็บ + push ผ่าน Socket.IO ของ chat-service (หรือ polling ใน MVP)
 
 ### 3.6 gateway (8080)
+
 - Reverse proxy ตาม path prefix: `/api/auth/*→3001`, `/api/products/*→3002`, `/api/orders/*→3003`, `/api/chat/*→3004`, `/api/reviews/*→3005`, `/uploads/*→static volume`
 - ตรวจ JWT, แนบ `x-user-id`/`x-user-role`, rate limit, CORS
 
 ### 3.7 frontend (Next.js)
+
 หน้าหลัก: สมัคร/ล็อกอิน • แบบสอบถามสไตล์ (cold start) • Feed + filter ขั้นสูง • โหมด Swipe (การ์ดปัดซ้าย/ขวา) • หน้าสินค้า (รูป 4 มุม, สภาพ, รีวิวผู้ขาย, ปุ่มแชท/ตะกร้า) • ตะกร้า (countdown 10 นาที) • Checkout + หน้า mock payment • My Orders 4 แท็บ (ที่ต้องชำระ/จัดส่ง/ได้รับ/สำเร็จ) • แชท • เปิดร้าน+KYC upload • ลงขาย (แนะนำราคา + ปุ่มใช้ราคาแนะนำ) • จัดการร้าน (สต็อก 3 สถานะ, สถิติต่อโพสต์, quick replies) • โปรไฟล์ร้าน (badge ยืนยันตัวตน, รีวิว) • เขียนรีวิว
 
 ---
