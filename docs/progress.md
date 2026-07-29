@@ -588,6 +588,122 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 - `frontend/components/Pagination.js`, `StarRating.js` (ใหม่ทั้งคู่)
 - `frontend/app/products/page.js`, `frontend/app/orders/page.js`, `frontend/app/store/[sellerId]/page.js`, `frontend/app/products/[id]/page.js`, `frontend/components/NavBar.js`, `frontend/app/cart/page.js`, `frontend/app/seller/dashboard/page.js`
 
+## Task `MOCK-TRADE-008` — ผสาน Branch `ball_test` (ระบบปัดดูสินค้า/Swipe Feed)
+
+> วันที่ทำ: 2026-07-29
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ยืนยันด้วย Automated Test (Backend 33 ข้อ/Frontend 2 ข้อ ผ่านหมด) และ E2E จริงผ่าน Docker + Browser (ดู Feed แบบไม่ Login, อัปโหลดคลิปจริงในฐานะผู้ขาย, เห็นคลิปใหม่ขึ้น Feed พร้อมชื่อผู้ขายจริง, บัญชีผู้ซื้อโดนกันทั้ง UI และ Backend)
+>
+> หมายเหตุ: `git fetch origin` เจอ Branch `ball_test` (เพื่อนร่วมทีมชื่อ "ball" Push ไว้) แตกออกจาก Commit `db4c2a4` — เก่ากว่า Schema/Controller ของ product-service ที่ถูกเขียนใหม่ทั้งหมดในรอบ `MOCK-TRADE-004`/`005` (Category/Condition/Photo/Video Tables, Pagination) จึง**Merge ตรงๆ ไม่ได้** ต้องย้าย Logic ของ Feature ไปใส่บน Schema/Pattern ปัจจุบันเอง ไม่ใช่ `git merge` เฉยๆ
+
+### สิ่งที่พบใน `ball_test` และวิธีจัดการ
+
+| ของเดิมใน `ball_test`                                                                               | ปัญหาที่พบ                                                                                                                                                                      | วิธีแก้                                                                                                                                                                                                  |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prisma Model `ProductVideo`                                                                         | ชนกับหลักการตั้งชื่อของฉัน (`Video` มีอยู่แล้วสำหรับ Gallery)                                                                                                                   | เก็บชื่อ `ProductVideo` เดิมของ ball ไว้ (ไม่ชนจริง เป็นคนละ Model) เพิ่ม Comment อธิบายความต่างจาก `Video` ให้ชัดว่าอันไหนใช้ทำอะไร                                                                     |
+| `getMyProducts` Controller ใหม่ (Mapping ทับ `/mine`)                                               | เขียนซ้ำ `mine` เดิมของฉันที่มี Pagination อยู่แล้ว — ถ้าใช้ของ ball จะเสีย Pagination ที่เพิ่งทำใน `MOCK-TRADE-007`                                                            | ไม่เอา `getMyProducts` ของ ball มา ใช้ `mine` เดิมที่มี Pagination ต่อ                                                                                                                                   |
+| `req.userName \|\| req.userEmail` สำหรับ `sellerName`                                               | **Bug จริง** — JWT ของระบบนี้มีแค่ `sub`/`role` ไม่มี Name/Email ฝังอยู่ ค่าจะเป็น `undefined` เสมอ (Fallback ไป "Seller" ทุกครั้ง ไม่มีทางเห็นชื่อจริง)                        | เปลี่ยนให้ Frontend ส่ง `sellerName` มาใน Body ตอนสร้าง (ดึงจาก `getStoredUser().firstName` ที่มีอยู่แล้วใน `localStorage`) — ยืนยันด้วย Browser จริงว่าเห็นชื่อผู้ขายถูกต้อง ("@วิชัย") ไม่ใช่ Fallback |
+| Gateway Regex แก้ `PUBLIC_PATHS` เป็น Negative Lookahead ซับซ้อนขึ้น                                | ไม่จำเป็น เพราะ Route "mine"/"videos" ยังมี `requireAuth` ที่ตัว Service เองอยู่แล้ว (Defense-in-depth Pattern เดิม)                                                            | ไม่เอามาทั้งดุ้น เพิ่มแค่ Public Path ใหม่เฉพาะ `/api/products/videos/feed`                                                                                                                              |
+| `docker-compose.yml` เปลี่ยนจาก Bind Mount เป็น `develop.watch` (Comment Block เก่าทิ้งค้างไว้ด้วย) | ลบ Bind Mount ตัวเดิมออกจริง — ถ้าเอามาทั้งดุ้นจะทำให้ `docker compose up` (ไม่ใช่ `docker compose watch`) ไม่มี Live Reload อีกต่อไป กระทบ Workflow เดิมทั้งหมดของ Session นี้ | **ไม่เอามาเลย** เก็บ Bind Mount เดิมไว้ตามที่ใช้งานอยู่จริงมาตลอด                                                                                                                                        |
+| `frontend/app/seller/videos/new/page.js` เรียก `fetch("http://localhost:8080/...")` Hardcode ตรงๆ   | ไม่ใช้ `apiFetch`/`NEXT_PUBLIC_API_URL` เหมือนหน้าอื่นทั้งหมดในระบบ, ไม่มี Role Gate แบบหน้า `/sell`                                                                            | เขียนใหม่ให้ใช้ `apiFetch`/`getAccessToken` และมี Role Gate เหมือนหน้าอื่น                                                                                                                               |
+| Loading State ในหน้า Swipe ใช้ `text-white` บนพื้นหลัง `bg-[#FFFFFF]` (สีขาว)                       | **Bug จริง** — ตัวหนังสือขาวบนพื้นขาว มองไม่เห็นตอนกำลังโหลด                                                                                                                    | แก้ Layout ใหม่ให้พื้นที่วิดีโอเป็นพื้นดำจริง (`bg-black`) ข้อความ Loading ใช้สีเทาอ่อนที่มองเห็นได้                                                                                                     |
+
+### งานที่ทำ
+
+1. เพิ่ม Model `ProductVideo` ใน `backend/services/product-service/prisma/schema.prisma` พร้อม Comment อธิบายว่าใน ER Diagram ต้นฉบับใกล้เคียงที่สุดคือ Entity `Swipe` (ถูกนำมาปรับใช้ใหม่) — เพิ่ม Relation `reviewClips` บน `Product`
+2. เพิ่ม `productModel.listVideoFeed()` (Paginate, กรองเฉพาะสินค้าที่ยังไม่ถูกลบ) และ `createVideoClip()` ตาม Pattern เดียวกับฟังก์ชันอื่นในไฟล์
+3. เพิ่ม Controller `videoFeed`/`createVideoClip` — `createVideoClip` ตรวจสิทธิ์ครบ: ต้องเป็น SELLER/ADMIN, ต้องเป็นเจ้าของสินค้าที่จะแนบคลิปเท่านั้น (403 ถ้าไม่ใช่)
+4. เพิ่ม Route `GET /videos/feed` (Public) และ `POST /videos` (Auth, ต้อง SELLER) ก่อน `/:id` ตาม Pattern เดิมของไฟล์ (กัน "videos" ถูกอ่านเป็น Id)
+5. Gateway: เพิ่ม Public Path เฉพาะจุดสำหรับ `/api/products/videos/feed`
+6. Frontend `app/swipe/page.js` (ใหม่): ปรับจากของ ball ให้ใช้ `apiFetch`/`mediaUrl` ของระบบ, แก้ Bug สีตัวอักษร, ปรับสีปุ่ม/Avatar เป็นโทน Emerald ให้ตรง Brand เดิม
+7. Frontend `app/seller/videos/new/page.js` (ใหม่): เขียนใหม่ทั้งหมดด้วย `apiFetch`/`getAccessToken`, มี Role Gate เหมือนหน้า `/sell`, ส่ง `sellerName` จาก `getStoredUser()` ไปด้วยตอนสร้าง
+8. `components/NavBar.js`: เพิ่มลิงก์ "🎬 ปัดดูสินค้า" ที่ Header (มองเห็นได้ทุกคนรวม Guest เพราะ Feed เป็น Public) และ "อัปโหลดคลิปรีวิว" ในเมนู Dropdown เฉพาะบัญชีผู้ขาย (สไตล์เดียวกับ "ลงขายสินค้า"/"แดชบอร์ดผู้ขาย")
+9. `app/page.js`: เพิ่มปุ่ม "🎬 ปัดดูสินค้า" ในหน้าแรกคู่กับ "เลือกซื้อสินค้า"/"เริ่มขายสินค้า"
+10. อัปเดต `prisma/seed.js`: Seed คลิปตัวอย่าง 2 คลิป (ใช้ Sample Video Public Domain จาก Blender Foundation ผ่าน Google Cloud Storage Bucket สาธารณะ) ผูกกับสินค้า `p1`/`p3` ที่ Seed ไว้แล้ว ให้ Feed ไม่ว่างเปล่าตั้งแต่แรกเริ่ม
+11. เพิ่ม Test: Smoke Test 401/403 สำหรับ `POST /videos` ใน `app.test.js`, และ Integration Test เต็มรูปแบบใน `product-crud.integration.test.js` (สร้างคลิปสำเร็จ, คนอื่นแนบคลิปกับสินค้าไม่ใช่ของตัวเองโดน 403, คลิปโผล่ใน Feed จริง)
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                                                  | ผลที่เกิดขึ้นจริง                                                                                                                                        |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                                                                           | Exit 0                                                                                                                                                   |
+| `npm test` (Backend)                                                                     | 33 Test: ผ่าน 30, Skip 3, Fail 0                                                                                                                         |
+| `DATABASE_URL=...reloop_product REQUIRE_INTEGRATION=1 node --test`                       | ผ่านจริงกับ Database จริง รวม Video Clip Ownership Check                                                                                                 |
+| `npm run test:frontend`                                                                  | 2/2 ผ่าน                                                                                                                                                 |
+| `docker compose up -d --build`                                                           | ทุก Container Healthy รวม product-service ที่มี Table `product_videos` ใหม่                                                                              |
+| `curl /api/products/videos/feed` (ไม่ใส่ Token)                                          | `200 OK` เห็น 2 คลิป Seed — ยืนยัน Public จริง                                                                                                           |
+| เปิด `/swipe` ในฐานะ Guest ผ่าน Browser                                                  | เห็นคลิป Video จริง เล่นได้, ปุ่ม "ดูรายละเอียดสินค้า" ลิงก์ไปหน้าสินค้าถูกต้องพร้อมราคา                                                                 |
+| Login บัญชีผู้ขาย → เมนู Dropdown เห็น "อัปโหลดคลิปรีวิว" → กรอกฟอร์ม → Submit           | Redirect ไป `/swipe` จริง, คลิปใหม่ขึ้นเป็นอันดับแรก (เรียงตามวันที่ใหม่สุด) พร้อมชื่อผู้ขายจริง "@วิชัย" (ไม่ใช่ Fallback "Seller" แบบโค้ดเดิมของ ball) |
+| Login บัญชีผู้ซื้อ → เปิด `/seller/videos/new` ตรงๆ                                      | เห็นข้อความปฏิเสธ "บัญชีนี้เป็นบัญชีผู้ซื้อ..." พร้อมลิงก์ไปสมัครผู้ขาย ไม่เห็นฟอร์ม                                                                     |
+| ยิง `POST /api/products/videos` ตรงจาก Browser Console ด้วย Token บัญชีผู้ซื้อ (ข้าม UI) | `403 {"error":"only seller accounts can upload video reviews"}` — ยืนยันกันที่ Backend จริง                                                              |
+
+### ผลลัพธ์ปัจจุบัน
+
+- ระบบปัดดูสินค้าทำงานร่วมกับของเดิมทั้งหมดในระบบได้ปกติ ไม่มี Route/Model ชนกัน, Pagination ที่ทำไว้ก่อนหน้าไม่เสียหาย
+- แก้ Bug จริง 2 จุดที่มากับ Branch ต้นทาง (ชื่อผู้ขายไม่เคยแสดงถูกเพราะ JWT ไม่มี Field ที่อ้างถึง, ตัวหนังสือขาวบนพื้นขาวตอนโหลด) — ไม่ใช่แค่ Copy โค้ดมาแปะ
+- ตั้งใจ**ไม่เอา**การเปลี่ยน `docker-compose.yml` มาด้วย เพราะจะทำให้ Bind Mount เดิมหายและ Live Reload เสีย กระทบ Workflow ที่ใช้อยู่ตลอด Session — ถ้าจะใช้ `docker compose watch` จริงต้องคุยแยกเป็นการตัดสินใจอีกเรื่องหนึ่ง ไม่ใช่ผลพลอยได้จากการ Merge Feature นี้
+- Branch `ิball_test` (ชื่อมีอักขระไทยแฝงอยู่ด้านหน้า) เป็น Push รุ่นเก่ากว่า `ball_test` — ไม่ได้เอามาทำอะไรต่อ ถือเป็นข้อมูลซ้ำซ้อนที่ค้างอยู่บน Remote
+- ยังไม่ผ่าน AI Reviewer อิสระ
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/product-service/prisma/schema.prisma`, `prisma/seed.js`
+- `backend/services/product-service/src/models/productModel.js`, `src/controllers/productController.js`, `src/routes/productRoutes.js`
+- `backend/services/product-service/src/app.test.js`, `test/product-crud.integration.test.js`
+- `backend/gateway/src/app.js`
+- `frontend/app/swipe/page.js` (ใหม่), `frontend/app/seller/videos/new/page.js` (ใหม่)
+- `frontend/components/NavBar.js`, `frontend/app/page.js`
+
+## Task `MOCK-TRADE-009` — อัปโหลดคลิปรีวิวแบบไฟล์จริง (ไม่ใช่วาง URL) + เคลียร์/รี Seed Database ให้มีร้านค้าหลากหลาย
+
+> วันที่ทำ: 2026-07-29
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ยืนยันด้วย Automated Test (Backend 30 ข้อผ่าน/Frontend 2 ข้อผ่าน) และ E2E จริงผ่าน Docker + Browser (Login บัญชีร้านค้าใหม่จริง, ลากไฟล์วิดีโอจริงลง Dropzone, เห็น Request `POST /uploads` และ `POST /api/products/videos` สำเร็จจริงใน Network Log, คลิปใหม่ขึ้น Feed `/swipe` ทันที)
+
+### งานที่ทำ
+
+**(a) เปลี่ยนอัปโหลดคลิปรีวิวจากวาง URL เป็นอัปโหลดไฟล์จากเครื่องจริง**
+
+1. เพิ่ม `frontend/components/VideoUploader.js` (ใหม่) — Dropzone ไฟล์เดียว ลอกกลไกอัปโหลดจาก `MediaUploader.js` เดิม (ลากวางหรือคลิกเลือกไฟล์ → `uploadFiles()` → POST ตรงไป `/uploads` แบบ `multipart/form-data`) ตัดให้เหลือรับแค่ 1 ไฟล์เพราะคลิปรีวิวผูกกับสินค้าได้ทีละคลิป, จำกัด `accept="video/mp4,video/quicktime"`, มี Preview เล่นได้ + ปุ่มลบ
+2. แก้ `frontend/app/seller/videos/new/page.js`: เปลี่ยนจาก `<input type="url">` เป็น `<VideoUploader />`, เพิ่ม Validation `กรุณาอัปโหลดไฟล์วิดีโอ` ถ้ายังไม่มีไฟล์, ปุ่ม Submit `disabled` เมื่อยังไม่มีไฟล์
+
+**(b) เคลียร์ Database เดิม + Seed สินค้าใหม่หลากหลายร้านค้า**
+
+1. เพิ่ม `backend/services/auth-service/prisma/seed.js` (ใหม่) — Seed บัญชีผู้ขายจริง 4 ร้าน (UUID คงที่ `10000000-...0001-0004`: ร้านยีนส์เดนิม/Sneaker Society/Retro & Vintage House/กระเป๋าและเครื่องประดับมือสองพรีเมียม), Upsert-Only (`update: {}`) ไม่ทับข้อมูลจริงถ้ามีคนสมัครทับ Id เดียวกัน (เป็นไปไม่ได้ในทางปฏิบัติเพราะ Id สุ่ม แต่กันไว้), Password Demo `password123` เดียวกันทุกร้าน
+2. อัปเดต `auth-service/package.json` เพิ่ม `"prisma":{"seed":"node prisma/seed.js"}`, `auth-service/Dockerfile` เพิ่ม `npx prisma db seed` ต่อจาก `db push` ใน `CMD`
+3. เขียนใหม่ `backend/services/product-service/prisma/seed.js` ทั้งไฟล์: 8 หมวดหมู่, 4 สภาพสินค้า, สินค้า 16 ชิ้น (p01–p16) กระจาย 4 ร้านข้างบนจริง (ไม่ใช่ Seller Id ปลอมแบบเดิม) ราคา ฿199–฿1,800 คละทำเล/ขนาด/Tag, ตั้งใจให้ 1 ชิ้น (p11) เป็น `status: "sold"` ไว้ทดสอบ UI สินค้าขายแล้ว, คลิปรีวิว Demo 2 คลิปผูกกับ p01/p05
+4. ล้างข้อมูลเก่าใน `reloop_product` ด้วย Script ครั้งเดียว (ยืนยัน Authorization จากผู้ใช้ตรงๆ ก่อนรัน เพราะเป็น Bulk Delete) แล้วรัน Seed ใหม่ทั้งสองฝั่ง (Auth + Product) ทั้ง Local และใน Docker Container จริงตอน `docker compose up -d --build`
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                                   | ผลที่เกิดขึ้นจริง                                                                                                                                                        |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run lint`                                                            | Exit 0                                                                                                                                                                   |
+| `npm test` (Backend)                                                      | 33 Test: ผ่าน 30, Skip 3, Fail 0                                                                                                                                         |
+| `npm run test:frontend`                                                   | 2/2 ผ่าน                                                                                                                                                                 |
+| `docker compose up -d --build`                                            | ทุก Container ขึ้น Healthy (auth-service, product-service, order-service, review-service, chat-service, gateway, frontend)                                               |
+| Log `auth-service` ตอน Container Start                                    | `[auth-service] seeded 4 demo seller accounts (password: "password123")` — รันผ่าน `npx prisma db seed` ใน `CMD` จริงเป็นครั้งแรก                                        |
+| Log `product-service` ตอน Container Start                                 | `[product-service] seeded 8 categories, 4 conditions, 16 demo products across 4 stores, 2 demo review clips`                                                             |
+| เปิด `/products` ผ่าน Browser                                             | เห็นสินค้า 16 ชิ้นจริง แบ่งหน้า 2 หน้า, หมวดหมู่/ราคา/ทำเลตรงกับ Seed                                                                                                    |
+| เปิด `/store/10000000-0000-0000-0000-000000000004` ผ่าน Browser           | แสดงชื่อร้าน "กระเป๋าและเครื่องประดับมือสองพรีเมียม" จริง (ไม่ใช่ Fallback "ร้านค้า") พร้อมสินค้า 4 ชิ้นของร้านนี้ครบ                                                    |
+| Login `shop.bag@example.com` / `password123`                              | เข้าระบบสำเร็จจริง, Avatar/Session เปลี่ยนเป็นบัญชีร้านนี้                                                                                                               |
+| `curl -F "files=@test-clip.mp4"` ไป `/uploads` ด้วย Token ร้านนี้         | `201` คืน `{"media":[{"url":"/uploads/....mp4","type":"video"}]}` — ยืนยัน Endpoint อัปโหลดไฟล์วิดีโอทำงานจริง                                                           |
+| จำลอง Drag & Drop ไฟล์ `.mp4` จริงลง Dropzone ในหน้า `/seller/videos/new` | Network Log เห็น Dropzone เรียก Upload สำเร็จ (เปลี่ยนจาก Dropzone เป็น Preview วิดีโอ + ปุ่มลบทันที ไม่มี Error)                                                        |
+| กรอกรายละเอียด + กด "เผยแพร่คลิปรีวิว"                                    | Network Log: `POST /api/products/videos → 201 Created`, Redirect ไป `/swipe` จริง, คลิปใหม่ขึ้นเป็นอันดับแรกพร้อมชื่อผู้ขาย "@ต้น" และลิงก์ไปหน้าสินค้าราคา ฿990 ถูกต้อง |
+
+### ผลลัพธ์ปัจจุบัน
+
+- อัปโหลดคลิปรีวิวใช้กลไกไฟล์จริงเหมือนหน้าลงขายสินค้าแล้ว ไม่ใช่วาง URL อีกต่อไป
+- Database ถูกล้างและ Seed ใหม่ทั้งหมดด้วยร้านค้า 4 ร้านที่เป็นบัญชีผู้ขายจริงในระบบ (Login ได้จริง), สินค้ากระจายหลากหลายครบทั้งหมวดหมู่/ราคา/สภาพ/ทำเล
+- Seed ทั้งสอง Service เป็น Upsert-Only เหมือนเดิม — Restart Container ซ้ำจะไม่ทำข้อมูลจริงหาย (ถ้ามีในอนาคต)
+- **ยังไม่ได้ทำ**: ยังไม่ผ่าน AI Reviewer อิสระ, บัญชี Demo ทั้ง 4 ร้านใช้รหัสผ่านเดียวกัน (`password123`) เหมาะกับ Dev/Demo เท่านั้น ไม่ควรใช้ Pattern นี้ถ้าจะขึ้น Production จริง
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `frontend/components/VideoUploader.js` (ใหม่), `frontend/app/seller/videos/new/page.js`
+- `backend/services/auth-service/prisma/seed.js` (ใหม่), `backend/services/auth-service/package.json`, `backend/services/auth-service/Dockerfile`
+- `backend/services/product-service/prisma/seed.js`
+
 ## อัปเดตล่าสุด
 
 2026-07-29 (Asia/Bangkok)

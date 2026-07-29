@@ -8,6 +8,10 @@ const router = Router();
 router.get("/feed", productController.feed);
 router.get("/search", productController.search);
 
+// Swipe feed ("ปัดดูสินค้า") — must come before "/:id" for the same reason.
+router.get("/videos/feed", productController.videoFeed);
+router.post("/videos", requireAuth, productController.createVideoClip);
+
 // Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);
 router.get("/by-seller/:sellerId", productController.bySeller);

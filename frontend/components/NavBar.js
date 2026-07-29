@@ -83,6 +83,14 @@ export default function NavBar() {
           </div>
         </form>
 
+        <Link
+          href="/swipe"
+          className="flex shrink-0 items-center gap-1 text-sm text-gray-600 hover:text-emerald-600"
+        >
+          <span aria-hidden="true">🎬</span>
+          <span className="hidden sm:inline">ปัดดูสินค้า</span>
+        </Link>
+
         <div className="ml-auto shrink-0">
           {user ? (
             <div className="relative" ref={menuRef}>
@@ -126,6 +134,19 @@ export default function NavBar() {
                         🏪
                       </span>
                       แดชบอร์ดผู้ขาย
+                    </Link>
+                  )}
+
+                  {isSeller && (
+                    <Link
+                      href="/seller/videos/new"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
+                        🎬
+                      </span>
+                      อัปโหลดคลิปรีวิว
                     </Link>
                   )}
 

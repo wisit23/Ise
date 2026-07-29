@@ -41,6 +41,12 @@ export default function HomePage() {
               เลือกซื้อสินค้า
             </Link>
             <Link
+              href="/swipe"
+              className="rounded-md border border-gray-300 px-6 py-3 font-medium text-gray-700 hover:bg-gray-50"
+            >
+              🎬 ปัดดูสินค้า
+            </Link>
+            <Link
               href="/register"
               className="rounded-md border border-gray-300 px-6 py-3 font-medium text-gray-700 hover:bg-gray-50"
             >
