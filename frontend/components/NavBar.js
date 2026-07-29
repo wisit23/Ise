@@ -87,7 +87,7 @@ export default function NavBar() {
           href="/swipe"
           className="flex shrink-0 items-center gap-1 text-sm text-gray-600 hover:text-emerald-600"
         >
-          <span aria-hidden="true">🎬</span>
+          <span aria-hidden="true"></span>
           <span className="hidden sm:inline">ปัดดูสินค้า</span>
         </Link>
 
