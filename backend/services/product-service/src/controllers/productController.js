@@ -180,7 +180,7 @@ async function createVideo(req, res, next) {
 }
 async function getMyProducts(req, res, next) {
   try {
-    const products = await productModel.findBySellerId(req.userId);
+    const products = await productModel.listBySeller(req.userId);;
     res.json({ items: products });
   } catch (err) {
     next(err);

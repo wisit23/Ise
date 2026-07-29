@@ -16,19 +16,28 @@ export default function UploadVideoPage() {
   useEffect(() => {
     async function fetchMyProducts() {
       try {
-        const token = localStorage.getItem("token");
+        const token = localStorage.getItem("reloop_access_token");
+        console.log("🔑 Token ที่ส่งไป:", token); // เช็กว่ามี Token หรือเป็น null
+
         const res = await fetch("http://localhost:8080/api/products/mine", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) throw new Error("ไม่สามารถดึงรายการสินค้าได้");
+
+        if (!res.ok) {
+          // ดึงข้อความ Error จริงๆ ที่ซ่อนอยู่จากหลังบ้านมาดู
+          const errorText = await res.text();
+          console.error("🔥 สาเหตุที่แท้จริง! Status:", res.status, "Message:", errorText);
+          throw new Error(`ดึงข้อมูลพัง (Status: ${res.status})`);
+        }
+
         const data = await res.json();
         setProducts(data.items || []);
         if (data.items && data.items.length > 0) {
           setProductId(data.items[0].id);
         }
       } catch (err) {
-        console.error(err);
-        setError("โหลดรายการสินค้าไม่สำเร็จ กรุณาล็อกอินใหม่");
+        console.error("Catch Error:", err);
+        setError(err.message || "โหลดรายการสินค้าไม่สำเร็จ กรุณาล็อกอินใหม่");
       } finally {
         setFetchingProducts(false);
       }
@@ -48,7 +57,7 @@ export default function UploadVideoPage() {
     }
 
     try {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("reloop_access_token");
       // เปลี่ยนจากพอร์ต 5000 เป็นพอร์ต Gateway (8080)
       const res = await fetch("http://localhost:8080/api/products/videos", {
         method: "POST",

@@ -42,9 +42,9 @@ export default function HomePage() {
             >
               เริ่มขายสินค้า
             </Link>
-            {/* <Link href="/seller/videos/new" className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700">
+            <Link href="/seller/videos/new" className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700">
               อัปโหลดคลิปรีวิว
-            </Link> */}
+            </Link>
           </div>
         </div>
       </section>
