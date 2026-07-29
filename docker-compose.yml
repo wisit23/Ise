@@ -143,19 +143,42 @@ services:
       timeout: 5s
       retries: 10
 
+  # frontend:
+  #   build:
+  #     context: .
+  #     dockerfile: frontend/Dockerfile
+  #   env_file: .env
+  #   volumes:
+  #     - ./frontend:/app/frontend
+  #     - /app/frontend/node_modules
+  #     - /app/frontend/.next
+  #   ports:
+  #     - "${FRONTEND_PORT}:3000"
+  #   depends_on:
+  #     - gateway
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     env_file: .env
     volumes:
-      - ./frontend:/app/frontend
       - /app/frontend/node_modules
       - /app/frontend/.next
     ports:
       - "${FRONTEND_PORT}:3000"
     depends_on:
       - gateway
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend
+          target: /app/frontend
+          ignore:
+            - node_modules/
+            - .next/
+        - action: rebuild
+          path: ./frontend/package.json
+    
 
 volumes:
   pgdata:

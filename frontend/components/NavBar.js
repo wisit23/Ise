@@ -64,16 +64,21 @@ export default function NavBar() {
               onChange={(e) => setQ(e.target.value)}
               placeholder="ค้นหาสินค้า เช่น เสื้อ, กระเป๋า, รองเท้า..."
               className="w-full px-3 py-2 text-sm outline-none"
+              suppressHydrationWarning
             />
             <button
               type="submit"
               aria-label="ค้นหา"
+              suppressHydrationWarning={true}
               className="flex items-center bg-emerald-600 px-4 text-white hover:bg-emerald-700"
             >
               ค้นหา
             </button>
           </div>
         </form>
+          <Link href="/swipe" className="text-gray-600 hover:text-emerald-600">
+                ปัดดูสินค้า
+              </Link>
 
         <nav className="ml-auto flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
           {user ? (

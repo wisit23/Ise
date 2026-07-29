@@ -8,8 +8,13 @@ const router = Router();
 router.get("/feed", productController.feed);
 router.get("/search", productController.search);
 
+router.get("/videos/feed", productController.getVideoFeed);
+
 // Seller's own listings — must come before "/:id" so "mine" is not read as an id.
-router.get("/mine", requireAuth, productController.mine);
+router.get("/mine", requireAuth, productController.getMyProducts);
+
+// อัปโหลดวิดีโอ (ใช้ requireAuth จาก @reloop/shared ตัวเดียวกับเส้นทางอื่น)
+router.post("/videos", requireAuth, productController.createVideo);
 
 router.get("/:id", productController.getOne);
 router.post("/", requireAuth, productController.create);

@@ -28,8 +28,23 @@ model Product {
   status      String   @default("available")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  videos      ProductVideo[]
 
   @@index([sellerId])
   @@index([status, category])
   @@map("products")
+}
+
+// เพิ่ม Model สำหรับเก็บคลิปวิดีโอ
+model ProductVideo {
+  id          String   @id @default(uuid())
+  videoUrl    String
+  description String?
+  sellerId    String   @map("seller_id")
+  sellerName  String?  @map("seller_name")
+  productId   String   @map("product_id")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("product_videos")
 }

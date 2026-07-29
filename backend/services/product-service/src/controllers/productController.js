@@ -138,6 +138,55 @@ async function markStatusInternal(req, res, next) {
   }
 }
 
+// ฟังก์ชันวิดิโอ
+async function getVideoFeed(req, res, next) {
+  try {
+    const videos = await productModel.getVideoFeed(); // เรียกผ่าน Model
+    res.status(200).json({ videos });
+  } catch (err) {
+    next(err); // ส่งให้ระบบจัดการ Error กลาง
+  }
+}
+async function createVideo(req, res, next) {
+  try {
+    if (!["SELLER", "ADMIN"].includes(req.userRole)) {
+      throw forbidden("only seller accounts can upload video reviews");
+    }
+
+    const { videoUrl, description, productId } = req.body;
+    if (!videoUrl || !productId) {
+      throw badRequest("videoUrl and productId are required");
+    }
+
+    // ตรวจสอบว่าสินค้ามีอยู่จริงและเป็นของผู้ขายคนนี้หรือไม่
+    const product = await productModel.findById(productId);
+    if (!product) throw notFound("product not found");
+    if (product.sellerId !== req.userId) {
+      throw forbidden("you can only attach videos to your own products");
+    }
+
+    const video = await productModel.createVideo({
+      videoUrl,
+      description: description || "",
+      sellerId: req.userId,
+      sellerName: req.userName || req.userEmail || "Seller", // ดึงชื่อผู้ขายจาก Token/Auth
+      productId,
+    });
+
+    res.status(201).json(video);
+  } catch (err) {
+    next(err);
+  }
+}
+async function getMyProducts(req, res, next) {
+  try {
+    const products = await productModel.findBySellerId(req.userId);
+    res.json({ items: products });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   feed,
   search,
@@ -147,4 +196,7 @@ module.exports = {
   remove,
   mine,
   markStatusInternal,
+  getVideoFeed,
+  createVideo,
+  getMyProducts,
 };

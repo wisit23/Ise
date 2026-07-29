@@ -53,4 +53,18 @@ async function remove(id) {
   }
 }
 
-module.exports = { list, listBySeller, findById, create, update, remove };
+async function getVideoFeed() {
+  return await prisma.productVideo.findMany({
+    include: {
+      product: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+}
+function createVideo(data) {
+  return prisma.productVideo.create({ data });
+}
+
+module.exports = { list, listBySeller, findById, create, update, remove , getVideoFeed , createVideo };
