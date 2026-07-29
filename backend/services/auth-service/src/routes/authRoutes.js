@@ -9,5 +9,7 @@ router.post("/login", authController.login);
 router.post("/refresh", authController.refresh);
 router.post("/logout", authController.logout);
 router.get("/me", requireAuth, authController.me);
+router.patch("/me", requireAuth, authController.updateMe);
+router.get("/users/:id/public", authController.publicProfile);
 
 module.exports = router;

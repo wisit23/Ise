@@ -1,0 +1,31 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Custom output path — see the comment in product-service/prisma/schema.prisma:
+// this npm workspace hoists @prisma/client to one shared location, so every
+// service that generates a client there fights over the same physical folder.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-client"
+}
+
+// Not in docs/erdatabase.png's ER diagram at all (no review/rating concept
+// there). Second-hand listings here are one-off — a product sells exactly
+// once and is gone — so a review rates the SELLER (the party the buyer keeps
+// dealing with across purchases), not the individual product. One review per
+// completed order (orderId is unique) so a buyer can't review the same
+// purchase twice, and can't review before the order is actually completed.
+model Review {
+  id        String   @id @default(uuid())
+  orderId   String   @unique @map("order_id")
+  buyerId   String   @map("buyer_id")
+  sellerId  String   @map("seller_id")
+  rating    Int
+  comment   String   @default("")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([sellerId])
+  @@map("reviews")
+}

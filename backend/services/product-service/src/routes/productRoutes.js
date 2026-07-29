@@ -8,8 +8,11 @@ const router = Router();
 router.get("/feed", productController.feed);
 router.get("/search", productController.search);
 
-// Seller's own listings — must come before "/:id" so "mine" is not read as an id.
+// Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);
+router.get("/by-seller/:sellerId", productController.bySeller);
+router.get("/categories", productController.listCategories);
+router.get("/conditions", productController.listConditions);
 
 router.get("/:id", productController.getOne);
 router.post("/", requireAuth, productController.create);

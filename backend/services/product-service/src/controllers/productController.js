@@ -1,11 +1,49 @@
-const { badRequest, notFound, forbidden } = require("@reloop/shared");
+const {
+  badRequest,
+  notFound,
+  forbidden,
+  parsePagination,
+  paginatedResponse,
+} = require("@reloop/shared");
 const productModel = require("../models/productModel");
+
+function normalizeMedia(media) {
+  if (!Array.isArray(media)) return [];
+  return media
+    .filter((m) => m && typeof m.url === "string" && m.url)
+    .map((m) => ({
+      url: m.url,
+      type: m.type === "video" ? "video" : "image",
+    }));
+}
+
+function normalizeTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return [
+    ...new Set(
+      tags
+        .filter((t) => typeof t === "string" && t.trim())
+        .map((t) => t.trim().toLowerCase()),
+    ),
+  ].slice(0, 20);
+}
+
+async function isValidCondition(value) {
+  const conditions = await productModel.listConditions();
+  return conditions.some((c) => c.value === value);
+}
 
 async function feed(req, res, next) {
   try {
     const { category } = req.query;
-    const items = await productModel.list({ category, status: "available" });
-    res.json({ items });
+    const pagination = parsePagination(req.query);
+    const { items, total } = await productModel.list({
+      category,
+      status: "available",
+      skip: pagination.skip,
+      take: pagination.take,
+    });
+    res.json(paginatedResponse(items, total, pagination));
   } catch (err) {
     next(err);
   }
@@ -14,12 +52,15 @@ async function feed(req, res, next) {
 async function search(req, res, next) {
   try {
     const { q, category } = req.query;
-    const items = await productModel.list({
+    const pagination = parsePagination(req.query);
+    const { items, total } = await productModel.list({
       q,
       category,
       status: "available",
+      skip: pagination.skip,
+      take: pagination.take,
     });
-    res.json({ items });
+    res.json(paginatedResponse(items, total, pagination));
   } catch (err) {
     next(err);
   }
@@ -35,20 +76,67 @@ async function getOne(req, res, next) {
   }
 }
 
+async function bySeller(req, res, next) {
+  try {
+    const pagination = parsePagination(req.query);
+    const { items, total } = await productModel.listBySeller(
+      req.params.sellerId,
+      { status: "available", skip: pagination.skip, take: pagination.take },
+    );
+    res.json(paginatedResponse(items, total, pagination));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listCategories(req, res, next) {
+  try {
+    const categories = await productModel.listCategories();
+    res.json({ items: categories.map((c) => c.name) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listConditions(req, res, next) {
+  try {
+    const conditions = await productModel.listConditions();
+    res.json({
+      items: conditions.map((c) => ({ value: c.value, label: c.label })),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function create(req, res, next) {
   try {
     if (!["SELLER", "ADMIN"].includes(req.userRole)) {
       throw forbidden("only seller accounts can list products for sale");
     }
 
-    const { title, description, price, category, condition, size, images } =
-      req.body;
+    const {
+      title,
+      description,
+      price,
+      category,
+      condition,
+      size,
+      tags,
+      media,
+      location,
+    } = req.body;
     if (!title || !price || !category) {
       throw badRequest("title, price, category are required");
     }
     if (!Number.isInteger(price) || price <= 0) {
       throw badRequest("price must be a positive whole number");
     }
+    if (condition !== undefined && !(await isValidCondition(condition))) {
+      throw badRequest("condition is not a recognized value");
+    }
+
+    await productModel.ensureCategory(category);
 
     const product = await productModel.create({
       sellerId: req.userId,
@@ -56,9 +144,11 @@ async function create(req, res, next) {
       description: description || "",
       price,
       category,
-      condition: condition || "ไม่ระบุ",
+      condition: condition || "Good",
       size: size || "Free size",
-      images: Array.isArray(images) ? images : [],
+      tags: normalizeTags(tags),
+      media: normalizeMedia(media),
+      location: location || "",
     });
     res.status(201).json(product);
   } catch (err) {
@@ -81,9 +171,16 @@ async function update(req, res, next) {
       category,
       condition,
       size,
-      images,
+      tags,
+      media,
+      location,
       status,
     } = req.body;
+    if (condition !== undefined && !(await isValidCondition(condition))) {
+      throw badRequest("condition is not a recognized value");
+    }
+    if (category !== undefined) await productModel.ensureCategory(category);
+
     const patch = {};
     if (title !== undefined) patch.title = title;
     if (description !== undefined) patch.description = description;
@@ -91,7 +188,9 @@ async function update(req, res, next) {
     if (category !== undefined) patch.category = category;
     if (condition !== undefined) patch.condition = condition;
     if (size !== undefined) patch.size = size;
-    if (images !== undefined) patch.images = images;
+    if (tags !== undefined) patch.tags = normalizeTags(tags);
+    if (media !== undefined) patch.media = normalizeMedia(media);
+    if (location !== undefined) patch.location = location;
     if (status !== undefined) patch.status = status;
 
     res.json(await productModel.update(req.params.id, patch));
@@ -116,8 +215,12 @@ async function remove(req, res, next) {
 
 async function mine(req, res, next) {
   try {
-    const items = await productModel.listBySeller(req.userId);
-    res.json({ items });
+    const pagination = parsePagination(req.query);
+    const { items, total } = await productModel.listBySeller(req.userId, {
+      skip: pagination.skip,
+      take: pagination.take,
+    });
+    res.json(paginatedResponse(items, total, pagination));
   } catch (err) {
     next(err);
   }
@@ -142,6 +245,9 @@ module.exports = {
   feed,
   search,
   getOne,
+  bySeller,
+  listCategories,
+  listConditions,
   create,
   update,
   remove,

@@ -14,11 +14,18 @@ const SERVICES = {
 // Routes that don't require a valid access token (register/login/refresh, public feed reads).
 const PUBLIC_PATHS = [
   /^\/api\/auth\/(register|login|refresh)/,
+  /^\/api\/auth\/users\/[^/]+\/public/,
   /^\/api\/products\/feed/,
   /^\/api\/products\/search/,
+  /^\/api\/products\/by-seller\//,
   // Single-item browsing must stay open to guests; write/delete routes on the
   // same path are still gated by product-service's own requireAuth middleware.
   /^\/api\/products\/[^/]+$/,
+  // Uploaded media must render for guests too; POST /uploads (creating new
+  // files) is still gated by product-service's own requireAuth/requireRole.
+  /^\/uploads\//,
+  // A store page's rating must be visible to guests browsing without an account.
+  /^\/api\/reviews\/by-seller\//,
 ];
 
 function isPublic(path) {
@@ -59,7 +66,17 @@ app.use(
 );
 app.use(
   "/uploads",
-  createProxyMiddleware({ target: SERVICES.products, changeOrigin: true }),
+  createProxyMiddleware({
+    target: SERVICES.products,
+    changeOrigin: true,
+    // Unlike /api/products (whose stripped path deliberately matches
+    // product-service's routes mounted at "/"), product-service mounts
+    // static file serving and the upload endpoint AT "/uploads" specifically
+    // so they don't collide with "GET /:id" / "POST /" in productRoutes.
+    // Express strips the "/uploads" mount prefix before this middleware
+    // runs, so it has to be added back here.
+    pathRewrite: (path) => `/uploads${path}`,
+  }),
 );
 app.use(
   "/api/orders",

@@ -45,4 +45,30 @@ async function me(req, res, next) {
   }
 }
 
-module.exports = { register, login, refresh, logout, me };
+async function updateMe(req, res, next) {
+  try {
+    const user = await authService.updateProfile(req.userId, req.body);
+    res.json(user);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function publicProfile(req, res, next) {
+  try {
+    const profile = await authService.getPublicSellerProfile(req.params.id);
+    res.json(profile);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  register,
+  login,
+  refresh,
+  logout,
+  me,
+  updateMe,
+  publicProfile,
+};

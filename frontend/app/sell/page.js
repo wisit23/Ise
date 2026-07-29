@@ -5,21 +5,27 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
+import MediaUploader from "../../components/MediaUploader";
+import TagInput from "../../components/TagInput";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
-import { CATEGORIES, CONDITIONS } from "../../lib/constants";
+import { fetchCategories, fetchConditions } from "../../lib/catalog";
 
 export default function SellPage() {
   const router = useRouter();
   const [user, setUser] = useState(undefined);
+  const [categories, setCategories] = useState([]);
+  const [conditions, setConditions] = useState([]);
   const [form, setForm] = useState({
     title: "",
     description: "",
     price: "",
-    category: CATEGORIES[0],
-    condition: CONDITIONS[0],
+    category: "",
+    condition: "",
     size: "",
-    imageUrl: "",
+    location: "",
+    tags: [],
+    media: [],
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,6 +37,20 @@ export default function SellPage() {
     }
     setUser(getStoredUser());
   }, [router]);
+
+  useEffect(() => {
+    fetchCategories()
+      .then(setCategories)
+      .catch(() => {});
+    fetchConditions()
+      .then((items) => {
+        setConditions(items);
+        setForm((prev) =>
+          prev.condition ? prev : { ...prev, condition: items[0]?.value || "" },
+        );
+      })
+      .catch(() => {});
+  }, []);
 
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });
@@ -57,7 +77,9 @@ export default function SellPage() {
           category: form.category,
           condition: form.condition,
           size: form.size || "Free size",
-          images: form.imageUrl ? [form.imageUrl] : [],
+          location: form.location,
+          tags: form.tags,
+          media: form.media,
         },
       });
       router.push(`/products/${product.id}`);
@@ -104,15 +126,26 @@ export default function SellPage() {
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
       <NavBar />
-      <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
+      <section className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
         <h1 className="mb-1 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
         <p className="mb-6 text-sm text-gray-500">
           กรอกรายละเอียดให้ครบเพื่อให้ผู้ซื้อตัดสินใจได้ง่ายขึ้น
         </p>
         <form
           onSubmit={handleSubmit}
-          className="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-6"
+          className="flex flex-col gap-5 rounded-lg border border-gray-200 bg-white p-6"
         >
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              รูปภาพ / วิดีโอสินค้า
+            </label>
+            <MediaUploader
+              value={form.media}
+              onChange={(media) => setForm({ ...form, media })}
+              token={getAccessToken()}
+            />
+          </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
               ชื่อสินค้า
@@ -139,38 +172,21 @@ export default function SellPage() {
             />
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              ราคา (บาท)
-            </label>
-            <input
-              required
-              type="number"
-              min="1"
-              step="1"
-              placeholder="0"
-              value={form.price}
-              onChange={update("price")}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-            />
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                หมวดหมู่
+                ราคา (บาท)
               </label>
-              <select
-                value={form.category}
-                onChange={update("category")}
+              <input
+                required
+                type="number"
+                min="1"
+                step="1"
+                placeholder="0"
+                value={form.price}
+                onChange={update("price")}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -181,39 +197,67 @@ export default function SellPage() {
                 onChange={update("condition")}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
               >
-                {CONDITIONS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                {conditions.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
                   </option>
                 ))}
               </select>
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                หมวดหมู่
+              </label>
+              <input
+                required
+                list="category-suggestions"
+                placeholder="พิมพ์หรือเลือกหมวดหมู่"
+                value={form.category}
+                onChange={update("category")}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+              />
+              <datalist id="category-suggestions">
+                {categories.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                ไซส์
+              </label>
+              <input
+                placeholder="เช่น M, 40, Free size"
+                value={form.size}
+                onChange={update("size")}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              ไซส์
+              สถานที่ตั้งสินค้า
             </label>
             <input
-              placeholder="เช่น M, 40, Free size"
-              value={form.size}
-              onChange={update("size")}
+              placeholder="เช่น กรุงเทพฯ, จตุจักร"
+              value={form.location}
+              onChange={update("location")}
               className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
             />
           </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              URL รูปภาพ{" "}
-              <span className="font-normal text-gray-400">
-                (ไม่บังคับในเวอร์ชัน mockup)
-              </span>
+              แท็ก
             </label>
-            <input
-              placeholder="https://..."
-              value={form.imageUrl}
-              onChange={update("imageUrl")}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+            <TagInput
+              value={form.tags}
+              onChange={(tags) => setForm({ ...form, tags })}
+              placeholder="พิมพ์แท็กแล้วกด Enter เช่น vintage, denim"
             />
           </div>
 

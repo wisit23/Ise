@@ -6,6 +6,7 @@ const {
   verifyRefreshToken,
   badRequest,
   conflict,
+  notFound,
 } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
 
@@ -141,4 +142,45 @@ async function getById(userId) {
   return toPublicUser(user);
 }
 
-module.exports = { register, login, refresh, logout, getById };
+async function updateProfile(userId, { firstName, lastName, phone }) {
+  const patch = {};
+  if (firstName !== undefined) {
+    if (!firstName) throw badRequest("firstName cannot be empty");
+    patch.firstName = firstName;
+  }
+  if (lastName !== undefined) {
+    if (!lastName) throw badRequest("lastName cannot be empty");
+    patch.lastName = lastName;
+  }
+  if (phone !== undefined) patch.phone = phone;
+
+  const user = await prisma.user.update({ where: { id: userId }, data: patch });
+  return toPublicUser(user);
+}
+
+/** Public store-front info for a seller — no email/phone, only what a buyer needs to see. */
+async function getPublicSellerProfile(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { sellerProfile: true },
+  });
+  if (!user || user.role !== "SELLER") throw notFound("seller not found");
+
+  return {
+    id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    shopName: user.sellerProfile?.shopName || null,
+    memberSince: user.createdAt,
+  };
+}
+
+module.exports = {
+  register,
+  login,
+  refresh,
+  logout,
+  getById,
+  updateProfile,
+  getPublicSellerProfile,
+};

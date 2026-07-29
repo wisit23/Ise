@@ -26,10 +26,11 @@ export default function CartPage() {
     }
     setLoading(true);
     try {
-      const data = await apiFetch("/api/orders/mine", { token });
-      const pending = data.items.filter((o) => o.status === "pending");
-      setItems(pending);
-      setSelected(new Set(pending.map((o) => o.id)));
+      const data = await apiFetch("/api/orders/mine?status=pending&limit=100", {
+        token,
+      });
+      setItems(data.items);
+      setSelected(new Set(data.items.map((o) => o.id)));
     } catch (err) {
       setError(err.message);
     } finally {

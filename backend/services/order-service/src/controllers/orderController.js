@@ -1,4 +1,10 @@
-const { badRequest, notFound, forbidden } = require("@reloop/shared");
+const {
+  badRequest,
+  notFound,
+  forbidden,
+  parsePagination,
+  paginatedResponse,
+} = require("@reloop/shared");
 const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
 
@@ -34,8 +40,19 @@ async function create(req, res, next) {
 
 async function mine(req, res, next) {
   try {
-    const items = await orderModel.listByBuyer(req.userId);
-    res.json({ items });
+    const pagination = parsePagination(req.query, 10);
+    const { status } = req.query;
+    if (status && !orderModel.VALID_STATUSES.includes(status)) {
+      throw badRequest(
+        `status must be one of ${orderModel.VALID_STATUSES.join(", ")}`,
+      );
+    }
+    const { items, total } = await orderModel.listByBuyer(req.userId, {
+      status,
+      skip: pagination.skip,
+      take: pagination.take,
+    });
+    res.json(paginatedResponse(items, total, pagination));
   } catch (err) {
     next(err);
   }
@@ -43,8 +60,19 @@ async function mine(req, res, next) {
 
 async function selling(req, res, next) {
   try {
-    const items = await orderModel.listBySeller(req.userId);
-    res.json({ items });
+    const pagination = parsePagination(req.query, 10);
+    const { status } = req.query;
+    if (status && !orderModel.VALID_STATUSES.includes(status)) {
+      throw badRequest(
+        `status must be one of ${orderModel.VALID_STATUSES.join(", ")}`,
+      );
+    }
+    const { items, total } = await orderModel.listBySeller(req.userId, {
+      status,
+      skip: pagination.skip,
+      take: pagination.take,
+    });
+    res.json(paginatedResponse(items, total, pagination));
   } catch (err) {
     next(err);
   }
@@ -93,6 +121,18 @@ async function updateStatus(req, res, next) {
   }
 }
 
+/** Called by review-service (service-to-service, internal token) to check whether
+ * an order exists/belongs to the reviewer/is eligible for a review. */
+async function getOneInternal(req, res, next) {
+  try {
+    const order = await orderModel.findById(req.params.id);
+    if (!order) throw notFound("order not found");
+    res.json(order);
+  } catch (err) {
+    next(err);
+  }
+}
+
 /** Mock checkout: buyer pays for a locked (pending) cart item. Moves the reserved product to sold. */
 async function pay(req, res, next) {
   try {
@@ -116,4 +156,12 @@ async function pay(req, res, next) {
   }
 }
 
-module.exports = { create, mine, selling, getOne, updateStatus, pay };
+module.exports = {
+  create,
+  mine,
+  selling,
+  getOne,
+  getOneInternal,
+  updateStatus,
+  pay,
+};

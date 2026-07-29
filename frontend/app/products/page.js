@@ -5,8 +5,11 @@ import { useSearchParams } from "next/navigation";
 import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
 import ProductCard from "../../components/ProductCard";
+import Pagination from "../../components/Pagination";
 import { apiFetch } from "../../lib/api";
-import { CATEGORIES } from "../../lib/constants";
+import { fetchCategories } from "../../lib/catalog";
+
+const PAGE_SIZE = 12;
 
 function ProductsPageInner() {
   const searchParams = useSearchParams();
@@ -14,22 +17,28 @@ function ProductsPageInner() {
   const urlCategory = searchParams.get("category") || "";
 
   const [items, setItems] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [q, setQ] = useState(urlQuery);
   const [category, setCategory] = useState(urlCategory);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  async function load(query, cat) {
+  async function load(query, cat, pageNum) {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
       if (cat) params.set("category", cat);
+      params.set("page", pageNum);
+      params.set("limit", PAGE_SIZE);
       const path = query
-        ? `/api/products/search?q=${encodeURIComponent(query)}${cat ? `&category=${encodeURIComponent(cat)}` : ""}`
-        : `/api/products/feed${params.toString() ? `?${params}` : ""}`;
+        ? `/api/products/search?q=${encodeURIComponent(query)}&${params}`
+        : `/api/products/feed?${params}`;
       const data = await apiFetch(path);
       setItems(data.items);
+      setTotalPages(data.totalPages);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,18 +49,33 @@ function ProductsPageInner() {
   useEffect(() => {
     setQ(urlQuery);
     setCategory(urlCategory);
-    load(urlQuery, urlCategory);
+    setPage(1);
+    load(urlQuery, urlCategory, 1);
   }, [urlQuery, urlCategory]);
+
+  useEffect(() => {
+    fetchCategories()
+      .then(setCategories)
+      .catch(() => {});
+  }, []);
 
   function handleSearch(e) {
     e.preventDefault();
-    load(q, category);
+    setPage(1);
+    load(q, category, 1);
   }
 
   function toggleCategory(c) {
     const next = category === c ? "" : c;
     setCategory(next);
-    load(q, next);
+    setPage(1);
+    load(q, next, 1);
+  }
+
+  function handlePageChange(next) {
+    setPage(next);
+    load(q, category, next);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
@@ -73,7 +97,7 @@ function ProductsPageInner() {
                 ทั้งหมด
               </button>
             </li>
-            {CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <li key={c}>
                 <button
                   onClick={() => toggleCategory(c)}
@@ -117,7 +141,7 @@ function ProductsPageInner() {
           </div>
 
           <div className="mb-4 flex gap-2 overflow-x-auto sm:hidden">
-            {CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <button
                 key={c}
                 onClick={() => toggleCategory(c)}
@@ -143,6 +167,12 @@ function ProductsPageInner() {
               <ProductCard key={p.id} product={p} />
             ))}
           </div>
+
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onChange={handlePageChange}
+          />
         </div>
       </section>
       <Footer />

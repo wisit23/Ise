@@ -6,14 +6,18 @@ import NavBar from "../components/NavBar";
 import Footer from "../components/Footer";
 import ProductCard from "../components/ProductCard";
 import { apiFetch } from "../lib/api";
-import { CATEGORIES } from "../lib/constants";
+import { fetchCategories } from "../lib/catalog";
 
 export default function HomePage() {
   const [items, setItems] = useState([]);
+  const [categories, setCategories] = useState([]);
 
   useEffect(() => {
     apiFetch("/api/products/feed")
       .then((data) => setItems(data.items.slice(0, 8)))
+      .catch(() => {});
+    fetchCategories()
+      .then(setCategories)
       .catch(() => {});
   }, []);
 
@@ -49,7 +53,7 @@ export default function HomePage() {
       <section className="mx-auto w-full max-w-6xl px-4 py-10">
         <h2 className="mb-4 text-lg font-semibold text-gray-900">หมวดหมู่</h2>
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-          {CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <Link
               key={c}
               href={`/products?category=${encodeURIComponent(c)}`}

@@ -4,8 +4,10 @@ This file tracks every deviation from the original ER diagram, with the reason f
 Rule (per project decision): **no ER table is ever dropped** — tables not yet used by a shipped
 feature are still created, just left with no routes/UI until that phase lands.
 
-Updated incrementally as each service's schema is built. Current status: only `auth-service`
-(`reloop_auth` database) exists so far — see [`auth-service.prisma`](./auth-service.prisma).
+Updated incrementally as each service's schema is built. Current status: `auth-service`
+(`reloop_auth`), `product-service` (`reloop_product`), and `order-service` (`reloop_order`)
+exist — see the `.prisma` files in each service's own `prisma/` folder (this folder only holds
+`auth-service.prisma` from when the project had a single shared schema location).
 
 ## auth-service (`reloop_auth`)
 
@@ -25,9 +27,30 @@ No foreign keys reach across service databases. Where a table needs to reference
 another service (e.g. `reports.product_id`), it's stored as a plain string ID with no DB-level constraint;
 integrity there is enforced by API calls, not by Postgres.
 
-### Still to schema (per the master plan, not built yet)
+## product-service (`reloop_product`)
 
-product-service (Product, Photo, Video, Swipe, Book_Mark, Auction, Campaign, Product_Campaign,
-Campaign_KPIs, Evaluation_Criteria + new: tags/user_tag_scores/product_views), order-service
-(basket, Order, Order_Items, Payments, Shippings, Dispute), chat-service (message, Auto_messages +
-new: chat_rooms), review-service (new: reviews, seller_stats, notifications).
+| ER entity     | Prisma model / table       | Change + reason                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product       | `Product` / `products`     | ER attributes are `Price, Seller_ID, Name, Brand, Type, Product_ID`. Kept `Price`/`Seller_ID`/`Product_ID` as-is (`Name`→`title`). Dropped `Brand` (unused, no field asked for it) and `Type` (superseded by the new `category` + `categories` table below). Added `description`, `condition`, `tags`, `location`, `size`, `status` — none are in the ER; required by the Release A listing/lifecycle requirements the ER doesn't encode. |
+| Photo         | `Photo` / `photos`         | As ER (`Photo_ID`, `URL`, `Product_ID`). Added `position` (not in ER) so the seller's chosen image order / cover photo survives being split across `photos` and `videos` as two separate tables.                                                                                                                                                                                                                                          |
+| Video         | `Video` / `videos`         | As ER (`Video_ID`, `Caption`, `CreatedAt`, `URL`, `Product_ID`). Added `position` for the same reason as `Photo`.                                                                                                                                                                                                                                                                                                                         |
+| _(not in ER)_ | `Category` / `categories`  | New table. The ER's Product only has a free `Type` attribute, no dedicated entity. Added so the category list is real, queryable data instead of a hardcoded frontend array — `category` on `products` stays a plain string (not a hard FK) so sellers can still type a new one freely; unseen names are inserted here automatically.                                                                                                     |
+| _(not in ER)_ | `Condition` / `conditions` | New table. The ER has no condition/quality concept at all. Values (`New`/`Like New`/`Good`/`Fair`) were a hardcoded array in both the controller and the frontend before this table existed; now validated against real rows.                                                                                                                                                                                                             |
+
+Explicitly **not** built (out of Release A scope per the master plan, no shipped feature needs
+them yet): `Swipe`, `Book_Mark`, `Auction`, `Campaign`, `Product_Campaign`, `Campaign_KPIs`,
+`Evaluation_Criteria`.
+
+## order-service (`reloop_order`)
+
+| ER entity | Prisma model / table | Change + reason                                                                                                                                                                                                                                                                                                        |
+| --------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Order     | `Order` / `orders`   | ER's `Order`/`basket`/`Order_Items` are collapsed into a single `orders` row per product (this system sells one-off items, not multi-line carts) — `product_title`/`price` are snapshotted at purchase time rather than joined live, so a later price edit on the listing can't silently change a past order's amount. |
+
+Explicitly **not** built yet: `basket` (as its own table — cart state is currently just
+`orders` rows with `status='pending'`), `Payments`, `Shippings`, `Dispute`.
+
+## Still to schema (per the master plan, not built yet)
+
+chat-service (message, Auto_messages + new: chat_rooms), review-service (new: reviews,
+seller_stats, notifications).

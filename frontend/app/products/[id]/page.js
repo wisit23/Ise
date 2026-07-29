@@ -5,8 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
+import MediaGallery from "../../../components/MediaGallery";
+import { StarDisplay } from "../../../components/StarRating";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
+import { fetchConditions } from "../../../lib/catalog";
 
 const STATUS_LABEL = {
   available: "พร้อมขาย",
@@ -18,15 +21,33 @@ export default function ProductDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const [product, setProduct] = useState(null);
+  const [seller, setSeller] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [added, setAdded] = useState(false);
+  const [conditionLabels, setConditionLabels] = useState({});
+  const [reviewSummary, setReviewSummary] = useState(null);
 
   useEffect(() => {
     apiFetch(`/api/products/${id}`)
-      .then(setProduct)
+      .then((p) => {
+        setProduct(p);
+        apiFetch(`/api/auth/users/${p.sellerId}/public`)
+          .then(setSeller)
+          .catch(() => {});
+        apiFetch(`/api/reviews/by-seller/${p.sellerId}/summary`)
+          .then(setReviewSummary)
+          .catch(() => {});
+      })
       .catch((err) => setError(err.message));
+    fetchConditions()
+      .then((items) =>
+        setConditionLabels(
+          Object.fromEntries(items.map((c) => [c.value, c.label])),
+        ),
+      )
+      .catch(() => {});
   }, [id]);
 
   async function addToCart() {
@@ -90,6 +111,9 @@ export default function ProductDetailPage() {
   }
 
   const available = product.status === "available";
+  const sellerName = seller
+    ? seller.shopName || `${seller.firstName} ${seller.lastName}`
+    : "ผู้ขาย";
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
@@ -112,17 +136,7 @@ export default function ProductDetailPage() {
 
       <section className="mx-auto grid w-full max-w-5xl flex-1 gap-10 px-4 py-6 sm:grid-cols-2">
         <div>
-          {product.images?.[0] ? (
-            <img
-              src={product.images[0]}
-              alt={product.title}
-              className="aspect-square w-full rounded-lg border border-gray-200 object-cover"
-            />
-          ) : (
-            <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-gray-200 bg-gray-100 text-gray-400">
-              ไม่มีรูปภาพ
-            </div>
-          )}
+          <MediaGallery media={product.media} alt={product.title} />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{product.title}</h1>
@@ -132,11 +146,16 @@ export default function ProductDetailPage() {
 
           <div className="mt-4 flex flex-wrap gap-2 text-xs">
             <span className="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600">
-              สภาพ: {product.condition}
+              สภาพ: {conditionLabels[product.condition] || product.condition}
             </span>
             <span className="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600">
               ไซส์: {product.size}
             </span>
+            {product.location && (
+              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600">
+                📍 {product.location}
+              </span>
+            )}
             <span
               className={`rounded-full px-2.5 py-1 ${
                 available
@@ -151,6 +170,52 @@ export default function ProductDetailPage() {
           <p className="mt-5 whitespace-pre-line text-sm text-gray-700">
             {product.description}
           </p>
+
+          {product.tags?.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {product.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-6 flex items-center justify-between rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-700">
+                {sellerName?.[0] || "?"}
+              </span>
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  {sellerName}
+                </p>
+                {reviewSummary?.total > 0 ? (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                    <StarDisplay
+                      value={reviewSummary.averageRating}
+                      size={13}
+                    />
+                    <span>
+                      {reviewSummary.averageRating.toFixed(1)} (
+                      {reviewSummary.total} รีวิว)
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">ยังไม่มีรีวิว</p>
+                )}
+              </div>
+            </div>
+            <Link
+              href={`/store/${product.sellerId}`}
+              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              ดูร้านค้า
+            </Link>
+          </div>
 
           {notice && <p className="mt-4 text-sm text-red-600">{notice}</p>}
           {added && (

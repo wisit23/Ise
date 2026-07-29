@@ -346,6 +346,248 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 - `frontend/lib/constants.js` (ใหม่)
 - `frontend/app/page.js`, `frontend/app/products/page.js`, `frontend/app/products/[id]/page.js`, `frontend/app/cart/page.js`, `frontend/app/orders/page.js`, `frontend/app/sell/page.js`, `frontend/app/login/page.js`, `frontend/app/register/page.js`
 
+## Task `MOCK-TRADE-004` — Schema เต็มรูปแบบ (tags/media/location) + Upload ไฟล์จริง + Avatar Dropdown + ร้านค้า/โปรไฟล์
+
+> วันที่ทำ: 2026-07-29
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ยืนยันด้วย Automated Test (Backend 26 ข้อ/Frontend 2 ข้อ ผ่านหมด) และ E2E จริงผ่าน Docker + Browser รวมถึง Upload ไฟล์จริงขึ้น Disk ผ่าน API จริง (ไม่ใช่ Mock)
+>
+> หมายเหตุ: งานนี้ตอบ Requirement ที่ผู้ใช้ระบุ Data Schema ตรงๆ (id, title, description, price, condition enum, category, tags[], media[], location, seller_id, created_at) และ UI แบบ Navbar+Dropdown ตามสเปกละเอียด — เปลี่ยน `Product.condition` จาก Free-text ภาษาไทยเป็น Enum ที่ Validate ในโค้ด (`New`/`Like New`/`Good`/`Fair`) และเพิ่ม `tags`/`media`/`location` เป็น Column จริงใน Postgres (ไม่ใช่ Mock)
+
+### งานที่ทำ
+
+**Backend — Schema และ API**
+
+1. แก้ `backend/services/product-service/prisma/schema.prisma`: เพิ่ม `tags String[]`, `media Json @default("[]")` (Array ของ `{url, type}`), `location String` — เปลี่ยน `condition` Default เป็น `"Good"` (Validate ใน Controller กับ `['New', 'Like New', 'Good', 'Fair']` แทนการทำ Prisma Enum จริง เพราะ `"Like New"` มีช่องว่าง ไม่ใช่ Identifier ที่ถูกต้องสำหรับ Prisma Enum)
+2. Push Schema ใหม่เข้า `reloop_product` จริงด้วย `prisma db push --accept-data-loss` (ยอมรับ Data Loss เฉพาะ Column `images` เดิมที่เปลี่ยนชื่อเป็น `media` — เป็น Dev Database ที่มีแต่ข้อมูลทดสอบของตัวเอง)
+3. เพิ่ม Endpoint จริง: `POST /uploads` (product-service, `multer` เขียนไฟล์ลง Disk จริงที่ `uploads/` ซึ่งมี Docker Volume `product_uploads` Mount ไว้แล้วตั้งแต่แรกแต่ไม่เคยถูกใช้งาน) — Validate MIME Type (เฉพาะ JPG/PNG/WEBP/GIF/MP4/MOV), จำกัด 8 ไฟล์ 20MB/ไฟล์, ต้องเป็นบัญชี SELLER/ADMIN (เช็คด้วย `requireRole` **ก่อน** Multer ประมวลผลไฟล์ เพื่อไม่ให้เขียนไฟล์ลง Disk ก่อนรู้ผล Authorization)
+4. **พบและแก้ Bug จริงระหว่างทำ:** Gateway มี Proxy `/uploads` อยู่ก่อนแล้ว (Scaffold ไว้ตั้งแต่ต้นแต่ไม่เคยมี Endpoint ให้ Proxy จริง) — พบว่า Express Strip Path Prefix ก่อนส่งต่อให้ Proxy โดยอัตโนมัติ (Mechanism เดียวกับที่ทำให้ `/api/products/feed` ทำงานได้อยู่แล้ว) ทำให้ `POST /uploads` ถูกส่งไป product-service เป็น `POST /` ซึ่งชนกับ `POST /` ของ `productRoutes` (สร้างสินค้า) เกิด Error "title, price, category are required" ผิดที่ผิดทาง — แก้ด้วย `pathRewrite: (path) => `/uploads${path}`` ใน Proxy Config เพื่อคืน Prefix กลับก่อนส่งต่อ ยืนยันแก้แล้วด้วยการอัปโหลดไฟล์ PNG จริงผ่าน `fetch` ตรงและได้ URL ที่โหลดกลับมาเป็นรูปได้จริง (`Content-Type: image/png`, 200)
+5. เพิ่ม `GET /api/products/by-seller/:sellerId` (Public, กรอง `status=available`) สำหรับหน้าร้านค้า
+6. เพิ่ม `GET /api/auth/users/:id/public` (Public, auth-service) — คืนเฉพาะ `firstName/lastName/shopName/memberSince` ของบัญชี Role `SELLER` เท่านั้น (404 ถ้าไม่ใช่ผู้ขาย) ไม่มี Email/Phone รั่วออกไป
+7. เพิ่ม `PATCH /api/auth/me` (auth-service) แก้ไข `firstName/lastName/phone` ของตัวเอง สำหรับหน้า "ตั้งค่าโปรไฟล์"
+8. อัปเดต Gateway `PUBLIC_PATHS` เพิ่ม `/api/auth/users/*/public`, `/api/products/by-seller/*`, และ `/uploads/*` (GET ดูรูปไม่ต้อง Login, POST ยังโดน `requireAuth`/`requireRole` ที่ product-service เหมือนเดิม)
+9. ย้าย Test ที่แตะ Database ออกจาก Smoke Test เดิม เพิ่ม Test ใหม่ยืนยัน Role Gate ด้วย JWT จริง
+
+**Frontend — Component ใหม่และ UI ตามสเปก**
+
+10. `frontend/components/MediaUploader.js` (ใหม่): Dropzone ลากไฟล์วางได้จริง + คลิกเลือกไฟล์, Preview Grid พร้อมปุ่ม [×] ลบ และปุ่ม "ตั้งเป็นภาพหลัก" ย้ายลำดับ Cover Image ได้ — อัปโหลดไฟล์ขึ้น Backend จริงทันทีที่เลือก ไม่ใช่รอตอนกด "ลงขาย"
+11. `frontend/components/TagInput.js` (ใหม่): พิมพ์คำแล้วกด Enter/Space/Comma สร้าง Badge แท็ก, Backspace ตอนช่องว่างลบแท็กล่าสุด, ปุ่ม × ลบทีละอัน
+12. `frontend/components/MediaGallery.js` (ใหม่): Gallery/Carousel สำหรับหน้ารายละเอียดสินค้า รองรับทั้งรูปและวิดีโอ (`<video controls>` เล่นได้จริง) พร้อม Thumbnail Strip กดสลับได้
+13. `frontend/components/NavBar.js`: ปรับ Layout เป็น Logo กลางซ้าย + ช่องค้นหากลาง + **เฉพาะ Avatar วงกลม** ด้านขวา (ไม่มีข้อความ/ลิงก์ลอยแยกแล้วเหมือนก่อนหน้า) — คลิก Avatar เปิด Dropdown Menu มีครบ 6 รายการตามสเปก: ลงขายสินค้า (Highlight เขียว + ไอคอน +), แดชบอร์ดผู้ขาย (เฉพาะ Seller), คำสั่งซื้อของฉัน, ร้านค้าของฉัน (เฉพาะ Seller, ลิงก์ไป `/store/{ตัวเอง}`), ตั้งค่าโปรไฟล์, ออกจากระบบ — เพิ่ม "ตะกร้า" (พร้อม Badge จำนวน) เป็นรายการเสริมสำหรับ Buyer เพราะ Spec ไม่ได้ระบุแต่ตัดออกจะทำให้กลับไปที่ตะกร้าไม่ได้เลยนอกจาก Flow ซื้อโดยตรง
+14. `frontend/app/sell/page.js`: เขียนใหม่ทั้งหมดใช้ `MediaUploader`/`TagInput`, เปลี่ยนหมวดหมู่จาก `<select>` เป็น `<input list>` + `<datalist>` (พิมพ์อิสระได้ตาม Spec แต่ยังมี Suggestion), เพิ่มช่อง "สถานที่ตั้งสินค้า", เปลี่ยนสภาพสินค้าเป็น Dropdown ค่า `New/Like New/Good/Fair` (แสดง Label ไทยแต่ค่าที่ส่งเป็นภาษาอังกฤษตรงสเปก)
+15. `frontend/app/products/[id]/page.js`: ใช้ `MediaGallery`, แสดง Tag Badge, การ์ดข้อมูลผู้ขาย (Avatar อักษรแรก, ชื่อร้าน/ชื่อผู้ขาย, "ยังไม่มีรีวิว") พร้อมปุ่ม "ดูร้านค้า" สีเขียวไปหน้า `/store/[sellerId]`
+16. `frontend/app/store/[sellerId]/page.js` (ใหม่): Header ร้านค้า (Avatar, ชื่อร้าน, จำนวนสินค้า) + Grid สินค้าของผู้ขายคนนั้น
+17. `frontend/app/profile/page.js` (ใหม่): ฟอร์มแก้ไข ชื่อ/นามสกุล/เบอร์โทร เชื่อม `PATCH /api/auth/me` จริง อัปเดต `localStorage` Session ให้ตรงกับข้อมูลใหม่ทันที
+18. `frontend/lib/constants.js`: เปลี่ยน `CONDITIONS` เป็น `{value, label}` คู่ (Value ตรง Backend Enum เป๊ะ, Label เป็นภาษาไทยสำหรับ UI) เพิ่ม `CONDITION_LABEL` Lookup Map
+19. `frontend/lib/api.js`: เพิ่ม `uploadFiles()` (ส่ง `FormData`, **ห้าม**ตั้ง `Content-Type` เองเพราะ Browser ต้องเป็นคนใส่ Multipart Boundary) และ `mediaUrl()` (Helper แปลง Path สัมพัทธ์ `/uploads/...` เป็น URL เต็ม)
+20. ยืนยันสี: Primary/Accent ที่ผู้ใช้ระบุ (`#059669`, `#D1FAE5`, `#F9FAFB`) ตรงกับ Tailwind `emerald-600`/`emerald-100`/`gray-50` ที่ใช้อยู่แล้วทั้งเว็บตั้งแต่รอบก่อน ไม่ต้องเปลี่ยน Theme ใหม่
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                                                                                                | ผลที่เกิดขึ้นจริง                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                                                                                                                         | Exit 0                                                                                                                                                                                                                             |
+| `npm test` (Backend)                                                                                                                   | 26 Test: ผ่าน 24, Skip 2 (ไม่ได้ตั้ง `DATABASE_URL` ตอนรันจาก Root), Fail 0                                                                                                                                                        |
+| `DATABASE_URL=...reloop_product REQUIRE_INTEGRATION=1 node --test` (Integration Test กับ Schema ใหม่)                                  | ผ่านจริงกับ Database จริงหลัง Migrate                                                                                                                                                                                              |
+| `npm run test:frontend`                                                                                                                | 2/2 ผ่าน                                                                                                                                                                                                                           |
+| อัปโหลดไฟล์ PNG จริงผ่าน `fetch` ตรงไป Gateway `/uploads`                                                                              | `201 Created` คืน `{media:[{url,type:"image"}]}`, โหลดไฟล์กลับมาดูได้จริงที่ URL นั้น `200 OK` `Content-Type: image/png`                                                                                                           |
+| ทดสอบ `MediaUploader` ผ่าน Browser จริง (จำลองเลือกไฟล์ผ่าน `<input type="file">` เพราะ Browser Automation สั่ง OS File Picker ไม่ได้) | ไฟล์อัปโหลดสำเร็จ, Preview แสดง Badge "ภาพหลัก" ถูกต้อง                                                                                                                                                                            |
+| กรอกฟอร์มลงขายครบ (Media, Title, Price, Condition=Like New, Category พิมพ์อิสระ, Location, Tags 3 อัน ผ่าน `TagInput`) แล้ว Submit     | สร้างสินค้าสำเร็จ, หน้ารายละเอียดแสดง Breadcrumb/Gallery/Tag Badge/Location/Condition Label ภาษาไทยถูกต้องครบทุกจุด                                                                                                                |
+| กด "ดูร้านค้า"                                                                                                                         | ไปหน้า `/store/[sellerId]` แสดงชื่อร้าน "ร้านวิชัยแฟชั่น" (จาก `SellerProfile.shopName` จริง) และสินค้าของร้านนั้นถูกต้อง                                                                                                          |
+| เปิด Avatar Dropdown                                                                                                                   | เห็นครบ 6 รายการตามสเปก พร้อมชื่อ-นามสกุล และ Role Badge ในหัว Dropdown                                                                                                                                                            |
+| แก้ไขเบอร์โทรที่ `/profile` แล้วเช็คผ่าน `GET /api/auth/me`                                                                            | เบอร์โทรอัปเดตจริงในฐานข้อมูล ยืนยัน Persist ข้าม Request                                                                                                                                                                          |
+| พยายามลบข้อมูลเก่าที่ Schema เปลี่ยนแล้วยังไม่ได้ Migrate (Bulk `deleteMany`)                                                          | ถูก Auto-mode Safety Classifier **บล็อกจริง** เพราะเป็นคำสั่งลบข้อมูลจำนวนมาก — ไม่ได้พยายามหาทางเลี่ยง ปล่อยข้อมูลเดิมทิ้งไว้ (สินค้าเก่าก่อน Schema นี้จะมี `tags`/`media` ว่างเปล่า เป็นข้อมูลสาธิตที่ไม่สมบูรณ์ แต่ไม่ใช่ Bug) |
+
+### ผลลัพธ์ปัจจุบัน
+
+- Schema ตรงตามที่ผู้ใช้ระบุครบ: `tags[]`, `media[]` (object จริงมี `url`/`type`), `location`, `condition` Enum ที่ Validate จริง
+- Upload ไฟล์เป็นของจริง (เขียนลง Disk ผ่าน Docker Volume ที่มีอยู่แล้ว) ไม่ใช่แค่ให้พิมพ์ URL เหมือนรอบก่อน
+- Navbar/Dropdown ตรงสเปกที่ให้มาทุกจุด (ยกเว้นเพิ่ม "ตะกร้า" เป็นรายการเสริมที่ไม่ได้ขอ แต่จำเป็นเพื่อไม่ให้ผู้ซื้อกลับไปตะกร้าไม่ได้)
+- หน้าร้านค้า (`/store/[sellerId]`) และหน้าตั้งค่าโปรไฟล์ (`/profile`) เป็นหน้าใหม่ที่ใช้งานได้จริง ไม่ใช่ Placeholder
+- **ข้อมูลสินค้าเก่า (`p1`-`p5` และสินค้าทดสอบก่อนหน้านี้) ยังมี `tags`/`media` ว่างเปล่า** เพราะ Schema Migration ใหม่กว่าข้อมูลเดิม และคำสั่งลบข้อมูลเพื่อ Reseed ถูกบล็อกโดย Safety Classifier — ไม่กระทบ Function ใดๆ (สินค้าเก่ายังซื้อขายได้ปกติ) แค่ไม่มีรูป/แท็กให้โชว์เป็นตัวอย่าง สินค้าที่สร้างใหม่หลังจากนี้จะมีข้อมูลครบ
+- ยังไม่มี Rating/Review จริง ("ยังไม่มีรีวิว" เป็นข้อความ Static เพราะ `review-service` ยังไม่มี Endpoint ให้เรียก)
+- ยังไม่ผ่าน AI Reviewer อิสระ
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/product-service/prisma/schema.prisma`, `prisma/seed.js`
+- `backend/services/product-service/src/middleware/upload.js` (ใหม่), `src/controllers/uploadController.js` (ใหม่), `src/routes/uploadRoutes.js` (ใหม่)
+- `backend/services/product-service/src/controllers/productController.js`, `src/models/productModel.js`, `src/routes/productRoutes.js`, `src/app.js`
+- `backend/services/auth-service/src/services/authService.js`, `src/controllers/authController.js`, `src/routes/authRoutes.js`
+- `backend/gateway/src/app.js`
+- `frontend/components/MediaUploader.js`, `TagInput.js`, `MediaGallery.js` (ใหม่ทั้งหมด), `NavBar.js`
+- `frontend/app/sell/page.js`, `frontend/app/products/[id]/page.js`, `frontend/app/store/[sellerId]/page.js` (ใหม่), `frontend/app/profile/page.js` (ใหม่)
+- `frontend/lib/constants.js`, `frontend/lib/api.js`
+
+## Task `MOCK-TRADE-005` — ปรับ Schema ให้ตรง ER Diagram + ย้ายค่าที่ฝังในโค้ดลง Database
+
+> วันที่ทำ: 2026-07-29
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ยืนยันด้วย Automated Test (Backend 26 ข้อ/Frontend 2 ข้อ ผ่านหมด, Integration Test ยืนยัน Category ใหม่ที่ Insert อัตโนมัติจริง) และทดสอบผ่าน Docker + Browser จริง (สร้างสินค้าด้วยหมวดหมู่ใหม่ที่ไม่เคยมีมาก่อน แล้วยืนยันว่าไปโผล่ใน Database จริง)
+>
+> หมายเหตุ: อ่าน `docs/erdatabase.png` (ER Diagram ต้นฉบับของโปรเจกต์) ตรงๆ เพื่อจัดโครงสร้างให้ใกล้เคียงของจริง — พบว่า ER มี `Photo`/`Video` เป็น Entity แยกกัน (ไม่ใช่ Field เดียวแบบ JSON ที่ทำไว้ก่อนหน้า) และไม่มี `Category`/`Condition` เป็น Entity เลย (Product มีแค่ Field `Type` อิสระ) — งานนี้เลยเป็นทั้ง "ทำตาม ER ที่มีอยู่" (Photo/Video) และ "เพิ่ม Table ใหม่ที่ ER ไม่มี" (Category/Condition) พร้อมบันทึกเหตุผลของทุกจุดที่ต่างจาก ER ไว้ใน `database/ER-changes.md` ตาม Rule เดิมของโปรเจกต์ (ห้ามตัด Table ของ ER แต่เพิ่มได้ถ้าบันทึกเหตุผล)
+
+### งานที่ทำ
+
+**Backend — Schema**
+
+1. แก้ `backend/services/product-service/prisma/schema.prisma`: ลบ Field `media Json` เดิม เปลี่ยนเป็น 2 Table จริงตาม ER คือ `Photo` (`Photo_ID`, `URL`, `Product_ID` + `position` ที่เพิ่มเองเพื่อรักษาลำดับ/ภาพหลัก) และ `Video` (`Video_ID`, `Caption`, `CreatedAt`, `URL`, `Product_ID` + `position`) — ทั้งคู่ `onDelete: Cascade` เมื่อลบสินค้า
+2. เพิ่ม `Category` Table (`id`, `name` unique) — ไม่มีใน ER แต่เพิ่มเพื่อย้ายรายการหมวดหมู่ที่เคย Hardcode ไว้ใน `frontend/lib/constants.js` ให้เป็นข้อมูลจริงใน Database — `products.category` ยังเป็น String ธรรมดา (ไม่ใช่ FK บังคับ) เพื่อให้ผู้ขายยังพิมพ์หมวดหมู่ใหม่ได้อิสระตามที่เคยขอไว้ก่อนหน้า โดยชื่อที่ไม่เคยมีมาก่อนจะถูก Insert เข้า `categories` อัตโนมัติ (`productModel.ensureCategory`)
+3. เพิ่ม `Condition` Table (`id`, `value`, `label`, `sort_order`) — ย้าย Enum ที่เคย Hardcode ไว้ทั้งใน Controller และ Frontend ให้เป็นข้อมูลจริง Seed ไว้ 4 แถว (`New`/`Like New`/`Good`/`Fair`)
+4. เขียน `productModel.js` ใหม่ทั้งหมด: เพิ่ม `toApiShape()` แปลง `photos`/`videos` Relations กลับเป็น `media[]` (Shape เดิมที่ Frontend คุ้นเคย เพื่อไม่ต้องแก้ Frontend เยอะ), `mediaToNestedCreate()` แยก `media[]` ที่รับมาเป็น Nested Create ของ `photos`/`videos` ตาม `position`, และฟังก์ชันใหม่ `listCategories`/`ensureCategory`/`listConditions`
+5. `update()` ของ Product ใช้ `prisma.$transaction` ลบ `photos`/`videos` เดิมทั้งหมดแล้วสร้างใหม่เมื่อมีการส่ง `media` มาแก้ไข (Replace-all แทน Merge เพื่อความง่ายและถูกต้อง — ยังไม่มีหน้าแก้ไขสินค้าในระบบตอนนี้ ความเสี่ยงต่ำ)
+6. เพิ่ม Endpoint `GET /api/products/categories` และ `GET /api/products/conditions` (Public) ให้ Frontend ดึงไปแสดงแทนของที่เคย Hardcode
+7. Validate `condition` ที่ส่งมาตอนสร้าง/แก้ไขสินค้า กับข้อมูลจริงใน Table `conditions` แทนการเทียบกับ Array Hardcode ในโค้ด
+8. อัปเดต `prisma/seed.js`: Seed `categories` (5 แถว) และ `conditions` (4 แถว) ก่อน Seed สินค้าตัวอย่าง, เปลี่ยนสินค้าตัวอย่างให้ใช้ Nested Create ของ `photos` แทน `media` Array เดิม
+
+**Backend — Test**
+
+9. เพิ่ม Assertion ใน `product-crud.integration.test.js`: สร้างสินค้าพร้อม `condition`/`tags`/`media` (ทั้งรูปและวิดีโอ) แล้วตรวจว่า Response กลับมาตรงตาม Shape เดิม (`media[]` มี `type` ถูกต้องทั้งสองแบบ), เพิ่มการยิง `GET /categories` และ `GET /conditions` ตรวจว่าคืนข้อมูลจริงจาก Database
+
+**Frontend — ย้ายจาก Hardcoded Array เป็น Fetch จริง**
+
+10. เพิ่ม `frontend/lib/catalog.js`: `fetchCategories()`/`fetchConditions()` แบบ Cache ที่ Promise level (เรียกพร้อมกันจากหลาย Component ยิง Request จริงแค่ครั้งเดียว)
+11. **ลบ `frontend/lib/constants.js` ทิ้งทั้งไฟล์** (ไม่มีอะไรอ้างอิงเหลืออยู่แล้ว) — แก้ทุกจุดที่เคย Import `CATEGORIES`/`CONDITIONS`/`CONDITION_LABEL` ให้ดึงจาก `lib/catalog.js` แทน: `app/page.js` (Category Tile หน้าแรก), `app/products/page.js` (Sidebar + Mobile Chips), `app/sell/page.js` (Category Datalist + Condition Dropdown), `components/ProductCard.js` และ `app/products/[id]/page.js` (Condition Label สำหรับ Badge)
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                                                                                                | ผลที่เกิดขึ้นจริง                                                                                                                                               |
+| -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                                                                                                                         | Exit 0                                                                                                                                                          |
+| `npm test` (Backend)                                                                                                                   | 26 Test: ผ่าน 24, Skip 2, Fail 0                                                                                                                                |
+| `DATABASE_URL=...reloop_product REQUIRE_INTEGRATION=1 node --test` (Schema ใหม่)                                                       | ผ่านจริงกับ Database จริง รวม Assertion ใหม่เรื่อง Category/Condition/Media แยกรูป-วิดีโอ                                                                       |
+| `npm run test:frontend`                                                                                                                | 2/2 ผ่าน                                                                                                                                                        |
+| `prisma db push --accept-data-loss` (ยอมรับเฉพาะการลบ Column `media` เดิมที่เปลี่ยนเป็น Table แยก) แล้ว `docker compose up -d --build` | ทุก Container Healthy รวม product-service ที่ Build ใหม่พร้อม Schema/Seed ใหม่                                                                                  |
+| `curl /api/products/categories` และ `/api/products/conditions` หลัง Rebuild                                                            | คืนข้อมูลจริงจาก Database (5 หมวดหมู่, 4 สภาพสินค้า) ไม่ใช่ค่าที่เคย Hardcode                                                                                   |
+| E2E จริงผ่าน Browser: Login บัญชีผู้ขายเดิม แล้วลงขายสินค้าใหม่ด้วยหมวดหมู่ที่ไม่เคยมีมาก่อน ("หนังสือ")                               | สร้างสินค้าสำเร็จ, หน้ารายละเอียดแสดง Breadcrumb "สินค้า / หนังสือ / ..." ถูกต้อง                                                                               |
+| `curl /api/products/categories` หลังสร้างสินค้าหมวดใหม่                                                                                | รายการหมวดหมู่มี `"หนังสือ"` เพิ่มเข้ามาจริง — ยืนยันว่า "พิมพ์อิสระ" ยังใช้ได้ และข้อมูลถูกบันทึกลง Database จริงแทนที่จะหายไปเป็นแค่ String ในสินค้าชิ้นเดียว |
+
+### ผลลัพธ์ปัจจุบัน
+
+- Schema ของ `product-service` ใกล้เคียง ER Diagram ต้นฉบับมากขึ้น (`Photo`/`Video` เป็น Table จริงแยกกันตาม ER) พร้อมบันทึกทุกจุดที่ต่างจาก ER ไว้ใน `database/ER-changes.md` ตาม Rule เดิมของโปรเจกต์
+- ค่าที่เคย Hardcode ในโค้ด (หมวดหมู่สินค้า, สภาพสินค้า) ย้ายลง Database ครบแล้วทั้งฝั่ง Backend และ Frontend — ไม่มี Array แบบ Static เหลืออยู่ใน Frontend อีกต่อไป
+- `database/schema.md` และ `database/ER-changes.md` อัปเดตให้ตรงกับ Schema จริงล่าสุด รวม `order-service` ที่ยังไม่เคยถูกบันทึกไว้ในเอกสารนี้มาก่อน (ทำจาก Task ก่อนหน้าแต่ลืมอัปเดต Doc)
+- ยังไม่มี Migration History แบบ `prisma migrate` (ยังใช้ `db push` เหมือนเดิม เหมาะกับ Dev ไม่เหมาะกับ Production)
+- ยังไม่ได้ทำ Category เป็น FK บังคับ (เป็น String Denormalized ตั้งใจ เพื่อรักษาความสามารถพิมพ์อิสระของผู้ขาย) — ถ้าจะทำ Analytics/Filter ที่แม่นยำระดับ Category ในอนาคต อาจต้องพิจารณาใหม่
+- ยังไม่ผ่าน AI Reviewer อิสระ
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/product-service/prisma/schema.prisma`, `prisma/seed.js`
+- `backend/services/product-service/src/models/productModel.js`, `src/controllers/productController.js`, `src/routes/productRoutes.js`
+- `backend/services/product-service/test/product-crud.integration.test.js`
+- `frontend/lib/catalog.js` (ใหม่) — แทนที่ `frontend/lib/constants.js` (ลบทิ้ง)
+- `frontend/app/page.js`, `frontend/app/products/page.js`, `frontend/app/sell/page.js`, `frontend/app/products/[id]/page.js`, `frontend/components/ProductCard.js`
+- `database/schema.md`, `database/ER-changes.md`, `database/product-service.prisma` (ใหม่), `database/order-service.prisma` (ใหม่)
+
+## Task `MOCK-TRADE-006` — แดชบอร์ดผู้ขายแบบ Bento Grid พร้อมกราฟจริง
+
+> วันที่ทำ: 2026-07-29
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ยืนยันด้วย Automated Test (Frontend/Backend เดิมยังผ่านหมด) และตรวจสอบ Layout/Chart จริงผ่าน Browser (Desktop + Mobile Viewport)
+>
+> หมายเหตุ: เรียกใช้ Skill `dataviz` ภายในของระบบก่อนสร้างกราฟ เพื่อให้ทำตามขั้นตอนที่ถูกต้อง (เลือกรูปแบบกราฟตาม "งาน" ของข้อมูลก่อน แล้วค่อยใส่สี, ใช้ Palette ที่ผ่านการ Validate มาแล้วสำหรับ CVD/Contrast แทนการเดาสีเอง) ไม่ได้เพิ่ม Chart Library ใหม่ (เช่น Recharts/Chart.js) เพราะข้อมูลและ Layout ไม่ซับซ้อนพอที่จะคุ้มกับ Dependency เพิ่ม — เขียน SVG Chart เองแบบเบาๆ 3 ตัวแทน
+
+### งานที่ทำ
+
+1. เพิ่ม `frontend/components/charts/palette.js` — สี Categorical 8 ตัวและสี Sequential (Blue) ที่ผ่านการ Validate มาจาก Skill `dataviz` แล้ว (CVD-safe, Contrast ผ่าน) ไม่ใช่สีที่เดาเอง
+2. เพิ่ม `frontend/components/charts/Sparkline.js` — เส้นแนวโน้มเล็กๆ 12 จุดสำหรับ Stat Tile (ไม่มีแกน/Tooltip ตาม Spec เพราะเป็นแค่ Context ประกอบตัวเลขหลัก ไม่ใช่กราฟหลัก)
+3. เพิ่ม `frontend/components/charts/TrendBarChart.js` — กราฟแท่งรายวัน (Single Series, งาน "แนวโน้มตามเวลา") มี Hover Tooltip ต่อแท่ง, Bar ตาม Spec (มุมโค้ง 4px, สูงสุด 24px, Baseline เดียว)
+4. เพิ่ม `frontend/components/charts/CategoryBarChart.js` — กราฟแท่งแนวนอนสำหรับเทียบขนาดข้ามหมวดหมู่ (สถานะคำสั่งซื้อ, สถานะสินค้า, หมวดหมู่สินค้า) ใช้สี Categorical ตามลำดับคงที่ Label ตรงบนแท่งเลย (ไม่ต้องมี Legend แยกเพราะ Label กำกับ Identity อยู่แล้วตาม Rule ของ Skill), พับหมวดที่เกิน 8 ช่องเป็น "อื่นๆ" อัตโนมัติ
+5. เขียน `frontend/app/seller/dashboard/page.js` ใหม่ทั้งหมดเป็น Bento Grid (`grid-cols-4` ผสมขนาด Card ไม่เท่ากัน): การ์ด Hero ยอดขายรวม (2×2, ตัวเลขใหญ่ + Sparkline + % เทียบ 7 วันก่อนหน้า), Stat Tile 4 ช่อง (คำสั่งซื้อทั้งหมด/สินค้าพร้อมขาย/รอชำระเงิน/ขายแล้ว), กราฟยอดขายรายวัน 14 วันเต็มความกว้าง, กราฟสถานะคำสั่งซื้อ/สถานะสินค้า/หมวดหมู่สินค้า (คำนวณจากข้อมูลจริงด้วย `useMemo` ไม่ใช่ Mock), คำสั่งซื้อล่าสุด 5 รายการ, รายการสินค้าทั้งหมด — Responsive ยุบเป็นคอลัมน์เดียวบนมือถือ
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                                  | ผลที่เกิดขึ้นจริง                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                                                           | Exit 0                                                                                                                                                                                                                                                                                                          |
+| `npm test` (Backend, ไม่กระทบเพราะงานนี้แก้ Frontend ล้วน)               | 26 Test: ผ่าน 24, Skip 2, Fail 0                                                                                                                                                                                                                                                                                |
+| `npm run test:frontend`                                                  | 2/2 ผ่าน                                                                                                                                                                                                                                                                                                        |
+| เปิด `/seller/dashboard` ผ่าน Browser จริงด้วยบัญชีผู้ขายที่มีข้อมูลจริง | Hero แสดง ฿539 ถูกต้อง, Stat Tile ตรงกับข้อมูลจริง (คำสั่งซื้อ 2, พร้อมขาย 1, ขายแล้ว 2), กราฟรายวันมี Label วันที่ 7 จุด, กราฟหมวดหมู่/สถานะแสดงข้อมูลจริงจาก Backend ไม่ใช่ Mock                                                                                                                              |
+| ตรวจ DOM จริง                                                            | Bento Grid มี 11 การ์ดตามที่ออกแบบ, Hero มี Class `lg:col-span-2 lg:row-span-2` ถูกต้อง, SVG กราฟรายวันมี 28 `<rect>` (14 วัน × แท่งจริง + Hit Target โปร่งใส) ตรงตาม Implementation                                                                                                                            |
+| ทดสอบ Responsive ที่ Viewport มือถือ (375px)                             | ไม่มี Horizontal Overflow, การ์ด Hero ยุบเป็นเต็มความกว้างคอลัมน์เดียวถูกต้อง                                                                                                                                                                                                                                   |
+| ทดสอบ Hover Tooltip ผ่าน Synthetic PointerEvent                          | ยิง Event ไม่ Error แต่ State ไม่เปลี่ยนที่เห็นได้ — ตรงกับข้อจำกัดเดิมที่เจอตอนทดสอบ Drag-and-Drop (Synthetic PointerEvent ที่ยิงเองไม่ครบ Property เท่า Event จริงจาก OS) ไม่ใช่ Bug ของ Component เพราะ `onPointerEnter`/`onPointerLeave` เป็น React Event มาตรฐานที่ใช้งานได้ปกติกับการ Hover จริงของผู้ใช้ |
+
+### ผลลัพธ์ปัจจุบัน
+
+- แดชบอร์ดผู้ขายมีกราฟและข้อมูลจริงครบตามที่ขอ ไม่ใช่แค่ตัวเลขนิ่งๆ 3 ช่องแบบเดิม
+- สีทุกกราฟผ่านการ Validate มาจาก Skill `dataviz` แล้ว (Categorical Order คงที่, ไม่ใช่สีสุ่ม)
+- Tooltip แบบ Hover ยืนยันได้แค่ว่าไม่ Error จาก Automated Test เท่านั้น ยังไม่ได้ยืนยันด้วยการเห็นจริงเพราะข้อจำกัดของเครื่องมือทดสอบอัตโนมัติ (ควรให้มนุษย์ลองเล่นจริงเพื่อยืนยัน UX จุดนี้)
+- ยังไม่มี Filter ช่วงเวลา (เช่นเลือกดู 7/30/90 วัน) ตามที่ Skill `dataviz` แนะนำสำหรับ Dashboard เต็มรูปแบบ — ตอนนี้ Fix ไว้ที่ 14 วันเสมอ เป็นการตัดสินใจลดขอบเขตเพื่อไม่ให้งานใหญ่เกินไป
+- ยังไม่ผ่าน AI Reviewer อิสระ
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `frontend/components/charts/palette.js`, `Sparkline.js`, `TrendBarChart.js`, `CategoryBarChart.js` (ใหม่ทั้งหมด)
+- `frontend/app/seller/dashboard/page.js`
+
+## Task `MOCK-TRADE-007` — Pagination ทั่วระบบ + ระบบรีวิว/ให้คะแนนร้านค้าหลังซื้อขาย
+
+> วันที่ทำ: 2026-07-29
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ยืนยันด้วย Automated Test (Backend 31 ข้อ/Frontend 2 ข้อ ผ่านหมด) และ E2E จริงผ่าน Docker + Browser ครบ Flow (ซื้อ→ครบกำหนดชำระ→รีวิว→เห็นคะแนนที่หน้าร้านค้าและหน้าสินค้า) รวมถึงทดสอบ Backend Validation ตรงๆ (กันรีวิวซ้ำ, กันรีวิว Order ที่ไม่มีจริง)
+>
+> หมายเหตุ: เพราะสินค้าเป็นของมือสองชิ้นเดียว ขายแล้วหมด รีวิวจึงให้คะแนน **ร้านค้า (ผู้ขาย)** ไม่ใช่ตัวสินค้า — Design ตรงตามที่ผู้ใช้อธิบายไว้ตรงๆ ("ให้คะแนนร้านค้านะเพราะสินค้ามันมือ2 มีชิ้นเดียวขายแล้วออกเลย")
+
+### งานที่ทำ
+
+**Backend — Pagination**
+
+1. เพิ่ม `backend/shared/src/pagination.js`: `parsePagination(query, defaultLimit)` แปลง Query Param `page`/`limit` เป็น Prisma `skip`/`take` (Clamp ค่าสูงสุด 50 ต่อหน้า กัน Abuse) และ `paginatedResponse(items, total, pagination)` คืน Shape มาตรฐาน `{items, page, limit, total, totalPages}` ใช้ร่วมกันทุก Service
+2. เพิ่ม Pagination จริง (Query + Count คู่กันผ่าน `Promise.all`) ให้: `GET /api/products/feed`, `/search`, `/mine`, `/by-seller/:id` (product-service), `GET /api/orders/mine`, `/selling` (order-service, เพิ่ม Filter `status` ด้วยเพราะ Tab ในหน้า UI ต้องกรองที่ Server ไม่ใช่กรองเฉพาะหน้าที่โหลดมา — ถ้ากรองฝั่ง Client อย่างเดียวจะเห็นแค่ Order ที่ตรง Filter ในหน้าปัจจุบัน ไม่ใช่ทั้งหมด), `GET /api/reviews/by-seller/:id` (review-service)
+3. **จุดที่ตั้งใจไม่ใส่ Pagination:** หน้าแดชบอร์ดผู้ขาย (Stat/กราฟต้องเห็นข้อมูลกว้างพอจะคำนวณถูก, ผสม Pagination เข้ากับ Aggregate จะขัดกันเอง) และตะกร้า (ต้องเห็นสินค้าที่ล็อกไว้ทั้งหมดเพื่อเลือก Checkout พร้อมกัน) — ทั้งสองจุดนี้ใช้ `limit=100` เป็น Cap แทนที่จะทำ Pagination UI จริงๆ
+
+**Backend — ระบบรีวิว (Service ใหม่ทั้งหมด)**
+
+4. สร้าง `review-service` เต็มรูปแบบ (เดิมมีแค่ Health Check Stub): `prisma/schema.prisma` (Model `Review`: `orderId` Unique กันรีวิวซ้ำ, `buyerId`, `sellerId`, `rating`, `comment`), `models/reviewModel.js`, `controllers/reviewController.js`, `routes/reviewRoutes.js`, `services/orderClient.js` (เรียก order-service แบบ Service-to-Service)
+5. เพิ่ม `GET /:id/internal` (requireInternalToken) ใน order-service ให้ review-service เรียกตรวจสอบ Order จริง (`buyerId`, `sellerId`, `status`) ก่อนอนุญาตให้รีวิว
+6. Validate ที่ `POST /api/reviews`: ต้องเป็นเจ้าของ Order เอง (`buyerId` ตรง), Order ต้องเป็น `status=completed` เท่านั้น, ห้ามรีวิวซ้ำ Order เดิม (409 Conflict) — ทดสอบยืนยันทั้งสามเงื่อนไขจริงผ่าน `fetch` ตรงจาก Browser ไม่ใช่แค่ Trust Frontend
+7. เพิ่ม `GET /api/reviews/by-seller/:id` (Public, มี Pagination + คำนวณ `averageRating` ด้วย Prisma `aggregate`) และ `GET /api/reviews/by-seller/:id/summary` (Public, แบบเบา สำหรับหน้าที่ต้องการแค่ตัวเลขไม่ต้องการ List เต็ม เช่น การ์ดผู้ขายในหน้าสินค้า)
+8. อัปเดต Gateway: เพิ่ม `pathRewrite` และ Public Path สำหรับ `/api/reviews/by-seller/*`
+
+**Frontend**
+
+9. เพิ่ม `frontend/components/Pagination.js` (ปุ่มก่อนหน้า/ถัดไป + เลขหน้าแบบมี "…" ตอนหน้าเยอะ) และ `frontend/components/StarRating.js` (`StarDisplay` อ่านอย่างเดียว รองรับค่าทศนิยม, `StarInput` กดให้คะแนน 1-5 ดาว)
+10. `app/orders/page.js`: เพิ่ม Pagination จริง + เปลี่ยน Tab ให้ส่ง `status` ไป Server แทนกรองฝั่ง Client, เพิ่มปุ่ม "ให้คะแนนร้านค้า" บน Order ที่ `status=completed` และยังไม่เคยรีวิว (เช็คจาก `GET /api/reviews/mine` ที่โหลดมาล่วงหน้า) กดแล้วเปิดฟอร์มรีวิวแบบ Inline ในบรรทัดเดียวกัน
+11. `app/store/[sellerId]/page.js`: แสดงคะแนนเฉลี่ย+จำนวนรีวิวที่ Header ร้าน, รายการรีวิวพร้อม Pagination แยกจาก Pagination ของสินค้า
+12. `app/products/[id]/page.js`: การ์ดผู้ขายเปลี่ยนจากข้อความ Static "ยังไม่มีรีวิว" เป็นดึงคะแนนจริงจาก `/summary`
+13. `app/products/page.js`: เพิ่ม Pagination จริงสำหรับผลการค้นหา/รายการสินค้า
+14. อัปเดตจุดที่เรียก `/api/orders/mine` เดิม (Cart, NavBar Badge) ให้ส่ง `status=pending&limit=100` ชัดเจน เพราะ Endpoint นี้ Paginate เป็น Default (`limit=10`) แล้ว — ถ้าไม่ระบุจะเห็นตะกร้าไม่ครบถ้าเผลอมี Pending เกิน 10 ชิ้น; Badge จำนวนตะกร้าเปลี่ยนไปใช้ `total` จาก Response แทนการนับจาก `items.length` (แม่นยำกว่า ไม่ขึ้นกับ Limit)
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                                                                                                   | ผลที่เกิดขึ้นจริง                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                                                                                                                            | Exit 0                                                                                                  |
+| `npm test` (Backend)                                                                                                                      | 31 Test: ผ่าน 28, Skip 3, Fail 0                                                                        |
+| `DATABASE_URL=...reloop_review REQUIRE_INTEGRATION=1 node --test`                                                                         | ผ่านจริงกับ Database จริง (Aggregate คะแนนเฉลี่ยถูกต้อง)                                                |
+| `npm run test:frontend`                                                                                                                   | 2/2 ผ่าน                                                                                                |
+| `docker compose up -d --build`                                                                                                            | ทุก Container Healthy รวม `review-service` ที่เพิ่ง Build ครั้งแรกพร้อม Schema ใหม่                     |
+| E2E จริงผ่าน Browser: Login ผู้ซื้อ → หน้า `/orders` เห็นปุ่ม "ให้คะแนนร้านค้า" บน Order ที่สำเร็จแล้ว → กรอกดาว 4 + คอมเมนต์ → ส่งสำเร็จ | ปุ่มหายไป กลายเป็นดาว+คอมเมนต์แสดงแทนทันที                                                              |
+| เปิดหน้าร้านค้าของผู้ขายคนนั้นหลังรีวิว                                                                                                   | Header แสดง "4.0 (1 รีวิว)" ถูกต้อง, รายการรีวิวด้านล่างมีคอมเมนต์ที่พิมพ์ไปจริง                        |
+| เปิดหน้าสินค้าอื่นของร้านเดียวกัน                                                                                                         | การ์ดผู้ขายแสดง "4.0 (1 รีวิว)" ตรงกัน (ดึงจาก Endpoint เดียวกัน)                                       |
+| ยิง `POST /api/reviews` ซ้ำ Order เดิมตรงจาก Browser Console (ข้าม UI)                                                                    | `409 {"error":"this order has already been reviewed"}` — ยืนยันกันซ้ำที่ Backend จริง ไม่ใช่แค่ซ่อนปุ่ม |
+| ยิง `POST /api/reviews` ด้วย `orderId` ปลอม                                                                                               | `404 {"error":"order not found"}`                                                                       |
+
+### ผลลัพธ์ปัจจุบัน
+
+- Pagination ใช้งานจริงในทุกจุดที่เป็นรายการเปิดกว้าง/โตไม่จำกัด (สินค้าทั้งหมด, สินค้าของร้าน, คำสั่งซื้อของผู้ซื้อ, รีวิวของร้าน) — จุดที่ตั้งใจไม่ใส่ (แดชบอร์ด, ตะกร้า) มีเหตุผลบันทึกไว้ชัดเจน ไม่ใช่ลืม
+- ระบบรีวิวให้คะแนน "ร้านค้า" ตามที่ตั้งใจ ไม่ใช่ให้คะแนนสินค้ารายชิ้น ตรงกับธรรมชาติของ Marketplace มือสองที่สินค้าขายครั้งเดียวหมด
+- คะแนนร้านค้าแสดงสอดคล้องกันทั้ง 2 จุด (หน้าร้านค้า, การ์ดผู้ขายในหน้าสินค้า) — ยังไม่ได้เพิ่มใน `ProductCard`/Listing Grid เพราะจะต้องยิง Request คะแนนแยกทุกใบในหน้า List ซึ่งจะเพิ่ม Request จำนวนมาก ตัดสินใจไม่ทำในรอบนี้
+- Backend Validate ครบ 3 เงื่อนไขสำคัญของรีวิว (เจ้าของ Order เท่านั้น, ต้อง Completed เท่านั้น, ห้ามซ้ำ) ไม่ใช่แค่ Trust หน้าบ้าน
+- ยังไม่มี Endpoint แก้ไข/ลบรีวิว (Buyer พิมพ์ผิดแล้วต้องขอให้ Admin แก้แทน — Scope Cut ตั้งใจ)
+- ยังไม่ผ่าน AI Reviewer อิสระ
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/shared/src/pagination.js`, `src/index.js`
+- `backend/services/review-service/` ทั้งโฟลเดอร์ (ใหม่ทั้งหมด: `prisma/schema.prisma`, `src/models/`, `src/controllers/`, `src/routes/`, `src/services/orderClient.js`, `src/app.js`, `src/server.js`, `test/review-crud.integration.test.js`)
+- `backend/services/order-service/src/controllers/orderController.js`, `src/models/orderModel.js`, `src/routes/orderRoutes.js` (Internal Endpoint + Pagination + Status Filter)
+- `backend/services/product-service/src/controllers/productController.js`, `src/models/productModel.js` (Pagination)
+- `backend/gateway/src/app.js`
+- `frontend/components/Pagination.js`, `StarRating.js` (ใหม่ทั้งคู่)
+- `frontend/app/products/page.js`, `frontend/app/orders/page.js`, `frontend/app/store/[sellerId]/page.js`, `frontend/app/products/[id]/page.js`, `frontend/components/NavBar.js`, `frontend/app/cart/page.js`, `frontend/app/seller/dashboard/page.js`
+
 ## อัปเดตล่าสุด
 
 2026-07-29 (Asia/Bangkok)

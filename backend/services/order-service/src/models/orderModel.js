@@ -16,18 +16,32 @@ function findById(id) {
   return prisma.order.findUnique({ where: { id } });
 }
 
-function listByBuyer(buyerId) {
-  return prisma.order.findMany({
-    where: { buyerId },
-    orderBy: { createdAt: "desc" },
-  });
+async function listByBuyer(buyerId, { status, skip, take } = {}) {
+  const where = { buyerId, ...(status ? { status } : {}) };
+  const [items, total] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+    }),
+    prisma.order.count({ where }),
+  ]);
+  return { items, total };
 }
 
-function listBySeller(sellerId) {
-  return prisma.order.findMany({
-    where: { sellerId },
-    orderBy: { createdAt: "desc" },
-  });
+async function listBySeller(sellerId, { status, skip, take } = {}) {
+  const where = { sellerId, ...(status ? { status } : {}) };
+  const [items, total] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+    }),
+    prisma.order.count({ where }),
+  ]);
+  return { items, total };
 }
 
 async function updateStatus(id, status) {

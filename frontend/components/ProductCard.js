@@ -1,24 +1,51 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { mediaUrl } from "../lib/api";
+import { fetchConditions } from "../lib/catalog";
 
 const CONDITION_STYLE = {
-  ดีมาก: "bg-emerald-50 text-emerald-700",
-  ดี: "bg-sky-50 text-sky-700",
-  พอใช้: "bg-amber-50 text-amber-700",
+  New: "bg-emerald-50 text-emerald-700",
+  "Like New": "bg-emerald-50 text-emerald-700",
+  Good: "bg-sky-50 text-sky-700",
+  Fair: "bg-amber-50 text-amber-700",
 };
 
 export default function ProductCard({ product }) {
+  const cover = product.media?.[0];
+  const [conditionLabels, setConditionLabels] = useState({});
+
+  useEffect(() => {
+    fetchConditions()
+      .then((items) =>
+        setConditionLabels(
+          Object.fromEntries(items.map((c) => [c.value, c.label])),
+        ),
+      )
+      .catch(() => {});
+  }, []);
+
   return (
     <Link
       href={`/products/${product.id}`}
       className="group flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
-        {product.images?.[0] ? (
-          <img
-            src={product.images[0]}
-            alt={product.title}
-            className="h-full w-full object-cover transition group-hover:scale-105"
-          />
+        {cover ? (
+          cover.type === "video" ? (
+            <video
+              src={mediaUrl(cover.url)}
+              className="h-full w-full object-cover transition group-hover:scale-105"
+              muted
+            />
+          ) : (
+            <img
+              src={mediaUrl(cover.url)}
+              alt={product.title}
+              className="h-full w-full object-cover transition group-hover:scale-105"
+            />
+          )
         ) : (
           <div className="flex h-full w-full items-center justify-center text-gray-300">
             ไม่มีรูปภาพ
@@ -30,7 +57,7 @@ export default function ProductCard({ product }) {
               CONDITION_STYLE[product.condition] || "bg-gray-100 text-gray-600"
             }`}
           >
-            {product.condition}
+            {conditionLabels[product.condition] || product.condition}
           </span>
         )}
       </div>
@@ -39,7 +66,12 @@ export default function ProductCard({ product }) {
         <p className="mt-auto text-base font-semibold text-emerald-600">
           ฿{product.price.toLocaleString("th-TH")}
         </p>
-        <p className="text-xs text-gray-400">{product.category}</p>
+        <div className="flex items-center justify-between text-xs text-gray-400">
+          <span>{product.category}</span>
+          {product.location && (
+            <span className="truncate">{product.location}</span>
+          )}
+        </div>
       </div>
     </Link>
   );

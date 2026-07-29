@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
+import Pagination from "../../components/Pagination";
+import { StarInput, StarDisplay } from "../../components/StarRating";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -25,35 +27,115 @@ const STATUS_STYLE = {
 };
 
 const TABS = [
-  { key: "all", label: "ทั้งหมด" },
-  { key: "pending", label: "รอชำระเงิน" },
-  { key: "completed", label: "สำเร็จ" },
-  { key: "cancelled", label: "ยกเลิก" },
+  { key: "all", label: "ทั้งหมด", status: undefined },
+  { key: "pending", label: "รอชำระเงิน", status: "pending" },
+  { key: "completed", label: "สำเร็จ", status: "completed" },
+  { key: "cancelled", label: "ยกเลิก", status: "cancelled" },
 ];
+
+const PAGE_SIZE = 8;
+
+function ReviewForm({ order, onSubmitted }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const token = getAccessToken();
+    setSubmitting(true);
+    setError("");
+    try {
+      const review = await apiFetch("/api/reviews", {
+        method: "POST",
+        token,
+        body: { orderId: order.id, rating, comment },
+      });
+      onSubmitted(review);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="mt-3 flex flex-col gap-2 rounded-md border border-gray-200 bg-gray-50 p-3"
+    >
+      <p className="text-xs text-gray-500">
+        ให้คะแนนร้านค้าสำหรับคำสั่งซื้อนี้
+      </p>
+      <StarInput value={rating} onChange={setRating} size={22} />
+      <textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="เล่าประสบการณ์การซื้อของคุณ (ไม่บังคับ)"
+        rows={2}
+        className="rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-emerald-500"
+      />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <button
+        type="submit"
+        disabled={submitting}
+        className="self-start rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+      >
+        {submitting ? "กำลังส่ง..." : "ส่งรีวิว"}
+      </button>
+    </form>
+  );
+}
 
 export default function OrdersPage() {
   const router = useRouter();
   const [items, setItems] = useState([]);
   const [tab, setTab] = useState("all");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [reviewedByOrderId, setReviewedByOrderId] = useState({});
+  const [openReviewFor, setOpenReviewFor] = useState(null);
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
+    if (!getAccessToken()) {
       router.push("/login");
       return;
     }
-    apiFetch("/api/orders/mine", { token })
-      .then((data) => setItems(data.items))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    apiFetch("/api/reviews/mine?limit=100", { token: getAccessToken() })
+      .then((data) =>
+        setReviewedByOrderId(
+          Object.fromEntries(data.items.map((r) => [r.orderId, r])),
+        ),
+      )
+      .catch(() => {});
   }, [router]);
 
-  const filtered =
-    tab === "all" ? items : items.filter((o) => o.status === tab);
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!token) return;
+    const tabDef = TABS.find((t) => t.key === tab);
+    const params = new URLSearchParams({ page, limit: PAGE_SIZE });
+    if (tabDef?.status) params.set("status", tabDef.status);
 
-  const hasPending = items.some((o) => o.status === "pending");
+    setLoading(true);
+    apiFetch(`/api/orders/mine?${params}`, { token })
+      .then((data) => {
+        setItems(data.items);
+        setTotalPages(data.totalPages);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [tab, page]);
+
+  function handleTab(key) {
+    setTab(key);
+    setPage(1);
+  }
+
+  const hasPending = tab === "all" && items.some((o) => o.status === "pending");
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
@@ -76,7 +158,7 @@ export default function OrdersPage() {
           {TABS.map((t) => (
             <button
               key={t.key}
-              onClick={() => setTab(t.key)}
+              onClick={() => handleTab(t.key)}
               className={`border-b-2 px-4 py-2 text-sm font-medium ${
                 tab === t.key
                   ? "border-emerald-600 text-emerald-700"
@@ -90,33 +172,75 @@ export default function OrdersPage() {
 
         {error && <p className="text-sm text-red-600">{error}</p>}
         {loading && <p className="text-gray-500">กำลังโหลด...</p>}
-        {!loading && filtered.length === 0 && (
+        {!loading && items.length === 0 && (
           <p className="text-gray-500">ไม่มีคำสั่งซื้อในหมวดนี้</p>
         )}
 
         <ul className="flex flex-col gap-3">
-          {filtered.map((o) => (
-            <li
-              key={o.id}
-              className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4"
-            >
-              <div>
-                <p className="font-medium text-gray-900">{o.productTitle}</p>
-                <p className="text-sm text-gray-500">
-                  ฿{o.price.toLocaleString("th-TH")} · สั่งซื้อเมื่อ{" "}
-                  {new Date(o.createdAt).toLocaleDateString("th-TH")}
-                </p>
-              </div>
-              <span
-                className={`rounded-full px-3 py-1 text-xs ${
-                  STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
-                }`}
+          {items.map((o) => {
+            const review = reviewedByOrderId[o.id];
+            return (
+              <li
+                key={o.id}
+                className="rounded-lg border border-gray-200 bg-white p-4"
               >
-                {STATUS_LABEL[o.status] || o.status}
-              </span>
-            </li>
-          ))}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {o.productTitle}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      ฿{o.price.toLocaleString("th-TH")} · สั่งซื้อเมื่อ{" "}
+                      {new Date(o.createdAt).toLocaleDateString("th-TH")}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs ${
+                      STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {STATUS_LABEL[o.status] || o.status}
+                  </span>
+                </div>
+
+                {o.status === "completed" && (
+                  <div className="mt-2">
+                    {review ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <StarDisplay value={review.rating} />
+                        {review.comment && (
+                          <span className="text-gray-500">
+                            &quot;{review.comment}&quot;
+                          </span>
+                        )}
+                      </div>
+                    ) : openReviewFor === o.id ? (
+                      <ReviewForm
+                        order={o}
+                        onSubmitted={(review) => {
+                          setReviewedByOrderId((prev) => ({
+                            ...prev,
+                            [o.id]: review,
+                          }));
+                          setOpenReviewFor(null);
+                        }}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => setOpenReviewFor(o.id)}
+                        className="text-sm font-medium text-emerald-600 hover:underline"
+                      >
+                        ให้คะแนนร้านค้า
+                      </button>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
+
+        <Pagination page={page} totalPages={totalPages} onChange={setPage} />
       </section>
       <Footer />
     </main>

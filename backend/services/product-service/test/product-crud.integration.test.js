@@ -44,12 +44,36 @@ test("product CRUD against a real database", async (t) => {
     const createRes = await request(app)
       .post("/")
       .set("Authorization", `Bearer ${sellerToken}`)
-      .send({ title, price: 199, category: "เสื้อผ้า" });
+      .send({
+        title,
+        price: 199,
+        category: "เสื้อผ้า",
+        condition: "Like New",
+        tags: ["Vintage", "vintage", "  denim "],
+        media: [
+          { url: "https://example.test/a.jpg", type: "image" },
+          { url: "https://example.test/b.mp4", type: "video" },
+        ],
+      });
     assert.equal(createRes.status, 201);
     assert.equal(createRes.body.sellerId, "int-test-seller");
     assert.equal(createRes.body.status, "available");
+    assert.equal(createRes.body.condition, "Like New");
+    assert.deepEqual(createRes.body.tags, ["vintage", "denim"]);
+    assert.deepEqual(createRes.body.media, [
+      { url: "https://example.test/a.jpg", type: "image" },
+      { url: "https://example.test/b.mp4", type: "video" },
+    ]);
 
     const id = createRes.body.id;
+
+    const categoriesRes = await request(app).get("/categories");
+    assert.equal(categoriesRes.status, 200);
+    assert.ok(categoriesRes.body.items.includes("เสื้อผ้า"));
+
+    const conditionsRes = await request(app).get("/conditions");
+    assert.equal(conditionsRes.status, 200);
+    assert.ok(conditionsRes.body.items.some((c) => c.value === "Like New"));
 
     const getRes = await request(app).get(`/${id}`);
     assert.equal(getRes.status, 200);
