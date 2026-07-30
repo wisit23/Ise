@@ -35,6 +35,10 @@ docs/
 └── featureplan/
     ├── README.md
     ├── integration.md
+    ├── plan.md
+    ├── progress.md
+    ├── changelog.md
+    ├── teachme.md
     ├── buyer/
     │   ├── plan.md
     │   ├── progress.md
@@ -68,8 +72,11 @@ docs/
 ```
 
 `README.md` เป็นสารบัญ แสดง Owner, Reviewer, Core/Extended status, dependency และลิงก์
-ไปยังเอกสารทั้งสี่ของแต่ละ Feature ส่วน `integration.md` เป็นสัญญากลางและลำดับ merge
-จึงไม่ซ้ำ business requirement ที่อยู่ใน `plan.md`
+ไปยังเอกสารของแต่ละ Feature ส่วน `integration.md` เป็นสัญญากลางและลำดับ merge
+
+ไฟล์ `plan.md`, `progress.md`, `changelog.md` และ `teachme.md` ที่ root เป็นมุมมองรวมของทั้ง
+โครงการ โดยสรุปและลิงก์ข้อมูลจากไฟล์ชื่อเดียวกันของทั้งหก Feature ไม่แทนที่ไฟล์ย่อย
+และไม่เพิ่มสถานะหรือหลักฐานที่ไม่มีอยู่ในไฟล์ย่อย
 
 ## 4. หน้าที่ของเอกสารแต่ละไฟล์
 
@@ -212,6 +219,7 @@ Extended work เริ่มหลัง Core ของ Feature นั้นผ
 ระบบ Feature Plan พร้อมใช้งานเมื่อ:
 
 - มี root index และ integration contract
+- มี `plan.md`, `progress.md`, `changelog.md` และ `teachme.md` ระดับรวมที่ root
 - มีหก Feature directories ตามชื่อที่กำหนด
 - แต่ละ Feature มี `plan.md`, `progress.md`, `changelog.md` และ `teachme.md`
 - Requirement จากการสัมภาษณ์ทุกข้อถูก trace ไปยัง Core, Extended หรือเหตุผลที่อยู่นอกขอบเขต
