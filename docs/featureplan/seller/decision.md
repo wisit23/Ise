@@ -41,3 +41,11 @@
 - Decision: เก็บ ProductVideo/feed/upload ที่ pull มาเป็น Seller/Product provider baseline แต่ยังไม่ freeze เป็น shared contract
 - Reason: Feed filter ยังรวม `reserved`/`sold`, `sellerName` มาจาก request body และ `UR-11` semantics ยังไม่ชัด
 - Consequence: Seller, Buyer และ Marketing ต้อง review allowed states, identity source และ acceptance tests ก่อน Gate 2
+
+## SEL-DEC-006 — ProductVideo feed and seller identity implementation rule
+
+- Date: 2026-08-10
+- Status: Accepted for implementation; contract review pending
+- Decision: Feed query แสดงเฉพาะ Product `available` และ `sellerName` ต้องมาจาก verified JWT `displayName`; request body ไม่มีอำนาจกำหนดชื่อ
+- Reason: ให้ comment/behavior ตรงกัน ป้องกัน sold/reserved item ใน discovery feed และป้องกัน client ปลอมชื่อ
+- Consequence: Access token/refresh ต้องสร้าง display name จาก Auth User, ProductVideo service ignore body name และ Prisma index ต้อง apply ก่อน database acceptance

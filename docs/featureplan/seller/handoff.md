@@ -7,7 +7,7 @@
 - Owner: เอกตระการ บุญญกาศ
 - Reviewer: วิศิษฏ์ เจียมสันต์
 - Requirement scope: `UR-32`–`UR-39`
-- Current status: Plan acceptance not started; pulled ProductVideo provider baseline audited
+- Current status: ProductVideo provider refactored and locally tested; Seller plan acceptance incomplete
 
 ## Scope to hand off
 
@@ -24,7 +24,8 @@
 - ประวัติการเปลี่ยนแปลงอยู่ใน [`changelog.md`](changelog.md)
 - บทเรียนจากการตรวจ listing flow อยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
-- Pulled source มี ProductVideo provider/upload baseline แต่ KYC และ Seller plan acceptance ยังไม่ผ่าน
+- ProductVideo แยก route/controller/service/repository, filter `available` และใช้ signed-token display name แล้ว
+- Prisma schema/index ยังไม่ได้ apply กับ PostgreSQL และ Synthetic KYC/Seller plan acceptance ยังไม่ผ่าน
 
 ## Dependencies and contracts
 

@@ -7,7 +7,7 @@
 - Owner: ศิวกร วรวัฒน์อมรชัย
 - Reviewer: อัสนัย เมืองรอด
 - Requirement scope: `UR-08`–`UR-16`
-- Current status: Plan acceptance not started; pulled Swipe baseline audited
+- Current status: Swipe baseline refactored and locally tested; Marketing plan acceptance incomplete
 
 ## Scope to hand off
 
@@ -24,7 +24,7 @@
 - ประวัติการเปลี่ยนแปลงอยู่ใน [`changelog.md`](changelog.md)
 - บทเรียนจากการตรวจ campaign flow อยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
-- Pulled source มี video feed/Swipe UI แต่ยังไม่มี Campaign/Auction หรือ persisted Swipe-to-Choose acceptance
+- ProductVideo/Swipe baseline ผ่าน unit/frontend/build checks แต่ยังไม่มี Campaign/Auction หรือ persisted Swipe-to-Choose acceptance
 
 ## Dependencies and contracts
 

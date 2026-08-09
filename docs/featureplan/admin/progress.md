@@ -13,6 +13,9 @@ the functional multi-role catalog, persisted KYC decision API, moderation worksp
 **Post-pull audit:** Auth seed now creates four deterministic demo Seller accounts with one shared
 development password; this is seed data only and does not satisfy `ADM-001`, Synthetic KYC or RBAC acceptance
 
+**Shared refactor evidence:** Auth access tokens now carry a database-derived `displayName` and refresh
+rebuilds claims from the stored User. This supports trusted ProductVideo attribution but does not complete `ADM-001`
+
 **Database acceptance:** Auth/Product/Order PostgreSQL tests are required; no new
 `REQUIRE_INTEGRATION=1` Admin test has run in this planning round
 

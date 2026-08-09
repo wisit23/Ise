@@ -30,3 +30,13 @@
 - ปรับ `SEL-005`, progress, handoff และ decision โดยไม่ยก baseline เป็น Seller acceptance
 - Auth demo seller seed ไม่ถูกนับเป็น Synthetic KYC
 - ไม่ได้แก้ Seller application code หรือ rerun Seller PostgreSQL acceptance test ในรอบเอกสารนี้
+
+## 2026-08-10 — ProductVideo Provider Refactor
+
+- แยก ProductVideo ออกจาก general Product controller/model เป็น route/controller/service/repository
+- feed query เฉพาะ Product `available`; create flow ตรวจ role, required fields และ Product owner ใน service
+- Auth ใส่ database-derived `displayName` ใน signed access token และ Product service ไม่รับรอง
+  `sellerName` จาก client อีกต่อไป
+- เพิ่ม repository/service/auth tests และ integration assertions สำหรับ spoofed name กับ sold-product feed
+- เพิ่ม `ProductVideo.createdAt` index ใน Prisma schema แต่ยังไม่ได้ apply กับ PostgreSQL จริง
+- backend ล่าสุด 41 tests: 38 ผ่าน, 3 database tests ข้าม, 0 fail; Synthetic KYC ยังไม่ได้ implement

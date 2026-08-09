@@ -71,7 +71,6 @@ export default function UploadVideoPage() {
           videoUrl: form.videoUrl,
           description: form.description,
           productId: form.productId,
-          sellerName: user?.firstName,
         },
       });
       router.push("/swipe");

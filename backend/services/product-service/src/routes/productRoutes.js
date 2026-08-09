@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const { requireAuth, requireInternalToken } = require("@reloop/shared");
 const productController = require("../controllers/productController");
+const productVideoRoutes = require("../features/product-videos/productVideoRoutes");
 
 const router = Router();
 
@@ -8,9 +9,9 @@ const router = Router();
 router.get("/feed", productController.feed);
 router.get("/search", productController.search);
 
-// Swipe feed ("ปัดดูสินค้า") — must come before "/:id" for the same reason.
-router.get("/videos/feed", productController.videoFeed);
-router.post("/videos", requireAuth, productController.createVideoClip);
+// Feature routes must come before "/:id" so Express does not read "videos"
+// as a product id.
+router.use("/videos", productVideoRoutes);
 
 // Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);

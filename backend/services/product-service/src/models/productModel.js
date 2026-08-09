@@ -142,27 +142,6 @@ function listConditions() {
   return prisma.condition.findMany({ orderBy: { sortOrder: "asc" } });
 }
 
-/** Swipe feed ("ปัดดูสินค้า") — newest review clips first, only for products
- * still on sale (no point swiping into a clip whose item is already sold). */
-async function listVideoFeed({ skip, take } = {}) {
-  const where = { product: { status: { not: "removed" } } };
-  const [items, total] = await Promise.all([
-    prisma.productVideo.findMany({
-      where,
-      include: { product: true },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take,
-    }),
-    prisma.productVideo.count({ where }),
-  ]);
-  return { items, total };
-}
-
-function createVideoClip(data) {
-  return prisma.productVideo.create({ data, include: { product: true } });
-}
-
 module.exports = {
   list,
   listBySeller,
@@ -173,6 +152,4 @@ module.exports = {
   listCategories,
   ensureCategory,
   listConditions,
-  listVideoFeed,
-  createVideoClip,
 };

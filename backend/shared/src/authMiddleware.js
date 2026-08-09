@@ -1,7 +1,7 @@
 const { verifyAccessToken } = require("./jwt");
 
 /**
- * Verifies the Bearer JWT and attaches req.userId / req.userRole.
+ * Verifies the Bearer JWT and attaches trusted user context to the request.
  * Used by services that receive requests directly from the gateway
  * (gateway already validates, but services re-validate defensively).
  */
@@ -14,6 +14,7 @@ function requireAuth(req, res, next) {
     const payload = verifyAccessToken(token);
     req.userId = payload.sub;
     req.userRole = payload.role;
+    req.userDisplayName = payload.displayName || null;
     next();
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
@@ -33,6 +34,7 @@ function requireRole(...roles) {
 function fromGatewayHeaders(req, res, next) {
   req.userId = req.headers["x-user-id"] || null;
   req.userRole = req.headers["x-user-role"] || null;
+  req.userDisplayName = req.headers["x-user-display-name"] || null;
   next();
 }
 

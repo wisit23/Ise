@@ -17,6 +17,7 @@ process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
 
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+const { verifyAccessToken } = require("@reloop/shared");
 
 const TEST_EMAIL_PREFIX = "found-002-integration-test+";
 
@@ -56,12 +57,29 @@ test("register then login against a real database", async (t) => {
     assert.equal(registerRes.body.user.email, email);
     assert.ok(registerRes.body.accessToken);
     assert.ok(registerRes.body.refreshToken);
+    assert.equal(
+      verifyAccessToken(registerRes.body.accessToken).displayName,
+      "Test User",
+    );
 
     const loginRes = await request(app)
       .post("/login")
       .send({ email, password });
     assert.equal(loginRes.status, 200);
     assert.ok(loginRes.body.accessToken);
+    assert.equal(
+      verifyAccessToken(loginRes.body.accessToken).displayName,
+      "Test User",
+    );
+
+    const refreshRes = await request(app).post("/refresh").send({
+      refreshToken: loginRes.body.refreshToken,
+    });
+    assert.equal(refreshRes.status, 200);
+    assert.equal(
+      verifyAccessToken(refreshRes.body.accessToken).displayName,
+      "Test User",
+    );
 
     const wrongPasswordRes = await request(app)
       .post("/login")

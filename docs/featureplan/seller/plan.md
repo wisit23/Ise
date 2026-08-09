@@ -195,10 +195,10 @@ function mergeSellerMetrics(productMetrics, orderMetrics) {
 
 ### Task SEL-005: Extended Seller Tools
 
-**Pulled source baseline (not acceptance):** Product service มี `ProductVideo`, public
-`GET /videos/feed`, authenticated `POST /videos`, ownership checks และหน้า
-`/seller/videos/new` แล้ว แต่ filter ปัจจุบันใช้ `status != removed` ทั้งที่ comment ระบุสินค้า
-ที่ยังขายอยู่, `sellerName` มาจาก request body และยังไม่มี contract review ของ `UR-11`
+**Refactored source baseline (partial evidence, not acceptance):** ProductVideo แยกเป็น
+route/controller/service/repository, feed query ใช้ Product `available`, ชื่อผู้ขายมาจาก signed
+JWT และ client-supplied `sellerName` ถูก ignore แล้ว แต่ยังไม่มี PostgreSQL integration run,
+schema apply หรือ contract review ของ `UR-11`
 
 **Files:**
 
@@ -206,13 +206,16 @@ function mergeSellerMetrics(productMetrics, orderMetrics) {
 - Create: `backend/services/product-service/src/features/pricing/priceStrategy.js`
 - Create: `frontend/app/seller/auctions/page.js`
 - Modify: `backend/services/product-service/prisma/schema.prisma`
-- Modify: `backend/services/product-service/src/models/productModel.js`
-- Modify: `backend/services/product-service/src/controllers/productController.js`
+- Create: `backend/services/product-service/src/features/product-videos/`
 - Modify: `backend/services/product-service/src/routes/productRoutes.js`
+- Modify: `backend/services/auth-service/src/services/authService.js`
+- Modify: `backend/shared/src/authMiddleware.js`
 - Modify: `frontend/app/seller/videos/new/page.js`
 - Modify: `frontend/components/VideoUploader.js`
 - Test: `backend/services/product-service/src/features/pricing/priceStrategy.test.js`
 - Test: `backend/services/product-service/test/product-crud.integration.test.js`
+- Test: `backend/services/product-service/src/features/product-videos/productVideoService.test.js`
+- Test: `backend/services/product-service/src/features/product-videos/productVideoRepository.test.js`
 
 **Interfaces:**
 

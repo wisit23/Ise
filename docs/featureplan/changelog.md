@@ -50,3 +50,18 @@
   `/seller/videos/new`; ยังมี warning ว่าไม่ได้ตั้ง Next.js ESLint plugin
 - ไม่ได้รัน `REQUIRE_INTEGRATION=1` หรือ Docker/browser E2E และ host Node 24 อยู่นอก engine ที่กำหนด
 - ไม่มี application code, Prisma schema หรือ runtime configuration ถูกแก้โดยรอบเอกสารนี้
+
+## 2026-08-10 — ProductVideo and Swipe Targeted Refactor
+
+- แยก ProductVideo เป็น `route -> controller -> service -> repository -> Prisma` เพื่อให้ flow และ
+  responsibility อ่านตามได้ง่าย โดยคง endpoint และ response shape เดิม
+- จำกัด public video feed ให้แสดงเฉพาะ Product สถานะ `available` และเพิ่ม Prisma index ที่
+  `ProductVideo.createdAt`; ยังไม่ได้ apply schema กับ PostgreSQL จริง
+- เปลี่ยน seller display name ให้มาจาก signed JWT claim ที่ Auth สร้างจาก User ในฐานข้อมูล และไม่เชื่อ
+  `sellerName` จาก request body
+- แยก `/swipe` เป็น page/viewer/card, เล่นเฉพาะ active video และเพิ่ม empty/error/product-link tests
+- เพิ่ม pretest ที่ generate เฉพาะ Prisma client ที่ขาดหรือเก่ากว่า schema
+- ตรวจล่าสุด: backend 41 tests (38 ผ่าน, 3 database tests ข้าม, 0 fail), frontend 5/5,
+  lint ผ่าน, frontend build ผ่าน และ secret scan พบ 0 จุดใน 177 tracked files
+- ยังไม่ได้รัน `REQUIRE_INTEGRATION=1`, apply ProductVideo index, Docker/browser E2E; `UR-11`
+  Swipe-to-Choose semantics และ persisted choose action ยังคงเป็น TBD

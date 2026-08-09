@@ -52,6 +52,7 @@ app.use((req, res, next) => {
     const payload = verifyAccessToken(token);
     req.headers["x-user-id"] = payload.sub;
     req.headers["x-user-role"] = payload.role;
+    req.headers["x-user-display-name"] = payload.displayName || "";
     next();
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });

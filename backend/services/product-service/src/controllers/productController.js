@@ -227,50 +227,6 @@ async function mine(req, res, next) {
 }
 
 /** Swipe feed ("ปัดดูสินค้า") — public, anyone can watch without an account. */
-async function videoFeed(req, res, next) {
-  try {
-    const pagination = parsePagination(req.query, 10);
-    const { items, total } = await productModel.listVideoFeed({
-      skip: pagination.skip,
-      take: pagination.take,
-    });
-    res.json(paginatedResponse(items, total, pagination));
-  } catch (err) {
-    next(err);
-  }
-}
-
-/** Sellers attach a short review clip to one of their own listings. */
-async function createVideoClip(req, res, next) {
-  try {
-    if (!["SELLER", "ADMIN"].includes(req.userRole)) {
-      throw forbidden("only seller accounts can upload video reviews");
-    }
-
-    const { videoUrl, description, productId, sellerName } = req.body;
-    if (!videoUrl || !productId) {
-      throw badRequest("videoUrl and productId are required");
-    }
-
-    const product = await productModel.findById(productId);
-    if (!product) throw notFound("product not found");
-    if (product.sellerId !== req.userId) {
-      throw forbidden("you can only attach video clips to your own products");
-    }
-
-    const clip = await productModel.createVideoClip({
-      videoUrl,
-      description: description || "",
-      sellerId: req.userId,
-      sellerName: sellerName || null,
-      productId,
-    });
-    res.status(201).json(clip);
-  } catch (err) {
-    next(err);
-  }
-}
-
 /** Called by order-service (service-to-service, internal token) when an order is placed/cancelled. */
 async function markStatusInternal(req, res, next) {
   try {
@@ -298,6 +254,4 @@ module.exports = {
   remove,
   mine,
   markStatusInternal,
-  videoFeed,
-  createVideoClip,
 };

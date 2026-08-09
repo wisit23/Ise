@@ -301,9 +301,10 @@ await apiFetch("/api/chat/rooms", {
 
 ### Task BUY-005: Extended Discovery
 
-**Pulled source baseline (not acceptance):** `frontend/app/swipe/page.js` เรียก public
-`GET /api/products/videos/feed`, เลื่อนคลิปและเปิดหน้าสินค้าได้ แต่ยังไม่มี persisted
-choose/swipe action, consumer contract test หรือหลักฐานว่าผ่าน `UR-11`
+**Refactored source baseline (partial evidence, not acceptance):** `frontend/app/swipe/page.js`
+เรียก public `GET /api/products/videos/feed`, มี empty/error/product-link tests และเล่นเฉพาะ
+คลิปที่ active เพื่อลดงาน browser แต่ยังไม่มี persisted choose/swipe action หรือหลักฐานว่า
+ผ่าน `UR-11`
 
 **Files:**
 
@@ -314,6 +315,8 @@ choose/swipe action, consumer contract test หรือหลักฐานว
 - Create: `frontend/app/wishlist/page.js`
 - Modify: `frontend/app/page.js`
 - Modify: `frontend/app/swipe/page.js`
+- Create: `frontend/components/swipe/SwipeFeedViewer.js`
+- Create: `frontend/components/swipe/SwipeVideoCard.js`
 - Test: `backend/services/product-service/src/features/recommendations/recommendation.test.js`
 - Test: `frontend/app/swipe/page.test.js`
 

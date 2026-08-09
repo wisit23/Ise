@@ -23,10 +23,23 @@ function toPublicUser(user) {
   };
 }
 
+function buildAccessTokenClaims(user) {
+  const displayName = [user.firstName, user.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return {
+    sub: user.id,
+    role: user.role,
+    displayName: displayName || undefined,
+  };
+}
+
 async function issueTokenPair(user) {
   // jti guarantees uniqueness even if a user logs in twice within the same second
   // (same sub+role+iat would otherwise sign to the identical JWT string).
-  const accessToken = signAccessToken({ sub: user.id, role: user.role });
+  const accessToken = signAccessToken(buildAccessTokenClaims(user));
   const refreshToken = signRefreshToken({
     sub: user.id,
     role: user.role,
@@ -119,12 +132,18 @@ async function refresh(refreshToken) {
 
   const stored = await prisma.refreshToken.findUnique({
     where: { token: refreshToken },
+    include: { user: true },
   });
-  if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
+  if (
+    !stored ||
+    stored.userId !== payload.sub ||
+    stored.revokedAt ||
+    stored.expiresAt < new Date()
+  ) {
     throw badRequest("refresh token is no longer valid");
   }
 
-  const accessToken = signAccessToken({ sub: payload.sub, role: payload.role });
+  const accessToken = signAccessToken(buildAccessTokenClaims(stored.user));
   return { accessToken };
 }
 

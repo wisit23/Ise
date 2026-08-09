@@ -24,3 +24,11 @@ Source ที่ pull มาให้ Seller สร้าง `ProductVideo` ข�
 
 **Teach-back:** เหตุใด ownership check ของ Product ผ่านแล้ว แต่ client-supplied `sellerName`
 ยังไม่ใช่ trusted identity?
+
+## Round 2 — Business rule ต้องหาเจอใน service layer
+
+หลัง refactor flow คือ `route → controller → service → repository → Prisma` โดย service ตรวจ
+role/required fields/Product ownership และเลือกชื่อจาก verified token ส่วน repository มีแต่ query
+และ filter Product `available`
+
+**Teach-back:** ถ้าเปลี่ยน allowed Product state ควรเริ่มอ่าน/แก้ที่ service หรือ repository และเพราะอะไร?

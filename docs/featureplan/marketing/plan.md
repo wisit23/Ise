@@ -175,21 +175,22 @@ function matchesSegment(profile, rule) {
 
 ### Task MKT-005: Extended Auction and Swipe Contracts
 
-**Pulled source baseline (not acceptance):** `ProductVideo`, `GET /videos/feed`, `POST /videos`,
-`frontend/app/swipe/page.js` และ seller upload UI มีอยู่ใน source หลัง pull แต่หน้า Swipe
-เพียงเลื่อน feed/เปิดรายละเอียดสินค้า ยังไม่มี persisted choose action และยังไม่ผ่าน Marketing
-requirement/contract review
+**Refactored source baseline (partial evidence, not acceptance):** ProductVideo provider แยก
+route/controller/service/repository, feed แสดง Product `available` เท่านั้น, seller identity
+มาจาก signed JWT และ Swipe UI มี component/tests/per-active-video playback แล้ว แต่ยังไม่มี
+persisted choose action และยังไม่ผ่าน Marketing requirement/contract review
 
 **Files:**
 
 - Create: `backend/services/product-service/src/features/auctions/auctionService.js`
 - Modify: `backend/services/product-service/prisma/schema.prisma`
-- Modify: `backend/services/product-service/src/models/productModel.js`
-- Modify: `backend/services/product-service/src/controllers/productController.js`
+- Create: `backend/services/product-service/src/features/product-videos/`
 - Modify: `backend/services/product-service/src/routes/productRoutes.js`
 - Modify: `backend/gateway/src/app.js`
 - Create: `frontend/app/auctions/page.js`
 - Modify: `frontend/app/swipe/page.js`
+- Create: `frontend/components/swipe/SwipeFeedViewer.js`
+- Create: `frontend/components/swipe/SwipeVideoCard.js`
 - Test: `backend/services/product-service/test/auction.integration.test.js`
 - Test: `backend/services/product-service/test/product-crud.integration.test.js`
 - Test: `frontend/app/swipe/page.test.js`

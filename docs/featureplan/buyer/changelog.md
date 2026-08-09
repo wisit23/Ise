@@ -28,3 +28,10 @@
 - ยืนยันจาก source ว่าหน้า Swipe เลื่อน feed/เปิด Product ได้ แต่ไม่ persist choose action
 - ปรับ `BUY-005`, progress, handoff และ decision ให้ใช้ baseline โดยไม่อ้างว่า `UR-11` Done
 - ไม่ได้แก้ Buyer application code หรือรัน Buyer PostgreSQL acceptance test ในรอบเอกสารนี้
+
+## 2026-08-10 — Swipe Consumer Refactor
+
+- แยก `/swipe` เป็น data-loading page, feed viewer และ video card เพื่อให้ junior ไล่ flow ได้ทีละชั้น
+- ให้ browser เล่นเฉพาะ active video และ pause video ที่ไม่ active เพื่อลดงาน decode/playback ที่ไม่จำเป็น
+- เพิ่ม tests สำหรับ empty feed, trusted seller/product link และ API error; frontend ผ่าน 5/5 และ build ผ่าน
+- ยังไม่มี persisted choose action และยังไม่ได้รัน Buyer PostgreSQL acceptance test จึงไม่ยก `UR-11` เป็น Done

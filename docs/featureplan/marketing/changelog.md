@@ -30,3 +30,10 @@
 - ปรับ plan, progress, handoff และ decision ให้แยก source baseline ออกจาก `UR-11` acceptance
 - Campaign, Attribution และ Auction ยังคงไม่มี implementation/acceptance evidence จาก pull นี้
 - ไม่ได้แก้ Marketing application code หรือรัน Marketing PostgreSQL acceptance test
+
+## 2026-08-10 — Swipe Baseline Correctness Refactor
+
+- Product-owned video feed แสดงเฉพาะสินค้า `available` และ seller identity มาจาก signed token
+- Swipe UI เล่นเฉพาะ active card และมี focused tests แล้ว
+- การเปลี่ยนแปลงนี้ปรับ baseline provider/consumer ให้ถูกต้องขึ้น แต่ยังไม่มี choose persistence,
+  Campaign, Attribution หรือ Marketing PostgreSQL acceptance จึงไม่ใช่ `UR-11` acceptance

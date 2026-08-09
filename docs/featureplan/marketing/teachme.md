@@ -19,3 +19,9 @@ Campaign publish → Buyer sees offer → Order records attribution
 consumer โดยไม่ย้าย Product database มาเป็นของ Marketing
 
 **Teach-back:** ถ้า feed เปิดดูได้แต่ไม่มี choose event Marketing ควรรายงานเป็น Done หรือ baseline และเพราะอะไร?
+
+## Round 2 — Correctness ของ feed ไม่ได้ปิด Requirement semantics
+
+Refactor แก้ feed ให้แสดงเฉพาะ Product `available` และแก้ชื่อผู้ขายให้เชื่อถือได้แล้ว แต่สิ่งนี้
+ยังตอบไม่ได้ว่า “choose” ต้องสร้าง state/event ใด Marketing จึงยังต้อง freeze semantics ก่อน
+ยก `UR-11` เป็น Done

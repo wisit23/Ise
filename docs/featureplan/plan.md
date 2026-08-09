@@ -64,7 +64,8 @@ PostgreSQL 16, Redis 7, Node.js test runner, Jest และ Docker Compose
 - [ ] `FOUND-002` Freeze Product/Order/Campaign/KYC/Case states และ Requirement-to-code mapping
 - [ ] `FOUND-003` Freeze response/error shapes และ provider/consumer endpoint signatures
 - [ ] `FOUND-005` Freeze Swipe/ProductVideo contract: requirement owner, allowed Product states,
-      trusted seller identity และความหมายของ “choose” ก่อนขยาย source baseline ที่ pull มา
+      response contract และความหมายของ “choose”; implementation ปัจจุบันแก้ feed เป็น
+      `available` only และใช้ trusted display name จาก signed JWT แล้ว
 - [ ] `ADM-001` เพิ่ม functional multi-role/permission catalog ที่ 6 Feature ใช้งานร่วมกัน
 - [ ] `FOUND-004` เพิ่ม PostgreSQL integration-test gate ที่ fail เมื่อ
       `REQUIRE_INTEGRATION=1` แต่ database/schema ใช้งานไม่ได้

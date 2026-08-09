@@ -114,7 +114,7 @@ Consumer เก็บ `eventId` ที่ประมวลผลแล้วเ
 Owner เปิด PR ขนาดเล็กสำหรับ contract/schema/router ก่อน แล้วจึง rebase Feature branch
 ห้ามให้สอง Feature แก้ migration หรือ status enum เดียวกันโดยไม่มีลำดับ merge
 
-### Pulled Swipe/ProductVideo baseline — not a frozen contract
+### Refactored Swipe/ProductVideo baseline — not a frozen requirement contract
 
 การตรวจ source หลัง pull พบ implementation ที่ใช้เป็น baseline ได้ แต่ยังห้ามนับเป็น Gate 2:
 
@@ -124,12 +124,13 @@ Owner เปิด PR ขนาดเล็กสำหรับ contract/schema
   ตรวจว่า Product เป็นของผู้ส่ง และ persist ใน Product PostgreSQL ผ่าน Prisma
 - `/seller/videos/new` อัปโหลดไฟล์แล้วสร้างคลิป; `/swipe` เลื่อนดู feed และเปิดรายละเอียดสินค้า
 - Source ยังไม่มี persisted choose/swipe direction; scrolling ไม่ใช่หลักฐานว่า `UR-11` ผ่าน
-- `listVideoFeed()` filter `status != removed` ซึ่งยังรวม `reserved`/`sold` แต่ comment ระบุ
-  สินค้าที่ “still on sale”; Gate 0 ต้องเลือก canonical rule
-- `sellerName` ถูกส่งจาก Frontend และ denormalize ลง `ProductVideo`; Gate 0 ต้องเลือก trusted
-  identity source ก่อนยก contract นี้เป็น Accepted
+- ProductVideo implementation แยกเป็น `route -> controller -> service -> repository -> Prisma`
+  และ repository filter เฉพาะ Product `available`
+- Access token มี `displayName` จาก Auth database; Product service ignore `sellerName` จาก body
+  และใช้ชื่อจาก verified token ลดการปลอมชื่อข้าม client
+- `/swipe` เล่นเฉพาะ active video และ preload คลิปอื่นแบบ metadata เพื่อลดการ decode พร้อมกัน
 
-จนกว่าจะปิดประเด็นข้างต้น ให้ Seller/Product เป็น provider, Buyer เป็น consumer และ Marketing
+จนกว่าจะนิยาม choose action/response contract และผ่าน PostgreSQL integration review ให้ Seller/Product เป็น provider, Buyer เป็น consumer และ Marketing
 เป็น requirement owner/reviewer ของ `UR-11` โดยไม่มี Feature ใดอ้างว่า Swipe-to-Choose Done
 
 ## Provider/consumer ownership

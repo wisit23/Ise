@@ -7,7 +7,7 @@
 - Owner: วิศิษฏ์ เจียมสันต์
 - Reviewer: เอกตระการ บุญญกาศ
 - Requirement scope: `UR-01`–`UR-07`
-- Current status: Plan acceptance not started; pulled Swipe consumer baseline audited
+- Current status: Swipe consumer refactor verified locally; Buyer plan acceptance incomplete
 
 ## Scope to hand off
 
@@ -24,7 +24,8 @@
 - ประวัติการเปลี่ยนแปลงอยู่ใน [`changelog.md`](changelog.md)
 - บทเรียนจากการตรวจระบบเดิมอยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
-- Pulled source มี `/swipe` consumer แล้ว แต่ยังไม่มี persisted choose action หรือ plan acceptance evidence
+- `/swipe` แยก viewer/card, มี empty/error/product-link tests และ active-video playback แล้ว
+- ยังไม่มี persisted choose action, PostgreSQL acceptance หรือ Marketing contract approval
 
 ## Dependencies and contracts
 

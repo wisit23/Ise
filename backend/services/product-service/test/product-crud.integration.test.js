@@ -14,7 +14,11 @@ const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
 
 const TEST_TITLE_PREFIX = "mock-trade-integration-test ";
-const sellerToken = signAccessToken({ sub: "int-test-seller", role: "SELLER" });
+const sellerToken = signAccessToken({
+  sub: "int-test-seller",
+  role: "SELLER",
+  displayName: "Trusted Integration Seller",
+});
 
 async function databaseIsReachable() {
   if (!process.env.DATABASE_URL) return false;
@@ -109,14 +113,23 @@ test("product CRUD against a real database", async (t) => {
         videoUrl: "https://example.test/clip.mp4",
         description: "รีวิวจริง",
         productId: id,
-        sellerName: "int-test-seller",
+        sellerName: "Spoofed Client Name",
       });
     assert.equal(clipRes.status, 201);
     assert.equal(clipRes.body.productId, id);
+    assert.equal(clipRes.body.sellerName, "Trusted Integration Seller");
 
     const feedVideosRes = await request(app).get("/videos/feed");
     assert.equal(feedVideosRes.status, 200);
     assert.ok(feedVideosRes.body.items.some((v) => v.id === clipRes.body.id));
+
+    await prisma.product.update({
+      where: { id },
+      data: { status: "sold" },
+    });
+    const soldFeedRes = await request(app).get("/videos/feed");
+    assert.equal(soldFeedRes.status, 200);
+    assert.ok(!soldFeedRes.body.items.some((v) => v.id === clipRes.body.id));
   } finally {
     await prisma.product.deleteMany({
       where: { title: { startsWith: TEST_TITLE_PREFIX } },

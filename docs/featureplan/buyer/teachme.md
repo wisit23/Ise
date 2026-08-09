@@ -26,3 +26,10 @@ Source ที่ pull มาทำ flow `GET /api/products/videos/feed → /swip
 Buyer choice journey
 
 **Teach-back:** ต้องเพิ่ม state หรือ event อะไรจึงจะพิสูจน์ “choose” ได้โดยไม่เดาความหมายแทน Req Doc?
+
+## Round 2 — แยก UI component เพื่ออ่านง่ายและลดงาน browser
+
+`page.js` ดูแลเฉพาะ fetch/loading/error ส่วน `SwipeFeedViewer` ดูแล active index/navigation และ
+`SwipeVideoCard` ดูแล video/product link คลิปที่ไม่ active จะ pause และ preload แค่ metadata
+
+**Teach-back:** เหตุใดการ render วิดีโอ 20 ตัวแล้ว autoplay ทุกตัวจึงแพงกว่าเล่นเฉพาะ active card?

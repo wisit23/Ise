@@ -27,3 +27,12 @@
 - ยืนยันว่า seed ดังกล่าวไม่ใช่ Synthetic KYC, role catalog หรือ Admin acceptance evidence
 - Admin status, blocker และ `ADM-001` next action ยังคงเดิม
 - ไม่ได้แก้ Admin application code หรือรัน Admin PostgreSQL acceptance test
+
+## 2026-08-10 — Trusted Display Name Claim
+
+- Auth access token เพิ่ม `displayName` ที่ประกอบจาก User ในฐานข้อมูล และ refresh token flow สร้าง claim ใหม่
+  จาก User ปัจจุบัน
+- gateway/shared auth middleware ส่งต่อ identity ที่ verify แล้วให้ ProductVideo provider
+- เพิ่ม middleware tests สำหรับ token ใหม่และ backward-compatible token เก่าที่ไม่มี `displayName`
+- การเปลี่ยนแปลงนี้รองรับ trusted attribution เท่านั้น; ไม่ได้ทำ functional role catalog, Synthetic KYC
+  decision หรือ `ADM-001` acceptance

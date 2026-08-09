@@ -4,20 +4,21 @@
 
 ## สถานะรวม
 
-**Planning revised - pulled source audited; plan acceptance not started**
+**Planning revised - ProductVideo/Swipe refactor verified locally; plan acceptance incomplete**
 
 แผนครอบคลุม `UR-01` ถึง `UR-39` แบบ 6 Vertical Role Features และเพิ่ม explicit
 traceability `UR -> FR -> NFR -> Workflow -> Task/Phase` แล้ว Source ที่ pull มาเพิ่ม
-Swipe/ProductVideo และ seller video upload แต่ยังไม่มี Feature ใหม่ถูกยกเป็น Done จนกว่า
-contract, PostgreSQL acceptance และ reviewer evidence ของแผนนี้จะผ่าน
+Swipe/ProductVideo และ seller video upload จากนั้น refactor เป็นโมดูลที่แยก responsibility,
+แก้ feed/identity correctness และเพิ่ม tests แล้ว แต่ยังไม่มี Feature ใหม่ถูกยกเป็น Done จนกว่า
+PostgreSQL acceptance, Swipe-to-Choose semantics และ reviewer evidence ของแผนนี้จะผ่าน
 
 | Feature          | Owner     | Planning | Core         | Extended evidence              | Next action                               |
 | ---------------- | --------- | -------- | ------------ | ------------------------------ | ----------------------------------------- |
-| Buyer            | วิศิษฏ์   | Revised  | Not accepted | Swipe consumer baseline only   | Review `BUY-001` + Product DB contract    |
-| Seller           | เอกตระการ | Revised  | Not accepted | ProductVideo provider baseline | Review `SEL-001` + Synthetic KYC schema   |
+| Buyer            | วิศิษฏ์   | Revised  | Not accepted | Refactored Swipe baseline      | Review `BUY-001` + Product DB contract    |
+| Seller           | เอกตระการ | Revised  | Not accepted | Refactored ProductVideo module | Review `SEL-001` + Synthetic KYC schema   |
 | Customer Service | อชิรวินท์ | Revised  | Not accepted | None                           | Review `CSS-001` + Chat PostgreSQL schema |
 | Admin            | สิรดนัย   | Revised  | Not accepted | None                           | Start `ADM-001` functional role catalog   |
-| Marketing        | ศิวกร     | Revised  | Not accepted | Swipe baseline; not `UR-11`    | Review `MKT-001` + freeze Swipe semantics |
+| Marketing        | ศิวกร     | Revised  | Not accepted | Improved baseline; not `UR-11` | Review `MKT-001` + freeze Swipe semantics |
 | Executive        | อัสนัย    | Revised  | Not accepted | None                           | Review `CEO-001` metric definitions       |
 
 ## Confirmed current evidence
@@ -28,9 +29,14 @@ contract, PostgreSQL acceptance และ reviewer evidence ของแผน�
   in the restored upstream `docs/progress.md`
 - Pulled source adds Prisma `ProductVideo`, seller-owned upload, public paginated video feed,
   `/seller/videos/new`, `/swipe` and Product ownership/role tests
-- `/swipe` currently scrolls feed and links to Product only; no persisted choose/swipe action exists
-- ProductVideo feed currently includes every Product state except `removed`, and `sellerName` comes
-  from request body; both remain Gate 0 contract decisions
+- ProductVideo now follows `route -> controller -> service -> repository -> Prisma`; the general
+  Product controller/model no longer contain video-feed rules
+- Feed now queries Product `available` only and has a `createdAt` index planned in Prisma schema
+- Seller display name now comes from signed JWT claims built from Auth database fields; Product
+  service ignores client-supplied `sellerName`
+- `/swipe` has separate viewer/card components, five frontend tests total and plays only the active
+  clip; no persisted choose/swipe action exists
+- Test preparation now generates only missing/stale Prisma clients automatically
 - Pulled Auth seed adds four deterministic demo Seller accounts; this is development seed evidence,
   not Synthetic KYC or Admin/RBAC acceptance
 - Chat service still has no persisted chat feature in current source
@@ -50,18 +56,18 @@ Prototype/history is input for review only and does not change the new Feature s
 
 ## Current blocker
 
-Phase 0 has not passed: canonical Product/Order states, Swipe/ProductVideo semantics and identity,
+Phase 0 has not passed: canonical Product/Order states, Swipe-to-Choose semantics/response contract,
 shared endpoint contracts, functional role catalog, Chat Prisma setup and required PostgreSQL
 integration-test gates still need implementation and six-role review
 
 ## Verification boundary
 
-This refresh statically inspected the pulled source and retained upstream historical evidence.
+This refresh inspected and locally tested the refactored source while retaining upstream historical evidence.
 
 - `npm run lint`: passed
-- First `npm test`: failed during setup because generated Prisma clients were absent
-- After `prisma generate` for Auth/Product/Order/Review, `npm test`: 30 passed, 3 database tests skipped, 0 failed
-- `npm run test:frontend`: 2 passed, 0 failed
+- `npm test`: 41 total; 38 passed, 3 database tests skipped, 0 failed. The pretest step
+  confirmed generated Prisma clients were current
+- `npm run test:frontend`: 5 passed, 0 failed
 - `npm run secret-scan`: passed, 0 potential secrets across 177 tracked files
 - `npm --workspace frontend run build`: passed and generated `/swipe` plus `/seller/videos/new`;
   warning remains that Next.js ESLint plugin is not configured
@@ -69,9 +75,9 @@ This refresh statically inspected the pulled source and retained upstream histor
 - `docker compose ps`: Docker was reachable after approval but no project containers were running
 - Host Node was `24.18.1`, outside repository engine `>=22.11.0 <23.0.0`
 
-No `REQUIRE_INTEGRATION=1`, Docker E2E or browser scenario was rerun. The upstream-reported
-database/browser results therefore remain historical evidence and current database/runtime status is
-**Not reverified for the new plan**
+No `REQUIRE_INTEGRATION=1`, ProductVideo index schema apply, Docker E2E or browser scenario was
+run. The upstream-reported database/browser results therefore remain historical evidence and current
+database/runtime status is **Not reverified for the new plan**
 
 ## Next action
 
