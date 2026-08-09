@@ -35,3 +35,16 @@
 - ให้ browser เล่นเฉพาะ active video และ pause video ที่ไม่ active เพื่อลดงาน decode/playback ที่ไม่จำเป็น
 - เพิ่ม tests สำหรับ empty feed, trusted seller/product link และ API error; frontend ผ่าน 5/5 และ build ผ่าน
 - ยังไม่มี persisted choose action และยังไม่ได้รัน Buyer PostgreSQL acceptance test จึงไม่ยก `UR-11` เป็น Done
+
+## 2026-08-10 — BUY-002 Atomic Reservation and Cart
+
+- เพิ่ม Product reservation fields และ internal contract สำหรับ reserve/release/complete โดยทุก write
+  ใช้ `reservationId` เป็น compare-and-set guard
+- เปลี่ยน Order create เป็น Product reserve ก่อน แล้ว persist `reservationId`, 10-minute expiry และ
+  `pending_payment`; retry ใช้ Order เดิมและ Order write failure มี compensation
+- เพิ่ม Product startup worker สำหรับคืน `reserved → available` เมื่อหมดอายุ และ stale release ไม่สามารถ
+  ปลด reservation ใหม่ได้
+- เพิ่ม Cart countdown, ปิดการเลือก/checkout รายการหมดอายุ และรองรับ legacy `pending` rows ระหว่างเปลี่ยน contract
+- PostgreSQL 16 integration ผ่าน concurrency `201/409`, retry, takeover, stale release และ restart recovery;
+  backend 47/47, frontend 7/7, lint, secret scan และ frontend build ผ่าน
+- Apply schema เฉพาะฐานข้อมูลทดสอบชั่วคราวที่ port `55432`; ยังไม่มี production/deployment change

@@ -53,6 +53,7 @@ HTTP status ที่ใช้ร่วมกัน: `400` validation, `401` una
     productTitle,
     price,
     status,
+    reservationId,
     reservationExpiresAt,
     trackingNumber,
     carrier,
@@ -83,6 +84,16 @@ Product states: `available → reserved → sold`; `reserved → available` เ�
 Order states:
 `pending_payment → paid → awaiting_shipment → shipped → delivered → completed`
 และแตกแขนงไป `cancelled` หรือ `disputed` ตาม transition ที่ Order service อนุญาต
+
+### BUY-002 reservation contract — implemented, pending integration review
+
+- `POST /internal/products/:id/reservations` รับ `{buyerId}` และคืน
+  `{reservationId, expiresAt, product}`; ผลใหม่เป็น `201`, retry ของ Buyer เดิมเป็น `200`
+- `DELETE /internal/products/:id/reservations/:reservationId` ปลดได้เฉพาะ reservation ที่ ID ตรงกัน
+- `PATCH /internal/products/:id/reservations/:reservationId/complete` ขายได้เฉพาะ reservation ที่ยังไม่หมดอายุ
+- Product เป็น owner ของ atomic inventory lock/expiry; Order persist `reservationId` และ
+  `reservationExpiresAt` โดยไม่อ่าน Product database ข้าม service
+- `pending` ยังคงอ่านได้สำหรับ legacy rows แต่ Order ใหม่เริ่มที่ `pending_payment`
 
 Campaign states: `draft → pending_approval → approved → published → ended` หรือ `rejected`
 

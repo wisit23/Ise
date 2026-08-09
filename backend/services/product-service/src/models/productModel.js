@@ -7,6 +7,9 @@ const WITH_MEDIA = { photos: true, videos: true };
 function toApiShape(product) {
   if (!product) return product;
   const { photos, videos, ...rest } = product;
+  delete rest.reservationId;
+  delete rest.reservedBy;
+  delete rest.reservationExpiresAt;
   const media = [
     ...(photos || []).map((p) => ({ ...p, type: "image" })),
     ...(videos || []).map((v) => ({ ...v, type: "video" })),

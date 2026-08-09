@@ -2,6 +2,7 @@ const express = require("express");
 const { errorHandler } = require("@reloop/shared");
 const productRoutes = require("./routes/productRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
+const reservationRoutes = require("./features/reservations/reservationRoutes");
 const { UPLOAD_DIR } = require("./middleware/upload");
 
 const app = express();
@@ -17,6 +18,7 @@ app.get("/health", (req, res) =>
 app.use("/uploads", express.static(UPLOAD_DIR));
 app.use("/uploads", uploadRoutes);
 
+app.use("/internal/products", reservationRoutes);
 app.use("/", productRoutes);
 
 app.use(errorHandler);

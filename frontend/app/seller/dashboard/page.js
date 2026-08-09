@@ -25,6 +25,7 @@ const PRODUCT_STATUS_STYLE = {
 
 const ORDER_STATUS_LABEL = {
   pending: "รอลูกค้าชำระเงิน",
+  pending_payment: "รอลูกค้าชำระเงิน",
   confirmed: "ยืนยันแล้ว",
   shipped: "จัดส่งแล้ว",
   completed: "ขายสำเร็จ",
@@ -33,6 +34,7 @@ const ORDER_STATUS_LABEL = {
 
 const ORDER_STATUS_STYLE = {
   pending: "bg-amber-50 text-amber-700",
+  pending_payment: "bg-amber-50 text-amber-700",
   confirmed: "bg-sky-50 text-sky-700",
   shipped: "bg-sky-50 text-sky-700",
   completed: "bg-emerald-50 text-emerald-700",
@@ -99,7 +101,7 @@ export default function SellerDashboardPage() {
     const completed = orders.filter((o) => o.status === "completed");
     const totalRevenue = completed.reduce((sum, o) => sum + o.price, 0);
     const pendingRevenue = orders
-      .filter((o) => o.status === "pending")
+      .filter((o) => ["pending", "pending_payment"].includes(o.status))
       .reduce((sum, o) => sum + o.price, 0);
 
     const days = lastNDays(TREND_DAYS);
