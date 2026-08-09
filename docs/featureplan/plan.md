@@ -48,8 +48,10 @@ PostgreSQL 16, Redis 7, Node.js test runner, Jest และ Docker Compose
 
 ## Requirement-Document Gaps to Preserve
 
-- `UR-11` มี `WF-03` แต่ไม่มี FR เฉพาะสำหรับ Swipe-to-Choose จึง trace ไป `MKT-005`
-  และ Buyer `BUY-005` พร้อมบันทึกช่องว่างนี้ ไม่สร้าง FR ใหม่เอง
+- `UR-11` มี `WF-03` แต่ไม่มี FR เฉพาะสำหรับ Swipe-to-Choose จึงคง Marketing `MKT-005`
+  เป็น requirement owner, Seller/Product เป็น provider และ Buyer `BUY-005` เป็น consumer
+  โค้ดที่ pull มามี public video feed และ seller upload แล้ว แต่ยังไม่มี persisted choose/swipe action
+  จึงเป็น source baseline ไม่ใช่หลักฐานว่า `UR-11` Done และห้ามสร้าง FR ใหม่เอง
 - `UR-39` มี `FR-1.3.5`, `FR-4.2.6` และ `FR-5.2.5` แต่ไม่มี Workflow ประมูลเฉพาะ
   จึงใช้ provider chain Seller -> Admin -> Marketing โดยไม่สร้างหมายเลข Workflow ใหม่
 - State name ใน Requirement และ source ปัจจุบันต่างกัน Phase 0 ต้อง freeze canonical mapping
@@ -61,6 +63,8 @@ PostgreSQL 16, Redis 7, Node.js test runner, Jest และ Docker Compose
       `reloop_order`, `reloop_chat`, `reloop_review` และ disposable test data policy
 - [ ] `FOUND-002` Freeze Product/Order/Campaign/KYC/Case states และ Requirement-to-code mapping
 - [ ] `FOUND-003` Freeze response/error shapes และ provider/consumer endpoint signatures
+- [ ] `FOUND-005` Freeze Swipe/ProductVideo contract: requirement owner, allowed Product states,
+      trusted seller identity และความหมายของ “choose” ก่อนขยาย source baseline ที่ pull มา
 - [ ] `ADM-001` เพิ่ม functional multi-role/permission catalog ที่ 6 Feature ใช้งานร่วมกัน
 - [ ] `FOUND-004` เพิ่ม PostgreSQL integration-test gate ที่ fail เมื่อ
       `REQUIRE_INTEGRATION=1` แต่ database/schema ใช้งานไม่ได้
@@ -127,11 +131,11 @@ relevant workspace test, docs update และ commit ที่ไม่ปน F
 
 ## Phase 3 - Extended Vertical Features
 
-- [ ] Buyer `BUY-005`: style profile, wishlist, rule-based recommendation และ swipe consumer
-- [ ] Seller `SEL-005`: quick replies, rule-based price recommendation และ auction submission
+- [ ] Buyer `BUY-005`: style profile, wishlist, rule-based recommendation และตรวจรับ `/swipe` consumer baseline
+- [ ] Seller `SEL-005`: quick replies, rule-based price recommendation, auction submission และ ProductVideo provider reconciliation
 - [ ] Customer Service `CSS-004`: FAQ revisions และ SLA priority
 - [ ] Admin `ADM-005`: auction approval และ bounded operations
-- [ ] Marketing `MKT-004`–`MKT-005`: segmentation, content, auction และ swipe
+- [ ] Marketing `MKT-004`–`MKT-005`: segmentation, content, auction และนิยาม/ตรวจรับ Swipe-to-Choose บน source baseline
 - [ ] Executive `CEO-004`–`CEO-005`: anomaly alert และ CSV/PDF export
 - [ ] รัน Extended integration scenarios ด้วย PostgreSQL fixture และปิด Gate 2
 

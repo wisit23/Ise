@@ -22,13 +22,13 @@
 
 ## Requirement Traceability
 
-| UR      | Functional Requirement | Active/Deferred NFR                                  | Workflow         | Task / Phase                |
-| ------- | ---------------------- | ---------------------------------------------------- | ---------------- | --------------------------- |
-| `UR-17` | `FR-4.1.1`             | `NFR-P-01`, `NFR-M-01`; `NFR-SP-01` (Security Phase) | `WF-10`          | `CSS-002` / Core            |
-| `UR-18` | `FR-4.1.2`             | `NFR-P-02`                                           | `WF-06`, `WF-10` | `CSS-001`, `CSS-002` / Core |
-| `UR-19` | `FR-4.1.3`             | ไม่มี NFR เฉพาะ                                      | `WF-10`          | `CSS-004` / Extended        |
-| `UR-20` | `FR-3.2.1`, `FR-3.2.2` | `NFR-P-04`; `NFR-SP-03` (Security Phase)             | `WF-08`          | `CSS-003` / Core            |
-| `UR-21` | `FR-4.1.4`             | ไม่มี NFR เฉพาะ                                      | `WF-10`          | `CSS-004` / Extended        |
+| UR      | Functional Requirement | Active/Deferred NFR                                              | Workflow         | Task / Phase                |
+| ------- | ---------------------- | ---------------------------------------------------------------- | ---------------- | --------------------------- |
+| `UR-17` | `FR-4.1.1`             | `NFR-P-01`, `NFR-M-01`; `NFR-SP-01` (Security Phase)             | `WF-10`          | `CSS-002` / Core            |
+| `UR-18` | `FR-4.1.2`             | `NFR-P-02`                                                       | `WF-06`, `WF-10` | `CSS-001`, `CSS-002` / Core |
+| `UR-19` | `FR-4.1.3`             | ไม่มี NFR เฉพาะ                                                  | `WF-10`          | `CSS-004` / Extended        |
+| `UR-20` | `FR-3.2.1`, `FR-3.2.2` | `NFR-P-04`; `NFR-SP-03`, `NFR-CP-02` (Security/Compliance Phase) | `WF-08`          | `CSS-003` / Core            |
+| `UR-21` | `FR-4.1.4`             | ไม่มี NFR เฉพาะ                                                  | `WF-10`          | `CSS-004` / Extended        |
 
 ### PostgreSQL acceptance for Customer Service
 

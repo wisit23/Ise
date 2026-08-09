@@ -21,3 +21,9 @@
 - เพิ่ม `handoff.md` สำหรับส่งต่อ `CSS-001`–`CSS-004`, dependency และ acceptance evidence
 - เพิ่ม `decision.md` สำหรับ Vertical ownership, real Chat/Case DB, simulated refund และ deferred security decisions
 - ไม่มี Customer Service implementation/database change ในรายการนี้
+
+## 2026-08-10 — Post-Pull Source Audit
+
+- ไม่พบ Chat, SupportCase, refund decision หรือ SLA implementation เพิ่มในสอง upstream commits
+- Customer Service status, blocker และ `CSS-001` next action ยังคงเดิม
+- ไม่ได้แก้ Customer Service application code หรือรัน Chat PostgreSQL acceptance test

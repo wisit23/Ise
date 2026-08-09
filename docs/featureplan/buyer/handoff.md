@@ -7,7 +7,7 @@
 - Owner: วิศิษฏ์ เจียมสันต์
 - Reviewer: เอกตระการ บุญญกาศ
 - Requirement scope: `UR-01`–`UR-07`
-- Current status: Planning revised - implementation not started
+- Current status: Plan acceptance not started; pulled Swipe consumer baseline audited
 
 ## Scope to hand off
 
@@ -24,18 +24,18 @@
 - ประวัติการเปลี่ยนแปลงอยู่ใน [`changelog.md`](changelog.md)
 - บทเรียนจากการตรวจระบบเดิมอยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
-- ยังไม่มี Feature implementation, migration หรือ PostgreSQL integration test ใหม่ที่ยืนยันว่า Done
+- Pulled source มี `/swipe` consumer แล้ว แต่ยังไม่มี persisted choose action หรือ plan acceptance evidence
 
 ## Dependencies and contracts
 
-- ใช้ Product contract จาก Seller/Product สำหรับ catalog และ reservation
+- ใช้ Product/ProductVideo contract จาก Seller/Product สำหรับ catalog, reservation และ Swipe feed
 - เป็นเจ้าของ Buyer/Order journey และส่ง Order data ให้ Seller, Customer Service, Admin และ Executive
 - Mock Payment ต้อง deterministic แต่ `PaymentAttempt` และสถานะ Order ต้องบันทึกใน PostgreSQL จริง
 - API shape, state และ merge gate ต้องตรงกับ [`../integration.md`](../integration.md)
 
 ## Resume from here
 
-1. ยืนยัน Gate 0 และ Product/Order state mapping กับ Seller และ Admin
+1. ยืนยัน Gate 0, Product/Order state mapping และ Swipe semantics กับ Seller, Marketing และ Admin
 2. เริ่ม `BUY-001` ตาม test-first steps ใน `plan.md`
 3. รัน targeted test และ PostgreSQL integration test โดยห้าม skip
 4. อัปเดต `progress.md`, append `changelog.md` และเพิ่ม `teachme.md` เมื่อมีหลักฐานจริง

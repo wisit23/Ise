@@ -44,8 +44,9 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  photos Photo[]
-  videos Video[]
+  photos        Photo[]
+  videos        Video[]
+  reviewClips   ProductVideo[]
 
   @@index([sellerId])
   @@index([status, category])
@@ -103,4 +104,26 @@ model Condition {
   sortOrder Int    @default(0) @map("sort_order")
 
   @@map("conditions")
+}
+
+// Not in the ER (closest is the "Swipe" entity, repurposed here) — a short
+// review clip a seller attaches to one of their listings, for the swipe
+// ("ปัดดูสินค้า") feed. Deliberately separate from `Video` above: `Video` is
+// gallery media on the product detail page (ordered, no seller identity of
+// its own), this is a standalone feed item with its own caption and a
+// denormalized seller name so the feed doesn't need to join out per card.
+model ProductVideo {
+  id          String   @id @default(uuid())
+  videoUrl    String
+  description String?
+  sellerId    String   @map("seller_id")
+  sellerName  String?  @map("seller_name")
+  productId   String   @map("product_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([sellerId])
+  @@map("product_videos")
 }

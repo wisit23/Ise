@@ -33,3 +33,18 @@ test("POST / from a BUYER account is rejected with 403 before touching the datab
     .send({ title: "x", price: 100, category: "y" });
   assert.equal(res.status, 403);
 });
+
+test("POST /videos with no bearer token is rejected with 401", async () => {
+  const res = await request(app)
+    .post("/videos")
+    .send({ videoUrl: "https://example.test/a.mp4", productId: "p1" });
+  assert.equal(res.status, 401);
+});
+
+test("POST /videos from a BUYER account is rejected with 403 before touching the database", async () => {
+  const res = await request(app)
+    .post("/videos")
+    .set("Authorization", `Bearer ${buyerToken}`)
+    .send({ videoUrl: "https://example.test/a.mp4", productId: "p1" });
+  assert.equal(res.status, 403);
+});

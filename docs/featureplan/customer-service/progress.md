@@ -10,6 +10,9 @@
 **Confirmed evidence:** Gateway proxy `/api/chat` exists, but Chat service currently has only a
 health endpoint and no persisted Room, Message, SupportCase, refund decision or SLA feature
 
+**Post-pull audit:** The two pulled commits contain no Chat/Support implementation or acceptance evidence;
+Customer Service status and next action are unchanged
+
 **Database acceptance:** Chat/Order PostgreSQL tests are required; no new
 `REQUIRE_INTEGRATION=1` Customer Service test has run in this planning round
 

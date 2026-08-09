@@ -7,7 +7,7 @@
 - Owner: เอกตระการ บุญญกาศ
 - Reviewer: วิศิษฏ์ เจียมสันต์
 - Requirement scope: `UR-32`–`UR-39`
-- Current status: Planning revised - implementation not started
+- Current status: Plan acceptance not started; pulled ProductVideo provider baseline audited
 
 ## Scope to hand off
 
@@ -24,18 +24,18 @@
 - ประวัติการเปลี่ยนแปลงอยู่ใน [`changelog.md`](changelog.md)
 - บทเรียนจากการตรวจ listing flow อยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
-- ยังไม่มี Feature implementation, migration หรือ PostgreSQL integration test ใหม่ที่ยืนยันว่า Done
+- Pulled source มี ProductVideo provider/upload baseline แต่ KYC และ Seller plan acceptance ยังไม่ผ่าน
 
 ## Dependencies and contracts
 
 - Synthetic KYC ใช้ข้อมูลทดสอบเท่านั้น แต่ `KycApplication` และผลพิจารณาต้องอยู่ใน Auth PostgreSQL จริง
-- เป็นเจ้าของ Seller/Product contract ที่ Buyer, Marketing และ Admin ใช้งาน
+- เป็นเจ้าของ Seller/Product และ ProductVideo provider contract ที่ Buyer, Marketing และ Admin ใช้งาน
 - ใช้ Buyer/Order contract สำหรับ inventory, shipping และ seller insight
 - API shape, state และ merge gate ต้องตรงกับ [`../integration.md`](../integration.md)
 
 ## Resume from here
 
-1. ยืนยัน Gate 0 และ KYC/Product/Order state mapping กับ Admin และ Buyer
+1. ยืนยัน Gate 0, KYC/Product/Order state mapping และ ProductVideo contract กับ Admin, Buyer และ Marketing
 2. เริ่ม `SEL-001` ตาม test-first steps ใน `plan.md`
 3. รัน targeted test และ PostgreSQL integration test โดยห้าม skip
 4. อัปเดต `progress.md`, append `changelog.md` และเพิ่ม `teachme.md` เมื่อมีหลักฐานจริง

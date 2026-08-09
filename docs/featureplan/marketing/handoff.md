@@ -7,7 +7,7 @@
 - Owner: ศิวกร วรวัฒน์อมรชัย
 - Reviewer: อัสนัย เมืองรอด
 - Requirement scope: `UR-08`–`UR-16`
-- Current status: Planning revised - implementation not started
+- Current status: Plan acceptance not started; pulled Swipe baseline audited
 
 ## Scope to hand off
 
@@ -24,18 +24,18 @@
 - ประวัติการเปลี่ยนแปลงอยู่ใน [`changelog.md`](changelog.md)
 - บทเรียนจากการตรวจ campaign flow อยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
-- ยังไม่มี Feature implementation, migration หรือ PostgreSQL integration test ใหม่ที่ยืนยันว่า Done
+- Pulled source มี video feed/Swipe UI แต่ยังไม่มี Campaign/Auction หรือ persisted Swipe-to-Choose acceptance
 
 ## Dependencies and contracts
 
 - เป็นเจ้าของ Campaign contract ที่ Buyer และ Executive ใช้งาน
-- ใช้ Seller/Product สำหรับสินค้าและ Buyer/Order สำหรับ attribution/conversion
+- ใช้ Seller/Product/ProductVideo สำหรับสินค้า/Swipe และ Buyer/Order สำหรับ attribution/conversion
 - ห้ามอ่าน database ของ Product หรือ Order โดยตรง; ใช้ provider API/event contract
 - API shape, state และ merge gate ต้องตรงกับ [`../integration.md`](../integration.md)
 
 ## Resume from here
 
-1. ยืนยัน Gate 0 และ Campaign/Product/Order contract กับ Seller, Buyer และ Executive
+1. ยืนยัน Gate 0, Campaign/Product/Order contract และ Swipe semantics กับ Seller, Buyer และ Executive
 2. เริ่ม `MKT-001` ตาม test-first steps ใน `plan.md`
 3. รัน targeted test และ PostgreSQL integration test โดยห้าม skip
 4. อัปเดต `progress.md`, append `changelog.md` และเพิ่ม `teachme.md` เมื่อมีหลักฐานจริง

@@ -21,3 +21,9 @@
 - เพิ่ม `handoff.md` สำหรับส่งต่อ `CEO-001`–`CEO-005`, dependency และ acceptance evidence
 - เพิ่ม `decision.md` สำหรับ Vertical ownership, read-only analytics, owner-local aggregate และ deferred security decisions
 - ไม่มี Executive implementation/database change ในรายการนี้
+
+## 2026-08-10 — Post-Pull Source Audit
+
+- ProductVideo/feed และ demo seed ที่ pull มาไม่เพิ่ม Executive metrics, aggregate API, alert หรือ export
+- Executive status, blocker และ `CEO-001` next action ยังคงเดิม
+- ไม่ได้แก้ Executive application code หรือรัน Executive PostgreSQL acceptance test

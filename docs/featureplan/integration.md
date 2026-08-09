@@ -114,11 +114,30 @@ Consumer เก็บ `eventId` ที่ประมวลผลแล้วเ
 Owner เปิด PR ขนาดเล็กสำหรับ contract/schema/router ก่อน แล้วจึง rebase Feature branch
 ห้ามให้สอง Feature แก้ migration หรือ status enum เดียวกันโดยไม่มีลำดับ merge
 
+### Pulled Swipe/ProductVideo baseline — not a frozen contract
+
+การตรวจ source หลัง pull พบ implementation ที่ใช้เป็น baseline ได้ แต่ยังห้ามนับเป็น Gate 2:
+
+- `GET /api/products/videos/feed` เป็น public route ผ่าน Gateway และคืน paginated
+  `ProductVideo` พร้อม Product relation เรียงใหม่สุดก่อน
+- `POST /api/products/videos` ต้องมี token; Product service อนุญาต `SELLER`/`ADMIN`,
+  ตรวจว่า Product เป็นของผู้ส่ง และ persist ใน Product PostgreSQL ผ่าน Prisma
+- `/seller/videos/new` อัปโหลดไฟล์แล้วสร้างคลิป; `/swipe` เลื่อนดู feed และเปิดรายละเอียดสินค้า
+- Source ยังไม่มี persisted choose/swipe direction; scrolling ไม่ใช่หลักฐานว่า `UR-11` ผ่าน
+- `listVideoFeed()` filter `status != removed` ซึ่งยังรวม `reserved`/`sold` แต่ comment ระบุ
+  สินค้าที่ “still on sale”; Gate 0 ต้องเลือก canonical rule
+- `sellerName` ถูกส่งจาก Frontend และ denormalize ลง `ProductVideo`; Gate 0 ต้องเลือก trusted
+  identity source ก่อนยก contract นี้เป็น Accepted
+
+จนกว่าจะปิดประเด็นข้างต้น ให้ Seller/Product เป็น provider, Buyer เป็น consumer และ Marketing
+เป็น requirement owner/reviewer ของ `UR-11` โดยไม่มี Feature ใดอ้างว่า Swipe-to-Choose Done
+
 ## Provider/consumer ownership
 
 | Provider              | Consumer                                   | Reviewer ที่ต้องร่วม |
 | --------------------- | ------------------------------------------ | -------------------- |
 | Seller/Product        | Buyer, Marketing, Admin                    | Buyer + Admin        |
+| Seller/ProductVideo   | Buyer Swipe, Marketing `UR-11`             | Buyer + Marketing    |
 | Buyer/Order           | Seller, Customer Service, Admin, Executive | Seller + CS          |
 | Admin/Auth-RBAC       | ทุก Feature                                | ตัวแทนทุก Role       |
 | Customer Service/Chat | Buyer, Seller, Admin                       | Buyer + Admin        |
@@ -134,7 +153,7 @@ Owner เปิด PR ขนาดเล็กสำหรับ contract/schema
 - permission-negative tests ของทุก staff Role ผ่าน
 - Buyer → Seller → reserve → mock pay → ship → receive → review ผ่าน
 - Dashboard แสดง unavailable/partial state โดยไม่ปลอมเป็นเลขศูนย์
-- เอกสารสี่ไฟล์ของทุก Feature ตรงกับหลักฐาน
+- เอกสารหกไฟล์ของทุก Feature ตรงกับหลักฐาน
 
 ### Gate 2 — Extended
 

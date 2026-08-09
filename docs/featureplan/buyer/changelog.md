@@ -21,3 +21,10 @@
 - เพิ่ม `handoff.md` สำหรับส่งต่อ `BUY-001`–`BUY-005`, dependency และ acceptance evidence
 - เพิ่ม `decision.md` สำหรับ Vertical ownership, Mock Payment, reservation และ deferred security decisions
 - ไม่มี Buyer implementation/database change ในรายการนี้
+
+## 2026-08-10 — Post-Pull Swipe Consumer Audit
+
+- พบ `/swipe` และ public `GET /api/products/videos/feed` ใน source ที่ pull มา
+- ยืนยันจาก source ว่าหน้า Swipe เลื่อน feed/เปิด Product ได้ แต่ไม่ persist choose action
+- ปรับ `BUY-005`, progress, handoff และ decision ให้ใช้ baseline โดยไม่อ้างว่า `UR-11` Done
+- ไม่ได้แก้ Buyer application code หรือรัน Buyer PostgreSQL acceptance test ในรอบเอกสารนี้

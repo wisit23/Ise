@@ -33,3 +33,11 @@
 - Decision: Security/PDPA hardening ของ KYC/media/secrets แยกไปทำหลัง Core และ Extended behavior
 - Reason: ขอบเขตรอบปัจจุบันเน้น functional Feature และ database-backed acceptance
 - Consequence: ห้ามรายงาน security NFR ว่า Done ในรอบนี้
+
+## SEL-DEC-005 — ProductVideo provider baseline needs review
+
+- Date: 2026-08-10
+- Status: Needs review
+- Decision: เก็บ ProductVideo/feed/upload ที่ pull มาเป็น Seller/Product provider baseline แต่ยังไม่ freeze เป็น shared contract
+- Reason: Feed filter ยังรวม `reserved`/`sold`, `sellerName` มาจาก request body และ `UR-11` semantics ยังไม่ชัด
+- Consequence: Seller, Buyer และ Marketing ต้อง review allowed states, identity source และ acceptance tests ก่อน Gate 2

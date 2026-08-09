@@ -25,6 +25,7 @@
 - บทเรียนจากการตรวจ admin flow อยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
 - ยังไม่มี Feature implementation, migration หรือ PostgreSQL integration test ใหม่ที่ยืนยันว่า Done
+- Pulled Auth demo Seller seed เป็น development fixture เท่านั้น ไม่ใช่ KYC/RBAC acceptance
 
 ## Dependencies and contracts
 

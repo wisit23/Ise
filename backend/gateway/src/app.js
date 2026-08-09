@@ -18,6 +18,8 @@ const PUBLIC_PATHS = [
   /^\/api\/products\/feed/,
   /^\/api\/products\/search/,
   /^\/api\/products\/by-seller\//,
+  // Swipe feed ("ปัดดูสินค้า") must be watchable by guests too.
+  /^\/api\/products\/videos\/feed/,
   // Single-item browsing must stay open to guests; write/delete routes on the
   // same path are still gated by product-service's own requireAuth middleware.
   /^\/api\/products\/[^/]+$/,

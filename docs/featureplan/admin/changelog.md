@@ -20,3 +20,10 @@
 - เพิ่ม `handoff.md` สำหรับส่งต่อ `ADM-001`–`ADM-005`, dependency และ acceptance evidence
 - เพิ่ม `decision.md` สำหรับ Vertical ownership, shared RBAC, synthetic/simulated boundary และ deferred security decisions
 - ไม่มี Admin implementation/database change ในรายการนี้
+
+## 2026-08-10 — Post-Pull Source Audit
+
+- พบ Auth seed สำหรับ demo Seller 4 บัญชีใน source ที่ pull มา
+- ยืนยันว่า seed ดังกล่าวไม่ใช่ Synthetic KYC, role catalog หรือ Admin acceptance evidence
+- Admin status, blocker และ `ADM-001` next action ยังคงเดิม
+- ไม่ได้แก้ Admin application code หรือรัน Admin PostgreSQL acceptance test

@@ -175,18 +175,30 @@ function matchesSegment(profile, rule) {
 
 ### Task MKT-005: Extended Auction and Swipe Contracts
 
+**Pulled source baseline (not acceptance):** `ProductVideo`, `GET /videos/feed`, `POST /videos`,
+`frontend/app/swipe/page.js` และ seller upload UI มีอยู่ใน source หลัง pull แต่หน้า Swipe
+เพียงเลื่อน feed/เปิดรายละเอียดสินค้า ยังไม่มี persisted choose action และยังไม่ผ่าน Marketing
+requirement/contract review
+
 **Files:**
 
 - Create: `backend/services/product-service/src/features/auctions/auctionService.js`
 - Modify: `backend/services/product-service/prisma/schema.prisma`
+- Modify: `backend/services/product-service/src/models/productModel.js`
+- Modify: `backend/services/product-service/src/controllers/productController.js`
+- Modify: `backend/services/product-service/src/routes/productRoutes.js`
+- Modify: `backend/gateway/src/app.js`
 - Create: `frontend/app/auctions/page.js`
-- Create: `frontend/app/swipe/page.js`
+- Modify: `frontend/app/swipe/page.js`
 - Test: `backend/services/product-service/test/auction.integration.test.js`
+- Test: `backend/services/product-service/test/product-crud.integration.test.js`
+- Test: `frontend/app/swipe/page.test.js`
 
-**Interfaces:** Seller submits listing; Admin approves; Buyer bids; Marketing schedules event
+**Interfaces:** Seller/Product provides video upload/feed; Buyer consumes public Swipe UI; Marketing owns
+`UR-11` acceptance and auction scheduling; Admin approves auction items
 
-- [ ] **Step 1: Write failing schedule/approval/late-bid tests**
-- [ ] **Step 2: Run tests; confirm auction module missing**
+- [ ] **Step 1: Freeze “Swipe-to-Choose” semantics, then write failing schedule/approval/late-bid and swipe contract tests**
+- [ ] **Step 2: Run tests; confirm auction module missing and pulled Swipe baseline lacks persisted choose behavior**
 - [ ] **Step 3: Implement server-time state machine and idempotent bid command**
 
 ```js
@@ -201,5 +213,5 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 }
 ```
 
-- [ ] **Step 4: Verify unapproved item denial, tie rule, close race and swipe fallback**
+- [ ] **Step 4: Verify unapproved item denial, tie rule, close race, allowed feed Product states, identity source and swipe fallback**
 - [ ] **Step 5: Update docs and commit `feat(marketing): add auction and swipe experience`**

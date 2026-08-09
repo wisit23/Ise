@@ -33,3 +33,11 @@
 - Decision: Security/consent/abuse hardening แยกไปทำหลัง Core และ Extended behavior
 - Reason: ขอบเขตรอบปัจจุบันเน้น functional Feature และ database-backed acceptance
 - Consequence: ห้ามรายงาน security NFR ว่า Done ในรอบนี้
+
+## MKT-DEC-005 — `UR-11` ownership across pulled source
+
+- Date: 2026-08-10
+- Status: Needs decision
+- Decision: คง Marketing เป็น requirement owner ของ `UR-11`, Seller/Product เป็น provider และ Buyer เป็น consumer จนกว่า Gate 0 จะยืนยัน contract
+- Reason: โค้ดที่ pull มาแบ่งอยู่ใน Product service, seller upload UI และ public Buyer-facing Swipe UI แต่ยังไม่มี choose behavior
+- Consequence: ห้าม Feature ใดอ้าง `UR-11` Done จากการมี feed อย่างเดียว และการแก้ contract ต้อง review ร่วมสาม Owner

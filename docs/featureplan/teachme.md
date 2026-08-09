@@ -20,12 +20,14 @@ Buyer UI
 Buyer Owner ดูแล journey และ Order rule ส่วน Seller Owner ดูแล Product state
 จุดเชื่อมต้องถูกล็อกด้วย contract test ก่อนทั้งสองคนทำพร้อมกัน
 
-### เอกสารสี่ชนิดต่างกันอย่างไร
+### เอกสารหกชนิดต่างกันอย่างไร
 
 - `plan.md`: จะทำอะไรและผ่านเมื่อไร
 - `progress.md`: ตอนนี้อยู่ตรงไหนและทำอะไรต่อ
 - `changelog.md`: เกิดอะไรขึ้นจริงตามเวลา
 - `teachme.md`: ทีมเรียนรู้อะไรจากสิ่งที่ทำ/ตรวจจริง
+- `handoff.md`: คนถัดไปรับช่วงจากจุดไหนและต้องได้รับหลักฐานอะไร
+- `decision.md`: ทีมตัดสินใจอะไร เพราะอะไร และมีผลกระทบอย่างไร
 
 ### Teach-back
 
@@ -35,3 +37,20 @@ Buyer Owner ดูแล journey และ Order rule ส่วน Seller Owner 
 
 คำตอบ: `Review` หรือ `Blocked` ตามสาเหตุ; Changelog บอกเพียงว่าเคยเกิดการเปลี่ยนแปลง;
 Seller/Product provider และ Buyer consumer ต้อง review contract ร่วมกัน
+
+## Round 1 — หลัง Pull: Source Baseline ไม่เท่ากับ Feature Done
+
+Source ใหม่มีเส้นทางทำงานจริงดังนี้:
+
+```text
+Seller /seller/videos/new
+  → POST /uploads
+  → POST /api/products/videos
+  → ProductVideo ใน Product PostgreSQL
+  → GET /api/products/videos/feed
+  → Buyer-facing /swipe
+```
+
+แต่การมีเส้นทางนี้ยังไม่ยืนยัน `UR-11` เพราะหน้า `/swipe` ปัจจุบันเพียงเลื่อนดูคลิปและ
+เปิดหน้าสินค้า ไม่มี persisted “choose” action นอกจากนี้ feed filter กับ trusted seller identity
+ยังไม่ผ่าน contract review ดังนั้น progress ต้องเขียนว่า “baseline audited” ไม่ใช่ “Done”

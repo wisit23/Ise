@@ -195,20 +195,33 @@ function mergeSellerMetrics(productMetrics, orderMetrics) {
 
 ### Task SEL-005: Extended Seller Tools
 
+**Pulled source baseline (not acceptance):** Product service มี `ProductVideo`, public
+`GET /videos/feed`, authenticated `POST /videos`, ownership checks และหน้า
+`/seller/videos/new` แล้ว แต่ filter ปัจจุบันใช้ `status != removed` ทั้งที่ comment ระบุสินค้า
+ที่ยังขายอยู่, `sellerName` มาจาก request body และยังไม่มี contract review ของ `UR-11`
+
 **Files:**
 
 - Create: `backend/services/chat-service/src/features/quick-replies/`
 - Create: `backend/services/product-service/src/features/pricing/priceStrategy.js`
 - Create: `frontend/app/seller/auctions/page.js`
+- Modify: `backend/services/product-service/prisma/schema.prisma`
+- Modify: `backend/services/product-service/src/models/productModel.js`
+- Modify: `backend/services/product-service/src/controllers/productController.js`
+- Modify: `backend/services/product-service/src/routes/productRoutes.js`
+- Modify: `frontend/app/seller/videos/new/page.js`
+- Modify: `frontend/components/VideoUploader.js`
 - Test: `backend/services/product-service/src/features/pricing/priceStrategy.test.js`
+- Test: `backend/services/product-service/test/product-crud.integration.test.js`
 
 **Interfaces:**
 
 - Produces: `PriceStrategy.recommend({brand, condition, completedComparables})`
+- Provides: Seller/Product video upload/feed contract for Marketing `MKT-005` and Buyer `BUY-005`
 - Consumes: Marketing auction event and Admin auction approval contracts
 
-- [ ] **Step 1: Write failing quick-reply ownership and deterministic price tests**
-- [ ] **Step 2: Run targeted tests and confirm modules missing**
+- [ ] **Step 1: Write failing quick-reply, deterministic price and ProductVideo provider contract tests**
+- [ ] **Step 2: Run targeted tests; confirm missing modules and record pulled ProductVideo baseline gaps**
 - [ ] **Step 3: Implement rule-based price range with evidence count**
 
 ```js
@@ -228,5 +241,5 @@ return {
 };
 ```
 
-- [ ] **Step 4: Verify sparse-data fallback, no cross-seller quick replies and auction lock**
+- [ ] **Step 4: Verify sparse-data fallback, cross-seller denial, allowed feed Product states, trusted seller identity and auction lock**
 - [ ] **Step 5: Update docs and commit `feat(seller): add extended seller tools`**

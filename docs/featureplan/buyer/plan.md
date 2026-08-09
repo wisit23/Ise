@@ -24,15 +24,15 @@
 
 ## Requirement Traceability
 
-| UR      | Functional Requirement             | Active/Deferred NFR                 | Workflow | Task / Phase                                         |
-| ------- | ---------------------------------- | ----------------------------------- | -------- | ---------------------------------------------------- |
-| `UR-01` | `FR-1.1.2`, `FR-1.1.3`, `FR-1.1.4` | `NFR-P-01`, `NFR-P-03`, `NFR-SC-01` | `WF-03`  | `BUY-005` / Extended                                 |
-| `UR-02` | `FR-1.2.1`                         | `NFR-P-01`, `NFR-SC-02`, `NFR-U-03` | `WF-03`  | `BUY-001` / Core                                     |
-| `UR-03` | `FR-1.3.1`                         | `NFR-P-05`                          | `WF-02`  | Seller `SEL-002` provider, `BUY-001` consumer / Core |
-| `UR-04` | `FR-2.1.1`, `FR-2.1.2`             | ไม่มี NFR เฉพาะ                     | `WF-07`  | `BUY-004` / Core                                     |
-| `UR-05` | `FR-2.2.1`, `FR-2.2.2`             | `NFR-P-02` shared Chat target       | `WF-06`  | `BUY-004` + CS `CSS-001` / Core                      |
-| `UR-06` | `FR-1.4.1`                         | `NFR-AR-01`, `NFR-AR-02`            | `WF-04`  | `BUY-002` / Core                                     |
-| `UR-07` | `FR-3.1.1`                         | `NFR-P-04`, `NFR-AR-03`             | `WF-05`  | `BUY-003` / Core                                     |
+| UR      | Functional Requirement             | Active/Deferred NFR                                   | Workflow | Task / Phase                                         |
+| ------- | ---------------------------------- | ----------------------------------------------------- | -------- | ---------------------------------------------------- |
+| `UR-01` | `FR-1.1.2`, `FR-1.1.3`, `FR-1.1.4` | `NFR-P-01`, `NFR-P-03`, `NFR-SC-01`                   | `WF-03`  | `BUY-005` / Extended                                 |
+| `UR-02` | `FR-1.2.1`                         | `NFR-P-01`, `NFR-SC-02`, `NFR-U-03`                   | `WF-03`  | `BUY-001` / Core                                     |
+| `UR-03` | `FR-1.3.1`                         | `NFR-P-05`                                            | `WF-02`  | Seller `SEL-002` provider, `BUY-001` consumer / Core |
+| `UR-04` | `FR-2.1.1`, `FR-2.1.2`             | ไม่มี NFR เฉพาะ                                       | `WF-07`  | `BUY-004` / Core                                     |
+| `UR-05` | `FR-2.2.1`, `FR-2.2.2`             | `NFR-P-02` shared Chat target                         | `WF-06`  | `BUY-004` + CS `CSS-001` / Core                      |
+| `UR-06` | `FR-1.4.1`                         | `NFR-AR-01`, `NFR-AR-02`                              | `WF-04`  | `BUY-002` / Core                                     |
+| `UR-07` | `FR-3.1.1`                         | `NFR-P-04`, `NFR-AR-03`; `NFR-CP-01` (Security Phase) | `WF-05`  | `BUY-003` / Core                                     |
 
 ### PostgreSQL acceptance for Buyer
 
@@ -301,6 +301,10 @@ await apiFetch("/api/chat/rooms", {
 
 ### Task BUY-005: Extended Discovery
 
+**Pulled source baseline (not acceptance):** `frontend/app/swipe/page.js` เรียก public
+`GET /api/products/videos/feed`, เลื่อนคลิปและเปิดหน้าสินค้าได้ แต่ยังไม่มี persisted
+choose/swipe action, consumer contract test หรือหลักฐานว่าผ่าน `UR-11`
+
 **Files:**
 
 - Create: `backend/services/product-service/src/features/wishlist/`
@@ -309,15 +313,17 @@ await apiFetch("/api/chat/rooms", {
 - Create: `frontend/app/style-profile/page.js`
 - Create: `frontend/app/wishlist/page.js`
 - Modify: `frontend/app/page.js`
+- Modify: `frontend/app/swipe/page.js`
 - Test: `backend/services/product-service/src/features/recommendations/recommendation.test.js`
+- Test: `frontend/app/swipe/page.test.js`
 
 **Interfaces:**
 
 - Produces: `RecommendationStrategy.rank({userId, candidates, limit})`
-- Consumes: Marketing auction/swipe contract after Gate 1
+- Consumes: Seller/Product `GET /api/products/videos/feed` under Marketing `MKT-005` requirement acceptance
 
-- [ ] **Step 1: Write failing deterministic ranking and wishlist ownership tests**
-- [ ] **Step 2: Run targeted tests and confirm missing strategy/routes**
+- [ ] **Step 1: Write failing deterministic ranking, wishlist ownership and `/swipe` consumer-state tests**
+- [ ] **Step 2: Run targeted tests; confirm recommendation/wishlist modules are missing and pulled Swipe UI is feed-only**
 - [ ] **Step 3: Persist Buyer style profile and implement rule-based strategy plus labelled fallback; do not call it AI**
 
 ```js
@@ -328,5 +334,5 @@ class RecommendationStrategy {
 }
 ```
 
-- [ ] **Step 4: Verify cold start, deleted product, cross-user wishlist and fallback**
+- [ ] **Step 4: Verify cold start, deleted product, cross-user wishlist, feed empty/error states and contract fallback**
 - [ ] **Step 5: Update docs and commit `feat(buyer): add extended discovery`**

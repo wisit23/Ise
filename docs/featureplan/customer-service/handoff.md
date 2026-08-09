@@ -24,6 +24,7 @@
 - บทเรียนจากการตรวจ support flow อยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
 - ยังไม่มี Feature implementation, migration หรือ PostgreSQL integration test ใหม่ที่ยืนยันว่า Done
+- Post-pull audit ไม่พบ Chat/Support source delta; handoff scope และ next action ยังคงเดิม
 
 ## Dependencies and contracts
 

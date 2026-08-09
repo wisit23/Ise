@@ -11,3 +11,11 @@ Campaign publish → Buyer sees offer → Order records attribution
 ```
 
 **Teach-back:** เพราะเหตุใด Conversion ต้องอิง completed order ไม่ใช่จำนวนคลิกอย่างเดียว?
+
+## Round 1 — Requirement owner ไม่จำเป็นต้องเป็น database owner
+
+`UR-11` อยู่ใน Marketing scope แต่ source ของ feed อยู่ใน Seller/Product และหน้าที่ผู้ใช้
+อยู่ใน Buyer UI ได้ Marketing ยังต้องกำหนด/ตรวจ acceptance semantics ร่วมกับ provider และ
+consumer โดยไม่ย้าย Product database มาเป็นของ Marketing
+
+**Teach-back:** ถ้า feed เปิดดูได้แต่ไม่มี choose event Marketing ควรรายงานเป็น Done หรือ baseline และเพราะอะไร?

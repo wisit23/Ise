@@ -33,3 +33,11 @@
 - Decision: Security/PDPA/PCI-DSS hardening แยกไปทำหลัง Core และ Extended behavior
 - Reason: ขอบเขตรอบปัจจุบันเน้น functional Feature และ database-backed acceptance
 - Consequence: ห้ามรายงาน security NFR ว่า Done ในรอบนี้
+
+## BUY-DEC-005 — Swipe consumer baseline needs contract decision
+
+- Date: 2026-08-10
+- Status: Needs decision
+- Decision: ยังไม่ยก `/swipe` ที่ pull มาเป็น `UR-11` acceptance จนกว่าจะนิยาม “choose”, Product state และ provider/consumer contract
+- Reason: Source ปัจจุบันเลื่อนดู feed และเปิด Product เท่านั้น ไม่มี persisted user choice
+- Consequence: Buyer ใช้ source เป็น baseline ได้ แต่ Marketing และ Seller ต้องร่วม freeze contract ก่อนขยายหรือเปลี่ยนสถานะ

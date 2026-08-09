@@ -18,3 +18,11 @@ double-sale/partial failure งาน `BUY-002` ต้องย้าย correct
 
 **Teach-back:** ถ้า Order ถูกสร้างแต่ Product lock ล้มเหลว ระบบต้องมี rollback/reconciliation
 แบบใด และเหตุใดการเช็ค `available` ก่อนเขียนจึงยังไม่พอ?
+
+## Round 1 — Swipe feed กับ Swipe-to-Choose ไม่ใช่สิ่งเดียวกัน
+
+Source ที่ pull มาทำ flow `GET /api/products/videos/feed → /swipe → Product detail` ได้แล้ว
+แต่ยังไม่เก็บว่าผู้ซื้อเลือก/ปัดอะไร ดังนั้นมันเป็น discovery feed baseline ไม่ใช่ completed
+Buyer choice journey
+
+**Teach-back:** ต้องเพิ่ม state หรือ event อะไรจึงจะพิสูจน์ “choose” ได้โดยไม่เดาความหมายแทน Req Doc?

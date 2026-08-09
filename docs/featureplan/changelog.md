@@ -33,3 +33,20 @@
 - บันทึก accepted/deferred decisions ราย Feature แบบ append-only โดยไม่ใช้แทน `progress.md` หรือ `changelog.md`
 - อัปเดต `README.md` ให้อธิบายหน้าที่ของเอกสารทั้งหกชนิด
 - ไม่มี application code, Prisma schema, database หรือ runtime configuration ถูกเปลี่ยนในรอบนี้
+
+## 2026-08-10 — Post-Pull Source Reconciliation
+
+- ตรวจ merge จาก upstream commits `19db46c` และ `9a11682`; เก็บ `docs/progress.md`
+  ฝั่ง upstream เพราะมีหลักฐาน `MOCK-TRADE-008` และ `MOCK-TRADE-009` เพิ่มเข้ามา
+- ตรวจ source ของ `ProductVideo`, seller video upload, public Swipe feed, demo Seller seed และ tests
+- กำหนด source ดังกล่าวเป็น baseline ของ Seller/Product provider, Buyer consumer และ Marketing
+  `UR-11` requirement owner โดยยังไม่ยกเป็น Feature Done
+- บันทึกช่องว่าง: ไม่มี persisted choose action, feed filter ยังรวม `reserved`/`sold` และ
+  `sellerName` มาจาก request body
+- อัปเดต root/role plan, progress, handoff, decision, integration และ teachme ที่ได้รับผลกระทบ
+- ตรวจรอบนี้: lint ผ่าน, frontend 2 tests ผ่าน, backend หลัง generate Prisma client ผ่าน 30
+  และ skip database tests 3; Compose config ผ่าน แต่ไม่มี project container ทำงาน
+- Secret scan ผ่าน 177 tracked files และ frontend production build ผ่านรวม `/swipe` กับ
+  `/seller/videos/new`; ยังมี warning ว่าไม่ได้ตั้ง Next.js ESLint plugin
+- ไม่ได้รัน `REQUIRE_INTEGRATION=1` หรือ Docker/browser E2E และ host Node 24 อยู่นอก engine ที่กำหนด
+- ไม่มี application code, Prisma schema หรือ runtime configuration ถูกแก้โดยรอบเอกสารนี้

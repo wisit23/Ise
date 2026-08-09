@@ -10,6 +10,9 @@
 **Confirmed evidence:** Auth schema has `ADMIN`, `KycStatus` and `Report`, but current source lacks
 the functional multi-role catalog, persisted KYC decision API, moderation workspace and simulated hold flow
 
+**Post-pull audit:** Auth seed now creates four deterministic demo Seller accounts with one shared
+development password; this is seed data only and does not satisfy `ADM-001`, Synthetic KYC or RBAC acceptance
+
 **Database acceptance:** Auth/Product/Order PostgreSQL tests are required; no new
 `REQUIRE_INTEGRATION=1` Admin test has run in this planning round
 

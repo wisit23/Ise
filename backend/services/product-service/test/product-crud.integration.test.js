@@ -91,6 +91,32 @@ test("product CRUD against a real database", async (t) => {
 
     const missingRes = await request(app).get("/does-not-exist");
     assert.equal(missingRes.status, 404);
+
+    const otherSellerToken = signAccessToken({
+      sub: "int-test-other-seller",
+      role: "SELLER",
+    });
+    const forbiddenClipRes = await request(app)
+      .post("/videos")
+      .set("Authorization", `Bearer ${otherSellerToken}`)
+      .send({ videoUrl: "https://example.test/clip.mp4", productId: id });
+    assert.equal(forbiddenClipRes.status, 403);
+
+    const clipRes = await request(app)
+      .post("/videos")
+      .set("Authorization", `Bearer ${sellerToken}`)
+      .send({
+        videoUrl: "https://example.test/clip.mp4",
+        description: "รีวิวจริง",
+        productId: id,
+        sellerName: "int-test-seller",
+      });
+    assert.equal(clipRes.status, 201);
+    assert.equal(clipRes.body.productId, id);
+
+    const feedVideosRes = await request(app).get("/videos/feed");
+    assert.equal(feedVideosRes.status, 200);
+    assert.ok(feedVideosRes.body.items.some((v) => v.id === clipRes.body.id));
   } finally {
     await prisma.product.deleteMany({
       where: { title: { startsWith: TEST_TITLE_PREFIX } },
