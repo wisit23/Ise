@@ -6,31 +6,41 @@ const {
   paginatedResponse,
 } = require("@reloop/shared");
 const productModel = require("../models/productModel");
+const {
+  buildCreateProductData,
+  buildProductPatch,
+} = require("./productPayload");
 
-function normalizeMedia(media) {
-  if (!Array.isArray(media)) return [];
-  return media
-    .filter((m) => m && typeof m.url === "string" && m.url)
-    .map((m) => ({
-      url: m.url,
-      type: m.type === "video" ? "video" : "image",
-    }));
+function requireSellerRole(role) {
+  if (!["SELLER", "ADMIN"].includes(role)) {
+    throw forbidden("only seller accounts can list products for sale");
+  }
 }
 
-function normalizeTags(tags) {
-  if (!Array.isArray(tags)) return [];
-  return [
-    ...new Set(
-      tags
-        .filter((t) => typeof t === "string" && t.trim())
-        .map((t) => t.trim().toLowerCase()),
-    ),
-  ].slice(0, 20);
+function validateCreateRequest({ title, price, category }) {
+  if (!title || !price || !category) {
+    throw badRequest("title, price, category are required");
+  }
+  if (!Number.isInteger(price) || price <= 0) {
+    throw badRequest("price must be a positive whole number");
+  }
 }
 
-async function isValidCondition(value) {
+async function requireKnownCondition(value) {
+  if (value === undefined) return;
+
   const conditions = await productModel.listConditions();
-  return conditions.some((c) => c.value === value);
+  if (!conditions.some((condition) => condition.value === value)) {
+    throw badRequest("condition is not a recognized value");
+  }
+}
+
+async function requireProductOwner(productId, sellerId, action) {
+  const product = await productModel.findById(productId);
+  if (!product) throw notFound("product not found");
+  if (product.sellerId !== sellerId) {
+    throw forbidden(`only the seller can ${action} this listing`);
+  }
 }
 
 async function feed(req, res, next) {
@@ -111,45 +121,14 @@ async function listConditions(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    if (!["SELLER", "ADMIN"].includes(req.userRole)) {
-      throw forbidden("only seller accounts can list products for sale");
-    }
+    requireSellerRole(req.userRole);
+    validateCreateRequest(req.body);
+    await requireKnownCondition(req.body.condition);
+    await productModel.ensureCategory(req.body.category);
 
-    const {
-      title,
-      description,
-      price,
-      category,
-      condition,
-      size,
-      tags,
-      media,
-      location,
-    } = req.body;
-    if (!title || !price || !category) {
-      throw badRequest("title, price, category are required");
-    }
-    if (!Number.isInteger(price) || price <= 0) {
-      throw badRequest("price must be a positive whole number");
-    }
-    if (condition !== undefined && !(await isValidCondition(condition))) {
-      throw badRequest("condition is not a recognized value");
-    }
-
-    await productModel.ensureCategory(category);
-
-    const product = await productModel.create({
-      sellerId: req.userId,
-      title,
-      description: description || "",
-      price,
-      category,
-      condition: condition || "Good",
-      size: size || "Free size",
-      tags: normalizeTags(tags),
-      media: normalizeMedia(media),
-      location: location || "",
-    });
+    const product = await productModel.create(
+      buildCreateProductData(req.userId, req.body),
+    );
     res.status(201).json(product);
   } catch (err) {
     next(err);
@@ -158,42 +137,15 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const product = await productModel.findById(req.params.id);
-    if (!product) throw notFound("product not found");
-    if (product.sellerId !== req.userId) {
-      throw forbidden("only the seller can edit this listing");
+    await requireProductOwner(req.params.id, req.userId, "edit");
+    await requireKnownCondition(req.body.condition);
+    if (req.body.category !== undefined) {
+      await productModel.ensureCategory(req.body.category);
     }
 
-    const {
-      title,
-      description,
-      price,
-      category,
-      condition,
-      size,
-      tags,
-      media,
-      location,
-      status,
-    } = req.body;
-    if (condition !== undefined && !(await isValidCondition(condition))) {
-      throw badRequest("condition is not a recognized value");
-    }
-    if (category !== undefined) await productModel.ensureCategory(category);
-
-    const patch = {};
-    if (title !== undefined) patch.title = title;
-    if (description !== undefined) patch.description = description;
-    if (price !== undefined) patch.price = price;
-    if (category !== undefined) patch.category = category;
-    if (condition !== undefined) patch.condition = condition;
-    if (size !== undefined) patch.size = size;
-    if (tags !== undefined) patch.tags = normalizeTags(tags);
-    if (media !== undefined) patch.media = normalizeMedia(media);
-    if (location !== undefined) patch.location = location;
-    if (status !== undefined) patch.status = status;
-
-    res.json(await productModel.update(req.params.id, patch));
+    res.json(
+      await productModel.update(req.params.id, buildProductPatch(req.body)),
+    );
   } catch (err) {
     next(err);
   }
@@ -201,11 +153,7 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    const product = await productModel.findById(req.params.id);
-    if (!product) throw notFound("product not found");
-    if (product.sellerId !== req.userId) {
-      throw forbidden("only the seller can remove this listing");
-    }
+    await requireProductOwner(req.params.id, req.userId, "remove");
     await productModel.remove(req.params.id);
     res.status(204).send();
   } catch (err) {
