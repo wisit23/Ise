@@ -14,6 +14,9 @@ const request = require("supertest");
 
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
+if (process.env.DATABASE_URL_AUTH) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL_AUTH;
+}
 
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");

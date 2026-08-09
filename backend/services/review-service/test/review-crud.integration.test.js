@@ -11,6 +11,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
 
+if (process.env.DATABASE_URL_REVIEW) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL_REVIEW;
+}
+
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
 

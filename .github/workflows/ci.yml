@@ -15,7 +15,7 @@ jobs:
         env:
           POSTGRES_USER: reloop
           POSTGRES_PASSWORD: reloop_test
-          POSTGRES_DB: reloop_auth_test
+          POSTGRES_DB: reloop_test
         ports:
           - 5432:5432
         options: >-
@@ -25,7 +25,11 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://reloop:reloop_test@localhost:5432/reloop_auth_test
+      DATABASE_URL: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=auth
+      DATABASE_URL_AUTH: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=auth
+      DATABASE_URL_PRODUCT: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=product
+      DATABASE_URL_ORDER: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=order
+      DATABASE_URL_REVIEW: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=review
       JWT_ACCESS_SECRET: ci-test-access-secret
       JWT_REFRESH_SECRET: ci-test-refresh-secret
       # Turns the integration test's "skip if no database" fallback (meant for
@@ -60,11 +64,33 @@ jobs:
         run: npm run audit
         continue-on-error: true
 
-      - name: Generate Prisma client (auth-service)
-        run: npx prisma generate --schema backend/services/auth-service/prisma/schema.prisma
+      - name: Generate Prisma clients (all services)
+        run: npm run prisma:generate
 
-      - name: Push test database schema (disposable CI database only)
+      - name: Push auth test schema
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_AUTH }}
         run: npx prisma db push --schema backend/services/auth-service/prisma/schema.prisma --skip-generate
+
+      - name: Push product test schema
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_PRODUCT }}
+        run: npx prisma db push --schema backend/services/product-service/prisma/schema.prisma --skip-generate
+
+      - name: Seed product test data
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_PRODUCT }}
+        run: node backend/services/product-service/prisma/seed.js
+
+      - name: Push order test schema
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_ORDER }}
+        run: npx prisma db push --schema backend/services/order-service/prisma/schema.prisma --skip-generate
+
+      - name: Push review test schema
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_REVIEW }}
+        run: npx prisma db push --schema backend/services/review-service/prisma/schema.prisma --skip-generate
 
       - name: Backend unit + integration tests (with coverage)
         run: npm test
