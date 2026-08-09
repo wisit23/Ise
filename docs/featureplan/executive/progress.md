@@ -1,13 +1,20 @@
 # Executive Feature Progress
 
-> Owner: อัสนัย เมืองรอด · Reviewer: ศิวกร วรวัฒน์อมรชัย · Updated: 2026-07-30
+> Owner: อัสนัย เมืองรอด · Reviewer: ศิวกร วรวัฒน์อมรชัย · Updated: 2026-08-10
 
-**Status:** Not started
+**Status:** Planning revised - implementation not started
 
-**Confirmed evidence:** มี Seller dashboard ที่คำนวณจาก `/products/mine` และ
-`/orders/selling` ฝั่ง Browser แต่ยังไม่มี Executive role, platform-wide metric API,
-revenue definition, report export หรือ anomaly alert
+**Plan coverage:** Explicit trace rows cover `UR-27`–`UR-31` through FR, active/deferred NFR,
+`WF-12` and `CEO-001`–`CEO-005`
 
-**Blocker:** รอ Gate 0 Executive permission และ metric definitions จาก Auth/Product/Order
+**Confirmed evidence:** Seller dashboard performs browser-side Seller calculations, but current
+source lacks Executive Role, platform metric APIs, metric definitions, persisted alerts and export jobs
 
-**Next action:** Review `CEO-001` และเขียน metric contract tests
+**Database acceptance:** Auth/Product/Order/Review PostgreSQL tests are required; no new
+`REQUIRE_INTEGRATION=1` Executive test has run in this planning round
+
+**Deferred:** Production Executive authorization and alert/audit security hardening
+
+**Blocker:** Phase 0 metric definitions, owner endpoints and database fixture policy are not frozen
+
+**Next action:** Review `CEO-001` and write fixture-based metric integration tests against owner databases

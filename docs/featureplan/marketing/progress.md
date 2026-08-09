@@ -1,12 +1,20 @@
 # Marketing Feature Progress
 
-> Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-07-30
+> Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-08-10
 
-**Status:** Not started
+**Status:** Planning revised - implementation not started
 
-**Confirmed evidence:** ไม่มี Campaign, Promotion, Segment, Attribution schema/API/UI
-Seller dashboard ปัจจุบันไม่ใช่ Marketing dashboard
+**Plan coverage:** Explicit trace rows cover `UR-08`–`UR-16` through FR, active/deferred NFR,
+`WF-03`, `WF-11`, documented Workflow gaps and `MKT-001`–`MKT-005`
 
-**Blocker:** รอ Gate 0 Marketing permission, Campaign contract และ Order attribution event
+**Confirmed evidence:** Current source has no persisted Campaign, Promotion, Segment,
+Attribution or Auction feature; Seller dashboard is not Marketing acceptance evidence
 
-**Next action:** Review `MKT-001` และเพิ่ม failing campaign lifecycle tests
+**Database acceptance:** Product/Order/Auth PostgreSQL tests are required; no new
+`REQUIRE_INTEGRATION=1` Marketing test has run in this planning round
+
+**Deferred:** Production campaign authorization, privacy and push-notification security hardening
+
+**Blocker:** Phase 0 Campaign state/API ownership and Order attribution contract are not frozen
+
+**Next action:** Review `MKT-001` and write the failing Campaign lifecycle persistence test

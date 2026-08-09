@@ -12,20 +12,32 @@
 
 - Owner: อัสนัย; Reviewer: ศิวกร
 - Trace: `UR-27`–`UR-31`, `UC-13`
-- Executive เป็น read-only Role; ห้าม reuse Seller dashboard เป็นหลักฐาน
+- Executive เป็น functional read-only Role; production authorization hardening ทำภายหลัง
+- Metrics, alert state และ export job metadata ต้องคำนวณ/อ่านจาก PostgreSQL จริง
+  ห้ามใช้ hardcoded dashboard หรือ mock/in-memory database เป็น acceptance evidence
+- `NFR-SP-*` และ `NFR-CP-*` เป็น Deferred Security Phase
 - Metric definitions/version/timezone ต้องปรากฏใน response
 
 ---
 
 ## Requirement Traceability
 
-| Requirement                                  | Task                 |
-| -------------------------------------------- | -------------------- |
-| `UR-27` GMV/revenue/users                    | `CEO-001`, `CEO-002` |
-| `UR-28` monthly/yearly comparison            | `CEO-001`, `CEO-002` |
-| `UR-29` top products/categories              | `CEO-003`            |
-| `UR-30` abnormal transaction/complaint alert | `CEO-004`            |
-| `UR-31` one-click report export              | `CEO-005`            |
+| UR      | Functional Requirement | Active/Deferred NFR                                                            | Workflow | Task / Phase                |
+| ------- | ---------------------- | ------------------------------------------------------------------------------ | -------- | --------------------------- |
+| `UR-27` | `FR-6.1.1`             | `NFR-P-01`, `NFR-AR-01`, `NFR-U-02`, `NFR-BR-02`; `NFR-SP-01` (Security Phase) | `WF-12`  | `CEO-001`, `CEO-002` / Core |
+| `UR-28` | `FR-6.1.2`             | `NFR-SC-02`, `NFR-BR-02`, `NFR-BR-03`                                          | `WF-12`  | `CEO-001`, `CEO-002` / Core |
+| `UR-29` | `FR-6.1.3`             | `NFR-U-01`                                                                     | `WF-12`  | `CEO-003` / Core            |
+| `UR-30` | `FR-6.2.1`             | `NFR-M-02`; `NFR-SP-03` (Security Phase)                                       | `WF-12`  | `CEO-004` / Extended        |
+| `UR-31` | `FR-6.1.4`             | `NFR-P-06`                                                                     | `WF-12`  | `CEO-005` / Extended        |
+
+### PostgreSQL acceptance for Executive
+
+- `CEO-001`: GMV/revenue/user metrics are aggregated from persisted service-owner facts
+- `CEO-002`: dashboard fixtures are created through APIs/Prisma and partial state is not a fake zero
+- `CEO-003`: rankings rebuild from completed Order/Product facts with deterministic ties
+- `CEO-004`: alert fingerprint/status persists in the provider database
+- `CEO-005`: export job/status/expiry persists and export content derives from database facts
+- Database tests run with `REQUIRE_INTEGRATION=1`; an unavailable database must fail, not skip
 
 ### Task CEO-001: Metric Definitions and Provider Endpoints
 
@@ -117,6 +129,8 @@ rows.sort(
 
 - Create: `backend/services/review-service/src/features/alerts/anomalyRule.js`
 - Create: `backend/services/review-service/src/features/alerts/alertWorker.js`
+- Modify: `backend/services/review-service/prisma/schema.prisma`
+- Test: `backend/services/review-service/test/executive-alert.integration.test.js`
 - Test: `backend/services/review-service/src/features/alerts/anomalyRule.test.js`
 
 **Interfaces:** Produces `executive.alert.created.v1` from explicit threshold/version
@@ -140,19 +154,25 @@ function alertFingerprint({ ruleId, bucketStart }) {
 
 - Create: `backend/services/review-service/src/features/exports/exportRoutes.js`
 - Create: `backend/services/review-service/src/features/exports/exportService.js`
+- Create: `backend/services/review-service/src/features/exports/exportWorker.js`
+- Modify: `backend/services/review-service/prisma/schema.prisma`
 - Test: `backend/services/review-service/test/executive-export.integration.test.js`
 
-**Interfaces:** `POST /api/reviews/executive/exports {format, from, to, category}`
+**Interfaces:**
 
-- [ ] **Step 1: Write failing permission/size/formula-injection tests**
+- Produces: `POST /api/reviews/executive/exports {format, from, to, category}`
+- Produces: `runExportJob({exportJobId})` which claims one persisted `PENDING` job and writes
+  `COMPLETED` or `FAILED`
+
+- [ ] **Step 1: Write failing format/date-range/job-persistence tests**
 - [ ] **Step 2: Run integration test; confirm export route absent**
-- [ ] **Step 3: Implement bounded async export with escaped CSV cells**
+- [ ] **Step 3: Implement bounded async export backed by persisted ExportJob**
 
 ```js
-function escapeCsvCell(value) {
-  const text = String(value ?? "");
-  return /^[=+\-@]/.test(text) ? `'${text}` : text;
-}
+const exportJob = await prisma.exportJob.create({
+  data: { requestedBy, format, from, to, category, status: "PENDING" },
+});
+return { id: exportJob.id, status: exportJob.status };
 ```
 
 - [ ] **Step 4: Verify expiry, audit, 10-second target on agreed fixture and cleanup**

@@ -32,5 +32,20 @@ Feature ตั้งแต่ UI, API, business rule, database change ที่�
 5. Reviewer คนละคนกับ Owner ตรวจ acceptance criteria และหลักฐาน
 6. ไฟล์รวมที่ root สรุปจากไฟล์ย่อยเท่านั้น ห้ามสร้างสถานะใหม่ที่ไฟล์ย่อยไม่มี
 
+## เอกสารประจำแต่ละ Feature
+
+ทุกโฟลเดอร์ `buyer/`, `seller/`, `customer-service/`, `admin/`, `marketing/` และ
+`executive/` ใช้เอกสารชุดเดียวกัน:
+
+- `plan.md` — ขอบเขต Requirement, Task, ขั้นตอนทำงาน และ acceptance criteria
+- `progress.md` — สถานะล่าสุด, evidence, blocker และ next action
+- `changelog.md` — ประวัติสิ่งที่เปลี่ยนจริงแบบ append-only
+- `teachme.md` — บทเรียนที่ได้จากการลงมือทำและตรวจจริง
+- `handoff.md` — จุดรับช่วงงาน, dependency และหลักฐานที่คนถัดไปต้องได้รับ
+- `decision.md` — decision log แบบ append-only พร้อมเหตุผลและผลกระทบของแต่ละคำตัดสิน
+
+`handoff.md` ไม่ใช่สถานะหลักและ `decision.md` ไม่ใช่ประวัติการแก้ไฟล์ สถานะหลักยังอยู่ใน
+`progress.md` และการเปลี่ยนแปลงจริงยังต้อง append ใน `changelog.md`
+
 งาน prototype เดิมใน `docs/progress.md` เป็นหลักฐานให้ตรวจรับช่วง ไม่ได้ถูกนับเป็น Done ของ
 Feature ใหม่โดยอัตโนมัติ

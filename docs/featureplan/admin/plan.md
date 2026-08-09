@@ -12,20 +12,33 @@
 
 - Owner: สิรดนัย; Reviewer: อชิรวินท์
 - Trace: `UR-22`–`UR-26`, `UC-06`, `UC-10`, `UC-11`
-- ไม่มี default Admin password; privileged action ต้อง reason + audit + version check
+- Functional role/ownership checks, reason และ version check อยู่ใน Core
+- Production security hardening และ privileged audit hardening ทำใน Deferred Security Phase
+- KYC decision, report, moderation state และ simulated fund hold ต้อง persist ใน PostgreSQL จริง
+  ห้ามใช้ mock/in-memory database เป็น acceptance evidence
+- `NFR-SP-*` และ `NFR-CP-*` เป็น Deferred Security Phase
 - `ADM-001` เป็น Gate 0 blocker ของทุก Feature
 
 ---
 
 ## Requirement Traceability
 
-| Requirement                            | Task                        |
-| -------------------------------------- | --------------------------- |
-| `UR-22` seller verification            | `ADM-002`, Seller `SEL-001` |
-| `UR-23` history/report summary and ban | `ADM-003`                   |
-| `UR-24` reported-product moderation    | `ADM-003`                   |
-| `UR-25` shipment/chat dispute evidence | `ADM-004`, CS `CSS-003`     |
-| `UR-26` emergency simulated fund hold  | `ADM-004`                   |
+| UR      | Functional Requirement | Active/Deferred NFR                      | Workflow         | Task / Phase                        |
+| ------- | ---------------------- | ---------------------------------------- | ---------------- | ----------------------------------- |
+| `UR-22` | `FR-4.2.1`             | `NFR-SP-02` (Security Phase)             | `WF-01`          | `ADM-002` + Seller `SEL-001` / Core |
+| `UR-23` | `FR-4.2.2`, `FR-4.2.3` | `NFR-P-01`                               | `WF-09`          | `ADM-003` / Core                    |
+| `UR-24` | `FR-4.2.4`, `FR-4.2.5` | ไม่มี NFR เฉพาะ                          | `WF-09`          | `ADM-003` / Core                    |
+| `UR-25` | `FR-3.2.3`             | `NFR-M-01`; `NFR-SP-03` (Security Phase) | `WF-08`          | `ADM-004` + CS `CSS-003` / Core     |
+| `UR-26` | `FR-3.2.4`             | `NFR-BR-01`                              | `WF-08`, `WF-09` | `ADM-004` / Core                    |
+
+### PostgreSQL acceptance for Admin
+
+- `ADM-001`: role assignment/migration is verified in `reloop_auth`
+- `ADM-002`: Synthetic KYC queue/decision/version persists in `reloop_auth`
+- `ADM-003`: report lifecycle and owner-service moderation outcome persist in Auth/Product databases
+- `ADM-004`: dispute evidence reference and simulated hold/release persist in `reloop_order`
+- `ADM-005`: auction decision and bounded operation result persist in owner databases
+- Database tests run with `REQUIRE_INTEGRATION=1`; an unavailable database must fail, not skip
 
 ### Task ADM-001: Multi-Role Permission Foundation
 
@@ -77,17 +90,18 @@ function requirePermission(permission) {
 
 - Create: `backend/services/auth-service/src/features/adminKyc/adminKycRoutes.js`
 - Create: `backend/services/auth-service/src/features/adminKyc/adminKycService.js`
+- Modify: `backend/services/auth-service/prisma/schema.prisma`
 - Create: `frontend/app/admin/kyc/page.js`
 - Test: `backend/services/auth-service/test/admin-kyc.integration.test.js`
 
 **Interfaces:**
 
-- Consumes: Seller private KYC object
+- Consumes: Seller persisted Synthetic KYC application/document reference
 - Produces: `POST /api/auth/admin/kyc/:id/decision {decision, reason, version}`
 
-- [ ] **Step 1: Write failing non-Admin, expired URL and double-decision tests**
+- [ ] **Step 1: Write failing wrong-role, stale-version and double-decision tests**
 - [ ] **Step 2: Run integration test; confirm routes missing**
-- [ ] **Step 3: Implement short-lived view and compare-version decision**
+- [ ] **Step 3: Implement Synthetic KYC lookup and compare-version decision**
 
 ```js
 async function decideKyc({
@@ -107,7 +121,7 @@ async function decideKyc({
 }
 ```
 
-- [ ] **Step 4: Verify approve/reject audit, cleanup and Seller status response**
+- [ ] **Step 4: Verify persisted approve/reject, resubmission state and Seller status response**
 - [ ] **Step 5: Update docs and commit `feat(admin): add test KYC decisions`**
 
 ### Task ADM-003: Reports, User Suspension and Product Moderation
@@ -116,6 +130,8 @@ async function decideKyc({
 
 - Create: `backend/services/auth-service/src/features/reports/reportRoutes.js`
 - Create: `backend/services/product-service/src/features/moderation/moderationRoutes.js`
+- Modify: `backend/services/auth-service/prisma/schema.prisma`
+- Modify: `backend/services/product-service/prisma/schema.prisma`
 - Create: `frontend/app/admin/reports/page.js`
 - Test: `backend/services/product-service/test/moderation.integration.test.js`
 
@@ -152,6 +168,7 @@ async function recordAdminAction({
 **Files:**
 
 - Create: `backend/services/order-service/src/features/adminDisputes/adminDisputeRoutes.js`
+- Modify: `backend/services/order-service/prisma/schema.prisma`
 - Create: `frontend/app/admin/disputes/[id]/page.js`
 - Test: `backend/services/order-service/test/admin-hold.integration.test.js`
 
@@ -186,6 +203,8 @@ async function holdSimulatedFunds({ orderId, reason, version, adminId }) {
 
 - Create: `backend/services/product-service/src/features/auctions/adminAuctionRoutes.js`
 - Create: `backend/services/auth-service/src/features/audit/auditQuery.js`
+- Modify: `backend/services/product-service/prisma/schema.prisma`
+- Modify: `backend/services/auth-service/prisma/schema.prisma`
 - Create: `frontend/app/admin/audit/page.js`
 - Test: `backend/services/auth-service/test/bounded-bulk.integration.test.js`
 

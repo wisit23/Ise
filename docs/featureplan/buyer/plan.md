@@ -14,21 +14,36 @@
 - Trace: `UR-01`–`UR-07`, `UC-01`–`UC-05`
 - ใช้ contracts จาก `../integration.md`; ห้ามอ่าน Product/Order database ข้าม service
 - Mock payment เท่านั้น; ห้ามรับ card/bank fields
+- Product reservation, Order, Mock Payment attempt, style profile และ wishlist ต้อง persist
+  ผ่าน Prisma ใน PostgreSQL จริง ห้ามใช้ mock/in-memory database เป็น acceptance evidence
+- `NFR-SP-*` และ `NFR-CP-*` เป็น Deferred Security Phase; รอบนี้คงเฉพาะ functional
+  ownership/role checks ที่จำเป็นต่อ Buyer flow
 - ทุก Task อัปเดต `progress.md`, append `changelog.md`, เพิ่มบทเรียนใน `teachme.md`
 
 ---
 
 ## Requirement Traceability
 
-| Requirement                         | Task                                    |
-| ----------------------------------- | --------------------------------------- |
-| `UR-01` personalized feed           | `BUY-005`                               |
-| `UR-02` detailed filters            | `BUY-001`                               |
-| `UR-03` four-angle product evidence | Seller `SEL-002`, consumed by `BUY-001` |
-| `UR-04` seller rating/history       | `BUY-004`                               |
-| `UR-05` Contact Seller              | `BUY-004`, CS `CSS-001`                 |
-| `UR-06` 10-minute lock              | `BUY-002`                               |
-| `UR-07` four Buyer order groups     | `BUY-003`                               |
+| UR      | Functional Requirement             | Active/Deferred NFR                 | Workflow | Task / Phase                                         |
+| ------- | ---------------------------------- | ----------------------------------- | -------- | ---------------------------------------------------- |
+| `UR-01` | `FR-1.1.2`, `FR-1.1.3`, `FR-1.1.4` | `NFR-P-01`, `NFR-P-03`, `NFR-SC-01` | `WF-03`  | `BUY-005` / Extended                                 |
+| `UR-02` | `FR-1.2.1`                         | `NFR-P-01`, `NFR-SC-02`, `NFR-U-03` | `WF-03`  | `BUY-001` / Core                                     |
+| `UR-03` | `FR-1.3.1`                         | `NFR-P-05`                          | `WF-02`  | Seller `SEL-002` provider, `BUY-001` consumer / Core |
+| `UR-04` | `FR-2.1.1`, `FR-2.1.2`             | ไม่มี NFR เฉพาะ                     | `WF-07`  | `BUY-004` / Core                                     |
+| `UR-05` | `FR-2.2.1`, `FR-2.2.2`             | `NFR-P-02` shared Chat target       | `WF-06`  | `BUY-004` + CS `CSS-001` / Core                      |
+| `UR-06` | `FR-1.4.1`                         | `NFR-AR-01`, `NFR-AR-02`            | `WF-04`  | `BUY-002` / Core                                     |
+| `UR-07` | `FR-3.1.1`                         | `NFR-P-04`, `NFR-AR-03`             | `WF-05`  | `BUY-003` / Core                                     |
+
+### PostgreSQL acceptance for Buyer
+
+- `BUY-001`: query filter results from `reloop_product`; no hardcoded catalog is accepted
+- `BUY-002`: two-buyer concurrency, expiry and compensation read state back from
+  `reloop_product` and `reloop_order`
+- `BUY-003`: Mock Payment attempt and every Order transition survive process restart in
+  `reloop_order`
+- `BUY-004`: review uniqueness is enforced by persisted Order/Review data
+- `BUY-005`: style profile and wishlist ownership persist in service-owner databases
+- Database tests run with `REQUIRE_INTEGRATION=1`; an unavailable database must fail, not skip
 
 ### Task BUY-001: Catalog Search and Filters
 
@@ -38,7 +53,9 @@
 - Create: `backend/services/product-service/src/features/catalog/catalog.contract.test.js`
 - Modify: `backend/services/product-service/src/controllers/productController.js`
 - Modify: `backend/services/product-service/src/models/productModel.js`
+- Modify: `backend/services/product-service/prisma/schema.prisma`
 - Modify: `frontend/app/products/page.js`
+- Test: `backend/services/product-service/test/catalog.integration.test.js`
 - Test: `frontend/app/products/products.test.js`
 
 **Interfaces:**
@@ -103,7 +120,16 @@ function buildCatalogWhere({
 }
 ```
 
-- [ ] **Step 4: Run targeted backend/Jest tests, then `npm run lint`**
+- [ ] **Step 4: Apply Product schema and run real-database/Jest tests, then lint**
+
+Run:
+
+```powershell
+docker compose exec product-service npx prisma db push --schema prisma/schema.prisma
+docker compose exec -e REQUIRE_INTEGRATION=1 product-service node --test test/catalog.integration.test.js
+npm --workspace frontend test -- products.test.js
+npm run lint
+```
 
 Expected: filter combinations, empty result, invalid range and pagination pass
 
@@ -181,15 +207,18 @@ git commit -m "feat(buyer): make cart reservations concurrency safe"
 **Files:**
 
 - Create: `backend/services/order-service/src/features/orders/orderState.js`
+- Create: `backend/services/order-service/src/features/payments/mockPaymentService.js`
 - Modify: `backend/services/order-service/src/controllers/orderController.js`
 - Modify: `backend/services/order-service/prisma/schema.prisma`
 - Modify: `frontend/app/orders/page.js`
 - Test: `backend/services/order-service/src/order-state.test.js`
+- Test: `backend/services/order-service/test/mock-payment.integration.test.js`
 
 **Interfaces:**
 
 - Produces: `transitionOrder({ order, actor, nextStatus })`
 - Produces: `PATCH /api/orders/:id/transitions` body `{nextStatus, trackingNumber?, carrier?}`
+- Produces: persisted `PaymentAttempt {id, orderId, idempotencyKey, result, createdAt}`
 
 - [ ] **Step 1: Write failing state/actor table tests**
 
@@ -203,6 +232,14 @@ assert.equal(canTransition("awaiting_shipment", "SELLER", "shipped"), true);
 
 Expected: FAIL เพราะยังใช้ arbitrary `PATCH /:id/status`
 
+Run real-database test separately:
+
+```powershell
+docker compose exec -e REQUIRE_INTEGRATION=1 order-service node --test test/mock-payment.integration.test.js
+```
+
+Expected: FAIL เพราะยังไม่มี `PaymentAttempt` table และ Mock Payment service
+
 - [ ] **Step 3: Implement explicit state table and deterministic mock payment**
 
 ```js
@@ -215,10 +252,13 @@ const TRANSITIONS = {
 };
 ```
 
-- [ ] **Step 4: Verify forbidden transitions, retry conflict and four Buyer tabs**
+`mockPaymentService.pay()` ต้องสร้าง `PaymentAttempt` และ transition Order ใน Prisma
+transaction เดียวกัน การเรียกซ้ำด้วย `idempotencyKey` เดิมต้องคืนผลเดิมโดยไม่สร้างแถวซ้ำ
+
+- [ ] **Step 4: Verify persisted Mock Payment, forbidden transitions, restart and four Buyer tabs**
 
 Expected: API returns `403/409`; UI maps `pending_payment`, `awaiting_shipment`, `shipped`,
-`completed` without client-only mutation
+`completed` without client-only mutation; process restart แล้วยังอ่าน Order/PaymentAttempt เดิมได้
 
 - [ ] **Step 5: Update docs and commit**
 

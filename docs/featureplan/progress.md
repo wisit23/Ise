@@ -1,35 +1,58 @@
 # RE-LOOP Combined Feature Progress
 
-> อัปเดตล่าสุด: 2026-07-30
+> อัปเดตล่าสุด: 2026-08-10
 
 ## สถานะรวม
 
-**Not started — planning package prepared, implementation ยังไม่เริ่มตาม Feature plans ใหม่**
+**Planning revised - implementation not started**
 
-| Feature          | Owner     | Core        | Extended    | Next action                         |
-| ---------------- | --------- | ----------- | ----------- | ----------------------------------- |
-| Buyer            | วิศิษฏ์   | Not started | Not started | Review Product/Order contract       |
-| Seller           | เอกตระการ | Not started | Not started | Review listing/KYC boundary         |
-| Customer Service | อชิรวินท์ | Not started | Not started | Freeze Chat/Case contract           |
-| Admin            | สิรดนัย   | Not started | Not started | Start `ADM-001` RBAC contract       |
-| Marketing        | ศิวกร     | Not started | Not started | Freeze Campaign contract            |
-| Executive        | อัสนัย    | Not started | Not started | Freeze read-only metric definitions |
+แผนครอบคลุม `UR-01` ถึง `UR-39` แบบ 6 Vertical Role Features และเพิ่ม explicit
+traceability `UR -> FR -> NFR -> Workflow -> Task/Phase` แล้ว รอบนี้ยังไม่มี Feature
+implementation หรือ database migration ใหม่ถูกยกเป็น Done
+
+| Feature          | Owner     | Planning | Core        | Extended    | Next action                               |
+| ---------------- | --------- | -------- | ----------- | ----------- | ----------------------------------------- |
+| Buyer            | วิศิษฏ์   | Revised  | Not started | Not started | Review `BUY-001` + Product DB contract    |
+| Seller           | เอกตระการ | Revised  | Not started | Not started | Review `SEL-001` + Synthetic KYC schema   |
+| Customer Service | อชิรวินท์ | Revised  | Not started | Not started | Review `CSS-001` + Chat PostgreSQL schema |
+| Admin            | สิรดนัย   | Revised  | Not started | Not started | Start `ADM-001` functional role catalog   |
+| Marketing        | ศิวกร     | Revised  | Not started | Not started | Review `MKT-001` Campaign schema          |
+| Executive        | อัสนัย    | Revised  | Not started | Not started | Review `CEO-001` metric definitions       |
 
 ## Confirmed current evidence
 
-- Repository มี Auth, Product, Order และ Review implementation/prototype บางส่วน
-- Buyer/Seller UI, pagination, upload, seller dashboard และ seller reviews มีหลักฐานใน
-  `docs/progress.md`
-- Chat service ยังมีเพียง health endpoint
-- Admin, Marketing และ Executive ยังไม่มี Feature module/UI ที่รับ requirement ของตนเองครบ
+- Requirement sources contain 39 UR, 49 FR, 27 NFR and 12 Workflows
+- Repository has Auth, Product, Order and Review implementation/prototypeบางส่วน
+- Buyer/Seller UI, pagination, upload, seller dashboard and seller reviews have prior evidence
+  in `docs/progress.md`
+- Chat service still has no persisted chat feature in current source
+- Admin, Marketing and Executive do not yet have complete Feature modules/UI
+- Docker Compose defines separate PostgreSQL databases per service through service-specific URLs
 
-หลักฐานเดิมเป็น input สำหรับตรวจรับช่วง ไม่เปลี่ยนสถานะ Feature ใหม่เป็น Done
+Prototype/history is input for review only and does not change the new Feature status to Done
+
+## Approved planning boundaries
+
+- Mock: deterministic Payment provider behavior and Synthetic KYC content only
+- Real persistence: Prisma/PostgreSQL for KYC, Product, Reservation, Order, PaymentAttempt,
+  Chat, Review, Support, Campaign and reporting data
+- Mock/in-memory database is not accepted as Feature evidence
+- Security hardening (`NFR-SP-*`, `NFR-CP-*`, encryption/PDPA/PCI-DSS/secrets/abuse controls)
+  is deferred to a later Security Phase
 
 ## Current blocker
 
-Gate 0 ยังไม่ผ่าน: multi-role permission, error envelope, status transitions และ event envelope
-ยังต้องได้รับ review จากทั้งหก Feature
+Phase 0 has not passed: canonical Product/Order states, shared endpoint contracts,
+functional role catalog, Chat Prisma setup and required PostgreSQL integration-test gates
+still need implementation and six-role review
+
+## Verification boundary
+
+This round verified planning-document coverage and source structure only. No new Prisma schema
+was applied and no new `REQUIRE_INTEGRATION=1` Feature test was run, so database/runtime status
+remains **Not verified for the new plan**
 
 ## Next action
 
-สิรดนัยเริ่ม `ADM-001`; Owner คนอื่น review `integration.md` และเตรียม failing contract tests
+สิรดนัย starts `ADM-001`; service owners freeze Phase 0 contracts and each Feature Owner writes
+the failing PostgreSQL-backed test from their first Core Task

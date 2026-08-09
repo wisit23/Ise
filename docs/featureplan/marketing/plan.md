@@ -12,24 +12,36 @@
 
 - Owner: ศิวกร; Reviewer: อัสนัย
 - Trace: `UR-08`–`UR-16`, `UC-12`
-- Campaign publish ต้องมี permission/approval; discount snapshot เก็บใน Order
+- Campaign approval เป็น functional workflow; production authorization hardening ทำภายหลัง
+- Campaign, attribution snapshot, metrics, segment/content และ auction data ต้อง persist
+  ใน PostgreSQL จริง ห้ามใช้ mock/in-memory database เป็น acceptance evidence
+- `NFR-SP-*` และ `NFR-CP-*` เป็น Deferred Security Phase
 - Conversion = completed attributed orders ไม่ใช่ clicks
 
 ---
 
 ## Requirement Traceability
 
-| Requirement                     | Task                       |
-| ------------------------------- | -------------------------- |
-| `UR-08` user activity/peak time | `MKT-003`                  |
-| `UR-09` campaign conversion     | `MKT-003`                  |
-| `UR-10` scheduled auction event | `MKT-005`                  |
-| `UR-11` swipe-to-choose         | `MKT-005`, Buyer `BUY-005` |
-| `UR-12` marketing KPI dashboard | `MKT-003`                  |
-| `UR-13` segmentation            | `MKT-004`                  |
-| `UR-14` knowledge content       | `MKT-004`                  |
-| `UR-15` promotion management    | `MKT-001`, `MKT-002`       |
-| `UR-16` promotion approval      | `MKT-002`                  |
+| UR      | Functional Requirement                         | Active/Deferred NFR                       | Workflow                               | Task / Phase                           |
+| ------- | ---------------------------------------------- | ----------------------------------------- | -------------------------------------- | -------------------------------------- |
+| `UR-08` | `FR-5.1.1`                                     | `NFR-U-01`                                | `WF-11`                                | `MKT-003` / Core                       |
+| `UR-09` | `FR-5.1.2`                                     | `NFR-U-01`                                | `WF-11`                                | `MKT-003` / Core                       |
+| `UR-10` | `FR-1.1.4`, `FR-1.3.5`, `FR-4.2.6`, `FR-5.2.5` | `NFR-M-03`                                | ไม่มี Workflow ประมูลเฉพาะใน Req Doc   | `MKT-005` / Extended                   |
+| `UR-11` | ไม่มี FR เฉพาะสำหรับ Swipe ใน Req Doc          | `NFR-M-03`                                | `WF-03`                                | `MKT-005` + Buyer `BUY-005` / Extended |
+| `UR-12` | `FR-5.1.2`, `FR-5.1.3`                         | `NFR-U-01`                                | `WF-11`                                | `MKT-003` / Core                       |
+| `UR-13` | `FR-5.1.4`                                     | `NFR-SC-03`; `NFR-SP-02` (Security Phase) | `WF-11`                                | `MKT-004` / Extended                   |
+| `UR-14` | `FR-5.2.3`                                     | `NFR-U-02`                                | ไม่มี Workflow community-content เฉพาะ | `MKT-004` / Extended                   |
+| `UR-15` | `FR-5.2.1`                                     | `NFR-SP-01` (Security Phase)              | `WF-11`                                | `MKT-001`, `MKT-002` / Core            |
+| `UR-16` | `FR-5.2.2`                                     | `NFR-SP-01`, `NFR-SP-03` (Security Phase) | `WF-11`                                | `MKT-002` / Core                       |
+
+### PostgreSQL acceptance for Marketing
+
+- `MKT-001`: Campaign lifecycle/date/discount/version persists in `reloop_product`
+- `MKT-002`: approval/publish result is read from persisted Campaign state
+- `MKT-003`: Order attribution snapshot persists in `reloop_order`; metrics rebuild from persisted facts
+- `MKT-004`: segment rule/content revision/status persists in the owner database
+- `MKT-005`: auction event, approved listing and bids persist in `reloop_product`
+- Database tests run with `REQUIRE_INTEGRATION=1`; an unavailable database must fail, not skip
 
 ### Task MKT-001: Campaign Domain and Lifecycle
 
@@ -137,25 +149,28 @@ router.post(
 
 - Create: `backend/services/product-service/src/features/segments/`
 - Create: `backend/services/product-service/src/features/content/`
+- Modify: `backend/services/product-service/prisma/schema.prisma`
 - Create: `frontend/app/marketing/content/page.js`
 - Test: `backend/services/product-service/src/features/segments/segmentRule.test.js`
 
 **Interfaces:** Produces deterministic `matchesSegment(profile, rule)` and versioned content publish
 
-- [ ] **Step 1: Write failing consent/minimization/segment rule tests**
+- [ ] **Step 1: Write failing segment rule, empty-result and content-version tests**
 - [ ] **Step 2: Run tests; confirm modules absent**
-- [ ] **Step 3: Implement allowlisted fields and draft→published content**
+- [ ] **Step 3: Implement deterministic fields and draft→published content**
 
 ```js
+const SEGMENT_FIELDS = ["favoriteCategory", "preferredSize", "styleTag"];
+
 function matchesSegment(profile, rule) {
   return rule.every(
     ({ field, value }) =>
-      ALLOWED_FIELDS.includes(field) && profile[field] === value,
+      SEGMENT_FIELDS.includes(field) && profile[field] === value,
   );
 }
 ```
 
-- [ ] **Step 4: Verify opt-out, empty segment, unauthorized publish and audit**
+- [ ] **Step 4: Verify empty segment, stale content version, publish role and persisted result**
 - [ ] **Step 5: Update docs and commit `feat(marketing): add segmentation and content`**
 
 ### Task MKT-005: Extended Auction and Swipe Contracts
@@ -163,6 +178,7 @@ function matchesSegment(profile, rule) {
 **Files:**
 
 - Create: `backend/services/product-service/src/features/auctions/auctionService.js`
+- Modify: `backend/services/product-service/prisma/schema.prisma`
 - Create: `frontend/app/auctions/page.js`
 - Create: `frontend/app/swipe/page.js`
 - Test: `backend/services/product-service/test/auction.integration.test.js`

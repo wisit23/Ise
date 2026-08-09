@@ -6,30 +6,43 @@
 
 **Architecture:** Auth owns seller/KYC state; Product owns listing/media/inventory; Order owns shipping transitions Seller UI เป็น consumer ของทั้งสามและไม่เขียน database ข้าม service
 
-**Tech Stack:** Next.js, Express, Prisma, PostgreSQL, private object-storage adapter, Node/Jest tests
+**Tech Stack:** Next.js, Express, Prisma, PostgreSQL, synthetic document-reference adapter,
+Node/Jest tests
 
 ## Global Constraints
 
 - Owner: เอกตระการ; Reviewer: วิศิษฏ์
 - Trace: `UR-32`–`UR-39` และ Buyer `UR-03`
-- KYC ใช้ synthetic data/private storage; Product media เป็น public
+- KYC ใช้ synthetic content; application, document reference, status และ decision ต้อง persist
+  ใน `reloop_auth` จริง ส่วน Product media persist metadata ใน `reloop_product`
 - Listing ห้าม publish ก่อน KYC approved และอย่างน้อย 4 ภาพ
+- ห้ามใช้ mock/in-memory database เป็น acceptance evidence
+- `NFR-SP-*` และ `NFR-CP-*` เป็น Deferred Security Phase; encryption/PDPA hardening ทำภายหลัง
 - ใช้ contracts จาก `../integration.md`
 
 ---
 
 ## Requirement Traceability
 
-| Requirement                             | Task                                  |
-| --------------------------------------- | ------------------------------------- |
-| `UR-32` visibility without followers    | `SEL-002` + Buyer `BUY-001`           |
-| `UR-33` create/edit listing             | `SEL-002`                             |
-| `UR-34` quick replies                   | `SEL-005`                             |
-| `UR-35` sold/inventory status           | `SEL-003`                             |
-| `UR-36` listing views                   | `SEL-004`                             |
-| `UR-37` verification/review/sales trust | `SEL-001`, `SEL-004`, Buyer `BUY-004` |
-| `UR-38` price recommendation            | `SEL-005`                             |
-| `UR-39` auction submission              | `SEL-005`, Marketing `MKT-005`        |
+| UR      | Functional Requirement             | Active/Deferred NFR                  | Workflow                             | Task / Phase                                                 |
+| ------- | ---------------------------------- | ------------------------------------ | ------------------------------------ | ------------------------------------------------------------ |
+| `UR-32` | `FR-1.1.1`                         | `NFR-SC-01`, `NFR-U-02`              | `WF-02`                              | `SEL-002` + Buyer `BUY-001` / Core                           |
+| `UR-33` | `FR-1.3.1`, `FR-1.3.2`             | `NFR-SC-01`                          | `WF-02`                              | `SEL-002` / Core                                             |
+| `UR-34` | `FR-2.2.1`, `FR-2.2.3`             | `NFR-P-02`                           | `WF-06`                              | `SEL-005` / Extended                                         |
+| `UR-35` | `FR-1.3.3`, `FR-1.3.4`             | `NFR-P-03`                           | `WF-05`                              | `SEL-003` / Core                                             |
+| `UR-36` | `FR-1.4.2`, `FR-1.4.3`, `FR-1.4.4` | `NFR-P-01`, `NFR-SC-02`, `NFR-AR-04` | `WF-03`                              | `SEL-004` + Buyer `BUY-005` / Core + Extended                |
+| `UR-37` | `FR-2.1.1`, `FR-2.1.2`, `FR-4.2.1` | `NFR-SP-02` (Security Phase)         | `WF-01`, `WF-07`                     | `SEL-001`, `SEL-004`, Buyer `BUY-004` / Core                 |
+| `UR-38` | `FR-1.4.5`, `FR-1.4.6`             | `NFR-AR-03`, `NFR-AR-04`             | `WF-02`                              | `SEL-005` / Extended                                         |
+| `UR-39` | `FR-1.3.5`, `FR-4.2.6`, `FR-5.2.5` | `NFR-M-03`                           | ไม่มี Workflow ประมูลเฉพาะใน Req Doc | `SEL-005` + Admin `ADM-005` + Marketing `MKT-005` / Extended |
+
+### PostgreSQL acceptance for Seller
+
+- `SEL-001`: KYC application/resubmission/decision status is read back from `reloop_auth`
+- `SEL-002`: listing, four image rows, ordering and edit rules are verified in `reloop_product`
+- `SEL-003`: inventory/shipping actions persist in Product/Order owner databases
+- `SEL-004`: insight aggregates are calculated from persisted view/wishlist/order facts
+- `SEL-005`: quick replies, comparable-sale evidence and auction submission persist in owner databases
+- Database tests run with `REQUIRE_INTEGRATION=1`; an unavailable database must fail, not skip
 
 ### Task SEL-001: Synthetic KYC Submission
 
@@ -37,38 +50,54 @@
 
 - Create: `backend/services/auth-service/src/features/kyc/kycRoutes.js`
 - Create: `backend/services/auth-service/src/features/kyc/kycService.js`
-- Create: `backend/shared/src/storage/objectStorage.js`
+- Create: `backend/services/auth-service/src/features/kyc/syntheticDocumentStore.js`
 - Modify: `backend/services/auth-service/prisma/schema.prisma`
 - Create: `frontend/app/seller/verification/page.js`
 - Test: `backend/services/auth-service/test/kyc.integration.test.js`
 
 **Interfaces:**
 
-- Produces: `POST /api/auth/seller/kyc` multipart synthetic file + consent
+- Produces: `POST /api/auth/seller/kyc` multipart synthetic file + acknowledgement
 - Produces: `GET /api/auth/seller/kyc` → `{status, submittedAt, decisionReason}`
 - Consumes: Admin decision contract from `ADM-002`
 
-- [ ] **Step 1: Write failing private-object and resubmission tests**
+- [ ] **Step 1: Write failing PostgreSQL persistence and resubmission tests**
 
 ```js
 assert.equal((await submitKyc(sellerToken, fakePdf)).status, 201);
-assert.equal((await publicGet(returned.objectKey)).status, 404);
+assert.equal(
+  (await prisma.kycApplication.findUnique({ where: { sellerId } })).status,
+  "PENDING",
+);
 assert.equal((await submitKyc(sellerToken, fakePdf)).status, 409);
 ```
 
 - [ ] **Step 2: Run integration test and confirm routes/storage adapter missing**
-- [ ] **Step 3: Implement `ObjectStorage.putPrivate()` and `PENDING` transition**
+- [ ] **Step 3: Implement persisted `KycApplication` and synthetic document reference**
 
 ```js
-class ObjectStorage {
-  putPrivate({ key, contentType, body }) {}
-  getSignedPrivateUrl({ key, expiresInSeconds }) {}
-  deletePrivate({ key }) {}
-}
+await prisma.kycApplication.create({
+  data: {
+    sellerId,
+    documentRef: syntheticDocumentStore.put(fakePdf),
+    status: "PENDING",
+  },
+});
 ```
 
-- [ ] **Step 4: Verify file type/size, non-seller `403`, public denial and cleanup**
-- [ ] **Step 5: Update Seller docs and commit `feat(seller): add private test KYC submission`**
+- [ ] **Step 4: Apply Auth schema and verify type/size, persisted status, resubmission and cleanup**
+
+Run:
+
+```powershell
+docker compose exec auth-service npx prisma db push --schema prisma/schema.prisma
+docker compose exec -e REQUIRE_INTEGRATION=1 auth-service node --test test/kyc.integration.test.js
+```
+
+Expected: test creates and reads a real `KycApplication` row, rejects duplicate pending submission
+and deletes only its synthetic fixture during cleanup
+
+- [ ] **Step 5: Update Seller docs and commit `feat(seller): persist synthetic KYC submission`**
 
 ### Task SEL-002: Listing and Media Workspace
 
@@ -149,14 +178,14 @@ await apiFetch(`/api/orders/${orderId}/transitions`, {
 - [ ] **Step 3: Implement owner-scoped aggregate endpoints with date bounds**
 
 ```js
-async function getSellerMetrics({ sellerId, from, to }) {
+function mergeSellerMetrics(productMetrics, orderMetrics) {
   return {
-    views,
-    wishlistCount,
-    chatStarts,
-    completedSales,
-    revenue,
-    dailySeries,
+    views: productMetrics.views,
+    wishlistCount: productMetrics.wishlistCount,
+    chatStarts: productMetrics.chatStarts,
+    completedSales: orderMetrics.completedSales,
+    revenue: orderMetrics.revenue,
+    dailySeries: orderMetrics.dailySeries,
   };
 }
 ```
@@ -183,7 +212,20 @@ async function getSellerMetrics({ sellerId, from, to }) {
 - [ ] **Step 3: Implement rule-based price range with evidence count**
 
 ```js
-return { min, median, max, comparableCount, method: "completed-sales-median" };
+const prices = completedComparables
+  .map(({ price }) => Number(price))
+  .sort((a, b) => a - b);
+const middle = Math.floor(prices.length / 2);
+return {
+  min: prices[0],
+  median:
+    prices.length % 2 === 0
+      ? (prices[middle - 1] + prices[middle]) / 2
+      : prices[middle],
+  max: prices.at(-1),
+  comparableCount: prices.length,
+  method: "completed-sales-median",
+};
 ```
 
 - [ ] **Step 4: Verify sparse-data fallback, no cross-seller quick replies and auction lock**

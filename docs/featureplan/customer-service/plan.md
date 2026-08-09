@@ -12,26 +12,39 @@
 
 - Owner: อชิรวินท์; Reviewer: สิรดนัย
 - Trace: `UR-17`–`UR-21`, `UC-05`, `UC-10`
-- Staff access ต้องมี permission, reason และ audit
+- Functional case assignment/role checks อยู่ใน Core; production security hardening ทำภายหลัง
 - Refund/payment เป็น simulated state เท่านั้น
+- Chat message, SupportCase, evidence reference และ refund decision ต้อง persist ผ่าน Prisma
+  ใน PostgreSQL จริง ห้ามใช้ mock/in-memory database เป็น acceptance evidence
+- `NFR-SP-*` และ `NFR-CP-*` เป็น Deferred Security Phase
 
 ---
 
 ## Requirement Traceability
 
-| Requirement                    | Task      |
-| ------------------------------ | --------- |
-| `UR-17` detailed Order lookup  | `CSS-002` |
-| `UR-18` central support chat   | `CSS-001` |
-| `UR-19` FAQ/How-to             | `CSS-004` |
-| `UR-20` return/refund decision | `CSS-003` |
-| `UR-21` SLA priority           | `CSS-004` |
+| UR      | Functional Requirement | Active/Deferred NFR                                  | Workflow         | Task / Phase                |
+| ------- | ---------------------- | ---------------------------------------------------- | ---------------- | --------------------------- |
+| `UR-17` | `FR-4.1.1`             | `NFR-P-01`, `NFR-M-01`; `NFR-SP-01` (Security Phase) | `WF-10`          | `CSS-002` / Core            |
+| `UR-18` | `FR-4.1.2`             | `NFR-P-02`                                           | `WF-06`, `WF-10` | `CSS-001`, `CSS-002` / Core |
+| `UR-19` | `FR-4.1.3`             | ไม่มี NFR เฉพาะ                                      | `WF-10`          | `CSS-004` / Extended        |
+| `UR-20` | `FR-3.2.1`, `FR-3.2.2` | `NFR-P-04`; `NFR-SP-03` (Security Phase)             | `WF-08`          | `CSS-003` / Core            |
+| `UR-21` | `FR-4.1.4`             | ไม่มี NFR เฉพาะ                                      | `WF-10`          | `CSS-004` / Extended        |
+
+### PostgreSQL acceptance for Customer Service
+
+- `CSS-001`: room membership, message idempotency and message history persist in `reloop_chat`
+- `CSS-002`: SupportCase assignment/version/search reads persisted Order/Case data
+- `CSS-003`: evidence reference and exactly-one simulated refund decision persist in `reloop_order`
+- `CSS-004`: FAQ revision/status and SLA timestamps persist in `reloop_chat`
+- Database tests run with `REQUIRE_INTEGRATION=1`; an unavailable database must fail, not skip
 
 ### Task CSS-001: Participant-Safe Chat
 
 **Files:**
 
 - Create: `backend/services/chat-service/prisma/schema.prisma`
+- Modify: `backend/services/chat-service/package.json`
+- Create: `backend/services/chat-service/src/models/prismaClient.js`
 - Create: `backend/services/chat-service/src/features/chat/chatRoutes.js`
 - Create: `backend/services/chat-service/src/features/chat/chatService.js`
 - Modify: `backend/services/chat-service/src/server.js`
@@ -55,11 +68,33 @@ assert.equal((await join(roomId, strangerToken)).status, 403);
 
 ```js
 async function assertRoomAccess({ roomId, userId, permissions }) {
-  // participant or assigned support permission with active case
+  const room = await prisma.chatRoom.findUnique({
+    where: { id: roomId },
+    include: { supportCase: true },
+  });
+  if (!room) throw notFound("chat room not found");
+  if (room.buyerId === userId || room.sellerId === userId) return room;
+  if (
+    permissions.includes("support:chat:join") &&
+    room.supportCase?.assigneeId === userId
+  ) {
+    return room;
+  }
+  throw forbidden("chat room access denied");
 }
 ```
 
-- [ ] **Step 4: Verify reconnect, duplicate clientMessageId, limits and cross-room denial**
+- [ ] **Step 4: Apply Chat schema and verify reconnect, persisted messages and idempotency**
+
+Run:
+
+```powershell
+docker compose exec chat-service npx prisma db push --schema prisma/schema.prisma
+docker compose exec -e REQUIRE_INTEGRATION=1 chat-service node --test test/chat-auth.integration.test.js
+```
+
+Expected: restart แล้วยังอ่าน room/message เดิมได้; `clientMessageId` ซ้ำไม่สร้างแถวซ้ำ
+
 - [ ] **Step 5: Update docs and commit `feat(cs): add participant-safe chat`**
 
 ### Task CSS-002: Support Order Lookup and Case Queue
@@ -77,9 +112,9 @@ async function assertRoomAccess({ roomId, userId, permissions }) {
 - Produces: `GET /api/orders/support/search?orderId&userId`
 - Produces: `SupportCase {id, orderId, assigneeId, priority, status, reason, version}`
 
-- [ ] **Step 1: Write failing permission, assignment and PII-minimization tests**
+- [ ] **Step 1: Write failing role, assignment and bounded-search tests**
 - [ ] **Step 2: Run integration test; expect `403`/route absence**
-- [ ] **Step 3: Implement permission-scoped projection and optimistic version update**
+- [ ] **Step 3: Implement role-scoped projection and optimistic version update**
 
 ```js
 await prisma.supportCase.updateMany({
@@ -96,6 +131,7 @@ await prisma.supportCase.updateMany({
 **Files:**
 
 - Create: `backend/services/order-service/src/features/disputes/disputeService.js`
+- Modify: `backend/services/order-service/prisma/schema.prisma`
 - Create: `frontend/app/support/cases/[id]/page.js`
 - Test: `backend/services/order-service/test/dispute-decision.integration.test.js`
 
@@ -122,6 +158,8 @@ const DECISIONS = ["APPROVE_SIMULATED_REFUND", "REJECT"];
 - Create: `backend/services/chat-service/src/features/help-content/`
 - Create: `frontend/app/support/help-content/page.js`
 - Create: `backend/services/chat-service/src/features/sla/priority.js`
+- Modify: `backend/services/chat-service/prisma/schema.prisma`
+- Test: `backend/services/chat-service/test/help-content.integration.test.js`
 - Test: `backend/services/chat-service/src/features/sla/priority.test.js`
 
 **Interfaces:** Produces published FAQ revisions and deterministic `calculatePriority(caseData)`

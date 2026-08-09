@@ -1,0 +1,35 @@
+# Seller Feature Decision Log
+
+> รายการนี้เป็น append-only; หากเปลี่ยนคำตัดสินให้เพิ่มรายการใหม่และอ้างถึงรายการเดิม
+
+## SEL-DEC-001 — Vertical Seller ownership
+
+- Date: 2026-08-10
+- Status: Accepted
+- Decision: Seller Owner รับผิดชอบ `UR-32`–`UR-39` แบบ vertical ตั้งแต่ UI, API, KYC/listing rules, PostgreSQL tests และเอกสาร
+- Reason: ทำให้ Seller journey มี Owner เดียวตั้งแต่สมัครขายจนถึงจัดส่งและดูผลลัพธ์
+- Consequence: Auth/RBAC และ Order contracts ยังต้อง review ร่วมกับ Admin และ Buyer
+
+## SEL-DEC-002 — Synthetic KYC only
+
+- Date: 2026-08-10
+- Status: Accepted
+- Decision: KYC ใช้บุคคลและเอกสาร synthetic เท่านั้น ไม่มีข้อมูลบัตรหรือเอกสารจริง
+- Reason: ต้องการทดสอบ flow โดยไม่ประมวลผลข้อมูลระบุตัวตนจริง
+- Consequence: `KycApplication`, document reference และ decision state ต้องบันทึกใน Auth PostgreSQL จริง; ห้ามใช้ mock database เป็น acceptance evidence
+
+## SEL-DEC-003 — Seller owns Product contract
+
+- Date: 2026-08-10
+- Status: Accepted
+- Decision: Seller/Product เป็น provider ของ Product state, listing และ inventory ให้ Buyer, Marketing และ Admin
+- Reason: ป้องกันแต่ละ Feature นิยามสถานะสินค้าแยกกัน
+- Consequence: Consumer ห้ามอ่าน Product database โดยตรง และการเปลี่ยน schema/state ต้องผ่าน integration review
+
+## SEL-DEC-004 — Security hardening deferred
+
+- Date: 2026-08-10
+- Status: Deferred
+- Decision: Security/PDPA hardening ของ KYC/media/secrets แยกไปทำหลัง Core และ Extended behavior
+- Reason: ขอบเขตรอบปัจจุบันเน้น functional Feature และ database-backed acceptance
+- Consequence: ห้ามรายงาน security NFR ว่า Done ในรอบนี้
