@@ -568,9 +568,9 @@ function TicketsSection({ token, statusFilter, setStatusFilter }) {
               </div>
               <button
                 onClick={closeTicket}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full aspect-square text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
               >
-                <span className="material-symbols-outlined text-[20px] leading-none">close</span>
+                <span className="material-symbols-outlined text-[20px] leading-none block">close</span>
               </button>
             </div>
 
@@ -1008,9 +1008,9 @@ function DisputesSection({ token, status, setStatus }) {
                 </div>
                 <button
                   onClick={closeDisputeChat}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full aspect-square text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[20px] leading-none">close</span>
+                  <span className="material-symbols-outlined text-[20px] leading-none block">close</span>
                 </button>
               </div>
               {/* Buyer info */}
@@ -1091,9 +1091,9 @@ function DisputesSection({ token, status, setStatus }) {
               </div>
               <button
                 onClick={closeDispute}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full aspect-square text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
               >
-                <span className="material-symbols-outlined text-[20px] leading-none">close</span>
+                <span className="material-symbols-outlined text-[20px] leading-none block">close</span>
               </button>
             </div>
 
@@ -1275,6 +1275,12 @@ function DisputesSection({ token, status, setStatus }) {
 
 function OrdersSection({ token }) {
   const [searchType, setSearchType] = useState("orderId");
+  const [showSearchType, setShowSearchType] = useState(false);
+  const searchTypeLabels = {
+    orderId: "รหัสคำสั่งซื้อ (Order)",
+    buyerId: "รหัสผู้ซื้อ (Buyer)",
+    sellerId: "รหัสผู้ขาย (Seller)"
+  };
   const [query, setQuery] = useState("");
   const [items, setItems] = useState([]);
   const [searched, setSearched] = useState(false);
@@ -1314,21 +1320,35 @@ function OrdersSection({ token }) {
       <div className={`w-full transition-all duration-500 ease-out ${searched ? "max-w-4xl mb-6" : "max-w-2xl"}`}>
         <form
           onSubmit={handleSearch}
-          className="relative flex w-full items-center overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.06)] transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
+          className="relative flex w-full items-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.06)] transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
         >
           <div className="relative border-r border-slate-200 bg-slate-50/50 rounded-l-lg">
-            <select
-              value={searchType}
-              onChange={(e) => setSearchType(e.target.value)}
-              className="appearance-none bg-transparent py-2.5 pl-4 pr-9 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-100 cursor-pointer"
+            <button
+              type="button"
+              onClick={() => setShowSearchType(!showSearchType)}
+              className="flex items-center justify-between w-48 bg-transparent py-2.5 pl-4 pr-3 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-100 transition-colors"
             >
-              <option value="orderId">รหัสคำสั่งซื้อ (Order)</option>
-              <option value="buyerId">รหัสผู้ซื้อ (Buyer)</option>
-              <option value="sellerId">รหัสผู้ขาย (Seller)</option>
-            </select>
-            <span className="material-symbols-outlined pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">
-              expand_more
-            </span>
+              <span className="truncate">{searchTypeLabels[searchType]}</span>
+              <span className="material-symbols-outlined text-[18px] text-slate-400 shrink-0">
+                expand_more
+              </span>
+            </button>
+            {showSearchType && (
+              <div className="absolute top-full left-0 mt-2 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-20 animate-fade-in-up">
+                {Object.entries(searchTypeLabels).map(([val, label]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => { setSearchType(val); setShowSearchType(false); }}
+                    className={`w-full text-left rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                      searchType === val ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-1 items-center px-3">
             <span className="material-symbols-outlined mr-2 text-[20px] text-slate-400">search</span>
@@ -1399,9 +1419,18 @@ function FaqSection({ token }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [closingForm, setClosingForm] = useState(false);
   const [form, setForm] = useState({ title: "", body: "", category: "OTHER" });
   const [submitting, setSubmitting] = useState(false);
   const [publishingId, setPublishingId] = useState(null);
+
+  function closeForm() {
+    setClosingForm(true);
+    setTimeout(() => {
+      setShowForm(false);
+      setClosingForm(false);
+    }, 280);
+  }
 
   function load() {
     setLoading(true);
@@ -1507,13 +1536,13 @@ function FaqSection({ token }) {
       </div>
 
       {/* FAQ Modal */}
-      {showForm && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl animate-fade-in-up">
+      {(showForm || closingForm) && (
+        <div className={`fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm ${closingForm ? "animate-fade-out" : "animate-fade-in"}`}>
+          <div className={`w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl ${closingForm ? "animate-fade-out" : "animate-fade-in-up"}`}>
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <h2 className="text-lg font-bold text-slate-900">เขียนบทความใหม่ (New FAQ)</h2>
-              <button onClick={() => setShowForm(false)} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                <span className="material-symbols-outlined text-[20px]">close</span>
+              <button onClick={closeForm} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full aspect-square text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors">
+                <span className="material-symbols-outlined text-[20px] leading-none block">close</span>
               </button>
             </div>
             <form onSubmit={handleCreate} className="flex flex-col gap-5 p-6">
@@ -1557,7 +1586,7 @@ function FaqSection({ token }) {
               <div className="mt-2 flex items-center justify-end gap-3 border-t border-slate-100 pt-5">
                 <button
                   type="button"
-                  onClick={() => setShowForm(false)}
+                  onClick={closeForm}
                   className="rounded-xl px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
                 >
                   ยกเลิก
