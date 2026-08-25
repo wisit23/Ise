@@ -34,7 +34,7 @@ async function main() {
     },
   });
 
-  await prisma.disputeEvidence.upsert({
+  await prisma.adminDisputeEvidence.upsert({
     where: { id: EVIDENCE_ID },
     update: {},
     create: {

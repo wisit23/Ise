@@ -9,6 +9,7 @@ const SERVICES = {
   orders: process.env.ORDER_SERVICE_URL || "http://order-service:3003",
   chat: process.env.CHAT_SERVICE_URL || "http://chat-service:3004",
   reviews: process.env.REVIEW_SERVICE_URL || "http://review-service:3005",
+  support: process.env.SUPPORT_SERVICE_URL || "http://support-service:3006",
 };
 
 // Routes that don't require a valid access token (register/login/refresh, public feed reads).
@@ -32,6 +33,9 @@ const PUBLIC_PATHS = [
   /^\/uploads\//,
   // A store page's rating must be visible to guests browsing without an account.
   /^\/api\/reviews\/by-seller\//,
+  // FAQ deflection (WF-10 step 2) must work for guests too; POST/PATCH on
+  // this same path are still gated by support-service's own requireAuth.
+  /^\/api\/support\/help(\/|$)/,
 ];
 
 function isPublic(path) {
@@ -111,6 +115,10 @@ app.use(
 app.use(
   "/api/reviews",
   createProxyMiddleware({ target: SERVICES.reviews, changeOrigin: true }),
+);
+app.use(
+  "/api/support",
+  createProxyMiddleware({ target: SERVICES.support, changeOrigin: true }),
 );
 
 module.exports = app;

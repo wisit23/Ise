@@ -5,7 +5,7 @@
 //
 // Evidence normally comes from a CS case / Chat projection (plan.md
 // "Consumes"), but that feature doesn't exist in the codebase yet — this
-// test seeds DisputeEvidence directly via Prisma instead of inventing a
+// test seeds AdminDisputeEvidence directly via Prisma instead of inventing a
 // CS-facing submit endpoint Admin doesn't own the contract for (ADM-DEC-010's
 // pattern, applied here too).
 const test = require("node:test");
@@ -65,7 +65,7 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
       status: "shipped",
     },
   });
-  await prisma.disputeEvidence.create({
+  await prisma.adminDisputeEvidence.create({
     data: {
       orderId: order.id,
       evidenceRef: "https://example.test/cs-case/1",
@@ -150,7 +150,9 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
     assert.equal(holdAudits.length, 2);
   } finally {
     await prisma.disputeAudit.deleteMany({ where: { orderId: order.id } });
-    await prisma.disputeEvidence.deleteMany({ where: { orderId: order.id } });
+    await prisma.adminDisputeEvidence.deleteMany({
+      where: { orderId: order.id },
+    });
     await prisma.order.delete({ where: { id: order.id } });
     await prisma.$disconnect();
   }

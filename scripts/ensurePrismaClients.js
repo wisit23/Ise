@@ -29,6 +29,12 @@ const CLIENTS = [
     output:
       "backend/services/review-service/src/generated/prisma-client/index.js",
   },
+  {
+    name: "support-service",
+    schema: "backend/services/support-service/prisma/schema.prisma",
+    output:
+      "backend/services/support-service/src/generated/prisma-client/index.js",
+  },
 ];
 
 function absolute(relativePath) {

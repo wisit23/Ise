@@ -75,6 +75,16 @@ async function getOne(req, res, next) {
   }
 }
 
+// disputed/refunded are set only through the dispute flow (CSS-003's
+// disputeService), never by a buyer/seller PATCHing status directly.
+const USER_SETTABLE_STATUSES = [
+  "pending",
+  "confirmed",
+  "shipped",
+  "completed",
+  "cancelled",
+];
+
 async function updateStatus(req, res, next) {
   try {
     const order = await orderModel.findById(req.params.id);
@@ -84,9 +94,9 @@ async function updateStatus(req, res, next) {
     }
 
     const { status } = req.body;
-    if (!orderModel.VALID_STATUSES.includes(status)) {
+    if (!USER_SETTABLE_STATUSES.includes(status)) {
       throw badRequest(
-        `status must be one of ${orderModel.VALID_STATUSES.join(", ")}`,
+        `status must be one of ${USER_SETTABLE_STATUSES.join(", ")}`,
       );
     }
 

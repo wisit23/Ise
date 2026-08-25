@@ -36,7 +36,6 @@ export default function AdminAuditPage() {
     }
     setUser(getStoredUser());
     load(token, "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // Menu visibility is UX only — the server enforces admin:audit:read on

@@ -36,6 +36,7 @@ services:
       ORDER_SERVICE_URL: http://order-service:3003
       CHAT_SERVICE_URL: http://chat-service:3004
       REVIEW_SERVICE_URL: http://review-service:3005
+      SUPPORT_SERVICE_URL: http://support-service:3006
     ports:
       - "${GATEWAY_PORT}:8080"
     depends_on:
@@ -44,6 +45,7 @@ services:
       - order-service
       - chat-service
       - review-service
+      - support-service
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
       interval: 5s
@@ -96,6 +98,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL_ORDER}
       PRODUCT_SERVICE_URL: http://product-service:3002
+    volumes:
+      - order_private_evidence:/app/services/order-service/private-evidence
     depends_on:
       postgres:
         condition: service_healthy
@@ -143,6 +147,24 @@ services:
       timeout: 5s
       retries: 10
 
+  support-service:
+    build:
+      context: .
+      dockerfile: backend/services/support-service/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_SUPPORT}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3006/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   frontend:
     build:
       context: .
@@ -160,3 +182,4 @@ services:
 volumes:
   pgdata:
   product_uploads:
+  order_private_evidence:

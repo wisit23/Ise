@@ -755,6 +755,18 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 - `.gitignore`, `backend/services/product-service/uploads/.gitkeep`, `backend/services/product-service/src/middleware/upload.js`
 - `frontend/lib/auth.js`, `frontend/lib/api.js`
 
+### แก้ไขเพิ่มเติม (พบระหว่างทำ CSS-000–CSS-004, 2026-08-25)
+
+- `.gitignore` Pattern `uploads/*` + `!uploads/.gitkeep` ที่เพิ่มไว้ใน Task นี้ **ใช้งานไม่ได้จริง** — Pattern ที่มี
+  `/` อยู่กลาง Pattern (ไม่ใช่ท้ายสุด) จะ Anchor กับ Root ของ Repo เท่านั้นตาม gitignore Spec ทำให้ `uploads/*`
+  ที่ตั้งใจจะครอบ `backend/services/product-service/uploads/*` (Path ซ้อนลึก) ไม่ได้ครอบอะไรเลยจริงๆ —
+  ยืนยันด้วย `git check-ignore -v` ตรงๆ (คืนค่า Not Ignored ทั้งที่ Pattern มีอยู่) ตอนนั้นไม่มีใครสังเกตเพราะ
+  `uploads/` ในเครื่อง Dev ว่างเปล่าพอดี (ไม่เคยมี Local File ให้ทดสอบ Pattern จริง)
+- แก้เป็น Path เต็มจาก Root ตรงๆ: `backend/services/product-service/uploads/*` +
+  `!backend/services/product-service/uploads/.gitkeep` — ยืนยันด้วย `git check-ignore -v` กับไฟล์ทดสอบจริงแล้วว่า
+  Ignore ถูกต้อง และ `.gitkeep` ยัง Track ได้ปกติ
+- Pattern เดียวกันนี้ถูกใช้ซ้ำตอนสร้าง `private-evidence/` ใน `CSS-003` เลยแก้พร้อมกันทั้งคู่
+
 ## Task `MOCK-TRADE-011` — Full-Text-ish Search (Trigram) แทนที่ Title-Only Search
 
 > วันที่ทำ: 2026-08-25
@@ -852,6 +864,113 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 - `backend/gateway/src/app.js`, `backend/shared/src/authMiddleware.js`
 
+## Task `CSS-000`–`CSS-004` — Customer Service Core (Ticket, Agent Workspace, Dispute/Refund, SLA + FAQ)
+
+> วันที่ทำ: 2026-08-25
+>
+> สถานะตามหลักฐาน: ลงมือทำและยืนยันครบทุกชั้น — `REQUIRE_INTEGRATION=1` PostgreSQL Test (16 Test ใหม่),
+> `npm test` ทั้ง Repo 67/67, `npm run lint`/`format:check` ผ่าน, และ E2E จริงผ่าน Browser กับ Docker Stack
+> ที่ Rebuild ใหม่ทั้งหมด (ไม่ใช่แค่เรียก Express App ผ่าน `supertest`)
+>
+> รายละเอียดเต็มอยู่ที่ [`docs/featureplan/customer-service/progress.md`](featureplan/customer-service/progress.md)
+> (Evidence Table), [`plan.md`](featureplan/customer-service/plan.md) (เหตุผล Scope Revision เป็น Ticket-first
+> แทน Chat-first) และ [`changelog.md`](featureplan/customer-service/changelog.md)
+
+### สรุปงานที่ทำ
+
+1. สร้าง `support-service` ใหม่ทั้ง Service (Express + Prisma, `reloop_support`) ต่อเข้าทุกจุดของ Infra:
+   `docker-compose.yml`, `infra/postgres/init-databases.sql`, `.env.example`, `scripts/ensurePrismaClients.js`,
+   Gateway Proxy (`/api/support`), `.github/workflows/ci.yml`
+2. เพิ่ม `SUPPORT` Role + Seed เจ้าหน้าที่ Demo 2 คน; ขยาย Order Lifecycle ด้วย `disputed`/`refunded` +
+   `payoutHeld`/`disputedAt` โดย Endpoint `PATCH /:id/status` ทั่วไปตั้งใจไม่ให้ตั้งค่า 2 สถานะนี้ได้
+   (ต้องผ่าน Dispute Decision Flow เท่านั้น)
+3. **CSS-005** Ticket Core: State Machine บริสุทธิ์ (`ticketState.js`), Optimistic Lock ตอน Assign/Transition,
+   โน้ตภายในที่ผู้แจ้งมองไม่เห็น, Audit Log ทุก Privileged Action
+4. **CSS-002** Agent Workspace: ค้นหา Order แบบมีขอบเขต (`orderId`/`buyerId`/`sellerId` เท่านั้น — ตัดข้อกำหนด
+   "ค้นด้วยชื่อ/อีเมล" ออกเพราะ `order-service` ไม่มีข้อมูลนี้จริง) และปฏิเสธการค้นแบบไม่ใส่เงื่อนไขเพื่อกัน
+   Agent Dump ทั้งตาราง
+5. **CSS-003** Dispute/Refund: เปิดเคส → Hold Payout แบบ Atomic (`WF-08` ข้อ 3), ตัดสินได้ครั้งเดียวด้วย
+   Optimistic Lock, หลักฐานเก็บใน Private Storage แยกจาก `uploads/` สาธารณะของ Product-Service โดยสิ้นเชิง
+   (Directory + Docker Volume + `.gitkeep` ของตัวเอง), ทุกการเปิดดูหลักฐานตรวจสิทธิ์และบันทึก Audit (`NFR-SP-03`)
+6. **CSS-004** SLA + FAQ: `calculatePriority()`/`calculateSlaDueAt()` เป็น Pure Function, SLA Monitor Escalate
+   แบบปลอดภัยแม้รันหลาย Instance (`updateMany` แบบมีเงื่อนไข ไม่ใช่ Read-Then-Write), FAQ Search ใช้ `pg_trgm`
+   Pattern เดียวกับ `MOCK-TRADE-011`
+7. Frontend ครบ: `/help`, `/support/tickets(+[id])`, `/support/queue`, `/support/cases(+[id])`, ปุ่มเปิด
+   ข้อพิพาท + แนบหลักฐานในหน้า `/orders`, ลิงก์ใน `NavBar`
+8. หลักฐาน (รูป/วิดีโอ) โหลดผ่าน `fetch` แนบ Bearer Token → `Blob` → `ObjectURL` ไม่ใช่ `<a href>`/`<img src>`
+   ตรงๆ เพราะ Browser ไม่แนบ Header กำหนดเองให้กับการ Navigate ธรรมดา
+
+### บั๊กที่เจอและแก้ระหว่างตรวจสอบจริง (Test อัตโนมัติจับไม่ได้)
+
+| # | บั๊ก | สาเหตุที่ Test จับไม่ได้ | วิธีแก้ |
+| - | ---- | ------------------------ | ------- |
+| 1 | Frontend เรียก Decision Endpoint ด้วย `PATCH` แต่ Backend Route เป็น `POST` → `404` เงียบๆ | Integration Test เรียก Express App ตรงๆ ผ่าน `supertest` ไม่ได้ทดสอบ Frontend Call จริง | แก้ Method ให้ตรงกัน + ไล่เช็ค `apiFetch` ทุกจุดเทียบกับ Route จริงด้วยมือ |
+| 2 | ไฟล์ Frontend ใหม่/แก้ไขแล้ว Dev Server ไม่เห็นการเปลี่ยนแปลง | Docker Desktop บน Windows กับ Bind Mount มีช่องโหว่เรื่อง File Watcher ที่รู้จักกันอยู่แล้ว | `docker compose restart frontend` — ถ้าใครทำงานต่อในเครื่อง Windows แล้วหน้าเว็บไม่อัปเดตตามที่แก้ ให้ลองวิธีนี้ก่อน |
+| 3 | `.gitignore` Pattern `uploads/*`/`private-evidence/*` ที่ตั้งใจครอบ Path ซ้อนลึกไม่ทำงานจริง (มาจาก `MOCK-TRADE-010`) | ไม่มี Test คลุม `.gitignore` เลย ต้องเจอตอนสร้าง Evidence File จริงระหว่างทดสอบแล้วสังเกตว่า `git status` ขึ้นไฟล์ | เปลี่ยนเป็น Path เต็มจาก Root, ยืนยันด้วย `git check-ignore -v` — รายละเอียดเต็มอยู่ที่ Task `MOCK-TRADE-010` ด้านบน |
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ | ผลที่เกิดขึ้นจริง |
+| ------- | ------------------ |
+| `REQUIRE_INTEGRATION=1` support-service (4 ไฟล์) | 16 Test ผ่านหมด (Ticket Lifecycle, SLA Escalation ×2 รอบไม่ซ้ำ, Help Content, Health) |
+| `REQUIRE_INTEGRATION=1` order-service (Dispute/Support ใหม่) | 4 Test ผ่าน (Support Lookup, Dispute Decision ×2, Evidence Access) + Test เดิม 5 ตัวยังผ่านครบ |
+| `npm test` (Repo ทั้งหมด) | 67/67 ผ่าน |
+| `npm run lint` / `npm run format:check` | ผ่าน |
+| Rebuild `auth-service`, `order-service`, `support-service`, `gateway` + `docker compose up -d` | ทุก Container ขึ้น Healthy |
+| E2E ผ่าน Browser จริง: สมัคร Buyer → เปิดข้อพิพาทพร้อมเหตุผล → Login Agent → ดู Queue/Assign/Reply Ticket แยกใบ → Requester เห็น Reply แต่ไม่เห็นโน้ตภายใน → Agent เปิด Case พิจารณาอนุมัติคืนเงิน | สำเร็จทุกขั้น, `orders.status` เปลี่ยนเป็น `refunded`, `payout_held` เปลี่ยนเป็น `false` ยืนยันด้วย Query ตรงหลัง Rebuild Container ใหม่ |
+
+### ผลลัพธ์ปัจจุบัน
+
+- Customer Service ใช้งานได้จริงครบวงจร: ผู้ใช้เปิด Ticket/ข้อพิพาทได้, เจ้าหน้าที่รับเรื่อง/ตอบ/ตัดสินได้,
+  หลักฐานปลอดภัยไม่รั่วสู่สาธารณะ, SLA คำนวณและ Escalate อัตโนมัติ, FAQ ค้นภาษาไทยได้จริง
+- **Deferred**: `CSS-001` Live Chat Console (`UR-18`, `WF-06`) — ดูข้อกำหนดตอนกลับมาทำใน `plan.md`
+  (ต้อง Persist ก่อน Broadcast เพราะ `UR-25` ใช้ประวัติแชทเป็นหลักฐานข้อพิพาท)
+- **ยังไม่ได้ทำ**: การแจ้งเตือนหัวหน้าทีมจริงตอน SLA ใกล้ครบ (`WF-10` ข้อ 3) ตอนนี้แค่เปลี่ยนสถานะเป็น
+  `ESCALATED` ยังไม่มีช่องทางแจ้งเตือนจริง, ยังไม่ผ่าน AI Reviewer อิสระ, `buyer/plan.md` → `BUY-004` ยังรอ
+  ตกลงกับ Buyer Owner เรื่อง `CSS-001` ที่ถูกเลื่อน
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/support-service/` (ทั้ง Service ใหม่)
+- `backend/services/order-service/src/features/{disputes,support}/`, `backend/services/order-service/prisma/schema.prisma`
+- `backend/services/auth-service/prisma/schema.prisma`, `backend/services/auth-service/prisma/seed.js`
+- `backend/gateway/src/app.js`, `docker-compose.yml`, `infra/postgres/init-databases.sql`, `.env.example`,
+  `scripts/ensurePrismaClients.js`, `.github/workflows/ci.yml`
+- `frontend/app/help/`, `frontend/app/support/`, `frontend/app/orders/page.js`, `frontend/lib/api.js`,
+  `frontend/components/NavBar.js`
+
+## Task `UI-POLISH-001` — อัปเกรดหน้า Support Panel ให้สมบูรณ์แบบ (Impeccable UI)
+
+> วันที่ทำ: 2026-08-26
+>
+> สถานะตามหลักฐาน: ลงมือทำและคอมไพล์ผ่านสมบูรณ์ (Frontend React/Next.js)
+
+### สรุปงานที่ทำ
+
+1. **อัปเกรด UI หน้าศูนย์กลาง (Support Panel):** 
+   - ปรับกล่องค้นหา (Search Box) ไม่ให้บังหน้าจอ
+   - เพิ่มปุ่ม Copy (Full ID) สำหรับก๊อปปี้รหัสผู้ซื้อ/ผู้ขายในตารางข้อพิพาท เพื่อใช้วางค้นหาได้ทันที
+2. **ปรับปรุงระบบ FAQ (FAQ Modal):** เปลี่ยนจากการพิมพ์ข้อความลงฟอร์มในหน้าเดียวกัน เป็น Popup Modal สไตล์ Glassmorphism กลางจอ รองรับการพิมพ์ข้อความยาวๆ อย่างเป็นระบบ
+3. **Slide-over Modal (Tickets & Disputes):**
+   - เปลี่ยนจาก Modal ทั่วไปที่ซ้อนทับกันงงๆ เป็น Slide-over Panel ที่เลื่อนออกมาจากขอบขวาของจอสุดพรีเมียม
+   - เพิ่มระบบแอนิเมชันเปิด/ปิด (`animate-in slide-in-from-right` และ `animate-out slide-out-to-right`) ครบทุกจุด 
+   - รองรับการคลิกนอกกรอบ (Click outside) เพื่อสไลด์ปิดหน้าต่างอย่างนุ่มนวล และแก้บั๊กปุ่มปิด (Close button) เยื้อง
+4. **Disputes Panel + Chat Slide-over:**
+   - ออกแบบหน้าตาบัตรรายละเอียดผู้ร้องเรียน (Buyer Contact) และแกลเลอรีรูปภาพหลักฐาน (Evidence Gallery) ใหม่
+   - วางระบบ "แชท" จำลอง (UI) สำหรับข้อพิพาท เมื่อกดแล้วจะมีหน้าต่างแชทสไลด์ออกมาซ้อนจากด้านซ้ายของหน้าต่างหลัก (เปิดให้ดูรายละเอียดเคสพร้อมกับแชทได้ในจอเดียว)
+5. **Tickets Panel Details:** ขยายพื้นที่ตั๋ว (Tickets) ให้เป็น `max-w-2xl` ดึงข้อมูลทั้งหมดมาจัดวางอย่างสวยงาม และมีช่องเตรียมต่อระบบแชทในอนาคต
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ | ผลที่เกิดขึ้นจริง |
+| ------- | ------------------ |
+| `npm run build` (Frontend) | **Exit 0** (แก้บั๊ก ESLint `no-unused-vars` และ `react/no-unescaped-entities` ผ่านทั้งหมด) |
+| ตรวจสอบ UI (Visual UI Check) | แอนิเมชันตอนเปิด/ปิดลื่นไหล, เปิด UI ย่อย (แชท) ได้โดย Layout ไม่พัง |
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `frontend/app/support/panel/page.js`
+
 ## อัปเดตล่าสุด
 
-2026-08-25 (Asia/Bangkok)
+2026-08-26 (Asia/Bangkok)

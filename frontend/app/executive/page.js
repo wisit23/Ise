@@ -26,7 +26,7 @@ function OverviewContent() {
   const [current, setCurrent] = useState(null);
   const [previous, setPrevious] = useState(null);
   const [rankings, setRankings] = useState(null);
-  const [meta, setMeta] = useState(null);
+  const [, setMeta] = useState(null);
   const [trend, setTrend] = useState({ gmv: [], activeUsers: [] });
 
   useEffect(() => {

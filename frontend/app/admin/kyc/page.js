@@ -32,7 +32,6 @@ export default function AdminKycQueuePage() {
     }
     setUser(getStoredUser());
     loadQueue(token);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // Menu visibility is UX only — the server enforces admin:kyc:decide on every

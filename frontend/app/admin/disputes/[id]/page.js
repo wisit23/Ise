@@ -41,7 +41,6 @@ export default function AdminDisputeDetailPage() {
     }
     setUser(getStoredUser());
     load(token);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id, router]);
 
   // Menu visibility is UX only — the server enforces admin:dispute:hold /

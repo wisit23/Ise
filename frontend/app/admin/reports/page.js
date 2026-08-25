@@ -39,7 +39,6 @@ export default function AdminReportsPage() {
     }
     setUser(getStoredUser());
     loadReports(token);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // Menu visibility is UX only — the server enforces admin:report:* on every
