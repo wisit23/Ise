@@ -66,17 +66,20 @@ missing, instead of failing later with a confusing runtime error.
 
 ## Current status
 
-| Service           | State                                                                               |
-| ----------------- | ----------------------------------------------------------------------------------- |
-| `gateway`         | ✅ routes to all 5 services, verifies JWT                                           |
-| `auth-service`    | ✅ register / login / refresh / logout / me — KYC & seller onboarding not built yet |
-| `product-service` | 🔲 skeleton only (`/health`)                                                        |
-| `order-service`   | 🔲 skeleton only (`/health`)                                                        |
-| `chat-service`    | 🔲 skeleton only (`/health`)                                                        |
-| `review-service`  | 🔲 skeleton only (`/health`)                                                        |
-| `frontend`        | ✅ home page, login, register — rest of the pages not built yet                     |
+| Service            | State                                                                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateway`           | ✅ routes to all 5 services, verifies JWT, allowlists public read paths                                                                        |
+| `auth-service`      | ✅ register / login / refresh / logout / `me` (get + patch) / public seller profile — KYC submission & multi-role not built yet                |
+| `product-service`   | ✅ CRUD listings, feed/search, categories/conditions, media upload, seller video clips (swipe feed) — reservation/lock hardening still pending |
+| `order-service`     | ✅ create/pay/cancel order, buyer/seller order lists, mock checkout — real cart table, disputes, outbox not built yet                          |
+| `chat-service`      | 🔲 skeleton only (`/health`) — no routes, no Socket.IO, no schema                                                                              |
+| `review-service`    | ✅ one review per completed order, seller rating summary/list — moderation & seller replies not built yet                                     |
+| `frontend`          | ✅ home, login/register, product feed/detail, cart, orders, profile, sell, seller dashboard + video upload, seller storefront, swipe feed — Admin UI not started |
 
-See `log/phase-*.md` for what was actually done in each phase, including bugs found and fixed.
+`product-service`, `order-service`, and `review-service` are implemented well beyond a health
+check — see the API tables below for the current surface of each. `chat-service` is the only
+backend service still unstarted. See `log/phase-*.md` for what was actually done in each phase,
+including bugs found and fixed.
 
 ## Project structure
 
@@ -108,13 +111,72 @@ middleware, and standardized error handling.
 
 ## Auth API (implemented)
 
-| Method | Path                 | Auth                | Notes                                            |
-| ------ | -------------------- | ------------------- | ------------------------------------------------ |
-| POST   | `/api/auth/register` | —                   | `{email, password, firstName, lastName, phone?}` |
-| POST   | `/api/auth/login`    | —                   | `{email, password}`                              |
-| POST   | `/api/auth/refresh`  | —                   | `{refreshToken}` → new access token              |
-| POST   | `/api/auth/logout`   | —                   | `{refreshToken}` → revokes it                    |
-| GET    | `/api/auth/me`       | Bearer access token | current user                                     |
+| Method | Path                          | Auth                 | Notes                                             |
+| ------ | ----------------------------- | --------------------- | -------------------------------------------------- |
+| POST   | `/api/auth/register`          | —                     | `{email, password, firstName, lastName, phone?}`   |
+| POST   | `/api/auth/login`             | —                     | `{email, password}`                                |
+| POST   | `/api/auth/refresh`           | —                     | `{refreshToken}` → new access token                |
+| POST   | `/api/auth/logout`            | —                     | `{refreshToken}` → revokes it                      |
+| GET    | `/api/auth/me`                | Bearer access token   | current user                                       |
+| PATCH  | `/api/auth/me`                | Bearer access token   | update own profile                                 |
+| GET    | `/api/auth/users/:id/public`  | — (public)            | public seller profile card                         |
+
+Not built yet: KYC document submission/review, seller onboarding endpoint, `reports` submission,
+multi-role-per-user.
+
+## Product API (implemented)
+
+| Method | Path                              | Auth                     | Notes                                                            |
+| ------ | ---------------------------------- | ------------------------- | ------------------------------------------------------------------ |
+| GET    | `/api/products/feed`               | — (public)                | paginated available listings, optional `category`                  |
+| GET    | `/api/products/search`             | — (public)                | paginated search, `q` + optional `category`                        |
+| GET    | `/api/products/videos/feed`        | — (public)                | swipe-style video feed                                              |
+| POST   | `/api/products/videos`             | Bearer, owner             | attach a video clip to one of the seller's own products             |
+| GET    | `/api/products/mine`               | Bearer                    | current seller's own listings, any status                           |
+| GET    | `/api/products/by-seller/:id`      | — (public)                | one seller's available listings                                     |
+| GET    | `/api/products/categories`         | — (public)                | known category names                                                |
+| GET    | `/api/products/conditions`         | — (public)                | valid condition values + Thai labels                                |
+| GET    | `/api/products/:id`                | — (public)                | single listing                                                      |
+| POST   | `/api/products`                    | Bearer, SELLER/ADMIN      | create listing                                                      |
+| PATCH  | `/api/products/:id`                | Bearer, owner             | edit own listing                                                    |
+| DELETE | `/api/products/:id`                | Bearer, owner             | remove own listing                                                  |
+| PATCH  | `/api/products/:id/internal-status`| internal service token    | called by `order-service` to flip `available`/`reserved`/`sold`     |
+| POST   | `/uploads`                         | Bearer, SELLER/ADMIN      | upload up to 8 media files (photos/video source)                    |
+
+Not built yet: explicit reservation-expiry job, listing moderation/reports.
+
+## Order API (implemented)
+
+| Method | Path                       | Auth                    | Notes                                                        |
+| ------ | ---------------------------- | ------------------------- | ---------------------------------------------------------------- |
+| POST   | `/api/orders`                | Bearer                    | lock a listing (`pending`), rejects self-purchase                |
+| GET    | `/api/orders/mine`           | Bearer                    | paginated orders as buyer, optional `status`                     |
+| GET    | `/api/orders/selling`        | Bearer                    | paginated orders as seller, optional `status`                    |
+| GET    | `/api/orders/:id`            | Bearer, buyer/seller      | single order                                                     |
+| GET    | `/api/orders/:id/internal`   | internal service token    | called by `review-service` to check order eligibility for review |
+| PATCH  | `/api/orders/:id/status`     | Bearer, buyer/seller      | `pending → completed \| cancelled`; releases/sells the product   |
+| PATCH  | `/api/orders/:id/pay`        | Bearer, buyer              | mock checkout: `pending → completed`, marks product `sold`       |
+
+No real cart table yet — a "cart" is `orders` rows with `status='pending'`. No real payment
+provider, dispute flow, or transactional outbox.
+
+## Review API (implemented)
+
+| Method | Path                                  | Auth       | Notes                                                     |
+| ------ | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+| POST   | `/api/reviews`                           | Bearer, buyer | one review per completed order (`orderId` must be unique)    |
+| GET    | `/api/reviews/by-seller/:sellerId`       | — (public)   | paginated reviews + `averageRating` for a seller              |
+| GET    | `/api/reviews/by-seller/:sellerId/summary`| — (public)  | `{total, averageRating}` only                                 |
+| GET    | `/api/reviews/by-order/:orderId`         | Bearer       | the review for one order, if any                              |
+| GET    | `/api/reviews/mine`                      | Bearer, buyer | paginated reviews the current buyer has written                |
+
+Reviews rate the **seller**, not the product (one-off listings sell exactly once). No moderation,
+reporting, or seller-reply feature yet.
+
+## Chat service (not built)
+
+`chat-service` only exposes `/health`. No routes, no Socket.IO server, no Prisma schema, and
+`reloop_chat` has no tables. This is the one backend service still at the skeleton stage.
 
 ## Database
 

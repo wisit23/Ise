@@ -5,9 +5,12 @@ Rule (per project decision): **no ER table is ever dropped** — tables not yet 
 feature are still created, just left with no routes/UI until that phase lands.
 
 Updated incrementally as each service's schema is built. Current status: `auth-service`
-(`reloop_auth`), `product-service` (`reloop_product`), and `order-service` (`reloop_order`)
-exist — see the `.prisma` files in each service's own `prisma/` folder (this folder only holds
-`auth-service.prisma` from when the project had a single shared schema location).
+(`reloop_auth`), `product-service` (`reloop_product`), `order-service` (`reloop_order`), and
+`review-service` (`reloop_review`) exist — see the `.prisma` files in each service's own
+`prisma/` folder (this folder only holds `auth-service.prisma`/`product-service.prisma`/
+`order-service.prisma` copies from when the project had a single shared schema location;
+`review-service.prisma` lives only under `backend/services/review-service/prisma/`).
+`chat-service` (`reloop_chat`) is the only remaining database with no schema.
 
 ## auth-service (`reloop_auth`)
 
@@ -50,7 +53,16 @@ them yet): `Swipe`, `Book_Mark`, `Auction`, `Campaign`, `Product_Campaign`, `Cam
 Explicitly **not** built yet: `basket` (as its own table — cart state is currently just
 `orders` rows with `status='pending'`), `Payments`, `Shippings`, `Dispute`.
 
+## review-service (`reloop_review`)
+
+| ER entity     | Prisma model / table | Change + reason                                                                                                                                                                                                                                                                                     |
+| -------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(not in ER)_  | `Review` / `reviews`   | New table — the ER has no review/rating concept. Rates the **seller**, not the individual product: listings are one-off (a product sells exactly once and is gone), so the seller is the party the buyer keeps dealing with across purchases. `order_id` is unique — one review per completed order, and only after the order's status is `completed` (checked via a call to `order-service`). |
+
+Explicitly **not** built yet: `seller_stats` (aggregates are computed on read via
+`reviewModel.summaryBySeller`/`listBySeller` instead of a materialized table), `notifications`,
+review moderation/reports, seller replies.
+
 ## Still to schema (per the master plan, not built yet)
 
-chat-service (message, Auto_messages + new: chat_rooms), review-service (new: reviews,
-seller_stats, notifications).
+chat-service (message, Auto_messages + new: chat_rooms).

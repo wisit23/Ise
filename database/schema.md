@@ -9,8 +9,8 @@ does versus the original ER diagram, and the `.prisma` files in this folder for 
 | `reloop_auth`    | `auth-service`    | 6                 |
 | `reloop_product` | `product-service` | 5                 |
 | `reloop_order`   | `order-service`   | 1                 |
+| `reloop_review`  | `review-service`  | 1                 |
 | `reloop_chat`    | `chat-service`    | — not created yet |
-| `reloop_review`  | `review-service`  | — not created yet |
 
 ---
 
@@ -303,9 +303,42 @@ Source: [`order-service.prisma`](./order-service.prisma)
 
 ---
 
+## `reloop_review`
+
+Source: [`review-service.prisma`](../backend/services/review-service/prisma/schema.prisma)
+
+### `reviews`
+
+| Column     | Type      | Constraints                | Notes                                                             |
+| ---------- | --------- | --------------------------- | -------------------------------------------------------------------- |
+| id         | uuid      | PK, default `uuid()`        |                                                                       |
+| order_id   | text      | unique, not null            | no FK — owned by `order-service`; one review per completed order     |
+| buyer_id   | text      | not null                    | no FK — owned by `auth-service`                                      |
+| seller_id  | text      | not null, indexed           | no FK — owned by `auth-service`                                      |
+| rating     | int       | not null                    | 1–5, validated at the API layer                                      |
+| comment    | text      | not null, default `''`      | truncated to 1000 chars at write time                                |
+| created_at | timestamp | not null, default `now()`   |                                                                       |
+
+Not in the original ER diagram at all — added because second-hand listings sell exactly once, so
+a review rates the **seller** (the party the buyer keeps dealing with across purchases), not the
+individual product.
+
+### Entity relationship diagram
+
+```mermaid
+erDiagram
+    reviews {
+        uuid id PK
+        text order_id UK
+        text buyer_id
+        text seller_id
+        int rating
+        text comment
+    }
+```
+
 ## Other services
 
-`chat-service`, `review-service` don't have a Prisma schema yet — their databases
-(`reloop_chat`, `reloop_review`) exist (created by `infra/postgres/init-databases.sql`) but are
-empty. This file gets a new section per service as each one's schema is built — see
-`plan/00-master-plan.md` section 2 for the planned table list per service.
+`chat-service` doesn't have a Prisma schema yet — its database (`reloop_chat`) exists (created by
+`infra/postgres/init-databases.sql`) but is empty. This is the only remaining service without a
+schema. See `plan/00-master-plan.md` section 2 for the planned table list.

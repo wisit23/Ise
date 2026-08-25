@@ -3,6 +3,12 @@
 > Status: Planning baseline — no production implementation is performed by this document.
 >
 > Evidence priority: confirmed user answers → source/configuration → Prisma schema → discovery findings → still-valid legacy documents → explicitly labelled assumptions.
+>
+> Section 2 last re-verified against the repository on 2026-08-25. `product-service`,
+> `order-service`, and `review-service` were previously (as of 2026-07-28) health-check-only
+> skeletons; they now have real routes, controllers, and Prisma schemas — see
+> [`README.md`](../README.md) and [`database/schema.md`](../database/schema.md) for the current
+> API/DB surface. `chat-service` remains the only unimplemented backend service.
 
 ## 1. Scope and status legend
 
@@ -22,17 +28,17 @@ The Release A boundary is the public coursework marketplace for Buyer, Seller, a
 ```mermaid
 flowchart LR
     Buyer["Buyer (Current role enum)"]
-    Seller["Seller (Current role enum; workflow not implemented)"]
+    Seller["Seller (Current role enum; KYC/onboarding not implemented)"]
     Admin["Admin (Current role enum; no Admin UI)"]
     Browser["Browser"]
-    Frontend["Next.js 15 Frontend<br/>Current: /, /login, /register"]
+    Frontend["Next.js 15 Frontend<br/>Current: home, login/register, product feed/detail,<br/>cart, orders, profile, sell, seller dashboard,<br/>seller video upload, storefront, swipe feed"]
     Gateway["Express Gateway<br/>Current"]
-    Auth["Auth Service<br/>Current: register/login/refresh/logout/me"]
-    Product["Product Service<br/>Current: health only"]
-    Order["Order Service<br/>Current: health only"]
+    Auth["Auth Service<br/>Current: register/login/refresh/logout/me (get+patch)/public profile"]
+    Product["Product Service<br/>Current: CRUD, feed/search, categories,<br/>conditions, media upload, video clips"]
+    Order["Order Service<br/>Current: create/pay/cancel, buyer+seller lists"]
     Chat["Chat Service<br/>Current: health only"]
-    Review["Review Service<br/>Current: health only"]
-    Postgres["PostgreSQL 16<br/>Current: 5 databases; auth schema only"]
+    Review["Review Service<br/>Current: create, by-seller, by-order, mine"]
+    Postgres["PostgreSQL 16<br/>Current: 5 databases; auth+product+order+review schemas, chat empty"]
     Redis["Redis 7<br/>Current: container only"]
 
     Buyer --> Browser
@@ -40,41 +46,44 @@ flowchart LR
     Admin --> Browser
     Browser --> Frontend --> Gateway
     Gateway --> Auth --> Postgres
-    Gateway --> Product
-    Gateway --> Order
+    Gateway --> Product --> Postgres
+    Gateway --> Order --> Postgres
     Gateway --> Chat
-    Gateway --> Review
-    Product -. "No implemented integration" .-> Postgres
-    Order -. "No implemented integration" .-> Postgres
+    Gateway --> Review --> Postgres
+    Order -. "internal-token call" .-> Product
+    Review -. "internal-token call" .-> Order
     Chat -. "No implemented integration" .-> Postgres
-    Review -. "No implemented integration" .-> Postgres
     Auth -. "Redis declared as dependency only" .-> Redis
 ```
 
 Evidence:
 
-- `frontend/app/`, `frontend/components/NavBar.js`, `frontend/lib/api.js`, `frontend/lib/auth.js`
-- `backend/gateway/src/server.js`
-- `backend/services/auth-service/src/`
-- `backend/services/*-service/src/app.js`
-- `backend/services/auth-service/prisma/schema.prisma`
+- `frontend/app/`, `frontend/components/`, `frontend/lib/api.js`, `frontend/lib/auth.js`
+- `backend/gateway/src/app.js`
+- `backend/services/auth-service/src/`, `backend/services/product-service/src/`,
+  `backend/services/order-service/src/`, `backend/services/review-service/src/`
+- `backend/services/chat-service/src/app.js` (health only)
+- `backend/services/*/prisma/schema.prisma` (all except `chat-service`)
 - `infra/postgres/init-databases.sql`
 - `docker-compose.yml`
 
 ### 2.2 Current containers and boundaries
 
-| Boundary                  | Current state                                                                                                   | Evidence                                | Limitation                                                                  |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------- |
-| Customer frontend         | One Next.js application with home, login, register                                                              | `frontend/app/`                         | No marketplace lifecycle                                                    |
-| Admin frontend            | Not started                                                                                                     | No admin routes/components found        | Role enum alone is not an Admin feature                                     |
-| Shared frontend           | `api.js`, `auth.js`, `NavBar.js` only                                                                           | `frontend/lib/`, `frontend/components/` | No design system, form library, route guard, or test harness                |
-| Gateway                   | Proxies `/api/auth`, `/api/products`, `/api/orders`, `/api/chat`, `/api/reviews`; validates bearer access token | `backend/gateway/src/server.js`         | Open CORS; WebSocket upgrade bypasses normal auth middleware                |
-| Auth service              | Register, login, refresh, logout, `/me`                                                                         | `backend/services/auth-service/src/`    | Single role, localStorage tokens, plaintext stored refresh JWT, no rotation |
-| Product/Order/Chat/Review | Health endpoints only                                                                                           | each service `src/app.js`               | No routes, domain logic, schema, tests                                      |
-| Database                  | One PostgreSQL container, one logical database per service; auth tables only                                    | `docker-compose.yml`, Prisma schema     | `db push`, no migration history, four empty databases                       |
-| Cache/jobs                | Redis container exists                                                                                          | `docker-compose.yml`                    | No Redis/BullMQ/pub-sub implementation                                      |
-| Storage                   | Local named volume declared for product uploads                                                                 | `docker-compose.yml`                    | No upload handler; no private KYC storage                                   |
-| Infrastructure            | Docker Compose development topology                                                                             | `docker-compose.yml`                    | No IaC, environments, cloud, CI/CD, backup, monitoring                      |
+| Boundary        | Current state                                                                                                                                                                  | Evidence                                                                                       | Limitation                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Customer frontend | Next.js app: home, login/register, product feed/detail, cart, orders, profile, sell listing, seller dashboard, seller video upload, storefront, swipe feed                     | `frontend/app/`                                                                                | No design system beyond ad-hoc components; no marketplace-wide UX polish pass                        |
+| Admin frontend    | Not started                                                                                                                                                                    | No admin routes/components found                                                              | Role enum alone is not an Admin feature                                                              |
+| Shared frontend   | `lib/api.js`, `lib/auth.js`, `lib/catalog.js`, `components/*` (NavBar, ProductCard, MediaGallery/Uploader, VideoUploader, StarRating, TagInput, Pagination, charts, swipe viewer) | `frontend/lib/`, `frontend/components/`                                                       | No shared design tokens, form library, route guard, or component test harness                        |
+| Gateway           | Proxies `/api/auth`, `/api/products`, `/uploads`, `/api/orders`, `/api/chat` (ws-aware), `/api/reviews`; validates bearer access token; allowlists specific public read paths | `backend/gateway/src/app.js`                                                                   | Open CORS; WebSocket upgrade bypasses normal auth middleware                                          |
+| Auth service      | Register, login, refresh, logout, `GET/PATCH /me`, public seller profile                                                                                                      | `backend/services/auth-service/src/`                                                           | Single role, localStorage tokens, plaintext stored refresh JWT, no rotation; no KYC endpoint          |
+| Product service   | Listing CRUD, feed/search, categories/conditions, media upload, seller video clips, internal status transitions                                                               | `backend/services/product-service/src/`                                                        | No explicit reservation-expiry job; no moderation/reports on listings                                 |
+| Order service     | Create/pay/cancel order (product lock via internal call), buyer/seller order lists                                                                                            | `backend/services/order-service/src/`                                                          | Cart is just `orders` rows with `status='pending'`; mock payment only; no outbox/dispute              |
+| Review service    | Create review (order-eligibility checked via internal call), by-seller list+summary, by-order, mine                                                                           | `backend/services/review-service/src/`                                                         | No moderation, reporting, or seller-reply feature                                                     |
+| Chat service      | Health endpoint only                                                                                                                                                           | `backend/services/chat-service/src/app.js`                                                     | No routes, domain logic, schema, tests                                                                |
+| Database          | One PostgreSQL container, one logical database per service; auth+product+order+review schemas populated, chat empty                                                          | `docker-compose.yml`, Prisma schemas                                                            | `db push`, no migration history, one empty database (`reloop_chat`)                                   |
+| Cache/jobs        | Redis container exists                                                                                                                                                         | `docker-compose.yml`                                                                            | No Redis/BullMQ/pub-sub implementation                                                                |
+| Storage           | Local named volume for product uploads; upload endpoint implemented                                                                                                            | `docker-compose.yml`, `backend/services/product-service/src/middleware/upload.js`               | No private KYC storage; no scanning/quarantine/EXIF-stripping                                         |
+| Infrastructure    | Docker Compose development topology                                                                                                                                            | `docker-compose.yml`                                                                            | No IaC, environments, cloud, CI/CD, backup, monitoring                                                |
 
 ## 3. Target architecture principles
 
