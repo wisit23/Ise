@@ -939,6 +939,38 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 - `frontend/app/help/`, `frontend/app/support/`, `frontend/app/orders/page.js`, `frontend/lib/api.js`,
   `frontend/components/NavBar.js`
 
+## Task `UI-POLISH-001` — อัปเกรดหน้า Support Panel ให้สมบูรณ์แบบ (Impeccable UI)
+
+> วันที่ทำ: 2026-08-26
+>
+> สถานะตามหลักฐาน: ลงมือทำและคอมไพล์ผ่านสมบูรณ์ (Frontend React/Next.js)
+
+### สรุปงานที่ทำ
+
+1. **อัปเกรด UI หน้าศูนย์กลาง (Support Panel):** 
+   - ปรับกล่องค้นหา (Search Box) ไม่ให้บังหน้าจอ
+   - เพิ่มปุ่ม Copy (Full ID) สำหรับก๊อปปี้รหัสผู้ซื้อ/ผู้ขายในตารางข้อพิพาท เพื่อใช้วางค้นหาได้ทันที
+2. **ปรับปรุงระบบ FAQ (FAQ Modal):** เปลี่ยนจากการพิมพ์ข้อความลงฟอร์มในหน้าเดียวกัน เป็น Popup Modal สไตล์ Glassmorphism กลางจอ รองรับการพิมพ์ข้อความยาวๆ อย่างเป็นระบบ
+3. **Slide-over Modal (Tickets & Disputes):**
+   - เปลี่ยนจาก Modal ทั่วไปที่ซ้อนทับกันงงๆ เป็น Slide-over Panel ที่เลื่อนออกมาจากขอบขวาของจอสุดพรีเมียม
+   - เพิ่มระบบแอนิเมชันเปิด/ปิด (`animate-in slide-in-from-right` และ `animate-out slide-out-to-right`) ครบทุกจุด 
+   - รองรับการคลิกนอกกรอบ (Click outside) เพื่อสไลด์ปิดหน้าต่างอย่างนุ่มนวล และแก้บั๊กปุ่มปิด (Close button) เยื้อง
+4. **Disputes Panel + Chat Slide-over:**
+   - ออกแบบหน้าตาบัตรรายละเอียดผู้ร้องเรียน (Buyer Contact) และแกลเลอรีรูปภาพหลักฐาน (Evidence Gallery) ใหม่
+   - วางระบบ "แชท" จำลอง (UI) สำหรับข้อพิพาท เมื่อกดแล้วจะมีหน้าต่างแชทสไลด์ออกมาซ้อนจากด้านซ้ายของหน้าต่างหลัก (เปิดให้ดูรายละเอียดเคสพร้อมกับแชทได้ในจอเดียว)
+5. **Tickets Panel Details:** ขยายพื้นที่ตั๋ว (Tickets) ให้เป็น `max-w-2xl` ดึงข้อมูลทั้งหมดมาจัดวางอย่างสวยงาม และมีช่องเตรียมต่อระบบแชทในอนาคต
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ | ผลที่เกิดขึ้นจริง |
+| ------- | ------------------ |
+| `npm run build` (Frontend) | **Exit 0** (แก้บั๊ก ESLint `no-unused-vars` และ `react/no-unescaped-entities` ผ่านทั้งหมด) |
+| ตรวจสอบ UI (Visual UI Check) | แอนิเมชันตอนเปิด/ปิดลื่นไหล, เปิด UI ย่อย (แชท) ได้โดย Layout ไม่พัง |
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `frontend/app/support/panel/page.js`
+
 ## อัปเดตล่าสุด
 
-2026-08-25 (Asia/Bangkok)
+2026-08-26 (Asia/Bangkok)

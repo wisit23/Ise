@@ -72,6 +72,13 @@ beyond what's listed above stays in the Security Phase
 **Cross-team note:** `buyer/plan.md` → `BUY-004` (`UR-05`, Contact Seller button) still depends on the
 deferred `CSS-001` — unchanged by this round, still needs Buyer-owner alignment before anyone builds it
 
+**UI Polish / UX Improvements (2026-08-26):**
+- Upgraded the Customer Support panels (`/support/panel`) to an "Impeccable" UI standard.
+- **Search UI:** Adjusted the search empty state to properly accommodate the search bar without layout overlap and added quick "Copy Full ID" buttons to the Disputes table for seamless ID pasting.
+- **FAQ Editor:** Converted the inline FAQ submission form into a beautiful, centralized Glassmorphism Modal.
+- **Tickets & Disputes Panels:** Refactored standard modals into premium Slide-over Panels (`max-w-2xl`) emerging from the right, complete with `animate-in`/`animate-out` lifecycle transitions and click-outside-to-close capabilities.
+- **Dispute Chat Placeholder:** Implemented a secondary Slide-over chat panel that emerges from the left of the Dispute details modal, readying the UI structure for the deferred `CSS-001` Live Chat feature.
+
 **Next action:** None blocking — Core is feature-complete for this round. Follow-ups if picked back up:
 SLA breach notifications to a team lead (WF-10 step 3's "แจ้งเตือนหาหัวหน้าทีม" is only a status flip
 today, no actual notification channel exists yet), and `CSS-001` Live Chat per the deferred spec

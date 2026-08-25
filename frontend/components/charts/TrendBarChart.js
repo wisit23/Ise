@@ -74,12 +74,14 @@ export default function TrendBarChart({ data, height = 160, formatValue }) {
           );
         })}
       </svg>
-      {hover !== null && (
-        <div className="mt-1 text-xs text-gray-600">
-          <span className="font-medium text-gray-900">{data[hover].label}</span>{" "}
-          · <span className="font-semibold">{fmt(data[hover].value)}</span>
-        </div>
-      )}
+      <div className={`mt-1 h-5 text-xs text-gray-600 transition-opacity duration-200 ${hover !== null ? "opacity-100" : "opacity-0"}`}>
+        {hover !== null && (
+          <>
+            <span className="font-medium text-gray-900">{data[hover].label}</span>{" "}
+            · <span className="font-semibold">{fmt(data[hover].value)}</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }
