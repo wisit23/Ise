@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../../components/NavBar";
@@ -158,22 +158,75 @@ function ChartCard({ title, icon, children }) {
 }
 
 function DropdownFilter({ value, onChange, options }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const dropdownRef = useRef(null);
+
+  const closeDropdown = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsOpen(false);
+      setIsClosing(false);
+    }, 140);
+  };
+
+  const toggleDropdown = () => {
+    if (isOpen) {
+      closeDropdown();
+    } else {
+      setIsOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen((prev) => {
+          if (prev) {
+            setIsClosing(true);
+            setTimeout(() => {
+              setIsOpen(false);
+              setIsClosing(false);
+            }, 140);
+          }
+          return prev;
+        });
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLabel = options.find((o) => o.value === value)?.label || options[0]?.label;
+
   return (
-    <div className="relative">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-sm font-medium text-slate-700 shadow-sm outline-none transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-300"
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={toggleDropdown}
+        className="flex h-full w-full items-center justify-between min-w-[140px] rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-2 text-sm font-medium text-slate-700 shadow-sm outline-none transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-300"
       >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <span className="material-symbols-outlined pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">
-        expand_more
-      </span>
+        <span className="truncate mr-2">{selectedLabel}</span>
+        <span className="material-symbols-outlined shrink-0 text-[18px] text-slate-400">
+          expand_more
+        </span>
+      </button>
+      {(isOpen || isClosing) && (
+        <div className={`absolute top-full left-0 mt-2 w-full min-w-[160px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-[60] ${isClosing ? "animate-dropdown-out" : "animate-dropdown-in"}`}>
+          {options.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => { onChange(o.value); closeDropdown(); }}
+              className={`w-full text-left rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                value === o.value ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -470,14 +523,14 @@ function TicketsSection({ token, statusFilter, setStatusFilter }) {
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
-        <table className="w-full min-w-[750px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[750px] border-collapse text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-transparent text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              <th className="px-5 py-4">Ticket ID</th>
-              <th className="px-5 py-4">
+              <th className="px-5 py-4 text-left">Ticket ID</th>
+              <th className="px-5 py-4 text-left">
                 รหัสลูกค้า (ID)
               </th>
-              <th className="px-5 py-4">หัวข้อปัญหา</th>
+              <th className="px-5 py-4 text-left">หัวข้อปัญหา</th>
               <th className="px-5 py-4">ความสำคัญ</th>
               <th className="px-5 py-4">สถานะ</th>
               <th className="px-5 py-4">
@@ -505,13 +558,13 @@ function TicketsSection({ token, statusFilter, setStatusFilter }) {
             )}
             {items.map((t) => (
               <tr key={t.id} onClick={() => setSelectedTicket(t)} className="group hover:bg-slate-50/80 hover:shadow-sm transition-all duration-200 cursor-pointer">
-                <td className="px-5 py-4 font-mono text-[11px] font-semibold tracking-tight text-slate-500">
+                <td className="px-5 py-4 font-mono text-[13px] font-semibold tracking-tight text-slate-500 text-left">
                   {t.ticketNumber}
                 </td>
-                <td className="px-5 py-4 text-sm font-medium text-slate-700">
-                  {t.requesterId?.slice(0, 8) ?? "—"}
+                <td className="px-5 py-4 text-sm font-medium text-slate-700 text-left">
+                  {t.requesterId?.slice(0, 12) ?? "—"}
                 </td>
-                <td className="max-w-[200px] truncate px-5 py-4 text-sm font-medium text-slate-900 group-hover:text-emerald-700 transition-colors">
+                <td className="max-w-[200px] truncate px-5 py-4 text-sm font-medium text-slate-900 group-hover:text-emerald-700 transition-colors text-left">
                   {t.subject}
                 </td>
                 <td className="px-5 py-4">
@@ -527,7 +580,7 @@ function TicketsSection({ token, statusFilter, setStatusFilter }) {
                   />
                 </td>
                 <td className="px-5 py-4 text-xs font-medium text-slate-500">
-                  {t.assigneeId ? t.assigneeId.slice(0, 8) : (
+                  {t.assigneeId ? t.assigneeId.slice(0, 12) : (
                     <span className="text-slate-300">—</span>
                   )}
                 </td>
@@ -893,12 +946,12 @@ function DisputesSection({ token, status, setStatus }) {
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
-        <table className="w-full min-w-[700px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[700px] border-collapse text-center text-sm">
           <thead>
             <tr className="border-b border-slate-100 bg-transparent text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              <th className="px-5 py-4">Dispute ID</th>
-              <th className="px-5 py-4">เหตุผล</th>
-              <th className="px-5 py-4">Buyer → Seller</th>
+              <th className="px-5 py-4 text-left">Dispute ID</th>
+              <th className="px-5 py-4 text-left">เหตุผล</th>
+              <th className="px-5 py-4 text-left">Buyer → Seller</th>
               <th className="px-5 py-4">ยอดเงิน</th>
               <th className="px-5 py-4">สถานะ</th>
               <th className="px-5 py-4">วันที่เปิด</th>
@@ -918,10 +971,10 @@ function DisputesSection({ token, status, setStatus }) {
             )}
             {items.map((d) => (
               <tr key={d.id} className="group hover:bg-slate-50/80 hover:shadow-sm transition-all duration-200">
-                <td className="px-5 py-4">
+                <td className="px-5 py-4 text-left">
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center font-mono text-[11px] font-semibold tracking-tight text-slate-800">
-                      #{d.id.slice(0, 8).toUpperCase()}
+                    <div className="flex items-center font-mono text-[13px] font-semibold tracking-tight text-slate-800">
+                      #{d.id.slice(0, 12).toUpperCase()}
                       <button
                         onClick={() => navigator.clipboard.writeText(d.id)}
                         className="ml-1 text-slate-300 hover:text-emerald-600 transition-colors"
@@ -930,25 +983,25 @@ function DisputesSection({ token, status, setStatus }) {
                         <span className="material-symbols-outlined text-[13px] align-middle">content_copy</span>
                       </button>
                     </div>
-                    <span className="font-mono text-[10px] text-slate-400">
-                      Ord #{d.orderId.slice(0, 8).toUpperCase()}
+                    <span className="font-mono text-xs text-slate-400">
+                      Ord #{d.orderId.slice(0, 12).toUpperCase()}
                     </span>
                   </div>
                 </td>
-                <td className="max-w-[180px] truncate px-5 py-4 text-sm font-medium text-slate-700">
+                <td className="max-w-[180px] truncate px-5 py-4 text-sm font-medium text-slate-700 text-left">
                   {d.reason}
                 </td>
-                <td className="px-5 py-4">
+                <td className="px-5 py-4 text-left">
                   {d.order ? (
-                    <div className="text-xs text-gray-500 flex flex-col gap-0.5">
+                    <div className="text-[13px] text-gray-500 flex flex-col gap-0.5">
                       <span className="flex items-center group/b">
-                        {d.order.buyerId.slice(0, 8)} (B)
+                        {d.order.buyerId.slice(0, 12)} (B)
                         <button onClick={() => navigator.clipboard.writeText(d.order.buyerId)} className="ml-1 opacity-0 group-hover/b:opacity-100 text-slate-300 hover:text-emerald-600 transition-all" title="Copy Full ID">
                           <span className="material-symbols-outlined text-[13px] align-middle">content_copy</span>
                         </button>
                       </span>
                       <span className="flex items-center group/s">
-                        {d.order.sellerId.slice(0, 8)} (S)
+                        {d.order.sellerId.slice(0, 12)} (S)
                         <button onClick={() => navigator.clipboard.writeText(d.order.sellerId)} className="ml-1 opacity-0 group-hover/s:opacity-100 text-slate-300 hover:text-emerald-600 transition-all" title="Copy Full ID">
                           <span className="material-symbols-outlined text-[13px] align-middle">content_copy</span>
                         </button>
@@ -1276,6 +1329,44 @@ function DisputesSection({ token, status, setStatus }) {
 function OrdersSection({ token }) {
   const [searchType, setSearchType] = useState("orderId");
   const [showSearchType, setShowSearchType] = useState(false);
+  const [closingSearchType, setClosingSearchType] = useState(false);
+  const searchDropdownRef = useRef(null);
+
+  const closeSearchDropdown = () => {
+    setClosingSearchType(true);
+    setTimeout(() => {
+      setShowSearchType(false);
+      setClosingSearchType(false);
+    }, 140);
+  };
+
+  const toggleSearchDropdown = () => {
+    if (showSearchType) {
+      closeSearchDropdown();
+    } else {
+      setShowSearchType(true);
+    }
+  };
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (searchDropdownRef.current && !searchDropdownRef.current.contains(e.target)) {
+        setShowSearchType((prev) => {
+          if (prev) {
+            setClosingSearchType(true);
+            setTimeout(() => {
+              setShowSearchType(false);
+              setClosingSearchType(false);
+            }, 140);
+          }
+          return prev;
+        });
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const searchTypeLabels = {
     orderId: "รหัสคำสั่งซื้อ (Order)",
     buyerId: "รหัสผู้ซื้อ (Buyer)",
@@ -1322,10 +1413,10 @@ function OrdersSection({ token }) {
           onSubmit={handleSearch}
           className="relative flex w-full items-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.06)] transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
         >
-          <div className="relative border-r border-slate-200 bg-slate-50/50 rounded-l-lg">
+          <div className="relative border-r border-slate-200 bg-slate-50/50 rounded-l-lg" ref={searchDropdownRef}>
             <button
               type="button"
-              onClick={() => setShowSearchType(!showSearchType)}
+              onClick={toggleSearchDropdown}
               className="flex items-center justify-between w-48 bg-transparent py-2.5 pl-4 pr-3 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-100 transition-colors"
             >
               <span className="truncate">{searchTypeLabels[searchType]}</span>
@@ -1333,13 +1424,13 @@ function OrdersSection({ token }) {
                 expand_more
               </span>
             </button>
-            {showSearchType && (
-              <div className="absolute top-full left-0 mt-2 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-20 animate-fade-in-up">
+            {(showSearchType || closingSearchType) && (
+              <div className={`absolute top-full left-0 mt-2 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-20 ${closingSearchType ? "animate-dropdown-out" : "animate-dropdown-in"}`}>
                 {Object.entries(searchTypeLabels).map(([val, label]) => (
                   <button
                     key={val}
                     type="button"
-                    onClick={() => { setSearchType(val); setShowSearchType(false); }}
+                    onClick={() => { setSearchType(val); closeSearchDropdown(); }}
                     className={`w-full text-left rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
                       searchType === val ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     }`}
@@ -1421,6 +1512,44 @@ function FaqSection({ token }) {
   const [showForm, setShowForm] = useState(false);
   const [closingForm, setClosingForm] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [closingCategoryDropdown, setClosingCategoryDropdown] = useState(false);
+  const categoryDropdownRef = useRef(null);
+
+  const closeCategoryDropdown = () => {
+    setClosingCategoryDropdown(true);
+    setTimeout(() => {
+      setShowCategoryDropdown(false);
+      setClosingCategoryDropdown(false);
+    }, 140);
+  };
+
+  const toggleCategoryDropdown = () => {
+    if (showCategoryDropdown) {
+      closeCategoryDropdown();
+    } else {
+      setShowCategoryDropdown(true);
+    }
+  };
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target)) {
+        setShowCategoryDropdown((prev) => {
+          if (prev) {
+            setClosingCategoryDropdown(true);
+            setTimeout(() => {
+              setShowCategoryDropdown(false);
+              setClosingCategoryDropdown(false);
+            }, 140);
+          }
+          return prev;
+        });
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const [form, setForm] = useState({ title: "", body: "", category: "OTHER" });
   const [submitting, setSubmitting] = useState(false);
   const [publishingId, setPublishingId] = useState(null);
@@ -1558,11 +1687,11 @@ function FaqSection({ token }) {
                     className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                   />
                 </div>
-                <div className="col-span-1 relative">
+                <div className="col-span-1 relative" ref={categoryDropdownRef}>
                   <label className="mb-1 block text-xs font-semibold text-slate-500 uppercase tracking-wider">หมวดหมู่</label>
                   <button
                     type="button"
-                    onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                    onClick={toggleCategoryDropdown}
                     className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none hover:border-slate-300 hover:bg-slate-50 transition-colors focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                   >
                     <span className="truncate">
@@ -1572,13 +1701,13 @@ function FaqSection({ token }) {
                       expand_more
                     </span>
                   </button>
-                  {showCategoryDropdown && (
-                    <div className="absolute top-full left-0 mt-2 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-20 animate-fade-in-up">
+                  {(showCategoryDropdown || closingCategoryDropdown) && (
+                    <div className={`absolute top-full left-0 mt-2 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-20 ${closingCategoryDropdown ? "animate-dropdown-out" : "animate-dropdown-in"}`}>
                       {HELP_CATEGORIES.map((c) => (
                         <button
                           key={c.value}
                           type="button"
-                          onClick={() => { setForm({ ...form, category: c.value }); setShowCategoryDropdown(false); }}
+                          onClick={() => { setForm({ ...form, category: c.value }); closeCategoryDropdown(); }}
                           className={`w-full text-left rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
                             form.category === c.value ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                           }`}
