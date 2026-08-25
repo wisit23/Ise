@@ -112,3 +112,26 @@
   ข้อมูลซ้ำ
 - ยืนยันด้วย Browser จริง: Panel แสดง Stat Card และตารางถูกต้องตามข้อมูล Seed หลัง Rebuild Container ใหม่
   ทั้ง `auth-service`, `order-service`, `support-service`
+
+## 2026-08-26 — Fix Priority Filter No-op และ Dead Action Buttons ใน Panel
+
+- ผู้ใช้ Redesign UI ของ `/support/panel` เองด้วย Skill "impeccable" (Commit นอกบทสนทนานี้) — ตรวจสอบ
+  Code หลัง Redesign พบ Bug จริง 4 จุด รายงานให้ผู้ใช้ ผู้ใช้เลือกให้แก้เฉพาะ 2 จุด (Priority Filter, Dead
+  Action Buttons) ส่วนอีก 2 จุด (ปุ่ม Escalate ของ Dispute ที่ส่ง Decision ที่ Backend ไม่รองรับ, เนื้อหา Chat
+  ปลอมใน Dispute Chat Placeholder) ยังไม่แตะตามที่ผู้ใช้สั่ง
+- **Priority Filter เป็น No-op**: Frontend ส่ง `?priority=LOW|NORMAL|HIGH|URGENT` แต่
+  `ticketModel.listQueue()` ไม่เคยอ่าน Param นี้เลย — Dropdown Filter และ Dashboard Donut "Tickets by
+  Priority" แสดงตัวเลขเดียวกันทุก Bucket แก้โดยส่ง `priority` ผ่าน `ticketController.js` →
+  `ticketService.listQueue()` → `ticketModel.listQueue()`'s Prisma `where` — ยืนยันกับ Dev Database จริง
+  และ Browser จริงว่า Filter แยกผลลัพธ์ถูกต้องแล้ว
+- **ปุ่ม Assign/Close/ส่งต่อ Admin ใน Ticket Slide-over ไม่มี `onClick`**: ไม่มีทางจัดการตั๋วจากหน้า Panel
+  ได้เลย (ต้องออกไปหน้า `/support/tickets/[id]` เดิม) ผูกปุ่มทั้งสามเข้ากับ
+  `POST /api/support/tickets/:id/assign` และ `PATCH /api/support/tickets/:id/status` โดยใช้ตาราง
+  `AGENT_NEXT_STATUS` เดียวกับ `/support/tickets/[id]/page.js` เพื่อให้ปุ่มแสดงเฉพาะ State Transition ที่
+  ถูกต้องตาม `ticketState.js` (เช่น `IN_PROGRESS` ปิดตรงไม่ได้ ต้องผ่าน `PENDING_USER`/`RESOLVED`/
+  `ESCALATED` ก่อน) — ปุ่ม Assign หายไปเมื่อมี Assignee แล้ว, ทั้ง Slide-over และตารางด้านล่าง Refetch
+  หลัง Action สำเร็จ, Error แสดงใน UI แทนที่จะเงียบ
+- ยืนยันด้วย Browser จริง: Assign ตั๋ว NEW → กลายเป็น Assigned, ปิดงานต่อ → กลายเป็น Closed พร้อมข้อความ
+  "ไม่มีการดำเนินการเพิ่มเติม" ครบทุกจุด แล้ว Reset ข้อมูล Seed กลับสถานะเดิม
+- `npm test`: 67/67 ผ่าน, `eslint`/`prettier --check` เฉพาะไฟล์ที่แก้ผ่านสะอาด (Repo-wide Lint ยังมี Error
+  จำนวนมากจาก `.github/skills/impeccable/` ซึ่งเป็น Tooling ของ Skill เอง ไม่เกี่ยวกับ Application Code)

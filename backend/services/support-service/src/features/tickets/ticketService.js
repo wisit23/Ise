@@ -88,6 +88,7 @@ async function listQueue({
   userId,
   scope,
   status,
+  priority,
   search,
   ...pagination
 }) {
@@ -96,6 +97,7 @@ async function listQueue({
     scope,
     assigneeId: userId,
     status,
+    priority,
     search,
     ...pagination,
   });

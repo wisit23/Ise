@@ -79,6 +79,36 @@ deferred `CSS-001` — unchanged by this round, still needs Buyer-owner alignmen
 - **Tickets & Disputes Panels:** Refactored standard modals into premium Slide-over Panels (`max-w-2xl`) emerging from the right, complete with `animate-in`/`animate-out` lifecycle transitions and click-outside-to-close capabilities.
 - **Dispute Chat Placeholder:** Implemented a secondary Slide-over chat panel that emerges from the left of the Dispute details modal, readying the UI structure for the deferred `CSS-001` Live Chat feature.
 
+**Bugs found during a follow-up review of the UI Polish commit above, and fixed (2026-08-26):**
+
+1. **Priority filter was a silent no-op.** The panel's Tickets table and the Dashboard's "Tickets by
+   Priority" donut both sent `?priority=LOW|NORMAL|HIGH|URGENT` to `GET /api/support/tickets/queue`,
+   but `ticketModel.listQueue()` never read that query param — every bucket returned the same unfiltered
+   set. Fixed by threading `priority` through `ticketController.js` → `ticketService.listQueue()` →
+   `ticketModel.listQueue()`'s Prisma `where` clause. Verified against the live dev DB (`URGENT` and
+   `NORMAL` now return disjoint result sets) and live in the browser (donut now shows differentiated
+   percentages per bucket instead of an even split).
+2. **Ticket slide-over's Assign/Close/"ส่งต่อ Admin" buttons were decorative.** None had an `onClick`;
+   there was no way to actually manage a ticket from `/support/panel` (the older
+   `/support/tickets/[id]` page was the only functional path). Wired all three to the existing
+   `POST /api/support/tickets/:id/assign` and `PATCH /api/support/tickets/:id/status` endpoints,
+   reusing the same `AGENT_NEXT_STATUS` transition map as `/support/tickets/[id]/page.js` so each
+   button only appears when the current status legally allows it (e.g. Close is hidden on
+   `IN_PROGRESS`, which per `ticketState.js` must go through `PENDING_USER`/`RESOLVED`/`ESCALATED`
+   first). Assign is hidden once a ticket has an assignee. Both the open slide-over and the underlying
+   table refetch after a successful action; errors surface inline instead of failing silently.
+   Verified live end-to-end: assigned an unassigned NEW ticket, then closed it, confirming table +
+   slide-over state and the "no further actions" fallback on `CLOSED`.
+
+Not addressed (found in the same review, intentionally left alone pending explicit direction): the
+Dispute slide-over's "ส่งเรื่องให้ Admin (Escalate)" button calls `handleDecision("ESCALATE")`, but
+`disputeService.js`'s `DECISIONS` only allows `APPROVE_REFUND`/`REJECT` — backend will 400 it. The
+Dispute chat sub-panel also still shows fabricated placeholder message content (reusing the dispute's
+`reason` field as a fake buyer bubble plus a canned agent reply) — cosmetic-only, not wired to any real
+data, consistent with the `CSS-001` Live Chat deferral above.
+
 **Next action:** None blocking — Core is feature-complete for this round. Follow-ups if picked back up:
 SLA breach notifications to a team lead (WF-10 step 3's "แจ้งเตือนหาหัวหน้าทีม" is only a status flip
-today, no actual notification channel exists yet), and `CSS-001` Live Chat per the deferred spec
+today, no actual notification channel exists yet), `CSS-001` Live Chat per the deferred spec, and the
+two known-but-unaddressed issues noted directly above (dispute Escalate button, dispute chat
+placeholder content)

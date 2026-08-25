@@ -47,6 +47,7 @@ async function listQueue({
   scope = "unassigned",
   assigneeId,
   status,
+  priority,
   search,
   skip,
   take,
@@ -57,6 +58,8 @@ async function listQueue({
 
   if (status) where.status = status;
   else if (scope !== "all") where.status = { notIn: ["CLOSED"] };
+
+  if (priority) where.priority = priority;
 
   if (search) {
     where.OR = [

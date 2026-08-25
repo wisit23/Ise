@@ -46,6 +46,17 @@ const PRIORITY_STYLE = {
   URGENT: "bg-red-600 text-white border border-red-600",
 };
 
+// Agent-only next steps offered from each status (see ticketState.js).
+const AGENT_NEXT_STATUS = {
+  NEW: ["ESCALATED", "CLOSED"],
+  ASSIGNED: ["IN_PROGRESS", "ESCALATED", "CLOSED"],
+  IN_PROGRESS: ["PENDING_USER", "RESOLVED", "ESCALATED"],
+  PENDING_USER: ["IN_PROGRESS", "RESOLVED", "CLOSED"],
+  RESOLVED: ["CLOSED", "IN_PROGRESS"],
+  ESCALATED: ["IN_PROGRESS", "RESOLVED", "CLOSED"],
+  CLOSED: [],
+};
+
 const DISPUTE_STATUS_LABEL = {
   OPEN: "รอตรวจสอบ",
   NEEDS_INFO: "รอข้อมูล",
@@ -341,10 +352,13 @@ function TicketsSection({ token, statusFilter, setStatusFilter }) {
   const [priorityFilter, setPriorityFilter] = useState("");
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [closingTicket, setClosingTicket] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   function closeTicket() {
     setClosingTicket(true);
-    setTimeout(() => { setSelectedTicket(null); setClosingTicket(false); }, 280);
+    setTimeout(() => { setSelectedTicket(null); setClosingTicket(false); setActionError(""); }, 280);
   }
 
   useEffect(() => {
@@ -357,7 +371,55 @@ function TicketsSection({ token, statusFilter, setStatusFilter }) {
       .then((data) => { setItems(data.items || []); setTotalPages(data.totalPages || 1); })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [page, q, statusFilter, priorityFilter, token]);
+  }, [page, q, statusFilter, priorityFilter, token, refreshKey]);
+
+  function refreshAfterAction() {
+    setRefreshKey((k) => k + 1);
+    if (selectedTicket) {
+      apiFetch(`/api/support/tickets/${selectedTicket.id}`, { token })
+        .then(setSelectedTicket)
+        .catch((err) => setActionError(err.message));
+    }
+  }
+
+  async function handleAssign() {
+    if (!selectedTicket) return;
+    setActionBusy(true);
+    setActionError("");
+    try {
+      await apiFetch(`/api/support/tickets/${selectedTicket.id}/assign`, {
+        method: "POST",
+        token,
+      });
+      refreshAfterAction();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleStatusChange(status) {
+    if (!selectedTicket) return;
+    const reason =
+      status === "ESCALATED"
+        ? window.prompt("เหตุผลที่ยกระดับ (ไม่บังคับ)")
+        : null;
+    setActionBusy(true);
+    setActionError("");
+    try {
+      await apiFetch(`/api/support/tickets/${selectedTicket.id}/status`, {
+        method: "PATCH",
+        token,
+        body: { status, reason: reason || undefined },
+      });
+      refreshAfterAction();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   return (
     <>
@@ -614,17 +676,46 @@ function TicketsSection({ token, statusFilter, setStatusFilter }) {
                   <span className="material-symbols-outlined text-[15px]">build</span>
                   จัดการคำร้อง (Actions)
                 </h3>
-                <div className="flex gap-2">
-                  <button className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white shadow hover:bg-emerald-700 transition-colors">
-                    รับงาน (Assign)
-                  </button>
-                  <button className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
-                    ปิดงาน (Close)
-                  </button>
-                  <button className="flex-1 rounded-lg bg-red-50 text-red-600 py-2.5 text-xs font-bold hover:bg-red-100 transition-colors">
-                    ส่งต่อ Admin
-                  </button>
-                </div>
+                {actionError && (
+                  <p className="mb-3 text-xs font-semibold text-red-600">{actionError}</p>
+                )}
+                {(() => {
+                  const nextStatuses = AGENT_NEXT_STATUS[selectedTicket.status] || [];
+                  return (
+                    <div className="flex gap-2">
+                      {!selectedTicket.assigneeId && (
+                        <button
+                          onClick={handleAssign}
+                          disabled={actionBusy}
+                          className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-xs font-bold text-white shadow hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                        >
+                          รับงาน (Assign)
+                        </button>
+                      )}
+                      {nextStatuses.includes("CLOSED") && (
+                        <button
+                          onClick={() => handleStatusChange("CLOSED")}
+                          disabled={actionBusy}
+                          className="flex-1 rounded-lg border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                        >
+                          ปิดงาน (Close)
+                        </button>
+                      )}
+                      {nextStatuses.includes("ESCALATED") && (
+                        <button
+                          onClick={() => handleStatusChange("ESCALATED")}
+                          disabled={actionBusy}
+                          className="flex-1 rounded-lg bg-red-50 text-red-600 py-2.5 text-xs font-bold hover:bg-red-100 transition-colors disabled:opacity-50"
+                        >
+                          ส่งต่อ Admin
+                        </button>
+                      )}
+                      {nextStatuses.length === 0 && selectedTicket.assigneeId && (
+                        <p className="text-xs font-medium text-slate-400">ไม่มีการดำเนินการเพิ่มเติมสำหรับสถานะนี้</p>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
             </div>
