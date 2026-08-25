@@ -34,7 +34,12 @@ function requireRole(...roles) {
 function fromGatewayHeaders(req, res, next) {
   req.userId = req.headers["x-user-id"] || null;
   req.userRole = req.headers["x-user-role"] || null;
-  req.userDisplayName = req.headers["x-user-display-name"] || null;
+  // Gateway URL-encodes this header (raw HTTP headers are Latin-1 only, and
+  // display names can contain non-ASCII text) — decode it back here.
+  const rawDisplayName = req.headers["x-user-display-name"];
+  req.userDisplayName = rawDisplayName
+    ? decodeURIComponent(rawDisplayName)
+    : null;
   next();
 }
 

@@ -815,6 +815,43 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 - `backend/services/product-service/prisma/schema.prisma`, `backend/services/product-service/prisma/seed.js`
 - `backend/services/product-service/src/models/productModel.js`
 
+## Task `MOCK-TRADE-012` — แก้ Gateway ล่มทุก Authenticated Request เมื่อชื่อผู้ใช้เป็นภาษาไทย
+
+> วันที่ทำ: 2026-08-25
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ยืนยัน Root Cause ด้วยการจำลอง Error ตรงๆ, ยืนยัน Fix ด้วย `curl` จริงผ่าน Container ที่ Build ใหม่ (Login บัญชีชื่อไทยจริง → เรียก Endpoint ที่ต้อง Authen จริง → 200 พร้อมข้อมูลจริง, Log Gateway ไม่มี Error), `npm test` ทั้ง Repo ผ่าน 44/44
+
+### บริบท / อาการที่พบ
+
+- ผู้ใช้รายงานว่า Clone ไปแล้ว "แตกเหมือนเดิม" พร้อมแปะ Log จริง: `gateway-1 | TypeError [ERR_INVALID_CHAR]: Invalid character in header content ["x-user-display-name"]` เกิดซ้ำๆ ทุกครั้งที่มี Request เข้า `/register`, `/sell` ตามหลัง
+
+### งานที่ทำ
+
+1. หา Root Cause: [gateway/src/app.js](../backend/gateway/src/app.js) Set `req.headers["x-user-display-name"] = payload.displayName` ตรงๆ ก่อน Proxy ต่อ — ถ้า `displayName` เป็นภาษาไทย (เช่น Seed Sellers "มานพ", "ปิยะ" หรือชื่อจริงที่ผู้ใช้สมัคร) จะ Error เพราะ HTTP Header Value ตาม Spec รับได้แค่ Latin-1 เท่านั้น ยืนยันด้วยการจำลอง Error ตรงๆ ผ่าน `http.ClientRequest.setHeader()` นอก Container ก่อนแก้ (ได้ `ERR_INVALID_CHAR` เหมือน Log ผู้ใช้เป๊ะ)
+2. แก้ `gateway/src/app.js`: `encodeURIComponent(payload.displayName || "")` ก่อน Set Header
+3. แก้ `shared/src/authMiddleware.js`'s `fromGatewayHeaders()` ให้ `decodeURIComponent()` กลับตอนอ่าน Header เดียวกัน (คู่กับข้อ 2 แม้ตอนนี้ยังไม่มี Route ไหนเรียกใช้ `fromGatewayHeaders()` จริง — ทุก Service อ่าน `displayName` จาก JWT Payload ตรงๆ ผ่าน `requireAuth()` แทน — แต่แก้คู่กันไว้กัน Encode/Decode ไม่ตรงกันถ้ามีคนเอาไปใช้ในอนาคต)
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                                          | ผลที่เกิดขึ้นจริง                                                                                     |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| จำลอง `setHeader('x-user-display-name', 'มานพ')` ตรงๆ ก่อนแก้                     | `ERR_INVALID_CHAR` ตรงกับ Log ผู้ใช้                                                                     |
+| `npm test` (Repo ทั้งหมด)                                                        | 44/44 ผ่าน (ไม่มี Test เดิมที่ Cover Header นี้โดยตรง จึงไม่มี Test แตก)                                  |
+| `npm run lint` เฉพาะไฟล์ที่แก้                                                   | Exit 0                                                                                                    |
+| Rebuild `gateway`, `auth-service`, `product-service`, `order-service`, `chat-service`, `review-service` + `up -d` | ทุก Container ขึ้น Healthy                                                                                |
+| `curl` Login `shop.denim@example.com` (ชื่อจริง "มานพ เดนิม") ผ่าน Gateway จริง   | ได้ Access Token กลับมาปกติ                                                                               |
+| `curl GET /api/products/mine` พร้อม Token ข้างต้น ผ่าน Gateway จริง               | `200 OK` พร้อมข้อมูลสินค้าจริง 4 ชิ้น, Gateway Log **ไม่มี** `ERR_INVALID_CHAR` อีกเลย                    |
+
+### ผลลัพธ์ปัจจุบัน
+
+- ผู้ใช้ที่มีชื่อ-นามสกุลภาษาไทย (Seed Seller ทุกคนและผู้สมัครจริงส่วนใหญ่) ใช้งาน Authenticated Route ผ่าน Gateway ได้ปกติ ไม่ล่มอีก
+- นี่เป็น Bug เดิมที่มาจากรอบ "ProductVideo Provider Refactor" (Task ก่อนหน้าที่เพิ่ม `displayName` ลง Signed Access Token) ไม่ใช่ผลจากงานในรอบนี้ (`MOCK-TRADE-010`/`011`) แต่ถูกจับได้และแก้ในรอบเดียวกันเพราะผู้ใช้รายงานหลัง Clone ล่าสุด
+- **ยังไม่ได้ทำ**: ยังไม่มี Automated Test คลุม Header Encode/Decode คู่นี้โดยตรง (ตรวจด้วย Manual `curl` เท่านั้น), ยังไม่ผ่าน AI Reviewer อิสระ
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/gateway/src/app.js`, `backend/shared/src/authMiddleware.js`
+
 ## อัปเดตล่าสุด
 
 2026-08-25 (Asia/Bangkok)

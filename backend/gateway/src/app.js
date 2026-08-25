@@ -52,7 +52,12 @@ app.use((req, res, next) => {
     const payload = verifyAccessToken(token);
     req.headers["x-user-id"] = payload.sub;
     req.headers["x-user-role"] = payload.role;
-    req.headers["x-user-display-name"] = payload.displayName || "";
+    // HTTP header values are Latin-1 only; displayName can be Thai (or any
+    // non-ASCII) text, which throws ERR_INVALID_CHAR in http-proxy if set
+    // raw. Encode here, decode in authMiddleware's fromGatewayHeaders.
+    req.headers["x-user-display-name"] = encodeURIComponent(
+      payload.displayName || "",
+    );
     next();
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
