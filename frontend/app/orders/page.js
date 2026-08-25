@@ -12,6 +12,7 @@ import { getAccessToken } from "../../lib/auth";
 
 const STATUS_LABEL = {
   pending: "อยู่ในตะกร้า",
+  pending_payment: "อยู่ในตะกร้า",
   confirmed: "ยืนยันแล้ว",
   shipped: "จัดส่งแล้ว",
   completed: "สำเร็จ",
@@ -20,6 +21,7 @@ const STATUS_LABEL = {
 
 const STATUS_STYLE = {
   pending: "bg-amber-50 text-amber-700",
+  pending_payment: "bg-amber-50 text-amber-700",
   confirmed: "bg-sky-50 text-sky-700",
   shipped: "bg-sky-50 text-sky-700",
   completed: "bg-emerald-50 text-emerald-700",
@@ -28,7 +30,11 @@ const STATUS_STYLE = {
 
 const TABS = [
   { key: "all", label: "ทั้งหมด", status: undefined },
-  { key: "pending", label: "รอชำระเงิน", status: "pending" },
+  {
+    key: "pending_payment",
+    label: "รอชำระเงิน",
+    status: "pending_payment",
+  },
   { key: "completed", label: "สำเร็จ", status: "completed" },
   { key: "cancelled", label: "ยกเลิก", status: "cancelled" },
 ];
@@ -135,7 +141,9 @@ export default function OrdersPage() {
     setPage(1);
   }
 
-  const hasPending = tab === "all" && items.some((o) => o.status === "pending");
+  const hasPending =
+    tab === "all" &&
+    items.some((o) => ["pending", "pending_payment"].includes(o.status));
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">

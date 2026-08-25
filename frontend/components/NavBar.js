@@ -27,7 +27,7 @@ export default function NavBar() {
 
     const token = getAccessToken();
     if (token) {
-      apiFetch("/api/orders/mine?status=pending&limit=1", { token })
+      apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
         .then((data) => setCartCount(data.total))
         .catch(() => {});
     }

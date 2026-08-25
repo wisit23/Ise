@@ -35,25 +35,30 @@ generator client {
 //     table — tags here are freeform, not a curated taxonomy).
 // Status lifecycle: available -> reserved (in a buyer's cart) -> sold, or removed by the seller.
 model Product {
-  id          String   @id @default(uuid())
-  sellerId    String   @map("seller_id")
-  title       String
-  description String   @default("")
-  price       Int
-  category    String
-  condition   String   @default("Good")
-  tags        String[]
-  location    String   @default("")
-  size        String   @default("Free size")
-  status      String   @default("available")
+  id                   String    @id @default(uuid())
+  sellerId             String    @map("seller_id")
+  title                String
+  description          String    @default("")
+  price                Int
+  category             String
+  condition            String    @default("Good")
+  tags                 String[]
+  location             String    @default("")
+  size                 String    @default("Free size")
+  status               String    @default("available")
+  // BUY-xxx: a cart reservation holds the listing for 10 minutes; the expiry
+  // worker in features/reservations releases it when the clock runs out.
+  reservationId        String?   @unique @map("reservation_id")
+  reservedBy           String?   @map("reserved_by")
+  reservationExpiresAt DateTime? @map("reservation_expires_at")
   // ADM-003: set when Admin removes a listing via POST /internal/moderation/:id/remove.
   // preRemovalStatus remembers what `status` was before removal so restore can
   // put the listing back where it actually was (not force it to "available").
-  moderatedAt      DateTime? @map("moderated_at")
-  moderationReason String?   @map("moderation_reason")
-  preRemovalStatus String?   @map("pre_removal_status")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  moderatedAt          DateTime? @map("moderated_at")
+  moderationReason     String?   @map("moderation_reason")
+  preRemovalStatus     String?   @map("pre_removal_status")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   // Denormalized concat of title/description/category/condition/location/
   // size/tags, kept in sync by a DB trigger (see prisma/seed.js — Postgres
@@ -69,6 +74,7 @@ model Product {
   @@index([sellerId])
   @@index([status, category])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([status, reservationExpiresAt])
   @@map("products")
 }
 

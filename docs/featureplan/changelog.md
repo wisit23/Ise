@@ -65,3 +65,13 @@
   lint ผ่าน, frontend build ผ่าน และ secret scan พบ 0 จุดใน 177 tracked files
 - ยังไม่ได้รัน `REQUIRE_INTEGRATION=1`, apply ProductVideo index, Docker/browser E2E; `UR-11`
   Swipe-to-Choose semantics และ persisted choose action ยังคงเป็น TBD
+
+## 2026-08-10 — Buyer BUY-002 Atomic Reservation and Cart
+
+- เพิ่ม Product-side atomic reservation อายุ 10 นาที, reservation-scoped release/complete และ startup expiry worker
+- เพิ่ม Order persistence สำหรับ `reservationId`/`reservationExpiresAt`, retry deduplication และ failed-write compensation
+- เปลี่ยน Order ใหม่เป็น `pending_payment` โดยยังอ่าน legacy `pending` ได้ และเพิ่ม Cart countdown/expired guard
+- รัน `REQUIRE_INTEGRATION=1` กับ PostgreSQL 16 แยก Product/Order schema: concurrency, retry,
+  expired takeover, stale release และ process-restart recovery ผ่าน
+- ผลตรวจรวม: backend 47/47, frontend 7/7, lint, secret scan, Prisma validation และ frontend build ผ่าน
+- Schema apply เฉพาะ disposable database; ไม่มี deploy หรือ shared/production database change

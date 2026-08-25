@@ -11,25 +11,27 @@ generator client {
   output   = "../src/generated/prisma-client"
 }
 
-// Status lifecycle: pending (cart, product locked) -> completed (paid), or cancelled (product unlocked).
+// Status lifecycle: pending_payment (cart, product locked) -> completed (paid), or cancelled (product unlocked).
 // confirmed/shipped are reserved for a future fulfillment flow and are not driven by the UI yet.
 // "disputed" (ADM-004) is a branch Admin drives via adminDisputeService, not the buyer/seller
 // updateStatus endpoint — preDisputeStatus remembers what `status` was so release can restore it.
 model Order {
-  id           String   @id @default(uuid())
-  buyerId      String   @map("buyer_id")
-  sellerId     String   @map("seller_id")
-  productId    String   @map("product_id")
-  productTitle String   @map("product_title")
-  price        Int
-  status       String   @default("pending")
+  id                   String    @id @default(uuid())
+  buyerId              String    @map("buyer_id")
+  sellerId             String    @map("seller_id")
+  productId            String    @map("product_id")
+  productTitle         String    @map("product_title")
+  price                Int
+  status               String    @default("pending_payment")
+  reservationId        String?   @unique @map("reservation_id")
+  reservationExpiresAt DateTime? @map("reservation_expires_at")
   // Set only when this order was created automatically because a buyer won
   // an auction in product-service, instead of a normal "buy now" checkout.
   // No FK — product-service owns the AuctionItem, this is a read-only
   // reference so metrics/support can trace an order back to its auction.
-  auctionId    String?  @map("auction_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  auctionId            String?   @map("auction_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   // ADM-004: simulated fund hold — no bank/payment-processor fields, mock state only
   // (ADM-DEC-003: KYC/fund hold are synthetic/simulation, never real money).
@@ -45,6 +47,7 @@ model Order {
   @@index([buyerId])
   @@index([sellerId])
   @@index([auctionId])
+  @@index([status, reservationExpiresAt])
   @@map("orders")
 }
 
