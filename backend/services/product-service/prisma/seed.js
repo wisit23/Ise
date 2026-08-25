@@ -292,7 +292,40 @@ const DEMO_VIDEOS = [
   },
 ];
 
+// products.search_text can't be a native Postgres generated column (its
+// expression needs array_to_string(), which is STABLE not IMMUTABLE — see
+// schema.prisma), so a trigger fills the same role: keep it auto-computed on
+// every insert/update no matter which code path touches the row (API, this
+// seed script, or anything added later). `db push` doesn't run arbitrary
+// SQL, so this — the one hook that already runs on every container
+// start — is where it's (idempotently) installed.
+async function ensureSearchTextTrigger() {
+  await prisma.$executeRaw`
+    CREATE OR REPLACE FUNCTION products_set_search_text() RETURNS trigger AS $$
+    BEGIN
+      NEW.search_text := concat_ws(' ',
+        NEW.title, NEW.description, NEW.category, NEW.condition,
+        NEW.location, NEW.size, array_to_string(NEW.tags, ' ')
+      );
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `;
+  await prisma.$executeRaw`
+    CREATE OR REPLACE TRIGGER products_search_text_trigger
+    BEFORE INSERT OR UPDATE ON products
+    FOR EACH ROW EXECUTE FUNCTION products_set_search_text();
+  `;
+  // Backfill: the trigger only fires on rows written after it exists, so
+  // force it for every existing row too. Cheap and safe to rerun every start.
+  // Touches updated_at (a no-op value) rather than id, to avoid re-triggering
+  // the id's ON UPDATE CASCADE to photos/videos/product_videos for no reason.
+  await prisma.$executeRaw`UPDATE products SET updated_at = updated_at;`;
+}
+
 async function main() {
+  await ensureSearchTextTrigger();
+
   for (const name of CATEGORIES) {
     await prisma.category.upsert({
       where: { name },

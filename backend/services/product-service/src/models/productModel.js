@@ -1,4 +1,5 @@
 const prisma = require("./prismaClient");
+const { Prisma } = require("../generated/prisma-client");
 
 const WITH_MEDIA = { photos: true, videos: true };
 
@@ -7,6 +8,10 @@ const WITH_MEDIA = { photos: true, videos: true };
 function toApiShape(product) {
   if (!product) return product;
   const { photos, videos, ...rest } = product;
+  // searchText is an internal trigger-maintained field (see schema.prisma);
+  // it just duplicates title/description/tags/etc. concatenated, so it's
+  // dropped here rather than leaking through every product API response.
+  delete rest.searchText;
   const media = [
     ...(photos || []).map((p) => ({ ...p, type: "image" })),
     ...(videos || []).map((v) => ({ ...v, type: "video" })),
@@ -31,19 +36,69 @@ function mediaToNestedCreate(media) {
   };
 }
 
+/** Full-text-ish search against Product.searchText (a trigger-maintained
+ * concat of title/description/category/condition/location/size/tags — see
+ * prisma/schema.prisma and prisma/seed.js's ensureSearchTextTrigger).
+ *
+ * Postgres full-text search (tsvector/to_tsquery) can't be used here: it has
+ * no Thai text-search config, and its "simple" config tokenizes on
+ * whitespace, which Thai doesn't reliably use between words — querying
+ * "เสื้อ" against a stored "เสื้อยืดวินเทจ" token literally does not match.
+ * pg_trgm's trigram matching works on 3-character sequences regardless of
+ * script, so it degrades gracefully for Thai instead of just failing.
+ *
+ * Matches on either: a literal substring (ILIKE, catches short/exact
+ * queries trigram similarity would score too low) OR a word-similarity hit
+ * (the `<%` operator, catches fuzzy/typo'd/multi-word matches). Both sides
+ * use the same GIN gin_trgm_ops index on search_text (verified with
+ * EXPLAIN — see docs/progress.md MOCK-TRADE-011 evidence table).
+ */
+async function searchProducts({ q, category, status, skip = 0, take = 20 }) {
+  const statusFilter = status
+    ? Prisma.sql`status = ${status}`
+    : Prisma.sql`status <> 'removed'`;
+  const categoryFilter = category
+    ? Prisma.sql`AND category = ${category}`
+    : Prisma.empty;
+  const matchCondition = Prisma.sql`(search_text ILIKE '%' || ${q} || '%' OR ${q} <% search_text)`;
+
+  const [rows, countRows] = await Promise.all([
+    prisma.$queryRaw`
+      SELECT id, GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) AS rank
+      FROM products
+      WHERE ${statusFilter} ${categoryFilter} AND ${matchCondition}
+      ORDER BY rank DESC, created_at DESC
+      LIMIT ${take} OFFSET ${skip}
+    `,
+    prisma.$queryRaw`
+      SELECT count(*)::int AS count
+      FROM products
+      WHERE ${statusFilter} ${categoryFilter} AND ${matchCondition}
+    `,
+  ]);
+
+  const total = countRows[0]?.count ?? 0;
+  if (rows.length === 0) return { items: [], total };
+
+  // Raw query already picked the ranked page of ids; re-hydrate full rows
+  // (with media) through Prisma and restore that same rank order, since
+  // `id IN (...)` makes no ordering guarantee of its own.
+  const ids = rows.map((r) => r.id);
+  const products = await prisma.product.findMany({
+    where: { id: { in: ids } },
+    include: WITH_MEDIA,
+  });
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const items = ids.map((id) => byId.get(id)).filter(Boolean).map(toApiShape);
+  return { items, total };
+}
+
 async function list({ category, q, status, skip, take } = {}) {
+  if (q) return searchProducts({ q, category, status, skip, take });
+
   const where = {
     ...(status ? { status } : { status: { not: "removed" } }),
     ...(category ? { category } : {}),
-    ...(q
-      ? {
-          OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { description: { contains: q, mode: "insensitive" } },
-            { category: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : {}),
   };
   const [items, total] = await Promise.all([
     prisma.product.findMany({

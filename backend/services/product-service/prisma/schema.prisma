@@ -1,6 +1,10 @@
+// pg_trgm powers the search_text GIN index below (trigram matching works on
+// Thai text, unlike Postgres full-text search, which has no Thai word-break
+// config — see productModel.js search() for why).
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm]
 }
 
 // Custom output path: this is an npm workspace monorepo where @prisma/client
@@ -10,8 +14,9 @@ datasource db {
 // service in isolation so they wouldn't collide there, but local `npm test`
 // runs every service's tests in one process and needs them to coexist.
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma-client"
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma-client"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 // ER: ties to docs/erdatabase.png's Product entity (Photo/Video are separate
@@ -44,12 +49,19 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  // Denormalized concat of title/description/category/condition/location/
+  // size/tags, kept in sync by a DB trigger (see prisma/seed.js — Postgres
+  // can't use a native generated column here because array_to_string() is
+  // STABLE, not IMMUTABLE). This is the one field search() matches against.
+  searchText  String   @default("") @map("search_text")
+
   photos      Photo[]
   videos      Video[]
   reviewClips ProductVideo[]
 
   @@index([sellerId])
   @@index([status, category])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("products")
 }
 

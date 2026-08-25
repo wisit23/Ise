@@ -704,6 +704,117 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 - `backend/services/auth-service/prisma/seed.js` (ใหม่), `backend/services/auth-service/package.json`, `backend/services/auth-service/Dockerfile`
 - `backend/services/product-service/prisma/seed.js`
 
+## Task `MOCK-TRADE-010` — แก้ Uploads Directory หายหลัง Clone + Auto-Refresh Access Token
+
+> วันที่ทำ: 2026-08-25
+>
+> สถานะตามหลักฐาน: ลงมือทำและตรวจด้วย `npm test` (Frontend) แล้ว, **ยังไม่ได้ทดสอบ E2E จริงผ่าน Browser + Docker** สำหรับส่วน Auto-Refresh (จำลอง Access Token หมดอายุจริงแล้วเช็ค Network Log ยังไม่ได้ทำ)
+
+### บริบท / อาการที่พบ
+
+- เพื่อนร่วมทีม Clone Repo แล้วอัปโหลดรูปตอนลงขายสินค้าไม่ได้ (`500 Internal Server Error`) ตั้งแต่รันครั้งแรก
+- ผู้ใช้ (Seller) ที่ Login ทิ้งไว้เกิน 15 นาทีแล้วกดอัปโหลดรูป จะเจอ Error `401` โดยไม่มีการเด้งออกจากระบบให้เห็นชัดเจน
+
+### งานที่ทำ
+
+**(a) แก้ `uploads/` หายหลัง Clone**
+
+1. พบว่า `.gitignore` มี `uploads/` แบบ Ignore ทั้ง Directory โดยไม่มีไฟล์ Placeholder ค้างอยู่เลย — Clone ใหม่จึงไม่มี Directory นี้อยู่จริง
+2. `backend/services/product-service/src/middleware/upload.js` ใช้ `multer.diskStorage` เขียนไฟล์ลง Directory นี้ตรงๆ แบบ Fixed Path โดยไม่เช็คว่ามีอยู่จริงก่อน → `ENOENT` → `500`
+3. แก้ `.gitignore` เป็น `uploads/*` + `!uploads/.gitkeep` เพื่อให้ Track โครงสร้าง Directory ได้ แต่ไม่ Track ไฟล์ที่ผู้ใช้อัปโหลดจริง
+4. เพิ่ม `backend/services/product-service/uploads/.gitkeep`
+5. เพิ่ม `fs.mkdirSync(UPLOAD_DIR, { recursive: true })` ใน `upload.js` เป็น Backstop ให้ Service สร้าง Directory เองเสมอตอน Start ไม่ว่าจะรันแบบ Docker (มี Named Volume `product_uploads` อยู่แล้วซึ่งปกติไม่ชนปัญหานี้) หรือรัน `node src/server.js` ตรงๆ นอก Docker (ชนปัญหานี้แน่นอนถ้าไม่มี `.gitkeep`)
+
+**(b) เพิ่ม Auto-Refresh Access Token**
+
+1. พบว่า Auth Service มี Endpoint `POST /api/auth/refresh` พร้อมใช้งานเต็มรูปแบบอยู่แล้ว (`backend/services/auth-service/src/services/authService.js`) แต่ Frontend ไม่เคยเรียกใช้เลย
+2. Access Token อายุ 15 นาที (`JWT_ACCESS_EXPIRES`), หมดแล้วไม่มีกลไกต่ออายุ ผู้ใช้เจอ `401` เฉยๆ โดย Session ใน `localStorage` (`reloop_user`) ยังไม่ถูกล้าง ทำให้ดู "เหมือนยัง Login อยู่" ทั้งที่ใช้งานไม่ได้แล้ว
+3. เพิ่ม `setAccessToken()` ใน `frontend/lib/auth.js` สำหรับอัปเดตเฉพาะ Access Token โดยไม่กระทบ Refresh Token/User ที่เก็บไว้
+4. แก้ `frontend/lib/api.js` (จุดเดียว ครอบคลุมทุกหน้าที่เรียกผ่าน `apiFetch`/`uploadFiles`): เจอ `401` → เรียก `/api/auth/refresh` ด้วย Refresh Token อัตโนมัติ → Retry Request เดิม 1 ครั้งด้วย Token ใหม่ → ถ้า Refresh ก็ยังพัง (Refresh Token หมดอายุ 7 วัน/ถูก Revoke) ค่อย `clearSession()` + Redirect ไป `/login`
+5. กันเรียก `/refresh` ซ้อนกันหลายรอบพร้อมกัน (เช่น ตอนอัปโหลดรูปหลายไฟล์พร้อมกันแล้วโดน `401` พร้อมกันทุก Request) ด้วย Single-Flight Promise
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                          | ผลที่เกิดขึ้นจริง                                                                              |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| จำลอง Fresh Clone (ลบ `uploads/` แล้วรัน Node ตรงๆ) | `fs.mkdirSync` สร้าง Directory คืนให้อัตโนมัติ, `fs.existsSync` คืน `true`                       |
+| Grep ทั้ง `backend/` หา Pattern เขียนไฟล์ลง Disk    | เจอแค่จุดเดียวที่ `upload.js`, ไม่มีจุดอื่นเสี่ยงปัญหาเดียวกัน                                   |
+| ตรวจ Route `/api/auth/refresh` ผ่าน Gateway         | ตรงกับที่ `frontend/lib/api.js` เรียกจริง (`authRoutes.js` mount `/refresh` ใต้ `/api/auth`)     |
+| ตรวจ Status Code Login/Refresh ผิดพลาด              | ตอบ `400` (`badRequest`) ไม่ใช่ `401` — ยืนยันว่า Retry-on-401 Logic ไม่ชนกับ Error ทาง Business |
+| `npm test` (Frontend)                              | 5/5 ผ่าน (Test ที่พาดพิง `api.js` เป็น Mock ทั้งหมด ไม่ได้ทดสอบ Refresh Logic จริง)              |
+
+### ผลลัพธ์ปัจจุบัน
+
+- Clone ใหม่แล้วอัปโหลดรูปตอนลงขายสินค้าได้ทันทีโดยไม่ต้องสร้าง Directory เอง
+- Access Token หมดอายุระหว่างใช้งาน (เกิน 15 นาทีหลัง Login) จะต่ออายุให้อัตโนมัติแบบผู้ใช้ไม่รู้ตัว ไม่โดน Error ค้างกลางทาง
+- Refresh Token ยังคงอายุตายตัว 7 วันนับจากวัน Login (ไม่มี Rotation/Sliding Session) — ครบ 7 วันต้อง Login ใหม่แน่นอนแม้ใช้งานต่อเนื่องทุกวัน เป็นการตัดสินใจที่ยอมรับไว้ ไม่ใช่ Bug
+- **ยังไม่ได้ทำ**: ยังไม่ได้ทดสอบ E2E จริงผ่าน Browser (จำลอง Token หมดอายุจริงแล้วดู Network Log), ยังไม่ผ่าน AI Reviewer อิสระ, Token ยังเก็บใน `localStorage` (เสี่ยง XSS) ไม่ใช่ HttpOnly Cookie ตามที่ `docs/architecture.md` วางเป้าหมายไว้ (`ADR-003`)
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `.gitignore`, `backend/services/product-service/uploads/.gitkeep`, `backend/services/product-service/src/middleware/upload.js`
+- `frontend/lib/auth.js`, `frontend/lib/api.js`
+
+## Task `MOCK-TRADE-011` — Full-Text-ish Search (Trigram) แทนที่ Title-Only Search
+
+> วันที่ทำ: 2026-08-25
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ตรวจกับ PostgreSQL จริงใน Container ทุกขั้น (ไม่ใช่ Mock), ยืนยัน E2E ผ่าน Browser จริงที่ `http://localhost:3000/products?q=...` เห็น Network Request `GET /api/products/search` คืนผลถูกต้อง, `npm test` ทั้ง Repo ผ่าน 44/44, `npm run lint` Exit 0
+
+### บริบท / อาการที่พบ
+
+- ผู้ใช้ระบุว่า Search เดิมค้นได้แค่ชื่อสินค้าแบบตรงตัว ("โง่ๆ") อยากให้ค้นได้ทั้ง Tag, รายละเอียด, ชื่อ, อื่นๆ
+- ตรวจสอบก่อนแก้พบว่า Query เดิม ([productModel.js](../backend/services/product-service/src/models/productModel.js)) ค้นแค่ `title`/`description`/`category` ไม่ครอบคลุม `tags`/`location`/`condition` — ทดสอบกับข้อมูล Seed จริงแล้วค้นคำที่ตรงกับ Tag ตรงๆ เช่น `denim`, `sneakers`, `vintage` **ได้ 0 ผลลัพธ์ทั้งหมด** เพราะ Title เป็นภาษาไทยแต่ Tag เป็นภาษาอังกฤษ
+
+### งานที่ทำ
+
+**(a) Phase 1 — เพิ่ม Field ที่ค้นได้ทันที (ไม่แตะ Schema)**
+
+1. เพิ่ม `location`, `condition` เข้า `OR contains` เดิม และเพิ่ม `tags: { hasSome: [q.toLowerCase()] } }` (Exact-Tag Match; Tag ถูก Normalize เป็นตัวพิมพ์เล็กอยู่แล้วตอน Save ที่ `productPayload.js`)
+
+**(b) Phase 2 — Trigram Search แทนที่ OR-Contains เดิมทั้งหมด**
+
+1. ตรวจกับ PostgreSQL จริงก่อนตัดสินใจ: Postgres Full-Text Search (`tsvector`/`to_tsquery`) **ใช้กับภาษาไทยไม่ได้** — `pg_ts_config` ไม่มี Config ภาษาไทย และ Config `simple` Tokenize "เสื้อยืดวินเทจ" เป็น 1 Token เดียว ค้น "เสื้อ" ไม่เจอ (ยืนยันด้วยการรัน `to_tsvector` จริง) — เลือกใช้ `pg_trgm` (Trigram) แทน เพราะทำงานระดับตัวอักษร ไม่ต้องรู้ขอบเขตคำ ใช้กับภาษาไทยได้จริงตามที่ทดสอบ (`word_similarity('เสื้อ', ...)` ได้ `0.83`, ตรงข้ามกับ `similarity()` ที่คะแนนเจือจางเมื่อข้อความยาว จึงต้องใช้ `word_similarity()`)
+2. เพิ่ม `extensions = [pg_trgm]` + `previewFeatures = ["postgresqlExtensions"]` และ Field `searchText` (`@map("search_text")`) พร้อม `@@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)` ใน `schema.prisma`
+3. **ไม่ใช้ Postgres Generated Column** สำหรับ `search_text` — ทดสอบจริงแล้วพบ Error `generation expression is not immutable` เพราะ `array_to_string()`/`concat_ws()` เป็น `STABLE` ไม่ใช่ `IMMUTABLE` — ใช้ **DB Trigger** แทน (`products_set_search_text()` + `products_search_text_trigger`) ติดตั้งแบบ Idempotent (`CREATE OR REPLACE FUNCTION`/`TRIGGER`) ใน `prisma/seed.js` เพราะ Repo นี้ใช้ `prisma db push` ไม่ใช่ `prisma migrate` จึงไม่มีที่วาง Migration SQL ตามปกติ — `seed.js` เป็น Hook เดียวที่รันทุกครั้งที่ Container Start อยู่แล้ว
+4. เพิ่ม Backfill (`UPDATE products SET updated_at = updated_at`) ต่อท้ายการติดตั้ง Trigger เพื่อบังคับให้ Trigger คำนวณ `search_text` ให้กับ 16 แถวเดิมที่มีอยู่ก่อน Trigger ถูกสร้าง (Idempotent, รันซ้ำได้ทุก Start)
+5. เขียน `searchProducts()` ใหม่ใน `productModel.js` ด้วย `prisma.$queryRaw` (Parameterized ผ่าน `Prisma.sql` Tagged Template กัน SQL Injection): เงื่อนไข `search_text ILIKE '%'||q||'%' OR q <% search_text` (`<%` คือ Word-Similarity Operator ของ `pg_trgm`, Threshold Default 0.6) จับได้ทั้ง Substring แบบตรงตัวและ Fuzzy/Typo-Tolerant, จัดอันดับด้วย `GREATEST(word_similarity(...), similarity(...))`, แล้วดึง Media กลับผ่าน Prisma ปกติ (`findMany({ id: { in } })`) พร้อมคง Rank Order เดิม (SQL `IN` ไม่รับประกัน Order)
+6. ยืนยันด้วย `EXPLAIN`/`SET enable_seqscan = off` ว่าทั้ง `ILIKE` และ `<%` ใช้ GIN Index `products_search_text_idx` จริง (Planner เลือก Seq Scan เองตอน Data มีแค่ 16 แถวเพราะเร็วกว่า ไม่ใช่ Index ใช้งานไม่ได้)
+7. ลบ `searchText` ออกจาก API Response ทุก Endpoint (`toApiShape`) เพราะเป็น Field ภายในที่ซ้ำกับ `title`/`description`/`tags` อยู่แล้ว ไม่ควรรั่วออกไปที่ Frontend
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                             | ผลที่เกิดขึ้นจริง                                                                                                    |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `to_tsvector('simple', 'เสื้อยืดวินเทจ Nike สภาพดี')`                    | Token ไทยรวมเป็นก้อนเดียว ยืนยันว่า Postgres FTS ใช้กับไทยไม่ได้                                                        |
+| ค้น `denim`/`sneakers`/`vintage` ก่อนแก้                              | 0 ผลลัพธ์ทั้งหมด (Query เดิมไม่ครอบคลุม `tags`)                                                                         |
+| `word_similarity('เสื้อ', full_text)` vs `similarity(...)`             | `0.83` vs `0.24` — ยืนยันต้องใช้ `word_similarity`                                                                     |
+| `CREATE TABLE ... GENERATED ALWAYS AS (array_to_string(...)) STORED` | Error `generation expression is not immutable` — ยืนยันว่าต้องใช้ Trigger แทน Generated Column                        |
+| `npx prisma db push` กับ Schema ใหม่                                 | สร้าง Extension, Column `search_text`, GIN Index `products_search_text_idx` สำเร็จ ไม่มี Error                        |
+| รัน `seed.js` ใหม่กับ DB จริง                                        | Trigger ติดตั้งสำเร็จ, Backfill 16 แถวเดิมมี `search_text` ครบ                                                         |
+| Insert แถวใหม่ตรงๆ ด้วย SQL (ไม่ผ่าน App)                             | Trigger คำนวณ `search_text` ให้อัตโนมัติ ยืนยัน Trigger Fire ทุก Insert ไม่ใช่แค่ตอน Seed                              |
+| `EXPLAIN` กับ `SET enable_seqscan=off`                                | ทั้ง `ILIKE` และ `<%` ใช้ `Bitmap Index Scan` บน `products_search_text_idx` จริง                                       |
+| ค้น `denim`/`sneakers`/`vintage`/`Denim`/`เสื้อ`/`leather` หลังแก้      | เจอผลลัพธ์ถูกต้องครบทุกคำ รวมตัวพิมพ์ใหญ่เล็กและข้ามภาษา                                                               |
+| Category Filter + Search พร้อมกัน                                    | กรองถูกต้อง (`q=vintage&category=แจ็คเก็ต` เหลือแค่ 1 รายการที่ตรงทั้งสองเงื่อนไข)                                     |
+| `model.create()` แล้วค้นทันที                                        | เจอสินค้าที่เพิ่งสร้างในผลค้นหาทันที, ตรวจ `Object.keys()` แล้วไม่มี `searchText` รั่วออกมาใน Response                 |
+| `npm run lint` (Repo ทั้งหมด)                                        | Exit 0                                                                                                                  |
+| `npm test` (Repo ทั้งหมด, ต่อ Postgres จริงใน Container)              | 44/44 ผ่าน                                                                                                              |
+| `docker compose build product-service` + `up -d`                     | Build สำเร็จ, `db push` sync, Seed+Trigger รันสำเร็จตอน Container Start จริง (ไม่ใช่แค่ Local)                         |
+| เปิด `http://localhost:3000/products?q=denim` ผ่าน Browser จริง       | เห็น "กางเกงยีนส์ Levi's 501 ทรงตรง" และ "เดนิมแจ็คเก็ตวินเทจ Levi's" ถูกต้อง, Network Log `GET /api/products/search → 200` |
+| เปิด `http://localhost:3000/products?q=sneakers` ผ่าน Browser จริง    | เห็น "รองเท้าผ้าใบ Converse สีขาว" ถูกต้อง (มาจาก Tag ล้วนๆ, Title ไม่มีคำนี้เลย)                                       |
+
+### ผลลัพธ์ปัจจุบัน
+
+- Search ค้นได้ครบ `title`/`description`/`category`/`condition`/`location`/`tags`/`size` ในคำค้นเดียว ไม่ใช่แค่ชื่อสินค้าตรงตัวอีกต่อไป
+- รองรับภาษาไทยจริง (ไม่ใช่ Postgres FTS ที่ใช้ไม่ได้กับไทย), Case-Insensitive, มี Ranking ตามความเกี่ยวข้อง, Typo-Tolerant ระดับหนึ่ง (Threshold Default ของ `pg_trgm`)
+- Trigger ดูแล `search_text` อัตโนมัติไม่ว่าจะสร้าง/แก้สินค้าผ่านช่องทางไหน (API, Seed, โค้ดที่จะเพิ่มในอนาคต) โดยไม่ต้องแก้ `productModel.create()`/`update()` เลย
+- **ยังไม่ได้ทำ**: ยังไม่ผ่าน AI Reviewer อิสระ, `word_similarity_threshold` (Default 0.6) ยังไม่ได้ปรับแต่ง — คำที่พิมพ์ผิดเยอะ (ทดสอบ "นาิกา" สลับตัวอักษรจาก "นาฬิกา") ยังหาไม่เจอ, ยังไม่ได้ทดสอบกับข้อมูลปริมาณมาก (Seed มีแค่ 16 แถว — Planner เลือก Seq Scan อยู่ ยังไม่เห็น Index Scan ทำงานจริงตอน Query ปกติ), ยังไม่มี Debounce ที่ Frontend สำหรับ Search-As-You-Type ถ้าจะทำต่อ
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/product-service/prisma/schema.prisma`, `backend/services/product-service/prisma/seed.js`
+- `backend/services/product-service/src/models/productModel.js`
+
 ## อัปเดตล่าสุด
 
-2026-07-29 (Asia/Bangkok)
+2026-08-25 (Asia/Bangkok)

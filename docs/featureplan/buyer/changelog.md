@@ -35,3 +35,12 @@
 - ให้ browser เล่นเฉพาะ active video และ pause video ที่ไม่ active เพื่อลดงาน decode/playback ที่ไม่จำเป็น
 - เพิ่ม tests สำหรับ empty feed, trusted seller/product link และ API error; frontend ผ่าน 5/5 และ build ผ่าน
 - ยังไม่มี persisted choose action และยังไม่ได้รัน Buyer PostgreSQL acceptance test จึงไม่ยก `UR-11` เป็น Done
+
+## 2026-08-25 — Search แทนที่ Title-Only ด้วย Trigram (pg_trgm)
+
+- Bug report: Search เดิมค้นได้แค่ `title`/`description`/`category` ตรงตัว — ค้นคำที่ตรงกับ Tag เช่น `denim`/`sneakers`/`vintage` ได้ 0 ผลลัพธ์ เพราะ Tag เป็นภาษาอังกฤษแต่ Title เป็นไทย
+- ตรวจแล้วพบ Postgres Full-Text Search มาตรฐาน (`tsvector`) ใช้กับภาษาไทยไม่ได้ (ไม่มี Thai Text-Search Config) จึงใช้ `pg_trgm` (Trigram) แทน — ทำงานระดับตัวอักษร ไม่ต้องพึ่ง Word-Break
+- เพิ่ม Column `search_text` (Concat ของทุก Field ที่ค้นหาได้) คุมค่าด้วย DB Trigger แทน Generated Column (Postgres ไม่ยอมให้ Generated Column ใช้ `array_to_string()` เพราะเป็น `STABLE`), มี GIN Trigram Index รองรับทั้ง `ILIKE` และ Word-Similarity
+- ยืนยัน E2E ผ่าน Browser จริงที่ `/products?q=sneakers` เจอสินค้าที่ Title ไม่มีคำนี้เลยแต่ Tag ตรง
+- รายละเอียดและหลักฐานเต็มอยู่ที่ Task `MOCK-TRADE-011` ใน `docs/progress.md`
+- ยังไม่ผ่าน AI Reviewer อิสระ, ยังไม่ได้ทดสอบ Performance กับข้อมูลปริมาณมาก (Seed มีแค่ 16 แถว)

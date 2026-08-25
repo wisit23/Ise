@@ -13,6 +13,10 @@ export function getAccessToken() {
   return localStorage.getItem(ACCESS_KEY);
 }
 
+export function setAccessToken(accessToken) {
+  localStorage.setItem(ACCESS_KEY, accessToken);
+}
+
 export function getRefreshToken() {
   if (typeof window === "undefined") return null;
   return localStorage.getItem(REFRESH_KEY);

@@ -40,3 +40,11 @@
 - เพิ่ม repository/service/auth tests และ integration assertions สำหรับ spoofed name กับ sold-product feed
 - เพิ่ม `ProductVideo.createdAt` index ใน Prisma schema แต่ยังไม่ได้ apply กับ PostgreSQL จริง
 - backend ล่าสุด 41 tests: 38 ผ่าน, 3 database tests ข้าม, 0 fail; Synthetic KYC ยังไม่ได้ implement
+
+## 2026-08-25 — Upload 500 Fix + Auto-Refresh Access Token
+
+- Bug report: Seller upload รูปตอนลงขายสินค้าได้ `500` หลัง Clone ใหม่ ตั้งแต่รันครั้งแรก — สาเหตุคือ `uploads/` ถูก `.gitignore` ทั้ง Directory โดยไม่มี Placeholder ค้างไว้ (`multer.diskStorage` เขียนไฟล์ลง Path ที่ไม่มีอยู่จริง → `ENOENT`)
+- แก้ `.gitignore` (`uploads/*` + `!uploads/.gitkeep`) และเพิ่ม `fs.mkdirSync(UPLOAD_DIR, { recursive: true })` ใน `product-service/src/middleware/upload.js` เป็น Backstop ถาวร
+- เพิ่ม Auto-Refresh Access Token ที่ `frontend/lib/api.js`: เจอ `401` (Access Token หมดอายุ 15 นาที) → เรียก `/api/auth/refresh` อัตโนมัติ → Retry Request เดิม; Refresh ไม่สำเร็จค่อย Force Logout — Endpoint `/refresh` มีอยู่แล้วฝั่ง Auth Service แต่ Frontend ไม่เคยเรียกใช้มาก่อน ทำให้ Seller ที่ Login ทิ้งไว้เกิน 15 นาทีอัปโหลดรูปไม่ได้แบบเงียบๆ (ไม่มี Error ชัดเจน ไม่มีการเด้งออกจากระบบ)
+- รายละเอียดและหลักฐานเต็มอยู่ที่ Task `MOCK-TRADE-010` ใน `docs/progress.md`
+- ยังไม่ได้ทดสอบ E2E จริงผ่าน Browser + Docker สำหรับ Auto-Refresh, ยังไม่ผ่าน AI Reviewer อิสระ
