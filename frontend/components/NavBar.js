@@ -9,6 +9,7 @@ const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
   SELLER: "ผู้ขาย",
   ADMIN: "แอดมิน",
+  SUPPORT: "เจ้าหน้าที่ซัพพอร์ต",
 };
 
 export default function NavBar() {
@@ -54,6 +55,7 @@ export default function NavBar() {
   }
 
   const isSeller = user?.role === "SELLER";
+  const isSupportAgent = user?.role === "SUPPORT" || user?.role === "ADMIN";
 
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
@@ -178,6 +180,35 @@ export default function NavBar() {
                       className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
                     >
                       ร้านค้าของฉัน
+                    </Link>
+                  )}
+
+                  <Link
+                    href="/help"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    ศูนย์ช่วยเหลือ
+                  </Link>
+
+                  <Link
+                    href="/support/tickets"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    ตั๋วแจ้งปัญหาของฉัน
+                  </Link>
+
+                  {isSupportAgent && (
+                    <Link
+                      href="/support/panel"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-xs text-white">
+                        🎧
+                      </span>
+                      แผงควบคุมซัพพอร์ต
                     </Link>
                   )}
 

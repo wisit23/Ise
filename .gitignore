@@ -3,8 +3,10 @@ node_modules/
 dist/
 .env
 *.log
-uploads/*
-!uploads/.gitkeep
+backend/services/product-service/uploads/*
+!backend/services/product-service/uploads/.gitkeep
+backend/services/order-service/private-evidence/*
+!backend/services/order-service/private-evidence/.gitkeep
 .DS_Store
 coverage/
 backend/services/*/src/generated/

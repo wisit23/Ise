@@ -113,6 +113,67 @@ export async function uploadFiles(files, token) {
   return data.media;
 }
 
+/** Uploads one file as dispute evidence — a separate, private endpoint from
+ * uploadFiles()'s public /uploads (see order-service's evidenceStorage.js
+ * and gateway's PUBLIC_PATHS: this path is deliberately NOT in it). */
+export async function uploadDisputeEvidence(disputeId, file, token) {
+  const authToken = token ?? getAccessToken();
+  const path = `/api/orders/disputes/${disputeId}/evidence`;
+  const form = new FormData();
+  form.append("file", file);
+
+  let res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body: form,
+  });
+
+  if (res.status === 401 && authToken) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await fetch(`${API_URL}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${newToken}` },
+        body: form,
+      });
+    }
+  }
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    if (res.status === 401) forceLogout();
+    throw new Error(data?.error || `Evidence upload failed (${res.status})`);
+  }
+  return data;
+}
+
+/** Fetches a private, authenticated file (dispute evidence — never a plain
+ * <img src>/<a href>, since the browser won't attach a Bearer header to a
+ * bare navigation) and returns an object URL. Caller must revokeObjectURL
+ * when done with it (e.g. on unmount) to avoid leaking memory. */
+export async function fetchAuthedBlobUrl(path, token) {
+  const authToken = token ?? getAccessToken();
+  let res = await fetch(`${API_URL}${path}`, {
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+  });
+
+  if (res.status === 401 && authToken) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await fetch(`${API_URL}${path}`, {
+        headers: { Authorization: `Bearer ${newToken}` },
+      });
+    }
+  }
+
+  if (!res.ok) {
+    if (res.status === 401) forceLogout();
+    throw new Error(`Request failed (${res.status})`);
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export function mediaUrl(url) {
   if (!url) return url;
   return url.startsWith("http") ? url : `${API_URL}${url}`;

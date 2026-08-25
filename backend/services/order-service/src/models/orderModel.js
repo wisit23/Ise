@@ -6,6 +6,8 @@ const VALID_STATUSES = [
   "shipped",
   "completed",
   "cancelled",
+  "disputed",
+  "refunded",
 ];
 
 function create(data) {

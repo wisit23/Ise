@@ -13,18 +13,82 @@ generator client {
 
 // Status lifecycle: pending (cart, product locked) -> completed (paid), or cancelled (product unlocked).
 // confirmed/shipped are reserved for a future fulfillment flow and are not driven by the UI yet.
+// disputed/refunded added for CSS-003 (WF-08): completed -> disputed -> refunded | completed.
 model Order {
-  id           String   @id @default(uuid())
-  buyerId      String   @map("buyer_id")
-  sellerId     String   @map("seller_id")
-  productId    String   @map("product_id")
-  productTitle String   @map("product_title")
+  id           String    @id @default(uuid())
+  buyerId      String    @map("buyer_id")
+  sellerId     String    @map("seller_id")
+  productId    String    @map("product_id")
+  productTitle String    @map("product_title")
   price        Int
-  status       String   @default("pending")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  status       String    @default("pending")
+  // WF-08 step 3: opening a dispute holds payout until CSS-003 decides.
+  payoutHeld   Boolean   @default(false) @map("payout_held")
+  disputedAt   DateTime? @map("disputed_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  dispute DisputeCase?
 
   @@index([buyerId])
   @@index([sellerId])
   @@map("orders")
+}
+
+// WF-08: one dispute per order (order.id is @unique here). status stays OPEN
+// while evidence is being gathered; DECIDED is terminal — see disputeService's
+// one-way decision guard for why "decided" isn't just "decision != null".
+model DisputeCase {
+  id               String    @id @default(uuid())
+  orderId          String    @unique @map("order_id")
+  openedBy         String    @map("opened_by")
+  reason           String
+  status           String    @default("OPEN") // OPEN|NEEDS_INFO|DECIDED
+  decision         String? // APPROVE_REFUND|REJECT
+  decisionReason   String?   @map("decision_reason")
+  decidedBy        String?   @map("decided_by")
+  decidedAt        DateTime? @map("decided_at")
+  evidenceDeadline DateTime? @map("evidence_deadline") // WF-08 step 6: 48h to respond to an info request
+  version          Int       @default(0)
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  order    Order             @relation(fields: [orderId], references: [id])
+  evidence DisputeEvidence[]
+  auditLog DisputeAuditLog[]
+
+  @@map("dispute_cases")
+}
+
+// NFR-SP-03: every privileged action on a dispute — including just viewing a
+// piece of evidence — must be attributable and timestamped to the second.
+model DisputeAuditLog {
+  id        String   @id @default(uuid())
+  disputeId String   @map("dispute_id")
+  actorId   String   @map("actor_id")
+  action    String // OPEN|VIEW_EVIDENCE|DECIDE
+  detail    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  dispute DisputeCase @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId, createdAt])
+  @@map("dispute_audit_logs")
+}
+
+// storageKey is a private filesystem key, never a public URL — see
+// evidenceStorage.js. Files live outside product-service's publicly-served
+// uploads/ entirely (see plan.md's Known Risk #2: /uploads/ is a public
+// gateway path, evidence must never go through it).
+model DisputeEvidence {
+  id         String   @id @default(uuid())
+  disputeId  String   @map("dispute_id")
+  uploaderId String   @map("uploader_id")
+  storageKey String   @map("storage_key")
+  fileType   String   @map("file_type")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  dispute DisputeCase @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+  @@map("dispute_evidence")
 }

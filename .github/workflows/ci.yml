@@ -30,6 +30,7 @@ jobs:
       DATABASE_URL_PRODUCT: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=product
       DATABASE_URL_ORDER: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=order
       DATABASE_URL_REVIEW: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=review
+      DATABASE_URL_SUPPORT: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=support
       JWT_ACCESS_SECRET: ci-test-access-secret
       JWT_REFRESH_SECRET: ci-test-refresh-secret
       # Turns the integration test's "skip if no database" fallback (meant for
@@ -87,10 +88,25 @@ jobs:
           DATABASE_URL: ${{ env.DATABASE_URL_ORDER }}
         run: npx prisma db push --schema backend/services/order-service/prisma/schema.prisma --skip-generate
 
+      - name: Seed order test data
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_ORDER }}
+        run: node backend/services/order-service/prisma/seed.js
+
       - name: Push review test schema
         env:
           DATABASE_URL: ${{ env.DATABASE_URL_REVIEW }}
         run: npx prisma db push --schema backend/services/review-service/prisma/schema.prisma --skip-generate
+
+      - name: Push support test schema
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_SUPPORT }}
+        run: npx prisma db push --schema backend/services/support-service/prisma/schema.prisma --skip-generate
+
+      - name: Seed support test data
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_SUPPORT }}
+        run: node backend/services/support-service/prisma/seed.js
 
       - name: Backend unit + integration tests (with coverage)
         run: npm test

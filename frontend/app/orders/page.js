@@ -7,7 +7,7 @@ import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
 import Pagination from "../../components/Pagination";
 import { StarInput, StarDisplay } from "../../components/StarRating";
-import { apiFetch } from "../../lib/api";
+import { apiFetch, uploadDisputeEvidence } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
 const STATUS_LABEL = {
@@ -16,6 +16,8 @@ const STATUS_LABEL = {
   shipped: "จัดส่งแล้ว",
   completed: "สำเร็จ",
   cancelled: "ยกเลิกแล้ว",
+  disputed: "อยู่ระหว่างข้อพิพาท",
+  refunded: "คืนเงินแล้ว",
 };
 
 const STATUS_STYLE = {
@@ -24,6 +26,8 @@ const STATUS_STYLE = {
   shipped: "bg-sky-50 text-sky-700",
   completed: "bg-emerald-50 text-emerald-700",
   cancelled: "bg-gray-100 text-gray-500",
+  disputed: "bg-red-50 text-red-700",
+  refunded: "bg-emerald-50 text-emerald-700",
 };
 
 const TABS = [
@@ -88,6 +92,73 @@ function ReviewForm({ order, onSubmitted }) {
   );
 }
 
+/** WF-08: buyer opens a dispute + attaches evidence in one step. Files
+ * upload one at a time to /disputes/:id/evidence after the dispute exists —
+ * that endpoint needs a disputeId, which only exists once open() succeeds. */
+function DisputeForm({ order, onOpened }) {
+  const [reason, setReason] = useState("");
+  const [files, setFiles] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const token = getAccessToken();
+    setSubmitting(true);
+    setError("");
+    try {
+      const dispute = await apiFetch(`/api/orders/${order.id}/disputes`, {
+        method: "POST",
+        token,
+        body: { reason },
+      });
+      for (const file of files) {
+        await uploadDisputeEvidence(dispute.id, file, token);
+      }
+      onOpened(dispute);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="mt-3 flex flex-col gap-2 rounded-md border border-red-200 bg-red-50 p-3"
+    >
+      <p className="text-xs text-gray-600">
+        อธิบายปัญหาให้ละเอียด (เช่น สินค้าชำรุด ไม่ตรงตามที่ตกลง)
+        แนบรูปภาพ/วิดีโอประกอบเพื่อให้เจ้าหน้าที่พิจารณาได้เร็วขึ้น
+      </p>
+      <textarea
+        required
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        rows={3}
+        placeholder="เหตุผลที่ขอคืนเงิน/คืนสินค้า"
+        className="rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-emerald-500"
+      />
+      <input
+        type="file"
+        multiple
+        accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime"
+        onChange={(e) => setFiles(Array.from(e.target.files || []))}
+        className="text-xs text-gray-600"
+      />
+      {error && <p className="text-xs text-red-600">{error}</p>}
+      <button
+        type="submit"
+        disabled={submitting}
+        className="self-start rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+      >
+        {submitting ? "กำลังส่ง..." : "ส่งคำร้องขอคืนเงิน/คืนสินค้า"}
+      </button>
+    </form>
+  );
+}
+
 export default function OrdersPage() {
   const router = useRouter();
   const [items, setItems] = useState([]);
@@ -98,6 +169,8 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [reviewedByOrderId, setReviewedByOrderId] = useState({});
   const [openReviewFor, setOpenReviewFor] = useState(null);
+  const [openDisputeFor, setOpenDisputeFor] = useState(null);
+  const [justDisputedIds, setJustDisputedIds] = useState(new Set());
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -233,6 +306,40 @@ export default function OrdersPage() {
                         ให้คะแนนร้านค้า
                       </button>
                     )}
+                  </div>
+                )}
+
+                {o.status === "completed" && !justDisputedIds.has(o.id) && (
+                  <div className="mt-2">
+                    {openDisputeFor === o.id ? (
+                      <DisputeForm
+                        order={o}
+                        onOpened={() => {
+                          setJustDisputedIds((prev) => new Set(prev).add(o.id));
+                          setOpenDisputeFor(null);
+                        }}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => setOpenDisputeFor(o.id)}
+                        className="text-sm font-medium text-red-600 hover:underline"
+                      >
+                        มีปัญหากับคำสั่งซื้อนี้? ขอคืนเงิน/คืนสินค้า
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {(o.status === "disputed" ||
+                  o.status === "refunded" ||
+                  justDisputedIds.has(o.id)) && (
+                  <div className="mt-2">
+                    <Link
+                      href={`/support/cases/${o.id}`}
+                      className="text-sm font-medium text-emerald-600 hover:underline"
+                    >
+                      ดูสถานะข้อพิพาท →
+                    </Link>
                   </div>
                 )}
               </li>
