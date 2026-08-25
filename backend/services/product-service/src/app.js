@@ -2,6 +2,7 @@ const express = require("express");
 const { errorHandler } = require("@reloop/shared");
 const productRoutes = require("./routes/productRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
+const moderationRoutes = require("./features/moderation/moderationRoutes");
 const { UPLOAD_DIR } = require("./middleware/upload");
 
 const app = express();
@@ -18,6 +19,7 @@ app.use("/uploads", express.static(UPLOAD_DIR));
 app.use("/uploads", uploadRoutes);
 
 app.use("/", productRoutes);
+app.use("/internal/moderation", moderationRoutes);
 
 app.use(errorHandler);
 

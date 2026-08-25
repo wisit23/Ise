@@ -14,6 +14,8 @@ function requireAuth(req, res, next) {
     const payload = verifyAccessToken(token);
     req.userId = payload.sub;
     req.userRole = payload.role;
+    req.userRoles = payload.roles || (payload.role ? [payload.role] : []);
+    req.permissions = payload.permissions || [];
     req.userDisplayName = payload.displayName || null;
     next();
   } catch {
@@ -30,10 +32,32 @@ function requireRole(...roles) {
   };
 }
 
-/** Trusts x-user-id / x-user-role headers set by the gateway after it verified the JWT. */
+/** Server-side permission gate — Frontend hiding a menu is never authorization. */
+function requirePermission(permission) {
+  return (req, res, next) => {
+    if (req.permissions?.includes(permission)) return next();
+    return res.status(403).json({
+      error: {
+        code: "FORBIDDEN",
+        message: "Forbidden",
+        requestId: req.id,
+      },
+    });
+  };
+}
+
+/** Trusts x-user-* headers set by the gateway after it verified the JWT. */
 function fromGatewayHeaders(req, res, next) {
   req.userId = req.headers["x-user-id"] || null;
   req.userRole = req.headers["x-user-role"] || null;
+  req.userRoles = req.headers["x-user-roles"]
+    ? req.headers["x-user-roles"].split(",")
+    : req.userRole
+      ? [req.userRole]
+      : [];
+  req.permissions = req.headers["x-user-permissions"]
+    ? req.headers["x-user-permissions"].split(",")
+    : [];
   req.userDisplayName = req.headers["x-user-display-name"] || null;
   next();
 }
@@ -50,6 +74,7 @@ function requireInternalToken(req, res, next) {
 module.exports = {
   requireAuth,
   requireRole,
+  requirePermission,
   fromGatewayHeaders,
   requireInternalToken,
 };

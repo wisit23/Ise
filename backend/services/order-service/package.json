@@ -6,7 +6,8 @@
   "type": "commonjs",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "seed:dispute-demo": "node prisma/seed-dispute-demo.js"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

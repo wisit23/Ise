@@ -54,6 +54,7 @@ export default function NavBar() {
   }
 
   const isSeller = user?.role === "SELLER";
+  const isAdmin = user?.role === "ADMIN";
 
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
@@ -112,6 +113,19 @@ export default function NavBar() {
                       {ROLE_LABEL[user.role] || user.role}
                     </span>
                   </div>
+
+                  {isAdmin && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-xs text-white">
+                        ⚙
+                      </span>
+                      Admin Panel
+                    </Link>
+                  )}
 
                   <Link
                     href="/sell"
