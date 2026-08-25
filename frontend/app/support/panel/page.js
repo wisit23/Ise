@@ -13,13 +13,13 @@ import { getAccessToken, getStoredUser } from "../../../lib/auth";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TICKET_STATUS_LABEL = {
-  NEW: "new",
-  ASSIGNED: "assigned",
-  IN_PROGRESS: "in-progress",
-  PENDING_USER: "waiting",
-  RESOLVED: "resolved",
-  CLOSED: "closed",
-  ESCALATED: "escalated",
+  NEW: "ตั๋วใหม่",
+  ASSIGNED: "มอบหมายแล้ว",
+  IN_PROGRESS: "กำลังดำเนินการ",
+  PENDING_USER: "รอลูกค้าตอบกลับ",
+  RESOLVED: "แก้ไขสำเร็จ",
+  CLOSED: "ปิดตั๋วแล้ว",
+  ESCALATED: "ส่งเรื่องต่อ",
 };
 
 const TICKET_STATUS_STYLE = {
@@ -33,10 +33,10 @@ const TICKET_STATUS_STYLE = {
 };
 
 const PRIORITY_LABEL = {
-  LOW: "low",
-  NORMAL: "medium",
-  HIGH: "high",
-  URGENT: "urgent",
+  LOW: "ต่ำ",
+  NORMAL: "ปานกลาง",
+  HIGH: "สูง",
+  URGENT: "ด่วนที่สุด",
 };
 
 const PRIORITY_STYLE = {
@@ -444,25 +444,25 @@ function TicketsSection({ token, statusFilter, setStatusFilter }) {
           value={statusFilter}
           onChange={(v) => { setStatusFilter(v); setPage(1); }}
           options={[
-            { value: "", label: "All Statuses" },
-            { value: "NEW", label: "New" },
-            { value: "ASSIGNED", label: "Assigned" },
-            { value: "IN_PROGRESS", label: "In Progress" },
-            { value: "PENDING_USER", label: "Waiting" },
-            { value: "RESOLVED", label: "Resolved" },
-            { value: "CLOSED", label: "Closed" },
-            { value: "ESCALATED", label: "Escalated" },
+            { value: "", label: "สถานะทั้งหมด" },
+            { value: "NEW", label: "ตั๋วใหม่" },
+            { value: "ASSIGNED", label: "มอบหมายแล้ว" },
+            { value: "IN_PROGRESS", label: "กำลังดำเนินการ" },
+            { value: "PENDING_USER", label: "รอลูกค้าตอบกลับ" },
+            { value: "RESOLVED", label: "แก้ไขสำเร็จ" },
+            { value: "CLOSED", label: "ปิดตั๋วแล้ว" },
+            { value: "ESCALATED", label: "ส่งเรื่องต่อ" },
           ]}
         />
         <DropdownFilter
           value={priorityFilter}
           onChange={(v) => { setPriorityFilter(v); setPage(1); }}
           options={[
-            { value: "", label: "All Priorities" },
-            { value: "LOW", label: "Low" },
-            { value: "NORMAL", label: "Medium" },
-            { value: "HIGH", label: "High" },
-            { value: "URGENT", label: "Urgent" },
+            { value: "", label: "ความสำคัญทั้งหมด" },
+            { value: "LOW", label: "ต่ำ" },
+            { value: "NORMAL", label: "ปานกลาง" },
+            { value: "HIGH", label: "สูง" },
+            { value: "URGENT", label: "ด่วนที่สุด" },
           ]}
         />
       </div>
@@ -878,16 +878,16 @@ function DisputesSection({ token, status, setStatus }) {
             className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm font-medium outline-none shadow-sm transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-300"
           />
         </form>
-        <DropdownFilter
-          value={status}
-          onChange={(v) => { setStatus(v); setPage(1); }}
-          options={[
-            { value: "", label: "All Statuses" },
-            { value: "OPEN", label: "รอตรวจสอบ" },
-            { value: "NEEDS_INFO", label: "รอข้อมูล" },
-            { value: "DECIDED", label: "ตัดสินแล้ว" },
-          ]}
-        />
+          <DropdownFilter
+            value={status}
+            onChange={(v) => { setStatus(v); setPage(1); }}
+            options={[
+              { value: "", label: "สถานะทั้งหมด" },
+              { value: "OPEN", label: "รอตรวจสอบ" },
+              { value: "NEEDS_INFO", label: "รอข้อมูล" },
+              { value: "DECIDED", label: "ตัดสินแล้ว" },
+            ]}
+          />
       </div>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
