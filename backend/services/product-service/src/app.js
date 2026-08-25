@@ -3,6 +3,7 @@ const { errorHandler } = require("@reloop/shared");
 const productRoutes = require("./routes/productRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const moderationRoutes = require("./features/moderation/moderationRoutes");
+const metricsRoutes = require("./features/metrics/metricsRoutes");
 const { UPLOAD_DIR } = require("./middleware/upload");
 
 const app = express();
@@ -11,6 +12,8 @@ app.use(express.json());
 app.get("/health", (req, res) =>
   res.json({ status: "ok", service: "product-service" }),
 );
+
+app.use("/executive", metricsRoutes);
 
 // Uploaded media is served directly as static files; the gateway proxies
 // GET /uploads/* to this service without requiring a bearer token (public

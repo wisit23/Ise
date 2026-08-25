@@ -26,7 +26,9 @@ export default function LoginPage() {
         body: form,
       });
       saveSession(data);
-      router.push("/");
+      // An executive's job here is the dashboard, not the storefront — land
+      // them on the business overview straight after login (UR-27).
+      router.push(data.user?.role === "EXECUTIVE" ? "/executive" : "/");
     } catch (err) {
       setError(err.message);
     } finally {

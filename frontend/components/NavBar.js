@@ -9,6 +9,7 @@ const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
   SELLER: "ผู้ขาย",
   ADMIN: "แอดมิน",
+  EXECUTIVE: "ผู้บริหาร",
 };
 
 export default function NavBar() {
@@ -55,6 +56,7 @@ export default function NavBar() {
 
   const isSeller = user?.role === "SELLER";
   const isAdmin = user?.role === "ADMIN";
+  const isExecutive = user?.role === "EXECUTIVE";
 
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
@@ -137,6 +139,19 @@ export default function NavBar() {
                     </span>
                     ลงขายสินค้า
                   </Link>
+
+                  {isExecutive && (
+                    <Link
+                      href="/executive"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
+                        📊
+                      </span>
+                      แดชบอร์ดผู้บริหาร
+                    </Link>
+                  )}
 
                   {isSeller && (
                     <Link

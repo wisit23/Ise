@@ -40,6 +40,13 @@ const SELLERS = [
   },
 ];
 
+const EXECUTIVE = {
+  id: "10000000-0000-0000-0000-000000000099",
+  email: "ceo@example.com",
+  firstName: "อัสนัย",
+  lastName: "เมืองรอด",
+};
+
 async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
@@ -59,8 +66,21 @@ async function main() {
     });
   }
 
+  await prisma.user.upsert({
+    where: { id: EXECUTIVE.id },
+    update: {},
+    create: {
+      id: EXECUTIVE.id,
+      email: EXECUTIVE.email,
+      passwordHash,
+      firstName: EXECUTIVE.firstName,
+      lastName: EXECUTIVE.lastName,
+      role: "EXECUTIVE",
+    },
+  });
+
   console.log(
-    `[auth-service] seeded ${SELLERS.length} demo seller accounts (password: "${DEMO_PASSWORD}")`,
+    `[auth-service] seeded ${SELLERS.length} demo seller accounts + 1 demo executive account (password: "${DEMO_PASSWORD}")`,
   );
 }
 

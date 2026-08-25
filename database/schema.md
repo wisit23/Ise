@@ -28,7 +28,7 @@ Source: [`auth-service.prisma`](./auth-service.prisma)
 | f_name        | text        | not null                     | ER: `FName`                    |
 | l_name        | text        | not null                     | ER: `LName`                    |
 | phone         | text        | nullable                     |                                |
-| role          | enum `Role` | not null, default `BUYER`    | `BUYER` \| `SELLER` \| `ADMIN` |
+| role          | enum `Role` | not null, default `BUYER`    | `BUYER` \| `SELLER` \| `ADMIN` \| `EXECUTIVE` |
 | status        | text        | not null, default `'ACTIVE'` |                                |
 | created_at    | timestamp   | not null, default `now()`    |                                |
 | updated_at    | timestamp   | not null, auto-update        |                                |
@@ -102,7 +102,7 @@ No submission endpoint yet — table only, per the "no ER table gets cut" rule.
 
 | Enum           | Values                                      |
 | -------------- | ------------------------------------------- |
-| `Role`         | `BUYER`, `SELLER`, `ADMIN`                  |
+| `Role`         | `BUYER`, `SELLER`, `ADMIN`, `EXECUTIVE`     |
 | `KycStatus`    | `NONE`, `PENDING`, `VERIFIED`, `REJECTED`   |
 | `ReportStatus` | `OPEN`, `REVIEWED`, `ACTIONED`, `DISMISSED` |
 

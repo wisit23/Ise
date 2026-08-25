@@ -11,6 +11,7 @@ enum Role {
   BUYER
   SELLER
   ADMIN
+  EXECUTIVE
 }
 
 // Functional multi-role catalog (ADM-001). `Role` above stays as the legacy
