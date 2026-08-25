@@ -9,6 +9,8 @@ const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
   SELLER: "ผู้ขาย",
   ADMIN: "แอดมิน",
+  MARKETING: "การตลาด",
+  CUSTOMER_SERVICE: "ฝ่ายบริการลูกค้า",
   EXECUTIVE: "ผู้บริหาร",
 };
 
@@ -57,6 +59,7 @@ export default function NavBar() {
   const isSeller = user?.role === "SELLER";
   const isAdmin = user?.role === "ADMIN";
   const isExecutive = user?.role === "EXECUTIVE";
+  const isMarketing = user?.role === "MARKETING";
 
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
@@ -92,6 +95,14 @@ export default function NavBar() {
         >
           <span aria-hidden="true"></span>
           <span className="hidden sm:inline">ปัดดูสินค้า</span>
+        </Link>
+
+        <Link
+          href="/auctions"
+          className="flex shrink-0 items-center gap-1 text-sm text-gray-600 hover:text-emerald-600"
+        >
+          <span aria-hidden="true"></span>
+          <span className="hidden sm:inline">ประมูล</span>
         </Link>
 
         <div className="ml-auto shrink-0">
@@ -176,6 +187,32 @@ export default function NavBar() {
                         🎬
                       </span>
                       อัปโหลดคลิปรีวิว
+                    </Link>
+                  )}
+
+                  {isSeller && (
+                    <Link
+                      href="/seller/auctions"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
+                        🔨
+                      </span>
+                      ส่งสินค้าประมูล
+                    </Link>
+                  )}
+
+                  {isMarketing && (
+                    <Link
+                      href="/marketing/auctions"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
+                        📣
+                      </span>
+                      ศูนย์การตลาด
                     </Link>
                   )}
 

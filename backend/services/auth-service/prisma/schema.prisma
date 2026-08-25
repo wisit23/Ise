@@ -7,10 +7,15 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Legacy single-role column on User. Kept in sync with RoleCode below —
+// CUSTOMER_SERVICE is the one name for support staff across every service
+// (support-service's AGENT_ROLES, permissions.js, and the seeds all agree).
 enum Role {
   BUYER
   SELLER
   ADMIN
+  MARKETING
+  CUSTOMER_SERVICE
   EXECUTIVE
 }
 

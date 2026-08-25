@@ -23,6 +23,11 @@ model Order {
   productTitle String   @map("product_title")
   price        Int
   status       String   @default("pending")
+  // Set only when this order was created automatically because a buyer won
+  // an auction in product-service, instead of a normal "buy now" checkout.
+  // No FK — product-service owns the AuctionItem, this is a read-only
+  // reference so metrics/support can trace an order back to its auction.
+  auctionId    String?  @map("auction_id")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -39,6 +44,7 @@ model Order {
 
   @@index([buyerId])
   @@index([sellerId])
+  @@index([auctionId])
   @@map("orders")
 }
 
