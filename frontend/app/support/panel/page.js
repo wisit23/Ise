@@ -483,8 +483,8 @@ function TicketsSection({ token, statusFilter, setStatusFilter }) {
               <th className="px-5 py-4">
                 ผู้รับผิดชอบ
               </th>
-              <th className="px-5 py-4">
-                วันที่เปิด
+              <th className="px-5 py-4 text-center">
+                จัดการ
               </th>
             </tr>
           </thead>
@@ -956,7 +956,7 @@ function DisputesSection({ token, status, setStatus }) {
                     </div>
                   ) : "—"}
                 </td>
-                <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+                <td className="px-5 py-4 text-right font-medium text-slate-700">
                   {d.order?.price ? `฿${d.order.price.toLocaleString("th-TH")}` : "—"}
                 </td>
                 <td className="px-5 py-4">
