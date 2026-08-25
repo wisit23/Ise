@@ -1,9 +1,11 @@
+const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const multer = require("multer");
 const { badRequest } = require("@reloop/shared");
 
 const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const ALLOWED_MIME = /^image\/(jpeg|png|webp|gif)$|^video\/(mp4|quicktime)$/;
 
