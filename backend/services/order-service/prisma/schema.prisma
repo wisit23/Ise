@@ -13,6 +13,8 @@ generator client {
 
 // Status lifecycle: pending (cart, product locked) -> completed (paid), or cancelled (product unlocked).
 // confirmed/shipped are reserved for a future fulfillment flow and are not driven by the UI yet.
+// "disputed" (ADM-004) is a branch Admin drives via adminDisputeService, not the buyer/seller
+// updateStatus endpoint — preDisputeStatus remembers what `status` was so release can restore it.
 model Order {
   id           String   @id @default(uuid())
   buyerId      String   @map("buyer_id")
@@ -24,7 +26,50 @@ model Order {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  // ADM-004: simulated fund hold — no bank/payment-processor fields, mock state only
+  // (ADM-DEC-003: KYC/fund hold are synthetic/simulation, never real money).
+  paymentSimulationStatus String    @default("RELEASE_PENDING") @map("payment_simulation_status")
+  version                 Int       @default(1)
+  holdReason              String?   @map("hold_reason")
+  heldAt                  DateTime? @map("held_at")
+  heldBy                  String?   @map("held_by")
+  preDisputeStatus        String?   @map("pre_dispute_status")
+
+  disputeEvidence DisputeEvidence[]
+
   @@index([buyerId])
   @@index([sellerId])
   @@map("orders")
+}
+
+// ADM-004: evidence reference "consumed" from CS case / Chat (plan.md Interfaces)
+// — CS/Chat don't have that feature built yet, so this is populated by direct
+// seed in tests today (ADM-DEC-010's pattern), not by a CS-facing submit endpoint
+// Admin would have to guess the contract for.
+model DisputeEvidence {
+  id          String   @id @default(uuid())
+  orderId     String   @map("order_id")
+  order       Order    @relation(fields: [orderId], references: [id])
+  evidenceRef String   @map("evidence_ref")
+  note        String?
+  submittedBy String   @map("submitted_by")
+  submittedAt DateTime @default(now()) @map("submitted_at")
+
+  @@index([orderId])
+  @@map("dispute_evidence")
+}
+
+// ADM-004: append-only audit of every privileged dispute action (evidence
+// view, hold, release) — mirrors auth-service's AdminAudit, kept local to
+// order-service since each service persists its own action evidence.
+model DisputeAudit {
+  id        String   @id @default(uuid())
+  orderId   String   @map("order_id")
+  actorId   String   @map("actor_id")
+  action    String
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("dispute_audits")
 }

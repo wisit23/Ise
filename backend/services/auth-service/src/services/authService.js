@@ -4,6 +4,8 @@ const {
   signAccessToken,
   signRefreshToken,
   verifyRefreshToken,
+  permissionsForRoles,
+  ALL_ROLES,
   badRequest,
   conflict,
   notFound,
@@ -23,15 +25,71 @@ function toPublicUser(user) {
   };
 }
 
-function buildAccessTokenClaims(user) {
+/**
+ * A user with no explicit UserRole rows resolves to their legacy single
+ * `role` column — this is what makes existing Buyer/Seller accounts keep
+ * working without a bulk backfill migration (ADM-001 Step 4).
+ */
+async function getUserRoles(userId) {
+  const assigned = await prisma.userRole.findMany({ where: { userId } });
+  if (assigned.length > 0) return assigned.map((r) => r.role);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  return user ? [user.role] : [];
+}
+
+/** Materializes UserRole rows from the legacy `role` column on first write, if needed. */
+async function ensureRoleRowsMigrated(userId) {
+  const existing = await prisma.userRole.findMany({ where: { userId } });
+  if (existing.length > 0) return existing.map((r) => r.role);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw notFound("user not found");
+
+  await prisma.userRole.create({ data: { userId, role: user.role } });
+  return [user.role];
+}
+
+async function assignRole(userId, role) {
+  if (!ALL_ROLES.includes(role)) throw badRequest("unknown role");
+
+  await ensureRoleRowsMigrated(userId);
+  await prisma.userRole.upsert({
+    where: { userId_role: { userId, role } },
+    update: {},
+    create: { userId, role },
+  });
+
+  return getUserRoles(userId);
+}
+
+async function removeRole(userId, role) {
+  if (!ALL_ROLES.includes(role)) throw badRequest("unknown role");
+
+  await ensureRoleRowsMigrated(userId);
+  const remaining = await prisma.userRole.findMany({ where: { userId } });
+  if (remaining.length <= 1 && remaining.some((r) => r.role === role)) {
+    throw conflict("user must retain at least one role");
+  }
+
+  await prisma.userRole.deleteMany({ where: { userId, role } });
+  return getUserRoles(userId);
+}
+
+async function buildAccessTokenClaims(user) {
   const displayName = [user.firstName, user.lastName]
     .filter(Boolean)
     .join(" ")
     .trim();
 
+  const roles = await getUserRoles(user.id);
+  const permissions = permissionsForRoles(roles);
+
   return {
     sub: user.id,
-    role: user.role,
+    role: user.role, // legacy single-role claim, kept for backward compatibility
+    roles,
+    permissions,
     displayName: displayName || undefined,
   };
 }
@@ -39,7 +97,7 @@ function buildAccessTokenClaims(user) {
 async function issueTokenPair(user) {
   // jti guarantees uniqueness even if a user logs in twice within the same second
   // (same sub+role+iat would otherwise sign to the identical JWT string).
-  const accessToken = signAccessToken(buildAccessTokenClaims(user));
+  const accessToken = signAccessToken(await buildAccessTokenClaims(user));
   const refreshToken = signRefreshToken({
     sub: user.id,
     role: user.role,
@@ -143,7 +201,7 @@ async function refresh(refreshToken) {
     throw badRequest("refresh token is no longer valid");
   }
 
-  const accessToken = signAccessToken(buildAccessTokenClaims(stored.user));
+  const accessToken = signAccessToken(await buildAccessTokenClaims(stored.user));
   return { accessToken };
 }
 
@@ -202,4 +260,7 @@ module.exports = {
   getById,
   updateProfile,
   getPublicSellerProfile,
+  getUserRoles,
+  assignRole,
+  removeRole,
 };

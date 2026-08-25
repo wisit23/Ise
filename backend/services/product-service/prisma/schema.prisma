@@ -46,6 +46,12 @@ model Product {
   location    String   @default("")
   size        String   @default("Free size")
   status      String   @default("available")
+  // ADM-003: set when Admin removes a listing via POST /internal/moderation/:id/remove.
+  // preRemovalStatus remembers what `status` was before removal so restore can
+  // put the listing back where it actually was (not force it to "available").
+  moderatedAt      DateTime? @map("moderated_at")
+  moderationReason String?   @map("moderation_reason")
+  preRemovalStatus String?   @map("pre_removal_status")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

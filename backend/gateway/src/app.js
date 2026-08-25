@@ -52,6 +52,12 @@ app.use((req, res, next) => {
     const payload = verifyAccessToken(token);
     req.headers["x-user-id"] = payload.sub;
     req.headers["x-user-role"] = payload.role;
+    // Multi-role/permission claims (ADM-001) — fromGatewayHeaders reads these,
+    // so the gateway has to forward them or every permission check downstream
+    // would silently see an empty set. Both are ASCII-only by construction
+    // (role codes and permission slugs), so no encoding is needed here.
+    req.headers["x-user-roles"] = (payload.roles || []).join(",");
+    req.headers["x-user-permissions"] = (payload.permissions || []).join(",");
     // HTTP header values are Latin-1 only; displayName can be Thai (or any
     // non-ASCII) text, which throws ERR_INVALID_CHAR in http-proxy if set
     // raw. Encode here, decode in authMiddleware's fromGatewayHeaders.
