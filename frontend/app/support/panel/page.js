@@ -899,7 +899,7 @@ function DisputesSection({ token, status, setStatus }) {
               <th className="px-5 py-4">Dispute ID</th>
               <th className="px-5 py-4">เหตุผล</th>
               <th className="px-5 py-4">Buyer → Seller</th>
-              <th className="px-5 py-4 text-right">ยอดเงิน</th>
+              <th className="px-5 py-4">ยอดเงิน</th>
               <th className="px-5 py-4">สถานะ</th>
               <th className="px-5 py-4">วันที่เปิด</th>
               <th className="px-5 py-4 text-center">Action</th>
@@ -956,7 +956,7 @@ function DisputesSection({ token, status, setStatus }) {
                     </div>
                   ) : "—"}
                 </td>
-                <td className="px-5 py-4 text-right font-medium text-slate-700">
+                <td className="px-5 py-4 font-medium text-slate-700">
                   {d.order?.price ? `฿${d.order.price.toLocaleString("th-TH")}` : "—"}
                 </td>
                 <td className="px-5 py-4">
