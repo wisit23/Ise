@@ -156,6 +156,39 @@ async function pay(req, res, next) {
   }
 }
 
+/**
+ * Called by product-service (internal token) once an auction closes with a
+ * winning bid. Creates the same shape of Order a normal "buy now" checkout
+ * would, so the winner pays through the existing pay() flow below — Marketing
+ * owns the auction/schedule, Order stays the only writer of Order state.
+ */
+async function createFromAuction(req, res, next) {
+  try {
+    const { auctionId, productId, productTitle, sellerId, buyerId, price } =
+      req.body;
+    if (!auctionId || !productId || !sellerId || !buyerId || !price) {
+      throw badRequest(
+        "auctionId, productId, sellerId, buyerId, price are required",
+      );
+    }
+
+    const order = await orderModel.create({
+      buyerId,
+      sellerId,
+      productId,
+      productTitle: productTitle || "",
+      price,
+      auctionId,
+    });
+
+    await productClient.setProductStatus(productId, "reserved");
+
+    res.status(201).json(order);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   create,
   mine,
@@ -164,4 +197,5 @@ module.exports = {
   getOneInternal,
   updateStatus,
   pay,
+  createFromAuction,
 };

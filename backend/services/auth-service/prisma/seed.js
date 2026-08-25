@@ -40,6 +40,18 @@ const SELLERS = [
   },
 ];
 
+// Staff accounts for roles nobody can self-register into (Marketing, Admin,
+// etc.) — fixed UUIDs and upsert-only for the same reason as SELLERS above.
+const STAFF = [
+  {
+    id: "20000000-0000-0000-0000-000000000001",
+    email: "marketing@example.com",
+    firstName: "การตลาด",
+    lastName: "รีลูป",
+    role: "MARKETING",
+  },
+];
+
 async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
@@ -59,8 +71,23 @@ async function main() {
     });
   }
 
+  for (const staff of STAFF) {
+    await prisma.user.upsert({
+      where: { id: staff.id },
+      update: {},
+      create: {
+        id: staff.id,
+        email: staff.email,
+        passwordHash,
+        firstName: staff.firstName,
+        lastName: staff.lastName,
+        role: staff.role,
+      },
+    });
+  }
+
   console.log(
-    `[auth-service] seeded ${SELLERS.length} demo seller accounts (password: "${DEMO_PASSWORD}")`,
+    `[auth-service] seeded ${SELLERS.length} demo seller accounts and ${STAFF.length} staff accounts (password: "${DEMO_PASSWORD}")`,
   );
 }
 

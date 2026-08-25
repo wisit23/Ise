@@ -11,6 +11,9 @@ enum Role {
   BUYER
   SELLER
   ADMIN
+  MARKETING
+  CUSTOMER_SERVICE
+  EXECUTIVE
 }
 
 enum KycStatus {
