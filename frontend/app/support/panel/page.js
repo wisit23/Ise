@@ -1420,6 +1420,7 @@ function FaqSection({ token }) {
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [closingForm, setClosingForm] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [form, setForm] = useState({ title: "", body: "", category: "OTHER" });
   const [submitting, setSubmitting] = useState(false);
   const [publishingId, setPublishingId] = useState(null);
@@ -1557,17 +1558,36 @@ function FaqSection({ token }) {
                     className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                   />
                 </div>
-                <div className="col-span-1">
+                <div className="col-span-1 relative">
                   <label className="mb-1 block text-xs font-semibold text-slate-500 uppercase tracking-wider">หมวดหมู่</label>
-                  <select
-                    value={form.category}
-                    onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                  <button
+                    type="button"
+                    onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 outline-none hover:border-slate-300 hover:bg-slate-50 transition-colors focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                   >
-                    {HELP_CATEGORIES.map((c) => (
-                      <option key={c.value} value={c.value}>{c.label}</option>
-                    ))}
-                  </select>
+                    <span className="truncate">
+                      {HELP_CATEGORIES.find((c) => c.value === form.category)?.label || "เลือกหมวดหมู่"}
+                    </span>
+                    <span className="material-symbols-outlined text-[18px] text-slate-400 shrink-0">
+                      expand_more
+                    </span>
+                  </button>
+                  {showCategoryDropdown && (
+                    <div className="absolute top-full left-0 mt-2 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-20 animate-fade-in-up">
+                      {HELP_CATEGORIES.map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={() => { setForm({ ...form, category: c.value }); setShowCategoryDropdown(false); }}
+                          className={`w-full text-left rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                            form.category === c.value ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                          }`}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               
