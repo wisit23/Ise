@@ -31,6 +31,10 @@ function createProductVideoRepository(prismaClient) {
     });
   }
 
+  function findById(id) {
+    return prismaClient.productVideo.findUnique({ where: { id } });
+  }
+
   function create(data) {
     return prismaClient.productVideo.create({
       data,
@@ -38,10 +42,20 @@ function createProductVideoRepository(prismaClient) {
     });
   }
 
+  function upsertChoice({ productVideoId, userId }) {
+    return prismaClient.swipeChoice.upsert({
+      where: { productVideoId_userId: { productVideoId, userId } },
+      update: {},
+      create: { productVideoId, userId },
+    });
+  }
+
   return {
     listAvailable,
     findProductOwner,
+    findById,
     create,
+    upsertChoice,
   };
 }
 

@@ -53,7 +53,7 @@
 - Produces: `GET /api/*/executive/metrics?from&to&timezone`
 - Produces: `ExecutiveMetricPoint` from `../integration.md`
 
-- [ ] **Step 1: Write failing fixture-based GMV/revenue/user tests**
+- [x] **Step 1: Write failing fixture-based GMV/revenue/user tests**
 
 ```js
 assert.deepEqual(metrics, {
@@ -63,15 +63,15 @@ assert.deepEqual(metrics, {
 });
 ```
 
-- [ ] **Step 2: Run integration tests; confirm protected aggregate endpoints missing**
-- [ ] **Step 3: Implement owner-local aggregates and metadata**
+- [x] **Step 2: Run integration tests; confirm protected aggregate endpoints missing**
+- [x] **Step 3: Implement owner-local aggregates and metadata**
 
 ```js
 { data, meta: { definitionVersion: "v1", timezone: "Asia/Bangkok", from, to } }
 ```
 
-- [ ] **Step 4: Verify non-Executive `403`, cancelled exclusion and boundary timestamps**
-- [ ] **Step 5: Update docs and commit `feat(executive): add governed metrics`**
+- [x] **Step 4: Verify non-Executive `403`, cancelled exclusion and boundary timestamps**
+- [x] **Step 5: Update docs** — commit `feat(executive): add governed metrics` still pending
 
 ### Task CEO-002: Executive Dashboard and Comparisons
 
@@ -84,9 +84,9 @@ assert.deepEqual(metrics, {
 
 **Interfaces:** Consumes three provider metric responses and preserves `unavailable` state
 
-- [ ] **Step 1: Write failing KPI/month/year/partial-state tests**
-- [ ] **Step 2: Run Jest and confirm route/components missing**
-- [ ] **Step 3: Implement parallel fetch with per-provider result state**
+- [x] **Step 1: Write failing KPI/month/year/partial-state tests**
+- [x] **Step 2: Run Jest and confirm route/components missing**
+- [x] **Step 3: Implement parallel fetch with per-provider result state**
 
 ```js
 const results = await Promise.allSettled([
@@ -96,8 +96,8 @@ const results = await Promise.allSettled([
 ]);
 ```
 
-- [ ] **Step 4: Verify keyboard/chart labels, mobile layout and one-provider failure**
-- [ ] **Step 5: Update docs and commit `feat(executive): add KPI dashboard`**
+- [x] **Step 4: Verify keyboard/chart labels, mobile layout and one-provider failure**
+- [x] **Step 5: Update docs** — commit `feat(executive): add KPI dashboard` still pending
 
 ### Task CEO-003: Top Products and Categories
 
@@ -105,13 +105,16 @@ const results = await Promise.allSettled([
 
 - Create: `backend/services/product-service/src/features/metrics/topCatalog.js`
 - Create: `frontend/components/executive/TopCategories.js`
+  — built as `RankingList.js` instead: one component renders both the category
+  and the product ranking (same `{id,label,count,gmv}` shape), so a
+  category-only component would have needed a near-duplicate sibling.
 - Test: `backend/services/product-service/test/top-catalog.integration.test.js`
 
 **Interfaces:** Consumes completed-sale facts; produces ranked `{id, label, count, gmv}`
 
-- [ ] **Step 1: Write failing top-10/tie/category/date tests**
-- [ ] **Step 2: Run integration test; confirm aggregate missing**
-- [ ] **Step 3: Implement deterministic rank with stable tie-break**
+- [x] **Step 1: Write failing top-10/tie/category/date tests**
+- [x] **Step 2: Run integration test; confirm aggregate missing**
+- [x] **Step 3: Implement deterministic rank with stable tie-break**
 
 ```js
 rows.sort(
@@ -120,8 +123,11 @@ rows.sort(
 );
 ```
 
-- [ ] **Step 4: Verify removed products retain historical label and filters**
-- [ ] **Step 5: Update docs and commit `feat(executive): add catalog rankings`**
+- [x] **Step 4: Verify removed products retain historical label and filters**
+      — ranking reads `products` rows directly, so a title is whatever the row
+      still holds; a hard-deleted product leaves the ranking entirely. Revisit
+      if listings ever become soft-deleted.
+- [x] **Step 5: Update docs** — commit `feat(executive): add catalog rankings` still pending
 
 ### Task CEO-004: Extended Anomaly Alerts
 

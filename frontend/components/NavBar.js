@@ -9,6 +9,9 @@ const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
   SELLER: "ผู้ขาย",
   ADMIN: "แอดมิน",
+  MARKETING: "การตลาด",
+  CUSTOMER_SERVICE: "ฝ่ายบริการลูกค้า",
+  EXECUTIVE: "ผู้บริหาร",
 };
 
 export default function NavBar() {
@@ -19,12 +22,23 @@ export default function NavBar() {
   const menuRef = useRef(null);
 
   useEffect(() => {
+    if (!document.getElementById("material-symbols-font")) {
+      const link = document.createElement("link");
+      link.id = "material-symbols-font";
+      link.rel = "stylesheet";
+      link.href =
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
+      document.head.appendChild(link);
+    }
+  }, []);
+
+  useEffect(() => {
     const stored = getStoredUser();
     setUser(stored);
 
     const token = getAccessToken();
     if (token) {
-      apiFetch("/api/orders/mine?status=pending&limit=1", { token })
+      apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
         .then((data) => setCartCount(data.total))
         .catch(() => {});
     }
@@ -54,6 +68,10 @@ export default function NavBar() {
   }
 
   const isSeller = user?.role === "SELLER";
+  const isExecutive = user?.role === "EXECUTIVE";
+  const isMarketing = user?.role === "MARKETING";
+  const isSupportAgent =
+    user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
 
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
@@ -91,6 +109,14 @@ export default function NavBar() {
           <span className="hidden sm:inline">ปัดดูสินค้า</span>
         </Link>
 
+        <Link
+          href="/auctions"
+          className="flex shrink-0 items-center gap-1 text-sm text-gray-600 hover:text-emerald-600"
+        >
+          <span aria-hidden="true"></span>
+          <span className="hidden sm:inline">ประมูล</span>
+        </Link>
+
         <div className="ml-auto shrink-0">
           {user ? (
             <div className="relative" ref={menuRef}>
@@ -113,16 +139,48 @@ export default function NavBar() {
                     </span>
                   </div>
 
+                  {isSupportAgent && (
+                    <Link
+                      href="/workspace"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sky-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          headset_mic
+                        </span>
+                      </span>
+                      Backoffice Workspace
+                    </Link>
+                  )}
+
                   <Link
                     href="/sell"
                     onClick={() => setMenuOpen(false)}
                     className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                   >
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
-                      +
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                      <span className="material-symbols-outlined text-[14px] leading-none">
+                        add
+                      </span>
                     </span>
                     ลงขายสินค้า
                   </Link>
+
+                  {isExecutive && (
+                    <Link
+                      href="/executive"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          insights
+                        </span>
+                      </span>
+                      แดชบอร์ดผู้บริหาร
+                    </Link>
+                  )}
 
                   {isSeller && (
                     <Link
@@ -130,8 +188,10 @@ export default function NavBar() {
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
-                        🏪
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          storefront
+                        </span>
                       </span>
                       แดชบอร์ดผู้ขาย
                     </Link>
@@ -143,10 +203,42 @@ export default function NavBar() {
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
-                        🎬
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          videocam
+                        </span>
                       </span>
                       อัปโหลดคลิปรีวิว
+                    </Link>
+                  )}
+
+                  {isSeller && (
+                    <Link
+                      href="/seller/auctions"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          gavel
+                        </span>
+                      </span>
+                      ส่งสินค้าประมูล
+                    </Link>
+                  )}
+
+                  {isMarketing && (
+                    <Link
+                      href="/marketing"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          campaign
+                        </span>
+                      </span>
+                      ศูนย์การตลาด
                     </Link>
                   )}
 
@@ -180,6 +272,22 @@ export default function NavBar() {
                       ร้านค้าของฉัน
                     </Link>
                   )}
+
+                  <Link
+                    href="/help"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    ศูนย์ช่วยเหลือ
+                  </Link>
+
+                  <Link
+                    href="/support/tickets"
+                    onClick={() => setMenuOpen(false)}
+                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    ตั๋วแจ้งปัญหาของฉัน
+                  </Link>
 
                   <Link
                     href="/profile"

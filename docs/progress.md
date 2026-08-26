@@ -735,13 +735,13 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                             | ผลที่เกิดขึ้นจริง                                                                                |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| การตรวจ                                          | ผลที่เกิดขึ้นจริง                                                                              |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | จำลอง Fresh Clone (ลบ `uploads/` แล้วรัน Node ตรงๆ) | `fs.mkdirSync` สร้าง Directory คืนให้อัตโนมัติ, `fs.existsSync` คืน `true`                       |
 | Grep ทั้ง `backend/` หา Pattern เขียนไฟล์ลง Disk    | เจอแค่จุดเดียวที่ `upload.js`, ไม่มีจุดอื่นเสี่ยงปัญหาเดียวกัน                                   |
 | ตรวจ Route `/api/auth/refresh` ผ่าน Gateway         | ตรงกับที่ `frontend/lib/api.js` เรียกจริง (`authRoutes.js` mount `/refresh` ใต้ `/api/auth`)     |
 | ตรวจ Status Code Login/Refresh ผิดพลาด              | ตอบ `400` (`badRequest`) ไม่ใช่ `401` — ยืนยันว่า Retry-on-401 Logic ไม่ชนกับ Error ทาง Business |
-| `npm test` (Frontend)                               | 5/5 ผ่าน (Test ที่พาดพิง `api.js` เป็น Mock ทั้งหมด ไม่ได้ทดสอบ Refresh Logic จริง)              |
+| `npm test` (Frontend)                              | 5/5 ผ่าน (Test ที่พาดพิง `api.js` เป็น Mock ทั้งหมด ไม่ได้ทดสอบ Refresh Logic จริง)              |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -754,6 +754,18 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 - `.gitignore`, `backend/services/product-service/uploads/.gitkeep`, `backend/services/product-service/src/middleware/upload.js`
 - `frontend/lib/auth.js`, `frontend/lib/api.js`
+
+### แก้ไขเพิ่มเติม (พบระหว่างทำ CSS-000–CSS-004, 2026-08-25)
+
+- `.gitignore` Pattern `uploads/*` + `!uploads/.gitkeep` ที่เพิ่มไว้ใน Task นี้ **ใช้งานไม่ได้จริง** — Pattern ที่มี
+  `/` อยู่กลาง Pattern (ไม่ใช่ท้ายสุด) จะ Anchor กับ Root ของ Repo เท่านั้นตาม gitignore Spec ทำให้ `uploads/*`
+  ที่ตั้งใจจะครอบ `backend/services/product-service/uploads/*` (Path ซ้อนลึก) ไม่ได้ครอบอะไรเลยจริงๆ —
+  ยืนยันด้วย `git check-ignore -v` ตรงๆ (คืนค่า Not Ignored ทั้งที่ Pattern มีอยู่) ตอนนั้นไม่มีใครสังเกตเพราะ
+  `uploads/` ในเครื่อง Dev ว่างเปล่าพอดี (ไม่เคยมี Local File ให้ทดสอบ Pattern จริง)
+- แก้เป็น Path เต็มจาก Root ตรงๆ: `backend/services/product-service/uploads/*` +
+  `!backend/services/product-service/uploads/.gitkeep` — ยืนยันด้วย `git check-ignore -v` กับไฟล์ทดสอบจริงแล้วว่า
+  Ignore ถูกต้อง และ `.gitkeep` ยัง Track ได้ปกติ
+- Pattern เดียวกันนี้ถูกใช้ซ้ำตอนสร้าง `private-evidence/` ใน `CSS-003` เลยแก้พร้อมกันทั้งคู่
 
 ## Task `MOCK-TRADE-011` — Full-Text-ish Search (Trigram) แทนที่ Title-Only Search
 
@@ -784,24 +796,24 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                                              | ผลที่เกิดขึ้นจริง                                                                                                           |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `to_tsvector('simple', 'เสื้อยืดวินเทจ Nike สภาพดี')`                | Token ไทยรวมเป็นก้อนเดียว ยืนยันว่า Postgres FTS ใช้กับไทยไม่ได้                                                            |
-| ค้น `denim`/`sneakers`/`vintage` ก่อนแก้                             | 0 ผลลัพธ์ทั้งหมด (Query เดิมไม่ครอบคลุม `tags`)                                                                             |
-| `word_similarity('เสื้อ', full_text)` vs `similarity(...)`           | `0.83` vs `0.24` — ยืนยันต้องใช้ `word_similarity`                                                                          |
-| `CREATE TABLE ... GENERATED ALWAYS AS (array_to_string(...)) STORED` | Error `generation expression is not immutable` — ยืนยันว่าต้องใช้ Trigger แทน Generated Column                              |
-| `npx prisma db push` กับ Schema ใหม่                                 | สร้าง Extension, Column `search_text`, GIN Index `products_search_text_idx` สำเร็จ ไม่มี Error                              |
-| รัน `seed.js` ใหม่กับ DB จริง                                        | Trigger ติดตั้งสำเร็จ, Backfill 16 แถวเดิมมี `search_text` ครบ                                                              |
-| Insert แถวใหม่ตรงๆ ด้วย SQL (ไม่ผ่าน App)                            | Trigger คำนวณ `search_text` ให้อัตโนมัติ ยืนยัน Trigger Fire ทุก Insert ไม่ใช่แค่ตอน Seed                                   |
-| `EXPLAIN` กับ `SET enable_seqscan=off`                               | ทั้ง `ILIKE` และ `<%` ใช้ `Bitmap Index Scan` บน `products_search_text_idx` จริง                                            |
-| ค้น `denim`/`sneakers`/`vintage`/`Denim`/`เสื้อ`/`leather` หลังแก้   | เจอผลลัพธ์ถูกต้องครบทุกคำ รวมตัวพิมพ์ใหญ่เล็กและข้ามภาษา                                                                    |
-| Category Filter + Search พร้อมกัน                                    | กรองถูกต้อง (`q=vintage&category=แจ็คเก็ต` เหลือแค่ 1 รายการที่ตรงทั้งสองเงื่อนไข)                                          |
-| `model.create()` แล้วค้นทันที                                        | เจอสินค้าที่เพิ่งสร้างในผลค้นหาทันที, ตรวจ `Object.keys()` แล้วไม่มี `searchText` รั่วออกมาใน Response                      |
-| `npm run lint` (Repo ทั้งหมด)                                        | Exit 0                                                                                                                      |
-| `npm test` (Repo ทั้งหมด, ต่อ Postgres จริงใน Container)             | 44/44 ผ่าน                                                                                                                  |
-| `docker compose build product-service` + `up -d`                     | Build สำเร็จ, `db push` sync, Seed+Trigger รันสำเร็จตอน Container Start จริง (ไม่ใช่แค่ Local)                              |
-| เปิด `http://localhost:3000/products?q=denim` ผ่าน Browser จริง      | เห็น "กางเกงยีนส์ Levi's 501 ทรงตรง" และ "เดนิมแจ็คเก็ตวินเทจ Levi's" ถูกต้อง, Network Log `GET /api/products/search → 200` |
-| เปิด `http://localhost:3000/products?q=sneakers` ผ่าน Browser จริง   | เห็น "รองเท้าผ้าใบ Converse สีขาว" ถูกต้อง (มาจาก Tag ล้วนๆ, Title ไม่มีคำนี้เลย)                                           |
+| การตรวจ                                                             | ผลที่เกิดขึ้นจริง                                                                                                    |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `to_tsvector('simple', 'เสื้อยืดวินเทจ Nike สภาพดี')`                    | Token ไทยรวมเป็นก้อนเดียว ยืนยันว่า Postgres FTS ใช้กับไทยไม่ได้                                                        |
+| ค้น `denim`/`sneakers`/`vintage` ก่อนแก้                              | 0 ผลลัพธ์ทั้งหมด (Query เดิมไม่ครอบคลุม `tags`)                                                                         |
+| `word_similarity('เสื้อ', full_text)` vs `similarity(...)`             | `0.83` vs `0.24` — ยืนยันต้องใช้ `word_similarity`                                                                     |
+| `CREATE TABLE ... GENERATED ALWAYS AS (array_to_string(...)) STORED` | Error `generation expression is not immutable` — ยืนยันว่าต้องใช้ Trigger แทน Generated Column                        |
+| `npx prisma db push` กับ Schema ใหม่                                 | สร้าง Extension, Column `search_text`, GIN Index `products_search_text_idx` สำเร็จ ไม่มี Error                        |
+| รัน `seed.js` ใหม่กับ DB จริง                                        | Trigger ติดตั้งสำเร็จ, Backfill 16 แถวเดิมมี `search_text` ครบ                                                         |
+| Insert แถวใหม่ตรงๆ ด้วย SQL (ไม่ผ่าน App)                             | Trigger คำนวณ `search_text` ให้อัตโนมัติ ยืนยัน Trigger Fire ทุก Insert ไม่ใช่แค่ตอน Seed                              |
+| `EXPLAIN` กับ `SET enable_seqscan=off`                                | ทั้ง `ILIKE` และ `<%` ใช้ `Bitmap Index Scan` บน `products_search_text_idx` จริง                                       |
+| ค้น `denim`/`sneakers`/`vintage`/`Denim`/`เสื้อ`/`leather` หลังแก้      | เจอผลลัพธ์ถูกต้องครบทุกคำ รวมตัวพิมพ์ใหญ่เล็กและข้ามภาษา                                                               |
+| Category Filter + Search พร้อมกัน                                    | กรองถูกต้อง (`q=vintage&category=แจ็คเก็ต` เหลือแค่ 1 รายการที่ตรงทั้งสองเงื่อนไข)                                     |
+| `model.create()` แล้วค้นทันที                                        | เจอสินค้าที่เพิ่งสร้างในผลค้นหาทันที, ตรวจ `Object.keys()` แล้วไม่มี `searchText` รั่วออกมาใน Response                 |
+| `npm run lint` (Repo ทั้งหมด)                                        | Exit 0                                                                                                                  |
+| `npm test` (Repo ทั้งหมด, ต่อ Postgres จริงใน Container)              | 44/44 ผ่าน                                                                                                              |
+| `docker compose build product-service` + `up -d`                     | Build สำเร็จ, `db push` sync, Seed+Trigger รันสำเร็จตอน Container Start จริง (ไม่ใช่แค่ Local)                         |
+| เปิด `http://localhost:3000/products?q=denim` ผ่าน Browser จริง       | เห็น "กางเกงยีนส์ Levi's 501 ทรงตรง" และ "เดนิมแจ็คเก็ตวินเทจ Levi's" ถูกต้อง, Network Log `GET /api/products/search → 200` |
+| เปิด `http://localhost:3000/products?q=sneakers` ผ่าน Browser จริง    | เห็น "รองเท้าผ้าใบ Converse สีขาว" ถูกต้อง (มาจาก Tag ล้วนๆ, Title ไม่มีคำนี้เลย)                                       |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -833,14 +845,14 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                                                                                           | ผลที่เกิดขึ้นจริง                                                                      |
-| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| จำลอง `setHeader('x-user-display-name', 'มานพ')` ตรงๆ ก่อนแก้                                                     | `ERR_INVALID_CHAR` ตรงกับ Log ผู้ใช้                                                   |
-| `npm test` (Repo ทั้งหมด)                                                                                         | 44/44 ผ่าน (ไม่มี Test เดิมที่ Cover Header นี้โดยตรง จึงไม่มี Test แตก)               |
-| `npm run lint` เฉพาะไฟล์ที่แก้                                                                                    | Exit 0                                                                                 |
-| Rebuild `gateway`, `auth-service`, `product-service`, `order-service`, `chat-service`, `review-service` + `up -d` | ทุก Container ขึ้น Healthy                                                             |
-| `curl` Login `shop.denim@example.com` (ชื่อจริง "มานพ เดนิม") ผ่าน Gateway จริง                                   | ได้ Access Token กลับมาปกติ                                                            |
-| `curl GET /api/products/mine` พร้อม Token ข้างต้น ผ่าน Gateway จริง                                               | `200 OK` พร้อมข้อมูลสินค้าจริง 4 ชิ้น, Gateway Log **ไม่มี** `ERR_INVALID_CHAR` อีกเลย |
+| การตรวจ                                                                          | ผลที่เกิดขึ้นจริง                                                                                     |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| จำลอง `setHeader('x-user-display-name', 'มานพ')` ตรงๆ ก่อนแก้                     | `ERR_INVALID_CHAR` ตรงกับ Log ผู้ใช้                                                                     |
+| `npm test` (Repo ทั้งหมด)                                                        | 44/44 ผ่าน (ไม่มี Test เดิมที่ Cover Header นี้โดยตรง จึงไม่มี Test แตก)                                  |
+| `npm run lint` เฉพาะไฟล์ที่แก้                                                   | Exit 0                                                                                                    |
+| Rebuild `gateway`, `auth-service`, `product-service`, `order-service`, `chat-service`, `review-service` + `up -d` | ทุก Container ขึ้น Healthy                                                                                |
+| `curl` Login `shop.denim@example.com` (ชื่อจริง "มานพ เดนิม") ผ่าน Gateway จริง   | ได้ Access Token กลับมาปกติ                                                                               |
+| `curl GET /api/products/mine` พร้อม Token ข้างต้น ผ่าน Gateway จริง               | `200 OK` พร้อมข้อมูลสินค้าจริง 4 ชิ้น, Gateway Log **ไม่มี** `ERR_INVALID_CHAR` อีกเลย                    |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -852,68 +864,213 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 - `backend/gateway/src/app.js`, `backend/shared/src/authMiddleware.js`
 
-## Task `MOCK-TRADE-013` — Hybrid Search (PostgreSQL FTS + Trigram)
+## Task `CSS-000`–`CSS-004` — Customer Service Core (Ticket, Agent Workspace, Dispute/Refund, SLA + FAQ)
 
-> วันที่ทำ: 2026-08-26
+> วันที่ทำ: 2026-08-25
 >
-> สถานะตามหลักฐาน: Implement แล้ว, Prisma schema validation และ lint ผ่าน, Product Service test ผ่าน 8/8 โดย Integration test ที่ต้องต่อ PostgreSQL ถูก Skip เพราะ environment รอบนี้ไม่มี Database/Docker
+> สถานะตามหลักฐาน: ลงมือทำและยืนยันครบทุกชั้น — `REQUIRE_INTEGRATION=1` PostgreSQL Test (16 Test ใหม่),
+> `npm test` ทั้ง Repo 67/67, `npm run lint`/`format:check` ผ่าน, และ E2E จริงผ่าน Browser กับ Docker Stack
+> ที่ Rebuild ใหม่ทั้งหมด (ไม่ใช่แค่เรียก Express App ผ่าน `supertest`)
+>
+> รายละเอียดเต็มอยู่ที่ [`docs/featureplan/customer-service/progress.md`](featureplan/customer-service/progress.md)
+> (Evidence Table), [`plan.md`](featureplan/customer-service/plan.md) (เหตุผล Scope Revision เป็น Ticket-first
+> แทน Chat-first) และ [`changelog.md`](featureplan/customer-service/changelog.md)
 
-### เหตุผลที่เปลี่ยน
+### สรุปงานที่ทำ
 
-- Trigram เดิมเก่งการค้น substring, ภาษาไทย และคำพิมพ์ผิด แต่คะแนนวัดความคล้ายของตัวอักษรเป็นหลัก จึงไม่รู้ว่า Match อยู่ใน `title` หรืออยู่ท้าย `description`
-- PostgreSQL Full-Text Search เก่งการ Match หลายคำและถ่วงน้ำหนัก Field แต่ Config `simple` ไม่สามารถตัดคำไทยที่เขียนติดกันได้
-- จึงใช้ **Hybrid Search** ให้สองระบบทำงานร่วมกัน ไม่ได้แทนที่ Trigram ด้วย FTS ล้วน
+1. สร้าง `support-service` ใหม่ทั้ง Service (Express + Prisma, `reloop_support`) ต่อเข้าทุกจุดของ Infra:
+   `docker-compose.yml`, `infra/postgres/init-databases.sql`, `.env.example`, `scripts/ensurePrismaClients.js`,
+   Gateway Proxy (`/api/support`), `.github/workflows/ci.yml`
+2. เพิ่ม `SUPPORT` Role + Seed เจ้าหน้าที่ Demo 2 คน; ขยาย Order Lifecycle ด้วย `disputed`/`refunded` +
+   `payoutHeld`/`disputedAt` โดย Endpoint `PATCH /:id/status` ทั่วไปตั้งใจไม่ให้ตั้งค่า 2 สถานะนี้ได้
+   (ต้องผ่าน Dispute Decision Flow เท่านั้น)
+3. **CSS-005** Ticket Core: State Machine บริสุทธิ์ (`ticketState.js`), Optimistic Lock ตอน Assign/Transition,
+   โน้ตภายในที่ผู้แจ้งมองไม่เห็น, Audit Log ทุก Privileged Action
+4. **CSS-002** Agent Workspace: ค้นหา Order แบบมีขอบเขต (`orderId`/`buyerId`/`sellerId` เท่านั้น — ตัดข้อกำหนด
+   "ค้นด้วยชื่อ/อีเมล" ออกเพราะ `order-service` ไม่มีข้อมูลนี้จริง) และปฏิเสธการค้นแบบไม่ใส่เงื่อนไขเพื่อกัน
+   Agent Dump ทั้งตาราง
+5. **CSS-003** Dispute/Refund: เปิดเคส → Hold Payout แบบ Atomic (`WF-08` ข้อ 3), ตัดสินได้ครั้งเดียวด้วย
+   Optimistic Lock, หลักฐานเก็บใน Private Storage แยกจาก `uploads/` สาธารณะของ Product-Service โดยสิ้นเชิง
+   (Directory + Docker Volume + `.gitkeep` ของตัวเอง), ทุกการเปิดดูหลักฐานตรวจสิทธิ์และบันทึก Audit (`NFR-SP-03`)
+6. **CSS-004** SLA + FAQ: `calculatePriority()`/`calculateSlaDueAt()` เป็น Pure Function, SLA Monitor Escalate
+   แบบปลอดภัยแม้รันหลาย Instance (`updateMany` แบบมีเงื่อนไข ไม่ใช่ Read-Then-Write), FAQ Search ใช้ `pg_trgm`
+   Pattern เดียวกับ `MOCK-TRADE-011`
+7. Frontend ครบ: `/help`, `/support/tickets(+[id])`, `/support/queue`, `/support/cases(+[id])`, ปุ่มเปิด
+   ข้อพิพาท + แนบหลักฐานในหน้า `/orders`, ลิงก์ใน `NavBar`
+8. หลักฐาน (รูป/วิดีโอ) โหลดผ่าน `fetch` แนบ Bearer Token → `Blob` → `ObjectURL` ไม่ใช่ `<a href>`/`<img src>`
+   ตรงๆ เพราะ Browser ไม่แนบ Header กำหนดเองให้กับการ Navigate ธรรมดา
 
-### งานที่ทำ
+### บั๊กที่เจอและแก้ระหว่างตรวจสอบจริง (Test อัตโนมัติจับไม่ได้)
 
-1. เพิ่ม `search_vector tsvector` ใน Product schema และ GIN Index สำหรับ Full-Text Search
-2. ขยาย DB Trigger เดิมให้คำนวณทั้ง `search_text` และ `search_vector` ทุกครั้งที่ Insert/Update พร้อม Backfill แถวเดิม
-3. กำหนดน้ำหนัก Full-Text Document ดังนี้:
-   - Weight A: `title`, `tags`
-   - Weight B: `category`
-   - Weight C: `description`
-   - Weight D: `condition`, `location`, `size`
-4. ใช้ `websearch_to_tsquery('simple', q)` สำหรับแปลงคำค้น และ `ts_rank_cd(..., 32)` สำหรับคำนวณคะแนน FTS แบบ Normalize
-5. Match สินค้าเมื่อเข้าเงื่อนไขอย่างน้อยหนึ่งทาง: `search_vector @@ query` (คำตรง), `ILIKE` (substring ตรง), หรือ `<%` (Trigram word similarity/คำพิมพ์ใกล้เคียง)
-6. เรียงผลด้วยสูตร `(0.65 × FTS rank) + (0.35 × Trigram rank) + 0.15 exact-title boost` แล้วใช้ `created_at DESC` ตัดสินเมื่อคะแนนเท่ากัน
-7. เพิ่ม Integration Test สร้างสินค้าสองชิ้นที่มีคำเดียวกันในตำแหน่งต่างกัน และยืนยันว่า Match ใน `title` อยู่เหนือ Match ที่มีเฉพาะ `description`; Test ยังตรวจด้วยว่า Trigger เติม `search_vector` จริง
-8. อัปเดต Node.js ของเครื่องจาก `20.11.0` เป็น `22.23.2` และ npm เป็น `10.9.8` ให้ตรงกับ `package.json` (`>=22.11.0 <23.0.0`)
-
-### กระบวนการค้นหาปัจจุบัน
-
-```text
-คำค้น
-  ├─ Full-Text Search: วัดความตรงของคำและน้ำหนัก Field
-  ├─ Trigram: วัดความคล้ายของตัวอักษรและช่วยกรณีพิมพ์ผิด
-  └─ ILIKE: จับ substring ตรง โดยเฉพาะคำไทยที่ FTS ตัดคำไม่ได้
-          ↓
-รวมคะแนน Hybrid
-          ↓
-เรียงคะแนนมากไปน้อย
-```
+| # | บั๊ก | สาเหตุที่ Test จับไม่ได้ | วิธีแก้ |
+| - | ---- | ------------------------ | ------- |
+| 1 | Frontend เรียก Decision Endpoint ด้วย `PATCH` แต่ Backend Route เป็น `POST` → `404` เงียบๆ | Integration Test เรียก Express App ตรงๆ ผ่าน `supertest` ไม่ได้ทดสอบ Frontend Call จริง | แก้ Method ให้ตรงกัน + ไล่เช็ค `apiFetch` ทุกจุดเทียบกับ Route จริงด้วยมือ |
+| 2 | ไฟล์ Frontend ใหม่/แก้ไขแล้ว Dev Server ไม่เห็นการเปลี่ยนแปลง | Docker Desktop บน Windows กับ Bind Mount มีช่องโหว่เรื่อง File Watcher ที่รู้จักกันอยู่แล้ว | `docker compose restart frontend` — ถ้าใครทำงานต่อในเครื่อง Windows แล้วหน้าเว็บไม่อัปเดตตามที่แก้ ให้ลองวิธีนี้ก่อน |
+| 3 | `.gitignore` Pattern `uploads/*`/`private-evidence/*` ที่ตั้งใจครอบ Path ซ้อนลึกไม่ทำงานจริง (มาจาก `MOCK-TRADE-010`) | ไม่มี Test คลุม `.gitignore` เลย ต้องเจอตอนสร้าง Evidence File จริงระหว่างทดสอบแล้วสังเกตว่า `git status` ขึ้นไฟล์ | เปลี่ยนเป็น Path เต็มจาก Root, ยืนยันด้วย `git check-ignore -v` — รายละเอียดเต็มอยู่ที่ Task `MOCK-TRADE-010` ด้านบน |
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                   | ผลที่เกิดขึ้นจริง                                                                                     |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `npx prisma validate`                     | Schema ถูกต้อง                                                                                        |
-| `npm run lint`                            | Exit 0                                                                                                |
-| Product Service tests                     | ผ่าน 8, ล้มเหลว 0, Skip Integration 1 เพราะไม่มี PostgreSQL ที่เข้าถึงได้                             |
-| Repo test suite หลังอัปเดต Node           | ผ่าน 39, ล้มเหลว 2, Skip 2; ที่ล้มเหลวเป็นปัญหา Prisma Client ของ `auth-service` ไม่ได้เกิดจาก Search |
-| PostgreSQL Integration ของ Hybrid Ranking | เพิ่ม Test แล้ว แต่ยังไม่ได้ Execute ใน environment รอบนี้เพราะไม่มี Database/Docker                  |
+| การตรวจ | ผลที่เกิดขึ้นจริง |
+| ------- | ------------------ |
+| `REQUIRE_INTEGRATION=1` support-service (4 ไฟล์) | 16 Test ผ่านหมด (Ticket Lifecycle, SLA Escalation ×2 รอบไม่ซ้ำ, Help Content, Health) |
+| `REQUIRE_INTEGRATION=1` order-service (Dispute/Support ใหม่) | 4 Test ผ่าน (Support Lookup, Dispute Decision ×2, Evidence Access) + Test เดิม 5 ตัวยังผ่านครบ |
+| `npm test` (Repo ทั้งหมด) | 67/67 ผ่าน |
+| `npm run lint` / `npm run format:check` | ผ่าน |
+| Rebuild `auth-service`, `order-service`, `support-service`, `gateway` + `docker compose up -d` | ทุก Container ขึ้น Healthy |
+| E2E ผ่าน Browser จริง: สมัคร Buyer → เปิดข้อพิพาทพร้อมเหตุผล → Login Agent → ดู Queue/Assign/Reply Ticket แยกใบ → Requester เห็น Reply แต่ไม่เห็นโน้ตภายใน → Agent เปิด Case พิจารณาอนุมัติคืนเงิน | สำเร็จทุกขั้น, `orders.status` เปลี่ยนเป็น `refunded`, `payout_held` เปลี่ยนเป็น `false` ยืนยันด้วย Query ตรงหลัง Rebuild Container ใหม่ |
 
-### ข้อจำกัดที่ยังเหลือ
+### ผลลัพธ์ปัจจุบัน
 
-- FTS ใช้ Config `simple`; ข้อความไทยที่ไม่มีช่องว่างยังพึ่ง `ILIKE`/Trigram เป็นหลัก ไม่ใช่ Thai semantic search
-- ค่าน้ำหนัก `65/35`, exact-title boost `0.15` และ Trigram threshold ยังเป็นค่าเริ่มต้น ต้องปรับจาก Search analytics/ข้อมูลจริง
-- ยังไม่ได้ทำ synonym, autocomplete/debounce, semantic/vector embedding หรือ benchmark กับข้อมูลจำนวนมาก
+- Customer Service ใช้งานได้จริงครบวงจร: ผู้ใช้เปิด Ticket/ข้อพิพาทได้, เจ้าหน้าที่รับเรื่อง/ตอบ/ตัดสินได้,
+  หลักฐานปลอดภัยไม่รั่วสู่สาธารณะ, SLA คำนวณและ Escalate อัตโนมัติ, FAQ ค้นภาษาไทยได้จริง
+- **Deferred**: `CSS-001` Live Chat Console (`UR-18`, `WF-06`) — ดูข้อกำหนดตอนกลับมาทำใน `plan.md`
+  (ต้อง Persist ก่อน Broadcast เพราะ `UR-25` ใช้ประวัติแชทเป็นหลักฐานข้อพิพาท)
+- **ยังไม่ได้ทำ**: การแจ้งเตือนหัวหน้าทีมจริงตอน SLA ใกล้ครบ (`WF-10` ข้อ 3) ตอนนี้แค่เปลี่ยนสถานะเป็น
+  `ESCALATED` ยังไม่มีช่องทางแจ้งเตือนจริง, ยังไม่ผ่าน AI Reviewer อิสระ, `buyer/plan.md` → `BUY-004` ยังรอ
+  ตกลงกับ Buyer Owner เรื่อง `CSS-001` ที่ถูกเลื่อน
 
 ### ไฟล์หลักที่เป็นหลักฐาน
 
-- `backend/services/product-service/prisma/schema.prisma`
-- `backend/services/product-service/prisma/seed.js`
-- `backend/services/product-service/src/models/productModel.js`
-- `backend/services/product-service/test/product-crud.integration.test.js`
+- `backend/services/support-service/` (ทั้ง Service ใหม่)
+- `backend/services/order-service/src/features/{disputes,support}/`, `backend/services/order-service/prisma/schema.prisma`
+- `backend/services/auth-service/prisma/schema.prisma`, `backend/services/auth-service/prisma/seed.js`
+- `backend/gateway/src/app.js`, `docker-compose.yml`, `infra/postgres/init-databases.sql`, `.env.example`,
+  `scripts/ensurePrismaClients.js`, `.github/workflows/ci.yml`
+- `frontend/app/help/`, `frontend/app/support/`, `frontend/app/orders/page.js`, `frontend/lib/api.js`,
+  `frontend/components/NavBar.js`
+
+## Task `UI-POLISH-001` — อัปเกรดหน้า Support Panel ให้สมบูรณ์แบบ (Impeccable UI)
+
+> วันที่ทำ: 2026-08-26
+>
+> สถานะตามหลักฐาน: ลงมือทำและคอมไพล์ผ่านสมบูรณ์ (Frontend React/Next.js)
+
+### สรุปงานที่ทำ
+
+1. **อัปเกรด UI หน้าศูนย์กลาง (Support Panel):** 
+   - ปรับกล่องค้นหา (Search Box) ไม่ให้บังหน้าจอ
+   - เพิ่มปุ่ม Copy (Full ID) สำหรับก๊อปปี้รหัสผู้ซื้อ/ผู้ขายในตารางข้อพิพาท เพื่อใช้วางค้นหาได้ทันที
+2. **ปรับปรุงระบบ FAQ (FAQ Modal):** เปลี่ยนจากการพิมพ์ข้อความลงฟอร์มในหน้าเดียวกัน เป็น Popup Modal สไตล์ Glassmorphism กลางจอ รองรับการพิมพ์ข้อความยาวๆ อย่างเป็นระบบ
+3. **Slide-over Modal (Tickets & Disputes):**
+   - เปลี่ยนจาก Modal ทั่วไปที่ซ้อนทับกันงงๆ เป็น Slide-over Panel ที่เลื่อนออกมาจากขอบขวาของจอสุดพรีเมียม
+   - เพิ่มระบบแอนิเมชันเปิด/ปิด (`animate-in slide-in-from-right` และ `animate-out slide-out-to-right`) ครบทุกจุด 
+   - รองรับการคลิกนอกกรอบ (Click outside) เพื่อสไลด์ปิดหน้าต่างอย่างนุ่มนวล และแก้บั๊กปุ่มปิด (Close button) เยื้อง
+4. **Disputes Panel + Chat Slide-over:**
+   - ออกแบบหน้าตาบัตรรายละเอียดผู้ร้องเรียน (Buyer Contact) และแกลเลอรีรูปภาพหลักฐาน (Evidence Gallery) ใหม่
+   - วางระบบ "แชท" จำลอง (UI) สำหรับข้อพิพาท เมื่อกดแล้วจะมีหน้าต่างแชทสไลด์ออกมาซ้อนจากด้านซ้ายของหน้าต่างหลัก (เปิดให้ดูรายละเอียดเคสพร้อมกับแชทได้ในจอเดียว)
+5. **Tickets Panel Details:** ขยายพื้นที่ตั๋ว (Tickets) ให้เป็น `max-w-2xl` ดึงข้อมูลทั้งหมดมาจัดวางอย่างสวยงาม และมีช่องเตรียมต่อระบบแชทในอนาคต
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ | ผลที่เกิดขึ้นจริง |
+| ------- | ------------------ |
+| `npm run build` (Frontend) | **Exit 0** (แก้บั๊ก ESLint `no-unused-vars` และ `react/no-unescaped-entities` ผ่านทั้งหมด) |
+| ตรวจสอบ UI (Visual UI Check) | แอนิเมชันตอนเปิด/ปิดลื่นไหล, เปิด UI ย่อย (แชท) ได้โดย Layout ไม่พัง |
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `frontend/app/support/panel/page.js`
+
+## Task `ADM-COMPLETE-001` — ทำให้ Admin สมบูรณ์ + รวม Executive/Marketing เข้า Panel Format เดียวกัน
+
+> วันที่ทำ: 2026-08-26
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ทดสอบผ่าน Browser จริงกับ Docker Stack ที่ Rebuild แล้ว, ยืนยันด้วย
+> `npm test` / `npm run test:frontend` / `next build` / `eslint`
+
+### สรุปงานที่ทำ
+
+1. **แก้บั๊ก "สถานะส่งไม้ต่อรั่วนอกเคสระดับแอดมิน":** ตัด Option `ESCALATED` ออกจาก Dropdown
+   ของ Tickets ทั่วไป, ทำ Dashboard KPI ให้ Role-aware (CS เห็น "Urgent" แทน "Escalated" ที่เป็น 0
+   เสมอ, Admin คลิกแล้วพาไปเคสระดับแอดมินตรง)
+2. **เพิ่มความสามารถ Admin ที่ Backend มีอยู่แล้วแต่ไม่เคยมี UI เรียก:** ลบ/กู้คืนสินค้าโดยตรง
+   (ไม่ต้องพึ่ง Report), อนุมัติ/ปฏิเสธคำขอเปิดประมูล (`auctionService.approve/reject` ค้างมาตั้งแต่
+   รอบ Merge ก่อนหน้าโดยไม่มี Frontend เรียกใช้เลย — ยืนยันจาก Seed Data จริงที่ค้างอยู่)
+3. **แก้บั๊กจริงที่พบระหว่างทดสอบผ่าน Docker Stack (ไม่ใช่แค่ตอน Dev):**
+   - Report action เรียก `/action` โดยไม่เคยเรียก `/review` ก่อน → 409 ทุกครั้งที่จัดการ Report
+     ที่ยังเป็น OPEN
+   - `restoreProduct` ส่ง `reason: null` เข้า Field ที่ Schema บังคับ Required → Prisma 500
+   - `ComplaintsSection` (Executive) สมมติ Response Shape ผิด (ไม่ Unwrap `{data, meta}`) →
+     หน้าเว็บ Crash ทันทีที่กดแท็บ "ข้อร้องเรียน"
+4. **เชื่อม Dispute เข้ากับ Admin Fund-hold ที่มีอยู่แล้วแต่ไม่เคยถูกลิงก์จากที่ไหน:** ตัดปุ่ม
+   "ส่งเรื่องให้ Admin" ที่พังมาตั้งแต่รอบก่อน (ส่ง Decision ที่ Backend ไม่รองรับ) เพิ่มลิงก์ไปหน้า
+   Hold/Release จริงที่แสดงเฉพาะ Role ADMIN
+5. **รวม Executive และ Marketing เข้า Sidebar Panel Format เดียวกับ CS/Admin
+   (`/workspace`):** ย้าย UI Atom กลาง (`Badge`/`KpiCard`/`ChartCard`/`DropdownFilter`) จาก
+   `components/support/ui/` ไป `components/panel/ui/` ให้ทุก Panel ใช้ร่วมกัน; เชื่อม
+   Executive Complaints กลับเข้าข้อมูลจริง (เดิม Hardcode Empty ไว้เพราะกลัว Seed Data
+   ดูเหมือนกิจกรรมจริง — Panel อื่นในระบบไม่มีข้อกังวลนี้แล้วหลัง Consolidate); เพิ่ม Dashboard
+   Overview ใหม่ให้ Marketing (เดิมไม่มี)
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ | ผลที่เกิดขึ้นจริง |
+| ------- | ------------------ |
+| `npm test` (Backend) | 108 tests, 84 ผ่าน, 0 fail, 24 skip (integration ต้องการ `REQUIRE_INTEGRATION`) |
+| `npm run test:frontend` | 28/28 ผ่าน (8 suites รวม Test ใหม่/แก้ไขสำหรับ Complaints, Reports) |
+| `next build` (Production) | สำเร็จครบ 22 route |
+| `eslint` | สะอาดทั้ง Backend และ Frontend |
+| Browser จริงผ่าน Docker Stack | Login ครบ ADMIN/CUSTOMER_SERVICE/EXECUTIVE/MARKETING, เดิน Flow ลบ/กู้คืนสินค้า, อนุมัติประมูล → เห็นผลฝั่ง Marketing ทันที, Report Review→Action ไม่ 409, Dispute Admin Link แสดงถูก Role |
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `frontend/app/workspace/page.js`, `frontend/app/executive/page.js`, `frontend/app/marketing/page.js`
+- `frontend/components/panel/ui/`, `frontend/components/support/sections/ProductsSection.js`,
+  `frontend/components/support/sections/AuctionApprovalsSection.js`
+- `frontend/components/executive/sections/`, `frontend/components/marketing/sections/`
+- `backend/services/auth-service/src/features/productModeration/`
+- `backend/services/product-service/src/controllers/productController.js` (`adminSearch`)
+- รายละเอียดเต็มแยกตามทีมที่ `docs/featureplan/admin/changelog.md`,
+  `docs/featureplan/executive/changelog.md`, `docs/featureplan/marketing/changelog.md`,
+  `docs/featureplan/customer-service/changelog.md`
+
+## Task `ADM-COMPLETE-002` — Report Creation, WARN_USER Decision, Ticket Counterparty (`targetId`)
+
+> วันที่ทำ: 2026-08-26
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ทดสอบผ่าน Browser จริงกับ Docker Stack ที่ Rebuild แล้ว, ยืนยันด้วย
+> `npm test` / `npm run test:frontend` / `eslint`
+
+### สรุปงานที่ทำ
+
+ผู้ใช้ตั้งข้อสังเกตสองรอบต่อเนื่องกัน: (1) `report:create` permission มีอยู่แล้วแต่ไม่มี endpoint
+ไหนใช้จริง, (2) Admin มีแค่ "แบน" เป็นทางเลือกเดียว และปุ่มแบน/ตักเตือนบนตั๋วที่ Escalate ยิงไปที่
+ผู้แจ้ง (`requesterId`) เสมอ — ผิดหลักการเมื่อเรื่องจริงเกี่ยวกับอีกฝ่าย
+
+1. **เปิดทาง Report creation จริง:** `POST /api/auth/reports` endpoint ใหม่ +
+   `ReportModal.js` (Reusable) + ปุ่ม "รายงาน" บนหน้าสินค้าและหน้าร้านค้า
+2. **เพิ่ม `WARN_USER` เป็น Decision ที่ไม่ใช่การแบน:** ใช้ได้ทั้งกับ Report-decision flow และ
+   Ticket แบบ Standalone endpoint (`POST /admin/users/:id/warn`) — บันทึก Audit แต่ไม่แตะ
+   `user.status`
+3. **เพิ่มคู่กรณี (`targetId`) ให้ `SupportTicket`:** Schema เพิ่ม Field ใหม่ (Soft reference แบบ
+   เดียวกับ `orderId`), ฟอร์มเปิดตั๋วให้ผู้ใช้ผูก Order จริงได้ ระบบ Derive คู่กรณีอัตโนมัติจากอีกฝ่าย
+   ของ Order นั้น, `AdminInboxSection.js` เพิ่มการ์ด "คู่กรณี (Target)" แยกจากการ์ดผู้แจ้งเดิม พร้อม
+   ปุ่มตักเตือน/แบนของตัวเองที่ผูกกับ `targetId` ไม่ใช่ `requesterId`
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ | ผลที่เกิดขึ้นจริง |
+| ------- | ------------------ |
+| `npm test` (Backend) | 108 tests, 84 ผ่าน, 0 fail, 24 skip (เท่าเดิม ไม่มี Regression) |
+| `npm run test:frontend` | 28/28 ผ่าน (เท่าเดิม) |
+| `eslint` | สะอาดทุกไฟล์ที่แก้ |
+| Browser จริงผ่าน Docker Stack (Rebuild `support-service`) | Login เป็น Buyer สร้างตั๋วผูก Order จริง
+  → Query DB ตรงยืนยัน `target_id` ตรงกับ Seller ของ Order นั้น (ไม่ใช่ผู้แจ้ง) → Escalate ตั๋ว →
+  Login เป็น Admin เปิดเคสระดับแอดมิน เห็นการ์ด "คู่กรณี" แสดง Seller ID แยกจากการ์ดผู้แจ้งที่แสดง
+  Buyer ID ถูกต้อง — ลบข้อมูลทดสอบและคืนค่า Baseline ครบหลังยืนยันเสร็จ |
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/auth-service/src/features/reports/reportService.js`,
+  `reportRoutes.js`
+- `backend/services/support-service/prisma/schema.prisma`,
+  `src/features/tickets/ticketController.js`, `ticketService.js`
+- `frontend/components/ReportModal.js`,
+  `frontend/components/support/sections/AdminInboxSection.js`
+- `frontend/app/support/tickets/page.js`, `frontend/app/products/[id]/page.js`,
+  `frontend/app/store/[sellerId]/page.js`
+- รายละเอียดเต็มแยกตามทีมที่ `docs/featureplan/admin/changelog.md`,
+  `docs/featureplan/customer-service/changelog.md`
 
 ## อัปเดตล่าสุด
 

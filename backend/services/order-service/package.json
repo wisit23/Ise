@@ -6,13 +6,18 @@
   "type": "commonjs",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "seed:dispute-demo": "node prisma/seed-dispute-demo.js"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
     "@reloop/shared": "file:../../shared",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
     "prisma": "^5.18.0"
   }
 }

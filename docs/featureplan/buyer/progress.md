@@ -2,30 +2,30 @@
 
 > Owner: วิศิษฏ์ เจียมสันต์ · Reviewer: เอกตระการ บุญญกาศ · Updated: 2026-08-10
 
-**Status:** `BUY-002` reservation core verified; remaining Buyer plan acceptance incomplete
+**Status:** `BUY-002` verified locally with PostgreSQL; Buyer plan acceptance incomplete
 
 **Plan coverage:** Explicit trace rows cover `UR-01`–`UR-07` through FR, active/deferred NFR,
 `WF-02`–`WF-07` and `BUY-001`–`BUY-005`
 
-**Confirmed evidence:** `/products`, `/products/[id]`, `/cart`, `/orders`, Product/Order/Review
-APIs and pagination exist. Product now owns an atomic 10-minute reservation with persisted
-`reservedBy`, `reservationId`, `reservationExpiresAt`, token-guarded release/confirm, lazy expiry
-and a cleanup worker. Order persists the reservation identity and compensates by releasing the
-exact token when Order creation fails. Mock Payment attempts and the new tracking contract have
-not passed this plan
+**Confirmed evidence:** `BUY-002` now uses Product-side compare-and-set reservation with persisted
+`reservationId`, `reservedBy` and 10-minute `reservationExpiresAt`. Order persists the matching
+reservation, compensates a failed Order write and reuses the same Order on retry. Cart renders a
+live countdown and prevents checkout after local expiry. Persisted Mock Payment attempts and the
+new fulfillment tracking contract remain outside this completed slice
 
 **Current implementation evidence:** `/swipe` consumes public `GET /api/products/videos/feed`,
 renders empty/error states, links to Product detail and is split into viewer/card components. Five
 frontend tests pass and only the active video plays; persisted choose behavior remains absent
 
-**Database acceptance:** Product reservation concurrency test passed against PostgreSQL with
-`REQUIRE_INTEGRATION=1`: two simultaneous buyers produced exactly one `201` and one `409`;
-expiry takeover, stale-token rejection and cleanup also passed. Checkout unit tests verify Order
-reservation persistence and compensation. Cross-service restart acceptance remains pending
+**Database acceptance:** `REQUIRE_INTEGRATION=1` ran against isolated PostgreSQL 16 schemas for
+Product and Order. The test proved one winner from two concurrent Buyers (`201/409`), retry without
+duplicate Order, expired takeover, stale-release protection and startup expiry recovery. Backend
+47/47, frontend 7/7, lint, secret scan and frontend production build passed
 
 **Deferred:** Security hardening in `NFR-SP-*`/`NFR-CP-*`; functional ownership checks remain
 
-**Blocker:** Phase 0 Product/Order state mapping, Swipe-to-Choose semantics and real-database test gate are not frozen
+**Blocker:** Overall Phase 0 and Buyer acceptance remain open: `BUY-001`, `BUY-003`–`BUY-005`,
+Swipe-to-Choose semantics, Mock Payment/fulfillment states and their database gates are not complete
 
-**Next action:** Add a process-restart/cross-service checkout integration test, then continue
-`BUY-003` Mock Payment and explicit fulfillment states
+**Next action:** Reviewer checks `BUY-002` evidence and schema contract. Do not start another Buyer
+task until that review; the planned implementation order resumes at `BUY-001`

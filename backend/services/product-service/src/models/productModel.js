@@ -12,8 +12,10 @@ function toApiShape(product) {
   // it just duplicates title/description/tags/etc. concatenated, so it's
   // dropped here rather than leaking through every product API response.
   delete rest.searchText;
-  delete rest.reservedBy;
+  // Reservation columns are internal cart-hold bookkeeping, not part of the
+  // public product shape either.
   delete rest.reservationId;
+  delete rest.reservedBy;
   delete rest.reservationExpiresAt;
   const media = [
     ...(photos || []).map((p) => ({ ...p, type: "image" })),
@@ -39,17 +41,22 @@ function mediaToNestedCreate(media) {
   };
 }
 
-/** Hybrid search against Product.searchVector and Product.searchText.
+/** Full-text-ish search against Product.searchText (a trigger-maintained
  * concat of title/description/category/condition/location/size/tags — see
  * prisma/schema.prisma and prisma/seed.js's ensureSearchTextTrigger).
  *
- * PostgreSQL FTS supplies field-aware lexical relevance for whitespace-
- * separated terms. Its `simple` config cannot word-break Thai, so pg_trgm
- * remains an equal partner: it handles Thai substrings and misspellings.
+ * Postgres full-text search (tsvector/to_tsquery) can't be used here: it has
+ * no Thai text-search config, and its "simple" config tokenizes on
+ * whitespace, which Thai doesn't reliably use between words — querying
+ * "เสื้อ" against a stored "เสื้อยืดวินเทจ" token literally does not match.
+ * pg_trgm's trigram matching works on 3-character sequences regardless of
+ * script, so it degrades gracefully for Thai instead of just failing.
  *
- * FTS weights title/tags (A) above category (B), description (C), and other
- * metadata (D). The final score blends lexical rank with trigram similarity,
- * plus a small exact-title boost. A row may match either engine.
+ * Matches on either: a literal substring (ILIKE, catches short/exact
+ * queries trigram similarity would score too low) OR a word-similarity hit
+ * (the `<%` operator, catches fuzzy/typo'd/multi-word matches). Both sides
+ * use the same GIN gin_trgm_ops index on search_text (verified with
+ * EXPLAIN — see docs/progress.md MOCK-TRADE-011 evidence table).
  */
 async function searchProducts({ q, category, status, skip = 0, take = 20 }) {
   const statusFilter = status
@@ -58,20 +65,11 @@ async function searchProducts({ q, category, status, skip = 0, take = 20 }) {
   const categoryFilter = category
     ? Prisma.sql`AND category = ${category}`
     : Prisma.empty;
-  const textQuery = Prisma.sql`websearch_to_tsquery('simple', ${q})`;
-  const fullTextRank = Prisma.sql`COALESCE(ts_rank_cd(search_vector, ${textQuery}, 32), 0)`;
-  const trigramRank = Prisma.sql`GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text))`;
-  const exactTitleBoost = Prisma.sql`CASE WHEN title ILIKE '%' || ${q} || '%' THEN 0.15 ELSE 0 END`;
-  const hybridRank = Prisma.sql`(0.65 * ${fullTextRank}) + (0.35 * ${trigramRank}) + ${exactTitleBoost}`;
-  const matchCondition = Prisma.sql`(
-    search_vector @@ ${textQuery}
-    OR search_text ILIKE '%' || ${q} || '%'
-    OR ${q} <% search_text
-  )`;
+  const matchCondition = Prisma.sql`(search_text ILIKE '%' || ${q} || '%' OR ${q} <% search_text)`;
 
   const [rows, countRows] = await Promise.all([
     prisma.$queryRaw`
-      SELECT id, ${hybridRank} AS rank
+      SELECT id, GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) AS rank
       FROM products
       WHERE ${statusFilter} ${categoryFilter} AND ${matchCondition}
       ORDER BY rank DESC, created_at DESC

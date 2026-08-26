@@ -1,13 +1,14 @@
 # Executive Feature Handoff
 
-> อัปเดตล่าสุด: 2026-08-10
+> อัปเดตล่าสุด: 2026-08-26
 
 ## Ownership
 
 - Owner: อัสนัย เมืองรอด
 - Reviewer: ศิวกร วรวัฒน์อมรชัย
 - Requirement scope: `UR-27`–`UR-31`
-- Current status: Planning revised - implementation not started
+- Current status: `CEO-001`–`CEO-003` implemented and database-verified; `CEO-004`/`CEO-005`
+  partially delivered — see [`progress.md`](progress.md) for the exact scope boundary
 
 ## Scope to hand off
 
@@ -24,8 +25,10 @@
 - ประวัติการเปลี่ยนแปลงอยู่ใน [`changelog.md`](changelog.md)
 - บทเรียนจากการตรวจ analytics flow อยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
-- ยังไม่มี Feature implementation, migration หรือ PostgreSQL integration test ใหม่ที่ยืนยันว่า Done
-- Post-pull audit ไม่พบ Executive source delta; ProductVideo/feed ไม่ใช่ metric acceptance evidence
+- `CEO-001`–`CEO-003` มี implementation + PostgreSQL integration test ที่รันผ่านจริงแล้ว
+  (`REQUIRE_INTEGRATION=1`, 49 passed / 0 skipped) — รายละเอียดใน [`progress.md`](progress.md)
+- `CEO-004`/`CEO-005` ยังไม่ครบตาม acceptance เดิม: ไม่มี persisted alert state และไม่มี
+  persisted export job/expiry — ห้ามรายงานว่า Done จนกว่าจะทำเพิ่มหรือ rescope อย่างเป็นทางการ
 
 ## Dependencies and contracts
 

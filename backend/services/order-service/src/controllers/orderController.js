@@ -1,5 +1,6 @@
 const {
   badRequest,
+  conflict,
   notFound,
   forbidden,
   parsePagination,
@@ -7,39 +8,16 @@ const {
 } = require("@reloop/shared");
 const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
+const { reserveOrder } = require("../features/checkout/checkoutService");
 
 async function create(req, res, next) {
-  let reservation;
   try {
-    const { productId } = req.body;
-    if (!productId) throw badRequest("productId is required");
-
-    reservation = await productClient.reserveProduct(productId, req.userId);
-    const product = reservation.product;
-
-    const order = await orderModel.create({
+    const { order, created } = await reserveOrder({
       buyerId: req.userId,
-      sellerId: product.sellerId,
-      productId: product.id,
-      productTitle: product.title,
-      price: product.price,
-      reservationId: reservation.reservationId,
-      reservationExpiresAt: reservation.expiresAt,
+      productId: req.body.productId,
     });
-
-    res.status(201).json(order);
+    res.status(created ? 201 : 200).json(order);
   } catch (err) {
-    if (reservation) {
-      try {
-        await productClient.releaseReservation(
-          req.body.productId,
-          reservation.reservationId,
-          req.userId,
-        );
-      } catch (releaseError) {
-        console.error("failed to compensate reservation", releaseError);
-      }
-    }
     next(err);
   }
 }
@@ -97,6 +75,16 @@ async function getOne(req, res, next) {
   }
 }
 
+// disputed/refunded are set only through the dispute flow (CSS-003's
+// disputeService), never by a buyer/seller PATCHing status directly.
+const USER_SETTABLE_STATUSES = [
+  "pending",
+  "confirmed",
+  "shipped",
+  "completed",
+  "cancelled",
+];
+
 async function updateStatus(req, res, next) {
   try {
     const order = await orderModel.findById(req.params.id);
@@ -106,31 +94,27 @@ async function updateStatus(req, res, next) {
     }
 
     const { status } = req.body;
-    if (!orderModel.VALID_STATUSES.includes(status)) {
+    if (!USER_SETTABLE_STATUSES.includes(status)) {
       throw badRequest(
-        `status must be one of ${orderModel.VALID_STATUSES.join(", ")}`,
-      );
-    }
-    if (["cancelled", "completed"].includes(status) && !order.reservationId) {
-      throw badRequest("order has no active reservation");
-    }
-
-    if (status === "cancelled") {
-      await productClient.releaseReservation(
-        order.productId,
-        order.reservationId,
-        order.buyerId,
-      );
-    }
-    if (status === "completed") {
-      await productClient.confirmReservation(
-        order.productId,
-        order.reservationId,
-        order.buyerId,
+        `status must be one of ${USER_SETTABLE_STATUSES.join(", ")}`,
       );
     }
 
     const updated = await orderModel.updateStatus(req.params.id, status);
+
+    if (status === "cancelled") {
+      if (order.reservationId) {
+        await productClient.releaseProductReservation(
+          order.productId,
+          order.reservationId,
+        );
+      } else {
+        await productClient.setProductStatus(order.productId, "available");
+      }
+    }
+    if (status === "completed") {
+      await productClient.setProductStatus(order.productId, "sold");
+    }
 
     res.json(updated);
   } catch (err) {
@@ -150,7 +134,7 @@ async function getOneInternal(req, res, next) {
   }
 }
 
-/** Mock checkout: buyer pays for a locked (pending) cart item. Moves the reserved product to sold. */
+/** Mock checkout: buyer pays for a locked cart item. Moves the reserved product to sold. */
 async function pay(req, res, next) {
   try {
     const order = await orderModel.findById(req.params.id);
@@ -158,23 +142,70 @@ async function pay(req, res, next) {
     if (order.buyerId !== req.userId) {
       throw forbidden("only the buyer can pay for this order");
     }
-    if (order.status !== "pending") {
+    if (!["pending", "pending_payment"].includes(order.status)) {
       throw badRequest(
         `order is already ${order.status}, it cannot be paid again`,
       );
     }
-    if (!order.reservationId) {
-      throw badRequest("order has no active reservation");
+
+    if (
+      order.reservationExpiresAt &&
+      order.reservationExpiresAt <= new Date()
+    ) {
+      await orderModel.updateStatus(req.params.id, "cancelled");
+      if (order.reservationId) {
+        await productClient.releaseProductReservation(
+          order.productId,
+          order.reservationId,
+        );
+      }
+      throw conflict("reservation has expired");
     }
 
-    await productClient.confirmReservation(
-      order.productId,
-      order.reservationId,
-      order.buyerId,
-    );
+    if (order.reservationId) {
+      await productClient.completeProductReservation(
+        order.productId,
+        order.reservationId,
+      );
+    } else {
+      await productClient.setProductStatus(order.productId, "sold");
+    }
     const updated = await orderModel.updateStatus(req.params.id, "completed");
 
     res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Called by product-service (internal token) once an auction closes with a
+ * winning bid. Creates the same shape of Order a normal "buy now" checkout
+ * would, so the winner pays through the existing pay() flow below — Marketing
+ * owns the auction/schedule, Order stays the only writer of Order state.
+ */
+async function createFromAuction(req, res, next) {
+  try {
+    const { auctionId, productId, productTitle, sellerId, buyerId, price } =
+      req.body;
+    if (!auctionId || !productId || !sellerId || !buyerId || !price) {
+      throw badRequest(
+        "auctionId, productId, sellerId, buyerId, price are required",
+      );
+    }
+
+    const order = await orderModel.create({
+      buyerId,
+      sellerId,
+      productId,
+      productTitle: productTitle || "",
+      price,
+      auctionId,
+    });
+
+    await productClient.setProductStatus(productId, "reserved");
+
+    res.status(201).json(order);
   } catch (err) {
     next(err);
   }
@@ -188,4 +219,5 @@ module.exports = {
   getOneInternal,
   updateStatus,
   pay,
+  createFromAuction,
 };

@@ -4,5 +4,7 @@ module.exports = {
   ...require("./errors"),
   ...require("./env"),
   ...require("./pagination"),
+  ...require("./permissions"),
+  ...require("./executiveMetrics"),
   events: require("./events").EVENTS,
 };
