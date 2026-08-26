@@ -12,3 +12,12 @@ backend/services/order-service/private-evidence/*
 .DS_Store
 coverage/
 backend/services/*/src/generated/
+
+# AI coding-assistant skill tooling — installed locally per-agent, not part
+# of the application; never commit it.
+.agent/
+.claude/
+.github/skills/
+.github/agents/
+.github/hooks/
+.impeccable/
