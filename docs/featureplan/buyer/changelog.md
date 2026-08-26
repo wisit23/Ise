@@ -44,3 +44,14 @@
 - ยืนยัน E2E ผ่าน Browser จริงที่ `/products?q=sneakers` เจอสินค้าที่ Title ไม่มีคำนี้เลยแต่ Tag ตรง
 - รายละเอียดและหลักฐานเต็มอยู่ที่ Task `MOCK-TRADE-011` ใน `docs/progress.md`
 - ยังไม่ผ่าน AI Reviewer อิสระ, ยังไม่ได้ทดสอบ Performance กับข้อมูลปริมาณมาก (Seed มีแค่ 16 แถว)
+
+## 2026-08-26 — Hybrid Search (Full-Text Ranking + Trigram)
+
+- เพิ่ม `search_vector` ชนิด `tsvector` และ GIN Index โดย DB Trigger เดิมคำนวณ/Backfill ทั้ง `search_text` และ `search_vector`
+- Full-Text Search ถ่วงน้ำหนัก `title`/`tags` สูงสุด ตามด้วย `category`, `description` และ metadata อื่นตามลำดับ
+- Query ใหม่รับผลจาก FTS, exact substring และ Trigram แล้วจัดอันดับด้วย `65% FTS + 35% Trigram + exact-title boost 0.15`
+- ไม่ตัด Trigram ออก เพราะ PostgreSQL `simple` config ไม่สามารถตัดคำไทยที่เขียนติดกัน; ภาษาไทยและคำพิมพ์ผิดจึงยังใช้ Trigram/`ILIKE` ช่วย
+- เพิ่ม Integration Test ยืนยันว่า Match ในชื่อสินค้าอยู่เหนือคำเดียวกันที่ Match เฉพาะ description และ Trigger เติม `search_vector` ให้รายการใหม่
+- Prisma schema validation และ lint ผ่าน; Product Service tests ผ่าน 8/8 โดย PostgreSQL Integration ถูก Skip ใน environment รอบนี้เพราะไม่มี Database/Docker
+- อัปเดต Local Node.js เป็น `22.23.2` และ npm `10.9.8` ให้ตรงกับ engine requirement ของ repository
+- รายละเอียดอยู่ที่ Task `MOCK-TRADE-013` ใน `docs/progress.md`

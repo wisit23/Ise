@@ -735,13 +735,13 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                          | ผลที่เกิดขึ้นจริง                                                                              |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| การตรวจ                                             | ผลที่เกิดขึ้นจริง                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | จำลอง Fresh Clone (ลบ `uploads/` แล้วรัน Node ตรงๆ) | `fs.mkdirSync` สร้าง Directory คืนให้อัตโนมัติ, `fs.existsSync` คืน `true`                       |
 | Grep ทั้ง `backend/` หา Pattern เขียนไฟล์ลง Disk    | เจอแค่จุดเดียวที่ `upload.js`, ไม่มีจุดอื่นเสี่ยงปัญหาเดียวกัน                                   |
 | ตรวจ Route `/api/auth/refresh` ผ่าน Gateway         | ตรงกับที่ `frontend/lib/api.js` เรียกจริง (`authRoutes.js` mount `/refresh` ใต้ `/api/auth`)     |
 | ตรวจ Status Code Login/Refresh ผิดพลาด              | ตอบ `400` (`badRequest`) ไม่ใช่ `401` — ยืนยันว่า Retry-on-401 Logic ไม่ชนกับ Error ทาง Business |
-| `npm test` (Frontend)                              | 5/5 ผ่าน (Test ที่พาดพิง `api.js` เป็น Mock ทั้งหมด ไม่ได้ทดสอบ Refresh Logic จริง)              |
+| `npm test` (Frontend)                               | 5/5 ผ่าน (Test ที่พาดพิง `api.js` เป็น Mock ทั้งหมด ไม่ได้ทดสอบ Refresh Logic จริง)              |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -784,24 +784,24 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                                             | ผลที่เกิดขึ้นจริง                                                                                                    |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `to_tsvector('simple', 'เสื้อยืดวินเทจ Nike สภาพดี')`                    | Token ไทยรวมเป็นก้อนเดียว ยืนยันว่า Postgres FTS ใช้กับไทยไม่ได้                                                        |
-| ค้น `denim`/`sneakers`/`vintage` ก่อนแก้                              | 0 ผลลัพธ์ทั้งหมด (Query เดิมไม่ครอบคลุม `tags`)                                                                         |
-| `word_similarity('เสื้อ', full_text)` vs `similarity(...)`             | `0.83` vs `0.24` — ยืนยันต้องใช้ `word_similarity`                                                                     |
-| `CREATE TABLE ... GENERATED ALWAYS AS (array_to_string(...)) STORED` | Error `generation expression is not immutable` — ยืนยันว่าต้องใช้ Trigger แทน Generated Column                        |
-| `npx prisma db push` กับ Schema ใหม่                                 | สร้าง Extension, Column `search_text`, GIN Index `products_search_text_idx` สำเร็จ ไม่มี Error                        |
-| รัน `seed.js` ใหม่กับ DB จริง                                        | Trigger ติดตั้งสำเร็จ, Backfill 16 แถวเดิมมี `search_text` ครบ                                                         |
-| Insert แถวใหม่ตรงๆ ด้วย SQL (ไม่ผ่าน App)                             | Trigger คำนวณ `search_text` ให้อัตโนมัติ ยืนยัน Trigger Fire ทุก Insert ไม่ใช่แค่ตอน Seed                              |
-| `EXPLAIN` กับ `SET enable_seqscan=off`                                | ทั้ง `ILIKE` และ `<%` ใช้ `Bitmap Index Scan` บน `products_search_text_idx` จริง                                       |
-| ค้น `denim`/`sneakers`/`vintage`/`Denim`/`เสื้อ`/`leather` หลังแก้      | เจอผลลัพธ์ถูกต้องครบทุกคำ รวมตัวพิมพ์ใหญ่เล็กและข้ามภาษา                                                               |
-| Category Filter + Search พร้อมกัน                                    | กรองถูกต้อง (`q=vintage&category=แจ็คเก็ต` เหลือแค่ 1 รายการที่ตรงทั้งสองเงื่อนไข)                                     |
-| `model.create()` แล้วค้นทันที                                        | เจอสินค้าที่เพิ่งสร้างในผลค้นหาทันที, ตรวจ `Object.keys()` แล้วไม่มี `searchText` รั่วออกมาใน Response                 |
-| `npm run lint` (Repo ทั้งหมด)                                        | Exit 0                                                                                                                  |
-| `npm test` (Repo ทั้งหมด, ต่อ Postgres จริงใน Container)              | 44/44 ผ่าน                                                                                                              |
-| `docker compose build product-service` + `up -d`                     | Build สำเร็จ, `db push` sync, Seed+Trigger รันสำเร็จตอน Container Start จริง (ไม่ใช่แค่ Local)                         |
-| เปิด `http://localhost:3000/products?q=denim` ผ่าน Browser จริง       | เห็น "กางเกงยีนส์ Levi's 501 ทรงตรง" และ "เดนิมแจ็คเก็ตวินเทจ Levi's" ถูกต้อง, Network Log `GET /api/products/search → 200` |
-| เปิด `http://localhost:3000/products?q=sneakers` ผ่าน Browser จริง    | เห็น "รองเท้าผ้าใบ Converse สีขาว" ถูกต้อง (มาจาก Tag ล้วนๆ, Title ไม่มีคำนี้เลย)                                       |
+| การตรวจ                                                              | ผลที่เกิดขึ้นจริง                                                                                                           |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `to_tsvector('simple', 'เสื้อยืดวินเทจ Nike สภาพดี')`                | Token ไทยรวมเป็นก้อนเดียว ยืนยันว่า Postgres FTS ใช้กับไทยไม่ได้                                                            |
+| ค้น `denim`/`sneakers`/`vintage` ก่อนแก้                             | 0 ผลลัพธ์ทั้งหมด (Query เดิมไม่ครอบคลุม `tags`)                                                                             |
+| `word_similarity('เสื้อ', full_text)` vs `similarity(...)`           | `0.83` vs `0.24` — ยืนยันต้องใช้ `word_similarity`                                                                          |
+| `CREATE TABLE ... GENERATED ALWAYS AS (array_to_string(...)) STORED` | Error `generation expression is not immutable` — ยืนยันว่าต้องใช้ Trigger แทน Generated Column                              |
+| `npx prisma db push` กับ Schema ใหม่                                 | สร้าง Extension, Column `search_text`, GIN Index `products_search_text_idx` สำเร็จ ไม่มี Error                              |
+| รัน `seed.js` ใหม่กับ DB จริง                                        | Trigger ติดตั้งสำเร็จ, Backfill 16 แถวเดิมมี `search_text` ครบ                                                              |
+| Insert แถวใหม่ตรงๆ ด้วย SQL (ไม่ผ่าน App)                            | Trigger คำนวณ `search_text` ให้อัตโนมัติ ยืนยัน Trigger Fire ทุก Insert ไม่ใช่แค่ตอน Seed                                   |
+| `EXPLAIN` กับ `SET enable_seqscan=off`                               | ทั้ง `ILIKE` และ `<%` ใช้ `Bitmap Index Scan` บน `products_search_text_idx` จริง                                            |
+| ค้น `denim`/`sneakers`/`vintage`/`Denim`/`เสื้อ`/`leather` หลังแก้   | เจอผลลัพธ์ถูกต้องครบทุกคำ รวมตัวพิมพ์ใหญ่เล็กและข้ามภาษา                                                                    |
+| Category Filter + Search พร้อมกัน                                    | กรองถูกต้อง (`q=vintage&category=แจ็คเก็ต` เหลือแค่ 1 รายการที่ตรงทั้งสองเงื่อนไข)                                          |
+| `model.create()` แล้วค้นทันที                                        | เจอสินค้าที่เพิ่งสร้างในผลค้นหาทันที, ตรวจ `Object.keys()` แล้วไม่มี `searchText` รั่วออกมาใน Response                      |
+| `npm run lint` (Repo ทั้งหมด)                                        | Exit 0                                                                                                                      |
+| `npm test` (Repo ทั้งหมด, ต่อ Postgres จริงใน Container)             | 44/44 ผ่าน                                                                                                                  |
+| `docker compose build product-service` + `up -d`                     | Build สำเร็จ, `db push` sync, Seed+Trigger รันสำเร็จตอน Container Start จริง (ไม่ใช่แค่ Local)                              |
+| เปิด `http://localhost:3000/products?q=denim` ผ่าน Browser จริง      | เห็น "กางเกงยีนส์ Levi's 501 ทรงตรง" และ "เดนิมแจ็คเก็ตวินเทจ Levi's" ถูกต้อง, Network Log `GET /api/products/search → 200` |
+| เปิด `http://localhost:3000/products?q=sneakers` ผ่าน Browser จริง   | เห็น "รองเท้าผ้าใบ Converse สีขาว" ถูกต้อง (มาจาก Tag ล้วนๆ, Title ไม่มีคำนี้เลย)                                           |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -833,14 +833,14 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                                                          | ผลที่เกิดขึ้นจริง                                                                                     |
-| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| จำลอง `setHeader('x-user-display-name', 'มานพ')` ตรงๆ ก่อนแก้                     | `ERR_INVALID_CHAR` ตรงกับ Log ผู้ใช้                                                                     |
-| `npm test` (Repo ทั้งหมด)                                                        | 44/44 ผ่าน (ไม่มี Test เดิมที่ Cover Header นี้โดยตรง จึงไม่มี Test แตก)                                  |
-| `npm run lint` เฉพาะไฟล์ที่แก้                                                   | Exit 0                                                                                                    |
-| Rebuild `gateway`, `auth-service`, `product-service`, `order-service`, `chat-service`, `review-service` + `up -d` | ทุก Container ขึ้น Healthy                                                                                |
-| `curl` Login `shop.denim@example.com` (ชื่อจริง "มานพ เดนิม") ผ่าน Gateway จริง   | ได้ Access Token กลับมาปกติ                                                                               |
-| `curl GET /api/products/mine` พร้อม Token ข้างต้น ผ่าน Gateway จริง               | `200 OK` พร้อมข้อมูลสินค้าจริง 4 ชิ้น, Gateway Log **ไม่มี** `ERR_INVALID_CHAR` อีกเลย                    |
+| การตรวจ                                                                                                           | ผลที่เกิดขึ้นจริง                                                                      |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| จำลอง `setHeader('x-user-display-name', 'มานพ')` ตรงๆ ก่อนแก้                                                     | `ERR_INVALID_CHAR` ตรงกับ Log ผู้ใช้                                                   |
+| `npm test` (Repo ทั้งหมด)                                                                                         | 44/44 ผ่าน (ไม่มี Test เดิมที่ Cover Header นี้โดยตรง จึงไม่มี Test แตก)               |
+| `npm run lint` เฉพาะไฟล์ที่แก้                                                                                    | Exit 0                                                                                 |
+| Rebuild `gateway`, `auth-service`, `product-service`, `order-service`, `chat-service`, `review-service` + `up -d` | ทุก Container ขึ้น Healthy                                                             |
+| `curl` Login `shop.denim@example.com` (ชื่อจริง "มานพ เดนิม") ผ่าน Gateway จริง                                   | ได้ Access Token กลับมาปกติ                                                            |
+| `curl GET /api/products/mine` พร้อม Token ข้างต้น ผ่าน Gateway จริง                                               | `200 OK` พร้อมข้อมูลสินค้าจริง 4 ชิ้น, Gateway Log **ไม่มี** `ERR_INVALID_CHAR` อีกเลย |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -852,6 +852,69 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 - `backend/gateway/src/app.js`, `backend/shared/src/authMiddleware.js`
 
+## Task `MOCK-TRADE-013` — Hybrid Search (PostgreSQL FTS + Trigram)
+
+> วันที่ทำ: 2026-08-26
+>
+> สถานะตามหลักฐาน: Implement แล้ว, Prisma schema validation และ lint ผ่าน, Product Service test ผ่าน 8/8 โดย Integration test ที่ต้องต่อ PostgreSQL ถูก Skip เพราะ environment รอบนี้ไม่มี Database/Docker
+
+### เหตุผลที่เปลี่ยน
+
+- Trigram เดิมเก่งการค้น substring, ภาษาไทย และคำพิมพ์ผิด แต่คะแนนวัดความคล้ายของตัวอักษรเป็นหลัก จึงไม่รู้ว่า Match อยู่ใน `title` หรืออยู่ท้าย `description`
+- PostgreSQL Full-Text Search เก่งการ Match หลายคำและถ่วงน้ำหนัก Field แต่ Config `simple` ไม่สามารถตัดคำไทยที่เขียนติดกันได้
+- จึงใช้ **Hybrid Search** ให้สองระบบทำงานร่วมกัน ไม่ได้แทนที่ Trigram ด้วย FTS ล้วน
+
+### งานที่ทำ
+
+1. เพิ่ม `search_vector tsvector` ใน Product schema และ GIN Index สำหรับ Full-Text Search
+2. ขยาย DB Trigger เดิมให้คำนวณทั้ง `search_text` และ `search_vector` ทุกครั้งที่ Insert/Update พร้อม Backfill แถวเดิม
+3. กำหนดน้ำหนัก Full-Text Document ดังนี้:
+   - Weight A: `title`, `tags`
+   - Weight B: `category`
+   - Weight C: `description`
+   - Weight D: `condition`, `location`, `size`
+4. ใช้ `websearch_to_tsquery('simple', q)` สำหรับแปลงคำค้น และ `ts_rank_cd(..., 32)` สำหรับคำนวณคะแนน FTS แบบ Normalize
+5. Match สินค้าเมื่อเข้าเงื่อนไขอย่างน้อยหนึ่งทาง: `search_vector @@ query` (คำตรง), `ILIKE` (substring ตรง), หรือ `<%` (Trigram word similarity/คำพิมพ์ใกล้เคียง)
+6. เรียงผลด้วยสูตร `(0.65 × FTS rank) + (0.35 × Trigram rank) + 0.15 exact-title boost` แล้วใช้ `created_at DESC` ตัดสินเมื่อคะแนนเท่ากัน
+7. เพิ่ม Integration Test สร้างสินค้าสองชิ้นที่มีคำเดียวกันในตำแหน่งต่างกัน และยืนยันว่า Match ใน `title` อยู่เหนือ Match ที่มีเฉพาะ `description`; Test ยังตรวจด้วยว่า Trigger เติม `search_vector` จริง
+8. อัปเดต Node.js ของเครื่องจาก `20.11.0` เป็น `22.23.2` และ npm เป็น `10.9.8` ให้ตรงกับ `package.json` (`>=22.11.0 <23.0.0`)
+
+### กระบวนการค้นหาปัจจุบัน
+
+```text
+คำค้น
+  ├─ Full-Text Search: วัดความตรงของคำและน้ำหนัก Field
+  ├─ Trigram: วัดความคล้ายของตัวอักษรและช่วยกรณีพิมพ์ผิด
+  └─ ILIKE: จับ substring ตรง โดยเฉพาะคำไทยที่ FTS ตัดคำไม่ได้
+          ↓
+รวมคะแนน Hybrid
+          ↓
+เรียงคะแนนมากไปน้อย
+```
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                   | ผลที่เกิดขึ้นจริง                                                                                     |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `npx prisma validate`                     | Schema ถูกต้อง                                                                                        |
+| `npm run lint`                            | Exit 0                                                                                                |
+| Product Service tests                     | ผ่าน 8, ล้มเหลว 0, Skip Integration 1 เพราะไม่มี PostgreSQL ที่เข้าถึงได้                             |
+| Repo test suite หลังอัปเดต Node           | ผ่าน 39, ล้มเหลว 2, Skip 2; ที่ล้มเหลวเป็นปัญหา Prisma Client ของ `auth-service` ไม่ได้เกิดจาก Search |
+| PostgreSQL Integration ของ Hybrid Ranking | เพิ่ม Test แล้ว แต่ยังไม่ได้ Execute ใน environment รอบนี้เพราะไม่มี Database/Docker                  |
+
+### ข้อจำกัดที่ยังเหลือ
+
+- FTS ใช้ Config `simple`; ข้อความไทยที่ไม่มีช่องว่างยังพึ่ง `ILIKE`/Trigram เป็นหลัก ไม่ใช่ Thai semantic search
+- ค่าน้ำหนัก `65/35`, exact-title boost `0.15` และ Trigram threshold ยังเป็นค่าเริ่มต้น ต้องปรับจาก Search analytics/ข้อมูลจริง
+- ยังไม่ได้ทำ synonym, autocomplete/debounce, semantic/vector embedding หรือ benchmark กับข้อมูลจำนวนมาก
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/product-service/prisma/schema.prisma`
+- `backend/services/product-service/prisma/seed.js`
+- `backend/services/product-service/src/models/productModel.js`
+- `backend/services/product-service/test/product-crud.integration.test.js`
+
 ## อัปเดตล่าสุด
 
-2026-08-25 (Asia/Bangkok)
+2026-08-26 (Asia/Bangkok)

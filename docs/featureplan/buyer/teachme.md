@@ -33,3 +33,15 @@ Buyer choice journey
 `SwipeVideoCard` ดูแล video/product link คลิปที่ไม่ active จะ pause และ preload แค่ metadata
 
 **Teach-back:** เหตุใดการ render วิดีโอ 20 ตัวแล้ว autoplay ทุกตัวจึงแพงกว่าเล่นเฉพาะ active card?
+
+## Round 3 — Hybrid Search ใช้คะแนนคนละชนิดร่วมกัน
+
+ข้อมูลสินค้าถูกเตรียมเป็นสองรูปแบบ: `search_vector` สำหรับค้นคำและถ่วงน้ำหนัก Field กับ
+`search_text` สำหรับค้น substring/ความคล้ายของตัวอักษร เมื่อผู้ใช้ค้น ระบบจะ Match ด้วย FTS,
+`ILIKE` หรือ Trigram อย่างน้อยหนึ่งทาง แล้วรวมคะแนน `65% FTS + 35% Trigram` พร้อมโบนัสเมื่อ
+ข้อความตรงอยู่ใน `title`
+
+FTS ทำให้ `nike running` ในชื่อสินค้ามีน้ำหนักสูงกว่าคำเดียวกันที่อยู่เฉพาะ description ส่วน
+Trigram และ `ILIKE` ยังจำเป็นสำหรับคำพิมพ์ผิดและภาษาไทยที่ PostgreSQL `simple` config ตัดคำไม่ได้
+
+**Teach-back:** เพราะเหตุใดระบบนี้จึงไม่ควรเปลี่ยนเป็น PostgreSQL FTS ล้วนเมื่อข้อมูลสินค้ามีภาษาไทย และ Weight A–D ช่วยให้ Ranking ดีขึ้นอย่างไร?

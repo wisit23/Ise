@@ -55,6 +55,11 @@ model Product {
   // STABLE, not IMMUTABLE). This is the one field search() matches against.
   searchText  String   @default("") @map("search_text")
 
+  // Weighted PostgreSQL full-text document maintained by the same trigger as
+  // search_text. `simple` preserves product names/brands without stemming;
+  // pg_trgm remains the fallback for Thai substrings and misspellings.
+  searchVector Unsupported("tsvector")? @map("search_vector")
+
   photos      Photo[]
   videos      Video[]
   reviewClips ProductVideo[]
@@ -62,6 +67,7 @@ model Product {
   @@index([sellerId])
   @@index([status, category])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([searchVector], type: Gin)
   @@map("products")
 }
 
