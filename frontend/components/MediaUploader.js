@@ -3,6 +3,69 @@
 import { useRef, useState } from "react";
 import { uploadFiles, mediaUrl } from "../lib/api";
 
+/** Crops an image file to a 1:1 square (center-crop) using HTML5 Canvas. */
+function cropImageToSquare(file, maxSize = 1600) {
+  if (!file.type.startsWith("image/")) {
+    return Promise.resolve(file);
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      const side = Math.min(img.naturalWidth || img.width, img.naturalHeight || img.height);
+      const targetSide = Math.min(side, maxSize);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = targetSide;
+      canvas.height = targetSide;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      const sourceWidth = img.naturalWidth || img.width;
+      const sourceHeight = img.naturalHeight || img.height;
+      const sx = (sourceWidth - side) / 2;
+      const sy = (sourceHeight - side) / 2;
+
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, targetSide, targetSide);
+
+      const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const croppedFile = new File([blob], file.name, {
+            type: mimeType,
+            lastModified: Date.now(),
+          });
+          resolve(croppedFile);
+        },
+        mimeType,
+        0.92,
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
+
 export default function MediaUploader({ value = [], onChange, token }) {
   const safeValue = Array.isArray(value) ? value : [];
   const inputRef = useRef(null);
@@ -17,7 +80,10 @@ export default function MediaUploader({ value = [], onChange, token }) {
     setError("");
     setUploading(true);
     try {
-      const uploaded = await uploadFiles(files, token);
+      const processedFiles = await Promise.all(
+        files.map((file) => cropImageToSquare(file)),
+      );
+      const uploaded = await uploadFiles(processedFiles, token);
       onChange([...safeValue, ...uploaded]);
     } catch (err) {
       setError(err.message);
@@ -67,10 +133,11 @@ export default function MediaUploader({ value = [], onChange, token }) {
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
+        <div className="mb-2 flex items-center justify-center text-2xl">📸</div>
         <p className="font-medium text-gray-700">
           {uploading
-            ? "กำลังอัปโหลด..."
-            : "ลากไฟล์มาวาง หรือคลิกเพื่อเลือกรูป/วิดีโอ"}
+            ? "กำลังประมวลผลและอัปโหลดรูปภาพ..."
+            : "ไฟล์รูปภาพ หรือคลิกเพื่อเลือกรูปภาพ/วิดีโอ"}
         </p>
         <p className="mt-1 text-xs text-gray-400">
           JPG, PNG, WEBP, MP4, MOV — สูงสุด 8 ไฟล์

@@ -205,7 +205,7 @@ export default function EditProductPage() {
         >
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              รูปภาพ / วิดีโอสินค้า <span className="text-red-500">*</span>{" "}
+              รูปภาพ / วิดีโอสินค้า (สัดส่วน 1:1) <span className="text-red-500">*</span>{" "}
               <span className="text-xs font-normal text-gray-500">
                 (ต้องมีอย่างน้อย 4 รูป, สูงสุด 8 รูป)
               </span>

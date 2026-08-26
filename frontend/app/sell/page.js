@@ -140,7 +140,7 @@ export default function SellPage() {
       <section className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
         <h1 className="mb-1 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
         <p className="mb-6 text-sm text-gray-500">
-          กรอกรายละเอียดให้ครบเพื่อให้ผู้ซื้อตัดสินใจได้ง่ายขึ้น (บังคับใส่รูปอย่างน้อย 4 รูป)
+          โปรดกรอกรายละเอียดให้ครบเพื่อความถูกต้องของสิ้นค้า 
         </p>
         <form
           onSubmit={handleSubmit}
@@ -148,7 +148,7 @@ export default function SellPage() {
         >
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              รูปภาพ / วิดีโอสินค้า <span className="text-red-500">*</span>{" "}
+              รูปภาพ / วิดีโอสินค้า<span className="text-red-500">*</span>{" "}
               <span className="text-xs font-normal text-gray-500">
                 (อย่างน้อย 4 รูป, สูงสุด 8 รูป)
               </span>
