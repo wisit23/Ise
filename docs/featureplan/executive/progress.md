@@ -60,3 +60,9 @@
 **Next action:** Reviewer to check `CEO-001`–`CEO-003` acceptance evidence, then decide
 whether `CEO-004`/`CEO-005` are finished properly (persisted alerts, persisted export jobs)
 or formally rescoped to what is built
+
+**2026-08-26 update:** Consolidated the three `/executive/*` routes into one sidebar panel
+(same format as CS/Admin's `/workspace`) and reconnected the Complaints tab to real data —
+see `changelog.md` "Consolidate into a Panel" for the full rationale, the `{data,meta}`
+response-shape bug found and fixed, and updated test evidence. Does not change `CEO-001`–
+`CEO-005` status above; this was a UI-consistency and bug-fix pass, not new feature scope.

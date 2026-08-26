@@ -5,10 +5,10 @@ import Link from "next/link";
 import DonutChart from "../../charts/DonutChart";
 import TrendBarChart from "../../charts/TrendBarChart";
 
-import Badge from "../ui/Badge";
-import KpiCard from "../ui/KpiCard";
-import ChartCard from "../ui/ChartCard";
-import DropdownFilter from "../ui/DropdownFilter";
+import Badge from "../../panel/ui/Badge";
+import KpiCard from "../../panel/ui/KpiCard";
+import ChartCard from "../../panel/ui/ChartCard";
+import DropdownFilter from "../../panel/ui/DropdownFilter";
 import {
   TICKET_STATUS_LABEL, TICKET_STATUS_STYLE, PRIORITY_LABEL, PRIORITY_STYLE,
   AGENT_NEXT_STATUS, DISPUTE_STATUS_LABEL, DISPUTE_STATUS_STYLE, ORDER_STATUS_LABEL,
@@ -19,7 +19,8 @@ import { apiFetch, fetchAuthedBlobUrl } from "../../../lib/api";
 
 export default // ─── Dashboard Section ────────────────────────────────────────────────────────
 
-function DashboardSection({ token, onNavigate }) {
+function DashboardSection({ token, userRole, onNavigate }) {
+  const isAdmin = userRole === "ADMIN";
   const [stats, setStats] = useState({
     total: null, resolved: null, pending: null, urgent: null,
     escalated: null, open: null,
@@ -39,7 +40,12 @@ function DashboardSection({ token, onNavigate }) {
     fc("scope=all").then((v) => setStats((s) => ({ ...s, total: v })));
     fc("scope=all&status=RESOLVED").then((v) => setStats((s) => ({ ...s, resolved: v })));
     fc("scope=all&status=NEW").then((v) => setStats((s) => ({ ...s, pending: v })));
-    fc("scope=all&status=ESCALATED").then((v) => setStats((s) => ({ ...s, escalated: v })));
+    // CS agents can never see ESCALATED tickets (they're handed off to Admin
+    // — see ticketModel.listQueue's role check), so the backend always
+    // returns 0 for this query under that role; skip the wasted request.
+    if (isAdmin) {
+      fc("scope=all&status=ESCALATED").then((v) => setStats((s) => ({ ...s, escalated: v })));
+    }
     fc("scope=all&priority=URGENT").then((v) => setStats((s) => ({ ...s, urgent: v })));
     fc("scope=all&status=IN_PROGRESS").then((v) => setStats((s) => ({ ...s, open: v })));
 
@@ -123,9 +129,15 @@ function DashboardSection({ token, onNavigate }) {
         <KpiCard label="Pending Tickets" value={stats.pending} icon="pending" color="amber"
           onClick={() => onNavigate("tickets", "NEW")}
           sub="รอรับเรื่อง" />
-        <KpiCard label="Escalated Tickets" value={stats.escalated} icon="priority_high" color="red"
-          onClick={() => onNavigate("tickets", "ESCALATED")}
-          sub={stats.urgent !== null ? `${stats.urgent} เคสด่วนที่สุด` : null} />
+        {isAdmin ? (
+          <KpiCard label="Escalated Tickets" value={stats.escalated} icon="priority_high" color="red"
+            onClick={() => onNavigate("admin_inbox", "")}
+            sub="ดูที่เคสระดับแอดมิน" />
+        ) : (
+          <KpiCard label="Urgent Tickets" value={stats.urgent} icon="priority_high" color="red"
+            onClick={() => onNavigate("tickets", "")}
+            sub="ความสำคัญด่วนที่สุด" />
+        )}
       </div>
 
       {/* Charts Row 1 */}

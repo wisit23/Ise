@@ -41,7 +41,8 @@ export default function DropdownFilter({ value, onChange, options }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedLabel = options.find((o) => o.value === value)?.label || options[0]?.label;
+  const selectedLabel =
+    options.find((o) => o.value === value)?.label || options[0]?.label;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -56,14 +57,21 @@ export default function DropdownFilter({ value, onChange, options }) {
         </span>
       </button>
       {(isOpen || isClosing) && (
-        <div className={`absolute top-full left-0 mt-2 w-full min-w-[160px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-[60] ${isClosing ? "animate-dropdown-out" : "animate-dropdown-in"}`}>
+        <div
+          className={`absolute top-full left-0 mt-2 w-full min-w-[160px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-[60] ${isClosing ? "animate-dropdown-out" : "animate-dropdown-in"}`}
+        >
           {options.map((o) => (
             <button
               key={o.value}
               type="button"
-              onClick={() => { onChange(o.value); closeDropdown(); }}
+              onClick={() => {
+                onChange(o.value);
+                closeDropdown();
+              }}
               className={`w-full text-left rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                value === o.value ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                value === o.value
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
               {o.label}

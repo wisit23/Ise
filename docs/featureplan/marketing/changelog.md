@@ -98,3 +98,24 @@
 - Swipe UI เล่นเฉพาะ active card และมี focused tests แล้ว
 - การเปลี่ยนแปลงนี้ปรับ baseline provider/consumer ให้ถูกต้องขึ้น แต่ยังไม่มี choose persistence,
   Campaign, Attribution หรือ Marketing PostgreSQL acceptance จึงไม่ใช่ `UR-11` acceptance
+
+## 2026-08-26 — Consolidate into a Panel (Same as CS/Admin) + Dashboard Overview
+
+รวม `/marketing/layout.js` + `/marketing/auctions/page.js` (Top-tab เดิมมีแค่ 1 Tab) เข้าเป็น
+`/marketing/page.js` เดียว รูปแบบ Sidebar + Section Switch เดียวกับ `/workspace` ตามที่ผู้ใช้ขอ
+ให้ทุก Role-panel ในระบบใช้ Format เดียวกัน — Logic การตั้งเวลา/ยกเลิกประมูลเดิมย้ายเป็น
+`AuctionScheduleSection.js` ไม่มีการเปลี่ยนพฤติกรรม แค่ Restyle ด้วย UI Atom กลาง
+(`components/panel/ui/`) แทน Element ดิบเดิม
+
+**เพิ่มใหม่ — Dashboard Section:** เดิม Marketing ไม่มีหน้าภาพรวมเลย เห็นแต่รายการประมูลดิบ
+เพิ่ม `DashboardSection.js`: การ์ด KPI นับจำนวนประมูลต่อสถานะ (รออนุมัติ/อนุมัติแล้ว/ตั้งเวลาแล้ว/
+กำลังประมูล) และ Donut Chart สัดส่วนทุกสถานะรวม `rejected`/`cancelled`/`closed` — ใช้ Endpoint
+`GET /api/products/auctions?status=X&limit=1` ที่มีอยู่แล้ว อ่านแค่ `.total` ไม่เพิ่ม Backend ใหม่
+(Pattern เดียวกับที่ CS Dashboard ใช้กับ Ticket Queue)
+
+- อัปเดต `NavBar.js`: ลิงก์ Marketing จาก `/marketing/auctions` → `/marketing`
+- ยืนยันด้วย Browser จริงผ่าน Docker Stack: Login เป็น `marketing@example.com`, Dashboard
+  แสดง "อนุมัติแล้ว รอตั้งเวลา: 1" ตรงกับประมูลที่ Admin เพิ่งอนุมัติจริงในรอบทดสอบเดียวกัน
+  (ยืนยัน Pipeline Seller → Admin → Marketing ทำงานครบวงจรจริง ไม่ใช่แค่ Mock)
+- `next build` สำเร็จ, `eslint` สะอาด — ไม่มี Test แยกสำหรับ Marketing Pages มาก่อน (ไม่มี Baseline
+  ให้ Migrate)

@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Pagination from "../../Pagination";
 
-import Badge from "../ui/Badge";
-import KpiCard from "../ui/KpiCard";
-import ChartCard from "../ui/ChartCard";
-import DropdownFilter from "../ui/DropdownFilter";
+import Badge from "../../panel/ui/Badge";
+import KpiCard from "../../panel/ui/KpiCard";
+import ChartCard from "../../panel/ui/ChartCard";
+import DropdownFilter from "../../panel/ui/DropdownFilter";
 import {
   TICKET_STATUS_LABEL, TICKET_STATUS_STYLE, PRIORITY_LABEL, PRIORITY_STYLE,
   AGENT_NEXT_STATUS, DISPUTE_STATUS_LABEL, DISPUTE_STATUS_STYLE, ORDER_STATUS_LABEL,
@@ -18,7 +18,7 @@ import { apiFetch, fetchAuthedBlobUrl } from "../../../lib/api";
 
 export default // ─── Disputes Section ─────────────────────────────────────────────────────────
 
-function DisputesSection({ token, status, setStatus }) {
+function DisputesSection({ token, userRole, status, setStatus }) {
   const [q, setQ] = useState("");
   const [qInput, setQInput] = useState("");
   const [items, setItems] = useState([]);
@@ -378,6 +378,16 @@ function DisputesSection({ token, status, setStatus }) {
                   />
                 </div>
                 <p className="font-mono text-xs text-slate-400">Order ID: {selectedDispute.orderId}</p>
+                {userRole === "ADMIN" && (
+                  <Link
+                    href={`/admin/disputes/${selectedDispute.orderId}`}
+                    target="_blank"
+                    className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:underline"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">admin_panel_settings</span>
+                    จัดการการระงับเงิน (Admin)
+                  </Link>
+                )}
               </div>
               <button
                 onClick={closeDispute}
@@ -540,14 +550,11 @@ function DisputesSection({ token, status, setStatus }) {
                             ปฏิเสธคำร้อง
                           </button>
                         </div>
-                        <button
-                          onClick={() => handleDecision("ESCALATE")}
-                          disabled={deciding || !decisionReason.trim()}
-                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-amber-200 bg-white py-2 text-sm font-bold text-amber-600 shadow-sm hover:bg-amber-50 disabled:opacity-40 transition-all"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
-                          ส่งเรื่องให้ Admin (Escalate)
-                        </button>
+                        {userRole !== "ADMIN" && (
+                          <p className="text-center text-xs font-medium text-slate-400">
+                            หากต้องการให้ Admin ช่วยระงับเงินไว้ก่อนตัดสิน แจ้งทีม Admin โดยตรง
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}

@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Pagination from "../../Pagination";
 
-import Badge from "../ui/Badge";
-import KpiCard from "../ui/KpiCard";
-import ChartCard from "../ui/ChartCard";
-import DropdownFilter from "../ui/DropdownFilter";
+import Badge from "../../panel/ui/Badge";
+import KpiCard from "../../panel/ui/KpiCard";
+import ChartCard from "../../panel/ui/ChartCard";
+import DropdownFilter from "../../panel/ui/DropdownFilter";
 import {
   TICKET_STATUS_LABEL, TICKET_STATUS_STYLE, PRIORITY_LABEL, PRIORITY_STYLE,
   AGENT_NEXT_STATUS, DISPUTE_STATUS_LABEL, DISPUTE_STATUS_STYLE, ORDER_STATUS_LABEL,
@@ -140,6 +140,16 @@ function AdminInboxSection({ token }) {
     setActionBusy(true);
     setActionError("");
     try {
+      // A report must pass through REVIEWED before it can be actioned
+      // (reportService.actionReport enforces the OPEN -> REVIEWED ->
+      // ACTIONED|DISMISSED lifecycle strictly) — this inbox opens straight
+      // on OPEN reports, so review it first if it hasn't been already.
+      if (selectedTicket.rawReport.status === "OPEN") {
+        await apiFetch(`/api/auth/admin/reports/${selectedTicket.id}/review`, {
+          method: "POST",
+          token,
+        });
+      }
       await apiFetch(`/api/auth/admin/reports/${selectedTicket.id}/action`, {
         method: "POST",
         token,

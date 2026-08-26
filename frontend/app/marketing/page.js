@@ -4,20 +4,18 @@ import { useRouter } from "next/navigation";
 import NavBar from "../../components/NavBar";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 
-import OverviewSection from "../../components/executive/sections/OverviewSection";
-import ReportsSection from "../../components/executive/sections/ReportsSection";
-import ComplaintsSection from "../../components/executive/sections/ComplaintsSection";
+import DashboardSection from "../../components/marketing/sections/DashboardSection";
+import AuctionScheduleSection from "../../components/marketing/sections/AuctionScheduleSection";
 
 const SECTIONS = [
-  { key: "overview", label: "ภาพรวม", icon: "dashboard" },
-  { key: "reports", label: "รายงานผลการดำเนินงาน", icon: "monitoring" },
-  { key: "complaints", label: "ข้อร้องเรียน", icon: "report" },
+  { key: "dashboard", label: "Dashboard", icon: "dashboard" },
+  { key: "auctions", label: "ตารางประมูล", icon: "gavel" },
 ];
 
-export default function ExecutiveDashboardPage() {
+export default function MarketingPanelPage() {
   const router = useRouter();
   const [user, setUser] = useState(undefined);
-  const [section, setSection] = useState("overview");
+  const [section, setSection] = useState("dashboard");
 
   useEffect(() => {
     if (!document.getElementById("material-symbols-font")) {
@@ -31,7 +29,8 @@ export default function ExecutiveDashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (!getAccessToken()) {
+    const token = getAccessToken();
+    if (!token) {
       router.push("/login");
       return;
     }
@@ -48,12 +47,12 @@ export default function ExecutiveDashboardPage() {
       </main>
     );
   }
-  if (user?.role !== "EXECUTIVE") {
+  if (user?.role !== "MARKETING") {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
         <p className="mx-auto max-w-6xl px-4 py-10 text-amber-800">
-          หน้านี้ใช้ได้เฉพาะบัญชีผู้บริหารเท่านั้น
+          หน้านี้ใช้ได้เฉพาะบัญชีฝ่ายการตลาด (Marketing) เท่านั้น
         </p>
       </main>
     );
@@ -70,17 +69,17 @@ export default function ExecutiveDashboardPage() {
         <aside className="hidden w-56 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
           <div className="border-b border-slate-100 px-6 py-5">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
                 <span className="material-symbols-outlined text-[22px]">
-                  insights
+                  campaign
                 </span>
               </span>
               <div className="flex flex-col">
                 <span className="text-[15px] font-extrabold tracking-tight text-slate-800">
                   Re-loop panel
                 </span>
-                <span className="text-[10px] font-bold tracking-wider text-indigo-600 uppercase">
-                  Executive
+                <span className="text-[10px] font-bold tracking-wider text-violet-600 uppercase">
+                  Marketing
                 </span>
               </div>
             </div>
@@ -95,7 +94,7 @@ export default function ExecutiveDashboardPage() {
                   onClick={() => setSection(s.key)}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-all duration-200 ${
                     active
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                      ? "bg-violet-600 text-white shadow-md shadow-violet-600/20"
                       : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                 >
@@ -128,7 +127,7 @@ export default function ExecutiveDashboardPage() {
               <select
                 value={section}
                 onChange={(e) => setSection(e.target.value)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium shadow-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10"
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium shadow-sm outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10"
               >
                 {SECTIONS.map((s) => (
                   <option key={s.key} value={s.key}>
@@ -140,9 +139,10 @@ export default function ExecutiveDashboardPage() {
           </div>
 
           <div className="p-8 max-w-7xl mx-auto">
-            {section === "overview" && <OverviewSection token={token} />}
-            {section === "reports" && <ReportsSection token={token} />}
-            {section === "complaints" && <ComplaintsSection token={token} />}
+            {section === "dashboard" && (
+              <DashboardSection token={token} onNavigate={setSection} />
+            )}
+            {section === "auctions" && <AuctionScheduleSection token={token} />}
           </div>
         </main>
       </div>

@@ -30,4 +30,23 @@ async function removeProduct(productId, reason) {
   return res.json();
 }
 
-module.exports = { removeProduct };
+async function restoreProduct(productId) {
+  let res;
+  try {
+    res = await fetch(
+      `${PRODUCT_SERVICE_URL}/internal/moderation/${productId}/restore`,
+      {
+        method: "POST",
+        headers: { "x-internal-token": INTERNAL_TOKEN },
+      },
+    );
+  } catch {
+    throw new AppError(502, "product-service is unreachable");
+  }
+  if (res.status === 404) throw new AppError(404, "product not found");
+  if (res.status === 409) throw new AppError(409, "product is not removed");
+  if (!res.ok) throw new AppError(502, "failed to restore product");
+  return res.json();
+}
+
+module.exports = { removeProduct, restoreProduct };

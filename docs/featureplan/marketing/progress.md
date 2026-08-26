@@ -59,3 +59,9 @@ lifecycle/validation logic, live verification covered the database-backed path
 
 **Next action:** Add a `REQUIRE_INTEGRATION=1` auction test file, then start `MKT-001` (Campaign
 lifecycle) following the same test-first pattern used for `MKT-005`
+
+**2026-08-26 update:** Consolidated `/marketing/layout.js` + `/marketing/auctions` into one
+`/marketing/page.js` sidebar panel (same format as CS/Admin) and added a Dashboard overview
+section — see `changelog.md`. Also confirmed end-to-end with the real Docker stack that the
+Admin auction-approval fix (see `admin/changelog.md`) flows through correctly: an auction
+approved by Admin shows up here as "approved, ready to schedule" immediately.

@@ -17,6 +17,7 @@ export default function AdminDisputeDetailPage() {
   const [user, setUser] = useState(undefined);
   const [order, setOrder] = useState(null);
   const [evidence, setEvidence] = useState([]);
+  const [disputeCase, setDisputeCase] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [reason, setReason] = useState("");
@@ -28,6 +29,7 @@ export default function AdminDisputeDetailPage() {
       .then((data) => {
         setOrder(data.order);
         setEvidence(data.evidence);
+        setDisputeCase(data.disputeCase);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -141,6 +143,37 @@ export default function AdminDisputeDetailPage() {
             <p className="font-medium text-gray-900">{order.version}</p>
           </div>
         </div>
+
+        {disputeCase && (
+          <div className="mb-6 rounded-lg border border-gray-200 bg-white p-5">
+            <h2 className="mb-3 text-sm font-semibold text-gray-900">
+              เคสข้อพิพาทฝั่ง Customer Service
+            </h2>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-gray-500">สถานะเคส</p>
+                <p className="font-medium text-gray-900">
+                  {disputeCase.status}
+                </p>
+              </div>
+              {disputeCase.decision && (
+                <div>
+                  <p className="text-xs text-gray-500">คำตัดสินของ CS</p>
+                  <p className="font-medium text-gray-900">
+                    {disputeCase.decision}
+                  </p>
+                </div>
+              )}
+            </div>
+            {disputeCase.status !== "DECIDED" && (
+              <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                ⚠ เคสนี้ยังไม่ถูกตัดสินโดยฝ่าย CS — หากกด &quot;ปล่อยเงิน&quot;
+                ระบบจะยกเลิก เฉพาะการระงับที่ Admin สั่งเอง
+                แต่เงินจะยังถูกพักไว้ต่อจนกว่า CS จะตัดสินใจ
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="mb-6 rounded-lg border border-gray-200 bg-white p-5">
           <h2 className="mb-3 text-sm font-semibold text-gray-900">

@@ -17,6 +17,7 @@ router.use("/auctions", auctionRoutes);
 
 // Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);
+router.get("/admin/search", requireAuth, productController.adminSearch);
 router.get("/by-seller/:sellerId", productController.bySeller);
 router.get("/categories", productController.listCategories);
 router.get("/conditions", productController.listConditions);

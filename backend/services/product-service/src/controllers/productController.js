@@ -76,6 +76,29 @@ async function search(req, res, next) {
   }
 }
 
+// Unlike search() above (locked to status="available" for public browsing),
+// Admin needs to find a listing in ANY status — including "removed" ones, to
+// restore them — so status is optional and passed through as-is.
+async function adminSearch(req, res, next) {
+  try {
+    if (req.userRole !== "ADMIN") {
+      throw forbidden("only admin accounts can use this search");
+    }
+    const { q, category, status } = req.query;
+    const pagination = parsePagination(req.query);
+    const { items, total } = await productModel.list({
+      q,
+      category,
+      status,
+      skip: pagination.skip,
+      take: pagination.take,
+    });
+    res.json(paginatedResponse(items, total, pagination));
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getOne(req, res, next) {
   try {
     const product = await productModel.findById(req.params.id);
@@ -193,6 +216,7 @@ async function markStatusInternal(req, res, next) {
 module.exports = {
   feed,
   search,
+  adminSearch,
   getOne,
   bySeller,
   listCategories,

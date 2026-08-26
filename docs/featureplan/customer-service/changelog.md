@@ -135,3 +135,25 @@
   "ไม่มีการดำเนินการเพิ่มเติม" ครบทุกจุด แล้ว Reset ข้อมูล Seed กลับสถานะเดิม
 - `npm test`: 67/67 ผ่าน, `eslint`/`prettier --check` เฉพาะไฟล์ที่แก้ผ่านสะอาด (Repo-wide Lint ยังมี Error
   จำนวนมากจาก `.github/skills/impeccable/` ซึ่งเป็น Tooling ของ Skill เอง ไม่เกี่ยวกับ Application Code)
+
+## 2026-08-26 — Fix Escalation Handoff Leak; Remove Broken Dispute Escalate Button
+
+ส่วนหนึ่งของงาน "ทำให้ Admin สมบูรณ์" — ผู้ใช้ระบุว่าสถานะ "ส่งเรื่องต่อ Admin" ของตั๋วต้องโผล่
+เฉพาะหน้าเคสระดับแอดมินเท่านั้น ไม่ใช่ปนอยู่ในหน้า Tickets ทั่วไปของ CS ด้วย
+
+- `TicketsSection.js`: ตัด Option `ESCALATED` ออกจาก Dropdown กรองสถานะ (เดิมโผล่เฉพาะ ADMIN
+  แต่ทำให้ตั๋วที่ส่งต่อ Admin ดูได้ซ้ำ 2 ที่ — ทั้งหน้า Tickets ทั่วไปและ Admin Inbox)
+- `DashboardSection.js` เพิ่ม `userRole` prop — การ์ด KPI "Escalated Tickets" สำหรับ
+  CUSTOMER_SERVICE (ซึ่ง Backend Block เป็น 0 เสมออยู่แล้วตั้งแต่รอบ Merge ก่อนหน้า จึงเป็นค่าที่
+  หลอกตาไม่มีประโยชน์) เปลี่ยนเป็น "Urgent Tickets" แทน; สำหรับ ADMIN คลิกแล้วพาไปหน้า
+  "เคสระดับแอดมิน" โดยตรง
+- `DisputesSection.js`: ปุ่ม "ส่งเรื่องให้ Admin (Escalate)" (Known Bug ที่บันทึกไว้ตั้งแต่รอบก่อน —
+  ส่ง Decision `"ESCALATE"` ที่ Backend Whitelist ไม่รองรับ, เคยเลือกไม่แก้ตอนนั้นเพราะผู้ใช้ยังไม่สั่ง)
+  ตอนนี้ตัดออก เปลี่ยนเป็นข้อความแนะนำให้ติดต่อทีม Admin โดยตรง (CS ไม่มี Permission
+  `admin:dispute:hold` ตามการออกแบบ RBAC เดิมอยู่แล้ว) และเพิ่มลิงก์ "จัดการการระงับเงิน (Admin)"
+  ที่แสดงเฉพาะ `userRole === "ADMIN"` พาไปหน้า Fund-hold ที่มีอยู่แล้วแต่ไม่เคยมีใครลิงก์ถึง
+- ยืนยันด้วย Browser จริงทั้งสอง Role: CS เห็น "Urgent Tickets" + ไม่มีปุ่ม Escalate ที่พัง,
+  ADMIN เห็น "ดูที่เคสระดับแอดมิน" + ลิงก์ Fund-hold ปรากฏถูกต้องตาม Role
+- รายละเอียด Backend/UI เพิ่มเติม (Direct Product Moderation, Auction Approval,
+  Report Review-before-Action Fix) บันทึกไว้ที่ `docs/featureplan/admin/changelog.md`
+  เพราะเป็นความรับผิดชอบฝั่ง Admin โดยตรง

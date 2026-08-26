@@ -128,8 +128,6 @@ export default function NavBar() {
                     </span>
                   </div>
 
-
-
                   <Link
                     href="/sell"
                     onClick={() => setMenuOpen(false)}
@@ -195,7 +193,7 @@ export default function NavBar() {
 
                   {isMarketing && (
                     <Link
-                      href="/marketing/auctions"
+                      href="/marketing"
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                     >

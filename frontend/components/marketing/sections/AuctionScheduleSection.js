@@ -1,8 +1,9 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "../../../lib/api";
+import Badge from "../../panel/ui/Badge";
+import DropdownFilter from "../../panel/ui/DropdownFilter";
 
 const STATUS_LABEL = {
   draft: "ร่าง",
@@ -16,14 +17,14 @@ const STATUS_LABEL = {
 };
 
 const STATUS_STYLE = {
-  draft: "bg-gray-100 text-gray-600",
+  draft: "bg-slate-100 text-slate-600",
   pending_approval: "bg-amber-50 text-amber-700",
   rejected: "bg-red-50 text-red-700",
   approved: "bg-sky-50 text-sky-700",
   scheduled: "bg-sky-50 text-sky-700",
   open: "bg-emerald-50 text-emerald-700",
-  closed: "bg-gray-100 text-gray-500",
-  cancelled: "bg-gray-100 text-gray-400",
+  closed: "bg-slate-100 text-slate-500",
+  cancelled: "bg-slate-100 text-slate-400",
 };
 
 function baht(v) {
@@ -71,21 +72,21 @@ function BulkScheduleBar({ count, onApply, onClear }) {
         เลือกไว้ {count} รายการ — ตั้งเวลาให้พร้อมกันทีเดียว
       </p>
       <div>
-        <label className="block text-xs text-gray-600">เวลาเปิดประมูล</label>
+        <label className="block text-xs text-slate-600">เวลาเปิดประมูล</label>
         <input
           type="datetime-local"
           value={startsAt}
           onChange={(e) => setStartsAt(e.target.value)}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
         />
       </div>
       <div>
-        <label className="block text-xs text-gray-600">เวลาปิดประมูล</label>
+        <label className="block text-xs text-slate-600">เวลาปิดประมูล</label>
         <input
           type="datetime-local"
           value={endsAt}
           onChange={(e) => setEndsAt(e.target.value)}
-          className="rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"
         />
       </div>
       <button
@@ -98,7 +99,7 @@ function BulkScheduleBar({ count, onApply, onClear }) {
       <button
         type="button"
         onClick={onClear}
-        className="text-sm text-gray-500 hover:underline"
+        className="text-sm text-slate-500 hover:underline"
       >
         ล้างการเลือก
       </button>
@@ -107,7 +108,12 @@ function BulkScheduleBar({ count, onApply, onClear }) {
   );
 }
 
-export default function MarketingAuctionsPage() {
+// ─── Auction Schedule Section ───────────────────────────────────────────────
+// Marketing's own control surface for the auction pipeline: browse by
+// status, bulk-schedule everything Admin has approved, cancel a live/
+// scheduled slot.
+
+export default function AuctionScheduleSection({ token }) {
   const [auctions, setAuctions] = useState([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [selected, setSelected] = useState(() => new Set());
@@ -117,13 +123,13 @@ export default function MarketingAuctionsPage() {
   function load() {
     setLoading(true);
     const qs = statusFilter ? `&status=${statusFilter}` : "";
-    apiFetch(`/api/products/auctions?limit=50${qs}`)
+    apiFetch(`/api/products/auctions?limit=50${qs}`, { token })
       .then((data) => setAuctions(data.items))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, [statusFilter]);
+  useEffect(load, [statusFilter, token]);
 
   function toggleSelected(id) {
     setSelected((prev) => {
@@ -140,6 +146,7 @@ export default function MarketingAuctionsPage() {
       ids.map((id) =>
         apiFetch(`/api/products/auctions/${id}/schedule`, {
           method: "PATCH",
+          token,
           body: { startsAt, endsAt },
         }),
       ),
@@ -159,6 +166,7 @@ export default function MarketingAuctionsPage() {
     try {
       await apiFetch(`/api/products/auctions/${id}/cancel`, {
         method: "PATCH",
+        token,
       });
       setSelected((prev) => {
         const next = new Set(prev);
@@ -176,23 +184,22 @@ export default function MarketingAuctionsPage() {
   );
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">
-          ควบคุมตารางประมูล
-        </h2>
-        <select
+    <div className="animate-fade-in-up">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">
+          เลือกดูตามสถานะ แล้วตั้งเวลาหรือยกเลิกได้ทันที
+        </p>
+        <DropdownFilter
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm"
-        >
-          <option value="">ทุกสถานะ</option>
-          {Object.entries(STATUS_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+          onChange={setStatusFilter}
+          options={[
+            { value: "", label: "ทุกสถานะ" },
+            ...Object.entries(STATUS_LABEL).map(([value, label]) => ({
+              value,
+              label,
+            })),
+          ]}
+        />
       </div>
 
       {selected.size > 0 && (
@@ -206,15 +213,22 @@ export default function MarketingAuctionsPage() {
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       {loading ? (
-        <p className="text-sm text-gray-500">กำลังโหลด...</p>
+        <p className="text-sm text-slate-500">กำลังโหลด...</p>
       ) : auctions.length === 0 ? (
-        <p className="text-sm text-gray-400">ยังไม่มีรายการประมูล</p>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-10 text-center">
+          <span className="material-symbols-outlined text-[40px] text-slate-300 mb-2">
+            gavel
+          </span>
+          <p className="text-sm font-semibold text-slate-600">
+            ยังไม่มีรายการประมูลในหมวดนี้
+          </p>
+        </div>
       ) : (
         <ul className="flex flex-col gap-3">
           {auctions.map((a) => (
             <li
               key={a.id}
-              className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+              className="flex items-start gap-3 rounded-xl border border-slate-200/60 bg-white p-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]"
             >
               {eligibleIds.has(a.id) && (
                 <input
@@ -222,7 +236,7 @@ export default function MarketingAuctionsPage() {
                   checked={selected.has(a.id)}
                   onChange={() => toggleSelected(a.id)}
                   aria-label={`เลือก ${a.product?.title || a.productId}`}
-                  className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300"
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
                 />
               )}
 
@@ -231,33 +245,32 @@ export default function MarketingAuctionsPage() {
                   <div className="min-w-0">
                     <Link
                       href={`/products/${a.productId}`}
-                      className="truncate font-medium text-gray-900 hover:text-emerald-600"
+                      className="truncate font-semibold text-slate-900 hover:text-emerald-600"
                     >
                       {a.product?.title || a.productId}
                     </Link>
-                    <p className="mt-0.5 text-xs text-gray-500">
+                    <p className="mt-0.5 text-xs text-slate-500">
                       ราคาเริ่มต้น {baht(a.startingPrice)} · เพิ่มขั้นต่ำครั้งละ{" "}
                       {baht(a.bidIncrement)}
                     </p>
-                    <p className="mt-0.5 text-xs text-gray-500">
+                    <p className="mt-0.5 text-xs text-slate-500">
                       เปิด {fmt(a.scheduledStartAt)} · ปิด{" "}
                       {fmt(a.scheduledEndAt)}
                     </p>
                   </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${
-                      STATUS_STYLE[a.status] || "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {STATUS_LABEL[a.status] || a.status}
-                  </span>
+                  <Badge
+                    text={STATUS_LABEL[a.status] || a.status}
+                    style={
+                      STATUS_STYLE[a.status] || "bg-slate-100 text-slate-600"
+                    }
+                  />
                 </div>
 
                 {["approved", "scheduled"].includes(a.status) && (
-                  <div className="mt-3 border-t border-gray-100 pt-3">
+                  <div className="mt-3 border-t border-slate-100 pt-3">
                     <button
                       onClick={() => handleCancel(a.id)}
-                      className="text-xs font-medium text-red-600 hover:underline"
+                      className="text-xs font-bold text-red-600 hover:underline"
                     >
                       ยกเลิกการประมูลนี้
                     </button>

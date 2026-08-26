@@ -81,3 +81,39 @@
 - โครงสร้างนี้พร้อมขยายเป็น multi-period export ในอนาคต (เพิ่มแถวต่อเดือน ไม่ใช่เพิ่มคอลัมน์)
 - อัปเดต `reports.test.js` ให้ตรวจ header/cell แยกตามคอลัมน์แทนการเช็คว่ามีตัวเลขปรากฏในไฟล์
   → backend 49 ผ่าน / frontend 24 ผ่าน / eslint สะอาด
+
+## 2026-08-26 — Consolidate into a Panel (Same as CS/Admin), Reconnect Complaints to Real Data
+
+ผู้ใช้ขอให้ Executive กับ Marketing ใช้ Layout แบบเดียวกับ CS/Admin Workspace (Sidebar + Section
+Switch หน้าเดียว) โดยเนื้อหา/ข้อมูลต้องเหมือนเดิมทุกอย่าง แค่เปลี่ยน Format
+
+**Layout เปลี่ยน:** รวม `/executive`, `/executive/reports`, `/executive/complaints` (3 route,
+แยก Top-tab Navigation ผ่าน `ExecutiveShell.js`) เข้าเป็น `/executive/page.js` เดียว มี Sidebar
+สลับ Section ในหน้าเดียวแบบ `/workspace` — ลบ `ExecutiveShell.js` และ 2 route ย่อยทิ้ง ย้าย Logic
+เดิมไปเป็น Component แยกใน `frontend/components/executive/sections/`
+(`OverviewSection`, `ReportsSection`, `ComplaintsSection`) ใช้ UI Atom ร่วม (`KpiCard`,
+`ChartCard`, `DropdownFilter`, `Badge`) ที่ย้ายจาก `components/support/ui/` ไปที่กลาง
+`components/panel/ui/` เพื่อให้ทุก Panel (CS/Admin/Executive/Marketing) ใช้ร่วมกันได้
+`MetricCard`/`TrendChart`/`RankingList` เดิมไม่แตะ (มี Logic เฉพาะ CEO-DEC-003 ที่ต้องแยก
+"unavailable" จาก "0" ไม่ต้องการ Merge เข้า `KpiCard`)
+
+**เชื่อมข้อมูลจริง — ไม่ใช่แค่เปลี่ยนหน้าตา:** `/executive/complaints` เดิม Hardcode
+`EMPTY_DATA` ไว้ (คอมเมนต์เดิมบอกว่า "ยังไม่เชื่อม เพราะกลัว Seed Data ดูเหมือนกิจกรรมจริง")
+ตามที่ผู้ใช้สั่งให้ "แสดงรายละเอียดเหมือนเดิมจากตอนแรก...เพิ่มรายละเอียดให้ครบถ้วนตามความเหมาะสม"
+จึงต่อกลับเข้ากับ `GET /api/auth/executive/reports` ที่มีอยู่แล้วจริง (อ่านตาราง `reports`
+เดียวกับที่ Admin Inbox ใช้) — Panel อื่นในระบบ (CS Dashboard, Admin Inbox) ก็แสดงข้อมูล Seed
+ตรงๆ อยู่แล้วโดยไม่มีข้อกังวลนี้ ความเสี่ยงเดิมจึงไม่สมเหตุผลอีกต่อไปเมื่อทั้งระบบ Consolidate เข้าด้วยกัน
+
+**บั๊กที่พบระหว่างทดสอบจริง:** `ComplaintsSection.js` เขียน `apiFetch(...).then(setData)` โดยเข้าใจผิดว่า
+Response คือ Object ตรงๆ แต่ Endpoint จริงห่อด้วย `{data, meta}` เหมือน Executive Endpoint อื่นทุกตัว
+— ทำให้กดแท็บ "ข้อร้องเรียน" แล้วหน้าเว็บ Crash ทันที (`Cannot read properties of undefined
+(reading 'OPEN')` เพราะ `data.statusCounts` เป็น `undefined`) พบจากการทดสอบผ่าน Browser จริงกับ
+Docker Stack (ไม่ใช่ Unit Test เพราะ Test เดิม Mock Shape ผิดตามสมมติฐานเดียวกัน) แก้โดย unwrap
+`res.data` และแก้ Test ให้ Mock Response Envelope ให้ตรงของจริงด้วย ป้องกัน Regression ซ้ำ
+
+- Test: ย้าย `reports.test.js` → `ReportsSection.test.js`, เขียน `ComplaintsSection.test.js`
+  ใหม่ทั้งหมดให้ตรงกับพฤติกรรมจริง (ก่อนหน้านี้ Test เดิม Assert ว่าต้องเป็น Placeholder ว่างเปล่า
+  ซึ่งขัดกับ Requirement ใหม่โดยตรง)
+- ยืนยันผ่าน Browser จริง: `/executive` ครบทั้ง 3 Section (Overview/Reports/Complaints) แสดงข้อมูลถูกต้อง
+  หลัง Restart Frontend Container (เจอ Docker-on-Windows File-watcher Gap ซ้ำ — Known Issue เดิม)
+- `npm run test:frontend`: 28/28 ผ่าน (8 suites), `eslint` สะอาด, `next build` สำเร็จ

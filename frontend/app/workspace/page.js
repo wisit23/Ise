@@ -13,6 +13,8 @@ import FaqSection from "../../components/support/sections/FaqSection";
 import KycSection from "../../components/support/sections/KycSection";
 import AuditSection from "../../components/support/sections/AuditSection";
 import AdminInboxSection from "../../components/support/sections/AdminInboxSection";
+import ProductsSection from "../../components/support/sections/ProductsSection";
+import AuctionApprovalsSection from "../../components/support/sections/AuctionApprovalsSection";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -22,8 +24,14 @@ const SECTIONS = [
   { key: "faq", label: "จัดการ FAQ", icon: "menu_book" },
 ];
 
+// Escalated tickets, moderation, and every other Admin-only privileged
+// action live ONLY under these sections — deliberately not surfaced
+// anywhere in the CS agent's own tabs (see TicketsSection's dropped
+// ESCALATED filter option).
 const ADMIN_SECTIONS = [
   { key: "admin_inbox", label: "เคสระดับแอดมิน", icon: "assignment_late" },
+  { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
+  { key: "auction_approvals", label: "อนุมัติประมูล", icon: "sell" },
   { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
 ];
@@ -55,7 +63,10 @@ export default function SupportPanelPage() {
 
   useEffect(() => {
     const token = getAccessToken();
-    if (!token) { router.push("/login"); return; }
+    if (!token) {
+      router.push("/login");
+      return;
+    }
     setUser(getStoredUser());
   }, [router]);
 
@@ -63,7 +74,9 @@ export default function SupportPanelPage() {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
-        <p className="mx-auto max-w-6xl px-4 py-10 text-gray-500">กำลังโหลด...</p>
+        <p className="mx-auto max-w-6xl px-4 py-10 text-gray-500">
+          กำลังโหลด...
+        </p>
       </main>
     );
   }
@@ -79,7 +92,8 @@ export default function SupportPanelPage() {
   }
 
   const token = getAccessToken();
-  const visibleSections = user?.role === "ADMIN" ? [...SECTIONS, ...ADMIN_SECTIONS] : SECTIONS;
+  const visibleSections =
+    user?.role === "ADMIN" ? [...SECTIONS, ...ADMIN_SECTIONS] : SECTIONS;
   const activeSection = visibleSections.find((s) => s.key === section);
 
   return (
@@ -92,10 +106,14 @@ export default function SupportPanelPage() {
           <div className="border-b border-slate-100 px-6 py-5">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                <span className="material-symbols-outlined text-[22px]">headset_mic</span>
+                <span className="material-symbols-outlined text-[22px]">
+                  headset_mic
+                </span>
               </span>
               <div className="flex flex-col">
-                <span className="text-[15px] font-extrabold tracking-tight text-slate-800">Re-loop panel</span>
+                <span className="text-[15px] font-extrabold tracking-tight text-slate-800">
+                  Re-loop panel
+                </span>
                 <span className="text-[10px] font-bold tracking-wider text-emerald-600 uppercase">
                   {user?.role === "ADMIN" ? "Administrator" : "Support Agent"}
                 </span>
@@ -117,7 +135,11 @@ export default function SupportPanelPage() {
                       : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                 >
-                  <span className={`material-symbols-outlined text-[20px] transition-transform ${active ? "scale-110" : ""}`}>{s.icon}</span>
+                  <span
+                    className={`material-symbols-outlined text-[20px] transition-transform ${active ? "scale-110" : ""}`}
+                  >
+                    {s.icon}
+                  </span>
                   {s.label}
                 </button>
               );
@@ -130,7 +152,9 @@ export default function SupportPanelPage() {
               href="/support/tickets"
               className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-emerald-600 transition-colors"
             >
-              <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+              <span className="material-symbols-outlined text-[16px]">
+                open_in_new
+              </span>
               ตั๋วซัพพอร์ตทั่วไป
             </Link>
           </div>
@@ -142,9 +166,13 @@ export default function SupportPanelPage() {
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-8 py-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
             <div className="flex items-center gap-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                <span className="material-symbols-outlined text-[18px]">{activeSection?.icon}</span>
+                <span className="material-symbols-outlined text-[18px]">
+                  {activeSection?.icon}
+                </span>
               </span>
-              <h1 className="text-lg font-bold tracking-tight text-slate-900">{activeSection?.label}</h1>
+              <h1 className="text-lg font-bold tracking-tight text-slate-900">
+                {activeSection?.label}
+              </h1>
             </div>
             {/* Mobile section switcher */}
             <div className="flex items-center gap-3 sm:hidden">
@@ -154,7 +182,9 @@ export default function SupportPanelPage() {
                 className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium shadow-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
               >
                 {visibleSections.map((s) => (
-                  <option key={s.key} value={s.key}>{s.label}</option>
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -162,16 +192,38 @@ export default function SupportPanelPage() {
 
           {/* Content */}
           <div className="p-8 max-w-7xl mx-auto">
-            {section === "dashboard" && <DashboardSection token={token} onNavigate={navigateTo} />}
+            {section === "dashboard" && (
+              <DashboardSection
+                token={token}
+                userRole={user?.role}
+                onNavigate={navigateTo}
+              />
+            )}
             {section === "tickets" && (
-              <TicketsSection token={token} userId={user?.id} userRole={user?.role} statusFilter={ticketsFilter} setStatusFilter={setTicketsFilter} />
+              <TicketsSection
+                token={token}
+                userId={user?.id}
+                statusFilter={ticketsFilter}
+                setStatusFilter={setTicketsFilter}
+              />
             )}
             {section === "admin_inbox" && <AdminInboxSection token={token} />}
-            {section === "disputes" && <DisputesSection token={token} status={disputesFilter} setStatus={setDisputesFilter} />}
+            {section === "disputes" && (
+              <DisputesSection
+                token={token}
+                userRole={user?.role}
+                status={disputesFilter}
+                setStatus={setDisputesFilter}
+              />
+            )}
             {section === "orders" && <OrdersSection token={token} />}
             {section === "faq" && <FaqSection token={token} />}
             {section === "kyc" && <KycSection token={token} />}
             {section === "audit" && <AuditSection token={token} />}
+            {section === "products" && <ProductsSection token={token} />}
+            {section === "auction_approvals" && (
+              <AuctionApprovalsSection token={token} />
+            )}
           </div>
         </main>
       </div>

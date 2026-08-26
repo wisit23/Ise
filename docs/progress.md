@@ -971,6 +971,59 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 - `frontend/app/support/panel/page.js`
 
+## Task `ADM-COMPLETE-001` — ทำให้ Admin สมบูรณ์ + รวม Executive/Marketing เข้า Panel Format เดียวกัน
+
+> วันที่ทำ: 2026-08-26
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ทดสอบผ่าน Browser จริงกับ Docker Stack ที่ Rebuild แล้ว, ยืนยันด้วย
+> `npm test` / `npm run test:frontend` / `next build` / `eslint`
+
+### สรุปงานที่ทำ
+
+1. **แก้บั๊ก "สถานะส่งไม้ต่อรั่วนอกเคสระดับแอดมิน":** ตัด Option `ESCALATED` ออกจาก Dropdown
+   ของ Tickets ทั่วไป, ทำ Dashboard KPI ให้ Role-aware (CS เห็น "Urgent" แทน "Escalated" ที่เป็น 0
+   เสมอ, Admin คลิกแล้วพาไปเคสระดับแอดมินตรง)
+2. **เพิ่มความสามารถ Admin ที่ Backend มีอยู่แล้วแต่ไม่เคยมี UI เรียก:** ลบ/กู้คืนสินค้าโดยตรง
+   (ไม่ต้องพึ่ง Report), อนุมัติ/ปฏิเสธคำขอเปิดประมูล (`auctionService.approve/reject` ค้างมาตั้งแต่
+   รอบ Merge ก่อนหน้าโดยไม่มี Frontend เรียกใช้เลย — ยืนยันจาก Seed Data จริงที่ค้างอยู่)
+3. **แก้บั๊กจริงที่พบระหว่างทดสอบผ่าน Docker Stack (ไม่ใช่แค่ตอน Dev):**
+   - Report action เรียก `/action` โดยไม่เคยเรียก `/review` ก่อน → 409 ทุกครั้งที่จัดการ Report
+     ที่ยังเป็น OPEN
+   - `restoreProduct` ส่ง `reason: null` เข้า Field ที่ Schema บังคับ Required → Prisma 500
+   - `ComplaintsSection` (Executive) สมมติ Response Shape ผิด (ไม่ Unwrap `{data, meta}`) →
+     หน้าเว็บ Crash ทันทีที่กดแท็บ "ข้อร้องเรียน"
+4. **เชื่อม Dispute เข้ากับ Admin Fund-hold ที่มีอยู่แล้วแต่ไม่เคยถูกลิงก์จากที่ไหน:** ตัดปุ่ม
+   "ส่งเรื่องให้ Admin" ที่พังมาตั้งแต่รอบก่อน (ส่ง Decision ที่ Backend ไม่รองรับ) เพิ่มลิงก์ไปหน้า
+   Hold/Release จริงที่แสดงเฉพาะ Role ADMIN
+5. **รวม Executive และ Marketing เข้า Sidebar Panel Format เดียวกับ CS/Admin
+   (`/workspace`):** ย้าย UI Atom กลาง (`Badge`/`KpiCard`/`ChartCard`/`DropdownFilter`) จาก
+   `components/support/ui/` ไป `components/panel/ui/` ให้ทุก Panel ใช้ร่วมกัน; เชื่อม
+   Executive Complaints กลับเข้าข้อมูลจริง (เดิม Hardcode Empty ไว้เพราะกลัว Seed Data
+   ดูเหมือนกิจกรรมจริง — Panel อื่นในระบบไม่มีข้อกังวลนี้แล้วหลัง Consolidate); เพิ่ม Dashboard
+   Overview ใหม่ให้ Marketing (เดิมไม่มี)
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ | ผลที่เกิดขึ้นจริง |
+| ------- | ------------------ |
+| `npm test` (Backend) | 108 tests, 84 ผ่าน, 0 fail, 24 skip (integration ต้องการ `REQUIRE_INTEGRATION`) |
+| `npm run test:frontend` | 28/28 ผ่าน (8 suites รวม Test ใหม่/แก้ไขสำหรับ Complaints, Reports) |
+| `next build` (Production) | สำเร็จครบ 22 route |
+| `eslint` | สะอาดทั้ง Backend และ Frontend |
+| Browser จริงผ่าน Docker Stack | Login ครบ ADMIN/CUSTOMER_SERVICE/EXECUTIVE/MARKETING, เดิน Flow ลบ/กู้คืนสินค้า, อนุมัติประมูล → เห็นผลฝั่ง Marketing ทันที, Report Review→Action ไม่ 409, Dispute Admin Link แสดงถูก Role |
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `frontend/app/workspace/page.js`, `frontend/app/executive/page.js`, `frontend/app/marketing/page.js`
+- `frontend/components/panel/ui/`, `frontend/components/support/sections/ProductsSection.js`,
+  `frontend/components/support/sections/AuctionApprovalsSection.js`
+- `frontend/components/executive/sections/`, `frontend/components/marketing/sections/`
+- `backend/services/auth-service/src/features/productModeration/`
+- `backend/services/product-service/src/controllers/productController.js` (`adminSearch`)
+- รายละเอียดเต็มแยกตามทีมที่ `docs/featureplan/admin/changelog.md`,
+  `docs/featureplan/executive/changelog.md`, `docs/featureplan/marketing/changelog.md`,
+  `docs/featureplan/customer-service/changelog.md`
+
 ## อัปเดตล่าสุด
 
 2026-08-26 (Asia/Bangkok)

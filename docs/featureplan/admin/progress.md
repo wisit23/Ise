@@ -146,3 +146,9 @@ multi-role, register-login), unit 2/2 pass ต่อ `reloop_auth` จริง,
 **Next action:** ขอ Reviewer ตรวจ evidence ครบทั้ง `ADM-001`–`ADM-005` ก่อนเปลี่ยนสถานะเป็น Done
 อย่างเป็นทางการ; ตาม `plan.md` Global Constraints — `NFR-SP-*`/`NFR-CP-*` และ privileged audit
 hardening ยังเป็น Deferred Security Phase ไม่ถือว่า Done ในรอบนี้
+
+**2026-08-26 update:** หลัง Merge ทุกทีมเข้า `main` พบว่า Admin ยังใช้งานไม่ครบ (สถานะส่งไม้ต่อ
+รั่วนอกเคสระดับแอดมิน, ไม่มีทางลบสินค้า/อนุมัติประมูลผ่าน UI ทั้งที่ Backend มีอยู่แล้ว) แก้ครบและ
+ยืนยันผ่าน Browser จริงกับ Docker Stack แล้ว — รายละเอียดทั้งหมดอยู่ที่ `changelog.md` หัวข้อ
+"Complete the Admin Story" ไม่กระทบสถานะ `ADM-001`–`ADM-005` เดิมข้างต้น (เป็นงานเชื่อม/ทำให้
+สมบูรณ์บน UI ไม่ใช่ Feature ใหม่ตาม Task ID)

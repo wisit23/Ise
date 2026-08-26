@@ -1,31 +1,14 @@
 import { render, screen, within, fireEvent } from "@testing-library/react";
-import ExecutiveReportsPage from "./page";
+import ReportsSection from "./ReportsSection";
 import { apiFetch } from "../../../lib/api";
-import { getAccessToken, getStoredUser } from "../../../lib/auth";
 import { downloadCsv } from "../../../lib/csv";
 
-jest.mock(
-  "../../../components/NavBar",
-  () =>
-    function MockNavBar() {
-      return <nav aria-label="main navigation" />;
-    },
-);
-
 jest.mock("../../../lib/api", () => ({ apiFetch: jest.fn() }));
-
-jest.mock("../../../lib/auth", () => ({
-  getAccessToken: jest.fn(),
-  getStoredUser: jest.fn(),
-}));
 
 jest.mock("../../../lib/csv", () => ({
   ...jest.requireActual("../../../lib/csv"),
   downloadCsv: jest.fn(),
 }));
-
-const mockRouter = { push: jest.fn() };
-jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
 
 const META = { definitionVersion: "v1", timezone: "Asia/Bangkok" };
 
@@ -62,13 +45,10 @@ function serveSeries({ order = ORDER_SERIES, auth = AUTH_SERIES } = {}) {
   });
 }
 
-describe("ExecutiveReportsPage", () => {
+describe("ReportsSection", () => {
   beforeEach(() => {
     apiFetch.mockReset();
     downloadCsv.mockReset();
-    getAccessToken.mockReturnValue("token");
-    getStoredUser.mockReturnValue({ role: "EXECUTIVE", firstName: "อัสนัย" });
-    // Freeze "now" so the default selection (this month) is known.
     jest.useFakeTimers({ doNotFake: ["setTimeout", "queueMicrotask"] });
     jest.setSystemTime(new Date("2026-08-15T00:00:00.000Z"));
   });
@@ -77,20 +57,10 @@ describe("ExecutiveReportsPage", () => {
     jest.useRealTimers();
   });
 
-  it("restricts the page to Executive accounts", async () => {
-    getStoredUser.mockReturnValue({ role: "BUYER", firstName: "ผู้ซื้อ" });
-
-    render(<ExecutiveReportsPage />);
-
-    expect(
-      await screen.findByText("หน้านี้ใช้ได้เฉพาะบัญชีผู้บริหารเท่านั้น"),
-    ).toBeInTheDocument();
-  });
-
   it("renders one row per day, merging the order and auth series by period", async () => {
     serveSeries();
 
-    render(<ExecutiveReportsPage />);
+    render(<ReportsSection token="token" />);
 
     const day1Row = (await screen.findByText("1. 01/ส.ค./69")).closest("tr");
     expect(within(day1Row).getByText("฿500")).toBeInTheDocument();
@@ -99,11 +69,8 @@ describe("ExecutiveReportsPage", () => {
     expect(within(day1Row).getByText("3")).toBeInTheDocument();
 
     const day2Row = screen.getByText("2. 02/ส.ค./69").closest("tr");
-    // Both gmv and platformRevenue are 0 on this day, so "฿0" legitimately
-    // appears twice in the row.
     expect(within(day2Row).getAllByText("฿0")).toHaveLength(2);
 
-    // No MoM/YoY column — the user asked for the daily breakdown instead.
     expect(screen.queryByText(/MoM/)).not.toBeInTheDocument();
     expect(screen.queryByText(/YoY/)).not.toBeInTheDocument();
   });
@@ -129,7 +96,7 @@ describe("ExecutiveReportsPage", () => {
     ];
     serveSeries({ order: monthOrderSeries, auth: monthAuthSeries });
 
-    render(<ExecutiveReportsPage />);
+    render(<ReportsSection token="token" />);
 
     fireEvent.change(screen.getByLabelText("รูปแบบรายงาน"), {
       target: { value: "year" },
@@ -139,14 +106,10 @@ describe("ExecutiveReportsPage", () => {
     expect(screen.getByText("2. กุมภาพันธ์")).toBeInTheDocument();
     expect(screen.queryByLabelText("เดือน")).not.toBeInTheDocument();
 
-    // The heading follows the granularity switch too — "รายวัน" (daily)
-    // must not linger once the table is actually broken down by month.
     expect(
       screen.getByText(/ผลการดำเนินงานรายเดือน — ปี 2569/),
     ).toBeInTheDocument();
 
-    // Requests a month-bucketed series after the switch, not the initial
-    // day-bucketed one from the default month view.
     const orderCalls = apiFetch.mock.calls.filter(([path]) =>
       path.startsWith("/api/orders/executive/metrics-series"),
     );
@@ -156,11 +119,10 @@ describe("ExecutiveReportsPage", () => {
   it("shows unavailable only for the column whose provider failed", async () => {
     serveSeries({ order: new Error("order-service unreachable") });
 
-    render(<ExecutiveReportsPage />);
+    render(<ReportsSection token="token" />);
 
     const day1Row = (await screen.findByText("1. 01/ส.ค./69")).closest("tr");
     expect(within(day1Row).getAllByText("ไม่พร้อมใช้งาน").length).toBe(3);
-    // Active users still came from the auth series, which did succeed.
     expect(within(day1Row).getByText("3")).toBeInTheDocument();
   });
 
@@ -170,7 +132,7 @@ describe("ExecutiveReportsPage", () => {
       auth: new Error("auth-service unreachable"),
     });
 
-    render(<ExecutiveReportsPage />);
+    render(<ReportsSection token="token" />);
 
     expect(
       await screen.findByText(/ไม่สามารถโหลดข้อมูลได้ในขณะนี้/),
@@ -180,7 +142,7 @@ describe("ExecutiveReportsPage", () => {
   it("exports one row per day with one column per metric, each column a single unit", async () => {
     serveSeries();
 
-    render(<ExecutiveReportsPage />);
+    render(<ReportsSection token="token" />);
     await screen.findByText("1. 01/ส.ค./69");
 
     fireEvent.click(screen.getByRole("button", { name: /ดาวน์โหลด CSV/ }));
@@ -190,7 +152,7 @@ describe("ExecutiveReportsPage", () => {
     expect(filename).toBe("reloop-executive-report-2026-08.csv");
 
     const lines = content.trim().split("\r\n");
-    expect(lines).toHaveLength(3); // header + 2 fixture days
+    expect(lines).toHaveLength(3);
     expect(lines[0]).toBe(
       "ช่วงเวลา,ยอดขาย (บาท),รายได้แพลตฟอร์ม (บาท),คำสั่งซื้อ (รายการ),ผู้ใช้งานที่ล็อกอิน (คน)",
     );
