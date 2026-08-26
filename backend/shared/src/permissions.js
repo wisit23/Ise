@@ -10,6 +10,9 @@ const ROLE_PERMISSIONS = {
     "support:case:read",
     "support:case:write",
     "order:read:any",
+    "report:read",
+    "report:action",
+    "report:create",
   ],
   ADMIN: [
     "admin:kyc:decide",
@@ -24,6 +27,7 @@ const ROLE_PERMISSIONS = {
     "admin:audit:read",
     "support:case:read",
     "order:read:any",
+    "report:create",
   ],
   MARKETING: ["campaign:write", "campaign:read", "analytics:read:marketing"],
   EXECUTIVE: ["analytics:read:executive", "admin:audit:read"],

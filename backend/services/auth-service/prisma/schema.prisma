@@ -79,15 +79,19 @@ model BuyerProfile {
   @@map("buyer_profiles")
 }
 
-// ER: Seller — shop info + KYC fields (KYC upload/verification flow lands in a later phase).
+// ER: Seller — shop info + KYC fields.
 model SellerProfile {
   userId         String    @id @map("user_id")
   user           User      @relation(fields: [userId], references: [id])
   shopName       String    @map("shop_name")
   idCardNumber   String?   @map("id_card_number")
+  // Return/shipping address collected during seller verification.
+  address        String?
   bankAccount    String?   @map("bank_account")
   kycStatus      KycStatus @default(NONE) @map("kyc_status")
-  kycDocumentUrl String?   @map("kyc_document_url")
+  // Private storage key for the latest submitted ID card photo — never a
+  // public URL, same reasoning as KycApplication.storageKey below.
+  kycStorageKey  String?   @map("kyc_storage_key")
   verifiedAt     DateTime? @map("verified_at")
 
   @@map("seller_profiles")
@@ -192,7 +196,11 @@ model KycApplication {
   id          String    @id @default(uuid())
   userId      String    @map("user_id")
   user        User      @relation(fields: [userId], references: [id])
-  documentUrl String    @map("document_url")
+  // Private filesystem key, never a public URL — same convention as
+  // order-service's DisputeEvidence.storageKey (see evidenceStorage.js
+  // there). Served only through kycRoutes' authorized stream-through route.
+  storageKey  String    @map("storage_key")
+  fileType    String    @map("file_type")
   status      KycStatus @default(PENDING)
   reason      String?
   version     Int       @default(1)

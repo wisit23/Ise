@@ -45,7 +45,8 @@ export default function ReportModal({
       });
       setDone(true);
     } catch (err) {
-      setError(err.message);
+      console.error("Report error:", err);
+      setError(String(err?.message || err));
     } finally {
       setBusy(false);
     }

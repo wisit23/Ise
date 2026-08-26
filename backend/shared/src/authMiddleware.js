@@ -16,6 +16,7 @@ function requireAuth(req, res, next) {
     req.userRole = payload.role;
     req.userRoles = payload.roles || (payload.role ? [payload.role] : []);
     req.permissions = payload.permissions || [];
+    req.kycVerified = Boolean(payload.kycVerified);
     req.userDisplayName = payload.displayName || null;
     next();
   } catch {

@@ -219,7 +219,14 @@ export default function ProductDetailPage() {
             </Link>
           </div>
 
-          {getStoredUser()?.id !== product.sellerId && (
+          {getStoredUser()?.id === product.sellerId ? (
+            <Link
+              href={`/products/${product.id}/edit`}
+              className="mt-3 inline-block text-xs font-medium text-gray-400 hover:text-emerald-600 hover:underline"
+            >
+              แก้ไขสินค้านี้
+            </Link>
+          ) : (
             <button
               onClick={() => setShowReport(true)}
               className="mt-3 text-xs font-medium text-gray-400 hover:text-red-600 hover:underline"

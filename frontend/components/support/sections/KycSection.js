@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
-import { apiFetch } from "../../../lib/api";
+import { useEffect, useRef, useState } from "react";
+import { apiFetch, fetchAuthedBlobUrl } from "../../../lib/api";
 
 export default function KycSection({ token }) {
   const [applications, setApplications] = useState([]);
@@ -8,6 +8,12 @@ export default function KycSection({ token }) {
   const [loading, setLoading] = useState(true);
   const [reasonById, setReasonById] = useState({});
   const [decidingId, setDecidingId] = useState(null);
+  const [documentUrlById, setDocumentUrlById] = useState({});
+  // Mirrors documentUrlById so the unmount cleanup below always sees the
+  // latest set of object URLs, not whatever was current when the effect
+  // first ran (a plain closure over state would go stale with `[]` deps).
+  const documentUrlByIdRef = useRef({});
+  documentUrlByIdRef.current = documentUrlById;
 
   function loadQueue() {
     setLoading(true);
@@ -19,7 +25,27 @@ export default function KycSection({ token }) {
 
   useEffect(() => {
     loadQueue();
+    return () => {
+      // Revoke every object URL created for a document preview so the
+      // browser doesn't leak memory across queue reloads/unmounts.
+      Object.values(documentUrlByIdRef.current).forEach((url) =>
+        URL.revokeObjectURL(url),
+      );
+    };
   }, []);
+
+  async function loadDocument(applicationId) {
+    if (documentUrlById[applicationId]) return;
+    try {
+      const url = await fetchAuthedBlobUrl(
+        `/api/auth/kyc/${applicationId}/document`,
+        token,
+      );
+      setDocumentUrlById((prev) => ({ ...prev, [applicationId]: url }));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   async function decide(application, decision) {
     const reason = (reasonById[application.id] || "").trim();
@@ -50,7 +76,7 @@ export default function KycSection({ token }) {
   return (
     <div className="animate-fade-in-up flex flex-col min-h-full">
       <h1 className="mb-1 text-xl font-bold text-gray-900">
-        คิวตรวจ KYC (Synthetic)
+        คิวตรวจยืนยันตัวตนผู้ขาย (KYC)
       </h1>
       <p className="mb-6 text-sm text-gray-500">
         รอตรวจสอบ {applications.length} รายการ
@@ -69,19 +95,62 @@ export default function KycSection({ token }) {
               key={app.id}
               className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm"
             >
-              <div className="mb-3 border-b border-gray-100 pb-3">
-                <p className="text-sm font-semibold text-gray-900">
-                  User ID: {app.userId}
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  ยื่นเมื่อ: {new Date(app.createdAt).toLocaleString()}
-                </p>
+              <div className="mb-3 flex items-start justify-between border-b border-gray-100 pb-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {app.user?.firstName} {app.user?.lastName} ({app.user?.email})
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    ยื่นเมื่อ: {new Date(app.submittedAt).toLocaleString("th-TH")}
+                  </p>
+                </div>
               </div>
 
-              <div className="mb-4 rounded bg-gray-50 p-3 text-sm text-gray-700">
-                <pre className="whitespace-pre-wrap font-mono text-xs">
-                  {JSON.stringify(app.payload, null, 2)}
-                </pre>
+              <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="rounded bg-gray-50 p-3 text-sm text-gray-700">
+                  <dl className="flex flex-col gap-1.5">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-400">ชื่อร้านค้า</dt>
+                      <dd className="font-medium text-gray-900">
+                        {app.user?.sellerProfile?.shopName ?? "—"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-400">เลขบัตรประชาชน</dt>
+                      <dd className="font-mono">
+                        {app.user?.sellerProfile?.idCardNumber ?? "—"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-400">ที่อยู่</dt>
+                      <dd className="max-w-[60%] text-right">
+                        {app.user?.sellerProfile?.address ?? "—"}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-gray-400">บัญชีธนาคาร</dt>
+                      <dd>{app.user?.sellerProfile?.bankAccount ?? "—"}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="flex flex-col items-center justify-center rounded bg-gray-50 p-3">
+                  {documentUrlById[app.id] ? (
+                    <img
+                      src={documentUrlById[app.id]}
+                      alt="รูปถ่ายบัตรประชาชน"
+                      className="max-h-40 rounded border border-gray-200 object-contain"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => loadDocument(app.id)}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                    >
+                      แสดงรูปถ่ายบัตรประชาชน
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -99,10 +168,10 @@ export default function KycSection({ token }) {
                 />
                 <button
                   disabled={decidingId === app.id}
-                  onClick={() => decide(app, "APPROVED")}
+                  onClick={() => decide(app, "VERIFIED")}
                   className="shrink-0 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
-                  อนุมัติ (APPROVE)
+                  อนุมัติ (VERIFY)
                 </button>
                 <button
                   disabled={decidingId === app.id}

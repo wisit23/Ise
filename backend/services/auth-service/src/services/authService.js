@@ -85,11 +85,21 @@ async function buildAccessTokenClaims(user) {
   const roles = await getUserRoles(user.id);
   const permissions = permissionsForRoles(roles);
 
+  // Queried fresh (not trusted from the caller's `user` object) so a
+  // just-decided VERIFIED status shows up the next time this user's access
+  // token is refreshed (every 15m), without requiring re-login — same
+  // staleness window roles/permissions already accept.
+  const sellerProfile = await prisma.sellerProfile.findUnique({
+    where: { userId: user.id },
+    select: { kycStatus: true },
+  });
+
   return {
     sub: user.id,
     role: user.role, // legacy single-role claim, kept for backward compatibility
     roles,
     permissions,
+    kycVerified: sellerProfile?.kycStatus === "VERIFIED",
     displayName: displayName || undefined,
   };
 }

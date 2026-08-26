@@ -13,7 +13,20 @@ async function listQueue({ page, limit, status }) {
       take: limit,
       include: {
         user: {
-          select: { id: true, firstName: true, lastName: true, email: true },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            sellerProfile: {
+              select: {
+                shopName: true,
+                idCardNumber: true,
+                address: true,
+                bankAccount: true,
+              },
+            },
+          },
         },
       },
     }),

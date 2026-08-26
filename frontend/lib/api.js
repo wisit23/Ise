@@ -75,7 +75,11 @@ export async function apiFetch(path, { method = "GET", body, token } = {}) {
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
-    throw new Error(data?.error || `Request failed (${res.status})`);
+    let errorMsg = data?.error;
+    if (typeof errorMsg === "object" && errorMsg !== null) {
+      errorMsg = errorMsg.message || JSON.stringify(errorMsg);
+    }
+    throw new Error(errorMsg || `Request failed (${res.status})`);
   }
   return data;
 }
@@ -143,6 +147,47 @@ export async function uploadDisputeEvidence(disputeId, file, token) {
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     throw new Error(data?.error || `Evidence upload failed (${res.status})`);
+  }
+  return data;
+}
+
+/** Submits a seller verification (KYC) application — multipart, same
+ * private-storage pattern as uploadDisputeEvidence, since an ID card photo
+ * is PII and must never land in product-service's public uploads/. */
+export async function submitKyc(fields, documentFile, token) {
+  const authToken = token ?? getAccessToken();
+  const path = "/api/auth/kyc";
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined && value !== null) form.append(key, value);
+  }
+  form.append("document", documentFile);
+
+  let res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body: form,
+  });
+
+  if (res.status === 401 && authToken) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await fetch(`${API_URL}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${newToken}` },
+        body: form,
+      });
+    }
+  }
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    if (res.status === 401) forceLogout();
+    let errorMsg = data?.error;
+    if (typeof errorMsg === "object" && errorMsg !== null) {
+      errorMsg = errorMsg.message || JSON.stringify(errorMsg);
+    }
+    throw new Error(errorMsg || `KYC submission failed (${res.status})`);
   }
   return data;
 }

@@ -1,67 +1,64 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import NavBar from "../../components/NavBar";
-import Footer from "../../components/Footer";
-import MediaUploader from "../../components/MediaUploader";
-import TagInput from "../../components/TagInput";
-import { apiFetch } from "../../lib/api";
-import { getAccessToken, getStoredUser } from "../../lib/auth";
-import { fetchCategories, fetchConditions } from "../../lib/catalog";
+import NavBar from "../../../../components/NavBar";
+import Footer from "../../../../components/Footer";
+import MediaUploader from "../../../../components/MediaUploader";
+import TagInput from "../../../../components/TagInput";
+import { apiFetch } from "../../../../lib/api";
+import { getAccessToken, getStoredUser } from "../../../../lib/auth";
+import { fetchCategories, fetchConditions } from "../../../../lib/catalog";
 
 const MIN_MEDIA_COUNT = 4;
 const MAX_MEDIA_COUNT = 8;
 
-export default function SellPage() {
+export default function EditProductPage() {
+  const { id } = useParams();
   const router = useRouter();
+
   const [user, setUser] = useState(undefined);
-  const [kycStatus, setKycStatus] = useState(null);
+  const [product, setProduct] = useState(null);
   const [categories, setCategories] = useState([]);
   const [conditions, setConditions] = useState([]);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    price: "",
-    category: "",
-    condition: "",
-    size: "",
-    location: "",
-    tags: [],
-    media: [],
-  });
+  const [form, setForm] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
+    if (!getAccessToken()) {
       router.push("/login");
       return;
     }
-    const stored = getStoredUser();
-    setUser(stored);
-    if (stored?.role === "SELLER") {
-      apiFetch("/api/auth/kyc/mine", { token })
-        .then((data) => setKycStatus(data.kycStatus))
-        .catch(() => setKycStatus("NONE"));
-    }
+    setUser(getStoredUser());
   }, [router]);
 
   useEffect(() => {
+    apiFetch(`/api/products/${id}`)
+      .then((p) => {
+        setProduct(p);
+        setForm({
+          title: p.title,
+          description: p.description || "",
+          price: String(p.price),
+          category: p.category,
+          condition: p.condition,
+          size: p.size || "",
+          location: p.location || "",
+          tags: p.tags || [],
+          media: p.media || [],
+        });
+      })
+      .catch(() => setNotFound(true));
     fetchCategories()
       .then(setCategories)
       .catch(() => {});
     fetchConditions()
-      .then((items) => {
-        setConditions(items);
-        setForm((prev) =>
-          prev.condition ? prev : { ...prev, condition: items[0]?.value || "" },
-        );
-      })
+      .then(setConditions)
       .catch(() => {});
-  }, []);
+  }, [id]);
 
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });
@@ -74,7 +71,6 @@ export default function SellPage() {
       router.push("/login");
       return;
     }
-
     if (form.media.length < MIN_MEDIA_COUNT) {
       setError(
         `กรุณาอัปโหลดรูปภาพหรือวิดีโอสินค้าอย่างน้อย ${MIN_MEDIA_COUNT} รูป (ปัจจุบันมี ${form.media.length} รูป)`,
@@ -85,8 +81,8 @@ export default function SellPage() {
     setError("");
     setLoading(true);
     try {
-      const product = await apiFetch("/api/products", {
-        method: "POST",
+      await apiFetch(`/api/products/${id}`, {
+        method: "PATCH",
         token,
         body: {
           title: form.title,
@@ -100,7 +96,7 @@ export default function SellPage() {
           media: form.media,
         },
       });
-      router.push(`/products/${product.id}`);
+      router.push(`/products/${id}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -108,7 +104,7 @@ export default function SellPage() {
     }
   }
 
-  if (user === undefined || (user?.role === "SELLER" && kycStatus === null)) {
+  if (user === undefined || (!product && !notFound)) {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
@@ -119,44 +115,30 @@ export default function SellPage() {
     );
   }
 
-  if (user?.role !== "SELLER") {
+  if (notFound) {
     return (
-      <main className="flex min-h-screen flex-col bg-gray-50">
+      <main className="min-h-screen bg-gray-50">
         <NavBar />
-        <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
-          <h1 className="mb-4 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            บัญชีนี้เป็นบัญชีผู้ซื้อ ลงขายสินค้าไม่ได้ —
-            ต้องสมัครด้วยบัญชีผู้ขายก่อน
-          </div>
-          <Link
-            href="/register"
-            className="mt-4 inline-block rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
-          >
-            สมัครบัญชีผู้ขาย
-          </Link>
-        </section>
-        <Footer />
+        <p className="mx-auto max-w-lg px-4 py-10 text-gray-500">
+          ไม่พบสินค้านี้
+        </p>
       </main>
     );
   }
 
-  if (user.role === "SELLER" && kycStatus !== "VERIFIED") {
+  if (getStoredUser()?.id !== product.sellerId) {
     return (
       <main className="flex min-h-screen flex-col bg-gray-50">
         <NavBar />
         <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
-          <h1 className="mb-4 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
           <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            {kycStatus === "PENDING"
-              ? "บัญชีนี้อยู่ระหว่างการตรวจสอบยืนยันตัวตนโดยแอดมิน กรุณารอผลก่อนจึงจะลงขายสินค้าได้"
-              : "บัญชีนี้ยังไม่ได้ยืนยันตัวตนผู้ขาย ต้องยืนยันตัวตนก่อนจึงจะลงขายสินค้าได้"}
+            คุณไม่มีสิทธิ์แก้ไขสินค้านี้ — แก้ไขได้เฉพาะเจ้าของสินค้าเท่านั้น
           </div>
           <Link
-            href="/seller/onboarding"
+            href={`/products/${id}`}
             className="mt-4 inline-block rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
           >
-            ไปหน้ายืนยันตัวตนผู้ขาย
+            กลับไปดูสินค้า
           </Link>
         </section>
         <Footer />
@@ -168,9 +150,9 @@ export default function SellPage() {
     <main className="flex min-h-screen flex-col bg-gray-50">
       <NavBar />
       <section className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
-        <h1 className="mb-1 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
+        <h1 className="mb-1 text-xl font-bold text-gray-900">แก้ไขสินค้า</h1>
         <p className="mb-6 text-sm text-gray-500">
-          กรอกรายละเอียดให้ครบเพื่อให้ผู้ซื้อตัดสินใจได้ง่ายขึ้น
+          แก้ไขรายละเอียดสินค้าที่วางขายไปแล้ว
         </p>
         <form
           onSubmit={handleSubmit}
@@ -178,8 +160,7 @@ export default function SellPage() {
         >
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              รูปภาพ / วิดีโอสินค้า
-              <span className="text-red-500">*</span>{" "}
+              รูปภาพ / วิดีโอสินค้า <span className="text-red-500">*</span>{" "}
               <span className="font-normal text-gray-400">
                 (อย่างน้อย {MIN_MEDIA_COUNT} รูป, สูงสุด {MAX_MEDIA_COUNT} รูป)
               </span>
@@ -197,7 +178,6 @@ export default function SellPage() {
             </label>
             <input
               required
-              placeholder="เช่น เสื้อยืดวินเทจ Nike"
               value={form.title}
               onChange={update("title")}
               className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
@@ -209,7 +189,6 @@ export default function SellPage() {
               รายละเอียดสินค้า
             </label>
             <textarea
-              placeholder="สภาพสินค้า ตำหนิ (ถ้ามี) และเหตุผลที่ขาย"
               value={form.description}
               onChange={update("description")}
               rows={4}
@@ -227,7 +206,6 @@ export default function SellPage() {
                 type="number"
                 min="1"
                 step="1"
-                placeholder="0"
                 value={form.price}
                 onChange={update("price")}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
@@ -259,7 +237,6 @@ export default function SellPage() {
               <input
                 required
                 list="category-suggestions"
-                placeholder="พิมพ์หรือเลือกหมวดหมู่"
                 value={form.category}
                 onChange={update("category")}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
@@ -275,7 +252,6 @@ export default function SellPage() {
                 ไซส์
               </label>
               <input
-                placeholder="เช่น M, 40, Free size"
                 value={form.size}
                 onChange={update("size")}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
@@ -288,7 +264,6 @@ export default function SellPage() {
               สถานที่ตั้งสินค้า
             </label>
             <input
-              placeholder="เช่น กรุงเทพฯ, จตุจักร"
               value={form.location}
               onChange={update("location")}
               className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
@@ -307,13 +282,21 @@ export default function SellPage() {
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-md bg-emerald-600 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {loading ? "กำลังลงขาย..." : "ลงขาย"}
-          </button>
+          <div className="flex gap-3">
+            <Link
+              href={`/products/${id}`}
+              className="rounded-md border border-gray-300 px-4 py-2.5 text-center font-medium text-gray-700 hover:bg-gray-50"
+            >
+              ยกเลิก
+            </Link>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 rounded-md bg-emerald-600 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {loading ? "กำลังบันทึก..." : "บันทึกการแก้ไข"}
+            </button>
+          </div>
         </form>
       </section>
       <Footer />

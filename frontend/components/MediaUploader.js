@@ -3,6 +3,80 @@
 import { useRef, useState } from "react";
 import { uploadFiles, mediaUrl } from "../lib/api";
 
+const MAX_FILES = 8;
+
+/** Center-crops an image file to a square so every listing's gallery reads
+ * as one consistent grid, regardless of what aspect ratio a seller's photo
+ * came in at. Videos pass through untouched (can't crop those with Canvas). */
+function cropImageToSquare(file, maxSide = 1600) {
+  if (!file.type.startsWith("image/")) {
+    return Promise.resolve(file);
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      const width = img.naturalWidth || img.width;
+      const height = img.naturalHeight || img.height;
+      const side = Math.min(width, height, maxSide);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = side;
+      canvas.height = side;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      const sx = (width - Math.min(width, height)) / 2;
+      const sy = (height - Math.min(width, height)) / 2;
+      ctx.drawImage(
+        img,
+        sx,
+        sy,
+        Math.min(width, height),
+        Math.min(width, height),
+        0,
+        0,
+        side,
+        side,
+      );
+
+      const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          resolve(
+            new File([blob], file.name, {
+              type: mimeType,
+              lastModified: Date.now(),
+            }),
+          );
+        },
+        mimeType,
+        0.92,
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
+
 export default function MediaUploader({ value, onChange, token }) {
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -10,13 +84,27 @@ export default function MediaUploader({ value, onChange, token }) {
   const [dragOver, setDragOver] = useState(false);
 
   async function handleFiles(fileList) {
-    const files = Array.from(fileList || []);
+    let files = Array.from(fileList || []);
     if (files.length === 0) return;
 
     setError("");
+
+    const remaining = MAX_FILES - value.length;
+    if (remaining <= 0) {
+      setError(`อัปโหลดได้สูงสุด ${MAX_FILES} รูป`);
+      return;
+    }
+    if (files.length > remaining) {
+      setError(
+        `อัปโหลดได้สูงสุด ${MAX_FILES} รูป — เลือกเพิ่มได้อีก ${remaining} รูป`,
+      );
+      files = files.slice(0, remaining);
+    }
+
     setUploading(true);
     try {
-      const uploaded = await uploadFiles(files, token);
+      const processed = await Promise.all(files.map(cropImageToSquare));
+      const uploaded = await uploadFiles(processed, token);
       onChange([...value, ...uploaded]);
     } catch (err) {
       setError(err.message);
@@ -68,11 +156,11 @@ export default function MediaUploader({ value, onChange, token }) {
         />
         <p className="font-medium text-gray-700">
           {uploading
-            ? "กำลังอัปโหลด..."
+            ? "กำลังประมวลผลและอัปโหลด..."
             : "ลากไฟล์มาวาง หรือคลิกเพื่อเลือกรูป/วิดีโอ"}
         </p>
         <p className="mt-1 text-xs text-gray-400">
-          JPG, PNG, WEBP, MP4, MOV — สูงสุด 8 ไฟล์
+          JPG, PNG, WEBP, MP4, MOV — สูงสุด {MAX_FILES} ไฟล์ (รูปภาพจะถูกครอบเป็นสี่เหลี่ยมจัตุรัสอัตโนมัติ)
         </p>
       </div>
 

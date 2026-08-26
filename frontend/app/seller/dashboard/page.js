@@ -68,6 +68,7 @@ export default function SellerDashboardPage() {
   const [orders, setOrders] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [kycStatus, setKycStatus] = useState(null);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -81,6 +82,10 @@ export default function SellerDashboardPage() {
       setLoading(false);
       return;
     }
+
+    apiFetch("/api/auth/kyc/mine", { token })
+      .then((data) => setKycStatus(data.kycStatus))
+      .catch(() => setKycStatus("NONE"));
 
     // The stat cards/charts below need the full recent picture, not one page of
     // it — capped at 100 rather than truly unbounded (a real pagination UI
@@ -206,6 +211,24 @@ export default function SellerDashboardPage() {
         </div>
 
         {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+
+        {kycStatus && kycStatus !== "VERIFIED" && (
+          <div className="mb-6 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span>
+              {kycStatus === "PENDING"
+                ? "บัญชีนี้อยู่ระหว่างการตรวจสอบยืนยันตัวตนโดยแอดมิน"
+                : "บัญชีนี้ยังไม่ได้ยืนยันตัวตนผู้ขาย — ต้องยืนยันก่อนจึงจะลงขายสินค้าได้"}
+            </span>
+            {kycStatus !== "PENDING" && (
+              <Link
+                href="/seller/onboarding"
+                className="shrink-0 font-medium underline hover:text-amber-900"
+              >
+                ยืนยันตัวตนผู้ขาย
+              </Link>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {/* Hero: total revenue, 2x2 */}
@@ -376,14 +399,22 @@ export default function SellerDashboardPage() {
                       </Link>
                       <p className="text-gray-500">{baht(p.price)}</p>
                     </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${
-                        PRODUCT_STATUS_STYLE[p.status] ||
-                        "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {PRODUCT_STATUS_LABEL[p.status] || p.status}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Link
+                        href={`/products/${p.id}/edit`}
+                        className="text-xs font-medium text-gray-400 hover:text-emerald-600 hover:underline"
+                      >
+                        แก้ไข
+                      </Link>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs ${
+                          PRODUCT_STATUS_STYLE[p.status] ||
+                          "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {PRODUCT_STATUS_LABEL[p.status] || p.status}
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ul>
