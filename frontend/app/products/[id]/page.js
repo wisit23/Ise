@@ -7,6 +7,7 @@ import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import MediaGallery from "../../../components/MediaGallery";
 import { StarDisplay } from "../../../components/StarRating";
+import ReportModal from "../../../components/ReportModal";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 import { fetchConditions } from "../../../lib/catalog";
@@ -28,6 +29,7 @@ export default function ProductDetailPage() {
   const [added, setAdded] = useState(false);
   const [conditionLabels, setConditionLabels] = useState({});
   const [reviewSummary, setReviewSummary] = useState(null);
+  const [showReport, setShowReport] = useState(false);
 
   useEffect(() => {
     apiFetch(`/api/products/${id}`)
@@ -217,6 +219,15 @@ export default function ProductDetailPage() {
             </Link>
           </div>
 
+          {getStoredUser()?.id !== product.sellerId && (
+            <button
+              onClick={() => setShowReport(true)}
+              className="mt-3 text-xs font-medium text-gray-400 hover:text-red-600 hover:underline"
+            >
+              รายงานสินค้า/ผู้ขายรายนี้
+            </button>
+          )}
+
           {notice && <p className="mt-4 text-sm text-red-600">{notice}</p>}
           {added && (
             <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
@@ -248,6 +259,16 @@ export default function ProductDetailPage() {
           )}
         </div>
       </section>
+
+      <ReportModal
+        open={showReport}
+        onClose={() => setShowReport(false)}
+        targetId={product.sellerId}
+        targetLabel={sellerName}
+        productId={product.id}
+        productLabel={product.title}
+      />
+
       <Footer />
     </main>
   );

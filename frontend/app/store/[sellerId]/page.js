@@ -7,7 +7,9 @@ import Footer from "../../../components/Footer";
 import ProductCard from "../../../components/ProductCard";
 import Pagination from "../../../components/Pagination";
 import { StarDisplay } from "../../../components/StarRating";
+import ReportModal from "../../../components/ReportModal";
 import { apiFetch } from "../../../lib/api";
+import { getStoredUser } from "../../../lib/auth";
 
 const PRODUCT_PAGE_SIZE = 12;
 const REVIEW_PAGE_SIZE = 5;
@@ -30,6 +32,7 @@ export default function StorePage() {
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewTotalPages, setReviewTotalPages] = useState(1);
   const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [showReport, setShowReport] = useState(false);
 
   useEffect(() => {
     apiFetch(`/api/auth/users/${sellerId}/public`)
@@ -77,27 +80,37 @@ export default function StorePage() {
       <NavBar />
 
       <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-8">
-          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-2xl font-semibold text-emerald-700">
-            {sellerName?.[0] || "?"}
-          </span>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{sellerName}</h1>
-            <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
-              {reviewSummary.total > 0 ? (
-                <>
-                  <StarDisplay value={reviewSummary.averageRating} />
-                  <span className="font-medium text-gray-700">
-                    {reviewSummary.averageRating.toFixed(1)}
-                  </span>
-                  <span>({reviewSummary.total} รีวิว)</span>
-                </>
-              ) : (
-                <span>ยังไม่มีรีวิว</span>
-              )}
-              <span>· สินค้าทั้งหมด {productTotal} รายการ</span>
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-8">
+          <div className="flex items-center gap-4">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-2xl font-semibold text-emerald-700">
+              {sellerName?.[0] || "?"}
+            </span>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">{sellerName}</h1>
+              <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+                {reviewSummary.total > 0 ? (
+                  <>
+                    <StarDisplay value={reviewSummary.averageRating} />
+                    <span className="font-medium text-gray-700">
+                      {reviewSummary.averageRating.toFixed(1)}
+                    </span>
+                    <span>({reviewSummary.total} รีวิว)</span>
+                  </>
+                ) : (
+                  <span>ยังไม่มีรีวิว</span>
+                )}
+                <span>· สินค้าทั้งหมด {productTotal} รายการ</span>
+              </div>
             </div>
           </div>
+          {getStoredUser()?.id !== sellerId && (
+            <button
+              onClick={() => setShowReport(true)}
+              className="shrink-0 text-xs font-medium text-gray-400 hover:text-red-600 hover:underline"
+            >
+              รายงานร้านค้านี้
+            </button>
+          )}
         </div>
       </section>
 
@@ -152,6 +165,13 @@ export default function StorePage() {
           />
         </div>
       </div>
+
+      <ReportModal
+        open={showReport}
+        onClose={() => setShowReport(false)}
+        targetId={sellerId}
+        targetLabel={sellerName}
+      />
 
       <Footer />
     </main>

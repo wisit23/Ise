@@ -67,7 +67,10 @@ function AdminInboxSection({ token }) {
             requesterId: r.reporterId,
             priority: "URGENT",
             status: r.status === "OPEN" ? "NEW" : (r.status === "REVIEWED" ? "IN_PROGRESS" : "RESOLVED"),
-            createdAt: r.createdAt,
+            // Report rows use `reportedAt`, not `createdAt` (see the Report
+            // model) — using the wrong field here produced "Invalid Date" in
+            // the table and broke the merged sort (NaN comparisons).
+            createdAt: r.reportedAt,
             rawReport: r
           }));
           merged = [...merged, ...mapped].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -177,6 +180,27 @@ function AdminInboxSection({ token }) {
         body: { action: "SUSPEND_USER", ids: [userId], reason: `Banned from Admin Inbox (Ticket: ${selectedTicket?.ticketNumber})` },
       });
       alert("ระงับบัญชีผู้ใช้สำเร็จ");
+      refreshAfterAction();
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleWarnUser(userId) {
+    const reason = window.prompt("เหตุผลในการตักเตือน (จะถูกบันทึกไว้ในประวัติผู้ใช้)");
+    if (!reason || !reason.trim()) return;
+
+    setActionBusy(true);
+    setActionError("");
+    try {
+      await apiFetch(`/api/auth/admin/users/${userId}/warn`, {
+        method: "POST",
+        token,
+        body: { reason: reason.trim() },
+      });
+      alert("บันทึกการตักเตือนสำเร็จ");
       refreshAfterAction();
     } catch (err) {
       setActionError(err.message);
@@ -373,6 +397,7 @@ function AdminInboxSection({ token }) {
                       >
                         <option value="">-- เลือกการตัดสินใจ --</option>
                         {selectedTicket.rawReport.targetId && <option value="SUSPEND_USER">ระงับบัญชีผู้ใช้ (SUSPEND_USER)</option>}
+                        {selectedTicket.rawReport.targetId && <option value="WARN_USER">ตักเตือนผู้ใช้ ไม่ระงับบัญชี (WARN_USER)</option>}
                         {selectedTicket.rawReport.productId && <option value="REMOVE_PRODUCT">ลบสินค้า (REMOVE_PRODUCT)</option>}
                         <option value="DISMISS">ยกเลิกรายงาน / ไม่พบความผิด (DISMISS)</option>
                       </select>
@@ -448,14 +473,24 @@ function AdminInboxSection({ token }) {
                     <span className="material-symbols-outlined text-[15px]">person</span>
                     ข้อมูลผู้แจ้ง
                   </h3>
-                  <button 
-                    onClick={() => handleBanUser(selectedTicket.requesterId)}
-                    disabled={actionBusy}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">block</span>
-                    แบนผู้ใช้นี้
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleWarnUser(selectedTicket.requesterId)}
+                      disabled={actionBusy}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">warning</span>
+                      ตักเตือน
+                    </button>
+                    <button
+                      onClick={() => handleBanUser(selectedTicket.requesterId)}
+                      disabled={actionBusy}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">block</span>
+                      แบนผู้ใช้นี้
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold text-base shadow">

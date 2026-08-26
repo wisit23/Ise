@@ -9,6 +9,25 @@ const reportService = require("./reportService");
 
 const router = Router();
 
+router.post(
+  "/reports",
+  requireAuth,
+  requirePermission("report:create"),
+  async (req, res, next) => {
+    try {
+      const report = await reportService.createReport({
+        reporterId: req.userId,
+        targetId: req.body.targetId,
+        productId: req.body.productId,
+        reason: req.body.reason,
+      });
+      res.status(201).json(report);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 router.get(
   "/admin/reports",
   requireAuth,
@@ -71,6 +90,25 @@ router.post(
   async (req, res, next) => {
     try {
       const user = await reportService.suspendUser({
+        targetId: req.params.id,
+        adminId: req.userId,
+        reason: req.body.reason,
+        requestId: req.id,
+      });
+      res.json(user);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.post(
+  "/admin/users/:id/warn",
+  requireAuth,
+  requirePermission("admin:user:suspend"),
+  async (req, res, next) => {
+    try {
+      const user = await reportService.warnUser({
         targetId: req.params.id,
         adminId: req.userId,
         reason: req.body.reason,

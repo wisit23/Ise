@@ -19,6 +19,30 @@ async function recordAdminAction({ actorId, action, targetId, reason, requestId 
   });
 }
 
+/**
+ * The consumer-facing half of the report flow — a Buyer/Seller flags a user
+ * and/or a product (at least one of the two, never neither) with a reason.
+ * Everything downstream (review, decide, dismiss) is Admin's existing flow;
+ * this is only the missing "file a report" entry point into it.
+ */
+async function createReport({ reporterId, targetId, productId, reason }) {
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) throw badRequest("reason is required");
+  if (!targetId && !productId) {
+    throw badRequest("targetId or productId is required");
+  }
+  if (targetId === reporterId) throw badRequest("cannot report yourself");
+
+  return prisma.report.create({
+    data: {
+      reporterId,
+      targetId: targetId || null,
+      productId: productId || null,
+      reason: trimmedReason,
+    },
+  });
+}
+
 async function listReports({ page, limit, status }) {
   const where = { status: status || "OPEN" };
   const [items, total] = await Promise.all([
@@ -46,7 +70,12 @@ async function reviewReport({ reportId, adminId }) {
   });
 }
 
-const VALID_DECISIONS = ["SUSPEND_USER", "REMOVE_PRODUCT", "DISMISS"];
+const VALID_DECISIONS = [
+  "SUSPEND_USER",
+  "WARN_USER",
+  "REMOVE_PRODUCT",
+  "DISMISS",
+];
 
 /**
  * A report must pass through REVIEWED first (reviewReport) — this keeps
@@ -56,7 +85,7 @@ const VALID_DECISIONS = ["SUSPEND_USER", "REMOVE_PRODUCT", "DISMISS"];
 async function actionReport({ reportId, adminId, decision, reason, requestId }) {
   if (!VALID_DECISIONS.includes(decision)) {
     throw badRequest(
-      "decision must be SUSPEND_USER, REMOVE_PRODUCT or DISMISS",
+      `decision must be one of ${VALID_DECISIONS.join(", ")}`,
     );
   }
   if (!reason) throw badRequest("reason is required");
@@ -72,6 +101,11 @@ async function actionReport({ reportId, adminId, decision, reason, requestId }) 
       throw badRequest("report has no target user to suspend");
     }
     await suspendUser({ targetId: report.targetId, adminId, reason, requestId });
+  } else if (decision === "WARN_USER") {
+    if (!report.targetId) {
+      throw badRequest("report has no target user to warn");
+    }
+    await warnUser({ targetId: report.targetId, adminId, reason, requestId });
   } else if (decision === "REMOVE_PRODUCT") {
     if (!report.productId) {
       throw badRequest("report has no target product to remove");
@@ -120,6 +154,30 @@ async function suspendUser({ targetId, adminId, reason, requestId }) {
   return toPublicUser(updated);
 }
 
+/**
+ * The lighter-touch counterpart to suspendUser — records a formal warning
+ * against the user without touching account status. Keyed by the user's own
+ * id (not the report's), so it feeds getUserSafetySummary's `priorActions`
+ * count the same way USER_SUSPENDED does — a repeat offender with three
+ * warnings and no suspension is still visible as a repeat offender.
+ */
+async function warnUser({ targetId, adminId, reason, requestId }) {
+  if (!reason) throw badRequest("reason is required");
+  if (targetId === adminId) throw forbidden("admins cannot warn themselves");
+
+  const user = await prisma.user.findUnique({ where: { id: targetId } });
+  if (!user) throw notFound("user not found");
+
+  await recordAdminAction({
+    actorId: adminId,
+    action: "USER_WARNED",
+    targetId,
+    reason,
+    requestId,
+  });
+  return toPublicUser(user);
+}
+
 async function restoreUser({ targetId, adminId, reason, requestId }) {
   if (!reason) throw badRequest("reason is required");
 
@@ -159,10 +217,12 @@ async function getUserSafetySummary(targetId) {
 }
 
 module.exports = {
+  createReport,
   listReports,
   reviewReport,
   actionReport,
   suspendUser,
+  warnUser,
   restoreUser,
   getUserSafetySummary,
   recordAdminAction,
