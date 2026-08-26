@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import { uploadFiles, mediaUrl } from "../lib/api";
 
-export default function MediaUploader({ value, onChange, token }) {
+export default function MediaUploader({ value = [], onChange, token }) {
+  const safeValue = Array.isArray(value) ? value : [];
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -17,7 +18,7 @@ export default function MediaUploader({ value, onChange, token }) {
     setUploading(true);
     try {
       const uploaded = await uploadFiles(files, token);
-      onChange([...value, ...uploaded]);
+      onChange([...safeValue, ...uploaded]);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -27,12 +28,12 @@ export default function MediaUploader({ value, onChange, token }) {
   }
 
   function removeAt(index) {
-    onChange(value.filter((_, i) => i !== index));
+    onChange(safeValue.filter((_, i) => i !== index));
   }
 
   function setCover(index) {
     if (index === 0) return;
-    const next = [...value];
+    const next = [...safeValue];
     const [item] = next.splice(index, 1);
     next.unshift(item);
     onChange(next);
@@ -78,9 +79,9 @@ export default function MediaUploader({ value, onChange, token }) {
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
-      {value.length > 0 && (
+      {safeValue.length > 0 && (
         <div className="mt-3 grid grid-cols-4 gap-3">
-          {value.map((item, index) => (
+          {safeValue.map((item, index) => (
             <div
               key={item.url + index}
               className="group relative aspect-square overflow-hidden rounded-md border border-gray-200 bg-gray-100"

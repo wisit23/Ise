@@ -374,14 +374,22 @@ export default function SellerDashboardPage() {
                       </Link>
                       <p className="text-gray-500">{baht(p.price)}</p>
                     </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${
-                        PRODUCT_STATUS_STYLE[p.status] ||
-                        "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {PRODUCT_STATUS_LABEL[p.status] || p.status}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs ${
+                          PRODUCT_STATUS_STYLE[p.status] ||
+                          "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {PRODUCT_STATUS_LABEL[p.status] || p.status}
+                      </span>
+                      <Link
+                        href={`/products/${p.id}/edit`}
+                        className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 transition"
+                      >
+                        ✏️ แก้ไข
+                      </Link>
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -28,8 +28,10 @@ export default function ProductDetailPage() {
   const [added, setAdded] = useState(false);
   const [conditionLabels, setConditionLabels] = useState({});
   const [reviewSummary, setReviewSummary] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
+    setCurrentUser(getStoredUser());
     apiFetch(`/api/products/${id}`)
       .then((p) => {
         setProduct(p);
@@ -111,6 +113,8 @@ export default function ProductDetailPage() {
   }
 
   const available = product.status === "available";
+  const isOwner =
+    currentUser?.id === product.sellerId || currentUser?.role === "ADMIN";
   const sellerName = seller
     ? seller.shopName || `${seller.firstName} ${seller.lastName}`
     : "ผู้ขาย";
@@ -217,18 +221,17 @@ export default function ProductDetailPage() {
             </Link>
           </div>
 
-          {notice && <p className="mt-4 text-sm text-red-600">{notice}</p>}
-          {added && (
-            <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              เพิ่มลงตะกร้าแล้ว สินค้าถูกล็อกไว้ให้คุณ ไปที่{" "}
-              <Link href="/cart" className="font-medium underline">
-                ตะกร้า
-              </Link>{" "}
-              เพื่อชำระเงิน
-            </p>
-          )}
-
-          {!added && (
+          {isOwner ? (
+            <div className="mt-6">
+              <Link
+                href={`/products/${product.id}/edit`}
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-emerald-600 py-3 font-medium text-white shadow-sm hover:bg-emerald-700 transition"
+              >
+                <span>✏️</span>
+                <span>แก้ไขข้อมูลสินค้านี้</span>
+              </Link>
+            </div>
+          ) : !added && (
             <div className="mt-6 flex gap-3">
               <button
                 onClick={handleAddToCart}

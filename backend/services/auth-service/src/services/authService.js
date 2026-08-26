@@ -20,6 +20,17 @@ function toPublicUser(user) {
     lastName: user.lastName,
     phone: user.phone,
     role: user.role,
+    sellerProfile: user.sellerProfile
+      ? {
+          shopName: user.sellerProfile.shopName,
+          idCardNumber: user.sellerProfile.idCardNumber,
+          address: user.sellerProfile.address,
+          kycStatus: user.sellerProfile.kycStatus,
+          kycDocumentUrl: user.sellerProfile.kycDocumentUrl,
+          rejectionReason: user.sellerProfile.rejectionReason,
+          verifiedAt: user.sellerProfile.verifiedAt,
+        }
+      : null,
   };
 }
 
@@ -86,6 +97,7 @@ async function register({
         ? { sellerProfile: { create: { shopName } } }
         : {}),
     },
+    include: { sellerProfile: true },
   });
 
   const tokens = await issueTokenPair(user);
@@ -95,7 +107,10 @@ async function register({
 async function login({ email, password, ipAddress }) {
   if (!email || !password) throw badRequest("email and password are required");
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({
+    where: { email },
+    include: { sellerProfile: true },
+  });
   if (!user) throw badRequest("invalid email or password");
 
   const valid = await bcrypt.compare(password, user.passwordHash);
@@ -137,7 +152,10 @@ async function logout(refreshToken) {
 }
 
 async function getById(userId) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { sellerProfile: true },
+  });
   if (!user) throw badRequest("user not found");
   return toPublicUser(user);
 }
@@ -154,8 +172,121 @@ async function updateProfile(userId, { firstName, lastName, phone }) {
   }
   if (phone !== undefined) patch.phone = phone;
 
-  const user = await prisma.user.update({ where: { id: userId }, data: patch });
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: patch,
+    include: { sellerProfile: true },
+  });
   return toPublicUser(user);
+}
+
+/** Submit seller identity verification (KYC) and upgrade account to SELLER. */
+async function submitKyc(userId, {
+  firstName,
+  lastName,
+  phone,
+  idCardNumber,
+  idCardImageUrl,
+  kycDocumentUrl,
+  address,
+  shopName,
+  bankAccount,
+}) {
+  if (!firstName || !firstName.trim()) throw badRequest("กรุณาระบุชื่อจริง (firstName)");
+  if (!lastName || !lastName.trim()) throw badRequest("กรุณาระบุนามสกุล (lastName)");
+  if (!phone || !phone.trim()) throw badRequest("กรุณาระบุเบอร์โทรศัพท์ (phone)");
+  if (!idCardNumber || !idCardNumber.trim()) throw badRequest("กรุณาระบุรหัสบัตรประชาชน 13 หลัก (idCardNumber)");
+
+  const cleanedIdCard = idCardNumber.replace(/\D/g, "");
+  if (cleanedIdCard.length !== 13) {
+    throw badRequest("รหัสบัตรประชาชนต้องเป็นตัวเลข 13 หลัก");
+  }
+
+  if (!address || !address.trim()) throw badRequest("กรุณาระบุที่อยู่ (address)");
+  
+  const documentUrl = kycDocumentUrl || idCardImageUrl;
+  if (!documentUrl || !documentUrl.trim()) {
+    throw badRequest("กรุณาอัปโหลดรูปภาพบัตรประชาชน (kycDocumentUrl/idCardImageUrl)");
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { sellerProfile: true },
+  });
+  if (!existingUser) throw notFound("ไม่พบผู้ใช้งานในระบบ");
+
+  const resolvedShopName =
+    (shopName && shopName.trim()) ||
+    existingUser.sellerProfile?.shopName ||
+    `ร้านค้าของ ${firstName.trim()}`;
+
+  // Update user profile & role to SELLER
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      phone: phone.trim(),
+      role: "SELLER",
+      sellerProfile: {
+        upsert: {
+          create: {
+            shopName: resolvedShopName,
+            idCardNumber: cleanedIdCard,
+            address: address.trim(),
+            kycDocumentUrl: documentUrl.trim(),
+            bankAccount: bankAccount ? bankAccount.trim() : null,
+            kycStatus: "VERIFIED",
+            verifiedAt: new Date(),
+          },
+          update: {
+            shopName: resolvedShopName,
+            idCardNumber: cleanedIdCard,
+            address: address.trim(),
+            kycDocumentUrl: documentUrl.trim(),
+            bankAccount: bankAccount ? bankAccount.trim() : null,
+            kycStatus: "VERIFIED",
+            rejectionReason: null,
+            verifiedAt: new Date(),
+          },
+        },
+      },
+    },
+    include: { sellerProfile: true },
+  });
+
+  // Issue new token pair with updated SELLER role
+  const tokens = await issueTokenPair(updatedUser);
+
+  return {
+    user: toPublicUser(updatedUser),
+    ...tokens,
+  };
+}
+
+async function getKycStatus(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { sellerProfile: true },
+  });
+  if (!user) throw notFound("ไม่พบผู้ใช้งาน");
+
+  return {
+    userId: user.id,
+    role: user.role,
+    kycStatus: user.sellerProfile?.kycStatus || "NONE",
+    sellerProfile: user.sellerProfile
+      ? {
+          shopName: user.sellerProfile.shopName,
+          idCardNumber: user.sellerProfile.idCardNumber,
+          address: user.sellerProfile.address,
+          kycStatus: user.sellerProfile.kycStatus,
+          kycDocumentUrl: user.sellerProfile.kycDocumentUrl,
+          rejectionReason: user.sellerProfile.rejectionReason,
+          verifiedAt: user.sellerProfile.verifiedAt,
+        }
+      : null,
+  };
 }
 
 /** Public store-front info for a seller — no email/phone, only what a buyer needs to see. */
@@ -182,5 +313,7 @@ module.exports = {
   logout,
   getById,
   updateProfile,
+  submitKyc,
+  getKycStatus,
   getPublicSellerProfile,
 };

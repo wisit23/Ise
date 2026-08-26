@@ -15,3 +15,14 @@ test("GET /me with no bearer token is rejected with 401", async () => {
   const res = await request(app).get("/me");
   assert.equal(res.status, 401);
 });
+
+test("POST /kyc with no bearer token is rejected with 401", async () => {
+  const res = await request(app).post("/kyc").send({});
+  assert.equal(res.status, 401);
+});
+
+test("GET /kyc/status with no bearer token is rejected with 401", async () => {
+  const res = await request(app).get("/kyc/status");
+  assert.equal(res.status, 401);
+});
+

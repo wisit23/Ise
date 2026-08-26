@@ -10,6 +10,8 @@ router.post("/refresh", authController.refresh);
 router.post("/logout", authController.logout);
 router.get("/me", requireAuth, authController.me);
 router.patch("/me", requireAuth, authController.updateMe);
+router.post("/kyc", requireAuth, authController.submitKyc);
+router.get("/kyc/status", requireAuth, authController.getKycStatus);
 router.get("/users/:id/public", authController.publicProfile);
 
 module.exports = router;

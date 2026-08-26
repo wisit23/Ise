@@ -124,6 +124,19 @@ export default function NavBar() {
                     ลงขายสินค้า
                   </Link>
 
+                  {!isSeller && (
+                    <Link
+                      href="/seller/onboarding"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-amber-700 hover:bg-amber-50"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-xs text-white">
+                        ✓
+                      </span>
+                      ยืนยันตัวตนผู้ขาย
+                    </Link>
+                  )}
+
                   {isSeller && (
                     <Link
                       href="/seller/dashboard"

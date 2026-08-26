@@ -59,16 +59,18 @@ model BuyerProfile {
   @@map("buyer_profiles")
 }
 
-// ER: Seller — shop info + KYC fields (KYC upload/verification flow lands in a later phase).
+// ER: Seller — shop info + KYC fields (KYC upload/verification flow).
 model SellerProfile {
-  userId         String    @id @map("user_id")
-  user           User      @relation(fields: [userId], references: [id])
-  shopName       String    @map("shop_name")
-  idCardNumber   String?   @map("id_card_number")
-  bankAccount    String?   @map("bank_account")
-  kycStatus      KycStatus @default(NONE) @map("kyc_status")
-  kycDocumentUrl String?   @map("kyc_document_url")
-  verifiedAt     DateTime? @map("verified_at")
+  userId          String    @id @map("user_id")
+  user            User      @relation(fields: [userId], references: [id])
+  shopName        String    @map("shop_name")
+  idCardNumber    String?   @map("id_card_number")
+  bankAccount     String?   @map("bank_account")
+  address         String?   @map("address")
+  kycStatus       KycStatus @default(NONE) @map("kyc_status")
+  kycDocumentUrl  String?   @map("kyc_document_url")
+  rejectionReason String?   @map("rejection_reason")
+  verifiedAt      DateTime? @map("verified_at")
 
   @@map("seller_profiles")
 }

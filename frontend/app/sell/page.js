@@ -65,6 +65,12 @@ export default function SellPage() {
     }
 
     setError("");
+
+    if (!form.media || form.media.length < 4) {
+      setError("กรุณาอัปโหลดรูปภาพหรือวิดีโอสินค้าอย่างน้อย 4 รูป (ปัจจุบันมี " + (form.media?.length || 0) + " รูป)");
+      return;
+    }
+
     setLoading(true);
     try {
       const product = await apiFetch("/api/products", {
@@ -107,16 +113,21 @@ export default function SellPage() {
         <NavBar />
         <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
           <h1 className="mb-4 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            บัญชีนี้เป็นบัญชีผู้ซื้อ ลงขายสินค้าไม่ได้ —
-            ต้องสมัครด้วยบัญชีผู้ขายก่อน
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 shadow-sm">
+            <h2 className="mb-2 text-base font-semibold text-amber-950">
+              ต้องยืนยันตัวตนผู้ขายก่อนลงขายสินค้า
+            </h2>
+            <p className="mb-4 text-amber-800">
+              บัญชีของคุณปัจจุบันเป็นบัญชีผู้ซื้อ เพื่อความปลอดภัยและความน่าเชื่อถือของแพลตฟอร์ม RE-LOOP กรุณากรอกข้อมูลและยืนยันตัวตนผู้ขายเพื่อเริ่มลงขายสินค้าได้ทันที
+            </p>
+            <Link
+              href="/seller/onboarding"
+              className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-5 py-2.5 font-medium text-white shadow hover:bg-emerald-700 transition"
+            >
+              <span>🪪</span>
+              <span>ยืนยันตัวตนเพื่อเป็นผู้ขาย</span>
+            </Link>
           </div>
-          <Link
-            href="/register"
-            className="mt-4 inline-block rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
-          >
-            สมัครบัญชีผู้ขาย
-          </Link>
         </section>
         <Footer />
       </main>
@@ -129,7 +140,7 @@ export default function SellPage() {
       <section className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
         <h1 className="mb-1 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
         <p className="mb-6 text-sm text-gray-500">
-          กรอกรายละเอียดให้ครบเพื่อให้ผู้ซื้อตัดสินใจได้ง่ายขึ้น
+          กรอกรายละเอียดให้ครบเพื่อให้ผู้ซื้อตัดสินใจได้ง่ายขึ้น (บังคับใส่รูปอย่างน้อย 4 รูป)
         </p>
         <form
           onSubmit={handleSubmit}
@@ -137,7 +148,10 @@ export default function SellPage() {
         >
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              รูปภาพ / วิดีโอสินค้า
+              รูปภาพ / วิดีโอสินค้า <span className="text-red-500">*</span>{" "}
+              <span className="text-xs font-normal text-gray-500">
+                (อย่างน้อย 4 รูป, สูงสุด 8 รูป)
+              </span>
             </label>
             <MediaUploader
               value={form.media}

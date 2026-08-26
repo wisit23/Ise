@@ -54,6 +54,24 @@ async function updateMe(req, res, next) {
   }
 }
 
+async function submitKyc(req, res, next) {
+  try {
+    const result = await authService.submitKyc(req.userId, req.body);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getKycStatus(req, res, next) {
+  try {
+    const status = await authService.getKycStatus(req.userId);
+    res.json(status);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function publicProfile(req, res, next) {
   try {
     const profile = await authService.getPublicSellerProfile(req.params.id);
@@ -70,5 +88,7 @@ module.exports = {
   logout,
   me,
   updateMe,
+  submitKyc,
+  getKycStatus,
   publicProfile,
 };

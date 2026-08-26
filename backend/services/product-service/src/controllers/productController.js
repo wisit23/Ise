@@ -136,6 +136,11 @@ async function create(req, res, next) {
       throw badRequest("condition is not a recognized value");
     }
 
+    const normalizedMedia = normalizeMedia(media);
+    if (normalizedMedia.length < 4) {
+      throw badRequest("กรุณาอัปโหลดรูปภาพหรือวิดีโอสินค้าอย่างน้อย 4 ไฟล์ (at least 4 photos/videos are required)");
+    }
+
     await productModel.ensureCategory(category);
 
     const product = await productModel.create({
@@ -147,7 +152,7 @@ async function create(req, res, next) {
       condition: condition || "Good",
       size: size || "Free size",
       tags: normalizeTags(tags),
-      media: normalizeMedia(media),
+      media: normalizedMedia,
       location: location || "",
     });
     res.status(201).json(product);
@@ -160,7 +165,7 @@ async function update(req, res, next) {
   try {
     const product = await productModel.findById(req.params.id);
     if (!product) throw notFound("product not found");
-    if (product.sellerId !== req.userId) {
+    if (product.sellerId !== req.userId && req.userRole !== "ADMIN") {
       throw forbidden("only the seller can edit this listing");
     }
 
@@ -189,7 +194,13 @@ async function update(req, res, next) {
     if (condition !== undefined) patch.condition = condition;
     if (size !== undefined) patch.size = size;
     if (tags !== undefined) patch.tags = normalizeTags(tags);
-    if (media !== undefined) patch.media = normalizeMedia(media);
+    if (media !== undefined) {
+      const normalizedMedia = normalizeMedia(media);
+      if (normalizedMedia.length < 4) {
+        throw badRequest("กรุณาอัปโหลดรูปภาพหรือวิดีโอสินค้าอย่างน้อย 4 ไฟล์ (at least 4 photos/videos are required)");
+      }
+      patch.media = normalizedMedia;
+    }
     if (location !== undefined) patch.location = location;
     if (status !== undefined) patch.status = status;
 

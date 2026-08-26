@@ -137,6 +137,60 @@ export default function ProfilePage() {
             {loading ? "กำลังบันทึก..." : "บันทึกการเปลี่ยนแปลง"}
           </button>
         </form>
+
+        {form.role === "BUYER" ? (
+          <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 p-6 text-sm">
+            <h2 className="text-base font-semibold text-emerald-950">
+              สนใจเป็นผู้ขายใน RE-LOOP?
+            </h2>
+            <p className="mt-1 text-emerald-800">
+              ยืนยันตัวตนด้วยบัตรประชาชนและข้อมูลที่อยู่ เพื่อเปิดร้านค้าและลงขายเสื้อผ้ามือสองของคุณได้ทันที
+            </p>
+            <a
+              href="/seller/onboarding"
+              className="mt-4 inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 font-medium text-white shadow-sm hover:bg-emerald-700 transition"
+            >
+              <span>🪪</span>
+              <span>ยืนยันตัวตนผู้ขาย (KYC)</span>
+            </a>
+          </div>
+        ) : form.role === "SELLER" ? (
+          <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6 text-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">
+                  ข้อมูลผู้ขาย (Seller Profile)
+                </h2>
+                <p className="mt-0.5 text-gray-500">
+                  สถานะการยืนยันตัวตน:{" "}
+                  <span className="font-medium text-emerald-600">
+                    ✓ ยืนยันตัวตนเรียบร้อยแล้ว
+                  </span>
+                </p>
+              </div>
+              <a
+                href="/seller/dashboard"
+                className="rounded-md border border-emerald-600 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-50"
+              >
+                ไปที่แดชบอร์ดผู้ขาย
+              </a>
+            </div>
+            {form.sellerProfile?.shopName && (
+              <div className="mt-4 border-t border-gray-100 pt-3">
+                <p className="text-xs text-gray-500">ชื่อร้านค้า</p>
+                <p className="font-medium text-gray-800">
+                  {form.sellerProfile.shopName}
+                </p>
+              </div>
+            )}
+            {form.sellerProfile?.address && (
+              <div className="mt-2">
+                <p className="text-xs text-gray-500">ที่อยู่ผู้ขาย</p>
+                <p className="text-gray-700">{form.sellerProfile.address}</p>
+              </div>
+            )}
+          </div>
+        ) : null}
       </section>
       <Footer />
     </main>
