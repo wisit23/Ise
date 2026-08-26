@@ -75,7 +75,7 @@ export default function MarketingPanelPage() {
                 </span>
               </span>
               <div className="flex flex-col">
-                <span className="text-[15px] font-extrabold tracking-tight text-slate-800">
+                <span className="text-[13px] font-extrabold tracking-tight text-slate-800">
                   Re-loop panel
                 </span>
                 <span className="text-[10px] font-bold tracking-wider text-violet-600 uppercase">
