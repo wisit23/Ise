@@ -225,6 +225,23 @@ async function mine(req, res, next) {
   }
 }
 
+/** Called by order-service with its internal token when an order changes the
+ * listing lifecycle. This is intentionally separate from the seller-facing
+ * PATCH /:id route, whose ownership checks must not apply to service calls. */
+async function markStatusInternal(req, res, next) {
+  try {
+    const { status } = req.body;
+    if (!["available", "reserved", "sold"].includes(status)) {
+      throw badRequest("status must be one of available, reserved, sold");
+    }
+    const product = await productModel.update(req.params.id, { status });
+    if (!product) throw notFound("product not found");
+    res.json(product);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   feed,
   search,
@@ -237,4 +254,5 @@ module.exports = {
   update,
   remove,
   mine,
+  markStatusInternal,
 };
