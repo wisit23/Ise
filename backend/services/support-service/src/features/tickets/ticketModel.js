@@ -44,6 +44,7 @@ async function listByRequester(requesterId, { skip, take } = {}) {
 /** Agent queue. scope: "unassigned" (default) | "mine" | "all" — "mine" needs
  * assigneeId, "all" ignores assignment entirely (dashboard overview). */
 async function listQueue({
+  role,
   scope = "unassigned",
   assigneeId,
   status,
@@ -56,8 +57,20 @@ async function listQueue({
   if (scope === "unassigned") where.assigneeId = null;
   else if (scope === "mine") where.assigneeId = assigneeId;
 
-  if (status) where.status = status;
-  else if (scope !== "all") where.status = { notIn: ["CLOSED"] };
+  if (status) {
+    where.status = status;
+    // Note: If role === "CUSTOMER_SERVICE" and they request ESCALATED, block it
+    if (role === "CUSTOMER_SERVICE" && status === "ESCALATED") {
+      return { items: [], total: 0 };
+    }
+  } else {
+    // Default queue view: exclude ESCALATED (since they go to Admin Inbox)
+    if (scope !== "all") {
+      where.status = { notIn: ["CLOSED", "ESCALATED"] };
+    } else {
+      where.status = { notIn: ["ESCALATED"] };
+    }
+  }
 
   if (priority) where.priority = priority;
 

@@ -57,7 +57,6 @@ export default function NavBar() {
   }
 
   const isSeller = user?.role === "SELLER";
-  const isAdmin = user?.role === "ADMIN";
   const isExecutive = user?.role === "EXECUTIVE";
   const isMarketing = user?.role === "MARKETING";
   const isSupportAgent =
@@ -129,18 +128,7 @@ export default function NavBar() {
                     </span>
                   </div>
 
-                  {isAdmin && (
-                    <Link
-                      href="/admin"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
-                    >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-xs text-white">
-                        ⚙
-                      </span>
-                      Admin Panel
-                    </Link>
-                  )}
+
 
                   <Link
                     href="/sell"
@@ -267,14 +255,14 @@ export default function NavBar() {
 
                   {isSupportAgent && (
                     <Link
-                      href="/support/panel"
+                      href="/workspace"
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
                     >
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-xs text-white">
                         🎧
                       </span>
-                      แผงควบคุมซัพพอร์ต
+                      Backoffice Workspace
                     </Link>
                   )}
 

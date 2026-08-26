@@ -94,6 +94,7 @@ async function listQueue({
 }) {
   if (!isAgent(role)) throw forbidden("only support agents can view the queue");
   return ticketModel.listQueue({
+    role,
     scope,
     assigneeId: userId,
     status,

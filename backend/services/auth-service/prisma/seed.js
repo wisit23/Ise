@@ -59,9 +59,16 @@ const STAFF = [
   {
     id: "40000000-0000-0000-0000-000000000001",
     email: "marketing@example.com",
-    firstName: "การตลาด",
-    lastName: "รีลูป",
+    firstName: "พิมพ์ชนก",
+    lastName: "ทองศรี",
     role: "MARKETING",
+  },
+  {
+    id: "40000000-0000-0000-0000-000000000002",
+    email: "admin@example.com",
+    firstName: "แอดมิน",
+    lastName: "ระบบ",
+    role: "ADMIN",
   },
 ];
 
