@@ -1024,6 +1024,54 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
   `docs/featureplan/executive/changelog.md`, `docs/featureplan/marketing/changelog.md`,
   `docs/featureplan/customer-service/changelog.md`
 
+## Task `ADM-COMPLETE-002` — Report Creation, WARN_USER Decision, Ticket Counterparty (`targetId`)
+
+> วันที่ทำ: 2026-08-26
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ทดสอบผ่าน Browser จริงกับ Docker Stack ที่ Rebuild แล้ว, ยืนยันด้วย
+> `npm test` / `npm run test:frontend` / `eslint`
+
+### สรุปงานที่ทำ
+
+ผู้ใช้ตั้งข้อสังเกตสองรอบต่อเนื่องกัน: (1) `report:create` permission มีอยู่แล้วแต่ไม่มี endpoint
+ไหนใช้จริง, (2) Admin มีแค่ "แบน" เป็นทางเลือกเดียว และปุ่มแบน/ตักเตือนบนตั๋วที่ Escalate ยิงไปที่
+ผู้แจ้ง (`requesterId`) เสมอ — ผิดหลักการเมื่อเรื่องจริงเกี่ยวกับอีกฝ่าย
+
+1. **เปิดทาง Report creation จริง:** `POST /api/auth/reports` endpoint ใหม่ +
+   `ReportModal.js` (Reusable) + ปุ่ม "รายงาน" บนหน้าสินค้าและหน้าร้านค้า
+2. **เพิ่ม `WARN_USER` เป็น Decision ที่ไม่ใช่การแบน:** ใช้ได้ทั้งกับ Report-decision flow และ
+   Ticket แบบ Standalone endpoint (`POST /admin/users/:id/warn`) — บันทึก Audit แต่ไม่แตะ
+   `user.status`
+3. **เพิ่มคู่กรณี (`targetId`) ให้ `SupportTicket`:** Schema เพิ่ม Field ใหม่ (Soft reference แบบ
+   เดียวกับ `orderId`), ฟอร์มเปิดตั๋วให้ผู้ใช้ผูก Order จริงได้ ระบบ Derive คู่กรณีอัตโนมัติจากอีกฝ่าย
+   ของ Order นั้น, `AdminInboxSection.js` เพิ่มการ์ด "คู่กรณี (Target)" แยกจากการ์ดผู้แจ้งเดิม พร้อม
+   ปุ่มตักเตือน/แบนของตัวเองที่ผูกกับ `targetId` ไม่ใช่ `requesterId`
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ | ผลที่เกิดขึ้นจริง |
+| ------- | ------------------ |
+| `npm test` (Backend) | 108 tests, 84 ผ่าน, 0 fail, 24 skip (เท่าเดิม ไม่มี Regression) |
+| `npm run test:frontend` | 28/28 ผ่าน (เท่าเดิม) |
+| `eslint` | สะอาดทุกไฟล์ที่แก้ |
+| Browser จริงผ่าน Docker Stack (Rebuild `support-service`) | Login เป็น Buyer สร้างตั๋วผูก Order จริง
+  → Query DB ตรงยืนยัน `target_id` ตรงกับ Seller ของ Order นั้น (ไม่ใช่ผู้แจ้ง) → Escalate ตั๋ว →
+  Login เป็น Admin เปิดเคสระดับแอดมิน เห็นการ์ด "คู่กรณี" แสดง Seller ID แยกจากการ์ดผู้แจ้งที่แสดง
+  Buyer ID ถูกต้อง — ลบข้อมูลทดสอบและคืนค่า Baseline ครบหลังยืนยันเสร็จ |
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/auth-service/src/features/reports/reportService.js`,
+  `reportRoutes.js`
+- `backend/services/support-service/prisma/schema.prisma`,
+  `src/features/tickets/ticketController.js`, `ticketService.js`
+- `frontend/components/ReportModal.js`,
+  `frontend/components/support/sections/AdminInboxSection.js`
+- `frontend/app/support/tickets/page.js`, `frontend/app/products/[id]/page.js`,
+  `frontend/app/store/[sellerId]/page.js`
+- รายละเอียดเต็มแยกตามทีมที่ `docs/featureplan/admin/changelog.md`,
+  `docs/featureplan/customer-service/changelog.md`
+
 ## อัปเดตล่าสุด
 
 2026-08-26 (Asia/Bangkok)

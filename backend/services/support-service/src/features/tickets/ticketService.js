@@ -41,10 +41,14 @@ async function createTicket({
   description,
   category,
   orderId,
+  targetId,
 }) {
   if (!subject?.trim()) throw badRequest("subject is required");
   if (!CATEGORIES.has(category)) {
     throw badRequest(`category must be one of ${[...CATEGORIES].join(", ")}`);
+  }
+  if (targetId && targetId === requesterId) {
+    throw badRequest("cannot name yourself as the counterparty");
   }
 
   const priority = calculatePriority({
@@ -59,6 +63,7 @@ async function createTicket({
     description: description?.trim() || "",
     category,
     orderId: orderId || null,
+    targetId: targetId || null,
     priority,
     slaDueAt,
   });

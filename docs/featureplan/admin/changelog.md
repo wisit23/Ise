@@ -204,3 +204,41 @@ CUSTOMER_SERVICE, เดิน Flow ลบสินค้า → ค้นหา
 Marketing, เปิดเคส Dispute แล้วเห็นลิงก์ Admin เฉพาะ role ที่ถูกต้อง, Report review→action สำเร็จไม่ 409
 อีกต่อไป — `npm test` (backend) 108 เทสต์ ผ่าน 84 ไม่มี fail, `npm run test:frontend` 28/28 ผ่าน,
 `next build` (production) สำเร็จครบ 22 route, `eslint` สะอาดทั้ง repo
+
+## 2026-08-26 — Report Creation Endpoint, WARN_USER Decision, Ticket Counterparty Targeting
+
+ผู้ใช้ตั้งข้อสังเกตว่า `report:create` permission มีอยู่แล้วแต่ไม่มี endpoint ไหนใช้จริง (ไม่มีทางส่ง
+Report เข้ามาเลยนอกจาก Seed Data) และ Admin มีแค่ "แบน" เป็นทางเลือกเดียวเวลาตัดสิน Report/Ticket —
+ทั้งที่บางเคสความผิดไม่ถึงขั้นแบน แถมบางครั้งคนที่ควรถูกจัดการไม่ใช่คนที่แจ้งเรื่องเข้ามาด้วยซ้ำ
+
+**Report creation, wired end-to-end:**
+- `backend/services/auth-service/src/features/reports/reportService.js` เพิ่ม
+  `createReport({reporterId, targetId, productId, reason})` (ต้องมี `targetId` หรือ `productId`
+  อย่างน้อยหนึ่ง, ปฏิเสธ self-report)
+- `reportRoutes.js` เพิ่ม `POST /reports` (`requireAuth` + `report:create`)
+- `frontend/components/ReportModal.js` (ใหม่) — Modal ใช้ซ้ำได้ทั้งหน้าสินค้าและหน้าร้าน
+- ปุ่ม "รายงานสินค้า/ผู้ขายรายนี้" ใน `frontend/app/products/[id]/page.js` และ "รายงานร้านค้านี้"
+  ใน `frontend/app/store/[sellerId]/page.js` (ซ่อนเมื่อผู้ดูคือเจ้าของสินค้า/ร้านเอง)
+
+**WARN_USER — decision ที่ไม่ใช่การแบน:**
+- เพิ่ม `"WARN_USER"` เข้า `VALID_DECISIONS` ของ `actionReport` และ `warnUser({targetId, adminId,
+  reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แตะ** `user.status` — ต่างจาก suspend)
+- `POST /admin/users/:id/warn` endpoint ใหม่ (reuse permission `admin:user:suspend` เดิม)
+- `AdminInboxSection.js`: ปุ่ม "ตักเตือน" คู่กับ "แบนผู้ใช้นี้" ทั้งใน Report-decision dropdown และการ์ด
+  ผู้ใช้บนตั๋วที่ถูก Escalate
+
+**Ticket counterparty (`targetId`) — แก้ปัญหา "ทำไมแบนผู้แจ้ง":**
+ผู้ใช้ชี้ตรงๆ ว่าปุ่มแบน/ตักเตือนบนตั๋วที่ Escalate เดิมยิงไปที่ `selectedTicket.requesterId` เสมอ —
+ผิดตั้งแต่ต้นเวลาเรื่องจริงคือคนอื่นที่ผู้แจ้งกำลังร้องเรียน (เช่น ผู้ซื้อแจ้งว่าผู้ขายไม่จัดส่งของ)
+`SupportTicket` เดิมไม่มีแนวคิดคู่กรณีเลย ต่างจาก `Report` ที่มี `targetId` อยู่แล้ว
+- `SupportTicket` (schema ฝั่ง `support-service`, ดูรายละเอียดที่ `customer-service/changelog.md`)
+  เพิ่ม `targetId String?` — soft reference แบบเดียวกับ `orderId`, derive จาก order ที่ผู้แจ้งเลือกตอน
+  เปิดตั๋ว (buyer↔seller สลับฝั่งอัตโนมัติ)
+- `AdminInboxSection.js` เพิ่มการ์ด "คู่กรณี (Target)" แยกจากการ์ด "ผู้แจ้ง (Requester)" เดิม แสดงเมื่อ
+  `selectedTicket.targetId` มีค่า พร้อมปุ่มตักเตือน/แบนของตัวเอง ผูกกับ `targetId` ไม่ใช่ `requesterId`
+  (reuse `handleWarnUser`/`handleBanUser` เดิม แค่ส่ง id คนละตัว)
+- ยืนยันด้วย Browser จริง: Login เป็น Buyer สร้างตั๋วผูกกับ Order จริง → `target_id` ใน DB ตรงกับ
+  Seller ของ Order นั้น (ไม่ใช่ผู้แจ้ง) → Escalate ตั๋ว → Login เป็น Admin เปิดเคสระดับแอดมิน เห็นการ์ด
+  "คู่กรณี" แสดง Seller ID แยกจากการ์ดผู้แจ้งที่แสดง Buyer ID ถูกต้อง
+- `npm test` (backend) 108/84/0/24 เท่าเดิม, `npm run test:frontend` 28/28 เท่าเดิม, `eslint` สะอาด
+  ทุกไฟล์ที่แก้

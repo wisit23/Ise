@@ -157,3 +157,23 @@
 - รายละเอียด Backend/UI เพิ่มเติม (Direct Product Moderation, Auction Approval,
   Report Review-before-Action Fix) บันทึกไว้ที่ `docs/featureplan/admin/changelog.md`
   เพราะเป็นความรับผิดชอบฝั่ง Admin โดยตรง
+
+## 2026-08-26 — Add Counterparty (`targetId`) to SupportTicket
+
+ผู้ใช้ตั้งข้อสังเกตว่าปุ่มแบน/ตักเตือนบนตั๋ว Escalated เดิมยิงไปที่ผู้แจ้ง (`requesterId`) เสมอ —
+ผิดหลักการเวลาเรื่องจริงเกี่ยวกับอีกฝ่าย (เช่น ผู้ซื้อแจ้งว่าผู้ขายไม่จัดส่งของ) `SupportTicket`
+ไม่เคยมีแนวคิดคู่กรณีเลย ต่างจาก `Report` ฝั่ง Admin ที่มี `targetId` อยู่แล้วตั้งแต่ต้น
+
+- `prisma/schema.prisma`: เพิ่ม `targetId String? @map("target_id")` ให้ `SupportTicket` —
+  soft reference แบบเดียวกับ `orderId` เดิม (ไม่มี DB-level FK ข้าม service)
+- `ticketController.js` / `ticketService.createTicket`: รับ `targetId` จาก request, ปฏิเสธ
+  `targetId === requesterId` (กันตั้งตัวเองเป็นคู่กรณี), ส่งต่อเข้า `ticketModel.create` ตรงๆ
+- `frontend/app/support/tickets/page.js`: ฟอร์มเปิดตั๋วใหม่มี Dropdown เสริม "เกี่ยวข้องกับคำสั่งซื้อไหน
+  (ถ้ามี)" (โผล่เฉพาะเมื่อผู้ใช้มี Order จริง ทั้งฝั่งซื้อและขาย) เมื่อเลือก Order ระบบ derive `targetId`
+  อัตโนมัติจากอีกฝ่ายของ Order นั้น (buyer↔seller สลับตาม `myId`)
+- การ์ด Admin ฝั่งจัดการ (`AdminInboxSection.js`) — ดูรายละเอียดที่
+  `docs/featureplan/admin/changelog.md` เพราะเป็นความรับผิดชอบฝั่ง Admin โดยตรง
+- ยืนยันด้วย Browser จริง + Query DB ตรง: สร้างตั๋วผูก Order จริงในฐานะ Buyer → `target_id` ตรงกับ
+  Seller ของ Order นั้นเป๊ะ, ไม่ใช่ผู้แจ้ง — Escalate แล้วเปิดฝั่ง Admin เห็นค่าถูกต้อง — ลบข้อมูลทดสอบ
+  ออกหลังยืนยันเสร็จ
+- `npm test` (backend) 108/84/0/24 เท่าเดิม, `npm run test:frontend` 28/28 เท่าเดิม, `eslint` สะอาด

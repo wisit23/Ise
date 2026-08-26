@@ -9,6 +9,7 @@ async function create(req, res, next) {
       description: req.body.description,
       category: req.body.category,
       orderId: req.body.orderId,
+      targetId: req.body.targetId,
     });
     res.status(201).json(ticket);
   } catch (err) {

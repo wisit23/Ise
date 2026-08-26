@@ -466,12 +466,14 @@ function AdminInboxSection({ token }) {
                 </div>
               </div>
 
-              {/* Requester card */}
+              {/* Requester card — the person who filed the ticket. Not
+                  necessarily who's at fault, so it gets its own actions
+                  rather than being assumed to be the wrongdoer. */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="flex justify-between items-center mb-3">
                   <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-400">
                     <span className="material-symbols-outlined text-[15px]">person</span>
-                    ข้อมูลผู้แจ้ง
+                    ผู้แจ้ง (Requester)
                   </h3>
                   <div className="flex gap-2">
                     <button
@@ -502,6 +504,50 @@ function AdminInboxSection({ token }) {
                   </div>
                 </div>
               </div>
+
+              {/* Counterparty card — only exists when the requester tied the
+                  ticket to one of their orders on submission (see
+                  frontend/app/support/tickets/page.js), which lets us derive
+                  the other party of that transaction. This is who Admin
+                  usually actually needs to act against (e.g. "seller never
+                  shipped my order"), not the requester above. */}
+              {selectedTicket.targetId && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-5 shadow-sm">
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-orange-600">
+                      <span className="material-symbols-outlined text-[15px]">gavel</span>
+                      คู่กรณี (Target)
+                    </h3>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleWarnUser(selectedTicket.targetId)}
+                        disabled={actionBusy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">warning</span>
+                        ตักเตือน
+                      </button>
+                      <button
+                        onClick={() => handleBanUser(selectedTicket.targetId)}
+                        disabled={actionBusy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">block</span>
+                        แบนผู้ใช้นี้
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-orange-600 text-white font-bold text-base shadow">
+                      {selectedTicket.targetId.slice(0, 1).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">รหัส: {selectedTicket.targetId.slice(0, 16)}</p>
+                      <p className="text-xs text-slate-400 mt-0.5 font-mono">{selectedTicket.targetId}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Agent assignment card */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

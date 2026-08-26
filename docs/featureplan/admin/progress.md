@@ -152,3 +152,10 @@ hardening ยังเป็น Deferred Security Phase ไม่ถือว่
 ยืนยันผ่าน Browser จริงกับ Docker Stack แล้ว — รายละเอียดทั้งหมดอยู่ที่ `changelog.md` หัวข้อ
 "Complete the Admin Story" ไม่กระทบสถานะ `ADM-001`–`ADM-005` เดิมข้างต้น (เป็นงานเชื่อม/ทำให้
 สมบูรณ์บน UI ไม่ใช่ Feature ใหม่ตาม Task ID)
+
+**2026-08-26 update 2:** เพิ่ม Report creation endpoint ที่เคยขาด (`report:create` permission มีมา
+นานแล้วแต่ไม่มี route ใช้), เพิ่ม `WARN_USER` เป็น Decision ที่ไม่ใช่การแบนสำหรับทั้ง Report และ Ticket,
+และเพิ่มแนวคิดคู่กรณี (`targetId`) ให้ `SupportTicket` เพื่อให้ Admin แบน/ตักเตือน "คนที่ถูกร้องเรียน"
+ได้จริง แทนที่จะบังคับเลือกได้แค่ผู้แจ้ง — รายละเอียดที่ `changelog.md` หัวข้อ "Report Creation Endpoint,
+WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบสถานะ `ADM-001`–`ADM-005` เดิม (เป็นงาน
+เชื่อม/เสริม UI เดิมเช่นกัน)

@@ -112,3 +112,11 @@ SLA breach notifications to a team lead (WF-10 step 3's "แจ้งเตื�
 today, no actual notification channel exists yet), `CSS-001` Live Chat per the deferred spec, and the
 two known-but-unaddressed issues noted directly above (dispute Escalate button, dispute chat
 placeholder content)
+
+**2026-08-26 update:** `SupportTicket` gained an optional `targetId` counterparty field, derived from
+a linked order at ticket-creation time, so Admin can act against the accused party instead of only the
+requester who filed the ticket — driven directly by a user question about why the ban/warn buttons on
+an escalated ticket only ever targeted whoever filed it. Full detail in `changelog.md` under "Add
+Counterparty (`targetId`) to SupportTicket"; the Admin-side UI card lives in
+`docs/featureplan/admin/changelog.md`. Does not change any `CSS-000`–`CSS-005` status above — additive,
+non-breaking schema field.

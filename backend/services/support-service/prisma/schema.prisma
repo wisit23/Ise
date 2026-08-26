@@ -31,6 +31,12 @@ model SupportTicket {
   priority        String    @default("NORMAL") // LOW|NORMAL|HIGH|URGENT — see sla/priority.js
   assigneeId      String?   @map("assignee_id")
   orderId         String?   @map("order_id") // soft reference to order-service — not a DB-level FK, different service owns it
+  // Optional counterparty — the other party in the order this complaint is
+  // about (e.g. buyer reporting a seller who never shipped). Distinct from
+  // requesterId: a ticket's requester is not necessarily who's at fault, and
+  // Admin needs to be able to act against the accused party, not just
+  // whoever happened to file the ticket. Soft reference, same as orderId.
+  targetId        String?   @map("target_id")
   slaDueAt        DateTime? @map("sla_due_at")
   firstResponseAt DateTime? @map("first_response_at")
   resolvedAt      DateTime? @map("resolved_at")
