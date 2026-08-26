@@ -22,6 +22,17 @@ export default function NavBar() {
   const menuRef = useRef(null);
 
   useEffect(() => {
+    if (!document.getElementById("material-symbols-font")) {
+      const link = document.createElement("link");
+      link.id = "material-symbols-font";
+      link.rel = "stylesheet";
+      link.href =
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap";
+      document.head.appendChild(link);
+    }
+  }, []);
+
+  useEffect(() => {
     const stored = getStoredUser();
     setUser(stored);
 
@@ -134,8 +145,10 @@ export default function NavBar() {
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-xs text-white">
-                        🎧
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sky-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          headset_mic
+                        </span>
                       </span>
                       Backoffice Workspace
                     </Link>
@@ -146,8 +159,10 @@ export default function NavBar() {
                     onClick={() => setMenuOpen(false)}
                     className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                   >
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
-                      +
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                      <span className="material-symbols-outlined text-[14px] leading-none">
+                        add
+                      </span>
                     </span>
                     ลงขายสินค้า
                   </Link>
@@ -158,8 +173,10 @@ export default function NavBar() {
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
-                        📊
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          insights
+                        </span>
                       </span>
                       แดชบอร์ดผู้บริหาร
                     </Link>
@@ -171,8 +188,10 @@ export default function NavBar() {
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
-                        🏪
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          storefront
+                        </span>
                       </span>
                       แดชบอร์ดผู้ขาย
                     </Link>
@@ -184,8 +203,10 @@ export default function NavBar() {
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
-                        🎬
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          videocam
+                        </span>
                       </span>
                       อัปโหลดคลิปรีวิว
                     </Link>
@@ -197,8 +218,10 @@ export default function NavBar() {
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
-                        🔨
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          gavel
+                        </span>
                       </span>
                       ส่งสินค้าประมูล
                     </Link>
@@ -210,8 +233,10 @@ export default function NavBar() {
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
                     >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-xs text-white">
-                        📣
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <span className="material-symbols-outlined text-[14px] leading-none">
+                          campaign
+                        </span>
                       </span>
                       ศูนย์การตลาด
                     </Link>
