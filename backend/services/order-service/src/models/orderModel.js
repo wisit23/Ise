@@ -34,6 +34,9 @@ async function listByBuyer(buyerId, { status, skip, take } = {}) {
   const where = {
     buyerId,
     ...(status ? { status: statusFilter(status) } : {}),
+    ...(status === "pending_payment"
+      ? { reservationExpiresAt: { gt: new Date() } }
+      : {}),
   };
   const [items, total] = await Promise.all([
     prisma.order.findMany({

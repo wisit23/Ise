@@ -101,6 +101,47 @@ test("product CRUD against a real database", async (t) => {
     assert.equal(searchRes.status, 200);
     assert.ok(searchRes.body.items.some((p) => p.id === id));
 
+    // Hybrid ranking: a query whose terms occur in the weighted title must
+    // outrank a listing that only mentions the same terms in its description.
+    const titleMatch = await prisma.product.create({
+      data: {
+        sellerId: "int-test-seller",
+        title: `${TEST_TITLE_PREFIX} nike running`,
+        description: "รองเท้าสำหรับออกกำลังกาย",
+        price: 200,
+        category: "รองเท้า",
+        condition: "Good",
+        tags: [],
+      },
+    });
+    const descriptionMatch = await prisma.product.create({
+      data: {
+        sellerId: "int-test-seller",
+        title: `${TEST_TITLE_PREFIX} generic shoes`,
+        description: "nike running",
+        price: 200,
+        category: "รองเท้า",
+        condition: "Good",
+        tags: [],
+      },
+    });
+    const vectorRows = await prisma.$queryRaw`
+      SELECT search_vector IS NOT NULL AS populated
+      FROM products
+      WHERE id = ${titleMatch.id}
+    `;
+    assert.equal(vectorRows[0]?.populated, true);
+    const hybridRes = await request(app)
+      .get("/search")
+      .query({ q: "nike running" });
+    assert.equal(hybridRes.status, 200);
+    const titleIndex = hybridRes.body.items.findIndex((p) => p.id === titleMatch.id);
+    const descriptionIndex = hybridRes.body.items.findIndex(
+      (p) => p.id === descriptionMatch.id,
+    );
+    assert.ok(titleIndex !== -1 && descriptionIndex !== -1);
+    assert.ok(titleIndex < descriptionIndex);
+
     const missingRes = await request(app).get("/does-not-exist");
     assert.equal(missingRes.status, 404);
 

@@ -292,7 +292,7 @@ const DEMO_VIDEOS = [
   },
 ];
 
-// products.search_text can't be a native Postgres generated column (its
+// products.search_text/search_vector can't be native generated columns (the
 // expression needs array_to_string(), which is STABLE not IMMUTABLE — see
 // schema.prisma), so a trigger fills the same role: keep it auto-computed on
 // every insert/update no matter which code path touches the row (API, this
@@ -300,6 +300,12 @@ const DEMO_VIDEOS = [
 // SQL, so this — the one hook that already runs on every container
 // start — is where it's (idempotently) installed.
 async function ensureSearchTextTrigger() {
+  // Kept here as well as in schema.prisma so existing databases are upgraded
+  // safely before the trigger starts writing the new full-text document.
+  await prisma.$executeRaw`
+    ALTER TABLE products
+    ADD COLUMN IF NOT EXISTS search_vector tsvector;
+  `;
   await prisma.$executeRaw`
     CREATE OR REPLACE FUNCTION products_set_search_text() RETURNS trigger AS $$
     BEGIN
@@ -307,6 +313,12 @@ async function ensureSearchTextTrigger() {
         NEW.title, NEW.description, NEW.category, NEW.condition,
         NEW.location, NEW.size, array_to_string(NEW.tags, ' ')
       );
+      NEW.search_vector :=
+        setweight(to_tsvector('simple', coalesce(NEW.title, '')), 'A') ||
+        setweight(to_tsvector('simple', coalesce(array_to_string(NEW.tags, ' '), '')), 'A') ||
+        setweight(to_tsvector('simple', coalesce(NEW.category, '')), 'B') ||
+        setweight(to_tsvector('simple', coalesce(NEW.description, '')), 'C') ||
+        setweight(to_tsvector('simple', concat_ws(' ', NEW.condition, NEW.location, NEW.size)), 'D');
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;
@@ -315,6 +327,10 @@ async function ensureSearchTextTrigger() {
     CREATE OR REPLACE TRIGGER products_search_text_trigger
     BEFORE INSERT OR UPDATE ON products
     FOR EACH ROW EXECUTE FUNCTION products_set_search_text();
+  `;
+  await prisma.$executeRaw`
+    CREATE INDEX IF NOT EXISTS products_search_vector_idx
+    ON products USING GIN (search_vector);
   `;
   // Backfill: the trigger only fires on rows written after it exists, so
   // force it for every existing row too. Cheap and safe to rerun every start.

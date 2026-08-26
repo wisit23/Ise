@@ -9,21 +9,30 @@ import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
 export function isReservationExpired(order, now) {
-  return Boolean(
-    order.reservationExpiresAt &&
-    new Date(order.reservationExpiresAt).getTime() <= now,
-  );
+  const deadline = reservationDeadline(order);
+  return deadline !== null && deadline <= now;
 }
 
 export function reservationCountdown(order, now) {
-  if (!order.reservationExpiresAt) return null;
+  const deadline = reservationDeadline(order);
+  if (deadline === null) return null;
   const remainingSeconds = Math.max(
     0,
-    Math.ceil((new Date(order.reservationExpiresAt).getTime() - now) / 1000),
+    Math.ceil((deadline - now) / 1000),
   );
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = String(remainingSeconds % 60).padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+function reservationDeadline(order) {
+  if (order.reservationExpiresAt) {
+    return new Date(order.reservationExpiresAt).getTime();
+  }
+  if (order.createdAt) {
+    return new Date(order.createdAt).getTime() + 10 * 60 * 1000;
+  }
+  return null;
 }
 
 export default function CartPage() {
@@ -72,6 +81,19 @@ export default function CartPage() {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const expiredIds = new Set(
+      items.filter((order) => isReservationExpired(order, now)).map((o) => o.id),
+    );
+    if (expiredIds.size === 0) return;
+    setItems((prev) => prev.filter((order) => !expiredIds.has(order.id)));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      expiredIds.forEach((id) => next.delete(id));
+      return next;
+    });
+  }, [now]);
 
   function toggle(id) {
     const order = items.find((item) => item.id === id);
