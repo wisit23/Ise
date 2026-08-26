@@ -8,6 +8,23 @@ import Footer from "../../components/Footer";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
+function reservationCountdown(expiresAt, createdAt, now) {
+  // Older pending orders may not have reservationExpiresAt persisted yet.
+  // The reservation service uses a 10-minute lease, so keep those orders
+  // visible with the same deadline instead of silently hiding the countdown.
+  const deadline = expiresAt
+    ? new Date(expiresAt).getTime()
+    : new Date(createdAt).getTime() + 10 * 60 * 1000;
+
+  const remainingMs = deadline - now;
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return "หมดเวลาแล้ว";
+
+  const remainingSeconds = Math.ceil(remainingMs / 1000);
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")} นาที`;
+}
+
 export default function CartPage() {
   const router = useRouter();
   const [items, setItems] = useState([]);
@@ -17,6 +34,32 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [paying, setPaying] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const expiredIds = new Set(
+      items
+        .filter(
+          (o) =>
+            reservationCountdown(o.reservationExpiresAt, o.createdAt, now) ===
+            "หมดเวลาแล้ว",
+        )
+        .map((o) => o.id),
+    );
+    if (expiredIds.size === 0) return;
+
+    setItems((prev) => prev.filter((o) => !expiredIds.has(o.id)));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      expiredIds.forEach((id) => next.delete(id));
+      return next;
+    });
+  }, [now]);
 
   async function load() {
     const token = getAccessToken();
@@ -85,11 +128,16 @@ export default function CartPage() {
     setPaying(true);
     setNotice("");
     try {
-      for (const id of selected) {
-        await apiFetch(`/api/orders/${id}/pay`, { method: "PATCH", token });
+      for (const order of selectedItems) {
+        await apiFetch(`/api/orders/${order.id}/pay`, {
+          method: "PATCH",
+          token,
+        });
       }
       setNotice("ชำระเงินสำเร็จ");
-      setItems((prev) => prev.filter((o) => !selected.has(o.id)));
+      setItems((prev) =>
+        prev.filter((o) => !selectedItems.some((item) => item.id === o.id)),
+      );
       setSelected(new Set());
     } catch (err) {
       setNotice(err.message);
@@ -99,7 +147,12 @@ export default function CartPage() {
     }
   }
 
-  const selectedItems = items.filter((o) => selected.has(o.id));
+  const selectedItems = items.filter(
+    (o) =>
+      selected.has(o.id) &&
+      reservationCountdown(o.reservationExpiresAt, o.createdAt, now) !==
+        "หมดเวลาแล้ว",
+  );
   const total = selectedItems.reduce((sum, o) => sum + o.price, 0);
 
   return (
@@ -137,38 +190,59 @@ export default function CartPage() {
               เลือกทั้งหมด ({items.length} รายการ)
             </label>
             <ul>
-              {items.map((o) => (
-                <li
-                  key={o.id}
-                  className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(o.id)}
-                    onChange={() => toggle(o.id)}
-                    className="h-4 w-4 accent-emerald-600"
-                  />
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">
-                      {o.productTitle}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      ล็อกไว้ตั้งแต่{" "}
-                      {new Date(o.createdAt).toLocaleString("th-TH")}
-                    </p>
-                  </div>
-                  <p className="font-semibold text-emerald-600">
-                    ฿{o.price.toLocaleString("th-TH")}
-                  </p>
-                  <button
-                    onClick={() => handleCancel(o.id)}
-                    disabled={busyId === o.id}
-                    className="text-sm text-gray-400 hover:text-red-600 disabled:opacity-50"
+              {items.map((o) => {
+                const countdown = reservationCountdown(
+                  o.reservationExpiresAt,
+                  o.createdAt,
+                  now,
+                );
+                const expired = countdown === "หมดเวลาแล้ว";
+
+                return (
+                  <li
+                    key={o.id}
+                    className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0"
                   >
-                    ยกเลิก
-                  </button>
-                </li>
-              ))}
+                    <input
+                      type="checkbox"
+                      checked={selected.has(o.id)}
+                      onChange={() => toggle(o.id)}
+                      disabled={expired}
+                      className="h-4 w-4 accent-emerald-600"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900">
+                        {o.productTitle}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        ล็อกไว้ตั้งแต่{" "}
+                        {new Date(o.createdAt).toLocaleString("th-TH")}
+                      </p>
+                      {countdown && (
+                        <p
+                          className={`text-sm font-medium ${
+                            expired ? "text-red-600" : "text-amber-600"
+                          }`}
+                        >
+                          {expired
+                            ? "หมดเวลาล็อกสินค้า กรุณารีเฟรชตะกร้า"
+                            : `เหลือเวลาชำระเงิน ${countdown}`}
+                        </p>
+                      )}
+                    </div>
+                    <p className="font-semibold text-emerald-600">
+                      ฿{o.price.toLocaleString("th-TH")}
+                    </p>
+                    <button
+                      onClick={() => handleCancel(o.id)}
+                      disabled={busyId === o.id}
+                      className="text-sm text-gray-400 hover:text-red-600 disabled:opacity-50"
+                    >
+                      ยกเลิก
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}

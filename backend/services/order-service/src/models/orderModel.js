@@ -17,7 +17,13 @@ function findById(id) {
 }
 
 async function listByBuyer(buyerId, { status, skip, take } = {}) {
-  const where = { buyerId, ...(status ? { status } : {}) };
+  const where = {
+    buyerId,
+    ...(status ? { status } : {}),
+    ...(status === "pending"
+      ? { reservationExpiresAt: { gt: new Date() } }
+      : {}),
+  };
   const [items, total] = await Promise.all([
     prisma.order.findMany({
       where,
