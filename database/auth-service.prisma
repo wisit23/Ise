@@ -70,6 +70,8 @@ model SellerProfile {
   kycStatus       KycStatus @default(NONE) @map("kyc_status")
   kycDocumentUrl  String?   @map("kyc_document_url")
   rejectionReason String?   @map("rejection_reason")
+  submittedAt     DateTime? @map("submitted_at")
+  reviewedBy      String?   @map("reviewed_by")
   verifiedAt      DateTime? @map("verified_at")
 
   @@map("seller_profiles")

@@ -81,6 +81,44 @@ async function publicProfile(req, res, next) {
   }
 }
 
+async function adminListKyc(req, res, next) {
+  try {
+    const { status, skip, take } = req.query;
+    const result = await authService.adminListKyc({ status, skip, take });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function adminGetKyc(req, res, next) {
+  try {
+    const application = await authService.adminGetKyc(req.params.userId);
+    res.json(application);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function adminApproveKyc(req, res, next) {
+  try {
+    const result = await authService.adminApproveKyc(req.params.userId, req.userId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function adminRejectKyc(req, res, next) {
+  try {
+    const { reason } = req.body;
+    const result = await authService.adminRejectKyc(req.params.userId, req.userId, reason);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -91,4 +129,8 @@ module.exports = {
   submitKyc,
   getKycStatus,
   publicProfile,
+  adminListKyc,
+  adminGetKyc,
+  adminApproveKyc,
+  adminRejectKyc,
 };

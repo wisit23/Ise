@@ -59,8 +59,21 @@ async function main() {
     });
   }
 
+  // Seed demo admin account for KYC review & moderation testing
+  await prisma.user.upsert({
+    where: { email: "admin@reloop.test" },
+    update: {},
+    create: {
+      email: "admin@reloop.test",
+      passwordHash,
+      firstName: "ผู้ดูแลระบบ",
+      lastName: "RE-LOOP",
+      role: "ADMIN",
+    },
+  });
+
   console.log(
-    `[auth-service] seeded ${SELLERS.length} demo seller accounts (password: "${DEMO_PASSWORD}")`,
+    `[auth-service] seeded ${SELLERS.length} demo sellers & 1 admin (admin@reloop.test, password: "${DEMO_PASSWORD}")`,
   );
 }
 

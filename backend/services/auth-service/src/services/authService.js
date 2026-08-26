@@ -25,9 +25,12 @@ function toPublicUser(user) {
           shopName: user.sellerProfile.shopName,
           idCardNumber: user.sellerProfile.idCardNumber,
           address: user.sellerProfile.address,
+          bankAccount: user.sellerProfile.bankAccount,
           kycStatus: user.sellerProfile.kycStatus,
           kycDocumentUrl: user.sellerProfile.kycDocumentUrl,
           rejectionReason: user.sellerProfile.rejectionReason,
+          submittedAt: user.sellerProfile.submittedAt,
+          reviewedBy: user.sellerProfile.reviewedBy,
           verifiedAt: user.sellerProfile.verifiedAt,
         }
       : null,
@@ -180,7 +183,7 @@ async function updateProfile(userId, { firstName, lastName, phone }) {
   return toPublicUser(user);
 }
 
-/** Submit seller identity verification (KYC) and upgrade account to SELLER. */
+/** Submit seller identity verification (KYC). Sets status to PENDING for admin verification. */
 async function submitKyc(userId, {
   firstName,
   lastName,
@@ -220,14 +223,13 @@ async function submitKyc(userId, {
     existingUser.sellerProfile?.shopName ||
     `ร้านค้าของ ${firstName.trim()}`;
 
-  // Update user profile & role to SELLER
+  // Update user profile and sellerProfile with PENDING status
   const updatedUser = await prisma.user.update({
     where: { id: userId },
     data: {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       phone: phone.trim(),
-      role: "SELLER",
       sellerProfile: {
         upsert: {
           create: {
@@ -236,8 +238,10 @@ async function submitKyc(userId, {
             address: address.trim(),
             kycDocumentUrl: documentUrl.trim(),
             bankAccount: bankAccount ? bankAccount.trim() : null,
-            kycStatus: "VERIFIED",
-            verifiedAt: new Date(),
+            kycStatus: "PENDING",
+            submittedAt: new Date(),
+            rejectionReason: null,
+            reviewedBy: null,
           },
           update: {
             shopName: resolvedShopName,
@@ -245,9 +249,10 @@ async function submitKyc(userId, {
             address: address.trim(),
             kycDocumentUrl: documentUrl.trim(),
             bankAccount: bankAccount ? bankAccount.trim() : null,
-            kycStatus: "VERIFIED",
+            kycStatus: "PENDING",
+            submittedAt: new Date(),
             rejectionReason: null,
-            verifiedAt: new Date(),
+            reviewedBy: null,
           },
         },
       },
@@ -255,12 +260,9 @@ async function submitKyc(userId, {
     include: { sellerProfile: true },
   });
 
-  // Issue new token pair with updated SELLER role
-  const tokens = await issueTokenPair(updatedUser);
-
   return {
     user: toPublicUser(updatedUser),
-    ...tokens,
+    kycStatus: "PENDING",
   };
 }
 
@@ -280,13 +282,125 @@ async function getKycStatus(userId) {
           shopName: user.sellerProfile.shopName,
           idCardNumber: user.sellerProfile.idCardNumber,
           address: user.sellerProfile.address,
+          bankAccount: user.sellerProfile.bankAccount,
           kycStatus: user.sellerProfile.kycStatus,
           kycDocumentUrl: user.sellerProfile.kycDocumentUrl,
           rejectionReason: user.sellerProfile.rejectionReason,
+          submittedAt: user.sellerProfile.submittedAt,
+          reviewedBy: user.sellerProfile.reviewedBy,
           verifiedAt: user.sellerProfile.verifiedAt,
         }
       : null,
   };
+}
+
+// ---------------- Admin KYC Services ----------------
+
+async function adminListKyc({ status, skip = 0, take = 20 } = {}) {
+  const where = status ? { kycStatus: status } : { kycStatus: { not: "NONE" } };
+
+  const [items, total] = await Promise.all([
+    prisma.sellerProfile.findMany({
+      where,
+      include: { user: true },
+      orderBy: { submittedAt: "desc" },
+      skip: Number(skip),
+      take: Number(take),
+    }),
+    prisma.sellerProfile.count({ where }),
+  ]);
+
+  return {
+    items: items.map((p) => ({
+      userId: p.userId,
+      email: p.user.email,
+      firstName: p.user.firstName,
+      lastName: p.user.lastName,
+      phone: p.user.phone,
+      role: p.user.role,
+      shopName: p.shopName,
+      idCardNumber: p.idCardNumber,
+      address: p.address,
+      bankAccount: p.bankAccount,
+      kycStatus: p.kycStatus,
+      kycDocumentUrl: p.kycDocumentUrl,
+      rejectionReason: p.rejectionReason,
+      submittedAt: p.submittedAt,
+      reviewedBy: p.reviewedBy,
+      verifiedAt: p.verifiedAt,
+    })),
+    total,
+    skip: Number(skip),
+    take: Number(take),
+  };
+}
+
+async function adminGetKyc(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { sellerProfile: true },
+  });
+  if (!user || !user.sellerProfile) throw notFound("ไม่พบข้อมูลคำขอยืนยันตัวตนของผู้ใช้นี้");
+
+  return {
+    userId: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    phone: user.phone,
+    role: user.role,
+    ...user.sellerProfile,
+  };
+}
+
+async function adminApproveKyc(userId, adminId) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { sellerProfile: true },
+  });
+  if (!user || !user.sellerProfile) throw notFound("ไม่พบผู้ใช้งานหรือโปรไฟล์ผู้ขาย");
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      role: "SELLER",
+      sellerProfile: {
+        update: {
+          kycStatus: "VERIFIED",
+          verifiedAt: new Date(),
+          reviewedBy: adminId || "ADMIN",
+          rejectionReason: null,
+        },
+      },
+    },
+    include: { sellerProfile: true },
+  });
+
+  return toPublicUser(updatedUser);
+}
+
+async function adminRejectKyc(userId, adminId, reason) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { sellerProfile: true },
+  });
+  if (!user || !user.sellerProfile) throw notFound("ไม่พบผู้ใช้งานหรือโปรไฟล์ผู้ขาย");
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      sellerProfile: {
+        update: {
+          kycStatus: "REJECTED",
+          rejectionReason: reason || "เอกสารหรือข้อมูลไม่ถูกต้องตามเงื่อนไข",
+          reviewedBy: adminId || "ADMIN",
+        },
+      },
+    },
+    include: { sellerProfile: true },
+  });
+
+  return toPublicUser(updatedUser);
 }
 
 /** Public store-front info for a seller — no email/phone, only what a buyer needs to see. */
@@ -315,5 +429,9 @@ module.exports = {
   updateProfile,
   submitKyc,
   getKycStatus,
+  adminListKyc,
+  adminGetKyc,
+  adminApproveKyc,
+  adminRejectKyc,
   getPublicSellerProfile,
 };
