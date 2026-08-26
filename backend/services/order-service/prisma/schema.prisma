@@ -14,15 +14,17 @@ generator client {
 // Status lifecycle: pending (cart, product locked) -> completed (paid), or cancelled (product unlocked).
 // confirmed/shipped are reserved for a future fulfillment flow and are not driven by the UI yet.
 model Order {
-  id           String   @id @default(uuid())
-  buyerId      String   @map("buyer_id")
-  sellerId     String   @map("seller_id")
-  productId    String   @map("product_id")
-  productTitle String   @map("product_title")
-  price        Int
-  status       String   @default("pending")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                   String    @id @default(uuid())
+  buyerId              String    @map("buyer_id")
+  sellerId             String    @map("seller_id")
+  productId            String    @map("product_id")
+  productTitle         String    @map("product_title")
+  price                Int
+  status               String    @default("pending")
+  reservationId        String?   @unique @map("reservation_id")
+  reservationExpiresAt DateTime? @map("reservation_expires_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   @@index([buyerId])
   @@index([sellerId])

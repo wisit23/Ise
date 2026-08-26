@@ -46,7 +46,8 @@ function fromGatewayHeaders(req, res, next) {
 /** Guards internal service-to-service endpoints (e.g. product lock/unlock/sold). */
 function requireInternalToken(req, res, next) {
   const token = req.headers["x-internal-token"];
-  if (token !== process.env.INTERNAL_SERVICE_TOKEN) {
+  const expectedToken = process.env.INTERNAL_SERVICE_TOKEN;
+  if (!expectedToken || !token || token !== expectedToken) {
     return res.status(403).json({ error: "Forbidden" });
   }
   next();

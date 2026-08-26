@@ -54,7 +54,7 @@ test("buildProductPatch includes only submitted fields", () => {
   });
 });
 
-test("buildProductPatch preserves explicit null and empty scalar values", () => {
+test("buildProductPatch preserves scalar values but ignores reservation status", () => {
   const patch = buildProductPatch({
     description: "",
     condition: null,
@@ -66,6 +66,5 @@ test("buildProductPatch preserves explicit null and empty scalar values", () => 
     description: "",
     condition: null,
     location: null,
-    status: "sold",
   });
 });

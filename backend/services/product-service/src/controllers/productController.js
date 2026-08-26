@@ -174,22 +174,6 @@ async function mine(req, res, next) {
   }
 }
 
-/** Swipe feed ("ปัดดูสินค้า") — public, anyone can watch without an account. */
-/** Called by order-service (service-to-service, internal token) when an order is placed/cancelled. */
-async function markStatusInternal(req, res, next) {
-  try {
-    const { status } = req.body;
-    if (!["available", "reserved", "sold"].includes(status)) {
-      throw badRequest("status must be one of available, reserved, sold");
-    }
-    const product = await productModel.update(req.params.id, { status });
-    if (!product) throw notFound("product not found");
-    res.json(product);
-  } catch (err) {
-    next(err);
-  }
-}
-
 module.exports = {
   feed,
   search,
@@ -201,5 +185,4 @@ module.exports = {
   update,
   remove,
   mine,
-  markStatusInternal,
 };

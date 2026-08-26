@@ -35,25 +35,28 @@ generator client {
 //     table — tags here are freeform, not a curated taxonomy).
 // Status lifecycle: available -> reserved (in a buyer's cart) -> sold, or removed by the seller.
 model Product {
-  id          String   @id @default(uuid())
-  sellerId    String   @map("seller_id")
-  title       String
-  description String   @default("")
-  price       Int
-  category    String
-  condition   String   @default("Good")
-  tags        String[]
-  location    String   @default("")
-  size        String   @default("Free size")
-  status      String   @default("available")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                   String    @id @default(uuid())
+  sellerId             String    @map("seller_id")
+  title                String
+  description          String    @default("")
+  price                Int
+  category             String
+  condition            String    @default("Good")
+  tags                 String[]
+  location             String    @default("")
+  size                 String    @default("Free size")
+  status               String    @default("available")
+  reservedBy           String?   @map("reserved_by")
+  reservationId        String?   @unique @map("reservation_id")
+  reservationExpiresAt DateTime? @map("reservation_expires_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   // Denormalized concat of title/description/category/condition/location/
   // size/tags, kept in sync by a DB trigger (see prisma/seed.js — Postgres
   // can't use a native generated column here because array_to_string() is
   // STABLE, not IMMUTABLE). This is the one field search() matches against.
-  searchText  String   @default("") @map("search_text")
+  searchText String @default("") @map("search_text")
 
   // Weighted PostgreSQL full-text document maintained by the same trigger as
   // search_text. `simple` preserves product names/brands without stemming;
@@ -66,6 +69,7 @@ model Product {
 
   @@index([sellerId])
   @@index([status, category])
+  @@index([status, reservationExpiresAt])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([searchVector], type: Gin)
   @@map("products")

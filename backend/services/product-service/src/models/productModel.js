@@ -12,6 +12,9 @@ function toApiShape(product) {
   // it just duplicates title/description/tags/etc. concatenated, so it's
   // dropped here rather than leaking through every product API response.
   delete rest.searchText;
+  delete rest.reservedBy;
+  delete rest.reservationId;
+  delete rest.reservationExpiresAt;
   const media = [
     ...(photos || []).map((p) => ({ ...p, type: "image" })),
     ...(videos || []).map((v) => ({ ...v, type: "video" })),
@@ -93,7 +96,10 @@ async function searchProducts({ q, category, status, skip = 0, take = 20 }) {
     include: WITH_MEDIA,
   });
   const byId = new Map(products.map((p) => [p.id, p]));
-  const items = ids.map((id) => byId.get(id)).filter(Boolean).map(toApiShape);
+  const items = ids
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .map(toApiShape);
   return { items, total };
 }
 

@@ -55,3 +55,18 @@
 - Prisma schema validation และ lint ผ่าน; Product Service tests ผ่าน 8/8 โดย PostgreSQL Integration ถูก Skip ใน environment รอบนี้เพราะไม่มี Database/Docker
 - อัปเดต Local Node.js เป็น `22.23.2` และ npm `10.9.8` ให้ตรงกับ engine requirement ของ repository
 - รายละเอียดอยู่ที่ Task `MOCK-TRADE-013` ใน `docs/progress.md`
+
+## 2026-08-26 — Atomic 10-Minute Buyer Reservation
+
+- เพิ่ม `reservedBy`, unique `reservationId` และ `reservationExpiresAt` ใน Product พร้อมเก็บ
+  reservation identity ใน Order
+- ย้ายสิทธิ์ตัดสินผู้ชนะไปใช้ atomic conditional update ที่ Product; ผู้ซื้อพร้อมกันสองคนชนะ
+  ได้เพียงหนึ่งคน
+- เพิ่ม internal reserve/release/confirm contracts ที่ตรวจ `reservationId` และ `buyerId` เพื่อ
+  ป้องกัน request เก่าปลดล็อกหรือ confirm reservation รอบใหม่
+- รองรับ lazy expiry ตอนมีผู้ซื้อใหม่และ cleanup worker ทุก 30 วินาที
+- Checkout สร้าง reservation ก่อน Order และ release token เดิมเป็น compensation เมื่อ Order write
+  ล้มเหลว
+- PostgreSQL concurrency/expiry/stale-token/cleanup test ผ่าน 1/1 และ checkout compensation unit
+  tests ผ่าน 2/2; lint ผ่าน
+- ยังไม่ยก process-restart/cross-service checkout test เป็น Done

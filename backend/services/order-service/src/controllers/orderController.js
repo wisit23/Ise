@@ -9,18 +9,13 @@ const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
 
 async function create(req, res, next) {
+  let reservation;
   try {
     const { productId } = req.body;
     if (!productId) throw badRequest("productId is required");
 
-    const product = await productClient.getProduct(productId);
-    if (!product) throw notFound("product not found");
-    if (product.status !== "available") {
-      throw badRequest("product is no longer available");
-    }
-    if (product.sellerId === req.userId) {
-      throw badRequest("you cannot buy your own listing");
-    }
+    reservation = await productClient.reserveProduct(productId, req.userId);
+    const product = reservation.product;
 
     const order = await orderModel.create({
       buyerId: req.userId,
@@ -28,12 +23,23 @@ async function create(req, res, next) {
       productId: product.id,
       productTitle: product.title,
       price: product.price,
+      reservationId: reservation.reservationId,
+      reservationExpiresAt: reservation.expiresAt,
     });
-
-    await productClient.setProductStatus(product.id, "reserved");
 
     res.status(201).json(order);
   } catch (err) {
+    if (reservation) {
+      try {
+        await productClient.releaseReservation(
+          req.body.productId,
+          reservation.reservationId,
+          req.userId,
+        );
+      } catch (releaseError) {
+        console.error("failed to compensate reservation", releaseError);
+      }
+    }
     next(err);
   }
 }
@@ -105,15 +111,26 @@ async function updateStatus(req, res, next) {
         `status must be one of ${orderModel.VALID_STATUSES.join(", ")}`,
       );
     }
-
-    const updated = await orderModel.updateStatus(req.params.id, status);
+    if (["cancelled", "completed"].includes(status) && !order.reservationId) {
+      throw badRequest("order has no active reservation");
+    }
 
     if (status === "cancelled") {
-      await productClient.setProductStatus(order.productId, "available");
+      await productClient.releaseReservation(
+        order.productId,
+        order.reservationId,
+        order.buyerId,
+      );
     }
     if (status === "completed") {
-      await productClient.setProductStatus(order.productId, "sold");
+      await productClient.confirmReservation(
+        order.productId,
+        order.reservationId,
+        order.buyerId,
+      );
     }
+
+    const updated = await orderModel.updateStatus(req.params.id, status);
 
     res.json(updated);
   } catch (err) {
@@ -146,9 +163,16 @@ async function pay(req, res, next) {
         `order is already ${order.status}, it cannot be paid again`,
       );
     }
+    if (!order.reservationId) {
+      throw badRequest("order has no active reservation");
+    }
 
+    await productClient.confirmReservation(
+      order.productId,
+      order.reservationId,
+      order.buyerId,
+    );
     const updated = await orderModel.updateStatus(req.params.id, "completed");
-    await productClient.setProductStatus(order.productId, "sold");
 
     res.json(updated);
   } catch (err) {
