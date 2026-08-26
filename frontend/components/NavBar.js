@@ -128,6 +128,19 @@ export default function NavBar() {
                     </span>
                   </div>
 
+                  {isSupportAgent && (
+                    <Link
+                      href="/workspace"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
+                    >
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-xs text-white">
+                        🎧
+                      </span>
+                      Backoffice Workspace
+                    </Link>
+                  )}
+
                   <Link
                     href="/sell"
                     onClick={() => setMenuOpen(false)}
@@ -250,19 +263,6 @@ export default function NavBar() {
                   >
                     ตั๋วแจ้งปัญหาของฉัน
                   </Link>
-
-                  {isSupportAgent && (
-                    <Link
-                      href="/workspace"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
-                    >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-xs text-white">
-                        🎧
-                      </span>
-                      Backoffice Workspace
-                    </Link>
-                  )}
 
                   <Link
                     href="/profile"
