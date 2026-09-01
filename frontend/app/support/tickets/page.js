@@ -211,7 +211,7 @@ export default function MyTicketsPage() {
                   ))}
                 </select>
                 {form.orderId && (
-                  <p className="mt-1 text-xs text-gray-400">
+                  <p className="mt-1 text-xs text-gray-500">
                     ระบบจะแจ้งให้เจ้าหน้าที่ทราบว่าคำร้องนี้เกี่ยวข้องกับอีกฝ่ายในคำสั่งซื้อนี้ด้วย
                   </p>
                 )}
@@ -245,7 +245,7 @@ export default function MyTicketsPage() {
         {error && <p className="text-sm text-red-600">{error}</p>}
         {loading && <p className="text-sm text-gray-500">กำลังโหลด...</p>}
         {!loading && items.length === 0 && (
-          <p className="text-sm text-gray-400">ยังไม่มีตั๋วแจ้งปัญหา</p>
+          <p className="text-sm text-gray-500">ยังไม่มีตั๋วแจ้งปัญหา</p>
         )}
 
         <ul className="flex flex-col gap-3">
@@ -265,7 +265,7 @@ export default function MyTicketsPage() {
                     {STATUS_LABEL[t.status] || t.status}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-gray-400">
+                <p className="mt-1 text-xs text-gray-500">
                   {t.ticketNumber} ·{" "}
                   {new Date(t.createdAt).toLocaleDateString("th-TH")}
                 </p>

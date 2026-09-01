@@ -195,7 +195,7 @@ export default function ReportsSection({ token }) {
       {loading ? (
         <p className="text-slate-500">กำลังโหลด...</p>
       ) : bothUnavailable ? (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-500">
           ไม่สามารถโหลดข้อมูลได้ในขณะนี้ — {UNAVAILABLE}
         </p>
       ) : (
@@ -206,7 +206,7 @@ export default function ReportsSection({ token }) {
               : "ผลการดำเนินงานรายวัน"}{" "}
             — {periodLabel}
           </h2>
-          <p className="mb-3 text-xs text-slate-400">
+          <p className="mb-3 text-xs text-slate-500">
             รายได้แพลตฟอร์มคำนวณที่ {PLATFORM_FEE_RATE * 100}% ของยอดขายใน
             {granularity === "year" ? "แต่ละเดือน" : "แต่ละวัน"}
           </p>

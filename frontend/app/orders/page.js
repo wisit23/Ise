@@ -7,6 +7,10 @@ import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
 import Pagination from "../../components/Pagination";
 import { StarInput, StarDisplay } from "../../components/StarRating";
+import Alert from "../../components/ui/Alert";
+import Button from "../../components/ui/Button";
+import EmptyState from "../../components/ui/EmptyState";
+import Skeleton from "../../components/ui/Skeleton";
 import { apiFetch, uploadDisputeEvidence } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -189,7 +193,7 @@ export default function OrdersPage() {
           Object.fromEntries(data.items.map((r) => [r.orderId, r])),
         ),
       )
-      .catch(() => {});
+      .catch((err) => console.error("โหลดรีวิวของฉันไม่สำเร็จ:", err));
   }, [router]);
 
   useEffect(() => {
@@ -251,10 +255,25 @@ export default function OrdersPage() {
           ))}
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {loading && <p className="text-gray-500">กำลังโหลด...</p>}
+        {error && <Alert className="mb-4">{error}</Alert>}
+        {loading && (
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-28 rounded-lg" />
+            ))}
+          </div>
+        )}
         {!loading && items.length === 0 && (
-          <p className="text-gray-500">ไม่มีคำสั่งซื้อในหมวดนี้</p>
+          <EmptyState
+            icon="receipt_long"
+            title="ไม่มีคำสั่งซื้อในหมวดนี้"
+            description="ลองเลือกแท็บอื่น หรือเริ่มเลือกซื้อสินค้าชิ้นแรกของคุณ"
+            action={
+              <Button href="/products" icon="storefront">
+                เลือกซื้อสินค้า
+              </Button>
+            }
+          />
         )}
 
         <ul className="flex flex-col gap-3">

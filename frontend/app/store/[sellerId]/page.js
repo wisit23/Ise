@@ -67,7 +67,7 @@ export default function StorePage() {
         });
         setReviewTotalPages(data.totalPages);
       })
-      .catch(() => {})
+      .catch((err) => console.error("โหลดรีวิวของร้านไม่สำเร็จ:", err))
       .finally(() => setReviewsLoading(false));
   }, [sellerId, reviewPage]);
 
@@ -106,7 +106,7 @@ export default function StorePage() {
           {getStoredUser()?.id !== sellerId && (
             <button
               onClick={() => setShowReport(true)}
-              className="shrink-0 text-xs font-medium text-gray-400 hover:text-red-600 hover:underline"
+              className="shrink-0 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
             >
               รายงานร้านค้านี้
             </button>
@@ -138,7 +138,7 @@ export default function StorePage() {
             <p className="text-sm text-gray-500">กำลังโหลด...</p>
           )}
           {!reviewsLoading && reviews.length === 0 && (
-            <p className="text-sm text-gray-400">ร้านนี้ยังไม่มีรีวิว</p>
+            <p className="text-sm text-gray-500">ร้านนี้ยังไม่มีรีวิว</p>
           )}
           <ul className="flex flex-col gap-3">
             {reviews.map((r) => (
@@ -148,7 +148,7 @@ export default function StorePage() {
               >
                 <div className="flex items-center justify-between">
                   <StarDisplay value={r.rating} />
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-500">
                     {new Date(r.createdAt).toLocaleDateString("th-TH")}
                   </span>
                 </div>

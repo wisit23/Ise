@@ -73,7 +73,7 @@ export default function AuctionsPage() {
               กำลังประมูลอยู่
             </h2>
             {openAuctions.length === 0 ? (
-              <p className="mb-8 text-sm text-gray-400">
+              <p className="mb-8 text-sm text-gray-500">
                 ยังไม่มีประมูลที่เปิดอยู่ตอนนี้
               </p>
             ) : (
@@ -88,7 +88,7 @@ export default function AuctionsPage() {
               เร็วๆ นี้
             </h2>
             {scheduledAuctions.length === 0 ? (
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-500">
                 ยังไม่มีประมูลที่กำหนดเวลาไว้
               </p>
             ) : (

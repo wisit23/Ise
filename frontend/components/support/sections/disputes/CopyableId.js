@@ -36,7 +36,7 @@ export default function CopyableId({
         onClick={copy}
         aria-label={copied ? "คัดลอกแล้ว" : `คัดลอกรหัส ${value}`}
         title={copied ? "คัดลอกแล้ว" : "คัดลอก"}
-        className={`focus-ring ml-1 rounded text-slate-400 transition-all hover:text-emerald-600 ${
+        className={`focus-ring ml-1 rounded text-slate-500 transition-all hover:text-emerald-600 ${
           revealOnHover
             ? "opacity-0 group-hover/id:opacity-100 focus-visible:opacity-100"
             : ""

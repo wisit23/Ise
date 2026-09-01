@@ -159,7 +159,7 @@ function FaqSection({ token }) {
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
         {loading && <p className="text-sm text-gray-500">กำลังโหลด...</p>}
         {!loading && items.length === 0 && (
-          <p className="text-sm text-gray-400">ยังไม่มีบทความในหมวดนี้</p>
+          <p className="text-sm text-gray-500">ยังไม่มีบทความในหมวดนี้</p>
         )}
 
         <ul className="flex flex-col gap-2">
@@ -218,7 +218,7 @@ function FaqSection({ token }) {
               </h2>
               <button
                 onClick={closeForm}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full aspect-square text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full aspect-square text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
               >
                 <span className="material-symbols-outlined text-[20px] leading-none block">
                   close
@@ -254,7 +254,7 @@ function FaqSection({ token }) {
                       {HELP_CATEGORIES.find((c) => c.value === form.category)
                         ?.label || "เลือกหมวดหมู่"}
                     </span>
-                    <span className="material-symbols-outlined text-[18px] text-slate-400 shrink-0">
+                    <span className="material-symbols-outlined text-[18px] text-slate-500 shrink-0">
                       expand_more
                     </span>
                   </button>

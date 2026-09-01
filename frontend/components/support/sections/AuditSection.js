@@ -59,7 +59,7 @@ export default function AuditSection({ token }) {
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       {entries.length === 0 ? (
-        <p className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-400">
+        <p className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           ไม่มี audit log ที่ตรงกับเงื่อนไข
         </p>
       ) : (

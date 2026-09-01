@@ -112,7 +112,7 @@ export default function DisputeCasePage() {
             {dispute.status}
           </span>
         </div>
-        <p className="mb-4 text-xs text-gray-400">Order {dispute.orderId}</p>
+        <p className="mb-4 text-xs text-gray-500">Order {dispute.orderId}</p>
 
         <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
           <h2 className="mb-1 text-sm font-semibold text-gray-900">
@@ -126,7 +126,7 @@ export default function DisputeCasePage() {
             หลักฐานประกอบ ({dispute.evidence.length})
           </h2>
           {dispute.evidence.length === 0 && (
-            <p className="text-sm text-gray-400">ยังไม่มีหลักฐานแนบมา</p>
+            <p className="text-sm text-gray-500">ยังไม่มีหลักฐานแนบมา</p>
           )}
           <div className="grid grid-cols-3 gap-2">
             {dispute.evidence.map((ev) => (

@@ -158,7 +158,7 @@ function DashboardSection({ token, userRole, onNavigate }) {
           .map(([label, value]) => ({ label, value }));
         setTicketTrend(trend);
       })
-      .catch(() => {});
+      .catch((err) => console.error("โหลดแนวโน้มตั๋วไม่สำเร็จ:", err));
   }, [token]);
 
   return (
@@ -234,7 +234,7 @@ function DashboardSection({ token, userRole, onNavigate }) {
           {ticketTrend.length > 0 ? (
             <TrendBarChart data={ticketTrend} height={160} />
           ) : (
-            <div className="flex h-32 items-center justify-center text-sm text-gray-400">
+            <div className="flex h-32 items-center justify-center text-sm text-gray-500">
               กำลังโหลด...
             </div>
           )}

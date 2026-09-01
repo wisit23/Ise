@@ -24,7 +24,7 @@ const STATUS_STYLE = {
   scheduled: "bg-sky-50 text-sky-700",
   open: "bg-emerald-50 text-emerald-700",
   closed: "bg-slate-100 text-slate-500",
-  cancelled: "bg-slate-100 text-slate-400",
+  cancelled: "bg-slate-100 text-slate-500",
 };
 
 function baht(v) {
@@ -216,7 +216,7 @@ export default function AuctionScheduleSection({ token }) {
         <p className="text-sm text-slate-500">กำลังโหลด...</p>
       ) : auctions.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-10 text-center">
-          <span className="material-symbols-outlined text-[40px] text-slate-300 mb-2">
+          <span className="material-symbols-outlined text-[40px] text-slate-500 mb-2">
             gavel
           </span>
           <p className="text-sm font-semibold text-slate-600">

@@ -147,7 +147,7 @@ export default function TicketThreadPage() {
       <section className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
         <div className="mb-1 flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs text-gray-400">{ticket.ticketNumber}</p>
+            <p className="text-xs text-gray-500">{ticket.ticketNumber}</p>
             <h1 className="text-xl font-bold text-gray-900">
               {ticket.subject}
             </h1>
@@ -196,7 +196,7 @@ export default function TicketThreadPage() {
                     : "border-gray-200 bg-white"
               }`}
             >
-              <div className="mb-1 flex items-center gap-2 text-xs text-gray-400">
+              <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
                 <span className="font-medium text-gray-600">
                   {m.authorRole === "AGENT"
                     ? "เจ้าหน้าที่"
@@ -215,7 +215,7 @@ export default function TicketThreadPage() {
             </li>
           ))}
           {ticket.messages.length === 0 && (
-            <li className="text-sm text-gray-400">ยังไม่มีข้อความในตั๋วนี้</li>
+            <li className="text-sm text-gray-500">ยังไม่มีข้อความในตั๋วนี้</li>
           )}
         </ul>
 

@@ -18,7 +18,7 @@ export default function LineChart({
 
   if (!series.length || !series[0]?.data?.length) {
     return (
-      <div className="flex items-center justify-center h-32 text-sm text-gray-400">
+      <div className="flex items-center justify-center h-32 text-sm text-gray-500">
         ไม่มีข้อมูล
       </div>
     );

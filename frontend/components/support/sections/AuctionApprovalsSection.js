@@ -61,10 +61,10 @@ export default function AuctionApprovalsSection({ token }) {
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       {loading ? (
-        <p className="text-sm text-slate-400">กำลังโหลด...</p>
+        <p className="text-sm text-slate-500">กำลังโหลด...</p>
       ) : items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-10 text-center">
-          <span className="material-symbols-outlined text-[40px] text-slate-300 mb-2">
+          <span className="material-symbols-outlined text-[40px] text-slate-500 mb-2">
             gavel
           </span>
           <p className="text-sm font-semibold text-slate-600">
@@ -87,7 +87,7 @@ export default function AuctionApprovalsSection({ token }) {
                     ราคาเริ่มต้น {baht(a.startingPrice)} · เพิ่มขั้นต่ำครั้งละ{" "}
                     {baht(a.bidIncrement)}
                   </p>
-                  <p className="mt-0.5 text-xs text-slate-400">
+                  <p className="mt-0.5 text-xs text-slate-500">
                     รหัส {a.id.slice(0, 8)} · ผู้ขาย {a.sellerId?.slice(0, 8)}
                   </p>
                 </div>

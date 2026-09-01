@@ -85,7 +85,7 @@ export default function KycSection({ token }) {
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
       {applications.length === 0 ? (
-        <p className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-400">
+        <p className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-500">
           ไม่มีใบสมัคร KYC ที่รอตัดสินใจ
         </p>
       ) : (
@@ -112,25 +112,25 @@ export default function KycSection({ token }) {
                 <div className="rounded bg-gray-50 p-3 text-sm text-gray-700">
                   <dl className="flex flex-col gap-1.5">
                     <div className="flex justify-between gap-2">
-                      <dt className="text-gray-400">ชื่อร้านค้า</dt>
+                      <dt className="text-gray-500">ชื่อร้านค้า</dt>
                       <dd className="font-medium text-gray-900">
                         {app.user?.sellerProfile?.shopName ?? "—"}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-gray-400">เลขบัตรประชาชน</dt>
+                      <dt className="text-gray-500">เลขบัตรประชาชน</dt>
                       <dd className="font-mono">
                         {app.user?.sellerProfile?.idCardNumber ?? "—"}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-gray-400">ที่อยู่</dt>
+                      <dt className="text-gray-500">ที่อยู่</dt>
                       <dd className="max-w-[60%] text-right">
                         {app.user?.sellerProfile?.address ?? "—"}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-gray-400">บัญชีธนาคาร</dt>
+                      <dt className="text-gray-500">บัญชีธนาคาร</dt>
                       <dd>{app.user?.sellerProfile?.bankAccount ?? "—"}</dd>
                     </div>
                   </dl>

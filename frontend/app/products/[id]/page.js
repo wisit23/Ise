@@ -37,10 +37,10 @@ export default function ProductDetailPage() {
         setProduct(p);
         apiFetch(`/api/auth/users/${p.sellerId}/public`)
           .then(setSeller)
-          .catch(() => {});
+          .catch((err) => console.error("โหลดข้อมูลผู้ขายไม่สำเร็จ:", err));
         apiFetch(`/api/reviews/by-seller/${p.sellerId}/summary`)
           .then(setReviewSummary)
-          .catch(() => {});
+          .catch((err) => console.error("โหลดคะแนนรีวิวผู้ขายไม่สำเร็จ:", err));
       })
       .catch((err) => setError(err.message));
     fetchConditions()
@@ -49,7 +49,7 @@ export default function ProductDetailPage() {
           Object.fromEntries(items.map((c) => [c.value, c.label])),
         ),
       )
-      .catch(() => {});
+      .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, [id]);
 
   async function addToCart() {
@@ -121,7 +121,7 @@ export default function ProductDetailPage() {
     <main className="flex min-h-screen flex-col bg-gray-50">
       <NavBar />
 
-      <nav className="mx-auto w-full max-w-5xl px-4 pt-4 text-xs text-gray-400">
+      <nav className="mx-auto w-full max-w-5xl px-4 pt-4 text-xs text-gray-500">
         <Link href="/products" className="hover:text-emerald-600">
           สินค้า
         </Link>
@@ -207,7 +207,7 @@ export default function ProductDetailPage() {
                     </span>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">ยังไม่มีรีวิว</p>
+                  <p className="text-xs text-gray-500">ยังไม่มีรีวิว</p>
                 )}
               </div>
             </div>
@@ -222,14 +222,14 @@ export default function ProductDetailPage() {
           {getStoredUser()?.id === product.sellerId ? (
             <Link
               href={`/products/${product.id}/edit`}
-              className="mt-3 inline-block text-xs font-medium text-gray-400 hover:text-emerald-600 hover:underline"
+              className="mt-3 inline-block text-xs font-medium text-gray-500 hover:text-emerald-600 hover:underline"
             >
               แก้ไขสินค้านี้
             </Link>
           ) : (
             <button
               onClick={() => setShowReport(true)}
-              className="mt-3 text-xs font-medium text-gray-400 hover:text-red-600 hover:underline"
+              className="mt-3 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
             >
               รายงานสินค้า/ผู้ขายรายนี้
             </button>
@@ -251,7 +251,7 @@ export default function ProductDetailPage() {
               <button
                 onClick={handleAddToCart}
                 disabled={!available || busy}
-                className="flex-1 rounded-md border border-emerald-600 py-3 font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-400"
+                className="flex-1 rounded-md border border-emerald-600 py-3 font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-500"
               >
                 {busy ? "กำลังเพิ่ม..." : "เพิ่มลงตะกร้า"}
               </button>

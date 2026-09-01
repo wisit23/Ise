@@ -7,7 +7,7 @@ export default function KpiCard({
   onClick,
 }) {
   const colors = {
-    gray: "text-slate-400 bg-slate-50",
+    gray: "text-slate-500 bg-slate-50",
     emerald: "text-emerald-600 bg-emerald-50",
     amber: "text-amber-500 bg-amber-50",
     red: "text-red-500 bg-red-50",

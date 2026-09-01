@@ -10,10 +10,10 @@ function baht(v) {
  */
 export default function RankingList({ rows, emptyText, unavailable }) {
   if (unavailable) {
-    return <p className="text-sm text-gray-400">ไม่พร้อมใช้งาน</p>;
+    return <p className="text-sm text-gray-500">ไม่พร้อมใช้งาน</p>;
   }
   if (!rows || rows.length === 0) {
-    return <p className="text-sm text-gray-400">{emptyText}</p>;
+    return <p className="text-sm text-gray-500">{emptyText}</p>;
   }
 
   const max = Math.max(...rows.map((r) => r.gmv), 1);
@@ -22,7 +22,7 @@ export default function RankingList({ rows, emptyText, unavailable }) {
     <ol className="flex flex-col gap-3">
       {rows.map((row, i) => (
         <li key={row.id} className="flex items-center gap-3">
-          <span className="w-5 shrink-0 text-right text-sm font-semibold text-gray-400">
+          <span className="w-5 shrink-0 text-right text-sm font-semibold text-gray-500">
             {i + 1}
           </span>
           <div className="min-w-0 flex-1">
@@ -32,7 +32,7 @@ export default function RankingList({ rows, emptyText, unavailable }) {
               </span>
               <span className="shrink-0 text-sm font-semibold text-gray-900">
                 {baht(row.gmv)}
-                <span className="ml-1.5 font-normal text-gray-400">
+                <span className="ml-1.5 font-normal text-gray-500">
                   · {row.count.toLocaleString("th-TH")} ชิ้น
                 </span>
               </span>

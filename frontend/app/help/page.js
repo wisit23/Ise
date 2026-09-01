@@ -68,7 +68,7 @@ export default function HelpCenterPage() {
         {error && <p className="text-sm text-red-600">{error}</p>}
         {loading && <p className="text-sm text-gray-500">กำลังโหลด...</p>}
         {!loading && items.length === 0 && (
-          <p className="text-sm text-gray-400">ไม่พบบทความที่ตรงกับคำค้นหา</p>
+          <p className="text-sm text-gray-500">ไม่พบบทความที่ตรงกับคำค้นหา</p>
         )}
 
         <ul className="flex flex-col gap-3">

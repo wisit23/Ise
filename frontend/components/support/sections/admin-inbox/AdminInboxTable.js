@@ -93,7 +93,7 @@ export default function AdminInboxTable({
         t.assigneeId ? (
           t.assigneeId.slice(0, 12)
         ) : (
-          <span className="text-slate-400">—</span>
+          <span className="text-slate-500">—</span>
         ),
     },
     {

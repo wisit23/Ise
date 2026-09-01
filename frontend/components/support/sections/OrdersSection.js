@@ -137,7 +137,7 @@ function OrdersSection({ token }) {
               className="flex items-center justify-between w-48 bg-transparent py-2.5 pl-4 pr-3 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-100 transition-colors"
             >
               <span className="truncate">{searchTypeLabels[searchType]}</span>
-              <span className="material-symbols-outlined text-[18px] text-slate-400 shrink-0">
+              <span className="material-symbols-outlined text-[18px] text-slate-500 shrink-0">
                 expand_more
               </span>
             </button>
@@ -166,14 +166,14 @@ function OrdersSection({ token }) {
             )}
           </div>
           <div className="flex flex-1 items-center px-3">
-            <span className="material-symbols-outlined mr-2 text-[20px] text-slate-400">
+            <span className="material-symbols-outlined mr-2 text-[20px] text-slate-500">
               search
             </span>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="พิมพ์รหัสที่ต้องการค้นหา..."
-              className="w-full border-0 bg-transparent py-2.5 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:ring-0"
+              className="w-full border-0 bg-transparent py-2.5 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-500 focus:ring-0"
             />
           </div>
           <button
@@ -189,13 +189,13 @@ function OrdersSection({ token }) {
       {error && <p className="text-sm text-red-600">{error}</p>}
       {searched && !loading && items.length === 0 && !error && (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-10 text-center">
-          <span className="material-symbols-outlined text-[40px] text-slate-300 mb-2">
+          <span className="material-symbols-outlined text-[40px] text-slate-500 mb-2">
             search_off
           </span>
           <p className="text-sm font-semibold text-slate-600">
             ไม่พบคำสั่งซื้อที่ตรงกับเงื่อนไข
           </p>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-500">
             หมายเหตุ: การค้นหา Buyer/Seller ต้องใช้รหัสเต็ม (Full ID)
             ไม่ใช่รหัสย่อ 8 ตัวแรก
           </p>
@@ -222,25 +222,25 @@ function OrdersSection({ token }) {
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] font-medium text-slate-500">
               <span className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-slate-400">
+                <span className="material-symbols-outlined text-[16px] text-slate-500">
                   receipt_long
                 </span>{" "}
                 Order {o.id.slice(0, 8)}
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-slate-400">
+                <span className="material-symbols-outlined text-[16px] text-slate-500">
                   payments
                 </span>{" "}
                 ฿{o.price?.toLocaleString("th-TH")}
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-slate-400">
+                <span className="material-symbols-outlined text-[16px] text-slate-500">
                   person
                 </span>{" "}
                 Buyer {o.buyerId?.slice(0, 8)}
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-slate-400">
+                <span className="material-symbols-outlined text-[16px] text-slate-500">
                   storefront
                 </span>{" "}
                 Seller {o.sellerId?.slice(0, 8)}

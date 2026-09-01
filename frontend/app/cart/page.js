@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
+import Alert from "../../components/ui/Alert";
+import Button from "../../components/ui/Button";
+import EmptyState from "../../components/ui/EmptyState";
+import Skeleton from "../../components/ui/Skeleton";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -175,17 +178,31 @@ export default function CartPage() {
           กรุณาชำระเงินก่อนเวลาหมดหรือยกเลิกเพื่อคืนสินค้า
         </p>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {notice && <p className="mb-4 text-sm text-emerald-700">{notice}</p>}
-        {loading && <p className="text-gray-500">กำลังโหลด...</p>}
+        {error && <Alert className="mb-4">{error}</Alert>}
+        {notice && (
+          <Alert tone="success" className="mb-4">
+            {notice}
+          </Alert>
+        )}
+        {loading && (
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-lg" />
+            ))}
+          </div>
+        )}
 
         {!loading && items.length === 0 && (
-          <p className="text-gray-500">
-            ตะกร้าว่างเปล่า —{" "}
-            <Link href="/products" className="text-emerald-600 hover:underline">
-              เลือกซื้อสินค้า
-            </Link>
-          </p>
+          <EmptyState
+            icon="shopping_cart"
+            title="ตะกร้าว่างเปล่า"
+            description="ยังไม่มีสินค้าที่คุณจองไว้ — เลือกดูสินค้าที่ตรงสไตล์ได้เลย"
+            action={
+              <Button href="/products" icon="storefront">
+                เลือกซื้อสินค้า
+              </Button>
+            }
+          />
         )}
 
         {items.length > 0 && (
@@ -236,7 +253,7 @@ export default function CartPage() {
                     <button
                       onClick={() => handleCancel(o.id)}
                       disabled={busyId === o.id}
-                      className="text-sm text-gray-400 hover:text-red-600 disabled:opacity-50"
+                      className="text-sm text-gray-500 hover:text-red-600 disabled:opacity-50"
                     >
                       ยกเลิก
                     </button>

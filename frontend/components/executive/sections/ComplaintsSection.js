@@ -114,9 +114,9 @@ export default function ComplaintsSection({ token }) {
         </h2>
 
         {loading ? (
-          <p className="px-5 py-8 text-sm text-slate-400">กำลังโหลด...</p>
+          <p className="px-5 py-8 text-sm text-slate-500">กำลังโหลด...</p>
         ) : data.items.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-slate-400">
+          <p className="px-5 py-8 text-sm text-slate-500">
             ไม่มีข้อร้องเรียนในหมวดนี้
           </p>
         ) : (
@@ -128,7 +128,7 @@ export default function ComplaintsSection({ token }) {
                     <p className="text-sm font-semibold text-slate-900">
                       {r.reason}
                     </p>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-slate-500">
                       โดย {r.reporterName || "ไม่ทราบชื่อ"} ·{" "}
                       {new Date(r.reportedAt).toLocaleDateString("th-TH")}
                       {r.targetId && (

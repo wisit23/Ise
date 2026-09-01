@@ -14,7 +14,7 @@ export default function MetricCard({
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <p className="text-xs text-gray-500">{label}</p>
       {unavailable ? (
-        <p className="mt-1 text-sm font-medium text-gray-400">ไม่พร้อมใช้งาน</p>
+        <p className="mt-1 text-sm font-medium text-gray-500">ไม่พร้อมใช้งาน</p>
       ) : (
         <>
           <p className="mt-1 text-2xl font-semibold text-gray-900">
@@ -27,7 +27,7 @@ export default function MetricCard({
               }`}
             >
               {deltaPct >= 0 ? "▲" : "▼"} {Math.abs(deltaPct)}%{" "}
-              <span className="font-normal text-gray-400">เทียบช่วงก่อน</span>
+              <span className="font-normal text-gray-500">เทียบช่วงก่อน</span>
             </p>
           )}
         </>

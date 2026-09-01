@@ -216,7 +216,7 @@ export default function OverviewSection({ token }) {
         </ChartCard>
 
         <ChartCard title="หมวดหมู่ที่ขายดีที่สุด" icon="category">
-          <p className="mb-3 -mt-2 text-xs text-slate-400">
+          <p className="mb-3 -mt-2 text-xs text-slate-500">
             จัดอันดับจากยอดขายในเดือนนี้
           </p>
           <RankingList
@@ -227,7 +227,7 @@ export default function OverviewSection({ token }) {
         </ChartCard>
 
         <ChartCard title="สินค้าที่ทำรายได้สูงสุด" icon="workspace_premium">
-          <p className="mb-3 -mt-2 text-xs text-slate-400">
+          <p className="mb-3 -mt-2 text-xs text-slate-500">
             จัดอันดับจากยอดขายในเดือนนี้
           </p>
           <RankingList

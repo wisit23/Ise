@@ -52,7 +52,7 @@ export default function DropdownFilter({ value, onChange, options }) {
         className="flex h-full w-full items-center justify-between min-w-[140px] rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-2 text-sm font-medium text-slate-700 shadow-sm outline-none transition-all focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 hover:border-slate-300"
       >
         <span className="truncate mr-2">{selectedLabel}</span>
-        <span className="material-symbols-outlined shrink-0 text-[18px] text-slate-400">
+        <span className="material-symbols-outlined shrink-0 text-[18px] text-slate-500">
           expand_more
         </span>
       </button>

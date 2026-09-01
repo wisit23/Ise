@@ -17,7 +17,7 @@ export default function DonutChart({
   const total = data.reduce((s, d) => s + d.value, 0);
   if (!total) {
     return (
-      <div className="flex items-center justify-center h-32 text-sm text-gray-400">
+      <div className="flex items-center justify-center h-32 text-sm text-gray-500">
         ไม่มีข้อมูล
       </div>
     );

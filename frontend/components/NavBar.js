@@ -30,7 +30,9 @@ export default function NavBar() {
     if (token) {
       apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
         .then((data) => setCartCount(data.total))
-        .catch(() => {});
+        .catch((err) =>
+          console.error("โหลดจำนวนสินค้าในตะกร้าไม่สำเร็จ:", err),
+        );
     }
   }, []);
 

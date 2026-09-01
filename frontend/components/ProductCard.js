@@ -23,7 +23,7 @@ export default function ProductCard({ product }) {
           Object.fromEntries(items.map((c) => [c.value, c.label])),
         ),
       )
-      .catch(() => {});
+      .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, []);
 
   return (

@@ -54,10 +54,10 @@ export default function EditProductPage() {
       .catch(() => setNotFound(true));
     fetchCategories()
       .then(setCategories)
-      .catch(() => {});
+      .catch((err) => console.error("โหลดหมวดหมู่ไม่สำเร็จ:", err));
     fetchConditions()
       .then(setConditions)
-      .catch(() => {});
+      .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, [id]);
 
   function update(field) {
@@ -161,7 +161,7 @@ export default function EditProductPage() {
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
               รูปภาพ / วิดีโอสินค้า <span className="text-red-500">*</span>{" "}
-              <span className="font-normal text-gray-400">
+              <span className="font-normal text-gray-500">
                 (อย่างน้อย {MIN_MEDIA_COUNT} รูป, สูงสุด {MAX_MEDIA_COUNT} รูป)
               </span>
             </label>

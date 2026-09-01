@@ -28,7 +28,7 @@ const STATUS_STYLE = {
   scheduled: "bg-sky-50 text-sky-700",
   open: "bg-emerald-50 text-emerald-700",
   closed: "bg-gray-100 text-gray-500",
-  cancelled: "bg-gray-100 text-gray-400",
+  cancelled: "bg-gray-100 text-gray-500",
 };
 
 function baht(v) {
@@ -87,7 +87,7 @@ export default function SellerAuctionsPage() {
   useEffect(() => {
     fetchCategories()
       .then(setCategories)
-      .catch(() => {});
+      .catch((err) => console.error("โหลดหมวดหมู่ไม่สำเร็จ:", err));
     fetchConditions()
       .then((items) => {
         setConditions(items);
@@ -95,7 +95,7 @@ export default function SellerAuctionsPage() {
           prev.condition ? prev : { ...prev, condition: items[0]?.value || "" },
         );
       })
-      .catch(() => {});
+      .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, []);
 
   function update(field) {
@@ -349,7 +349,7 @@ export default function SellerAuctionsPage() {
           สินค้าที่ส่งเข้าประมูลของฉัน ({myAuctions.length})
         </h2>
         {myAuctions.length === 0 ? (
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-500">
             ยังไม่มีสินค้าที่ส่งเข้าประมูล
           </p>
         ) : (

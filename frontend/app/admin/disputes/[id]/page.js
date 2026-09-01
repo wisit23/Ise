@@ -180,7 +180,7 @@ export default function AdminDisputeDetailPage() {
             หลักฐาน ({evidence.length})
           </h2>
           {evidence.length === 0 ? (
-            <p className="text-sm text-gray-400">ยังไม่มีหลักฐานแนบมา</p>
+            <p className="text-sm text-gray-500">ยังไม่มีหลักฐานแนบมา</p>
           ) : (
             <ul className="flex flex-col divide-y divide-gray-100">
               {evidence.map((e) => (

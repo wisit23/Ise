@@ -155,7 +155,7 @@ export default function AuctionDetailPage() {
               <p className="text-3xl font-bold text-gray-900">
                 {baht(highest ? highest.amount : auction.startingPrice)}
               </p>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-gray-500">
                 บิดถัดไปต้อง ≥ {baht(minNext)} · มีผู้เสนอราคาแล้ว {bids.length}{" "}
                 ครั้ง
               </p>
@@ -170,7 +170,7 @@ export default function AuctionDetailPage() {
             )}
 
             {isOwnAuction ? (
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-500">
                 นี่คือสินค้าของคุณเอง ไม่สามารถประมูลสินค้าของตัวเองได้
               </p>
             ) : isOpen ? (
@@ -197,7 +197,7 @@ export default function AuctionDetailPage() {
                 </button>
               </form>
             ) : (
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-500">
                 ยังไม่สามารถเสนอราคาได้ในสถานะนี้
               </p>
             )}

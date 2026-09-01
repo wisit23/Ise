@@ -140,14 +140,14 @@ export default function ProductsSection({ token }) {
             className="relative flex w-full items-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.06)] transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
           >
             <div className="flex flex-1 items-center px-3">
-              <span className="material-symbols-outlined mr-2 text-[20px] text-slate-400">
+              <span className="material-symbols-outlined mr-2 text-[20px] text-slate-500">
                 search
               </span>
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="ค้นหาชื่อสินค้า, แท็ก, หมวดหมู่..."
-                className="w-full border-0 bg-transparent py-2.5 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:ring-0"
+                className="w-full border-0 bg-transparent py-2.5 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-500 focus:ring-0"
               />
             </div>
             <button
@@ -172,7 +172,7 @@ export default function ProductsSection({ token }) {
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
         {searched && !loading && items.length === 0 && !error && (
           <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-10 text-center">
-            <span className="material-symbols-outlined text-[40px] text-slate-300 mb-2">
+            <span className="material-symbols-outlined text-[40px] text-slate-500 mb-2">
               search_off
             </span>
             <p className="text-sm font-semibold text-slate-600">
