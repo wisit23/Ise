@@ -5,6 +5,7 @@
    are back-office-specific and stay where they are. */
 export { default as Alert } from "./Alert";
 export { default as Button } from "./Button";
+export { default as ConfirmDialog } from "./ConfirmDialog";
 export { default as DataTable } from "./DataTable";
 export { default as EmptyState } from "./EmptyState";
 export { default as ErrorState } from "./ErrorState";

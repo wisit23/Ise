@@ -61,7 +61,7 @@ export function ToastProvider({ children }) {
       {children}
       {/* aria-live so the message is announced without stealing focus. */}
       <div
-        className="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2"
+        className="pointer-events-none fixed bottom-4 right-4 z-toast flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2"
         role="status"
         aria-live="polite"
       >

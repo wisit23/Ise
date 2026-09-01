@@ -49,6 +49,16 @@ module.exports = {
           subtle: "rgb(var(--color-ink-subtle) / <alpha-value>)",
         },
       },
+      // Named stacking order. Ad-hoc values (z-30, z-50, z-[100]) had drifted
+      // out of order — the confirm dialog opened *behind* the case drawer
+      // because Modal sat at z-50 and the drawer at z-[100].
+      zIndex: {
+        nav: "30",
+        dropdown: "60",
+        drawer: "100",
+        modal: "200",
+        toast: "300",
+      },
       fontFamily: {
         sans: ["var(--font-noto-sans-thai)", "system-ui", "sans-serif"],
       },

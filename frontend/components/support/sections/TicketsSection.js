@@ -268,7 +268,7 @@ function TicketsSection({ token, statusFilter, setStatusFilter, userRole }) {
       {selectedTicket && (
         <div
           onClick={(e) => e.target === e.currentTarget && closeTicket()}
-          className={`fixed inset-0 z-[100] flex justify-end bg-slate-900/50 backdrop-blur-sm ${
+          className={`fixed inset-0 z-drawer flex justify-end bg-slate-900/50 backdrop-blur-sm ${
             closingTicket ? "animate-fade-out" : "animate-fade-in"
           }`}
         >

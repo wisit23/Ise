@@ -207,7 +207,7 @@ function FaqSection({ token }) {
       {/* FAQ Modal */}
       {(showForm || closingForm) && (
         <div
-          className={`fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm ${closingForm ? "animate-fade-out" : "animate-fade-in"}`}
+          className={`fixed inset-0 z-drawer flex items-center justify-center bg-slate-900/40 backdrop-blur-sm ${closingForm ? "animate-fade-out" : "animate-fade-in"}`}
         >
           <div
             className={`w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl ${closingForm ? "animate-fade-out" : "animate-fade-in-up"}`}

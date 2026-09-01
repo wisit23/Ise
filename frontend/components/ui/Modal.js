@@ -84,7 +84,7 @@ export default function Modal({
 
   return (
     <div
-      className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4"
+      className="animate-fade-in fixed inset-0 z-modal flex items-center justify-center bg-gray-900/50 p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose?.();
       }}

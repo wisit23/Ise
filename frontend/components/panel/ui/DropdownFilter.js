@@ -58,7 +58,7 @@ export default function DropdownFilter({ value, onChange, options }) {
       </button>
       {(isOpen || isClosing) && (
         <div
-          className={`absolute top-full left-0 mt-2 w-full min-w-[160px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-[60] ${isClosing ? "animate-dropdown-out" : "animate-dropdown-in"}`}
+          className={`absolute top-full left-0 mt-2 w-full min-w-[160px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-dropdown ${isClosing ? "animate-dropdown-out" : "animate-dropdown-in"}`}
         >
           {options.map((o) => (
             <button

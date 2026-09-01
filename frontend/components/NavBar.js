@@ -76,7 +76,7 @@ export default function NavBar() {
     user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
 
   return (
-    <header className="sticky top-0 z-30 border-b border-gray-200 bg-white">
+    <header className="sticky top-0 z-nav border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
         <Link
           href="/"

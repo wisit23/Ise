@@ -370,7 +370,7 @@ function DisputesSection({ token, userRole, status, setStatus }) {
       {selectedDispute && (
         <div
           onClick={(e) => e.target === e.currentTarget && closeDispute()}
-          className={`fixed inset-0 z-[100] flex justify-end bg-slate-900/50 backdrop-blur-sm ${
+          className={`fixed inset-0 z-drawer flex justify-end bg-slate-900/50 backdrop-blur-sm ${
             closingDispute ? "animate-fade-out" : "animate-fade-in"
           }`}
         >
