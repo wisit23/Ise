@@ -1160,6 +1160,25 @@ Info strip, การ์ดผู้แจ้ง, การ์ดเจ้าห
 | Browser: `/seller/dashboard`                        | Hero, Sparkline, Charts, รายการสินค้า เรนเดอร์ครบ                        |
 | Browser: `/cart` (ตะกร้าว่าง)                       | `EmptyState` พร้อมปุ่ม "เลือกซื้อสินค้า"                                 |
 
+### เรื่องที่พบตอนตรวจแต่ไม่ได้อยู่ในขอบเขตงานนี้
+
+`npm test` (Backend) ตอนนี้ได้ **111 tests, 84 ผ่าน, 2 fail, 25 skip** ซึ่งไม่ตรงกับที่
+`ADM-COMPLETE-002` บันทึกไว้ (108/84/0/24) งานรอบนี้ไม่ได้แตะ Backend เลย จึง Bisect ดู:
+
+| Commit                                                                       | ผล `npm test`                           |
+| ---------------------------------------------------------------------------- | --------------------------------------- |
+| `2aad48f` (ก่อน Merge branch `buyer`)                                        | 108 tests, 84 ผ่าน, **0 fail**, 24 skip |
+| `05f63e1` "add time count ui" (แก้ `order-service/src/models/orderModel.js`) | เริ่ม Fail                              |
+| `2b2c719` (`main` ปัจจุบัน)                                                  | 111 tests, 84 ผ่าน, **2 fail**, 25 skip |
+
+Test ที่ Fail ทั้งสองอยู่ใน `backend/services/order-service/src/checkout-reservation.test.js`
+(ไม่ต้องใช้ Database) — ตัวหนึ่งเจอ Prisma error จาก `orderController.js:15` อีกตัวขึ้น
+`ERR_INVALID_ARG_VALUE: The argument 'methodName' must be a method` ซึ่งแปลว่า Mock ชี้ไปที่
+Method ที่ไม่มีอยู่แล้วหลัง `orderModel.js` ถูกแก้
+
+CI (`.github/workflows/ci.yml`) รัน `npm test` ด้วย `REQUIRE_INTEGRATION=1` ดังนั้นข้อนี้ควรทำให้
+Build แดง — **ยังไม่ได้แก้ในรอบนี้เพราะอยู่คนละขอบเขต** และเจ้าของโค้ดคนละคน
+
 ### ผลลัพธ์ปัจจุบัน
 
 - ไม่มี `alert()`, `confirm()`, `prompt()` เหลืออยู่ใน Frontend
