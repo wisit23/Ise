@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import NavBar from "../../../../components/NavBar";
 import Footer from "../../../../components/Footer";
+import ConfirmDialog from "../../../../components/ui/ConfirmDialog";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 
@@ -38,6 +39,7 @@ export default function TicketThreadPage() {
   const [isInternal, setIsInternal] = useState(false);
   const [sending, setSending] = useState(false);
   const [busyAction, setBusyAction] = useState(false);
+  const [escalating, setEscalating] = useState(false);
 
   const isAgent = user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
 
@@ -94,12 +96,14 @@ export default function TicketThreadPage() {
     }
   }
 
-  async function handleStatusChange(status) {
+  async function handleStatusChange(status, reason) {
+    // Escalating asks for a note. window.prompt() froze the tab, ignored the
+    // page's styling, and discarded whatever had been typed on a mis-click.
+    if (status === "ESCALATED" && reason === undefined) {
+      setEscalating(true);
+      return;
+    }
     const token = getAccessToken();
-    const reason =
-      status === "ESCALATED"
-        ? window.prompt("เหตุผลที่ยกระดับ (ไม่บังคับ)")
-        : null;
     setBusyAction(true);
     try {
       await apiFetch(`/api/support/tickets/${id}/status`, {
@@ -253,6 +257,22 @@ export default function TicketThreadPage() {
         )}
       </section>
       <Footer />
+
+      <ConfirmDialog
+        open={escalating}
+        busy={busyAction}
+        title="ส่งต่อให้ Admin?"
+        description="ตั๋วจะออกจากคิวของคุณและไปอยู่ในคิวของ Admin"
+        confirmLabel="ส่งต่อ"
+        tone="primary"
+        reason="optional"
+        reasonLabel="เหตุผลที่ยกระดับ"
+        onCancel={() => setEscalating(false)}
+        onConfirm={(reason) => {
+          setEscalating(false);
+          handleStatusChange("ESCALATED", reason);
+        }}
+      />
     </main>
   );
 }

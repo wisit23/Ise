@@ -3,7 +3,12 @@
 import Button from "../../../ui/Button";
 
 /* The requester card and the counterparty card were the same 45 lines of
-   markup twice over, differing only in colour and heading. */
+   markup twice over, differing only in colour and heading — and TicketsSection
+   had a third near-copy.
+
+   Warn/ban are Admin-only powers, so the buttons appear only when the caller
+   passes handlers; the CS Tickets tab renders the same card without them
+   rather than showing controls that would 403. */
 const TONES = {
   requester: {
     wrapper: "border-slate-200 bg-white",
@@ -38,28 +43,34 @@ export default function CaseUserCard({
           <span className="material-symbols-outlined text-[15px]">{icon}</span>
           {heading}
         </h3>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon="warning"
-            disabled={busy}
-            onClick={() => onWarn(userId)}
-            className="bg-amber-50 font-bold text-amber-700 hover:bg-amber-100 hover:text-amber-800"
-          >
-            ตักเตือน
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            icon="block"
-            disabled={busy}
-            onClick={() => onBan(userId)}
-            className="bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
-          >
-            แบนผู้ใช้นี้
-          </Button>
-        </div>
+        {(onWarn || onBan) && (
+          <div className="flex gap-2">
+            {onWarn && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="warning"
+                disabled={busy}
+                onClick={() => onWarn(userId)}
+                className="bg-amber-50 font-bold text-amber-700 hover:bg-amber-100 hover:text-amber-800"
+              >
+                ตักเตือน
+              </Button>
+            )}
+            {onBan && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="block"
+                disabled={busy}
+                onClick={() => onBan(userId)}
+                className="bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
+              >
+                แบนผู้ใช้นี้
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-3">
         <div

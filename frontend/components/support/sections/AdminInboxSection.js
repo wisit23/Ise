@@ -6,9 +6,9 @@ import Alert from "../../ui/Alert";
 import ConfirmDialog from "../../ui/ConfirmDialog";
 import { useToast } from "../../ui/ToastProvider";
 import AdminInboxTable from "./admin-inbox/AdminInboxTable";
-import CaseDrawer from "./admin-inbox/CaseDrawer";
+import CaseDrawer from "./case/CaseDrawer";
 import ReportCasePanel from "./admin-inbox/ReportCasePanel";
-import TicketCasePanel from "./admin-inbox/TicketCasePanel";
+import TicketCasePanel from "./case/TicketCasePanel";
 import { PAGE_SIZE } from "../../../lib/supportConstants";
 import { apiFetch } from "../../../lib/api";
 
@@ -16,7 +16,8 @@ const DRAWER_EXIT_MS = 280;
 
 /* Admin's escalation queue: escalated support tickets and user reports in one
    list. This component owns the data and the actions; the queue table and the
-   two case panels are presentational and live in ./admin-inbox. */
+   report panel live in ./admin-inbox, while the drawer shell and the ticket
+   panel are shared with the CS Tickets tab in ./case. */
 export default function AdminInboxSection({ token }) {
   const toast = useToast();
 
