@@ -55,10 +55,13 @@ npm run lint        # ESLint across backend + frontend
 npm run format:check # Prettier check (use `npm run format` to auto-fix)
 ```
 
-`npm run lint` currently **exits 1** — it reports 7 pre-existing issues in application code
-(unused catch-error bindings and unused imports) that predate this baseline — see `docs/progress.md` evidence
-manifest for the tracked list; fixing them is separate feature/cleanup work, not part of the
-tooling baseline itself.
+Both commands pass on a clean checkout. If `format:check` reports every file on Windows, the
+cause is `core.autocrlf=true` rewriting the checkout to CRLF; `.prettierrc` pins
+`endOfLine: "auto"` so the check reads the same locally and in CI.
+
+Frontend conventions — design tokens, the shared UI primitives in `frontend/components/ui/`,
+the stacking order, and the accessibility rules every screen is expected to follow — are
+documented in `docs/ui-conventions.md`.
 
 Each service validates its own required environment variables at startup via
 `requireEnv()` (`backend/shared/src/env.js`) and fails immediately with a clear error if one is

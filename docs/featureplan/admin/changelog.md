@@ -248,3 +248,30 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
   "คู่กรณี" แสดง Seller ID แยกจากการ์ดผู้แจ้งที่แสดง Buyer ID ถูกต้อง
 - `npm test` (backend) 108/84/0/24 เท่าเดิม, `npm run test:frontend` 28/28 เท่าเดิม, `eslint` สะอาด
   ทุกไฟล์ที่แก้
+
+## 2026-09-02 — UI-SYSTEM-001 (Frontend Design System / Refactor)
+
+- `AdminInboxSection.js` 887 → 338 บรรทัด แตกเป็น `admin-inbox/AdminInboxTable`,
+  `admin-inbox/ReportCasePanel` และส่วนที่ใช้ร่วมกับ CS ที่ `support/sections/case/`
+  (`CaseDrawer`, `TicketCasePanel`, `CaseUserCard`) — logic การดึงข้อมูลและสิทธิ์ยังอยู่ที่
+  Container เดิมทั้งหมด ไม่ได้ย้าย
+- การ์ด "ผู้แจ้ง (Requester)" กับ "คู่กรณี (Target)" ที่เคยเป็น Markup ชุดเดียวกันเขียนซ้ำสองรอบ
+  รวมเป็น `CaseUserCard` ตัวเดียว โดยปุ่มตักเตือน/แบนจะโผล่เฉพาะเมื่อผู้เรียกส่ง Handler มาให้
+  (CS จึงเห็นการ์ดเดียวกันโดยไม่มีปุ่มที่จะ 403)
+- `alert()` 2 จุดใน Admin Inbox (`ระงับบัญชีผู้ใช้สำเร็จ`, `บันทึกการตักเตือนสำเร็จ`) → Toast;
+  `window.confirm` ตอนแบน และ `window.prompt` ตอนตักเตือน → `ConfirmDialog` ที่ตรวจเหตุผล
+  แบบ inline ได้ ไม่บล็อกทั้งแท็บ
+- `ProductsSection` ลบสินค้าเคยใช้ `window.confirm` ที่บอกได้แค่ชื่อสินค้า → `ConfirmDialog`
+  ที่บอกผลจริงของการลบ (ซ่อนจากผู้ซื้อทันที ผู้ขายเห็นสถานะ "ถูกลบโดยแอดมิน")
+- แก้บั๊ก: `ConfirmDialog` เปิดขึ้นมาอยู่ **ใต้** Case Drawer เพราะ Modal เป็น z-50 ส่วน Drawer
+  เป็น z-[100] และไม่มีใครกำหนดลำดับไว้ → ตั้งชื่อ Stacking Order ใน `tailwind.config.js`
+  (`z-nav` < `z-dropdown` < `z-drawer` < `z-modal` < `z-toast`) แล้วย้าย z-index ทั้ง 7 จุดมาใช้
+- พบบั๊กฝั่ง Backend ที่ **ยังไม่แก้**: Admin เห็นและ Action ตั๋วจาก Queue ได้ แต่
+  GET `/api/support/tickets/:id` ตอบ 403 สำหรับตั๋วใบเดียวกัน ทำให้หลังตักเตือนสำเร็จเคยมี
+  ข้อความ "you do not have access to this ticket" สีแดงขึ้นใต้ Toast ที่บอกว่าสำเร็จ —
+  ฝั่ง UI ไม่แสดงข้อความนั้นแล้ว (การ Refresh ที่ล้มเหลวไม่ใช่ Action ที่ล้มเหลว) แต่
+  ความไม่สอดคล้องของสิทธิ์ระหว่าง Queue กับ Detail endpoint ยังอยู่
+- ยืนยันด้วย Browser จริงกับ Docker Stack ด้วยบัญชี Demo Admin: ตารางเคส, Report panel,
+  Ticket panel, การตักเตือนทั้งกรณีไม่กรอกเหตุผล (ถูกบล็อก) และกรอกเหตุผล (สำเร็จ ขึ้น Toast),
+  Disputes ทั้ง 5 เคส Seed และ Dialog ลบสินค้า
+- รายละเอียดเต็มและผลตรวจอยู่ที่ [`docs/featureplan/changelog.md`](../changelog.md) และ [`docs/progress.md`](../../progress.md) Task `UI-SYSTEM-001`; กติกา UI อยู่ที่ [`docs/ui-conventions.md`](../../ui-conventions.md)

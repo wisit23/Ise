@@ -1072,6 +1072,110 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 - รายละเอียดเต็มแยกตามทีมที่ `docs/featureplan/admin/changelog.md`,
   `docs/featureplan/customer-service/changelog.md`
 
+## Task `UI-SYSTEM-001` — Design Token, UI Primitive Layer และการสลาย God Component ฝั่ง Frontend
+
+> วันที่ทำ: 2026-09-02
+>
+> สถานะตามหลักฐาน: ลงมือทำ, ทดสอบผ่าน Browser จริงกับ Docker Stack (postgres, gateway,
+> auth, product, order, support) ด้วยบัญชี Demo Admin และ Demo Seller, ยืนยันด้วย
+> `npm run lint` / `npm run format:check` / `npm run test:frontend`
+>
+> หมายเหตุ: สถานะนี้ไม่ใช่การยืนยันว่า Acceptance Criteria ผ่านครบทุกข้อ
+
+### ที่มา
+
+ผู้ใช้ขอให้ทำความเข้าใจโปรเจกต์โดยเน้น UX/UI แล้วสั่งให้แก้ทั้งหมดพร้อม Refactor ส่วนที่เป็น
+God Code สิ่งที่วัดได้จากโค้ดก่อนเริ่ม:
+
+- ปุ่ม CTA สี emerald อยู่ใน **37 ไฟล์** ด้วย padding **10 แบบที่ต่างกัน**
+- input class string เดียวกันเป๊ะๆ ซ้ำ **54 ครั้ง**, Modal เขียนมือซ้ำ **5 ไฟล์**, Table ซ้ำ **5 ไฟล์**
+- `alert()` **4 จุด**, `window.confirm` **1 จุด**, `window.prompt` **2 จุด** ในหน้าที่ใช้ทำงานจริง
+- `.catch(() => {})` กลืน Error **17 จุด** → Backend ล่ม = ผู้ใช้เห็นหน้าว่าง ไม่มีคำอธิบาย
+- `text-gray-400` **62 ครั้ง** (2.85:1 ไม่ผ่าน WCAG AA)
+- ไฟล์ใหญ่สุด `AdminInboxSection.js` **887 บรรทัด** เป็นฟังก์ชันเดียวยาวรวด
+- ไม่มีฟอนต์ไทย ทำให้ตัวไทยหน้าตาต่างกันในแต่ละ OS
+
+### งานที่ทำ
+
+1. **ปลด Quality Gate ที่เสียอยู่ก่อน (`d840b54`)** — `format:check` ที่ CI รันจริง Fail
+   249 ไฟล์บน Windows เพราะ `core.autocrlf=true` ชนกับ `endOfLine: "lf"` ของ Prettier
+   เพิ่ม `.prettierrc` (`endOfLine: "auto"`) แล้วพบว่ายังมี **56 ไฟล์ที่ไม่ได้ Format จริง**
+   → **CI แดงอยู่บน `main`** จัดการด้วย `npm run format` และเพิ่ม `.agent/`, `.claude/`,
+   `.github/skills/` เข้า eslint ignores (เคยทำให้ `npm run lint` ขึ้น 6,672 error ในเครื่อง)
+2. **Design Token + ฟอนต์ + ไอคอน (`c5dbdf6`)** — Token brand/semantic/surface/line/ink
+   ใน `globals.css` map เข้า Tailwind, Noto Sans Thai ผ่าน `next/font`, ย้าย Material
+   Symbols จาก `useEffect` 4 จุดมาประกาศครั้งเดียวใน `layout.js`, เพิ่ม `.focus-ring`
+   และ `prefers-reduced-motion`
+3. **UI Primitive Layer** — `components/ui/`: `Button`, `Input`/`Select`/`Textarea`/`Field`,
+   `Modal`, `ConfirmDialog`, `ToastProvider`, `Alert`, `EmptyState`, `ErrorState`,
+   `Skeleton`, `DataTable` — ไม่เพิ่ม Runtime Dependency ใหม่เลย
+4. **นำ Primitive ไปใช้กับ Storefront (`eed766b`)** — หน้าแรก, รายการสินค้า, Login, Register,
+   NavBar, ProductCard, Footer, Pagination
+5. **สลาย God Component (`5988e0d`, `d8794f0`, `52e552f`, `a2f2baf`)** — ดูตารางด้านล่าง
+6. **ยกระดับ Contrast และเลิกกลืน Error (`1b8be7f`)** — 37 ไฟล์
+
+### ผลการสลาย God Component
+
+| ไฟล์                                    | ก่อน | หลัง | แตกออกเป็น                                                                                                                   |
+| --------------------------------------- | ---- | ---- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `support/sections/AdminInboxSection.js` | 887  | 338  | `admin-inbox/AdminInboxTable`, `admin-inbox/ReportCasePanel`, `case/CaseDrawer`, `case/TicketCasePanel`, `case/CaseUserCard` |
+| `support/sections/DisputesSection.js`   | 789  | 240  | `disputes/DisputesTable`, `disputes/DisputeDetailPanel`, `disputes/DisputeChatPanel`, `disputes/CopyableId`                  |
+| `support/sections/TicketsSection.js`    | 542  | 188  | `tickets/TicketsTable` + ใช้ `case/*` ร่วมกับ Admin Inbox                                                                    |
+| `app/seller/onboarding/page.js`         | 431  | 207  | `seller/onboarding/KycForm`, `KycStatusCard`, `KycDocumentUpload`, `IdCardField`                                             |
+| `app/seller/dashboard/page.js`          | 428  | 239  | `seller/dashboard/SalesSummary`, `SellerProductList`, `RecentOrderList`, `sellerStatus`                                      |
+
+`TicketsSection` กับ `AdminInboxSection` เคยมี Markup ซ้ำกันประมาณ 250 บรรทัด (Drawer,
+Info strip, การ์ดผู้แจ้ง, การ์ดเจ้าหน้าที่, Chat placeholder, แถว Action) ต่างกันแค่ CS ตักเตือน/
+แบนไม่ได้ — จึงยกส่วนที่ใช้ร่วมไปไว้ที่ `case/` แล้วให้ `CaseUserCard` แสดงปุ่ม Moderation
+เฉพาะเมื่อผู้เรียกส่ง Handler มาให้
+
+### บั๊กจริงที่เจอระหว่างทาง
+
+| บั๊ก                                                                                                                                                                                         | สถานะ                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| ไอคอน NavBar 2 จุด (`ปัดดูสินค้า`, `ประมูล`) เป็น `<span aria-hidden="true"></span>` ว่าง ตกค้างจาก `d98e8a1`                                                                                | แก้แล้ว → `swipe` / `gavel`                            |
+| `Modal` (z-50) เปิดขึ้นมาอยู่ **ใต้** Case Drawer (z-[100]) กดยืนยันไม่ได้                                                                                                                   | แก้แล้ว → ตั้ง Stacking Order เป็นชื่อใน Tailwind      |
+| Focus trap ของ `Modal` กรอง Element ด้วย `offsetParent !== null` แต่ Panel อยู่ใน `position:fixed` ซึ่ง Descendant ทุกตัวรายงาน `offsetParent === null` แปลว่า Trap ตายทั้งในเบราว์เซอร์จริง | เจอจากการเขียน Test → แก้แล้ว                          |
+| Admin ตักเตือนผู้ใช้สำเร็จ แต่หน้าจอขึ้น "you do not have access to this ticket" สีแดงใต้ Toast ที่บอกว่าสำเร็จ (GET `/tickets/:id` 403 ทั้งที่ Queue คืนตั๋วใบเดียวกันมาให้)                | ฝั่ง UI ไม่แสดงแล้ว; ต้นเหตุฝั่ง Backend **ยังไม่แก้** |
+| Drop zone อัปโหลดบัตรประชาชนเป็น `<div onClick>` คีย์บอร์ดเข้าไม่ถึงเลย                                                                                                                      | แก้แล้ว → `<button>`                                   |
+| Spinner ของ Evidence ใน Disputes อ้าง keyframe `spin` ที่ไม่มีใน CSS ของโปรเจกต์                                                                                                             | แก้แล้ว → `Skeleton.Text`                              |
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                             | ผลที่เกิดขึ้นจริง                                                        |
+| --------------------------------------------------- | ------------------------------------------------------------------------ |
+| `npm run lint`                                      | ผ่าน (จากเดิม 6,672 error ในเครื่องพัฒนา)                                |
+| `npm run format:check`                              | ผ่าน (จากเดิม Fail และ CI แดงอยู่บน `main`)                              |
+| `npm run test:frontend`                             | 37/37 ผ่าน (เพิ่มใหม่ 9: `Modal`, `Button`, `Toast`, Error path หน้าแรก) |
+| `next build`                                        | สำเร็จ ทุก Route Compile ผ่าน                                            |
+| Browser: หน้าแรกตอน Backend ดับ                     | ขึ้น `ErrorState` + ปุ่มลองใหม่ (เดิมเป็นหน้าว่างเปล่า)                  |
+| Browser: `/products`                                | Skeleton รูปทรงเดียวกับการ์ดจริง                                         |
+| Browser: `/workspace` → เคสระดับแอดมิน (Demo Admin) | ตาราง, Report panel, Ticket panel เรนเดอร์ครบ                            |
+| Browser: ตักเตือนผู้ใช้โดยไม่กรอกเหตุผล             | ถูกบล็อกพร้อม Error ในฟอร์ม (เดิมเป็น `window.prompt`)                   |
+| Browser: ตักเตือนผู้ใช้พร้อมเหตุผล                  | สำเร็จ ขึ้น Toast                                                        |
+| Browser: `/workspace` → Disputes (5 เคส Seed)       | ตาราง, Detail panel, Chat sub-panel เรนเดอร์ครบ                          |
+| Browser: `/workspace` → Tickets (CS view)           | ใช้ Panel ร่วมกัน และ **ไม่มี** ปุ่มตักเตือน/แบน ถูกต้อง                 |
+| Browser: `/workspace` → จัดการสินค้า → ลบสินค้า     | `ConfirmDialog` บอกชื่อสินค้าและผลของการลบ                               |
+| Browser: `/seller/onboarding` (Demo Seller)         | ฟอร์มเรนเดอร์ครบ, ตัวนับหลักบัตรประชาชนทำงาน                             |
+| Browser: `/seller/dashboard`                        | Hero, Sparkline, Charts, รายการสินค้า เรนเดอร์ครบ                        |
+| Browser: `/cart` (ตะกร้าว่าง)                       | `EmptyState` พร้อมปุ่ม "เลือกซื้อสินค้า"                                 |
+
+### ผลลัพธ์ปัจจุบัน
+
+- ไม่มี `alert()`, `confirm()`, `prompt()` เหลืออยู่ใน Frontend
+- ไม่มี `.catch(() => {})` แบบเงียบสนิทเหลืออยู่
+- ไม่มี `text-gray-400` / `text-slate-400` บนพื้นสว่างเหลืออยู่
+- Diff รวม 8 Commit: 133 ไฟล์, +5,810 / −3,187
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `frontend/app/globals.css`, `frontend/tailwind.config.js`, `frontend/app/layout.js`
+- `frontend/components/ui/*` (14 ไฟล์ + 3 ไฟล์ Test)
+- `frontend/components/support/sections/{case,admin-inbox,disputes,tickets}/*`
+- `frontend/components/seller/{onboarding,dashboard}/*`
+- `.prettierrc`, `eslint.config.js`
+- กติกาสำหรับคนที่มาต่อ: [`docs/ui-conventions.md`](ui-conventions.md)
+
 ## อัปเดตล่าสุด
 
-2026-08-26 (Asia/Bangkok)
+2026-09-02 (Asia/Bangkok)

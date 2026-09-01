@@ -177,3 +177,28 @@ frontend` to be picked up
   Seller ของ Order นั้นเป๊ะ, ไม่ใช่ผู้แจ้ง — Escalate แล้วเปิดฝั่ง Admin เห็นค่าถูกต้อง — ลบข้อมูลทดสอบ
   ออกหลังยืนยันเสร็จ
 - `npm test` (backend) 108/84/0/24 เท่าเดิม, `npm run test:frontend` 28/28 เท่าเดิม, `eslint` สะอาด
+
+## 2026-09-02 — UI-SYSTEM-001 (Frontend Design System / Refactor)
+
+- `DisputesSection.js` 789 → 240 บรรทัด แตกเป็น `disputes/DisputesTable`,
+  `disputes/DisputeDetailPanel`, `disputes/DisputeChatPanel` และ `disputes/CopyableId`
+- `TicketsSection.js` 542 → 188 บรรทัด เพิ่ม `tickets/TicketsTable` และหันไปใช้ Drawer กับ
+  Ticket panel ร่วมกับ Admin Inbox ที่ `support/sections/case/` แทน Markup ที่เคยซ้ำกัน
+  ประมาณ 250 บรรทัด (Header, Info strip, การ์ดผู้แจ้ง, การ์ดเจ้าหน้าที่, Chat placeholder,
+  แถว Action) — ต่างกันแค่ CS ตักเตือน/แบนไม่ได้ ซึ่งตอนนี้คุมด้วยการไม่ส่ง Handler เข้าไป
+- `alert()` 2 จุดใน Disputes ที่เป็นข้อความอังกฤษปนไทย (`Failed to load evidence: `,
+  `Error: `) → Toast ภาษาไทย ตรงกับที่เหลือทั้ง Panel
+- `window.prompt("เหตุผลที่ยกระดับ")` ทั้งใน `TicketsSection` และหน้า
+  `/support/tickets/[id]` → `ConfirmDialog` ที่ไม่บล็อกแท็บ และไม่ทิ้งข้อความที่พิมพ์ไปแล้ว
+  เมื่อกดพลาด
+- ปุ่มคัดลอกรหัสในตาราง Disputes เคยไม่มี Feedback เลย (กดแล้วไม่รู้ว่าติดหรือไม่) → รวมเป็น
+  `CopyableId` ที่สลับเป็นเครื่องหมายถูก 1.5 วินาที และไม่ยิง Event ทะลุไปที่แถวข้างล่าง
+- `loadDisputeDetails` เคยกลืน Error ด้วย `console.error` เปล่าๆ ทำให้ Slide-over แสดงข้อมูล
+  จาก Queue โดยไม่มีคำอธิบายว่าทำไมหลักฐานกับฟอร์มตัดสินหายไป → แจ้งด้วย Toast
+- "(บังคับกรอก)" ของช่องเหตุผลการตัดสินเคยอยู่ใน placeholder ซึ่งหายทันทีที่พิมพ์ → ย้ายเป็น
+  hint ของ Field ทำให้ปุ่มตัดสินที่ถูก disable ไม่ดูไร้เหตุผล
+- Spinner ตอนโหลดหลักฐานอ้าง keyframe `spin` ที่ไม่มีอยู่จริงใน CSS ของโปรเจกต์ (จึงไม่เคย
+  หมุน) → เปลี่ยนเป็น `Skeleton.Text`
+- ยืนยันด้วย Browser จริง: Disputes queue, Detail panel, Chat sub-panel และ Tickets tab
+  ที่ใช้ Panel ร่วมกันแล้ว **ไม่มี** ปุ่มตักเตือน/แบน ถูกต้องตามสิทธิ์
+- รายละเอียดเต็มและผลตรวจอยู่ที่ [`docs/featureplan/changelog.md`](../changelog.md) และ [`docs/progress.md`](../../progress.md) Task `UI-SYSTEM-001`; กติกา UI อยู่ที่ [`docs/ui-conventions.md`](../../ui-conventions.md)

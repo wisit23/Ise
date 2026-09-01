@@ -83,3 +83,24 @@
 - PostgreSQL concurrency/expiry/stale-token/cleanup test ผ่าน 1/1 และ checkout compensation unit
   tests ผ่าน 2/2; lint ผ่าน
 - ยังไม่ยก process-restart/cross-service checkout test เป็น Done
+
+## 2026-09-02 — UI-SYSTEM-001 (Frontend Design System / Refactor)
+
+- หน้าแรกเคยใช้ `.catch(() => {})` กับ feed: Backend ดับแล้วได้ Hero ลอยอยู่เหนือพื้นที่ว่าง
+  ไม่มี Error ไม่มีปุ่มลองใหม่ → `ErrorState` ที่กดลองใหม่ได้จริง (ทดสอบโดยปิด Backend)
+- หน้ารายการสินค้า: "ไม่พบสินค้า" ประโยคเดียว → `EmptyState` ที่อธิบายตัวเองและมีปุ่ม
+  "ล้างตัวกรอง" เมื่อผลว่างเพราะคำค้นหรือหมวดหมู่; "กำลังโหลด..." → Skeleton รูปทรงการ์ดจริง
+- ตะกร้าและคำสั่งซื้อ: Skeleton แทนข้อความ, `EmptyState` ที่มีปุ่ม "เลือกซื้อสินค้า" และ Error/
+  Notice ผ่าน `Alert`
+- NavBar: ไอคอนของ "ปัดดูสินค้า" และ "ประมูล" เป็น `<span aria-hidden="true"></span>` ว่าง
+  มาตั้งแต่ `d98e8a1` (ตอนถอด emoji ออกแล้วยังไม่ได้ใส่ Material Symbols แทน) → ใส่ `swipe`
+  และ `gavel`; ทั้งสองลิงก์ซ่อน Label บนจอเล็กจึงเพิ่ม `aria-label` ของตัวเอง
+- NavBar profile dropdown: เพิ่ม `aria-expanded`/`aria-haspopup` และปิดด้วย Esc ได้ พร้อมคืน
+  Focus ให้ปุ่ม Avatar
+- Login/Register: ช่องกรอกเคยมีแต่ placeholder ซึ่งหายทันทีที่พิมพ์ → Label จริง + hint +
+  `autoComplete`; ตัวเลือกประเภทบัญชีเปลี่ยนจากปุ่มลอยสองปุ่มเป็น `radiogroup` จริง
+- เพิ่ม Footer ที่ Login/Register ตามที่ Journey Map Stage 1 ระบุเองว่าเป็นจุดที่ผู้มาใหม่กำลัง
+  ตัดสินใจว่าจะเชื่อใจแพลตฟอร์มหรือไม่
+- ProductCard: `text-gray-400` ของหมวดหมู่/สถานที่ (2.85:1) → โทนที่ผ่าน WCAG AA และ
+  "ไม่มีรูปภาพ" เปลี่ยนเป็นไอคอน + ข้อความแทนข้อความเทาลอยๆ
+- รายละเอียดเต็มและผลตรวจอยู่ที่ [`docs/featureplan/changelog.md`](../changelog.md) และ [`docs/progress.md`](../../progress.md) Task `UI-SYSTEM-001`; กติกา UI อยู่ที่ [`docs/ui-conventions.md`](../../ui-conventions.md)
