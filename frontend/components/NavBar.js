@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getStoredUser, clearSession, getAccessToken } from "../lib/auth";
 import { apiFetch } from "../lib/api";
+import Button from "./ui/Button";
 
 const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
@@ -39,8 +40,20 @@ export default function NavBar() {
         setMenuOpen(false);
       }
     }
+    // Escape closes the menu and hands focus back to the avatar button, so a
+    // keyboard user is not stranded inside a menu they cannot dismiss.
+    function handleEscape(e) {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        menuRef.current?.querySelector("button")?.focus();
+      }
+    }
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, []);
 
   function handleLogout() {
@@ -73,36 +86,51 @@ export default function NavBar() {
         </Link>
 
         <form onSubmit={handleSearch} className="hidden flex-1 sm:flex">
-          <div className="flex w-full overflow-hidden rounded-md border border-gray-300 focus-within:border-emerald-500">
+          <div className="focus-within:border-brand-500 flex w-full overflow-hidden rounded-md border border-line-strong transition">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              aria-label="ค้นหาสินค้า"
               placeholder="ค้นหาสินค้า เช่น เสื้อ, กระเป๋า, รองเท้า..."
-              className="w-full px-3 py-2 text-sm outline-none"
+              className="placeholder:text-ink-subtle w-full px-3 py-2 text-sm text-gray-900 outline-none"
             />
             <button
               type="submit"
-              aria-label="ค้นหา"
-              className="flex items-center bg-emerald-600 px-4 text-white hover:bg-emerald-700"
+              className="flex items-center bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
             >
               ค้นหา
             </button>
           </div>
         </form>
 
+        {/* On small screens the label is hidden and only the icon remains, so
+            each link carries its own aria-label rather than relying on text
+            that may not be rendered. */}
         <Link
           href="/swipe"
-          className="flex shrink-0 items-center gap-1 text-sm text-gray-600 hover:text-emerald-600"
+          aria-label="ปัดดูสินค้า"
+          className="focus-ring flex shrink-0 items-center gap-1 rounded-md px-1 py-1 text-sm text-gray-600 transition hover:text-brand-600"
         >
-          <span aria-hidden="true"></span>
+          <span
+            className="material-symbols-outlined text-[20px] leading-none"
+            aria-hidden="true"
+          >
+            swipe
+          </span>
           <span className="hidden sm:inline">ปัดดูสินค้า</span>
         </Link>
 
         <Link
           href="/auctions"
-          className="flex shrink-0 items-center gap-1 text-sm text-gray-600 hover:text-emerald-600"
+          aria-label="ประมูล"
+          className="focus-ring flex shrink-0 items-center gap-1 rounded-md px-1 py-1 text-sm text-gray-600 transition hover:text-brand-600"
         >
-          <span aria-hidden="true"></span>
+          <span
+            className="material-symbols-outlined text-[20px] leading-none"
+            aria-hidden="true"
+          >
+            gavel
+          </span>
           <span className="hidden sm:inline">ประมูล</span>
         </Link>
 
@@ -112,13 +140,18 @@ export default function NavBar() {
               <button
                 onClick={() => setMenuOpen((v) => !v)}
                 aria-label="เมนูโปรไฟล์"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-700 ring-2 ring-transparent hover:ring-emerald-200"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                className="focus-ring flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-transparent transition hover:ring-brand-200"
               >
                 {user.firstName?.[0] || "?"}
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white py-2 shadow-lg">
+                <div
+                  role="menu"
+                  className="animate-dropdown-in absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-line bg-white py-2 shadow-lg"
+                >
                   <div className="border-b border-gray-100 px-4 py-3">
                     <p className="truncate text-sm font-medium text-gray-900">
                       {user.firstName} {user.lastName}
@@ -301,16 +334,11 @@ export default function NavBar() {
             <div className="flex items-center gap-3 text-sm">
               <Link
                 href="/login"
-                className="text-gray-600 hover:text-emerald-600"
+                className="focus-ring rounded-md px-1 py-1 text-gray-600 transition hover:text-brand-600"
               >
                 เข้าสู่ระบบ
               </Link>
-              <Link
-                href="/register"
-                className="rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
-              >
-                สมัครสมาชิก
-              </Link>
+              <Button href="/register">สมัครสมาชิก</Button>
             </div>
           )}
         </div>
@@ -323,8 +351,9 @@ export default function NavBar() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          aria-label="ค้นหาสินค้า"
           placeholder="ค้นหาสินค้า..."
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+          className="focus-ring placeholder:text-ink-subtle w-full rounded-md border border-line-strong px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
         />
       </form>
     </header>

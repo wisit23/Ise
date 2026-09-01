@@ -6,6 +6,10 @@ import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
 import ProductCard from "../../components/ProductCard";
 import Pagination from "../../components/Pagination";
+import Button from "../../components/ui/Button";
+import EmptyState from "../../components/ui/EmptyState";
+import ErrorState from "../../components/ui/ErrorState";
+import Skeleton from "../../components/ui/Skeleton";
 import { apiFetch } from "../../lib/api";
 import { fetchCategories } from "../../lib/catalog";
 
@@ -54,9 +58,11 @@ function ProductsPageInner() {
   }, [urlQuery, urlCategory]);
 
   useEffect(() => {
+    // A failed category fetch only costs the filter list, not the product
+    // grid, so it degrades to "no filters" rather than blocking the page.
     fetchCategories()
       .then(setCategories)
-      .catch(() => {});
+      .catch((err) => console.error("Failed to load categories:", err));
   }, []);
 
   function handleSearch(e) {
@@ -79,7 +85,7 @@ function ProductsPageInner() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-gray-50">
+    <main className="flex min-h-screen flex-col bg-surface-subtle">
       <NavBar />
       <section className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-6 px-4 py-8 sm:grid-cols-[200px_1fr]">
         <aside className="hidden sm:block">
@@ -90,7 +96,7 @@ function ProductsPageInner() {
                 onClick={() => toggleCategory("")}
                 className={`w-full rounded-md px-2 py-1.5 text-left ${
                   !category
-                    ? "bg-emerald-50 font-medium text-emerald-700"
+                    ? "bg-brand-50 font-medium text-brand-700"
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
@@ -103,7 +109,7 @@ function ProductsPageInner() {
                   onClick={() => toggleCategory(c)}
                   className={`w-full rounded-md px-2 py-1.5 text-left ${
                     category === c
-                      ? "bg-emerald-50 font-medium text-emerald-700"
+                      ? "bg-brand-50 font-medium text-brand-700"
                       : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
@@ -128,15 +134,11 @@ function ProductsPageInner() {
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                aria-label="ค้นหาสินค้า"
                 placeholder="ค้นหาสินค้า..."
-                className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+                className="focus-ring placeholder:text-ink-subtle rounded-md border border-line-strong px-3 py-2 text-sm"
               />
-              <button
-                type="submit"
-                className="rounded-md bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700"
-              >
-                ค้นหา
-              </button>
+              <Button type="submit">ค้นหา</Button>
             </form>
           </div>
 
@@ -147,8 +149,8 @@ function ProductsPageInner() {
                 onClick={() => toggleCategory(c)}
                 className={`shrink-0 rounded-full border px-3 py-1 text-xs ${
                   category === c
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                    : "border-gray-300 text-gray-600"
+                    ? "border-brand-500 bg-brand-50 text-brand-700"
+                    : "border-line-strong text-gray-600"
                 }`}
               >
                 {c}
@@ -156,23 +158,55 @@ function ProductsPageInner() {
             ))}
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          {loading && <p className="text-gray-500">กำลังโหลด...</p>}
-          {!loading && items.length === 0 && (
-            <p className="text-gray-500">ไม่พบสินค้า</p>
+          {error ? (
+            <ErrorState
+              description="ไม่สามารถโหลดรายการสินค้าได้ในขณะนี้"
+              detail={error}
+              onRetry={() => load(q, category, page)}
+            />
+          ) : loading ? (
+            <Skeleton.CardGrid count={PAGE_SIZE} />
+          ) : items.length === 0 ? (
+            <EmptyState
+              icon="search_off"
+              title="ไม่พบสินค้าที่ตรงกับเงื่อนไข"
+              description={
+                q || category
+                  ? "ลองใช้คำค้นอื่น หรือล้างตัวกรองเพื่อดูสินค้าทั้งหมด"
+                  : "ยังไม่มีสินค้าในระบบตอนนี้"
+              }
+              action={
+                (q || category) && (
+                  <Button
+                    variant="secondary"
+                    icon="filter_alt_off"
+                    onClick={() => {
+                      setQ("");
+                      setCategory("");
+                      setPage(1);
+                      load("", "", 1);
+                    }}
+                  >
+                    ล้างตัวกรอง
+                  </Button>
+                )
+              }
+            />
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                {items.map((p) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onChange={handlePageChange}
+              />
+            </>
           )}
-
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {items.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
-
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onChange={handlePageChange}
-          />
         </div>
       </section>
       <Footer />

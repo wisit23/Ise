@@ -29,7 +29,7 @@ export default function ProductCard({ product }) {
   return (
     <Link
       href={`/products/${product.id}`}
-      className="group flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-white transition hover:-translate-y-0.5 hover:shadow-md"
+      className="focus-ring group flex flex-col overflow-hidden rounded-lg border border-line bg-white transition hover:-translate-y-0.5 hover:shadow-md"
     >
       <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
         {cover ? (
@@ -47,8 +47,14 @@ export default function ProductCard({ product }) {
             />
           )
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-gray-300">
-            ไม่มีรูปภาพ
+          <div className="text-ink-subtle flex h-full w-full flex-col items-center justify-center gap-1">
+            <span
+              className="material-symbols-outlined text-[28px] leading-none"
+              aria-hidden="true"
+            >
+              image_not_supported
+            </span>
+            <span className="text-xs">ไม่มีรูปภาพ</span>
           </div>
         )}
         {product.condition && (
@@ -63,10 +69,10 @@ export default function ProductCard({ product }) {
       </div>
       <div className="flex flex-1 flex-col gap-1 p-3">
         <p className="line-clamp-2 text-sm text-gray-800">{product.title}</p>
-        <p className="mt-auto text-base font-semibold text-emerald-600">
+        <p className="mt-auto text-base font-semibold text-brand-600">
           ฿{product.price.toLocaleString("th-TH")}
         </p>
-        <div className="flex items-center justify-between text-xs text-gray-400">
+        <div className="text-ink-subtle flex items-center justify-between text-xs">
           <span>{product.category}</span>
           {product.location && (
             <span className="truncate">{product.location}</span>
