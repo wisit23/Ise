@@ -24,13 +24,13 @@ CS UI เรียกผ่าน Gateway ด้วย permission-scoped API แ
 "ผ่าน Chat Console" ทำให้ดูเหมือน Chat เป็น prerequisite ของทั้งระบบ CS
 
 แต่ในระบบ CS ระดับ Production จริง (Zendesk, Jira Service Desk, Freshdesk) **ช่องทางหลักคือ Ticket Thread
-แบบ async ไม่ใช่ Live Chat** ส่วน Live Chat เป็นเพียง *ช่องทางเพิ่ม* ที่ไหลเข้ามาเป็น Ticket เหมือนกัน
+แบบ async ไม่ใช่ Live Chat** ส่วน Live Chat เป็นเพียง _ช่องทางเพิ่ม_ ที่ไหลเข้ามาเป็น Ticket เหมือนกัน
 
-| | Ticket Thread (`CSS-005`) | Live Chat (`CSS-001`) |
-| --- | --- | --- |
-| รูปแบบ | ตอบกลับแบบ async | Real-time |
-| เทคโนโลยี | REST (`POST`/`GET`) | WebSocket + Pub/Sub |
-| ครอบคลุม `WF-10` | ครบทุกขั้นตอน | เป็นช่องทางเพิ่มเท่านั้น |
+|                  | Ticket Thread (`CSS-005`) | Live Chat (`CSS-001`)    |
+| ---------------- | ------------------------- | ------------------------ |
+| รูปแบบ           | ตอบกลับแบบ async          | Real-time                |
+| เทคโนโลยี        | REST (`POST`/`GET`)       | WebSocket + Pub/Sub      |
+| ครอบคลุม `WF-10` | ครบทุกขั้นตอน             | เป็นช่องทางเพิ่มเท่านั้น |
 
 ผลคือ **`CSS-001` ถูกเลื่อนเป็น Deferred** และ `CSS-005` เข้ามาเป็นแกนสื่อสารแทน โดยออกแบบให้ Chat
 เสียบเข้ามาเป็นช่องทางเพิ่มภายหลังได้โดยไม่ต้องรื้อ `CSS-005`
@@ -78,14 +78,14 @@ CSS-000 (Foundation)  →  CSS-005 (Ticket Core)  →  CSS-002 (Agent Workspace)
 
 ## Requirement Traceability
 
-| UR      | Functional Requirement | Active/Deferred NFR                                              | Workflow         | Task / Phase                     |
-| ------- | ---------------------- | ---------------------------------------------------------------- | ---------------- | -------------------------------- |
-| `UR-17` | `FR-4.1.1`             | `NFR-P-01`, `NFR-M-01`; `NFR-SP-01` (Security Phase)             | `WF-10`          | `CSS-002` / Core                 |
-| `UR-18` | `FR-4.1.2`             | `NFR-P-02`                                                       | `WF-06`, `WF-10` | `CSS-001` / **Deferred**         |
-| `UR-19` | `FR-4.1.3`             | ไม่มี NFR เฉพาะ                                                  | `WF-10`          | `CSS-004` / Core                 |
-| `UR-20` | `FR-3.2.1`, `FR-3.2.2` | `NFR-P-04`; `NFR-SP-03`, `NFR-CP-02` (Security/Compliance Phase) | `WF-08`          | `CSS-003` / Core                 |
-| `UR-21` | `FR-4.1.4`             | ไม่มี NFR เฉพาะ                                                  | `WF-10`          | `CSS-004` / Core                 |
-| —       | รองรับ `WF-10` ทั้งสาย | `NFR-M-01`                                                       | `WF-10`          | `CSS-000`, `CSS-005` / Core      |
+| UR      | Functional Requirement | Active/Deferred NFR                                              | Workflow         | Task / Phase                |
+| ------- | ---------------------- | ---------------------------------------------------------------- | ---------------- | --------------------------- |
+| `UR-17` | `FR-4.1.1`             | `NFR-P-01`, `NFR-M-01`; `NFR-SP-01` (Security Phase)             | `WF-10`          | `CSS-002` / Core            |
+| `UR-18` | `FR-4.1.2`             | `NFR-P-02`                                                       | `WF-06`, `WF-10` | `CSS-001` / **Deferred**    |
+| `UR-19` | `FR-4.1.3`             | ไม่มี NFR เฉพาะ                                                  | `WF-10`          | `CSS-004` / Core            |
+| `UR-20` | `FR-3.2.1`, `FR-3.2.2` | `NFR-P-04`; `NFR-SP-03`, `NFR-CP-02` (Security/Compliance Phase) | `WF-08`          | `CSS-003` / Core            |
+| `UR-21` | `FR-4.1.4`             | ไม่มี NFR เฉพาะ                                                  | `WF-10`          | `CSS-004` / Core            |
+| —       | รองรับ `WF-10` ทั้งสาย | `NFR-M-01`                                                       | `WF-10`          | `CSS-000`, `CSS-005` / Core |
 
 ### PostgreSQL acceptance for Customer Service
 
@@ -99,13 +99,13 @@ CSS-000 (Foundation)  →  CSS-005 (Ticket Core)  →  CSS-002 (Agent Workspace)
 
 ## Known Risks / Gotchas
 
-| # | ความเสี่ยง | การจัดการ |
-| - | ---------- | --------- |
-| 1 | `infra/postgres/init-databases.sql` รันเฉพาะตอน **cluster init ครั้งแรก** — เพิ่ม `reloop_support` แล้วเครื่องที่มี `pgdata` volume อยู่แล้วจะไม่ได้ database ใหม่ | `CSS-000` ต้องมีขั้นตอน idempotent สร้าง database ตอน service start (หรือเอกสารสั่ง `docker compose down -v`) — เป็นบั๊กประเภทเดียวกับ `MOCK-TRADE-010` ที่เคยทำให้ clone แล้วพัง |
-| 2 | หลักฐานข้อพิพาทรั่วสู่สาธารณะ — `gateway/src/app.js` allowlist `/^\/uploads\//` ไว้ให้ guest ดูรูปสินค้าได้ | `CSS-003` ต้องใช้ private storage แยก + authz + ห้ามใส่ใน `PUBLIC_PATHS` |
-| 3 | เจ้าหน้าที่ 2 คนรับเคส/ตัดสินเคสเดียวกันพร้อมกัน | Optimistic lock ด้วย `version` → ตอบ `409` |
-| 4 | SLA job รันหลาย instance แล้ว escalate ซ้ำ | ใช้ conditional `updateMany` (`escalatedAt: null` ใน where) ให้ instance เดียวชนะแบบ atomic |
-| 5 | `CSS-001` ถูกเลื่อน แต่ `BUY-004` ผูกอยู่ | แจ้ง Buyer owner ก่อนเริ่ม `CSS-005` |
+| #   | ความเสี่ยง                                                                                                                                                         | การจัดการ                                                                                                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `infra/postgres/init-databases.sql` รันเฉพาะตอน **cluster init ครั้งแรก** — เพิ่ม `reloop_support` แล้วเครื่องที่มี `pgdata` volume อยู่แล้วจะไม่ได้ database ใหม่ | `CSS-000` ต้องมีขั้นตอน idempotent สร้าง database ตอน service start (หรือเอกสารสั่ง `docker compose down -v`) — เป็นบั๊กประเภทเดียวกับ `MOCK-TRADE-010` ที่เคยทำให้ clone แล้วพัง |
+| 2   | หลักฐานข้อพิพาทรั่วสู่สาธารณะ — `gateway/src/app.js` allowlist `/^\/uploads\//` ไว้ให้ guest ดูรูปสินค้าได้                                                        | `CSS-003` ต้องใช้ private storage แยก + authz + ห้ามใส่ใน `PUBLIC_PATHS`                                                                                                          |
+| 3   | เจ้าหน้าที่ 2 คนรับเคส/ตัดสินเคสเดียวกันพร้อมกัน                                                                                                                   | Optimistic lock ด้วย `version` → ตอบ `409`                                                                                                                                        |
+| 4   | SLA job รันหลาย instance แล้ว escalate ซ้ำ                                                                                                                         | ใช้ conditional `updateMany` (`escalatedAt: null` ใน where) ให้ instance เดียวชนะแบบ atomic                                                                                       |
+| 5   | `CSS-001` ถูกเลื่อน แต่ `BUY-004` ผูกอยู่                                                                                                                          | แจ้ง Buyer owner ก่อนเริ่ม `CSS-005`                                                                                                                                              |
 
 ---
 
@@ -256,7 +256,10 @@ assert.equal((await getTicket(id, strangerToken)).status, 403);
 // เจ้าหน้าที่ที่ไม่ได้ถูก assign ก็ห้ามเช่นกัน
 assert.equal((await getTicket(id, otherAgentToken)).status, 403);
 // internal note ต้องไม่หลุดไปฝั่งผู้ใช้
-assert.equal(userView.messages.some((m) => m.isInternal), false);
+assert.equal(
+  userView.messages.some((m) => m.isInternal),
+  false,
+);
 ```
 
 - [ ] **Step 2: รัน test ยืนยันว่า fail เพราะ route/schema ยังไม่มี**
@@ -390,11 +393,27 @@ model DisputeEvidence {
 const DECISIONS = ["APPROVE_REFUND", "REJECT"];
 
 // ตัดสินได้ครั้งเดียวเท่านั้น
-assert.equal((await decide(id, { decision: "APPROVE_REFUND", reason: "ชำรุดจริง", version: 0 })).status, 200);
-assert.equal((await decide(id, { decision: "REJECT", reason: "เปลี่ยนใจ", version: 0 })).status, 409);
+assert.equal(
+  (
+    await decide(id, {
+      decision: "APPROVE_REFUND",
+      reason: "ชำรุดจริง",
+      version: 0,
+    })
+  ).status,
+  200,
+);
+assert.equal(
+  (await decide(id, { decision: "REJECT", reason: "เปลี่ยนใจ", version: 0 }))
+    .status,
+  409,
+);
 
 // บังคับกรอกเหตุผล (FR-3.2.2)
-assert.equal((await decide(id2, { decision: "REJECT", version: 0 })).status, 400);
+assert.equal(
+  (await decide(id2, { decision: "REJECT", version: 0 })).status,
+  400,
+);
 
 // หลักฐานต้องไม่เปิดสาธารณะ (Risk #2)
 assert.equal((await fetchEvidenceNoAuth(url)).status, 401);

@@ -19,7 +19,10 @@ const strangerToken = signAccessToken({
   sub: `int-test-dispute-stranger-${Date.now()}`,
   role: "BUYER",
 });
-const agentToken = signAccessToken({ sub: "int-test-dispute-agent", role: "CUSTOMER_SERVICE" });
+const agentToken = signAccessToken({
+  sub: "int-test-dispute-agent",
+  role: "CUSTOMER_SERVICE",
+});
 
 async function databaseIsReachable() {
   if (!process.env.DATABASE_URL) return false;
@@ -74,7 +77,9 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   const disputeId = openRes.body.id;
 
   // Order flips to disputed + payout held (WF-08 step 3), atomically.
-  const orderAfterOpen = await prisma.order.findUnique({ where: { id: order.id } });
+  const orderAfterOpen = await prisma.order.findUnique({
+    where: { id: order.id },
+  });
   assert.equal(orderAfterOpen.status, "disputed");
   assert.equal(orderAfterOpen.payoutHeld, true);
   assert.ok(orderAfterOpen.disputedAt);
@@ -114,13 +119,18 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   const decideRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
     .set("Authorization", `Bearer ${agentToken}`)
-    .send({ decision: "APPROVE_REFUND", reason: "หลักฐานชัดเจน สินค้าชำรุดจริง" });
+    .send({
+      decision: "APPROVE_REFUND",
+      reason: "หลักฐานชัดเจน สินค้าชำรุดจริง",
+    });
   assert.equal(decideRes.status, 200);
   assert.equal(decideRes.body.decision, "APPROVE_REFUND");
   assert.equal(decideRes.body.status, "DECIDED");
 
   // Order reflects the refund and payout is released from hold.
-  const orderAfterDecision = await prisma.order.findUnique({ where: { id: order.id } });
+  const orderAfterDecision = await prisma.order.findUnique({
+    where: { id: order.id },
+  });
   assert.equal(orderAfterDecision.status, "refunded");
   assert.equal(orderAfterDecision.payoutHeld, false);
 

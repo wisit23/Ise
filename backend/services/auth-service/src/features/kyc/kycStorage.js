@@ -8,7 +8,13 @@ const crypto = require("crypto");
 const multer = require("multer");
 const { badRequest } = require("@reloop/shared");
 
-const STORAGE_DIR = path.join(__dirname, "..", "..", "..", "private-kyc-documents");
+const STORAGE_DIR = path.join(
+  __dirname,
+  "..",
+  "..",
+  "..",
+  "private-kyc-documents",
+);
 fs.mkdirSync(STORAGE_DIR, { recursive: true });
 
 const ALLOWED_MIME = /^image\/(jpeg|png|webp)$/;

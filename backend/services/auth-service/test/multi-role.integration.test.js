@@ -65,11 +65,16 @@ test("multi-role permissions are issued, migrated and stay fresh after removal",
     // Promote to Customer Service in addition to Seller.
     await authService.assignRole(userId, "CUSTOMER_SERVICE");
 
-    const loginRes = await request(app).post("/login").send({ email, password });
+    const loginRes = await request(app)
+      .post("/login")
+      .send({ email, password });
     const promotedClaims = verifyAccessToken(loginRes.body.accessToken);
     assert.ok(promotedClaims.roles.includes("SELLER"));
     assert.ok(promotedClaims.roles.includes("CUSTOMER_SERVICE"));
-    assert.equal(hasPermission(promotedClaims.roles, "support:case:read"), true);
+    assert.equal(
+      hasPermission(promotedClaims.roles, "support:case:read"),
+      true,
+    );
     assert.equal(hasPermission(promotedClaims.roles, "admin:user:ban"), false);
 
     // Removing SELLER must be reflected on the very next issued token (freshness).
@@ -79,10 +84,16 @@ test("multi-role permissions are issued, migrated and stay fresh after removal",
       .send({ refreshToken: loginRes.body.refreshToken });
     const afterRemovalClaims = verifyAccessToken(refreshRes.body.accessToken);
     assert.deepEqual(afterRemovalClaims.roles, ["CUSTOMER_SERVICE"]);
-    assert.equal(hasPermission(afterRemovalClaims.roles, "product:write"), false);
+    assert.equal(
+      hasPermission(afterRemovalClaims.roles, "product:write"),
+      false,
+    );
 
     // Staff denial: CUSTOMER_SERVICE alone must never grant Admin actions.
-    assert.equal(hasPermission(afterRemovalClaims.roles, "admin:user:ban"), false);
+    assert.equal(
+      hasPermission(afterRemovalClaims.roles, "admin:user:ban"),
+      false,
+    );
 
     // A user must always keep at least one role.
     await assert.rejects(

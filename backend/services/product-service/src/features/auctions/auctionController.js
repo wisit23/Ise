@@ -105,4 +105,13 @@ async function bid(req, res, next) {
   }
 }
 
-module.exports = { submit, approve, reject, schedule, cancel, getOne, list, bid };
+module.exports = {
+  submit,
+  approve,
+  reject,
+  schedule,
+  cancel,
+  getOne,
+  list,
+  bid,
+};

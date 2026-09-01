@@ -37,7 +37,6 @@
 - การเปลี่ยนแปลงนี้รองรับ trusted attribution เท่านั้น; ไม่ได้ทำ functional role catalog, Synthetic KYC
   decision หรือ `ADM-001` acceptance
 
-
 ## 2026-08-24 — ADM-001 Multi-Role Permission Foundation
 
 - เพิ่ม `RoleCode` enum และ `UserRole` model ใน `backend/services/auth-service/prisma/schema.prisma`
@@ -103,7 +102,7 @@
   แทน product-service จริงเพื่อทดสอบ cross-service call), `moderation.integration.test.js`
   (product-service)
 - รันเทสต์ครบ: auth-service integration 4/4 + unit 2/2, product-service integration 2/2
-  + unit 8/8 — ไม่มี regression
+  - unit 8/8 — ไม่มี regression
 
   ## 2026-08-25 — ADM-004 Dispute Evidence and Simulated Fund Hold
 
@@ -152,6 +151,7 @@
 ของตั๋วรั่วไปโผล่นอกหน้าเคสระดับแอดมิน และ (2) Admin ควรระงับบัญชี/ลบสินค้าได้จริงจากหน้าเดียว ไม่ใช่แค่ผ่าน Report ที่บังเอิญมี
 
 **แก้บั๊ก "สถานะส่งไม้ต่อรั่ว":**
+
 - `TicketsSection.js` (แท็บ Tickets ทั่วไป) เคยมี Option `ESCALATED` ในตัวกรองสถานะสำหรับ ADMIN
   ทำให้ตั๋วที่ส่งต่อ Admin โผล่ซ้ำได้ทั้งใน Tickets ทั่วไปและ "เคสระดับแอดมิน" — ตัด Option นี้ทิ้ง
   ให้ ESCALATED โผล่เฉพาะใน `AdminInboxSection` เท่านั้น
@@ -161,6 +161,7 @@
   แทนที่จะไปหน้า Tickets ที่ตัด Option ออกแล้ว
 
 **แก้บั๊กจริงที่เจอระหว่างทดสอบ (ไม่ใช่แค่ design):**
+
 - `AdminInboxSection`'s report action เคยยิง `/admin/reports/:id/action` ตรงๆ โดยไม่เคยเรียก
   `/admin/reports/:id/review` ก่อน — `reportService.actionReport` บังคับ lifecycle
   `OPEN -> REVIEWED -> ACTIONED|DISMISSED` เข้มงวด ทำให้ปุ่ม "จัดการ" ของ Report ที่ยังเป็น OPEN
@@ -172,6 +173,7 @@
   แก้โดยใส่ reason คงที่ที่อธิบายว่าเป็นการกู้คืนแบบ direct moderation
 
 **เพิ่มความสามารถ Admin ที่ backend มีอยู่แล้วแต่ไม่เคยมี UI เรียกใช้:**
+
 - **ลบ/กู้คืนสินค้าโดยตรง** (ไม่ต้องพึ่ง Report ที่บังเอิญมี `productId`): เพิ่ม
   `backend/services/auth-service/src/features/productModeration/` (routes + service) —
   `POST /admin/products/:id/remove|restore`, คุมด้วย permission `admin:moderation:remove` ที่มีอยู่แล้ว,
@@ -188,6 +190,7 @@
 - ทั้งสอง Section ใหม่อยู่ใน `ADMIN_SECTIONS` ของ `frontend/app/workspace/page.js` — มองเห็นเฉพาะ ADMIN
 
 **เชื่อมฝั่ง Dispute เข้ากับ Admin Fund Hold ที่มีอยู่แล้ว:**
+
 - ปุ่ม "ส่งเรื่องให้ Admin (Escalate)" เดิมใน `DisputesSection.js` ส่ง decision `"ESCALATE"` ที่
   `disputeService.js`'s whitelist (`APPROVE_REFUND`/`REJECT`) ไม่รองรับ — เป็นปุ่มพังมาตั้งแต่รอบก่อน
   (บันทึกไว้เป็น known issue ไม่แก้ตอนนั้น) ตอนนี้ตัดปุ่มออก เปลี่ยนเป็นข้อความแนะนำให้ติดต่อทีม
@@ -212,6 +215,7 @@ Report เข้ามาเลยนอกจาก Seed Data) และ Admin 
 ทั้งที่บางเคสความผิดไม่ถึงขั้นแบน แถมบางครั้งคนที่ควรถูกจัดการไม่ใช่คนที่แจ้งเรื่องเข้ามาด้วยซ้ำ
 
 **Report creation, wired end-to-end:**
+
 - `backend/services/auth-service/src/features/reports/reportService.js` เพิ่ม
   `createReport({reporterId, targetId, productId, reason})` (ต้องมี `targetId` หรือ `productId`
   อย่างน้อยหนึ่ง, ปฏิเสธ self-report)
@@ -221,8 +225,9 @@ Report เข้ามาเลยนอกจาก Seed Data) และ Admin 
   ใน `frontend/app/store/[sellerId]/page.js` (ซ่อนเมื่อผู้ดูคือเจ้าของสินค้า/ร้านเอง)
 
 **WARN_USER — decision ที่ไม่ใช่การแบน:**
+
 - เพิ่ม `"WARN_USER"` เข้า `VALID_DECISIONS` ของ `actionReport` และ `warnUser({targetId, adminId,
-  reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แตะ** `user.status` — ต่างจาก suspend)
+reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แตะ** `user.status` — ต่างจาก suspend)
 - `POST /admin/users/:id/warn` endpoint ใหม่ (reuse permission `admin:user:suspend` เดิม)
 - `AdminInboxSection.js`: ปุ่ม "ตักเตือน" คู่กับ "แบนผู้ใช้นี้" ทั้งใน Report-decision dropdown และการ์ด
   ผู้ใช้บนตั๋วที่ถูก Escalate
@@ -231,6 +236,7 @@ Report เข้ามาเลยนอกจาก Seed Data) และ Admin 
 ผู้ใช้ชี้ตรงๆ ว่าปุ่มแบน/ตักเตือนบนตั๋วที่ Escalate เดิมยิงไปที่ `selectedTicket.requesterId` เสมอ —
 ผิดตั้งแต่ต้นเวลาเรื่องจริงคือคนอื่นที่ผู้แจ้งกำลังร้องเรียน (เช่น ผู้ซื้อแจ้งว่าผู้ขายไม่จัดส่งของ)
 `SupportTicket` เดิมไม่มีแนวคิดคู่กรณีเลย ต่างจาก `Report` ที่มี `targetId` อยู่แล้ว
+
 - `SupportTicket` (schema ฝั่ง `support-service`, ดูรายละเอียดที่ `customer-service/changelog.md`)
   เพิ่ม `targetId String?` — soft reference แบบเดียวกับ `orderId`, derive จาก order ที่ผู้แจ้งเลือกตอน
   เปิดตั๋ว (buyer↔seller สลับฝั่งอัตโนมัติ)

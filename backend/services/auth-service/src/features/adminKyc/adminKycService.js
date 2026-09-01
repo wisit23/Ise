@@ -40,7 +40,13 @@ async function listQueue({ page, limit, status }) {
  * someone else already decided (or resubmitted) this application since —
  * reject the write instead of silently overwriting their outcome.
  */
-async function decideKyc({ applicationId, decision, reason, version, adminId }) {
+async function decideKyc({
+  applicationId,
+  decision,
+  reason,
+  version,
+  adminId,
+}) {
   if (!ALLOWED_DECISIONS.includes(decision)) {
     throw badRequest("decision must be VERIFIED or REJECTED");
   }

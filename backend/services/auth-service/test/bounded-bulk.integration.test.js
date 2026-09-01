@@ -50,7 +50,9 @@ test("bounded batch enforces cap, dry-run, permission-per-action and idempotency
 
   const adminId = `adm-005-admin+${Date.now()}`;
   const adminToken = tokenFor(adminId, ["ADMIN"]);
-  const marketingToken = tokenFor(`adm-005-marketing+${Date.now()}`, ["MARKETING"]);
+  const marketingToken = tokenFor(`adm-005-marketing+${Date.now()}`, [
+    "MARKETING",
+  ]);
   let userA;
   let userB;
 
@@ -115,7 +117,9 @@ test("bounded batch enforces cap, dry-run, permission-per-action and idempotency
     assert.equal(dryRunRes.body.dryRun, true);
     assert.equal(dryRunRes.body.succeeded, 1);
     assert.equal(dryRunRes.body.failed, 1);
-    const stillActive = await prisma.user.findUnique({ where: { id: userA.id } });
+    const stillActive = await prisma.user.findUnique({
+      where: { id: userA.id },
+    });
     assert.equal(stillActive.status, "ACTIVE");
 
     // Real run: partial failure — one real id succeeds, one bogus id fails,
@@ -133,7 +137,9 @@ test("bounded batch enforces cap, dry-run, permission-per-action and idempotency
     assert.equal(runRes.body.succeeded, 1);
     assert.equal(runRes.body.failed, 1);
 
-    const suspendedA = await prisma.user.findUnique({ where: { id: userA.id } });
+    const suspendedA = await prisma.user.findUnique({
+      where: { id: userA.id },
+    });
     assert.equal(suspendedA.status, "SUSPENDED");
 
     // Replaying the same idempotencyKey must not run the batch again — userB

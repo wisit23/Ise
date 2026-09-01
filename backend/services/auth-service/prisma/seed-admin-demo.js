@@ -27,7 +27,9 @@ async function main() {
     },
   });
 
-  console.log(`[auth-service] demo admin ready: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+  console.log(
+    `[auth-service] demo admin ready: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`,
+  );
   console.log(`[auth-service] user id: ${user.id}`);
 }
 

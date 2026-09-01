@@ -88,7 +88,9 @@ export default function AuctionsPage() {
               เร็วๆ นี้
             </h2>
             {scheduledAuctions.length === 0 ? (
-              <p className="text-sm text-gray-400">ยังไม่มีประมูลที่กำหนดเวลาไว้</p>
+              <p className="text-sm text-gray-400">
+                ยังไม่มีประมูลที่กำหนดเวลาไว้
+              </p>
             ) : (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                 {scheduledAuctions.map((a) => (

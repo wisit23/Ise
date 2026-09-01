@@ -109,7 +109,10 @@ test("approve rejects moving out of a non-pending_approval state", async (t) => 
   }));
 
   await assert.rejects(
-    service.approve({ user: { id: "admin-1", role: "ADMIN" }, auctionId: "a1" }),
+    service.approve({
+      user: { id: "admin-1", role: "ADMIN" },
+      auctionId: "a1",
+    }),
     (err) => err.status === 409,
   );
 });

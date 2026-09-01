@@ -25,7 +25,6 @@ rebuilds claims from the stored User. This supports trusted ProductVideo attribu
 
 **Next action:** Write the failing `ADM-001` role-assignment migration/integration tests against `reloop_auth`
 
-
 > Owner: สิรดนัย กันหา · Reviewer: อชิรวินท์ จรูญกีรติโรจน์ · Updated: 2026-08-24
 
 **Status:** ADM-001 implemented — pending Reviewer verification and integration test run

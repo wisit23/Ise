@@ -7,7 +7,14 @@ const { absolutePath } = require("./kycStorage");
  * always appends a fresh KycApplication row so decision history/evidence
  * survives resubmission after a rejection (mirrors adminKycService's
  * comment on why the two are kept separate). */
-async function submitKyc({ userId, shopName, idCardNumber, address, bankAccount, file }) {
+async function submitKyc({
+  userId,
+  shopName,
+  idCardNumber,
+  address,
+  bankAccount,
+  file,
+}) {
   if (!file) throw badRequest("id card photo is required");
   if (!shopName?.trim()) throw badRequest("shopName is required");
   if (!address?.trim()) throw badRequest("address is required");

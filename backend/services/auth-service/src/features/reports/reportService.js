@@ -13,7 +13,13 @@ function toPublicUser(user) {
 }
 
 /** Append-only — never updated or deleted (ADM-DEC-003: audit evidence must persist). */
-async function recordAdminAction({ actorId, action, targetId, reason, requestId }) {
+async function recordAdminAction({
+  actorId,
+  action,
+  targetId,
+  reason,
+  requestId,
+}) {
   return prisma.adminAudit.create({
     data: { actorId, action, targetId, reason, requestId },
   });
@@ -82,11 +88,15 @@ const VALID_DECISIONS = [
  * the OPEN -> REVIEWED -> ACTIONED|DISMISSED lifecycle from plan.md strictly
  * sequential instead of letting a decision skip the review step.
  */
-async function actionReport({ reportId, adminId, decision, reason, requestId }) {
+async function actionReport({
+  reportId,
+  adminId,
+  decision,
+  reason,
+  requestId,
+}) {
   if (!VALID_DECISIONS.includes(decision)) {
-    throw badRequest(
-      `decision must be one of ${VALID_DECISIONS.join(", ")}`,
-    );
+    throw badRequest(`decision must be one of ${VALID_DECISIONS.join(", ")}`);
   }
   if (!reason) throw badRequest("reason is required");
 
@@ -100,7 +110,12 @@ async function actionReport({ reportId, adminId, decision, reason, requestId }) 
     if (!report.targetId) {
       throw badRequest("report has no target user to suspend");
     }
-    await suspendUser({ targetId: report.targetId, adminId, reason, requestId });
+    await suspendUser({
+      targetId: report.targetId,
+      adminId,
+      reason,
+      requestId,
+    });
   } else if (decision === "WARN_USER") {
     if (!report.targetId) {
       throw badRequest("report has no target user to warn");

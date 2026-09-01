@@ -211,7 +211,9 @@ async function refresh(refreshToken) {
     throw badRequest("refresh token is no longer valid");
   }
 
-  const accessToken = signAccessToken(await buildAccessTokenClaims(stored.user));
+  const accessToken = signAccessToken(
+    await buildAccessTokenClaims(stored.user),
+  );
   return { accessToken };
 }
 

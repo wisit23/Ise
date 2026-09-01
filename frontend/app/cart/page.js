@@ -16,10 +16,7 @@ export function isReservationExpired(order, now) {
 export function reservationCountdown(order, now) {
   const deadline = reservationDeadline(order);
   if (deadline === null) return null;
-  const remainingSeconds = Math.max(
-    0,
-    Math.ceil((deadline - now) / 1000),
-  );
+  const remainingSeconds = Math.max(0, Math.ceil((deadline - now) / 1000));
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = String(remainingSeconds % 60).padStart(2, "0");
   return `${minutes}:${seconds}`;
@@ -84,7 +81,9 @@ export default function CartPage() {
 
   useEffect(() => {
     const expiredIds = new Set(
-      items.filter((order) => isReservationExpired(order, now)).map((o) => o.id),
+      items
+        .filter((order) => isReservationExpired(order, now))
+        .map((o) => o.id),
     );
     if (expiredIds.size === 0) return;
     setItems((prev) => prev.filter((order) => !expiredIds.has(order.id)));

@@ -184,7 +184,8 @@ export default function SellerAuctionsPage() {
           ลงสินค้าใหม่เข้าประมูล
         </h1>
         <p className="mb-6 text-sm text-gray-500">
-          กรอกรายละเอียดสินค้าเหมือนลงขายปกติ พร้อมตั้งราคาเริ่มต้นและเรทการเสนอราคา
+          กรอกรายละเอียดสินค้าเหมือนลงขายปกติ
+          พร้อมตั้งราคาเริ่มต้นและเรทการเสนอราคา
         </p>
 
         <form
@@ -348,7 +349,9 @@ export default function SellerAuctionsPage() {
           สินค้าที่ส่งเข้าประมูลของฉัน ({myAuctions.length})
         </h2>
         {myAuctions.length === 0 ? (
-          <p className="text-sm text-gray-400">ยังไม่มีสินค้าที่ส่งเข้าประมูล</p>
+          <p className="text-sm text-gray-400">
+            ยังไม่มีสินค้าที่ส่งเข้าประมูล
+          </p>
         ) : (
           <ul className="flex flex-col gap-3">
             {myAuctions.map((a) => (

@@ -160,7 +160,8 @@ export default function MediaUploader({ value, onChange, token }) {
             : "ลากไฟล์มาวาง หรือคลิกเพื่อเลือกรูป/วิดีโอ"}
         </p>
         <p className="mt-1 text-xs text-gray-400">
-          JPG, PNG, WEBP, MP4, MOV — สูงสุด {MAX_FILES} ไฟล์ (รูปภาพจะถูกครอบเป็นสี่เหลี่ยมจัตุรัสอัตโนมัติ)
+          JPG, PNG, WEBP, MP4, MOV — สูงสุด {MAX_FILES} ไฟล์
+          (รูปภาพจะถูกครอบเป็นสี่เหลี่ยมจัตุรัสอัตโนมัติ)
         </p>
       </div>
 

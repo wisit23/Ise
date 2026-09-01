@@ -76,21 +76,33 @@ test("KYC decisions enforce permission, version and single-decision rules", asyn
     const deniedRes = await request(app)
       .post(`/admin/kyc/${application.id}/decision`)
       .set("Authorization", `Bearer ${marketingToken}`)
-      .send({ decision: "VERIFIED", reason: "looks fine", version: application.version });
+      .send({
+        decision: "VERIFIED",
+        reason: "looks fine",
+        version: application.version,
+      });
     assert.equal(deniedRes.status, 403);
 
     // Stale version must be rejected as a conflict, not silently applied.
     const staleRes = await request(app)
       .post(`/admin/kyc/${application.id}/decision`)
       .set("Authorization", `Bearer ${adminToken}`)
-      .send({ decision: "VERIFIED", reason: "looks fine", version: application.version + 1 });
+      .send({
+        decision: "VERIFIED",
+        reason: "looks fine",
+        version: application.version + 1,
+      });
     assert.equal(staleRes.status, 409);
 
     // Correct version approves and updates the Seller's status in the same call.
     const approveRes = await request(app)
       .post(`/admin/kyc/${application.id}/decision`)
       .set("Authorization", `Bearer ${adminToken}`)
-      .send({ decision: "VERIFIED", reason: "documents match", version: application.version });
+      .send({
+        decision: "VERIFIED",
+        reason: "documents match",
+        version: application.version,
+      });
     assert.equal(approveRes.status, 200);
     assert.equal(approveRes.body.application.status, "VERIFIED");
     assert.equal(approveRes.body.sellerStatus.kycStatus, "VERIFIED");
@@ -107,7 +119,11 @@ test("KYC decisions enforce permission, version and single-decision rules", asyn
     const doubleRes = await request(app)
       .post(`/admin/kyc/${application.id}/decision`)
       .set("Authorization", `Bearer ${adminToken}`)
-      .send({ decision: "REJECTED", reason: "changed my mind", version: application.version });
+      .send({
+        decision: "REJECTED",
+        reason: "changed my mind",
+        version: application.version,
+      });
     assert.equal(doubleRes.status, 409);
   } finally {
     if (application) {

@@ -34,7 +34,6 @@
 - Reason: ขอบเขตรอบปัจจุบันเน้น functional Feature และ database-backed acceptance
 - Consequence: ห้ามรายงาน security NFR ว่า Done ในรอบนี้
 
-
 ## ADM-DEC-005 — Legacy role fallback แทน bulk backfill migration
 
 - Date: 2026-08-24

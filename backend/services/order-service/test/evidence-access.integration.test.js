@@ -22,7 +22,10 @@ const strangerToken = signAccessToken({
   sub: `int-test-evidence-stranger-${Date.now()}`,
   role: "BUYER",
 });
-const agentToken = signAccessToken({ sub: "int-test-evidence-agent", role: "CUSTOMER_SERVICE" });
+const agentToken = signAccessToken({
+  sub: "int-test-evidence-agent",
+  role: "CUSTOMER_SERVICE",
+});
 
 async function databaseIsReachable() {
   if (!process.env.DATABASE_URL) return false;

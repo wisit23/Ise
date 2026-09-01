@@ -85,9 +85,7 @@ export default function ReportModal({
           </>
         ) : (
           <form onSubmit={handleSubmit}>
-            <h2 className="text-sm font-semibold text-gray-900">
-              รายงานปัญหา
-            </h2>
+            <h2 className="text-sm font-semibold text-gray-900">รายงานปัญหา</h2>
             {(targetLabel || productLabel) && (
               <p className="mt-1 text-xs text-gray-500">
                 {targetLabel && <>ผู้ใช้: {targetLabel}</>}

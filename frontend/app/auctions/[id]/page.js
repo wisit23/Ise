@@ -45,7 +45,10 @@ export default function AuctionDetailPage() {
   // Poll while the auction can still change (bids coming in, or a
   // scheduled/open transition due) so the page doesn't go stale mid-bid war.
   useEffect(() => {
-    if (!auction || ["closed", "cancelled", "rejected"].includes(auction.status)) {
+    if (
+      !auction ||
+      ["closed", "cancelled", "rejected"].includes(auction.status)
+    ) {
       return;
     }
     const interval = setInterval(load, 4000);
@@ -153,7 +156,8 @@ export default function AuctionDetailPage() {
                 {baht(highest ? highest.amount : auction.startingPrice)}
               </p>
               <p className="mt-1 text-xs text-gray-400">
-                บิดถัดไปต้อง ≥ {baht(minNext)} · มีผู้เสนอราคาแล้ว {bids.length} ครั้ง
+                บิดถัดไปต้อง ≥ {baht(minNext)} · มีผู้เสนอราคาแล้ว {bids.length}{" "}
+                ครั้ง
               </p>
             </div>
 

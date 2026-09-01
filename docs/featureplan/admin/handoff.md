@@ -95,13 +95,13 @@ npm run seed:dispute-demo  # → order + evidence ดูที่ /admin/dispute
 
 ## Task ID และ UR/FR/NFR/Workflow ที่ครอบคลุม
 
-| Task | UR | Workflow | Test command | ผลล่าสุด |
-|---|---|---|---|---|
-| `ADM-001` | `UR-22` | `WF-01` | `REQUIRE_INTEGRATION=1 node --test test/multi-role.integration.test.js` (auth-service) | pass, 2026-08-25 |
-| `ADM-002` | `UR-23` | `WF-09` | `REQUIRE_INTEGRATION=1 node --test test/admin-kyc.integration.test.js` (auth-service) | pass, 2026-08-25 |
-| `ADM-003` | `UR-23`,`UR-24` | `WF-09` | `REQUIRE_INTEGRATION=1 node --test test/admin-reports.integration.test.js` (auth-service) + `test/moderation.integration.test.js` (product-service) | pass, 2026-08-25 |
-| `ADM-004` | `UR-25`,`UR-26` | `WF-08`,`WF-09` | `REQUIRE_INTEGRATION=1 node --test test/admin-hold.integration.test.js` (order-service) | pass, 2026-08-25 |
-| `ADM-005` | `UR-26` | `WF-09` | `REQUIRE_INTEGRATION=1 node --test test/bounded-bulk.integration.test.js` (auth-service) | pass ×2 รอบ, 2026-08-25 |
+| Task      | UR              | Workflow        | Test command                                                                                                                                        | ผลล่าสุด                |
+| --------- | --------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `ADM-001` | `UR-22`         | `WF-01`         | `REQUIRE_INTEGRATION=1 node --test test/multi-role.integration.test.js` (auth-service)                                                              | pass, 2026-08-25        |
+| `ADM-002` | `UR-23`         | `WF-09`         | `REQUIRE_INTEGRATION=1 node --test test/admin-kyc.integration.test.js` (auth-service)                                                               | pass, 2026-08-25        |
+| `ADM-003` | `UR-23`,`UR-24` | `WF-09`         | `REQUIRE_INTEGRATION=1 node --test test/admin-reports.integration.test.js` (auth-service) + `test/moderation.integration.test.js` (product-service) | pass, 2026-08-25        |
+| `ADM-004` | `UR-25`,`UR-26` | `WF-08`,`WF-09` | `REQUIRE_INTEGRATION=1 node --test test/admin-hold.integration.test.js` (order-service)                                                             | pass, 2026-08-25        |
+| `ADM-005` | `UR-26`         | `WF-09`         | `REQUIRE_INTEGRATION=1 node --test test/bounded-bulk.integration.test.js` (auth-service)                                                            | pass ×2 รอบ, 2026-08-25 |
 
 Unit tests ที่เกี่ยวข้อง (`permissions.test.js`, `authMiddleware.test.js`, `app.test.js` ของทั้ง 3
 service) รันผ่านครบ ไม่มี regression จากการแก้ในรอบนี้

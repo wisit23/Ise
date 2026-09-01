@@ -67,7 +67,10 @@ export default function DonutChart({
               strokeDasharray={`${circumference} ${circumference}`}
               strokeDashoffset={slice.offset}
               strokeLinecap="round"
-              style={{ transform: `rotate(${slice.rotation}deg)`, transformOrigin: `${cx}px ${cy}px` }}
+              style={{
+                transform: `rotate(${slice.rotation}deg)`,
+                transformOrigin: `${cx}px ${cy}px`,
+              }}
               opacity={hover === null || hover === i ? 1 : 0.35}
               onPointerEnter={() => setHover(i)}
               onPointerLeave={() => setHover(null)}
@@ -77,19 +80,45 @@ export default function DonutChart({
           {/* Centre label */}
           {hovered ? (
             <>
-              <text x={cx} y={cy - 6} textAnchor="middle" fontSize="18" fontWeight="700" fill={CHART_INK.primary}>
+              <text
+                x={cx}
+                y={cy - 6}
+                textAnchor="middle"
+                fontSize="18"
+                fontWeight="700"
+                fill={CHART_INK.primary}
+              >
                 {((hovered.value / total) * 100).toFixed(0)}%
               </text>
-              <text x={cx} y={cy + 12} textAnchor="middle" fontSize="9" fill={CHART_INK.muted}>
+              <text
+                x={cx}
+                y={cy + 12}
+                textAnchor="middle"
+                fontSize="9"
+                fill={CHART_INK.muted}
+              >
                 {hovered.label}
               </text>
             </>
           ) : (
             <>
-              <text x={cx} y={cy - 4} textAnchor="middle" fontSize="22" fontWeight="700" fill={CHART_INK.primary}>
+              <text
+                x={cx}
+                y={cy - 4}
+                textAnchor="middle"
+                fontSize="22"
+                fontWeight="700"
+                fill={CHART_INK.primary}
+              >
                 {total}
               </text>
-              <text x={cx} y={cy + 12} textAnchor="middle" fontSize="9" fill={CHART_INK.muted}>
+              <text
+                x={cx}
+                y={cy + 12}
+                textAnchor="middle"
+                fontSize="9"
+                fill={CHART_INK.muted}
+              >
                 total
               </text>
             </>
@@ -110,7 +139,11 @@ export default function DonutChart({
               className="inline-block h-2.5 w-2.5 rounded-full shrink-0"
               style={{ backgroundColor: d.color }}
             />
-            <span className={hover === i ? "font-semibold text-gray-900" : "text-gray-500"}>
+            <span
+              className={
+                hover === i ? "font-semibold text-gray-900" : "text-gray-500"
+              }
+            >
               {d.label}
             </span>
           </div>

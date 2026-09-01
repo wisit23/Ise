@@ -24,8 +24,14 @@ const agentBId = `int-test-agent-b-${Date.now()}`;
 const strangerId = `int-test-stranger-${Date.now()}`;
 
 const requesterToken = signAccessToken({ sub: requesterId, role: "BUYER" });
-const agentAToken = signAccessToken({ sub: agentAId, role: "CUSTOMER_SERVICE" });
-const agentBToken = signAccessToken({ sub: agentBId, role: "CUSTOMER_SERVICE" });
+const agentAToken = signAccessToken({
+  sub: agentAId,
+  role: "CUSTOMER_SERVICE",
+});
+const agentBToken = signAccessToken({
+  sub: agentBId,
+  role: "CUSTOMER_SERVICE",
+});
 const strangerToken = signAccessToken({ sub: strangerId, role: "BUYER" });
 
 async function databaseIsReachable() {

@@ -735,13 +735,13 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                          | ผลที่เกิดขึ้นจริง                                                                              |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| การตรวจ                                             | ผลที่เกิดขึ้นจริง                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | จำลอง Fresh Clone (ลบ `uploads/` แล้วรัน Node ตรงๆ) | `fs.mkdirSync` สร้าง Directory คืนให้อัตโนมัติ, `fs.existsSync` คืน `true`                       |
 | Grep ทั้ง `backend/` หา Pattern เขียนไฟล์ลง Disk    | เจอแค่จุดเดียวที่ `upload.js`, ไม่มีจุดอื่นเสี่ยงปัญหาเดียวกัน                                   |
 | ตรวจ Route `/api/auth/refresh` ผ่าน Gateway         | ตรงกับที่ `frontend/lib/api.js` เรียกจริง (`authRoutes.js` mount `/refresh` ใต้ `/api/auth`)     |
 | ตรวจ Status Code Login/Refresh ผิดพลาด              | ตอบ `400` (`badRequest`) ไม่ใช่ `401` — ยืนยันว่า Retry-on-401 Logic ไม่ชนกับ Error ทาง Business |
-| `npm test` (Frontend)                              | 5/5 ผ่าน (Test ที่พาดพิง `api.js` เป็น Mock ทั้งหมด ไม่ได้ทดสอบ Refresh Logic จริง)              |
+| `npm test` (Frontend)                               | 5/5 ผ่าน (Test ที่พาดพิง `api.js` เป็น Mock ทั้งหมด ไม่ได้ทดสอบ Refresh Logic จริง)              |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -796,24 +796,24 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                                             | ผลที่เกิดขึ้นจริง                                                                                                    |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `to_tsvector('simple', 'เสื้อยืดวินเทจ Nike สภาพดี')`                    | Token ไทยรวมเป็นก้อนเดียว ยืนยันว่า Postgres FTS ใช้กับไทยไม่ได้                                                        |
-| ค้น `denim`/`sneakers`/`vintage` ก่อนแก้                              | 0 ผลลัพธ์ทั้งหมด (Query เดิมไม่ครอบคลุม `tags`)                                                                         |
-| `word_similarity('เสื้อ', full_text)` vs `similarity(...)`             | `0.83` vs `0.24` — ยืนยันต้องใช้ `word_similarity`                                                                     |
-| `CREATE TABLE ... GENERATED ALWAYS AS (array_to_string(...)) STORED` | Error `generation expression is not immutable` — ยืนยันว่าต้องใช้ Trigger แทน Generated Column                        |
-| `npx prisma db push` กับ Schema ใหม่                                 | สร้าง Extension, Column `search_text`, GIN Index `products_search_text_idx` สำเร็จ ไม่มี Error                        |
-| รัน `seed.js` ใหม่กับ DB จริง                                        | Trigger ติดตั้งสำเร็จ, Backfill 16 แถวเดิมมี `search_text` ครบ                                                         |
-| Insert แถวใหม่ตรงๆ ด้วย SQL (ไม่ผ่าน App)                             | Trigger คำนวณ `search_text` ให้อัตโนมัติ ยืนยัน Trigger Fire ทุก Insert ไม่ใช่แค่ตอน Seed                              |
-| `EXPLAIN` กับ `SET enable_seqscan=off`                                | ทั้ง `ILIKE` และ `<%` ใช้ `Bitmap Index Scan` บน `products_search_text_idx` จริง                                       |
-| ค้น `denim`/`sneakers`/`vintage`/`Denim`/`เสื้อ`/`leather` หลังแก้      | เจอผลลัพธ์ถูกต้องครบทุกคำ รวมตัวพิมพ์ใหญ่เล็กและข้ามภาษา                                                               |
-| Category Filter + Search พร้อมกัน                                    | กรองถูกต้อง (`q=vintage&category=แจ็คเก็ต` เหลือแค่ 1 รายการที่ตรงทั้งสองเงื่อนไข)                                     |
-| `model.create()` แล้วค้นทันที                                        | เจอสินค้าที่เพิ่งสร้างในผลค้นหาทันที, ตรวจ `Object.keys()` แล้วไม่มี `searchText` รั่วออกมาใน Response                 |
-| `npm run lint` (Repo ทั้งหมด)                                        | Exit 0                                                                                                                  |
-| `npm test` (Repo ทั้งหมด, ต่อ Postgres จริงใน Container)              | 44/44 ผ่าน                                                                                                              |
-| `docker compose build product-service` + `up -d`                     | Build สำเร็จ, `db push` sync, Seed+Trigger รันสำเร็จตอน Container Start จริง (ไม่ใช่แค่ Local)                         |
-| เปิด `http://localhost:3000/products?q=denim` ผ่าน Browser จริง       | เห็น "กางเกงยีนส์ Levi's 501 ทรงตรง" และ "เดนิมแจ็คเก็ตวินเทจ Levi's" ถูกต้อง, Network Log `GET /api/products/search → 200` |
-| เปิด `http://localhost:3000/products?q=sneakers` ผ่าน Browser จริง    | เห็น "รองเท้าผ้าใบ Converse สีขาว" ถูกต้อง (มาจาก Tag ล้วนๆ, Title ไม่มีคำนี้เลย)                                       |
+| การตรวจ                                                              | ผลที่เกิดขึ้นจริง                                                                                                           |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `to_tsvector('simple', 'เสื้อยืดวินเทจ Nike สภาพดี')`                | Token ไทยรวมเป็นก้อนเดียว ยืนยันว่า Postgres FTS ใช้กับไทยไม่ได้                                                            |
+| ค้น `denim`/`sneakers`/`vintage` ก่อนแก้                             | 0 ผลลัพธ์ทั้งหมด (Query เดิมไม่ครอบคลุม `tags`)                                                                             |
+| `word_similarity('เสื้อ', full_text)` vs `similarity(...)`           | `0.83` vs `0.24` — ยืนยันต้องใช้ `word_similarity`                                                                          |
+| `CREATE TABLE ... GENERATED ALWAYS AS (array_to_string(...)) STORED` | Error `generation expression is not immutable` — ยืนยันว่าต้องใช้ Trigger แทน Generated Column                              |
+| `npx prisma db push` กับ Schema ใหม่                                 | สร้าง Extension, Column `search_text`, GIN Index `products_search_text_idx` สำเร็จ ไม่มี Error                              |
+| รัน `seed.js` ใหม่กับ DB จริง                                        | Trigger ติดตั้งสำเร็จ, Backfill 16 แถวเดิมมี `search_text` ครบ                                                              |
+| Insert แถวใหม่ตรงๆ ด้วย SQL (ไม่ผ่าน App)                            | Trigger คำนวณ `search_text` ให้อัตโนมัติ ยืนยัน Trigger Fire ทุก Insert ไม่ใช่แค่ตอน Seed                                   |
+| `EXPLAIN` กับ `SET enable_seqscan=off`                               | ทั้ง `ILIKE` และ `<%` ใช้ `Bitmap Index Scan` บน `products_search_text_idx` จริง                                            |
+| ค้น `denim`/`sneakers`/`vintage`/`Denim`/`เสื้อ`/`leather` หลังแก้   | เจอผลลัพธ์ถูกต้องครบทุกคำ รวมตัวพิมพ์ใหญ่เล็กและข้ามภาษา                                                                    |
+| Category Filter + Search พร้อมกัน                                    | กรองถูกต้อง (`q=vintage&category=แจ็คเก็ต` เหลือแค่ 1 รายการที่ตรงทั้งสองเงื่อนไข)                                          |
+| `model.create()` แล้วค้นทันที                                        | เจอสินค้าที่เพิ่งสร้างในผลค้นหาทันที, ตรวจ `Object.keys()` แล้วไม่มี `searchText` รั่วออกมาใน Response                      |
+| `npm run lint` (Repo ทั้งหมด)                                        | Exit 0                                                                                                                      |
+| `npm test` (Repo ทั้งหมด, ต่อ Postgres จริงใน Container)             | 44/44 ผ่าน                                                                                                                  |
+| `docker compose build product-service` + `up -d`                     | Build สำเร็จ, `db push` sync, Seed+Trigger รันสำเร็จตอน Container Start จริง (ไม่ใช่แค่ Local)                              |
+| เปิด `http://localhost:3000/products?q=denim` ผ่าน Browser จริง      | เห็น "กางเกงยีนส์ Levi's 501 ทรงตรง" และ "เดนิมแจ็คเก็ตวินเทจ Levi's" ถูกต้อง, Network Log `GET /api/products/search → 200` |
+| เปิด `http://localhost:3000/products?q=sneakers` ผ่าน Browser จริง   | เห็น "รองเท้าผ้าใบ Converse สีขาว" ถูกต้อง (มาจาก Tag ล้วนๆ, Title ไม่มีคำนี้เลย)                                           |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -845,14 +845,14 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ                                                                          | ผลที่เกิดขึ้นจริง                                                                                     |
-| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| จำลอง `setHeader('x-user-display-name', 'มานพ')` ตรงๆ ก่อนแก้                     | `ERR_INVALID_CHAR` ตรงกับ Log ผู้ใช้                                                                     |
-| `npm test` (Repo ทั้งหมด)                                                        | 44/44 ผ่าน (ไม่มี Test เดิมที่ Cover Header นี้โดยตรง จึงไม่มี Test แตก)                                  |
-| `npm run lint` เฉพาะไฟล์ที่แก้                                                   | Exit 0                                                                                                    |
-| Rebuild `gateway`, `auth-service`, `product-service`, `order-service`, `chat-service`, `review-service` + `up -d` | ทุก Container ขึ้น Healthy                                                                                |
-| `curl` Login `shop.denim@example.com` (ชื่อจริง "มานพ เดนิม") ผ่าน Gateway จริง   | ได้ Access Token กลับมาปกติ                                                                               |
-| `curl GET /api/products/mine` พร้อม Token ข้างต้น ผ่าน Gateway จริง               | `200 OK` พร้อมข้อมูลสินค้าจริง 4 ชิ้น, Gateway Log **ไม่มี** `ERR_INVALID_CHAR` อีกเลย                    |
+| การตรวจ                                                                                                           | ผลที่เกิดขึ้นจริง                                                                      |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| จำลอง `setHeader('x-user-display-name', 'มานพ')` ตรงๆ ก่อนแก้                                                     | `ERR_INVALID_CHAR` ตรงกับ Log ผู้ใช้                                                   |
+| `npm test` (Repo ทั้งหมด)                                                                                         | 44/44 ผ่าน (ไม่มี Test เดิมที่ Cover Header นี้โดยตรง จึงไม่มี Test แตก)               |
+| `npm run lint` เฉพาะไฟล์ที่แก้                                                                                    | Exit 0                                                                                 |
+| Rebuild `gateway`, `auth-service`, `product-service`, `order-service`, `chat-service`, `review-service` + `up -d` | ทุก Container ขึ้น Healthy                                                             |
+| `curl` Login `shop.denim@example.com` (ชื่อจริง "มานพ เดนิม") ผ่าน Gateway จริง                                   | ได้ Access Token กลับมาปกติ                                                            |
+| `curl GET /api/products/mine` พร้อม Token ข้างต้น ผ่าน Gateway จริง                                               | `200 OK` พร้อมข้อมูลสินค้าจริง 4 ชิ้น, Gateway Log **ไม่มี** `ERR_INVALID_CHAR` อีกเลย |
 
 ### ผลลัพธ์ปัจจุบัน
 
@@ -902,21 +902,21 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### บั๊กที่เจอและแก้ระหว่างตรวจสอบจริง (Test อัตโนมัติจับไม่ได้)
 
-| # | บั๊ก | สาเหตุที่ Test จับไม่ได้ | วิธีแก้ |
-| - | ---- | ------------------------ | ------- |
-| 1 | Frontend เรียก Decision Endpoint ด้วย `PATCH` แต่ Backend Route เป็น `POST` → `404` เงียบๆ | Integration Test เรียก Express App ตรงๆ ผ่าน `supertest` ไม่ได้ทดสอบ Frontend Call จริง | แก้ Method ให้ตรงกัน + ไล่เช็ค `apiFetch` ทุกจุดเทียบกับ Route จริงด้วยมือ |
-| 2 | ไฟล์ Frontend ใหม่/แก้ไขแล้ว Dev Server ไม่เห็นการเปลี่ยนแปลง | Docker Desktop บน Windows กับ Bind Mount มีช่องโหว่เรื่อง File Watcher ที่รู้จักกันอยู่แล้ว | `docker compose restart frontend` — ถ้าใครทำงานต่อในเครื่อง Windows แล้วหน้าเว็บไม่อัปเดตตามที่แก้ ให้ลองวิธีนี้ก่อน |
-| 3 | `.gitignore` Pattern `uploads/*`/`private-evidence/*` ที่ตั้งใจครอบ Path ซ้อนลึกไม่ทำงานจริง (มาจาก `MOCK-TRADE-010`) | ไม่มี Test คลุม `.gitignore` เลย ต้องเจอตอนสร้าง Evidence File จริงระหว่างทดสอบแล้วสังเกตว่า `git status` ขึ้นไฟล์ | เปลี่ยนเป็น Path เต็มจาก Root, ยืนยันด้วย `git check-ignore -v` — รายละเอียดเต็มอยู่ที่ Task `MOCK-TRADE-010` ด้านบน |
+| #   | บั๊ก                                                                                                                  | สาเหตุที่ Test จับไม่ได้                                                                                           | วิธีแก้                                                                                                              |
+| --- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| 1   | Frontend เรียก Decision Endpoint ด้วย `PATCH` แต่ Backend Route เป็น `POST` → `404` เงียบๆ                            | Integration Test เรียก Express App ตรงๆ ผ่าน `supertest` ไม่ได้ทดสอบ Frontend Call จริง                            | แก้ Method ให้ตรงกัน + ไล่เช็ค `apiFetch` ทุกจุดเทียบกับ Route จริงด้วยมือ                                           |
+| 2   | ไฟล์ Frontend ใหม่/แก้ไขแล้ว Dev Server ไม่เห็นการเปลี่ยนแปลง                                                         | Docker Desktop บน Windows กับ Bind Mount มีช่องโหว่เรื่อง File Watcher ที่รู้จักกันอยู่แล้ว                        | `docker compose restart frontend` — ถ้าใครทำงานต่อในเครื่อง Windows แล้วหน้าเว็บไม่อัปเดตตามที่แก้ ให้ลองวิธีนี้ก่อน |
+| 3   | `.gitignore` Pattern `uploads/*`/`private-evidence/*` ที่ตั้งใจครอบ Path ซ้อนลึกไม่ทำงานจริง (มาจาก `MOCK-TRADE-010`) | ไม่มี Test คลุม `.gitignore` เลย ต้องเจอตอนสร้าง Evidence File จริงระหว่างทดสอบแล้วสังเกตว่า `git status` ขึ้นไฟล์ | เปลี่ยนเป็น Path เต็มจาก Root, ยืนยันด้วย `git check-ignore -v` — รายละเอียดเต็มอยู่ที่ Task `MOCK-TRADE-010` ด้านบน |
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ | ผลที่เกิดขึ้นจริง |
-| ------- | ------------------ |
-| `REQUIRE_INTEGRATION=1` support-service (4 ไฟล์) | 16 Test ผ่านหมด (Ticket Lifecycle, SLA Escalation ×2 รอบไม่ซ้ำ, Help Content, Health) |
-| `REQUIRE_INTEGRATION=1` order-service (Dispute/Support ใหม่) | 4 Test ผ่าน (Support Lookup, Dispute Decision ×2, Evidence Access) + Test เดิม 5 ตัวยังผ่านครบ |
-| `npm test` (Repo ทั้งหมด) | 67/67 ผ่าน |
-| `npm run lint` / `npm run format:check` | ผ่าน |
-| Rebuild `auth-service`, `order-service`, `support-service`, `gateway` + `docker compose up -d` | ทุก Container ขึ้น Healthy |
+| การตรวจ                                                                                                                                                                                            | ผลที่เกิดขึ้นจริง                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `REQUIRE_INTEGRATION=1` support-service (4 ไฟล์)                                                                                                                                                   | 16 Test ผ่านหมด (Ticket Lifecycle, SLA Escalation ×2 รอบไม่ซ้ำ, Help Content, Health)                                                    |
+| `REQUIRE_INTEGRATION=1` order-service (Dispute/Support ใหม่)                                                                                                                                       | 4 Test ผ่าน (Support Lookup, Dispute Decision ×2, Evidence Access) + Test เดิม 5 ตัวยังผ่านครบ                                           |
+| `npm test` (Repo ทั้งหมด)                                                                                                                                                                          | 67/67 ผ่าน                                                                                                                               |
+| `npm run lint` / `npm run format:check`                                                                                                                                                            | ผ่าน                                                                                                                                     |
+| Rebuild `auth-service`, `order-service`, `support-service`, `gateway` + `docker compose up -d`                                                                                                     | ทุก Container ขึ้น Healthy                                                                                                               |
 | E2E ผ่าน Browser จริง: สมัคร Buyer → เปิดข้อพิพาทพร้อมเหตุผล → Login Agent → ดู Queue/Assign/Reply Ticket แยกใบ → Requester เห็น Reply แต่ไม่เห็นโน้ตภายใน → Agent เปิด Case พิจารณาอนุมัติคืนเงิน | สำเร็จทุกขั้น, `orders.status` เปลี่ยนเป็น `refunded`, `payout_held` เปลี่ยนเป็น `false` ยืนยันด้วย Query ตรงหลัง Rebuild Container ใหม่ |
 
 ### ผลลัพธ์ปัจจุบัน
@@ -947,13 +947,13 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### สรุปงานที่ทำ
 
-1. **อัปเกรด UI หน้าศูนย์กลาง (Support Panel):** 
+1. **อัปเกรด UI หน้าศูนย์กลาง (Support Panel):**
    - ปรับกล่องค้นหา (Search Box) ไม่ให้บังหน้าจอ
    - เพิ่มปุ่ม Copy (Full ID) สำหรับก๊อปปี้รหัสผู้ซื้อ/ผู้ขายในตารางข้อพิพาท เพื่อใช้วางค้นหาได้ทันที
 2. **ปรับปรุงระบบ FAQ (FAQ Modal):** เปลี่ยนจากการพิมพ์ข้อความลงฟอร์มในหน้าเดียวกัน เป็น Popup Modal สไตล์ Glassmorphism กลางจอ รองรับการพิมพ์ข้อความยาวๆ อย่างเป็นระบบ
 3. **Slide-over Modal (Tickets & Disputes):**
    - เปลี่ยนจาก Modal ทั่วไปที่ซ้อนทับกันงงๆ เป็น Slide-over Panel ที่เลื่อนออกมาจากขอบขวาของจอสุดพรีเมียม
-   - เพิ่มระบบแอนิเมชันเปิด/ปิด (`animate-in slide-in-from-right` และ `animate-out slide-out-to-right`) ครบทุกจุด 
+   - เพิ่มระบบแอนิเมชันเปิด/ปิด (`animate-in slide-in-from-right` และ `animate-out slide-out-to-right`) ครบทุกจุด
    - รองรับการคลิกนอกกรอบ (Click outside) เพื่อสไลด์ปิดหน้าต่างอย่างนุ่มนวล และแก้บั๊กปุ่มปิด (Close button) เยื้อง
 4. **Disputes Panel + Chat Slide-over:**
    - ออกแบบหน้าตาบัตรรายละเอียดผู้ร้องเรียน (Buyer Contact) และแกลเลอรีรูปภาพหลักฐาน (Evidence Gallery) ใหม่
@@ -962,10 +962,10 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ | ผลที่เกิดขึ้นจริง |
-| ------- | ------------------ |
-| `npm run build` (Frontend) | **Exit 0** (แก้บั๊ก ESLint `no-unused-vars` และ `react/no-unescaped-entities` ผ่านทั้งหมด) |
-| ตรวจสอบ UI (Visual UI Check) | แอนิเมชันตอนเปิด/ปิดลื่นไหล, เปิด UI ย่อย (แชท) ได้โดย Layout ไม่พัง |
+| การตรวจ                      | ผลที่เกิดขึ้นจริง                                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| `npm run build` (Frontend)   | **Exit 0** (แก้บั๊ก ESLint `no-unused-vars` และ `react/no-unescaped-entities` ผ่านทั้งหมด) |
+| ตรวจสอบ UI (Visual UI Check) | แอนิเมชันตอนเปิด/ปิดลื่นไหล, เปิด UI ย่อย (แชท) ได้โดย Layout ไม่พัง                       |
 
 ### ไฟล์หลักที่เป็นหลักฐาน
 
@@ -1004,12 +1004,12 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ | ผลที่เกิดขึ้นจริง |
-| ------- | ------------------ |
-| `npm test` (Backend) | 108 tests, 84 ผ่าน, 0 fail, 24 skip (integration ต้องการ `REQUIRE_INTEGRATION`) |
-| `npm run test:frontend` | 28/28 ผ่าน (8 suites รวม Test ใหม่/แก้ไขสำหรับ Complaints, Reports) |
-| `next build` (Production) | สำเร็จครบ 22 route |
-| `eslint` | สะอาดทั้ง Backend และ Frontend |
+| การตรวจ                       | ผลที่เกิดขึ้นจริง                                                                                                                                                                          |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm test` (Backend)          | 108 tests, 84 ผ่าน, 0 fail, 24 skip (integration ต้องการ `REQUIRE_INTEGRATION`)                                                                                                            |
+| `npm run test:frontend`       | 28/28 ผ่าน (8 suites รวม Test ใหม่/แก้ไขสำหรับ Complaints, Reports)                                                                                                                        |
+| `next build` (Production)     | สำเร็จครบ 22 route                                                                                                                                                                         |
+| `eslint`                      | สะอาดทั้ง Backend และ Frontend                                                                                                                                                             |
 | Browser จริงผ่าน Docker Stack | Login ครบ ADMIN/CUSTOMER_SERVICE/EXECUTIVE/MARKETING, เดิน Flow ลบ/กู้คืนสินค้า, อนุมัติประมูล → เห็นผลฝั่ง Marketing ทันที, Report Review→Action ไม่ 409, Dispute Admin Link แสดงถูก Role |
 
 ### ไฟล์หลักที่เป็นหลักฐาน
@@ -1049,15 +1049,15 @@ Reviewer คนเดิมตรวจซ้ำเฉพาะส่วนท�
 
 ### ผลการตรวจที่ทำแล้ว
 
-| การตรวจ | ผลที่เกิดขึ้นจริง |
-| ------- | ------------------ |
-| `npm test` (Backend) | 108 tests, 84 ผ่าน, 0 fail, 24 skip (เท่าเดิม ไม่มี Regression) |
-| `npm run test:frontend` | 28/28 ผ่าน (เท่าเดิม) |
-| `eslint` | สะอาดทุกไฟล์ที่แก้ |
-| Browser จริงผ่าน Docker Stack (Rebuild `support-service`) | Login เป็น Buyer สร้างตั๋วผูก Order จริง
-  → Query DB ตรงยืนยัน `target_id` ตรงกับ Seller ของ Order นั้น (ไม่ใช่ผู้แจ้ง) → Escalate ตั๋ว →
-  Login เป็น Admin เปิดเคสระดับแอดมิน เห็นการ์ด "คู่กรณี" แสดง Seller ID แยกจากการ์ดผู้แจ้งที่แสดง
-  Buyer ID ถูกต้อง — ลบข้อมูลทดสอบและคืนค่า Baseline ครบหลังยืนยันเสร็จ |
+| การตรวจ                                                                                          | ผลที่เกิดขึ้นจริง                                               |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `npm test` (Backend)                                                                             | 108 tests, 84 ผ่าน, 0 fail, 24 skip (เท่าเดิม ไม่มี Regression) |
+| `npm run test:frontend`                                                                          | 28/28 ผ่าน (เท่าเดิม)                                           |
+| `eslint`                                                                                         | สะอาดทุกไฟล์ที่แก้                                              |
+| Browser จริงผ่าน Docker Stack (Rebuild `support-service`)                                        | Login เป็น Buyer สร้างตั๋วผูก Order จริง                        |
+| → Query DB ตรงยืนยัน `target_id` ตรงกับ Seller ของ Order นั้น (ไม่ใช่ผู้แจ้ง) → Escalate ตั๋ว →  |
+| Login เป็น Admin เปิดเคสระดับแอดมิน เห็นการ์ด "คู่กรณี" แสดง Seller ID แยกจากการ์ดผู้แจ้งที่แสดง |
+| Buyer ID ถูกต้อง — ลบข้อมูลทดสอบและคืนค่า Baseline ครบหลังยืนยันเสร็จ                            |
 
 ### ไฟล์หลักที่เป็นหลักฐาน
 

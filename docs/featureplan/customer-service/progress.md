@@ -73,6 +73,7 @@ beyond what's listed above stays in the Security Phase
 deferred `CSS-001` — unchanged by this round, still needs Buyer-owner alignment before anyone builds it
 
 **UI Polish / UX Improvements (2026-08-26):**
+
 - Upgraded the Customer Support panels (`/support/panel`) to an "Impeccable" UI standard.
 - **Search UI:** Adjusted the search empty state to properly accommodate the search bar without layout overlap and added quick "Copy Full ID" buttons to the Disputes table for seamless ID pasting.
 - **FAQ Editor:** Converted the inline FAQ submission form into a beautiful, centralized Glassmorphism Modal.

@@ -208,7 +208,9 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
   }
 
   return auctionRepository.withAuctionLock(auctionId, async (tx) => {
-    const auction = await tx.auctionItem.findUnique({ where: { id: auctionId } });
+    const auction = await tx.auctionItem.findUnique({
+      where: { id: auctionId },
+    });
     if (!auction) throw notFound("auction not found");
     if (auction.sellerId === user.id) {
       throw forbidden("you cannot bid on your own auction");

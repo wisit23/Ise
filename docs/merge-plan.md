@@ -5,13 +5,13 @@ Target branch: `integration/all-features` (ตัดจาก `main` แล้�
 
 ## สถานะ Branch (เทียบ `origin/main` = `2c8ef20`)
 
-| Branch | ล้ำหน้า | ตามหลัง | ขอบเขต | Merge-base |
-| --- | --- | --- | --- | --- |
-| `ceo` | 1 | 0 | Executive dashboard + metrics API (auth/order/product) | `2c8ef20` |
-| `marketing` | 1 | 0 | Auction system + Swipe choice | `2c8ef20` |
-| `buyer` | 1 | 4 | Reservation 10 นาที + Cart | `76910b7` |
-| `feature-admin` | 1 | 4 | KYC, reports, moderation, bulk action, dispute hold, multi-role | `76910b7` |
-| `feature/customer-service-panel` | 9 | 0 | support-service (ticket/dispute/FAQ) + agent panel | `2c8ef20` |
+| Branch                           | ล้ำหน้า | ตามหลัง | ขอบเขต                                                          | Merge-base |
+| -------------------------------- | ------- | ------- | --------------------------------------------------------------- | ---------- |
+| `ceo`                            | 1       | 0       | Executive dashboard + metrics API (auth/order/product)          | `2c8ef20`  |
+| `marketing`                      | 1       | 0       | Auction system + Swipe choice                                   | `2c8ef20`  |
+| `buyer`                          | 1       | 4       | Reservation 10 นาที + Cart                                      | `76910b7`  |
+| `feature-admin`                  | 1       | 4       | KYC, reports, moderation, bulk action, dispute hold, multi-role | `76910b7`  |
+| `feature/customer-service-panel` | 9       | 0       | support-service (ticket/dispute/FAQ) + agent panel              | `2c8ef20`  |
 
 ## ลำดับการ Merge และเหตุผล
 
@@ -99,14 +99,14 @@ Dockerfile ยังเป็น `prisma db push` → โฟลเดอร์ m
 
 ## Conflict ที่เป็นแค่ "ต่อท้าย" (แก้เชิงกลไก keep both)
 
-| ไฟล์ | branch ที่ชน | วิธี |
-| --- | --- | --- |
-| `backend/services/*/src/app.js` (3 ไฟล์) | admin, ceo, buyer, marketing | รวม `app.use()` ทุกเส้น |
-| `frontend/components/NavBar.js` | admin, ceo, marketing, CS | รวมลิงก์ทุกเมนู ตาม role |
-| `backend/shared/src/index.js` | admin, ceo | รวม export |
-| `auth/order/product schema.prisma` | เกือบทุก branch | รวม field/model (ยกเว้น P1) |
-| `auth-service/prisma/seed.js` | marketing, ceo, CS | รวม (ยกเว้น P3) |
-| `product-service/src/server.js` | buyer, marketing | รวม background job ทั้งคู่ |
+| ไฟล์                                     | branch ที่ชน                 | วิธี                        |
+| ---------------------------------------- | ---------------------------- | --------------------------- |
+| `backend/services/*/src/app.js` (3 ไฟล์) | admin, ceo, buyer, marketing | รวม `app.use()` ทุกเส้น     |
+| `frontend/components/NavBar.js`          | admin, ceo, marketing, CS    | รวมลิงก์ทุกเมนู ตาม role    |
+| `backend/shared/src/index.js`            | admin, ceo                   | รวม export                  |
+| `auth/order/product schema.prisma`       | เกือบทุก branch              | รวม field/model (ยกเว้น P1) |
+| `auth-service/prisma/seed.js`            | marketing, ceo, CS           | รวม (ยกเว้น P3)             |
+| `product-service/src/server.js`          | buyer, marketing             | รวม background job ทั้งคู่  |
 
 ## จุดที่ "เชื่อมระบบเข้าหากัน" เพิ่มเติม
 

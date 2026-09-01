@@ -32,7 +32,7 @@ async function listQueue({ status, search, skip, take }) {
   if (search) {
     where.OR = [
       { reason: { contains: search, mode: "insensitive" } },
-      { orderId: { contains: search, mode: "insensitive" } }
+      { orderId: { contains: search, mode: "insensitive" } },
     ];
   }
 
@@ -46,7 +46,7 @@ async function listQueue({ status, search, skip, take }) {
     }),
     prisma.disputeCase.count({ where }),
   ]);
-  
+
   return { items, total };
 }
 

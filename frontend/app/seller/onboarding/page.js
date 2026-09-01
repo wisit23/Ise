@@ -130,8 +130,7 @@ export default function SellerOnboardingPage() {
         <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
           <div className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
             <p className="text-sm text-gray-600">
-              การยืนยันตัวตนผู้ขายใช้ได้เฉพาะบัญชีประเภทผู้ขาย (Seller)
-              เท่านั้น
+              การยืนยันตัวตนผู้ขายใช้ได้เฉพาะบัญชีประเภทผู้ขาย (Seller) เท่านั้น
             </p>
             <Link
               href="/register"
@@ -204,9 +203,9 @@ export default function SellerOnboardingPage() {
                   ยื่นคำขอเมื่อ:
                 </span>{" "}
                 {status.latestApplication?.submittedAt &&
-                  new Date(
-                    status.latestApplication.submittedAt,
-                  ).toLocaleString("th-TH")}
+                  new Date(status.latestApplication.submittedAt).toLocaleString(
+                    "th-TH",
+                  )}
               </div>
             </div>
           </div>
@@ -323,7 +322,9 @@ export default function SellerOnboardingPage() {
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        idCardNumber: e.target.value.replace(/\D/g, "").slice(0, 13),
+                        idCardNumber: e.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 13),
                       })
                     }
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono outline-none focus:border-emerald-500"
@@ -350,8 +351,7 @@ export default function SellerOnboardingPage() {
 
             <div className="border-t border-gray-100 pt-5">
               <h2 className="mb-2 text-base font-semibold text-gray-900">
-                3. รูปถ่ายบัตรประชาชน{" "}
-                <span className="text-red-500">*</span>
+                3. รูปถ่ายบัตรประชาชน <span className="text-red-500">*</span>
               </h2>
               <p className="mb-3 text-xs text-gray-500">
                 กรุณาถ่ายรูปด้านหน้าบัตรประชาชนให้ชัดเจน เห็นชื่อ นามสกุล

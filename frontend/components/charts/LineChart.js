@@ -58,7 +58,7 @@ export default function LineChart({
   }
 
   const yTicks = Array.from({ length: gridLines + 1 }, (_, i) =>
-    Math.round((maxY / gridLines) * i)
+    Math.round((maxY / gridLines) * i),
   );
 
   return (
@@ -115,11 +115,7 @@ export default function LineChart({
         {series.map((s, si) => (
           <g key={s.label}>
             {fillArea && (
-              <path
-                d={buildArea(s.data)}
-                fill={s.color}
-                fillOpacity="0.12"
-              />
+              <path d={buildArea(s.data)} fill={s.color} fillOpacity="0.12" />
             )}
             <path
               d={buildPath(s.data)}
@@ -151,42 +147,46 @@ export default function LineChart({
         ))}
 
         {/* Hover tooltip */}
-        {hover && (() => {
-          const s = series[hover.si];
-          const d = s.data[hover.i];
-          const tx = Math.min(Math.max(xPos(hover.i), 40), W - 40);
-          const ty = Math.max(yPos(d.y) - 20, padTop + 5);
-          return (
-            <g>
-              <rect
-                x={tx - 28}
-                y={ty - 12}
-                width={56}
-                height={18}
-                rx="4"
-                fill="#1f2937"
-                fillOpacity="0.88"
-              />
-              <text
-                x={tx}
-                y={ty}
-                textAnchor="middle"
-                fontSize="9"
-                fill="white"
-                fontWeight="600"
-              >
-                {d.x}: {d.y}
-              </text>
-            </g>
-          );
-        })()}
+        {hover &&
+          (() => {
+            const s = series[hover.si];
+            const d = s.data[hover.i];
+            const tx = Math.min(Math.max(xPos(hover.i), 40), W - 40);
+            const ty = Math.max(yPos(d.y) - 20, padTop + 5);
+            return (
+              <g>
+                <rect
+                  x={tx - 28}
+                  y={ty - 12}
+                  width={56}
+                  height={18}
+                  rx="4"
+                  fill="#1f2937"
+                  fillOpacity="0.88"
+                />
+                <text
+                  x={tx}
+                  y={ty}
+                  textAnchor="middle"
+                  fontSize="9"
+                  fill="white"
+                  fontWeight="600"
+                >
+                  {d.x}: {d.y}
+                </text>
+              </g>
+            );
+          })()}
       </svg>
 
       {/* Legend */}
       {series.length > 1 && (
         <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-0.5">
           {series.map((s) => (
-            <div key={s.label} className="flex items-center gap-1 text-[10px] text-gray-500">
+            <div
+              key={s.label}
+              className="flex items-center gap-1 text-[10px] text-gray-500"
+            >
               <span
                 className="inline-block h-2 w-5 rounded-full"
                 style={{ backgroundColor: s.color }}

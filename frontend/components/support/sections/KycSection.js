@@ -98,10 +98,12 @@ export default function KycSection({ token }) {
               <div className="mb-3 flex items-start justify-between border-b border-gray-100 pb-3">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">
-                    {app.user?.firstName} {app.user?.lastName} ({app.user?.email})
+                    {app.user?.firstName} {app.user?.lastName} (
+                    {app.user?.email})
                   </p>
                   <p className="mt-1 text-xs text-gray-500">
-                    ยื่นเมื่อ: {new Date(app.submittedAt).toLocaleString("th-TH")}
+                    ยื่นเมื่อ:{" "}
+                    {new Date(app.submittedAt).toLocaleString("th-TH")}
                   </p>
                 </div>
               </div>

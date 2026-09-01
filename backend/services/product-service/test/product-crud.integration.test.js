@@ -135,7 +135,9 @@ test("product CRUD against a real database", async (t) => {
       .get("/search")
       .query({ q: "nike running" });
     assert.equal(hybridRes.status, 200);
-    const titleIndex = hybridRes.body.items.findIndex((p) => p.id === titleMatch.id);
+    const titleIndex = hybridRes.body.items.findIndex(
+      (p) => p.id === titleMatch.id,
+    );
     const descriptionIndex = hybridRes.body.items.findIndex(
       (p) => p.id === descriptionMatch.id,
     );

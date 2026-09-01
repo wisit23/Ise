@@ -72,8 +72,11 @@ test("report lifecycle enforces review-before-action and dispatches owner comman
     return;
   }
 
-  const { server: mockProductServer, moderationCalls, port } =
-    await startMockProductService();
+  const {
+    server: mockProductServer,
+    moderationCalls,
+    port,
+  } = await startMockProductService();
   process.env.PRODUCT_SERVICE_URL = `http://localhost:${port}`;
   const app = require("../src/app");
 

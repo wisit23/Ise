@@ -14,7 +14,10 @@ const app = require("../src/app");
 
 const buyerId = `int-test-lookup-buyer-${Date.now()}`;
 const buyerToken = signAccessToken({ sub: buyerId, role: "BUYER" });
-const agentToken = signAccessToken({ sub: "int-test-lookup-agent", role: "CUSTOMER_SERVICE" });
+const agentToken = signAccessToken({
+  sub: "int-test-lookup-agent",
+  role: "CUSTOMER_SERVICE",
+});
 
 async function databaseIsReachable() {
   if (!process.env.DATABASE_URL) return false;

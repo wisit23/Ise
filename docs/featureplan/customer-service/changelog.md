@@ -66,7 +66,7 @@
 - Found and fixed two real bugs only live browser testing caught: a PATCH/POST method mismatch between
   frontend and backend on the decision endpoint (silent 404, no test caught it), and a Docker-Desktop-on-
   Windows bind-mount file-watcher gap where new/edited frontend files needed `docker compose restart
-  frontend` to be picked up
+frontend` to be picked up
 - Verified: 67/67 `npm test` (12 new support-service tests, 4 new order-service tests), lint/format clean,
   full round trip through the real browser against the live rebuilt Docker stack — order → dispute open →
   agent decision → order `refunded` + payout released, confirmed by direct Postgres query
