@@ -9,7 +9,7 @@ import Button from "../components/ui/Button";
 import ErrorState from "../components/ui/ErrorState";
 import Skeleton from "../components/ui/Skeleton";
 import { apiFetch, mediaUrl } from "../lib/api";
-import { fetchCategoryPreviews } from "../lib/catalog";
+import { fetchActiveCategories } from "../lib/catalog";
 
 const NEW_ARRIVALS_COUNT = 8;
 
@@ -26,14 +26,6 @@ const CATEGORY_ICON = {
   เสื้อผ้า: "checkroom",
   เสื้อยืด: "checkroom",
   แจ็คเก็ต: "checkroom",
-};
-
-/* Bento rhythm: the first tile is a 2x2 hero and the fourth is a wide
-   banner, everything else is a unit square. Keyed by index so it holds
-   whatever the real category list turns out to be. */
-const TILE_SPAN = {
-  0: "sm:col-span-2 sm:row-span-2",
-  3: "sm:col-span-2",
 };
 
 const VALUE_PROPS = [
@@ -102,7 +94,7 @@ export default function HomePage() {
   useEffect(() => {
     // Secondary to the product grid: if this fails the rail just stays
     // empty rather than taking the whole page down with it.
-    fetchCategoryPreviews()
+    fetchActiveCategories()
       .then(setCategories)
       .catch((err) => console.error("โหลดหมวดหมู่ไม่สำเร็จ:", err))
       .finally(() => setCategoriesLoading(false));
@@ -309,9 +301,9 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* ── Category bento ─────────────────────────────────── */}
-          <section className="mx-auto w-full max-w-6xl px-4 py-14">
-            <div className="mb-6 flex items-end justify-between gap-4">
+          {/* ── Category rail ─────────────────────────────────── */}
+          <section className="mx-auto w-full max-w-6xl px-4 py-12">
+            <div className="mb-5 flex items-end justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-bold tracking-tight text-gray-900">
                   เลือกซื้อตามหมวดหมู่
@@ -334,56 +326,33 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <div className="grid auto-rows-[132px] grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+            <div className="scrollbar-none flex gap-3 overflow-x-auto pb-1">
               {categoriesLoading
                 ? Array.from({ length: 6 }).map((_, i) => (
                     <Skeleton
                       key={i}
-                      className={`rounded-2xl ${TILE_SPAN[i] || ""}`}
+                      className="h-[104px] w-[140px] shrink-0 rounded-xl"
                     />
                   ))
-                : categories.map((c, i) => (
+                : categories.map((c) => (
                     <Link
                       key={c.name}
                       href={`/products?category=${encodeURIComponent(c.name)}`}
-                      className={`focus-ring group relative overflow-hidden rounded-2xl bg-gray-900 ${
-                        TILE_SPAN[i] || ""
-                      }`}
+                      className="focus-ring flex w-[140px] shrink-0 flex-col items-center gap-2 rounded-xl border border-line bg-white px-3 py-5 text-center transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
                     >
-                      {/* The newest listing in the category doubles as its
-                          cover art — no separate category-image table to
-                          maintain, and it can never go stale. */}
-                      {c.coverUrl && (
-                        <img
-                          src={mediaUrl(c.coverUrl)}
-                          alt=""
-                          aria-hidden="true"
-                          loading="lazy"
-                          className="absolute inset-0 h-full w-full object-cover opacity-70 transition-transform duration-700 group-hover:scale-110"
-                        />
-                      )}
-                      <span
-                        aria-hidden="true"
-                        className="absolute inset-0 bg-gradient-to-t from-gray-950/85 via-gray-950/25 to-transparent"
-                      />
-
-                      <span className="relative flex h-full flex-col justify-end p-3.5 sm:p-4">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-50 text-brand-600">
                         <span
-                          className="material-symbols-outlined mb-auto w-fit rounded-lg bg-white/15 p-1.5 text-[19px] leading-none text-white backdrop-blur"
+                          className="material-symbols-outlined text-[23px]"
                           aria-hidden="true"
                         >
                           {CATEGORY_ICON[c.name] || "sell"}
                         </span>
-                        <span
-                          className={`font-bold leading-tight text-white ${
-                            i === 0 ? "text-xl sm:text-2xl" : "text-base"
-                          }`}
-                        >
-                          {c.name}
-                        </span>
-                        <span className="mt-0.5 text-xs text-white/75">
-                          {c.count.toLocaleString("th-TH")} ชิ้น
-                        </span>
+                      </span>
+                      <span className="line-clamp-1 text-sm font-semibold text-gray-800">
+                        {c.name}
+                      </span>
+                      <span className="text-xs text-ink-subtle">
+                        {c.count.toLocaleString("th-TH")} ชิ้น
                       </span>
                     </Link>
                   ))}
@@ -424,7 +393,7 @@ export default function HomePage() {
                   ยังไม่มีสินค้าลงขายในระบบ
                 </p>
               ) : (
-                <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 md:gap-5">
                   {items.map((p) => (
                     <ProductCard key={p.id} product={p} />
                   ))}

@@ -120,13 +120,19 @@ export default function ProductCard({ product, showSeller = true }) {
     part === product.size && all.length > 1 ? `ไซซ์ ${part}` : part,
   );
 
+  // The catalog labels conditions bilingually ("ใหม่มาก (Like New)"), which
+  // is right on a detail page but too long for a badge — on a 2-up phone
+  // grid it either collided with the freshness pill or truncated to
+  // "ใหม่มาก (Like…". At a glance the Thai alone carries it.
   const conditionLabel = product.condition
-    ? conditionLabels[product.condition] || product.condition
+    ? (conditionLabels[product.condition] || product.condition)
+        .replace(/\s*\([^)]*\)\s*$/, "")
+        .trim()
     : null;
 
   return (
-    <article className="group relative flex flex-col">
-      <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-gray-100">
+    <article className="group relative flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-line-strong hover:shadow-xl">
+      <div className="relative aspect-[4/5] overflow-hidden bg-gray-100">
         {cover ? (
           <>
             <img
@@ -162,7 +168,7 @@ export default function ProductCard({ product, showSeller = true }) {
 
         {conditionLabel && (
           <span
-            className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm ${
+            className={`absolute left-2.5 top-2.5 max-w-[calc(100%-6rem)] truncate rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm ${
               CONDITION_STYLE[product.condition] || "bg-gray-700 text-white"
             }`}
           >
@@ -170,13 +176,13 @@ export default function ProductCard({ product, showSeller = true }) {
           </span>
         )}
 
-        <span className="absolute right-3 top-3 rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-medium text-gray-700 shadow-sm backdrop-blur">
+        <span className="absolute right-2.5 top-2.5 rounded-full bg-gray-900/75 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm backdrop-blur">
           {freshnessLabel(product.createdAt)}
         </span>
 
         {/* A caption for the link the whole card already is — not a second
             action, just the affordance a still photo lacks. */}
-        <div className="pointer-events-none absolute inset-x-3 bottom-3 translate-y-2 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+        <div className="pointer-events-none absolute inset-x-2.5 bottom-2.5 translate-y-2 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
           <span className="flex items-center justify-center gap-1.5 rounded-full bg-white/95 py-2.5 text-sm font-semibold text-gray-900 shadow-lg backdrop-blur">
             ดูรายละเอียด
             <span
@@ -189,8 +195,8 @@ export default function ProductCard({ product, showSeller = true }) {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col px-1 pt-3">
-        <h3 className="line-clamp-2 text-sm font-medium leading-snug text-gray-900">
+      <div className="flex flex-1 flex-col p-3.5">
+        <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-gray-900">
           {/* Stretched link: the whole card is clickable, but only the title
               is in the tab order — a keyboard user gets one stop per card,
               not one per decorative element. */}
@@ -203,18 +209,18 @@ export default function ProductCard({ product, showSeller = true }) {
         </h3>
 
         {meta.length > 0 && (
-          <p className="mt-1 truncate text-xs text-ink-subtle">
+          <p className="mt-1.5 truncate text-[13px] text-ink-muted">
             {meta.join(" · ")}
           </p>
         )}
 
-        <p className="mt-2 text-xl font-bold tracking-tight text-gray-900">
+        <p className="mt-2.5 text-[22px] font-bold tracking-tight text-gray-900">
           ฿{product.price.toLocaleString("th-TH")}
         </p>
 
         {showSeller && (
-          <div className="mt-auto flex items-center gap-1.5 pt-3 text-xs">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[10px] font-bold text-brand-700">
+          <div className="mt-auto flex items-center gap-1.5 border-t border-line pt-3 text-[13px]">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[11px] font-bold text-brand-700">
               {sellerName?.[0]?.toUpperCase() || "?"}
             </span>
             <span className="truncate text-ink-muted">
