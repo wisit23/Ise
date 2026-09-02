@@ -261,6 +261,11 @@ async function getPublicSellerProfile(userId) {
     lastName: user.lastName,
     shopName: user.sellerProfile?.shopName || null,
     memberSince: user.createdAt,
+    // Real trust signal for the storefront: a buyer-facing "verified seller"
+    // badge is only honest if it reflects the actual KYC state, not just
+    // "this account has the SELLER role" (every seller gets that at
+    // registration, before any verification happens).
+    kycStatus: user.sellerProfile?.kycStatus || "NONE",
   };
 }
 

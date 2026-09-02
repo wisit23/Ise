@@ -15,6 +15,17 @@ const ROLE_LABEL = {
   EXECUTIVE: "ผู้บริหาร",
 };
 
+/* Everywhere a buyer browses to find something. Shown as top-level links —
+   this is the "single row" pattern chosen after prototyping it alongside a
+   two-row collapsing header and a hidden-search variant: three destinations
+   is few enough to sit beside the search field without crowding it, and
+   nothing here ever moves or hides. */
+const DISCOVERY_LINKS = [
+  { href: "/products", label: "สินค้าทั้งหมด", icon: "storefront" },
+  { href: "/swipe", label: "ปัดดู", icon: "swipe" },
+  { href: "/auctions", label: "ประมูล", icon: "gavel" },
+];
+
 export default function NavBar() {
   const [user, setUser] = useState(null);
   const [cartCount, setCartCount] = useState(0);
@@ -76,29 +87,46 @@ export default function NavBar() {
   const isMarketing = user?.role === "MARKETING";
   const isSupportAgent =
     user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
+  // Every one of these is a role someone can hold *in addition to* being a
+  // buyer on this same account — the header never assumes a visitor is only
+  // one thing, which is why these sit in their own labelled group instead of
+  // gating an entirely separate header.
+  const hasWorkLinks = isSupportAgent || isSeller || isExecutive || isMarketing;
 
   return (
-    <header className="sticky top-0 z-nav border-b border-gray-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+    <header className="sticky top-0 z-nav border-b border-line bg-white/90 backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
         <Link
           href="/"
-          className="shrink-0 text-xl font-bold tracking-tight text-emerald-600"
+          aria-label="RE-LOOP หน้าแรก"
+          className="focus-ring flex shrink-0 items-center gap-2 rounded text-xl font-bold tracking-tight text-brand-600"
         >
-          RE-LOOP
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
+            <span
+              className="material-symbols-outlined text-[18px]"
+              aria-hidden="true"
+            >
+              autorenew
+            </span>
+          </span>
+          <span className="hidden sm:inline">RE-LOOP</span>
         </Link>
 
-        <form onSubmit={handleSearch} className="hidden flex-1 sm:flex">
-          <div className="focus-within:border-brand-500 flex w-full overflow-hidden rounded-md border border-line-strong transition">
+        <form onSubmit={handleSearch} className="hidden min-w-0 flex-1 sm:flex">
+          <div className="focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10 flex w-full max-w-md overflow-hidden rounded-full border border-line-strong bg-white transition">
+            <span className="material-symbols-outlined pl-4 text-[19px] text-ink-subtle">
+              search
+            </span>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               aria-label="ค้นหาสินค้า"
-              placeholder="ค้นหาสินค้า เช่น เสื้อ, กระเป๋า, รองเท้า..."
-              className="placeholder:text-ink-subtle w-full px-3 py-2 text-sm text-gray-900 outline-none"
+              placeholder="ค้นหาแบรนด์ หมวดหมู่ หรือสไตล์..."
+              className="placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-gray-900 outline-none"
             />
             <button
               type="submit"
-              className="flex items-center bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
+              className="shrink-0 self-stretch bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
             >
               ค้นหา
             </button>
@@ -108,35 +136,64 @@ export default function NavBar() {
         {/* On small screens the label is hidden and only the icon remains, so
             each link carries its own aria-label rather than relying on text
             that may not be rendered. */}
-        <Link
-          href="/swipe"
-          aria-label="ปัดดูสินค้า"
-          className="focus-ring flex shrink-0 items-center gap-1 rounded-md px-1 py-1 text-sm text-gray-600 transition hover:text-brand-600"
+        <nav
+          aria-label="สำรวจสินค้า"
+          className="ml-auto flex shrink-0 items-center gap-0.5 md:ml-0"
         >
-          <span
-            className="material-symbols-outlined text-[20px] leading-none"
-            aria-hidden="true"
-          >
-            swipe
-          </span>
-          <span className="hidden sm:inline">ปัดดูสินค้า</span>
-        </Link>
+          {DISCOVERY_LINKS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-label={item.label}
+              className="focus-ring flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-brand-700 md:px-3"
+            >
+              <span
+                className="material-symbols-outlined text-[20px] leading-none"
+                aria-hidden="true"
+              >
+                {item.icon}
+              </span>
+              <span className="hidden lg:inline">{item.label}</span>
+            </Link>
+          ))}
+        </nav>
 
-        <Link
-          href="/auctions"
-          aria-label="ประมูล"
-          className="focus-ring flex shrink-0 items-center gap-1 rounded-md px-1 py-1 text-sm text-gray-600 transition hover:text-brand-600"
-        >
-          <span
-            className="material-symbols-outlined text-[20px] leading-none"
-            aria-hidden="true"
+        {user && (
+          <Link
+            href="/sell"
+            className="focus-ring hidden shrink-0 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 md:flex"
           >
-            gavel
-          </span>
-          <span className="hidden sm:inline">ประมูล</span>
-        </Link>
+            <span
+              className="material-symbols-outlined text-[18px] leading-none"
+              aria-hidden="true"
+            >
+              add_circle
+            </span>
+            ลงขาย
+          </Link>
+        )}
 
-        <div className="ml-auto shrink-0">
+        {user && (
+          <Link
+            href="/cart"
+            aria-label={`ตะกร้า${cartCount > 0 ? ` มี ${cartCount} รายการ` : ""}`}
+            className="focus-ring relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-600 transition hover:bg-gray-100 hover:text-brand-700"
+          >
+            <span
+              className="material-symbols-outlined text-[22px] leading-none"
+              aria-hidden="true"
+            >
+              shopping_cart
+            </span>
+            {cartCount > 0 && (
+              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
+                {cartCount}
+              </span>
+            )}
+          </Link>
+        )}
+
+        <div className="shrink-0">
           {user ? (
             <div className="relative" ref={menuRef}>
               <button
@@ -154,189 +211,243 @@ export default function NavBar() {
                   role="menu"
                   className="animate-dropdown-in absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-line bg-white py-2 shadow-lg"
                 >
-                  <div className="border-b border-gray-100 px-4 py-3">
+                  <div className="border-b border-line px-4 py-3">
                     <p className="truncate text-sm font-medium text-gray-900">
                       {user.firstName} {user.lastName}
                     </p>
-                    <span className="mt-1 inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                    <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
                       {ROLE_LABEL[user.role] || user.role}
                     </span>
                   </div>
 
-                  {isSupportAgent && (
-                    <Link
-                      href="/workspace"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-50"
-                    >
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sky-600 text-white">
-                        <span className="material-symbols-outlined text-[14px] leading-none">
-                          headset_mic
-                        </span>
-                      </span>
-                      Backoffice Workspace
-                    </Link>
+                  {/* Work links live in their own labelled section rather
+                      than mixed in with "my stuff" — the twelve items this
+                      menu used to hold in one flat list were exactly this
+                      plus the buyer links below, undivided. Nothing here was
+                      removed, only grouped. */}
+                  {hasWorkLinks && (
+                    <>
+                      <p className="px-4 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
+                        การทำงาน
+                      </p>
+
+                      {isSupportAgent && (
+                        <Link
+                          href="/workspace"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <span
+                            className="material-symbols-outlined text-[18px] text-ink-subtle"
+                            aria-hidden="true"
+                          >
+                            headset_mic
+                          </span>
+                          Backoffice Workspace
+                        </Link>
+                      )}
+
+                      {isExecutive && (
+                        <Link
+                          href="/executive"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <span
+                            className="material-symbols-outlined text-[18px] text-ink-subtle"
+                            aria-hidden="true"
+                          >
+                            insights
+                          </span>
+                          แดชบอร์ดผู้บริหาร
+                        </Link>
+                      )}
+
+                      {isSeller && (
+                        <Link
+                          href="/seller/dashboard"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <span
+                            className="material-symbols-outlined text-[18px] text-ink-subtle"
+                            aria-hidden="true"
+                          >
+                            storefront
+                          </span>
+                          แดชบอร์ดผู้ขาย
+                        </Link>
+                      )}
+
+                      {isSeller && (
+                        <Link
+                          href={`/store/${user.id}`}
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <span
+                            className="material-symbols-outlined text-[18px] text-ink-subtle"
+                            aria-hidden="true"
+                          >
+                            storefront
+                          </span>
+                          ร้านค้าของฉัน
+                        </Link>
+                      )}
+
+                      {isSeller && (
+                        <Link
+                          href="/seller/videos/new"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <span
+                            className="material-symbols-outlined text-[18px] text-ink-subtle"
+                            aria-hidden="true"
+                          >
+                            videocam
+                          </span>
+                          อัปโหลดคลิปรีวิว
+                        </Link>
+                      )}
+
+                      {isSeller && (
+                        <Link
+                          href="/seller/auctions"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <span
+                            className="material-symbols-outlined text-[18px] text-ink-subtle"
+                            aria-hidden="true"
+                          >
+                            gavel
+                          </span>
+                          ส่งสินค้าประมูล
+                        </Link>
+                      )}
+
+                      {isMarketing && (
+                        <Link
+                          href="/marketing"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          <span
+                            className="material-symbols-outlined text-[18px] text-ink-subtle"
+                            aria-hidden="true"
+                          >
+                            campaign
+                          </span>
+                          ศูนย์การตลาด
+                        </Link>
+                      )}
+
+                      <div className="my-1 border-t border-line" />
+                    </>
                   )}
 
+                  <p className="px-4 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
+                    บัญชีของฉัน
+                  </p>
+
+                  {/* Also a header pill at md+ (next to the cart icon), but
+                      that pill is hidden below md to leave room for the
+                      search field — this is the only path to /sell on a
+                      phone, so it has to exist here too, not just as a
+                      shortcut. */}
                   <Link
                     href="/sell"
                     onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50"
                   >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                      <span className="material-symbols-outlined text-[14px] leading-none">
-                        add
-                      </span>
+                    <span
+                      className="material-symbols-outlined text-[18px]"
+                      aria-hidden="true"
+                    >
+                      add_circle
                     </span>
                     ลงขายสินค้า
-                  </Link>
-
-                  {isExecutive && (
-                    <Link
-                      href="/executive"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-                    >
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                        <span className="material-symbols-outlined text-[14px] leading-none">
-                          insights
-                        </span>
-                      </span>
-                      แดชบอร์ดผู้บริหาร
-                    </Link>
-                  )}
-
-                  {isSeller && (
-                    <Link
-                      href="/seller/dashboard"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-                    >
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                        <span className="material-symbols-outlined text-[14px] leading-none">
-                          storefront
-                        </span>
-                      </span>
-                      แดชบอร์ดผู้ขาย
-                    </Link>
-                  )}
-
-                  {isSeller && (
-                    <Link
-                      href="/seller/videos/new"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-                    >
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                        <span className="material-symbols-outlined text-[14px] leading-none">
-                          videocam
-                        </span>
-                      </span>
-                      อัปโหลดคลิปรีวิว
-                    </Link>
-                  )}
-
-                  {isSeller && (
-                    <Link
-                      href="/seller/auctions"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-                    >
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                        <span className="material-symbols-outlined text-[14px] leading-none">
-                          gavel
-                        </span>
-                      </span>
-                      ส่งสินค้าประมูล
-                    </Link>
-                  )}
-
-                  {isMarketing && (
-                    <Link
-                      href="/marketing"
-                      onClick={() => setMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-                    >
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                        <span className="material-symbols-outlined text-[14px] leading-none">
-                          campaign
-                        </span>
-                      </span>
-                      ศูนย์การตลาด
-                    </Link>
-                  )}
-
-                  <Link
-                    href="/cart"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center justify-between px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    ตะกร้า
-                    {cartCount > 0 && (
-                      <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] text-white">
-                        {cartCount}
-                      </span>
-                    )}
                   </Link>
 
                   <Link
                     href="/orders"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                   >
-                    คำสั่งซื้อของฉัน
-                  </Link>
-
-                  {isSeller && (
-                    <Link
-                      href={`/store/${user.id}`}
-                      onClick={() => setMenuOpen(false)}
-                      className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    <span
+                      className="material-symbols-outlined text-[18px] text-ink-subtle"
+                      aria-hidden="true"
                     >
-                      ร้านค้าของฉัน
-                    </Link>
-                  )}
-
-                  <Link
-                    href="/help"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    ศูนย์ช่วยเหลือ
+                      receipt_long
+                    </span>
+                    คำสั่งซื้อของฉัน
                   </Link>
 
                   <Link
                     href="/support/tickets"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                   >
+                    <span
+                      className="material-symbols-outlined text-[18px] text-ink-subtle"
+                      aria-hidden="true"
+                    >
+                      confirmation_number
+                    </span>
                     ตั๋วแจ้งปัญหาของฉัน
+                  </Link>
+
+                  <Link
+                    href="/help"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <span
+                      className="material-symbols-outlined text-[18px] text-ink-subtle"
+                      aria-hidden="true"
+                    >
+                      help
+                    </span>
+                    ศูนย์ช่วยเหลือ
                   </Link>
 
                   <Link
                     href="/profile"
                     onClick={() => setMenuOpen(false)}
-                    className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50"
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                   >
+                    <span
+                      className="material-symbols-outlined text-[18px] text-ink-subtle"
+                      aria-hidden="true"
+                    >
+                      person
+                    </span>
                     ตั้งค่าโปรไฟล์
                   </Link>
 
-                  <div className="my-1 border-t border-gray-100" />
+                  <div className="my-1 border-t border-line" />
 
                   <button
                     onClick={handleLogout}
-                    className="block w-full px-4 py-2.5 text-left text-sm text-gray-500 hover:bg-gray-50"
+                    className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-500 hover:bg-gray-50"
                   >
+                    <span
+                      className="material-symbols-outlined text-[18px]"
+                      aria-hidden="true"
+                    >
+                      logout
+                    </span>
                     ออกจากระบบ
                   </button>
                 </div>
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-2 text-sm">
               <Link
                 href="/login"
-                className="focus-ring rounded-md px-1 py-1 text-gray-600 transition hover:text-brand-600"
+                className="focus-ring rounded-md px-2 py-1.5 text-gray-600 transition hover:text-brand-600"
               >
                 เข้าสู่ระบบ
               </Link>
@@ -348,15 +459,20 @@ export default function NavBar() {
 
       <form
         onSubmit={handleSearch}
-        className="border-t border-gray-100 px-4 py-2 sm:hidden"
+        className="border-t border-line px-4 py-2 sm:hidden"
       >
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="ค้นหาสินค้า"
-          placeholder="ค้นหาสินค้า..."
-          className="focus-ring placeholder:text-ink-subtle w-full rounded-md border border-line-strong px-3 py-2 text-sm text-gray-900 outline-none focus:border-brand-500"
-        />
+        <div className="flex items-center overflow-hidden rounded-full border border-line-strong bg-white">
+          <span className="material-symbols-outlined pl-3 text-[18px] text-ink-subtle">
+            search
+          </span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            aria-label="ค้นหาสินค้า"
+            placeholder="ค้นหาสินค้า..."
+            className="focus-ring placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-gray-900 outline-none"
+          />
+        </div>
       </form>
     </header>
   );

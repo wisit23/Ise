@@ -121,7 +121,7 @@ export default function StorePage() {
         )}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
           {items.map((p) => (
-            <ProductCard key={p.id} product={p} />
+            <ProductCard key={p.id} product={p} showSeller={false} />
           ))}
         </div>
         <Pagination

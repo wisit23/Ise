@@ -31,3 +31,24 @@ export function fetchConditions() {
   }
   return conditionsPromise;
 }
+
+/** Resolves to { [category]: liveListingCount }.
+ *
+ * The categories table lists every category ever created, including ones
+ * nobody has listed anything under yet — browsing to one of those is a dead
+ * end. There is no single endpoint for per-category totals, so this asks the
+ * feed for each category's `total` with `limit=1` (cheap: no item payload)
+ * and lets the caller filter out the zeros. */
+export function fetchCategoryCounts() {
+  return fetchCategories().then((categories) =>
+    Promise.all(
+      categories.map((category) =>
+        apiFetch(
+          `/api/products/feed?category=${encodeURIComponent(category)}&limit=1`,
+        )
+          .then((data) => [category, data.total])
+          .catch(() => [category, 0]),
+      ),
+    ).then((pairs) => Object.fromEntries(pairs)),
+  );
+}
