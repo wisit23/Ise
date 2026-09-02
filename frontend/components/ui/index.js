@@ -11,6 +11,7 @@ export { default as EmptyState } from "./EmptyState";
 export { default as ErrorState } from "./ErrorState";
 export { default as Input } from "./Input";
 export { default as Modal } from "./Modal";
+export { default as RadioSelect } from "./RadioSelect";
 export { default as Select } from "./Select";
 export { default as Skeleton } from "./Skeleton";
 export { default as Textarea } from "./Textarea";

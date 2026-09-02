@@ -135,11 +135,13 @@ export default function TicketsTable({
           value={statusFilter}
           onChange={onStatusFilterChange}
           options={STATUS_OPTIONS}
+          align="right"
         />
         <DropdownFilter
           value={priorityFilter}
           onChange={onPriorityFilterChange}
           options={PRIORITY_OPTIONS}
+          align="right"
         />
       </div>
 

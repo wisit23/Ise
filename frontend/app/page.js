@@ -325,7 +325,7 @@ export default function HomePage() {
                 type="button"
                 onClick={() => scrollRail(-1)}
                 aria-label="เลื่อนซ้าย"
-                className="focus-ring absolute -left-[18px] top-1/2 z-[5] hidden h-[42px] w-[42px] -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
+                className="focus-ring absolute -left-3.5 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
               >
                 <span
                   className="material-symbols-outlined text-[19px]"
@@ -337,7 +337,7 @@ export default function HomePage() {
 
               <div
                 ref={railRef}
-                className="scrollbar-none flex snap-x snap-mandatory gap-[.9rem] overflow-x-auto scroll-smooth pb-2"
+                className="scrollbar-none flex snap-x snap-mandatory gap-3.5 overflow-x-auto scroll-smooth py-2.5 -my-2.5 px-1 -mx-1"
               >
                 {categoriesLoading
                   ? Array.from({ length: 6 }).map((_, i) => (
@@ -350,7 +350,7 @@ export default function HomePage() {
                       <Link
                         key={c.name}
                         href={`/products?category=${encodeURIComponent(c.name)}`}
-                        className="focus-ring group/cat w-[150px] shrink-0 snap-start rounded-md border-[1.5px] border-line bg-white px-4 py-[1.35rem] text-center transition duration-300 ease-ease hover:-translate-y-[5px] hover:border-brand-300 hover:shadow-2"
+                        className="focus-ring group/cat w-[150px] shrink-0 snap-start rounded-md border border-line bg-white px-4 py-[1.35rem] text-center transition-all duration-200 ease-out hover:border-brand-400 hover:shadow-2"
                       >
                         <span className="mx-auto mb-[.7rem] grid h-[50px] w-[50px] place-items-center rounded-[14px] bg-surface-subtle text-brand-600 transition-colors duration-[250ms] group-hover/cat:bg-brand-50">
                           <span
@@ -360,7 +360,7 @@ export default function HomePage() {
                             {CATEGORY_ICON[c.name] || "sell"}
                           </span>
                         </span>
-                        <b className="block truncate text-sm font-semibold">
+                        <b className="block truncate text-sm font-semibold text-ink">
                           {c.name}
                         </b>
                         <small className="text-xs text-ink-subtle">
@@ -374,7 +374,7 @@ export default function HomePage() {
                 type="button"
                 onClick={() => scrollRail(1)}
                 aria-label="เลื่อนขวา"
-                className="focus-ring absolute -right-[18px] top-1/2 z-[5] hidden h-[42px] w-[42px] -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
+                className="focus-ring absolute -right-3.5 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
               >
                 <span
                   className="material-symbols-outlined text-[19px]"

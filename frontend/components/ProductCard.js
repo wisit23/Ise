@@ -131,7 +131,7 @@ export default function ProductCard({ product, showSeller = true }) {
     : null;
 
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-md border border-line bg-white shadow-1 transition duration-[350ms] ease-ease hover:-translate-y-1.5 hover:border-line-strong hover:shadow-2">
+    <article className="group relative flex flex-col overflow-hidden rounded-md border border-line bg-white shadow-1 transition duration-[300ms] ease-ease hover:-translate-y-1 hover:border-line-strong hover:shadow-2">
       <div className="relative aspect-[4/5] overflow-hidden bg-surface-panel">
         {cover ? (
           <>
@@ -239,9 +239,12 @@ export default function ProductCard({ product, showSeller = true }) {
 
             {rating?.total > 0 ? (
               <span className="ml-auto flex shrink-0 items-center gap-1">
-                <RatingStars value={rating.averageRating} />
-                <span className="font-semibold text-gray-700">
+                <RatingStars value={rating.averageRating} size={12} />
+                <span className="font-semibold text-gray-800 text-xs">
                   {rating.averageRating.toFixed(1)}
+                </span>
+                <span className="text-[11px] text-ink-subtle">
+                  ({rating.total})
                 </span>
               </span>
             ) : (

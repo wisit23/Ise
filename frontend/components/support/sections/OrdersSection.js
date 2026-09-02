@@ -23,58 +23,16 @@ import {
   PAGE_SIZE,
 } from "../../../lib/supportConstants";
 import { apiFetch, fetchAuthedBlobUrl } from "../../../lib/api";
+import RadioSelect from "../../ui/RadioSelect";
 
-export default // ─── Orders Section ───────────────────────────────────────────────────────────
+const SEARCH_TYPE_OPTIONS = [
+  { value: "orderId", label: "รหัสคำสั่งซื้อ (Order)" },
+  { value: "buyerId", label: "รหัสผู้ซื้อ (Buyer)" },
+  { value: "sellerId", label: "รหัสผู้ขาย (Seller)" },
+];
 
-function OrdersSection({ token }) {
+export default function OrdersSection({ token }) {
   const [searchType, setSearchType] = useState("orderId");
-  const [showSearchType, setShowSearchType] = useState(false);
-  const [closingSearchType, setClosingSearchType] = useState(false);
-  const searchDropdownRef = useRef(null);
-
-  const closeSearchDropdown = () => {
-    setClosingSearchType(true);
-    setTimeout(() => {
-      setShowSearchType(false);
-      setClosingSearchType(false);
-    }, 140);
-  };
-
-  const toggleSearchDropdown = () => {
-    if (showSearchType) {
-      closeSearchDropdown();
-    } else {
-      setShowSearchType(true);
-    }
-  };
-
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (
-        searchDropdownRef.current &&
-        !searchDropdownRef.current.contains(e.target)
-      ) {
-        setShowSearchType((prev) => {
-          if (prev) {
-            setClosingSearchType(true);
-            setTimeout(() => {
-              setShowSearchType(false);
-              setClosingSearchType(false);
-            }, 140);
-          }
-          return prev;
-        });
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const searchTypeLabels = {
-    orderId: "รหัสคำสั่งซื้อ (Order)",
-    buyerId: "รหัสผู้ซื้อ (Buyer)",
-    sellerId: "รหัสผู้ขาย (Seller)",
-  };
   const [query, setQuery] = useState("");
   const [items, setItems] = useState([]);
   const [searched, setSearched] = useState(false);
@@ -125,61 +83,34 @@ function OrdersSection({ token }) {
       >
         <form
           onSubmit={handleSearch}
-          className="relative flex w-full items-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.06)] transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
+          className="relative flex w-full items-center rounded-[10px] border border-slate-200 bg-white p-1.5 shadow-sm transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
         >
-          <div
-            className="relative border-r border-slate-200 bg-slate-50/50 rounded-l-lg"
-            ref={searchDropdownRef}
-          >
-            <button
-              type="button"
-              onClick={toggleSearchDropdown}
-              className="flex items-center justify-between w-48 bg-transparent py-2.5 pl-4 pr-3 text-sm font-semibold text-slate-700 outline-none hover:bg-slate-100 transition-colors"
-            >
-              <span className="truncate">{searchTypeLabels[searchType]}</span>
-              <span className="material-symbols-outlined text-[18px] text-slate-500 shrink-0">
-                expand_more
-              </span>
-            </button>
-            {(showSearchType || closingSearchType) && (
-              <div
-                className={`absolute top-full left-0 mt-2 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg z-20 ${closingSearchType ? "animate-dropdown-out" : "animate-dropdown-in"}`}
-              >
-                {Object.entries(searchTypeLabels).map(([val, label]) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => {
-                      setSearchType(val);
-                      closeSearchDropdown();
-                    }}
-                    className={`w-full text-left rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                      searchType === val
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* New RadioSelect Dropdown integrated seamlessly inside the search bar */}
+          <RadioSelect
+            options={SEARCH_TYPE_OPTIONS}
+            value={searchType}
+            onChange={setSearchType}
+            variant="panel"
+            size="sm"
+            className="w-48 border-r border-slate-200 shrink-0"
+            buttonClassName="!border-0 !shadow-none bg-slate-50/80 rounded-l-[8px] rounded-r-none py-2 pl-3.5 pr-2.5"
+          />
+
           <div className="flex flex-1 items-center px-3">
-            <span className="material-symbols-outlined mr-2 text-[20px] text-slate-500">
+            <span className="material-symbols-outlined mr-2 text-[19px] text-slate-400">
               search
             </span>
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="พิมพ์รหัสที่ต้องการค้นหา..."
-              className="w-full border-0 bg-transparent py-2.5 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-500 focus:ring-0"
+              className="w-full border-0 bg-transparent py-2 text-xs font-medium text-slate-900 outline-none placeholder:text-slate-400 focus:ring-0"
             />
           </div>
           <button
             type="submit"
             disabled={loading || !query.trim()}
-            className="flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold tracking-wide text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1 rounded-[8px] bg-emerald-600 px-4 py-2 text-xs font-bold tracking-wide text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
           >
             {loading ? "กำลังค้นหา..." : "ค้นหา"}
           </button>
@@ -201,67 +132,54 @@ function OrdersSection({ token }) {
           </p>
         </div>
       )}
-      <ul className="flex flex-col gap-3 max-w-4xl">
-        {items.map((o) => (
-          <li
-            key={o.id}
-            className="group rounded-xl border border-slate-200/60 bg-white p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)] hover:shadow-md hover:border-slate-300 transition-all duration-200"
-          >
-            <div className="flex items-center justify-between">
-              <p className="font-semibold text-slate-900 group-hover:text-emerald-700 transition-colors">
-                {o.productTitle}
-              </p>
-              <Badge
-                text={ORDER_STATUS_LABEL[o.status] || o.status}
-                style={
-                  o.status === "disputed"
-                    ? "bg-red-50 text-red-600"
-                    : "bg-slate-100 text-slate-600"
-                }
-              />
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] font-medium text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-slate-500">
-                  receipt_long
-                </span>{" "}
-                Order {o.id.slice(0, 8)}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-slate-500">
-                  payments
-                </span>{" "}
-                ฿{o.price?.toLocaleString("th-TH")}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-slate-500">
-                  person
-                </span>{" "}
-                Buyer {o.buyerId?.slice(0, 8)}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-slate-500">
-                  storefront
-                </span>{" "}
-                Seller {o.sellerId?.slice(0, 8)}
-              </span>
-            </div>
-            {o.status === "disputed" && (
-              <div className="mt-4 border-t border-slate-100 pt-3">
-                <Link
-                  href={`/support/cases/${o.id}`}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold tracking-wide text-emerald-700 transition-colors hover:bg-emerald-100"
-                >
-                  <span className="material-symbols-outlined text-[16px]">
-                    visibility
+
+      {items.length > 0 && (
+        <div className="mt-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-700">
+              พบ {items.length} รายการ
+            </h3>
+          </div>
+          <div className="grid gap-4">
+            {items.map((order) => (
+              <div
+                key={order.id}
+                className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-900">
+                      #{order.id}
+                    </span>
+                    <Badge variant={order.status}>
+                      {ORDER_STATUS_LABEL[order.status] || order.status}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    <span>ผู้ซื้อ: {order.buyer?.name || order.buyerId}</span>
+                    <span className="mx-2">•</span>
+                    <span>ผู้ขาย: {order.seller?.name || order.sellerId}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-bold text-slate-900">
+                    ฿{Number(order.totalAmount || 0).toLocaleString()}
                   </span>
-                  ดูข้อพิพาทของออเดอร์นี้
-                </Link>
+                  <Link
+                    href={`/orders?id=${order.id}`}
+                    className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    ดูรายละเอียด
+                    <span className="material-symbols-outlined text-[16px]">
+                      chevron_right
+                    </span>
+                  </Link>
+                </div>
               </div>
-            )}
-          </li>
-        ))}
-      </ul>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

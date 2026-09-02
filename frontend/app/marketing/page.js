@@ -55,44 +55,46 @@ export default function MarketingPanelPage() {
       <NavBar />
       <div className="flex flex-1">
         {/* ── Sidebar ── */}
-        <aside className="hidden w-56 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
-          <div className="border-b border-slate-100 px-6 py-5">
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
+          <div className="flex h-16 items-center border-b border-slate-200/60 px-4 bg-white">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
-                <span className="material-symbols-outlined text-[22px]">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-violet-50 text-violet-600">
+                <span className="material-symbols-outlined text-[19px]">
                   campaign
                 </span>
               </span>
-              <div className="flex flex-col">
-                <span className="text-[13px] font-extrabold tracking-tight text-slate-800">
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-bold tracking-tight text-slate-800">
                   Re-loop panel
                 </span>
-                <span className="text-[10px] font-bold tracking-wider text-violet-600 uppercase">
+                <span className="text-[10px] font-semibold tracking-wider text-violet-600 uppercase">
                   Marketing
                 </span>
               </div>
             </div>
           </div>
 
-          <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
+          <nav className="flex flex-1 flex-col gap-1 p-2">
             {SECTIONS.map((s) => {
               const active = section === s.key;
               return (
                 <button
                   key={s.key}
                   onClick={() => setSection(s.key)}
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-all duration-200 ${
+                  className={`group flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-xs transition-colors ${
                     active
-                      ? "bg-violet-600 text-white shadow-md shadow-violet-600/20"
-                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                      ? "bg-violet-600 text-white font-semibold shadow-sm"
+                      : "text-slate-600 font-medium hover:bg-slate-100/70 hover:text-slate-900"
                   }`}
                 >
                   <span
-                    className={`material-symbols-outlined text-[20px] transition-transform ${active ? "scale-110" : ""}`}
+                    className={`material-symbols-outlined text-[20px] shrink-0 w-5 text-center ${
+                      active ? "text-white" : "text-slate-500 group-hover:text-slate-700"
+                    }`}
                   >
                     {s.icon}
                   </span>
-                  {s.label}
+                  <span className="truncate">{s.label}</span>
                 </button>
               );
             })}
@@ -101,7 +103,7 @@ export default function MarketingPanelPage() {
 
         {/* ── Main Content ── */}
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-8 py-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+          <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
             <div className="flex items-center gap-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                 <span className="material-symbols-outlined text-[18px]">

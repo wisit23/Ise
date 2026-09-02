@@ -128,6 +128,7 @@ export default function AdminInboxTable({
           value={statusFilter}
           onChange={onStatusFilterChange}
           options={STATUS_OPTIONS}
+          align="right"
         />
       </div>
 

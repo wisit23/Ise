@@ -169,6 +169,7 @@ export default function DisputesTable({
           value={status}
           onChange={onStatusChange}
           options={STATUS_OPTIONS}
+          align="right"
         />
       </div>
 
