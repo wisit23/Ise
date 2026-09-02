@@ -26,7 +26,7 @@ export default function Alert({
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
-      className={`flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${t.cls} ${className}`}
+      className={`animate-slide-up flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${t.cls} ${className}`}
     >
       <span
         className="material-symbols-outlined shrink-0 text-[20px] leading-none"

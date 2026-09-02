@@ -188,7 +188,7 @@ export default function TicketThreadPage() {
           {ticket.messages.map((m) => (
             <li
               key={m.id}
-              className={`rounded-lg border p-3 text-sm ${
+              className={`animate-slide-up rounded-lg border p-3 text-sm ${
                 m.isInternal
                   ? "border-amber-200 bg-amber-50"
                   : m.authorRole === "AGENT"

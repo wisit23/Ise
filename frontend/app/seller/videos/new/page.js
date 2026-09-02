@@ -6,6 +6,7 @@ import Link from "next/link";
 import NavBar from "../../../../components/NavBar";
 import Footer from "../../../../components/Footer";
 import VideoUploader from "../../../../components/VideoUploader";
+import Select from "../../../../components/ui/Select";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 
@@ -136,9 +137,6 @@ export default function UploadVideoPage() {
           className="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-6"
         >
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              เลือกสินค้าของคุณ
-            </label>
             {fetchingProducts ? (
               <p className="text-sm text-gray-500">กำลังโหลดรายการสินค้า...</p>
             ) : products.length === 0 ? (
@@ -150,17 +148,16 @@ export default function UploadVideoPage() {
                 ก่อนอัปโหลดคลิป
               </p>
             ) : (
-              <select
+              <Select
+                label="เลือกสินค้าของคุณ"
                 value={form.productId}
                 onChange={update("productId")}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-              >
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title} (฿{p.price.toLocaleString("th-TH")})
-                  </option>
-                ))}
-              </select>
+                options={products.map((p) => ({
+                  value: p.id,
+                  label: `${p.title} (฿${p.price.toLocaleString("th-TH")})`,
+                }))}
+                required
+              />
             )}
           </div>
 

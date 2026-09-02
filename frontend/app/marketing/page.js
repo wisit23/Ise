@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NavBar from "../../components/NavBar";
+import RadioSelect from "../../components/ui/RadioSelect";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 
 import DashboardSection from "../../components/marketing/sections/DashboardSection";
@@ -115,17 +116,18 @@ export default function MarketingPanelPage() {
               </h1>
             </div>
             <div className="flex items-center gap-3 sm:hidden">
-              <select
+              <RadioSelect
                 value={section}
-                onChange={(e) => setSection(e.target.value)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium shadow-sm outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10"
-              >
-                {SECTIONS.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+                onChange={setSection}
+                options={SECTIONS.map((s) => ({
+                  value: s.key,
+                  label: s.label,
+                  icon: s.icon,
+                }))}
+                size="sm"
+                variant="panel"
+                align="right"
+              />
             </div>
           </div>
 

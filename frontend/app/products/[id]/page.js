@@ -8,6 +8,7 @@ import Footer from "../../../components/Footer";
 import MediaGallery from "../../../components/MediaGallery";
 import { StarDisplay } from "../../../components/StarRating";
 import ReportModal from "../../../components/ReportModal";
+import Alert from "../../../components/ui/Alert";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 import { fetchConditions } from "../../../lib/catalog";
@@ -235,15 +236,31 @@ export default function ProductDetailPage() {
             </button>
           )}
 
-          {notice && <p className="mt-4 text-sm text-red-600">{notice}</p>}
+          {notice && (
+            <div className="mt-4 animate-slide-up">
+              <Alert tone="error">{notice}</Alert>
+            </div>
+          )}
           {added && (
-            <p className="mt-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              เพิ่มลงตะกร้าแล้ว สินค้าถูกล็อกไว้ให้คุณ ไปที่{" "}
-              <Link href="/cart" className="font-medium underline">
-                ตะกร้า
-              </Link>{" "}
-              เพื่อชำระเงิน
-            </p>
+            <div className="mt-4 animate-slide-up flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0">
+                  check_circle
+                </span>
+                <span className="font-medium">
+                  เพิ่มลงตะกร้าแล้ว! สินค้าถูกล็อกไว้ให้คุณ 10 นาที
+                </span>
+              </div>
+              <Link
+                href="/cart"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95"
+              >
+                ไปที่ตะกร้า
+                <span className="material-symbols-outlined text-[15px]">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
           )}
 
           {!added && (

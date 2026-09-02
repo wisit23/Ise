@@ -7,6 +7,7 @@ import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import MediaUploader from "../../../components/MediaUploader";
 import TagInput from "../../../components/TagInput";
+import Select from "../../../components/ui/Select";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 import { fetchCategories, fetchConditions } from "../../../lib/catalog";
@@ -249,20 +250,13 @@ export default function SellerAuctionsPage() {
               </datalist>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                สภาพสินค้า
-              </label>
-              <select
+              <Select
+                label="สภาพสินค้า"
                 value={form.condition}
                 onChange={update("condition")}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-              >
-                {conditions.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
+                options={conditions}
+                required
+              />
             </div>
           </div>
 

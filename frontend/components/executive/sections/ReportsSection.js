@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { toCsv, downloadCsv } from "../../../lib/csv";
+import RadioSelect from "../../ui/RadioSelect";
 import {
   baht,
   dayLabel,
@@ -125,60 +126,60 @@ export default function ReportsSection({ token }) {
         <div>
           <label
             htmlFor="granularity"
-            className="mb-1 block text-xs text-slate-500"
+            className="mb-1 block text-xs text-slate-500 font-medium"
           >
             รูปแบบรายงาน
           </label>
-          <select
+          <RadioSelect
             id="granularity"
             value={granularity}
-            onChange={(e) => setGranularity(e.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-          >
-            <option value="month">รายเดือน</option>
-            <option value="year">รายปี</option>
-          </select>
+            onChange={setGranularity}
+            options={[
+              { value: "month", label: "รายเดือน" },
+              { value: "year", label: "รายปี" },
+            ]}
+            size="sm"
+            variant="panel"
+          />
         </div>
 
         {granularity === "month" && (
           <div>
             <label
               htmlFor="month"
-              className="mb-1 block text-xs text-slate-500"
+              className="mb-1 block text-xs text-slate-500 font-medium"
             >
               เดือน
             </label>
-            <select
+            <RadioSelect
               id="month"
               value={monthIndex}
-              onChange={(e) => setMonthIndex(Number(e.target.value))}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-            >
-              {MONTH_NAMES.map((name, i) => (
-                <option key={name} value={i}>
-                  {name}
-                </option>
-              ))}
-            </select>
+              onChange={setMonthIndex}
+              options={MONTH_NAMES.map((name, i) => ({
+                value: i,
+                label: name,
+              }))}
+              size="sm"
+              variant="panel"
+            />
           </div>
         )}
 
         <div>
-          <label htmlFor="year" className="mb-1 block text-xs text-slate-500">
+          <label htmlFor="year" className="mb-1 block text-xs text-slate-500 font-medium">
             ปี
           </label>
-          <select
+          <RadioSelect
             id="year"
             value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-          >
-            {yearChoices().map((y) => (
-              <option key={y} value={y}>
-                {y + 543}
-              </option>
-            ))}
-          </select>
+            onChange={setYear}
+            options={yearChoices().map((y) => ({
+              value: y,
+              label: String(y + 543),
+            }))}
+            size="sm"
+            variant="panel"
+          />
         </div>
 
         <button

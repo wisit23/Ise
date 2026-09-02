@@ -6,6 +6,7 @@ import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import Pagination from "../../../components/Pagination";
+import Select from "../../../components/ui/Select";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
@@ -145,9 +146,16 @@ export default function MyTicketsPage() {
           </h1>
           <button
             onClick={() => setShowForm((v) => !v)}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+            className={`focus-ring inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200 active:scale-95 ${
+              showForm
+                ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                : "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+            }`}
           >
-            + เปิดตั๋วใหม่
+            <span className="material-symbols-outlined text-[18px]">
+              {showForm ? "close" : "add"}
+            </span>
+            {showForm ? "ปิดฟอร์ม" : "เปิดตั๋วใหม่"}
           </button>
         </div>
         <p className="mb-6 text-sm text-gray-500">
@@ -161,84 +169,78 @@ export default function MyTicketsPage() {
         {showForm && (
           <form
             onSubmit={handleCreate}
-            className="mb-6 flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-5"
+            className="animate-slide-up mb-6 flex flex-col gap-4 rounded-xl border border-line bg-white p-6 shadow-sm"
           >
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                หัวข้อ
+                หัวข้อ <span className="text-danger">*</span>
               </label>
               <input
                 required
                 value={form.subject}
                 onChange={(e) => setForm({ ...form, subject: e.target.value })}
                 placeholder="สรุปปัญหาสั้นๆ"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none transition placeholder:text-slate-400 hover:border-gray-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                หมวดหมู่
-              </label>
-              <select
+              <Select
+                label="หมวดหมู่"
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
+                options={CATEGORIES}
+                required
+              />
             </div>
             {myOrders.length > 0 && (
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  เกี่ยวข้องกับคำสั่งซื้อไหน (ถ้ามี)
-                </label>
-                <select
+                <Select
+                  label="เกี่ยวข้องกับคำสั่งซื้อไหน (ถ้ามี)"
                   value={form.orderId}
                   onChange={(e) =>
                     setForm({ ...form, orderId: e.target.value })
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-                >
-                  <option value="">— ไม่เกี่ยวข้องกับคำสั่งซื้อใด —</option>
-                  {myOrders.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.productTitle} ({o.id.slice(0, 8)})
-                    </option>
-                  ))}
-                </select>
-                {form.orderId && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    ระบบจะแจ้งให้เจ้าหน้าที่ทราบว่าคำร้องนี้เกี่ยวข้องกับอีกฝ่ายในคำสั่งซื้อนี้ด้วย
-                  </p>
-                )}
+                  options={[
+                    { value: "", label: "— ไม่เกี่ยวข้องกับคำสั่งซื้อใด —" },
+                    ...myOrders.map((o) => ({
+                      value: o.id,
+                      label: `${o.productTitle} (${o.id.slice(0, 8)})`,
+                    })),
+                  ]}
+                  hint={form.orderId ? "ระบบจะแจ้งให้เจ้าหน้าที่ทราบว่าคำร้องนี้เกี่ยวข้องกับอีกฝ่ายในคำสั่งซื้อนี้ด้วย" : undefined}
+                />
               </div>
             )}
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                รายละเอียด
+                รายละเอียด <span className="text-danger">*</span>
               </label>
               <textarea
+                required
+                rows={4}
                 value={form.description}
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
                 }
-                rows={4}
                 placeholder="อธิบายปัญหาให้ละเอียดที่สุด"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none transition placeholder:text-slate-400 hover:border-gray-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
               />
             </div>
-            {formError && <p className="text-sm text-red-600">{formError}</p>}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="self-start rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {submitting ? "กำลังส่ง..." : "ส่งตั๋ว"}
-            </button>
+            {formError && (
+              <p className="animate-slide-up text-sm text-red-600 font-medium">{formError}</p>
+            )}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="focus-ring inline-flex items-center gap-2 rounded-full bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-95 disabled:opacity-50"
+              >
+                {submitting ? "กำลังส่ง..." : "ส่งตั๋ว"}
+                <span className="material-symbols-outlined text-[16px]">
+                  send
+                </span>
+              </button>
+            </div>
           </form>
         )}
 

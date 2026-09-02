@@ -142,12 +142,22 @@ module.exports = {
           "0%": { opacity: "1", transform: "translateY(0) scale(1)" },
           "100%": { opacity: "0", transform: "translateY(8px) scale(0.95)" },
         },
+        "slide-up": {
+          "0%": { opacity: "0", transform: "translateY(12px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "scale-in": {
+          "0%": { opacity: "0", transform: "scale(0.95)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
       },
       animation: {
         bob: "bob 5s ease-in-out infinite",
         swipe: "swipe .9s .35s cubic-bezier(.22,1,.36,1) forwards",
         "pulse-dot": "pulse-dot 2s infinite",
         "fade-in-up": "fade-in-up 0.5s ease-out forwards",
+        "slide-up": "slide-up 0.3s cubic-bezier(.16,1,.3,1) forwards",
+        "scale-in": "scale-in 0.25s cubic-bezier(.16,1,.3,1) forwards",
         "slide-in-right": "slide-in-right 0.3s ease-out forwards",
         "slide-out-right": "slide-out-right 0.3s ease-out forwards",
         "slide-in-left": "slide-in-left 0.3s ease-out forwards",

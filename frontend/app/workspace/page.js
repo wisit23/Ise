@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import NavBar from "../../components/NavBar";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 import { ToastProvider } from "../../components/ui/ToastProvider";
+import RadioSelect from "../../components/ui/RadioSelect";
 import Link from "next/link";
 
 import DashboardSection from "../../components/support/sections/DashboardSection";
@@ -170,17 +171,18 @@ export default function SupportPanelPage() {
               </div>
               {/* Mobile section switcher */}
               <div className="flex items-center gap-3 sm:hidden">
-                <select
+                <RadioSelect
                   value={section}
-                  onChange={(e) => setSection(e.target.value)}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium shadow-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
-                >
-                  {visibleSections.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSection}
+                  options={visibleSections.map((s) => ({
+                    value: s.key,
+                    label: s.label,
+                    icon: s.icon,
+                  }))}
+                  size="sm"
+                  variant="panel"
+                  align="right"
+                />
               </div>
             </div>
 

@@ -8,7 +8,8 @@ import ProductCard from "../components/ProductCard";
 import ErrorState from "../components/ui/ErrorState";
 import Skeleton from "../components/ui/Skeleton";
 import Reveal from "../components/ui/Reveal";
-import { apiFetch, mediaUrl } from "../lib/api";
+import FannedHeroCards from "../components/home/FannedHeroCards";
+import { apiFetch } from "../lib/api";
 import { fetchActiveCategories } from "../lib/catalog";
 
 const NEW_ARRIVALS_COUNT = 8;
@@ -125,8 +126,6 @@ export default function HomePage() {
     if (rail) rail.scrollBy({ left: dir * rail.clientWidth * 0.8 });
   };
 
-  const heroPhotos = items.filter((p) => p.media?.length).slice(0, 3);
-
   return (
     <main className="flex min-h-screen flex-col bg-white">
       <NavBar />
@@ -135,49 +134,54 @@ export default function HomePage() {
       {/* The hero sits on its own tinted ground with a closing rule: with a
           white background it ran straight into the category rail and the two
           read as one long block. */}
-      <section className="relative overflow-clip border-b border-line bg-[linear-gradient(180deg,theme(colors.brand.50/.45),theme(colors.surface.subtle))] pb-[clamp(3.5rem,7vw,6rem)] pt-[clamp(3rem,6vw,5.5rem)]">
+      <section className="relative overflow-clip border-b border-line bg-[linear-gradient(180deg,theme(colors.brand.50/.45),theme(colors.surface.subtle))] pb-[clamp(3rem,5vw,4.8rem)] pt-[clamp(2.8rem,4.5vw,4.2rem)]">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-[14%] -top-[38%] aspect-square w-[min(70vw,760px)] rounded-full bg-[radial-gradient(circle_at_30%_30%,theme(colors.brand.50),transparent_68%)]"
+          className="pointer-events-none absolute -right-[10%] -top-[30%] aspect-square w-[min(70vw,760px)] rounded-full bg-[radial-gradient(circle_at_30%_30%,theme(colors.brand.50),transparent_68%)]"
         />
 
-        <div className="relative mx-auto grid w-[min(100%-2.5rem,1280px)] items-center gap-[clamp(2rem,5vw,4.5rem)] lg:grid-cols-[1.05fr_.95fr]">
-          <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-4 py-1.5 text-xs font-semibold text-brand-700">
-              <span
-                aria-hidden="true"
-                className="h-[7px] w-[7px] animate-pulse-dot rounded-full bg-brand-600"
-              />
-              คัดสภาพแล้ว ตรวจสอบร้านได้ก่อนซื้อ
-            </span>
+        <div className="relative mx-auto grid w-[min(100%-2.5rem,1280px)] items-center gap-8 lg:gap-10 lg:grid-cols-[1.05fr_.95fr]">
+          <div className="flex flex-col justify-center">
+            {/* Eyebrow Chip */}
+            <div className="mb-3.5">
+              <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3.5 py-1 text-xs font-semibold text-brand-700 shadow-sm">
+                <span
+                  aria-hidden="true"
+                  className="h-2 w-2 animate-pulse rounded-full bg-brand-600"
+                />
+                คัดสภาพแล้ว ตรวจสอบร้านได้ก่อนซื้อ
+              </span>
+            </div>
 
-            <h1 className="my-5 text-hero leading-[1.22] tracking-[-.035em]">
+            {/* Main Heading */}
+            <h1 className="text-hero font-extrabold leading-[1.18] tracking-tight text-slate-900">
               ให้ของที่คุณรัก
               <br />
               ได้มี
-              <span className="relative whitespace-nowrap text-brand-600">
-                {/* Swipes in behind the words on load, as in the reference. */}
+              <span className="relative whitespace-nowrap text-brand-600 ml-1.5">
                 <span
                   aria-hidden="true"
-                  className="absolute inset-x-0 bottom-[.06em] -z-10 h-[.28em] origin-left scale-x-0 animate-swipe rounded-[3px] bg-brand-100"
+                  className="absolute inset-x-0 bottom-[.08em] -z-10 h-[.28em] origin-left scale-x-0 animate-swipe rounded-[3px] bg-brand-100"
                 />
                 ชีวิตรอบสอง
               </span>
             </h1>
 
-            <p className="max-w-[50ch] text-[clamp(1rem,.95rem+.25vw,1.125rem)] text-ink-muted">
+            {/* Subheading */}
+            <p className="mt-4 max-w-[50ch] text-base font-normal leading-relaxed text-slate-600">
               ตลาดแฟชั่นมือสองที่ให้คุณดูรีวิวร้าน เช็กสภาพสินค้า
               และจองของไว้ก่อนจ่ายเงิน — ซื้อสบายใจ ขายได้จริง
             </p>
 
-            <div className="my-8 flex flex-wrap gap-3">
+            {/* Action Buttons */}
+            <div className="my-7 flex flex-wrap items-center gap-3.5">
               <Link
                 href="/products"
-                className="focus-ring inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-[2.1em] py-[1.05em] text-base font-semibold text-white shadow-brand transition duration-[250ms] ease-ease hover:-translate-y-0.5 hover:bg-brand-700 active:scale-[.97]"
+                className="focus-ring inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-7 py-3 text-sm font-semibold text-white shadow-brand transition duration-200 hover:-translate-y-0.5 hover:bg-brand-700 active:scale-95"
               >
                 เลือกซื้อสินค้า
                 <span
-                  className="material-symbols-outlined text-[17px] leading-none"
+                  className="material-symbols-outlined text-[18px] leading-none"
                   aria-hidden="true"
                 >
                   arrow_forward
@@ -185,115 +189,75 @@ export default function HomePage() {
               </Link>
               <Link
                 href="/sell"
-                className="focus-ring inline-flex items-center justify-center rounded-full border-[1.5px] border-line bg-white px-[2.1em] py-[1.05em] text-base font-semibold transition duration-[250ms] ease-ease hover:-translate-y-0.5 hover:border-brand-600 hover:text-brand-600 active:scale-[.97]"
+                className="focus-ring inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-7 py-3 text-sm font-semibold text-slate-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-brand-600 hover:text-brand-600 active:scale-95"
               >
                 เริ่มขายฟรี
               </Link>
             </div>
 
-            {/* The reference showed avatar stacks and "4.9/5 จากรีวิว 23,481
-                รายการ". Those numbers do not exist here, so this is the
-                catalogue size instead — real, and it updates itself. */}
-            <div className="flex flex-wrap items-center gap-x-7 gap-y-3 text-sm">
-              <span className="flex items-center gap-2 text-ink-subtle">
-                <span
-                  className="material-symbols-outlined text-[19px] leading-none text-brand-600"
-                  aria-hidden="true"
-                >
-                  inventory_2
-                </span>
-                {total === null ? (
-                  <Skeleton className="h-4 w-28" />
-                ) : (
-                  <>
-                    <b className="font-semibold text-ink">
-                      {total.toLocaleString("th-TH")}
-                    </b>
-                    ชิ้นพร้อมขายตอนนี้
-                  </>
-                )}
-              </span>
-              <span className="flex items-center gap-2 text-ink-subtle">
-                <span
-                  className="material-symbols-outlined text-[19px] leading-none text-brand-600"
-                  aria-hidden="true"
-                >
-                  category
-                </span>
-                {categoriesLoading ? (
-                  <Skeleton className="h-4 w-20" />
-                ) : (
-                  <>
-                    <b className="font-semibold text-ink">
-                      {categories.length}
-                    </b>
-                    หมวดหมู่
-                  </>
-                )}
-              </span>
-            </div>
-          </div>
-
-          {/* Staggered collage of the site's own newest listings — real
-              merchandise rather than stock photography, so the hero can
-              never promise a selection that doesn't exist. */}
-          <div className="relative mx-auto hidden w-full max-w-[520px] lg:block">
-            {loading ? (
-              <div className="grid grid-cols-2 grid-rows-[repeat(5,58px)] gap-[14px]">
-                <Skeleton className="col-start-1 row-[1/4] rounded-lg" />
-                <Skeleton className="col-start-2 row-[2/5] rounded-lg" />
-                <Skeleton className="col-start-1 row-[4/6] rounded-lg" />
-              </div>
-            ) : heroPhotos.length > 0 ? (
-              <div className="grid grid-cols-2 grid-rows-[repeat(5,58px)] gap-[14px]">
-                {[
-                  "col-start-1 row-[1/4]",
-                  "col-start-2 row-[2/5]",
-                  "col-start-1 row-[4/6]",
-                ].map((placement, i) => {
-                  const p = heroPhotos[i];
-                  if (!p) return null;
-                  return (
-                    <Link
-                      key={p.id}
-                      href={`/products/${p.id}`}
-                      className={`focus-ring group overflow-hidden rounded-lg bg-gray-100 shadow-3 ${placement}`}
-                    >
-                      <img
-                        src={mediaUrl(p.media[0].url)}
-                        alt={p.title}
-                        className="h-full w-full object-cover transition-transform duration-[800ms] ease-ease group-hover:scale-[1.07]"
-                      />
-                    </Link>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="grid h-[350px] place-items-center rounded-lg border border-dashed border-line-strong text-sm text-ink-subtle">
-                ยังไม่มีรูปสินค้าให้แสดง
-              </div>
-            )}
-
-            {heroPhotos.length > 0 && !loading && (
-              <div className="absolute -bottom-5 right-0 flex w-[calc(50%-7px)] animate-bob items-center gap-3 rounded-md border border-line bg-white px-[1.05rem] py-3 shadow-3">
-                <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-brand-50 text-brand-600">
+            {/* Trust & Stats Bar */}
+            <div className="flex flex-wrap items-center gap-x-7 gap-y-2.5 pt-4 border-t border-slate-200/80 text-xs text-slate-600">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-50 text-brand-600">
                   <span
-                    className="material-symbols-outlined text-[17px]"
+                    className="material-symbols-outlined text-[15px]"
                     aria-hidden="true"
                   >
-                    lock_clock
+                    inventory_2
+                  </span>
+                </span>
+                {total === null ? (
+                  <Skeleton className="h-3.5 w-24" />
+                ) : (
+                  <span>
+                    <b className="font-bold text-slate-900">
+                      {total.toLocaleString("th-TH")}
+                    </b>{" "}
+                    ชิ้นพร้อมขาย
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <span
+                    className="material-symbols-outlined text-[15px]"
+                    aria-hidden="true"
+                  >
+                    category
+                  </span>
+                </span>
+                {categoriesLoading ? (
+                  <Skeleton className="h-3.5 w-20" />
+                ) : (
+                  <span>
+                    <b className="font-bold text-slate-900">
+                      {categories.length}
+                    </b>{" "}
+                    หมวดหมู่
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+                  <span
+                    className="material-symbols-outlined text-[15px]"
+                    aria-hidden="true"
+                  >
+                    verified_user
                   </span>
                 </span>
                 <span>
-                  <b className="block text-sm leading-tight">
-                    จองสินค้าให้ 10 นาที
-                  </b>
-                  <small className="text-xs text-ink-subtle">
-                    ระหว่างที่คุณชำระเงิน
-                  </small>
+                  <b className="font-bold text-slate-900">100%</b> ร้านค้ายืนยันตัวตน
                 </span>
               </div>
-            )}
+            </div>
+          </div>
+
+          {/* 3-Card Fanned Arc Deck Showcase */}
+          <div className="relative mx-auto hidden w-full max-w-[580px] lg:block">
+            <FannedHeroCards items={items} loading={loading} />
           </div>
         </div>
       </section>

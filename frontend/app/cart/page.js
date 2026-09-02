@@ -207,7 +207,7 @@ export default function CartPage() {
         )}
 
         {items.length > 0 && (
-          <div className="overflow-hidden rounded-md border border-line bg-white shadow-1">
+          <div className="animate-slide-up overflow-hidden rounded-md border border-line bg-white shadow-1">
             <label className="flex cursor-pointer items-center gap-3 border-b border-line bg-surface-subtle px-4 py-3 text-sm font-medium text-ink-muted">
               <input
                 type="checkbox"
@@ -226,7 +226,7 @@ export default function CartPage() {
                 const expired = isReservationExpired(o, now);
                 const countdown = reservationCountdown(o, now);
                 return (
-                  <li key={o.id}>
+                  <li key={o.id} className="transition-colors hover:bg-slate-50/50">
                     <OrderLine
                       order={o}
                       highlight={expired}
