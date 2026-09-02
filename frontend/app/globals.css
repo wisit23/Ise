@@ -54,6 +54,17 @@
   }
 }
 
+/* Reserve the scrollbar's width whether or not the page needs one.
+   Without this, navigating between a view tall enough to scroll and one
+   that is not removes the scrollbar, widens the viewport by ~15px, and
+   every centred container jumps sideways by half that. It was most obvious
+   switching sections inside /workspace, but it applies to any page whose
+   height crosses the viewport — a short search result set versus a long
+   one, for instance. */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* MVP has no dark theme yet - pin a light background so text stays readable
    regardless of the visitor's OS/browser color-scheme preference. */
 body {
