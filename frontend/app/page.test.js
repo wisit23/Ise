@@ -4,14 +4,15 @@ import HomePage from "./page";
 describe("HomePage", () => {
   it("renders the marketplace headline", async () => {
     render(<HomePage />);
+    // Asserts the actual headline rather than just the brand name, which
+    // used to be in the h1 only because the old copy repeated it — the
+    // brand already has its own link in the header.
     expect(
-      screen.getByRole("heading", { name: /RE-LOOP/ }),
+      screen.getByRole("heading", { level: 1, name: /ชีวิตรอบสอง/ }),
     ).toBeInTheDocument();
     // The page kicks off a fetch on mount; let it settle so the state update
     // doesn't land outside act().
-    await waitFor(() =>
-      expect(screen.queryByText("กำลังโหลด...")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
   });
 
   it("renders guest navigation links when no user is logged in", async () => {

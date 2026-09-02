@@ -7,54 +7,56 @@ import { fetchConditions } from "../lib/catalog";
 import { fetchSellerRating, fetchSellerSummary } from "../lib/sellers";
 
 const CONDITION_STYLE = {
-  New: "bg-brand-50 text-brand-700",
-  "Like New": "bg-brand-50 text-brand-700",
-  Good: "bg-sky-50 text-sky-700",
-  Fair: "bg-amber-50 text-amber-700",
+  New: "bg-brand-600 text-white",
+  "Like New": "bg-brand-600 text-white",
+  Good: "bg-sky-600 text-white",
+  Fair: "bg-amber-600 text-white",
 };
 
 const DAY_MS = 86_400_000;
 
-/** "ลงขายวันนี้" / "เมื่อวานนี้" / "N วันที่แล้ว" — freshness is a real decision
- * signal on a resale marketplace (a listing sitting for months is more likely
- * already gone or the price untested), and `createdAt` is real data, not a
- * guess. */
+/** "วันนี้" / "เมื่อวาน" / "N วันก่อน" — freshness is a real decision signal on
+ * a resale marketplace (a listing sitting for months is more likely already
+ * gone or priced wrong), and `createdAt` is real data, not a guess. */
 function freshnessLabel(createdAt) {
   const days = Math.floor(
     (Date.now() - new Date(createdAt).getTime()) / DAY_MS,
   );
-  if (days <= 0) return "ลงขายวันนี้";
-  if (days === 1) return "เมื่อวานนี้";
-  if (days < 30) return `${days} วันที่แล้ว`;
+  if (days <= 0) return "ลงวันนี้";
+  if (days === 1) return "เมื่อวาน";
+  if (days < 30) return `${days} วันก่อน`;
   const months = Math.floor(days / 30);
-  return `${months} เดือนที่แล้ว`;
+  return `${months} เดือนก่อน`;
 }
 
-/** Five Material Symbols stars, honouring a fractional rating (4.3 -> 4
- * filled + a clipped 5th). Uses the icon font's own FILL axis rather than
- * swapping two different icons, so a half-filled star doesn't shift
- * baseline. */
-function RatingStars({ value }) {
+/** Five stars honouring a fractional rating (4.3 -> 4 filled + a clipped
+ * 5th). Uses the icon font's own FILL axis rather than two different icons,
+ * so a half-filled star can't shift the baseline. */
+function RatingStars({ value, size = 13 }) {
   return (
     <span className="inline-flex items-center gap-px" aria-hidden="true">
       {[1, 2, 3, 4, 5].map((n) => {
         const fill = Math.max(0, Math.min(1, value - (n - 1)));
         return (
-          <span key={n} className="relative inline-block h-[13px] w-[13px]">
+          <span
+            key={n}
+            className="relative inline-block"
+            style={{ width: size, height: size }}
+          >
             <span
-              className="material-symbols-outlined absolute inset-0 text-[13px] leading-none text-gray-300"
-              style={{ fontVariationSettings: "'FILL' 0" }}
+              className="material-symbols-outlined absolute inset-0 leading-none text-gray-300"
+              style={{ fontSize: size, fontVariationSettings: "'FILL' 1" }}
             >
               star
             </span>
             {fill > 0 && (
               <span
-                className="absolute inset-0 overflow-hidden text-[13px] leading-none text-amber-500"
+                className="absolute inset-0 overflow-hidden leading-none text-amber-400"
                 style={{ width: `${fill * 100}%` }}
               >
                 <span
-                  className="material-symbols-outlined text-[13px] leading-none"
-                  style={{ fontVariationSettings: "'FILL' 1" }}
+                  className="material-symbols-outlined leading-none"
+                  style={{ fontSize: size, fontVariationSettings: "'FILL' 1" }}
                 >
                   star
                 </span>
@@ -101,132 +103,147 @@ export default function ProductCard({ product, showSeller = true }) {
   const sellerName = seller?.shopName || seller?.firstName || null;
   const isVerifiedSeller = seller?.kycStatus === "VERIFIED";
 
+  // "ไซซ์ M · รองเท้า · กรุงเทพฯ" — one quiet line instead of three competing
+  // icon chips. Only the parts this listing actually filled in, and each
+  // value only once: sellers do put the same word in size, category and
+  // location, which otherwise renders as "สินค้า · สินค้า · สินค้า".
+  const meta = [
+    ...new Set(
+      [
+        product.size === "-" ? null : product.size,
+        product.category,
+        product.location,
+      ].filter(Boolean),
+    ),
+  ].map((part, i, all) =>
+    // Label the size only when it is distinguishable from the other parts.
+    part === product.size && all.length > 1 ? `ไซซ์ ${part}` : part,
+  );
+
+  const conditionLabel = product.condition
+    ? conditionLabels[product.condition] || product.condition
+    : null;
+
   return (
-    <Link
-      href={`/products/${product.id}`}
-      className="focus-ring group flex flex-col overflow-hidden rounded-xl border border-line bg-white transition duration-300 hover:-translate-y-1 hover:border-line-strong hover:shadow-lg"
-    >
-      <div className="relative aspect-[4/5] w-full overflow-hidden bg-surface-2">
+    <article className="group relative flex flex-col">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-gray-100">
         {cover ? (
           <>
             <img
               src={mediaUrl(cover.url)}
               alt={product.title}
-              className="h-full w-full object-cover transition-opacity duration-500 group-hover:opacity-0"
+              loading="lazy"
+              className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
             />
-            {/* Swaps to the listing's second real photo on hover — a cheap
-                way to show more of an actual item without adding a
-                carousel, and only appears when that photo really exists. */}
+            {/* Swaps to the listing's own second photo on hover — more of the
+                real item without building a carousel, and only when that
+                photo actually exists. */}
             {altCover && (
               <img
                 src={mediaUrl(altCover.url)}
                 alt=""
                 aria-hidden="true"
-                className="absolute inset-0 h-full w-full scale-105 object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                loading="lazy"
+                className="absolute inset-0 h-full w-full scale-[1.06] object-cover opacity-0 transition-opacity duration-500 group-hover:opacity-100"
               />
             )}
           </>
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-ink-subtle">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-ink-subtle">
             <span
-              className="material-symbols-outlined text-[28px] leading-none"
+              className="material-symbols-outlined text-[32px] leading-none"
               aria-hidden="true"
             >
-              image_not_supported
+              imagesmode
             </span>
-            <span className="text-xs">ไม่มีรูปภาพ</span>
+            <span className="text-xs">ไม่มีรูปสินค้า</span>
           </div>
         )}
 
-        <div className="absolute left-2 top-2 flex flex-col items-start gap-1">
-          {product.condition && (
-            <span
-              className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
-                CONDITION_STYLE[product.condition] ||
-                "bg-gray-100 text-gray-600"
-              }`}
-            >
-              {conditionLabels[product.condition] || product.condition}
-            </span>
-          )}
-        </div>
+        {conditionLabel && (
+          <span
+            className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm ${
+              CONDITION_STYLE[product.condition] || "bg-gray-700 text-white"
+            }`}
+          >
+            {conditionLabel}
+          </span>
+        )}
+
+        <span className="absolute right-3 top-3 rounded-full bg-white/85 px-2.5 py-1 text-[11px] font-medium text-gray-700 shadow-sm backdrop-blur">
+          {freshnessLabel(product.createdAt)}
+        </span>
 
         {/* A caption for the link the whole card already is — not a second
-            action, just the affordance a static photo lacks. */}
-        <div className="absolute inset-x-0 bottom-0 translate-y-full bg-gradient-to-t from-black/55 to-transparent px-3 py-2.5 text-xs font-medium text-white opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-          ดูรายละเอียดสินค้า
+            action, just the affordance a still photo lacks. */}
+        <div className="pointer-events-none absolute inset-x-3 bottom-3 translate-y-2 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+          <span className="flex items-center justify-center gap-1.5 rounded-full bg-white/95 py-2.5 text-sm font-semibold text-gray-900 shadow-lg backdrop-blur">
+            ดูรายละเอียด
+            <span
+              className="material-symbols-outlined text-[16px] leading-none"
+              aria-hidden="true"
+            >
+              arrow_forward
+            </span>
+          </span>
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-1.5 p-3">
-        <p className="line-clamp-2 min-h-[2.6em] text-sm leading-tight text-gray-800">
-          {product.title}
-        </p>
+      <div className="flex flex-1 flex-col px-1 pt-3">
+        <h3 className="line-clamp-2 text-sm font-medium leading-snug text-gray-900">
+          {/* Stretched link: the whole card is clickable, but only the title
+              is in the tab order — a keyboard user gets one stop per card,
+              not one per decorative element. */}
+          <Link
+            href={`/products/${product.id}`}
+            className="focus-ring rounded before:absolute before:inset-0 before:content-['']"
+          >
+            {product.title}
+          </Link>
+        </h3>
 
-        <p className="text-lg font-semibold text-brand-600">
+        {meta.length > 0 && (
+          <p className="mt-1 truncate text-xs text-ink-subtle">
+            {meta.join(" · ")}
+          </p>
+        )}
+
+        <p className="mt-2 text-xl font-bold tracking-tight text-gray-900">
           ฿{product.price.toLocaleString("th-TH")}
         </p>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-subtle">
-          {product.size && product.size !== "-" && (
-            <span className="inline-flex items-center gap-0.5">
-              <span
-                className="material-symbols-outlined text-[13px] leading-none"
-                aria-hidden="true"
-              >
-                straighten
-              </span>
-              {product.size}
-            </span>
-          )}
-          {product.location && (
-            <span className="inline-flex items-center gap-0.5 truncate">
-              <span
-                className="material-symbols-outlined text-[13px] leading-none"
-                aria-hidden="true"
-              >
-                location_on
-              </span>
-              <span className="truncate">{product.location}</span>
-            </span>
-          )}
-          <span className="ml-auto shrink-0">
-            {freshnessLabel(product.createdAt)}
-          </span>
-        </div>
-
         {showSeller && (
-          <div className="mt-1 flex items-center gap-1.5 border-t border-line pt-2 text-xs text-ink-muted">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[10px] font-semibold text-brand-700">
+          <div className="mt-auto flex items-center gap-1.5 pt-3 text-xs">
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[10px] font-bold text-brand-700">
               {sellerName?.[0]?.toUpperCase() || "?"}
             </span>
-            <span className="truncate">{sellerName || "ผู้ขาย"}</span>
+            <span className="truncate text-ink-muted">
+              {sellerName || "ผู้ขาย"}
+            </span>
             {isVerifiedSeller && (
               <span
-                className="material-symbols-outlined shrink-0 text-[14px] leading-none text-brand-500"
-                style={{ fontVariationSettings: "'FILL' 1" }}
+                className="material-symbols-outlined shrink-0 leading-none text-brand-500"
+                style={{ fontSize: 15, fontVariationSettings: "'FILL' 1" }}
                 aria-label="ผู้ขายยืนยันตัวตนแล้ว"
                 title="ผู้ขายยืนยันตัวตนแล้ว"
               >
                 verified
               </span>
             )}
+
             {rating?.total > 0 ? (
               <span className="ml-auto flex shrink-0 items-center gap-1">
                 <RatingStars value={rating.averageRating} />
-                <span className="font-medium text-gray-600">
+                <span className="font-semibold text-gray-700">
                   {rating.averageRating.toFixed(1)}
                 </span>
-                <span>({rating.total})</span>
               </span>
             ) : (
-              <span className="ml-auto shrink-0 text-ink-subtle">
-                ยังไม่มีรีวิว
-              </span>
+              <span className="ml-auto shrink-0 text-ink-subtle">ร้านใหม่</span>
             )}
           </div>
         )}
       </div>
-    </Link>
+    </article>
   );
 }

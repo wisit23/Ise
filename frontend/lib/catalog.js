@@ -5,6 +5,7 @@ import { apiFetch } from "./api";
 
 let categoriesPromise = null;
 let conditionsPromise = null;
+let categoryPreviewsPromise = null;
 
 /** Resolves to string[] of category names. */
 export function fetchCategories() {
@@ -32,23 +33,40 @@ export function fetchConditions() {
   return conditionsPromise;
 }
 
-/** Resolves to { [category]: liveListingCount }.
+/** Resolves to `{ name, count, coverUrl }[]`, busiest category first, with
+ * empty ones dropped.
  *
  * The categories table lists every category ever created, including ones
  * nobody has listed anything under yet — browsing to one of those is a dead
- * end. There is no single endpoint for per-category totals, so this asks the
- * feed for each category's `total` with `limit=1` (cheap: no item payload)
- * and lets the caller filter out the zeros. */
-export function fetchCategoryCounts() {
-  return fetchCategories().then((categories) =>
-    Promise.all(
-      categories.map((category) =>
-        apiFetch(
-          `/api/products/feed?category=${encodeURIComponent(category)}&limit=1`,
-        )
-          .then((data) => [category, data.total])
-          .catch(() => [category, 0]),
-      ),
-    ).then((pairs) => Object.fromEntries(pairs)),
-  );
+ * end. There is no endpoint for per-category totals, so this asks the feed
+ * for each category with `limit=1`: the response carries both the `total`
+ * and the newest listing, whose photo becomes the tile's cover. Real
+ * merchandise as the category art, at no extra request. */
+export function fetchCategoryPreviews() {
+  if (!categoryPreviewsPromise) {
+    categoryPreviewsPromise = fetchCategories()
+      .then((categories) =>
+        Promise.all(
+          categories.map((name) =>
+            apiFetch(
+              `/api/products/feed?category=${encodeURIComponent(name)}&limit=1`,
+            )
+              .then((data) => ({
+                name,
+                count: data.total,
+                coverUrl: data.items?.[0]?.media?.[0]?.url || null,
+              }))
+              .catch(() => ({ name, count: 0, coverUrl: null })),
+          ),
+        ),
+      )
+      .then((rows) =>
+        rows.filter((r) => r.count > 0).sort((a, b) => b.count - a.count),
+      )
+      .catch((err) => {
+        categoryPreviewsPromise = null;
+        throw err;
+      });
+  }
+  return categoryPreviewsPromise;
 }

@@ -9,14 +9,12 @@ import Button from "../components/ui/Button";
 import ErrorState from "../components/ui/ErrorState";
 import Skeleton from "../components/ui/Skeleton";
 import { apiFetch, mediaUrl } from "../lib/api";
-import { fetchCategoryCounts } from "../lib/catalog";
+import { fetchCategoryPreviews } from "../lib/catalog";
 
 const NEW_ARRIVALS_COUNT = 8;
 
-/* One icon per real category name, falling back to a generic tag icon for
-   anything new added later so this never silently renders blank. Deliberately
-   not exhaustive of every possible Thai word — just the ones product-service
-   actually has right now. */
+/* One icon per real category name, falling back to a generic tag for
+   anything added later so a new category never renders blank. */
 const CATEGORY_ICON = {
   กระเป๋า: "shopping_bag",
   กางเกง: "checkroom",
@@ -30,39 +28,47 @@ const CATEGORY_ICON = {
   แจ็คเก็ต: "checkroom",
 };
 
+/* Bento rhythm: the first tile is a 2x2 hero and the fourth is a wide
+   banner, everything else is a unit square. Keyed by index so it holds
+   whatever the real category list turns out to be. */
+const TILE_SPAN = {
+  0: "sm:col-span-2 sm:row-span-2",
+  3: "sm:col-span-2",
+};
+
 const VALUE_PROPS = [
   {
     icon: "lock_clock",
-    title: "จองสินค้าให้ระหว่างชำระเงิน",
-    body: "กดจ่ายเงินแล้วระบบล็อกสินค้าให้ 10 นาที ไม่ต้องกลัวมีคนแย่งซื้อไปก่อนคุณจะโอนเสร็จ",
+    title: "จองสินค้าให้ 10 นาที",
+    body: "กดสั่งซื้อแล้วระบบล็อกของไว้ให้ ไม่ต้องกลัวโดนแย่งระหว่างที่กำลังโอน",
   },
   {
     icon: "gavel",
-    title: "มีข้อพิพาท ทีมงานช่วยตัดสิน",
-    body: "ได้รับสินค้าไม่ตรงปก แจ้งข้อพิพาทได้จากหน้าคำสั่งซื้อ ทีมงานตรวจสอบและตัดสินให้ทุกฝ่าย",
+    title: "มีข้อพิพาท ทีมงานตัดสิน",
+    body: "ได้ของไม่ตรงปก แจ้งได้จากหน้าคำสั่งซื้อ มีคนกลางตรวจหลักฐานให้ทั้งสองฝ่าย",
   },
   {
     icon: "verified",
-    title: "มองหาร้านที่ยืนยันตัวตนแล้ว",
-    body: "ร้านค้าที่ผ่านการยืนยันตัวตนจะมีเครื่องหมายติ๊กสีเขียวข้างชื่อร้าน ก่อนซื้อลองเช็กดูได้เสมอ",
+    title: "ดูได้ว่าร้านไหนยืนยันตัวตนแล้ว",
+    body: "ร้านที่ผ่าน KYC จะมีเครื่องหมายรับรองข้างชื่อ เช็กก่อนโอนได้ทุกครั้ง",
   },
 ];
 
 const HOW_IT_WORKS = [
   {
     icon: "search",
-    title: "เลือกสินค้าที่ถูกใจ",
-    body: "ดูรูปจริงของสินค้า สภาพ ไซซ์ และคะแนนร้านค้าให้ครบก่อนตัดสินใจ",
+    title: "เลือกของที่ถูกใจ",
+    body: "ดูรูปจริงทุกมุม สภาพสินค้า ไซซ์ และคะแนนร้านให้ครบก่อนตัดสินใจ",
   },
   {
     icon: "lock_clock",
     title: "จองแล้วค่อยจ่าย",
-    body: "กดสั่งซื้อ ระบบล็อกสินค้าให้ 10 นาทีเพื่อให้คุณชำระเงินได้โดยไม่ถูกแย่ง",
+    body: "ระบบล็อกสินค้าให้ 10 นาที ชำระเงินได้สบายๆ โดยไม่ต้องแข่งกับใคร",
   },
   {
-    icon: "local_shipping",
-    title: "รับสินค้า หรือแจ้งปัญหา",
-    body: "ได้รับของแล้วให้คะแนนร้านค้าได้เลย หรือแจ้งข้อพิพาทหากไม่ตรงปกที่ตกลงไว้",
+    icon: "inventory",
+    title: "รับของ แล้วให้คะแนน",
+    body: "ได้ของตรงปกก็รีวิวร้านได้เลย ถ้าไม่ตรงปกแจ้งข้อพิพาทได้ทันที",
   },
 ];
 
@@ -94,22 +100,11 @@ export default function HomePage() {
   }, [load]);
 
   useEffect(() => {
-    // Decorative relative to the product grid above — a category with zero
-    // real listings is worse than not showing categories at all, so this is
-    // the live count per category, not the raw category table. If it fails,
-    // the rail just stays empty; it should not take the whole page down.
-    fetchCategoryCounts()
-      .then((counts) => {
-        setCategories(
-          Object.entries(counts)
-            .filter(([, count]) => count > 0)
-            .sort((a, b) => b[1] - a[1])
-            .map(([name, count]) => ({ name, count })),
-        );
-      })
-      .catch((err) =>
-        console.error("โหลดจำนวนสินค้าต่อหมวดหมู่ไม่สำเร็จ:", err),
-      )
+    // Secondary to the product grid: if this fails the rail just stays
+    // empty rather than taking the whole page down with it.
+    fetchCategoryPreviews()
+      .then(setCategories)
+      .catch((err) => console.error("โหลดหมวดหมู่ไม่สำเร็จ:", err))
       .finally(() => setCategoriesLoading(false));
   }, []);
 
@@ -119,113 +114,163 @@ export default function HomePage() {
     <main className="flex min-h-screen flex-col bg-white">
       <NavBar />
 
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden border-b border-line bg-surface-subtle">
-        <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 py-14 md:grid-cols-[1.05fr_0.95fr] md:py-20">
+      {/* ── Hero ──────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-surface-subtle">
+        {/* Soft brand wash behind the collage, clipped by the section. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-32 -top-40 h-[520px] w-[520px] rounded-full bg-brand-100/50 blur-3xl"
+        />
+
+        <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 md:grid-cols-[1fr_0.9fr] md:py-24">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-600">
-              แฟชั่นมือสอง คัดสภาพแล้ว
-            </p>
-            <h1 className="mt-3 text-3xl font-bold leading-tight text-gray-900 sm:text-4xl md:text-[2.75rem]">
-              RE-LOOP — ตลาดแฟชั่นมือสอง
-              <br className="hidden sm:block" /> ที่ซื้อขายกันอย่างมั่นใจ
+            <span className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700">
+              <span
+                className="material-symbols-outlined text-[15px] leading-none"
+                aria-hidden="true"
+              >
+                recycling
+              </span>
+              แฟชั่นมือสอง ซื้อขายอย่างมั่นใจ
+            </span>
+
+            <h1 className="mt-5 text-[2.1rem] font-bold leading-[1.15] tracking-tight text-gray-900 sm:text-5xl">
+              ให้ของที่คุณรัก
+              <br />
+              ได้มี
+              {/* The brand swipe sits behind the word, not under it, so the
+                  descenders in ชีวิตรอบสอง stay readable. */}
+              <span className="relative whitespace-nowrap text-brand-700">
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-x-0 bottom-1 -z-10 h-3.5 rounded bg-brand-200/70 sm:h-4"
+                />
+                ชีวิตรอบสอง
+              </span>
             </h1>
-            <p className="mt-4 max-w-md text-ink-muted">
-              เสื้อผ้า กระเป๋า รองเท้า และของมือสองสภาพดี
-              ตรวจสอบร้านค้าและรีวิวได้ก่อนตัดสินใจซื้อทุกครั้ง
+
+            <p className="mt-5 max-w-md text-base leading-relaxed text-ink-muted">
+              RE-LOOP คือตลาดแฟชั่นมือสองที่ให้คุณตรวจสอบร้าน ดูรีวิว
+              และจองของไว้ก่อนจ่ายเงิน — ซื้อสบายใจ ขายได้จริง
             </p>
 
-            <div className="mt-7 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button href="/products" size="lg" icon="storefront">
                 เลือกซื้อสินค้า
               </Button>
-              <Button href="/swipe" size="lg" variant="secondary" icon="swipe">
-                ปัดดูสินค้า
-              </Button>
               <Button href="/sell" size="lg" variant="secondary" icon="sell">
-                เริ่มขายสินค้า
+                เริ่มขายฟรี
               </Button>
             </div>
 
-            <div className="mt-8 flex items-center gap-2 text-sm text-ink-muted">
-              <span
-                className="material-symbols-outlined text-[18px] text-brand-600"
-                aria-hidden="true"
-              >
-                inventory_2
-              </span>
-              {total === null ? (
-                <Skeleton className="h-4 w-40" />
-              ) : (
-                <span>
-                  มีสินค้าให้เลือกตอนนี้{" "}
-                  <b className="font-semibold text-gray-900">
-                    {total.toLocaleString("th-TH")}
-                  </b>{" "}
-                  ชิ้น
+            <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-line pt-6 text-sm">
+              <span className="flex items-center gap-2 text-ink-muted">
+                <span
+                  className="material-symbols-outlined text-[19px] leading-none text-brand-600"
+                  aria-hidden="true"
+                >
+                  inventory_2
                 </span>
-              )}
+                {total === null ? (
+                  <Skeleton className="h-4 w-32" />
+                ) : (
+                  <>
+                    <b className="font-bold text-gray-900">
+                      {total.toLocaleString("th-TH")}
+                    </b>{" "}
+                    ชิ้นพร้อมขายตอนนี้
+                  </>
+                )}
+              </span>
+              <span className="flex items-center gap-2 text-ink-muted">
+                <span
+                  className="material-symbols-outlined text-[19px] leading-none text-brand-600"
+                  aria-hidden="true"
+                >
+                  category
+                </span>
+                {categoriesLoading ? (
+                  <Skeleton className="h-4 w-24" />
+                ) : (
+                  <>
+                    <b className="font-bold text-gray-900">
+                      {categories.length}
+                    </b>{" "}
+                    หมวดหมู่
+                  </>
+                )}
+              </span>
             </div>
           </div>
 
-          {/* Real listings, not stock photography — this is what is
-              actually for sale on the site right now, so the hero never
-              promises a selection that does not exist. */}
-          <div className="relative hidden aspect-square md:block">
+          {/* Staggered collage of the site's own newest listings — real
+              merchandise rather than stock photography, so the hero can
+              never promise a selection that doesn't exist. */}
+          <div className="relative hidden md:block">
             {loading ? (
-              <div className="grid h-full grid-cols-2 gap-3">
-                <Skeleton className="row-span-2 rounded-2xl" />
-                <Skeleton className="rounded-2xl" />
-                <Skeleton className="rounded-2xl" />
+              <div className="grid h-[440px] grid-cols-2 grid-rows-6 gap-4">
+                <Skeleton className="col-start-1 row-span-4 row-start-1 rounded-3xl" />
+                <Skeleton className="col-start-2 row-span-4 row-start-2 rounded-3xl" />
+                <Skeleton className="col-start-1 row-span-2 row-start-5 rounded-3xl" />
               </div>
             ) : heroPhotos.length > 0 ? (
-              <div className="grid h-full grid-cols-2 grid-rows-2 gap-3">
-                <Link
-                  href={`/products/${heroPhotos[0].id}`}
-                  className="focus-ring row-span-2 overflow-hidden rounded-2xl border border-line shadow-sm"
-                >
-                  <img
-                    src={mediaUrl(heroPhotos[0].media[0].url)}
-                    alt={heroPhotos[0].title}
-                    className="h-full w-full object-cover transition duration-500 hover:scale-105"
-                  />
-                </Link>
-                {heroPhotos.slice(1, 3).map((p) => (
-                  <Link
-                    key={p.id}
-                    href={`/products/${p.id}`}
-                    className="focus-ring overflow-hidden rounded-2xl border border-line shadow-sm"
-                  >
-                    <img
-                      src={mediaUrl(p.media[0].url)}
-                      alt={p.title}
-                      className="h-full w-full object-cover transition duration-500 hover:scale-105"
-                    />
-                  </Link>
-                ))}
+              <div className="grid h-[440px] grid-cols-2 grid-rows-6 gap-4">
+                {[
+                  "col-start-1 row-start-1 row-span-4",
+                  "col-start-2 row-start-2 row-span-4",
+                  "col-start-1 row-start-5 row-span-2",
+                ].map((placement, i) => {
+                  const p = heroPhotos[i];
+                  if (!p) return null;
+                  return (
+                    <Link
+                      key={p.id}
+                      href={`/products/${p.id}`}
+                      className={`focus-ring group relative overflow-hidden rounded-3xl bg-gray-100 shadow-[0_18px_40px_-12px_rgba(11,18,16,0.18)] ${placement}`}
+                    >
+                      <img
+                        src={mediaUrl(p.media[0].url)}
+                        alt={p.title}
+                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      />
+                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-8 text-xs font-medium text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                        <span className="line-clamp-1">{p.title}</span>
+                        <span className="font-bold">
+                          ฿{p.price.toLocaleString("th-TH")}
+                        </span>
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
             ) : (
-              <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-line-strong bg-white text-sm text-ink-subtle">
+              <div className="flex h-[440px] items-center justify-center rounded-3xl border border-dashed border-line-strong bg-white text-sm text-ink-subtle">
                 ยังไม่มีรูปสินค้าให้แสดง
               </div>
             )}
 
-            <div className="absolute -bottom-5 -left-5 hidden items-center gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-lg lg:flex">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
-                <span
-                  className="material-symbols-outlined text-[20px]"
-                  aria-hidden="true"
-                >
-                  lock_clock
+            {heroPhotos.length > 0 && !loading && (
+              /* The collage leaves column 2 / row 6 empty by design — the
+                 badge drops into that gap instead of covering a photo. */
+              <div className="absolute -bottom-3 right-0 flex w-[calc(50%-0.5rem)] items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3 shadow-[0_18px_40px_-12px_rgba(11,18,16,0.22)]">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+                  <span
+                    className="material-symbols-outlined text-[21px]"
+                    aria-hidden="true"
+                  >
+                    lock_clock
+                  </span>
                 </span>
-              </span>
-              <div className="leading-tight">
-                <p className="text-sm font-semibold text-gray-900">
-                  จองสินค้าให้ 10 นาที
-                </p>
-                <p className="text-xs text-ink-subtle">ระหว่างที่คุณชำระเงิน</p>
+                <span className="leading-tight">
+                  <b className="block text-sm font-semibold text-gray-900">
+                    จองสินค้าให้ 10 นาที
+                  </b>
+                  <span className="text-xs text-ink-subtle">
+                    ระหว่างที่คุณชำระเงิน
+                  </span>
+                </span>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </section>
@@ -241,10 +286,10 @@ export default function HomePage() {
       ) : (
         <>
           {/* ── Value props ────────────────────────────────────── */}
-          <section className="border-b border-line bg-white">
-            <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-12 sm:grid-cols-3">
+          <section className="border-y border-line bg-white">
+            <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:grid-cols-3">
               {VALUE_PROPS.map((v) => (
-                <div key={v.title} className="flex gap-3">
+                <div key={v.title} className="flex gap-3.5">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
                     <span
                       className="material-symbols-outlined text-[22px]"
@@ -255,73 +300,33 @@ export default function HomePage() {
                   </span>
                   <div>
                     <p className="font-semibold text-gray-900">{v.title}</p>
-                    <p className="mt-1 text-sm text-ink-muted">{v.body}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+                      {v.body}
+                    </p>
                   </div>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* ── Category rail ──────────────────────────────────── */}
-          <section className="mx-auto w-full max-w-6xl px-4 py-10">
-            <div className="mb-4 flex items-end justify-between gap-3">
+          {/* ── Category bento ─────────────────────────────────── */}
+          <section className="mx-auto w-full max-w-6xl px-4 py-14">
+            <div className="mb-6 flex items-end justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-2xl font-bold tracking-tight text-gray-900">
                   เลือกซื้อตามหมวดหมู่
                 </h2>
-                <p className="mt-0.5 text-sm text-ink-muted">
-                  แสดงเฉพาะหมวดที่มีสินค้าให้ซื้อจริงในระบบตอนนี้
+                <p className="mt-1 text-sm text-ink-muted">
+                  แสดงเฉพาะหมวดที่มีของขายจริงในระบบตอนนี้
                 </p>
               </div>
-            </div>
-
-            <div className="scrollbar-none flex gap-3 overflow-x-auto pb-1">
-              {categoriesLoading
-                ? Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton
-                      key={i}
-                      className="h-[86px] w-[136px] shrink-0 rounded-xl"
-                    />
-                  ))
-                : categories.map((c) => (
-                    <Link
-                      key={c.name}
-                      href={`/products?category=${encodeURIComponent(c.name)}`}
-                      className="focus-ring flex w-[136px] shrink-0 flex-col items-center gap-2 rounded-xl border border-line bg-white px-3 py-4 text-center transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
-                    >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-600">
-                        <span
-                          className="material-symbols-outlined text-[22px]"
-                          aria-hidden="true"
-                        >
-                          {CATEGORY_ICON[c.name] || "sell"}
-                        </span>
-                      </span>
-                      <span className="line-clamp-1 text-sm font-medium text-gray-800">
-                        {c.name}
-                      </span>
-                      <span className="text-xs text-ink-subtle">
-                        {c.count.toLocaleString("th-TH")} ชิ้น
-                      </span>
-                    </Link>
-                  ))}
-            </div>
-          </section>
-
-          {/* ── New arrivals ───────────────────────────────────── */}
-          <section className="mx-auto w-full max-w-6xl px-4 pb-14">
-            <div className="mb-4 flex items-end justify-between gap-3">
-              <h2 className="text-lg font-semibold text-gray-900">
-                สินค้าเข้าใหม่
-              </h2>
               <Link
                 href="/products"
-                className="focus-ring flex shrink-0 items-center gap-1 rounded text-sm font-medium text-brand-600 hover:underline"
+                className="focus-ring hidden shrink-0 items-center gap-1 rounded text-sm font-semibold text-brand-600 hover:underline sm:flex"
               >
-                ดูทั้งหมด
-                {total !== null ? ` ${total.toLocaleString("th-TH")} ชิ้น` : ""}
+                ดูสินค้าทั้งหมด
                 <span
-                  className="material-symbols-outlined text-[16px]"
+                  className="material-symbols-outlined text-[17px]"
                   aria-hidden="true"
                 >
                   arrow_forward
@@ -329,89 +334,182 @@ export default function HomePage() {
               </Link>
             </div>
 
-            {loading ? (
-              <Skeleton.CardGrid count={NEW_ARRIVALS_COUNT} />
-            ) : items.length === 0 ? (
-              <p className="text-sm text-ink-muted">
-                ยังไม่มีสินค้าลงขายในระบบ
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                {items.map((p) => (
-                  <ProductCard key={p.id} product={p} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* ── How it works ───────────────────────────────────── */}
-          <section className="border-y border-line bg-surface-subtle">
-            <div className="mx-auto w-full max-w-6xl px-4 py-14">
-              <h2 className="mb-8 text-center text-lg font-semibold text-gray-900">
-                ซื้อขายกันยังไงให้ปลอดภัย
-              </h2>
-              <div className="grid gap-6 sm:grid-cols-3">
-                {HOW_IT_WORKS.map((step, i) => (
-                  <div
-                    key={step.title}
-                    className="rounded-xl border border-line bg-white p-6"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">
-                        {i + 1}
-                      </span>
+            <div className="grid auto-rows-[132px] grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+              {categoriesLoading
+                ? Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton
+                      key={i}
+                      className={`rounded-2xl ${TILE_SPAN[i] || ""}`}
+                    />
+                  ))
+                : categories.map((c, i) => (
+                    <Link
+                      key={c.name}
+                      href={`/products?category=${encodeURIComponent(c.name)}`}
+                      className={`focus-ring group relative overflow-hidden rounded-2xl bg-gray-900 ${
+                        TILE_SPAN[i] || ""
+                      }`}
+                    >
+                      {/* The newest listing in the category doubles as its
+                          cover art — no separate category-image table to
+                          maintain, and it can never go stale. */}
+                      {c.coverUrl && (
+                        <img
+                          src={mediaUrl(c.coverUrl)}
+                          alt=""
+                          aria-hidden="true"
+                          loading="lazy"
+                          className="absolute inset-0 h-full w-full object-cover opacity-70 transition-transform duration-700 group-hover:scale-110"
+                        />
+                      )}
                       <span
-                        className="material-symbols-outlined text-[22px] text-brand-600"
                         aria-hidden="true"
-                      >
-                        {step.icon}
+                        className="absolute inset-0 bg-gradient-to-t from-gray-950/85 via-gray-950/25 to-transparent"
+                      />
+
+                      <span className="relative flex h-full flex-col justify-end p-3.5 sm:p-4">
+                        <span
+                          className="material-symbols-outlined mb-auto w-fit rounded-lg bg-white/15 p-1.5 text-[19px] leading-none text-white backdrop-blur"
+                          aria-hidden="true"
+                        >
+                          {CATEGORY_ICON[c.name] || "sell"}
+                        </span>
+                        <span
+                          className={`font-bold leading-tight text-white ${
+                            i === 0 ? "text-xl sm:text-2xl" : "text-base"
+                          }`}
+                        >
+                          {c.name}
+                        </span>
+                        <span className="mt-0.5 text-xs text-white/75">
+                          {c.count.toLocaleString("th-TH")} ชิ้น
+                        </span>
                       </span>
-                    </div>
-                    <p className="mt-4 font-semibold text-gray-900">
-                      {step.title}
-                    </p>
-                    <p className="mt-1 text-sm text-ink-muted">{step.body}</p>
-                  </div>
-                ))}
-              </div>
+                    </Link>
+                  ))}
             </div>
           </section>
 
+          {/* ── New arrivals ───────────────────────────────────── */}
+          <section className="border-t border-line bg-surface-subtle">
+            <div className="mx-auto w-full max-w-6xl px-4 py-14">
+              <div className="mb-6 flex items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight text-gray-900">
+                    เข้าใหม่ล่าสุด
+                  </h2>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    ของที่เพิ่งลงขาย เรียงจากใหม่ที่สุด
+                  </p>
+                </div>
+                <Link
+                  href="/products"
+                  className="focus-ring flex shrink-0 items-center gap-1 rounded text-sm font-semibold text-brand-600 hover:underline"
+                >
+                  ดูทั้งหมด
+                  {total !== null && ` ${total.toLocaleString("th-TH")} ชิ้น`}
+                  <span
+                    className="material-symbols-outlined text-[17px]"
+                    aria-hidden="true"
+                  >
+                    arrow_forward
+                  </span>
+                </Link>
+              </div>
+
+              {loading ? (
+                <Skeleton.CardGrid count={NEW_ARRIVALS_COUNT} />
+              ) : items.length === 0 ? (
+                <p className="text-sm text-ink-muted">
+                  ยังไม่มีสินค้าลงขายในระบบ
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4">
+                  {items.map((p) => (
+                    <ProductCard key={p.id} product={p} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* ── How it works ───────────────────────────────────── */}
+          <section className="mx-auto w-full max-w-6xl px-4 py-16">
+            <h2 className="text-center text-2xl font-bold tracking-tight text-gray-900">
+              ซื้อขายยังไงให้ปลอดภัย
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-center text-sm text-ink-muted">
+              ทุกคำสั่งซื้อเดินตามสามขั้นนี้ ไม่มีขั้นตอนซ่อน
+            </p>
+
+            <ol className="mt-10 grid gap-5 sm:grid-cols-3">
+              {HOW_IT_WORKS.map((step, i) => (
+                <li
+                  key={step.title}
+                  className="relative rounded-2xl border border-line bg-white p-6"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-5 top-4 text-5xl font-bold leading-none text-gray-100"
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+                    <span
+                      className="material-symbols-outlined text-[22px]"
+                      aria-hidden="true"
+                    >
+                      {step.icon}
+                    </span>
+                  </span>
+                  <p className="relative mt-4 font-semibold text-gray-900">
+                    {step.title}
+                  </p>
+                  <p className="relative mt-1 text-sm leading-relaxed text-ink-muted">
+                    {step.body}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </section>
+
           {/* ── Sell CTA ────────────────────────────────────────── */}
-          <section className="mx-auto w-full max-w-6xl px-4 py-14">
-            <div className="flex flex-col items-center gap-4 rounded-2xl bg-brand-600 px-6 py-12 text-center text-white sm:px-12">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15">
-                <span
-                  className="material-symbols-outlined text-[24px]"
-                  aria-hidden="true"
+          <section className="mx-auto w-full max-w-6xl px-4 pb-16">
+            <div className="relative overflow-hidden rounded-3xl bg-brand-700 px-6 py-14 text-center sm:px-12">
+              <span
+                aria-hidden="true"
+                className="absolute -left-16 -top-16 h-64 w-64 rounded-full bg-white/10"
+              />
+              <span
+                aria-hidden="true"
+                className="absolute -bottom-20 -right-10 h-56 w-56 rounded-full bg-white/10"
+              />
+
+              <div className="relative">
+                <h2 className="text-2xl font-bold text-white sm:text-3xl">
+                  มีของที่ไม่ได้ใช้แล้วใช่ไหม
+                </h2>
+                <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-brand-50">
+                  ลงขายได้ฟรี ไม่มีค่าธรรมเนียมแรกเข้า ถ่ายรูป ตั้งราคา
+                  แล้วลงขายได้เลย
+                </p>
+                {/* Not <Button>: its variants already set a background and
+                    text colour, and two Tailwind class strings don't
+                    reliably override each other by source order. A one-off
+                    white-on-brand button is safest written directly. */}
+                <Link
+                  href="/sell"
+                  className="focus-ring mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-white px-7 py-3.5 text-base font-semibold text-brand-700 shadow-lg transition hover:bg-brand-50"
                 >
-                  add_circle
-                </span>
-              </span>
-              <h2 className="text-2xl font-bold">
-                มีของที่ไม่ได้ใช้แล้วใช่ไหม
-              </h2>
-              <p className="max-w-md text-sm text-brand-50">
-                ลงขายได้ฟรี ไม่มีค่าธรรมเนียมแรกเข้า ถ่ายรูป ตั้งราคา
-                แล้วลงขายได้ทันที
-              </p>
-              {/* Not <Button variant="secondary">: its base classes already
-                  set a background/text colour, and Tailwind utilities from
-                  two different class strings don't reliably override one
-                  another by source order alone. A one-off white-on-brand
-                  button is simplest and safest written directly. */}
-              <Link
-                href="/sell"
-                className="focus-ring mt-2 inline-flex items-center justify-center gap-2 rounded-md bg-white px-6 py-3 text-base font-medium text-brand-700 transition hover:bg-brand-50"
-              >
-                <span
-                  className="material-symbols-outlined text-[18px] leading-none"
-                  aria-hidden="true"
-                >
-                  sell
-                </span>
-                เริ่มลงขายเลย
-              </Link>
+                  <span
+                    className="material-symbols-outlined text-[19px] leading-none"
+                    aria-hidden="true"
+                  >
+                    sell
+                  </span>
+                  เริ่มลงขายเลย
+                </Link>
+              </div>
             </div>
           </section>
         </>
