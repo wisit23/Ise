@@ -119,3 +119,16 @@
   (postgres, gateway, auth, product, order, support) ด้วย Demo Admin และ Demo Seller
 - กติกาสำหรับคนที่มาต่อ: `docs/ui-conventions.md`
 - ไม่มี Prisma schema, database migration หรือ backend logic ถูกเปลี่ยนในรอบนี้
+
+## UI-BUYER-002 — Reveal Animation, แถวคำสั่งซื้อที่มีรูป, เมนูหมวดหมู่, แดชบอร์ดสมมาตร (2026-09-02)
+
+- เพิ่ม `Reveal` (Scroll-into-view), `Menu`/`MenuItem`/`MenuLabel` (Dropdown ที่ใช้ซ้ำได้),
+  `OrderLine`/`ProductThumb`, `useDismissable`, `lib/products.js`
+- แถบบน: "สินค้าทั้งหมด" → "สินค้า" เปิดเป็น Dropdown หมวดหมู่ที่มีของจริงพร้อมจำนวน;
+  ปุ่ม "ลงขาย" ได้กรอบคืนและลด Padding
+- ตะกร้าและคำสั่งซื้อเลิกวาดแถวของตัวเอง มาใช้ `OrderLine` ที่มีรูปสินค้า สภาพ ไซซ์
+  หมวด ทำเล และจัดเป็น 3 คอลัมน์ให้ราคา/ปุ่มตรงกันทั้งรายการ
+- `ChartCard`/`KpiCard` ยืดเต็มแถว Grid — แก้ที่ Primitive เดียว ครอบคลุมทั้ง 4 แดชบอร์ด
+- Hero หน้าแรกมีพื้นและเส้นปิดของตัวเอง แยกโซนจาก Section ด้านล่าง
+- ผลตรวจ: `lint` ผ่าน, `format:check` ผ่าน, Frontend test 37/37, `next build` สำเร็จ,
+  ตรวจบน Browser จริงกับ Docker Stack ทั้ง `/`, `/cart`, `/orders`, `/executive`

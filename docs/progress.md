@@ -1195,6 +1195,46 @@ Build แดง — **ยังไม่ได้แก้ในรอบนี�
 - `.prettierrc`, `eslint.config.js`
 - กติกาสำหรับคนที่มาต่อ: [`docs/ui-conventions.md`](ui-conventions.md)
 
+## Task `UI-BUYER-002` — Reveal Animation, แถวคำสั่งซื้อที่มีรูป, เมนูหมวดหมู่ และแดชบอร์ดที่สมมาตร
+
+ต่อจาก `UI-SYSTEM-001` และงานหน้าแรก/NavBar รอบก่อน — หกข้อที่ผู้ใช้ระบุว่ายังไม่ครบ
+ทุกข้อทำเป็น Component ที่ใช้ซ้ำได้ ไม่ Hardcode ลงหน้าใดหน้าหนึ่ง
+
+| #   | โจทย์                                                                  | ทำอะไร                                                                                                                                                                                                                               |
+| --- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | อยากได้อนิเมชั่นตอนเลื่อนลงไปเจอ / ตอนกดแล้วมีของเพิ่ม                 | `components/ui/Reveal.js` — IntersectionObserver ครอบ Section หรือ Card, `delay` ไว้ไล่ทีละใบ, เคารพ `prefers-reduced-motion`, เริ่มที่ `shown=true` เพื่อไม่ให้ของหายถ้าไม่มี IO; Dropdown ใช้ keyframe `dropdown-in` ที่มีอยู่แล้ว |
+| 2   | ปุ่ม "ลงขาย" เว้นว่างเยอะกว่าปุ่มอื่น                                  | คืนกรอบให้ปุ่ม (`rounded-full border-[1.5px]`) และลด Padding — ตอนเป็น Text Link เปล่าๆ มันอ่านเป็นช่องว่างกลางแถวที่ควบคุมอื่นมีกรอบหมด                                                                                             |
+| 3   | ตะกร้า/รายการสินค้าใช้งานจริงไม่ได้ ไม่มีรูป จัด Layout ซ้ายสุด-ขวาสุด | `components/OrderLine.js` (+ `ProductThumb`, `lib/products.js`) แทนแถวที่สองหน้าต่างคนเขียนเอง — มีรูป, สภาพสินค้า, ไซซ์/หมวด/ทำเล และเป็น `grid-cols-[auto_1fr_auto]` ให้ราคากับปุ่มตรงกันทั้งคอลัมน์                               |
+| 4   | แดชบอร์ดทุกอันดูไม่สมมาตร                                              | ต้นเหตุอยู่ที่ `ChartCard`/`KpiCard` ที่ไม่ได้ `h-full` — Card ในแถวเดียวกันจึงสูงไม่เท่ากันตามเนื้อใน แก้ที่ Primitive สองตัว ครอบคลุมทั้ง 4 แดชบอร์ด                                                                               |
+| 5   | "สินค้าทั้งหมด" บนแถบบน → "สินค้า" แล้วกดแล้วมีหมวดหมู่ลงมา            | `components/ui/Menu.js` (`Menu` / `MenuItem` / `MenuLabel`) + `lib/useDismissable.js` — Dropdown ตัวจริงที่ใช้ซ้ำได้ ดึงหมวดหมู่จาก `fetchActiveCategories()` จึงแสดงเฉพาะหมวดที่มีของ พร้อมจำนวน                                    |
+| 6   | Hero กับ Section ด้านล่างแยกโซนไม่ออก                                  | Hero ได้พื้น `linear-gradient(brand-50 → surface-subtle)` และเส้นปิดด้านล่าง                                                                                                                                                         |
+
+### หลักฐานการตรวจ
+
+| ตรวจอะไร                     | ผล                                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------------------- |
+| `npm run lint`               | ผ่าน                                                                                    |
+| `npm run format:check`       | ผ่าน                                                                                    |
+| `npm run test:frontend`      | 37/37 ผ่าน                                                                              |
+| `next build`                 | สำเร็จ                                                                                  |
+| Browser `/` — เมนู "สินค้า"  | `aria-expanded=true`, Panel 258×404, มี "สินค้าทั้งหมด" + 9 หมวดที่มีของจริง พร้อมจำนวน |
+| Browser `/cart` (จอง 2 ชิ้น) | แถวมีรูป, สภาพ, ไซซ์/หมวด/ทำเล, นับถอยหลัง, Grid `88px 490px 84px`                      |
+| Browser `/orders`            | เหมือนกัน — Grid เดียวกัน, มีรูปครบทุกแถว                                               |
+| Browser `/executive`         | Card ในแถวเดียวกันสูงเท่ากันแล้ว (242/242, 139/139)                                     |
+
+### บั๊กที่เจอระหว่างทางและแก้แล้ว
+
+`Reveal` เรียก `window.matchMedia` ตรงๆ ทำให้ `app/page.test.js` พังทั้ง 3 เคส
+เพราะ jsdom ไม่มี Method นี้ — Helper สำหรับอนิเมชั่นไม่ควรเป็นตัวที่ Throw
+จึงเช็ค `typeof window.matchMedia === "function"` ก่อน
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `frontend/components/ui/{Reveal,Menu}.js`, `frontend/components/OrderLine.js`
+- `frontend/lib/{products,useDismissable}.js`
+- `frontend/components/panel/ui/{ChartCard,KpiCard}.js`, `frontend/components/NavBar.js`
+- `frontend/app/{page,cart/page,orders/page,products/page}.js`
+
 ## อัปเดตล่าสุด
 
 2026-09-02 (Asia/Bangkok)
