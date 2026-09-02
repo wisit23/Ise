@@ -61,6 +61,18 @@ body {
 }
 
 @layer components {
+  /* Hides the scrollbar on a deliberately swipeable strip while keeping it
+     scrollable. SwipeFeedViewer has been asking for this class since it was
+     written, but nothing ever defined it — so the feed has been showing a
+     scrollbar it did not intend to. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   /* One focus treatment for the whole app. Keyboard-only (`:focus-visible`)
      so a mouse click doesn't leave a ring behind. */
   .focus-ring {

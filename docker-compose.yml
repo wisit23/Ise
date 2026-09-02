@@ -170,6 +170,13 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     env_file: .env
+    environment:
+      # inotify events do not cross a Windows bind mount, so Next's dev server
+      # never sees edits made on the host and new routes 404 until the
+      # container is restarted. Polling costs a little CPU and makes hot
+      # reload work the same on every OS.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
     volumes:
       - ./frontend:/app/frontend
       - /app/frontend/node_modules

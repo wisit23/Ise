@@ -118,6 +118,29 @@ Import ผ่าน barrel: `import { Button, Input, Modal } from "../components
   **ห้ามใช้ emoji เป็นไอคอน** (เคยเป็นแบบนั้น แล้ว migrate ออกไปแล้วใน `d98e8a1`)
 - ใส่ `aria-hidden="true"` ที่ span ของไอคอนเสมอเมื่อมี label ข้างๆ อยู่แล้ว
 
+### กับดัก: ห้ามใส่ display utility ที่ span ของไอคอนโดยตรง
+
+stylesheet ของ Material Symbols จาก Google **โหลดทีหลัง** `layout.css` ของ Next
+(ตรวจแล้วด้วย `document.styleSheets` — index 0 คือ Tailwind, index 1 คือ Google)
+และมันตั้ง `display` ให้ `.material-symbols-outlined` เอง specificity เท่ากัน (0,1,0)
+ตัวที่มาทีหลังจึงชนะ
+
+แปลว่า `hidden` / `sm:inline` / `flex` / `block` ที่ใส่บน span ไอคอน **ไม่ทำงาน
+และไม่มี error อะไรบอก**
+
+```jsx
+// ❌ hidden ไม่ทำงาน — Google เขียนทับ
+<span className="material-symbols-outlined hidden sm:inline">search</span>
+
+// ✅ ใส่ที่ตัวห่อแทน
+<span className="hidden sm:inline">
+  <span className="material-symbols-outlined">search</span>
+</span>
+```
+
+utility อื่น (`text-[20px]`, สี, `leading-none`) ใส่ที่ไอคอนได้ตามปกติ —
+มีปัญหาเฉพาะ property `display`
+
 ---
 
 ## 8. ยังไม่ทำ (Backlog)

@@ -220,7 +220,7 @@ function FaqSection({ token }) {
                 onClick={closeForm}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full aspect-square text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
               >
-                <span className="material-symbols-outlined text-[20px] leading-none block">
+                <span className="material-symbols-outlined text-[20px] leading-none">
                   close
                 </span>
               </button>
