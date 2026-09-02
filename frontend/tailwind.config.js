@@ -59,10 +59,53 @@ module.exports = {
         modal: "200",
         toast: "300",
       },
+      /* Shape, depth and type scale ported from the RE-LOOP v2 design
+         reference so the storefront speaks one visual language. Tailwind's
+         defaults sit close to these but not on them, and the small
+         differences were what made pages look assembled rather than
+         designed. */
+      borderRadius: {
+        sm: "10px",
+        md: "16px",
+        lg: "24px",
+        xl: "32px",
+      },
+      boxShadow: {
+        1: "0 1px 2px rgba(11,18,16,.05)",
+        2: "0 4px 12px -2px rgba(11,18,16,.08), 0 2px 4px -2px rgba(11,18,16,.04)",
+        3: "0 18px 40px -12px rgba(11,18,16,.18), 0 4px 10px -4px rgba(11,18,16,.06)",
+        brand: "0 10px 30px -8px rgba(5,150,105,.45)",
+      },
+      fontSize: {
+        xs: ".8125rem",
+        sm: ".9063rem",
+        base: "1rem",
+        lg: "clamp(1.25rem,1.1rem + .6vw,1.5rem)",
+        xl: "clamp(1.6rem,1.3rem + 1.4vw,2.25rem)",
+        hero: "clamp(2.25rem,1.5rem + 3.4vw,4.25rem)",
+      },
+      transitionTimingFunction: {
+        ease: "cubic-bezier(.22,1,.36,1)",
+      },
       fontFamily: {
         sans: ["var(--font-noto-sans-thai)", "system-ui", "sans-serif"],
+        display: [
+          "var(--font-anuphan)",
+          "var(--font-noto-sans-thai)",
+          "system-ui",
+          "sans-serif",
+        ],
       },
       keyframes: {
+        bob: {
+          "0%,100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-9px)" },
+        },
+        swipe: { to: { transform: "scaleX(1)" } },
+        "pulse-dot": {
+          "0%,100%": { opacity: "1", transform: "scale(1)" },
+          "50%": { opacity: ".4", transform: "scale(.75)" },
+        },
         "fade-in-up": {
           "0%": { opacity: "0", transform: "translateY(16px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
@@ -101,6 +144,9 @@ module.exports = {
         },
       },
       animation: {
+        bob: "bob 5s ease-in-out infinite",
+        swipe: "swipe .9s .35s cubic-bezier(.22,1,.36,1) forwards",
+        "pulse-dot": "pulse-dot 2s infinite",
         "fade-in-up": "fade-in-up 0.5s ease-out forwards",
         "slide-in-right": "slide-in-right 0.3s ease-out forwards",
         "slide-out-right": "slide-out-right 0.3s ease-out forwards",

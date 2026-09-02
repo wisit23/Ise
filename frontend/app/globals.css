@@ -60,6 +60,15 @@ body {
   @apply bg-white text-gray-900;
 }
 
+/* Headings take the display face and a tighter tracking by default, so a
+   page does not have to remember to ask for it. */
+h1,
+h2,
+h3,
+h4 {
+  @apply font-display tracking-tight;
+}
+
 @layer components {
   /* Hides the scrollbar on a deliberately swipeable strip while keeping it
      scrollable. SwipeFeedViewer has been asking for this class since it was

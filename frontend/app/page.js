@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import NavBar from "../components/NavBar";
 import Footer from "../components/Footer";
 import ProductCard from "../components/ProductCard";
-import Button from "../components/ui/Button";
 import ErrorState from "../components/ui/ErrorState";
 import Skeleton from "../components/ui/Skeleton";
 import { apiFetch, mediaUrl } from "../lib/api";
@@ -28,41 +27,60 @@ const CATEGORY_ICON = {
   แจ็คเก็ต: "checkroom",
 };
 
-const VALUE_PROPS = [
-  {
-    icon: "lock_clock",
-    title: "จองสินค้าให้ 10 นาที",
-    body: "กดสั่งซื้อแล้วระบบล็อกของไว้ให้ ไม่ต้องกลัวโดนแย่งระหว่างที่กำลังโอน",
-  },
-  {
-    icon: "gavel",
-    title: "มีข้อพิพาท ทีมงานตัดสิน",
-    body: "ได้ของไม่ตรงปก แจ้งได้จากหน้าคำสั่งซื้อ มีคนกลางตรวจหลักฐานให้ทั้งสองฝ่าย",
-  },
-  {
-    icon: "verified",
-    title: "ดูได้ว่าร้านไหนยืนยันตัวตนแล้ว",
-    body: "ร้านที่ผ่าน KYC จะมีเครื่องหมายรับรองข้างชื่อ เช็กก่อนโอนได้ทุกครั้ง",
-  },
-];
-
+/* Three steps, as in the reference. Each line describes a mechanic this
+   codebase actually has — the reservation hold, confirm-to-close, and the
+   dispute queue — rather than the escrow-and-7-day-returns promise the
+   mockup carried, which nothing in order-service implements. */
 const HOW_IT_WORKS = [
   {
     icon: "search",
     title: "เลือกของที่ถูกใจ",
-    body: "ดูรูปจริงทุกมุม สภาพสินค้า ไซซ์ และคะแนนร้านให้ครบก่อนตัดสินใจ",
+    body: "ดูรูปจริงทุกมุม สภาพสินค้า ไซซ์ และคะแนนร้าน ก่อนตัดสินใจ",
   },
   {
     icon: "lock_clock",
     title: "จองแล้วค่อยจ่าย",
-    body: "ระบบล็อกสินค้าให้ 10 นาที ชำระเงินได้สบายๆ โดยไม่ต้องแข่งกับใคร",
+    body: "ระบบล็อกสินค้าให้ 10 นาที ระหว่างที่คุณชำระเงิน ไม่ต้องแข่งกับใคร",
   },
   {
     icon: "inventory",
     title: "รับของ แล้วให้คะแนน",
-    body: "ได้ของตรงปกก็รีวิวร้านได้เลย ถ้าไม่ตรงปกแจ้งข้อพิพาทได้ทันที",
+    body: "ตรงปกก็กดรับแล้วรีวิวได้เลย ไม่ตรงปกแจ้งข้อพิพาทให้ทีมงานตัดสิน",
   },
 ];
+
+/** Eyebrow, title, one line of context, and an optional link on the right. */
+function SectionHead({ eyebrow, title, lead, action }) {
+  return (
+    <div className="mb-9 flex flex-wrap items-end justify-between gap-8">
+      <div>
+        <span className="text-xs font-semibold uppercase tracking-[.14em] text-brand-600">
+          {eyebrow}
+        </span>
+        <h2 className="mb-1 mt-1.5 text-xl">{title}</h2>
+        <p className="max-w-[46ch] text-sm text-ink-subtle">{lead}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function MoreLink({ href, children }) {
+  return (
+    <Link
+      href={href}
+      className="focus-ring group/more inline-flex shrink-0 items-center gap-1.5 rounded text-sm font-semibold text-brand-600"
+    >
+      {children}
+      <span
+        className="material-symbols-outlined text-[17px] leading-none transition-transform duration-300 group-hover/more:translate-x-1"
+        aria-hidden="true"
+      >
+        arrow_forward
+      </span>
+    </Link>
+  );
+}
 
 export default function HomePage() {
   const [items, setItems] = useState([]);
@@ -71,6 +89,7 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const railRef = useRef(null);
 
   /* This used to be `.catch(() => {})`, which meant a backend outage rendered
      the landing page as a hero over empty space with nothing to click and no
@@ -100,6 +119,11 @@ export default function HomePage() {
       .finally(() => setCategoriesLoading(false));
   }, []);
 
+  const scrollRail = (dir) => {
+    const rail = railRef.current;
+    if (rail) rail.scrollBy({ left: dir * rail.clientWidth * 0.8 });
+  };
+
   const heroPhotos = items.filter((p) => p.media?.length).slice(0, 3);
 
   return (
@@ -107,56 +131,67 @@ export default function HomePage() {
       <NavBar />
 
       {/* ── Hero ──────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-surface-subtle">
-        {/* Soft brand wash behind the collage, clipped by the section. */}
+      <section className="relative overflow-clip pb-[clamp(3.5rem,7vw,6rem)] pt-[clamp(3rem,6vw,5.5rem)]">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-32 -top-40 h-[520px] w-[520px] rounded-full bg-brand-100/50 blur-3xl"
+          className="pointer-events-none absolute -right-[14%] -top-[38%] aspect-square w-[min(70vw,760px)] rounded-full bg-[radial-gradient(circle_at_30%_30%,theme(colors.brand.50),transparent_68%)]"
         />
 
-        <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 md:grid-cols-[1fr_0.9fr] md:py-24">
+        <div className="relative mx-auto grid w-[min(100%-2.5rem,1280px)] items-center gap-[clamp(2rem,5vw,4.5rem)] lg:grid-cols-[1.05fr_.95fr]">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700">
+            <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-4 py-1.5 text-xs font-semibold text-brand-700">
               <span
-                className="material-symbols-outlined text-[15px] leading-none"
                 aria-hidden="true"
-              >
-                recycling
-              </span>
-              แฟชั่นมือสอง ซื้อขายอย่างมั่นใจ
+                className="h-[7px] w-[7px] animate-pulse-dot rounded-full bg-brand-600"
+              />
+              คัดสภาพแล้ว ตรวจสอบร้านได้ก่อนซื้อ
             </span>
 
-            <h1 className="mt-5 text-[2.1rem] font-bold leading-[1.15] tracking-tight text-gray-900 sm:text-5xl">
+            <h1 className="my-5 text-hero leading-[1.22] tracking-[-.035em]">
               ให้ของที่คุณรัก
               <br />
               ได้มี
-              {/* The brand swipe sits behind the word, not under it, so the
-                  descenders in ชีวิตรอบสอง stay readable. */}
-              <span className="relative whitespace-nowrap text-brand-700">
+              <span className="relative whitespace-nowrap text-brand-600">
+                {/* Swipes in behind the words on load, as in the reference. */}
                 <span
                   aria-hidden="true"
-                  className="absolute inset-x-0 bottom-1 -z-10 h-3.5 rounded bg-brand-200/70 sm:h-4"
+                  className="absolute inset-x-0 bottom-[.06em] -z-10 h-[.28em] origin-left scale-x-0 animate-swipe rounded-[3px] bg-brand-100"
                 />
                 ชีวิตรอบสอง
               </span>
             </h1>
 
-            <p className="mt-5 max-w-md text-base leading-relaxed text-ink-muted">
-              RE-LOOP คือตลาดแฟชั่นมือสองที่ให้คุณตรวจสอบร้าน ดูรีวิว
+            <p className="max-w-[50ch] text-[clamp(1rem,.95rem+.25vw,1.125rem)] text-ink-muted">
+              ตลาดแฟชั่นมือสองที่ให้คุณดูรีวิวร้าน เช็กสภาพสินค้า
               และจองของไว้ก่อนจ่ายเงิน — ซื้อสบายใจ ขายได้จริง
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Button href="/products" size="lg" icon="storefront">
+            <div className="my-8 flex flex-wrap gap-3">
+              <Link
+                href="/products"
+                className="focus-ring inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-[2.1em] py-[1.05em] text-base font-semibold text-white shadow-brand transition duration-[250ms] ease-ease hover:-translate-y-0.5 hover:bg-brand-700 active:scale-[.97]"
+              >
                 เลือกซื้อสินค้า
-              </Button>
-              <Button href="/sell" size="lg" variant="secondary" icon="sell">
+                <span
+                  className="material-symbols-outlined text-[17px] leading-none"
+                  aria-hidden="true"
+                >
+                  arrow_forward
+                </span>
+              </Link>
+              <Link
+                href="/sell"
+                className="focus-ring inline-flex items-center justify-center rounded-full border-[1.5px] border-line bg-white px-[2.1em] py-[1.05em] text-base font-semibold transition duration-[250ms] ease-ease hover:-translate-y-0.5 hover:border-brand-600 hover:text-brand-600 active:scale-[.97]"
+              >
                 เริ่มขายฟรี
-              </Button>
+              </Link>
             </div>
 
-            <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-line pt-6 text-sm">
-              <span className="flex items-center gap-2 text-ink-muted">
+            {/* The reference showed avatar stacks and "4.9/5 จากรีวิว 23,481
+                รายการ". Those numbers do not exist here, so this is the
+                catalogue size instead — real, and it updates itself. */}
+            <div className="flex flex-wrap items-center gap-x-7 gap-y-3 text-sm">
+              <span className="flex items-center gap-2 text-ink-subtle">
                 <span
                   className="material-symbols-outlined text-[19px] leading-none text-brand-600"
                   aria-hidden="true"
@@ -164,17 +199,17 @@ export default function HomePage() {
                   inventory_2
                 </span>
                 {total === null ? (
-                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-28" />
                 ) : (
                   <>
-                    <b className="font-bold text-gray-900">
+                    <b className="font-semibold text-ink">
                       {total.toLocaleString("th-TH")}
-                    </b>{" "}
+                    </b>
                     ชิ้นพร้อมขายตอนนี้
                   </>
                 )}
               </span>
-              <span className="flex items-center gap-2 text-ink-muted">
+              <span className="flex items-center gap-2 text-ink-subtle">
                 <span
                   className="material-symbols-outlined text-[19px] leading-none text-brand-600"
                   aria-hidden="true"
@@ -182,12 +217,12 @@ export default function HomePage() {
                   category
                 </span>
                 {categoriesLoading ? (
-                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-20" />
                 ) : (
                   <>
-                    <b className="font-bold text-gray-900">
+                    <b className="font-semibold text-ink">
                       {categories.length}
-                    </b>{" "}
+                    </b>
                     หมวดหมู่
                   </>
                 )}
@@ -198,19 +233,19 @@ export default function HomePage() {
           {/* Staggered collage of the site's own newest listings — real
               merchandise rather than stock photography, so the hero can
               never promise a selection that doesn't exist. */}
-          <div className="relative hidden md:block">
+          <div className="relative mx-auto hidden w-full max-w-[520px] lg:block">
             {loading ? (
-              <div className="grid h-[440px] grid-cols-2 grid-rows-6 gap-4">
-                <Skeleton className="col-start-1 row-span-4 row-start-1 rounded-3xl" />
-                <Skeleton className="col-start-2 row-span-4 row-start-2 rounded-3xl" />
-                <Skeleton className="col-start-1 row-span-2 row-start-5 rounded-3xl" />
+              <div className="grid grid-cols-2 grid-rows-[repeat(5,58px)] gap-[14px]">
+                <Skeleton className="col-start-1 row-[1/4] rounded-lg" />
+                <Skeleton className="col-start-2 row-[2/5] rounded-lg" />
+                <Skeleton className="col-start-1 row-[4/6] rounded-lg" />
               </div>
             ) : heroPhotos.length > 0 ? (
-              <div className="grid h-[440px] grid-cols-2 grid-rows-6 gap-4">
+              <div className="grid grid-cols-2 grid-rows-[repeat(5,58px)] gap-[14px]">
                 {[
-                  "col-start-1 row-start-1 row-span-4",
-                  "col-start-2 row-start-2 row-span-4",
-                  "col-start-1 row-start-5 row-span-2",
+                  "col-start-1 row-[1/4]",
+                  "col-start-2 row-[2/5]",
+                  "col-start-1 row-[4/6]",
                 ].map((placement, i) => {
                   const p = heroPhotos[i];
                   if (!p) return null;
@@ -218,48 +253,40 @@ export default function HomePage() {
                     <Link
                       key={p.id}
                       href={`/products/${p.id}`}
-                      className={`focus-ring group relative overflow-hidden rounded-3xl bg-gray-100 shadow-[0_18px_40px_-12px_rgba(11,18,16,0.18)] ${placement}`}
+                      className={`focus-ring group overflow-hidden rounded-lg bg-gray-100 shadow-3 ${placement}`}
                     >
                       <img
                         src={mediaUrl(p.media[0].url)}
                         alt={p.title}
-                        className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        className="h-full w-full object-cover transition-transform duration-[800ms] ease-ease group-hover:scale-[1.07]"
                       />
-                      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 pt-8 text-xs font-medium text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                        <span className="line-clamp-1">{p.title}</span>
-                        <span className="font-bold">
-                          ฿{p.price.toLocaleString("th-TH")}
-                        </span>
-                      </span>
                     </Link>
                   );
                 })}
               </div>
             ) : (
-              <div className="flex h-[440px] items-center justify-center rounded-3xl border border-dashed border-line-strong bg-white text-sm text-ink-subtle">
+              <div className="grid h-[350px] place-items-center rounded-lg border border-dashed border-line-strong text-sm text-ink-subtle">
                 ยังไม่มีรูปสินค้าให้แสดง
               </div>
             )}
 
             {heroPhotos.length > 0 && !loading && (
-              /* The collage leaves column 2 / row 6 empty by design — the
-                 badge drops into that gap instead of covering a photo. */
-              <div className="absolute -bottom-3 right-0 flex w-[calc(50%-0.5rem)] items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3 shadow-[0_18px_40px_-12px_rgba(11,18,16,0.22)]">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+              <div className="absolute -left-[8%] bottom-[16%] flex animate-bob items-center gap-3 rounded-md border border-line bg-white px-[1.05rem] py-3 shadow-3">
+                <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-brand-50 text-brand-600">
                   <span
-                    className="material-symbols-outlined text-[21px]"
+                    className="material-symbols-outlined text-[17px]"
                     aria-hidden="true"
                   >
                     lock_clock
                   </span>
                 </span>
-                <span className="leading-tight">
-                  <b className="block text-sm font-semibold text-gray-900">
+                <span>
+                  <b className="block text-sm leading-tight">
                     จองสินค้าให้ 10 นาที
                   </b>
-                  <span className="text-xs text-ink-subtle">
+                  <small className="text-xs text-ink-subtle">
                     ระหว่างที่คุณชำระเงิน
-                  </span>
+                  </small>
                 </span>
               </div>
             )}
@@ -268,7 +295,7 @@ export default function HomePage() {
       </section>
 
       {error ? (
-        <section className="mx-auto w-full max-w-6xl px-4 py-16">
+        <section className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]">
           <ErrorState
             description="ไม่สามารถโหลดสินค้าได้ในขณะนี้"
             detail={error}
@@ -277,206 +304,173 @@ export default function HomePage() {
         </section>
       ) : (
         <>
-          {/* ── Value props ────────────────────────────────────── */}
-          <section className="border-y border-line bg-white">
-            <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:grid-cols-3">
-              {VALUE_PROPS.map((v) => (
-                <div key={v.title} className="flex gap-3.5">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-                    <span
-                      className="material-symbols-outlined text-[22px]"
-                      aria-hidden="true"
-                    >
-                      {v.icon}
-                    </span>
-                  </span>
-                  <div>
-                    <p className="font-semibold text-gray-900">{v.title}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-ink-muted">
-                      {v.body}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+          {/* ── Categories ─────────────────────────────────────── */}
+          <section className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]">
+            <SectionHead
+              eyebrow="Shop by category"
+              title="เลือกจากหมวดที่คุณตามหา"
+              lead="แสดงเฉพาะหมวดที่มีของขายจริงในระบบตอนนี้ กดแล้วไม่เจอหน้าว่าง"
+              action={<MoreLink href="/products">ดูทั้งหมด</MoreLink>}
+            />
 
-          {/* ── Category rail ─────────────────────────────────── */}
-          <section className="mx-auto w-full max-w-6xl px-4 py-12">
-            <div className="mb-5 flex items-end justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold tracking-tight text-gray-900">
-                  เลือกซื้อตามหมวดหมู่
-                </h2>
-                <p className="mt-1 text-sm text-ink-muted">
-                  แสดงเฉพาะหมวดที่มีของขายจริงในระบบตอนนี้
-                </p>
-              </div>
-              <Link
-                href="/products"
-                className="focus-ring hidden shrink-0 items-center gap-1 rounded text-sm font-semibold text-brand-600 hover:underline sm:flex"
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => scrollRail(-1)}
+                aria-label="เลื่อนซ้าย"
+                className="focus-ring absolute -left-[18px] top-1/2 z-[5] hidden h-[42px] w-[42px] -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
               >
-                ดูสินค้าทั้งหมด
                 <span
-                  className="material-symbols-outlined text-[17px]"
+                  className="material-symbols-outlined text-[19px]"
                   aria-hidden="true"
                 >
-                  arrow_forward
+                  chevron_left
                 </span>
-              </Link>
-            </div>
+              </button>
 
-            <div className="scrollbar-none flex gap-3 overflow-x-auto pb-1">
-              {categoriesLoading
-                ? Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton
-                      key={i}
-                      className="h-[104px] w-[140px] shrink-0 rounded-xl"
-                    />
-                  ))
-                : categories.map((c) => (
-                    <Link
-                      key={c.name}
-                      href={`/products?category=${encodeURIComponent(c.name)}`}
-                      className="focus-ring flex w-[140px] shrink-0 flex-col items-center gap-2 rounded-xl border border-line bg-white px-3 py-5 text-center transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md"
-                    >
-                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-50 text-brand-600">
-                        <span
-                          className="material-symbols-outlined text-[23px]"
-                          aria-hidden="true"
-                        >
-                          {CATEGORY_ICON[c.name] || "sell"}
+              <div
+                ref={railRef}
+                className="scrollbar-none flex snap-x snap-mandatory gap-[.9rem] overflow-x-auto scroll-smooth pb-2"
+              >
+                {categoriesLoading
+                  ? Array.from({ length: 6 }).map((_, i) => (
+                      <Skeleton
+                        key={i}
+                        className="h-[150px] w-[150px] shrink-0 rounded-md"
+                      />
+                    ))
+                  : categories.map((c) => (
+                      <Link
+                        key={c.name}
+                        href={`/products?category=${encodeURIComponent(c.name)}`}
+                        className="focus-ring group/cat w-[150px] shrink-0 snap-start rounded-md border-[1.5px] border-line bg-white px-4 py-[1.35rem] text-center transition duration-300 ease-ease hover:-translate-y-[5px] hover:border-brand-300 hover:shadow-2"
+                      >
+                        <span className="mx-auto mb-[.7rem] grid h-[50px] w-[50px] place-items-center rounded-[14px] bg-surface-subtle text-brand-600 transition-colors duration-[250ms] group-hover/cat:bg-brand-50">
+                          <span
+                            className="material-symbols-outlined text-[24px]"
+                            aria-hidden="true"
+                          >
+                            {CATEGORY_ICON[c.name] || "sell"}
+                          </span>
                         </span>
-                      </span>
-                      <span className="line-clamp-1 text-sm font-semibold text-gray-800">
-                        {c.name}
-                      </span>
-                      <span className="text-xs text-ink-subtle">
-                        {c.count.toLocaleString("th-TH")} ชิ้น
-                      </span>
-                    </Link>
-                  ))}
+                        <b className="block truncate text-sm font-semibold">
+                          {c.name}
+                        </b>
+                        <small className="text-xs text-ink-subtle">
+                          {c.count.toLocaleString("th-TH")} ชิ้น
+                        </small>
+                      </Link>
+                    ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => scrollRail(1)}
+                aria-label="เลื่อนขวา"
+                className="focus-ring absolute -right-[18px] top-1/2 z-[5] hidden h-[42px] w-[42px] -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
+              >
+                <span
+                  className="material-symbols-outlined text-[19px]"
+                  aria-hidden="true"
+                >
+                  chevron_right
+                </span>
+              </button>
             </div>
           </section>
 
           {/* ── New arrivals ───────────────────────────────────── */}
-          <section className="border-t border-line bg-surface-subtle">
-            <div className="mx-auto w-full max-w-6xl px-4 py-14">
-              <div className="mb-6 flex items-end justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-gray-900">
-                    เข้าใหม่ล่าสุด
-                  </h2>
-                  <p className="mt-1 text-sm text-ink-muted">
-                    ของที่เพิ่งลงขาย เรียงจากใหม่ที่สุด
-                  </p>
-                </div>
-                <Link
-                  href="/products"
-                  className="focus-ring flex shrink-0 items-center gap-1 rounded text-sm font-semibold text-brand-600 hover:underline"
-                >
+          <section className="mx-auto w-[min(100%-2.5rem,1280px)] pb-[clamp(3.5rem,7vw,6rem)]">
+            <SectionHead
+              eyebrow="New arrivals"
+              title="สินค้าเข้าใหม่ล่าสุด"
+              lead="เรียงจากที่เพิ่งลงขาย ระบุสภาพและไซซ์ไว้ครบก่อนกดเข้าไปดู"
+              action={
+                <MoreLink href="/products">
                   ดูทั้งหมด
                   {total !== null && ` ${total.toLocaleString("th-TH")} ชิ้น`}
-                  <span
-                    className="material-symbols-outlined text-[17px]"
-                    aria-hidden="true"
-                  >
-                    arrow_forward
-                  </span>
-                </Link>
-              </div>
+                </MoreLink>
+              }
+            />
 
-              {loading ? (
-                <Skeleton.CardGrid count={NEW_ARRIVALS_COUNT} />
-              ) : items.length === 0 ? (
-                <p className="text-sm text-ink-muted">
-                  ยังไม่มีสินค้าลงขายในระบบ
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 md:gap-5">
-                  {items.map((p) => (
-                    <ProductCard key={p.id} product={p} />
-                  ))}
-                </div>
-              )}
-            </div>
+            {loading ? (
+              <Skeleton.CardGrid count={NEW_ARRIVALS_COUNT} />
+            ) : items.length === 0 ? (
+              <p className="text-sm text-ink-subtle">
+                ยังไม่มีสินค้าลงขายในระบบ
+              </p>
+            ) : (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(238px,1fr))] gap-[clamp(1rem,2vw,1.6rem)] max-[560px]:grid-cols-2 max-[560px]:gap-[.9rem]">
+                {items.map((p) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+            )}
           </section>
 
           {/* ── How it works ───────────────────────────────────── */}
-          <section className="mx-auto w-full max-w-6xl px-4 py-16">
-            <h2 className="text-center text-2xl font-bold tracking-tight text-gray-900">
-              ซื้อขายยังไงให้ปลอดภัย
-            </h2>
-            <p className="mx-auto mt-2 max-w-md text-center text-sm text-ink-muted">
-              ทุกคำสั่งซื้อเดินตามสามขั้นนี้ ไม่มีขั้นตอนซ่อน
-            </p>
+          <section className="border-y border-line bg-surface-subtle">
+            <div className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]">
+              <SectionHead
+                eyebrow="How it works"
+                title="ซื้อขายยังไงให้ปลอดภัย"
+                lead="ทุกคำสั่งซื้อเดินตามสามขั้นนี้ ไม่มีขั้นตอนซ่อน"
+              />
 
-            <ol className="mt-10 grid gap-5 sm:grid-cols-3">
-              {HOW_IT_WORKS.map((step, i) => (
-                <li
-                  key={step.title}
-                  className="relative rounded-2xl border border-line bg-white p-6"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="absolute right-5 top-4 text-5xl font-bold leading-none text-gray-100"
+              <ol className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-5">
+                {HOW_IT_WORKS.map((step, i) => (
+                  <li
+                    key={step.title}
+                    className="relative overflow-hidden rounded-lg border border-line bg-white px-[1.6rem] py-[1.9rem] transition duration-300 ease-ease hover:-translate-y-1 hover:shadow-2"
                   >
-                    {i + 1}
-                  </span>
-                  <span className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
                     <span
-                      className="material-symbols-outlined text-[22px]"
                       aria-hidden="true"
+                      className="pointer-events-none absolute right-4 top-1 font-display text-[3.6rem] font-bold leading-none text-gray-100"
                     >
-                      {step.icon}
+                      0{i + 1}
                     </span>
-                  </span>
-                  <p className="relative mt-4 font-semibold text-gray-900">
-                    {step.title}
-                  </p>
-                  <p className="relative mt-1 text-sm leading-relaxed text-ink-muted">
-                    {step.body}
-                  </p>
-                </li>
-              ))}
-            </ol>
+                    <span className="mb-4 grid h-[46px] w-[46px] place-items-center rounded-[13px] bg-brand-50 text-brand-600">
+                      <span
+                        className="material-symbols-outlined text-[21px]"
+                        aria-hidden="true"
+                      >
+                        {step.icon}
+                      </span>
+                    </span>
+                    <h3 className="mb-1.5 text-[1.075rem]">{step.title}</h3>
+                    <p className="text-sm text-ink-subtle">{step.body}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
           </section>
 
           {/* ── Sell CTA ────────────────────────────────────────── */}
-          <section className="mx-auto w-full max-w-6xl px-4 pb-16">
-            <div className="relative overflow-hidden rounded-3xl bg-brand-700 px-6 py-14 text-center sm:px-12">
+          <section className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]">
+            <div className="relative overflow-hidden rounded-xl bg-[linear-gradient(135deg,theme(colors.brand.700),theme(colors.brand.500)_55%,theme(colors.brand.300))] px-[clamp(1.5rem,4vw,3.5rem)] py-[clamp(2.5rem,5vw,4.25rem)] text-center text-white">
               <span
                 aria-hidden="true"
-                className="absolute -left-16 -top-16 h-64 w-64 rounded-full bg-white/10"
+                className="absolute -left-[90px] -top-[160px] h-[340px] w-[340px] rounded-full bg-white/[.09]"
               />
               <span
                 aria-hidden="true"
-                className="absolute -bottom-20 -right-10 h-56 w-56 rounded-full bg-white/10"
+                className="absolute -bottom-[140px] -right-[60px] h-[260px] w-[260px] rounded-full bg-white/[.09]"
               />
 
               <div className="relative">
-                <h2 className="text-2xl font-bold text-white sm:text-3xl">
-                  มีของที่ไม่ได้ใช้แล้วใช่ไหม
-                </h2>
-                <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-brand-50">
-                  ลงขายได้ฟรี ไม่มีค่าธรรมเนียมแรกเข้า ถ่ายรูป ตั้งราคา
-                  แล้วลงขายได้เลย
+                <h2 className="mb-2.5 text-xl">มีของที่ไม่ได้ใช้แล้วใช่ไหม</h2>
+                <p className="mx-auto mb-[1.9rem] max-w-[52ch] text-sm opacity-90">
+                  ลงขายฟรี ไม่มีค่าธรรมเนียมแรกเข้า ถ่ายรูป ตั้งราคา กดลง —
+                  ใช้เวลาไม่ถึง 2 นาที
                 </p>
-                {/* Not <Button>: its variants already set a background and
-                    text colour, and two Tailwind class strings don't
-                    reliably override each other by source order. A one-off
-                    white-on-brand button is safest written directly. */}
+                {/* Written out rather than <Button>: its variants set their
+                    own background and text colour, and two Tailwind class
+                    strings don't reliably override each other by order. */}
                 <Link
                   href="/sell"
-                  className="focus-ring mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-white px-7 py-3.5 text-base font-semibold text-brand-700 shadow-lg transition hover:bg-brand-50"
+                  className="focus-ring inline-flex items-center justify-center rounded-full bg-white px-[2.1em] py-[1.05em] text-base font-semibold text-brand-700 shadow-[0_12px_30px_-8px_rgba(0,0,0,.35)] transition duration-[250ms] ease-ease hover:-translate-y-0.5 hover:bg-brand-50 active:scale-[.97]"
                 >
-                  <span
-                    className="material-symbols-outlined text-[19px] leading-none"
-                    aria-hidden="true"
-                  >
-                    sell
-                  </span>
-                  เริ่มลงขายเลย
+                  เริ่มขายสินค้าเลย
                 </Link>
               </div>
             </div>

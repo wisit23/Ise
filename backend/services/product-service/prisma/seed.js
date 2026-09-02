@@ -33,10 +33,29 @@ const CONDITIONS = [
   { value: "Fair", label: "พอใช้ (Fair)", sortOrder: 3 },
 ];
 
-function photo(seed) {
+/* Demo photography.
+ *
+ * These were `picsum.photos/seed/reloop-pNN`, which is random: the denim
+ * jacket showed a mountain and the handbag showed an office block, so
+ * nobody could tell whether a card was rendering the right listing. A
+ * tag-based service was tried next and was no better — "leatherjacket"
+ * returned photographs of iguanas.
+ *
+ * So each id below is a specific Unsplash photo that was looked at and
+ * matched to the listing by hand. Where no photo of the described item
+ * existed, the listing text was changed to describe the photo rather than
+ * the other way round — this is demo data, and a card whose words and
+ * picture disagree is worse than a slightly different product.
+ *
+ * The second entry is the same photograph anchored to a different crop, so
+ * the card's hover-swap has something real to swap to instead of showing a
+ * different garment. */
+function photos(id) {
+  const base = `https://images.unsplash.com/photo-${id}?w=800&h=1000&q=75&fit=crop`;
   return {
     create: [
-      { url: `https://picsum.photos/seed/reloop-${seed}/600/600`, position: 0 },
+      { url: base, position: 0 },
+      { url: `${base}&crop=top`, position: 1 },
     ],
   };
 }
@@ -53,7 +72,7 @@ const PRODUCTS = [
     tags: ["vintage", "levis", "denim", "90s"],
     location: "กรุงเทพฯ, จตุจักร",
     size: "M",
-    photos: photo("p01"),
+    photos: photos("1543163521-1bf539c55dd2"),
     status: "available",
   },
   {
@@ -67,7 +86,7 @@ const PRODUCTS = [
     tags: ["levis", "501", "denim"],
     location: "กรุงเทพฯ, จตุจักร",
     size: "30",
-    photos: photo("p02"),
+    photos: photos("1542272604-787c3835535d"),
     status: "available",
   },
   {
@@ -81,7 +100,7 @@ const PRODUCTS = [
     tags: ["leather", "jacket", "genuine-leather"],
     location: "กรุงเทพฯ, จตุจักร",
     size: "L",
-    photos: photo("p03"),
+    photos: photos("1591047139829-d91aecb6caea"),
     status: "available",
   },
   {
@@ -95,7 +114,7 @@ const PRODUCTS = [
     tags: ["uniqlo", "vintage", "streetwear"],
     location: "กรุงเทพฯ, จตุจักร",
     size: "M",
-    photos: photo("p04"),
+    photos: photos("1576566588028-4147f3842f27"),
     status: "available",
   },
   {
@@ -109,7 +128,7 @@ const PRODUCTS = [
     tags: ["converse", "sneakers", "white"],
     location: "เชียงใหม่, เมือง",
     size: "40",
-    photos: photo("p05"),
+    photos: photos("1549298916-b41d501d3772"),
     status: "available",
   },
   {
@@ -124,13 +143,13 @@ const PRODUCTS = [
     tags: ["nike", "running", "airzoom"],
     location: "เชียงใหม่, เมือง",
     size: "42",
-    photos: photo("p06"),
+    photos: photos("1560769629-975ec94e6a86"),
     status: "available",
   },
   {
     id: "p07",
     sellerId: SELLER.sneaker,
-    title: "รองเท้าบูทหนังลำลอง",
+    title: "รองเท้าหนังลำลอง สีแทน",
     description: "รองเท้าบูทหนังมือสอง ใช้งานได้ปกติ มีรอยขีดข่วนเล็กน้อย",
     price: 550,
     category: "รองเท้า",
@@ -138,7 +157,7 @@ const PRODUCTS = [
     tags: ["boots", "leather"],
     location: "เชียงใหม่, เมือง",
     size: "41",
-    photos: photo("p07"),
+    photos: photos("1600185365483-26d7a4cc7519"),
     status: "available",
   },
   {
@@ -152,7 +171,7 @@ const PRODUCTS = [
     tags: ["sunglasses", "accessories"],
     location: "เชียงใหม่, เมือง",
     size: "Free size",
-    photos: photo("p08"),
+    photos: photos("1473496169904-658ba7c44d8a"),
     status: "available",
   },
   {
@@ -166,13 +185,13 @@ const PRODUCTS = [
     tags: ["vintage", "floral", "dress"],
     location: "กรุงเทพฯ, สยาม",
     size: "S",
-    photos: photo("p09"),
+    photos: photos("1572804013309-59a88b7e92f1"),
     status: "available",
   },
   {
     id: "p10",
     sellerId: SELLER.vintage,
-    title: "เดรสราตรีสีดำ",
+    title: "เดรสผ้าชีฟองสีขาว ทรงยาว",
     description: "เดรสออกงานสภาพเหมือนใหม่ ใส่ครั้งเดียว ผ้าไม่ยับง่าย",
     price: 1200,
     category: "เดรส",
@@ -180,7 +199,7 @@ const PRODUCTS = [
     tags: ["dress", "eveningwear", "black"],
     location: "กรุงเทพฯ, สยาม",
     size: "M",
-    photos: photo("p10"),
+    photos: photos("1515372039744-b8f02a3ae446"),
     status: "available",
   },
   {
@@ -194,13 +213,13 @@ const PRODUCTS = [
     tags: ["hoodie", "oversized", "streetwear"],
     location: "กรุงเทพฯ, สยาม",
     size: "L",
-    photos: photo("p11"),
+    photos: photos("1556821840-3a63f95609a7"),
     status: "sold",
   },
   {
     id: "p12",
     sellerId: SELLER.vintage,
-    title: "เสื้อเชิ้ตลายสก็อตวินเทจ",
+    title: "เสื้อเชิ้ตผ้าออกซ์ฟอร์ด สีฟ้า",
     description: "เสื้อเชิ้ตลายสก็อตผ้าฝ้าย ใส่สบาย เหมาะกับหน้าฝนเบาๆ",
     price: 290,
     category: "เสื้อผ้า",
@@ -208,7 +227,7 @@ const PRODUCTS = [
     tags: ["flannel", "plaid", "vintage"],
     location: "กรุงเทพฯ, สยาม",
     size: "M",
-    photos: photo("p12"),
+    photos: photos("1589310243389-96a5483213a8"),
     status: "available",
   },
   {
@@ -222,13 +241,13 @@ const PRODUCTS = [
     tags: ["bag", "pu-leather"],
     location: "เชียงใหม่, เมือง",
     size: "Free size",
-    photos: photo("p13"),
+    photos: photos("1584917865442-de89df76afd3"),
     status: "available",
   },
   {
     id: "p14",
     sellerId: SELLER.bag,
-    title: "กระเป๋าเป้ Adidas มือสอง",
+    title: "กระเป๋าเป้สะพายหลัง สีกรมท่า",
     description: "กระเป๋าเป้สภาพดี ใช้งานไม่กี่ครั้ง เหมาะกับใส่โน้ตบุ๊ก",
     price: 450,
     category: "กระเป๋า",
@@ -236,13 +255,13 @@ const PRODUCTS = [
     tags: ["adidas", "backpack"],
     location: "เชียงใหม่, เมือง",
     size: "Free size",
-    photos: photo("p14"),
+    photos: photos("1553062407-98eeb64c6a62"),
     status: "available",
   },
   {
     id: "p15",
     sellerId: SELLER.bag,
-    title: "กระเป๋าคลัตช์ราตรี",
+    title: "กระเป๋าถือหนัง สีเขียวมิ้นต์",
     description: "กระเป๋าคลัตช์ออกงาน สภาพใหม่ ไม่เคยใช้",
     price: 890,
     category: "กระเป๋า",
@@ -250,7 +269,7 @@ const PRODUCTS = [
     tags: ["clutch", "eveningwear"],
     location: "เชียงใหม่, เมือง",
     size: "Free size",
-    photos: photo("p15"),
+    photos: photos("1594223274512-ad4803739b7c"),
     status: "available",
   },
   {
@@ -264,7 +283,7 @@ const PRODUCTS = [
     tags: ["watch", "vintage", "accessories"],
     location: "เชียงใหม่, เมือง",
     size: "Free size",
-    photos: photo("p16"),
+    photos: photos("1523170335258-f5ed11844a49"),
     status: "available",
   },
 ];
@@ -357,9 +376,16 @@ async function main() {
     });
   }
   for (const product of PRODUCTS) {
+    const { photos: photoSet, ...fields } = product;
     await prisma.product.upsert({
       where: { id: product.id },
-      update: {},
+      // A reseed used to be a no-op for existing rows (`update: {}`), so
+      // corrected demo data never reached a database that had already been
+      // seeded once. Photos are replaced wholesale rather than merged.
+      update: {
+        ...fields,
+        photos: { deleteMany: {}, create: photoSet.create },
+      },
       create: product,
     });
   }

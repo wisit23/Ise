@@ -131,8 +131,8 @@ export default function ProductCard({ product, showSeller = true }) {
     : null;
 
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-line-strong hover:shadow-xl">
-      <div className="relative aspect-[4/5] overflow-hidden bg-gray-100">
+    <article className="group relative flex flex-col overflow-hidden rounded-md border border-line bg-white shadow-1 transition duration-[350ms] ease-ease hover:-translate-y-1.5 hover:border-line-strong hover:shadow-2">
+      <div className="relative aspect-[4/5] overflow-hidden bg-surface-panel">
         {cover ? (
           <>
             <img
@@ -168,7 +168,7 @@ export default function ProductCard({ product, showSeller = true }) {
 
         {conditionLabel && (
           <span
-            className={`absolute left-2.5 top-2.5 max-w-[calc(100%-6rem)] truncate rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm ${
+            className={`absolute left-[.7rem] top-[.7rem] max-w-[calc(100%-6rem)] truncate rounded-full px-[.75em] py-[.32em] text-xs font-semibold shadow-1 ${
               CONDITION_STYLE[product.condition] || "bg-gray-700 text-white"
             }`}
           >
@@ -176,14 +176,14 @@ export default function ProductCard({ product, showSeller = true }) {
           </span>
         )}
 
-        <span className="absolute right-2.5 top-2.5 rounded-full bg-gray-900/75 px-2.5 py-1 text-[11px] font-medium text-white shadow-sm backdrop-blur">
+        <span className="absolute right-[.7rem] top-[.7rem] rounded-full bg-ink/70 px-[.75em] py-[.32em] text-xs font-medium text-white shadow-1 backdrop-blur-[8px]">
           {freshnessLabel(product.createdAt)}
         </span>
 
         {/* A caption for the link the whole card already is — not a second
             action, just the affordance a still photo lacks. */}
-        <div className="pointer-events-none absolute inset-x-2.5 bottom-2.5 translate-y-2 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-          <span className="flex items-center justify-center gap-1.5 rounded-full bg-white/95 py-2.5 text-sm font-semibold text-gray-900 shadow-lg backdrop-blur">
+        <div className="pointer-events-none absolute inset-x-[.7rem] bottom-[.7rem] translate-y-2.5 opacity-0 transition-all duration-300 ease-ease group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 max-[560px]:translate-y-0 max-[560px]:opacity-100">
+          <span className="flex items-center justify-center gap-1.5 rounded-sm bg-white/[.92] p-[.7em] text-sm font-semibold text-ink shadow-2 backdrop-blur-[10px]">
             ดูรายละเอียด
             <span
               className="material-symbols-outlined text-[16px] leading-none"
@@ -195,8 +195,8 @@ export default function ProductCard({ product, showSeller = true }) {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col p-3.5">
-        <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-gray-900">
+      <div className="flex flex-1 flex-col p-[.95rem]">
+        <h3 className="line-clamp-2 font-sans text-sm font-medium leading-[1.45] text-ink">
           {/* Stretched link: the whole card is clickable, but only the title
               is in the tab order — a keyboard user gets one stop per card,
               not one per decorative element. */}
@@ -209,17 +209,17 @@ export default function ProductCard({ product, showSeller = true }) {
         </h3>
 
         {meta.length > 0 && (
-          <p className="mt-1.5 truncate text-[13px] text-ink-muted">
+          <p className="mt-0.5 truncate text-xs text-ink-subtle">
             {meta.join(" · ")}
           </p>
         )}
 
-        <p className="mt-2.5 text-[22px] font-bold tracking-tight text-gray-900">
+        <p className="mt-[.55rem] font-display text-[1.18rem] font-bold tracking-[-.02em] text-ink">
           ฿{product.price.toLocaleString("th-TH")}
         </p>
 
         {showSeller && (
-          <div className="mt-auto flex items-center gap-1.5 border-t border-line pt-3 text-[13px]">
+          <div className="mt-[.7rem] flex items-center gap-[.45rem] border-t border-line pt-[.7rem] text-xs text-ink-subtle">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[11px] font-bold text-brand-700">
               {sellerName?.[0]?.toUpperCase() || "?"}
             </span>

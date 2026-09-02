@@ -1,4 +1,4 @@
-import { Noto_Sans_Thai } from "next/font/google";
+import { Anuphan, Noto_Sans_Thai } from "next/font/google";
 import "./globals.css";
 
 /* Self-hosted by next/font at build time — no runtime request to Google, no
@@ -11,6 +11,16 @@ const notoSansThai = Noto_Sans_Thai({
   variable: "--font-noto-sans-thai",
 });
 
+/* Headings only. The reference design pairs a tighter display face with the
+   body text; using one face for both is what made every heading read as
+   "big body text" rather than as a heading. */
+const anuphan = Anuphan({
+  subsets: ["thai", "latin"],
+  weight: ["500", "600", "700"],
+  display: "swap",
+  variable: "--font-anuphan",
+});
+
 export const metadata = {
   title: "RE-LOOP",
   description: "Second-hand fashion marketplace",
@@ -18,7 +28,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="th" className={notoSansThai.variable}>
+    <html lang="th" className={`${notoSansThai.variable} ${anuphan.variable}`}>
       <head>
         {/* Material Symbols used to be injected imperatively from a useEffect
             in four separate components. Declaring it once here means the
