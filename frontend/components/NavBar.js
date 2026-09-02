@@ -95,15 +95,15 @@ export default function NavBar() {
 
   return (
     <header className="sticky top-0 z-nav border-b border-line bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
+      <div className="mx-auto flex h-[64px] w-[min(100%-2.5rem,1280px)] items-center gap-5 sm:h-[72px]">
         <Link
           href="/"
           aria-label="RE-LOOP หน้าแรก"
-          className="focus-ring flex shrink-0 items-center gap-2 rounded text-xl font-bold tracking-tight text-brand-600"
+          className="focus-ring flex shrink-0 items-center gap-[.55rem] rounded font-display text-[1.35rem] font-bold tracking-[-.045em]"
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white">
+          <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] bg-[linear-gradient(140deg,theme(colors.brand.600),theme(colors.brand.300))] text-white shadow-brand">
             <span
-              className="material-symbols-outlined text-[18px]"
+              className="material-symbols-outlined text-[17px] leading-none"
               aria-hidden="true"
             >
               autorenew
@@ -113,8 +113,11 @@ export default function NavBar() {
         </Link>
 
         <form onSubmit={handleSearch} className="hidden min-w-0 flex-1 sm:flex">
-          <div className="focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/10 flex w-full max-w-md overflow-hidden rounded-full border border-line-strong bg-white transition">
-            <span className="material-symbols-outlined pl-4 text-[19px] text-ink-subtle">
+          <div className="flex w-full max-w-[520px] items-center gap-[.6rem] rounded-full border-[1.5px] border-line bg-surface-subtle p-[.4rem] pl-[1.1rem] transition duration-[250ms] focus-within:border-brand-600 focus-within:bg-white focus-within:ring-4 focus-within:ring-brand-50">
+            <span
+              className="material-symbols-outlined shrink-0 text-[18px] leading-none text-ink-subtle"
+              aria-hidden="true"
+            >
               search
             </span>
             <input
@@ -122,11 +125,11 @@ export default function NavBar() {
               onChange={(e) => setQ(e.target.value)}
               aria-label="ค้นหาสินค้า"
               placeholder="ค้นหาแบรนด์ หมวดหมู่ หรือสไตล์..."
-              className="placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-gray-900 outline-none"
+              className="placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent text-sm outline-none"
             />
             <button
               type="submit"
-              className="shrink-0 self-stretch bg-brand-600 px-4 text-sm font-medium text-white transition hover:bg-brand-700"
+              className="focus-ring shrink-0 rounded-full bg-brand-600 px-[1.35em] py-[.62em] text-sm font-semibold text-white transition hover:bg-brand-700"
             >
               ค้นหา
             </button>
@@ -145,10 +148,10 @@ export default function NavBar() {
               key={item.href}
               href={item.href}
               aria-label={item.label}
-              className="focus-ring flex items-center gap-1.5 rounded-lg px-2 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-brand-700 md:px-3"
+              className="focus-ring flex items-center gap-[.4rem] rounded-sm px-[.7em] py-[.55em] text-sm font-medium text-ink-muted transition hover:bg-surface-panel hover:text-ink lg:px-[.9em]"
             >
               <span
-                className="material-symbols-outlined text-[20px] leading-none"
+                className="material-symbols-outlined text-[18px] leading-none"
                 aria-hidden="true"
               >
                 {item.icon}
@@ -161,7 +164,7 @@ export default function NavBar() {
         {user && (
           <Link
             href="/sell"
-            className="focus-ring hidden shrink-0 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 md:flex"
+            className="focus-ring hidden shrink-0 items-center gap-[.4rem] rounded-sm px-[.9em] py-[.55em] text-sm font-medium text-brand-700 transition hover:bg-brand-50 md:flex"
           >
             <span
               className="material-symbols-outlined text-[18px] leading-none"
@@ -177,10 +180,10 @@ export default function NavBar() {
           <Link
             href="/cart"
             aria-label={`ตะกร้า${cartCount > 0 ? ` มี ${cartCount} รายการ` : ""}`}
-            className="focus-ring relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-600 transition hover:bg-gray-100 hover:text-brand-700"
+            className="focus-ring relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
           >
             <span
-              className="material-symbols-outlined text-[22px] leading-none"
+              className="material-symbols-outlined text-[21px] leading-none"
               aria-hidden="true"
             >
               shopping_cart
@@ -447,7 +450,7 @@ export default function NavBar() {
             <div className="flex items-center gap-2 text-sm">
               <Link
                 href="/login"
-                className="focus-ring rounded-md px-2 py-1.5 text-gray-600 transition hover:text-brand-600"
+                className="focus-ring rounded-sm px-[.9em] py-[.55em] font-medium text-ink-muted transition hover:bg-surface-panel hover:text-ink"
               >
                 เข้าสู่ระบบ
               </Link>
@@ -459,10 +462,13 @@ export default function NavBar() {
 
       <form
         onSubmit={handleSearch}
-        className="border-t border-line px-4 py-2 sm:hidden"
+        className="border-t border-line px-5 pb-3 sm:hidden"
       >
-        <div className="flex items-center overflow-hidden rounded-full border border-line-strong bg-white">
-          <span className="material-symbols-outlined pl-3 text-[18px] text-ink-subtle">
+        <div className="flex items-center gap-2 rounded-full border-[1.5px] border-line bg-surface-subtle px-4 py-2.5 focus-within:border-brand-600 focus-within:bg-white">
+          <span
+            className="material-symbols-outlined shrink-0 text-[18px] leading-none text-ink-subtle"
+            aria-hidden="true"
+          >
             search
           </span>
           <input
@@ -470,7 +476,7 @@ export default function NavBar() {
             onChange={(e) => setQ(e.target.value)}
             aria-label="ค้นหาสินค้า"
             placeholder="ค้นหาสินค้า..."
-            className="focus-ring placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent px-2 py-2 text-sm text-gray-900 outline-none"
+            className="placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
         </div>
       </form>

@@ -271,7 +271,7 @@ export default function HomePage() {
             )}
 
             {heroPhotos.length > 0 && !loading && (
-              <div className="absolute -left-[8%] bottom-[16%] flex animate-bob items-center gap-3 rounded-md border border-line bg-white px-[1.05rem] py-3 shadow-3">
+              <div className="absolute -bottom-5 right-0 flex w-[calc(50%-7px)] animate-bob items-center gap-3 rounded-md border border-line bg-white px-[1.05rem] py-3 shadow-3">
                 <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-brand-50 text-brand-600">
                   <span
                     className="material-symbols-outlined text-[17px]"
