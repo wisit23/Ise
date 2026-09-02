@@ -7,6 +7,7 @@ import Footer from "../components/Footer";
 import ProductCard from "../components/ProductCard";
 import ErrorState from "../components/ui/ErrorState";
 import Skeleton from "../components/ui/Skeleton";
+import Reveal from "../components/ui/Reveal";
 import { apiFetch, mediaUrl } from "../lib/api";
 import { fetchActiveCategories } from "../lib/catalog";
 
@@ -131,7 +132,10 @@ export default function HomePage() {
       <NavBar />
 
       {/* ── Hero ──────────────────────────────────────────────── */}
-      <section className="relative overflow-clip pb-[clamp(3.5rem,7vw,6rem)] pt-[clamp(3rem,6vw,5.5rem)]">
+      {/* The hero sits on its own tinted ground with a closing rule: with a
+          white background it ran straight into the category rail and the two
+          read as one long block. */}
+      <section className="relative overflow-clip border-b border-line bg-[linear-gradient(180deg,theme(colors.brand.50/.45),theme(colors.surface.subtle))] pb-[clamp(3.5rem,7vw,6rem)] pt-[clamp(3rem,6vw,5.5rem)]">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-[14%] -top-[38%] aspect-square w-[min(70vw,760px)] rounded-full bg-[radial-gradient(circle_at_30%_30%,theme(colors.brand.50),transparent_68%)]"
@@ -305,7 +309,10 @@ export default function HomePage() {
       ) : (
         <>
           {/* ── Categories ─────────────────────────────────────── */}
-          <section className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]">
+          <Reveal
+            as="section"
+            className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]"
+          >
             <SectionHead
               eyebrow="Shop by category"
               title="เลือกจากหมวดที่คุณตามหา"
@@ -377,10 +384,13 @@ export default function HomePage() {
                 </span>
               </button>
             </div>
-          </section>
+          </Reveal>
 
           {/* ── New arrivals ───────────────────────────────────── */}
-          <section className="mx-auto w-[min(100%-2.5rem,1280px)] pb-[clamp(3.5rem,7vw,6rem)]">
+          <Reveal
+            as="section"
+            className="mx-auto w-[min(100%-2.5rem,1280px)] pb-[clamp(3.5rem,7vw,6rem)]"
+          >
             <SectionHead
               eyebrow="New arrivals"
               title="สินค้าเข้าใหม่ล่าสุด"
@@ -406,10 +416,13 @@ export default function HomePage() {
                 ))}
               </div>
             )}
-          </section>
+          </Reveal>
 
           {/* ── How it works ───────────────────────────────────── */}
-          <section className="border-y border-line bg-surface-subtle">
+          <Reveal
+            as="section"
+            className="border-y border-line bg-surface-subtle"
+          >
             <div className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]">
               <SectionHead
                 eyebrow="How it works"
@@ -443,10 +456,13 @@ export default function HomePage() {
                 ))}
               </ol>
             </div>
-          </section>
+          </Reveal>
 
           {/* ── Sell CTA ────────────────────────────────────────── */}
-          <section className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]">
+          <Reveal
+            as="section"
+            className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]"
+          >
             <div className="relative overflow-hidden rounded-xl bg-[linear-gradient(135deg,theme(colors.brand.700),theme(colors.brand.500)_55%,theme(colors.brand.300))] px-[clamp(1.5rem,4vw,3.5rem)] py-[clamp(2.5rem,5vw,4.25rem)] text-center text-white">
               <span
                 aria-hidden="true"
@@ -474,7 +490,7 @@ export default function HomePage() {
                 </Link>
               </div>
             </div>
-          </section>
+          </Reveal>
         </>
       )}
 

@@ -18,7 +18,7 @@ export default function KpiCard({
   return (
     <div
       onClick={onClick}
-      className={`group rounded-xl border border-slate-200/60 bg-white p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] hover:-translate-y-1 hover:shadow-[0_8px_20px_-6px_rgba(6,81,237,0.12)] transition-all duration-300 ease-out ${onClick ? "cursor-pointer" : ""}`}
+      className={`group flex h-full flex-col rounded-xl border border-slate-200/60 bg-white p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] hover:-translate-y-1 hover:shadow-[0_8px_20px_-6px_rgba(6,81,237,0.12)] transition-all duration-300 ease-out ${onClick ? "cursor-pointer" : ""}`}
     >
       <div className="flex items-start justify-between">
         <div>
@@ -36,7 +36,9 @@ export default function KpiCard({
         </div>
       </div>
       {sub && (
-        <p className="mt-3 text-[13px] font-semibold text-slate-500">{sub}</p>
+        <p className="mt-auto pt-3 text-[13px] font-semibold text-slate-500">
+          {sub}
+        </p>
       )}
     </div>
   );

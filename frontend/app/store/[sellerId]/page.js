@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import ProductCard from "../../../components/ProductCard";
+import Reveal from "../../../components/ui/Reveal";
 import Pagination from "../../../components/Pagination";
 import { StarDisplay } from "../../../components/StarRating";
 import ReportModal from "../../../components/ReportModal";
@@ -120,8 +121,10 @@ export default function StorePage() {
           <p className="text-gray-500">ร้านนี้ยังไม่มีสินค้าวางขาย</p>
         )}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {items.map((p) => (
-            <ProductCard key={p.id} product={p} showSeller={false} />
+          {items.map((p, i) => (
+            <Reveal key={p.id} delay={Math.min(i, 7) * 45}>
+              <ProductCard product={p} showSeller={false} />
+            </Reveal>
           ))}
         </div>
         <Pagination

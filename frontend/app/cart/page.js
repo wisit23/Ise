@@ -8,6 +8,7 @@ import Alert from "../../components/ui/Alert";
 import Button from "../../components/ui/Button";
 import EmptyState from "../../components/ui/EmptyState";
 import Skeleton from "../../components/ui/Skeleton";
+import OrderLine from "../../components/OrderLine";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -206,8 +207,8 @@ export default function CartPage() {
         )}
 
         {items.length > 0 && (
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-            <label className="flex cursor-pointer items-center gap-3 border-b border-gray-100 px-4 py-3 text-sm text-gray-600">
+          <div className="overflow-hidden rounded-md border border-line bg-white shadow-1">
+            <label className="flex cursor-pointer items-center gap-3 border-b border-line bg-surface-subtle px-4 py-3 text-sm font-medium text-ink-muted">
               <input
                 type="checkbox"
                 checked={
@@ -215,48 +216,71 @@ export default function CartPage() {
                 }
                 onChange={toggleAll}
                 disabled={activeItems.length === 0}
-                className="h-4 w-4 accent-emerald-600"
+                className="h-4 w-4 accent-brand-600"
               />
               เลือกทั้งหมด ({items.length} รายการ)
             </label>
-            <ul>
+
+            <ul className="divide-y divide-line">
               {items.map((o) => {
                 const expired = isReservationExpired(o, now);
                 const countdown = reservationCountdown(o, now);
                 return (
-                  <li
-                    key={o.id}
-                    className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 last:border-b-0"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected.has(o.id)}
-                      onChange={() => toggle(o.id)}
-                      disabled={expired}
-                      className="h-4 w-4 accent-emerald-600"
+                  <li key={o.id}>
+                    <OrderLine
+                      order={o}
+                      highlight={expired}
+                      lead={
+                        <input
+                          type="checkbox"
+                          checked={selected.has(o.id)}
+                          onChange={() => toggle(o.id)}
+                          disabled={expired}
+                          aria-label={`เลือก ${o.productTitle}`}
+                          className="h-4 w-4 accent-brand-600"
+                        />
+                      }
+                      note={
+                        /* The hold is the only reason this page is urgent,
+                           so it gets a countdown next to the item rather
+                           than a grey sentence under the title. */
+                        expired ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-soft px-2.5 py-1 text-xs font-semibold text-red-700">
+                            <span
+                              className="material-symbols-outlined text-[15px] leading-none"
+                              aria-hidden="true"
+                            >
+                              timer_off
+                            </span>
+                            หมดเวลาจองแล้ว
+                          </span>
+                        ) : countdown ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">
+                            <span
+                              className="material-symbols-outlined text-[15px] leading-none"
+                              aria-hidden="true"
+                            >
+                              lock_clock
+                            </span>
+                            เหลือเวลาชำระเงิน {countdown} นาที
+                          </span>
+                        ) : (
+                          <span className="text-xs text-ink-subtle">
+                            ล็อกไว้ตั้งแต่{" "}
+                            {new Date(o.createdAt).toLocaleString("th-TH")}
+                          </span>
+                        )
+                      }
+                      actions={
+                        <button
+                          onClick={() => handleCancel(o.id)}
+                          disabled={busyId === o.id}
+                          className="focus-ring rounded px-1 text-sm text-ink-subtle transition hover:text-danger disabled:opacity-50"
+                        >
+                          ยกเลิก
+                        </button>
+                      }
                     />
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">
-                        {o.productTitle}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {expired
-                          ? "หมดเวลาจองแล้ว"
-                          : countdown
-                            ? `เหลือเวลาชำระเงิน ${countdown} นาที`
-                            : `ล็อกไว้ตั้งแต่ ${new Date(o.createdAt).toLocaleString("th-TH")}`}
-                      </p>
-                    </div>
-                    <p className="font-semibold text-emerald-600">
-                      ฿{o.price.toLocaleString("th-TH")}
-                    </p>
-                    <button
-                      onClick={() => handleCancel(o.id)}
-                      disabled={busyId === o.id}
-                      className="text-sm text-gray-500 hover:text-red-600 disabled:opacity-50"
-                    >
-                      ยกเลิก
-                    </button>
                   </li>
                 );
               })}

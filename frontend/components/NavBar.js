@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { getStoredUser, clearSession, getAccessToken } from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import Button from "./ui/Button";
+import Menu, { MenuItem, MenuLabel } from "./ui/Menu";
+import { fetchActiveCategories } from "../lib/catalog";
 
 const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
@@ -21,7 +23,6 @@ const ROLE_LABEL = {
    is few enough to sit beside the search field without crowding it, and
    nothing here ever moves or hides. */
 const DISCOVERY_LINKS = [
-  { href: "/products", label: "สินค้าทั้งหมด", icon: "storefront" },
   { href: "/swipe", label: "ปัดดู", icon: "swipe" },
   { href: "/auctions", label: "ประมูล", icon: "gavel" },
 ];
@@ -31,6 +32,7 @@ export default function NavBar() {
   const [cartCount, setCartCount] = useState(0);
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [categories, setCategories] = useState([]);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -67,6 +69,14 @@ export default function NavBar() {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
+  }, []);
+
+  // The catalogue menu is the only place in the header that needs these, and
+  // it is cheap: fetchActiveCategories is memoised per page load.
+  useEffect(() => {
+    fetchActiveCategories()
+      .then(setCategories)
+      .catch((err) => console.error("โหลดหมวดหมู่ไม่สำเร็จ:", err));
   }, []);
 
   function handleLogout() {
@@ -143,6 +153,38 @@ export default function NavBar() {
           aria-label="สำรวจสินค้า"
           className="ml-auto flex shrink-0 items-center gap-0.5 md:ml-0"
         >
+          <Menu
+            label="สินค้า"
+            icon="storefront"
+            labelClassName="hidden lg:inline"
+            width={272}
+          >
+            {(close) => (
+              <>
+                <MenuItem href="/products" icon="grid_view" onClick={close}>
+                  สินค้าทั้งหมด
+                </MenuItem>
+                {categories.length > 0 && (
+                  <>
+                    <MenuLabel>หมวดหมู่</MenuLabel>
+                    <div className="max-h-[min(60vh,340px)] overflow-y-auto">
+                      {categories.map((c) => (
+                        <MenuItem
+                          key={c.name}
+                          href={`/products?category=${encodeURIComponent(c.name)}`}
+                          onClick={close}
+                          meta={c.count}
+                        >
+                          {c.name}
+                        </MenuItem>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </Menu>
+
           {DISCOVERY_LINKS.map((item) => (
             <Link
               key={item.href}
@@ -164,7 +206,7 @@ export default function NavBar() {
         {user && (
           <Link
             href="/sell"
-            className="focus-ring hidden shrink-0 items-center gap-[.4rem] rounded-sm px-[.9em] py-[.55em] text-sm font-medium text-brand-700 transition hover:bg-brand-50 md:flex"
+            className="focus-ring hidden shrink-0 items-center gap-[.35rem] rounded-full border-[1.5px] border-brand-600/40 px-[.85em] py-[.42em] text-sm font-medium text-brand-700 transition hover:border-brand-600 hover:bg-brand-50 md:flex"
           >
             <span
               className="material-symbols-outlined text-[18px] leading-none"

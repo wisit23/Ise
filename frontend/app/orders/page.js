@@ -11,6 +11,7 @@ import Alert from "../../components/ui/Alert";
 import Button from "../../components/ui/Button";
 import EmptyState from "../../components/ui/EmptyState";
 import Skeleton from "../../components/ui/Skeleton";
+import OrderLine from "../../components/OrderLine";
 import { apiFetch, uploadDisputeEvidence } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -279,94 +280,98 @@ export default function OrdersPage() {
         <ul className="flex flex-col gap-3">
           {items.map((o) => {
             const review = reviewedByOrderId[o.id];
+            const disputed =
+              o.status === "disputed" ||
+              o.status === "refunded" ||
+              justDisputedIds.has(o.id);
             return (
               <li
                 key={o.id}
-                className="rounded-lg border border-gray-200 bg-white p-4"
+                className="overflow-hidden rounded-md border border-line bg-white shadow-1"
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {o.productTitle}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      ฿{o.price.toLocaleString("th-TH")} · สั่งซื้อเมื่อ{" "}
-                      {new Date(o.createdAt).toLocaleDateString("th-TH")}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-3 py-1 text-xs ${
-                      STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {STATUS_LABEL[o.status] || o.status}
-                  </span>
-                </div>
-
-                {o.status === "completed" && (
-                  <div className="mt-2">
-                    {review ? (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <StarDisplay value={review.rating} />
-                        {review.comment && (
-                          <span className="text-gray-500">
-                            &quot;{review.comment}&quot;
-                          </span>
-                        )}
-                      </div>
-                    ) : openReviewFor === o.id ? (
-                      <ReviewForm
-                        order={o}
-                        onSubmitted={(review) => {
-                          setReviewedByOrderId((prev) => ({
-                            ...prev,
-                            [o.id]: review,
-                          }));
-                          setOpenReviewFor(null);
-                        }}
-                      />
-                    ) : (
-                      <button
-                        onClick={() => setOpenReviewFor(o.id)}
-                        className="text-sm font-medium text-emerald-600 hover:underline"
-                      >
-                        ให้คะแนนร้านค้า
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {o.status === "completed" && !justDisputedIds.has(o.id) && (
-                  <div className="mt-2">
-                    {openDisputeFor === o.id ? (
-                      <DisputeForm
-                        order={o}
-                        onOpened={() => {
-                          setJustDisputedIds((prev) => new Set(prev).add(o.id));
-                          setOpenDisputeFor(null);
-                        }}
-                      />
-                    ) : (
-                      <button
-                        onClick={() => setOpenDisputeFor(o.id)}
-                        className="text-sm font-medium text-red-600 hover:underline"
-                      >
-                        มีปัญหากับคำสั่งซื้อนี้? ขอคืนเงิน/คืนสินค้า
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {(o.status === "disputed" ||
-                  o.status === "refunded" ||
-                  justDisputedIds.has(o.id)) && (
-                  <div className="mt-2">
-                    <Link
-                      href={`/support/cases/${o.id}`}
-                      className="text-sm font-medium text-emerald-600 hover:underline"
+                <OrderLine
+                  order={o}
+                  status={
+                    <span
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
+                        STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
+                      }`}
                     >
-                      ดูสถานะข้อพิพาท →
-                    </Link>
+                      {STATUS_LABEL[o.status] || o.status}
+                    </span>
+                  }
+                  note={
+                    <span className="text-xs text-ink-subtle">
+                      สั่งซื้อเมื่อ{" "}
+                      {new Date(o.createdAt).toLocaleDateString("th-TH")}
+                    </span>
+                  }
+                />
+
+                {/* Everything a buyer can still *do* with a finished order
+                    lives in one strip under the row, so the row itself stays
+                    the same shape in every status. */}
+                {(o.status === "completed" || disputed) && (
+                  <div className="flex flex-col gap-2 border-t border-line bg-surface-subtle px-4 py-3">
+                    {o.status === "completed" &&
+                      (review ? (
+                        <div className="flex items-center gap-2 text-sm text-ink-muted">
+                          <StarDisplay value={review.rating} />
+                          {review.comment && (
+                            <span className="text-ink-subtle">
+                              &quot;{review.comment}&quot;
+                            </span>
+                          )}
+                        </div>
+                      ) : openReviewFor === o.id ? (
+                        <ReviewForm
+                          order={o}
+                          onSubmitted={(review) => {
+                            setReviewedByOrderId((prev) => ({
+                              ...prev,
+                              [o.id]: review,
+                            }));
+                            setOpenReviewFor(null);
+                          }}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setOpenReviewFor(o.id)}
+                          className="focus-ring self-start rounded text-sm font-medium text-brand-700 hover:underline"
+                        >
+                          ให้คะแนนร้านค้า
+                        </button>
+                      ))}
+
+                    {o.status === "completed" &&
+                      !justDisputedIds.has(o.id) &&
+                      (openDisputeFor === o.id ? (
+                        <DisputeForm
+                          order={o}
+                          onOpened={() => {
+                            setJustDisputedIds((prev) =>
+                              new Set(prev).add(o.id),
+                            );
+                            setOpenDisputeFor(null);
+                          }}
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setOpenDisputeFor(o.id)}
+                          className="focus-ring self-start rounded text-sm font-medium text-danger hover:underline"
+                        >
+                          มีปัญหากับคำสั่งซื้อนี้? ขอคืนเงิน/คืนสินค้า
+                        </button>
+                      ))}
+
+                    {disputed && (
+                      <Link
+                        href={`/support/cases/${o.id}`}
+                        className="focus-ring self-start rounded text-sm font-medium text-brand-700 hover:underline"
+                      >
+                        ดูสถานะข้อพิพาท →
+                      </Link>
+                    )}
                   </div>
                 )}
               </li>
