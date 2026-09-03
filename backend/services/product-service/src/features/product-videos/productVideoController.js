@@ -32,7 +32,20 @@ async function createClip(req, res, next) {
   }
 }
 
+async function chooseClip(req, res, next) {
+  try {
+    const choice = await productVideoService.chooseClip({
+      user: { id: req.userId, role: req.userRole },
+      productVideoId: req.params.id,
+    });
+    res.status(201).json(choice);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   listFeed,
   createClip,
+  chooseClip,
 };

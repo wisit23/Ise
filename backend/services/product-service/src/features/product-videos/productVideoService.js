@@ -51,7 +51,23 @@ async function createClip({ user, input = {} }) {
   });
 }
 
+/**
+ * Persists a buyer's "interested" swipe on one clip (UR-11). Idempotent by
+ * design (upsert on the unique [productVideoId, userId] pair) — swiping the
+ * same card again just confirms the existing choice instead of erroring.
+ */
+async function chooseClip({ user, productVideoId }) {
+  const clip = await productVideoRepository.findById(productVideoId);
+  if (!clip) throw notFound("swipe card not found");
+
+  return productVideoRepository.upsertChoice({
+    productVideoId,
+    userId: user.id,
+  });
+}
+
 module.exports = {
   listFeed,
   createClip,
+  chooseClip,
 };

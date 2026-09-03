@@ -27,7 +27,7 @@ export default function CategoryBarChart({ data, formatValue }) {
   const max = Math.max(...capped.map((d) => d.value), 1);
 
   if (capped.length === 0) {
-    return <p className="text-sm text-gray-400">ไม่มีข้อมูล</p>;
+    return <p className="text-sm text-gray-500">ไม่มีข้อมูล</p>;
   }
 
   return (

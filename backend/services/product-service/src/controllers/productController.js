@@ -11,9 +11,22 @@ const {
   buildProductPatch,
 } = require("./productPayload");
 
+const MIN_MEDIA_COUNT = 4;
+const MAX_MEDIA_COUNT = 8;
+
 function requireSellerRole(role) {
   if (!["SELLER", "ADMIN"].includes(role)) {
     throw forbidden("only seller accounts can list products for sale");
+  }
+}
+
+/** ADMIN can list on a seller's behalf (moderation tooling) without having
+ * gone through seller verification themselves. */
+function requireVerifiedSeller(role, kycVerified) {
+  if (role === "SELLER" && !kycVerified) {
+    throw forbidden(
+      "seller account must complete identity verification before listing products",
+    );
   }
 }
 
@@ -23,6 +36,18 @@ function validateCreateRequest({ title, price, category }) {
   }
   if (!Number.isInteger(price) || price <= 0) {
     throw badRequest("price must be a positive whole number");
+  }
+}
+
+/** Standardizes listing quality: at least a handful of angles, capped so the
+ * gallery stays scannable. Client-side MediaUploader enforces the same
+ * bounds; this is the authoritative check. */
+function requireValidMediaCount(media) {
+  const count = Array.isArray(media) ? media.length : 0;
+  if (count < MIN_MEDIA_COUNT || count > MAX_MEDIA_COUNT) {
+    throw badRequest(
+      `media must include between ${MIN_MEDIA_COUNT} and ${MAX_MEDIA_COUNT} photos/videos (got ${count})`,
+    );
   }
 }
 
@@ -67,6 +92,29 @@ async function search(req, res, next) {
       q,
       category,
       status: "available",
+      skip: pagination.skip,
+      take: pagination.take,
+    });
+    res.json(paginatedResponse(items, total, pagination));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Unlike search() above (locked to status="available" for public browsing),
+// Admin needs to find a listing in ANY status — including "removed" ones, to
+// restore them — so status is optional and passed through as-is.
+async function adminSearch(req, res, next) {
+  try {
+    if (req.userRole !== "ADMIN") {
+      throw forbidden("only admin accounts can use this search");
+    }
+    const { q, category, status } = req.query;
+    const pagination = parsePagination(req.query);
+    const { items, total } = await productModel.list({
+      q,
+      category,
+      status,
       skip: pagination.skip,
       take: pagination.take,
     });
@@ -122,7 +170,9 @@ async function listConditions(req, res, next) {
 async function create(req, res, next) {
   try {
     requireSellerRole(req.userRole);
+    requireVerifiedSeller(req.userRole, req.kycVerified);
     validateCreateRequest(req.body);
+    requireValidMediaCount(req.body.media);
     await requireKnownCondition(req.body.condition);
     await productModel.ensureCategory(req.body.category);
 
@@ -139,6 +189,7 @@ async function update(req, res, next) {
   try {
     await requireProductOwner(req.params.id, req.userId, "edit");
     await requireKnownCondition(req.body.condition);
+    if (req.body.media !== undefined) requireValidMediaCount(req.body.media);
     if (req.body.category !== undefined) {
       await productModel.ensureCategory(req.body.category);
     }
@@ -174,8 +225,9 @@ async function mine(req, res, next) {
   }
 }
 
-/** Swipe feed ("ปัดดูสินค้า") — public, anyone can watch without an account. */
-/** Called by order-service (service-to-service, internal token) when an order is placed/cancelled. */
+/** Called by order-service with its internal token when an order changes the
+ * listing lifecycle. This is intentionally separate from the seller-facing
+ * PATCH /:id route, whose ownership checks must not apply to service calls. */
 async function markStatusInternal(req, res, next) {
   try {
     const { status } = req.body;
@@ -193,6 +245,7 @@ async function markStatusInternal(req, res, next) {
 module.exports = {
   feed,
   search,
+  adminSearch,
   getOne,
   bySeller,
   listCategories,

@@ -72,7 +72,9 @@ function buildSeriesPeriods({ from, to, granularity }) {
               cursor.getUTCDate() + 1,
             ),
           )
-        : new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+        : new Date(
+            Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1),
+          );
 
     if (periods.length > MAX_SERIES_POINTS) {
       throw badRequest(

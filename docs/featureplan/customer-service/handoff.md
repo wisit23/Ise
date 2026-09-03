@@ -1,20 +1,24 @@
 # Customer Service Feature Handoff
 
-> อัปเดตล่าสุด: 2026-08-10
+> อัปเดตล่าสุด: 2026-08-25
 
 ## Ownership
 
 - Owner: อชิรวินท์ จรูญกีรติโรจน์
 - Reviewer: สิรดนัย กันหา
-- Requirement scope: `UR-17`–`UR-21`
-- Current status: Planning revised - implementation not started
+- Requirement scope: `UR-17`, `UR-19`, `UR-20`, `UR-21` (Core) — `UR-18` Deferred
+- Current status: Planning revised (rescoped 2026-08-25) - implementation not started
 
 ## Scope to hand off
 
-- `CSS-001`: Participant-Safe Chat
-- `CSS-002`: Support Order Lookup and Case Queue
-- `CSS-003`: Return and Simulated Refund Decision
-- `CSS-004`: Extended FAQ and SLA
+ลำดับการทำงาน: `CSS-000` → `CSS-005` → `CSS-002` → `CSS-003` → `CSS-004`
+
+- `CSS-000`: Foundation — `SUPPORT` role, `support-service` ใหม่, Order dispute lifecycle **(hard blocker)**
+- `CSS-005`: Support Ticket Core — แกนสื่อสารแบบ async thread (`WF-10`)
+- `CSS-002`: Agent Workspace — Order Lookup and Case Queue
+- `CSS-003`: Dispute, Private Evidence and Simulated Refund Decision
+- `CSS-004`: SLA, Auto-Priority and Help Center
+- `CSS-001`: Participant-Safe Live Chat Console — **DEFERRED** (ดูเหตุผลใน `plan.md` หัวข้อ Scope Revision)
 
 ## Current evidence
 
@@ -35,11 +39,12 @@
 
 ## Resume from here
 
-1. ยืนยัน Gate 0 และ Chat/Order/Case state mapping กับ Buyer และ Admin
-2. เริ่ม `CSS-001` ตาม test-first steps ใน `plan.md`
-3. รัน targeted test และ PostgreSQL integration test โดยห้าม skip
-4. อัปเดต `progress.md`, append `changelog.md` และเพิ่ม `teachme.md` เมื่อมีหลักฐานจริง
-5. ขอ Reviewer ตรวจ acceptance evidence ก่อนเปลี่ยนสถานะเป็น Done
+1. **แจ้ง Buyer owner ก่อน** ว่า `CSS-001` ถูกเลื่อน — `BUY-004` (`UR-05` ปุ่มทักแชทผู้ขาย) ผูกอยู่กับ Task นี้
+2. ยืนยัน Gate 0 และ Ticket/Order/Dispute state mapping กับ Buyer และ Admin
+3. เริ่ม `CSS-000` ตาม test-first steps ใน `plan.md` (เป็น blocker ของทุก Task)
+4. รัน targeted test และ PostgreSQL integration test โดยห้าม skip
+5. อัปเดต `progress.md`, append `changelog.md` และเพิ่ม `teachme.md` เมื่อมีหลักฐานจริง
+6. ขอ Reviewer ตรวจ acceptance evidence ก่อนเปลี่ยนสถานะเป็น Done
 
 ## Required handoff evidence
 

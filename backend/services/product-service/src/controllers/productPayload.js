@@ -6,7 +6,6 @@ const SIMPLE_UPDATE_FIELDS = [
   "condition",
   "size",
   "location",
-  "status",
 ];
 
 function normalizeMedia(media) {

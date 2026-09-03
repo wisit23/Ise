@@ -7,12 +7,12 @@
 - Owner: วิศิษฏ์ เจียมสันต์
 - Reviewer: เอกตระการ บุญญกาศ
 - Requirement scope: `UR-01`–`UR-07`
-- Current status: Swipe consumer refactor verified locally; Buyer plan acceptance incomplete
+- Current status: `BUY-002` verified locally with PostgreSQL; Buyer plan acceptance incomplete
 
 ## Scope to hand off
 
 - `BUY-001`: Catalog Search and Filters
-- `BUY-002`: Atomic 10-Minute Reservation and Cart
+- `BUY-002`: Atomic 10-Minute Reservation and Cart — verified locally, pending Reviewer acceptance
 - `BUY-003`: Mock Checkout and Fulfillment Tracking
 - `BUY-004`: Seller Trust, Review and Contact Entry
 - `BUY-005`: Extended Discovery
@@ -25,7 +25,10 @@
 - บทเรียนจากการตรวจระบบเดิมอยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
 - `/swipe` แยก viewer/card, มี empty/error/product-link tests และ active-video playback แล้ว
-- ยังไม่มี persisted choose action, PostgreSQL acceptance หรือ Marketing contract approval
+- Product reservation ใช้ atomic compare-and-set, expiry 10 นาที, reservation-scoped release และ
+  startup expiry worker; Order retry/compensation และ Cart countdown มี automated evidence แล้ว
+- `REQUIRE_INTEGRATION=1` ผ่าน Product/Order PostgreSQL 16; backend 47/47 และ frontend 7/7
+- ยังไม่มี persisted choose action, Mock Payment/fulfillment acceptance หรือ Marketing contract approval
 
 ## Dependencies and contracts
 
@@ -36,11 +39,11 @@
 
 ## Resume from here
 
-1. ยืนยัน Gate 0, Product/Order state mapping และ Swipe semantics กับ Seller, Marketing และ Admin
-2. เริ่ม `BUY-001` ตาม test-first steps ใน `plan.md`
-3. รัน targeted test และ PostgreSQL integration test โดยห้าม skip
-4. อัปเดต `progress.md`, append `changelog.md` และเพิ่ม `teachme.md` เมื่อมีหลักฐานจริง
-5. ขอ Reviewer ตรวจ acceptance evidence ก่อนเปลี่ยนสถานะเป็น Done
+1. Reviewer ตรวจ `BUY-002` concurrency, expiry, compensation, schema และ recovery evidence
+2. Apply Product/Order schema ใน environment เป้าหมายก่อน deploy; รอบนี้ apply เฉพาะ PostgreSQL ทดสอบชั่วคราว
+3. ยืนยัน Gate 0 ส่วนที่ยังเปิด โดยเฉพาะ Swipe semantics และ Mock Payment/fulfillment states
+4. เมื่อ Reviewer รับ `BUY-002` แล้ว จึงเริ่ม `BUY-001` ตาม test-first steps ใน `plan.md`
+5. อัปเดตเอกสารและหลักฐานทุกครั้งก่อนเปลี่ยน Feature รวมเป็น Done
 
 ## Required handoff evidence
 

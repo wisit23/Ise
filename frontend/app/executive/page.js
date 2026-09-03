@@ -1,257 +1,144 @@
 "use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import NavBar from "../../components/NavBar";
+import RadioSelect from "../../components/ui/RadioSelect";
+import { getAccessToken, getStoredUser } from "../../lib/auth";
 
-import { useEffect, useMemo, useState } from "react";
-import ExecutiveShell from "../../components/executive/ExecutiveShell";
-import MetricCard from "../../components/executive/MetricCard";
-import TrendChart from "../../components/executive/TrendChart";
-import RankingList from "../../components/executive/RankingList";
-import { CATEGORICAL } from "../../components/charts/palette";
-import { apiFetch } from "../../lib/api";
-import { getAccessToken } from "../../lib/auth";
-import {
-  baht,
-  buildPath,
-  fetchWindowMetrics,
-  fulfilled,
-  growthPct,
-  lastNWindows,
-  PROVIDERS,
-} from "../../lib/executive";
+import OverviewSection from "../../components/executive/sections/OverviewSection";
+import ReportsSection from "../../components/executive/sections/ReportsSection";
+import ComplaintsSection from "../../components/executive/sections/ComplaintsSection";
 
-const TREND_PERIODS = 6;
-
-function OverviewContent() {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [current, setCurrent] = useState(null);
-  const [previous, setPrevious] = useState(null);
-  const [rankings, setRankings] = useState(null);
-  const [meta, setMeta] = useState(null);
-  const [trend, setTrend] = useState({ gmv: [], activeUsers: [] });
-
-  useEffect(() => {
-    const token = getAccessToken();
-    const windows = lastNWindows("month", TREND_PERIODS);
-    const currentWindow = windows[windows.length - 1];
-    const previousWindow = windows[windows.length - 2];
-
-    let cancelled = false;
-    setLoading(true);
-
-    Promise.all([
-      fetchWindowMetrics(currentWindow, token),
-      fetchWindowMetrics(previousWindow, token),
-      Promise.allSettled(
-        windows
-          .slice(0, -1)
-          .map((win) =>
-            Promise.all([
-              apiFetch(buildPath(PROVIDERS.order, win), { token }),
-              apiFetch(buildPath(PROVIDERS.auth, win), { token }),
-            ]),
-          ),
-      ),
-      Promise.allSettled([
-        apiFetch(
-          buildPath("/api/products/executive/top-catalog", currentWindow),
-          {
-            token,
-          },
-        ),
-      ]),
-    ])
-      .then(([cur, prev, trendSettled, rankingSettled]) => {
-        if (cancelled) return;
-
-        setCurrent(cur);
-        setPrevious(prev);
-        setMeta(cur.auth?.meta || cur.order?.meta || cur.product?.meta || null);
-        setRankings(fulfilled(rankingSettled[0]));
-
-        const olderWindows = windows.slice(0, -1);
-        const buildSeries = (pick, currentValue) => [
-          ...olderWindows.map((win, i) => {
-            const pair = fulfilled(trendSettled[i]);
-            const value = pair ? pick(pair) : undefined;
-            return {
-              label: win.label,
-              value: value ?? 0,
-              unavailable: value === undefined,
-            };
-          }),
-          {
-            label: currentWindow.label,
-            value: currentValue ?? 0,
-            unavailable: currentValue === undefined,
-          },
-        ];
-
-        setTrend({
-          gmv: buildSeries(([order]) => order?.data?.gmv, cur.order?.data?.gmv),
-          activeUsers: buildSeries(
-            ([, auth]) => auth?.data?.activeUsers,
-            cur.auth?.data?.activeUsers,
-          ),
-        });
-      })
-      .catch((err) => !cancelled && setError(err.message))
-      .finally(() => !cancelled && setLoading(false));
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const cards = useMemo(() => {
-    if (!current) return [];
-    const o = current.order?.data;
-    const po = previous?.order?.data;
-    const a = current.auth?.data;
-    const pa = previous?.auth?.data;
-    const p = current.product?.data;
-    const pp = previous?.product?.data;
-
-    return [
-      {
-        key: "gmv",
-        label: "ยอดขายรวม (GMV)",
-        value: o?.gmv,
-        unavailable: !current.order,
-        delta: growthPct(o?.gmv, po?.gmv),
-        formatValue: baht,
-      },
-      {
-        key: "platformRevenue",
-        label: "รายได้แพลตฟอร์ม",
-        value: o?.platformRevenue,
-        unavailable: !current.order,
-        delta: growthPct(o?.platformRevenue, po?.platformRevenue),
-        formatValue: baht,
-      },
-      {
-        key: "completedOrders",
-        label: "คำสั่งซื้อสำเร็จ",
-        value: o?.completedOrders,
-        unavailable: !current.order,
-        delta: growthPct(o?.completedOrders, po?.completedOrders),
-      },
-      {
-        key: "activeUsers",
-        label: "ผู้ใช้งานที่ล็อกอิน (เดือนนี้)",
-        value: a?.activeUsers,
-        unavailable: !current.auth,
-        delta: growthPct(a?.activeUsers, pa?.activeUsers),
-      },
-      {
-        key: "newUsers",
-        label: "ผู้ใช้งานใหม่",
-        value: a?.newUsers,
-        unavailable: !current.auth,
-        delta: growthPct(a?.newUsers, pa?.newUsers),
-      },
-      {
-        key: "newListings",
-        label: "สินค้าลงขายใหม่",
-        value: p?.newListings,
-        unavailable: !current.product,
-        delta: growthPct(p?.newListings, pp?.newListings),
-      },
-      {
-        key: "soldListings",
-        label: "สินค้าขายได้",
-        value: p?.soldListings,
-        unavailable: !current.product,
-        delta: growthPct(p?.soldListings, pp?.soldListings),
-      },
-      {
-        key: "activeListings",
-        label: "สินค้าพร้อมขายตอนนี้",
-        value: p?.activeListings,
-        unavailable: !current.product,
-        delta: null,
-      },
-    ];
-  }, [current, previous]);
-
-  if (loading) {
-    return <p className="text-gray-500">กำลังโหลด...</p>;
-  }
-
-  return (
-    <>
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {cards.map((c) => (
-          <MetricCard
-            key={c.key}
-            label={c.label}
-            value={c.value}
-            unavailable={c.unavailable}
-            deltaPct={c.delta}
-            formatValue={c.formatValue}
-          />
-        ))}
-
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-900">
-            แนวโน้มยอดขายรวม (GMV) — {TREND_PERIODS} เดือนล่าสุด
-          </h2>
-          <TrendChart
-            data={trend.gmv}
-            color={CATEGORICAL[0]}
-            formatValue={baht}
-            label="แนวโน้มยอดขายรวม (GMV)"
-          />
-        </div>
-
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-900">
-            แนวโน้มผู้ใช้งานที่ล็อกอิน — {TREND_PERIODS} เดือนล่าสุด
-          </h2>
-          <TrendChart
-            data={trend.activeUsers}
-            color={CATEGORICAL[2]}
-            label="แนวโน้มผู้ใช้งานที่ล็อกอิน"
-          />
-        </div>
-
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:col-span-2">
-          <h2 className="mb-1 text-sm font-semibold text-gray-900">
-            หมวดหมู่ที่ขายดีที่สุด
-          </h2>
-          <p className="mb-3 text-xs text-gray-400">
-            จัดอันดับจากยอดขายในเดือนนี้
-          </p>
-          <RankingList
-            rows={rankings?.data?.categories}
-            unavailable={!rankings}
-            emptyText="ยังไม่มีสินค้าที่ขายได้ในเดือนนี้"
-          />
-        </div>
-
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm sm:col-span-2">
-          <h2 className="mb-1 text-sm font-semibold text-gray-900">
-            สินค้าที่ทำรายได้สูงสุด
-          </h2>
-          <p className="mb-3 text-xs text-gray-400">
-            จัดอันดับจากยอดขายในเดือนนี้
-          </p>
-          <RankingList
-            rows={rankings?.data?.products}
-            unavailable={!rankings}
-            emptyText="ยังไม่มีสินค้าที่ขายได้ในเดือนนี้"
-          />
-        </div>
-      </div>
-    </>
-  );
-}
+const SECTIONS = [
+  { key: "overview", label: "ภาพรวม", icon: "dashboard" },
+  { key: "reports", label: "รายงานผลการดำเนินงาน", icon: "monitoring" },
+  { key: "complaints", label: "ข้อร้องเรียน", icon: "report" },
+];
 
 export default function ExecutiveDashboardPage() {
+  const router = useRouter();
+  const [user, setUser] = useState(undefined);
+  const [section, setSection] = useState("overview");
+
+  useEffect(() => {
+    if (!getAccessToken()) {
+      router.push("/login");
+      return;
+    }
+    setUser(getStoredUser());
+  }, [router]);
+
+  if (user === undefined) {
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <NavBar />
+        <p className="mx-auto max-w-6xl px-4 py-10 text-gray-500">
+          กำลังโหลด...
+        </p>
+      </main>
+    );
+  }
+  if (user?.role !== "EXECUTIVE") {
+    return (
+      <main className="min-h-screen bg-gray-50">
+        <NavBar />
+        <p className="mx-auto max-w-6xl px-4 py-10 text-amber-800">
+          หน้านี้ใช้ได้เฉพาะบัญชีผู้บริหารเท่านั้น
+        </p>
+      </main>
+    );
+  }
+
+  const token = getAccessToken();
+  const activeSection = SECTIONS.find((s) => s.key === section);
+
   return (
-    <ExecutiveShell title="แดชบอร์ดผู้บริหาร" activeTab="/executive">
-      <OverviewContent />
-    </ExecutiveShell>
+    <div className="flex min-h-screen flex-col bg-slate-50/50">
+      <NavBar />
+      <div className="flex flex-1">
+        {/* ── Sidebar ── */}
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
+          <div className="flex h-16 items-center border-b border-slate-200/60 px-4 bg-white">
+            <div className="flex items-center gap-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-indigo-50 text-indigo-600">
+                <span className="material-symbols-outlined text-[19px]">
+                  insights
+                </span>
+              </span>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-bold tracking-tight text-slate-800">
+                  Re-loop panel
+                </span>
+                <span className="text-[10px] font-semibold tracking-wider text-indigo-600 uppercase">
+                  Executive
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <nav className="flex flex-1 flex-col gap-1 p-2">
+            {SECTIONS.map((s) => {
+              const active = section === s.key;
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => setSection(s.key)}
+                  className={`group flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-xs transition-colors ${
+                    active
+                      ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                      : "text-slate-600 font-medium hover:bg-slate-100/70 hover:text-slate-900"
+                  }`}
+                >
+                  <span
+                    className={`material-symbols-outlined text-[20px] shrink-0 w-5 text-center ${
+                      active ? "text-white" : "text-slate-500 group-hover:text-slate-700"
+                    }`}
+                  >
+                    {s.icon}
+                  </span>
+                  <span className="truncate">{s.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* ── Main Content ── */}
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+            <div className="flex items-center gap-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <span className="material-symbols-outlined text-[18px]">
+                  {activeSection?.icon}
+                </span>
+              </span>
+              <h1 className="text-lg font-bold tracking-tight text-slate-900">
+                {activeSection?.label}
+              </h1>
+            </div>
+            <div className="flex items-center gap-3 sm:hidden">
+              <RadioSelect
+                value={section}
+                onChange={setSection}
+                options={SECTIONS.map((s) => ({
+                  value: s.key,
+                  label: s.label,
+                  icon: s.icon,
+                }))}
+                size="sm"
+                variant="panel"
+                align="right"
+              />
+            </div>
+          </div>
+
+          <div className="p-8 max-w-7xl mx-auto">
+            {section === "overview" && <OverviewSection token={token} />}
+            {section === "reports" && <ReportsSection token={token} />}
+            {section === "complaints" && <ComplaintsSection token={token} />}
+          </div>
+        </main>
+      </div>
+    </div>
   );
 }

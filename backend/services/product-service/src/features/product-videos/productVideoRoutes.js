@@ -11,4 +11,8 @@ router.get("/feed", productVideoController.listFeed);
 // service so they are enforced consistently outside HTTP tests too.
 router.post("/", requireAuth, productVideoController.createClip);
 
+// UR-11 Swipe-to-Choose: persists the buyer's "interested" swipe. Separate
+// from bidding an auction — this just bookmarks the card.
+router.post("/:id/choose", requireAuth, productVideoController.chooseClip);
+
 module.exports = router;

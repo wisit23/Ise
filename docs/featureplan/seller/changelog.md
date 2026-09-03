@@ -48,3 +48,26 @@
 - เพิ่ม Auto-Refresh Access Token ที่ `frontend/lib/api.js`: เจอ `401` (Access Token หมดอายุ 15 นาที) → เรียก `/api/auth/refresh` อัตโนมัติ → Retry Request เดิม; Refresh ไม่สำเร็จค่อย Force Logout — Endpoint `/refresh` มีอยู่แล้วฝั่ง Auth Service แต่ Frontend ไม่เคยเรียกใช้มาก่อน ทำให้ Seller ที่ Login ทิ้งไว้เกิน 15 นาทีอัปโหลดรูปไม่ได้แบบเงียบๆ (ไม่มี Error ชัดเจน ไม่มีการเด้งออกจากระบบ)
 - รายละเอียดและหลักฐานเต็มอยู่ที่ Task `MOCK-TRADE-010` ใน `docs/progress.md`
 - ยังไม่ได้ทดสอบ E2E จริงผ่าน Browser + Docker สำหรับ Auto-Refresh, ยังไม่ผ่าน AI Reviewer อิสระ
+
+## 2026-09-02 — UI-SYSTEM-001 (Frontend Design System / Refactor)
+
+- `app/seller/onboarding/page.js` 431 → 207 บรรทัด แตกเป็น `seller/onboarding/KycForm`,
+  `KycStatusCard`, `KycDocumentUpload` และ `IdCardField` (พร้อม `formatIdCardDisplay`,
+  `isCompleteIdCard`)
+- `app/seller/dashboard/page.js` 428 → 239 บรรทัด แตกเป็น `seller/dashboard/SalesSummary`,
+  `SellerProductList`, `RecentOrderList` และ `sellerStatus` (status label/style + `baht()`)
+- แก้บั๊ก a11y: Drop zone อัปโหลดรูปบัตรประชาชนเป็น `<div onClick>` คีย์บอร์ดเข้าไม่ถึงเลย
+  → เปลี่ยนเป็น `<button type="button">`
+- Onboarding ยังใช้ emoji เป็นไอคอนสถานะ (⏳ ✓ ⚠️ 🪪) ซึ่งตกค้างจากตอน migrate ไป
+  Material Symbols ใน `d98e8a1` → เปลี่ยนครบแล้ว
+- ช่องรหัสบัตรประชาชน 13 หลักเคยไม่บอกอะไรเลยจนกดส่ง → นับหลักที่เหลือให้ระหว่างพิมพ์
+- "(ไม่บังคับ)" เคยอยู่ใน placeholder ซึ่งหายทันทีที่พิมพ์ → ย้ายเป็น hint ของ Field
+- KYC fetch ของหน้า Onboarding ไม่มี Error branch: โหลดพลาดแล้วเรนเดอร์ฟอร์มเปล่าเหมือน
+  ยังไม่เคยยื่น ซึ่งชวนให้ยื่นซ้ำ → เพิ่ม `ErrorState` พร้อมปุ่มลองใหม่
+- ทั้งสองหน้าเคยขึ้น "กำลังโหลด..." เปล่าๆ แล้ว Layout กระโดดตอนข้อมูลมา → Skeleton ที่มี
+  รูปทรงเหมือนของจริง
+- รายการสินค้าว่างในแดชบอร์ดเคยเป็นข้อความเทาประโยคเดียว → `EmptyState` พร้อมปุ่ม
+  "ลงขายสินค้า"
+- ยืนยันด้วย Browser จริงด้วยบัญชี Demo Seller: ฟอร์ม Onboarding เรนเดอร์ครบและตัวนับหลัก
+  บัตรประชาชนทำงาน, แดชบอร์ดแสดงยอดขายจริง Sparkline Charts และรายการสินค้าครบ
+- รายละเอียดเต็มและผลตรวจอยู่ที่ [`docs/featureplan/changelog.md`](../changelog.md) และ [`docs/progress.md`](../../progress.md) Task `UI-SYSTEM-001`; กติกา UI อยู่ที่ [`docs/ui-conventions.md`](../../ui-conventions.md)

@@ -33,3 +33,16 @@ Buyer choice journey
 `SwipeVideoCard` ดูแล video/product link คลิปที่ไม่ active จะ pause และ preload แค่ metadata
 
 **Teach-back:** เหตุใดการ render วิดีโอ 20 ตัวแล้ว autoplay ทุกตัวจึงแพงกว่าเล่นเฉพาะ active card?
+
+## Round 3 — Reservation ต้องล็อกด้วย write เดียว ไม่ใช่ check แล้วค่อย update
+
+Flow ใหม่คือ `Order → Product reservation CAS → Order PostgreSQL` Product ใช้ `updateMany` ที่เขียน
+`available → reserved` ได้เมื่อแถวยังว่างหรือ reservation เดิมหมดอายุเท่านั้น ดังนั้น Buyer สองคนที่ยิง
+พร้อมกันจะมีเพียงคนเดียวที่ update ได้ ส่วน Order เก็บ `reservationId` เดียวกันไว้เป็นหลักฐานเชื่อมข้าม service
+
+ถ้า Order write ล้มเหลว ระบบเรียก release ด้วยทั้ง `productId + reservationId`; ถ้ามี Buyer คนใหม่จองต่อแล้ว
+release เก่าจะ update ไม่โดนแถว จึงไม่ปลด lock ของคนใหม่ Worker อ่าน expiry จาก PostgreSQL ตอน process start
+และทุก 30 วินาที ทำให้ restart แล้วข้อมูลเวลาจองไม่หาย
+
+**Teach-back:** เพราะเหตุใด `UPDATE product SET status='available' WHERE id=?` จึงอันตรายกว่า
+`UPDATE ... WHERE id=? AND reservation_id=?` เมื่อมี retry หรือ worker ทำงานพร้อมกัน?

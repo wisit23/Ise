@@ -1,6 +1,7 @@
 const express = require("express");
 const { errorHandler } = require("@reloop/shared");
 const orderRoutes = require("./routes/orderRoutes");
+const adminDisputeRoutes = require("./features/adminDisputes/adminDisputeRoutes");
 const metricsRoutes = require("./features/metrics/metricsRoutes");
 
 const app = express();
@@ -12,6 +13,7 @@ app.get("/health", (req, res) =>
 
 app.use("/executive", metricsRoutes);
 app.use("/", orderRoutes);
+app.use("/", adminDisputeRoutes);
 
 app.use(errorHandler);
 

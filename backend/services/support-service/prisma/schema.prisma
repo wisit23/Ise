@@ -1,0 +1,118 @@
+// pg_trgm powers HelpArticle.searchText's GIN index — same rationale as
+// product-service's search_text (see productModel.js): Postgres full-text
+// search has no Thai word-break config, trigram matching works regardless.
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm]
+}
+
+// Custom output path — see the comment in product-service/prisma/schema.prisma:
+// this npm workspace hoists @prisma/client to one shared location, so every
+// service that generates a client there fights over the same physical folder.
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma-client"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+// WF-10 backbone (CSS-005). Ticket is the primary CS communication channel —
+// async thread, not live chat (CSS-001 is deferred; see plan.md's Scope
+// Revision). ticketNumber is a short human-readable reference for agents to
+// quote back to a user ("#CS-000123"), separate from the opaque uuid `id`.
+model SupportTicket {
+  id              String    @id @default(uuid())
+  ticketNumber    String    @unique @map("ticket_number")
+  requesterId     String    @map("requester_id")
+  subject         String
+  description     String    @default("")
+  category        String // ORDER|PAYMENT|ACCOUNT|TECHNICAL|OTHER
+  status          String    @default("NEW") // see ticketState.js for the transition graph
+  priority        String    @default("NORMAL") // LOW|NORMAL|HIGH|URGENT — see sla/priority.js
+  assigneeId      String?   @map("assignee_id")
+  orderId         String?   @map("order_id") // soft reference to order-service — not a DB-level FK, different service owns it
+  // Optional counterparty — the other party in the order this complaint is
+  // about (e.g. buyer reporting a seller who never shipped). Distinct from
+  // requesterId: a ticket's requester is not necessarily who's at fault, and
+  // Admin needs to be able to act against the accused party, not just
+  // whoever happened to file the ticket. Soft reference, same as orderId.
+  targetId        String?   @map("target_id")
+  slaDueAt        DateTime? @map("sla_due_at")
+  firstResponseAt DateTime? @map("first_response_at")
+  resolvedAt      DateTime? @map("resolved_at")
+  closedAt        DateTime? @map("closed_at")
+  escalatedAt     DateTime? @map("escalated_at")
+  // Optimistic lock: guards against two agents assigning/transitioning the
+  // same ticket at once (see ticketService.js assign()).
+  version         Int       @default(0)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  messages TicketMessage[]
+  auditLog TicketAuditLog[]
+
+  @@index([status, priority, slaDueAt])
+  @@index([requesterId, createdAt])
+  @@index([assigneeId, status])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id         String   @id @default(uuid())
+  ticketId   String   @map("ticket_id")
+  authorId   String   @map("author_id")
+  authorRole String   @map("author_role") // REQUESTER|AGENT|SYSTEM
+  body       String
+  // Internal team note — never returned to the requester's own view of the
+  // ticket (see ticketService.js's requester-facing projection).
+  isInternal Boolean  @default(false) @map("is_internal")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_messages")
+}
+
+// NFR-SP-03: every privileged action on a ticket must be attributable and
+// timestamped to the second for later audit.
+model TicketAuditLog {
+  id        String   @id @default(uuid())
+  ticketId  String   @map("ticket_id")
+  actorId   String   @map("actor_id")
+  action    String // ASSIGN|STATUS_CHANGE|REPLY|ESCALATE
+  fromValue String?  @map("from_value")
+  toValue   String?  @map("to_value")
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_audit_logs")
+}
+
+// CSS-004 / UR-19: self-service FAQ, published-revision model so a draft
+// edit never appears to end users until explicitly published.
+model HelpArticle {
+  id          String    @id @default(uuid())
+  slug        String    @unique
+  title       String
+  body        String
+  category    String
+  status      String    @default("DRAFT") // DRAFT|PUBLISHED|ARCHIVED
+  version     Int       @default(1)
+  authorId    String    @map("author_id")
+  publishedAt DateTime? @map("published_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Trigger-maintained concat of title/body/category — see
+  // ensureSearchTextTrigger() in prisma/seed.js and MOCK-TRADE-011's
+  // productModel.js for the same pattern.
+  searchText String @default("") @map("search_text")
+
+  @@index([status, category])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("help_articles")
+}

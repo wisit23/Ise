@@ -9,6 +9,7 @@ const SERVICES = {
   orders: process.env.ORDER_SERVICE_URL || "http://order-service:3003",
   chat: process.env.CHAT_SERVICE_URL || "http://chat-service:3004",
   reviews: process.env.REVIEW_SERVICE_URL || "http://review-service:3005",
+  support: process.env.SUPPORT_SERVICE_URL || "http://support-service:3006",
 };
 
 // Routes that don't require a valid access token (register/login/refresh, public feed reads).
@@ -20,6 +21,10 @@ const PUBLIC_PATHS = [
   /^\/api\/products\/by-seller\//,
   // Swipe feed ("ปัดดูสินค้า") must be watchable by guests too.
   /^\/api\/products\/videos\/feed/,
+  // Auction listing/detail must be browsable by guests; submit/approve/
+  // schedule/bid all live on longer paths and stay gated by
+  // product-service's own requireAuth.
+  /^\/api\/products\/auctions\/[^/]+$/,
   // Single-item browsing must stay open to guests; write/delete routes on the
   // same path are still gated by product-service's own requireAuth middleware.
   /^\/api\/products\/[^/]+$/,
@@ -28,6 +33,9 @@ const PUBLIC_PATHS = [
   /^\/uploads\//,
   // A store page's rating must be visible to guests browsing without an account.
   /^\/api\/reviews\/by-seller\//,
+  // FAQ deflection (WF-10 step 2) must work for guests too; POST/PATCH on
+  // this same path are still gated by support-service's own requireAuth.
+  /^\/api\/support\/help(\/|$)/,
 ];
 
 function isPublic(path) {
@@ -52,6 +60,12 @@ app.use((req, res, next) => {
     const payload = verifyAccessToken(token);
     req.headers["x-user-id"] = payload.sub;
     req.headers["x-user-role"] = payload.role;
+    // Multi-role/permission claims (ADM-001) — fromGatewayHeaders reads these,
+    // so the gateway has to forward them or every permission check downstream
+    // would silently see an empty set. Both are ASCII-only by construction
+    // (role codes and permission slugs), so no encoding is needed here.
+    req.headers["x-user-roles"] = (payload.roles || []).join(",");
+    req.headers["x-user-permissions"] = (payload.permissions || []).join(",");
     // HTTP header values are Latin-1 only; displayName can be Thai (or any
     // non-ASCII) text, which throws ERR_INVALID_CHAR in http-proxy if set
     // raw. Encode here, decode in authMiddleware's fromGatewayHeaders.
@@ -101,6 +115,10 @@ app.use(
 app.use(
   "/api/reviews",
   createProxyMiddleware({ target: SERVICES.reviews, changeOrigin: true }),
+);
+app.use(
+  "/api/support",
+  createProxyMiddleware({ target: SERVICES.support, changeOrigin: true }),
 );
 
 module.exports = app;

@@ -4,22 +4,22 @@
 
 ## สถานะรวม
 
-**Planning revised - ProductVideo/Swipe refactor verified locally; plan acceptance incomplete**
+**Planning revised - BUY-002 and ProductVideo/Swipe refactor verified locally; plan acceptance incomplete**
 
 แผนครอบคลุม `UR-01` ถึง `UR-39` แบบ 6 Vertical Role Features และเพิ่ม explicit
 traceability `UR -> FR -> NFR -> Workflow -> Task/Phase` แล้ว Source ที่ pull มาเพิ่ม
 Swipe/ProductVideo และ seller video upload จากนั้น refactor เป็นโมดูลที่แยก responsibility,
-แก้ feed/identity correctness และเพิ่ม tests แล้ว แต่ยังไม่มี Feature ใหม่ถูกยกเป็น Done จนกว่า
-PostgreSQL acceptance, Swipe-to-Choose semantics และ reviewer evidence ของแผนนี้จะผ่าน
+แก้ feed/identity correctness และเพิ่ม tests แล้ว Buyer `BUY-002` ผ่าน PostgreSQL acceptance ในเครื่อง
+แต่ยังไม่มี Feature รวมถูกยกเป็น Done จนกว่า task อื่น, Swipe-to-Choose semantics และ reviewer evidence จะผ่าน
 
-| Feature          | Owner     | Planning | Core         | Extended evidence              | Next action                               |
-| ---------------- | --------- | -------- | ------------ | ------------------------------ | ----------------------------------------- |
-| Buyer            | วิศิษฏ์   | Revised  | Not accepted | Refactored Swipe baseline      | Review `BUY-001` + Product DB contract    |
-| Seller           | เอกตระการ | Revised  | Not accepted | Refactored ProductVideo module | Review `SEL-001` + Synthetic KYC schema   |
-| Customer Service | อชิรวินท์ | Revised  | Not accepted | None                           | Review `CSS-001` + Chat PostgreSQL schema |
-| Admin            | สิรดนัย   | Revised  | Not accepted | None                           | Start `ADM-001` functional role catalog   |
-| Marketing        | ศิวกร     | Revised  | Not accepted | Improved baseline; not `UR-11` | Review `MKT-001` + freeze Swipe semantics |
-| Executive        | อัสนัย    | Revised  | Not accepted | None                           | Review `CEO-001` metric definitions       |
+| Feature          | Owner     | Planning | Core                       | Extended evidence              | Next action                               |
+| ---------------- | --------- | -------- | -------------------------- | ------------------------------ | ----------------------------------------- |
+| Buyer            | วิศิษฏ์   | Revised  | `BUY-002` verified locally | Swipe baseline not accepted    | Review `BUY-002`; then resume `BUY-001`   |
+| Seller           | เอกตระการ | Revised  | Not accepted               | Refactored ProductVideo module | Review `SEL-001` + Synthetic KYC schema   |
+| Customer Service | อชิรวินท์ | Revised  | Not accepted               | None                           | Review `CSS-001` + Chat PostgreSQL schema |
+| Admin            | สิรดนัย   | Revised  | Not accepted               | None                           | Start `ADM-001` functional role catalog   |
+| Marketing        | ศิวกร     | Revised  | Not accepted               | Improved baseline; not `UR-11` | Review `MKT-001` + freeze Swipe semantics |
+| Executive        | อัสนัย    | Revised  | Not accepted               | None                           | Review `CEO-001` metric definitions       |
 
 ## Confirmed current evidence
 
@@ -36,6 +36,8 @@ PostgreSQL acceptance, Swipe-to-Choose semantics และ reviewer evidence ข
   service ignores client-supplied `sellerName`
 - `/swipe` has separate viewer/card components, five frontend tests total and plays only the active
   clip; no persisted choose/swipe action exists
+- `BUY-002` persists Product/Order reservation identity and expiry, uses atomic Product compare-and-set,
+  compensates failed Order writes, reuses retries and shows a live 10-minute Cart countdown
 - Test preparation now generates only missing/stale Prisma clients automatically
 - Pulled Auth seed adds four deterministic demo Seller accounts; this is development seed evidence,
   not Synthetic KYC or Admin/RBAC acceptance
@@ -56,30 +58,28 @@ Prototype/history is input for review only and does not change the new Feature s
 
 ## Current blocker
 
-Phase 0 has not passed: canonical Product/Order states, Swipe-to-Choose semantics/response contract,
-shared endpoint contracts, functional role catalog, Chat Prisma setup and required PostgreSQL
+Phase 0 has not passed: `BUY-002` established its local reservation contract, but remaining Product/Order
+states, Swipe-to-Choose semantics, functional role catalog, Chat Prisma setup and other PostgreSQL
 integration-test gates still need implementation and six-role review
 
 ## Verification boundary
 
-This refresh inspected and locally tested the refactored source while retaining upstream historical evidence.
+This refresh implemented and locally tested `BUY-002` while retaining upstream historical evidence.
 
 - `npm run lint`: passed
-- `npm test`: 41 total; 38 passed, 3 database tests skipped, 0 failed. The pretest step
-  confirmed generated Prisma clients were current
-- `npm run test:frontend`: 5 passed, 0 failed
-- `npm run secret-scan`: passed, 0 potential secrets across 177 tracked files
-- `npm --workspace frontend run build`: passed and generated `/swipe` plus `/seller/videos/new`;
+- `REQUIRE_INTEGRATION=1 npm test`: 47 passed, 0 skipped, 0 failed against isolated PostgreSQL 16
+- `npm run test:frontend`: 7 passed, 0 failed
+- `npm run secret-scan`: passed, 0 potential secrets across 190 tracked files
+- `npm --workspace frontend run build`: passed and generated `/cart`, `/orders`, `/swipe` and other routes;
   warning remains that Next.js ESLint plugin is not configured
-- `docker compose config --quiet`: passed
-- `docker compose ps`: Docker was reachable after approval but no project containers were running
+- Product and Order Prisma schemas validated; Product/Order test schemas were applied at port `55432`
+- Repository Compose stack was not started because host port `5432` belonged to unrelated `csdev022`
 - Host Node was `24.18.1`, outside repository engine `>=22.11.0 <23.0.0`
 
-No `REQUIRE_INTEGRATION=1`, ProductVideo index schema apply, Docker E2E or browser scenario was
-run. The upstream-reported database/browser results therefore remain historical evidence and current
-database/runtime status is **Not reverified for the new plan**
+No repository-wide Docker/browser E2E or deployment was run. ProductVideo index and `BUY-002` schema
+were applied only to the disposable PostgreSQL test container, not a shared or production database
 
 ## Next action
 
-สิรดนัย starts `ADM-001`; service owners freeze Phase 0 contracts and each Feature Owner writes
-the failing PostgreSQL-backed test from their first Core Task
+Reviewer checks `BUY-002` evidence before acceptance. Buyer work does not advance to another task in
+this change; after review, the existing plan resumes at `BUY-001`

@@ -84,7 +84,7 @@ export default function VideoUploader({ value, onChange, token }) {
             ? "กำลังอัปโหลด..."
             : "ลากไฟล์วิดีโอมาวาง หรือคลิกเพื่อเลือกจากเครื่อง"}
         </p>
-        <p className="mt-1 text-xs text-gray-400">MP4, MOV — สูงสุด 20MB</p>
+        <p className="mt-1 text-xs text-gray-500">MP4, MOV — สูงสุด 20MB</p>
       </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </div>

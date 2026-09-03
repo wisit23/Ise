@@ -2,8 +2,113 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ────────────────────────────────────────────────────────────────────────────
+   Design tokens
+   ────────────────────────────────────────────────────────────────────────────
+   Channel triplets (not hex) so Tailwind can apply opacity modifiers to them,
+   e.g. `bg-brand-600/10`. Consumed via `theme.extend.colors` in
+   tailwind.config.js.
+
+   The existing `emerald-*` / `gray-*` / `slate-*` classes still work — these
+   tokens are the vocabulary for NEW code and for anything being refactored,
+   so a future rebrand is one file instead of 37.
+   ──────────────────────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* Brand — currently emerald. CTAs, prices, active states, links. */
+    --color-brand-50: 236 253 245;
+    --color-brand-100: 209 250 229;
+    --color-brand-200: 167 243 208;
+    --color-brand-300: 110 231 183;
+    --color-brand-400: 52 211 153;
+    --color-brand-500: 16 185 129;
+    --color-brand-600: 5 150 105;
+    --color-brand-700: 4 120 87;
+    --color-brand-800: 6 95 70;
+    --color-brand-900: 6 78 59;
+
+    /* Semantic status. Paired: -soft for backgrounds, base for text/icons. */
+    --color-success: 5 150 105;
+    --color-success-soft: 209 250 229;
+    --color-warning: 180 83 9;
+    --color-warning-soft: 254 243 199;
+    --color-danger: 220 38 38;
+    --color-danger-soft: 254 226 226;
+    --color-info: 2 132 199;
+    --color-info-soft: 224 242 254;
+
+    /* Surfaces */
+    --color-surface: 255 255 255;
+    --color-surface-subtle: 249 250 251;
+    --color-surface-panel: 248 250 252;
+
+    /* Borders */
+    --color-line: 229 231 235;
+    --color-line-strong: 209 213 219;
+
+    /* Text. `muted` is the lightest tone that still clears WCAG AA (4.5:1)
+       on white — gray-400 does not, which is why it is not a token. */
+    --color-ink: 17 24 39;
+    --color-ink-muted: 75 85 99;
+    --color-ink-subtle: 107 114 128;
+  }
+}
+
+/* Reserve the scrollbar's width whether or not the page needs one.
+   Without this, navigating between a view tall enough to scroll and one
+   that is not removes the scrollbar, widens the viewport by ~15px, and
+   every centred container jumps sideways by half that. It was most obvious
+   switching sections inside /workspace, but it applies to any page whose
+   height crosses the viewport — a short search result set versus a long
+   one, for instance. */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* MVP has no dark theme yet - pin a light background so text stays readable
    regardless of the visitor's OS/browser color-scheme preference. */
 body {
   @apply bg-white text-gray-900;
+}
+
+/* Headings take the display face and a tighter tracking by default, so a
+   page does not have to remember to ask for it. */
+h1,
+h2,
+h3,
+h4 {
+  @apply font-display tracking-tight;
+}
+
+@layer components {
+  /* Hides the scrollbar on a deliberately swipeable strip while keeping it
+     scrollable. SwipeFeedViewer has been asking for this class since it was
+     written, but nothing ever defined it — so the feed has been showing a
+     scrollbar it did not intend to. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* One focus treatment for the whole app. Keyboard-only (`:focus-visible`)
+     so a mouse click doesn't leave a ring behind. */
+  .focus-ring {
+    @apply outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-brand-500/60;
+  }
+}
+
+/* Respect the OS "reduce motion" setting. The app leans on entrance
+   animations (fade-in-up, slide-in-*) that can trigger vestibular symptoms. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

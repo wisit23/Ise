@@ -19,13 +19,13 @@ export default function Pagination({ page, totalPages, onChange }) {
       <button
         onClick={() => onChange(page - 1)}
         disabled={page <= 1}
-        className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+        className="focus-ring rounded-md border border-line-strong px-3 py-1.5 text-sm text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
       >
         ก่อนหน้า
       </button>
       {pages.map((p, i) =>
         p === "…" ? (
-          <span key={`ellipsis-${i}`} className="px-2 text-sm text-gray-400">
+          <span key={`ellipsis-${i}`} className="text-ink-subtle px-2 text-sm">
             …
           </span>
         ) : (
@@ -33,9 +33,9 @@ export default function Pagination({ page, totalPages, onChange }) {
             key={p}
             onClick={() => onChange(p)}
             aria-current={p === page ? "page" : undefined}
-            className={`h-8 w-8 rounded-md text-sm ${
+            className={`focus-ring h-8 w-8 rounded-md text-sm transition ${
               p === page
-                ? "bg-emerald-600 font-medium text-white"
+                ? "bg-brand-600 font-medium text-white"
                 : "text-gray-600 hover:bg-gray-100"
             }`}
           >
@@ -46,7 +46,7 @@ export default function Pagination({ page, totalPages, onChange }) {
       <button
         onClick={() => onChange(page + 1)}
         disabled={page >= totalPages}
-        className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+        className="focus-ring rounded-md border border-line-strong px-3 py-1.5 text-sm text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
       >
         ถัดไป
       </button>
