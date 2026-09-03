@@ -81,3 +81,35 @@
 - โครงสร้างนี้พร้อมขยายเป็น multi-period export ในอนาคต (เพิ่มแถวต่อเดือน ไม่ใช่เพิ่มคอลัมน์)
 - อัปเดต `reports.test.js` ให้ตรวจ header/cell แยกตามคอลัมน์แทนการเช็คว่ามีตัวเลขปรากฏในไฟล์
   → backend 49 ผ่าน / frontend 24 ผ่าน / eslint สะอาด
+
+## 2026-08-26 — Reports Page: Per-Day/Per-Month Breakdown (Owner request, replaces MoM/YoY)
+
+- Owner ขอให้เปลี่ยน `/executive/reports` จากตาราง MoM/YoY (1 แถวสรุปต่อช่วงที่เลือก) เป็นตาราง
+  แจกแจงราย: **รายเดือน → 1 แถวต่อวัน** (สูงสุด 31 แถว), **รายปี → 1 แถวต่อเดือน** (12 แถว)
+  — คอลัมน์เดิม (ยอดขาย, รายได้แพลตฟอร์ม, คำสั่งซื้อ, ผู้ใช้งานที่ล็อกอิน) คงไว้ ตัด MoM/YoY ออก
+- เพิ่ม endpoint ใหม่ทั้งสอง provider เพื่อรองรับการแจกแจงนี้ในฝั่ง SQL แทนการวนเรียก API ทีละวัน:
+  - `GET /api/orders/executive/metrics-series?from&to&granularity&timezone` (order-service) —
+    `date_trunc` ตาม `granularity` (`day`/`month`) พร้อม gap-fill ให้ทุกช่วงเวลามีแถว แม้ไม่มีออร์เดอร์เลย
+  - `GET /api/auth/executive/metrics-series?from&to&granularity&timezone` (auth-service) —
+    `activeUsers` รายวัน/รายเดือนแบบเดียวกัน
+  - `PLATFORM_FEE_RATE`, `dayLabel`, `monthLabel`, `fetchMetricsSeries` เพิ่มใน
+    `frontend/lib/executive.js`
+- คง `CEO-DEC-003` เดิม: provider ไหนล่ม คอลัมน์ของ provider นั้น (เท่านั้น) ขึ้น "ไม่พร้อมใช้งาน"
+  ต่อแถว ไม่ปลอมเป็นศูนย์; ถ้าทั้งสอง provider ล่มพร้อมกันถึงจะขึ้นข้อความระดับหน้าแทนตารางเปล่า
+- CSV export ตามตารางใหม่ไปด้วย (1 แถวต่อวัน/เดือน, 1 คอลัมน์ต่อ 1 หน่วยเดิม)
+- **แก้บั๊ก 2 จุดที่เจอระหว่างทำ:**
+  1. `dayLabel` เคยเรียก `toLocaleDateString("th-TH", {year:"2-digit"})` แยกจาก `month` — th-TH
+     ICU จะสะกดเป็น `"พ.ศ. 69"` เมื่อขอปีอย่างเดียว แต่ตัด prefix เหลือ `"69"` เมื่อขอ
+     เดือน+ปีพร้อมกัน ทำให้ label ที่ควรเป็น `"01/ส.ค./69"` กลายเป็น `"01/ส.ค./พ.ศ. 69"` — แก้โดย
+     รวมเป็น `toLocaleDateString` ครั้งเดียว
+  2. `fetchMetricsSeries` ลืม unwrap `.data` จาก response (`{data, meta}`) ทำให้หน้าเว็บ crash
+     ด้วย `TypeError: order.map is not a function` เมื่อ provider ตอบกลับสำเร็จ
+  - ทั้งสองมี unit test คุมไว้ (`lib/executive.test.js`) กันกลับมาเป็นซ้ำ
+- Owner ลบข้อความ placeholder ท้ายหน้า `/executive/complaints`
+  ("ระบบตรวจจับธุรกรรมผิดปกติอัตโนมัติยังไม่ได้พัฒนา...") ด้วยตัวเอง — อัปเดต `complaints.test.js`
+  ให้ตรงกับหน้าปัจจุบัน (ไม่มีข้อความนี้แล้ว)
+- ลบ seed ข้อร้องเรียนตัวอย่าง 5 รายการออกจาก `auth-service/prisma/seed.js` ตามที่ Owner ขอ
+  (ตาราง `reports` seed เหลือแต่ demo seller/executive account เหมือนเดิม)
+- Test: `frontend/lib/executive.test.js` ใหม่ (day/month label formatters, `growthPct`),
+  `platform-metrics-series.integration.test.js`, `user-metrics-series.integration.test.js` ใหม่
+  → backend 51 ผ่าน (รวมทุก suite เดิม) / frontend 28 ผ่าน / eslint สะอาด

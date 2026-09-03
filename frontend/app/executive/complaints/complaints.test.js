@@ -40,9 +40,6 @@ describe("ExecutiveComplaintsPage", () => {
     expect(
       await screen.findByText("ไม่มีข้อร้องเรียนในหมวดนี้"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/ยังไม่ได้เชื่อมข้อมูลข้อร้องเรียนจริง/),
-    ).toBeInTheDocument();
   });
 
   it("still renders the filter tabs and stat tiles as placeholders", async () => {

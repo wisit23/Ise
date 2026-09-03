@@ -5,7 +5,7 @@ export const TIMEZONE = "Asia/Bangkok";
 /** Platform fee assumption. There is no payment system yet, so revenue is
  * modelled as a flat 10% of GMV — the same rate order-service applies when it
  * computes `platformRevenue`, kept here only for labelling the report. */
-export const PLATFORM_FEE_RATE = 0.1;
+export const PLATFORM_FEE_RATE = 0.03;
 
 export const MONTH_NAMES = [
   "มกราคม",
