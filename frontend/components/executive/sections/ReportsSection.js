@@ -166,7 +166,10 @@ export default function ReportsSection({ token }) {
         )}
 
         <div>
-          <label htmlFor="year" className="mb-1 block text-xs text-slate-500 font-medium">
+          <label
+            htmlFor="year"
+            className="mb-1 block text-xs text-slate-500 font-medium"
+          >
             ปี
           </label>
           <RadioSelect

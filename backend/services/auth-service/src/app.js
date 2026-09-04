@@ -1,6 +1,7 @@
 const express = require("express");
 const { errorHandler } = require("@reloop/shared");
 const authRoutes = require("./routes/authRoutes");
+const internalRoutes = require("./features/internal/internalRoutes");
 const adminKycRoutes = require("./features/adminKyc/adminKycRoutes");
 const kycRoutes = require("./features/kyc/kycRoutes");
 const reportRoutes = require("./features/reports/reportRoutes");
@@ -17,6 +18,7 @@ app.get("/health", (req, res) =>
 );
 
 app.use("/executive", metricsRoutes);
+app.use("/internal", internalRoutes);
 app.use("/", authRoutes);
 app.use("/admin/kyc", adminKycRoutes);
 app.use("/kyc", kycRoutes);

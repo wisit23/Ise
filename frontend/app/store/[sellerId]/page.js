@@ -9,6 +9,7 @@ import Reveal from "../../../components/ui/Reveal";
 import Pagination from "../../../components/Pagination";
 import { StarDisplay } from "../../../components/StarRating";
 import ReportModal from "../../../components/ReportModal";
+import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import { apiFetch } from "../../../lib/api";
 import { getStoredUser } from "../../../lib/auth";
 
@@ -105,12 +106,26 @@ export default function StorePage() {
             </div>
           </div>
           {getStoredUser()?.id !== sellerId && (
-            <button
-              onClick={() => setShowReport(true)}
-              className="shrink-0 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
-            >
-              รายงานร้านค้านี้
-            </button>
+            <div className="flex shrink-0 items-center gap-3">
+              {/* Chat is scoped to one PRODUCT conversation per pair this
+                  round (see chat-service's contextKey design) — there's no
+                  "message this seller in general" endpoint yet, so this
+                  opens/reopens the conversation about their first listed
+                  item. Hidden entirely for a store with no products, since
+                  there's nothing to anchor a conversation to. */}
+              {items.length > 0 && (
+                <ContactSellerButton
+                  productId={items[0].id}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              )}
+              <button
+                onClick={() => setShowReport(true)}
+                className="text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
+              >
+                รายงานร้านค้านี้
+              </button>
+            </div>
           )}
         </div>
       </section>

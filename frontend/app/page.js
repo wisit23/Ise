@@ -249,7 +249,8 @@ export default function HomePage() {
                   </span>
                 </span>
                 <span>
-                  <b className="font-bold text-slate-900">100%</b> ร้านค้ายืนยันตัวตน
+                  <b className="font-bold text-slate-900">100%</b>{" "}
+                  ร้านค้ายืนยันตัวตน
                 </span>
               </div>
             </div>

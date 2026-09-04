@@ -7,6 +7,14 @@ import { apiFetch } from "../lib/api";
 import Button from "./ui/Button";
 import Menu, { MenuItem, MenuLabel } from "./ui/Menu";
 import { fetchActiveCategories } from "../lib/catalog";
+import { getUnreadCount } from "../lib/chat";
+import { useChatSocket, useChatSocketEvent } from "./chat/ChatSocketProvider";
+
+// Only used while the shared socket is down — the badge's normal path is a
+// pushed "conversation:activity" event (see the effects below). 15s keeps
+// the degraded case feeling current without hammering the endpoint from
+// every open tab on every page.
+const UNREAD_POLL_INTERVAL_MS = 15000;
 
 const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
@@ -30,10 +38,12 @@ const DISCOVERY_LINKS = [
 export default function NavBar() {
   const [user, setUser] = useState(null);
   const [cartCount, setCartCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   const menuRef = useRef(null);
+  const { connected: socketConnected } = useChatSocket();
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -46,8 +56,60 @@ export default function NavBar() {
         .catch((err) =>
           console.error("โหลดจำนวนสินค้าในตะกร้าไม่สำเร็จ:", err),
         );
+      getUnreadCount(token)
+        .then((data) => setUnreadCount(data.total))
+        .catch((err) =>
+          console.error("โหลดจำนวนข้อความที่ยังไม่อ่านไม่สำเร็จ:", err),
+        );
     }
   }, []);
+
+  // Live path: the server nudges every participant's own socket room on any
+  // new message (broadcast.js's "conversation:activity"), so the badge
+  // updates on whatever page the user happens to be on — not just while a
+  // chat room is open. The nudge deliberately carries no count; the
+  // authoritative total is re-read here, because a server-computed number
+  // would race this user's own concurrent mark-read calls.
+  useChatSocketEvent("conversation:activity", () => {
+    const token = getAccessToken();
+    if (!token) return;
+    getUnreadCount(token)
+      .then((data) => setUnreadCount(data.total))
+      .catch(() => {});
+  });
+
+  // Fallback path: only runs while the socket ISN'T connected (blocked by a
+  // strict network, dropped mid-session, still connecting). Without this
+  // gate the badge would be both pushed and polled at once, doubling the
+  // request rate for no benefit.
+  useEffect(() => {
+    if (socketConnected) return undefined;
+    const token = getAccessToken();
+    if (!token) return undefined;
+
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      getUnreadCount(token)
+        .then((data) => setUnreadCount(data.total))
+        .catch(() => {
+          // A missed poll tick isn't worth surfacing — the next one retries.
+        });
+    }, UNREAD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [socketConnected]);
+
+  // A socket that just (re)connected missed everything that happened while
+  // it was down — reconnecting is precisely when a resync is mandatory, not
+  // optional. This is what stops the badge from sitting stale after a
+  // laptop wakes from sleep.
+  useEffect(() => {
+    if (!socketConnected) return;
+    const token = getAccessToken();
+    if (!token) return;
+    getUnreadCount(token)
+      .then((data) => setUnreadCount(data.total))
+      .catch(() => {});
+  }, [socketConnected]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -215,6 +277,26 @@ export default function NavBar() {
               add_circle
             </span>
             ลงขาย
+          </Link>
+        )}
+
+        {user && (
+          <Link
+            href="/chat"
+            aria-label={`ข้อความ${unreadCount > 0 ? ` มี ${unreadCount} รายการที่ยังไม่อ่าน` : ""}`}
+            className="focus-ring relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
+          >
+            <span
+              className="material-symbols-outlined text-[21px] leading-none"
+              aria-hidden="true"
+            >
+              chat_bubble
+            </span>
+            {unreadCount > 0 && (
+              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
+                {unreadCount}
+              </span>
+            )}
           </Link>
         )}
 

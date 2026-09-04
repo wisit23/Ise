@@ -192,6 +192,57 @@ export async function submitKyc(fields, documentFile, token) {
   return data;
 }
 
+/** Uploads one chat attachment — multipart, so it can't go through apiFetch
+ * (which always sets a JSON Content-Type). Same private-storage pattern as
+ * uploadDisputeEvidence: chat attachments are participant-only and are read
+ * back through fetchAuthedBlobUrl below, never as a bare <img src>. */
+export async function uploadChatAttachment(
+  conversationId,
+  file,
+  caption,
+  token,
+) {
+  const authToken = token ?? getAccessToken();
+  const path = `/api/chat/conversations/${conversationId}/attachments`;
+
+  // A fresh FormData per attempt — a consumed request body can't be
+  // replayed on the refresh retry below.
+  function buildBody() {
+    const form = new FormData();
+    form.append("file", file);
+    if (caption) form.append("caption", caption);
+    return form;
+  }
+
+  let res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body: buildBody(),
+  });
+
+  if (res.status === 401 && authToken) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await fetch(`${API_URL}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${newToken}` },
+        body: buildBody(),
+      });
+    }
+  }
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    if (res.status === 401) forceLogout();
+    let errorMsg = data?.error;
+    if (typeof errorMsg === "object" && errorMsg !== null) {
+      errorMsg = errorMsg.message || JSON.stringify(errorMsg);
+    }
+    throw new Error(errorMsg || `แนบไฟล์ไม่สำเร็จ (${res.status})`);
+  }
+  return data;
+}
+
 /** Fetches a private, authenticated file (dispute evidence — never a plain
  * <img src>/<a href>, since the browser won't attach a Bearer header to a
  * bare navigation) and returns an object URL. Caller must revokeObjectURL

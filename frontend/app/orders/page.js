@@ -12,6 +12,7 @@ import Button from "../../components/ui/Button";
 import EmptyState from "../../components/ui/EmptyState";
 import Skeleton from "../../components/ui/Skeleton";
 import OrderLine from "../../components/OrderLine";
+import ContactSellerButton from "../../components/chat/ContactSellerButton";
 import { apiFetch, uploadDisputeEvidence } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -291,6 +292,12 @@ export default function OrdersPage() {
               >
                 <OrderLine
                   order={o}
+                  actions={
+                    <ContactSellerButton
+                      productId={o.productId}
+                      className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-panel disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                  }
                   status={
                     <span
                       className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${

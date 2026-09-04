@@ -25,6 +25,41 @@ services:
       timeout: 5s
       retries: 10
 
+  # chat-service's document store (CHAT-001). Prisma's MongoDB connector needs
+  # transactions, which Mongo only supports on a replica set — even a
+  # single-node one — so this isn't a plain standalone mongod. See
+  # infra/mongo/init-replica.sh for the one-time rs.initiate() this requires.
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      # Up != usable: a freshly-started mongod answers ping before
+      # rs.initiate() has run, and every write fails with "not primary" until
+      # the replica set actually elects one. rs.status() only returns without
+      # error once a primary exists, so that's what depends_on needs to wait
+      # on, not just "the process is listening".
+      test: ["CMD", "mongosh", "--quiet", "--eval", "rs.status().ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # One-shot: calls rs.initiate() exactly once, then exits. Re-running
+  # rs.initiate() on an already-initialized set is a no-op error, not
+  # destructive, so this is safe to leave in the normal `up` path rather than
+  # requiring a separate manual bootstrap step.
+  mongo-init:
+    image: mongo:7
+    depends_on:
+      - mongo
+    volumes:
+      - ./infra/mongo/init-replica.sh:/init-replica.sh:ro
+    entrypoint: ["sh", "/init-replica.sh"]
+
   gateway:
     build:
       context: .
@@ -118,9 +153,22 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL_CHAT}
+      REDIS_URL: ${REDIS_URL}
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      # Chat resolves participant userIds into display names through
+      # auth-service's /internal API (see src/services/authClient.js).
+      AUTH_SERVICE_URL: http://auth-service:3001
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+    volumes:
+      # Chat attachments are private (participant-only reads through
+      # attachmentController) — they get their own volume rather than
+      # sharing product-service's publicly-served uploads/ tree.
+      - chat_private_attachments:/app/services/chat-service/private-attachments
     depends_on:
-      postgres:
+      mongo:
         condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     healthcheck:
@@ -188,5 +236,7 @@ services:
 
 volumes:
   pgdata:
+  mongodata:
+  chat_private_attachments:
   product_uploads:
   order_private_evidence:

@@ -21,3 +21,5 @@ backend/services/*/src/generated/
 .github/agents/
 .github/hooks/
 .impeccable/
+backend/services/chat-service/private-attachments/*
+!backend/services/chat-service/private-attachments/.gitkeep

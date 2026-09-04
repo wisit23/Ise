@@ -247,6 +247,51 @@ async function updateProfile(userId, { firstName, lastName, phone }) {
   return toPublicUser(user);
 }
 
+// A caller could otherwise hand over an unbounded id list and pull the whole
+// user table back in one request.
+const MAX_DISPLAY_NAME_IDS = 100;
+
+/**
+ * Display names for a batch of user ids — the ONLY way another service can
+ * turn a userId into something human-readable, and deliberately reachable
+ * only through /internal (x-internal-token, never proxied by the gateway).
+ *
+ * Returns a FIRST NAME, never the full legal name: a marketplace
+ * counterparty needs to tell one person from another, not to learn who they
+ * legally are. That's `NFR-SP-02`'s "ปกปิดข้อมูลส่วนบุคคลที่สำคัญในหน้าจอทั่วไป"
+ * applied to chat, and it matches how Grab/Airbnb/Shopee show a counterparty.
+ *
+ * Sellers resolve to their shop name instead — a shop name is a business
+ * identity that is already fully public on the storefront, and it's what a
+ * buyer actually recognises. Note this is driven by "does this account have
+ * a shop name", NOT by a role check: nothing here gates on BUYER vs SELLER.
+ *
+ * Unknown ids are simply absent from the result rather than throwing, so one
+ * deleted account can't break a whole conversation's rendering.
+ */
+async function getDisplayNames(userIds) {
+  if (!Array.isArray(userIds)) throw badRequest("userIds must be an array");
+  const unique = [...new Set(userIds.filter((id) => typeof id === "string"))];
+  if (unique.length === 0) return [];
+  if (unique.length > MAX_DISPLAY_NAME_IDS) {
+    throw badRequest(`userIds is limited to ${MAX_DISPLAY_NAME_IDS} per call`);
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: unique } },
+    select: {
+      id: true,
+      firstName: true,
+      sellerProfile: { select: { shopName: true } },
+    },
+  });
+
+  return users.map((user) => ({
+    userId: user.id,
+    displayName: user.sellerProfile?.shopName || user.firstName,
+  }));
+}
+
 /** Public store-front info for a seller — no email/phone, only what a buyer needs to see. */
 async function getPublicSellerProfile(userId) {
   const user = await prisma.user.findUnique({
@@ -277,6 +322,7 @@ module.exports = {
   getById,
   updateProfile,
   getPublicSellerProfile,
+  getDisplayNames,
   getUserRoles,
   assignRole,
   removeRole,

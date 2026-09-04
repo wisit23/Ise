@@ -226,7 +226,10 @@ export default function CartPage() {
                 const expired = isReservationExpired(o, now);
                 const countdown = reservationCountdown(o, now);
                 return (
-                  <li key={o.id} className="transition-colors hover:bg-slate-50/50">
+                  <li
+                    key={o.id}
+                    className="transition-colors hover:bg-slate-50/50"
+                  >
                     <OrderLine
                       order={o}
                       highlight={expired}

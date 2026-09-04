@@ -127,7 +127,10 @@ export default function HelpCenterPage() {
         </div>
 
         {/* Search Bar with Real-time Animation & Clear Button */}
-        <form onSubmit={handleSearchSubmit} className="mb-3.5 flex items-center gap-2">
+        <form
+          onSubmit={handleSearchSubmit}
+          className="mb-3.5 flex items-center gap-2"
+        >
           <div className="relative flex-1">
             <span
               className={`material-symbols-outlined pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[20px] transition-colors ${
@@ -274,7 +277,11 @@ export default function HelpCenterPage() {
 
         {totalPages > 1 && (
           <div className="mt-6">
-            <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onChange={setPage}
+            />
           </div>
         )}
       </section>

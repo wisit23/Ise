@@ -91,7 +91,9 @@ export default function ExecutiveDashboardPage() {
                 >
                   <span
                     className={`material-symbols-outlined text-[20px] shrink-0 w-5 text-center ${
-                      active ? "text-white" : "text-slate-500 group-hover:text-slate-700"
+                      active
+                        ? "text-white"
+                        : "text-slate-500 group-hover:text-slate-700"
                     }`}
                   >
                     {s.icon}

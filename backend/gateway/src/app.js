@@ -104,12 +104,18 @@ app.use(
   "/api/orders",
   createProxyMiddleware({ target: SERVICES.orders, changeOrigin: true }),
 );
+// Handles regular HTTP requests to /api/chat/* only (REST endpoints) — the
+// WebSocket upgrade path (Socket.IO) is proxied separately in server.js's
+// own `server.on("upgrade", ...)` handler via a hand-rolled raw TCP pipe,
+// not through this middleware's `ws: true` option (that option was tried
+// and removed: http-proxy-middleware's upgrade handling corrupted the
+// response under concurrent WebSocket connections — see server.js's comment
+// for the full story).
 app.use(
   "/api/chat",
   createProxyMiddleware({
     target: SERVICES.chat,
     changeOrigin: true,
-    ws: true,
   }),
 );
 app.use(

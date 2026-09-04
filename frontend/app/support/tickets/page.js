@@ -207,7 +207,11 @@ export default function MyTicketsPage() {
                       label: `${o.productTitle} (${o.id.slice(0, 8)})`,
                     })),
                   ]}
-                  hint={form.orderId ? "ระบบจะแจ้งให้เจ้าหน้าที่ทราบว่าคำร้องนี้เกี่ยวข้องกับอีกฝ่ายในคำสั่งซื้อนี้ด้วย" : undefined}
+                  hint={
+                    form.orderId
+                      ? "ระบบจะแจ้งให้เจ้าหน้าที่ทราบว่าคำร้องนี้เกี่ยวข้องกับอีกฝ่ายในคำสั่งซื้อนี้ด้วย"
+                      : undefined
+                  }
                 />
               </div>
             )}
@@ -227,7 +231,9 @@ export default function MyTicketsPage() {
               />
             </div>
             {formError && (
-              <p className="animate-slide-up text-sm text-red-600 font-medium">{formError}</p>
+              <p className="animate-slide-up text-sm text-red-600 font-medium">
+                {formError}
+              </p>
             )}
             <div className="pt-2">
               <button
