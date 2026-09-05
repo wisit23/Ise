@@ -12,6 +12,15 @@ module.exports = [
       "**/coverage/**",
       "**/generated/**",
       "frontend/next-env.d.ts",
+      // Local AI coding-assistant tooling (gitignored, never shipped). CI
+      // never sees these because they aren't committed, but a developer
+      // running `npm run lint` locally would otherwise drown in errors
+      // from files that aren't part of the application.
+      ".agent/**",
+      ".claude/**",
+      ".github/skills/**",
+      ".github/agents/**",
+      ".github/hooks/**",
     ],
   },
   js.configs.recommended,

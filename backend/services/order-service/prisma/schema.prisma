@@ -11,8 +11,17 @@ generator client {
   output   = "../src/generated/prisma-client"
 }
 
-// Status lifecycle: pending (cart, product locked) -> completed (paid), or cancelled (product unlocked).
+// Status lifecycle: pending_payment (cart, product locked) -> completed (paid), or cancelled (product unlocked).
 // confirmed/shipped are reserved for a future fulfillment flow and are not driven by the UI yet.
+// disputed/refunded added for CSS-003 (WF-08): completed -> disputed -> refunded | completed.
+// Two roles touch a dispute and they share one payout-hold flag (`payoutHeld`):
+//   - CS owns the *case* (DisputeCase below) — buyer opens it, an agent decides it.
+//   - Admin owns the *fund hold* escalation (ADM-004) via adminDisputeService,
+//     not the buyer/seller updateStatus endpoint. preDisputeStatus remembers
+//     what `status` was so a release can restore it.
+// paymentSimulationStatus stays Admin's own state machine, but both sides read
+// and write payoutHeld so there is never a second source of truth for
+// "is this seller's money frozen right now".
 model Order {
   id                   String    @id @default(uuid())
   buyerId              String    @map("buyer_id")
@@ -20,13 +29,127 @@ model Order {
   productId            String    @map("product_id")
   productTitle         String    @map("product_title")
   price                Int
-  status               String    @default("pending")
+  status               String    @default("pending_payment")
   reservationId        String?   @unique @map("reservation_id")
   reservationExpiresAt DateTime? @map("reservation_expires_at")
+  // Set only when this order was created automatically because a buyer won
+  // an auction in product-service, instead of a normal "buy now" checkout.
+  // No FK — product-service owns the AuctionItem, this is a read-only
+  // reference so metrics/support can trace an order back to its auction.
+  auctionId            String?   @map("auction_id")
+  // WF-08 step 3: opening a dispute holds payout until CSS-003 decides.
+  // Admin's hold/release writes this too — see adminDisputeService.
+  payoutHeld           Boolean   @default(false) @map("payout_held")
+  disputedAt           DateTime? @map("disputed_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
+  // ADM-004: simulated fund hold — no bank/payment-processor fields, mock state only
+  // (ADM-DEC-003: KYC/fund hold are synthetic/simulation, never real money).
+  paymentSimulationStatus String    @default("RELEASE_PENDING") @map("payment_simulation_status")
+  version                 Int       @default(1)
+  holdReason              String?   @map("hold_reason")
+  heldAt                  DateTime? @map("held_at")
+  heldBy                  String?   @map("held_by")
+  preDisputeStatus        String?   @map("pre_dispute_status")
+
+  dispute         DisputeCase?
+  adminEvidence   AdminDisputeEvidence[]
+
   @@index([buyerId])
   @@index([sellerId])
+  @@index([auctionId])
+  @@index([status, reservationExpiresAt])
   @@map("orders")
+}
+
+// ADM-004: Admin's own lightweight evidence *reference* list, distinct from
+// CS's DisputeEvidence below (which stores actual uploaded files against a
+// DisputeCase). Originally both were called DisputeEvidence and both mapped to
+// the `dispute_evidence` table, which Prisma rejects outright (P1012) — this
+// side was renamed because CS's model owns the real evidence-upload flow.
+model AdminDisputeEvidence {
+  id          String   @id @default(uuid())
+  orderId     String   @map("order_id")
+  order       Order    @relation(fields: [orderId], references: [id])
+  evidenceRef String   @map("evidence_ref")
+  note        String?
+  submittedBy String   @map("submitted_by")
+  submittedAt DateTime @default(now()) @map("submitted_at")
+
+  @@index([orderId])
+  @@map("admin_dispute_evidence")
+}
+
+// ADM-004: append-only audit of every privileged dispute action (evidence
+// view, hold, release) — mirrors auth-service's AdminAudit, kept local to
+// order-service since each service persists its own action evidence.
+model DisputeAudit {
+  id        String   @id @default(uuid())
+  orderId   String   @map("order_id")
+  actorId   String   @map("actor_id")
+  action    String
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@map("dispute_audits")
+}
+
+// WF-08: one dispute per order (order.id is @unique here). status stays OPEN
+// while evidence is being gathered; DECIDED is terminal — see disputeService's
+// one-way decision guard for why "decided" isn't just "decision != null".
+model DisputeCase {
+  id               String    @id @default(uuid())
+  orderId          String    @unique @map("order_id")
+  openedBy         String    @map("opened_by")
+  reason           String
+  status           String    @default("OPEN") // OPEN|NEEDS_INFO|DECIDED
+  decision         String? // APPROVE_REFUND|REJECT
+  decisionReason   String?   @map("decision_reason")
+  decidedBy        String?   @map("decided_by")
+  decidedAt        DateTime? @map("decided_at")
+  evidenceDeadline DateTime? @map("evidence_deadline") // WF-08 step 6: 48h to respond to an info request
+  version          Int       @default(0)
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  order    Order             @relation(fields: [orderId], references: [id])
+  evidence DisputeEvidence[]
+  auditLog DisputeAuditLog[]
+
+  @@map("dispute_cases")
+}
+
+// NFR-SP-03: every privileged action on a dispute — including just viewing a
+// piece of evidence — must be attributable and timestamped to the second.
+model DisputeAuditLog {
+  id        String   @id @default(uuid())
+  disputeId String   @map("dispute_id")
+  actorId   String   @map("actor_id")
+  action    String // OPEN|VIEW_EVIDENCE|DECIDE
+  detail    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  dispute DisputeCase @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId, createdAt])
+  @@map("dispute_audit_logs")
+}
+
+// storageKey is a private filesystem key, never a public URL — see
+// evidenceStorage.js. Files live outside product-service's publicly-served
+// uploads/ entirely (see plan.md's Known Risk #2: /uploads/ is a public
+// gateway path, evidence must never go through it).
+model DisputeEvidence {
+  id         String   @id @default(uuid())
+  disputeId  String   @map("dispute_id")
+  uploaderId String   @map("uploader_id")
+  storageKey String   @map("storage_key")
+  fileType   String   @map("file_type")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  dispute DisputeCase @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+
+  @@index([disputeId])
+  @@map("dispute_evidence")
 }

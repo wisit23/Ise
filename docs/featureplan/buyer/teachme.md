@@ -1,5 +1,14 @@
 # Buyer Feature Teach Me
 
+## Round 4 — Catalog filters share one PostgreSQL predicate builder
+
+`GET /api/products/search` validates price input first, then sends every filter through
+`catalogQuery.buildCatalogWhere`. A style is a normalized value matched against the persisted
+`Product.tags` array; therefore `q` ranking remains the existing hybrid trigram search while
+all other constraints stay AND conditions. The public predicate always includes `status =
+'available'`, including requests without `q`. The database integration gate still must be run
+before claiming persisted acceptance.
+
 ## Round 0 — Request flow ที่มีอยู่
 
 ```text
@@ -34,26 +43,15 @@ Buyer choice journey
 
 **Teach-back:** เหตุใดการ render วิดีโอ 20 ตัวแล้ว autoplay ทุกตัวจึงแพงกว่าเล่นเฉพาะ active card?
 
-## Round 3 — Hybrid Search ใช้คะแนนคนละชนิดร่วมกัน
+## Round 3 — Reservation ต้องล็อกด้วย write เดียว ไม่ใช่ check แล้วค่อย update
 
-ข้อมูลสินค้าถูกเตรียมเป็นสองรูปแบบ: `search_vector` สำหรับค้นคำและถ่วงน้ำหนัก Field กับ
-`search_text` สำหรับค้น substring/ความคล้ายของตัวอักษร เมื่อผู้ใช้ค้น ระบบจะ Match ด้วย FTS,
-`ILIKE` หรือ Trigram อย่างน้อยหนึ่งทาง แล้วรวมคะแนน `65% FTS + 35% Trigram` พร้อมโบนัสเมื่อ
-ข้อความตรงอยู่ใน `title`
+Flow ใหม่คือ `Order → Product reservation CAS → Order PostgreSQL` Product ใช้ `updateMany` ที่เขียน
+`available → reserved` ได้เมื่อแถวยังว่างหรือ reservation เดิมหมดอายุเท่านั้น ดังนั้น Buyer สองคนที่ยิง
+พร้อมกันจะมีเพียงคนเดียวที่ update ได้ ส่วน Order เก็บ `reservationId` เดียวกันไว้เป็นหลักฐานเชื่อมข้าม service
 
-FTS ทำให้ `nike running` ในชื่อสินค้ามีน้ำหนักสูงกว่าคำเดียวกันที่อยู่เฉพาะ description ส่วน
-Trigram และ `ILIKE` ยังจำเป็นสำหรับคำพิมพ์ผิดและภาษาไทยที่ PostgreSQL `simple` config ตัดคำไม่ได้
+ถ้า Order write ล้มเหลว ระบบเรียก release ด้วยทั้ง `productId + reservationId`; ถ้ามี Buyer คนใหม่จองต่อแล้ว
+release เก่าจะ update ไม่โดนแถว จึงไม่ปลด lock ของคนใหม่ Worker อ่าน expiry จาก PostgreSQL ตอน process start
+และทุก 30 วินาที ทำให้ restart แล้วข้อมูลเวลาจองไม่หาย
 
-**Teach-back:** เพราะเหตุใดระบบนี้จึงไม่ควรเปลี่ยนเป็น PostgreSQL FTS ล้วนเมื่อข้อมูลสินค้ามีภาษาไทย และ Weight A–D ช่วยให้ Ranking ดีขึ้นอย่างไร?
-
-## Round 4 — Reservation token สำคัญกว่าสถานะ `reserved` อย่างเดียว
-
-การเช็คแล้วเขียนแบบ `GET available → PATCH reserved` มีช่องให้ผู้ซื้อสองคนอ่านค่าเดิมพร้อมกัน
-ระบบจึงเปลี่ยนเป็นคำสั่งเขียนเดียวที่สำเร็จเมื่อสินค้ายัง `available` หรือ reservation เดิมหมดอายุ
-เท่านั้น จำนวนแถวที่แก้ได้จึงเป็นผู้ตัดสินว่าใครชนะ
-
-ตอน release/confirm ต้องตรวจ `reservationId` และ `buyerId` ด้วย เพราะสถานะ `reserved` อย่างเดียว
-ไม่บอกว่าเป็นการจองรอบไหน หาก request รอบเก่ามาช้า มันจะไม่สามารถปลดล็อกของผู้ซื้อรอบใหม่ได้
-
-**Teach-back:** ถ้า buyer A หมดเวลาแล้ว buyer B จองต่อ เหตุใดคำสั่ง release ของ A จึงต้องมี
-`reservationId` แทนที่จะตรวจเพียง `status = reserved`?
+**Teach-back:** เพราะเหตุใด `UPDATE product SET status='available' WHERE id=?` จึงอันตรายกว่า
+`UPDATE ... WHERE id=? AND reservation_id=?` เมื่อมี retry หรือ worker ทำงานพร้อมกัน?

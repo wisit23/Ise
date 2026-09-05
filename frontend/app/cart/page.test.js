@@ -1,45 +1,22 @@
-import { act, render, screen } from "@testing-library/react";
-import CartPage from "./page";
-import { apiFetch } from "../../lib/api";
+import { isReservationExpired, reservationCountdown } from "./page";
 
-jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
-}));
+test("shows the persisted reservation countdown and detects expiry", () => {
+  const order = { reservationExpiresAt: "2026-08-10T12:10:00.000Z" };
 
-jest.mock("../../components/NavBar", () => () => <nav />);
-jest.mock("../../components/Footer", () => () => <footer />);
-jest.mock("../../lib/auth", () => ({ getAccessToken: () => "token" }));
-jest.mock("../../lib/api", () => ({ apiFetch: jest.fn() }));
+  expect(
+    reservationCountdown(order, new Date("2026-08-10T12:00:30.000Z").getTime()),
+  ).toBe("9:30");
+  expect(
+    isReservationExpired(order, new Date("2026-08-10T12:09:59.000Z").getTime()),
+  ).toBe(false);
+  expect(
+    isReservationExpired(order, new Date("2026-08-10T12:10:00.000Z").getTime()),
+  ).toBe(true);
+});
 
-describe("CartPage", () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date("2026-08-26T00:00:00.000Z"));
-    apiFetch.mockResolvedValue({
-      items: [
-        {
-          id: "order-1",
-          productTitle: "สินค้าเดโม",
-          price: 199,
-          createdAt: "2026-08-26T00:00:00.000Z",
-          reservationExpiresAt: "2026-08-26T00:09:05.000Z",
-        },
-      ],
-    });
-  });
+test("keeps legacy cart rows without an expiry usable", () => {
+  const legacyOrder = { reservationExpiresAt: null };
 
-  afterEach(() => jest.useRealTimers());
-
-  it("shows the live time remaining from the reservation expiry", async () => {
-    render(<CartPage />);
-
-    expect(
-      await screen.findByText("เหลือเวลาชำระเงิน 9:05 นาที"),
-    ).toBeInTheDocument();
-
-    act(() => jest.advanceTimersByTime(1000));
-    expect(
-      await screen.findByText("เหลือเวลาชำระเงิน 9:04 นาที"),
-    ).toBeInTheDocument();
-  });
+  expect(isReservationExpired(legacyOrder, Date.now())).toBe(false);
+  expect(reservationCountdown(legacyOrder, Date.now())).toBeNull();
 });

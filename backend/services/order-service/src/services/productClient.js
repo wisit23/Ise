@@ -6,57 +6,89 @@ const PRODUCT_SERVICE_URL =
   process.env.PRODUCT_SERVICE_URL || "http://product-service:3002";
 const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 
-async function reservationRequest(path, { method, buyerId }) {
+async function getProduct(productId) {
+  let res;
+  try {
+    res = await fetch(`${PRODUCT_SERVICE_URL}/${productId}`);
+  } catch {
+    throw new AppError(502, "product-service is unreachable");
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) throw new AppError(502, "product-service returned an error");
+  return res.json();
+}
+
+async function reservationRequest(path, options, fallbackMessage) {
   let res;
   try {
     res = await fetch(`${PRODUCT_SERVICE_URL}${path}`, {
-      method,
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-token": INTERNAL_TOKEN,
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new AppError(502, "product-service is unreachable");
+  }
+
+  const data = res.status === 204 ? null : await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new AppError(
+      res.status >= 400 && res.status < 500 ? res.status : 502,
+      data?.error || fallbackMessage,
+    );
+  }
+  return data;
+}
+
+function reserveProduct(productId, buyerId) {
+  return reservationRequest(
+    `/internal/products/${productId}/reservations`,
+    { method: "POST", body: JSON.stringify({ buyerId }) },
+    "failed to reserve product",
+  );
+}
+
+function releaseProductReservation(productId, reservationId) {
+  return reservationRequest(
+    `/internal/products/${productId}/reservations/${reservationId}`,
+    { method: "DELETE" },
+    "failed to release product reservation",
+  );
+}
+
+function completeProductReservation(productId, reservationId) {
+  return reservationRequest(
+    `/internal/products/${productId}/reservations/${reservationId}/complete`,
+    { method: "PATCH" },
+    "failed to complete product reservation",
+  );
+}
+
+async function setProductStatus(productId, status) {
+  let res;
+  try {
+    res = await fetch(`${PRODUCT_SERVICE_URL}/${productId}/internal-status`, {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         "x-internal-token": INTERNAL_TOKEN,
       },
-      body: JSON.stringify({ buyerId }),
+      body: JSON.stringify({ status }),
     });
   } catch {
-    throw new AppError(503, "product-service is unreachable");
+    throw new AppError(502, "product-service is unreachable");
   }
-
-  if (res.status === 404) throw new AppError(404, "product not found");
-  if (res.status === 409) {
-    const body = await res.json().catch(() => ({}));
-    throw new AppError(409, body.error || "product is already reserved");
-  }
-  if (res.status === 400) {
-    const body = await res.json().catch(() => ({}));
-    throw new AppError(400, body.error || "invalid reservation request");
-  }
-  if (!res.ok) throw new AppError(503, "product-service returned an error");
-  return res.status === 204 ? null : res.json();
-}
-
-function reserveProduct(productId, buyerId) {
-  return reservationRequest(`/${productId}/reservations`, {
-    method: "POST",
-    buyerId,
-  });
-}
-
-function releaseReservation(productId, reservationId, buyerId) {
-  return reservationRequest(`/${productId}/reservations/${reservationId}`, {
-    method: "DELETE",
-    buyerId,
-  });
-}
-
-function confirmReservation(productId, reservationId, buyerId) {
-  return reservationRequest(
-    `/${productId}/reservations/${reservationId}/confirm`,
-    { method: "POST", buyerId },
-  );
+  if (!res.ok) throw new AppError(502, "failed to update product status");
+  return res.json();
 }
 
 module.exports = {
+  getProduct,
   reserveProduct,
-  releaseReservation,
-  confirmReservation,
+  releaseProductReservation,
+  completeProductReservation,
+  setProductStatus,
 };

@@ -20,18 +20,18 @@ Source: [`auth-service.prisma`](./auth-service.prisma)
 
 ### `users`
 
-| Column        | Type        | Constraints                  | Notes                          |
-| ------------- | ----------- | ---------------------------- | ------------------------------ |
-| id            | uuid        | PK, default `uuid()`         |                                |
-| email         | text        | unique, not null             |                                |
-| password_hash | text        | not null                     | bcrypt hash                    |
-| f_name        | text        | not null                     | ER: `FName`                    |
-| l_name        | text        | not null                     | ER: `LName`                    |
-| phone         | text        | nullable                     |                                |
-| role          | enum `Role` | not null, default `BUYER`    | `BUYER` \| `SELLER` \| `ADMIN` |
-| status        | text        | not null, default `'ACTIVE'` |                                |
-| created_at    | timestamp   | not null, default `now()`    |                                |
-| updated_at    | timestamp   | not null, auto-update        |                                |
+| Column        | Type        | Constraints                  | Notes                                         |
+| ------------- | ----------- | ---------------------------- | --------------------------------------------- |
+| id            | uuid        | PK, default `uuid()`         |                                               |
+| email         | text        | unique, not null             |                                               |
+| password_hash | text        | not null                     | bcrypt hash                                   |
+| f_name        | text        | not null                     | ER: `FName`                                   |
+| l_name        | text        | not null                     | ER: `LName`                                   |
+| phone         | text        | nullable                     |                                               |
+| role          | enum `Role` | not null, default `BUYER`    | `BUYER` \| `SELLER` \| `ADMIN` \| `EXECUTIVE` |
+| status        | text        | not null, default `'ACTIVE'` |                                               |
+| created_at    | timestamp   | not null, default `now()`    |                                               |
+| updated_at    | timestamp   | not null, auto-update        |                                               |
 
 Relations: has one `buyer_profiles`, one `seller_profiles`, many `login_logs`,
 many `refresh_tokens`, many `reports` (as reporter).
@@ -102,7 +102,7 @@ No submission endpoint yet — table only, per the "no ER table gets cut" rule.
 
 | Enum           | Values                                      |
 | -------------- | ------------------------------------------- |
-| `Role`         | `BUYER`, `SELLER`, `ADMIN`                  |
+| `Role`         | `BUYER`, `SELLER`, `ADMIN`, `EXECUTIVE`     |
 | `KycStatus`    | `NONE`, `PENDING`, `VERIFIED`, `REJECTED`   |
 | `ReportStatus` | `OPEN`, `REVIEWED`, `ACTIONED`, `DISMISSED` |
 
@@ -309,15 +309,15 @@ Source: [`review-service.prisma`](../backend/services/review-service/prisma/sche
 
 ### `reviews`
 
-| Column     | Type      | Constraints                | Notes                                                             |
-| ---------- | --------- | --------------------------- | -------------------------------------------------------------------- |
-| id         | uuid      | PK, default `uuid()`        |                                                                       |
-| order_id   | text      | unique, not null            | no FK — owned by `order-service`; one review per completed order     |
-| buyer_id   | text      | not null                    | no FK — owned by `auth-service`                                      |
-| seller_id  | text      | not null, indexed           | no FK — owned by `auth-service`                                      |
-| rating     | int       | not null                    | 1–5, validated at the API layer                                      |
-| comment    | text      | not null, default `''`      | truncated to 1000 chars at write time                                |
-| created_at | timestamp | not null, default `now()`   |                                                                       |
+| Column     | Type      | Constraints               | Notes                                                            |
+| ---------- | --------- | ------------------------- | ---------------------------------------------------------------- |
+| id         | uuid      | PK, default `uuid()`      |                                                                  |
+| order_id   | text      | unique, not null          | no FK — owned by `order-service`; one review per completed order |
+| buyer_id   | text      | not null                  | no FK — owned by `auth-service`                                  |
+| seller_id  | text      | not null, indexed         | no FK — owned by `auth-service`                                  |
+| rating     | int       | not null                  | 1–5, validated at the API layer                                  |
+| comment    | text      | not null, default `''`    | truncated to 1000 chars at write time                            |
+| created_at | timestamp | not null, default `now()` |                                                                  |
 
 Not in the original ER diagram at all — added because second-hand listings sell exactly once, so
 a review rates the **seller** (the party the buyer keeps dealing with across purchases), not the

@@ -41,37 +41,41 @@ model Product {
   description          String    @default("")
   price                Int
   category             String
+  brand                String    @default("")
   condition            String    @default("Good")
   tags                 String[]
   location             String    @default("")
   size                 String    @default("Free size")
   status               String    @default("available")
-  reservedBy           String?   @map("reserved_by")
+  // BUY-xxx: a cart reservation holds the listing for 10 minutes; the expiry
+  // worker in features/reservations releases it when the clock runs out.
   reservationId        String?   @unique @map("reservation_id")
+  reservedBy           String?   @map("reserved_by")
   reservationExpiresAt DateTime? @map("reservation_expires_at")
+  // ADM-003: set when Admin removes a listing via POST /internal/moderation/:id/remove.
+  // preRemovalStatus remembers what `status` was before removal so restore can
+  // put the listing back where it actually was (not force it to "available").
+  moderatedAt          DateTime? @map("moderated_at")
+  moderationReason     String?   @map("moderation_reason")
+  preRemovalStatus     String?   @map("pre_removal_status")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  // Denormalized concat of title/description/category/condition/location/
+  // Denormalized concat of title/description/category/brand/condition/location/
   // size/tags, kept in sync by a DB trigger (see prisma/seed.js — Postgres
   // can't use a native generated column here because array_to_string() is
   // STABLE, not IMMUTABLE). This is the one field search() matches against.
-  searchText String @default("") @map("search_text")
-
-  // Weighted PostgreSQL full-text document maintained by the same trigger as
-  // search_text. `simple` preserves product names/brands without stemming;
-  // pg_trgm remains the fallback for Thai substrings and misspellings.
-  searchVector Unsupported("tsvector")? @map("search_vector")
+  searchText  String   @default("") @map("search_text")
 
   photos      Photo[]
   videos      Video[]
   reviewClips ProductVideo[]
+  auction     AuctionItem?
 
   @@index([sellerId])
   @@index([status, category])
-  @@index([status, reservationExpiresAt])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
-  @@index([searchVector], type: Gin)
+  @@index([status, reservationExpiresAt])
   @@map("products")
 }
 
@@ -144,9 +148,89 @@ model ProductVideo {
   createdAt   DateTime @default(now()) @map("created_at")
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  choices SwipeChoice[]
 
   @@index([productId])
   @@index([sellerId])
   @@index([createdAt])
   @@map("product_videos")
+}
+
+// UR-11 "Swipe-to-Choose": a buyer marking one swipe card as interesting.
+// Deliberately separate from Bid below — choosing a card just bookmarks it
+// for later, it is not itself a bid and does not require an open auction.
+model SwipeChoice {
+  id             String   @id @default(uuid())
+  productVideoId String   @map("product_video_id")
+  userId         String   @map("user_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  productVideo ProductVideo @relation(fields: [productVideoId], references: [id], onDelete: Cascade)
+
+  // One choice per user per card — swiping again just confirms, doesn't duplicate.
+  @@unique([productVideoId, userId])
+  @@index([userId])
+  @@map("swipe_choices")
+}
+
+// Not in the original ER — Marketing (MKT-005) requirement, Seller/Product
+// owned. One Product goes through at most one auction at a time; Marketing
+// schedules it, Admin approves it, Seller sets the starting price/increment,
+// Buyers bid.
+enum AuctionStatus {
+  draft
+  pending_approval
+  rejected
+  approved
+  scheduled
+  open
+  closed
+  cancelled
+}
+
+model AuctionItem {
+  id                String        @id @default(uuid())
+  productId         String        @unique @map("product_id")
+  sellerId          String        @map("seller_id")
+  status            AuctionStatus @default(draft)
+  // Seller-owned pricing (see MKT/marketing decision log: Seller sets these,
+  // not Marketing — Marketing only controls the schedule).
+  startingPrice     Int           @map("starting_price")
+  bidIncrement      Int           @map("bid_increment")
+  // Marketing-owned schedule.
+  scheduledStartAt  DateTime?     @map("scheduled_start_at")
+  scheduledEndAt    DateTime?     @map("scheduled_end_at")
+  openedAt          DateTime?     @map("opened_at")
+  closedAt          DateTime?     @map("closed_at")
+  approvedBy        String?       @map("approved_by")
+  approvedAt        DateTime?     @map("approved_at")
+  winningBidId      String?       @unique @map("winning_bid_id")
+  // Order created in order-service once the auction closes with a winner —
+  // read via provider contract, never a cross-service DB read.
+  winningOrderId    String?       @map("winning_order_id")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  bids    Bid[]   @relation("AuctionBids")
+
+  @@index([sellerId])
+  @@index([status])
+  @@map("auction_items")
+}
+
+model Bid {
+  id             String      @id @default(uuid())
+  auctionId      String      @map("auction_id")
+  bidderId       String      @map("bidder_id")
+  amount         Int
+  // Client-supplied key so a retried request never creates a second bid.
+  idempotencyKey String      @unique @map("idempotency_key")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  auction AuctionItem @relation("AuctionBids", fields: [auctionId], references: [id], onDelete: Cascade)
+
+  @@index([auctionId, amount])
+  @@index([bidderId])
+  @@map("bids")
 }

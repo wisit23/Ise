@@ -1,11 +1,33 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { mediaUrl } from "../../lib/api";
+import { apiFetch, mediaUrl } from "../../lib/api";
+import { getAccessToken } from "../../lib/auth";
 
 export default function SwipeVideoCard({ video, isActive }) {
   const videoRef = useRef(null);
+  const [chosen, setChosen] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+
+  async function handleChoose() {
+    if (chosen || choosing) return;
+    if (!getAccessToken()) {
+      window.location.href = "/login";
+      return;
+    }
+    setChoosing(true);
+    try {
+      await apiFetch(`/api/products/videos/${video.id}/choose`, {
+        method: "POST",
+      });
+      setChosen(true);
+    } catch {
+      // Swallow — the button just stays clickable so the user can retry.
+    } finally {
+      setChoosing(false);
+    }
+  }
 
   // Only the visible clip plays. Pausing off-screen clips avoids decoding many
   // videos at once when the feed contains a full page of results.
@@ -51,17 +73,34 @@ export default function SwipeVideoCard({ video, isActive }) {
           </p>
         )}
 
-        {video.product && (
-          <Link
-            href={`/products/${video.productId}`}
-            className="inline-block rounded-lg bg-emerald-600 px-6 py-2.5 font-bold text-white shadow-md transition hover:bg-emerald-700"
+        <div className="flex items-center gap-3">
+          {video.product && (
+            <Link
+              href={`/products/${video.productId}`}
+              className="inline-block rounded-lg bg-emerald-600 px-6 py-2.5 font-bold text-white shadow-md transition hover:bg-emerald-700"
+            >
+              ดูรายละเอียดสินค้า
+              {video.product.price
+                ? ` (฿${video.product.price.toLocaleString("th-TH")})`
+                : ""}
+            </Link>
+          )}
+
+          <button
+            type="button"
+            onClick={handleChoose}
+            disabled={choosing}
+            aria-pressed={chosen}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl shadow-md transition disabled:cursor-not-allowed disabled:opacity-60 ${
+              chosen
+                ? "bg-rose-600 text-white"
+                : "bg-white/90 text-rose-600 hover:bg-white"
+            }`}
+            aria-label={chosen ? "บันทึกไว้แล้ว" : "สนใจสินค้านี้"}
           >
-            ดูรายละเอียดสินค้า
-            {video.product.price
-              ? ` (฿${video.product.price.toLocaleString("th-TH")})`
-              : ""}
-          </Link>
-        )}
+            {chosen ? "♥" : "♡"}
+          </button>
+        </div>
       </div>
     </article>
   );

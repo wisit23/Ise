@@ -7,10 +7,28 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Legacy single-role column on User. Kept in sync with RoleCode below —
+// CUSTOMER_SERVICE is the one name for support staff across every service
+// (support-service's AGENT_ROLES, permissions.js, and the seeds all agree).
 enum Role {
   BUYER
   SELLER
   ADMIN
+  MARKETING
+  CUSTOMER_SERVICE
+  EXECUTIVE
+}
+
+// Functional multi-role catalog (ADM-001). `Role` above stays as the legacy
+// single-role column on User for backward compatibility; UserRole is the
+// source of truth once a user has any row here — see authService.getUserRoles.
+enum RoleCode {
+  BUYER
+  SELLER
+  CUSTOMER_SERVICE
+  ADMIN
+  MARKETING
+  EXECUTIVE
 }
 
 enum KycStatus {
@@ -39,11 +57,13 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  buyerProfile  BuyerProfile?
-  sellerProfile SellerProfile?
-  loginLogs     LoginLog[]
-  refreshTokens RefreshToken[]
-  reports       Report[]
+  buyerProfile    BuyerProfile?
+  sellerProfile   SellerProfile?
+  loginLogs       LoginLog[]
+  refreshTokens   RefreshToken[]
+  reports         Report[]
+  roles           UserRole[]
+  kycApplications KycApplication[]
 
   @@map("users")
 }
@@ -59,15 +79,19 @@ model BuyerProfile {
   @@map("buyer_profiles")
 }
 
-// ER: Seller — shop info + KYC fields (KYC upload/verification flow lands in a later phase).
+// ER: Seller — shop info + KYC fields.
 model SellerProfile {
   userId         String    @id @map("user_id")
   user           User      @relation(fields: [userId], references: [id])
   shopName       String    @map("shop_name")
   idCardNumber   String?   @map("id_card_number")
+  // Return/shipping address collected during seller verification.
+  address        String?
   bankAccount    String?   @map("bank_account")
   kycStatus      KycStatus @default(NONE) @map("kyc_status")
-  kycDocumentUrl String?   @map("kyc_document_url")
+  // Private storage key for the latest submitted ID card photo — never a
+  // public URL, same reasoning as KycApplication.storageKey below.
+  kycStorageKey  String?   @map("kyc_storage_key")
   verifiedAt     DateTime? @map("verified_at")
 
   @@map("seller_profiles")
@@ -98,15 +122,91 @@ model RefreshToken {
 }
 
 // ER: Reports — table created now per plan (no tables cut from ER); report/moderation UI is a later phase.
+// ADM-003 extension: reviewedAt/reviewedBy/actionTaken track the
+// OPEN -> REVIEWED -> ACTIONED|DISMISSED lifecycle so a decision is never lost
+// once made (append-only AdminAudit below records the same fact independently).
 model Report {
-  id         String       @id @default(uuid())
-  reporterId String       @map("reporter_id")
-  reporter   User         @relation(fields: [reporterId], references: [id])
-  targetId   String?      @map("target_id")
-  productId  String?      @map("product_id")
-  reason     String
-  status     ReportStatus @default(OPEN)
-  reportedAt DateTime     @default(now()) @map("reported_at")
+  id          String       @id @default(uuid())
+  reporterId  String       @map("reporter_id")
+  reporter    User         @relation(fields: [reporterId], references: [id])
+  targetId    String?      @map("target_id")
+  productId   String?      @map("product_id")
+  reason      String
+  status      ReportStatus @default(OPEN)
+  reportedAt  DateTime     @default(now()) @map("reported_at")
+  reviewedAt  DateTime?    @map("reviewed_at")
+  reviewedBy  String?      @map("reviewed_by")
+  actionTaken String?      @map("action_taken")
 
   @@map("reports")
+}
+
+// ADM-003: append-only log of every privileged Admin action (suspend/restore,
+// report review/action/dismiss). Never updated or deleted — see decision.md
+// ADM-DEC-003 (evidence must persist in real PostgreSQL).
+model AdminAudit {
+  id        String   @id @default(uuid())
+  actorId   String   @map("actor_id")
+  action    String
+  targetId  String   @map("target_id")
+  reason    String
+  requestId String?  @map("request_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([targetId])
+  @@map("admin_audits")
+}
+
+// ADM-005: idempotency record for a bounded batch run — a replayed call with
+// the same idempotencyKey returns these stored `results` instead of
+// re-executing (so a retried network call can't double-suspend/double-decide).
+// `results` is a JSON snapshot of the batch summary (see bulkActionService).
+model BulkActionRun {
+  id             String   @id @default(uuid())
+  idempotencyKey String   @unique @map("idempotency_key")
+  actorId        String   @map("actor_id")
+  action         String
+  reason         String
+  requestedIds   String[] @map("requested_ids")
+  results        Json
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("bulk_action_runs")
+}
+
+// ADM-001: explicit role grants. A user with zero rows here still resolves
+// functionally via the legacy `role` column (see authService.getUserRoles) —
+// rows only start existing once an admin assigns/removes a role for that user.
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  role      RoleCode
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, role])
+  @@map("user_roles")
+}
+
+// ADM-002: one row per Synthetic KYC submission (including resubmissions after
+// a rejection) — kept separate from SellerProfile.kycStatus so decision history
+// and evidence persist even though SellerProfile only reflects the latest state.
+// `version` is an optimistic lock: decideKyc rejects a stale/duplicate decision.
+model KycApplication {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  // Private filesystem key, never a public URL — same convention as
+  // order-service's DisputeEvidence.storageKey (see evidenceStorage.js
+  // there). Served only through kycRoutes' authorized stream-through route.
+  storageKey  String    @map("storage_key")
+  fileType    String    @map("file_type")
+  status      KycStatus @default(PENDING)
+  reason      String?
+  version     Int       @default(1)
+  submittedAt DateTime  @default(now()) @map("submitted_at")
+  decidedAt   DateTime? @map("decided_at")
+  decidedBy   String?   @map("decided_by")
+
+  @@map("kyc_applications")
 }

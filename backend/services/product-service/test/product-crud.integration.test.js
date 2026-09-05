@@ -20,6 +20,7 @@ const TEST_TITLE_PREFIX = "mock-trade-integration-test ";
 const sellerToken = signAccessToken({
   sub: "int-test-seller",
   role: "SELLER",
+  kycVerified: true,
   displayName: "Trusted Integration Seller",
 });
 
@@ -60,6 +61,8 @@ test("product CRUD against a real database", async (t) => {
         media: [
           { url: "https://example.test/a.jpg", type: "image" },
           { url: "https://example.test/b.mp4", type: "video" },
+          { url: "https://example.test/c.jpg", type: "image" },
+          { url: "https://example.test/d.jpg", type: "image" },
         ],
       });
     assert.equal(createRes.status, 201);
@@ -70,6 +73,8 @@ test("product CRUD against a real database", async (t) => {
     assert.deepEqual(createRes.body.media, [
       { url: "https://example.test/a.jpg", type: "image" },
       { url: "https://example.test/b.mp4", type: "video" },
+      { url: "https://example.test/c.jpg", type: "image" },
+      { url: "https://example.test/d.jpg", type: "image" },
     ]);
 
     const id = createRes.body.id;
@@ -130,7 +135,9 @@ test("product CRUD against a real database", async (t) => {
       .get("/search")
       .query({ q: "nike running" });
     assert.equal(hybridRes.status, 200);
-    const titleIndex = hybridRes.body.items.findIndex((p) => p.id === titleMatch.id);
+    const titleIndex = hybridRes.body.items.findIndex(
+      (p) => p.id === titleMatch.id,
+    );
     const descriptionIndex = hybridRes.body.items.findIndex(
       (p) => p.id === descriptionMatch.id,
     );

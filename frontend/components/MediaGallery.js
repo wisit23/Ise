@@ -27,7 +27,7 @@ export default function MediaGallery({ media, alt }) {
             />
           )
         ) : (
-          <span className="text-gray-400">ไม่มีรูปภาพ</span>
+          <span className="text-gray-500">ไม่มีรูปภาพ</span>
         )}
       </div>
 

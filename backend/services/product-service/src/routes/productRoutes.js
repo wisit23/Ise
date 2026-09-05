@@ -1,8 +1,8 @@
 const { Router } = require("express");
-const { requireAuth } = require("@reloop/shared");
+const { requireAuth, requireInternalToken } = require("@reloop/shared");
 const productController = require("../controllers/productController");
 const productVideoRoutes = require("../features/product-videos/productVideoRoutes");
-const reservationRoutes = require("../features/reservations/reservationRoutes");
+const auctionRoutes = require("../features/auctions/auctionRoutes");
 
 const router = Router();
 
@@ -10,20 +10,28 @@ const router = Router();
 router.get("/feed", productController.feed);
 router.get("/search", productController.search);
 
-// Feature routes must come before "/:id" so Express does not read "videos"
-// as a product id.
+// Feature routes must come before "/:id" so Express does not read "videos"/
+// "auctions" as a product id.
 router.use("/videos", productVideoRoutes);
-router.use("/:id/reservations", reservationRoutes);
+router.use("/auctions", auctionRoutes);
 
 // Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);
+router.get("/admin/search", requireAuth, productController.adminSearch);
 router.get("/by-seller/:sellerId", productController.bySeller);
 router.get("/categories", productController.listCategories);
 router.get("/conditions", productController.listConditions);
+router.get("/filters", productController.listFilterOptions);
 
 router.get("/:id", productController.getOne);
 router.post("/", requireAuth, productController.create);
 router.patch("/:id", requireAuth, productController.update);
 router.delete("/:id", requireAuth, productController.remove);
+
+router.patch(
+  "/:id/internal-status",
+  requireInternalToken,
+  productController.markStatusInternal,
+);
 
 module.exports = router;

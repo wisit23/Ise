@@ -7,13 +7,18 @@ import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
 import MediaUploader from "../../components/MediaUploader";
 import TagInput from "../../components/TagInput";
+import Select from "../../components/ui/Select";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 import { fetchCategories, fetchConditions } from "../../lib/catalog";
 
+const MIN_MEDIA_COUNT = 4;
+const MAX_MEDIA_COUNT = 8;
+
 export default function SellPage() {
   const router = useRouter();
   const [user, setUser] = useState(undefined);
+  const [kycStatus, setKycStatus] = useState(null);
   const [categories, setCategories] = useState([]);
   const [conditions, setConditions] = useState([]);
   const [form, setForm] = useState({
@@ -21,6 +26,7 @@ export default function SellPage() {
     description: "",
     price: "",
     category: "",
+    brand: "",
     condition: "",
     size: "",
     location: "",
@@ -31,17 +37,24 @@ export default function SellPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!getAccessToken()) {
+    const token = getAccessToken();
+    if (!token) {
       router.push("/login");
       return;
     }
-    setUser(getStoredUser());
+    const stored = getStoredUser();
+    setUser(stored);
+    if (stored?.role === "SELLER") {
+      apiFetch("/api/auth/kyc/mine", { token })
+        .then((data) => setKycStatus(data.kycStatus))
+        .catch(() => setKycStatus("NONE"));
+    }
   }, [router]);
 
   useEffect(() => {
     fetchCategories()
       .then(setCategories)
-      .catch(() => {});
+      .catch((err) => console.error("โหลดหมวดหมู่ไม่สำเร็จ:", err));
     fetchConditions()
       .then((items) => {
         setConditions(items);
@@ -49,7 +62,7 @@ export default function SellPage() {
           prev.condition ? prev : { ...prev, condition: items[0]?.value || "" },
         );
       })
-      .catch(() => {});
+      .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, []);
 
   function update(field) {
@@ -64,6 +77,13 @@ export default function SellPage() {
       return;
     }
 
+    if (form.media.length < MIN_MEDIA_COUNT) {
+      setError(
+        `กรุณาอัปโหลดรูปภาพหรือวิดีโอสินค้าอย่างน้อย ${MIN_MEDIA_COUNT} รูป (ปัจจุบันมี ${form.media.length} รูป)`,
+      );
+      return;
+    }
+
     setError("");
     setLoading(true);
     try {
@@ -75,6 +95,7 @@ export default function SellPage() {
           description: form.description,
           price: Math.round(Number(form.price)),
           category: form.category,
+          brand: form.brand,
           condition: form.condition,
           size: form.size || "Free size",
           location: form.location,
@@ -90,7 +111,7 @@ export default function SellPage() {
     }
   }
 
-  if (user === undefined) {
+  if (user === undefined || (user?.role === "SELLER" && kycStatus === null)) {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
@@ -123,6 +144,29 @@ export default function SellPage() {
     );
   }
 
+  if (user.role === "SELLER" && kycStatus !== "VERIFIED") {
+    return (
+      <main className="flex min-h-screen flex-col bg-gray-50">
+        <NavBar />
+        <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
+          <h1 className="mb-4 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            {kycStatus === "PENDING"
+              ? "บัญชีนี้อยู่ระหว่างการตรวจสอบยืนยันตัวตนโดยแอดมิน กรุณารอผลก่อนจึงจะลงขายสินค้าได้"
+              : "บัญชีนี้ยังไม่ได้ยืนยันตัวตนผู้ขาย ต้องยืนยันตัวตนก่อนจึงจะลงขายสินค้าได้"}
+          </div>
+          <Link
+            href="/seller/onboarding"
+            className="mt-4 inline-block rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
+          >
+            ไปหน้ายืนยันตัวตนผู้ขาย
+          </Link>
+        </section>
+        <Footer />
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
       <NavBar />
@@ -138,6 +182,10 @@ export default function SellPage() {
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
               รูปภาพ / วิดีโอสินค้า
+              <span className="text-red-500">*</span>{" "}
+              <span className="font-normal text-gray-500">
+                (อย่างน้อย {MIN_MEDIA_COUNT} รูป, สูงสุด {MAX_MEDIA_COUNT} รูป)
+              </span>
             </label>
             <MediaUploader
               value={form.media}
@@ -189,20 +237,13 @@ export default function SellPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                สภาพสินค้า
-              </label>
-              <select
+              <Select
+                label="สภาพสินค้า"
                 value={form.condition}
                 onChange={update("condition")}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-              >
-                {conditions.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
+                options={conditions}
+                required
+              />
             </div>
           </div>
 
@@ -224,6 +265,18 @@ export default function SellPage() {
                   <option key={c} value={c} />
                 ))}
               </datalist>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                แบรนด์
+              </label>
+              <input
+                aria-label="แบรนด์"
+                placeholder="เช่น Nike, Uniqlo"
+                value={form.brand}
+                onChange={update("brand")}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">

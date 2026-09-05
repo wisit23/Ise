@@ -2,10 +2,13 @@ const prisma = require("./prismaClient");
 
 const VALID_STATUSES = [
   "pending",
+  "pending_payment",
   "confirmed",
   "shipped",
   "completed",
   "cancelled",
+  "disputed",
+  "refunded",
 ];
 
 function create(data) {
@@ -16,11 +19,22 @@ function findById(id) {
   return prisma.order.findUnique({ where: { id } });
 }
 
+function findByReservationId(reservationId) {
+  return prisma.order.findUnique({ where: { reservationId } });
+}
+
+function statusFilter(status) {
+  if (status === "pending_payment") {
+    return { in: ["pending", "pending_payment"] };
+  }
+  return status;
+}
+
 async function listByBuyer(buyerId, { status, skip, take } = {}) {
   const where = {
     buyerId,
-    ...(status ? { status } : {}),
-    ...(status === "pending"
+    ...(status ? { status: statusFilter(status) } : {}),
+    ...(status === "pending_payment"
       ? { reservationExpiresAt: { gt: new Date() } }
       : {}),
   };
@@ -37,7 +51,10 @@ async function listByBuyer(buyerId, { status, skip, take } = {}) {
 }
 
 async function listBySeller(sellerId, { status, skip, take } = {}) {
-  const where = { sellerId, ...(status ? { status } : {}) };
+  const where = {
+    sellerId,
+    ...(status ? { status: statusFilter(status) } : {}),
+  };
   const [items, total] = await Promise.all([
     prisma.order.findMany({
       where,
@@ -62,6 +79,7 @@ async function updateStatus(id, status) {
 module.exports = {
   create,
   findById,
+  findByReservationId,
   listByBuyer,
   listBySeller,
   updateStatus,

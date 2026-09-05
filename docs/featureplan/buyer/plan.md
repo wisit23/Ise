@@ -61,9 +61,9 @@
 **Interfaces:**
 
 - Consumes: Seller `ProductSummary` with `brand`, `size`, `condition`, `price`, `styleTags`
-- Produces: `GET /api/products/search?q&category&brand&size&condition&minPrice&maxPrice&page&limit`
+- Produces: `GET /api/products/search?q&category&style&brand&size&condition&minPrice&maxPrice&page&limit`
 
-- [ ] **Step 1: Write failing query contract test**
+- [x] **Step 1: Write failing query contract test**
 
 ```js
 test("search combines price, size and condition filters", async () => {
@@ -87,7 +87,7 @@ test("search combines price, size and condition filters", async () => {
 
 Expected: FAIL เพราะ query builder/fields ยังไม่รองรับครบ
 
-- [ ] **Step 3: Implement one query builder and Buyer controls**
+- [x] **Step 3: Implement one query builder and Buyer controls**
 
 ```js
 function buildCatalogWhere({
@@ -120,7 +120,7 @@ function buildCatalogWhere({
 }
 ```
 
-- [ ] **Step 4: Apply Product schema and run real-database/Jest tests, then lint**
+- [x] **Step 4: Apply Product schema and run real-database/Jest tests, then lint**
 
 Run:
 
@@ -158,7 +158,7 @@ git commit -m "feat(buyer): add catalog filters"
 - Produces: `DELETE /internal/products/:id/reservations/:reservationId`
 - Produces: Order fields `reservationId`, `reservationExpiresAt`, status `pending_payment`
 
-- [ ] **Step 1: Write failing 2-buyer concurrency test**
+- [x] **Step 1: Write failing 2-buyer concurrency test**
 
 ```js
 const attempts = await Promise.all([
@@ -168,13 +168,13 @@ const attempts = await Promise.all([
 assert.deepEqual(attempts.map((r) => r.status).sort(), [201, 409]);
 ```
 
-- [ ] **Step 2: Run the integration test with PostgreSQL**
+- [x] **Step 2: Run the integration test with PostgreSQL**
 
 Run: `$env:REQUIRE_INTEGRATION='1'; node --test backend/services/order-service/test/reservation-concurrency.integration.test.js`
 
 Expected: FAIL เพราะ Product ยัง update status แบบไม่ compare-and-set และไม่มี expiry
 
-- [ ] **Step 3: Implement compare-and-set and compensation**
+- [x] **Step 3: Implement compare-and-set and compensation**
 
 ```js
 const updated = await tx.product.updateMany({
@@ -191,15 +191,19 @@ if (updated.count !== 1) throw conflict("product is already reserved");
 `checkoutService.reserve()` ต้อง release reservation เดิมเมื่อสร้าง Order ไม่สำเร็จ และ worker
 ต้องคืน `available` เฉพาะ reservation ที่ expiry ตรงกันเพื่อไม่ปลด lock ใหม่
 
-- [ ] **Step 4: Verify concurrency, expiry and compensation**
+- [x] **Step 4: Verify concurrency, expiry and compensation**
 
 Expected: ผู้ชนะหนึ่งคน; restart แล้ว expiry ยังทำงาน; retry ไม่สร้าง Order ซ้ำ
 
-- [ ] **Step 5: Update docs and commit**
+Verified 2026-08-10: PostgreSQL integration ได้ `201/409` สำหรับ Buyer สองคน, retry คืน Order เดิม,
+stale release ไม่ปลด reservation ใหม่ และ Product Service process ที่เริ่มใหม่ sweep reservation
+หมดอายุได้ ส่วน compensation เมื่อ Order write ล้มเหลวผ่าน targeted unit test
+
+- [x] **Step 5: Update docs and commit**
 
 ```powershell
 git add backend/services/product-service backend/services/order-service frontend/app/cart docs/featureplan/buyer
-git commit -m "feat(buyer): make cart reservations concurrency safe"
+git commit -m "Reservation (10 Minute) & Cart"
 ```
 
 ### Task BUY-003: Mock Checkout and Fulfillment Tracking
