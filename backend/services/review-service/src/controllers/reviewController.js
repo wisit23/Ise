@@ -9,12 +9,33 @@ const {
 const reviewModel = require("../models/reviewModel");
 const orderClient = require("../services/orderClient");
 
+const MAX_REVIEW_MEDIA = 8;
+
 async function create(req, res, next) {
   try {
-    const { orderId, rating, comment } = req.body;
+    const { orderId, rating, comment, media } = req.body;
     if (!orderId) throw badRequest("orderId is required");
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       throw badRequest("rating must be a whole number from 1 to 5");
+    }
+
+    let normalizedMedia = [];
+    if (media !== undefined) {
+      if (!Array.isArray(media)) {
+        throw badRequest("media must be an array");
+      }
+      if (media.length > MAX_REVIEW_MEDIA) {
+        throw badRequest(
+          `media cannot contain more than ${MAX_REVIEW_MEDIA} items`,
+        );
+      }
+      normalizedMedia = media.map((item) => {
+        if (!item || typeof item.url !== "string" || !item.url.trim()) {
+          throw badRequest("each media item must have a valid url");
+        }
+        const type = item.type === "video" ? "video" : "image";
+        return { url: item.url.trim(), type };
+      });
     }
 
     const order = await orderClient.getOrder(orderId);
@@ -33,8 +54,10 @@ async function create(req, res, next) {
       orderId,
       buyerId: order.buyerId,
       sellerId: order.sellerId,
+      productId: order.productId || null,
       rating,
       comment: (comment || "").slice(0, 1000),
+      media: normalizedMedia,
     });
     res.status(201).json(review);
   } catch (err) {

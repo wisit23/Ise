@@ -18,14 +18,45 @@ generator client {
 // completed order (orderId is unique) so a buyer can't review the same
 // purchase twice, and can't review before the order is actually completed.
 model Review {
-  id        String   @id @default(uuid())
-  orderId   String   @unique @map("order_id")
-  buyerId   String   @map("buyer_id")
-  sellerId  String   @map("seller_id")
+  id        String        @id @default(uuid())
+  orderId   String        @unique @map("order_id")
+  buyerId   String        @map("buyer_id")
+  sellerId  String        @map("seller_id")
+  productId String?       @map("product_id")
   rating    Int
-  comment   String   @default("")
-  createdAt DateTime @default(now()) @map("created_at")
+  comment   String        @default("")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  photos ReviewPhoto[]
+  videos ReviewVideo[]
 
   @@index([sellerId])
+  @@index([productId])
   @@map("reviews")
+}
+
+model ReviewPhoto {
+  id        String   @id @default(uuid())
+  reviewId  String   @map("review_id")
+  url       String
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+  @@map("review_photos")
+}
+
+model ReviewVideo {
+  id        String   @id @default(uuid())
+  reviewId  String   @map("review_id")
+  url       String
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+  @@map("review_videos")
 }

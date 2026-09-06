@@ -48,3 +48,25 @@ test("POST /videos from a BUYER account is rejected with 403 before touching the
     .send({ videoUrl: "https://example.test/a.mp4", productId: "p1" });
   assert.equal(res.status, 403);
 });
+
+test("POST /uploads with no bearer token is rejected with 401", async () => {
+  const res = await request(app).post("/uploads");
+  assert.equal(res.status, 401);
+});
+
+test("POST /uploads allows BUYER to upload PNG images", async () => {
+  const fakePngBuffer = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  const res = await request(app)
+    .post("/uploads")
+    .set("Authorization", `Bearer ${buyerToken}`)
+    .attach("files", fakePngBuffer, "test-image.png");
+
+  assert.equal(res.status, 201);
+  assert.ok(Array.isArray(res.body.media));
+  assert.equal(res.body.media.length, 1);
+  assert.equal(res.body.media[0].type, "image");
+  assert.ok(res.body.media[0].url.endsWith(".png"));
+});

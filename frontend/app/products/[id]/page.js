@@ -6,6 +6,7 @@ import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import MediaGallery from "../../../components/MediaGallery";
+import ReviewMediaGallery from "../../../components/ReviewMediaGallery";
 import { StarDisplay } from "../../../components/StarRating";
 import Pagination from "../../../components/Pagination";
 import ReportModal from "../../../components/ReportModal";
@@ -368,7 +369,9 @@ export default function ProductDetailPage() {
           <p className="text-sm text-gray-500">กำลังโหลดรีวิว...</p>
         )}
         {!reviewsLoading && reviews.length === 0 && (
-          <p className="text-sm text-gray-500">ร้านค้านี้ยังไม่มีรีวิวจากผู้ซื้อ</p>
+          <p className="text-sm text-gray-500">
+            ร้านค้านี้ยังไม่มีรีวิวจากผู้ซื้อ
+          </p>
         )}
 
         <ul className="flex flex-col gap-3">
@@ -403,6 +406,11 @@ export default function ProductDetailPage() {
                   <p className="mt-2.5 pl-10.5 text-sm text-gray-700">
                     {r.comment}
                   </p>
+                )}
+                {r.media && r.media.length > 0 && (
+                  <div className="pl-10.5">
+                    <ReviewMediaGallery media={r.media} />
+                  </div>
                 )}
               </li>
             );
