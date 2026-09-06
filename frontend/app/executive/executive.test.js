@@ -69,7 +69,8 @@ describe("ExecutiveDashboardPage", () => {
 
     render(<ExecutiveDashboardPage />);
 
-    expect(await screen.findByText("฿100,000")).toBeInTheDocument();
+    const gmvElements = await screen.findAllByText("฿100,000");
+    expect(gmvElements.length).toBeGreaterThan(0);
     expect(screen.getByText("4")).toBeInTheDocument();
     expect(screen.getByText("14")).toBeInTheDocument();
   });
@@ -121,7 +122,8 @@ describe("ExecutiveDashboardPage", () => {
 
     render(<ExecutiveDashboardPage />);
 
-    expect(await screen.findByText("฿100,000")).toBeInTheDocument();
+    const gmvElements = await screen.findAllByText("฿100,000");
+    expect(gmvElements.length).toBeGreaterThan(0);
     const unavailable = await screen.findAllByText("ไม่พร้อมใช้งาน");
     expect(unavailable.length).toBeGreaterThan(0);
   });
