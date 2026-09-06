@@ -100,6 +100,9 @@ async function buildAccessTokenClaims(user) {
     roles,
     permissions,
     kycVerified: sellerProfile?.kycStatus === "VERIFIED",
+    // Full KYC status included so product-service can distinguish EXPIRED /
+    // INACTIVE_EXPIRED without a cross-service DB lookup on every request.
+    kycStatus: sellerProfile?.kycStatus ?? null,
     displayName: displayName || undefined,
   };
 }
@@ -125,30 +128,18 @@ async function issueTokenPair(user) {
   return { accessToken, refreshToken };
 }
 
-const REGISTERABLE_ROLES = ["BUYER", "SELLER"];
-
 async function register({
   email,
   password,
   firstName,
   lastName,
   phone,
-  role,
-  shopName,
 }) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
   }
   if (password.length < 8) {
     throw badRequest("password must be at least 8 characters");
-  }
-
-  const resolvedRole = role || "BUYER";
-  if (!REGISTERABLE_ROLES.includes(resolvedRole)) {
-    throw badRequest("role must be BUYER or SELLER");
-  }
-  if (resolvedRole === "SELLER" && !shopName) {
-    throw badRequest("shopName is required to register a seller account");
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -162,10 +153,7 @@ async function register({
       firstName,
       lastName,
       phone,
-      role: resolvedRole,
-      ...(resolvedRole === "SELLER"
-        ? { sellerProfile: { create: { shopName } } }
-        : {}),
+      role: "BUYER",
     },
   });
 

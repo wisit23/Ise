@@ -34,8 +34,10 @@ export default function StorePage() {
   const [reviewTotalPages, setReviewTotalPages] = useState(1);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [showReport, setShowReport] = useState(false);
+  const [user, setUser] = useState(undefined);
 
   useEffect(() => {
+    setUser(getStoredUser());
     apiFetch(`/api/auth/users/${sellerId}/public`)
       .then(setSeller)
       .catch(() => setSeller(null));
@@ -43,12 +45,26 @@ export default function StorePage() {
 
   useEffect(() => {
     setLoading(true);
+    const currentUser = getStoredUser();
+    const isOwner = currentUser?.id === sellerId;
+    const endpoint = isOwner
+      ? `/api/products/mine`
+      : `/api/products/by-seller/${sellerId}`;
+
     apiFetch(
-      `/api/products/by-seller/${sellerId}?page=${productPage}&limit=${PRODUCT_PAGE_SIZE}`,
+      `${endpoint}?page=${productPage}&limit=${PRODUCT_PAGE_SIZE}`,
     )
       .then((data) => {
-        setItems(data.items);
-        setProductTotal(data.total);
+        let itemsToDisplay = data.items;
+        // The 'mine' endpoint returns all statuses including sold and removed.
+        // For the store page, we only want to show available and hidden to the owner.
+        if (isOwner) {
+          itemsToDisplay = data.items.filter(
+            (p) => p.status === "available" || p.status === "hidden"
+          );
+        }
+        setItems(itemsToDisplay);
+        setProductTotal(isOwner ? itemsToDisplay.length : data.total);
         setProductTotalPages(data.totalPages);
       })
       .catch((err) => setError(err.message))
@@ -104,7 +120,8 @@ export default function StorePage() {
               </div>
             </div>
           </div>
-          {getStoredUser()?.id !== sellerId && (
+          {/* user is undefined during SSR, preventing mismatch */}
+          {user !== undefined && user?.id !== sellerId && (
             <button
               onClick={() => setShowReport(true)}
               className="shrink-0 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"

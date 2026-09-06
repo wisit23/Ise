@@ -29,6 +29,7 @@ const DISCOVERY_LINKS = [
 
 export default function NavBar() {
   const [user, setUser] = useState(null);
+  const [kycStatus, setKycStatus] = useState(null);
   const [cartCount, setCartCount] = useState(0);
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -41,6 +42,11 @@ export default function NavBar() {
 
     const token = getAccessToken();
     if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setKycStatus(payload.kycStatus || null);
+      } catch (e) {}
+
       apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
         .then((data) => setCartCount(data.total))
         .catch((err) =>
@@ -92,7 +98,7 @@ export default function NavBar() {
       : "/products";
   }
 
-  const isSeller = user?.role === "SELLER";
+  const isSeller = user?.role === "SELLER" && kycStatus === "VERIFIED";
   const isExecutive = user?.role === "EXECUTIVE";
   const isMarketing = user?.role === "MARKETING";
   const isSupportAgent =

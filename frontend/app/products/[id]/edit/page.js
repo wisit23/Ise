@@ -27,6 +27,7 @@ export default function EditProductPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -37,22 +38,42 @@ export default function EditProductPage() {
   }, [router]);
 
   useEffect(() => {
+    // First try the normal public endpoint (might 404 if gateway is not updated)
     apiFetch(`/api/products/${id}`)
       .then((p) => {
-        setProduct(p);
-        setForm({
-          title: p.title,
-          description: p.description || "",
-          price: String(p.price),
-          category: p.category,
-          condition: p.condition,
-          size: p.size || "",
-          location: p.location || "",
-          tags: p.tags || [],
-          media: p.media || [],
-        });
+        setupForm(p);
       })
-      .catch(() => setNotFound(true));
+      .catch((err) => {
+        // If it 404s, it might be hidden and the gateway stripped the token.
+        // Fallback: fetch from /mine which always works for owners.
+        apiFetch(`/api/products/mine?limit=100`)
+          .then((data) => {
+            const p = data.items.find((item) => item.id === id);
+            if (p) {
+              setupForm(p);
+            } else {
+              setNotFound(true);
+            }
+          })
+          .catch(() => setNotFound(true));
+      });
+
+    function setupForm(p) {
+      setProduct(p);
+      setIsHidden(p.status === "hidden");
+      setForm({
+        title: p.title,
+        description: p.description || "",
+        price: String(p.price),
+        category: p.category,
+        condition: p.condition,
+        size: p.size || "",
+        location: p.location || "",
+        tags: p.tags || [],
+        media: p.media || [],
+      });
+    }
+
     fetchCategories()
       .then(setCategories)
       .catch((err) => console.error("โหลดหมวดหมู่ไม่สำเร็จ:", err));
@@ -98,6 +119,51 @@ export default function EditProductPage() {
         },
       });
       router.push(`/products/${id}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm("คุณต้องการลบสินค้านี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้")) {
+      return;
+    }
+    const token = getAccessToken();
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      await apiFetch(`/api/products/${id}`, {
+        method: "DELETE",
+        token,
+      });
+      router.push(`/store/${user.id}`);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  }
+
+  async function handleToggleVisibility() {
+    const token = getAccessToken();
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const updated = await apiFetch(`/api/products/${id}/visibility`, {
+        method: "PATCH",
+        token,
+        body: { visible: isHidden }, // if currently hidden → make visible, vice versa
+      });
+      setIsHidden(updated.status === "hidden");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -155,6 +221,13 @@ export default function EditProductPage() {
         <p className="mb-6 text-sm text-gray-500">
           แก้ไขรายละเอียดสินค้าที่วางขายไปแล้ว
         </p>
+
+        {isHidden && (
+          <div className="mb-4 flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+            <span className="material-symbols-outlined text-[18px]">visibility_off</span>
+            <span>สินค้านี้ถูกซ่อนอยู่ — ผู้ซื้อจะไม่เห็นจนกว่าคุณจะกด "แสดงสินค้า"</span>
+          </div>
+        )}
         <form
           onSubmit={handleSubmit}
           className="flex flex-col gap-5 rounded-lg border border-gray-200 bg-white p-6"
@@ -276,10 +349,33 @@ export default function EditProductPage() {
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={handleDelete}
+              className="rounded-md border border-red-200 bg-red-50 px-4 py-2.5 text-center font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+            >
+              ลบสินค้า
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={handleToggleVisibility}
+              className={`flex items-center gap-1.5 rounded-md border px-4 py-2.5 text-center font-medium disabled:opacity-50 ${
+                isHidden
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  : "border-yellow-200 bg-yellow-50 text-yellow-800 hover:bg-yellow-100"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px] leading-none">
+                {isHidden ? "visibility" : "visibility_off"}
+              </span>
+              {isHidden ? "แสดงสินค้า" : "ซ่อนสินค้า"}
+            </button>
             <Link
               href={`/products/${id}`}
-              className="rounded-md border border-gray-300 px-4 py-2.5 text-center font-medium text-gray-700 hover:bg-gray-50"
+              className="flex items-center rounded-md border border-gray-300 px-4 py-2.5 text-center font-medium text-gray-700 hover:bg-gray-50"
             >
               ยกเลิก
             </Link>

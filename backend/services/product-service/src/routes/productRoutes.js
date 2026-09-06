@@ -1,5 +1,5 @@
 const { Router } = require("express");
-const { requireAuth, requireInternalToken } = require("@reloop/shared");
+const { requireAuth, requireInternalToken, fromGatewayHeaders } = require("@reloop/shared");
 const productController = require("../controllers/productController");
 const productVideoRoutes = require("../features/product-videos/productVideoRoutes");
 const auctionRoutes = require("../features/auctions/auctionRoutes");
@@ -18,12 +18,13 @@ router.use("/auctions", auctionRoutes);
 // Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);
 router.get("/admin/search", requireAuth, productController.adminSearch);
-router.get("/by-seller/:sellerId", productController.bySeller);
+router.get("/by-seller/:sellerId", fromGatewayHeaders, productController.bySeller);
 router.get("/categories", productController.listCategories);
 router.get("/conditions", productController.listConditions);
 
-router.get("/:id", productController.getOne);
+router.get("/:id", fromGatewayHeaders, productController.getOne);
 router.post("/", requireAuth, productController.create);
+router.patch("/:id/visibility", requireAuth, productController.toggleVisibility);
 router.patch("/:id", requireAuth, productController.update);
 router.delete("/:id", requireAuth, productController.remove);
 

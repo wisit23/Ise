@@ -8,7 +8,7 @@ const MAX_FILES = 8;
 /** Center-crops an image file to a square so every listing's gallery reads
  * as one consistent grid, regardless of what aspect ratio a seller's photo
  * came in at. Videos pass through untouched (can't crop those with Canvas). */
-function cropImageToSquare(file, maxSide = 1600) {
+function cropImageToSquare(file, maxSide = 2400) {
   if (!file.type.startsWith("image/")) {
     return Promise.resolve(file);
   }
@@ -49,6 +49,8 @@ function cropImageToSquare(file, maxSide = 1600) {
         side,
       );
 
+      // Use PNG for PNG files to preserve quality; JPEG with 0.97 quality for
+      // everything else — high enough that compression artefacts are invisible.
       const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
       canvas.toBlob(
         (blob) => {
@@ -64,7 +66,7 @@ function cropImageToSquare(file, maxSide = 1600) {
           );
         },
         mimeType,
-        0.92,
+        mimeType === "image/jpeg" ? 0.97 : undefined,
       );
     };
 
@@ -77,6 +79,9 @@ function cropImageToSquare(file, maxSide = 1600) {
   });
 }
 
+const MAX_FILE_SIZE_MB = 20;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
 export default function MediaUploader({ value, onChange, token }) {
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -88,6 +93,15 @@ export default function MediaUploader({ value, onChange, token }) {
     if (files.length === 0) return;
 
     setError("");
+
+    // Validate file sizes before doing any processing or upload.
+    const oversized = files.filter((f) => f.size > MAX_FILE_SIZE_BYTES);
+    if (oversized.length > 0) {
+      setError(
+        `ไฟล์ต่อไปนี้มีขนาดเกิน ${MAX_FILE_SIZE_MB} MB: ${oversized.map((f) => f.name).join(", ")}`,
+      );
+      return;
+    }
 
     const remaining = MAX_FILES - value.length;
     if (remaining <= 0) {
@@ -160,7 +174,7 @@ export default function MediaUploader({ value, onChange, token }) {
             : "ลากไฟล์มาวาง หรือคลิกเพื่อเลือกรูป/วิดีโอ"}
         </p>
         <p className="mt-1 text-xs text-gray-500">
-          JPG, PNG, WEBP, MP4, MOV — สูงสุด {MAX_FILES} ไฟล์
+          JPG, PNG, WEBP, MP4, MOV — สูงสุด {MAX_FILES} ไฟล์ ไฟล์ละไม่เกิน {MAX_FILE_SIZE_MB} MB
           (รูปภาพจะถูกครอบเป็นสี่เหลี่ยมจัตุรัสอัตโนมัติ)
         </p>
       </div>
