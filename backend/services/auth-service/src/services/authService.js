@@ -247,13 +247,13 @@ async function updateProfile(userId, { firstName, lastName, phone }) {
   return toPublicUser(user);
 }
 
-/** Public store-front info for a seller — no email/phone, only what a buyer needs to see. */
+/** Public profile info for a user or seller — no email/phone, only public display fields. */
 async function getPublicSellerProfile(userId) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { sellerProfile: true },
   });
-  if (!user || user.role !== "SELLER") throw notFound("seller not found");
+  if (!user) throw notFound("user not found");
 
   return {
     id: user.id,
