@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
+import MediaGallery from "../../../components/MediaGallery";
 import { apiFetch, mediaUrl } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
@@ -54,6 +55,24 @@ export default function AuctionDetailPage() {
     const interval = setInterval(load, 4000);
     return () => clearInterval(interval);
   }, [auction, load]);
+
+  // Auto-fill price input with the minimum valid next bid, while allowing buyer to edit.
+  useEffect(() => {
+    if (auction && auction.status === "open") {
+      const bids = auction.bids || [];
+      const highest = bids[0];
+      const min = highest
+        ? highest.amount + auction.bidIncrement
+        : auction.startingPrice;
+
+      setAmount((prev) => {
+        if (!prev || Number(prev) < min) {
+          return String(min);
+        }
+        return prev;
+      });
+    }
+  }, [auction]);
 
   async function handleBid(e) {
     e.preventDefault();
@@ -115,19 +134,24 @@ export default function AuctionDetailPage() {
     : auction.startingPrice;
   const isOpen = auction.status === "open";
   const isOwnAuction = user && user.id === auction.sellerId;
+  const isWinner = Boolean(user && highest && user.id === highest.bidderId);
+
+  const productMedia = [
+    ...(auction.product?.photos || []).map((p) => ({ ...p, type: "image" })),
+    ...(auction.product?.videos || []).map((v) => ({ ...v, type: "video" })),
+  ].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
       <NavBar />
       <section className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          {auction.product?.photos?.[0]?.url && (
-            <img
-              src={mediaUrl(auction.product.photos[0].url)}
-              alt={auction.product.title}
-              className="max-h-96 w-full object-contain bg-gray-50"
+          <div className="p-4 sm:p-6 bg-white border-b border-gray-100 max-w-md mx-auto">
+            <MediaGallery
+              media={productMedia}
+              alt={auction.product?.title || "ภาพสินค้าประมูล"}
             />
-          )}
+          </div>
 
           <div className="p-6">
             <div className="mb-3 flex items-start justify-between gap-3">
@@ -142,6 +166,11 @@ export default function AuctionDetailPage() {
                   เปิด {fmt(auction.scheduledStartAt)} · ปิด{" "}
                   {fmt(auction.scheduledEndAt)}
                 </p>
+                {auction.status === "open" && (
+                  <p className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 border border-amber-200/60">
+                    <span>⏱️ หากมีผู้เสนอราคาใน 5 นาทีสุดท้าย ระบบจะต่อเวลาออกไปอีก 5 นาทีอัตโนมัติ</span>
+                  </p>
+                )}
               </div>
               <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
                 {STATUS_LABEL[auction.status] || auction.status}
@@ -162,11 +191,35 @@ export default function AuctionDetailPage() {
             </div>
 
             {auction.status === "closed" && (
-              <p className="mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                {auction.winningBidId
-                  ? "ประมูลปิดแล้ว มีผู้ชนะการประมูลนี้"
-                  : "ประมูลปิดแล้วโดยไม่มีผู้เสนอราคา"}
-              </p>
+              <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm">
+                {auction.winningBidId ? (
+                  isWinner ? (
+                    <div>
+                      <div className="flex items-center gap-2 text-emerald-900 font-bold text-base">
+                        <span>🎉 ยินดีด้วย! คุณเป็นผู้ชนะการประมูลสินค้านี้</span>
+                      </div>
+                      <p className="mt-1 text-sm text-emerald-800">
+                        รายการสินค้านี้ถูกสร้างเป็นคำสั่งซื้อและส่งไปยังตะกร้าของคุณเรียบร้อยแล้ว ที่ราคา {baht(highest.amount)}
+                      </p>
+                      <Link
+                        href="/cart"
+                        className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 transition"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">shopping_cart_checkout</span>
+                        💳 ไปชำระเงินที่ตะกร้าสินค้า
+                      </Link>
+                    </div>
+                  ) : (
+                    <p className="text-sm font-semibold text-emerald-800">
+                      🏆 การประมูลปิดแล้ว (มีผู้ชนะการประมูลที่ราคา {baht(highest?.amount)})
+                    </p>
+                  )
+                ) : (
+                  <p className="text-sm font-medium text-gray-600">
+                    การประมูลปิดแล้วโดยไม่มีผู้เสนอราคา
+                  </p>
+                )}
+              </div>
             )}
 
             {isOwnAuction ? (
@@ -174,24 +227,32 @@ export default function AuctionDetailPage() {
                 นี่คือสินค้าของคุณเอง ไม่สามารถประมูลสินค้าของตัวเองได้
               </p>
             ) : isOpen ? (
-              <form onSubmit={handleBid} className="flex items-end gap-3">
+              <form onSubmit={handleBid} className="flex items-start gap-3">
                 <div className="flex-1">
-                  <label className="mb-1 block text-sm text-gray-700">
-                    เสนอราคา (บาท)
-                  </label>
+                  <div className="mb-1 flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700">
+                      เสนอราคา (บาท)
+                    </label>
+                    <span className="text-xs text-emerald-700 font-medium">
+                      ขั้นต่ำถัดไป: {baht(minNext)}
+                    </span>
+                  </div>
                   <input
                     type="number"
                     min={minNext}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder={`อย่างน้อย ${minNext}`}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                   />
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    * ใส่ราคาขั้นต่ำให้อัตโนมัติ สามารถพิมพ์เปลี่ยนเป็นจำนวนเงินที่ต้องการได้
+                  </p>
                 </div>
                 <button
                   type="submit"
                   disabled={bidding}
-                  className="rounded-md bg-emerald-600 px-6 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                  className="mt-6 rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 shadow-sm"
                 >
                   {bidding ? "กำลังส่ง..." : "เสนอราคา"}
                 </button>

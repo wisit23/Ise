@@ -66,6 +66,7 @@ async function requireProductOwner(productId, sellerId, action) {
   if (product.sellerId !== sellerId) {
     throw forbidden(`only the seller can ${action} this listing`);
   }
+  return product;
 }
 
 async function feed(req, res, next) {
@@ -187,7 +188,10 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    await requireProductOwner(req.params.id, req.userId, "edit");
+    const product = await requireProductOwner(req.params.id, req.userId, "edit");
+    if (product.status === "auction") {
+      throw forbidden("cannot edit a product that is currently in an auction");
+    }
     await requireKnownCondition(req.body.condition);
     if (req.body.media !== undefined) requireValidMediaCount(req.body.media);
     if (req.body.category !== undefined) {
@@ -204,7 +208,10 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    await requireProductOwner(req.params.id, req.userId, "remove");
+    const product = await requireProductOwner(req.params.id, req.userId, "remove");
+    if (product.status === "auction") {
+      throw forbidden("cannot remove a product that is currently in an auction");
+    }
     await productModel.remove(req.params.id);
     res.status(204).send();
   } catch (err) {

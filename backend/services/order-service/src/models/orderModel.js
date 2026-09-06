@@ -35,7 +35,13 @@ async function listByBuyer(buyerId, { status, skip, take } = {}) {
     buyerId,
     ...(status ? { status: statusFilter(status) } : {}),
     ...(status === "pending_payment"
-      ? { reservationExpiresAt: { gt: new Date() } }
+      ? {
+          OR: [
+            { reservationExpiresAt: { gt: new Date() } },
+            { auctionId: { not: null } },
+            { reservationExpiresAt: null },
+          ],
+        }
       : {}),
   };
   const [items, total] = await Promise.all([

@@ -47,3 +47,67 @@ Marketing เดิมถูกเสนอให้ตั้งราคาเ�
 เวลา (schedule/cancel) ส่วน Seller ตั้ง `startingPrice`/`bidIncrement` ตอน submit สิ่งนี้สอดคล้อง
 กับหลักการเดิมของ Feature นี้ที่ว่า **requirement owner ไม่จำเป็นต้อง own ทุกฟิลด์** (เหมือน Round 1
 ที่ `UR-11` ก็ไม่ใช่ Marketing owns ทุกอย่าง) — ดู `MKT-005` ใน `plan.md` และ `decision.md`
+
+## Round 5 — สินค้าประมูลต้องไม่ใช้สถานะ 'available' ปะปนกับสินค้าหน้าร้านทั่วไป
+
+เมื่อสร้างสินค้าเข้าสู่กระบวนการประมูล หากยังคงใช้ `status: "available"` ตัวสินค้าจะหลุดเข้าไปอยู่ใน Catalog ปกติ (ทั้งฟีดหน้าแรก `/feed`, ผลการค้นหา `/search` และหน้าร้านค้าของผู้ขาย `/store/:id`) ทำให้ลูกค้าเข้าใจผิดและสามารถกดสั่งซื้อผ่านระบบตะกร้าทั่วไปได้
+
+การแก้ปัญหาเชิงสถาปัตยกรรมคือแยกสถานะสินค้าประมูลเป็น `status: "auction"` ตั้งแต่ตอนสร้าง และบริหาร State Machine ร่วมกับ Auction Lifecycle (เปลี่ยนกลับเป็น `available` เมื่อปฏิเสธหรือยกเลิก หรือปิดโดยไม่มีผู้บิด) ซึ่งทำให้อัลกอริทึมฝั่ง Catalog ที่กรอง `status = "available"` สามารถคัดแยกสินค้าประมูลออกจากสินค้าทั่วไปได้โดยอัตโนมัติ ไม่ต้องแก้ Schema หลายตาราง
+
+**Teach-back:** ทำไมการกำหนดสถานะของ Entity ให้ตรงกับวงจรชีวิตจริง (Domain State) จึงปลอดภัยและลด Side Effect มากกว่าการพึ่งพา Frontend ซ่อนการแสดงผล?
+
+## Round 6 — Auction Rounds: Time-bounded Intake & Marketing Approval Ownership
+
+การเปิดให้ Seller ลงสินค้าประมูลอย่างอิสระโดยไม่มี "รอบ" ทำให้เกิดความกระจัดกระจายและไม่สามารถจัดแคมเปญกระตุ้นยอดขาย (FOMO / Event-based Engagement) ได้อย่างมีประสิทธิภาพ
+
+การแก้ปัญหาเชิงสถาปัตยกรรม:
+1. **Time-bounded Intake (Submission Window):** รวมการเปิดรับสินค้าเข้าเป็นอีเวนต์เดียว โดย Marketing ระบุทั้งช่วงเปิดรับสินค้า และช่วงเวลาประมูลจริงไว้ใน `AuctionRound`
+2. **Double Gating (Backend + Frontend):** ฝั่ง UI แสดง Countdown/Deadline และล็อกฟอร์มเมื่อหมดเวลา ส่วนฝั่ง API ตรวจสอบเวลาจริง (`now`) หากอยู่นอกช่วงเวลา จะปฏิเสธคำขอทันทีเพื่อป้องกันการยิงข้าม Interface
+3. **Decoupling from Admin:** โอนความรับผิดชอบในการตรวจรับสินค้าเข้าประมูลให้ Marketing ซึ่งเป็น Requirement Owner เพื่อลด Bottleneck และทำให้กระบวนการ Approve → Scheduled เกิดขึ้นได้ในคลิกเดียวโดยใช้เวลาที่ตั้งไว้ล่วงหน้าจากรอบประมูล
+
+**Teach-back:** การใช้ Event-driven / Round-based Architecture ดีกว่าการให้อิสระในการสร้างรายการแบบไร้ข้อจำกัดเวลาอย่างไรในเชิงธุรกิจและการจัดการทรัพยากรระบบ?
+
+## Round 7 — Anti-Sniping & Soft Close Mechanism
+
+ในระบบประมูลแบบดั้งเดิมที่มีกำหนดเวลาสิ้นสุดแบบตายตัว (Hard Cutoff) มักจะเกิดปัญหา "Auction Sniping" ซึ่งผู้ใช้อาจใช้บอตหรือแอบเคาะราคาในเสี้ยววินาทีสุดท้าย ทำให้ผู้ร่วมประมูลรายอื่นไม่สามารถตอบสนองได้ทัน ซึ่งส่งผลเสียต่อความเป็นธรรมและทำให้ผู้ขายเสียโอกาสได้ราคาสูงสุด
+
+การแก้ปัญหาเชิงสถาปัตยกรรม:
+1. **Dynamic Soft Close:** เมื่อมีการเคาะราคาในช่วง 5 นาทีสุดท้าย ระบบจะคำนวณและเลื่อน `scheduledEndAt` เพิ่มขึ้น 5 นาทีโดยอัตโนมัติ
+2. **Job Queue Synchronization:** เมื่อเวลาสิ้นสุดถูกเลื่อน ระบบต้อง reschedule งานปิดประมูลใน BullMQ ด้วยเวลาใหม่ทันที เพื่อให้งานเบื้องหลังปิดประมูลตรงกับเวลาจริง
+3. **Idempotency Safeguard:** ตรวจสอบให้แน่ใจว่าการส่งคำขอเคาะราคาซ้ำ (Retry request ด้วย idempotencyKey เดิม) จะไม่ทำให้เวลาถูกเลื่อนซ้ำซ้อน
+
+## Round 8 — Seed Script Resilience: Upsert by Unique Fields vs Fixed Primary Keys
+
+เมื่อระบบไมโครเซอร์วิสมี Seed script ที่รันอัตโนมัติตอน Container Startup หากเขียน `upsert` โดยอิงตาม Primary Key (`id`) เพียงอย่างเดียว แต่โมเดลในฐานข้อมูลมีฟิลด์อื่นที่เป็น Unique (`email`) อาจเกิดปัญหา **Unique Constraint Collision (`P2002`)**:
+
+```text
+Database มีอยู่แล้ว:  id = "e8d2-random", email = "marketing@example.com"
+Seed พยายาม upsert:  where: { id: "40000000-0001" }
+ผลลัพธ์:             Prisma ไม่เจอ id "40000000-0001" -> จึงสั่ง INSERT
+                    -> ชน Unique constraint บน email! -> Container พังทันที
+```
+
+การแก้ปัญหาเชิงสถาปัตยกรรม:
+1. **Dual-check Upsert Pattern:** ตรวจสอบจาก Unique Identifier เชิงธุรกิจ (`email`) ก่อนเสมอ หากมีอยู่แล้วให้ทำ `update` รหัสผ่าน, บทบาท และข้อมูลโปรไฟล์
+2. **Fallback to PK:** หากไม่พบค่อยตรวจตาม `id` และสร้างใหม่หากไม่พบทั้งคู่
+3. **Multi-role Alignment:** อัปเดตตารางเชื่อมโยงสิทธิ์ (`user_roles`) ให้สอดคล้องกับ `role` เสมอ เพื่อให้ Token Claims และ Permission Gating ทำงานได้อย่างถูกต้อง
+
+**Teach-back:** ทำไมการ `upsert` ข้อมูลตั้งต้น (Seed Data) ในฐานข้อมูลที่มีทั้ง Surrogate Key (UUID) และ Natural/Unique Key (Email) จึงไม่ควรยึดติดกับ Surrogate Key เพียงอย่างเดียว?
+
+## Round 9 — Media URL Resolution in Microservices & Static Assets (`mediaUrl` helper)
+
+ในระบบสถาปัตยกรรม Microservices ที่แยกส่วนระหว่าง Frontend Web App (Next.js บนพอร์ต 3000) และ API Gateway / Storage Backend (พอร์ต 8080):
+- ไฟล์มีเดียที่ถูกอัปโหลด (รูปภาพ/วิดีโอ) จะถูกจัดเก็บบน File Storage / Disk และบันทึกลงใน Database (PostgreSQL) เป็น Relative Path เสมอ เช่น `"/uploads/b08d8e8e-1c5a.jpg"` เพื่อให้ย้าย Domain หรือ Storage Provider ได้ง่ายโดยไม่ต้อง Migration ข้อมูลใน DB
+- เมื่อเขียนโค้ดแสดงผลในหน้าเว็บ หากนำค่าจาก Database ไปใส่ในแท็ก `<img src={coverImage} />` โดยตรง เบราว์เซอร์จะ Resolve เข้ากับ Origin ของหน้าเว็บเอง กลายเป็น `http://localhost:3000/uploads/...` ซึ่งเซิร์ฟเวอร์ Next.js ไม่มีโฟลเดอร์นี้ ทำให้เกิด HTTP 404 (ภาพไม่ขึ้น)
+- ในขณะที่ข้อมูล Seed ตัวอย่างมักใช้ Full External URL เช่น `https://images.unsplash.com/...` ซึ่งมี Domain ในตัว จึงแสดงผลได้ปกติ ทำให้การทดสอบด้วยข้อมูล Seed เพียงอย่างเดียวอาจตรวจไม่พบบั๊กนี้
+
+การแก้ปัญหาเชิงสถาปัตยกรรม:
+1. **Universal Media URL Helper (`mediaUrl`):** ใช้ฟังก์ชันตัวแปลงกลางที่ตรวจจับรูปแบบ URL:
+   - หากขึ้นต้นด้วย `http://` หรือ `https://` $\rightarrow$ ส่งคืน URL เดิมทันที
+   - หากขึ้นต้นด้วย `/uploads/...` $\rightarrow$ เติม Prefix `NEXT_PUBLIC_API_URL` (`http://localhost:8080`) ให้โดยอัตโนมัติ
+2. **Apply Uniformly:** นำ `mediaUrl()` ไปครอบให้กับรูปภาพทุกจุด (รูป Thumbnail ในตาราง, รูป Preview ในฟอร์มอัปโหลด, รูปการ์ดบนหน้ารวมบทความ, รูปภาพหน้าปกขนาดใหญ่ และรูปภาพที่แทรกใน Markdown)
+
+**Teach-back:** ทำไมจึงไม่ควรเก็บ Full URL ที่มีโดเมน (`http://localhost:8080/uploads/...`) ลงในฐานข้อมูลตรงๆ ตั้งแต่ตอนอัปโหลดภาพ?
+
+
+

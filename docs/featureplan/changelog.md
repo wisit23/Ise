@@ -132,3 +132,45 @@
 - Hero หน้าแรกมีพื้นและเส้นปิดของตัวเอง แยกโซนจาก Section ด้านล่าง
 - ผลตรวจ: `lint` ผ่าน, `format:check` ผ่าน, Frontend test 37/37, `next build` สำเร็จ,
   ตรวจบน Browser จริงกับ Docker Stack ทั้ง `/`, `/cart`, `/orders`, `/executive`
+
+## 2026-09-05 — Multi-Image Upload Fix, Auction Media Gallery & Auction Winner Checkout Flow
+
+- **Seller Multi-Image Upload Fix (`MediaUploader.js`):**
+  - แก้ไข JavaScript parameter passing ใน `files.map(cropImageToSquare)` ที่ส่ง `index` (0, 1, 2, 3) เข้าไปแทนที่ `maxSide` ทำให้รูปที่ 2, 3, 4 ถูกย่อเป็น 1x1, 2x2, 3x3 พิกเซลจนเบลอ
+  - ปรับเป็น `files.map((file) => cropImageToSquare(file))` และเพิ่ม Guard `maxSide >= 100` พร้อมซิงก์ภาพความละเอียดสูงเดิมกลับคืน
+- **Auction Media Gallery (`/auctions/[id]`):**
+  - ติดตั้งคอมโพเนนต์ `MediaGallery` ในหน้าประมูล แทนที่แท็ก `<img>` รูปแรกเดิม ทำให้ผู้ซื้อสามารถคลิก Thumbnails สลับดูรูปและวิดีโอของสินค้าประมูลได้ครบทุกรูป ปรับเป็น `object-contain` ไม่ถูกตัดขอบ
+- **Auction Winner Checkout Flow & Cart Bug Fix:**
+  - แก้ไข `order-service` (`listByBuyer` ใน `orderModel.js`): คำสั่งซื้อจากการประมูลมี `reservationExpiresAt = NULL` เดิมถูก SQL `WHERE reservation_expires_at > NOW()` คัดทิ้ง ทำให้ตะกร้าว่างเปล่า ปรับให้ดึงคำสั่งซื้อประมูล (`auctionId != null`) ขึ้นมาแสดงอย่างถูกต้อง
+  - ขยายระยะเวลาชำระเงินสำหรับสินค้าประมูลในตะกร้า (`/cart`) เป็น 24 ชั่วโมง พร้อมป้ายกำกับชัดเจนและปิดปุ่มยกเลิกป้องกันการกดพลาด
+  - ในหน้ารายละเอียดสินค้า (`/products/:id`) และหน้าประมูล (`/auctions/:id`): แสดงแบนเนอร์ยินดีกับผู้ชนะและปุ่มสีเขียว *"💳 ไปชำระเงินที่ตะกร้าสินค้า"*
+  - ในหน้าคำสั่งซื้อ (`/orders`): แสดงสถานะ *"ชนะประมูล · รอชำระเงิน"* พร้อมปุ่มลัดนำทางไปยังตะกร้า
+- **Auth Service Demo Seed & KYC Auto-Verify:**
+  - แก้ไข `auth-service/prisma/seed.js` ป้องกัน Prisma Error P2002 เมื่อมีอีเมลเดิมในระบบ และตั้งสถานะผู้ขายเดโมเป็น `VERIFIED` อัตโนมัติ
+- **Verification:** Frontend test 38/38 ผ่าน, API cart/order integration ตอบกลับถูกต้อง และรูปภาพแสดงผลคมชัดทุกรูป
+
+## 2026-09-06 — Marketing Knowledge Base & Educational Articles System (MKT-004 / UR-14 / FR-5.2.3)
+
+- **Requirement (`ST-MKT-05` / `UR-14` / `FR-5.2.3`):** พัฒนาระบบศูนย์ความรู้และบทความให้ความรู้ (Knowledge Base & Articles) เกี่ยวกับ second-hand fashion, การดูแลรักษาเสื้อผ้า (Care), สไตล์ (Styling) และความยั่งยืน (Sustainability) โดยกำหนดให้ Marketing เป็นผู้ดูแลและสร้างเนื้อหา และมีลิงก์เข้าชมบนแถบเมนูด้านบนของเว็บไซต์สำหรับผู้ใช้งานทั่วไป พร้อมอัลกอริทึมค้นหาแบบ Trigram ตาม baseline เดิมของระบบ
+- **Backend & Database (`reloop_product`):**
+  - เพิ่ม Model `Article` และ Enum `ArticleStatus` (`draft`, `published`, `archived`)
+  - ใช้ PostgreSQL GIN Trigram index (`pg_trgm`) พร้อม Database Trigger `articles_set_search_text()` อัปเดตข้อความค้นหาอัตโนมัติ
+  - ใช้ Search Ranking `GREATEST(word_similarity(q, search_text), similarity(q, search_text))` ร่วมกับ Substring Fallback `ILIKE` สอดคล้องตามมาตรฐานค้นหาเดิม (`MOCK-TRADE-011`)
+  - สร้าง API Public (`GET /api/products/articles`, `GET /:id`) และ Marketing (`GET /marketing/all`, `POST /`, `PUT /:id`, `DELETE /:id`) พร้อมตรวจสอบสิทธิ์ Role `MARKETING` / `ADMIN`
+  - อนุญาตสิทธิ์ `MARKETING` อัปโหลดภาพปกบทความผ่าน `uploadRoutes.js` และเปิด Public routes ใน Gateway
+- **Frontend Pages & Components:**
+  - เพิ่มเมนู "บทความ" (`/articles`) ใน `DISCOVERY_LINKS` บน Navbar
+  - สร้างหน้ารายการบทความ (`/articles`) รองรับการค้นหาแบบ Debounced Search, ฟิลเตอร์หมวดหมู่, และการ์ดแสดงเวลาอ่าน
+  - สร้างหน้ารายละเอียดบทความ (`/articles/[id]`) แสดงภาพปก, ผู้เขียน, วันที่, เนื้อหาที่จัดรูปแบบ และบทความแนะนำที่เกี่ยวข้อง
+  - สร้างแท็บ "จัดการบทความ" (`ArticlesSection`) ในแดชบอร์ด Marketing (`/marketing`) พร้อม KPI นับจำนวนบทความ, ตารางจัดการ, Modal สร้าง/แก้ไขบทความพร้อมอัปโหลดภาพปก, และ Dialog ยืนยันการลบ
+- **Verification:**
+  - Frontend Jest Tests: ผ่านครบ 12/12 test suites (41/41 tests passing)
+  - Next.js Production Build: คอมไพล์ผ่านสมบูรณ์ 24/24 static/dynamic pages
+  - Live Trigram Search: ทดสอบผ่าน Gateway ค้นหาคำภาษาไทยได้ผลลัพธ์แม่นยำ 100%
+
+## 2026-09-06 — Bug Fix: Media URL Resolution for Article Images
+
+- **Problem:** รูปภาพหน้าปกบทความที่ผู้ใช้งานอัปโหลดผ่านหน้าแดชบอร์ดการตลาดไม่แสดงผล (404) เนื่องจาก URL ถูกบันทึกเป็น Relative Path (`/uploads/...`) แต่หน้าเว็บไม่ได้ส่งผ่านตัวแปลง Origin ของ API Gateway
+- **Fix:** นำฟังก์ชัน `mediaUrl()` จาก `frontend/lib/api.js` มาครอบที่รูปภาพบทความทุกจุด (`ArticlesSection.js`, `articles/page.js`, `articles/[id]/page.js` และ Markdown renderer) ทำให้รูปภาพที่บันทึกบนเซิร์ฟเวอร์แสดงผลได้ถูกต้องและสอดคล้องกับระบบรูปภาพสินค้า
+- **Verification:** รูปภาพบทความที่อัปโหลดแสดงผลสมบูรณ์ทั้งในแดชบอร์ดและหน้ารายละเอียด และ Frontend Unit Tests ผ่านครบ 41/41 รายการ
+

@@ -3,6 +3,7 @@ const { requireAuth, requireInternalToken } = require("@reloop/shared");
 const productController = require("../controllers/productController");
 const productVideoRoutes = require("../features/product-videos/productVideoRoutes");
 const auctionRoutes = require("../features/auctions/auctionRoutes");
+const articleRoutes = require("./articleRoutes");
 
 const router = Router();
 
@@ -11,9 +12,10 @@ router.get("/feed", productController.feed);
 router.get("/search", productController.search);
 
 // Feature routes must come before "/:id" so Express does not read "videos"/
-// "auctions" as a product id.
+// "auctions"/"articles" as a product id.
 router.use("/videos", productVideoRoutes);
 router.use("/auctions", auctionRoutes);
+router.use("/articles", articleRoutes);
 
 // Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);

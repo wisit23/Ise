@@ -25,6 +25,7 @@ const PUBLIC_PATHS = [
   // schedule/bid all live on longer paths and stay gated by
   // product-service's own requireAuth.
   /^\/api\/products\/auctions\/[^/]+$/,
+  /^\/api\/products\/auctions\/rounds\/current$/,
   // Single-item browsing must stay open to guests; write/delete routes on the
   // same path are still gated by product-service's own requireAuth middleware.
   /^\/api\/products\/[^/]+$/,
@@ -36,6 +37,9 @@ const PUBLIC_PATHS = [
   // FAQ deflection (WF-10 step 2) must work for guests too; POST/PATCH on
   // this same path are still gated by support-service's own requireAuth.
   /^\/api\/support\/help(\/|$)/,
+  // Marketing & Community Articles (ST-MKT-05 / UR-14) must be browsable by guests;
+  // write/delete routes stay gated by product-service requireAuth/requireRole.
+  /^\/api\/products\/articles(\/|$)/,
 ];
 
 function isPublic(path) {

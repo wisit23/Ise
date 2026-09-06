@@ -71,3 +71,14 @@
 - ยืนยันด้วย Browser จริงด้วยบัญชี Demo Seller: ฟอร์ม Onboarding เรนเดอร์ครบและตัวนับหลัก
   บัตรประชาชนทำงาน, แดชบอร์ดแสดงยอดขายจริง Sparkline Charts และรายการสินค้าครบ
 - รายละเอียดเต็มและผลตรวจอยู่ที่ [`docs/featureplan/changelog.md`](../changelog.md) และ [`docs/progress.md`](../../progress.md) Task `UI-SYSTEM-001`; กติกา UI อยู่ที่ [`docs/ui-conventions.md`](../../ui-conventions.md)
+
+## 2026-09-05 — Bug Fix: Seller Multi-Image Upload Blurry (Map Parameter Bug) & KYC Readiness
+
+- **Bug Report:** ผู้ขายอัปโหลดรูปภาพหลายรูปพร้อมกันตอนลงขาย/ส่งเข้าประมูล (`MediaUploader.js`) พบว่ารูปแรกคมชัดปกติ แต่รูปที่ 2, 3, 4 ขึ้นเป็นบล็อกสีสี่เหลี่ยมเบลอๆ ความละเอียด 1x1, 2x2, 3x3 พิกเซล
+- **Root Cause:** ใน `frontend/components/MediaUploader.js` มีการเรียก `files.map(cropImageToSquare)` โดยที่ตัวฟังก์ชัน `cropImageToSquare(file, maxSide = 1600)` มีพารามิเตอร์ตัวที่สองคือ `maxSide` แต่ `Array.prototype.map` จะส่ง `(element, index)` เสมอ ทำให้รูปที่ 1, 2, 3 ได้รับ `maxSide` เป็น `1, 2, 3` ตามลำดับ Canvas จึงย่อภาพเป็นขนาด 1x1, 2x2, 3x3 พิกเซล
+- **Fix:**
+  - แก้ไขใน `MediaUploader.js` ให้เรียก `files.map((file) => cropImageToSquare(file))` อย่างชัดเจน
+  - เพิ่ม Fallback ให้ `maxSide` ต้องไม่ต่ำกว่า 100 พิกเซล หากน้อยกว่าจะใช้ 1600 เสมอ
+  - กู้คืนไฟล์ภาพความละเอียดสูงต้นฉบับของผู้ขายในโฟลเดอร์ `uploads/` เรียบร้อย
+  - อัปเดต `backend/services/auth-service/prisma/seed.js` ให้บัญชีผู้ขายเดโมทั้งหมดมีสถานะ KYC เป็น `VERIFIED` พร้อมส่งสินค้าเข้าประมูลทันที
+- **Verification:** Unit tests ผ่าน 38/38, ภาพที่อัปโหลดและแสดงผลคมชัดระดับ Full HD ทุกภาพ
