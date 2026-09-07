@@ -86,13 +86,13 @@ export async function apiFetch(path, { method = "GET", body, token } = {}) {
 
 /** Uploads files as multipart/form-data. Browser sets the boundary itself, so
  * Content-Type must NOT be set manually here (unlike apiFetch's JSON body). */
-export async function uploadFiles(files, token) {
+async function uploadMediaTo(path, files, token) {
   const authToken = token ?? getAccessToken();
 
   const form = new FormData();
   for (const file of files) form.append("files", file);
 
-  let res = await fetch(`${API_URL}/uploads`, {
+  let res = await fetch(`${API_URL}${path}`, {
     method: "POST",
     headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
     body: form,
@@ -101,7 +101,7 @@ export async function uploadFiles(files, token) {
   if (res.status === 401 && authToken) {
     const newToken = await refreshAccessToken();
     if (newToken) {
-      res = await fetch(`${API_URL}/uploads`, {
+      res = await fetch(`${API_URL}${path}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${newToken}` },
         body: form,
@@ -115,6 +115,16 @@ export async function uploadFiles(files, token) {
     throw new Error(data?.error || `Upload failed (${res.status})`);
   }
   return data.media;
+}
+
+// Product listing images and seller clips remain owned by product-service.
+export function uploadFiles(files, token) {
+  return uploadMediaTo("/uploads", files, token);
+}
+
+// Review images and videos are written to review-service's separate storage.
+export function uploadReviewFiles(files, token) {
+  return uploadMediaTo("/api/reviews/uploads", files, token);
 }
 
 /** Uploads one file as dispute evidence — a separate, private endpoint from

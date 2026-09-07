@@ -33,8 +33,12 @@ async function create(req, res, next) {
         if (!item || typeof item.url !== "string" || !item.url.trim()) {
           throw badRequest("each media item must have a valid url");
         }
+        const url = item.url.trim();
+        if (!url.startsWith("/review-uploads/")) {
+          throw badRequest("review media must be uploaded through review-service");
+        }
         const type = item.type === "video" ? "video" : "image";
-        return { url: item.url.trim(), type };
+        return { url, type };
       });
     }
 

@@ -20,6 +20,16 @@
   ownership/role checks ที่จำเป็นต่อ Buyer flow
 - ทุก Task อัปเดต `progress.md`, append `changelog.md`, เพิ่มบทเรียนใน `teachme.md`
 
+## Current Delivery Status (2026-09-07)
+
+| Task      | Status           | Note                                                                                                        |
+| --------- | ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| `BUY-001` | Verified locally | Catalog filters + hybrid search ผ่าน forced PostgreSQL acceptance                                           |
+| `BUY-002` | Verified locally | Atomic 10-minute reservation/Cart ผ่าน PostgreSQL concurrency and recovery evidence                         |
+| `BUY-003` | Not complete     | ยังไม่มี explicit state table, `PaymentAttempt` และ deterministic/idempotent Mock Payment                   |
+| `BUY-004` | Partial          | Review/list/summary/media มีแล้ว; Contact Seller และ forced cross-service acceptance ยังขาด                 |
+| `BUY-005` | Partial          | Swipe feed/choose/navigation มีแล้ว; direct choose acceptance, wishlist/style profile/recommendation ยังขาด |
+
 ---
 
 ## Requirement Traceability
@@ -83,42 +93,29 @@ test("search combines price, size and condition filters", async () => {
 });
 ```
 
-- [ ] **Step 2: Run `node --test backend/services/product-service/src/features/catalog/catalog.contract.test.js`**
+- [x] **Step 2: Run `node --test backend/services/product-service/src/features/catalog/catalog.contract.test.js`**
 
-Expected: FAIL เพราะ query builder/fields ยังไม่รองรับครบ
+Historical red phase: test เคย FAIL ก่อน query builder/fields รองรับครบ; current contract tests ผ่านแล้ว
 
 - [x] **Step 3: Implement one query builder and Buyer controls**
 
 ```js
-function buildCatalogWhere({
-  q,
-  category,
-  brand,
-  size,
-  condition,
-  minPrice,
-  maxPrice,
-}) {
-  return {
-    status: "available",
-    ...(category && { category }),
-    ...(brand && { brand }),
-    ...(size && { size }),
-    ...(condition && { condition }),
-    ...((minPrice || maxPrice) && {
-      price: {
-        ...(minPrice && { gte: Number(minPrice) }),
-        ...(maxPrice && { lte: Number(maxPrice) }),
-      },
-    }),
-    ...(q && {
-      OR: ["title", "description", "category", "brand"].map((field) => ({
-        [field]: { contains: q, mode: "insensitive" },
-      })),
-    }),
-  };
+function buildCatalogWhere(filters, { PrismaClient }) {
+  const clauses = [PrismaClient.sql`status = ${filters.status}`];
+  if (filters.style)
+    clauses.push(PrismaClient.sql`AND ${filters.style} = ANY(tags)`);
+  if (filters.minPrice !== undefined)
+    clauses.push(PrismaClient.sql`AND price >= ${filters.minPrice}`);
+  if (filters.q)
+    clauses.push(
+      PrismaClient.sql`AND (search_text ILIKE '%' || ${filters.q} || '%' OR ${filters.q} <% search_text)`,
+    );
+  return PrismaClient.join(clauses, " ");
 }
 ```
+
+Source จริงเพิ่ม equality clauses สำหรับ category/brand/size/condition และ max price ด้วย; ranked
+query ใช้ `search_vector`/Trigram ใน `productModel` โดย reuse predicate เดียวกันแทน Prisma `contains`.
 
 - [x] **Step 4: Apply Product schema and run real-database/Jest tests, then lint**
 
@@ -133,7 +130,7 @@ npm run lint
 
 Expected: filter combinations, empty result, invalid range and pagination pass
 
-- [ ] **Step 5: Update Buyer docs and commit**
+- [x] **Step 5: Update Buyer docs and commit**
 
 ```powershell
 git add backend/services/product-service/src/features/catalog frontend/app/products docs/featureplan/buyer
@@ -177,16 +174,26 @@ Expected: FAIL เพราะ Product ยัง update status แบบไม�
 - [x] **Step 3: Implement compare-and-set and compensation**
 
 ```js
-const updated = await tx.product.updateMany({
-  where: { id: productId, status: "available" },
+const claimed = await prisma.product.updateMany({
+  where: {
+    id: productId,
+    OR: [
+      { status: "available" },
+      { status: "reserved", reservationExpiresAt: { lte: now } },
+    ],
+  },
   data: {
     status: "reserved",
+    reservationId,
     reservedBy: buyerId,
     reservationExpiresAt: expiresAt,
   },
 });
-if (updated.count !== 1) throw conflict("product is already reserved");
+if (claimed.count !== 1) throw conflict("product is already reserved");
 ```
+
+Release/confirm ต้องใช้ `where: { id, status: "reserved", reservationId }` เพื่อไม่ให้ request เก่า
+เปลี่ยน reservation รอบใหม่.
 
 `checkoutService.reserve()` ต้อง release reservation เดิมเมื่อสร้าง Order ไม่สำเร็จ และ worker
 ต้องคืน `available` เฉพาะ reservation ที่ expiry ตรงกันเพื่อไม่ปลด lock ใหม่
@@ -223,6 +230,10 @@ git commit -m "Reservation (10 Minute) & Cart"
 - Produces: `transitionOrder({ order, actor, nextStatus })`
 - Produces: `PATCH /api/orders/:id/transitions` body `{nextStatus, trackingNumber?, carrier?}`
 - Produces: persisted `PaymentAttempt {id, orderId, idempotencyKey, result, createdAt}`
+
+**Current baseline (2026-09-07):** Order API/UI มี `PATCH /:id/status` และ `PATCH /:id/pay` เดิม
+แต่ยังไม่มี explicit actor/state table, `PaymentAttempt`, idempotency key หรือ restart acceptance;
+จึงห้ามนับ route ที่มีอยู่เป็น `BUY-003` completion.
 
 - [ ] **Step 1: Write failing state/actor table tests**
 
@@ -275,22 +286,42 @@ git commit -m "feat(buyer): add explicit order tracking states"
 
 **Files:**
 
+- Modify: `backend/services/review-service/prisma/schema.prisma`
 - Modify: `backend/services/review-service/src/controllers/reviewController.js`
+- Modify: `backend/services/review-service/src/models/reviewModel.js`
+- Create: `backend/services/review-service/src/{routes,middleware,controllers}/upload*`
+- Modify: `backend/gateway/src/app.js`, `docker-compose.yml`
 - Modify: `frontend/app/products/[id]/page.js`
 - Modify: `frontend/app/store/[sellerId]/page.js`
 - Modify: `frontend/app/orders/page.js`
+- Create: `frontend/components/ReviewMediaUploader.js`
+- Create: `frontend/components/ReviewMediaGallery.js`
 - Test: `backend/services/review-service/test/review-crud.integration.test.js`
-- Test: `frontend/app/products/[id]/product-detail.test.js`
+- Test: `backend/services/review-service/src/reviewMedia.test.js`
+- Test: `backend/services/review-service/src/reviewUpload.test.js`
+- Test: `frontend/components/ReviewMediaUploader.test.js`
+- Test: `frontend/components/ReviewMediaGallery.test.js`
 
 **Interfaces:**
 
-- Consumes: CS `POST /api/chat/rooms` body `{sellerId, productId}`
-- Consumes: Review summary `{total, averageRating}`
-- Produces: one review per completed Order
+- Consumes: Order lookup เพื่อยืนยัน `buyerId`, `sellerId`, `productId` และ `completed`
+- Consumes: CS `POST /api/chat/rooms` body `{sellerId, productId}` — ยังไม่มี Buyer entry ใน source
+- Consumes: Review summary `{total, averageRating}` และ paginated seller review list
+- Produces: one review per completed Order พร้อม ordered image/video media
+- Produces: `POST /api/reviews/uploads` และ public `/review-uploads/*`
 
-- [ ] **Step 1: Add failing tests for non-party review and Contact Seller**
-- [ ] **Step 2: Run Review integration and Product detail Jest tests; confirm failures**
-- [ ] **Step 3: Enforce Order participant/status server-side and create-or-open chat room**
+**Current partial implementation (2026-09-07):**
+
+- Orders page สร้างรีวิวและอ่าน review history; review-service ตรวจ Order owner/status และ `orderId` unique
+- Product detail/Storefront แสดง aggregate และรายการรีวิวแบบแบ่งหน้า
+- `ReviewPhoto`/`ReviewVideo`, uploader และ gallery/lightbox มีแล้ว; storage ใหม่อยู่ใน review-service
+- ยังไม่มี Contact Seller/create-or-open chat entry, forced cross-service review-create acceptance,
+  duplicate/forged-buyer HTTP test และ restart read-back จึงยังไม่ปิด `BUY-004`
+
+- [x] **Step 1: Implement Review schema/list/summary/order-eligibility and Buyer/Product/Store UI baseline**
+- [x] **Step 2: Implement ordered image/video metadata, uploader/gallery and review-owned file storage**
+- [ ] **Step 3: Run forced PostgreSQL + cross-service create tests for completed order, forged buyer `403`, duplicate `409`, media persistence and restart read-back**
+- [ ] **Step 4: Implement and test Contact Seller/create-or-open chat with guest redirect**
 
 ```js
 await apiFetch("/api/chat/rooms", {
@@ -300,37 +331,42 @@ await apiFetch("/api/chat/rooms", {
 });
 ```
 
-- [ ] **Step 4: Run tests; verify duplicate review `409`, forged buyer `403`, guest redirects**
-- [ ] **Step 5: Update docs and commit `feat(buyer): complete trust and contact journey`**
+- [ ] **Step 5: Reconcile the 5-vs-8 media limit, update docs, obtain Reviewer acceptance and commit `feat(buyer): complete trust and contact journey`**
 
 ### Task BUY-005: Extended Discovery
 
-**Refactored source baseline (partial evidence, not acceptance):** `frontend/app/swipe/page.js`
-เรียก public `GET /api/products/videos/feed`, มี empty/error/product-link tests และเล่นเฉพาะ
-คลิปที่ active เพื่อลดงาน browser แต่ยังไม่มี persisted choose/swipe action หรือหลักฐานว่า
-ผ่าน `UR-11`
+**Current source baseline (partial evidence, not acceptance; updated 2026-09-07):**
+`frontend/app/swipe/page.js` เรียก public `GET /api/products/videos/feed`, มี empty/error/product-link
+states และเล่นเฉพาะ active clip. `SwipeChoice` กับ `POST /api/products/videos/:id/choose` persist
+bookmark แบบ idempotent ตาม `MKT-DEC-006`; viewer รองรับ touch/keyboard navigation แล้ว แต่ยังไม่มี
+specific choose contract/PostgreSQL acceptance, Buyer-only role enforcement หรือ chosen-state read-back หลัง reload. Wishlist, style profile และ recommendation modules ยังไม่มี
 
 **Files:**
 
-- Create: `backend/services/product-service/src/features/wishlist/`
-- Create: `backend/services/product-service/src/features/recommendations/`
-- Modify: `backend/services/auth-service/prisma/schema.prisma`
-- Create: `frontend/app/style-profile/page.js`
-- Create: `frontend/app/wishlist/page.js`
-- Modify: `frontend/app/page.js`
+- Create: `backend/services/product-service/src/features/wishlist/` — planned
+- Create: `backend/services/product-service/src/features/recommendations/` — planned
+- Modify: `backend/services/auth-service/prisma/schema.prisma` — planned style profile
+- Existing: `backend/services/product-service/src/features/product-videos/`
+- Existing: `backend/services/product-service/prisma/schema.prisma` (`SwipeChoice`)
+- Create: `frontend/app/style-profile/page.js` — planned
+- Create: `frontend/app/wishlist/page.js` — planned
+- Modify: `frontend/app/page.js` — planned recommendation surface
 - Modify: `frontend/app/swipe/page.js`
 - Create: `frontend/components/swipe/SwipeFeedViewer.js`
 - Create: `frontend/components/swipe/SwipeVideoCard.js`
-- Test: `backend/services/product-service/src/features/recommendations/recommendation.test.js`
+- Test: `backend/services/product-service/src/features/recommendations/recommendation.test.js` — planned
 - Test: `frontend/app/swipe/page.test.js`
+- Test: `frontend/components/swipe/SwipeFeedViewer.test.js`
+- Missing: choose service/API/PostgreSQL tests, Buyer-only role enforcement และ chosen-state read-back
 
 **Interfaces:**
 
-- Produces: `RecommendationStrategy.rank({userId, candidates, limit})`
+- Produces: `RecommendationStrategy.rank({userId, candidates, limit})` — planned, not implemented
 - Consumes: Seller/Product `GET /api/products/videos/feed` under Marketing `MKT-005` requirement acceptance
+- Produces: `POST /api/products/videos/:id/choose` → one `SwipeChoice` per user/card (implemented; acceptance pending)
 
 - [ ] **Step 1: Write failing deterministic ranking, wishlist ownership and `/swipe` consumer-state tests**
-- [ ] **Step 2: Run targeted tests; confirm recommendation/wishlist modules are missing and pulled Swipe UI is feed-only**
+- [ ] **Step 2: Run targeted tests; confirm recommendation/wishlist modules are missing and persisted choose lacks direct contract/PostgreSQL acceptance**
 - [ ] **Step 3: Persist Buyer style profile and implement rule-based strategy plus labelled fallback; do not call it AI**
 
 ```js

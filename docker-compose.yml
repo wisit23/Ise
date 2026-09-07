@@ -136,6 +136,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL_REVIEW}
+    volumes:
+      - review_uploads:/app/services/review-service/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -189,4 +191,5 @@ services:
 volumes:
   pgdata:
   product_uploads:
+  review_uploads:
   order_private_evidence:

@@ -1,5 +1,34 @@
 # Buyer Feature Changelog
 
+> แต่ละรายการเป็น historical snapshot ณ วันนั้น; ใช้รายการล่าสุดและ `progress.md` เป็นสถานะปัจจุบัน
+
+## 2026-09-07 — Buyer review, review media and Swipe reconciliation
+
+- `BUY-004` มี Buyer review flow บน `/orders`: ส่งคะแนน/ข้อความได้เฉพาะ Order ที่ `completed`,
+  `review-service` ตรวจ buyer จาก Order contract และฐานข้อมูลบังคับหนึ่งรีวิวต่อ `orderId`.
+- หน้า Product detail และ Storefront แสดงคะแนนเฉลี่ย รายการรีวิวแบบแบ่งหน้า ชื่อผู้รีวิวแบบลดการเปิดเผย
+  identifier และ media gallery; ส่วน Contact Seller entry ตามแผนยังไม่มีใน source จึงคง `BUY-004` เป็น Partial.
+- เพิ่ม `ReviewPhoto`/`ReviewVideo` พร้อมลำดับ media, uploader สูงสุด 5 ไฟล์ใน UI และ gallery/lightbox
+  สำหรับรูปหรือวิดีโอ; API ยังคงเพดาน metadata 8 รายการจนกว่าจะปรับ contract ให้ตรงกัน.
+- แยกไฟล์รีวิวใหม่ออกจาก Product storage: `POST /api/reviews/uploads` เขียนเข้า
+  `review-service` volume `review_uploads` และเปิดอ่านผ่าน `/review-uploads/*`; รูป/คลิปสินค้ายังคงอยู่
+  `product-service` volume `product_uploads`. URL รีวิวเดิม `/uploads/*` ยังอ่านแบบเดิมได้และยังไม่ได้ migrate.
+- `/swipe` มี persisted bookmark ผ่าน `POST /api/products/videos/:id/choose` และ `SwipeChoice`
+  ตาม `MKT-DEC-006`; เพิ่ม touch swipe ขึ้น/ลง, keyboard navigation และ card snap. อย่างไรก็ตามยังไม่มี
+  automated contract/PostgreSQL test สำหรับ choose โดยตรง, service ยังไม่ reject role ที่ไม่ใช่ Buyer
+  และยังไม่อ่าน chosen state กลับหลัง reload จึงไม่ยก `BUY-005` หรือ `UR-11` เป็น Done.
+- Evidence รอบนี้: review/gateway focused tests 15/15, frontend 47/47, frontend build, targeted ESLint,
+  `docker compose config` และ Docker build ของ review-service/gateway ผ่าน. Root backend suite ยังไม่ green:
+  Order checkout integration 2 รายการหยุดที่ `PrismaClientInitializationError` เมื่อ database ไม่ได้รัน.
+
+## 2026-09-06 — Review list on Product and Storefront
+
+- Commit `1696bb8` เพิ่มรายการรีวิวของผู้ขายใต้ Product detail และ Storefront พร้อม pagination,
+  average rating และการดึง public buyer label สำหรับแสดงผล.
+- Orders page อ่าน `/api/reviews/mine` เพื่อไม่ให้แสดงฟอร์มซ้ำหลังส่งรีวิวแล้ว.
+- การแสดงรีวิวทำได้แล้ว แต่ยังไม่มี Contact Seller entry และยังไม่มี forced cross-service create-review
+  acceptance จึงบันทึกเป็น `BUY-004` Partial เท่านั้น.
+
 ## 2026-09-05 — BUY-001 PostgreSQL acceptance verified
 
 - Ran the catalog acceptance against an isolated disposable `postgres:16-alpine` container on

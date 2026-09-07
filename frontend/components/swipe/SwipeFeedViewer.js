@@ -3,23 +3,31 @@
 import { useRef, useState } from "react";
 import SwipeVideoCard from "./SwipeVideoCard";
 
+const SWIPE_THRESHOLD_PX = 50;
+
 export default function SwipeFeedViewer({ videos }) {
   const containerRef = useRef(null);
+  const touchStartRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  function clampIndex(index) {
+    return Math.min(videos.length - 1, Math.max(0, index));
+  }
 
   function updateActiveVideo() {
     const container = containerRef.current;
     if (!container || container.clientHeight === 0) return;
 
-    const nextIndex = Math.round(container.scrollTop / container.clientHeight);
-    setActiveIndex(Math.min(videos.length - 1, Math.max(0, nextIndex)));
+    setActiveIndex(
+      clampIndex(Math.round(container.scrollTop / container.clientHeight)),
+    );
   }
 
   function moveTo(index) {
     const container = containerRef.current;
-    const nextIndex = Math.min(videos.length - 1, Math.max(0, index));
     if (!container) return;
 
+    const nextIndex = clampIndex(index);
     setActiveIndex(nextIndex);
     container.scrollTo({
       top: nextIndex * container.clientHeight,
@@ -27,12 +35,49 @@ export default function SwipeFeedViewer({ videos }) {
     });
   }
 
+  function handleTouchStart(event) {
+    touchStartRef.current = {
+      y: event.touches[0].clientY,
+      index: activeIndex,
+    };
+  }
+
+  function handleTouchEnd(event) {
+    const touchStart = touchStartRef.current;
+    touchStartRef.current = null;
+    if (!touchStart || event.changedTouches.length === 0) return;
+
+    const distance = touchStart.y - event.changedTouches[0].clientY;
+    if (Math.abs(distance) < SWIPE_THRESHOLD_PX) return;
+
+    moveTo(touchStart.index + (distance > 0 ? 1 : -1));
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === "ArrowDown" || event.key === "PageDown") {
+      event.preventDefault();
+      moveTo(activeIndex + 1);
+    } else if (event.key === "ArrowUp" || event.key === "PageUp") {
+      event.preventDefault();
+      moveTo(activeIndex - 1);
+    }
+  }
+
   return (
     <>
       <div
         ref={containerRef}
         onScroll={updateActiveVideo}
-        className="scrollbar-none relative h-[80vh] max-h-[750px] w-full max-w-[500px] snap-y snap-mandatory scroll-smooth overflow-y-scroll rounded-2xl border border-zinc-800 bg-black shadow-2xl"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={() => {
+          touchStartRef.current = null;
+        }}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        role="region"
+        aria-label="ฟีดวิดีโอสินค้า ปัดขึ้นหรือลงเพื่อเปลี่ยนคลิป"
+        className="scrollbar-none relative h-full min-h-0 w-full max-w-[500px] snap-y snap-mandatory scroll-smooth overflow-y-auto overscroll-contain bg-black shadow-2xl focus:outline-none sm:my-4 sm:h-[min(750px,calc(100%_-_2rem))] sm:rounded-2xl sm:border sm:border-zinc-800"
       >
         {videos.map((video, index) => (
           <SwipeVideoCard

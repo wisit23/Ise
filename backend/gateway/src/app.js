@@ -31,6 +31,9 @@ const PUBLIC_PATHS = [
   // Uploaded media must render for guests too; POST /uploads (creating new
   // files) is still gated by product-service's own requireAuth/requireRole.
   /^\/uploads\//,
+  // Review media is public too, but lives in review-service's separate volume.
+  // POST /api/reviews/uploads is not matched here and still requires auth.
+  /^\/review-uploads\//,
   // A store page's rating must be visible to guests browsing without an account.
   /^\/api\/reviews\/by-seller\//,
   // FAQ deflection (WF-10 step 2) must work for guests too; POST/PATCH on
@@ -98,6 +101,14 @@ app.use(
     // Express strips the "/uploads" mount prefix before this middleware
     // runs, so it has to be added back here.
     pathRewrite: (path) => `/uploads${path}`,
+  }),
+);
+app.use(
+  "/review-uploads",
+  createProxyMiddleware({
+    target: SERVICES.reviews,
+    changeOrigin: true,
+    pathRewrite: (path) => `/review-uploads${path}`,
   }),
 );
 app.use(

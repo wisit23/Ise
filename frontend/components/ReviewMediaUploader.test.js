@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import ReviewMediaUploader from "./ReviewMediaUploader";
 
 jest.mock("../lib/api", () => ({
-  uploadFiles: jest.fn(),
+  uploadReviewFiles: jest.fn(),
   mediaUrl: (url) => url,
 }));
 
@@ -20,8 +20,8 @@ test("renders attach button and shows file upload limits", () => {
 test("displays thumbnails and calls onChange when item is removed", () => {
   const onChange = jest.fn();
   const value = [
-    { url: "/uploads/img1.jpg", type: "image" },
-    { url: "/uploads/vid1.mp4", type: "video" },
+    { url: "/review-uploads/img1.jpg", type: "image" },
+    { url: "/review-uploads/vid1.mp4", type: "video" },
   ];
 
   render(<ReviewMediaUploader value={value} onChange={onChange} />);
@@ -31,6 +31,6 @@ test("displays thumbnails and calls onChange when item is removed", () => {
 
   fireEvent.click(deleteButtons[0]);
   expect(onChange).toHaveBeenCalledWith([
-    { url: "/uploads/vid1.mp4", type: "video" },
+    { url: "/review-uploads/vid1.mp4", type: "video" },
   ]);
 });

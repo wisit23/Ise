@@ -47,7 +47,7 @@ export default function SwipeVideoCard({ video, isActive }) {
   const sellerName = video.sellerName || "Reloop Store";
 
   return (
-    <article className="relative flex h-full w-full shrink-0 snap-start items-center justify-center">
+    <article className="relative flex h-full min-h-full w-full shrink-0 snap-start snap-always items-center justify-center">
       <video
         ref={videoRef}
         src={mediaUrl(video.videoUrl)}
