@@ -53,25 +53,50 @@ export function useChatSocketEvent(event, handler) {
 }
 
 export default function ChatSocketProvider({ children }) {
+  const [token, setToken] = useState(() => getAccessToken());
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
 
+  // Sync token from localStorage, auth change events, and window focus so the
+  // socket automatically connects upon login without needing a manual page reload.
   useEffect(() => {
-    const token = getAccessToken();
+    function syncToken() {
+      const currentToken = getAccessToken();
+      setToken((prev) => (prev !== currentToken ? currentToken : prev));
+    }
+
+    syncToken();
+    window.addEventListener("reloop:auth", syncToken);
+    window.addEventListener("storage", syncToken);
+    window.addEventListener("focus", syncToken);
+    return () => {
+      window.removeEventListener("reloop:auth", syncToken);
+      window.removeEventListener("storage", syncToken);
+      window.removeEventListener("focus", syncToken);
+    };
+  }, []);
+
+  useEffect(() => {
     // Guests have nothing to subscribe to, and connecting without a token
     // would just be rejected by socketAuth.js on the server anyway.
-    if (!token) return undefined;
+    if (!token) {
+      setSocket(null);
+      setConnected(false);
+      return undefined;
+    }
 
     const instance = connectSocket(token);
     setSocket(instance);
 
+    if (instance.connected) {
+      setConnected(true);
+    }
+
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
+
     instance.on("connect", onConnect);
     instance.on("disconnect", onDisconnect);
-    // connect_error fires for an expired/invalid token too. Treating it as
-    // "not connected" is what makes consumers fall back to REST rather than
-    // silently going stale.
     instance.on("connect_error", onDisconnect);
 
     return () => {
@@ -82,7 +107,7 @@ export default function ChatSocketProvider({ children }) {
       setSocket(null);
       setConnected(false);
     };
-  }, []);
+  }, [token]);
 
   const value = useMemo(() => ({ socket, connected }), [socket, connected]);
 

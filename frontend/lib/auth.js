@@ -2,10 +2,17 @@ const ACCESS_KEY = "reloop_access_token";
 const REFRESH_KEY = "reloop_refresh_token";
 const USER_KEY = "reloop_user";
 
+function notifyAuthChange() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("reloop:auth"));
+  }
+}
+
 export function saveSession({ accessToken, refreshToken, user }) {
   localStorage.setItem(ACCESS_KEY, accessToken);
   localStorage.setItem(REFRESH_KEY, refreshToken);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  notifyAuthChange();
 }
 
 export function getAccessToken() {
@@ -15,6 +22,7 @@ export function getAccessToken() {
 
 export function setAccessToken(accessToken) {
   localStorage.setItem(ACCESS_KEY, accessToken);
+  notifyAuthChange();
 }
 
 export function getRefreshToken() {
@@ -32,4 +40,5 @@ export function clearSession() {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
+  notifyAuthChange();
 }

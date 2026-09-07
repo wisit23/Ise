@@ -32,6 +32,7 @@ async function createAndTouch({
   body,
   payload,
   preview: previewOverride,
+  participants,
 }) {
   // Enforced HERE, at the one function every write path goes through, for
   // the same reason getForParticipant is the one authorization point: a
@@ -51,6 +52,7 @@ async function createAndTouch({
     0,
     PREVIEW_LENGTH,
   );
+  const now = new Date();
   const [message] = await prisma.$transaction([
     prisma.message.create({
       data: {
@@ -64,11 +66,16 @@ async function createAndTouch({
         // Prisma's MongoDB connector needs it written explicitly or every
         // `deletedAt: null` read filter silently excludes this message.
         deletedAt: null,
+        createdAt: now,
       },
     }),
     prisma.conversation.update({
       where: { id: conversationId },
-      data: { lastMessageAt: new Date(), lastMessagePreview: preview },
+      data: {
+        lastMessageAt: now,
+        lastMessagePreview: preview,
+        ...(participants ? { participants: { set: participants } } : {}),
+      },
     }),
   ]);
   return message;

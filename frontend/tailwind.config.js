@@ -150,6 +150,12 @@ module.exports = {
           "0%": { opacity: "0", transform: "scale(0.95)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        "message-pop": {
+          "0%": { opacity: "0", transform: "scale(0.6)" },
+          "65%": { opacity: "1", transform: "scale(1.05)" },
+          "85%": { transform: "scale(0.98)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
       },
       animation: {
         bob: "bob 5s ease-in-out infinite",
@@ -158,6 +164,7 @@ module.exports = {
         "fade-in-up": "fade-in-up 0.5s ease-out forwards",
         "slide-up": "slide-up 0.3s cubic-bezier(.16,1,.3,1) forwards",
         "scale-in": "scale-in 0.25s cubic-bezier(.16,1,.3,1) forwards",
+        "message-pop": "message-pop 0.35s cubic-bezier(.16,1,.3,1) both",
         "slide-in-right": "slide-in-right 0.3s ease-out forwards",
         "slide-out-right": "slide-out-right 0.3s ease-out forwards",
         "slide-in-left": "slide-in-left 0.3s ease-out forwards",

@@ -67,4 +67,15 @@ function broadcastMessage(conversation, message) {
   }
 }
 
-module.exports = { setIo, roomName, userRoomName, broadcastMessage };
+function broadcastActivity(userId, activity) {
+  if (!ioInstance) return;
+  ioInstance.to(userRoomName(userId)).emit("conversation:activity", activity);
+}
+
+module.exports = {
+  setIo,
+  roomName,
+  userRoomName,
+  broadcastMessage,
+  broadcastActivity,
+};

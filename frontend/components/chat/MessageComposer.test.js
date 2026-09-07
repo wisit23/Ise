@@ -67,7 +67,7 @@ describe("MessageComposer", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("passes the picked file to onAttach", async () => {
+  it("shows thumbnail preview when file is picked and passes file to onAttach on send", async () => {
     const onAttach = jest.fn().mockResolvedValue(undefined);
     render(<MessageComposer onSend={jest.fn()} onAttach={onAttach} />);
 
@@ -75,7 +75,26 @@ describe("MessageComposer", () => {
     const input = document.querySelector('input[type="file"]');
     fireEvent.change(input, { target: { files: [file] } });
 
+    // Expect preview card with file name
+    expect(screen.getByText("item.png")).toBeInTheDocument();
+
+    // Clicking send submits the attachment
+    fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
     await waitFor(() => expect(onAttach).toHaveBeenCalledWith(file, ""));
+  });
+
+  it("allows removing the pending attachment before sending", () => {
+    render(<MessageComposer onSend={jest.fn()} onAttach={jest.fn()} />);
+
+    const file = new File(["bytes"], "remove-me.png", { type: "image/png" });
+    fireEvent.change(document.querySelector('input[type="file"]'), {
+      target: { files: [file] },
+    });
+
+    expect(screen.getByText("remove-me.png")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "ลบไฟล์ที่แนบ" }));
+
+    expect(screen.queryByText("remove-me.png")).not.toBeInTheDocument();
   });
 
   it("sends whatever is already typed along as the attachment's caption", async () => {
@@ -89,6 +108,8 @@ describe("MessageComposer", () => {
     fireEvent.change(document.querySelector('input[type="file"]'), {
       target: { files: [file] },
     });
+
+    fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
 
     // Typed text must not be silently thrown away just because the user
     // then picked a photo.
@@ -108,6 +129,7 @@ describe("MessageComposer", () => {
       target: { files: [new File(["b"], "x.png", { type: "image/png" })] },
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
     await waitFor(() => expect(onAttach).toHaveBeenCalled());
     expect(textarea).toHaveValue("คำบรรยาย");
   });

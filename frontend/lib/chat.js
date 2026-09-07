@@ -1,7 +1,18 @@
 import { io } from "socket.io-client";
 import { apiFetch } from "./api";
+import { getAccessToken } from "./auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+
+let conversationCache = null;
+
+export function getCachedConversations() {
+  return conversationCache;
+}
+
+export function setCachedConversations(items) {
+  conversationCache = items;
+}
 
 /** Mirrors chat-service's MAX_MESSAGE_LENGTH (backend/services/chat-service/
  * src/limits.js), which is the ACTUAL gate — this copy only drives the
@@ -130,6 +141,8 @@ export function connectSocket(token) {
   return io(API_URL, {
     path: "/api/chat/socket.io",
     transports: ["websocket"],
-    auth: { token },
+    auth: (cb) => {
+      cb({ token: getAccessToken() || token });
+    },
   });
 }

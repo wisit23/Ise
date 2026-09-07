@@ -37,6 +37,10 @@ async function sendMessage(conversationId, senderId, body) {
 
   const sender = conversation.participants.find((p) => p.userId === senderId);
   const trimmed = body.trim();
+  const now = new Date();
+  const updatedParticipants = conversation.participants.map((p) =>
+    p.userId === senderId ? { ...p, lastReadAt: now } : p,
+  );
 
   const message = await messageModel.createAndTouch({
     conversationId,
@@ -44,8 +48,12 @@ async function sendMessage(conversationId, senderId, body) {
     senderRole: sender.role,
     type: "TEXT",
     body: trimmed,
+    participants: updatedParticipants,
   });
-  return { message, conversation };
+  return {
+    message,
+    conversation: { ...conversation, participants: updatedParticipants },
+  };
 }
 
 async function listMessages(conversationId, userId, before, limit) {
@@ -91,7 +99,8 @@ async function unreadCount(userId) {
   const counts = await Promise.all(
     conversations.map((c) => {
       const participant = c.participants.find((p) => p.userId === userId);
-      const since = participant?.lastReadAt || participant?.joinedAt || EPOCH;
+      const rawSince = participant?.lastReadAt || participant?.joinedAt;
+      const since = rawSince ? new Date(rawSince) : EPOCH;
       return messageModel.countUnread({ conversationId: c.id, userId, since });
     }),
   );

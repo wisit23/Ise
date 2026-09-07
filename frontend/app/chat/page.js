@@ -3,17 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NavBar from "../../components/NavBar";
-import Footer from "../../components/Footer";
-import Alert from "../../components/ui/Alert";
-import ConversationRow from "../../components/chat/ConversationRow";
-import { listConversations } from "../../lib/chat";
+import ChatSidebar from "../../components/chat/ChatSidebar";
+import { listConversations, setCachedConversations } from "../../lib/chat";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 import {
   useChatSocket,
   useChatSocketEvent,
 } from "../../components/chat/ChatSocketProvider";
 
-// Only used while the shared socket is NOT connected — see the effect below.
+// Only used while the shared socket is NOT connected
 const POLL_INTERVAL_MS = 15000;
 
 export default function ChatInboxPage() {
@@ -31,26 +29,28 @@ export default function ChatInboxPage() {
     }
     setUser(getStoredUser());
     listConversations(token)
-      .then((data) => setConversations(data.items))
+      .then((data) => {
+        setConversations(data.items);
+        setCachedConversations(data.items);
+      })
       .catch((err) => setError(err.message));
   }, [router]);
 
   // Live path: the server nudges every participant's own socket room on any
   // new message, so a new conversation, an updated preview, or an unread
-  // dot appears here without the user reloading — even though this page
-  // has no particular conversation open. The whole list is re-read rather
-  // than patched in place, because the server already returns it correctly
-  // ordered by lastMessageAt and that ordering is exactly what changes.
+  // dot appears here without the user reloading
   useChatSocketEvent("conversation:activity", () => {
     const token = getAccessToken();
     if (!token) return;
     listConversations(token)
-      .then((data) => setConversations(data.items))
+      .then((data) => {
+        setConversations(data.items);
+        setCachedConversations(data.items);
+      })
       .catch(() => {});
   });
 
-  // Fallback path: gated on the socket being down, so the list is never
-  // both pushed and polled at the same time.
+  // Fallback path: gated on the socket being down
   useEffect(() => {
     if (!user || socketConnected) return undefined;
     const token = getAccessToken();
@@ -60,17 +60,12 @@ export default function ChatInboxPage() {
       if (document.hidden) return;
       listConversations(token)
         .then((data) => setConversations(data.items))
-        .catch(() => {
-          // A transient poll failure shouldn't blank out an already-loaded
-          // list — the next tick just tries again.
-        });
+        .catch(() => {});
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [user, socketConnected]);
 
-  // Reconnecting means events were missed while the socket was down, so the
-  // list has to be re-read at that moment rather than waiting for the next
-  // message to arrive.
+  // Reconnecting means events were missed while the socket was down
   useEffect(() => {
     if (!user || !socketConnected) return;
     const token = getAccessToken();
@@ -81,47 +76,38 @@ export default function ChatInboxPage() {
   }, [user, socketConnected]);
 
   return (
-    <main className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-50">
       <NavBar />
-      <section className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
-        <h1 className="text-xl font-bold text-gray-900">ข้อความ</h1>
-
-        {error && (
-          <div className="mt-4">
-            <Alert tone="error">{error}</Alert>
+      <main className="mx-auto flex w-full max-w-7xl flex-1 overflow-hidden p-2 sm:p-4">
+        <div className="flex flex-1 h-full overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm">
+          {/* Left Column: Inbox List */}
+          <div className="h-full w-full md:w-80 lg:w-96 shrink-0 flex flex-col overflow-hidden border-r border-gray-150">
+            <ChatSidebar
+              conversations={conversations}
+              currentUserId={user?.id}
+              activeId={null}
+              loading={conversations === null}
+              error={error}
+            />
           </div>
-        )}
 
-        {conversations === null && !error && (
-          <p className="mt-6 text-sm text-gray-500">กำลังโหลด...</p>
-        )}
-
-        {conversations?.length === 0 && (
-          <div className="mt-14 flex flex-col items-center gap-2 text-center text-gray-400">
-            <span
-              className="material-symbols-outlined text-[40px] text-gray-300"
-              aria-hidden="true"
-            >
-              chat_bubble
-            </span>
-            <p className="text-sm text-gray-500">ยังไม่มีข้อความ</p>
-            <p className="text-xs">เริ่มคุยกับผู้ขายได้จากหน้าสินค้า</p>
+          {/* Right Column: Empty Selection Canvas (Hidden on Mobile) */}
+          <div className="hidden flex-1 h-full flex-col items-center justify-center bg-slate-50/50 p-8 text-center md:flex overflow-hidden">
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-100/60 text-emerald-600 shadow-2xs mb-4">
+              <span className="material-symbols-outlined text-[40px]">
+                chat_bubble
+              </span>
+            </div>
+            <h2 className="text-lg font-bold text-gray-900">
+              เลือกการสนทนาเพื่อเริ่มแชท
+            </h2>
+            <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-gray-400">
+              เลือกห้องแชทจากรายการทางซ้าย เพื่อดูข้อความ ต่อรองราคา
+              หรือสอบถามข้อมูลสินค้าจากผู้ซื้อและผู้ขาย
+            </p>
           </div>
-        )}
-
-        {conversations?.length > 0 && user && (
-          <ul className="mt-6 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
-            {conversations.map((c) => (
-              <ConversationRow
-                key={c.id}
-                conversation={c}
-                currentUserId={user.id}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-      <Footer />
-    </main>
+        </div>
+      </main>
+    </div>
   );
 }

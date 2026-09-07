@@ -9,6 +9,7 @@ import ChatRoomPage from "./page";
 import {
   getConversation,
   listMessages,
+  listConversations,
   sendMessage,
   markRead,
 } from "../../../lib/chat";
@@ -34,6 +35,7 @@ jest.mock("../../../lib/chat", () => ({
   ...jest.requireActual("../../../lib/chat"),
   getConversation: jest.fn(),
   listMessages: jest.fn(),
+  listConversations: jest.fn(),
   sendMessage: jest.fn(),
   markRead: jest.fn(),
   connectSocket: jest.fn(),
@@ -133,6 +135,7 @@ describe("ChatRoomPage — live delivery vs. REST response race", () => {
     getStoredUser.mockReturnValue({ id: "buyer-1", role: "BUYER" });
     getConversation.mockResolvedValue(CONVERSATION);
     listMessages.mockResolvedValue({ items: [], nextCursor: null });
+    listConversations.mockResolvedValue({ items: [] });
     markRead.mockResolvedValue({});
     fakeSocket = createFakeSocket();
     mockSocketState.socket = fakeSocket;
@@ -281,5 +284,109 @@ describe("ChatRoomPage — live delivery vs. REST response race", () => {
 
     unmount();
     expect(fakeSocket.emit).toHaveBeenCalledWith("leave", "conv-1");
+  });
+
+  it("switches rooms in-place without page reload when clicking another conversation in sidebar", async () => {
+    const CONVERSATION_2 = {
+      id: "conv-2",
+      status: "ACTIVE",
+      participants: [
+        { userId: "buyer-1", role: "BUYER", lastReadAt: null },
+        {
+          userId: "seller-2",
+          role: "SELLER",
+          lastReadAt: null,
+          displayName: "ร้านรองเท้า",
+        },
+      ],
+    };
+
+    getConversation.mockImplementation(async (roomId) => {
+      if (roomId === "conv-1") return CONVERSATION;
+      if (roomId === "conv-2") return CONVERSATION_2;
+      return null;
+    });
+
+    listConversations.mockResolvedValue({
+      items: [CONVERSATION, CONVERSATION_2],
+    });
+
+    render(<ChatRoomPage />);
+    expect((await screen.findAllByText("ร้านของสะสม")).length).toBeGreaterThan(
+      0,
+    );
+
+    // Click conversation 2 in the desktop sidebar
+    const row2 = await screen.findByText("ร้านรองเท้า");
+    fireEvent.click(row2);
+
+    expect((await screen.findAllByText("ร้านรองเท้า")).length).toBeGreaterThan(
+      0,
+    );
+    await waitFor(() => {
+      expect(fakeSocket.emit).toHaveBeenCalledWith("leave", "conv-1");
+      expect(fakeSocket.emit).toHaveBeenCalledWith(
+        "join",
+        "conv-2",
+        expect.any(Function),
+      );
+    });
+
+    sendMessage.mockResolvedValue({
+      id: "msg-in-room-2",
+      conversationId: "conv-2",
+      senderId: "buyer-1",
+      senderRole: "BUYER",
+      type: "TEXT",
+      body: "สวัสดีร้านรองเท้า",
+      createdAt: new Date().toISOString(),
+    });
+
+    const composer = await screen.findByLabelText("พิมพ์ข้อความ");
+    fireEvent.change(composer, { target: { value: "สวัสดีร้านรองเท้า" } });
+    fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith(
+        "conv-2",
+        "สวัสดีร้านรองเท้า",
+        "token-123",
+      );
+    });
+  });
+
+  it("transitions typing indicator smoothly when typing status changes", async () => {
+    getConversation.mockResolvedValue(CONVERSATION);
+    listMessages.mockResolvedValue({ items: [] });
+    listConversations.mockResolvedValue({ items: [CONVERSATION] });
+
+    render(<ChatRoomPage />);
+    await screen.findByText("ร้านของสะสม");
+
+    const typingWrapper = screen.getByTestId("typing-indicator-wrapper");
+    // Initially not typing -> collapsed and hidden
+    expect(typingWrapper.className).toContain("max-h-0");
+    expect(typingWrapper.className).toContain("opacity-0");
+    expect(typingWrapper.getAttribute("aria-hidden")).toBe("true");
+
+    // Other user starts typing
+    act(() => {
+      fakeSocket._trigger("typing", { userId: "seller-1", typing: true });
+    });
+
+    // Becomes visible with transition classes
+    expect(typingWrapper.className).toContain("max-h-16");
+    expect(typingWrapper.className).toContain("opacity-100");
+    expect(typingWrapper.getAttribute("aria-hidden")).toBe("false");
+
+    // Other user stops typing
+    act(() => {
+      fakeSocket._trigger("typing", { userId: "seller-1", typing: false });
+    });
+
+    // Smoothly collapses back
+    expect(typingWrapper.className).toContain("max-h-0");
+    expect(typingWrapper.className).toContain("opacity-0");
+    expect(typingWrapper.getAttribute("aria-hidden")).toBe("true");
   });
 });

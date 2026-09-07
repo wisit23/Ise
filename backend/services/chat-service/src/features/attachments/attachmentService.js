@@ -44,6 +44,10 @@ async function attach({ conversationId, senderId, file, caption }) {
   const sender = conversation.participants.find((p) => p.userId === senderId);
   const type = messageTypeFor(file.mimetype);
   const body = typeof caption === "string" ? caption.trim() : "";
+  const now = new Date();
+  const updatedParticipants = conversation.participants.map((p) =>
+    p.userId === senderId ? { ...p, lastReadAt: now } : p,
+  );
 
   const message = await messageModel.createAndTouch({
     conversationId,
@@ -61,9 +65,13 @@ async function attach({ conversationId, senderId, file, caption }) {
       size: file.size,
     },
     preview: body || previewFor(type, file.originalname),
+    participants: updatedParticipants,
   });
 
-  return { message, conversation };
+  return {
+    message,
+    conversation: { ...conversation, participants: updatedParticipants },
+  };
 }
 
 /**

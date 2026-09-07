@@ -136,6 +136,27 @@ describe("NavBar unread badge", () => {
     ).toBeInTheDocument();
   });
 
+  it("updates the badge when a local chat:unread-sync event is dispatched", async () => {
+    getUnreadCount.mockResolvedValue({ total: 2 });
+
+    render(<NavBar />);
+    expect(
+      await screen.findByRole("link", { name: /มี 2 รายการที่ยังไม่อ่าน/ }),
+    ).toBeInTheDocument();
+
+    // All messages are marked read in chat page
+    getUnreadCount.mockResolvedValue({ total: 0 });
+    act(() => {
+      window.dispatchEvent(new CustomEvent("chat:unread-sync"));
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("link", { name: /ยังไม่อ่าน/ }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("never asks for an unread count when nobody is logged in", async () => {
     getAccessToken.mockReturnValue(null);
     getStoredUser.mockReturnValue(null);

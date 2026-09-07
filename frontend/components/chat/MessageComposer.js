@@ -1,45 +1,84 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MAX_MESSAGE_LENGTH } from "../../lib/chat";
+import { getFileTypeConfig } from "../../lib/fileIcons";
+import UploadProgressPill from "./UploadProgressPill";
 
 const TYPING_STOP_DELAY_MS = 2000;
-
-// Only worth showing a counter once the limit is actually in sight —
-// a permanent "0 / 4,000" on an empty box is noise.
 const COUNTER_VISIBLE_FROM = MAX_MESSAGE_LENGTH - 200;
 
-/** Enter sends, Shift+Enter inserts a newline — the same convention every
- * chat app uses, so no on-screen hint is needed for it.
+function formatFileSize(bytes) {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Enter sends, Shift+Enter inserts a newline.
  *
- * `onTyping` is optional (the inbox never passes it, only the live room
- * page does) and fires at most once per typing burst plus once when it
- * stops — not on every keystroke — so a socket-connected caller isn't
- * spamming a "typing:start" event per character.
+ * `onTyping` is optional and fires once per typing burst plus once when it
+ * stops — not on every keystroke.
  *
- * `onAttach` is optional too: pass it and the paperclip appears, omit it and
- * the composer is text-only. Anything already typed is handed over as the
- * attachment's caption rather than being discarded. */
+ * `onAttach` shows the paperclip button. When a file is picked:
+ * - A preview thumbnail card appears with file name, size, and a remove button.
+ * - The user can type a caption.
+ * - Pressing Send (or Enter) uploads the file with an animated progress pill.
+ */
 export default function MessageComposer({
   onSend,
   onAttach,
   onTyping,
+  onFocus,
   disabled,
 }) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  // Upload Progress State (shown during file upload)
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+
   const typingActiveRef = useRef(false);
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
+  const progressIntervalRef = useRef(null);
+
   const remaining = MAX_MESSAGE_LENGTH - value.length;
 
-  function handleChange(e) {
-    // Hard stop rather than letting the box overflow and failing at send
-    // time: `maxLength` on the textarea already blocks typing past the
-    // limit, but a paste in some browsers can exceed it.
-    setValue(e.target.value.slice(0, MAX_MESSAGE_LENGTH));
-    if (!onTyping) return;
+  // Clean up object URL when component unmounts or pending file changes
+  useEffect(() => {
+    return () => {
+      if (previewUrl && typeof URL.revokeObjectURL === "function") {
+        URL.revokeObjectURL(previewUrl);
+      }
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, [previewUrl]);
 
+  function autoResizeTextarea() {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "44px";
+      const scrollHeight = textareaRef.current.scrollHeight;
+      const targetHeight = Math.max(44, Math.min(scrollHeight, 120));
+      textareaRef.current.style.height = `${targetHeight}px`;
+    }
+  }
+
+  useEffect(() => {
+    autoResizeTextarea();
+  }, []);
+
+  function handleChange(e) {
+    setValue(e.target.value.slice(0, MAX_MESSAGE_LENGTH));
+    autoResizeTextarea();
+
+    if (!onTyping) return;
     if (!typingActiveRef.current) {
       typingActiveRef.current = true;
       onTyping(true);
@@ -58,22 +97,57 @@ export default function MessageComposer({
     onTyping(false);
   }
 
+  function clearPendingFile() {
+    if (previewUrl && typeof URL.revokeObjectURL === "function") {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPendingFile(null);
+    setPreviewUrl(null);
+  }
+
   async function submit() {
     const trimmed = value.trim();
-    if (!trimmed || sending || disabled) return;
+    if ((!trimmed && !pendingFile) || sending || disabled) return;
+
     stopTypingNow();
     setSending(true);
-    try {
-      await onSend(trimmed);
-      setValue("");
-    } catch {
-      // Swallowed deliberately — the draft text stays in the box so nothing
-      // typed is lost, and any user-facing error message is the caller's
-      // responsibility (the chat room page shows one via its own error
-      // state). The composer's only job on failure is to not crash and to
-      // let the user try sending again.
-    } finally {
-      setSending(false);
+
+    if (pendingFile && onAttach) {
+      // Simulate/animate progress bar smoothly
+      setUploadProgress(15);
+      progressIntervalRef.current = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) return prev;
+          return prev + Math.floor(Math.random() * 15 + 10);
+        });
+      }, 150);
+
+      try {
+        await onAttach(pendingFile, trimmed);
+        setUploadProgress(100);
+        clearPendingFile();
+        setValue("");
+        if (textareaRef.current) textareaRef.current.style.height = "44px";
+      } catch {
+        // Keep file and caption on failure so user can retry
+      } finally {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+        }
+        setSending(false);
+        setUploadProgress(0);
+      }
+    } else {
+      // Regular text send
+      try {
+        await onSend(trimmed);
+        setValue("");
+        if (textareaRef.current) textareaRef.current.style.height = "44px";
+      } catch {
+        // Keep draft text on failure
+      } finally {
+        setSending(false);
+      }
     }
   }
 
@@ -84,40 +158,123 @@ export default function MessageComposer({
     }
   }
 
-  // Whatever is already typed rides along as the attachment's caption, so a
-  // user who typed a note and then picked a photo doesn't lose the note or
-  // have to send it as a separate message.
-  async function handleFileChange(e) {
+  function handleFileChange(e) {
     const file = e.target.files?.[0];
-    // Reset immediately so picking the SAME file again still fires a change
-    // event (browsers suppress it when the value is unchanged).
     e.target.value = "";
     if (!file || !onAttach || sending || disabled) return;
 
-    stopTypingNow();
-    setSending(true);
-    try {
-      await onAttach(file, value.trim());
-      setValue("");
-    } catch {
-      // Same reasoning as submit(): the caller surfaces the error, the
-      // composer's job is only to stay usable.
-    } finally {
-      setSending(false);
+    clearPendingFile();
+    setPendingFile(file);
+
+    if (
+      file.type.startsWith("image/") &&
+      typeof URL.createObjectURL === "function"
+    ) {
+      setPreviewUrl(URL.createObjectURL(file));
     }
   }
 
+  function handleCancelUpload() {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+    }
+    setSending(false);
+    setUploadProgress(0);
+    clearPendingFile();
+  }
+
+  const canSend =
+    !disabled && !sending && (value.trim().length > 0 || Boolean(pendingFile));
+
+  const pendingFileConfig = pendingFile
+    ? getFileTypeConfig(pendingFile.name, pendingFile.type)
+    : null;
+
   return (
-    <div className="border-t border-gray-200 bg-white">
+    <div className="relative bg-white/95 backdrop-blur-sm p-3 transition-all duration-200">
+      {/* Upload Progress Bar (when uploading an attachment) */}
+      {sending && pendingFile && (
+        <div className="mb-2 animate-fade-in">
+          <UploadProgressPill
+            progress={uploadProgress}
+            isPaused={isPaused}
+            fileName={pendingFile.name}
+            onPauseToggle={() => setIsPaused((p) => !p)}
+            onCancel={handleCancelUpload}
+          />
+        </div>
+      )}
+
+      {/* Attachment Thumbnail Preview (before sending) */}
+      {pendingFile && !sending && (
+        <div className="mb-2 flex items-center justify-between rounded-2xl border border-gray-200 bg-slate-50/80 p-2.5 shadow-2xs animate-slide-up">
+          <div className="flex items-center gap-3 overflow-hidden">
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt="พรีวิวรูปภาพ"
+                className="h-12 w-12 shrink-0 rounded-xl object-cover border border-gray-200 shadow-2xs"
+              />
+            ) : (
+              <div
+                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${pendingFileConfig?.gradient} text-white shadow-2xs`}
+              >
+                <span className="material-symbols-outlined text-[26px]">
+                  {pendingFileConfig?.icon}
+                </span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-gray-800">
+                {pendingFile.name}
+              </p>
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <p className="text-[11px] text-gray-500">
+                  {formatFileSize(pendingFile.size)}
+                </p>
+                {!previewUrl && pendingFileConfig && (
+                  <>
+                    <span className="text-[10px] text-gray-300">•</span>
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${pendingFileConfig.pillBg} ${pendingFileConfig.pillText}`}
+                    >
+                      {pendingFileConfig.ext}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={clearPendingFile}
+            aria-label="ลบไฟล์ที่แนบ"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-200 hover:text-gray-700"
+          >
+            <span
+              className="material-symbols-outlined text-[18px]"
+              aria-hidden="true"
+            >
+              close
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* Remaining character counter */}
       {value.length >= COUNTER_VISIBLE_FROM && (
         <p
-          className={`px-3 pt-2 text-right text-xs ${remaining === 0 ? "font-medium text-red-600" : "text-gray-500"}`}
+          className={`pb-1 text-right text-[11px] ${
+            remaining === 0 ? "font-semibold text-red-600" : "text-gray-400"
+          }`}
           role="status"
         >
           เหลือ {remaining.toLocaleString("th-TH")} ตัวอักษร
         </p>
       )}
-      <div className="flex items-end gap-2 p-3">
+
+      {/* Composer Input Bar */}
+      <div className="flex items-end gap-2">
         {onAttach && (
           <>
             <input
@@ -134,10 +291,10 @@ export default function MessageComposer({
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled || sending}
               aria-label="แนบรูปภาพหรือไฟล์"
-              className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-500 transition hover:border-emerald-500 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-emerald-600 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
             >
               <span
-                className="material-symbols-outlined text-[20px]"
+                className="material-symbols-outlined text-[22px]"
                 aria-hidden="true"
               >
                 attach_file
@@ -145,25 +302,38 @@ export default function MessageComposer({
             </button>
           </>
         )}
-        <textarea
-          value={value}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          disabled={disabled || sending}
-          rows={1}
-          placeholder="พิมพ์ข้อความ..."
-          aria-label="พิมพ์ข้อความ"
-          maxLength={MAX_MESSAGE_LENGTH}
-          className="max-h-32 min-h-[42px] flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 disabled:bg-gray-50 disabled:text-gray-400"
-        />
+
+        <div className="relative flex-1">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onFocus={onFocus}
+            disabled={disabled || sending}
+            rows={1}
+            placeholder={
+              pendingFile ? "เพิ่มคำบรรยายรูปภาพ..." : "พิมพ์ข้อความ..."
+            }
+            aria-label="พิมพ์ข้อความ"
+            maxLength={MAX_MESSAGE_LENGTH}
+            className="block w-full resize-none rounded-2xl border border-gray-250 bg-gray-50/70 px-4 py-[10px] text-sm leading-[22px] text-gray-900 transition-all placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-gray-100 disabled:text-gray-400"
+            style={{ height: "44px", minHeight: "44px", maxHeight: "120px" }}
+          />
+        </div>
+
         <button
           type="button"
           onClick={submit}
-          disabled={disabled || sending || !value.trim()}
-          className="flex h-[42px] shrink-0 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+          disabled={!canSend}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-xs transition-all active:scale-95 focus:outline-none disabled:cursor-not-allowed disabled:shadow-none ${
+            canSend
+              ? "bg-emerald-600 text-white hover:bg-emerald-700"
+              : "bg-slate-200 text-slate-400"
+          }`}
         >
           <span
-            className="material-symbols-outlined text-[18px]"
+            className="material-symbols-outlined text-[20px] translate-x-[1px]"
             aria-hidden="true"
           >
             send

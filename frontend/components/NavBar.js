@@ -111,6 +111,25 @@ export default function NavBar() {
       .catch(() => {});
   }, [socketConnected]);
 
+  // Local sync path: when a conversation is opened or marked read in this
+  // window, this local event fires so the badge refreshes immediately.
+  useEffect(() => {
+    function handleSync(e) {
+      if (typeof e?.detail?.total === "number") {
+        setUnreadCount(e.detail.total);
+      } else {
+        const token = getAccessToken();
+        if (token) {
+          getUnreadCount(token)
+            .then((data) => setUnreadCount(data.total))
+            .catch(() => {});
+        }
+      }
+    }
+    window.addEventListener("chat:unread-sync", handleSync);
+    return () => window.removeEventListener("chat:unread-sync", handleSync);
+  }, []);
+
   useEffect(() => {
     function handleClickOutside(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
