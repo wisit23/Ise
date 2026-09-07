@@ -1,8 +1,8 @@
 # Marketing Feature Progress
 
-> Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-09-06
+> Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-09-07
 
-**Status:** `MKT-005` (Auction Core, Rounds, Soft Close) + `UR-11` choose action และ `MKT-004` Part A (Knowledge Base & Educational Articles System: `UR-14` / `FR-5.2.3`) พัฒนาและตรวจสอบผ่านทั้งฝั่ง Backend API, Trigram Search, Next.js Frontend และ Jest Tests ครบถ้วน; `MKT-001`–`MKT-003` (Campaign/Attribution) และ `MKT-004` Part B (Segmentation) อยู่ในแผนรอบถัดไป
+**Status:** `MKT-005` (Auction Core, Rounds, Soft Close, Winner Order Idempotency) + `UR-11` choose action และ `MKT-004` Part A (Knowledge Base & Educational Articles System: `UR-14` / `FR-5.2.3`) พัฒนาและตรวจสอบผ่านทั้งฝั่ง Backend API, Trigram Search, Next.js Frontend และ Jest Tests ครบถ้วน; `MKT-001`–`MKT-003` (Campaign/Attribution) และ `MKT-004` Part B (Segmentation) อยู่ในแผนรอบถัดไป
 
 **Plan coverage:** Explicit trace rows cover `UR-08`–`UR-16` through FR, active/deferred NFR,
 `WF-03`, `WF-11`, documented Workflow gaps and `MKT-001`–`MKT-005`
@@ -94,3 +94,13 @@ approved by Admin shows up here as "approved, ready to schedule" immediately.
   - ฟรอนต์เอนด์: เมนู "บทความ" บน Navbar (`/articles`), หน้ารายการบทความพร้อมตัวกรองหมวดหมู่และการค้นหาแบบ Real-time, หน้ารายละเอียดบทความ (`/articles/:id`) และแท็บจัดการบทความในแดชบอร์ด Marketing (`/marketing`)
   - ผ่านการทดสอบ Jest Tests (41/41 tests passing) และ Next.js Static Pages Build (24/24 pages)
   - แก้ไขการ Resolve URL ของไฟล์รูปภาพที่อัปโหลดขึ้นเซิร์ฟเวอร์ด้วย `mediaUrl()` ให้แสดงผลรูปภาพปกและรูปภาพในเนื้อหาได้อย่างถูกต้องตรงตามมาตรฐานสถาปัตยกรรมเดียวกับส่วนอื่นๆ ของระบบ
+
+**2026-09-07 update (MKT-005 Race Condition & Order Idempotency Fix):**
+- แก้ไขปัญหาคำสั่งซื้อซ้ำซ้อน 2 รายการจากการปิดประมูลพร้อมกัน (Race Condition):
+  - สาเหตุเกิดจากการทำงานพร้อมกันในระดับมิลลิวินาทีระหว่าง BullMQ Background Queue กับ Lazy evaluation (`maybeAdvance`) เมื่อมีการอ่านข้อมูลสินค้า
+  - ทำการเคลียร์ Order รายการซ้ำที่ค้างชำระในฐานข้อมูลออก คงเหลือคำสั่งซื้อจริงที่ผู้ซื้อชำระเงินเรียบร้อยแล้ว
+  - เสริม Idempotency ใน `orderController.createFromAuction` และเพิ่ม helper `findByAuctionId` ใน `orderModel.js`
+  - เพิ่มข้อกำหนด Unique Constraint `@unique` บนฟิลด์ `auctionId` ของตาราง `orders` ใน PostgreSQL (`reloop_order`)
+  - เพิ่ม Concurrency Guard ดึงสถานะล่าสุด (`findById`) ซ้ำใน `auctionService.closeAuction` ก่อนเริ่มกระบวนการปิดประมูล
+  - ผลลัพธ์: ตะกร้าสินค้าแสดงเฉพาะคำสั่งซื้อจริง ไม่มีรายการซ้ำ, หน้ารายการคำสั่งซื้อ (`/orders`) แสดงผลสถานะสำเร็จครบถ้วน, และ Unit Tests ใน `product-service` ผ่านครบ 30/30 รายการ
+

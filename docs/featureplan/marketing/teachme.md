@@ -109,5 +109,23 @@ Seed พยายาม upsert:  where: { id: "40000000-0001" }
 
 **Teach-back:** ทำไมจึงไม่ควรเก็บ Full URL ที่มีโดเมน (`http://localhost:8080/uploads/...`) ลงในฐานข้อมูลตรงๆ ตั้งแต่ตอนอัปโหลดภาพ?
 
+## Round 10 — Distributed Race Conditions & Idempotency in Multi-trigger Lifecycle Transitions
+
+ในระบบไมโครเซอร์วิส การเปลี่ยนสถานะของ Lifecycle ที่สำคัญ (เช่น การปิดประมูลและสร้าง Order ให้ผู้ชนะ) มักจะมี Trigger มากกว่าหนึ่งทางเพื่อความแน่นอน:
+1. **Active Trigger:** Job Queue เบื้องหลัง เช่น BullMQ Worker ที่ตั้งเวลาไว้ตรงกับเวลาปิด
+2. **Passive / Lazy Trigger:** การตรวจสอบเงื่อนไขเวลาเมื่อมีผู้ใช้เปิดเข้ามาดูหน้าเว็บ (`maybeAdvance`) เผื่อกรณีที่ Redis หรือ Worker ล่ม
+
+เมื่อเวลาสิ้นสุดมาถึง ทั้งสองกลไกสามารถถูกเรียกขึ้นมาพร้อมกันในระดับมิลลิวินาที:
+- หาก Service ต้นทาง (`product-service`) ยิง HTTP Request ข้าม Service ไปยัง Service ปลายทาง (`order-service`) **ก่อน** ที่จะอัปเดตสถานะในฐานข้อมูลของตนเองเป็น `closed` ทั้งสองฝั่งจะเห็นว่าการประมูลยังเปิดอยู่ (`open`) และยิงคำสั่งสร้าง Order ไปพร้อมกัน
+- หาก Service ปลายทาง (`order-service`) ออกแบบเป็นแบบ Non-idempotent (สั่ง Create ทื่อๆ โดยไม่ตรวจและไม่มี Unique Constraint) ผลลัพธ์คือจะเกิด Order ซ้ำซ้อน 2 รายการสำหรับผู้ใช้คนเดียวกันทันที
+
+การแก้ปัญหาเชิงสถาปัตยกรรม (Defense in Depth):
+1. **Downstream Idempotency:** ฝั่งผู้รับคำขอ (`order-service`) ต้องทำให้ฟังก์ชันเป็น Idempotent เสมอ — ตรวจสอบ `findByAuctionId` ก่อนสร้าง หากมีอยู่แล้วให้คืนค่า Order เดิมทันที
+2. **Database-level Constraint:** เพิ่ม `@unique` ให้กับ `auctionId` บนตาราง `orders` ใน PostgreSQL เพื่อเป็นแนวป้องกันด่านสุดท้าย หากคำขอหลุดเข้ามาพร้อมกันในมิลลิวินาทีเดียวกัน ฐานข้อมูลจะสกัดคำขอที่สองด้วย Unique Violation (`P2002`) ทันที
+3. **Upstream Concurrency Guard:** ฝั่งผู้ส่งคำขอ (`product-service`) ดึงสถานะล่าสุด (`findById`) มาเช็กซ้ำก่อนเริ่มปิดประมูล เพื่อลด Network Call ที่ไม่จำเป็น
+
+**Teach-back:** ทำไมการป้องกัน Race Condition จึงต้องทำทั้งฝั่งต้นทาง (Caller) และฝั่งปลายทาง (Receiver พร้อม Unique Constraint ใน Database) แทนที่จะเลือกทำเพียงฝั่งใดฝั่งหนึ่ง?
+
+
 
 

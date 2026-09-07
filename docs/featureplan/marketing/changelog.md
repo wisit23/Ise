@@ -286,3 +286,29 @@
 - **Verification:**
   - รูปภาพปกบทความจริงที่ผู้ใช้อัปโหลด (เช่น "Mii_น่ารัก") และรูปภาพในเนื้อหาแสดงผลคมชัดถูกต้องผ่าน API Gateway (พอร์ต 8080)
   - รัน `docker compose exec frontend npm test` ผ่านครบ 41/41 tests
+
+## 2026-09-07 — Bug Fix: Duplicate Auction Winner Orders from Concurrent Close Race Condition
+
+- **Problem:** เมื่อการประมูลสิ้นสุดลง ผู้ชนะประมูลพบว่ามีรายการรอชำระเงินของสินค้านั้นปรากฏขึ้นในตะกร้า (`/cart`) ถึง 2 รายการซ้ำกัน
+  - **Root Cause (Race Condition):** เมื่อการประมูลถึงกำหนดเวลาสิ้นสุด ระบบมี 2 ช่องทางในการปิดการประมูล:
+    1. Worker คิวของ BullMQ (`auctionCloseQueue`) ที่ทำงานใน Background
+    2. Lazy evaluation ใน `maybeAdvance` ของ `auctionService.js` เมื่อมีการเรียกดูข้อมูลสินค้า
+    - เมื่อเวลาสิ้นสุดมาถึง ทั้ง Worker และ Request ข้อมูลเข้ามาประเมินเงื่อนไขพร้อมกันในระดับมิลลิวินาที โดยทั้งคู่พบว่า `status === "open"` จึงเรียก `closeAuction()` พร้อมกัน
+    - `closeAuction()` ทำการยิง HTTP Request ไปที่ `order-service` ผ่าน `POST /internal/from-auction` ก่อนที่จะอัปเดตสถานะของ `AuctionItem` เป็น `"closed"` ในฐานข้อมูล
+    - ฝั่ง `order-service` ฟังก์ชัน `createFromAuction` ไม่มีการตรวจสอบ Idempotency หรือ Unique Constraint บน `auction_id` ทำให้สร้างเรคอร์ดคำสั่งซื้อขึ้นมา 2 รายการซ้ำกัน
+- **Fix:**
+  - **Data Cleanup:** ลบคำสั่งซื้อรายการที่ซ้ำซ้อน (`9b4d52c6-...`) ที่ยังค้างสถานะรอชำระเงินออก เหลือเฉพาะคำสั่งซื้อจริงที่ผู้ซื้อชำระเงินแล้ว (`0c08a543-...`)
+  - **Order Service Idempotency (`orderController.js` & `orderModel.js`):**
+    - เพิ่มฟังก์ชัน `findByAuctionId` ใน `orderModel.js`
+    - ใน `createFromAuction`: ตรวจสอบว่ามีคำสั่งซื้อของ `auctionId` นี้อยู่แล้วหรือไม่ หากมีอยู่แล้วให้คืนค่าคำสั่งซื้อเดิมทันที ไม่สร้างซ้ำ (HTTP 200)
+    - ดักจับ Prisma Error `P2002` (Unique Constraint Violation) กรณีเกิด Race Condition พร้อมกันในระดับมิลลิวินาที ให้ดึงและคืนค่าคำสั่งซื้อเดิม
+  - **Database Unique Constraint (`schema.prisma` in `order-service`):**
+    - กำหนด `@unique` ให้กับฟิลด์ `auctionId` บนโมเดล `Order` เพื่อรับประกันในระดับฐานข้อมูล PostgreSQL ว่าหนึ่งการประมูลจะมีคำสั่งซื้อได้เพียงหนึ่งเดียวเท่านั้น
+  - **Product Service Concurrency Check (`auctionService.js`):**
+    - ใน `closeAuction`: ดึงสถานะล่าสุด (`findById`) ซ้ำอีกครั้งก่อนเริ่มประมวลผล หากพบว่าถูกปิดไปแล้วโดย Process อื่น ให้คืนค่าทันที
+- **Verification:**
+  - ทดสอบส่งคำขอซ้ำจำลอง Race Condition: ฐานข้อมูลปฏิเสธคำสั่งซื้อซ้ำด้วย Error Code `P2002` และ Controller คืนค่าคำสั่งซื้อที่มีอยู่เดิมอย่างถูกต้อง
+  - ตรวจสอบหน้าตะกร้าของผู้ซื้อ: รายการคำสั่งซื้อซ้ำหายไปจากตะกร้าเรียบร้อยแล้ว
+  - ตรวจสอบหน้ารายการสั่งซื้อ (`/orders`): คำสั่งซื้อที่ชำระเงินแล้วยังคงอยู่ครบถ้วนสมบูรณ์
+  - รัน Unit Tests ใน `product-service`: ผ่านครบ 30/30 tests
+

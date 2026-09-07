@@ -56,6 +56,13 @@ async function maybeAdvance(auction, now = new Date()) {
 }
 
 async function closeAuction(auction, now) {
+  // Re-fetch to avoid race conditions if already closed concurrently (e.g. BullMQ worker vs page read)
+  const fresh = await auctionRepository.findById(auction.id);
+  if (!fresh || fresh.status === "closed") {
+    return fresh || auction;
+  }
+  auction = fresh;
+
   const winningBid = await auctionRepository.highestBid(auction.id);
 
   let winningOrderId = null;

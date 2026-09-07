@@ -174,3 +174,15 @@
 - **Fix:** นำฟังก์ชัน `mediaUrl()` จาก `frontend/lib/api.js` มาครอบที่รูปภาพบทความทุกจุด (`ArticlesSection.js`, `articles/page.js`, `articles/[id]/page.js` และ Markdown renderer) ทำให้รูปภาพที่บันทึกบนเซิร์ฟเวอร์แสดงผลได้ถูกต้องและสอดคล้องกับระบบรูปภาพสินค้า
 - **Verification:** รูปภาพบทความที่อัปโหลดแสดงผลสมบูรณ์ทั้งในแดชบอร์ดและหน้ารายละเอียด และ Frontend Unit Tests ผ่านครบ 41/41 รายการ
 
+## 2026-09-07 — Bug Fix: Duplicate Auction Winner Orders from Concurrent Close Race Condition
+
+- **Problem:** เมื่อการประมูลสิ้นสุดลง ผู้ชนะการประมูลพบรายการรอชำระเงินของสินค้านั้นปรากฏขึ้นในตะกร้า (`/cart`) 2 รายการซ้ำกัน
+  - **Root Cause (Race Condition):** เมื่อถึงเวลาปิดประมูล มี 2 กลไกทำงานพร้อมกัน: คิว BullMQ Worker เบื้องหลัง และ Lazy advance (`maybeAdvance`) เมื่อมีการอ่านข้อมูลสินค้า ทั้งสองกระบวนการตรวจพบว่า `status === "open"` พร้อมกันในระดับมิลลิวินาที จึงต่างเรียก `closeAuction()` และส่ง HTTP Request `POST /internal/from-auction` ไปยัง `order-service` พร้อมกัน ในขณะที่ `order-service` ไม่ได้ตรวจสอบ Idempotency และไม่มี Unique Constraint บน `auction_id` ส่งผลให้สร้าง Order ขึ้นมา 2 ฉบับซ้ำกัน
+- **Fix:**
+  - **Data Cleanup:** ลบ Order รายการซ้ำที่ค้างชำระ (`9b4d52c6-...`) ออก คงเหลือเฉพาะ Order จริงที่ผู้ซื้อชำระเงินเรียบร้อยแล้ว (`0c08a543-...`)
+  - **Order Service Idempotency:** เพิ่มฟังก์ชัน `findByAuctionId` ใน `orderModel.js` และตรวจสอบใน `createFromAuction` หากมี Order สำหรับการประมูลนี้อยู่แล้วให้คืนค่าคำสั่งซื้อเดิมทันที (HTTP 200) พร้อมดักจับ Prisma Error `P2002`
+  - **Database Constraint:** เพิ่ม `@unique` ให้กับฟิลด์ `auctionId` ใน `Order` schema ของ `reloop_order` ป้องกันการสร้างคำสั่งซื้อซ้ำในระดับ PostgreSQL
+  - **Product Service Guard:** เพิ่มการดึงสถานะล่าสุด (`findById`) ซ้ำอีกครั้งใน `closeAuction` ก่อนเริ่มสร้าง Order เพื่อป้องกัน Race Condition จากหลาย Process
+- **Verification:** ทดสอบจำลอง Race Condition ปฏิเสธการสร้างซ้ำด้วย Error Code `P2002`, รายการซ้ำในตะกร้าหายไป, คำสั่งซื้อที่ชำระแล้วแสดงผลถูกต้อง และ Unit Tests ผ่านครบ 30/30 รายการ
+
+

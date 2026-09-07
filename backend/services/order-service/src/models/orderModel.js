@@ -23,6 +23,10 @@ function findByReservationId(reservationId) {
   return prisma.order.findUnique({ where: { reservationId } });
 }
 
+function findByAuctionId(auctionId) {
+  return prisma.order.findFirst({ where: { auctionId } });
+}
+
 function statusFilter(status) {
   if (status === "pending_payment") {
     return { in: ["pending", "pending_payment"] };
@@ -86,6 +90,7 @@ module.exports = {
   create,
   findById,
   findByReservationId,
+  findByAuctionId,
   listByBuyer,
   listBySeller,
   updateStatus,

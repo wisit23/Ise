@@ -1,13 +1,13 @@
 # Marketing Feature Handoff
 
-> อัปเดตล่าสุด: 2026-09-06
+> อัปเดตล่าสุด: 2026-09-07
 
 ## Ownership
 
 - Owner: ศิวกร วรวัฒน์อมรชัย
 - Reviewer: อัสนัย เมืองรอด
 - Requirement scope: `UR-08`–`UR-16`
-- Current status: `MKT-005` (Auction Core, Rounds, Soft Close), `UR-11` choose action, และ `MKT-004` Part A (Knowledge Base & Educational Articles System: `UR-14` / `FR-5.2.3`) พัฒนาและทดสอบผ่านครบ 41/41 unit tests และ Next.js build ใน Docker เรียบร้อย
+- Current status: `MKT-005` (Auction Core, Rounds, Soft Close, Winner Order Idempotency), `UR-11` choose action, และ `MKT-004` Part A (Knowledge Base & Educational Articles System: `UR-14` / `FR-5.2.3`) พัฒนาและทดสอบผ่านครบทั้ง Unit tests และ Next.js build ใน Docker เรียบร้อย
 
 ## Scope to hand off
 
@@ -15,16 +15,16 @@
 - `MKT-002`: Review, Preview and Publish Workspace
 - `MKT-003`: Attribution and Conversion Dashboard
 - `MKT-004`: Extended Segmentation and Content (Knowledge Base & Articles System Completed)
-- `MKT-005`: Extended Auction and Swipe Contracts (Auction Rounds & Soft Close Completed)
+- `MKT-005`: Extended Auction and Swipe Contracts (Auction Rounds, Soft Close & Order Idempotency Completed)
 
 ## Current evidence
 
 - Requirement traceability และ acceptance steps อยู่ใน [`plan.md`](plan.md)
 - สถานะล่าสุดและขอบเขตที่ยังไม่ยืนยันอยู่ใน [`progress.md`](progress.md)
 - ประวัติการเปลี่ยนแปลงอยู่ใน [`changelog.md`](changelog.md)
-- บทเรียนจากการตรวจ flow อยู่ใน [`teachme.md`](teachme.md) (Round 1–8)
-- ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md) (`MKT-DEC-001`–`MKT-DEC-011`)
-- Auction System: แก้ไขบั๊กแยกสินค้าประมูลด้วย `status: "auction"`, ระบบกำหนดรอบประมูลโดย Marketing, การล็อกฟอร์มผู้ขายเมื่อหมดเวลารอบ, การอนุมัติโดย Marketing, ระบบต่อเวลาอัตโนมัติ 5 นาทีสุดท้าย (Soft Close) และ Auto-Fill Min Next Bid ผ่าน Unit Tests 30/30 รายการ
+- บทเรียนจากการตรวจ flow อยู่ใน [`teachme.md`](teachme.md) (Round 1–10)
+- ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md) (`MKT-DEC-001`–`MKT-DEC-012`)
+- Auction System: แก้ไขบั๊กแยกสินค้าประมูลด้วย `status: "auction"`, ระบบกำหนดรอบประมูลโดย Marketing, การล็อกฟอร์มผู้ขายเมื่อหมดเวลารอบ, การอนุมัติโดย Marketing, ระบบต่อเวลาอัตโนมัติ 5 นาทีสุดท้าย (Soft Close), Auto-Fill Min Next Bid, การป้องกัน Race Condition ระหว่าง Worker และ Lazy Read พร้อมทั้งความปลอดภัยระดับ Database Unique Constraint บน `Order.auctionId` ผ่าน Unit Tests 30/30 รายการ
 - Knowledge Base & Articles System: Model `Article` ใน PostgreSQL, GIN Trigram index + Trigger `search_text`, Trigram search algorithm (`GREATEST(word_similarity, similarity)` + `ILIKE`), API Public & Marketing, Role-based authorization, หน้า `/articles`, `/articles/:id`, เมนู Navbar, และแท็บ `ArticlesSection` ใน `/marketing` ผ่าน Jest tests (41/41 tests) และ static build (24/24 pages)
 - Test Environment: แก้ไขบั๊ก Seed script ใน `auth-service` ไม่ให้ชน Unique constraint บนอีเมล พร้อมบัญชีทดสอบที่พร้อมใช้งานครบทุก Role (`marketing@example.com`, `shop.denim@example.com`, `buyer.demo@example.com`, `admin@example.com` รหัสผ่าน: `password123`)
 

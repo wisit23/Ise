@@ -96,5 +96,16 @@
 - Reason: ตอบสนอง Requirement `ST-MKT-05` / `UR-14` / `FR-5.2.3` ในการสร้างศูนย์ความรู้เพื่อส่งเสริมความยั่งยืนและการใช้งานสินค้ามือสอง โดยคง ownership ไว้ที่ฝ่ายการตลาด และคงอัลกอริทึมการค้นหาของระบบตาม baseline เดิมที่ตกลงกันไว้
 - Consequence: เพิ่มโมเดล `Article` ใน `reloop_product` พร้อม Trigger อัปเดต `search_text` อัตโนมัติ, สร้าง API สำหรับ Guest (`GET /api/products/articles`) และสำหรับ Marketing (`/marketing/all`, `POST`, `PUT`, `DELETE`), อนุญาตสิทธิ์ `MARKETING` ในการอัปโหลดภาพปกบทความผ่าน `uploadRoutes.js` และเปิดเส้นทาง Public ใน API Gateway
 
+## MKT-DEC-012 — Auction Winner Order Idempotency and Race Condition Guard
+
+- Date: 2026-09-07
+- Status: Accepted
+- Decision: 
+  1. **Order Service Idempotency (`POST /internal/from-auction`):** ก่อนที่จะสร้างเรคอร์ดคำสั่งซื้อ (`Order`) จากการประมูล ให้ตรวจสอบก่อนว่ามีคำสั่งซื้อที่ผูกกับ `auctionId` นั้นอยู่แล้วหรือไม่ (`orderModel.findByAuctionId`) หากพบคำสั่งซื้อเดิม ให้ส่งคืนคำสั่งซื้อเดิมทันที (HTTP 200) ไม่สร้างใหม่
+  2. **Database Unique Constraint (`Order.auctionId`):** กำหนด `@unique` ให้กับฟิลด์ `auctionId` ใน Prisma Schema ของ `order-service` เพื่อรับประกันในระดับฐานข้อมูล PostgreSQL ว่าหนึ่งการประมูลจะสามารถสร้างคำสั่งซื้อได้เพียงคำสั่งซื้อเดียวเท่านั้น และดักจับ Prisma Error `P2002` เพื่อคืนคำสั่งซื้อที่มีอยู่เดิมกรณีเกิด Race Condition
+  3. **Product Service Close Guard:** ใน `closeAuction` ของ `auctionService.js` ให้ตรวจสอบสถานะการประมูลล่าสุด (`findById`) ซ้ำอีกครั้งก่อนเริ่มประมวลผล หากพบว่าการประมูลถูกปิดไปแล้วโดย Worker หรือ Process อื่น ให้คืนค่าทันที
+- Reason: ป้องกันปัญหา Race Condition เมื่อเวลาปิดประมูลมาถึงพร้อมกับการเรียกดูข้อมูล ทำให้ BullMQ Worker และ Lazy advance (`maybeAdvance`) ทำงานพร้อมกันในระดับมิลลิวินาที และส่งผลให้มีการสร้างคำสั่งซื้อรอชำระเงินซ้ำซ้อนกัน 2 รายการในตะกร้าของผู้ซื้อ
+- Consequence: รับประกันความถูกต้อง 100% ว่าผู้ชนะประมูลจะมีรายการรอชำระเงินในตะกร้าเพียง 1 รายการเสมอ แม้จะมีการเรียกปิดประมูลพร้อมกันหลาย Process
+
 
 
