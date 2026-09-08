@@ -72,7 +72,7 @@ describe("ExecutiveDashboardPage", () => {
     const gmvElements = await screen.findAllByText("฿100,000");
     expect(gmvElements.length).toBeGreaterThan(0);
     expect(screen.getByText("4")).toBeInTheDocument();
-    expect(screen.getByText("14")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
   });
 
   it("exposes the trend series to screen readers, since the tooltip is pointer-only", async () => {
@@ -105,17 +105,17 @@ describe("ExecutiveDashboardPage", () => {
 
   it("shows an unavailable state for a provider that fails, without masking it as zero", async () => {
     apiFetch.mockImplementation((path) => {
-      if (path.startsWith("/api/products/executive/metrics")) {
-        return Promise.reject(new Error("product-service unreachable"));
-      }
       if (path.startsWith("/api/auth/executive/metrics")) {
+        return Promise.reject(new Error("auth-service unreachable"));
+      }
+      if (path.startsWith("/api/orders/executive/metrics")) {
         return Promise.resolve({
-          data: { activeUsers: 4, newUsers: 11 },
+          data: { gmv: 100000, platformRevenue: 10000, completedOrders: 2 },
           meta: META,
         });
       }
       return Promise.resolve({
-        data: { gmv: 100000, platformRevenue: 10000, completedOrders: 2 },
+        data: { newListings: 17, soldListings: 3, activeListings: 14 },
         meta: META,
       });
     });

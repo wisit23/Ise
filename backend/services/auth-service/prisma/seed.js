@@ -177,8 +177,82 @@ async function main() {
     });
   }
 
+  const DEMO_REPORTS = [
+    // Sneaker Society (SELLERS[1]) - 3 complaints (High Risk / Anomaly >= 3)
+    {
+      id: "50000000-0000-0000-0000-000000000001",
+      reporterId: BUYERS[0].id,
+      targetId: SELLERS[1].id,
+      reason: "พฤติกรรมฉ้อโกง: ผู้ขายหลอกให้โอนเงินมัดจำล่วงหน้านอกแพลตฟอร์มแล้วเงียบหาย บล็อกการติดต่อ",
+      status: "OPEN",
+      reportedAt: new Date(Date.now() - 2 * 3600 * 1000),
+    },
+    {
+      id: "50000000-0000-0000-0000-000000000002",
+      reporterId: BUYERS[0].id,
+      targetId: SELLERS[1].id,
+      reason: "สินค้าผิดกฎหมายหรือละเมิดลิขสิทธิ์: สินค้าแบรนด์เนมปลอม ละเมิดลิขสิทธิ์อย่างชัดเจน ไม่ใช่ของแท้ตามที่โฆษณา",
+      status: "OPEN",
+      reportedAt: new Date(Date.now() - 5 * 3600 * 1000),
+    },
+    {
+      id: "50000000-0000-0000-0000-000000000003",
+      reporterId: BUYERS[0].id,
+      targetId: SELLERS[1].id,
+      reason: "พฤติกรรมฉ้อโกง: ได้รับสลิปยืนยันแต่ไม่ยอมจัดส่งสินค้าตามกำหนด ผัดวันประกันพรุ่งมาหลายสัปดาห์",
+      status: "REVIEWED",
+      reportedAt: new Date(Date.now() - 24 * 3600 * 1000),
+    },
+    // Retro & Vintage House (SELLERS[2]) - 2 complaints
+    {
+      id: "50000000-0000-0000-0000-000000000004",
+      reporterId: BUYERS[0].id,
+      targetId: SELLERS[2].id,
+      reason: "สินค้าไม่ตรงปก: สภาพสินค้าชำรุดเสียหายหนัก มีรอยฉีกขาดที่ไม่ระบุในรูปถ่ายประกาศ",
+      status: "OPEN",
+      reportedAt: new Date(Date.now() - 12 * 3600 * 1000),
+    },
+    {
+      id: "50000000-0000-0000-0000-000000000005",
+      reporterId: BUYERS[0].id,
+      targetId: SELLERS[2].id,
+      reason: "สินค้าไม่ตรงปก: ส่งสินค้าผิดขนาด ไซส์และสีไม่ตรงกับรายละเอียดที่ลงขายในระบบ",
+      status: "ACTIONED",
+      reportedAt: new Date(Date.now() - 48 * 3600 * 1000),
+    },
+    // กระเป๋าและเครื่องประดับมือสองพรีเมียม (SELLERS[3]) - 1 complaint
+    {
+      id: "50000000-0000-0000-0000-000000000006",
+      reporterId: BUYERS[0].id,
+      targetId: SELLERS[3].id,
+      reason: "สินค้าผิดกฎหมายหรือละเมิดลิขสิทธิ์: นำกระเป๋าละเมิดลิขสิทธิ์มาลงขาย มีการปลอมแปลงป้ายตราสินค้า",
+      status: "OPEN",
+      reportedAt: new Date(Date.now() - 8 * 3600 * 1000),
+    },
+    // ร้านยีนส์เดนิมมือสอง (SELLERS[0]) - 1 complaint
+    {
+      id: "50000000-0000-0000-0000-000000000007",
+      reporterId: BUYERS[0].id,
+      targetId: SELLERS[0].id,
+      reason: "พฤติกรรมฉ้อโกง: แจ้งเลขพัสดุปลอม ไม่สามารถตรวจสอบสถานะในระบบขนส่งได้",
+      status: "DISMISSED",
+      reportedAt: new Date(Date.now() - 72 * 3600 * 1000),
+    },
+  ];
+
+  for (const report of DEMO_REPORTS) {
+    await prisma.report.upsert({
+      where: { id: report.id },
+      update: {
+        reason: report.reason,
+        status: report.status,
+      },
+      create: report,
+    });
+  }
+
   console.log(
-    `[auth-service] seeded ${SELLERS.length} sellers, ${BUYERS.length} buyer, ${SUPPORT_AGENTS.length} customer-service agents, ${STAFF.length} staff and 1 executive (password: "${DEMO_PASSWORD}")`,
+    `[auth-service] seeded ${SELLERS.length} sellers, ${BUYERS.length} buyer, ${SUPPORT_AGENTS.length} customer-service agents, ${STAFF.length} staff, 1 executive, and ${DEMO_REPORTS.length} demo reports (password: "${DEMO_PASSWORD}")`,
   );
 }
 

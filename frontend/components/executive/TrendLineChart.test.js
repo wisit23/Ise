@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
-import HorizontalTrendChart from "./HorizontalTrendChart";
+import TrendLineChart from "./TrendLineChart";
 
-describe("HorizontalTrendChart", () => {
+describe("TrendLineChart", () => {
   const mockData = [
     {
       label: "ม.ค.",
@@ -28,7 +28,7 @@ describe("HorizontalTrendChart", () => {
 
   it("renders with accessible role and aria-label", () => {
     render(
-      <HorizontalTrendChart
+      <TrendLineChart
         data={mockData}
         label="แนวโน้มยอดขายรวม (GMV)"
       />,
@@ -42,9 +42,9 @@ describe("HorizontalTrendChart", () => {
     expect(chart).toHaveAccessibleName(/฿80,000/);
   });
 
-  it("renders month labels and in-bar values directly without hover", () => {
+  it("renders month labels and data values directly without needing hover", () => {
     render(
-      <HorizontalTrendChart
+      <TrendLineChart
         data={mockData}
         label="แนวโน้มยอดขายรวม (GMV)"
       />,

@@ -42,21 +42,40 @@ async function getMetricsSeries(req, res, next) {
   }
 }
 
+const VALID_SORT_OPTIONS = ["newest", "oldest", "most_reported"];
+const VALID_REASON_CATEGORIES = ["FRAUD", "COUNTERFEIT", "MISMATCH", "OTHER"];
+
 async function getReports(req, res, next) {
   try {
-    const { status } = req.query;
+    const { status, sortBy, reasonCategory, targetId } = req.query;
     if (status && !REPORT_STATUSES.includes(status)) {
       throw badRequest(`status must be one of ${REPORT_STATUSES.join(", ")}`);
     }
+    if (sortBy && !VALID_SORT_OPTIONS.includes(sortBy)) {
+      throw badRequest(
+        `sortBy must be one of ${VALID_SORT_OPTIONS.join(", ")}`,
+      );
+    }
+    if (reasonCategory && !VALID_REASON_CATEGORIES.includes(reasonCategory)) {
+      throw badRequest(
+        `reasonCategory must be one of ${VALID_REASON_CATEGORIES.join(", ")}`,
+      );
+    }
 
-    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_REPORT_LIMIT) {
       throw badRequest(
         `limit must be an integer between 1 and ${MAX_REPORT_LIMIT}`,
       );
     }
 
-    const data = await executiveReports.getReportOverview({ status, limit });
+    const data = await executiveReports.getReportOverview({
+      status,
+      limit,
+      sortBy: sortBy || "newest",
+      reasonCategory,
+      targetId,
+    });
 
     // Complaints are a live queue, not a windowed aggregate, so there is no
     // from/to to report here — only the definition version applies.

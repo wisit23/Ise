@@ -11,6 +11,7 @@ import {
   MONTH_NAMES,
   PLATFORM_FEE_RATE,
   yearWindow,
+  logExecutiveAction,
 } from "../../../lib/executive";
 
 const FIRST_YEAR = 2024;
@@ -91,6 +92,28 @@ export default function ReportsSection({ token }) {
     return buildRows(series, seriesGranularity);
   }, [series, seriesGranularity]);
 
+  const totals = useMemo(() => {
+    if (rows.length === 0) return null;
+    const hasOrderUnavailable = rows.some((r) => r.orderUnavailable);
+    const hasAuthUnavailable = rows.some((r) => r.authUnavailable);
+    return {
+      gmv: hasOrderUnavailable
+        ? null
+        : rows.reduce((sum, r) => sum + (r.gmv || 0), 0),
+      platformRevenue: hasOrderUnavailable
+        ? null
+        : rows.reduce((sum, r) => sum + (r.platformRevenue || 0), 0),
+      completedOrders: hasOrderUnavailable
+        ? null
+        : rows.reduce((sum, r) => sum + (r.completedOrders || 0), 0),
+      activeUsers: hasAuthUnavailable
+        ? null
+        : rows.reduce((sum, r) => sum + (r.activeUsers || 0), 0),
+      orderUnavailable: hasOrderUnavailable,
+      authUnavailable: hasAuthUnavailable,
+    };
+  }, [rows]);
+
   const bothUnavailable = series && !series.order && !series.auth;
 
   function handleDownload() {
@@ -112,12 +135,42 @@ export default function ReportsSection({ token }) {
       activeUsers: r.authUnavailable ? UNAVAILABLE : r.activeUsers,
     }));
 
+    if (totals) {
+      csvRows.push({
+        label: "รวมทั้งหมด",
+        gmv: totals.orderUnavailable ? UNAVAILABLE : totals.gmv,
+        platformRevenue: totals.orderUnavailable
+          ? UNAVAILABLE
+          : totals.platformRevenue,
+        completedOrders: totals.orderUnavailable
+          ? UNAVAILABLE
+          : totals.completedOrders,
+        activeUsers: totals.authUnavailable ? UNAVAILABLE : totals.activeUsers,
+      });
+    }
+
     const csv = toCsv(columns, csvRows);
     const slug =
       granularity === "year"
         ? `${year}`
         : `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
     downloadCsv(`reloop-executive-report-${slug}.csv`, csv);
+
+    logExecutiveAction(
+      {
+        action: "REPORT_EXPORT_CSV",
+        category: "DATA_EXPORT",
+        targetType: "report",
+        targetId: slug,
+        description: `ส่งออกรายงานยอดขายและรายได้ (${
+          granularity === "year"
+            ? `ปี ${year + 543}`
+            : `เดือน ${MONTH_NAMES[monthIndex]} ${year + 543}`
+        })`,
+        metadata: { granularity, year, monthIndex, rowCount: rows.length },
+      },
+      token,
+    );
   }
 
   return (
@@ -215,47 +268,47 @@ export default function ReportsSection({ token }) {
           <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
-                  <th scope="col" className="px-5 py-3 font-medium">
+                <tr className="border-b border-slate-100 text-xs text-slate-500">
+                  <th scope="col" className="px-5 py-3 text-left font-medium">
                     ช่วงเวลา
                   </th>
-                  <th scope="col" className="px-5 py-3 text-right font-medium">
+                  <th scope="col" className="px-5 py-3 text-center font-medium">
                     ยอดขาย
                   </th>
-                  <th scope="col" className="px-5 py-3 text-right font-medium">
+                  <th scope="col" className="px-5 py-3 text-center font-medium">
                     รายได้แพลตฟอร์ม
                   </th>
-                  <th scope="col" className="px-5 py-3 text-right font-medium">
+                  <th scope="col" className="px-5 py-3 text-center font-medium">
                     คำสั่งซื้อ
                   </th>
-                  <th scope="col" className="px-5 py-3 text-right font-medium">
+                  <th scope="col" className="px-5 py-3 text-center font-medium">
                     ผู้ใช้งานที่ล็อกอิน
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((r, i) => (
+                {rows.map((r) => (
                   <tr key={r.period}>
                     <th
                       scope="row"
                       className="px-5 py-3 text-left font-normal text-slate-700"
                     >
-                      {i + 1}. {r.label}
+                      {r.label}
                     </th>
-                    <td className="px-5 py-3 text-right text-slate-900">
+                    <td className="px-5 py-3 text-center text-slate-900">
                       {r.orderUnavailable ? UNAVAILABLE : baht(r.gmv)}
                     </td>
-                    <td className="px-5 py-3 text-right text-slate-900">
+                    <td className="px-5 py-3 text-center text-slate-900">
                       {r.orderUnavailable
                         ? UNAVAILABLE
                         : baht(r.platformRevenue)}
                     </td>
-                    <td className="px-5 py-3 text-right text-slate-900">
+                    <td className="px-5 py-3 text-center text-slate-900">
                       {r.orderUnavailable
                         ? UNAVAILABLE
                         : r.completedOrders.toLocaleString("th-TH")}
                     </td>
-                    <td className="px-5 py-3 text-right text-slate-900">
+                    <td className="px-5 py-3 text-center text-slate-900">
                       {r.authUnavailable
                         ? UNAVAILABLE
                         : r.activeUsers.toLocaleString("th-TH")}
@@ -263,6 +316,36 @@ export default function ReportsSection({ token }) {
                   </tr>
                 ))}
               </tbody>
+              {totals && (
+                <tfoot className="border-t-2 border-slate-200 bg-slate-50/80 font-bold text-slate-900">
+                  <tr>
+                    <th
+                      scope="row"
+                      className="px-5 py-3.5 text-left font-bold text-slate-900"
+                    >
+                      รวมทั้งหมด
+                    </th>
+                    <td className="px-5 py-3.5 text-center font-bold text-slate-900">
+                      {totals.orderUnavailable ? UNAVAILABLE : baht(totals.gmv)}
+                    </td>
+                    <td className="px-5 py-3.5 text-center font-bold text-slate-900">
+                      {totals.orderUnavailable
+                        ? UNAVAILABLE
+                        : baht(totals.platformRevenue)}
+                    </td>
+                    <td className="px-5 py-3.5 text-center font-bold text-slate-900">
+                      {totals.orderUnavailable
+                        ? UNAVAILABLE
+                        : totals.completedOrders.toLocaleString("th-TH")}
+                    </td>
+                    <td className="px-5 py-3.5 text-center font-bold text-slate-900">
+                      {totals.authUnavailable
+                        ? UNAVAILABLE
+                        : totals.activeUsers.toLocaleString("th-TH")}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </>

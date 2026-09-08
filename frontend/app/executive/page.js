@@ -53,12 +53,14 @@ export default function ExecutiveDashboardPage() {
   const activeSection = SECTIONS.find((s) => s.key === section);
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50/50">
-      <NavBar />
-      <div className="flex flex-1">
-        {/* ── Sidebar ── */}
-        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
-          <div className="flex h-16 items-center border-b border-slate-200/60 px-4 bg-white">
+    <div className="flex h-screen flex-col bg-slate-50/50 overflow-hidden">
+      <header className="shrink-0 z-30">
+        <NavBar />
+      </header>
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* ── Sidebar (Fixed, does not scroll with main content) ── */}
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-20 overflow-y-auto">
+          <div className="flex h-16 shrink-0 items-center border-b border-slate-200/60 px-4 bg-white">
             <div className="flex items-center gap-3">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-indigo-50 text-indigo-600">
                 <span className="material-symbols-outlined text-[19px]">
@@ -103,9 +105,10 @@ export default function ExecutiveDashboardPage() {
           </nav>
         </aside>
 
-        {/* ── Main Content ── */}
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+        {/* ── Main Content Area ── */}
+        <main className="min-w-0 flex-1 flex flex-col overflow-hidden">
+          {/* Top bar / Section header (Fixed, does not scroll away) */}
+          <div className="shrink-0 z-10 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/90 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
             <div className="flex items-center gap-3">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                 <span className="material-symbols-outlined text-[18px]">
@@ -132,10 +135,13 @@ export default function ExecutiveDashboardPage() {
             </div>
           </div>
 
-          <div className="p-8 max-w-7xl mx-auto">
-            {section === "overview" && <OverviewSection token={token} />}
-            {section === "reports" && <ReportsSection token={token} />}
-            {section === "complaints" && <ComplaintsSection token={token} />}
+          {/* Scrollable Content Body - Only this area scrolls when scrolling mouse */}
+          <div className="flex-1 overflow-y-auto p-6 sm:p-8">
+            <div className="max-w-7xl mx-auto">
+              {section === "overview" && <OverviewSection token={token} />}
+              {section === "reports" && <ReportsSection token={token} />}
+              {section === "complaints" && <ComplaintsSection token={token} />}
+            </div>
           </div>
         </main>
       </div>

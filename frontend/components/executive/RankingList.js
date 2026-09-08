@@ -1,4 +1,5 @@
-import { CATEGORICAL } from "../charts/palette";
+const MIN_BAR_PERCENT = 20;
+const LONG_BAR_THRESHOLD = 45;
 
 function baht(v) {
   return `฿${v.toLocaleString("th-TH")}`;
@@ -22,8 +23,9 @@ export default function RankingList({ rows, emptyText, unavailable }) {
   return (
     <ol className="flex flex-col gap-3 py-1">
       {rows.map((row, i) => {
-        const pctOfMax = Math.max((row.gmv / max) * 100, 20);
+        const pctOfMax = Math.max((row.gmv / max) * 100, MIN_BAR_PERCENT);
         const sharePct = ((row.gmv / total) * 100).toFixed(0);
+        const isBarLong = pctOfMax >= LONG_BAR_THRESHOLD;
 
         return (
           <li key={row.id} className="flex items-center gap-3">
@@ -35,20 +37,37 @@ export default function RankingList({ rows, emptyText, unavailable }) {
               </span>
             </div>
 
-            {/* Right: Horizontal Bar matching user screenshot */}
+            {/* Right: Horizontal Bar */}
             <div className="relative flex-1 h-8 rounded-lg bg-slate-100 overflow-hidden flex items-center">
-              <div
-                className="h-full rounded-lg bg-[#3b82f6] flex items-center justify-between px-3 transition-all duration-500 shadow-2xs"
-                style={{ width: `${pctOfMax}%` }}
-              >
-                <span className="text-xs font-bold text-white whitespace-nowrap">
-                  {baht(row.gmv)}
-                </span>
-                <span className="text-[10px] font-medium text-blue-100 hidden sm:inline-flex items-center gap-1 ml-2 whitespace-nowrap">
-                  <span>{row.count.toLocaleString("th-TH")} ชิ้น</span>
-                  <span>{sharePct}%</span>
-                </span>
-              </div>
+              {isBarLong ? (
+                <div
+                  className="h-full rounded-lg bg-[#3b82f6] flex items-center justify-between px-3 transition-all duration-500 shadow-2xs"
+                  style={{ width: `${pctOfMax}%` }}
+                >
+                  <span className="text-xs font-bold text-white whitespace-nowrap">
+                    {baht(row.gmv)}
+                  </span>
+                  <span className="text-[10px] font-medium text-blue-100 hidden sm:inline-flex items-center gap-1 ml-2 whitespace-nowrap">
+                    <span>{row.count.toLocaleString("th-TH")} ชิ้น</span>
+                    <span>{sharePct}%</span>
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center w-full h-full">
+                  <div
+                    className="h-full rounded-lg bg-[#3b82f6] flex items-center justify-start px-3 transition-all duration-500 shadow-2xs shrink-0"
+                    style={{ width: `${pctOfMax}%` }}
+                  >
+                    <span className="text-xs font-bold text-white whitespace-nowrap">
+                      {baht(row.gmv)}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-600 hidden sm:inline-flex items-center gap-1 ml-2.5 whitespace-nowrap">
+                    <span>{row.count.toLocaleString("th-TH")} ชิ้น</span>
+                    <span>{sharePct}%</span>
+                  </span>
+                </div>
+              )}
             </div>
           </li>
         );

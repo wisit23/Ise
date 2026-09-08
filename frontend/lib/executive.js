@@ -167,3 +167,24 @@ export async function fetchMetricsSeries(win, granularity, token) {
     auth: fulfilled(results[1])?.data ?? null,
   };
 }
+
+/** Records an append-only executive audit log entry (e.g. on export CSV or moderation). */
+export async function logExecutiveAction(actionData, token) {
+  try {
+    return await apiFetch("/api/auth/executive/audit", {
+      token,
+      method: "POST",
+      body: actionData,
+    });
+  } catch (err) {
+    console.warn("Failed to record executive audit log:", err);
+    return null;
+  }
+}
+
+/** Queries executive audit logs with pagination and filters. */
+export async function fetchExecutiveAuditLogs(params = {}, token) {
+  const query = new URLSearchParams(params).toString();
+  const path = `/api/auth/executive/audit${query ? `?${query}` : ""}`;
+  return apiFetch(path, { token });
+}

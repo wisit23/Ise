@@ -45,4 +45,21 @@ describe("RankingList (Horizontal In-Bar Bar Chart)", () => {
     expect(screen.getByText("8 ชิ้น")).toBeInTheDocument();
     expect(screen.getByText("40%")).toBeInTheDocument();
   });
+
+  it("renders short bars cleanly with high contrast outside text", () => {
+    const mockRows = [
+      { id: "cat-1", label: "ร้านบอร์ดเกม", gmv: 30000, count: 1 },
+      { id: "cat-2", label: "รองเท้าวิ่ง Nike Air Z", gmv: 1500, count: 1 },
+    ];
+
+    render(<RankingList rows={mockRows} />);
+
+    expect(screen.getByText("ร้านบอร์ดเกม")).toBeInTheDocument();
+    expect(screen.getByText("฿30,000")).toBeInTheDocument();
+    expect(screen.getByText("95%")).toBeInTheDocument();
+
+    expect(screen.getByText("รองเท้าวิ่ง Nike Air Z")).toBeInTheDocument();
+    expect(screen.getByText("฿1,500")).toBeInTheDocument();
+    expect(screen.getByText("5%")).toBeInTheDocument();
+  });
 });
