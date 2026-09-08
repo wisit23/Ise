@@ -16,13 +16,12 @@ import KycSection from "../../components/support/sections/KycSection";
 import AuditSection from "../../components/support/sections/AuditSection";
 import AdminInboxSection from "../../components/support/sections/AdminInboxSection";
 import ProductsSection from "../../components/support/sections/ProductsSection";
-import AuctionApprovalsSection from "../../components/support/sections/AuctionApprovalsSection";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "tickets", label: "Tickets", icon: "confirmation_number" },
   { key: "disputes", label: "Disputes", icon: "gavel" },
-  { key: "orders", label: "ค้นหาออเดอร์", icon: "search" },
+  { key: "orders", label: "ค้นหา", icon: "manage_search" },
   { key: "faq", label: "จัดการ FAQ", icon: "menu_book" },
 ];
 
@@ -31,9 +30,8 @@ const SECTIONS = [
 // anywhere in the CS agent's own tabs (see TicketsSection's dropped
 // ESCALATED filter option).
 const ADMIN_SECTIONS = [
-  { key: "admin_inbox", label: "เคสระดับแอดมิน", icon: "assignment_late" },
+  { key: "admin_inbox", label: "เคส Trust & Safety", icon: "assignment_late" },
   { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
-  { key: "auction_approvals", label: "อนุมัติประมูล", icon: "sell" },
   { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
 ];
@@ -70,7 +68,7 @@ export default function SupportPanelPage() {
       </main>
     );
   }
-  if (user?.role !== "CUSTOMER_SERVICE" && user?.role !== "ADMIN") {
+  if (user?.role !== "CUSTOMER_SERVICE" && user?.role !== "TRUST_AND_SAFETY") {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
@@ -83,7 +81,7 @@ export default function SupportPanelPage() {
 
   const token = getAccessToken();
   const visibleSections =
-    user?.role === "ADMIN" ? [...SECTIONS, ...ADMIN_SECTIONS] : SECTIONS;
+    user?.role === "TRUST_AND_SAFETY" ? [...SECTIONS, ...ADMIN_SECTIONS] : SECTIONS;
   const activeSection = visibleSections.find((s) => s.key === section);
 
   return (
@@ -108,7 +106,7 @@ export default function SupportPanelPage() {
                     Re-loop panel
                   </span>
                   <span className="text-[10px] font-semibold tracking-wider text-emerald-600 uppercase">
-                    {user?.role === "ADMIN" ? "Administrator" : "Support Agent"}
+                    {user?.role === "TRUST_AND_SAFETY" ? "Trust and Safety" : "Support Agent"}
                   </span>
                 </div>
               </div>
@@ -217,9 +215,6 @@ export default function SupportPanelPage() {
               {section === "kyc" && <KycSection token={token} />}
               {section === "audit" && <AuditSection token={token} />}
               {section === "products" && <ProductsSection token={token} />}
-              {section === "auction_approvals" && (
-                <AuctionApprovalsSection token={token} />
-              )}
             </div>
           </main>
         </div>

@@ -8,7 +8,7 @@ const router = Router();
 router.post(
   "/",
   requireAuth,
-  requireRole("SELLER", "ADMIN"),
+  requireRole("SELLER", "TRUST_AND_SAFETY"),
   upload.array("files", 8),
   uploadController.uploadMedia,
 );

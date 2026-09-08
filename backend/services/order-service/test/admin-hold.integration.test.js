@@ -74,7 +74,7 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
     },
   });
 
-  const adminToken = tokenFor("admin-1", ["ADMIN"]);
+  const adminToken = tokenFor("admin-1", ["TRUST_AND_SAFETY"]);
   const sellerToken = tokenFor(order.sellerId, ["SELLER"]);
 
   try {

@@ -99,9 +99,9 @@ export default function DisputeDetailPanel({
           <p className="font-mono text-xs text-slate-500">
             Order ID: {dispute.orderId}
           </p>
-          {/* Holding funds is an Admin-only power, so the link only exists
-              for Admin — a CS agent seeing it would hit a 403. */}
-          {userRole === "ADMIN" && (
+          {/* Holding funds is a Trust & Safety power, so the link only exists
+              for Trust & Safety — a CS agent seeing it would hit a 403. */}
+          {userRole === "TRUST_AND_SAFETY" && (
             <Link
               href={`/admin/disputes/${dispute.orderId}`}
               target="_blank"
@@ -110,7 +110,7 @@ export default function DisputeDetailPanel({
               <span className="material-symbols-outlined text-[14px]">
                 admin_panel_settings
               </span>
-              จัดการการระงับเงิน (Admin)
+              จัดการการระงับเงิน (Trust & Safety)
             </Link>
           )}
         </div>
@@ -282,10 +282,10 @@ export default function DisputeDetailPanel({
                       ปฏิเสธคำร้อง
                     </Button>
                   </div>
-                  {userRole !== "ADMIN" && (
+                  {userRole !== "TRUST_AND_SAFETY" && (
                     <p className="text-center text-xs font-medium text-slate-500">
-                      หากต้องการให้ Admin ช่วยระงับเงินไว้ก่อนตัดสิน แจ้งทีม
-                      Admin โดยตรง
+                      หากต้องการให้ทีม Trust & Safety ช่วยระงับเงินไว้ก่อนตัดสิน แจ้งทีม
+                      Trust & Safety โดยตรง
                     </p>
                   )}
                 </div>

@@ -95,9 +95,9 @@ test("submit creates a pending_approval auction for the owning seller", async (t
   assert.equal(auction.sellerId, "seller-1");
 });
 
-test("approve rejects a non-Admin caller", async () => {
+test("approve rejects a non-Marketing caller", async () => {
   await assert.rejects(
-    service.approve({ user: { id: "u1", role: "MARKETING" }, auctionId: "a1" }),
+    service.approve({ user: { id: "u1", role: "TRUST_AND_SAFETY" }, auctionId: "a1" }),
     (err) => err.status === 403,
   );
 });
@@ -110,7 +110,7 @@ test("approve rejects moving out of a non-pending_approval state", async (t) => 
 
   await assert.rejects(
     service.approve({
-      user: { id: "admin-1", role: "ADMIN" },
+      user: { id: "mkt-1", role: "MARKETING" },
       auctionId: "a1",
     }),
     (err) => err.status === 409,

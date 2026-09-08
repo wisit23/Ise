@@ -12,7 +12,14 @@ import {
   saveSession,
 } from "../../lib/auth";
 
-const ROLE_LABEL = { BUYER: "ผู้ซื้อ", SELLER: "ผู้ขาย", ADMIN: "แอดมิน" };
+const ROLE_LABEL = {
+  BUYER: "ผู้ซื้อ",
+  SELLER: "ผู้ขาย",
+  TRUST_AND_SAFETY: "Trust and Safety",
+  CUSTOMER_SERVICE: "ฝ่ายบริการลูกค้า",
+  MARKETING: "การตลาด",
+  EXECUTIVE: "ผู้บริหาร",
+};
 
 export default function ProfilePage() {
   const router = useRouter();

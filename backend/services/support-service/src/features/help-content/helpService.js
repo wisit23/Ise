@@ -1,7 +1,7 @@
 const { badRequest, forbidden, notFound } = require("@reloop/shared");
 const helpModel = require("./helpModel");
 
-const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN"]);
+const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "TRUST_AND_SAFETY"]);
 
 function slugify(title) {
   return (

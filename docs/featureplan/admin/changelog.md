@@ -275,3 +275,202 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
   Ticket panel, การตักเตือนทั้งกรณีไม่กรอกเหตุผล (ถูกบล็อก) และกรอกเหตุผล (สำเร็จ ขึ้น Toast),
   Disputes ทั้ง 5 เคส Seed และ Dialog ลบสินค้า
 - รายละเอียดเต็มและผลตรวจอยู่ที่ [`docs/featureplan/changelog.md`](../changelog.md) และ [`docs/progress.md`](../../progress.md) Task `UI-SYSTEM-001`; กติกา UI อยู่ที่ [`docs/ui-conventions.md`](../../ui-conventions.md)
+
+## 2026-09-06 — 100% Complete Replacement of Role ADMIN with TRUST_AND_SAFETY
+
+ลบและแทนที่บทบาท `ADMIN` ออกจากทั้งระบบ 100% โดยเปลี่ยนเป็น `TRUST_AND_SAFETY` (Trust and Safety) ในทุกเลเยอร์ของระบบ โดยไม่มีการคง enum ค่า `ADMIN` ไว้เป็นหนี้ทางเทคนิค:
+
+**Shared & Database Schema:**
+- `backend/shared/src/permissions.js`: เปลี่ยน key ใน `ROLE_PERMISSIONS` จาก `ADMIN` เป็น `TRUST_AND_SAFETY` และปรับ `ALL_ROLES` ให้มี `TRUST_AND_SAFETY` แทน `ADMIN`
+- `backend/services/auth-service/prisma/schema.prisma`: แทนที่ `ADMIN` ด้วย `TRUST_AND_SAFETY` ใน `enum Role` และ `enum RoleCode`
+- PostgreSQL migration: รันสคริปต์อัปเดตข้อมูลเดิมใน `users` และ `user_roles` ที่เคยมี role `ADMIN` ให้กลายเป็น `TRUST_AND_SAFETY` จากนั้น `prisma db push --accept-data-loss` สำเร็จ ไม่พบข้อผิดพลาด
+- `seed-admin-demo.js` & `seed.js`: อัปเดตสคริปต์ seed ให้สร้างบัญชีด้วย role `TRUST_AND_SAFETY` (`admin@test.local`)
+
+**Backend Microservices Role Guards:**
+- `backend/services/product-service/src/controllers/productController.js`: `requireSellerRole` และ `adminSearch` เปลี่ยนจากการเช็ค `ADMIN` เป็น `TRUST_AND_SAFETY`
+- `backend/services/product-service/src/routes/uploadRoutes.js`: `requireRole("SELLER", "TRUST_AND_SAFETY")`
+- `backend/services/product-service/src/features/product-videos/productVideoService.js`: `UPLOAD_ROLES` เปลี่ยนเป็น `new Set(["SELLER", "TRUST_AND_SAFETY"])`
+- `backend/services/product-service/src/features/auctions/auctionService.js`: เปลี่ยน role checks สำหรับการอนุมัติ/ปฏิเสธ/ยกเลิกประมูลจาก `ADMIN` เป็น `TRUST_AND_SAFETY`
+- `backend/services/support-service/src/features/tickets/ticketService.js` & `helpService.js`: `AGENT_ROLES` เปลี่ยนจาก `ADMIN` เป็น `TRUST_AND_SAFETY`
+- `backend/services/order-service/src/features/support/supportService.js` & `disputeService.js`: `AGENT_ROLES` เปลี่ยนจาก `ADMIN` เป็น `TRUST_AND_SAFETY`
+
+**Frontend UI & Navigation:**
+- `frontend/components/NavBar.js`: `ROLE_LABEL` เปลี่ยนจาก `ADMIN: "แอดมิน"` เป็น `TRUST_AND_SAFETY: "Trust and Safety"`; `isSupportAgent` รองรับ `TRUST_AND_SAFETY`
+- `frontend/app/profile/page.js`: `ROLE_LABEL` มี `TRUST_AND_SAFETY: "Trust and Safety"`
+- `frontend/app/workspace/page.js`: สิทธิ์การเข้าถึงแท็บควบคุมความปลอดภัย และ Badge เปลี่ยนเป็น `"Trust and Safety"`
+- `frontend/components/support/sections/DashboardSection.js`: ตรวจสอบ `isAdmin = userRole === "TRUST_AND_SAFETY"`
+- `frontend/components/support/sections/disputes/DisputeDetailPanel.js`: ปุ่มจัดการระงับเงิน และข้อความแจ้งเตือนเปลี่ยนเป็น `Trust & Safety`
+- `frontend/app/admin/disputes/[id]/page.js`: การป้องกันการเข้าถึงตรวจสอบ `user?.role === "TRUST_AND_SAFETY"`
+- `frontend/app/support/cases/[id]/page.js` & `tickets/[id]/page.js`: `isAgent` รองรับ `TRUST_AND_SAFETY`
+- `frontend/components/NavBar.js`: แก้ไขส่วนหัวของเมนูโปรไฟล์ให้แสดงเฉพาะข้อความ `"Trust and Safety"` บรรทัดเดียวอย่างกระชับเมื่อผู้ใช้ถือบทบาท `TRUST_AND_SAFETY` โดยไม่แสดงชื่อเดิม "แอดมิน ระบบ" พร้อมทั้งอัปเดตชื่อสตาฟฟ์ในฐานข้อมูลจริงและ seed.js เป็น "Trust and Safety"
+
+**Tests Verification:**
+- `backend/shared/src/permissions.test.js` & `authMiddleware.test.js`: 10/10 pass
+- `backend/services/auth-service/test/`: `admin-kyc`, `admin-reports`, `bounded-bulk`, `multi-role` 4/4 pass (พร้อมทั้ง sync `KycApplication` test fields `storageKey`/`fileType` ให้ตรงกับ schema ล่าสุด)
+- `backend/services/order-service/test/admin-hold.integration.test.js`: 1/1 pass
+- `backend/services/product-service/src/features/auctions/auctionService.test.js`: 17/17 pass
+- `backend/services/support-service/src/`: 10/10 pass
+- `npm run test:frontend`: 11/11 suites pass (37/37 tests pass)
+- `npm run lint`: 0 errors / 0 warnings สะอาดทั้ง monorepo
+
+## 2026-09-06 — Remove Auction Approvals from Trust & Safety Scope
+
+นำระบบและหน้าที่การอนุมัติประมูล (Auction Approvals) ออกจากบทบาท `Trust and Safety` ตามขอบเขตความรับผิดชอบ (Separation of Concerns) โดยงานส่วนนี้เป็นของทีมการตลาด (Marketing) และปฏิบัติตามคำสั่งที่ไม่แตะต้องโค้ดฝั่ง Marketing เพื่อรอ merge กับทีม:
+
+**Frontend Workspace Changes:**
+- `frontend/app/workspace/page.js`: ลบ import `AuctionApprovalsSection`, นำ `{ key: "auction_approvals", label: "อนุมัติประมูล", icon: "sell" }` ออกจากรายการแท็บ `ADMIN_SECTIONS` และลบ block แสดงผล `{section === "auction_approvals" && ...}`
+- `frontend/components/support/sections/AuctionApprovalsSection.js`: ลบไฟล์คอมโพเนนต์นี้ออกจากระบบอย่างสมบูรณ์
+
+**Backend Authorization:**
+- `backend/services/product-service/src/features/auctions/auctionService.js`: ตัด `TRUST_AND_SAFETY` ออกจากสิทธิ์ `approve`, `reject`, `schedule`, `cancel`, และ `submit` โดยคงการตรวจสอบสิทธิ์ `approve`/`reject` ไว้เฉพาะบทบาท `MARKETING`
+- `backend/services/product-service/src/features/auctions/auctionService.test.js`: ปรับ unit tests ให้การอนุมัติประมูลปฏิเสธ `TRUST_AND_SAFETY` ด้วย 403 Forbidden และยอมรับเฉพาะ `MARKETING`
+
+**Scope Boundary & Isolation:**
+- ไม่มีการแตะต้องหรือแก้ไขไฟล์ในส่วนของ Marketing (`frontend/components/marketing/` ฯลฯ) คงไว้สำหรับการ merge ร่วมกับเพื่อนร่วมทีมที่รับผิดชอบส่วนดังกล่าวโดยตรง
+
+**Tests Verification:**
+- Backend auctions unit tests: 17/17 pass
+- Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
+- Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
+
+## 2026-09-06 — Rename "เคสระดับแอดมิน" to "เคส Trust & Safety"
+
+ปรับปรุงข้อความบน UI เพื่อให้สอดรับกับการเปลี่ยนบทบาทจาก `ADMIN` เป็น `TRUST_AND_SAFETY` 100%:
+
+**UI Changes:**
+- `frontend/app/workspace/page.js`: เปลี่ยนชื่อแท็บ `admin_inbox` จาก `"เคสระดับแอดมิน"` เป็น `"เคส Trust & Safety"`
+- `frontend/components/support/sections/DashboardSection.js`: เปลี่ยนข้อความนำทางบนการ์ด KPI Escalated Tickets สำหรับเจ้าหน้าที่จาก `"ดูที่เคสระดับแอดมิน"` เป็น `"ดูที่เคส Trust & Safety"`
+- `frontend/components/support/sections/tickets/TicketsTable.js`: อัปเดต inline comments ให้สื่อถึงบทบาท Trust and Safety
+
+**Tests Verification:**
+- Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
+- Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
+
+## 2026-09-07 — Protect Requester & Prioritize Counterparty in Ticket Moderation (ADM-DEC-019)
+
+แก้ไขปัญหาเจ้าหน้าที่สับสนและแบนผู้แจ้งปัญหา (Requester) แทนคู่กรณีที่ถูกร้องเรียน (Target) ในหน้าเคส Trust & Safety:
+
+**Frontend Changes:**
+- `frontend/components/support/sections/case/CaseUserCard.js`: เพิ่ม props `warnLabel`, `banLabel`, และ `isRequester` เพื่อปรับข้อความและปุ่มสำหรับผู้ส่งคำร้องให้เป็นสีเทาอ่อน/ขอบบาง ป้องกันการเข้าใจผิดว่าเป็นปุ่มลงโทษคู่กรณีหลัก
+- `frontend/components/support/sections/case/TicketCasePanel.js`:
+  - สลับลำดับการ์ดนำ `คู่กรณี (Target - ผู้ถูกร้องเรียน)` มาแสดงเป็นอันดับแรกด้านบนสุด พร้อมปุ่มแบนสีแดง `[แบนคู่กรณี]`
+  - นำการ์ด `ผู้แจ้ง (Requester - ผู้ส่งคำร้อง)` ไปแสดงด้านล่าง พร้อมปุ่ม `[แบนผู้แจ้ง (ระวัง)]`
+  - หากตั๋วไม่มี `targetId` ผูกไว้ (เช่น เปิดตั๋วทั่วไปไม่ได้เลือกเลขออเดอร์) จะแสดงกล่องสีส้มพร้อมช่องกรอก User ID ของคู่กรณีด้วยตนเอง เพื่อให้ระบุตัวคนทำผิดและดำเนินการได้ทันที
+  - แถบสรุปด้านบนขยายเป็น 4 คอลัมน์ แสดงทั้ง `คู่กรณี (Target)` และ `ผู้แจ้ง (Requester)` ชัดเจน
+- `frontend/components/support/sections/AdminInboxSection.js`:
+  - ส่งต่อ `roleLabel` ("คู่กรณี" หรือ "ผู้แจ้ง") ไปยัง `pendingAction`
+  - ปรับปรุง `confirmCopy` ในโมดอล `ConfirmDialog` ให้ระบุ User ID และบทบาทที่จะแบนอย่างละเอียด พร้อมแสดงคำเตือนพิเศษ `⚠️ ยืนยันการระงับบัญชีผู้แจ้งปัญหา?` หากผู้ใช้พยายามแบนผู้ส่งคำร้อง
+  - Map `targetId` จากรายงาน (`REPORT`) เข้ารายการตารางเคส
+- `frontend/components/support/sections/admin-inbox/AdminInboxTable.js`:
+  - ปรับปรุงคอลัมน์ในตารางจากเดิม "รหัสลูกค้า (ID)" เป็น "คู่กรณี / ผู้แจ้ง" เพื่อแสดงรหัสคู่กรณี (สีส้ม) และผู้แจ้ง (สีเทา) ให้เห็นตั้งแต่ภาพรวม
+
+**Backend / Database Changes:**
+- `backend/services/support-service/prisma/seed.js`: เพิ่ม `targetId: SELLER_DENIM` ให้กับตั๋วข้อพิพาท `#CS-000002` และปรับการ upsert ให้ sync `targetId` เสมอ
+- อัปเดตข้อมูลตั๋ว `#CS-000002` ในฐานข้อมูลจริง `reloop_support` ให้มี `target_id = 10000000-0000-0000-0000-000000000001` (Denim Seller) เรียบร้อยแล้ว
+
+**Tests Verification:**
+- Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
+- Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
+
+## 2026-09-07 — Backend Architecture Refactoring for Trust & Safety (ADM-DEC-020)
+
+Refactor ปรับปรุงคุณภาพโค้ด สถาปัตยกรรม และความเสถียรของ Backend ที่เกี่ยวข้องกับระบบ **Trust & Safety** ข้าม 4 Microservices:
+
+**1. Database Atomicity (`prisma.$transaction`):**
+- `backend/services/auth-service/src/features/adminKyc/adminKycService.js`: ห่อหุ้มการอัปเดต `kycApplication` + `sellerProfile` + การบันทึก `adminAudit` ให้อยู่ใน Transaction เดียว ป้องกันข้อมูลค้างหรือสถานะไม่ตรงกันหากคำสั่งใดคำสั่งหนึ่งล้มเหลว
+- `backend/services/order-service/src/features/adminDisputes/adminDisputeService.js`: ห่อหุ้มการสั่งพักเงิน (`holdSimulatedFunds`) และการคืนเงิน (`releaseSimulatedFunds`) ให้อยู่ใน Transaction เดียวกันกับการบันทึก `disputeAudit`
+
+**2. Complete Audit Logging:**
+- บันทึก Audit Trail สำหรับการตัดสินใจ KYC (`KYC_APPROVED`, `KYC_REJECTED`) ลงในตาราง `admin_audits` อย่างครบถ้วน ปิดช่องว่าง NFR-SP-03
+- `reportService.js`: ปรับปรุง Safety Summary ให้นับจำนวนการระงับบัญชี (`suspensionCount`) และการตักเตือน (`warningCount`) เพิ่มเติม
+
+**3. Expanded Bulk Moderation Registry:**
+- `backend/services/auth-service/src/features/bulkActions/actionRegistry.js`: เพิ่มคำสั่ง `WARN_USER` และ `RESTORE_USER` รองรับการ Dry-run, Idempotency และจำกัดจำนวนต่อรอบ (Max batch size 100)
+- `bulkActionService.js`: ทำความสะอาดการส่งต่อพารามิเตอร์ `staffId`, `actorId`, และ `requestId`
+
+**4. Service-to-Service HTTP Resilience:**
+- `backend/services/auth-service/src/services/productModerationClient.js`: เพิ่ม Timeout 5,000ms ด้วย `AbortSignal.timeout` พร้อมจัดการ Error 504 Timeout ป้องกันปัญหาระบบค้างเมื่อเรียกข้ามเครือข่ายไปยัง `product-service`
+
+**5. Support Oversight Authorization:**
+- `backend/services/support-service/src/features/tickets/ticketService.js`: ปรับปรุง `assertAccess` ให้บทบาท `TRUST_AND_SAFETY` มีสิทธิ์ตรวจสอบและดูแลตั๋วทุกใบได้เสมอ แม้ตั๋วจะมีเจ้าหน้าที่ CS ท่านอื่นรับผิดชอบอยู่ก็ตาม (ขจัดปัญหา 403 Forbidden ที่เคยพบ)
+
+**Tests Verification:**
+- Shared permissions & authMiddleware unit tests: 10/10 pass
+- Auth-service PostgreSQL integration tests (`admin-kyc`, `admin-reports`, `bounded-bulk`): 3/3 pass (ครอบคลุมทั้ง `SUSPEND_USER`, `WARN_USER`, และ `RESTORE_USER`)
+- Order-service PostgreSQL integration test (`admin-hold`): 1/1 pass
+- Product-service PostgreSQL integration test (`moderation`): 1/1 pass
+- Support-service unit & integration tests (`ticketState`, `priority`, `ticket-lifecycle`): pass ครบทุกข้อ
+- Frontend test suites (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
+- Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
+
+## 2026-09-07 — Frontend Trust & Safety Architecture & UX Refactoring (ADM-DEC-021)
+
+Refactor ปรับปรุงประสบการณ์ใช้งาน สถาปัตยกรรมคอมโพเนนต์ และความปลอดภัยในการใช้งาน (Safety Guards) ของระบบ **Trust & Safety** บน Frontend:
+
+**1. KYC Section Modernization & Controls (`frontend/components/support/sections/KycSection.js`):**
+- เพิ่มตัวเลือกกรองสถานะ (`PENDING`, `VERIFIED`, `REJECTED`, `ALL`) ทำให้สามารถเรียกดูใบสมัครที่ผ่านการตัดสินแล้วย้อนหลังได้
+- เพิ่มระบบ Pagination เชื่อมต่อกับ Backend Pagination API
+- นำ `ConfirmDialog` มาครอบการตัดสินใจอนุมัติ (`VERIFY`) และปฏิเสธ (`REJECT`) ป้องกันการกดพลาด พร้อมแจ้งเตือนผ่าน Toast
+- จัดรูปแบบการแสดงผลใหม่ด้วย `Badge` และดีไซน์การ์ดข้อมูลร้านค้าที่อ่านง่ายและสบายตา
+
+**2. Audit Log Overhaul (`frontend/components/support/sections/AuditSection.js`):**
+- ปรับคำศัพท์จาก "Audit Log ของแอดมิน" เป็น "Audit Log ของ Trust & Safety" และเปลี่ยนชื่อคอลัมน์เป็น "ผู้ดำเนินการ (Staff ID)"
+- แก้ไขการอ่านฟิลด์ข้อมูลจริง (`actorId`, `targetId`, `reason`) ขจัดปัญหาค่าว่าง/ขีดค้างในตาราง
+- เพิ่มตัวกรองประเภทการกระทำ (Action Filter) แบบ Dropdown และช่องค้นหารหัสเป้าหมาย (Target ID)
+- เพิ่ม Pagination รองรับการดูประวัติขนาดใหญ่
+
+**3. Product Moderation Polish (`frontend/components/support/sections/ProductsSection.js`):**
+- ปรับปรุงข้อความสถานะสินค้าเป็น "ถูกระงับโดย Trust & Safety"
+- เพิ่ม Pagination สำหรับผลลัพธ์การค้นหาสินค้า
+- เพิ่ม Toast แจ้งเตือนเมื่อกู้คืนสินค้าสำเร็จ
+
+**4. Dispute Fund Management Safeguards (`frontend/app/admin/disputes/[id]/page.js`):**
+- ครอบคำสั่งระงับเงิน (`Hold`) และปล่อยเงิน (`Release`) ด้วย `ConfirmDialog` พร้อมคำอธิบายผลกระทบทางการเงินชัดเจน
+- ปรับปรุงข้อความคำเตือนให้อ้างอิงถึงทีม Trust & Safety
+
+**5. Escalation Copy Alignment (`frontend/components/support/sections/AdminInboxSection.js`):**
+- ปรับปรุงข้อความส่งต่อตั๋วเป็น "ส่งต่อให้ทีม Trust & Safety?"
+
+**Tests Verification:**
+- Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
+- Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
+- Shared RBAC tests: 10/10 pass
+
+## 2026-09-08 — Unified Search Center & Direct Moderation (ADM-DEC-022)
+
+ยกระดับหน้าแท็บค้นหาใน Workspace สู่ **"ศูนย์ค้นหาข้อมูล Trust & Safety (Unified Search Center)"** ค้นหาข้อมูลได้หลากหลายและสั่งการควบคุมความปลอดภัยได้ทันที:
+
+**1. Multi-Entity Search Dropdown & Dynamic Placeholders (`frontend/components/support/sections/OrdersSection.js`):**
+- เพิ่มตัวเลือกประเภทการค้นหาใน `RadioSelect`:
+  - `orderId`: ค้นหารหัสคำสั่งซื้อ (Order ID)
+  - `buyerId`: ค้นหาด้วยรหัสหรืออีเมลของผู้ซื้อ (Buyer ID / Email)
+  - `sellerId`: ค้นหาด้วยรหัส อีเมล หรือชื่อร้านค้าของผู้ขาย (Seller ID / Shop / Email)
+  - `userId`: ค้นหาด้วยรหัสหรืออีเมลของผู้ใช้ทั่วไป (User ID / Email)
+- ปรับเปลี่ยนข้อความ Placeholder อัตโนมัติตามประเภทที่เลือก พร้อมปุ่มล้างคำค้นหา (Clear input)
+
+**2. User Profile & Safety Summary Card:**
+- แสดงข้อมูลโปรไฟล์: ชื่อ-นามสกุล, อีเมล, เบอร์โทรศัพท์, สิทธิ์ผู้ใช้ (Roles), สถานะบัญชี (`ACTIVE` / `SUSPENDED`)
+- ปุ่มคัดลอก User ID พร้อม visual feedback
+- สถิติด้านความปลอดภัย 3 ด้าน: รายงานที่ได้รับ (`reportCount`), การตักเตือน (`warningCount`), ประวัติการถูกระงับบัญชี (`suspensionCount`)
+- ข้อมูลผู้ขาย (Seller Profile): แสดงชื่อร้านค้า, สถานะ KYC (`VERIFIED` / `PENDING` / `REJECTED`), เลขบัตรประชาชน, บัญชีธนาคาร, ที่อยู่
+
+**3. Direct Moderation Actions with ConfirmDialog:**
+- เพิ่มปุ่มสั่งการระดับ Trust & Safety บนการ์ดผู้ใช้:
+  - `[ตักเตือนผู้ใช้ (Warn)]`: เปิด `ConfirmDialog` ระบุเหตุผล และเรียก `POST /api/auth/admin/users/:id/warn`
+  - `[ระงับบัญชี (Ban)]`: แสดงเมื่อผู้ใช้ยังไม่ถูกระงับ เปิด `ConfirmDialog` (Danger tone) และเรียก `POST /api/auth/admin/users/:id/suspend`
+  - `[ปลดการระงับ (Restore)]`: แสดงเมื่อผู้ใช้ถูกระงับ เปิด `ConfirmDialog` และเรียก `POST /api/auth/admin/users/:id/restore`
+- ทุกคำสั่งบังคับระบุเหตุผลเพื่อบันทึก Audit Log พร้อมแสดงผลผ่าน Toast และรีเฟรชข้อมูลสถานะผู้ใช้แบบ real-time
+
+**4. Associated Orders List & Order Jump Integration:**
+- แสดงรายการคำสั่งซื้อจริงทั้งหมดที่เกี่ยวข้องกับผู้ใช้ที่ค้นหา
+- ในการ์ดแสดงผลการค้นหาคำสั่งซื้อ (`orderId`) เพิ่มปุ่มด่วน `[ตรวจสอบผู้ซื้อ]` และ `[ตรวจสอบผู้ขาย]` เพื่อสลับประเภทค้นหาและเจาะลึกข้อมูลประวัติผู้ใช้ได้ทันทีในคลิกเดียว
+
+**5. Backend Endpoint Extension (`auth-service`):**
+- เพิ่มฟังก์ชัน `getUserDetail(identifier)` ใน `backend/services/auth-service/src/features/reports/reportService.js` รองรับการค้นหาผู้ใช้จาก ID, Email, และ Shop Name พร้อมคืน `safetySummary` และ `sellerProfile`
+- เพิ่ม Route `GET /admin/users/:id` ใน `reportRoutes.js` ป้องกันด้วย `requireAuth` และสิทธิ์ `admin:report:read` / `support:case:read`
+- เพิ่มชุดทดสอบ Integration ใน `test/admin-reports.integration.test.js`
+
+**Tests Verification:**
+- Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
+- Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
+- Shared RBAC tests (`permissions.test.js`): 4/4 pass

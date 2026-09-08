@@ -37,7 +37,8 @@ async function main() {
     create: {
       id: APPLICATION_ID,
       userId: SELLER_ID,
-      documentUrl: "https://example.com/id-card.jpg",
+      storageKey: "kyc/demo-id-card.jpg",
+      fileType: "image/jpeg",
     },
   });
 

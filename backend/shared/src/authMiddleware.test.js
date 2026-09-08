@@ -49,15 +49,15 @@ test("requireAuth falls back to a single-item roles array for a legacy token", (
 test("requireAuth reads multi-role claims when present", () => {
   const token = signAccessToken({
     sub: "staff-1",
-    role: "ADMIN",
-    roles: ["ADMIN", "CUSTOMER_SERVICE"],
+    role: "TRUST_AND_SAFETY",
+    roles: ["TRUST_AND_SAFETY", "CUSTOMER_SERVICE"],
     permissions: ["admin:user:ban", "support:case:read"],
   });
   const req = { headers: { authorization: `Bearer ${token}` } };
 
   requireAuth(req, {}, () => {});
 
-  assert.deepEqual(req.userRoles, ["ADMIN", "CUSTOMER_SERVICE"]);
+  assert.deepEqual(req.userRoles, ["TRUST_AND_SAFETY", "CUSTOMER_SERVICE"]);
   assert.deepEqual(req.permissions, ["admin:user:ban", "support:case:read"]);
 });
 

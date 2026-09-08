@@ -29,12 +29,12 @@ test("catalog covers every contract role from integration.md", () => {
   assert.deepEqual(
     [...ALL_ROLES].sort(),
     [
-      "ADMIN",
       "BUYER",
       "CUSTOMER_SERVICE",
       "EXECUTIVE",
       "MARKETING",
       "SELLER",
+      "TRUST_AND_SAFETY",
     ].sort(),
   );
 });

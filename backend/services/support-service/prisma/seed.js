@@ -58,6 +58,7 @@ const TICKETS = [
     description: "อยากทราบความคืบหน้าเรื่องที่เปิดข้อพิพาทไปครับ",
     category: "PAYMENT",
     orderId: DISPUTED_ORDER_ID,
+    targetId: SELLER_DENIM,
     status: "IN_PROGRESS",
     priority: "URGENT",
     assigneeId: SUPPORT_AGENT_ID,
@@ -138,7 +139,9 @@ async function main() {
 
     await prisma.supportTicket.upsert({
       where: { id: ticket.id },
-      update: {},
+      update: {
+        targetId: fields.targetId ?? null,
+      },
       create: {
         ...fields,
         slaDueAt: new Date(now + slaDueAtOffsetMs),

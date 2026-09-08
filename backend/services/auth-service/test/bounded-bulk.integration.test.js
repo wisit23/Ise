@@ -49,7 +49,7 @@ test("bounded batch enforces cap, dry-run, permission-per-action and idempotency
   }
 
   const adminId = `adm-005-admin+${Date.now()}`;
-  const adminToken = tokenFor(adminId, ["ADMIN"]);
+  const adminToken = tokenFor(adminId, ["TRUST_AND_SAFETY"]);
   const marketingToken = tokenFor(`adm-005-marketing+${Date.now()}`, [
     "MARKETING",
   ]);
@@ -159,6 +159,32 @@ test("bounded batch enforces cap, dry-run, permission-per-action and idempotency
       });
     assert.equal(replayRes.status, 200);
     assert.deepEqual(replayRes.body, runRes.body);
+
+    // Bulk WARN_USER: warns userB
+    const warnRes = await request(app)
+      .post("/admin/bulk")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        action: "WARN_USER",
+        ids: [userB.id],
+        reason: "cautionary notice",
+      });
+    assert.equal(warnRes.status, 200);
+    assert.equal(warnRes.body.succeeded, 1);
+
+    // Bulk RESTORE_USER: restores userA from SUSPENDED back to ACTIVE
+    const restoreRes = await request(app)
+      .post("/admin/bulk")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        action: "RESTORE_USER",
+        ids: [userA.id],
+        reason: "reinstated after review",
+      });
+    assert.equal(restoreRes.status, 200);
+    assert.equal(restoreRes.body.succeeded, 1);
+    const restoredA = await prisma.user.findUnique({ where: { id: userA.id } });
+    assert.equal(restoredA.status, "ACTIVE");
 
     // Audit query: wrong permission denied, correct permission returns rows.
     const auditDeniedRes = await request(app)

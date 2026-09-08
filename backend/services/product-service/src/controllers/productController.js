@@ -15,12 +15,12 @@ const MIN_MEDIA_COUNT = 4;
 const MAX_MEDIA_COUNT = 8;
 
 function requireSellerRole(role) {
-  if (!["SELLER", "ADMIN"].includes(role)) {
+  if (!["SELLER", "TRUST_AND_SAFETY"].includes(role)) {
     throw forbidden("only seller accounts can list products for sale");
   }
 }
 
-/** ADMIN can list on a seller's behalf (moderation tooling) without having
+/** TRUST_AND_SAFETY can list on a seller's behalf (moderation tooling) without having
  * gone through seller verification themselves. */
 function requireVerifiedSeller(role, kycVerified) {
   if (role === "SELLER" && !kycVerified) {
@@ -106,8 +106,8 @@ async function search(req, res, next) {
 // restore them — so status is optional and passed through as-is.
 async function adminSearch(req, res, next) {
   try {
-    if (req.userRole !== "ADMIN") {
-      throw forbidden("only admin accounts can use this search");
+    if (req.userRole !== "TRUST_AND_SAFETY") {
+      throw forbidden("only trust & safety accounts can use this search");
     }
     const { q, category, status } = req.query;
     const pagination = parsePagination(req.query);

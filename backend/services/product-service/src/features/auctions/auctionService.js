@@ -81,7 +81,7 @@ async function closeAuction(auction, now) {
 
 /** Seller submits one of their own available products for auction. */
 async function submit({ user, input = {} }) {
-  if (!["SELLER", "ADMIN"].includes(user.role)) {
+  if (!["SELLER", "MARKETING"].includes(user.role)) {
     throw forbidden("only seller accounts can submit an auction");
   }
 
@@ -115,9 +115,9 @@ async function submit({ user, input = {} }) {
   });
 }
 
-/** Admin approves a pending auction. */
+/** Marketing approves a pending auction. */
 async function approve({ user, auctionId }) {
-  if (user.role !== "ADMIN") throw forbidden("only Admin can approve auctions");
+  if (user.role !== "MARKETING") throw forbidden("only Marketing can approve auctions");
 
   const auction = await loadAuction(auctionId);
   assertTransition(auction, "approved");
@@ -129,9 +129,9 @@ async function approve({ user, auctionId }) {
   });
 }
 
-/** Admin rejects a pending auction. */
+/** Marketing rejects a pending auction. */
 async function reject({ user, auctionId }) {
-  if (user.role !== "ADMIN") throw forbidden("only Admin can reject auctions");
+  if (user.role !== "MARKETING") throw forbidden("only Marketing can reject auctions");
 
   const auction = await loadAuction(auctionId);
   assertTransition(auction, "rejected");
@@ -141,7 +141,7 @@ async function reject({ user, auctionId }) {
 
 /** Marketing sets the open/close window for an approved auction. */
 async function schedule({ user, auctionId, startsAt, endsAt }) {
-  if (!["MARKETING", "ADMIN"].includes(user.role)) {
+  if (user.role !== "MARKETING") {
     throw forbidden("only Marketing can schedule auctions");
   }
 
@@ -168,9 +168,9 @@ async function schedule({ user, auctionId, startsAt, endsAt }) {
   return updated;
 }
 
-/** Marketing/Admin can cancel an auction any time before it opens. */
+/** Marketing can cancel an auction any time before it opens. */
 async function cancel({ user, auctionId }) {
-  if (!["MARKETING", "ADMIN"].includes(user.role)) {
+  if (user.role !== "MARKETING") {
     throw forbidden("only Marketing can cancel auctions");
   }
 

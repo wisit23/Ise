@@ -46,11 +46,16 @@ async function decideKyc({
   reason,
   version,
   adminId,
+  staffId,
+  requestId,
 }) {
+  const actorId = staffId || adminId;
+  const trimmedReason = reason?.trim();
+
   if (!ALLOWED_DECISIONS.includes(decision)) {
     throw badRequest("decision must be VERIFIED or REJECTED");
   }
-  if (!reason) throw badRequest("reason is required");
+  if (!trimmedReason) throw badRequest("reason is required");
   if (typeof version !== "number") throw badRequest("version is required");
 
   const application = await prisma.kycApplication.findUnique({
@@ -64,24 +69,35 @@ async function decideKyc({
     throw conflict("KYC application was modified — reload and retry");
   }
 
-  const updatedApplication = await prisma.kycApplication.update({
-    where: { id: applicationId },
-    data: {
-      status: decision,
-      reason,
-      decidedAt: new Date(),
-      decidedBy: adminId,
-      version: { increment: 1 },
-    },
-  });
-
-  const sellerProfile = await prisma.sellerProfile.update({
-    where: { userId: application.userId },
-    data: {
-      kycStatus: decision,
-      verifiedAt: decision === "VERIFIED" ? new Date() : null,
-    },
-  });
+  // Atomically update kycApplication, sellerProfile, and create an adminAudit record
+  const [updatedApplication, sellerProfile] = await prisma.$transaction([
+    prisma.kycApplication.update({
+      where: { id: applicationId },
+      data: {
+        status: decision,
+        reason: trimmedReason,
+        decidedAt: new Date(),
+        decidedBy: actorId,
+        version: { increment: 1 },
+      },
+    }),
+    prisma.sellerProfile.update({
+      where: { userId: application.userId },
+      data: {
+        kycStatus: decision,
+        verifiedAt: decision === "VERIFIED" ? new Date() : null,
+      },
+    }),
+    prisma.adminAudit.create({
+      data: {
+        actorId,
+        action: `KYC_${decision === "VERIFIED" ? "APPROVED" : "REJECTED"}`,
+        targetId: applicationId,
+        reason: trimmedReason,
+        requestId: requestId || null,
+      },
+    }),
+  ]);
 
   return {
     application: updatedApplication,

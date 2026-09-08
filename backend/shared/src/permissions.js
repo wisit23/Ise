@@ -14,7 +14,7 @@ const ROLE_PERMISSIONS = {
     "report:action",
     "report:create",
   ],
-  ADMIN: [
+  TRUST_AND_SAFETY: [
     "admin:kyc:decide",
     "admin:user:suspend",
     "admin:user:ban",

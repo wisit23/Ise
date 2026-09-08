@@ -22,7 +22,7 @@ const STATUS_OPTIONS = [
   { value: "RESOLVED", label: "แก้ไขสำเร็จ" },
   { value: "CLOSED", label: "ปิดตั๋วแล้ว" },
   // ESCALATED is deliberately excluded — those tickets are handed off to
-  // Admin and only ever browsable from "เคสระดับแอดมิน"
+  // Trust and Safety and only ever browsable from "เคส Trust & Safety"
   // (AdminInboxSection), not the general Tickets tab.
 ];
 

@@ -28,7 +28,7 @@ import { apiFetch, fetchAuthedBlobUrl } from "../../../lib/api";
 export default // ─── Dashboard Section ────────────────────────────────────────────────────────
 
 function DashboardSection({ token, userRole, onNavigate }) {
-  const isAdmin = userRole === "ADMIN";
+  const isAdmin = userRole === "TRUST_AND_SAFETY";
   const [stats, setStats] = useState({
     total: null,
     resolved: null,
@@ -196,7 +196,7 @@ function DashboardSection({ token, userRole, onNavigate }) {
             icon="priority_high"
             color="red"
             onClick={() => onNavigate("admin_inbox", "")}
-            sub="ดูที่เคสระดับแอดมิน"
+            sub="ดูที่เคส Trust & Safety"
           />
         ) : (
           <KpiCard

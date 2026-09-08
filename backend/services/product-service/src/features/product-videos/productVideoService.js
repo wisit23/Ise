@@ -1,7 +1,7 @@
 const { badRequest, forbidden, notFound } = require("@reloop/shared");
 const productVideoRepository = require("./productVideoRepository");
 
-const UPLOAD_ROLES = new Set(["SELLER", "ADMIN"]);
+const UPLOAD_ROLES = new Set(["SELLER", "TRUST_AND_SAFETY"]);
 
 function requiredText(value, fieldName) {
   if (typeof value !== "string" || !value.trim()) {

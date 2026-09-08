@@ -7,6 +7,8 @@ const PRODUCT_SERVICE_URL =
   process.env.PRODUCT_SERVICE_URL || "http://product-service:3002";
 const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 
+const REQUEST_TIMEOUT_MS = 5000;
+
 async function removeProduct(productId, reason) {
   let res;
   try {
@@ -19,9 +21,13 @@ async function removeProduct(productId, reason) {
           "x-internal-token": INTERNAL_TOKEN,
         },
         body: JSON.stringify({ reason }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       },
     );
-  } catch {
+  } catch (err) {
+    if (err.name === "TimeoutError") {
+      throw new AppError(504, "product-service request timed out");
+    }
     throw new AppError(502, "product-service is unreachable");
   }
   if (res.status === 404) throw new AppError(404, "product not found");
@@ -38,9 +44,13 @@ async function restoreProduct(productId) {
       {
         method: "POST",
         headers: { "x-internal-token": INTERNAL_TOKEN },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       },
     );
-  } catch {
+  } catch (err) {
+    if (err.name === "TimeoutError") {
+      throw new AppError(504, "product-service request timed out");
+    }
     throw new AppError(502, "product-service is unreachable");
   }
   if (res.status === 404) throw new AppError(404, "product not found");

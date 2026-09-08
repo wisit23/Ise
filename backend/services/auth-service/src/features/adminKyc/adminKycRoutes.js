@@ -32,6 +32,8 @@ router.post("/:id/decision", async (req, res, next) => {
       reason: req.body.reason,
       version: req.body.version,
       adminId: req.userId,
+      staffId: req.userId,
+      requestId: req.id,
     });
     res.json(result);
   } catch (err) {
