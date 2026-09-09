@@ -100,80 +100,144 @@ const SUPPORT_AGENTS = [
   },
 ];
 
+async function upsertUser({ id, email, firstName, lastName, role, shopName, passwordHash }) {
+  const existingByEmail = await prisma.user.findUnique({ where: { email } });
+  if (existingByEmail) {
+    await prisma.user.update({
+      where: { email },
+      data: {
+        role,
+        firstName,
+        lastName,
+        passwordHash,
+        ...(shopName
+          ? {
+              sellerProfile: {
+                upsert: {
+                  create: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                  update: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                },
+              },
+            }
+          : {}),
+      },
+    });
+
+    await prisma.userRole.upsert({
+      where: { userId_role: { userId: existingByEmail.id, role } },
+      update: {},
+      create: { userId: existingByEmail.id, role },
+    });
+    return;
+  }
+
+  const existingById = await prisma.user.findUnique({ where: { id } });
+  if (existingById) {
+    await prisma.user.update({
+      where: { id },
+      data: {
+        email,
+        role,
+        firstName,
+        lastName,
+        passwordHash,
+        ...(shopName
+          ? {
+              sellerProfile: {
+                upsert: {
+                  create: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                  update: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                },
+              },
+            }
+          : {}),
+      },
+    });
+
+    await prisma.userRole.upsert({
+      where: { userId_role: { userId: id, role } },
+      update: {},
+      create: { userId: id, role },
+    });
+    return;
+  }
+
+  await prisma.user.create({
+    data: {
+      id,
+      email,
+      passwordHash,
+      firstName,
+      lastName,
+      role,
+      ...(shopName
+        ? {
+            sellerProfile: {
+              create: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+            },
+          }
+        : {}),
+      roles: {
+        create: { role },
+      },
+    },
+  });
+}
+
 async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
   for (const seller of SELLERS) {
-    await prisma.user.upsert({
-      where: { id: seller.id },
-      update: {},
-      create: {
-        id: seller.id,
-        email: seller.email,
-        passwordHash,
-        firstName: seller.firstName,
-        lastName: seller.lastName,
-        role: "SELLER",
-        sellerProfile: { create: { shopName: seller.shopName } },
-      },
+    await upsertUser({
+      id: seller.id,
+      email: seller.email,
+      firstName: seller.firstName,
+      lastName: seller.lastName,
+      role: "SELLER",
+      shopName: seller.shopName,
+      passwordHash,
     });
   }
 
-  await prisma.user.upsert({
-    where: { id: EXECUTIVE.id },
-    update: {},
-    create: {
-      id: EXECUTIVE.id,
-      email: EXECUTIVE.email,
-      passwordHash,
-      firstName: EXECUTIVE.firstName,
-      lastName: EXECUTIVE.lastName,
-      role: "EXECUTIVE",
-    },
+  await upsertUser({
+    id: EXECUTIVE.id,
+    email: EXECUTIVE.email,
+    firstName: EXECUTIVE.firstName,
+    lastName: EXECUTIVE.lastName,
+    role: "EXECUTIVE",
+    passwordHash,
   });
 
   for (const staff of STAFF) {
-    await prisma.user.upsert({
-      where: { id: staff.id },
-      update: {},
-      create: {
-        id: staff.id,
-        email: staff.email,
-        passwordHash,
-        firstName: staff.firstName,
-        lastName: staff.lastName,
-        role: staff.role,
-      },
+    await upsertUser({
+      id: staff.id,
+      email: staff.email,
+      firstName: staff.firstName,
+      lastName: staff.lastName,
+      role: staff.role,
+      passwordHash,
     });
   }
 
   for (const buyer of BUYERS) {
-    await prisma.user.upsert({
-      where: { id: buyer.id },
-      update: {},
-      create: {
-        id: buyer.id,
-        email: buyer.email,
-        passwordHash,
-        firstName: buyer.firstName,
-        lastName: buyer.lastName,
-        role: "BUYER",
-      },
+    await upsertUser({
+      id: buyer.id,
+      email: buyer.email,
+      firstName: buyer.firstName,
+      lastName: buyer.lastName,
+      role: "BUYER",
+      passwordHash,
     });
   }
 
   for (const agent of SUPPORT_AGENTS) {
-    await prisma.user.upsert({
-      where: { id: agent.id },
-      update: {},
-      create: {
-        id: agent.id,
-        email: agent.email,
-        passwordHash,
-        firstName: agent.firstName,
-        lastName: agent.lastName,
-        role: "CUSTOMER_SERVICE",
-      },
+    await upsertUser({
+      id: agent.id,
+      email: agent.email,
+      firstName: agent.firstName,
+      lastName: agent.lastName,
+      role: "CUSTOMER_SERVICE",
+      passwordHash,
     });
   }
 

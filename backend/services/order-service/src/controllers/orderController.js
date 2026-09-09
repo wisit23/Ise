@@ -203,6 +203,12 @@ async function createFromAuction(req, res, next) {
       );
     }
 
+    // Idempotency: if an order was already created for this auction (e.g. race between BullMQ worker and page visit), return it.
+    const existing = await orderModel.findByAuctionId(auctionId);
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
     const order = await orderModel.create({
       buyerId,
       sellerId,
@@ -216,6 +222,12 @@ async function createFromAuction(req, res, next) {
 
     res.status(201).json(order);
   } catch (err) {
+    if (err.code === "P2002") {
+      const existing = await orderModel.findByAuctionId(req.body.auctionId);
+      if (existing) {
+        return res.status(200).json(existing);
+      }
+    }
     next(err);
   }
 }

@@ -23,6 +23,10 @@ function findByReservationId(reservationId) {
   return prisma.order.findUnique({ where: { reservationId } });
 }
 
+function findByAuctionId(auctionId) {
+  return prisma.order.findFirst({ where: { auctionId } });
+}
+
 function statusFilter(status) {
   if (status === "pending_payment") {
     return { in: ["pending", "pending_payment"] };
@@ -35,7 +39,13 @@ async function listByBuyer(buyerId, { status, skip, take } = {}) {
     buyerId,
     ...(status ? { status: statusFilter(status) } : {}),
     ...(status === "pending_payment"
-      ? { reservationExpiresAt: { gt: new Date() } }
+      ? {
+          OR: [
+            { reservationExpiresAt: { gt: new Date() } },
+            { auctionId: { not: null } },
+            { reservationExpiresAt: null },
+          ],
+        }
       : {}),
   };
   const [items, total] = await Promise.all([
@@ -80,6 +90,7 @@ module.exports = {
   create,
   findById,
   findByReservationId,
+  findByAuctionId,
   listByBuyer,
   listBySeller,
   updateStatus,

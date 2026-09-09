@@ -33,6 +33,7 @@ const ROLE_LABEL = {
 const DISCOVERY_LINKS = [
   { href: "/swipe", label: "ปัดดู", icon: "swipe" },
   { href: "/auctions", label: "ประมูล", icon: "gavel" },
+  { href: "/articles", label: "บทความ", icon: "menu_book" },
 ];
 
 export default function NavBar() {

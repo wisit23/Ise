@@ -9,9 +9,13 @@ const MAX_FILES = 8;
  * as one consistent grid, regardless of what aspect ratio a seller's photo
  * came in at. Videos pass through untouched (can't crop those with Canvas). */
 function cropImageToSquare(file, maxSide = 1600) {
-  if (!file.type.startsWith("image/")) {
+  if (!file || !file.type?.startsWith("image/")) {
     return Promise.resolve(file);
   }
+
+  // Guard against Array.prototype.map passing (element, index) where index becomes maxSide
+  const targetMaxSide =
+    typeof maxSide === "number" && maxSide >= 100 ? maxSide : 1600;
 
   return new Promise((resolve) => {
     const img = new Image();
@@ -22,7 +26,7 @@ function cropImageToSquare(file, maxSide = 1600) {
 
       const width = img.naturalWidth || img.width;
       const height = img.naturalHeight || img.height;
-      const side = Math.min(width, height, maxSide);
+      const side = Math.min(width, height, targetMaxSide);
 
       const canvas = document.createElement("canvas");
       canvas.width = side;
@@ -103,7 +107,9 @@ export default function MediaUploader({ value, onChange, token }) {
 
     setUploading(true);
     try {
-      const processed = await Promise.all(files.map(cropImageToSquare));
+      const processed = await Promise.all(
+        files.map((file) => cropImageToSquare(file)),
+      );
       const uploaded = await uploadFiles(processed, token);
       onChange([...value, ...uploaded]);
     } catch (err) {

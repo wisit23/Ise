@@ -18,7 +18,12 @@ const STATUS_LABEL = {
   available: "พร้อมขาย",
   reserved: "ถูกล็อกไว้ในตะกร้าแล้ว",
   sold: "ขายแล้ว",
+  auction: "อยู่ในระบบประมูล",
 };
+
+function baht(v) {
+  return `฿${Number(v || 0).toLocaleString("th-TH")}`;
+}
 
 export default function ProductDetailPage() {
   const { id } = useParams();
@@ -32,6 +37,19 @@ export default function ProductDetailPage() {
   const [conditionLabels, setConditionLabels] = useState({});
   const [reviewSummary, setReviewSummary] = useState(null);
   const [showReport, setShowReport] = useState(false);
+  const [myPendingOrder, setMyPendingOrder] = useState(null);
+
+  useEffect(() => {
+    const token = getAccessToken();
+    if (token && id) {
+      apiFetch("/api/orders/mine?status=pending_payment&limit=100", { token })
+        .then((data) => {
+          const match = data.items?.find((o) => o.productId === id);
+          if (match) setMyPendingOrder(match);
+        })
+        .catch(() => {});
+    }
+  }, [id]);
 
   useEffect(() => {
     apiFetch(`/api/products/${id}`)
@@ -272,22 +290,88 @@ export default function ProductDetailPage() {
             </div>
           )}
 
+          {product.status === "auction" && (
+            <div className="mt-4 animate-slide-up flex items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-sky-600 text-[22px] shrink-0">
+                  gavel
+                </span>
+                <span className="font-medium">
+                  สินค้านี้อยู่ในระบบประมูล ไม่สามารถสั่งซื้อแบบปกติได้
+                </span>
+              </div>
+              <Link
+                href="/auctions"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-sky-700 active:scale-95"
+              >
+                ไปที่ลานประมูล
+                <span className="material-symbols-outlined text-[15px]">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
+          )}
+
+          {myPendingOrder && (
+            <div className="mt-4 animate-slide-up flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-emerald-600 text-[24px] shrink-0">
+                  shopping_cart_checkout
+                </span>
+                <div>
+                  <p className="font-bold text-emerald-900">
+                    {myPendingOrder.auctionId
+                      ? "🎉 คุณเป็นผู้ชนะการประมูลสินค้านี้!"
+                      : "สินค้านี้อยู่ในตะกร้าของคุณแล้ว"}
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    รายการนี้ถูกล็อกไว้รอให้คุณชำระเงิน กรุณากดไปที่ตะกร้าเพื่อดำเนินการ
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/cart"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95"
+              >
+                ไปชำระเงิน
+                <span className="material-symbols-outlined text-[15px]">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
+          )}
+
           {!added && (
             <div className="mt-6 flex gap-3">
-              <button
-                onClick={handleAddToCart}
-                disabled={!available || busy}
-                className="flex-1 rounded-md border border-emerald-600 py-3 font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-500"
-              >
-                {busy ? "กำลังเพิ่ม..." : "เพิ่มลงตะกร้า"}
-              </button>
-              <button
-                onClick={handleBuyNow}
-                disabled={!available || busy}
-                className="flex-1 rounded-md bg-emerald-600 py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-              >
-                {available ? "ซื้อเลย" : "สินค้าไม่พร้อมขาย"}
-              </button>
+              {myPendingOrder ? (
+                <Link
+                  href="/cart"
+                  className="flex-1 rounded-md bg-emerald-600 py-3 text-center font-bold text-white shadow-sm hover:bg-emerald-700 transition"
+                >
+                  💳 ไปชำระเงินที่ตะกร้าสินค้า ({baht(myPendingOrder.price)})
+                </Link>
+              ) : (
+                <>
+                  <button
+                    onClick={handleAddToCart}
+                    disabled={!available || busy}
+                    className="flex-1 rounded-md border border-emerald-600 py-3 font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-500"
+                  >
+                    {busy ? "กำลังเพิ่ม..." : "เพิ่มลงตะกร้า"}
+                  </button>
+                  <button
+                    onClick={handleBuyNow}
+                    disabled={!available || busy}
+                    className="flex-1 rounded-md bg-emerald-600 py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                  >
+                    {available
+                      ? "ซื้อเลย"
+                      : product.status === "auction"
+                        ? "อยู่ในระบบประมูล"
+                        : "สินค้าไม่พร้อมขาย"}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

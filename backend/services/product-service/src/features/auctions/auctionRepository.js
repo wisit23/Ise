@@ -11,6 +11,7 @@ function createAuctionRepository(prismaClient) {
   // always photos[0] — same convention productModel uses for listings.
   const WITH_PRODUCT = {
     product: { include: { photos: { orderBy: { position: "asc" } } } },
+    round: true,
   };
 
   function findProductOwner(productId) {
@@ -31,8 +32,11 @@ function createAuctionRepository(prismaClient) {
     });
   }
 
-  async function list({ status, skip, take }) {
-    const where = status ? { status } : {};
+  async function list({ status, skip, take, roundId }) {
+    const where = {
+      ...(status ? { status } : {}),
+      ...(roundId ? { roundId } : {}),
+    };
     const [items, total] = await Promise.all([
       prismaClient.auctionItem.findMany({
         where,
@@ -78,6 +82,54 @@ function createAuctionRepository(prismaClient) {
     });
   }
 
+  function setProductStatus(productId, status, tx = prismaClient) {
+    return tx.product.update({
+      where: { id: productId },
+      data: { status },
+    });
+  }
+
+  function createRound(data) {
+    return prismaClient.auctionRound.create({ data });
+  }
+
+  function findActiveSubmissionRound(now = new Date()) {
+    return prismaClient.auctionRound.findFirst({
+      where: {
+        submissionStartsAt: { lte: now },
+        submissionEndsAt: { gte: now },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  function findCurrentRound() {
+    return prismaClient.auctionRound.findFirst({
+      orderBy: { createdAt: "desc" },
+      include: {
+        _count: { select: { auctions: true } },
+      },
+    });
+  }
+
+  function listRounds() {
+    return prismaClient.auctionRound.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        _count: { select: { auctions: true } },
+      },
+    });
+  }
+
+  function findRoundById(id) {
+    return prismaClient.auctionRound.findUnique({
+      where: { id },
+      include: {
+        auctions: { include: WITH_PRODUCT },
+      },
+    });
+  }
+
   return {
     findProductOwner,
     create,
@@ -87,6 +139,12 @@ function createAuctionRepository(prismaClient) {
     highestBid,
     createBid,
     withAuctionLock,
+    setProductStatus,
+    createRound,
+    findActiveSubmissionRound,
+    findCurrentRound,
+    listRounds,
+    findRoundById,
   };
 }
 

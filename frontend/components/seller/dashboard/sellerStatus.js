@@ -4,12 +4,14 @@ export const PRODUCT_STATUS_LABEL = {
   available: "พร้อมขาย",
   reserved: "อยู่ในตะกร้าลูกค้า",
   sold: "ขายแล้ว",
+  auction: "กำลังประมูล",
 };
 
 export const PRODUCT_STATUS_STYLE = {
   available: "bg-emerald-50 text-emerald-700",
   reserved: "bg-amber-50 text-amber-700",
   sold: "bg-gray-100 text-gray-600",
+  auction: "bg-sky-50 text-sky-700",
 };
 
 export const ORDER_STATUS_LABEL = {

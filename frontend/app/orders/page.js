@@ -301,15 +301,34 @@ export default function OrdersPage() {
                   status={
                     <span
                       className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
-                        STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
+                        o.auctionId &&
+                        ["pending", "pending_payment"].includes(o.status)
+                          ? "bg-amber-100 text-amber-800"
+                          : STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
                       }`}
                     >
-                      {STATUS_LABEL[o.status] || o.status}
+                      {o.auctionId &&
+                      ["pending", "pending_payment"].includes(o.status)
+                        ? "ชนะประมูล · รอชำระเงิน"
+                        : STATUS_LABEL[o.status] || o.status}
                     </span>
+                  }
+                  actions={
+                    ["pending", "pending_payment"].includes(o.status) && (
+                      <Link
+                        href="/cart"
+                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">
+                          shopping_cart_checkout
+                        </span>
+                        ไปชำระเงินที่ตะกร้า
+                      </Link>
+                    )
                   }
                   note={
                     <span className="text-xs text-ink-subtle">
-                      สั่งซื้อเมื่อ{" "}
+                      {o.auctionId ? "ชนะการประมูลเมื่อ " : "สั่งซื้อเมื่อ "}
                       {new Date(o.createdAt).toLocaleDateString("th-TH")}
                     </span>
                   }
