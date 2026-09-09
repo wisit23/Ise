@@ -8,6 +8,7 @@ const reportRoutes = require("./features/reports/reportRoutes");
 const bulkActionRoutes = require("./features/bulkActions/bulkActionRoutes");
 const auditRoutes = require("./features/audit/auditRoutes");
 const metricsRoutes = require("./features/metrics/metricsRoutes");
+const executiveAuditRoutes = require("./features/executiveAudit/executiveAuditRoutes");
 const productModerationRoutes = require("./features/productModeration/productModerationRoutes");
 
 const app = express();
@@ -18,6 +19,7 @@ app.get("/health", (req, res) =>
 );
 
 app.use("/executive", metricsRoutes);
+app.use("/executive", executiveAuditRoutes);
 app.use("/internal", internalRoutes);
 app.use("/", authRoutes);
 app.use("/admin/kyc", adminKycRoutes);

@@ -5,7 +5,7 @@ export const TIMEZONE = "Asia/Bangkok";
 /** Platform fee assumption. There is no payment system yet, so revenue is
  * modelled as a flat 10% of GMV — the same rate order-service applies when it
  * computes `platformRevenue`, kept here only for labelling the report. */
-export const PLATFORM_FEE_RATE = 0.1;
+export const PLATFORM_FEE_RATE = 0.03;
 
 export const MONTH_NAMES = [
   "มกราคม",
@@ -166,4 +166,25 @@ export async function fetchMetricsSeries(win, granularity, token) {
     order: fulfilled(results[0])?.data ?? null,
     auth: fulfilled(results[1])?.data ?? null,
   };
+}
+
+/** Records an append-only executive audit log entry (e.g. on export CSV or moderation). */
+export async function logExecutiveAction(actionData, token) {
+  try {
+    return await apiFetch("/api/auth/executive/audit", {
+      token,
+      method: "POST",
+      body: actionData,
+    });
+  } catch (err) {
+    console.warn("Failed to record executive audit log:", err);
+    return null;
+  }
+}
+
+/** Queries executive audit logs with pagination and filters. */
+export async function fetchExecutiveAuditLogs(params = {}, token) {
+  const query = new URLSearchParams(params).toString();
+  const path = `/api/auth/executive/audit${query ? `?${query}` : ""}`;
+  return apiFetch(path, { token });
 }

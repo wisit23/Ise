@@ -210,3 +210,27 @@ model KycApplication {
 
   @@map("kyc_applications")
 }
+
+// CEO-LOG-001: Append-only audit log for executive actions
+// (sensitive report exports, complaint decisions, metrics views).
+model ExecutiveAuditLog {
+  id          String   @id @default(uuid())
+  actorId     String   @map("actor_id")
+  actorEmail  String?  @map("actor_email")
+  actorRole   String?  @map("actor_role")
+  action      String   // e.g. "REPORT_EXPORT_CSV", "COMPLAINT_ACTIONED", "COMPLAINT_DISMISSED", "FINANCIAL_VIEW"
+  category    String   // e.g. "DATA_EXPORT", "MODERATION", "FINANCIAL", "SECURITY"
+  targetType  String?  @map("target_type") // e.g. "report", "complaint", "order"
+  targetId    String?  @map("target_id")
+  description String
+  metadata    Json?
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([actorId])
+  @@index([action])
+  @@index([category])
+  @@index([createdAt])
+  @@map("executive_audit_logs")
+}

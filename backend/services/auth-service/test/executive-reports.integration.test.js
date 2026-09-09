@@ -103,6 +103,77 @@ test("executive complaint feed against a real database", async (t) => {
     );
     assert.equal(repeat.count, 2, "a repeatedly reported target is surfaced");
 
+    // Category filter: FRAUD matches "ไม่จัดส่งสินค้าหลังชำระเงิน"
+    const fraudRes = await request(app)
+      .get("/executive/reports")
+      .query({ reasonCategory: "FRAUD" })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(fraudRes.status, 200);
+    const fraudItems = fraudRes.body.data.items.filter((item) =>
+      createdIds.includes(item.id),
+    );
+    assert.equal(fraudItems.length, 1);
+    assert.equal(fraudItems[0].category, "FRAUD");
+
+    // Category filter: MISMATCH matches "สินค้าไม่ตรงปก"
+    const mismatchRes = await request(app)
+      .get("/executive/reports")
+      .query({ reasonCategory: "MISMATCH" })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(mismatchRes.status, 200);
+    const mismatchItems = mismatchRes.body.data.items.filter((item) =>
+      createdIds.includes(item.id),
+    );
+    assert.equal(mismatchItems.length, 1);
+    assert.equal(mismatchItems[0].category, "MISMATCH");
+
+    // Target filtering
+    const targetRes = await request(app)
+      .get("/executive/reports")
+      .query({ targetId: reportedTarget })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(targetRes.status, 200);
+    assert.ok(
+      targetRes.body.data.items.every((item) => item.targetId === reportedTarget),
+    );
+
+    // Anomaly threshold testing: Add 3rd report for reportedTarget to trigger anomaly detection (>= 3)
+    const thirdReport = await prisma.report.create({
+      data: {
+        reporterId: reporter.id,
+        targetId: reportedTarget,
+        reason: "หลอกโอนเงินแล้วบล็อกหนี",
+        status: "OPEN",
+      },
+    });
+    createdIds.push(thirdReport.id);
+
+    const anomalyRes = await request(app)
+      .get("/executive/reports")
+      .query({ sortBy: "most_reported" })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(anomalyRes.status, 200);
+    assert.equal(anomalyRes.body.data.anomalySummary.detected, true);
+    const highRiskFound = anomalyRes.body.data.anomalySummary.highRiskTargets.find(
+      (t) => t.targetId === reportedTarget,
+    );
+    assert.ok(highRiskFound, "reported target should be flagged as high risk");
+    assert.equal(highRiskFound.count, 3);
+
+    // Validation: invalid sortBy
+    const badSortRes = await request(app)
+      .get("/executive/reports")
+      .query({ sortBy: "not_a_sort" })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(badSortRes.status, 400);
+
+    // Validation: invalid reasonCategory
+    const badCatRes = await request(app)
+      .get("/executive/reports")
+      .query({ reasonCategory: "NOT_A_CATEGORY" })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(badCatRes.status, 400);
+
     // Explicit status filter reaches the dismissed row.
     const dismissedRes = await request(app)
       .get("/executive/reports")

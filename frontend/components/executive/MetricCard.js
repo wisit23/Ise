@@ -11,23 +11,24 @@ export default function MetricCard({
   const fmt = formatValue || ((v) => v.toLocaleString("th-TH"));
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <p className="text-xs text-gray-500">{label}</p>
+    <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs transition-shadow hover:shadow-md">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
       {unavailable ? (
-        <p className="mt-1 text-sm font-medium text-gray-500">ไม่พร้อมใช้งาน</p>
+        <p className="mt-2 text-sm font-medium text-slate-400">ไม่พร้อมใช้งาน</p>
       ) : (
         <>
-          <p className="mt-1 text-2xl font-semibold text-gray-900">
+          <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
             {fmt(value)}
           </p>
           {deltaPct !== null && deltaPct !== undefined && (
             <p
-              className={`mt-1 text-xs font-medium ${
+              className={`mt-1.5 flex items-center gap-1 text-xs font-semibold ${
                 deltaPct >= 0 ? "text-[#006300]" : "text-red-600"
               }`}
             >
-              {deltaPct >= 0 ? "▲" : "▼"} {Math.abs(deltaPct)}%{" "}
-              <span className="font-normal text-gray-500">เทียบช่วงก่อน</span>
+              <span>{deltaPct >= 0 ? "▲" : "▼"}</span>
+              <span>{Math.abs(deltaPct)}%</span>{" "}
+              <span className="font-normal text-slate-500">เทียบเดือนก่อน</span>
             </p>
           )}
         </>
