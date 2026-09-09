@@ -13,18 +13,24 @@ set -e
 MONGO_HOST="${MONGO_HOST:-mongo}"
 MONGO_PORT="${MONGO_PORT:-27017}"
 
+if command -v mongosh >/dev/null 2>&1; then
+  CLI="mongosh"
+else
+  CLI="mongo"
+fi
+
 echo "[mongo-init] waiting for ${MONGO_HOST}:${MONGO_PORT} to accept connections..."
-until mongosh --host "$MONGO_HOST" --port "$MONGO_PORT" --quiet --eval "db.runCommand('ping').ok" >/dev/null 2>&1; do
+until $CLI --host "$MONGO_HOST" --port "$MONGO_PORT" --quiet --eval "db.runCommand('ping').ok" >/dev/null 2>&1; do
   sleep 1
 done
 
 echo "[mongo-init] checking replica set status..."
-STATUS=$(mongosh --host "$MONGO_HOST" --port "$MONGO_PORT" --quiet --eval "
+STATUS=$($CLI --host "$MONGO_HOST" --port "$MONGO_PORT" --quiet --eval "
   try {
     var s = rs.status();
     print(s.ok === 1 ? 'already-initiated' : 'unknown');
   } catch (e) {
-    if (e.codeName === 'NotYetInitialized') {
+    if (e.codeName === 'NotYetInitialized' || e.code === 94 || (e.message && e.message.indexOf('no replset config') !== -1)) {
       print('not-initiated');
     } else {
       print('error: ' + e.message);
@@ -37,7 +43,7 @@ echo "[mongo-init] status: ${STATUS}"
 case "$STATUS" in
   not-initiated)
     echo "[mongo-init] running rs.initiate()..."
-    mongosh --host "$MONGO_HOST" --port "$MONGO_PORT" --quiet --eval "
+    $CLI --host "$MONGO_HOST" --port "$MONGO_PORT" --quiet --eval "
       rs.initiate({
         _id: 'rs0',
         members: [{ _id: 0, host: '${MONGO_HOST}:${MONGO_PORT}' }]

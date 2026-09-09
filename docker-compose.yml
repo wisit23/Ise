@@ -30,19 +30,15 @@ services:
   # single-node one — so this isn't a plain standalone mongod. See
   # infra/mongo/init-replica.sh for the one-time rs.initiate() this requires.
   mongo:
-    image: mongo:7
+    image: mongo:4.4
     command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
       - mongodata:/data/db
     healthcheck:
-      # Up != usable: a freshly-started mongod answers ping before
-      # rs.initiate() has run, and every write fails with "not primary" until
-      # the replica set actually elects one. rs.status() only returns without
-      # error once a primary exists, so that's what depends_on needs to wait
-      # on, not just "the process is listening".
-      test: ["CMD", "mongosh", "--quiet", "--eval", "rs.status().ok"]
+      # Supports both legacy mongo shell (4.4) and modern mongosh (5+)
+      test: ["CMD-SHELL", "mongo --quiet --eval 'rs.status().ok' 2>/dev/null || mongosh --quiet --eval 'rs.status().ok' 2>/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -53,7 +49,7 @@ services:
   # destructive, so this is safe to leave in the normal `up` path rather than
   # requiring a separate manual bootstrap step.
   mongo-init:
-    image: mongo:7
+    image: mongo:4.4
     depends_on:
       - mongo
     volumes:
