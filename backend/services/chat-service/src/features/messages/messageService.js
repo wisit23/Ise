@@ -95,7 +95,9 @@ async function markRead(conversationId, userId) {
  * cleverer than that.
  */
 async function unreadCount(userId) {
-  const conversations = await conversationModel.listForParticipant(userId);
+  const conversations = await conversationModel.listForParticipant(userId, {
+    excludeContextType: "SUPPORT",
+  });
   const counts = await Promise.all(
     conversations.map((c) => {
       const participant = c.participants.find((p) => p.userId === userId);

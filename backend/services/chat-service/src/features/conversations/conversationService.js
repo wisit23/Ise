@@ -110,8 +110,8 @@ async function getForParticipant(conversationId, userId) {
   return conversation;
 }
 
-async function listInbox(userId) {
-  const conversations = await conversationModel.listForParticipant(userId);
+async function listInbox(userId, filter = {}) {
+  const conversations = await conversationModel.listForParticipant(userId, filter);
   return withDisplayNames(conversations);
 }
 

@@ -202,6 +202,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL_SUPPORT}
+      CHAT_SERVICE_URL: http://chat-service:3004
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
     depends_on:
       postgres:
         condition: service_healthy

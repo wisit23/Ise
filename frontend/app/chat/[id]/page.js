@@ -9,6 +9,7 @@ import MessageList from "../../../components/chat/MessageList";
 import MessageComposer from "../../../components/chat/MessageComposer";
 import ChatSidebar from "../../../components/chat/ChatSidebar";
 import ChatProductHeader from "../../../components/chat/ChatProductHeader";
+import ChatSupportHeader from "../../../components/chat/ChatSupportHeader";
 import {
   getConversation,
   listMessages,
@@ -57,6 +58,7 @@ export default function ChatRoomPage() {
   const [error, setError] = useState("");
   const [realtime, setRealtime] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [otherOnline, setOtherOnline] = useState(false);
   const { socket, connected: socketConnected } = useChatSocket();
 
   const messagesEndRef = useRef(null);
@@ -65,6 +67,7 @@ export default function ChatRoomPage() {
   const scrollRafRef = useRef(null);
   const tokenRef = useRef(null);
   const initialIdRef = useRef(id);
+  const initialPresenceMapRef = useRef({});
 
   const scrollToBottom = useCallback((smooth = true) => {
     if (scrollTimerRef.current) {
@@ -109,10 +112,15 @@ export default function ChatRoomPage() {
     });
   }, []);
 
-  const otherRoleLabel =
-    conversation && user
-      ? participantRoleLabel(otherParticipant(conversation, user.id)?.role)
-      : null;
+  const otherParticipantUser =
+    conversation && user ? otherParticipant(conversation, user.id) : null;
+  const otherUserId = otherParticipantUser?.userId || null;
+  const otherUserIdRef = useRef(null);
+  otherUserIdRef.current = otherUserId;
+
+  const otherRoleLabel = otherParticipantUser
+    ? participantRoleLabel(otherParticipantUser.role)
+    : null;
 
   const updateConversationReadLocally = useCallback(
     (roomId, userId, readTime = new Date().toISOString()) => {
@@ -202,7 +210,9 @@ export default function ChatRoomPage() {
       // Populate sidebar list on desktop
       listConversations(token)
         .then((data) => {
-          const items = data?.items || [];
+          const items = (data?.items || []).filter(
+            (c) => c.contextType !== "SUPPORT",
+          );
           setSidebarConversations(items);
           setCachedConversations(items);
         })
@@ -214,6 +224,8 @@ export default function ChatRoomPage() {
     (newId) => {
       if (newId === activeRoomId) return;
       setActiveRoomId(newId);
+      initialPresenceMapRef.current = {};
+      setOtherOnline(false);
       if (typeof window !== "undefined") {
         window.history.pushState(null, "", `/chat/${newId}`);
       }
@@ -266,6 +278,8 @@ export default function ChatRoomPage() {
       if (match && match[1] && match[1] !== activeRoomId) {
         const newId = match[1];
         setActiveRoomId(newId);
+        initialPresenceMapRef.current = {};
+        setOtherOnline(false);
         const cached = roomDataCache.get(newId);
         if (cached) {
           setConversation(cached.conversation);
@@ -309,7 +323,16 @@ export default function ChatRoomPage() {
 
     function joinRoom() {
       socket.emit("join", activeRoomId, (ack) => {
-        if (!cancelled) setRealtime(Boolean(ack?.ok));
+        if (!cancelled) {
+          setRealtime(Boolean(ack?.ok));
+          if (ack?.onlineUsers) {
+            Object.assign(initialPresenceMapRef.current, ack.onlineUsers);
+            const targetId = otherUserIdRef.current;
+            if (targetId && ack.onlineUsers[targetId] !== undefined) {
+              setOtherOnline(Boolean(ack.onlineUsers[targetId]));
+            }
+          }
+        }
       });
     }
 
@@ -323,6 +346,41 @@ export default function ChatRoomPage() {
       setRealtime(false);
     };
   }, [activeRoomId, user, socket, socketConnected]);
+
+  // Query online presence on room load, activeRoomId change, or when socket reconnects
+  useEffect(() => {
+    if (!otherUserId) return undefined;
+    let cancelled = false;
+
+    // If join ack has already provided online status, sync it immediately
+    if (initialPresenceMapRef.current[otherUserId] !== undefined) {
+      setOtherOnline(Boolean(initialPresenceMapRef.current[otherUserId]));
+    }
+
+    if (socket && socketConnected) {
+      socket.emit("presence:query", { userIds: [otherUserId] }, (res) => {
+        if (
+          !cancelled &&
+          res?.presence &&
+          res.presence[otherUserId] !== undefined
+        ) {
+          setOtherOnline(Boolean(res.presence[otherUserId]));
+        }
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [socket, socketConnected, otherUserId, activeRoomId]);
+
+  useChatSocketEvent("presence", ({ userId: changedUserId, online }) => {
+    if (!changedUserId) return;
+    initialPresenceMapRef.current[changedUserId] = Boolean(online);
+    if (changedUserId === otherUserIdRef.current) {
+      setOtherOnline(Boolean(online));
+    }
+  });
 
   useChatSocketEvent("message:new", (message) => {
     if (!user || message.conversationId !== activeRoomId) return;
@@ -347,7 +405,9 @@ export default function ChatRoomPage() {
     if (token) {
       listConversations(token)
         .then((data) => {
-          const items = data?.items || [];
+          const items = (data?.items || []).filter(
+            (c) => c.contextType !== "SUPPORT",
+          );
           setSidebarConversations(items);
           setCachedConversations(items);
         })
@@ -363,12 +423,24 @@ export default function ChatRoomPage() {
     }
   });
 
+  // Real-time lock/unlock: when CS closes a ticket, chat-service broadcasts
+  // conversation:status → the room page immediately hides the composer and
+  // shows the locked banner without needing a page refresh.
+  useChatSocketEvent("conversation:status", (data) => {
+    if (data.conversationId !== activeRoomId) return;
+    setConversation((prev) =>
+      prev ? { ...prev, status: data.status } : prev,
+    );
+  });
+
   useChatSocketEvent("conversation:activity", () => {
     const token = tokenRef.current;
     if (!token) return;
     listConversations(token)
       .then((data) => {
-        const items = data?.items || [];
+        const items = (data?.items || []).filter(
+          (c) => c.contextType !== "SUPPORT",
+        );
         setSidebarConversations(items);
         setCachedConversations(items);
       })
@@ -513,6 +585,8 @@ export default function ChatRoomPage() {
   const locked = conversation?.status === "LOCKED";
   const productId =
     conversation?.contextType === "PRODUCT" ? conversation.contextId : null;
+  const supportTicketId =
+    conversation?.contextType === "SUPPORT" ? conversation.contextId : null;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-50">
@@ -554,8 +628,12 @@ export default function ChatRoomPage() {
                     {otherName[0]?.toUpperCase() || "?"}
                   </div>
                   <span
-                    className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500"
+                    data-testid="status-indicator-dot"
+                    className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white transition-colors duration-200 ${
+                      otherOnline ? "bg-emerald-500 shadow-2xs" : "bg-slate-300"
+                    }`}
                     aria-hidden="true"
+                    title={otherOnline ? "ออนไลน์" : "ออฟไลน์"}
                   />
                 </div>
 
@@ -569,9 +647,16 @@ export default function ChatRoomPage() {
                         {otherRoleLabel}
                       </span>
                     )}
-                    <span className="text-[11px] text-emerald-600 font-medium">
-                      ออนไลน์
-                    </span>
+                    {otherOnline ? (
+                      <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        ออนไลน์
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-gray-400 font-medium">
+                        ออฟไลน์
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -600,6 +685,8 @@ export default function ChatRoomPage() {
 
             {/* Sticky Product Header */}
             {productId && <ChatProductHeader productId={productId} />}
+            {/* Sticky Support Ticket Header */}
+            {supportTicketId && <ChatSupportHeader ticketId={supportTicketId} />}
 
             {/* Messages Area - Permanently mounted container */}
             <div className="relative flex flex-1 flex-col overflow-hidden">

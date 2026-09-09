@@ -15,6 +15,7 @@ export default function ConversationRow({
   conversation,
   currentUserId,
   isActive = false,
+  isOnline = false,
   onSelect,
 }) {
   const other = otherParticipant(conversation, currentUserId);
@@ -73,11 +74,15 @@ export default function ConversationRow({
           >
             {otherName[0]?.toUpperCase() || "?"}
           </div>
-          {/* Online green indicator dot */}
-          <span
-            className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 shadow-2xs"
-            aria-hidden="true"
-          />
+          {/* Online green indicator dot - shown only when isOnline */}
+          {isOnline && (
+            <span
+              data-testid="online-indicator"
+              className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 shadow-2xs"
+              aria-hidden="true"
+              title="ออนไลน์"
+            />
+          )}
         </div>
 
         {/* Info Column */}

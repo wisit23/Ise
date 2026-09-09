@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import NavBar from "../../../../components/NavBar";
 import Footer from "../../../../components/Footer";
 import ConfirmDialog from "../../../../components/ui/ConfirmDialog";
+import EmbeddedChat from "../../../../components/support/EmbeddedChat";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 
@@ -184,6 +185,45 @@ export default function TicketThreadPage() {
           </div>
         )}
 
+        {/* ── Live Chat Embedded directly in the ticket page ── */}
+        {ticket.conversationId && (
+          <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                  <span className="material-symbols-outlined text-[16px]">
+                    chat
+                  </span>
+                </span>
+                <div>
+                  <h2 className="text-xs font-bold text-slate-800">
+                    สนทนาสดกับฝ่ายบริการลูกค้า (Live Chat)
+                  </h2>
+                  <p className="text-[11px] text-slate-500">
+                    สอบถาม ติดตามสถานะ หรือส่งหลักฐานเพิ่มเติมได้ที่นี่
+                  </p>
+                </div>
+              </div>
+              <span className="font-mono text-xs text-slate-400">
+                {ticket.ticketNumber}
+              </span>
+            </div>
+            <div className="p-2 bg-white">
+              <EmbeddedChat
+                conversationId={ticket.conversationId}
+                maxHeight="420px"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ── Ticket Log / Internal Notes ── */}
+        <div className="mb-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+            ประวัติและบันทึกคำร้อง (Log & Notes)
+          </h3>
+        </div>
+
         <ul className="mb-4 flex flex-col gap-2">
           {ticket.messages.map((m) => (
             <li
@@ -215,11 +255,11 @@ export default function TicketThreadPage() {
             </li>
           ))}
           {ticket.messages.length === 0 && (
-            <li className="text-sm text-gray-500">ยังไม่มีข้อความในตั๋วนี้</li>
+            <li className="text-sm text-gray-500">ยังไม่มีบันทึกในตั๋วนี้</li>
           )}
         </ul>
 
-        {ticket.status !== "CLOSED" && (
+        {ticket.status !== "CLOSED" && (isAgent || !ticket.conversationId) && (
           <form
             onSubmit={handleReply}
             className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-3"
@@ -228,7 +268,11 @@ export default function TicketThreadPage() {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={3}
-              placeholder="พิมพ์ข้อความ..."
+              placeholder={
+                isAgent
+                  ? "พิมพ์บันทึกโน้ตหรือตอบกลับ..."
+                  : "พิมพ์ข้อความเพิ่มเติม..."
+              }
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
             />
             <div className="flex items-center justify-between">

@@ -158,9 +158,15 @@ export default function SupportPanelPage() {
           </aside>
 
           {/* ── Main Content ── */}
-          <main className="min-w-0 flex-1 overflow-y-auto">
+          <main
+            className={`min-w-0 flex-1 flex flex-col ${
+              section === "tickets"
+                ? "h-[calc(100vh-4rem)] overflow-hidden"
+                : "overflow-y-auto"
+            }`}
+          >
             {/* Top bar */}
-            <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+            <div className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                   <span className="material-symbols-outlined text-[18px]">
@@ -189,40 +195,43 @@ export default function SupportPanelPage() {
             </div>
 
             {/* Content */}
-            <div className="p-8 max-w-7xl mx-auto">
-              {section === "dashboard" && (
-                <DashboardSection
-                  token={token}
-                  userRole={user?.role}
-                  onNavigate={navigateTo}
-                />
-              )}
-              {section === "tickets" && (
+            {section === "tickets" ? (
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 <TicketsSection
                   token={token}
                   userId={user?.id}
                   statusFilter={ticketsFilter}
                   setStatusFilter={setTicketsFilter}
                 />
-              )}
-              {section === "admin_inbox" && <AdminInboxSection token={token} />}
-              {section === "disputes" && (
-                <DisputesSection
-                  token={token}
-                  userRole={user?.role}
-                  status={disputesFilter}
-                  setStatus={setDisputesFilter}
-                />
-              )}
-              {section === "orders" && <OrdersSection token={token} />}
-              {section === "faq" && <FaqSection token={token} />}
-              {section === "kyc" && <KycSection token={token} />}
-              {section === "audit" && <AuditSection token={token} />}
-              {section === "products" && <ProductsSection token={token} />}
-              {section === "auction_approvals" && (
-                <AuctionApprovalsSection token={token} />
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="p-8 max-w-7xl mx-auto w-full">
+                {section === "dashboard" && (
+                  <DashboardSection
+                    token={token}
+                    userRole={user?.role}
+                    onNavigate={navigateTo}
+                  />
+                )}
+                {section === "admin_inbox" && <AdminInboxSection token={token} />}
+                {section === "disputes" && (
+                  <DisputesSection
+                    token={token}
+                    userRole={user?.role}
+                    status={disputesFilter}
+                    setStatus={setDisputesFilter}
+                  />
+                )}
+                {section === "orders" && <OrdersSection token={token} />}
+                {section === "faq" && <FaqSection token={token} />}
+                {section === "kyc" && <KycSection token={token} />}
+                {section === "audit" && <AuditSection token={token} />}
+                {section === "products" && <ProductsSection token={token} />}
+                {section === "auction_approvals" && (
+                  <AuctionApprovalsSection token={token} />
+                )}
+              </div>
+            )}
           </main>
         </div>
       </div>

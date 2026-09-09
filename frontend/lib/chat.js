@@ -34,8 +34,16 @@ export function contactSeller(productId, token) {
   });
 }
 
-export function listConversations(token) {
-  return apiFetch("/api/chat/conversations", { token });
+export function listConversations(token, options = {}) {
+  const params = new URLSearchParams();
+  if (options.excludeContextType) {
+    params.set("excludeContextType", options.excludeContextType);
+  }
+  if (options.contextType) {
+    params.set("contextType", options.contextType);
+  }
+  const qs = params.toString();
+  return apiFetch(`/api/chat/conversations${qs ? `?${qs}` : ""}`, { token });
 }
 
 export function getConversation(conversationId, token) {

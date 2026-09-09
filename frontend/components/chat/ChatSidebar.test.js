@@ -163,4 +163,17 @@ describe("ChatSidebar", () => {
       screen.queryByLabelText(/การสนทนาที่ยังไม่ได้อ่าน/),
     ).not.toBeInTheDocument();
   });
+
+  it("does not render fake online indicator when users are offline", () => {
+    render(
+      <ChatSidebar
+        conversations={conversations}
+        currentUserId="user-me"
+        activeId="conv-1"
+      />,
+    );
+
+    // By default offline users do not show green dot indicators
+    expect(screen.queryByTestId("online-indicator")).not.toBeInTheDocument();
+  });
 });

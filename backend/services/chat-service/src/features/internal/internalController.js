@@ -155,6 +155,7 @@ async function updateStatus(req, res, next) {
       where: { id: conversation.id },
       data: { status },
     });
+    broadcast.broadcastStatusChange(updated, status);
     res.json(updated);
   } catch (err) {
     next(err);

@@ -192,7 +192,7 @@ describe("ChatInboxPage", () => {
             },
             {
               id: "conv-support",
-              contextType: "SUPPORT",
+              contextType: "DIRECT",
               lastMessagePreview: "รับเรื่องแล้วครับ",
               lastMessageAt: "2026-09-04T11:00:00.000Z",
               participants: [
@@ -238,7 +238,7 @@ describe("ChatInboxPage", () => {
 
     render(<ChatInboxPage />);
 
-    // The whole point of the badge: telling a shop thread from a support
+    // The whole point of the badge: telling a shop thread from an agent
     // thread without opening either one.
     expect(await screen.findByText("ร้านค้า")).toBeInTheDocument();
     expect(screen.getByText("ฝ่ายบริการลูกค้า")).toBeInTheDocument();
@@ -335,5 +335,48 @@ describe("ChatInboxPage", () => {
     );
 
     expect(await screen.findByText("ข้อความใหม่ล่าสุด")).toBeInTheDocument();
+  });
+
+  it("filters out SUPPORT conversations from the user's chat inbox", async () => {
+    getAccessToken.mockReturnValue("token-123");
+    getStoredUser.mockReturnValue({ id: "buyer-1" });
+    apiFetch.mockImplementation((path) => {
+      if (path === "/api/chat/conversations") {
+        return Promise.resolve({
+          items: [
+            {
+              id: "conv-support-1",
+              contextType: "SUPPORT",
+              lastMessagePreview: "ตั๋วซัพพอร์ตถูกเปิดแล้ว",
+              lastMessageAt: "2026-09-04T11:00:00.000Z",
+              participants: [
+                { userId: "buyer-1", role: "BUYER" },
+                { userId: "agent-1", role: "AGENT", displayName: "แอดมิน" },
+              ],
+            },
+            {
+              id: "conv-product-1",
+              contextType: "PRODUCT",
+              lastMessagePreview: "สวัสดีครับ สินค้ายังมีไหม",
+              lastMessageAt: "2026-09-04T10:00:00.000Z",
+              participants: [
+                { userId: "buyer-1", role: "BUYER" },
+                {
+                  userId: "seller-1",
+                  role: "SELLER",
+                  displayName: "ร้านค้ากิ๊ฟช็อป",
+                },
+              ],
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<ChatInboxPage />);
+
+    expect(await screen.findByText("ร้านค้ากิ๊ฟช็อป")).toBeInTheDocument();
+    expect(screen.queryByText("ตั๋วซัพพอร์ตถูกเปิดแล้ว")).not.toBeInTheDocument();
   });
 });

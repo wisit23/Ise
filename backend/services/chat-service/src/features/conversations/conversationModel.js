@@ -30,9 +30,16 @@ function create({
 // Ordered by lastMessageAt desc so an empty conversation (never messaged)
 // sorts last, not by createdAt — an inbox should read like "most recently
 // active first", same as every chat app.
-function listForParticipant(userId) {
+function listForParticipant(userId, filter = {}) {
+  const where = { participants: { some: { userId } } };
+  if (filter.excludeContextType) {
+    where.contextType = { not: filter.excludeContextType };
+  }
+  if (filter.contextType) {
+    where.contextType = filter.contextType;
+  }
   return prisma.conversation.findMany({
-    where: { participants: { some: { userId } } },
+    where,
     orderBy: { lastMessageAt: "desc" },
   });
 }

@@ -41,6 +41,7 @@ model SupportTicket {
   firstResponseAt DateTime? @map("first_response_at")
   resolvedAt      DateTime? @map("resolved_at")
   closedAt        DateTime? @map("closed_at")
+  conversationId  String?   @map("conversation_id")
   escalatedAt     DateTime? @map("escalated_at")
   // Optimistic lock: guards against two agents assigning/transitioning the
   // same ticket at once (see ticketService.js assign()).

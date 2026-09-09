@@ -8,6 +8,7 @@ import { useToast } from "../../ui/ToastProvider";
 import CaseDrawer from "./case/CaseDrawer";
 import TicketCasePanel from "./case/TicketCasePanel";
 import TicketsTable from "./tickets/TicketsTable";
+import LiveSupportSection from "./LiveSupportSection";
 import { PAGE_SIZE } from "../../../lib/supportConstants";
 import { apiFetch } from "../../../lib/api";
 
@@ -22,6 +23,9 @@ export default function TicketsSection({
   setStatusFilter,
 }) {
   const toast = useToast();
+
+  const [viewMode, setViewMode] = useState("workspace");
+  const [workspaceTicketId, setWorkspaceTicketId] = useState(null);
 
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
@@ -121,68 +125,150 @@ export default function TicketsSection({
     );
   }
 
-  return (
-    <>
-      <div className="animate-fade-in-up flex min-h-full flex-col">
-        {error && <Alert className="mb-3">{error}</Alert>}
+  if (viewMode === "workspace") {
+    return (
+      <div className="flex h-full w-full flex-col overflow-hidden">
+        {/* View Mode Bar */}
+        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              มุมมอง:
+            </span>
+            <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setViewMode("workspace")}
+                className="flex items-center gap-1.5 rounded-md bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-2xs transition"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  view_kanban
+                </span>
+                <span>โหมดปฏิบัติการแชท (Workspace)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className="flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium text-slate-600 transition hover:text-slate-900"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  table_chart
+                </span>
+                <span>โหมดตารางสรุป (Table View)</span>
+              </button>
+            </div>
+          </div>
+        </div>
 
-        <TicketsTable
-          items={items}
-          loading={loading}
-          qInput={qInput}
-          onQInputChange={setQInput}
-          onSearch={() => {
-            setQ(qInput);
-            setPage(1);
-          }}
-          statusFilter={statusFilter}
-          onStatusFilterChange={(v) => {
-            setStatusFilter(v);
-            setPage(1);
-          }}
-          priorityFilter={priorityFilter}
-          onPriorityFilterChange={(v) => {
-            setPriorityFilter(v);
-            setPage(1);
-          }}
-          page={page}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          onSelectTicket={setSelectedTicket}
-        />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <LiveSupportSection
+            token={token}
+            initialTicketId={workspaceTicketId}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full w-full flex-col overflow-y-auto">
+      {/* View Mode Bar */}
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-2.5 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            มุมมอง:
+          </span>
+          <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setViewMode("workspace")}
+              className="flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium text-slate-600 transition hover:text-slate-900"
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                view_kanban
+              </span>
+              <span>โหมดปฏิบัติการแชท (Workspace)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className="flex items-center gap-1.5 rounded-md bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-2xs transition"
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                table_chart
+              </span>
+              <span>โหมดตารางสรุป (Table View)</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      <CaseDrawer
-        ticket={selectedTicket}
-        closing={closingTicket}
-        onClose={closeTicket}
-      >
-        {selectedTicket && (
-          <TicketCasePanel
-            ticket={selectedTicket}
-            actionBusy={actionBusy}
-            actionError={actionError}
-            onAssign={handleAssign}
-            onStatusChange={handleStatusChange}
-          />
-        )}
-      </CaseDrawer>
+      <div className="p-8 max-w-7xl mx-auto w-full">
+        <div className="animate-fade-in-up flex min-h-full flex-col">
+          {error && <Alert className="mb-3">{error}</Alert>}
 
-      <ConfirmDialog
-        open={escalating}
-        busy={actionBusy}
-        title="ส่งต่อให้ Admin?"
-        description="ตั๋วจะออกจากคิวของคุณและไปอยู่ในคิวของ Admin"
-        confirmLabel="ส่งต่อ"
-        tone="primary"
-        reason="optional"
-        reasonLabel="เหตุผลที่ยกระดับ"
-        onCancel={() => setEscalating(false)}
-        onConfirm={(reason) => {
-          setEscalating(false);
-          handleStatusChange("ESCALATED", reason);
-        }}
-      />
-    </>
+          <TicketsTable
+            items={items}
+            loading={loading}
+            qInput={qInput}
+            onQInputChange={setQInput}
+            onSearch={() => {
+              setQ(qInput);
+              setPage(1);
+            }}
+            statusFilter={statusFilter}
+            onStatusFilterChange={(v) => {
+              setStatusFilter(v);
+              setPage(1);
+            }}
+            priorityFilter={priorityFilter}
+            onPriorityFilterChange={(v) => {
+              setPriorityFilter(v);
+              setPage(1);
+            }}
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onSelectTicket={setSelectedTicket}
+          />
+        </div>
+
+        <CaseDrawer
+          ticket={selectedTicket}
+          closing={closingTicket}
+          onClose={closeTicket}
+        >
+          {selectedTicket && (
+            <TicketCasePanel
+              ticket={selectedTicket}
+              actionBusy={actionBusy}
+              actionError={actionError}
+              onAssign={handleAssign}
+              onStatusChange={handleStatusChange}
+              onOpenLiveChat={(tId) => {
+                closeTicket();
+                setWorkspaceTicketId(tId);
+                setViewMode("workspace");
+              }}
+            />
+          )}
+        </CaseDrawer>
+
+        <ConfirmDialog
+          open={escalating}
+          busy={actionBusy}
+          title="ส่งต่อให้ Admin?"
+          description="ตั๋วจะออกจากคิวของคุณและไปอยู่ในคิวของ Admin"
+          confirmLabel="ส่งต่อ"
+          tone="primary"
+          reason="optional"
+          reasonLabel="เหตุผลที่ยกระดับ"
+          onCancel={() => setEscalating(false)}
+          onConfirm={(reason) => {
+            setEscalating(false);
+            handleStatusChange("ESCALATED", reason);
+          }}
+        />
+      </div>
+    </div>
   );
 }

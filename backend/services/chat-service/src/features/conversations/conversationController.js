@@ -25,7 +25,11 @@ async function create(req, res, next) {
 
 async function list(req, res, next) {
   try {
-    const conversations = await conversationService.listInbox(req.userId);
+    const { contextType, excludeContextType } = req.query;
+    const filter = {};
+    if (contextType) filter.contextType = contextType;
+    if (excludeContextType) filter.excludeContextType = excludeContextType;
+    const conversations = await conversationService.listInbox(req.userId, filter);
     res.json({ items: conversations });
   } catch (err) {
     next(err);

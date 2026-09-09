@@ -389,4 +389,34 @@ describe("ChatRoomPage — live delivery vs. REST response race", () => {
     expect(typingWrapper.className).toContain("opacity-0");
     expect(typingWrapper.getAttribute("aria-hidden")).toBe("true");
   });
+
+  it("updates online status dot and label dynamically with socket presence events", async () => {
+    getConversation.mockResolvedValue(CONVERSATION);
+    listMessages.mockResolvedValue({ items: [] });
+    listConversations.mockResolvedValue({ items: [CONVERSATION] });
+
+    render(<ChatRoomPage />);
+    await screen.findByText("ร้านของสะสม");
+
+    // Initially offline
+    expect(screen.getByText("ออฟไลน์")).toBeInTheDocument();
+    const dot = screen.getByTestId("status-indicator-dot");
+    expect(dot.className).toContain("bg-slate-300");
+
+    // Other user comes online via presence event
+    act(() => {
+      fakeSocket._trigger("presence", { userId: "seller-1", online: true });
+    });
+
+    expect(screen.getByText("ออนไลน์")).toBeInTheDocument();
+    expect(dot.className).toContain("bg-emerald-500");
+
+    // Other user goes offline
+    act(() => {
+      fakeSocket._trigger("presence", { userId: "seller-1", online: false });
+    });
+
+    expect(screen.getByText("ออฟไลน์")).toBeInTheDocument();
+    expect(dot.className).toContain("bg-slate-300");
+  });
 });

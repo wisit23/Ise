@@ -115,6 +115,16 @@ async function transitionStatus({ id, version, status, extra = {} }) {
   return count > 0;
 }
 
+/** Stores the chat-service conversation ID on a ticket. Called once during
+ * ticket creation — not an optimistic-lock update because only the creating
+ * request ever writes this field, so there is no race. */
+function setConversationId(ticketId, conversationId) {
+  return prisma.supportTicket.update({
+    where: { id: ticketId },
+    data: { conversationId },
+  });
+}
+
 module.exports = {
   create,
   findById,
@@ -123,4 +133,5 @@ module.exports = {
   addMessage,
   assign,
   transitionStatus,
+  setConversationId,
 };

@@ -3,6 +3,7 @@
 import Alert from "../../../ui/Alert";
 import Button from "../../../ui/Button";
 import CaseUserCard from "./CaseUserCard";
+import EmbeddedChat from "../../EmbeddedChat";
 import { AGENT_NEXT_STATUS } from "../../../../lib/supportConstants";
 
 const THAI_DATE = { year: "numeric", month: "long", day: "numeric" };
@@ -44,6 +45,7 @@ export default function TicketCasePanel({
   onStatusChange,
   onWarnUser,
   onBanUser,
+  onOpenLiveChat,
 }) {
   const nextStatuses = AGENT_NEXT_STATUS[ticket.status] || [];
   const openedOn = new Date(ticket.createdAt).toLocaleDateString(
@@ -146,20 +148,34 @@ export default function TicketCasePanel({
         </SectionCard>
 
         <SectionCard icon="chat" title="สนทนากับลูกค้า" tone="indigo">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 font-bold text-white shadow">
-              {ticket.requesterId?.slice(0, 1).toUpperCase() ?? "U"}
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-slate-800">
-                ผู้ใช้: #{ticket.requesterId?.slice(0, 12)}
+          {onOpenLiveChat && ticket.conversationId && (
+            <button
+              type="button"
+              onClick={() => onOpenLiveChat(ticket.id)}
+              className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 shadow-2xs"
+            >
+              <span className="material-symbols-outlined text-[17px]">
+                open_in_full
+              </span>
+              <span>เปิดตั๋วนี้ในโหมดแชทสดจอใหญ่ (Workspace)</span>
+            </button>
+          )}
+          {ticket.conversationId ? (
+            <EmbeddedChat
+              conversationId={ticket.conversationId}
+              maxHeight="350px"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 py-6 text-slate-400">
+              <span className="material-symbols-outlined text-[24px]">
+                chat_bubble_outline
+              </span>
+              <p className="text-xs font-medium">ไม่มีห้องแชท</p>
+              <p className="text-[11px]">
+                ตั๋วนี้สร้างก่อนระบบแชทเปิดใช้งาน
               </p>
-              <p className="mt-0.5 text-xs text-slate-500">กำลังพัฒนาระบบแชท</p>
             </div>
-            <Button size="sm" variant="secondary" icon="chat" disabled>
-              แชท (Soon)
-            </Button>
-          </div>
+          )}
         </SectionCard>
 
         <SectionCard icon="build" title="จัดการคำร้อง (Actions)">

@@ -3,6 +3,7 @@ const ticketModel = require("./ticketModel");
 const { canTransition } = require("./ticketState");
 const { calculatePriority, calculateSlaDueAt } = require("../sla/priority");
 const auditLog = require("../audit/auditLog");
+const chatClient = require("../../services/chatClient");
 
 const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN"]);
 const CATEGORIES = new Set([
@@ -75,6 +76,18 @@ async function createTicket({
     fromValue: null,
     toValue: "NEW",
   });
+
+  // Best-effort: open a chat room for this support ticket so the requester
+  // can talk to the assigned agent in real-time once one picks it up.
+  const conversation = await chatClient.createSupportConversation(
+    ticket.id,
+    ticket.ticketNumber,
+    requesterId,
+  );
+  if (conversation?.id) {
+    await ticketModel.setConversationId(ticket.id, conversation.id);
+    ticket.conversationId = conversation.id;
+  }
 
   return ticket;
 }
@@ -172,7 +185,12 @@ async function assignToSelf({ ticketId, userId, role }) {
     toValue: userId,
   });
 
-  return ticketModel.findById(ticketId);
+  // Best-effort: add the agent to the support chat room.
+  const assigned = await ticketModel.findById(ticketId);
+  if (assigned?.conversationId) {
+    await chatClient.addAgentToConversation(assigned.conversationId, userId);
+  }
+  return assigned;
 }
 
 async function changeStatus({ ticketId, userId, role, status, reason }) {
@@ -205,7 +223,32 @@ async function changeStatus({ ticketId, userId, role, status, reason }) {
     reason: reason || null,
   });
 
-  return ticketModel.findById(ticketId);
+  // Best-effort chat notifications for meaningful status changes.
+  const updated = await ticketModel.findById(ticketId);
+  if (updated?.conversationId) {
+    if (status === "CLOSED") {
+      await chatClient.lockConversation(updated.conversationId);
+    } else if (status === "RESOLVED") {
+      await chatClient.sendSystemMessage(
+        updated.conversationId,
+        "เจ้าหน้าที่แจ้งว่าแก้ไขปัญหาเรียบร้อยแล้ว",
+        { event: "ticket.resolved", ticketId },
+      );
+    } else if (status === "IN_PROGRESS" && ticket.status === "RESOLVED") {
+      await chatClient.sendSystemMessage(
+        updated.conversationId,
+        "เคสถูกเปิดใหม่อีกครั้ง",
+        { event: "ticket.reopened", ticketId },
+      );
+    } else if (status === "ESCALATED") {
+      await chatClient.sendSystemMessage(
+        updated.conversationId,
+        "เคสถูกส่งต่อให้ผู้ดูแลระดับสูงแล้ว",
+        { event: "ticket.escalated", ticketId },
+      );
+    }
+  }
+  return updated;
 }
 
 module.exports = {

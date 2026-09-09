@@ -72,10 +72,22 @@ function broadcastActivity(userId, activity) {
   ioInstance.to(userRoomName(userId)).emit("conversation:activity", activity);
 }
 
+/** Notifies all sockets viewing a conversation that its status changed
+ * (e.g. ACTIVE → LOCKED). The client uses this to hide the composer and
+ * show the locked banner without needing a full page refresh. */
+function broadcastStatusChange(conversation, newStatus) {
+  if (!ioInstance) return;
+  ioInstance.to(roomName(conversation.id)).emit("conversation:status", {
+    conversationId: conversation.id,
+    status: newStatus,
+  });
+}
+
 module.exports = {
   setIo,
   roomName,
   userRoomName,
   broadcastMessage,
   broadcastActivity,
+  broadcastStatusChange,
 };

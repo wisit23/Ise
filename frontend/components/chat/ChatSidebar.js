@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ConversationRow from "./ConversationRow";
 import Alert from "../ui/Alert";
 import { otherParticipant, hasUnread } from "../../lib/chat";
+import { useChatSocket, useChatSocketEvent } from "./ChatSocketProvider";
 
 export default function ChatSidebar({
   conversations,
@@ -14,6 +15,8 @@ export default function ChatSidebar({
   error = "",
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [onlineUsers, setOnlineUsers] = useState({});
+  const { socket, connected: socketConnected } = useChatSocket();
   const listRef = useRef(null);
   const [indicatorStyle, setIndicatorStyle] = useState({
     top: 0,
@@ -21,25 +24,51 @@ export default function ChatSidebar({
     opacity: 0,
   });
 
+  const nonSupportConversations = useMemo(() => {
+    if (!conversations) return null;
+    return conversations.filter((c) => c.contextType !== "SUPPORT");
+  }, [conversations]);
+
+  // Query online status for all participants visible in the sidebar
+  useEffect(() => {
+    if (!socket || !socketConnected || !nonSupportConversations || !currentUserId) return;
+    const userIds = nonSupportConversations
+      .map((c) => otherParticipant(c, currentUserId)?.userId)
+      .filter(Boolean);
+
+    if (userIds.length === 0) return;
+
+    socket.emit("presence:query", { userIds }, (res) => {
+      if (res?.presence) {
+        setOnlineUsers((prev) => ({ ...prev, ...res.presence }));
+      }
+    });
+  }, [socket, socketConnected, nonSupportConversations, currentUserId]);
+
+  useChatSocketEvent("presence", ({ userId, online }) => {
+    if (!userId) return;
+    setOnlineUsers((prev) => ({ ...prev, [userId]: Boolean(online) }));
+  });
+
   const unreadTotal = useMemo(() => {
-    if (!conversations || !currentUserId) return 0;
-    return conversations.filter(
+    if (!nonSupportConversations || !currentUserId) return 0;
+    return nonSupportConversations.filter(
       (c) => c.id !== activeId && hasUnread(c, currentUserId),
     ).length;
-  }, [conversations, currentUserId, activeId]);
+  }, [nonSupportConversations, currentUserId, activeId]);
 
   const filteredConversations = useMemo(() => {
-    if (!conversations) return null;
+    if (!nonSupportConversations) return null;
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return conversations;
+    if (!query) return nonSupportConversations;
 
-    return conversations.filter((c) => {
+    return nonSupportConversations.filter((c) => {
       const other = otherParticipant(c, currentUserId);
       const name = (other?.displayName || "").toLowerCase();
       const preview = (c.lastMessagePreview || "").toLowerCase();
       return name.includes(query) || preview.includes(query);
     });
-  }, [conversations, searchQuery, currentUserId]);
+  }, [nonSupportConversations, searchQuery, currentUserId]);
 
   useEffect(() => {
     if (!activeId || !listRef.current) {
@@ -187,15 +216,22 @@ export default function ChatSidebar({
               aria-hidden="true"
             />
             <ul ref={listRef} className="divide-y divide-gray-100/70">
-              {filteredConversations.map((c) => (
-                <ConversationRow
-                  key={c.id}
-                  conversation={c}
-                  currentUserId={currentUserId}
-                  isActive={c.id === activeId}
-                  onSelect={onSelectConversation}
-                />
-              ))}
+              {filteredConversations.map((c) => {
+                const other = otherParticipant(c, currentUserId);
+                const isOnline = Boolean(
+                  other?.userId && onlineUsers[other.userId],
+                );
+                return (
+                  <ConversationRow
+                    key={c.id}
+                    conversation={c}
+                    currentUserId={currentUserId}
+                    isActive={c.id === activeId}
+                    isOnline={isOnline}
+                    onSelect={onSelectConversation}
+                  />
+                );
+              })}
             </ul>
           </div>
         )}

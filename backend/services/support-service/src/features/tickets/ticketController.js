@@ -105,4 +105,17 @@ async function changeStatus(req, res, next) {
   }
 }
 
-module.exports = { create, mine, queue, getOne, reply, assign, changeStatus };
+async function getConversation(req, res, next) {
+  try {
+    const ticket = await ticketService.getTicket({
+      ticketId: req.params.id,
+      userId: req.userId,
+      role: req.userRole,
+    });
+    res.json({ conversationId: ticket.conversationId || null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, mine, queue, getOne, reply, assign, changeStatus, getConversation };

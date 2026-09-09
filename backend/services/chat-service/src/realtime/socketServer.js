@@ -32,6 +32,12 @@ function createSocketServer(httpServer) {
   const REDIS_URL = process.env.REDIS_URL || "redis://redis:6379";
   const pubClient = new IORedis(REDIS_URL);
   const subClient = pubClient.duplicate();
+  pubClient.on("error", (err) =>
+    console.warn("[chat-service] redis pubClient warning:", err.message),
+  );
+  subClient.on("error", (err) =>
+    console.warn("[chat-service] redis subClient warning:", err.message),
+  );
   io.adapter(createAdapter(pubClient, subClient));
 
   // Nothing in production ever calls this (the process just exits), but an
@@ -45,9 +51,26 @@ function createSocketServer(httpServer) {
     await Promise.all([pubClient.quit(), subClient.quit()]);
   }
 
+  async function isUserOnline(targetUserId) {
+    if (!targetUserId) return false;
+    try {
+      const sockets = await io
+        .in(broadcast.userRoomName(targetUserId))
+        .fetchSockets();
+      if (sockets.length > 0) return true;
+    } catch {
+      // ignore fetchSockets failure, fallback to presence.isOnline
+    }
+    try {
+      return await presence.isOnline(targetUserId);
+    } catch {
+      return false;
+    }
+  }
+
   io.use(verifySocketAuth);
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     const userId = socket.data.userId;
     const joinedConversations = new Set();
 
@@ -58,6 +81,28 @@ function createSocketServer(httpServer) {
     // inbox list live on pages that have no conversation open at all (see
     // broadcast.js's userRoomName comment).
     socket.join(broadcast.userRoomName(userId));
+    presence.setOnline(userId).catch(() => {});
+
+    // Broadcast to conversation rooms and participant user rooms that this user is online
+    try {
+      const userConvs = await conversationModel.findByParticipant(userId);
+      for (const c of userConvs) {
+        socket.to(broadcast.roomName(c.id)).emit("presence", {
+          userId,
+          online: true,
+        });
+        for (const p of c.participants || []) {
+          if (p.userId !== userId) {
+            socket.to(broadcast.userRoomName(p.userId)).emit("presence", {
+              userId,
+              online: true,
+            });
+          }
+        }
+      }
+    } catch {
+      // ignore lookup failures
+    }
 
     // Re-checks participant membership against the database on every join —
     // exactly like conversationService.getForParticipant does for the REST
@@ -80,9 +125,33 @@ function createSocketServer(httpServer) {
         socket
           .to(broadcast.roomName(conversationId))
           .emit("presence", { userId, online: true });
-        if (typeof ack === "function") ack({ ok: true });
+
+        const onlineUsers = {};
+        for (const p of conversation.participants || []) {
+          if (p.userId !== userId) {
+            onlineUsers[p.userId] = await isUserOnline(p.userId);
+          }
+        }
+
+        if (typeof ack === "function") ack({ ok: true, onlineUsers });
       } catch {
         if (typeof ack === "function") ack({ error: "internal" });
+      }
+    });
+
+    // Allows client to query online presence of specific users on demand
+    socket.on("presence:query", async (payload, ack) => {
+      if (typeof ack !== "function") return;
+      try {
+        const raw = payload?.userIds || payload;
+        const ids = Array.isArray(raw) ? raw : [raw].filter(Boolean);
+        const result = {};
+        for (const id of ids) {
+          result[id] = await isUserOnline(id);
+        }
+        ack({ ok: true, presence: result });
+      } catch {
+        ack({ error: "internal" });
       }
     });
 
@@ -96,10 +165,7 @@ function createSocketServer(httpServer) {
       if (!joinedConversations.has(conversationId)) return;
       socket.leave(broadcast.roomName(conversationId));
       joinedConversations.delete(conversationId);
-      await presence.clearTyping(conversationId, userId);
-      socket
-        .to(broadcast.roomName(conversationId))
-        .emit("presence", { userId, online: false });
+      await presence.clearTyping(conversationId, userId).catch(() => {});
     });
 
     socket.on("typing:start", async (conversationId) => {
@@ -119,11 +185,40 @@ function createSocketServer(httpServer) {
     });
 
     socket.on("disconnect", async () => {
-      await presence.clearOnline(userId);
-      for (const conversationId of joinedConversations) {
-        socket
-          .to(broadcast.roomName(conversationId))
-          .emit("presence", { userId, online: false });
+      let isStillOnline = false;
+      try {
+        const remaining = await io
+          .in(broadcast.userRoomName(userId))
+          .fetchSockets();
+        isStillOnline = remaining.some((s) => s.id !== socket.id);
+      } catch {
+        isStillOnline = false;
+      }
+      if (!isStillOnline) {
+        await presence.clearOnline(userId).catch(() => {});
+        try {
+          const userConvs = await conversationModel.findByParticipant(userId);
+          for (const c of userConvs) {
+            io.to(broadcast.roomName(c.id)).emit("presence", {
+              userId,
+              online: false,
+            });
+            for (const p of c.participants || []) {
+              if (p.userId !== userId) {
+                io.to(broadcast.userRoomName(p.userId)).emit("presence", {
+                  userId,
+                  online: false,
+                });
+              }
+            }
+          }
+        } catch {
+          for (const conversationId of joinedConversations) {
+            socket
+              .to(broadcast.roomName(conversationId))
+              .emit("presence", { userId, online: false });
+          }
+        }
       }
     });
   });

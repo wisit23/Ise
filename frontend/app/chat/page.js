@@ -30,8 +30,9 @@ export default function ChatInboxPage() {
     setUser(getStoredUser());
     listConversations(token)
       .then((data) => {
-        setConversations(data.items);
-        setCachedConversations(data.items);
+        const items = (data.items || []).filter((c) => c.contextType !== "SUPPORT");
+        setConversations(items);
+        setCachedConversations(items);
       })
       .catch((err) => setError(err.message));
   }, [router]);
@@ -44,8 +45,9 @@ export default function ChatInboxPage() {
     if (!token) return;
     listConversations(token)
       .then((data) => {
-        setConversations(data.items);
-        setCachedConversations(data.items);
+        const items = (data.items || []).filter((c) => c.contextType !== "SUPPORT");
+        setConversations(items);
+        setCachedConversations(items);
       })
       .catch(() => {});
   });
@@ -59,7 +61,10 @@ export default function ChatInboxPage() {
     const interval = setInterval(() => {
       if (document.hidden) return;
       listConversations(token)
-        .then((data) => setConversations(data.items))
+        .then((data) => {
+          const items = (data.items || []).filter((c) => c.contextType !== "SUPPORT");
+          setConversations(items);
+        })
         .catch(() => {});
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
@@ -71,7 +76,10 @@ export default function ChatInboxPage() {
     const token = getAccessToken();
     if (!token) return;
     listConversations(token)
-      .then((data) => setConversations(data.items))
+      .then((data) => {
+        const items = (data.items || []).filter((c) => c.contextType !== "SUPPORT");
+        setConversations(items);
+      })
       .catch(() => {});
   }, [user, socketConnected]);
 
