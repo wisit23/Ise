@@ -52,9 +52,17 @@ services:
     image: mongo:4.4
     depends_on:
       - mongo
-    volumes:
-      - ./infra/mongo/init-replica.sh:/init-replica.sh:ro
-    entrypoint: ["sh", "/init-replica.sh"]
+    restart: "no"
+    entrypoint:
+      - "sh"
+      - "-c"
+      - >
+        echo '[mongo-init] waiting for mongo:27017...';
+        until mongo --host mongo:27017 --eval 'db.runCommand({ping:1})' >/dev/null 2>&1 || mongosh --host mongo:27017 --eval 'db.runCommand({ping:1})' >/dev/null 2>&1; do sleep 1; done;
+        echo '[mongo-init] initiating rs0 replica set...';
+        mongo --host mongo:27017 --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]})" >/dev/null 2>&1 || mongosh --host mongo:27017 --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]})" >/dev/null 2>&1 || true;
+        echo '[mongo-init] replica set initiated successfully.';
+        exit 0;
 
   gateway:
     build:
