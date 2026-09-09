@@ -5,6 +5,7 @@ export const PRODUCT_STATUS_LABEL = {
   reserved: "อยู่ในตะกร้าลูกค้า",
   sold: "ขายแล้ว",
   auction: "กำลังประมูล",
+  hidden: "ซ่อนอยู่",
 };
 
 export const PRODUCT_STATUS_STYLE = {
@@ -12,6 +13,7 @@ export const PRODUCT_STATUS_STYLE = {
   reserved: "bg-amber-50 text-amber-700",
   sold: "bg-gray-100 text-gray-600",
   auction: "bg-sky-50 text-sky-700",
+  hidden: "bg-yellow-50 text-yellow-800",
 };
 
 export const ORDER_STATUS_LABEL = {

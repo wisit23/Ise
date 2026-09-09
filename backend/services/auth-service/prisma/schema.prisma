@@ -36,6 +36,10 @@ enum KycStatus {
   PENDING
   VERIFIED
   REJECTED
+  // Seller's submitted ID card has passed its expiry date — must re-submit KYC.
+  EXPIRED
+  // Seller had no listing activity for 365 days — must re-submit KYC to list again.
+  INACTIVE_EXPIRED
 }
 
 enum ReportStatus {
@@ -85,6 +89,9 @@ model SellerProfile {
   user           User      @relation(fields: [userId], references: [id])
   shopName       String    @map("shop_name")
   idCardNumber   String?   @map("id_card_number")
+  // Expiry date printed on the ID card (optional — permanent-card holders leave this null).
+  // The daily kycExpiryJob sets kycStatus = EXPIRED when this date is in the past.
+  idCardExpiry   DateTime? @map("id_card_expiry")
   // Return/shipping address collected during seller verification.
   address        String?
   bankAccount    String?   @map("bank_account")
@@ -93,6 +100,10 @@ model SellerProfile {
   // public URL, same reasoning as KycApplication.storageKey below.
   kycStorageKey  String?   @map("kyc_storage_key")
   verifiedAt     DateTime? @map("verified_at")
+  // Timestamp of the seller's last listing activity (create or update a product).
+  // The daily sellerInactivityJob sets kycStatus = INACTIVE_EXPIRED when this
+  // (or verifiedAt if null) is older than 365 days.
+  lastActiveAt   DateTime? @map("last_active_at")
 
   @@map("seller_profiles")
 }

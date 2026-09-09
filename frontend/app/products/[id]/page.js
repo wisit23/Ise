@@ -19,6 +19,7 @@ const STATUS_LABEL = {
   reserved: "ถูกล็อกไว้ในตะกร้าแล้ว",
   sold: "ขายแล้ว",
   auction: "อยู่ในระบบประมูล",
+  hidden: "ซ่อนอยู่",
 };
 
 function baht(v) {
@@ -53,16 +54,27 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     apiFetch(`/api/products/${id}`)
-      .then((p) => {
-        setProduct(p);
-        apiFetch(`/api/auth/users/${p.sellerId}/public`)
-          .then(setSeller)
-          .catch((err) => console.error("โหลดข้อมูลผู้ขายไม่สำเร็จ:", err));
-        apiFetch(`/api/reviews/by-seller/${p.sellerId}/summary`)
-          .then(setReviewSummary)
-          .catch((err) => console.error("โหลดคะแนนรีวิวผู้ขายไม่สำเร็จ:", err));
-      })
-      .catch((err) => setError(err.message));
+      .then(setupProduct)
+      .catch((err) => {
+        // Fallback for owners if gateway stripped the token
+        apiFetch(`/api/products/mine?limit=100`)
+          .then((data) => {
+            const p = data.items.find((item) => item.id === id);
+            if (p) setupProduct(p);
+            else setError(err.message);
+          })
+          .catch(() => setError(err.message));
+      });
+
+    function setupProduct(p) {
+      setProduct(p);
+      apiFetch(`/api/auth/users/${p.sellerId}/public`)
+        .then(setSeller)
+        .catch((err) => console.error("โหลดข้อมูลผู้ขายไม่สำเร็จ:", err));
+      apiFetch(`/api/reviews/by-seller/${p.sellerId}/summary`)
+        .then(setReviewSummary)
+        .catch((err) => console.error("โหลดคะแนนรีวิวผู้ขายไม่สำเร็จ:", err));
+    }
     fetchConditions()
       .then((items) =>
         setConditionLabels(
@@ -182,7 +194,9 @@ export default function ProductDetailPage() {
               className={`rounded-full px-2.5 py-1 ${
                 available
                   ? "bg-emerald-50 text-emerald-700"
-                  : "bg-gray-100 text-gray-500"
+                  : product.status === "hidden"
+                    ? "bg-yellow-50 text-yellow-800"
+                    : "bg-gray-100 text-gray-500"
               }`}
             >
               {STATUS_LABEL[product.status] || product.status}

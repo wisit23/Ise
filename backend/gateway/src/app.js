@@ -54,30 +54,27 @@ app.get("/health", (req, res) =>
 );
 
 app.use((req, res, next) => {
-  if (isPublic(req.path)) return next();
-
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+  if (!token) {
+    if (isPublic(req.path)) return next();
+    return res.status(401).json({ error: "Missing bearer token" });
+  }
 
   try {
     const payload = verifyAccessToken(token);
     req.headers["x-user-id"] = payload.sub;
     req.headers["x-user-role"] = payload.role;
-    // Multi-role/permission claims (ADM-001) — fromGatewayHeaders reads these,
-    // so the gateway has to forward them or every permission check downstream
-    // would silently see an empty set. Both are ASCII-only by construction
-    // (role codes and permission slugs), so no encoding is needed here.
+    // Multi-role/permission claims (ADM-001)
     req.headers["x-user-roles"] = (payload.roles || []).join(",");
     req.headers["x-user-permissions"] = (payload.permissions || []).join(",");
-    // HTTP header values are Latin-1 only; displayName can be Thai (or any
-    // non-ASCII) text, which throws ERR_INVALID_CHAR in http-proxy if set
-    // raw. Encode here, decode in authMiddleware's fromGatewayHeaders.
     req.headers["x-user-display-name"] = encodeURIComponent(
       payload.displayName || "",
     );
     next();
   } catch {
+    if (isPublic(req.path)) return next();
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 });

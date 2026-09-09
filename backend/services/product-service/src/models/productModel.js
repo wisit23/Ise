@@ -61,7 +61,7 @@ function mediaToNestedCreate(media) {
 async function searchProducts({ q, category, status, skip = 0, take = 20 }) {
   const statusFilter = status
     ? Prisma.sql`status = ${status}`
-    : Prisma.sql`status <> 'removed'`;
+    : Prisma.sql`status NOT IN ('removed', 'hidden')`;
   const categoryFilter = category
     ? Prisma.sql`AND category = ${category}`
     : Prisma.empty;
@@ -105,7 +105,9 @@ async function list({ category, q, status, skip, take } = {}) {
   if (q) return searchProducts({ q, category, status, skip, take });
 
   const where = {
-    ...(status ? { status } : { status: { not: "removed" } }),
+    ...(status
+      ? { status }
+      : { status: { notIn: ["removed", "hidden"] } }),
     ...(category ? { category } : {}),
   };
   const [items, total] = await Promise.all([
@@ -122,7 +124,13 @@ async function list({ category, q, status, skip, take } = {}) {
 }
 
 async function listBySeller(sellerId, { status, skip, take } = {}) {
-  const where = { sellerId, ...(status ? { status } : {}) };
+  let statusFilter = {};
+  if (Array.isArray(status)) {
+    statusFilter = { status: { in: status } };
+  } else if (status) {
+    statusFilter = { status };
+  }
+  const where = { sellerId, ...statusFilter };
   const [items, total] = await Promise.all([
     prisma.product.findMany({
       where,
@@ -187,6 +195,45 @@ async function remove(id) {
   }
 }
 
+/**
+ * Toggles a product between "available"/"reserved" and "hidden".
+ * - Hiding saves the current status in preRemovalStatus so we can restore it.
+ * - Unhiding restores the saved status (default: "available").
+ * If the product is "reserved" and gets hidden, it stays in preRemovalStatus
+ * so buyers see it gone from their cart until it is un-hidden.
+ */
+async function setVisibility(id, visible) {
+  if (visible) {
+    // Restore to whatever status it had before hiding (default: available).
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return null;
+    const restored = product.preRemovalStatus || "available";
+    return toApiShape(
+      await prisma.product.update({
+        where: { id },
+        data: { status: restored, preRemovalStatus: null },
+        include: WITH_MEDIA,
+      }),
+    );
+  } else {
+    // Only hide if currently browsable (available or reserved).
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return null;
+    if (product.status === "hidden" || product.status === "removed") {
+      return toApiShape(
+        await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+      );
+    }
+    return toApiShape(
+      await prisma.product.update({
+        where: { id },
+        data: { status: "hidden", preRemovalStatus: product.status },
+        include: WITH_MEDIA,
+      }),
+    );
+  }
+}
+
 function listCategories() {
   return prisma.category.findMany({ orderBy: { name: "asc" } });
 }
@@ -212,6 +259,7 @@ module.exports = {
   create,
   update,
   remove,
+  setVisibility,
   listCategories,
   ensureCategory,
   listConditions,
