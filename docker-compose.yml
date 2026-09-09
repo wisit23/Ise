@@ -35,10 +35,10 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - mongodata:/data/db
+      - mongodata_v4:/data/db
     healthcheck:
       # Supports both legacy mongo shell (4.4) and modern mongosh (5+)
-      test: ["CMD-SHELL", "mongo --quiet --eval 'rs.status().ok' 2>/dev/null || mongosh --quiet --eval 'rs.status().ok' 2>/dev/null"]
+      test: ["CMD-SHELL", "mongo --quiet --eval 'quit(rs.status().ok === 1 ? 0 : 1)' 2>/dev/null || mongosh --quiet --eval 'quit(rs.status().ok === 1 ? 0 : 1)' 2>/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -58,7 +58,15 @@ services:
       - "-c"
       - >
         echo '[mongo-init] waiting for mongo:27017...';
-        until mongo --host mongo:27017 --eval 'db.runCommand({ping:1})' >/dev/null 2>&1 || mongosh --host mongo:27017 --eval 'db.runCommand({ping:1})' >/dev/null 2>&1; do sleep 1; done;
+        RETRIES=30;
+        until mongo --host mongo:27017 --eval 'db.runCommand({ping:1})' >/dev/null 2>&1 || mongosh --host mongo:27017 --eval 'db.runCommand({ping:1})' >/dev/null 2>&1 || [ $$RETRIES -eq 0 ]; do
+          RETRIES=$$((RETRIES - 1));
+          sleep 1;
+        done;
+        if [ $$RETRIES -eq 0 ]; then
+          echo '[mongo-init] timed out waiting for mongo:27017';
+          exit 1;
+        fi;
         echo '[mongo-init] initiating rs0 replica set...';
         mongo --host mongo:27017 --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]})" >/dev/null 2>&1 || mongosh --host mongo:27017 --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]})" >/dev/null 2>&1 || true;
         echo '[mongo-init] replica set initiated successfully.';
@@ -243,7 +251,7 @@ services:
 
 volumes:
   pgdata:
-  mongodata:
+  mongodata_v4:
   chat_private_attachments:
   product_uploads:
   order_private_evidence:
