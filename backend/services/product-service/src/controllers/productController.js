@@ -10,6 +10,7 @@ const {
   buildCreateProductData,
   buildProductPatch,
 } = require("./productPayload");
+const { parseCatalogFilters } = require("../features/catalog/catalogQuery");
 const sellerActivityClient = require("../services/sellerActivityClient");
 
 const MIN_MEDIA_COUNT = 4;
@@ -100,11 +101,15 @@ async function feed(req, res, next) {
 
 async function search(req, res, next) {
   try {
-    const { q, category } = req.query;
+    let filters;
+    try {
+      filters = parseCatalogFilters(req.query);
+    } catch (err) {
+      throw badRequest(err.message);
+    }
     const pagination = parsePagination(req.query);
     const { items, total } = await productModel.list({
-      q,
-      category,
+      ...filters,
       status: "available",
       skip: pagination.skip,
       take: pagination.take,
@@ -123,11 +128,19 @@ async function adminSearch(req, res, next) {
     if (req.userRole !== "ADMIN") {
       throw forbidden("only admin accounts can use this search");
     }
-    const { q, category, status } = req.query;
+    let filters;
+    try {
+      filters = parseCatalogFilters(req.query);
+    } catch (err) {
+      throw badRequest(err.message);
+    }
+    const status =
+      req.query.status === undefined
+        ? undefined
+        : String(req.query.status).trim();
     const pagination = parsePagination(req.query);
     const { items, total } = await productModel.list({
-      q,
-      category,
+      ...filters,
       status,
       skip: pagination.skip,
       take: pagination.take,
@@ -204,6 +217,14 @@ async function listConditions(req, res, next) {
     res.json({
       items: conditions.map((c) => ({ value: c.value, label: c.label })),
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listFilterOptions(req, res, next) {
+  try {
+    res.json(await productModel.listFilterOptions());
   } catch (err) {
     next(err);
   }
@@ -306,6 +327,7 @@ module.exports = {
   bySeller,
   listCategories,
   listConditions,
+  listFilterOptions,
   create,
   update,
   remove,

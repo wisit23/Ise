@@ -23,6 +23,7 @@ router.get("/admin/search", requireAuth, productController.adminSearch);
 router.get("/by-seller/:sellerId", fromGatewayHeaders, productController.bySeller);
 router.get("/categories", productController.listCategories);
 router.get("/conditions", productController.listConditions);
+router.get("/filters", productController.listFilterOptions);
 
 router.get("/:id", fromGatewayHeaders, productController.getOne);
 router.post("/", requireAuth, productController.create);

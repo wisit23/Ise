@@ -1,5 +1,6 @@
 const prisma = require("./prismaClient");
 const { Prisma } = require("../generated/prisma-client");
+const { buildCatalogWhere } = require("../features/catalog/catalogQuery");
 
 const WITH_MEDIA = { photos: true, videos: true };
 
@@ -23,7 +24,8 @@ function toApiShape(product) {
   ]
     .sort((a, b) => a.position - b.position)
     .map((m) => ({ url: m.url, type: m.type }));
-  return { ...rest, media };
+  // `styleTags` is the catalog contract name; `tags` remains for seller/edit compatibility.
+  return { ...rest, styleTags: rest.tags || [], media };
 }
 
 /** Splits the incoming { url, type }[] media array into nested Prisma
@@ -58,27 +60,24 @@ function mediaToNestedCreate(media) {
  * use the same GIN gin_trgm_ops index on search_text (verified with
  * EXPLAIN — see docs/progress.md MOCK-TRADE-011 evidence table).
  */
-async function searchProducts({ q, category, status, skip = 0, take = 20 }) {
-  const statusFilter = status
-    ? Prisma.sql`status = ${status}`
-    : Prisma.sql`status NOT IN ('removed', 'hidden')`;
-  const categoryFilter = category
-    ? Prisma.sql`AND category = ${category}`
-    : Prisma.empty;
-  const matchCondition = Prisma.sql`(search_text ILIKE '%' || ${q} || '%' OR ${q} <% search_text)`;
+async function searchProducts(filters) {
+  const { skip = 0, take = 20, q } = filters;
+  const where = buildCatalogWhere(filters, { PrismaClient: Prisma });
+  const order = q
+    ? Prisma.sql`GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) DESC, created_at DESC`
+    : Prisma.sql`created_at DESC`;
 
   const [rows, countRows] = await Promise.all([
     prisma.$queryRaw`
-      SELECT id, GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) AS rank
-      FROM products
-      WHERE ${statusFilter} ${categoryFilter} AND ${matchCondition}
-      ORDER BY rank DESC, created_at DESC
+      SELECT id FROM products
+      WHERE ${where}
+      ORDER BY ${order}
       LIMIT ${take} OFFSET ${skip}
     `,
     prisma.$queryRaw`
       SELECT count(*)::int AS count
       FROM products
-      WHERE ${statusFilter} ${categoryFilter} AND ${matchCondition}
+      WHERE ${where}
     `,
   ]);
 
@@ -101,8 +100,44 @@ async function searchProducts({ q, category, status, skip = 0, take = 20 }) {
   return { items, total };
 }
 
-async function list({ category, q, status, skip, take } = {}) {
-  if (q) return searchProducts({ q, category, status, skip, take });
+async function list({
+  category,
+  q,
+  brand,
+  style,
+  size,
+  condition,
+  minPrice,
+  maxPrice,
+  status,
+  skip,
+  take,
+} = {}) {
+  // Public catalog always uses the same PostgreSQL query builder, including when q is absent.
+  if (
+    status === "available" ||
+    q ||
+    brand ||
+    style ||
+    size ||
+    condition ||
+    minPrice !== undefined ||
+    maxPrice !== undefined
+  ) {
+    return searchProducts({
+      q,
+      category,
+      brand,
+      style,
+      size,
+      condition,
+      minPrice,
+      maxPrice,
+      status,
+      skip,
+      take,
+    });
+  }
 
   const where = {
     ...(status
@@ -252,6 +287,29 @@ function listConditions() {
   return prisma.condition.findMany({ orderBy: { sortOrder: "asc" } });
 }
 
+async function listFilterOptions() {
+  const [brands, styles, sizes] = await Promise.all([
+    prisma.product.findMany({
+      where: { status: "available", brand: { not: "" } },
+      distinct: ["brand"],
+      select: { brand: true },
+      orderBy: { brand: "asc" },
+    }),
+    prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS value FROM products WHERE status = 'available' ORDER BY value`,
+    prisma.product.findMany({
+      where: { status: "available" },
+      distinct: ["size"],
+      select: { size: true },
+      orderBy: { size: "asc" },
+    }),
+  ]);
+  return {
+    brands: brands.map((x) => x.brand),
+    styles: styles.map((x) => x.value),
+    sizes: sizes.map((x) => x.size),
+  };
+}
+
 module.exports = {
   list,
   listBySeller,
@@ -263,4 +321,5 @@ module.exports = {
   listCategories,
   ensureCategory,
   listConditions,
+  listFilterOptions,
 };

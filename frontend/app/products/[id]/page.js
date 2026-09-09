@@ -7,6 +7,7 @@ import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import MediaGallery from "../../../components/MediaGallery";
 import { StarDisplay } from "../../../components/StarRating";
+import Pagination from "../../../components/Pagination";
 import ReportModal from "../../../components/ReportModal";
 import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import Alert from "../../../components/ui/Alert";
@@ -21,6 +22,27 @@ const STATUS_LABEL = {
   auction: "อยู่ในระบบประมูล",
   hidden: "ซ่อนอยู่",
 };
+
+const REVIEW_PAGE_SIZE = 5;
+
+function getReviewerLabel(review) {
+  const directFullName = [
+    review.buyerFirstName || review.buyer?.firstName,
+    review.buyerLastName || review.buyer?.lastName,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  if (directFullName) return directFullName;
+
+  if (review.reviewerName) return review.reviewerName;
+  if (review.buyerName) return review.buyerName;
+  if (!review.buyerId) return "ผู้ซื้อทั่วไป";
+  if (review.buyerId.length > 10) {
+    return `ผู้ซื้อ (${review.buyerId.slice(0, 4)}***${review.buyerId.slice(-4)})`;
+  }
+  return `ผู้ซื้อ (${review.buyerId})`;
+}
 
 function baht(v) {
   return `฿${Number(v || 0).toLocaleString("th-TH")}`;
@@ -39,6 +61,10 @@ export default function ProductDetailPage() {
   const [reviewSummary, setReviewSummary] = useState(null);
   const [showReport, setShowReport] = useState(false);
   const [myPendingOrder, setMyPendingOrder] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewTotalPages, setReviewTotalPages] = useState(1);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -83,6 +109,44 @@ export default function ProductDetailPage() {
       )
       .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, [id]);
+
+  useEffect(() => {
+    if (!product?.sellerId) return;
+    setReviewsLoading(true);
+    apiFetch(
+      `/api/reviews/by-seller/${product.sellerId}?page=${reviewPage}&limit=${REVIEW_PAGE_SIZE}`,
+    )
+      .then(async (data) => {
+        const items = data.items || [];
+        setReviewTotalPages(data.totalPages || 1);
+
+        const uniqueBuyerIds = [
+          ...new Set(items.map((r) => r.buyerId).filter(Boolean)),
+        ];
+        const buyerMap = {};
+        await Promise.all(
+          uniqueBuyerIds.map((bId) =>
+            apiFetch(`/api/auth/users/${bId}/public`)
+              .then((u) => {
+                const fullName = [u?.firstName, u?.lastName]
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim();
+                buyerMap[bId] = fullName || u?.shopName || null;
+              })
+              .catch(() => {}),
+          ),
+        );
+
+        const enriched = items.map((r) => ({
+          ...r,
+          reviewerName: buyerMap[r.buyerId] || null,
+        }));
+        setReviews(enriched);
+      })
+      .catch((err) => console.error("โหลดรีวิวของร้านไม่สำเร็จ:", err))
+      .finally(() => setReviewsLoading(false));
+  }, [product?.sellerId, reviewPage]);
 
   async function addToCart() {
     const token = getAccessToken();
@@ -389,6 +453,74 @@ export default function ProductDetailPage() {
             </div>
           )}
         </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-5xl px-4 py-8 border-t border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">
+            รีวิวของร้านค้านี้ ({reviewSummary?.total || 0})
+          </h2>
+          {reviewSummary?.total > 0 && (
+            <div className="flex items-center gap-1.5 text-sm text-gray-600">
+              <StarDisplay value={reviewSummary.averageRating} size={16} />
+              <span className="font-semibold text-gray-900">
+                {reviewSummary.averageRating.toFixed(1)}
+              </span>
+              <span>/ 5.0</span>
+            </div>
+          )}
+        </div>
+
+        {reviewsLoading && (
+          <p className="text-sm text-gray-500">กำลังโหลดรีวิว...</p>
+        )}
+        {!reviewsLoading && reviews.length === 0 && (
+          <p className="text-sm text-gray-500">ร้านค้านี้ยังไม่มีรีวิวจากผู้ซื้อ</p>
+        )}
+
+        <ul className="flex flex-col gap-3">
+          {reviews.map((r) => {
+            const reviewerLabel = getReviewerLabel(r);
+            const initial =
+              reviewerLabel.replace(/^ผู้ซื้อ[ (]*/, "")[0] || "U";
+            return (
+              <li
+                key={r.id}
+                className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-800">
+                      {initial.toUpperCase()}
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-900">
+                        {reviewerLabel}
+                      </p>
+                      <div className="mt-0.5">
+                        <StarDisplay value={r.rating} size={12} />
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    {new Date(r.createdAt).toLocaleDateString("th-TH")}
+                  </span>
+                </div>
+                {r.comment && (
+                  <p className="mt-2.5 pl-10.5 text-sm text-gray-700">
+                    {r.comment}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+
+        <Pagination
+          page={reviewPage}
+          totalPages={reviewTotalPages}
+          onChange={setReviewPage}
+        />
       </section>
 
       <ReportModal
