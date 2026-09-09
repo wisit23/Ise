@@ -42,7 +42,10 @@ export default function TicketThreadPage() {
   const [busyAction, setBusyAction] = useState(false);
   const [escalating, setEscalating] = useState(false);
 
-  const isAgent = user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
+  const isAgent =
+    user?.role === "CUSTOMER_SERVICE" ||
+    user?.role === "ADMIN" ||
+    user?.role === "TRUST_AND_SAFETY";
 
   function load() {
     const token = getAccessToken();

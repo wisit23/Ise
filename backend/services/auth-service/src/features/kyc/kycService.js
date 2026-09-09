@@ -21,8 +21,6 @@ async function submitKyc({
   address,
   bankAccount,
   verifyMethod,
-  thaiIdFullName,
-  thaiIdPhone,
   file,
 }) {
   if (verifyMethod !== "thai_id" && !file) {

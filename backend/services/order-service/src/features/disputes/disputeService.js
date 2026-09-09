@@ -3,7 +3,7 @@ const orderModel = require("../../models/orderModel");
 const disputeModel = require("./disputeModel");
 const { absolutePath } = require("./evidenceStorage");
 
-const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN"]);
+const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
 const DECISIONS = ["APPROVE_REFUND", "REJECT"];
 
 function isAgent(role) {

@@ -5,7 +5,7 @@ const { calculatePriority, calculateSlaDueAt } = require("../sla/priority");
 const auditLog = require("../audit/auditLog");
 const chatClient = require("../../services/chatClient");
 
-const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN"]);
+const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
 const CATEGORIES = new Set([
   "ORDER",
   "PAYMENT",
@@ -31,6 +31,9 @@ async function assertAccess({ ticketId, userId, role }) {
   if (!ticket) throw notFound("ticket not found");
 
   if (ticket.requesterId === userId) return ticket;
+  // Trust & Safety / Admin is the escalation and safety authority; they can inspect
+  // and moderate any ticket in the system without assignee-lockout.
+  if (role === "ADMIN" || role === "TRUST_AND_SAFETY") return ticket;
   if (isAgent(role) && ticket.assigneeId === userId) return ticket;
   if (isAgent(role) && ticket.assigneeId === null) return ticket; // unassigned: any agent may pick it up / view it
   throw forbidden("you do not have access to this ticket");

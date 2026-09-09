@@ -43,7 +43,7 @@ export default function EditProductPage() {
       .then((p) => {
         setupForm(p);
       })
-      .catch((err) => {
+      .catch(() => {
         // If it 404s, it might be hidden and the gateway stripped the token.
         // Fallback: fetch from /mine which always works for owners.
         apiFetch(`/api/products/mine?limit=100`)
@@ -225,7 +225,7 @@ export default function EditProductPage() {
         {isHidden && (
           <div className="mb-4 flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
             <span className="material-symbols-outlined text-[18px]">visibility_off</span>
-            <span>สินค้านี้ถูกซ่อนอยู่ — ผู้ซื้อจะไม่เห็นจนกว่าคุณจะกด "แสดงสินค้า"</span>
+            <span>สินค้านี้ถูกซ่อนอยู่ — ผู้ซื้อจะไม่เห็นจนกว่าคุณจะกด &quot;แสดงสินค้า&quot;</span>
           </div>
         )}
         <form

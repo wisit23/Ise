@@ -6,7 +6,7 @@ import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import MediaGallery from "../../../components/MediaGallery";
-import { apiFetch, mediaUrl } from "../../../lib/api";
+import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
 const STATUS_LABEL = {

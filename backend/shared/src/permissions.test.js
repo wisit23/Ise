@@ -35,6 +35,7 @@ test("catalog covers every contract role from integration.md", () => {
       "EXECUTIVE",
       "MARKETING",
       "SELLER",
+      "TRUST_AND_SAFETY",
     ].sort(),
   );
 });

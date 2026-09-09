@@ -263,14 +263,14 @@ async function update(req, res, next) {
       await productModel.ensureCategory(req.body.category);
     }
 
-    const product = await productModel.update(
+    const updated = await productModel.update(
       req.params.id,
       buildProductPatch(req.body),
     );
     // Fire-and-forget: refreshes lastActiveAt so the inactivity job doesn't
     // flag an active seller who edits rather than creates listings.
     sellerActivityClient.recordActivity(req.userId);
-    res.json(product);
+    res.json(updated);
   } catch (err) {
     next(err);
   }

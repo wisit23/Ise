@@ -17,6 +17,7 @@ const expiresAt = new Date(Date.now() + 10 * 60 * 1_000).toISOString();
 
 test("checkout persists the reservation identity returned by product-service", async (t) => {
   t.mock.method(productClient, "reserveProduct", async () => ({
+    created: true,
     reservationId: "reservation-a",
     reservedBy: "buyer-a",
     expiresAt,
@@ -28,6 +29,7 @@ test("checkout persists the reservation identity returned by product-service", a
       status: "reserved",
     },
   }));
+  t.mock.method(orderModel, "findByReservationId", async () => null);
   t.mock.method(orderModel, "create", async (data) => ({
     id: "order-a",
     status: "pending",
@@ -47,6 +49,7 @@ test("checkout persists the reservation identity returned by product-service", a
 test("checkout releases the exact reservation when Order creation fails", async (t) => {
   t.mock.method(console, "error", () => {});
   t.mock.method(productClient, "reserveProduct", async () => ({
+    created: true,
     reservationId: "reservation-b",
     reservedBy: "buyer-a",
     expiresAt,
@@ -58,6 +61,7 @@ test("checkout releases the exact reservation when Order creation fails", async 
       status: "reserved",
     },
   }));
+  t.mock.method(orderModel, "findByReservationId", async () => null);
   t.mock.method(orderModel, "create", async () => {
     throw new Error("simulated Order database failure");
   });
@@ -65,9 +69,9 @@ test("checkout releases the exact reservation when Order creation fails", async 
   const releases = [];
   t.mock.method(
     productClient,
-    "releaseReservation",
-    async (productId, reservationId, buyerId) => {
-      releases.push({ productId, reservationId, buyerId });
+    "releaseProductReservation",
+    async (productId, reservationId) => {
+      releases.push({ productId, reservationId });
     },
   );
 
@@ -81,7 +85,6 @@ test("checkout releases the exact reservation when Order creation fails", async 
     {
       productId: "product-b",
       reservationId: "reservation-b",
-      buyerId: "buyer-a",
     },
   ]);
 });

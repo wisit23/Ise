@@ -293,10 +293,23 @@ export default function OrdersPage() {
                 <OrderLine
                   order={o}
                   actions={
-                    <ContactSellerButton
-                      productId={o.productId}
-                      className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-panel disabled:cursor-not-allowed disabled:opacity-60"
-                    />
+                    <div className="flex items-center gap-2">
+                      <ContactSellerButton
+                        productId={o.productId}
+                        className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-panel disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      {["pending", "pending_payment"].includes(o.status) && (
+                        <Link
+                          href="/cart"
+                          className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">
+                            shopping_cart_checkout
+                          </span>
+                          ไปชำระเงินที่ตะกร้า
+                        </Link>
+                      )}
+                    </div>
                   }
                   status={
                     <span
@@ -312,19 +325,6 @@ export default function OrdersPage() {
                         ? "ชนะประมูล · รอชำระเงิน"
                         : STATUS_LABEL[o.status] || o.status}
                     </span>
-                  }
-                  actions={
-                    ["pending", "pending_payment"].includes(o.status) && (
-                      <Link
-                        href="/cart"
-                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">
-                          shopping_cart_checkout
-                        </span>
-                        ไปชำระเงินที่ตะกร้า
-                      </Link>
-                    )
                   }
                   note={
                     <span className="text-xs text-ink-subtle">
