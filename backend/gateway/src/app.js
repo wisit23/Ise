@@ -10,6 +10,7 @@ const SERVICES = {
   chat: process.env.CHAT_SERVICE_URL || "http://chat-service:3004",
   reviews: process.env.REVIEW_SERVICE_URL || "http://review-service:3005",
   support: process.env.SUPPORT_SERVICE_URL || "http://support-service:3006",
+  frontend: process.env.FRONTEND_SERVICE_URL || "http://frontend:3000",
 };
 
 // Routes that don't require a valid access token (register/login/refresh, public feed reads).
@@ -54,6 +55,10 @@ app.get("/health", (req, res) =>
 );
 
 app.use((req, res, next) => {
+  if (!req.path.startsWith("/api/")) {
+    return next();
+  }
+
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
 
@@ -126,6 +131,16 @@ app.use(
 app.use(
   "/api/support",
   createProxyMiddleware({ target: SERVICES.support, changeOrigin: true }),
+);
+
+// Fallback: proxy all web UI requests (pages, _next assets, favicon, etc.) to Frontend
+app.use(
+  "/",
+  createProxyMiddleware({
+    target: SERVICES.frontend,
+    changeOrigin: true,
+    ws: true,
+  }),
 );
 
 module.exports = app;

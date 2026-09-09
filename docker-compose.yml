@@ -76,6 +76,7 @@ services:
       CHAT_SERVICE_URL: http://chat-service:3004
       REVIEW_SERVICE_URL: http://review-service:3005
       SUPPORT_SERVICE_URL: http://support-service:3006
+      FRONTEND_SERVICE_URL: http://frontend:3000
     ports:
       - "${GATEWAY_PORT}:8080"
     depends_on:
