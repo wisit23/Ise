@@ -86,6 +86,61 @@ async function updateStatus(id, status) {
   }
 }
 
+async function updateCampaign(id, { campaignId, campaignCode, discountAmount, finalPrice }) {
+  try {
+    return await prisma.order.update({
+      where: { id },
+      data: {
+        campaignId,
+        campaignCode,
+        discountAmount,
+        finalPrice,
+      },
+    });
+  } catch (err) {
+    if (err.code === "P2025") return null;
+    throw err;
+  }
+}
+
+async function cleanExpiredOrders(productClient) {
+  try {
+    const expired = await prisma.order.findMany({
+      where: {
+        status: { in: ["pending", "pending_payment"] },
+        reservationExpiresAt: { lte: new Date() },
+      },
+    });
+
+    for (const order of expired) {
+      try {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { status: "cancelled" },
+        });
+        if (order.campaignId && productClient) {
+          await productClient.releaseVoucher(order.campaignId, {
+            userId: order.buyerId,
+            orderId: order.id,
+          });
+        }
+        if (order.productId && order.reservationId && productClient) {
+          await productClient.releaseProductReservation(
+            order.productId,
+            order.reservationId,
+          );
+        }
+      } catch (err) {
+        console.warn(`[order-service] cleanExpiredOrder error ${order.id}:`, err.message);
+      }
+    }
+    return expired.length;
+  } catch (err) {
+    console.warn("[order-service] cleanExpiredOrders query failed:", err.message);
+    return 0;
+  }
+}
+
 module.exports = {
   create,
   findById,
@@ -94,5 +149,7 @@ module.exports = {
   listByBuyer,
   listBySeller,
   updateStatus,
+  updateCampaign,
+  cleanExpiredOrders,
   VALID_STATUSES,
 };

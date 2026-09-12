@@ -9,6 +9,7 @@ const auctionCloseQueue = require("./jobs/auctionCloseQueue");
 const {
   startReservationExpiryWorker,
 } = require("./features/reservations/reservationService");
+const campaignService = require("./features/campaigns/campaignService");
 
 const PORT = process.env.PRODUCT_PORT || 3002;
 app.listen(PORT, () => console.log(`[product-service] listening on ${PORT}`));
@@ -19,3 +20,6 @@ auctionCloseQueue.startWorker(auctionService.get);
 
 // Releases cart reservations whose 10-minute hold has expired.
 startReservationExpiryWorker();
+
+// Automatically transitions published campaigns whose endsAt has passed to "ended".
+campaignService.startCampaignExpiryWorker();

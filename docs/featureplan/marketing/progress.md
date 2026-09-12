@@ -104,3 +104,40 @@ approved by Admin shows up here as "approved, ready to schedule" immediately.
   - เพิ่ม Concurrency Guard ดึงสถานะล่าสุด (`findById`) ซ้ำใน `auctionService.closeAuction` ก่อนเริ่มกระบวนการปิดประมูล
   - ผลลัพธ์: ตะกร้าสินค้าแสดงเฉพาะคำสั่งซื้อจริง ไม่มีรายการซ้ำ, หน้ารายการคำสั่งซื้อ (`/orders`) แสดงผลสถานะสำเร็จครบถ้วน, และ Unit Tests ใน `product-service` ผ่านครบ 30/30 รายการ
 
+**2026-09-12 update (MKT-001: Campaign Domain, State Machine & Voucher Wallet System):**
+- พัฒนาระบบแคมเปญโปรโมชัน วงจรชีวิตสถานะ (State Machine) และระบบกระเป๋าคูปองส่วนลด (`MKT-001`, `UR-15`, `UR-16`, `WF-11`):
+  - **Database Schema (`reloop_product`):**
+    - เพิ่มโมเดล `Campaign` (รหัสโค้ดส่วนลด, ชนิดส่วนลด PERCENT/FIXED, เพดานลดสูงสุด, ยอดซื้อขั้นต่ำ, หมวดหมู่ที่ใช้ได้, งบประมาณ, สิทธิ์ใช้งาน, ตัวนับการใช้, สถานะ, วันเริ่ม-จบ, ผู้สร้าง, ผู้อนุมัติ, วันเวลาอนุมัติ, optimistic lock version)
+    - เพิ่มโมเดล `UserVoucher` (กระเป๋าคูปองของผู้ซื้อ) พร้อมระดับความปลอดภัย `@@unique([userId, campaignId])` รับประกัน 1 สิทธิ์ต่อ 1 แคมเปญ
+  - **Backend Module (`features/campaigns/`):**
+    - `campaignRepository.js`: คิวรี Prisma แบบแยกส่วนรองรับการค้นหา, กรองสถานะ, ตรวจสอบคูปอง, และบันทึกการใช้งาน
+    - `campaignService.js`: วงจรชีวิตสถานะแบบเคร่งครัด (`draft -> pending_approval -> approved -> published -> ended` / `rejected`), การตรวจสอบความถูกต้องของเงื่อนไขส่วนลดและวันที่, นโยบายการอนุมัติแบบ Option 2 พร้อมบันทึกหลักฐาน Audit Trail (`approvedById`, `approvedAt`), และระบบคัดกรองคูปองอัจฉริยะ (`getApplicableVouchers`) คำนวณส่วนลดตามจริงและจัดลำดับคูปองที่ประหยัดที่สุดขึ้นก่อน
+    - `campaignController.js` & `campaignRoutes.js`: รองรับ REST API สำหรับทั้งฝ่ายการตลาดและผู้ซื้อ
+  - **Gateway Integration:**
+    - เปิด Whitelist ใน `backend/gateway/src/app.js` ให้เส้นทาง `/api/products/campaigns/available` และ `/published` เป็น Public เข้าถึงได้โดยไม่ต้องส่ง Token
+  - **Testing & Verification:**
+    - สร้าง `test/campaign.integration.test.js` ทดสอบร่วมกับฐานข้อมูล PostgreSQL จริง (`reloop_product`) ผ่านครบ 7/7 การทดสอบย่อย (RBAC, Validations, State Transitions, Rejection Flow, 1-per-user Claim Uniqueness, Smart Compatibility Filter)
+    - ทดสอบ End-to-End ผ่าน API Gateway พอร์ต 8080 (Login Marketing -> Create Draft -> Submit -> Approve -> Publish -> Login Buyer -> Claim Voucher -> Duplicate Claim Rejected -> Smart Eligibility Filter) สำเร็จ 100%
+
+**2026-09-12 update (MKT-002: Dual-Side Frontend UI - Marketing Workspace & Buyer Voucher Hub):**
+- พัฒนาระบบหน้าบ้านแบบสองฝั่ง (Dual-Side Frontend UI) สำหรับฝ่ายการตลาดและผู้ซื้อ (`MKT-002`, `UR-15`, `UR-16`, `WF-11`):
+  - **Marketing Workspace (`/marketing` -> แท็บ "แคมเปญและคูปอง"):**
+    - พัฒนา `frontend/components/marketing/sections/CampaignsSection.js`
+    - การ์ดสรุป KPI 4 ใบ: แคมเปญทั้งหมด, กำลังเผยแพร่ (Active), รออนุมัติ, และจำนวนสิทธิ์ที่ถูกเก็บไปแล้ว
+    - ตารางรายการแคมเปญพร้อม Badge สถานะ (ฉบับร่าง, รออนุมัติ, อนุมัติแล้ว, เผยแพร่อยู่, สิ้นสุดแล้ว, ถูกปฏิเสธ)
+    - ฟิลเตอร์ค้นหาชื่อ/รหัสโค้ด และตัวกรองสถานะแคมเปญ
+    - ฟอร์ม Modal สร้างและแก้ไขแคมเปญ (กำหนดสิทธิ์แก้ไขเฉพาะสถานะ `draft` เพื่อความปลอดภัย) รองรับการตั้งค่ารหัสคูปอง, ชนิดส่วนลด (เปอร์เซ็นต์ / บาทคงที่), เพดานลดสูงสุด, ยอดสั่งซื้อขั้นต่ำ, หมวดหมู่เฉพาะ, งบประมาณ, สิทธิ์จำกัด, และช่วงวันเริ่ม-สิ้นสุด
+    - ปุ่มควบคุมวงจรชีวิตแคมเปญ (Lifecycle Actions): ส่งขออนุมัติ (`submit`), อนุมัติ (`approve`), ปฏิเสธพร้อมระบุเหตุผล (`reject`), เผยแพร่เปิดให้ใช้งาน (`publish`), และปิดสิ้นสุดแคมเปญ (`end`) พร้อม Dialog ยืนยันก่อนดำเนินการ
+  - **Buyer Voucher Hub & Wallet (`/campaigns`):**
+    - พัฒนา `frontend/app/campaigns/page.js` ศูนย์รวมคูปองสำหรับผู้ซื้อ
+    - แท็บ 1 "คูปองที่เก็บได้": ตั๋วคูปองดีไซน์ Ticket Card สวยงาม แสดงรหัส, เงื่อนไขส่วนลด, ยอดขั้นต่ำ, หมวดหมู่ที่ร่วมรายการ, วันหมดอายุ พร้อมปุ่ม 1-Click "เก็บคูปอง" และสถานะ "เก็บแล้ว" / "สิทธิ์เต็มแล้ว"
+    - แท็บ 2 "คูปองของฉัน (กระเป๋าคูปอง)": สรุปกระเป๋าคูปองของผู้ซื้อ แสดงสถานะคูปอง (พร้อมใช้งาน / ใช้ไปแล้ว / หมดอายุ) พร้อมปุ่มลัด "ใช้คูปองช้อปเลย" ลิงก์ไปยังหน้ารายการสินค้า
+  - **Global Navigation & Profile Menu:**
+    - ปรับปรุง `frontend/components/NavBar.js`: เพิ่มเมนู "คูปอง" ใน Navbar หลัก และเพิ่มเมนู "คูปองส่วนลดของฉัน" (`/campaigns?tab=mine`) ในเมนูข้อมูลผู้ใช้
+  - **Product Detail Page Voucher Preview (`/products/[id]`):**
+    - เชื่อมต่อ `POST /api/products/campaigns/applicable` และ `GET /api/products/campaigns/available`
+    - แสดงแบนเนอร์แนะนำคูปองส่วนลดใต้ราคาสินค้า: หากผู้ซื้อถือคูปองที่ตรงเกณฑ์ ระบบจะคำนวณส่วนลดและยอดสุทธิที่ต้องจ่ายจริงให้ทันที พร้อมปุ่มเปิดดูกระเป๋าคูปอง หรือหากยังไม่ได้เก็บคูปอง จะแสดงไฮไลต์โค้ดที่ร่วมรายการพร้อมปุ่มไปเก็บคูปอง
+  - **Automated Testing & Build Verification:**
+    - สร้าง `frontend/app/campaigns/page.test.js` และ `frontend/components/marketing/sections/CampaignsSection.test.js`
+    - ผลการรันทดสอบ: Jest Unit Tests ผ่านครบ 29/29 Suites (137/137 tests passing 100%)
+    - Next.js Production Build (`npm run build`) คอมไพล์ผ่านสมบูรณ์ ปราศจากข้อผิดพลาด (Static 26/26 pages)

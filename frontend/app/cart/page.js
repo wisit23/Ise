@@ -176,7 +176,15 @@ export default function CartPage() {
     (order) => !isReservationExpired(order, now),
   );
   const selectedItems = activeItems.filter((o) => selected.has(o.id));
-  const total = selectedItems.reduce((sum, o) => sum + o.price, 0);
+  const totalOriginal = selectedItems.reduce((sum, o) => sum + o.price, 0);
+  const total = selectedItems.reduce((sum, o) => {
+    const itemPrice =
+      o.finalPrice !== null && o.finalPrice !== undefined
+        ? o.finalPrice
+        : Math.max(0, o.price - (o.discountAmount || 0));
+    return sum + itemPrice;
+  }, 0);
+  const totalDiscount = totalOriginal - total;
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
@@ -319,9 +327,23 @@ export default function CartPage() {
           <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4">
             <div className="text-sm text-gray-600">
               เลือกแล้ว {selectedItems.length} รายการ ·{" "}
-              <span className="text-lg font-bold text-emerald-600">
-                ฿{total.toLocaleString("th-TH")}
-              </span>
+              {totalDiscount > 0 ? (
+                <>
+                  <span className="text-xs text-gray-400 line-through mr-1.5">
+                    ฿{totalOriginal.toLocaleString("th-TH")}
+                  </span>
+                  <span className="text-lg font-bold text-emerald-600">
+                    ฿{total.toLocaleString("th-TH")}
+                  </span>
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full ml-2">
+                    ลดไป ฿{totalDiscount.toLocaleString("th-TH")}
+                  </span>
+                </>
+              ) : (
+                <span className="text-lg font-bold text-emerald-600">
+                  ฿{total.toLocaleString("th-TH")}
+                </span>
+              )}
             </div>
             <button
               onClick={handleCheckout}

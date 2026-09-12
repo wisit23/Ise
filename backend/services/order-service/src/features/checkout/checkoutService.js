@@ -3,7 +3,7 @@ const defaultOrderModel = require("../../models/orderModel");
 const defaultProductClient = require("../../services/productClient");
 
 async function reserveOrder(
-  { buyerId, productId },
+  { buyerId, productId, campaignId, campaignCode, discountAmount, finalPrice },
   { orderModel = defaultOrderModel, productClient = defaultProductClient } = {},
 ) {
   if (!productId) throw badRequest("productId is required");
@@ -12,7 +12,21 @@ async function reserveOrder(
   const existing = await orderModel.findByReservationId(
     reservation.reservationId,
   );
-  if (existing) return { order: existing, created: false };
+  if (existing) {
+    if (campaignId !== undefined || discountAmount !== undefined) {
+      const updated = await orderModel.updateCampaign(existing.id, {
+        campaignId: campaignId || null,
+        campaignCode: campaignCode || null,
+        discountAmount: discountAmount ? Number(discountAmount) : 0,
+        finalPrice:
+          finalPrice !== undefined && finalPrice !== null
+            ? Number(finalPrice)
+            : Math.max(0, existing.price - (Number(discountAmount) || 0)),
+      });
+      return { order: updated || existing, created: false };
+    }
+    return { order: existing, created: false };
+  }
 
   try {
     const order = await orderModel.create({
@@ -21,6 +35,13 @@ async function reserveOrder(
       productId: reservation.product.id,
       productTitle: reservation.product.title,
       price: reservation.product.price,
+      campaignId: campaignId || null,
+      campaignCode: campaignCode || null,
+      discountAmount: discountAmount ? Number(discountAmount) : 0,
+      finalPrice:
+        finalPrice !== undefined && finalPrice !== null
+          ? Number(finalPrice)
+          : Math.max(0, reservation.product.price - (Number(discountAmount) || 0)),
       status: "pending_payment",
       reservationId: reservation.reservationId,
       reservationExpiresAt: new Date(reservation.expiresAt),

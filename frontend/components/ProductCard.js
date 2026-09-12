@@ -110,6 +110,7 @@ export default function ProductCard({ product, showSeller = true }) {
   const meta = [
     ...new Set(
       [
+        product.brand || null,
         product.size === "-" ? null : product.size,
         product.category,
         product.location,

@@ -312,3 +312,66 @@
   - ตรวจสอบหน้ารายการสั่งซื้อ (`/orders`): คำสั่งซื้อที่ชำระเงินแล้วยังคงอยู่ครบถ้วนสมบูรณ์
   - รัน Unit Tests ใน `product-service`: ผ่านครบ 30/30 tests
 
+## 2026-09-12 — MKT-001: Campaign Domain, State Machine & Voucher Wallet System
+
+- **Requirement:** `MKT-001`, `UR-15`, `UR-16`, `WF-11` (ระบบจัดการแคมเปญโปรโมชัน วงจรชีวิตสถานะ และระบบกระเป๋าคูปองส่วนลด)
+- **Database (`reloop_product`):**
+  - เพิ่ม Enum `CampaignStatus` (`draft`, `pending_approval`, `approved`, `published`, `ended`, `rejected`)
+  - เพิ่ม Enum `DiscountType` (`PERCENT`, `FIXED`)
+  - เพิ่ม Enum `VoucherStatus` (`CLAIMED`, `USED`, `EXPIRED`)
+  - เพิ่มโมเดล `Campaign` (ตาราง `campaigns`): กำหนดโครงสร้างข้อมูลแคมเปญครบถ้วน รหัสโค้ดส่วนลด (`code` Unique), ชนิดและมูลค่าส่วนลด, ยอดซื้อขั้นต่ำ, เพดานลดสูงสุด, หมวดหมู่ที่ใช้ได้, งบประมาณ, สิทธิ์ใช้งานรวม, ตัวนับการใช้งาน (`usedCount`), สถานะ, ช่วงวันเวลาเริ่ม-สิ้นสุด, ผู้สร้าง (`createdById`), ผู้อนุมัติ (`approvedById`), วันเวลาอนุมัติ (`approvedAt`), optimistic lock version
+  - เพิ่มโมเดล `UserVoucher` (ตาราง `user_vouchers`): เก็บสิทธิ์คูปองของผู้ซื้อ พร้อมข้อจำกัดระดับฐานข้อมูล `@@unique([userId, campaignId])` รับประกัน 1 สิทธิ์ต่อ 1 ผู้ใช้งาน
+  - ดำเนินการ Prisma db push ซิงก์ Schema เข้า PostgreSQL และ generate Prisma client ใน Docker container สำเร็จ
+- **Backend Implementation (`product-service`):**
+  - สร้าง `campaignRepository.js`: แยกการคิวรีฐานข้อมูลของ Campaign และ UserVoucher
+  - สร้าง `campaignService.js`:
+    - กลไก State Machine: ตรวจสอบและป้องกันการเปลี่ยนสถานะข้ามขั้น (`draft` -> `pending_approval` -> `approved` -> `published` -> `ended` / `rejected`)
+    - การตรวจสอบความถูกต้องของข้อมูล (Validation): ตรวจสอบโค้ด, ชนิดส่วนลด, มูลค่าส่วนลด (เปอร์เซ็นต์ต้อง 1-100, มูลค่าคงที่ต้อง > 0), วันที่สิ้นสุดต้องอยู่หลังวันที่เริ่มต้น
+    - นโยบายการอนุมัติ (Option 2 — Self-Approval for Evaluation): อนุญาตให้ `MARKETING` หรือ `ADMIN` กดอนุมัติได้ และบันทึก `approvedById` และ `approvedAt` เป็นหลักฐาน Audit Trail
+    - ระบบเก็บคูปอง (Claim Voucher): ตรวจสอบสถานะ published, ช่วงเวลาที่เปิดใช้, เพดานสิทธิ์รวม, และป้องกันการกดเก็บซ้ำด้วย Unique Constraint (HTTP 409 Conflict)
+    - ระบบคัดกรองคูปองอัจฉริยะ (`getApplicableVouchers`): คัดกรองคูปองในกระเป๋าที่ตรงตามเงื่อนไข (ยอดซื้อถึงขั้นต่ำ, หมวดหมู่ตรงกัน, ยังไม่หมดอายุ) พร้อมคำนวณส่วนลดโดยประมาณ (`estimatedDiscount`) และเรียงลำดับคูปองที่ลดได้มากที่สุดขึ้นก่อน
+  - สร้าง `campaignController.js` และ `campaignRoutes.js`: ติดตั้งเส้นทาง REST API ครอบคลุมทั้งฝั่งฝ่ายการตลาดและผู้ซื้อ
+  - ติดตั้ง Router ใน `routes/productRoutes.js` ภายใต้ prefix `/campaigns`
+- **Gateway Integration (`gateway`):**
+  - เพิ่ม Whitelist ใน `gateway/src/app.js` ให้เส้นทาง `/api/products/campaigns/available` และ `/published` เป็น Public ให้ผู้เข้าชมทั่วไปเข้าถึงได้โดยไม่ต้องใช้ Bearer Token
+- **Verification & Testing:**
+  - สร้าง `test/campaign.integration.test.js` ทดสอบร่วมกับฐานข้อมูล PostgreSQL จริง ผ่านครบ 7/7 ชุดการทดสอบ (RBAC, Validations, State Transitions, Rejection Flow, 1-per-user Claim Uniqueness, Smart Compatibility Filter)
+  - ทดสอบการทำงานสดผ่าน API Gateway (`http://localhost:8080`): เข้าถึง Public endpoint -> Login Marketing -> สร้างแคมเปญร่าง -> ส่งขออนุมัติ -> อนุมัติ -> เผยแพร่ -> Login Buyer -> กดเก็บคูปอง -> ทดสอบกดเก็บซ้ำ (ได้ 409) -> เรียก Smart Filter คำนวณส่วนลดแม่นยำ 100%
+
+## 2026-09-12 — MKT-002: Dual-Side Frontend UI (Marketing Workspace & Buyer Voucher Hub)
+
+- **Requirement:** `MKT-002`, `UR-15`, `UR-16`, `WF-11` (ระบบ UI สองฝั่งสำหรับฝ่ายการตลาดและผู้ซื้อ เพื่อรองรับการทดสอบและการใช้งานจริงแบบ End-to-End)
+- **Marketing Workspace UI (`frontend/components/marketing/sections/CampaignsSection.js` & `frontend/app/marketing/page.js`):**
+  - เพิ่มแท็บ "แคมเปญและคูปอง" ในแดชบอร์ดฝ่ายการตลาด (`/marketing`)
+  - **KPI Summary Cards:** แสดงการ์ดสถิติ 4 ใบ: แคมเปญทั้งหมด, กำลังเผยแพร่ (Active), รออนุมัติ, และสิทธิ์คูปองที่ถูกเก็บไปแล้ว
+  - **Status Filter & Search:** ค้นหารหัสโค้ดหรือชื่อแคมเปญแบบเรียลไทม์ พร้อมตัวกรองสถานะแคมเปญ 6 สถานะ
+  - **Campaigns Table:** แสดงตารางแคมเปญพร้อม Badge สีระบุสถานะ, ชนิดและมูลค่าส่วนลด, ยอดขั้นต่ำ, หมวดหมู่, สิทธิ์การใช้, วันเริ่ม-จบ, และปุ่ม Action ตามสถานะปัจจุบัน
+  - **Modal สร้าง/แก้ไขแคมเปญ:**
+    - รองรับการกำหนดรหัสโค้ด, ชนิดส่วนลด (%, บาทคงที่), เพดานลดสูงสุด, ยอดสั่งซื้อขั้นต่ำ, หมวดหมู่สินค้า, งบประมาณ, สิทธิ์ใช้งานรวม, และวันเริ่ม-สิ้นสุด
+    - บังคับแก้ไขได้เฉพาะแคมเปญที่อยู่ในสถานะ `draft` เท่านั้น (ป้องกันการแก้ไขข้อมูลแคมเปญที่อยู่ระหว่างพิจารณาหรือเปิดให้ใช้งานแล้ว)
+  - **Lifecycle Action Buttons & Modals:**
+    - ปุ่ม "ส่งขออนุมัติ" (`submit`)
+    - ปุ่ม "อนุมัติ" (`approve`) พร้อม Dialog ยืนยัน
+    - ปุ่ม "ปฏิเสธ" (`reject`) พร้อม Modal ให้ระบุเหตุผลการปฏิเสธ
+    - ปุ่ม "เผยแพร่" (`publish`) พร้อม Dialog ยืนยัน
+    - ปุ่ม "ปิดแคมเปญ" (`end`) พร้อม Dialog ยืนยัน
+- **Buyer Voucher Hub & Wallet UI (`frontend/app/campaigns/page.js`):**
+  - เพิ่มหน้าศูนย์รวมคูปองส่วนลดสำหรับผู้ซื้อ (`/campaigns`)
+  - **แท็บ "คูปองที่เก็บได้":** แสดงคูปองที่มีอยู่ในระบบรูปแบบ Ticket Card สวยงาม พร้อมปุ่ม 1-Click "เก็บคูปอง" ตรวจสอบสถานะการเก็บสิทธิ์ (ถ้าเก็บแล้วจะแสดง "เก็บแล้ว", ถ้าเต็มจะแสดง "สิทธิ์เต็มแล้ว")
+  - **แท็บ "คูปองของฉัน (กระเป๋าคูปอง)":** ตรวจสอบคูปองที่อยู่ในกระเป๋าของผู้ซื้อ แสดงสถานะ "พร้อมใช้งาน", "ใช้ไปแล้ว", "หมดอายุ" พร้อมปุ่มลัด "ใช้คูปองช้อปเลย" ไปยังรายการสินค้า
+- **Global Navigation Integration (`frontend/components/NavBar.js`):**
+  - เพิ่มเมนู "คูปอง" ใน Navbar หลัก
+  - เพิ่มเมนู "คูปองส่วนลดของฉัน" (`/campaigns?tab=mine`) ในเมนูข้อมูลบัญชีผู้ใช้งาน
+- **Product Detail Page Voucher Preview (`frontend/app/products/[id]/page.js`):**
+  - เชื่อมต่อ `POST /api/products/campaigns/applicable` และ `GET /api/products/campaigns/available`
+  - แสดงกล่องแนะนำคูปองส่วนลดใต้ราคาขาย:
+    - กรณีผู้ซื้อมีคูปองที่ตรงเกณฑ์: แสดงโค้ดคูปองพร้อมส่วนลดที่ประหยัดได้จริง และยอดคงเหลือที่ต้องชำระทันที
+    - กรณีผู้ซื้อยังไม่มีคูปอง: แสดงไฮไลต์โปรโมชันที่ร่วมรายการพร้อมปุ่ม "เก็บโค้ด" พายังหน้ารวมคูปอง
+- **Testing & Verification:**
+  - เพิ่มชุดทดสอบ Jest Component Tests:
+    - `frontend/app/campaigns/page.test.js` (ทดสอบแท็บคูปอง, แสดงการ์ด, และกระเป๋าคูปอง)
+    - `frontend/components/marketing/sections/CampaignsSection.test.js` (ทดสอบ KPI cards, ตารางแคมเปญ, และเปิด Modal สร้างแคมเปญ)
+  - รัน Jest ทั้งระบบ: ผ่าน 29/29 Test Suites (137/137 tests passing 100%)
+  - รัน Next.js Production Build (`npm run build`): สำเร็จ 100% ไม่มีข้อผิดพลาด
+
+

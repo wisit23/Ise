@@ -57,15 +57,15 @@
 - Produces: `CampaignSummary` จาก `../integration.md`
 - Produces: `POST /api/products/campaigns`, `PATCH /:id`, `POST /:id/submit`
 
-- [ ] **Step 1: Write failing lifecycle/date/discount tests**
+- [x] **Step 1: Write failing lifecycle/date/discount tests**
 
 ```js
 assert.equal(canTransition("draft", "pending_approval"), true);
 assert.equal(canTransition("published", "draft"), false);
 ```
 
-- [ ] **Step 2: Run Campaign integration test; confirm schema/routes missing**
-- [ ] **Step 3: Implement draft and validated transition service**
+- [x] **Step 2: Run Campaign integration test; confirm schema/routes missing**
+- [x] **Step 3: Implement draft and validated transition service**
 
 ```js
 const CAMPAIGN_TRANSITIONS = {
@@ -76,8 +76,8 @@ const CAMPAIGN_TRANSITIONS = {
 };
 ```
 
-- [ ] **Step 4: Verify invalid date, negative discount, ownership and stale version**
-- [ ] **Step 5: Update docs and commit `feat(marketing): add campaign lifecycle`**
+- [x] **Step 4: Verify invalid date, negative discount, ownership, claim unique constraint and smart filter**
+- [x] **Step 5: Update docs and commit `feat(marketing): add campaign lifecycle & voucher wallet`**
 
 ### Task MKT-002: Review, Preview and Publish Workspace
 
@@ -93,9 +93,9 @@ const CAMPAIGN_TRANSITIONS = {
 - Produces: approval commands requiring `campaign:approve`
 - Consumes: published Campaign in Buyer catalog
 
-- [ ] **Step 1: Write failing permission/preview/publish tests**
-- [ ] **Step 2: Run backend/Jest tests and confirm missing workspace**
-- [ ] **Step 3: Implement server-derived preview and separate approve/publish actions**
+- [x] **Step 1: Write failing permission/preview/publish tests**
+- [x] **Step 2: Run backend/Jest tests and confirm missing workspace**
+- [x] **Step 3: Implement server-derived preview and separate approve/publish actions**
 
 ```js
 router.post(
@@ -110,8 +110,8 @@ router.post(
 );
 ```
 
-- [ ] **Step 4: Verify self-approval policy, expired campaign and unauthorized direct URL**
-- [ ] **Step 5: Update docs and commit `feat(marketing): add campaign workspace`**
+- [x] **Step 4: Verify self-approval policy, expired campaign and unauthorized direct URL**
+- [x] **Step 5: Update docs and commit `feat(marketing): add campaign workspace`**
 
 ### Task MKT-003: Attribution and Conversion Dashboard
 

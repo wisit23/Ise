@@ -85,10 +85,46 @@ async function setProductStatus(productId, status) {
   return res.json();
 }
 
+function holdVoucher(campaignId, { userId, orderId }) {
+  if (!campaignId) return Promise.resolve(null);
+  return reservationRequest(
+    `/internal/campaigns/${campaignId}/hold`,
+    { method: "POST", body: JSON.stringify({ userId, orderId }) },
+    "failed to hold voucher",
+  );
+}
+
+function releaseVoucher(campaignId, { userId, orderId }) {
+  if (!campaignId) return Promise.resolve(null);
+  return reservationRequest(
+    `/internal/campaigns/${campaignId}/release`,
+    { method: "POST", body: JSON.stringify({ userId, orderId }) },
+    "failed to release voucher",
+  ).catch((err) => {
+    console.warn("releaseVoucher warning:", err.message);
+    return null;
+  });
+}
+
+function completeVoucher(campaignId, { userId, orderId }) {
+  if (!campaignId) return Promise.resolve(null);
+  return reservationRequest(
+    `/internal/campaigns/${campaignId}/complete`,
+    { method: "POST", body: JSON.stringify({ userId, orderId }) },
+    "failed to complete voucher",
+  ).catch((err) => {
+    console.warn("completeVoucher warning:", err.message);
+    return null;
+  });
+}
+
 module.exports = {
   getProduct,
   reserveProduct,
   releaseProductReservation,
   completeProductReservation,
   setProductStatus,
+  holdVoucher,
+  releaseVoucher,
+  completeVoucher,
 };

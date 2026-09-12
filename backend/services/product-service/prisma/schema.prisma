@@ -41,6 +41,7 @@ model Product {
   description          String    @default("")
   price                Int
   category             String
+  brand                String    @default("")
   condition            String    @default("Good")
   tags                 String[]
   location             String    @default("")
@@ -281,3 +282,76 @@ enum ArticleStatus {
   published
   archived
 }
+
+// Marketing Campaign Domain (MKT-001 / UR-15 / UR-16 / WF-11)
+enum CampaignStatus {
+  draft
+  pending_approval
+  approved
+  published
+  ended
+  rejected
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum VoucherStatus {
+  CLAIMED
+  USED
+  EXPIRED
+}
+
+model Campaign {
+  id                 String         @id @default(uuid())
+  code               String         @unique
+  name               String
+  description        String?        @db.Text
+  discountType       DiscountType   @default(PERCENT) @map("discount_type")
+  discountValue      Int            @map("discount_value")
+  minOrderPrice      Int            @default(0) @map("min_order_price")
+  maxDiscount        Int?           @map("max_discount")
+  applicableCategory String?        @map("applicable_category")
+  budget             Int?
+  usageLimit         Int?           @map("usage_limit")
+  usedCount          Int            @default(0) @map("used_count")
+  status             CampaignStatus @default(draft)
+  startsAt           DateTime       @map("starts_at")
+  endsAt             DateTime       @map("ends_at")
+  createdById        String         @map("created_by_id")
+  approvedById       String?        @map("approved_by_id")
+  approvedAt         DateTime?      @map("approved_at")
+  version            Int            @default(1)
+  targetSegment      Json?          @map("target_segment")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  vouchers           UserVoucher[]
+
+  @@index([status])
+  @@index([code])
+  @@index([startsAt, endsAt])
+  @@map("campaigns")
+}
+
+// Buyer Voucher Wallet (Claimed vouchers per user)
+model UserVoucher {
+  id          String        @id @default(uuid())
+  campaignId  String        @map("campaign_id")
+  userId      String        @map("user_id")
+  status      VoucherStatus @default(CLAIMED)
+  claimedAt   DateTime      @default(now()) @map("claimed_at")
+  usedAt      DateTime?     @map("used_at")
+  usedOrderId String?       @map("used_order_id")
+
+  campaign    Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, campaignId])
+  @@index([userId])
+  @@index([campaignId])
+  @@index([status])
+  @@map("user_vouchers")
+}
+

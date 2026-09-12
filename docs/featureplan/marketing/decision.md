@@ -107,5 +107,15 @@
 - Reason: ป้องกันปัญหา Race Condition เมื่อเวลาปิดประมูลมาถึงพร้อมกับการเรียกดูข้อมูล ทำให้ BullMQ Worker และ Lazy advance (`maybeAdvance`) ทำงานพร้อมกันในระดับมิลลิวินาที และส่งผลให้มีการสร้างคำสั่งซื้อรอชำระเงินซ้ำซ้อนกัน 2 รายการในตะกร้าของผู้ซื้อ
 - Consequence: รับประกันความถูกต้อง 100% ว่าผู้ชนะประมูลจะมีรายการรอชำระเงินในตะกร้าเพียง 1 รายการเสมอ แม้จะมีการเรียกปิดประมูลพร้อมกันหลาย Process
 
+## MKT-DEC-013 — Campaign Lifecycle State Machine, Voucher Wallet & Smart Eligibility Filtering (MKT-001 / UR-15 / UR-16 / WF-11)
 
-
+- Date: 2026-09-12
+- Status: Accepted
+- Decision:
+  1. **สถาปัตยกรรมบริการและฐานข้อมูล (Domain Placement):** ฟีเจอร์ Campaign และ Voucher Wallet ทั้งหมดถูกจัดวางไว้ภายในโมดูล `backend/services/product-service/src/features/campaigns/` และใช้ฐานข้อมูล `reloop_product` ไม่มีการสร้างไมโครเซอร์วิสคอนเทนเนอร์ใหม่ เพื่อลดภาระการดูแลระบบและสอดคล้องกับ ADR-001
+  2. **วงจรชีวิตสถานะแคมเปญ (State Machine):** แคมเปญเริ่มต้นจาก `draft` -> `pending_approval` -> `approved` -> `published` -> `ended` (หรือ `rejected` จาก pending_approval) โดยระบบป้องกันการเปลี่ยนสถานะข้ามขั้น (Invalid State Transition Guard) และอนุญาตให้แก้ไขฟิลด์ข้อมูลได้เฉพาะในสถานะ `draft` เท่านั้น
+  3. **นโยบายการอนุมัติเพื่อการประเมิน (Option 2 — Self-Approval with Audit Traceability):** ผู้ใช้งานบทบาท `MARKETING` หรือ `ADMIN` สามารถอนุมัติแคมเปญได้ทันที (รวมถึงแคมเปญที่ตนเองสร้าง เพื่อความสะดวกรวดเร็วในการทดสอบและตรวจงาน) โดยระบบจะบันทึก `approvedById` และ `approvedAt` เป็นหลักฐาน Audit Log ไว้ในตาราง `campaigns` ทุกครั้ง
+  4. **ระบบกระเป๋าคูปองและการจำกัดสิทธิ์ (Voucher Wallet & Claim Constraint):** ผู้ซื้อสามารถกดเก็บคูปองที่เผยแพร่อยู่เข้ากระเป๋าตนเอง (`POST /campaigns/:id/claim`) โดยมีข้อจำกัดระดับฐานข้อมูล `@@unique([userId, campaignId])` รับประกันว่า 1 บัญชีผู้ใช้จะเก็บคูปองเดิมได้เพียง 1 ครั้งเท่านั้น
+  5. **ระบบคัดกรองคูปองอัจฉริยะ (Smart Compatibility Filtering - `POST /campaigns/applicable`):** เมื่อคำนวณราคาที่ขั้นตอนชำระเงิน ระบบจะคัดกรองเฉพาะคูปองในกระเป๋าของผู้ซื้อที่: สถานะแคมเปญเป็น `published`, วันเวลาอยู่ในช่วงที่กำหนด, ยอดซื้อถึงเกณฑ์ขั้นต่ำ (`minOrderPrice`), และตรงตามหมวดหมู่สินค้า (`applicableCategory`) พร้อมคำนวณส่วนลดโดยประมาณ (`estimatedDiscount`) และเรียงลำดับจากคูปองที่ลดราคาได้มากที่สุดขึ้นก่อนอัตโนมัติ
+- Reason: ตอบโจทย์ข้อกำหนด `MKT-001`, `UR-15`, `UR-16`, และ `WF-11` อย่างสมบูรณ์ สร้างกลไกส่วนลดที่ปลอดภัยต่อการทุจริต (Fraud-resistant) และมอบประสบการณ์การใช้งานที่สะดวกสบายแก่ผู้ซื้อ
+- Consequence: เพิ่มโมเดล `Campaign` และ `UserVoucher` ในฐานข้อมูล `reloop_product`, เพิ่ม API Endpoints สำหรับทั้งฝ่ายการตลาดและผู้ซื้อทั่วไป, ปรับแต่ง API Gateway Whitelist ให้เส้นทางค้นหาแคมเปญที่เปิดใช้งานเป็น Public และมีชุด Integration Test ทดสอบการทำงานครอบคลุม 100%

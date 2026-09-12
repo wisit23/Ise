@@ -16,7 +16,29 @@ async function create(req, res, next) {
     const { order, created } = await reserveOrder({
       buyerId: req.userId,
       productId: req.body.productId,
+      campaignId: req.body.campaignId,
+      campaignCode: req.body.campaignCode,
+      discountAmount: req.body.discountAmount,
+      finalPrice: req.body.finalPrice,
     });
+    if (order.campaignId) {
+      try {
+        await productClient.holdVoucher(order.campaignId, {
+          userId: req.userId,
+          orderId: order.id,
+        });
+      } catch (holdErr) {
+        await orderModel.updateCampaign(order.id, {
+          campaignId: null,
+          campaignCode: null,
+          discountAmount: 0,
+          finalPrice: order.price,
+        });
+        throw conflict(
+          "โค้ดส่วนลดนี้กำลังถูกใช้งานกับสินค้าชิ้นอื่นในตะกร้าอยู่",
+        );
+      }
+    }
     res.status(created ? 201 : 200).json(order);
   } catch (err) {
     next(err);
@@ -31,6 +53,9 @@ async function mine(req, res, next) {
       throw badRequest(
         `status must be one of ${orderModel.VALID_STATUSES.join(", ")}`,
       );
+    }
+    if (!status || status === "pending_payment") {
+      await orderModel.cleanExpiredOrders(productClient);
     }
     const { items, total } = await orderModel.listByBuyer(req.userId, {
       status,
@@ -104,6 +129,12 @@ async function updateStatus(req, res, next) {
     const updated = await orderModel.updateStatus(req.params.id, status);
 
     if (status === "cancelled") {
+      if (order.campaignId) {
+        await productClient.releaseVoucher(order.campaignId, {
+          userId: order.buyerId,
+          orderId: order.id,
+        });
+      }
       if (order.reservationId) {
         await productClient.releaseProductReservation(
           order.productId,
@@ -114,6 +145,12 @@ async function updateStatus(req, res, next) {
       }
     }
     if (status === "completed") {
+      if (order.campaignId) {
+        await productClient.completeVoucher(order.campaignId, {
+          userId: order.buyerId,
+          orderId: order.id,
+        });
+      }
       await productClient.setProductStatus(order.productId, "sold");
     }
 
@@ -162,6 +199,12 @@ async function pay(req, res, next) {
       order.reservationExpiresAt <= new Date()
     ) {
       await orderModel.updateStatus(req.params.id, "cancelled");
+      if (order.campaignId) {
+        await productClient.releaseVoucher(order.campaignId, {
+          userId: order.buyerId,
+          orderId: order.id,
+        });
+      }
       if (order.reservationId) {
         await productClient.releaseProductReservation(
           order.productId,
@@ -179,6 +222,14 @@ async function pay(req, res, next) {
     } else {
       await productClient.setProductStatus(order.productId, "sold");
     }
+
+    if (order.campaignId) {
+      await productClient.completeVoucher(order.campaignId, {
+        userId: order.buyerId,
+        orderId: order.id,
+      });
+    }
+
     const updated = await orderModel.updateStatus(req.params.id, "completed");
 
     res.json(updated);

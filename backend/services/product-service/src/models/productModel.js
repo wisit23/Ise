@@ -288,26 +288,31 @@ function listConditions() {
 }
 
 async function listFilterOptions() {
-  const [brands, styles, sizes] = await Promise.all([
-    prisma.product.findMany({
-      where: { status: "available", brand: { not: "" } },
-      distinct: ["brand"],
-      select: { brand: true },
-      orderBy: { brand: "asc" },
-    }),
-    prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS value FROM products WHERE status = 'available' ORDER BY value`,
-    prisma.product.findMany({
-      where: { status: "available" },
-      distinct: ["size"],
-      select: { size: true },
-      orderBy: { size: "asc" },
-    }),
-  ]);
-  return {
-    brands: brands.map((x) => x.brand),
-    styles: styles.map((x) => x.value),
-    sizes: sizes.map((x) => x.size),
-  };
+  try {
+    const [brands, styles, sizes] = await Promise.all([
+      prisma.product.findMany({
+        where: { status: "available", brand: { not: "" } },
+        distinct: ["brand"],
+        select: { brand: true },
+        orderBy: { brand: "asc" },
+      }),
+      prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS value FROM products WHERE status = 'available' ORDER BY value`,
+      prisma.product.findMany({
+        where: { status: "available" },
+        distinct: ["size"],
+        select: { size: true },
+        orderBy: { size: "asc" },
+      }),
+    ]);
+    return {
+      brands: brands.map((x) => x.brand).filter(Boolean),
+      styles: styles.map((x) => x.value).filter(Boolean),
+      sizes: sizes.map((x) => x.size).filter(Boolean),
+    };
+  } catch (err) {
+    console.warn("listFilterOptions fallback:", err.message);
+    return { brands: [], styles: [], sizes: [] };
+  }
 }
 
 module.exports = {

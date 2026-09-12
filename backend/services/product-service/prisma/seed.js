@@ -68,6 +68,7 @@ const PRODUCTS = [
     description: "แจ็คเก็ตยีนส์มือสอง สภาพดีมาก ใส่ไม่ถึง 10 ครั้ง ไซส์ M",
     price: 890,
     category: "แจ็คเก็ต",
+    brand: "Levi's",
     condition: "Like New",
     tags: ["vintage", "levis", "denim", "90s"],
     location: "กรุงเทพฯ, จตุจักร",
@@ -82,6 +83,7 @@ const PRODUCTS = [
     description: "กางเกงยีนส์ทรงคลาสสิก ผ้าหนา ไม่ยืด สภาพดี",
     price: 650,
     category: "กางเกง",
+    brand: "Levi's",
     condition: "Good",
     tags: ["levis", "501", "denim"],
     location: "กรุงเทพฯ, จตุจักร",
@@ -96,6 +98,7 @@ const PRODUCTS = [
     description: "แจ็คเก็ตหนังแท้มือสอง มีรอยใช้งานตามอายุ กลิ่นหนังแท้ชัดเจน",
     price: 1800,
     category: "แจ็คเก็ต",
+    brand: "",
     condition: "Fair",
     tags: ["leather", "jacket", "genuine-leather"],
     location: "กรุงเทพฯ, จตุจักร",
@@ -110,6 +113,7 @@ const PRODUCTS = [
     description: "เสื้อยืดสภาพดีมาก ใส่ไม่กี่ครั้ง ไม่มีตำหนิ",
     price: 199,
     category: "เสื้อยืด",
+    brand: "Uniqlo",
     condition: "Like New",
     tags: ["uniqlo", "vintage", "streetwear"],
     location: "กรุงเทพฯ, จตุจักร",
@@ -124,6 +128,7 @@ const PRODUCTS = [
     description: "รองเท้าผ้าใบมือสอง ใส่ 2-3 ครั้ง ไซส์ 40",
     price: 690,
     category: "รองเท้า",
+    brand: "Converse",
     condition: "Like New",
     tags: ["converse", "sneakers", "white"],
     location: "เชียงใหม่, เมือง",
@@ -139,6 +144,7 @@ const PRODUCTS = [
       "รองเท้าวิ่งสภาพดี พื้นยังไม่สึกเยอะ เหมาะกับใส่วิ่งหรือใส่ลำลอง",
     price: 1500,
     category: "รองเท้า",
+    brand: "Nike",
     condition: "Good",
     tags: ["nike", "running", "airzoom"],
     location: "เชียงใหม่, เมือง",
@@ -167,6 +173,7 @@ const PRODUCTS = [
     description: "แว่นกันแดดของแท้ มีกล่องและถุงผ้าให้ครบ",
     price: 750,
     category: "เครื่องประดับ",
+    brand: "Ray-Ban",
     condition: "Like New",
     tags: ["sunglasses", "accessories"],
     location: "เชียงใหม่, เมือง",
@@ -326,10 +333,14 @@ async function ensureSearchTextTrigger() {
     ADD COLUMN IF NOT EXISTS search_vector tsvector;
   `;
   await prisma.$executeRaw`
+    ALTER TABLE products
+    ADD COLUMN IF NOT EXISTS brand text NOT NULL DEFAULT '';
+  `;
+  await prisma.$executeRaw`
     CREATE OR REPLACE FUNCTION products_set_search_text() RETURNS trigger AS $$
     BEGIN
       NEW.search_text := concat_ws(' ',
-        NEW.title, NEW.description, NEW.category, NEW.condition,
+        NEW.title, NEW.description, NEW.category, NEW.brand, NEW.condition,
         NEW.location, NEW.size, array_to_string(NEW.tags, ' ')
       );
       NEW.search_vector :=
@@ -337,7 +348,7 @@ async function ensureSearchTextTrigger() {
         setweight(to_tsvector('simple', coalesce(array_to_string(NEW.tags, ' '), '')), 'A') ||
         setweight(to_tsvector('simple', coalesce(NEW.category, '')), 'B') ||
         setweight(to_tsvector('simple', coalesce(NEW.description, '')), 'C') ||
-        setweight(to_tsvector('simple', concat_ws(' ', NEW.condition, NEW.location, NEW.size)), 'D');
+        setweight(to_tsvector('simple', concat_ws(' ', NEW.brand, NEW.condition, NEW.location, NEW.size)), 'D');
       RETURN NEW;
     END;
     $$ LANGUAGE plpgsql;

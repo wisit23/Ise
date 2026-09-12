@@ -146,9 +146,26 @@ export default function OrderLine({
       </div>
 
       <div className="flex flex-col items-end gap-2 text-right">
-        <span className="whitespace-nowrap font-display text-lg font-bold text-ink">
-          ฿{order.price.toLocaleString("th-TH")}
-        </span>
+        {order.campaignCode ? (
+          <div>
+            <div className="flex items-center justify-end gap-1.5">
+              <span className="text-xs text-gray-400 line-through">
+                ฿{order.price.toLocaleString("th-TH")}
+              </span>
+              <span className="whitespace-nowrap font-display text-lg font-bold text-emerald-600">
+                ฿{(order.finalPrice !== null && order.finalPrice !== undefined ? order.finalPrice : Math.max(0, order.price - (order.discountAmount || 0))).toLocaleString("th-TH")}
+              </span>
+            </div>
+            <div className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded mt-0.5 inline-flex items-center gap-1">
+              <span className="material-symbols-outlined text-[13px]">confirmation_number</span>
+              ใช้โค้ด {order.campaignCode} (-฿{(order.discountAmount || 0).toLocaleString("th-TH")})
+            </div>
+          </div>
+        ) : (
+          <span className="whitespace-nowrap font-display text-lg font-bold text-ink">
+            ฿{order.price.toLocaleString("th-TH")}
+          </span>
+        )}
         {status}
         {actions}
       </div>
