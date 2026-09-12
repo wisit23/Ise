@@ -22,7 +22,7 @@ const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "tickets", label: "Tickets", icon: "confirmation_number" },
   { key: "disputes", label: "Disputes", icon: "gavel" },
-  { key: "orders", label: "ค้นหาออเดอร์", icon: "search" },
+  { key: "orders", label: "ค้นหา", icon: "manage_search" },
   { key: "faq", label: "จัดการ FAQ", icon: "menu_book" },
 ];
 
@@ -31,7 +31,7 @@ const SECTIONS = [
 // anywhere in the CS agent's own tabs (see TicketsSection's dropped
 // ESCALATED filter option).
 const ADMIN_SECTIONS = [
-  { key: "admin_inbox", label: "เคสระดับแอดมิน", icon: "assignment_late" },
+  { key: "admin_inbox", label: "เคส Trust & Safety", icon: "assignment_late" },
   { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
   { key: "auction_approvals", label: "อนุมัติประมูล", icon: "sell" },
   { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
@@ -70,7 +70,11 @@ export default function SupportPanelPage() {
       </main>
     );
   }
-  if (user?.role !== "CUSTOMER_SERVICE" && user?.role !== "ADMIN") {
+  if (
+    user?.role !== "CUSTOMER_SERVICE" &&
+    user?.role !== "ADMIN" &&
+    user?.role !== "TRUST_AND_SAFETY"
+  ) {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
@@ -82,8 +86,11 @@ export default function SupportPanelPage() {
   }
 
   const token = getAccessToken();
-  const visibleSections =
-    user?.role === "ADMIN" ? [...SECTIONS, ...ADMIN_SECTIONS] : SECTIONS;
+  const isAdminOrSafety =
+    user?.role === "ADMIN" || user?.role === "TRUST_AND_SAFETY";
+  const visibleSections = isAdminOrSafety
+    ? [...SECTIONS, ...ADMIN_SECTIONS]
+    : SECTIONS;
   const activeSection = visibleSections.find((s) => s.key === section);
 
   return (
@@ -108,7 +115,7 @@ export default function SupportPanelPage() {
                     Re-loop panel
                   </span>
                   <span className="text-[10px] font-semibold tracking-wider text-emerald-600 uppercase">
-                    {user?.role === "ADMIN" ? "Administrator" : "Support Agent"}
+                    {isAdminOrSafety ? "Trust and Safety" : "Support Agent"}
                   </span>
                 </div>
               </div>
@@ -130,7 +137,9 @@ export default function SupportPanelPage() {
                   >
                     <span
                       className={`material-symbols-outlined text-[20px] shrink-0 w-5 text-center ${
-                        active ? "text-white" : "text-slate-500 group-hover:text-slate-700"
+                        active
+                          ? "text-white"
+                          : "text-slate-500 group-hover:text-slate-700"
                       }`}
                     >
                       {s.icon}
@@ -156,9 +165,15 @@ export default function SupportPanelPage() {
           </aside>
 
           {/* ── Main Content ── */}
-          <main className="min-w-0 flex-1 overflow-y-auto">
+          <main
+            className={`min-w-0 flex-1 flex flex-col ${
+              section === "tickets"
+                ? "h-[calc(100vh-4rem)] overflow-hidden"
+                : "overflow-y-auto"
+            }`}
+          >
             {/* Top bar */}
-            <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+            <div className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                   <span className="material-symbols-outlined text-[18px]">
@@ -187,40 +202,43 @@ export default function SupportPanelPage() {
             </div>
 
             {/* Content */}
-            <div className="p-8 max-w-7xl mx-auto">
-              {section === "dashboard" && (
-                <DashboardSection
-                  token={token}
-                  userRole={user?.role}
-                  onNavigate={navigateTo}
-                />
-              )}
-              {section === "tickets" && (
+            {section === "tickets" ? (
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 <TicketsSection
                   token={token}
                   userId={user?.id}
                   statusFilter={ticketsFilter}
                   setStatusFilter={setTicketsFilter}
                 />
-              )}
-              {section === "admin_inbox" && <AdminInboxSection token={token} />}
-              {section === "disputes" && (
-                <DisputesSection
-                  token={token}
-                  userRole={user?.role}
-                  status={disputesFilter}
-                  setStatus={setDisputesFilter}
-                />
-              )}
-              {section === "orders" && <OrdersSection token={token} />}
-              {section === "faq" && <FaqSection token={token} />}
-              {section === "kyc" && <KycSection token={token} />}
-              {section === "audit" && <AuditSection token={token} />}
-              {section === "products" && <ProductsSection token={token} />}
-              {section === "auction_approvals" && (
-                <AuctionApprovalsSection token={token} />
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="p-8 max-w-7xl mx-auto w-full">
+                {section === "dashboard" && (
+                  <DashboardSection
+                    token={token}
+                    userRole={user?.role}
+                    onNavigate={navigateTo}
+                  />
+                )}
+                {section === "admin_inbox" && <AdminInboxSection token={token} />}
+                {section === "disputes" && (
+                  <DisputesSection
+                    token={token}
+                    userRole={user?.role}
+                    status={disputesFilter}
+                    setStatus={setDisputesFilter}
+                  />
+                )}
+                {section === "orders" && <OrdersSection token={token} />}
+                {section === "faq" && <FaqSection token={token} />}
+                {section === "kyc" && <KycSection token={token} />}
+                {section === "audit" && <AuditSection token={token} />}
+                {section === "products" && <ProductsSection token={token} />}
+                {section === "auction_approvals" && (
+                  <AuctionApprovalsSection token={token} />
+                )}
+              </div>
+            )}
           </main>
         </div>
       </div>

@@ -1,5 +1,4 @@
 # Buyer Feature Changelog
-
 > แต่ละรายการเป็น historical snapshot ณ วันนั้น; ใช้รายการล่าสุดและ `progress.md` เป็นสถานะปัจจุบัน
 
 ## 2026-09-07 — Buyer review, review media and Swipe reconciliation
@@ -52,7 +51,6 @@
 - รองรับ category, style จาก persisted `tags`, brand, size, condition และ min/max price แบบ AND
 - เพิ่มการตรวจราคาที่ไม่ใช่ตัวเลข ติดลบ และช่วงราคากลับด้านให้ตอบ 400 ผ่าน controller
 - เพิ่ม controls ที่เข้าถึงได้บนหน้า Products และ contract/frontend tests; ยังไม่ได้อ้างฐานข้อมูลจริง เพราะไม่ได้รัน integration
-
 ## 2026-07-30 — Planning Round 0
 
 - Trace `UR-01`–`UR-07` ไปยัง Core/Extended tasks
@@ -157,3 +155,17 @@
 - ProductCard: `text-gray-400` ของหมวดหมู่/สถานที่ (2.85:1) → โทนที่ผ่าน WCAG AA และ
   "ไม่มีรูปภาพ" เปลี่ยนเป็นไอคอน + ข้อความแทนข้อความเทาลอยๆ
 - รายละเอียดเต็มและผลตรวจอยู่ที่ [`docs/featureplan/changelog.md`](../changelog.md) และ [`docs/progress.md`](../../progress.md) Task `UI-SYSTEM-001`; กติกา UI อยู่ที่ [`docs/ui-conventions.md`](../../ui-conventions.md)
+
+## 2026-09-05 — Bug Fix: Auction Winner Checkout Flow, Cart Filter & Auction Media Gallery
+
+- **Bug 1 (ตะกร้าว่างเปล่าสำหรับผู้ชนะประมูล):**
+  - **Root Cause:** ใน `backend/services/order-service/src/models/orderModel.js` ฟังก์ชัน `listByBuyer` กรอง `status=pending_payment` ด้วย SQL `reservation_expires_at > NOW()` แต่คำสั่งซื้อจากประมูลไม่มีค่านี้ (`NULL`) ทำให้ประเมินเป็น `FALSE` และคัดทิ้งทั้งหมด
+  - **Fix:** ปรับเงื่อนไขให้ดึงคำสั่งซื้อที่มี `auctionId != null` หรือ `reservationExpiresAt: null` ขึ้นมาด้วย
+- **Bug 2 (หน้าประมูลผู้ซื้อดูได้แค่รูปแรก):**
+  - **Root Cause:** ใน `frontend/app/auctions/[id]/page.js` แสดงเฉพาะ `auction.product.photos[0]` เพียงรูปเดียว
+  - **Fix:** ติดตั้ง `MediaGallery` ในหน้า `/auctions/[id]` แสดงรูปย่อ Thumbnails และสลับดูรูปภาพ/วิดีโอของสินค้าประมูลได้ครบทุกรูป ปรับเป็น `object-contain` ไม่ให้ถูกตัดขอบ
+- **Enhancement (24-Hour Auction Winner Payment Window & Direct Checkout):**
+  - หน้าตะกร้า (`/cart`): สินค้าประมูลได้รับเวลาชำระเงิน 24 ชั่วโมง พร้อมป้าย *"🔨 ชนะการประมูล · รอชำระเงิน"* และซ่อนปุ่มยกเลิกป้องกันการกดพลาด
+  - หน้ารายละเอียดสินค้า (`/products/:id`): เมื่อผู้ชนะประมูลเปิดดู สินค้าจะไม่ขึ้นสีเทา "สินค้าไม่พร้อมขาย" อีกต่อไป แต่ขึ้นแบนเนอร์สีเขียวแสดงความยินดีพร้อมปุ่ม *"💳 ไปชำระเงินที่ตะกร้าสินค้า"*
+  - หน้าคำสั่งซื้อ (`/orders`): แสดงสถานะ *"ชนะประมูล · รอชำระเงิน"* พร้อมปุ่มลัด *"💳 ไปชำระเงินที่ตะกร้า"*
+- **Verification:** Unit tests ผ่าน 38/38, ทดสอบ API ดึงรายการตะกร้าสินค้าประมูลสำเร็จครบถ้วน

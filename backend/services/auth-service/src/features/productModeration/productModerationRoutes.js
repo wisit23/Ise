@@ -13,6 +13,7 @@ router.post(
       const product = await productModerationService.removeProduct({
         productId: req.params.id,
         adminId: req.userId,
+        staffId: req.userId,
         reason: req.body.reason,
         requestId: req.id,
       });
@@ -32,6 +33,7 @@ router.post(
       const product = await productModerationService.restoreProduct({
         productId: req.params.id,
         adminId: req.userId,
+        staffId: req.userId,
         requestId: req.id,
       });
       res.json(product);

@@ -42,7 +42,9 @@ export default function RadioSelect({
   disabled = false,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [effectiveAlign, setEffectiveAlign] = useState(align === "right" ? "right" : "left");
+  const [effectiveAlign, setEffectiveAlign] = useState(
+    align === "right" ? "right" : "left",
+  );
   const dropdownRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
   const generatedName = useId();
@@ -63,7 +65,8 @@ export default function RadioSelect({
     };
   });
 
-  const selectedOption = normalizedOptions.find((o) => o.value === value) || normalizedOptions[0];
+  const selectedOption =
+    normalizedOptions.find((o) => o.value === value) || normalizedOptions[0];
 
   const handleSelect = (val) => {
     if (disabled) return;
@@ -136,65 +139,73 @@ export default function RadioSelect({
   }, [isOpen]);
 
   // Variant themes
-  const variantStyles = {
-    form: {
-      trigger:
-        "border border-gray-300 bg-white text-gray-900 text-sm shadow-sm hover:border-gray-400 focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500/20",
-      menu: "border border-gray-200 bg-white shadow-lg",
-      activeOption: "bg-emerald-50 text-emerald-700 font-semibold",
-      inactiveOption: "text-gray-700 hover:bg-gray-50 hover:text-gray-900 font-medium",
-      arrow: "text-gray-400",
-    },
-    panel: {
-      trigger:
-        "border border-slate-200 bg-white text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50/80 focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500/20",
-      menu: "border border-slate-200 bg-white shadow-[0_10px_25px_-5px_rgba(15,23,42,0.12)]",
-      activeOption: "bg-emerald-50 text-emerald-700 font-semibold",
-      inactiveOption: "text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium",
-      arrow: "text-slate-500",
-    },
-    storefront: {
-      trigger:
-        "border border-line bg-white text-ink shadow-sm hover:border-brand-400 hover:bg-surface-subtle focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/20",
-      menu: "border border-line bg-white shadow-2",
-      activeOption: "bg-brand-50 text-brand-700 font-semibold",
-      inactiveOption: "text-ink-muted hover:bg-surface-subtle hover:text-ink font-medium",
-      arrow: "text-ink-subtle",
-    },
-    dark: {
-      trigger:
-        "border border-[#3B4252] bg-[#2A2F3B] text-white shadow-sm hover:bg-[#323741] focus-visible:border-slate-400 focus-visible:ring-2 focus-visible:ring-white/20",
-      menu: "border border-[#3B4252] bg-[#2A2F3B] shadow-2xl",
-      activeOption: "bg-[#384152] text-white font-semibold",
-      inactiveOption: "text-slate-300 hover:bg-[#323741] hover:text-white font-medium",
-      arrow: "text-white",
-    },
-  }[variant] || variantStyles.form;
+  const variantStyles =
+    {
+      form: {
+        trigger:
+          "border border-gray-300 bg-white text-gray-900 text-sm shadow-sm hover:border-gray-400 focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500/20",
+        menu: "border border-gray-200 bg-white shadow-lg",
+        activeOption: "bg-emerald-50 text-emerald-700 font-semibold",
+        inactiveOption:
+          "text-gray-700 hover:bg-gray-50 hover:text-gray-900 font-medium",
+        arrow: "text-gray-400",
+      },
+      panel: {
+        trigger:
+          "border border-slate-200 bg-white text-slate-800 shadow-sm hover:border-slate-300 hover:bg-slate-50/80 focus-visible:border-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500/20",
+        menu: "border border-slate-200 bg-white shadow-[0_10px_25px_-5px_rgba(15,23,42,0.12)]",
+        activeOption: "bg-emerald-50 text-emerald-700 font-semibold",
+        inactiveOption:
+          "text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium",
+        arrow: "text-slate-500",
+      },
+      storefront: {
+        trigger:
+          "border border-line bg-white text-ink shadow-sm hover:border-brand-400 hover:bg-surface-subtle focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/20",
+        menu: "border border-line bg-white shadow-2",
+        activeOption: "bg-brand-50 text-brand-700 font-semibold",
+        inactiveOption:
+          "text-ink-muted hover:bg-surface-subtle hover:text-ink font-medium",
+        arrow: "text-ink-subtle",
+      },
+      dark: {
+        trigger:
+          "border border-[#3B4252] bg-[#2A2F3B] text-white shadow-sm hover:bg-[#323741] focus-visible:border-slate-400 focus-visible:ring-2 focus-visible:ring-white/20",
+        menu: "border border-[#3B4252] bg-[#2A2F3B] shadow-2xl",
+        activeOption: "bg-[#384152] text-white font-semibold",
+        inactiveOption:
+          "text-slate-300 hover:bg-[#323741] hover:text-white font-medium",
+        arrow: "text-white",
+      },
+    }[variant] || variantStyles.form;
 
   // Size styles
-  const sizeStyles = {
-    sm: {
-      trigger: "py-1.5 px-3 text-xs min-h-[34px] rounded-md",
-      menu: "p-1 rounded-lg text-xs mt-1.5",
-      option: "px-2.5 py-1.5 rounded-md text-xs gap-2",
-      arrow: "w-3.5 h-3.5",
-    },
-    md: {
-      trigger: "py-2 px-3 text-sm min-h-[38px] rounded-md",
-      menu: "p-1.5 rounded-lg text-sm mt-1.5",
-      option: "px-3 py-2 rounded-md text-sm gap-2.5",
-      arrow: "w-4 h-4",
-    },
-    lg: {
-      trigger: "py-2.5 px-4 text-sm font-medium min-h-[44px] rounded-md",
-      menu: "p-1.5 rounded-lg text-sm mt-2",
-      option: "px-3.5 py-2.5 rounded-md text-sm gap-3",
-      arrow: "w-4.5 h-4.5",
-    },
-  }[size] || sizeStyles.md;
+  const sizeStyles =
+    {
+      sm: {
+        trigger: "py-1.5 px-3 text-xs min-h-[34px] rounded-md",
+        menu: "p-1 rounded-lg text-xs mt-1.5",
+        option: "px-2.5 py-1.5 rounded-md text-xs gap-2",
+        arrow: "w-3.5 h-3.5",
+      },
+      md: {
+        trigger: "py-2 px-3 text-sm min-h-[38px] rounded-md",
+        menu: "p-1.5 rounded-lg text-sm mt-1.5",
+        option: "px-3 py-2 rounded-md text-sm gap-2.5",
+        arrow: "w-4 h-4",
+      },
+      lg: {
+        trigger: "py-2.5 px-4 text-sm font-medium min-h-[44px] rounded-md",
+        menu: "p-1.5 rounded-lg text-sm mt-2",
+        option: "px-3.5 py-2.5 rounded-md text-sm gap-3",
+        arrow: "w-4.5 h-4.5",
+      },
+    }[size] || sizeStyles.md;
 
   const containerClass =
-    className.includes("w-") || className.includes("block") || className.includes("flex-1")
+    className.includes("w-") ||
+    className.includes("block") ||
+    className.includes("flex-1")
       ? `relative ${className}`
       : `relative inline-block ${className}`;
 
@@ -241,7 +252,9 @@ export default function RadioSelect({
               {selectedOption.icon}
             </span>
           )}
-          <span className="truncate">{selectedOption?.label || placeholder}</span>
+          <span className="truncate">
+            {selectedOption?.label || placeholder}
+          </span>
         </span>
 
         {/* Arrow SVG from the user's snippet: rotates from -90deg to 0deg over 300ms */}
@@ -274,7 +287,8 @@ export default function RadioSelect({
             : "opacity-0 -translate-y-3 pointer-events-none invisible"
         }`}
         style={{
-          transformOrigin: effectiveAlign === "right" ? "top right" : "top left",
+          transformOrigin:
+            effectiveAlign === "right" ? "top right" : "top left",
         }}
       >
         <div className="flex flex-col gap-0.5">
@@ -306,7 +320,9 @@ export default function RadioSelect({
                   {opt.icon && (
                     <span
                       className={`material-symbols-outlined text-[17px] shrink-0 leading-none ${
-                        isSelected ? "text-current" : "text-slate-400 group-hover/opt:text-slate-600"
+                        isSelected
+                          ? "text-current"
+                          : "text-slate-400 group-hover/opt:text-slate-600"
                       }`}
                     >
                       {opt.icon}

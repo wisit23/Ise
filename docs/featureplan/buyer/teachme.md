@@ -1,5 +1,4 @@
 # Buyer Feature Teach Me
-
 > อัปเดตล่าสุด: 2026-09-07 · Round เก่าเก็บเป็น historical lesson และมีหมายเหตุเมื่อถูก supersede
 
 ## Round 4 — Catalog filters share one PostgreSQL predicate builder

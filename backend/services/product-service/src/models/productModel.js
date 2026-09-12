@@ -44,7 +44,7 @@ function mediaToNestedCreate(media) {
 }
 
 /** Full-text-ish search against Product.searchText (a trigger-maintained
- * concat of title/description/category/brand/condition/location/size/tags — see
+ * concat of title/description/category/condition/location/size/tags — see
  * prisma/schema.prisma and prisma/seed.js's ensureSearchTextTrigger).
  *
  * Postgres full-text search (tsvector/to_tsquery) can't be used here: it has
@@ -66,9 +66,19 @@ async function searchProducts(filters) {
   const order = q
     ? Prisma.sql`GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) DESC, created_at DESC`
     : Prisma.sql`created_at DESC`;
+
   const [rows, countRows] = await Promise.all([
-    prisma.$queryRaw`SELECT id FROM products WHERE ${where} ORDER BY ${order} LIMIT ${take} OFFSET ${skip}`,
-    prisma.$queryRaw`SELECT count(*)::int AS count FROM products WHERE ${where}`,
+    prisma.$queryRaw`
+      SELECT id FROM products
+      WHERE ${where}
+      ORDER BY ${order}
+      LIMIT ${take} OFFSET ${skip}
+    `,
+    prisma.$queryRaw`
+      SELECT count(*)::int AS count
+      FROM products
+      WHERE ${where}
+    `,
   ]);
 
   const total = countRows[0]?.count ?? 0;
@@ -130,7 +140,9 @@ async function list({
   }
 
   const where = {
-    ...(status ? { status } : { status: { not: "removed" } }),
+    ...(status
+      ? { status }
+      : { status: { notIn: ["removed", "hidden"] } }),
     ...(category ? { category } : {}),
   };
   const [items, total] = await Promise.all([
@@ -147,7 +159,13 @@ async function list({
 }
 
 async function listBySeller(sellerId, { status, skip, take } = {}) {
-  const where = { sellerId, ...(status ? { status } : {}) };
+  let statusFilter = {};
+  if (Array.isArray(status)) {
+    statusFilter = { status: { in: status } };
+  } else if (status) {
+    statusFilter = { status };
+  }
+  const where = { sellerId, ...statusFilter };
   const [items, total] = await Promise.all([
     prisma.product.findMany({
       where,
@@ -212,6 +230,45 @@ async function remove(id) {
   }
 }
 
+/**
+ * Toggles a product between "available"/"reserved" and "hidden".
+ * - Hiding saves the current status in preRemovalStatus so we can restore it.
+ * - Unhiding restores the saved status (default: "available").
+ * If the product is "reserved" and gets hidden, it stays in preRemovalStatus
+ * so buyers see it gone from their cart until it is un-hidden.
+ */
+async function setVisibility(id, visible) {
+  if (visible) {
+    // Restore to whatever status it had before hiding (default: available).
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return null;
+    const restored = product.preRemovalStatus || "available";
+    return toApiShape(
+      await prisma.product.update({
+        where: { id },
+        data: { status: restored, preRemovalStatus: null },
+        include: WITH_MEDIA,
+      }),
+    );
+  } else {
+    // Only hide if currently browsable (available or reserved).
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return null;
+    if (product.status === "hidden" || product.status === "removed") {
+      return toApiShape(
+        await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+      );
+    }
+    return toApiShape(
+      await prisma.product.update({
+        where: { id },
+        data: { status: "hidden", preRemovalStatus: product.status },
+        include: WITH_MEDIA,
+      }),
+    );
+  }
+}
+
 function listCategories() {
   return prisma.category.findMany({ orderBy: { name: "asc" } });
 }
@@ -260,6 +317,7 @@ module.exports = {
   create,
   update,
   remove,
+  setVisibility,
   listCategories,
   ensureCategory,
   listConditions,

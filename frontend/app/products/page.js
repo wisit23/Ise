@@ -310,26 +310,12 @@ function ProductsPageInner() {
               icon="search_off"
               title="ไม่พบสินค้าที่ตรงกับเงื่อนไข"
               description={
-                q ||
-                category ||
-                style ||
-                brand ||
-                size ||
-                condition ||
-                minPrice ||
-                maxPrice
+                hasActiveFilters
                   ? "ลองใช้คำค้นอื่น หรือล้างตัวกรองเพื่อดูสินค้าทั้งหมด"
                   : "ยังไม่มีสินค้าในระบบตอนนี้"
               }
               action={
-                (q ||
-                  category ||
-                  style ||
-                  brand ||
-                  size ||
-                  condition ||
-                  minPrice ||
-                  maxPrice) && (
+                hasActiveFilters && (
                   <Button
                     variant="secondary"
                     icon="filter_alt_off"

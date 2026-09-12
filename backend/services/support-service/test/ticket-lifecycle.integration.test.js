@@ -98,6 +98,16 @@ test("support ticket lifecycle against a real database", async (t) => {
     .set("Authorization", `Bearer ${agentBToken}`);
   assert.equal(agentBView.status, 403);
 
+  // Trust & Safety staff CAN view it even when not assigned (escalation/oversight authority).
+  const safetyToken = signAccessToken({
+    sub: `safety-${Date.now()}`,
+    role: "TRUST_AND_SAFETY",
+  });
+  const safetyView = await request(app)
+    .get(`/tickets/${id}`)
+    .set("Authorization", `Bearer ${safetyToken}`);
+  assert.equal(safetyView.status, 200);
+
   // Agent A moves it to IN_PROGRESS.
   const inProgressRes = await request(app)
     .patch(`/tickets/${id}/status`)

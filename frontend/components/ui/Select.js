@@ -84,9 +84,7 @@ export default function Select({
         disabled={disabled}
         className={`w-full block ${className}`}
         buttonClassName={`w-full text-left justify-between ${
-          error
-            ? "border-danger ring-1 ring-danger/30"
-            : ""
+          error ? "border-danger ring-1 ring-danger/30" : ""
         } ${buttonClassName}`}
       />
     </Field>

@@ -7,11 +7,20 @@ import { apiFetch } from "../lib/api";
 import Button from "./ui/Button";
 import Menu, { MenuItem, MenuLabel } from "./ui/Menu";
 import { fetchActiveCategories } from "../lib/catalog";
+import { getUnreadCount } from "../lib/chat";
+import { useChatSocket, useChatSocketEvent } from "./chat/ChatSocketProvider";
+
+// Only used while the shared socket is down — the badge's normal path is a
+// pushed "conversation:activity" event (see the effects below). 15s keeps
+// the degraded case feeling current without hammering the endpoint from
+// every open tab on every page.
+const UNREAD_POLL_INTERVAL_MS = 15000;
 
 const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
   SELLER: "ผู้ขาย",
-  ADMIN: "แอดมิน",
+  ADMIN: "Trust and Safety",
+  TRUST_AND_SAFETY: "Trust and Safety",
   MARKETING: "การตลาด",
   CUSTOMER_SERVICE: "ฝ่ายบริการลูกค้า",
   EXECUTIVE: "ผู้บริหาร",
@@ -25,15 +34,19 @@ const ROLE_LABEL = {
 const DISCOVERY_LINKS = [
   { href: "/swipe", label: "ปัดดู", icon: "swipe" },
   { href: "/auctions", label: "ประมูล", icon: "gavel" },
+  { href: "/articles", label: "บทความ", icon: "menu_book" },
 ];
 
 export default function NavBar() {
   const [user, setUser] = useState(null);
+  const [kycStatus, setKycStatus] = useState(null);
   const [cartCount, setCartCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   const menuRef = useRef(null);
+  const { connected: socketConnected } = useChatSocket();
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -41,12 +54,90 @@ export default function NavBar() {
 
     const token = getAccessToken();
     if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setKycStatus(payload.kycStatus || null);
+      } catch {
+        // ignore malformed token payload
+      }
+
       apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
         .then((data) => setCartCount(data.total))
         .catch((err) =>
           console.error("โหลดจำนวนสินค้าในตะกร้าไม่สำเร็จ:", err),
         );
+      getUnreadCount(token)
+        .then((data) => setUnreadCount(data.total))
+        .catch((err) =>
+          console.error("โหลดจำนวนข้อความที่ยังไม่อ่านไม่สำเร็จ:", err),
+        );
     }
+  }, []);
+
+  // Live path: the server nudges every participant's own socket room on any
+  // new message (broadcast.js's "conversation:activity"), so the badge
+  // updates on whatever page the user happens to be on — not just while a
+  // chat room is open. The nudge deliberately carries no count; the
+  // authoritative total is re-read here, because a server-computed number
+  // would race this user's own concurrent mark-read calls.
+  useChatSocketEvent("conversation:activity", () => {
+    const token = getAccessToken();
+    if (!token) return;
+    getUnreadCount(token)
+      .then((data) => setUnreadCount(data.total))
+      .catch(() => {});
+  });
+
+  // Fallback path: only runs while the socket ISN'T connected (blocked by a
+  // strict network, dropped mid-session, still connecting). Without this
+  // gate the badge would be both pushed and polled at once, doubling the
+  // request rate for no benefit.
+  useEffect(() => {
+    if (socketConnected) return undefined;
+    const token = getAccessToken();
+    if (!token) return undefined;
+
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      getUnreadCount(token)
+        .then((data) => setUnreadCount(data.total))
+        .catch(() => {
+          // A missed poll tick isn't worth surfacing — the next one retries.
+        });
+    }, UNREAD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [socketConnected]);
+
+  // A socket that just (re)connected missed everything that happened while
+  // it was down — reconnecting is precisely when a resync is mandatory, not
+  // optional. This is what stops the badge from sitting stale after a
+  // laptop wakes from sleep.
+  useEffect(() => {
+    if (!socketConnected) return;
+    const token = getAccessToken();
+    if (!token) return;
+    getUnreadCount(token)
+      .then((data) => setUnreadCount(data.total))
+      .catch(() => {});
+  }, [socketConnected]);
+
+  // Local sync path: when a conversation is opened or marked read in this
+  // window, this local event fires so the badge refreshes immediately.
+  useEffect(() => {
+    function handleSync(e) {
+      if (typeof e?.detail?.total === "number") {
+        setUnreadCount(e.detail.total);
+      } else {
+        const token = getAccessToken();
+        if (token) {
+          getUnreadCount(token)
+            .then((data) => setUnreadCount(data.total))
+            .catch(() => {});
+        }
+      }
+    }
+    window.addEventListener("chat:unread-sync", handleSync);
+    return () => window.removeEventListener("chat:unread-sync", handleSync);
   }, []);
 
   useEffect(() => {
@@ -92,11 +183,13 @@ export default function NavBar() {
       : "/products";
   }
 
-  const isSeller = user?.role === "SELLER";
+  const isSeller = user?.role === "SELLER" && kycStatus === "VERIFIED";
   const isExecutive = user?.role === "EXECUTIVE";
   const isMarketing = user?.role === "MARKETING";
   const isSupportAgent =
-    user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
+    user?.role === "CUSTOMER_SERVICE" ||
+    user?.role === "ADMIN" ||
+    user?.role === "TRUST_AND_SAFETY";
   // Every one of these is a role someone can hold *in addition to* being a
   // buyer on this same account — the header never assumes a visitor is only
   // one thing, which is why these sit in their own labelled group instead of
@@ -220,6 +313,26 @@ export default function NavBar() {
 
         {user && (
           <Link
+            href="/chat"
+            aria-label={`ข้อความ${unreadCount > 0 ? ` มี ${unreadCount} รายการที่ยังไม่อ่าน` : ""}`}
+            className="focus-ring relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
+          >
+            <span
+              className="material-symbols-outlined text-[21px] leading-none"
+              aria-hidden="true"
+            >
+              chat_bubble
+            </span>
+            {unreadCount > 0 && (
+              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
+                {unreadCount}
+              </span>
+            )}
+          </Link>
+        )}
+
+        {user && (
+          <Link
             href="/cart"
             aria-label={`ตะกร้า${cartCount > 0 ? ` มี ${cartCount} รายการ` : ""}`}
             className="focus-ring relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
@@ -248,7 +361,9 @@ export default function NavBar() {
                 aria-expanded={menuOpen}
                 className="focus-ring flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-transparent transition hover:ring-brand-200"
               >
-                {user.firstName?.[0] || "?"}
+                {user.role === "ADMIN" || user.role === "TRUST_AND_SAFETY"
+                  ? "T"
+                  : user.firstName?.[0] || "?"}
               </button>
 
               {menuOpen && (
@@ -257,12 +372,20 @@ export default function NavBar() {
                   className="animate-dropdown-in absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-line bg-white py-2 shadow-lg"
                 >
                   <div className="border-b border-line px-4 py-3">
-                    <p className="truncate text-sm font-medium text-gray-900">
-                      {user.firstName} {user.lastName}
-                    </p>
-                    <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
-                      {ROLE_LABEL[user.role] || user.role}
-                    </span>
+                    {user.role === "ADMIN" || user.role === "TRUST_AND_SAFETY" ? (
+                      <p className="truncate text-sm font-semibold text-gray-900">
+                        Trust and Safety
+                      </p>
+                    ) : (
+                      <>
+                        <p className="truncate text-sm font-medium text-gray-900">
+                          {user.firstName} {user.lastName}
+                        </p>
+                        <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
+                          {ROLE_LABEL[user.role] || user.role}
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   {/* Work links live in their own labelled section rather

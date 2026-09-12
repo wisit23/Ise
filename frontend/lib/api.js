@@ -171,7 +171,7 @@ export async function submitKyc(fields, documentFile, token) {
   for (const [key, value] of Object.entries(fields)) {
     if (value !== undefined && value !== null) form.append(key, value);
   }
-  form.append("document", documentFile);
+  if (documentFile) form.append("document", documentFile);
 
   let res = await fetch(`${API_URL}${path}`, {
     method: "POST",
@@ -198,6 +198,57 @@ export async function submitKyc(fields, documentFile, token) {
       errorMsg = errorMsg.message || JSON.stringify(errorMsg);
     }
     throw new Error(errorMsg || `KYC submission failed (${res.status})`);
+  }
+  return data;
+}
+
+/** Uploads one chat attachment — multipart, so it can't go through apiFetch
+ * (which always sets a JSON Content-Type). Same private-storage pattern as
+ * uploadDisputeEvidence: chat attachments are participant-only and are read
+ * back through fetchAuthedBlobUrl below, never as a bare <img src>. */
+export async function uploadChatAttachment(
+  conversationId,
+  file,
+  caption,
+  token,
+) {
+  const authToken = token ?? getAccessToken();
+  const path = `/api/chat/conversations/${conversationId}/attachments`;
+
+  // A fresh FormData per attempt — a consumed request body can't be
+  // replayed on the refresh retry below.
+  function buildBody() {
+    const form = new FormData();
+    form.append("file", file);
+    if (caption) form.append("caption", caption);
+    return form;
+  }
+
+  let res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body: buildBody(),
+  });
+
+  if (res.status === 401 && authToken) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await fetch(`${API_URL}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${newToken}` },
+        body: buildBody(),
+      });
+    }
+  }
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    if (res.status === 401) forceLogout();
+    let errorMsg = data?.error;
+    if (typeof errorMsg === "object" && errorMsg !== null) {
+      errorMsg = errorMsg.message || JSON.stringify(errorMsg);
+    }
+    throw new Error(errorMsg || `แนบไฟล์ไม่สำเร็จ (${res.status})`);
   }
   return data;
 }

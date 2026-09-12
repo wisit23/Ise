@@ -1,0 +1,73 @@
+// MongoDB, not Postgres — deliberate choice, see docs/featureplan/chat/plan.md
+// for the full reasoning (structured spine + JSON payload per message type,
+// vs. the rest of the platform's relational services).
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// Custom output path — same reasoning as product-service/prisma/schema.prisma:
+// the npm workspace hoists @prisma/client to one shared location, so every
+// service that generates a client there fights over the same physical folder.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-client"
+}
+
+// contextKey is the whole create-or-open mechanism (CHAT-002): a
+// deterministic string computed from (contextType, ids) — e.g.
+// "PRODUCT:<productId>:<buyerId>" — so two concurrent "Contact Seller"
+// clicks race on this unique index instead of on an application-level
+// check-then-create, which is not actually atomic. See contextKey.js.
+model Conversation {
+  id                 String        @id @default(auto()) @map("_id") @db.ObjectId
+  contextType        String // PRODUCT | ORDER | SUPPORT | DIRECT
+  contextId          String? // productId / orderId / ticketId — soft reference, no FK
+  contextKey         String        @unique
+  participants       Participant[]
+  status             String        @default("ACTIVE") // ACTIVE | ARCHIVED | LOCKED
+  lastMessageAt      DateTime?
+  lastMessagePreview String?
+  createdBy          String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  messages Message[]
+
+  @@index([lastMessageAt])
+}
+
+// Embedded document (Mongo-native), not a separate collection — a
+// conversation's participant list is always read/written together with the
+// conversation itself, never queried independently.
+type Participant {
+  userId     String
+  role       String // BUYER | SELLER | AGENT | ADMIN | SYSTEM
+  joinedAt   DateTime
+  lastReadAt DateTime?
+  leftAt     DateTime?
+}
+
+model Message {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  conversationId String    @db.ObjectId
+  senderId       String
+  senderRole     String
+  type           String    @default("TEXT")
+  // TEXT | IMAGE | FILE | PRODUCT_CARD | ORDER_CARD | SYSTEM
+  body           String    @default("")
+  // Semi-structured part — shape depends on `type`, see plan.md's payload
+  // table. Deliberately schemaless: this is the field that lets a new
+  // message type ship without a migration.
+  payload        Json?
+  visibility     String    @default("ALL") // ALL | INTERNAL (CS-only note, CHAT-007)
+  editedAt       DateTime?
+  // Soft delete only — messages are dispute evidence, never hard-deleted.
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([conversationId, deletedAt, createdAt])
+}

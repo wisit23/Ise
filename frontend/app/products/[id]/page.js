@@ -10,6 +10,7 @@ import ReviewMediaGallery from "../../../components/ReviewMediaGallery";
 import { StarDisplay } from "../../../components/StarRating";
 import Pagination from "../../../components/Pagination";
 import ReportModal from "../../../components/ReportModal";
+import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import Alert from "../../../components/ui/Alert";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
@@ -19,6 +20,8 @@ const STATUS_LABEL = {
   available: "พร้อมขาย",
   reserved: "ถูกล็อกไว้ในตะกร้าแล้ว",
   sold: "ขายแล้ว",
+  auction: "อยู่ในระบบประมูล",
+  hidden: "ซ่อนอยู่",
 };
 
 const REVIEW_PAGE_SIZE = 5;
@@ -42,6 +45,10 @@ function getReviewerLabel(review) {
   return `ผู้ซื้อ (${review.buyerId})`;
 }
 
+function baht(v) {
+  return `฿${Number(v || 0).toLocaleString("th-TH")}`;
+}
+
 export default function ProductDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -54,23 +61,47 @@ export default function ProductDetailPage() {
   const [conditionLabels, setConditionLabels] = useState({});
   const [reviewSummary, setReviewSummary] = useState(null);
   const [showReport, setShowReport] = useState(false);
+  const [myPendingOrder, setMyPendingOrder] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewTotalPages, setReviewTotalPages] = useState(1);
   const [reviewsLoading, setReviewsLoading] = useState(false);
 
   useEffect(() => {
+    const token = getAccessToken();
+    if (token && id) {
+      apiFetch("/api/orders/mine?status=pending_payment&limit=100", { token })
+        .then((data) => {
+          const match = data.items?.find((o) => o.productId === id);
+          if (match) setMyPendingOrder(match);
+        })
+        .catch(() => {});
+    }
+  }, [id]);
+
+  useEffect(() => {
     apiFetch(`/api/products/${id}`)
-      .then((p) => {
-        setProduct(p);
-        apiFetch(`/api/auth/users/${p.sellerId}/public`)
-          .then(setSeller)
-          .catch((err) => console.error("โหลดข้อมูลผู้ขายไม่สำเร็จ:", err));
-        apiFetch(`/api/reviews/by-seller/${p.sellerId}/summary`)
-          .then(setReviewSummary)
-          .catch((err) => console.error("โหลดคะแนนรีวิวผู้ขายไม่สำเร็จ:", err));
-      })
-      .catch((err) => setError(err.message));
+      .then(setupProduct)
+      .catch((err) => {
+        // Fallback for owners if gateway stripped the token
+        apiFetch(`/api/products/mine?limit=100`)
+          .then((data) => {
+            const p = data.items.find((item) => item.id === id);
+            if (p) setupProduct(p);
+            else setError(err.message);
+          })
+          .catch(() => setError(err.message));
+      });
+
+    function setupProduct(p) {
+      setProduct(p);
+      apiFetch(`/api/auth/users/${p.sellerId}/public`)
+        .then(setSeller)
+        .catch((err) => console.error("โหลดข้อมูลผู้ขายไม่สำเร็จ:", err));
+      apiFetch(`/api/reviews/by-seller/${p.sellerId}/summary`)
+        .then(setReviewSummary)
+        .catch((err) => console.error("โหลดคะแนนรีวิวผู้ขายไม่สำเร็จ:", err));
+    }
     fetchConditions()
       .then((items) =>
         setConditionLabels(
@@ -228,7 +259,9 @@ export default function ProductDetailPage() {
               className={`rounded-full px-2.5 py-1 ${
                 available
                   ? "bg-emerald-50 text-emerald-700"
-                  : "bg-gray-100 text-gray-500"
+                  : product.status === "hidden"
+                    ? "bg-yellow-50 text-yellow-800"
+                    : "bg-gray-100 text-gray-500"
               }`}
             >
               {STATUS_LABEL[product.status] || product.status}
@@ -277,12 +310,20 @@ export default function ProductDetailPage() {
                 )}
               </div>
             </div>
-            <Link
-              href={`/store/${product.sellerId}`}
-              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-            >
-              ดูร้านค้า
-            </Link>
+            <div className="flex shrink-0 items-center gap-2">
+              {getStoredUser()?.id !== product.sellerId && (
+                <ContactSellerButton
+                  productId={product.id}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3.5 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              )}
+              <Link
+                href={`/store/${product.sellerId}`}
+                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                ดูร้านค้า
+              </Link>
+            </div>
           </div>
 
           {getStoredUser()?.id === product.sellerId ? (
@@ -328,22 +369,88 @@ export default function ProductDetailPage() {
             </div>
           )}
 
+          {product.status === "auction" && (
+            <div className="mt-4 animate-slide-up flex items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-sky-600 text-[22px] shrink-0">
+                  gavel
+                </span>
+                <span className="font-medium">
+                  สินค้านี้อยู่ในระบบประมูล ไม่สามารถสั่งซื้อแบบปกติได้
+                </span>
+              </div>
+              <Link
+                href="/auctions"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-sky-700 active:scale-95"
+              >
+                ไปที่ลานประมูล
+                <span className="material-symbols-outlined text-[15px]">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
+          )}
+
+          {myPendingOrder && (
+            <div className="mt-4 animate-slide-up flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-emerald-600 text-[24px] shrink-0">
+                  shopping_cart_checkout
+                </span>
+                <div>
+                  <p className="font-bold text-emerald-900">
+                    {myPendingOrder.auctionId
+                      ? "🎉 คุณเป็นผู้ชนะการประมูลสินค้านี้!"
+                      : "สินค้านี้อยู่ในตะกร้าของคุณแล้ว"}
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    รายการนี้ถูกล็อกไว้รอให้คุณชำระเงิน กรุณากดไปที่ตะกร้าเพื่อดำเนินการ
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/cart"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95"
+              >
+                ไปชำระเงิน
+                <span className="material-symbols-outlined text-[15px]">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
+          )}
+
           {!added && (
             <div className="mt-6 flex gap-3">
-              <button
-                onClick={handleAddToCart}
-                disabled={!available || busy}
-                className="flex-1 rounded-md border border-emerald-600 py-3 font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-500"
-              >
-                {busy ? "กำลังเพิ่ม..." : "เพิ่มลงตะกร้า"}
-              </button>
-              <button
-                onClick={handleBuyNow}
-                disabled={!available || busy}
-                className="flex-1 rounded-md bg-emerald-600 py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-              >
-                {available ? "ซื้อเลย" : "สินค้าไม่พร้อมขาย"}
-              </button>
+              {myPendingOrder ? (
+                <Link
+                  href="/cart"
+                  className="flex-1 rounded-md bg-emerald-600 py-3 text-center font-bold text-white shadow-sm hover:bg-emerald-700 transition"
+                >
+                  💳 ไปชำระเงินที่ตะกร้าสินค้า ({baht(myPendingOrder.price)})
+                </Link>
+              ) : (
+                <>
+                  <button
+                    onClick={handleAddToCart}
+                    disabled={!available || busy}
+                    className="flex-1 rounded-md border border-emerald-600 py-3 font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-500"
+                  >
+                    {busy ? "กำลังเพิ่ม..." : "เพิ่มลงตะกร้า"}
+                  </button>
+                  <button
+                    onClick={handleBuyNow}
+                    disabled={!available || busy}
+                    className="flex-1 rounded-md bg-emerald-600 py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                  >
+                    {available
+                      ? "ซื้อเลย"
+                      : product.status === "auction"
+                        ? "อยู่ในระบบประมูล"
+                        : "สินค้าไม่พร้อมขาย"}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

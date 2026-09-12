@@ -24,6 +24,19 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # Needed for CHAT-006's @socket.io/redis-adapter integration test.
+      # Unlike Mongo below, Redis needs no post-start setup, so a plain
+      # `services:` entry works here.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
       DATABASE_URL: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=auth
       DATABASE_URL_AUTH: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=auth
@@ -31,6 +44,13 @@ jobs:
       DATABASE_URL_ORDER: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=order
       DATABASE_URL_REVIEW: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=review
       DATABASE_URL_SUPPORT: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=support
+      # No `services:` entry for Mongo (unlike Postgres above) because GitHub
+      # Actions service containers can't run a post-start command, and a
+      # single-node Mongo replica set needs rs.initiate() run once after
+      # start — see the "Start MongoDB" step below instead.
+      DATABASE_URL_CHAT: mongodb://localhost:27017/reloop_test?replicaSet=rs0&directConnection=true
+      REDIS_URL: redis://localhost:6379
+      INTERNAL_SERVICE_TOKEN: ci-test-internal-token
       JWT_ACCESS_SECRET: ci-test-access-secret
       JWT_REFRESH_SECRET: ci-test-refresh-secret
       # Turns the integration test's "skip if no database" fallback (meant for
@@ -51,6 +71,30 @@ jobs:
 
       - name: Install dependencies (all workspaces)
         run: npm ci
+
+      # Runs as its own container (not a `services:` entry) because it needs
+      # rs.initiate() called once after start — see docs/featureplan/chat/plan.md
+      # CHAT-001 and infra/mongo/init-replica.sh, which this mirrors.
+      - name: Start MongoDB (single-node replica set)
+        run: |
+          docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          echo "Waiting for mongod to accept connections..."
+          for i in $(seq 1 30); do
+            if docker exec mongo mongosh --quiet --eval "db.runCommand('ping').ok" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec mongo mongosh --quiet --eval "
+            rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]})
+          "
+          echo "Waiting for rs0 to elect a primary..."
+          for i in $(seq 1 30); do
+            if docker exec mongo mongosh --quiet --eval "rs.status().ok" | grep -q 1; then
+              break
+            fi
+            sleep 1
+          done
 
       - name: Lint
         run: npm run lint
@@ -107,6 +151,11 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL_SUPPORT }}
         run: node backend/services/support-service/prisma/seed.js
+
+      - name: Push chat test schema (MongoDB)
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_CHAT }}
+        run: npx prisma db push --schema backend/services/chat-service/prisma/schema.prisma --skip-generate
 
       - name: Backend unit + integration tests (with coverage)
         run: npm test

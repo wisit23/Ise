@@ -71,9 +71,9 @@
 **Interfaces:**
 
 - Consumes: Seller `ProductSummary` with `brand`, `size`, `condition`, `price`, `styleTags`
-- Produces: `GET /api/products/search?q&category&style&brand&size&condition&minPrice&maxPrice&page&limit`
+- Produces: `GET /api/products/search?q&category&brand&size&condition&minPrice&maxPrice&page&limit`
 
-- [x] **Step 1: Write failing query contract test**
+- [ ] **Step 1: Write failing query contract test**
 
 ```js
 test("search combines price, size and condition filters", async () => {
@@ -97,7 +97,7 @@ test("search combines price, size and condition filters", async () => {
 
 Historical red phase: test เคย FAIL ก่อน query builder/fields รองรับครบ; current contract tests ผ่านแล้ว
 
-- [x] **Step 3: Implement one query builder and Buyer controls**
+- [ ] **Step 3: Implement one query builder and Buyer controls**
 
 ```js
 function buildCatalogWhere(filters, { PrismaClient }) {

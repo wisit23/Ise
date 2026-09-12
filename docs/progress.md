@@ -1235,6 +1235,278 @@ Build แดง — **ยังไม่ได้แก้ในรอบนี�
 - `frontend/components/panel/ui/{ChartCard,KpiCard}.js`, `frontend/components/NavBar.js`
 - `frontend/app/{page,cart/page,orders/page,products/page}.js`
 
+## Task `CHAT-001` — Chat Platform: MongoDB Replica Set + Redis Wiring (Infrastructure)
+
+> วันที่ทำ: 2026-09-03
+>
+> สถานะตามหลักฐาน: Infrastructure เท่านั้น — ตรวจสอบด้วย Docker Stack จริง (ไม่ใช่แค่ Unit Test)
+> **ยังไม่มี Chat Feature จริง** (ไม่มี Route/Auth/Realtime) `chat-service` ยังเปิดแค่ `/health`
+>
+> รายละเอียดเต็มอยู่ที่ [`docs/featureplan/chat/progress.md`](featureplan/chat/progress.md)
+> (Evidence), [`plan.md`](featureplan/chat/plan.md) (แผนเต็ม 8 Task 5 Phase) และ
+> [`decision.md`](featureplan/chat/decision.md) (เหตุผลเลือก MongoDB + ขอบเขต + Ownership)
+
+### สรุปงานที่ทำ
+
+1. เพิ่ม `mongo` + `mongo-init` Service ใน `docker-compose.yml` — Replica Set เดี่ยว (`rs0`) ที่
+   Prisma's MongoDB Connector ต้องการเพื่อใช้ Transaction ได้ Healthcheck เช็ค `rs.status().ok`
+   จริง ไม่ใช่แค่ Process Listening (ดูเหตุผลใน `teachme.md`)
+2. `infra/mongo/init-replica.sh` — Bootstrap Script ที่ Idempotent (รันซ้ำแล้ว No-op)
+3. ย้าย `DATABASE_URL_CHAT` จาก Postgres เป็น MongoDB URL; ลบ `CREATE DATABASE reloop_chat;`
+   ออกจาก `infra/postgres/init-databases.sql`
+4. สร้าง `chat-service/prisma/schema.prisma` เต็มรูปแบบ (`Conversation`/`Participant` Embedded/
+   `Message` พร้อม `payload: Json` สำหรับข้อความแต่ละชนิด) — ดึงมาทำพร้อม `CHAT-001` เพื่อพิสูจน์
+   `db push` ใช้ได้จริงกับ Replica Set; Domain Logic (Route/Service) ยังไม่เริ่ม (`CHAT-002`)
+5. `chat-service`'s `/health` Ping MongoDB จริงผ่าน `$runCommandRaw({ping:1})` แทนตอบ `ok` ลอยๆ
+   แบบ Service อื่น — คืน `503` เมื่อต่อไม่ได้
+6. ต่อเข้า `scripts/ensurePrismaClients.js` และ `.github/workflows/ci.yml` — Mongo รันเป็น
+   `docker run` Step แยกใน CI เพราะ GitHub Actions `services:` สั่ง Post-Start Command ไม่ได้
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                         | ผลที่เกิดขึ้นจริง                                                                                          |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `docker compose up mongo-init` (2 ครั้ง)                        | ครั้งแรก `rs.initiate()` สำเร็จ, ครั้งที่สอง Detect "already-initiated" แล้ว No-op ถูกต้อง                 |
+| `npx prisma db push` ต่อ Replica Set จริงผ่าน `localhost:27017` | สร้าง Collection + Index ครบ 4 รายการ รวม `contextKey` Unique Index                                        |
+| `node --test health.integration.test.js`                        | 2/2 ผ่านตอนต่อ Mongo ได้จริง; Skip สะอาดตอนไม่ตั้ง `DATABASE_URL_CHAT`                                     |
+| `docker compose build chat-service` + `up -d`                   | Build สำเร็จ, Container ขึ้น `healthy` ผ่าน Dependency Chain (`mongo`→`mongo-init`→`redis`) ครบ            |
+| `curl chat-service:3004/health` ข้าม Docker Network             | `{"status":"ok","service":"chat-service","db":"ok"}`                                                       |
+| `GET /api/chat/health` ผ่าน Gateway โดยไม่มี Bearer Token       | `401` — Auth Gate เดิมยังทำงานปกติกับ Route ใหม่                                                           |
+| `npm test` (Repo ทั้งหมด)                                       | 85 Pass / 2 Fail (Pre-existing ใน `order-service`, ยืนยันด้วย `git stash` ว่าไม่เกี่ยวกับงานนี้) / 26 Skip |
+| `npm run lint` / `format:check` / `secret-scan`                 | ผ่านหมด                                                                                                    |
+| `docker compose down`                                           | Teardown สะอาด ไม่มี Orphan State                                                                          |
+
+### ผลลัพธ์ปัจจุบัน
+
+- MongoDB Replica Set พร้อมใช้งานจริงสำหรับ `chat-service`, ต่อเข้า CI แล้ว
+- **ยังไม่ได้ทำ**: `CHAT-002`–`CHAT-006` (Conversation/Message Domain Logic, Frontend, Internal
+  API, Realtime) — งานนี้เป็น Infrastructure ล้วน ไม่ใช่หลักฐานว่า Chat Feature ใช้งานได้
+- ขอบเขตที่ยืนยันกับผู้ใช้แล้ว: ทำถึง `CHAT-006` เท่านั้นในรอบนี้ (`CHAT-007`/`CHAT-008` เลื่อน) —
+  ดูเหตุผลเต็มใน `decision.md`
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `docker-compose.yml`, `infra/mongo/init-replica.sh`, `.env.example`,
+  `infra/postgres/init-databases.sql`, `scripts/ensurePrismaClients.js`,
+  `.github/workflows/ci.yml`
+- `backend/services/chat-service/` (`prisma/schema.prisma`, `src/app.js`, `src/server.js`,
+  `src/models/prismaClient.js`, `test/health.integration.test.js`)
+
+## Task `CHAT-002`–`CHAT-004` — Chat Platform: Conversation/Message Domain + Frontend
+
+> วันที่ทำ: 2026-09-03
+>
+> สถานะตามหลักฐาน: Buyer↔Seller Chat ใช้งานได้จริงครบวงจร — ตรวจสอบด้วย 43 Backend Integration
+> Test บน MongoDB Replica Set จริง, 10 Frontend Test, และ E2E จริงผ่าน Browser กับ Docker Stack
+> เต็มระบบ (ไม่ใช่แค่เรียก Express App ผ่าน `supertest`) **ยังไม่ทำ**: Internal API (`CHAT-005`),
+> Realtime (`CHAT-006`), ไฟล์แนบ/Rate-limit/Admin moderation (`CHAT-007`, นอกขอบเขตรอบนี้)
+>
+> รายละเอียดเต็มอยู่ที่ [`docs/featureplan/chat/progress.md`](featureplan/chat/progress.md)
+> (Evidence ทีละ Task), [`plan.md`](featureplan/chat/plan.md) และ
+> [`decision.md`](featureplan/chat/decision.md) (เหตุผลเลือก MongoDB, Ownership, ขอบเขต)
+
+### สรุปงานที่ทำ
+
+1. **CHAT-002** Conversation: `contextKey.js` (Pure Function สร้าง Dedupe Key), create-or-open
+   ที่ resolve `sellerId` จาก product-service ฝั่ง Server เท่านั้น (Client ส่ง `sellerId` มาไม่มีผล)
+   จับ Duplicate-key Error (`P2002`) แล้วคืนห้องเดิมแทน Error — Authorization เช็คจาก
+   `participants` ในฐานข้อมูลจริงทุก Request ไม่ใช่จาก JWT Claim
+2. **CHAT-003** Message: `cursor.js` cursor บน Message id (MongoDB ObjectId) แทน Offset/Page;
+   ส่งข้อความ + อัปเดต `lastMessageAt`/`lastMessagePreview` ใน `$transaction` เดียว; mark-read
+   และ unread-count คำนวณจาก Embedded Participant
+3. **CHAT-004** Frontend: `/chat` (Inbox), `/chat/[id]` (ห้อง), `ContactSellerButton` ต่อเข้า
+   3 จุด (หน้าสินค้า, หน้าร้านค้า, หน้าคำสั่งซื้อ — ปลด `buyer/plan.md` `BUY-004` Step 3),
+   NavBar Badge Unread, Polling ทุก 4 วิ (ชั่วคราวรอ `CHAT-006`)
+
+### บั๊กจริงที่เจอและแก้ระหว่างเขียน Test
+
+| #   | บั๊ก                                                                 | พบที่                                                                                           | วิธีแก้                                                                           |
+| --- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 1   | Message ทุกอันมองไม่เห็นตัวเองทันทีหลังสร้าง — List/Count คืน 0 เสมอ | `CHAT-003`: Prisma's MongoDB Connector เก็บ Field ที่ไม่ใส่ค่าเป็น "ไม่มีอยู่เลย" ไม่ใช่ `null` | เขียน `deletedAt: null` ชัดเจนตอน `create()` แทนการพึ่ง Schema Default            |
+| 2   | `MessageComposer` พังเงียบถ้า `onSend` reject                        | `CHAT-004`: ไม่มี `catch` รอบ `await onSend()`                                                  | เพิ่ม `catch` ให้ Component จับ Error ของตัวเองเสมอ ไม่พึ่งว่า Caller จะจัดการให้ |
+
+(พบอีก 2 ปัญหาที่เป็นบั๊กใน Test/Mock เอง ไม่ใช่ Production Code — รายละเอียดเต็มอยู่ใน
+`chat/teachme.md`: การรัน Concurrency Test กับฐานข้อมูลที่ไม่เคย `db push` ทำให้ Unique Index
+ไม่มีจริง, และ Router Mock ที่คืน Object ใหม่ทุกครั้งทำให้ React Effect Loop)
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                                        | ผลที่เกิดขึ้นจริง                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Backend integration test บน MongoDB Replica Set จริง (`REQUIRE_INTEGRATION=1`) | 43/43 ผ่าน (contextKey 7, cursor 7, health 2, conversation 21, message 20 — รวมซ้ำในบางไฟล์)                                                                                                                             |
+| Concurrency Race Test จริง (ยิง 2 Request พร้อมกัน)                            | Conversation เดียวใน MongoDB จริง ยืนยันด้วย Count Query ตรง ไม่ใช่แค่เช็ค Response                                                                                                                                      |
+| Cursor Pagination กับประวัติ 65 ข้อความจริง                                    | 3 หน้าไม่ซ้ำไม่ขาด รวมกรณี Interleaved Insert ระหว่าง Paging                                                                                                                                                             |
+| Frontend test (`chat.test.js`, `MessageComposer.test.js`)                      | 10/10 ผ่าน; รวม Suite ทั้งหมด 47/47 (เดิม 37) ไม่มี Regression                                                                                                                                                           |
+| `npm run lint`, `format:check`, `secret-scan`                                  | ผ่านหมด                                                                                                                                                                                                                  |
+| `npm --workspace frontend run build`                                           | สำเร็จ — `/chat`, `/chat/[id]` อยู่ใน Route Table                                                                                                                                                                        |
+| **E2E จริงผ่าน Browser กับ Docker Stack เต็มระบบ**                             | Login Buyer จริง → เปิดสินค้าของ Seller อื่น → กดติดต่อผู้ขาย → ส่งข้อความไทย → Login Seller คนละ Tab → เห็น Badge Unread "1" → ตอบกลับ → สลับกลับ Tab Buyer โดยไม่ Reload → เห็นข้อความ Seller ผ่าน Polling ภายใน ~4 วิ |
+
+### ผลลัพธ์ปัจจุบัน
+
+- Buyer↔Seller Chat ใช้งานได้จริงครบวงจร: เปิดห้อง, ส่ง/รับข้อความ, Unread Badge, Cursor
+  Pagination ทั้งหมดพิสูจน์ด้วยข้อมูลจริงใน MongoDB ไม่ใช่ Mock
+- **ยังไม่ได้ทำ**: Internal API ให้ Service อื่นเรียกใช้ (`CHAT-005`), Realtime ผ่าน Socket.IO +
+  Redis (`CHAT-006`), ไฟล์แนบ/Rate-limit/Admin Moderation/CS Ticket Migration (`CHAT-007`,
+  `CHAT-008` — นอกขอบเขตที่ยืนยันไว้สำหรับรอบนี้)
+- **ข้อจำกัดที่รู้อยู่แล้ว ไม่ใช่บั๊ก**: ชื่อ Buyer ฝั่งอื่นแสดงเป็น "ผู้ใช้" ทั่วไป เพราะ
+  auth-service's `GET /users/:id/public` ออกแบบไว้สำหรับ Seller เท่านั้น (`throw notFound` ถ้า
+  Role ไม่ใช่ `SELLER`) — เป็นข้อจำกัดเดิมของ auth-service ไม่ใช่ของ Chat
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/chat-service/src/features/{conversations,messages}/`
+- `backend/services/chat-service/src/services/productClient.js`
+- `backend/services/chat-service/test/{conversation,message}.integration.test.js`
+- `frontend/lib/chat.js`, `frontend/components/chat/`, `frontend/app/chat/`
+- `frontend/app/products/[id]/page.js`, `frontend/app/store/[sellerId]/page.js`,
+  `frontend/app/orders/page.js`, `frontend/components/NavBar.js` (Modified)
+
+## Task `CHAT-005`–`CHAT-006` — Chat Platform: Internal API + Socket.IO Realtime (ครบขอบเขตรอบนี้)
+
+> วันที่ทำ: 2026-09-03
+>
+> สถานะตามหลักฐาน: **`CHAT-001`–`CHAT-006` เสร็จครบตามขอบเขตที่ตกลงกับผู้ใช้** ตรวจสอบด้วย
+> Docker Stack จริงทั้งหมด — Backend Integration Test 74/74 (MongoDB replica set + Redis จริง),
+> Frontend 47/47 + Production Build สำเร็จ, Browser จริง 2 Session แยกกัน (Login/Logout สลับ
+> Buyer↔Seller เพราะ localStorage share กันใน Tab เดียวกัน), และ 2-Instance Scale Test ยืนยันว่า
+> Redis Adapter กระจายข้อความข้าม Instance ได้จริง
+>
+> รายละเอียดเต็มอยู่ที่ [`docs/featureplan/chat/progress.md`](featureplan/chat/progress.md)
+> (Evidence เต็มทุก Task), [`decision.md`](featureplan/chat/decision.md) (5 Decision Record รวม
+> เหตุผลเปลี่ยน WebSocket Proxy Implementation) และ [`plan.md`](featureplan/chat/plan.md)
+> (Checkbox ติ๊กครบทั้ง 6 Task)
+
+### สรุปงานที่ทำ
+
+1. **CHAT-005 Internal API**: 6 Endpoint (`create-or-open`, `by-context` lookup, ส่ง SYSTEM
+   message, เพิ่ม participant แบบ idempotent, เปลี่ยนสถานะ, ดึง transcript เต็ม) จำกัดเฉพาะ
+   `ORDER`/`SUPPORT` context ผ่าน `requireInternalToken`; `order-service` เป็น Consumer จริงตัวแรก
+   — ส่ง SYSTEM message เข้าห้องอัตโนมัติเมื่อ Order เปลี่ยนสถานะ; ตรวจสอบจริงว่า Internal API
+   เข้าผ่าน Gateway สาธารณะไม่ได้เลย (Defense in Depth ไม่ใช่พึ่ง Token อย่างเดียว)
+2. **CHAT-006 Socket.IO + Redis pub/sub**: `socketAuth.js` ตรวจ JWT ตอน Handshake (จุดเดียวที่
+   Authenticate WebSocket ได้ เพราะ Gateway Proxy ข้าม Middleware ปกติ), เช็ค Participant ซ้ำจาก
+   Database ทุกครั้งที่ Join ห้อง, Broadcast หลัง MongoDB Transaction สำเร็จเท่านั้น, Presence/
+   Typing ใช้ Redis TTL Key ไม่แตะ MongoDB
+3. **ปิด Scope Gap ที่เจอเอง**: Backend Realtime เสร็จและ Test ผ่านหมดแล้ว แต่ Frontend ยังเป็น
+   Polling-only ไม่มีโค้ด Socket เลย — เพิ่ม `connectSocket` ใน `lib/chat.js`, ต่อหน้าห้องแชทเข้า
+   Socket จริงโดยใช้ REST Polling เป็น Fallback เท่านั้น (ไม่ใช่ Primary Path อีกต่อไป), เพิ่ม
+   Typing Indicator UI แบบ Debounce
+4. **เจอและแก้บั๊กใหญ่ที่ Gateway**: `http-proxy-middleware` และ `http-proxy` (ทั้งแบบสร้าง
+   Instance ใหม่ต่อ Request และแบบ Shared Instance) ทำ WebSocket Response เสียหายเมื่อมี 2 Client
+   ต่อพร้อมกันผ่าน Gateway จริง — พิสูจน์ด้วยการเทียบ: ต่อตรงไปที่ chat-service สำเร็จเสมอ, ผ่าน
+   Gateway พร้อมกันล้มเสมอ, Log ยืนยันว่า chat-service ทำ Handshake สำเร็จทั้งคู่จริง (ปัญหาไม่ได้
+   อยู่ที่ chat-service) แก้โดยเขียน Raw TCP Pipe เองใน Gateway (`net.connect()` ใหม่ต่อ Upgrade
+   แล้ว Pipe สองทาง) — รายละเอียดเต็มใน `decision.md` CHAT-DEC-005
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ                                                                                                           | ผลที่เกิดขึ้นจริง                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| chat-service Test ทั้งหมด (contextKey, cursor, socketAuth, health, conversation, internal-api, message, realtime) | 74/74 ผ่าน บน MongoDB Replica Set + Redis จริง                                                                |
+| Concurrent 2-Client ผ่าน Gateway (4 รอบติด + 2 Process แยกจริง)                                                   | ผ่านทุกรอบหลังแก้ Raw TCP Pipe (ก่อนแก้: ล้มทุกรอบด้วย `ECONNRESET`)                                          |
+| `docker compose up --scale chat-service=2` + 6 รอบ Concurrent Test                                                | Log ยืนยันทั้งสอง Instance รับ Connection จริงและยัง Deliver ข้ามกันได้ทุกรอบ                                 |
+| หยุด Redis แล้วส่งข้อความผ่าน REST                                                                                | `201` สำเร็จ, Persist ใน MongoDB — Redis ไม่ใช่ Dependency ของ Write Path                                     |
+| Browser จริง 2 Session (Buyer → Seller สลับ Login)                                                                | ข้อความที่ส่งผ่าน API ขณะ Seller เปิดหน้าค้างไว้ ขึ้นสด**ไม่ต้อง Reload**                                     |
+| `npm run lint` / `format:check`                                                                                   | ผ่านหมด                                                                                                       |
+| Frontend Test ทั้งหมด + Production Build                                                                          | 47/47 ผ่าน, Build สำเร็จรวม `/chat`, `/chat/[id]`                                                             |
+| `npm test` (Repo ทั้งหมด)                                                                                         | Chat Suite ผ่านครบ; 2 Fail เดิมใน `order-service` (Pre-existing, ยืนยันด้วย `git stash` แล้วในรอบ `CHAT-001`) |
+
+### ผลลัพธ์ปัจจุบัน
+
+- Chat Platform ใช้งานได้จริงครบวงจรตามขอบเขตที่ตกลงกับผู้ใช้: Buyer↔Seller เปิดห้องจาก
+  หน้าสินค้าได้, ส่ง/รับข้อความแบบ Realtime ผ่าน Socket.IO พร้อม REST Fallback, Service อื่น
+  (เริ่มจาก order-service) ส่ง SYSTEM Message เข้าห้องอัตโนมัติผ่าน Internal API ได้
+- **ยังไม่ได้ทำ (ตกลงเลื่อนไว้แล้ว)**: `CHAT-007` (ไฟล์แนบ, Rate Limit, `chat:read:any` สำหรับ
+  CS/Admin แบบ Report-Gated เท่านั้น) และ `CHAT-008` (ย้ายข้อความตั๋ว CS มารวม) — ดู
+  `decision.md` CHAT-DEC-003 สำหรับเหตุผล
+- **Known Gap ที่เจอระหว่างตรวจ (ไม่ Blocking)**: `GET /api/auth/users/:id/public` เป็น
+  Seller-only Endpoint ทำให้ Seller มองชื่อ Buyer ในห้องแชทไม่ออก (Fallback เป็น "ผู้ใช้" อยู่แล้ว
+  ไม่ Crash) — อยู่นอกขอบเขต Chat เพราะเป็นไฟล์ของ auth-service ปล่อยไว้เป็น Follow-up แยก
+  **(แก้แล้วในรอบ 2026-09-04 ด้านล่าง — และระหว่างแก้เจอช่องโหว่ที่ใหญ่กว่าคือการไล่ดูดรายชื่อผู้ใช้)**
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/gateway/src/server.js` (Rewritten — Raw TCP WebSocket Proxy), `backend/gateway/src/app.js`
+- `backend/services/chat-service/src/features/internal/`, `src/realtime/`
+- `backend/services/chat-service/test/{internal-api,realtime}.integration.test.js`
+- `backend/services/order-service/src/services/chatClient.js`
+- `backend/shared/src/events.js`
+- `frontend/lib/chat.js`, `frontend/app/chat/[id]/page.js`, `frontend/components/chat/MessageComposer.js`
+- `frontend/package.json` (เพิ่ม `socket.io-client`)
+
+## Task `CHAT-007` (บางส่วน) — ชื่อคู่สนทนา: ปิดช่องโหว่ไล่ดูดรายชื่อผู้ใช้
+
+> วันที่ทำ: 2026-09-04
+>
+> สถานะตามหลักฐาน: **เสร็จ** — Frontend 75/75, auth-service `/internal` 5/5 (อีก 3 Subtest
+> ต้องมี Postgres จึงจะรัน), chat-service `authClient` 5/5, lint/format ผ่าน
+>
+> รายละเอียดเต็ม + ตาราง Evidence อยู่ที่
+> [`docs/featureplan/chat/progress.md`](featureplan/chat/progress.md)
+
+### สรุปงานที่ทำ
+
+Known Gap ที่บันทึกไว้รอบก่อน (Seller มองชื่อ Buyer ไม่ออก) พอไล่ดูจริงกลับเจอปัญหาที่ใหญ่กว่า:
+หน้าแชท**เรียก `GET /api/auth/users/:id/public` จากเบราว์เซอร์แถวละครั้ง** ซึ่งแปลว่าแค่ล็อกอิน
+บัญชีเดียวก็ไล่ยิงทุก `userId` เพื่อดูดรายชื่อผู้ใช้ทั้งระบบได้ (ผู้ใช้เป็นคนตั้งข้อสังเกตนี้เอง) และยัง
+คืนชื่อ-นามสกุลเต็มด้วย
+
+แก้ที่โครงสร้าง ไม่ใช่แค่กรองข้อมูล: **เบราว์เซอร์ไม่มี Endpoint ค้นหาผู้ใช้ให้เรียกอีกต่อไป**
+
+1. auth-service เพิ่ม `POST /internal/users/display-names` หลัง `requireInternalToken`
+   (จำกัด 100 id/ครั้ง) คืน **ชื่อต้นอย่างเดียว** ตาม `NFR-SP-02`; บัญชีที่มีร้านคืนชื่อร้าน —
+   ตัดสินจาก "มีชื่อร้านไหม" **ไม่ใช่เช็ค Role** จึงไม่ทำให้ Chat ผูกกับ Role
+2. chat-service เติม `participant.displayName` มากับตัว Conversation เอง — id ที่แปลงชื่อ
+   คือคนในห้องที่ผู้เรียกผ่าน `getForParticipant` มาแล้วเท่านั้น ถามชื่อคนนอกห้องไม่ได้เลย
+   และเป็น Best-effort: auth-service ล่มก็ยังอ่านแชทได้ (ตกไปแสดง "ผู้ใช้")
+3. Frontend ลบ `useEffect` ที่ยิง Lookup รายแถวทิ้ง (Inbox จาก N+1 Request → 0) พร้อม Test
+   ที่ Assert ตรง ๆ ว่าไม่มีการเรียก `/api/auth/users/` ตอน Render Inbox กันคนเผลอเอากลับมา
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/services/auth-service/src/features/internal/` (ใหม่ — Route + Controller + Test)
+- `backend/services/auth-service/src/services/authService.js` (`getDisplayNames`)
+- `backend/services/chat-service/src/services/authClient.js` (+ `authClient.test.js`)
+- `backend/services/chat-service/src/features/conversations/conversationService.js`
+  (`withDisplayNames`), `conversationController.js`
+- `frontend/components/chat/ConversationRow.js`, `frontend/app/chat/[id]/page.js`
+- `docker-compose.yml` (`AUTH_SERVICE_URL` ให้ chat-service)
+
+### ต่อยอด: ป้ายบอกบทบาทคู่สนทนา (2026-09-04)
+
+ผู้ใช้ขอให้มี status ใต้ชื่อว่าห้องนี้คุยกับใคร — **ไม่ต้องแก้ backend เลย** เพราะ
+`Participant.role` มีอยู่ใน schema ตั้งแต่ `CHAT-002` และส่งถึงเบราว์เซอร์อยู่แล้ว เหลือแค่แปลง
+เป็นภาษาไทยแล้วแสดง (`ร้านค้า` / `ฝ่ายบริการลูกค้า` / `ผู้ซื้อ` / `ผู้ดูแลระบบ` / `ระบบ`)
+
+ย้ำให้ชัด: ค่านี้คือ role **ระดับห้อง** ที่ chat เก็บเอง ไม่ใช่ role ระดับบัญชีของ auth-service —
+คนเดียวกันเป็นผู้ขายในห้องหนึ่งและผู้ซื้อในอีกห้องได้ และ**ไม่มีการตรวจสิทธิ์ด้วยค่านี้** เป็นแค่
+ป้ายกำกับ จึงไม่ขัดกับหลักการที่ยึดมาว่าแชทต้องไม่ผูกกับ role; role ที่ไม่รู้จักจะไม่แสดงป้ายเลย
+แทนที่จะปล่อยคำดิบหลุด UI
+
+Frontend 81/81 (ใหม่ 6 ตัว) — พิสูจน์ว่า test ไม่กลวงด้วยการปิดฟีเจอร์แล้วดูว่า fail 4 ตัวจริง;
+ตรวจบนเบราว์เซอร์จริงเห็นห้อง CS กับห้องร้านค้าแยกออกจากกันได้ในจอเดียว และ realtime ยังทำงานปกติ
+
+### ต่อยอด: Rate limit + จำกัดความยาวข้อความ (2026-09-04)
+
+เจอตอนตรวจความพร้อมก่อนส่งมอบ **ไม่ได้อยู่ในแผนเดิม**: ไม่มีการจำกัดความยาวข้อความเลย ยิงจริง
+ผ่าน gateway ได้ 30,000 ตัวอักษร → `201` เก็บลง DB (เพดานเดียวคือ default 100 KB ของ
+`express.json()` ซึ่งเป็นอุบัติเหตุ ไม่ใช่การตัดสินใจ) และไม่มี rate limit เลย (`CHAT-007` Step 3)
+
+- `MAX_MESSAGE_LENGTH = 4000` **นับตัวอักษรไม่ใช่ไบต์** (ไทย 1 ตัว = 3 ไบต์ ถ้านับไบต์คนไทย
+  จะได้พื้นที่แค่ 1 ใน 3) บังคับที่ `createAndTouch` **จุดเดียว** เส้น Internal API ก็ข้ามไม่ได้
+- Rate limit ใช้ **Redis ไม่ใช่ in-memory** เพราะ chat รันหลาย instance — ถ้านับในหน่วยความจำ
+  เพดานจริงจะกลายเป็น N เท่าโดยไม่มีใครรู้; INCR+EXPIRE รวมเป็น Lua script เดียวกันคีย์ค้างไม่มี
+  TTL; **fail open** ถ้า Redis ล่ม (แชทต้องไม่ล่มตาม); นับต่อ userId ไม่ใช่ IP
+- ส่ง 30/10 วิ, แนบไฟล์ 10/นาที, เปิดห้อง 20/นาที; `/internal` ไม่โดนจำกัด
+
+**บั๊กที่ตัวเองทำแล้วเจอจากการรัน test**: rate limit ทำ test เดิมพัง 4 ตัว (test ยิง 65 ข้อความรวด)
+— แก้ด้วยการทำให้ override ผ่าน env ได้ ไม่ใช่ลดเพดานจริง; test 2 ไฟล์ค้าง 300 วิเพราะ Redis
+connection ไม่ถูกปิด; unit test ก็ค้างตอนแรกเพราะ mock prototype ยังสร้าง client จริง
+
+chat-service **123/123** (ใหม่ 16 ตัว กับ MongoDB + Redis จริง) — พิสูจน์ว่า test ไม่กลวงด้วยการ
+ปิดฟีเจอร์แล้วดูว่า fail จริง; ตรวจผ่าน gateway: 4,001 ตัว → `400`, ยิงรัว 40 ครั้ง → บล็อก 13
+พร้อม `Retry-After`; บนเบราว์เซอร์: paste 10,000 ตัวถูกตัดเหลือ 4,000 พอดี
+
 ## อัปเดตล่าสุด
 
-2026-09-02 (Asia/Bangkok)
+2026-09-04 (Asia/Bangkok)

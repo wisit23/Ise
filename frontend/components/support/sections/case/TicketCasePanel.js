@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import Alert from "../../../ui/Alert";
 import Button from "../../../ui/Button";
 import CaseUserCard from "./CaseUserCard";
@@ -45,6 +47,7 @@ export default function TicketCasePanel({
   onWarnUser,
   onBanUser,
 }) {
+  const [manualTargetId, setManualTargetId] = useState("");
   const nextStatuses = AGENT_NEXT_STATUS[ticket.status] || [];
   const openedOn = new Date(ticket.createdAt).toLocaleDateString(
     "th-TH",
@@ -53,15 +56,24 @@ export default function TicketCasePanel({
 
   return (
     <>
-      <div className="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-100 bg-slate-50/70">
+      <div className="grid grid-cols-4 divide-x divide-slate-100 border-b border-slate-100 bg-slate-50/70">
+        <InfoCell label="คู่กรณี (Target)">
+          {ticket.targetId ? (
+            <span className="font-mono font-semibold text-orange-700">
+              {ticket.targetId.slice(0, 10)}...
+            </span>
+          ) : (
+            <span className="italic text-slate-400">ไม่ระบุ</span>
+          )}
+        </InfoCell>
         <InfoCell label="ผู้แจ้ง (Requester)">
           <span className="font-mono">
-            {ticket.requesterId?.slice(0, 14) ?? "—"}
+            {ticket.requesterId?.slice(0, 10) ?? "—"}
           </span>
         </InfoCell>
         <InfoCell label="ผู้รับผิดชอบ (Agent)">
           {ticket.assigneeId ? (
-            <span className="font-mono">{ticket.assigneeId.slice(0, 14)}</span>
+            <span className="font-mono">{ticket.assigneeId.slice(0, 10)}</span>
           ) : (
             <span className="italic text-slate-500">ยังไม่มอบหมาย</span>
           )}
@@ -88,32 +100,90 @@ export default function TicketCasePanel({
           </div>
         </SectionCard>
 
-        {/* The requester filed the ticket — not necessarily the person at
-            fault, so they get their own actions rather than being assumed
-            to be the wrongdoer. */}
+        {/* Counterparty is the primary focus of moderation when handling disputes/complaints.
+            Rendered first so Trust & Safety officers act on the accused party by default. */}
+        {ticket.targetId ? (
+          <CaseUserCard
+            userId={ticket.targetId}
+            heading="คู่กรณี (Target - ผู้ถูกร้องเรียน)"
+            icon="gavel"
+            tone="target"
+            busy={actionBusy}
+            warnLabel="ตักเตือนคู่กรณี"
+            banLabel="แบนคู่กรณี"
+            onWarn={
+              onWarnUser ? (uid) => onWarnUser(uid, "คู่กรณี") : undefined
+            }
+            onBan={onBanUser ? (uid) => onBanUser(uid, "คู่กรณี") : undefined}
+          />
+        ) : (
+          <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-5 shadow-sm">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-orange-600">
+              <span className="material-symbols-outlined text-[15px]">
+                gavel
+              </span>
+              คู่กรณี (Target - ผู้ถูกร้องเรียน)
+            </div>
+            <p className="text-xs text-slate-600">
+              ตั๋วนี้ไม่ได้ผูกกับคำสั่งซื้ออัตโนมัติ จึงไม่มีรหัสคู่กรณีในระบบ
+            </p>
+            {(onWarnUser || onBanUser) && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-orange-200/60 pt-2">
+                <input
+                  type="text"
+                  value={manualTargetId}
+                  onChange={(e) => setManualTargetId(e.target.value)}
+                  placeholder="กรอก User ID คู่กรณีที่ต้องการดำเนินการ..."
+                  className="flex-1 rounded-lg border border-orange-300 bg-white px-3 py-1.5 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus:border-orange-500 focus:outline-none"
+                />
+                {onWarnUser && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon="warning"
+                    disabled={actionBusy || !manualTargetId.trim()}
+                    onClick={() =>
+                      onWarnUser(manualTargetId.trim(), "คู่กรณี")
+                    }
+                    className="bg-amber-100 font-bold text-amber-800 hover:bg-amber-200"
+                  >
+                    ตักเตือนคู่กรณี
+                  </Button>
+                )}
+                {onBanUser && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon="block"
+                    disabled={actionBusy || !manualTargetId.trim()}
+                    onClick={() =>
+                      onBanUser(manualTargetId.trim(), "คู่กรณี")
+                    }
+                    className="bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
+                  >
+                    แบนคู่กรณี
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* The requester filed the ticket — not necessarily the person at fault.
+            Rendered second with distinct labels and caution styling. */}
         <CaseUserCard
           userId={ticket.requesterId}
-          heading="ผู้แจ้ง (Requester)"
+          heading="ผู้แจ้ง (Requester - ผู้ส่งคำร้อง)"
           icon="person"
           tone="requester"
+          isRequester={true}
           busy={actionBusy}
-          onWarn={onWarnUser}
-          onBan={onBanUser}
-        />
-
-        {/* Counterparty exists only when the requester tied the ticket to one
-            of their orders on submission (see app/support/tickets/page.js),
-            which lets us derive the other party of that transaction. This is
-            usually who Admin actually needs to act against — e.g. "seller
-            never shipped my order" — not the requester above. */}
-        <CaseUserCard
-          userId={ticket.targetId}
-          heading="คู่กรณี (Target)"
-          icon="gavel"
-          tone="target"
-          busy={actionBusy}
-          onWarn={onWarnUser}
-          onBan={onBanUser}
+          warnLabel="ตักเตือนผู้แจ้ง"
+          banLabel="แบนผู้แจ้ง (ระวัง)"
+          onWarn={
+            onWarnUser ? (uid) => onWarnUser(uid, "ผู้แจ้ง") : undefined
+          }
+          onBan={onBanUser ? (uid) => onBanUser(uid, "ผู้แจ้ง") : undefined}
         />
 
         <SectionCard icon="support_agent" title="เจ้าหน้าที่รับผิดชอบ">

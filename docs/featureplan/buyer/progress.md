@@ -1,5 +1,4 @@
 # Buyer Feature Progress
-
 > Owner: วิศิษฏ์ เจียมสันต์ · Reviewer: เอกตระการ บุญญกาศ · Updated: 2026-09-07
 
 **Status:** `BUY-001` และ `BUY-002` verified locally with PostgreSQL; `BUY-004` เป็น Partial;

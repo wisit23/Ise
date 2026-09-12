@@ -36,7 +36,7 @@ model Order {
   // an auction in product-service, instead of a normal "buy now" checkout.
   // No FK — product-service owns the AuctionItem, this is a read-only
   // reference so metrics/support can trace an order back to its auction.
-  auctionId            String?   @map("auction_id")
+  auctionId            String?   @unique @map("auction_id")
   // WF-08 step 3: opening a dispute holds payout until CSS-003 decides.
   // Admin's hold/release writes this too — see adminDisputeService.
   payoutHeld           Boolean   @default(false) @map("payout_held")

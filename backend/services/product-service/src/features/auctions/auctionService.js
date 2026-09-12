@@ -11,7 +11,7 @@ const auctionCloseQueue = require("../../jobs/auctionCloseQueue");
 // fallback if the job was ever missed (e.g. Redis was down).
 const TRANSITIONS = {
   draft: ["pending_approval", "cancelled"],
-  pending_approval: ["approved", "rejected"],
+  pending_approval: ["approved", "rejected", "scheduled"],
   approved: ["scheduled", "cancelled"],
   scheduled: ["open", "cancelled"],
   open: ["closed"],
@@ -56,6 +56,13 @@ async function maybeAdvance(auction, now = new Date()) {
 }
 
 async function closeAuction(auction, now) {
+  // Re-fetch to avoid race conditions if already closed concurrently (e.g. BullMQ worker vs page read)
+  const fresh = await auctionRepository.findById(auction.id);
+  if (!fresh || fresh.status === "closed") {
+    return fresh || auction;
+  }
+  auction = fresh;
+
   const winningBid = await auctionRepository.highestBid(auction.id);
 
   let winningOrderId = null;
@@ -69,6 +76,9 @@ async function closeAuction(auction, now) {
       price: winningBid.amount,
     });
     winningOrderId = order.id;
+  } else {
+    // If no bids were placed, release product back to "available"
+    await auctionRepository.setProductStatus(auction.productId, "available");
   }
 
   return auctionRepository.updateStatus(auction.id, {
@@ -102,8 +112,18 @@ async function submit({ user, input = {} }) {
   if (product.sellerId !== user.id) {
     throw forbidden("you can only auction your own products");
   }
-  if (product.status !== "available") {
+  if (!["available", "auction"].includes(product.status)) {
     throw badRequest("product must be available to enter an auction");
+  }
+
+  // Check if there is an active submission round
+  const activeRound = await auctionRepository.findActiveSubmissionRound();
+  if (!activeRound) {
+    throw badRequest("ขณะนี้ไม่มีรอบเปิดรับสินค้าเข้าประมูล หรือหมดเวลาเปิดรับแล้ว");
+  }
+
+  if (product.status !== "auction") {
+    await auctionRepository.setProductStatus(productId, "auction");
   }
 
   return auctionRepository.create({
@@ -112,16 +132,33 @@ async function submit({ user, input = {} }) {
     startingPrice,
     bidIncrement,
     status: "pending_approval",
+    roundId: activeRound.id,
+    scheduledStartAt: activeRound.auctionStartsAt,
+    scheduledEndAt: activeRound.auctionEndsAt,
   });
 }
 
-/** Admin approves a pending auction. */
+/** Marketing or Admin approves a pending auction. */
 async function approve({ user, auctionId }) {
-  if (user.role !== "ADMIN") throw forbidden("only Admin can approve auctions");
+  if (!["MARKETING", "ADMIN"].includes(user.role)) {
+    throw forbidden("only Marketing or Admin can approve auctions");
+  }
 
   const auction = await loadAuction(auctionId);
-  assertTransition(auction, "approved");
 
+  // If the auction already has scheduled dates (from round), transition directly to scheduled!
+  if (auction.scheduledStartAt && auction.scheduledEndAt) {
+    assertTransition(auction, "scheduled");
+    const updated = await auctionRepository.updateStatus(auctionId, {
+      status: "scheduled",
+      approvedBy: user.id,
+      approvedAt: new Date(),
+    });
+    await auctionCloseQueue.scheduleClose(auctionId, auction.scheduledEndAt);
+    return updated;
+  }
+
+  assertTransition(auction, "approved");
   return auctionRepository.updateStatus(auctionId, {
     status: "approved",
     approvedBy: user.id,
@@ -129,14 +166,93 @@ async function approve({ user, auctionId }) {
   });
 }
 
-/** Admin rejects a pending auction. */
+/** Marketing or Admin rejects a pending auction. */
 async function reject({ user, auctionId }) {
-  if (user.role !== "ADMIN") throw forbidden("only Admin can reject auctions");
+  if (!["MARKETING", "ADMIN"].includes(user.role)) {
+    throw forbidden("only Marketing or Admin can reject auctions");
+  }
 
   const auction = await loadAuction(auctionId);
   assertTransition(auction, "rejected");
 
+  await auctionRepository.setProductStatus(auction.productId, "available");
+
   return auctionRepository.updateStatus(auctionId, { status: "rejected" });
+}
+
+/** Create an auction round by Marketing/Admin. */
+async function createRound({ user, input = {} }) {
+  if (!["MARKETING", "ADMIN"].includes(user?.role)) {
+    throw forbidden("only Marketing or Admin can create auction rounds");
+  }
+
+  const { title, submissionStartsAt, submissionEndsAt, auctionStartsAt, auctionEndsAt } = input;
+  if (!title || typeof title !== "string" || !title.trim()) {
+    throw badRequest("title is required");
+  }
+
+  const subStart = new Date(submissionStartsAt);
+  const subEnd = new Date(submissionEndsAt);
+  const aucStart = new Date(auctionStartsAt);
+  const aucEnd = new Date(auctionEndsAt);
+
+  if ([subStart, subEnd, aucStart, aucEnd].some((d) => Number.isNaN(d.getTime()))) {
+    throw badRequest("all dates (submissionStartsAt, submissionEndsAt, auctionStartsAt, auctionEndsAt) must be valid dates");
+  }
+
+  if (subEnd <= subStart) {
+    throw badRequest("submissionEndsAt must be after submissionStartsAt");
+  }
+
+  if (aucStart < subEnd) {
+    throw badRequest("auctionStartsAt must be after or equal to submissionEndsAt");
+  }
+
+  if (aucEnd <= aucStart) {
+    throw badRequest("auctionEndsAt must be after auctionStartsAt");
+  }
+
+  return auctionRepository.createRound({
+    title: title.trim(),
+    submissionStartsAt: subStart,
+    submissionEndsAt: subEnd,
+    auctionStartsAt: aucStart,
+    auctionEndsAt: aucEnd,
+  });
+}
+
+/** Get the current auction round and its status. */
+async function getCurrentRound(now = new Date()) {
+  const round = await auctionRepository.findCurrentRound();
+  if (!round) {
+    return {
+      round: null,
+      isSubmissionOpen: false,
+      isAuctionActive: false,
+    };
+  }
+
+  const isSubmissionOpen =
+    now >= new Date(round.submissionStartsAt) &&
+    now <= new Date(round.submissionEndsAt);
+
+  const isAuctionActive =
+    now >= new Date(round.auctionStartsAt) &&
+    now <= new Date(round.auctionEndsAt);
+
+  return {
+    round,
+    isSubmissionOpen,
+    isAuctionActive,
+  };
+}
+
+/** List all auction rounds for Marketing/Admin. */
+async function listRounds({ user }) {
+  if (!["MARKETING", "ADMIN"].includes(user?.role)) {
+    throw forbidden("only Marketing or Admin can list all auction rounds");
+  }
+  return auctionRepository.listRounds();
 }
 
 /** Marketing sets the open/close window for an approved auction. */
@@ -177,6 +293,8 @@ async function cancel({ user, auctionId }) {
   const auction = await loadAuction(auctionId);
   assertTransition(auction, "cancelled");
 
+  await auctionRepository.setProductStatus(auction.productId, "available");
+
   const updated = await auctionRepository.updateStatus(auctionId, {
     status: "cancelled",
   });
@@ -189,8 +307,8 @@ async function get(auctionId) {
   return maybeAdvance(auction);
 }
 
-async function list({ status, skip, take }) {
-  return auctionRepository.list({ status, skip, take });
+async function list({ status, skip, take, roundId }) {
+  return auctionRepository.list({ status, skip, take, roundId });
 }
 
 /**
@@ -237,8 +355,9 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
       throw badRequest(`bid must be at least ${minAmount}`);
     }
 
+    let createdBid;
     try {
-      return await auctionRepository.createBid(
+      createdBid = await auctionRepository.createBid(
         { auctionId, bidderId: user.id, amount: bidAmount, idempotencyKey },
         tx,
       );
@@ -250,6 +369,26 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
       }
       throw err;
     }
+
+    // Anti-sniping soft close: If a new bid is placed within 5 minutes of scheduledEndAt, extend by 5 minutes.
+    const EXTENSION_WINDOW_MS = 5 * 60 * 1000;
+    const EXTENSION_TIME_MS = 5 * 60 * 1000;
+
+    if (auction.scheduledEndAt) {
+      const remainingMs = auction.scheduledEndAt.getTime() - now.getTime();
+      if (remainingMs > 0 && remainingMs <= EXTENSION_WINDOW_MS) {
+        const newScheduledEndAt = new Date(
+          auction.scheduledEndAt.getTime() + EXTENSION_TIME_MS,
+        );
+        await tx.auctionItem.update({
+          where: { id: auctionId },
+          data: { scheduledEndAt: newScheduledEndAt },
+        });
+        await auctionCloseQueue.scheduleClose(auctionId, newScheduledEndAt);
+      }
+    }
+
+    return createdBid;
   });
 }
 
@@ -264,4 +403,7 @@ module.exports = {
   list,
   placeBid,
   maybeAdvance,
+  createRound,
+  getCurrentRound,
+  listRounds,
 };

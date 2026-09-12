@@ -10,6 +10,7 @@ router.get("/queue", requireAuth, ticketController.queue);
 
 router.post("/", requireAuth, ticketController.create);
 router.get("/:id", requireAuth, ticketController.getOne);
+router.get("/:id/conversation", requireAuth, ticketController.getConversation);
 router.post("/:id/messages", requireAuth, ticketController.reply);
 router.post("/:id/assign", requireAuth, ticketController.assign);
 router.patch("/:id/status", requireAuth, ticketController.changeStatus);

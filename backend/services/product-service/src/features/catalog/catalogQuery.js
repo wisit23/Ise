@@ -42,7 +42,7 @@ function buildCatalogWhere(filters, { PrismaClient } = {}) {
   const clauses = [
     filters.status
       ? PrismaClient.sql`status = ${filters.status}`
-      : PrismaClient.sql`status <> 'removed'`,
+      : PrismaClient.sql`status NOT IN ('removed', 'hidden')`,
   ];
   for (const field of FILTER_FIELDS) {
     if (filters[field])

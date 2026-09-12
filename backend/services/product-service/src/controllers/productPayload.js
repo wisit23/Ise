@@ -3,7 +3,6 @@ const SIMPLE_UPDATE_FIELDS = [
   "description",
   "price",
   "category",
-  "brand",
   "condition",
   "size",
   "location",
@@ -33,31 +32,29 @@ function normalizeTags(tags) {
 }
 
 function buildCreateProductData(sellerId, body) {
-  return {
+  const data = {
     sellerId,
     title: body.title,
     description: body.description || "",
     price: body.price,
     category: body.category,
-    brand:
-      typeof body.brand === "string" ? body.brand.trim() : body.brand || "",
     condition: body.condition || "Good",
     size: body.size || "Free size",
     tags: normalizeTags(body.tags),
     media: normalizeMedia(body.media),
     location: body.location || "",
   };
+  if (body.status === "auction") {
+    data.status = "auction";
+  }
+  return data;
 }
 
 function buildProductPatch(body) {
   const patch = {};
 
   for (const field of SIMPLE_UPDATE_FIELDS) {
-    if (body[field] !== undefined)
-      patch[field] =
-        field === "brand" && typeof body[field] === "string"
-          ? body[field].trim()
-          : body[field];
+    if (body[field] !== undefined) patch[field] = body[field];
   }
 
   if (body.tags !== undefined) patch.tags = normalizeTags(body.tags);

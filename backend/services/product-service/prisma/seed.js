@@ -314,11 +314,10 @@ const DEMO_VIDEOS = [
 // products.search_text/search_vector can't be native generated columns (the
 // expression needs array_to_string(), which is STABLE not IMMUTABLE — see
 // schema.prisma), so a trigger fills the same role: keep it auto-computed on
-// every change, including the searchable brand field, so q can find brands
-// regardless of which code path touches the row (API, this seed script, or
-// anything added later). `db push` doesn't run arbitrary SQL, so this — the
-// one hook that already runs on every container start — is where it's
-// (idempotently) installed.
+// every insert/update no matter which code path touches the row (API, this
+// seed script, or anything added later). `db push` doesn't run arbitrary
+// SQL, so this — the one hook that already runs on every container
+// start — is where it's (idempotently) installed.
 async function ensureSearchTextTrigger() {
   // Kept here as well as in schema.prisma so existing databases are upgraded
   // safely before the trigger starts writing the new full-text document.
@@ -330,14 +329,13 @@ async function ensureSearchTextTrigger() {
     CREATE OR REPLACE FUNCTION products_set_search_text() RETURNS trigger AS $$
     BEGIN
       NEW.search_text := concat_ws(' ',
-        NEW.title, NEW.description, NEW.category, NEW.brand, NEW.condition,
+        NEW.title, NEW.description, NEW.category, NEW.condition,
         NEW.location, NEW.size, array_to_string(NEW.tags, ' ')
       );
       NEW.search_vector :=
         setweight(to_tsvector('simple', coalesce(NEW.title, '')), 'A') ||
         setweight(to_tsvector('simple', coalesce(array_to_string(NEW.tags, ' '), '')), 'A') ||
         setweight(to_tsvector('simple', coalesce(NEW.category, '')), 'B') ||
-        setweight(to_tsvector('simple', coalesce(NEW.brand, '')), 'B') ||
         setweight(to_tsvector('simple', coalesce(NEW.description, '')), 'C') ||
         setweight(to_tsvector('simple', concat_ws(' ', NEW.condition, NEW.location, NEW.size)), 'D');
       RETURN NEW;
@@ -359,6 +357,45 @@ async function ensureSearchTextTrigger() {
   // the id's ON UPDATE CASCADE to photos/videos/product_videos for no reason.
   await prisma.$executeRaw`UPDATE products SET updated_at = updated_at;`;
 }
+
+const DEMO_ARTICLES = [
+  {
+    id: "art-01",
+    title: "5 วิธีดูแลเสื้อผ้ามือสอง ซักและถนอมอย่างไรให้เนื้อผ้าสวยทนเหมือนใหม่",
+    summary: "ไขข้อข้องใจคนรักแฟชั่นวินเทจ เคล็ดลับการทำความสะอาด ฆ่าเชื้อ และถนอมเส้นใยเสื้อผ้ามือสองให้สะอาด ปลอดภัย และคงรูปทรงสวยงามยาวนาน",
+    content: `การซื้อเสื้อผ้ามือสองนอกจากจะช่วยประหยัดเงินและได้ไอเทมที่มีเอกลักษณ์ไม่ซ้ำใครแล้ว ยังเป็นการช่วยลดขยะสิ่งทอและรักษาสิ่งแวดล้อมอีกด้วย แต่หลายคนอาจยังกังวลเรื่องความสะอาดและวิธีดูแลรักษา วันนี้ RE-LOOP รวบรวม 5 เคล็ดลับดูแลเสื้อผ้ามือสองมาฝากกันครับ\n\n### 1. เช็กป้าย Care Label ก่อนลงมือซักเสมอ\nก่อนนำเสื้อผ้ามือสองไปซัก ควรสังเกตป้ายแนะนำการดูแลรักษาที่ติดมากับตัวเสื้อ โดยเฉพาะสัญลักษณ์การซัก อุณหภูมิน้ำที่เหมาะสม และข้อห้ามในการรีด หากเป็นผ้าเนื้อละเอียด เช่น ผ้าไหม หรือผ้าวูล ควรส่งซักแห้งเพื่อป้องกันเนื้อผ้าหดตัว\n\n### 2. ซักทำความสะอาดและฆ่าเชื้อในครั้งแรก\nสำหรับเสื้อผ้าที่เพิ่งซื้อมา แนะนำให้แช่ด้วยน้ำยาฆ่าเชื้อสำหรับซักผ้าหรือผสมน้ำส้มสายชูเล็กน้อย (ประมาณ 1/2 ถ้วย) ในน้ำอุณหภูมิปกติประมาณ 15-20 นาทีก่อนซักตามปกติ เพื่อช่วยกำจัดกลิ่นอับ เชื้อแบคทีเรีย และสิ่งตกค้าง\n\n### 3. เลี่ยงน้ำร้อนจัดและการปั่นแรง\nเสื้อผ้ามือสองบางชิ้นอาจผ่านการใช้งานมานาน ทำให้เส้นใยมีความบอบบางมากกว่าผ้าใหม่ การใช้น้ำร้อนหรือการปั่นหมาดด้วยรอบสูงอาจทำให้ตะเข็บปริแตกหรือผ้าเสียรูปทรงได้ แนะนำให้ใส่ถุงถนอมผ้าและเลือกโหมดถนอมผ้า (Delicate Wash)\n\n### 4. ตากในที่ร่ม ลมโกรก ไม่ตากแดดจัด\nแสงแดดที่แรงเกินไปเป็นตัวการสำคัญที่ทำให้สีของเสื้อผ้าซีดจางและเส้นใยกรอบหักง่าย ควรตากในบริเวณที่มีลมถ่ายเทสะดวกและกลับด้านในออกเพื่อถนอมสีผ้าให้สดใสเสมอ\n\n### 5. เก็บรักษาในตู้ที่แห้งและโปร่ง\nแขวนเสื้อผ้าด้วยไม้แขวนเสื้อที่มีขนาดพอดีกับช่วงไหล่ เพื่อไม่ให้เสื้อผ้าเสียทรง และควรใส่ถุงดูดความชื้นในตู้เสื้อผ้าเพื่อป้องกันการเกิดเชื้อราและกลิ่นอับ`,
+    coverImage: "https://images.unsplash.com/photo-1582735689369-4fe89db7114c?w=1200&h=800&q=80&fit=crop",
+    category: "care",
+    status: "published",
+    authorId: "40000000-0000-0000-0000-000000000001",
+    authorName: "ฝ่ายการตลาด RE-LOOP",
+    publishedAt: new Date(),
+  },
+  {
+    id: "art-02",
+    title: "เทคนิค Mix & Match เสื้อผ้าวินเทจให้ดูโมเดิร์น ไม่ตกยุค",
+    summary: "ไอเดียการจับคู่เสื้อผ้ามือสองยุค 90s และ Y2K เข้ากับไอเทมยุคปัจจุบัน สร้างลุคสุดเท่ที่เป็นเอกลักษณ์ในงบประมาณที่ทุกคนจับต้องได้",
+    content: `เสน่ห์ของเสื้อผ้าวินเทจคือลวดลาย คัตติ้ง และเรื่องราวเฉพาะตัวที่หาไม่ได้ในเสื้อผ้า Fast Fashion สมัยใหม่ แต่ถ้าแต่งตัวด้วยไอเทมวินเทจทั้งตัวตั้งแต่หัวจรดเท้า บางครั้งอาจทำให้ดูเหมือนกำลังใส่ชุดคอสตูมย้อนยุค วันนี้เรามีทริคง่ายๆ ในการจับคู่เสื้อผ้าวินเทจให้ดูชิคและร่วมสมัยมาแนะนำครับ\n\n### 1. กฎทอง One Vintage Piece per Outfit\nสำหรับผู้เริ่มต้น แนะนำให้เลือกชิ้นวินเทจเป็น **Statement Piece** เพียงชิ้นเดียวในแต่ละลุค เช่น หากใส่แจ็คเก็ตยีนส์โอเวอร์ไซส์ยุค 90s ให้จับคู่กับเสื้อยืดสีพื้นเรียบๆ และกางเกงสแล็คทรงโมเดิร์น จะช่วยขับให้แจ็คเก็ตดูโดดเด่นโดยไม่ดูล้น\n\n### 2. เล่นกับสัดส่วน (Proportion Play)\nเสื้อผ้าวินเทจมักมีซิลูเอทที่น่าสนใจ เช่น ไหล่กว้าง ทรงหลวม หรือเอวสูง ลองจับคู่เสื้อเชิ้ตลายวินเทจทรงหลวมกับกางเกงขายาวทรงกระบอกตรงเข้ารูป หรือใส่เสื้อยืดวินเทจพอดีตัวกับกางเกงคาร์โก้ทรงหลวม เพื่อสร้างสมดุลของสัดส่วน\n\n### 3. เติมเต็มด้วยรองเท้าและเครื่องประดับร่วมสมัย\nรองเท้าผ้าใบมินิมอล แว่นตากันแดดทรงทันสมัย หรือกระเป๋าทรงเรขาคณิต จะช่วยดึงลุคโดยรวมให้ดูสดใหม่และเข้ากับยุคปัจจุบันทันที\n\n### 4. ช้อปอย่างมั่นใจบน RE-LOOP\nค้นหาเสื้อผ้าวินเทจและเสื้อผ้ามือสองที่คัดสภาพดีได้ง่ายๆ ผ่านระบบฟิลเตอร์ค้นหาตามสไตล์ และฟีเจอร์ปัดดู (Swipe) เพื่อเซฟลุคที่คุณชอบไว้ในตู้เสื้อผ้าออนไลน์ของคุณ!`,
+    coverImage: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&h=800&q=80&fit=crop",
+    category: "styling",
+    status: "published",
+    authorId: "40000000-0000-0000-0000-000000000001",
+    authorName: "ฝ่ายการตลาด RE-LOOP",
+    publishedAt: new Date(),
+  },
+  {
+    id: "art-03",
+    title: "Circular Fashion คืออะไร? ทำไมการซื้อเสื้อผ้ามือสองถึงช่วยกู้โลกได้จริง",
+    summary: "เจาะลึกวิกฤตขยะสิ่งทอและผลกระทบของ Fast Fashion พร้อมร่วมเป็นส่วนหนึ่งของโมเดลเศรษฐกิจหมุนเวียนเพื่อความยั่งยืนผ่านแพลตฟอร์ม RE-LOOP",
+    content: `คุณรู้หรือไม่ว่า อุตสาหกรรมแฟชั่นปล่อยก๊าซเรือนกระจกคิดเป็นเกือบ 10% ของการปล่อยก๊าซทั้งหมดของโลก และการผลิตเสื้อยืดคอตตอนเพียง 1 ตัว ต้องใช้น้ำมากถึง 2,700 ลิตร ซึ่งเพียงพอต่อการดื่มของมนุษย์คนหนึ่งได้นานถึงเกือบ 3 ปี!\n\n### วิกฤตการณ์ Fast Fashion และขยะสิ่งทอ\nวัฒนธรรมการซื้อไวทิ้งไวทำให้เสื้อผ้ามากกว่า 85% ถูกนำไปฝังกลบหรือเผาทำลายในแต่ละปี เสื้อผ้าบางตัวถูกสวมใส่เพียงไม่กี่ครั้งก่อนถูกลืมไว้ก้นตู้เสื้อผ้า\n\n### Circular Fashion: ปิดลูปเพื่อความยั่งยืน\n**Circular Fashion (แฟชั่นหมุนเวียน)** คือแนวคิดในการออกแบบ ผลิต และใช้งานเสื้อผ้าให้คงอยู่ในระบบเศรษฐกิจให้นานที่สุด โดยมีหัวใจสำคัญคือ:\n* **Reuse (ใช้ซ้ำ):** ส่งต่อเสื้อผ้าสภาพดีให้ผู้อื่นนำไปใส่ต่อ\n* **Repair (ซ่อมแซม):** บำรุงรักษาเสื้อผ้าที่มีตำหนิเล็กน้อยให้กลับมาใช้งานได้\n* **Recycle & Upcycle (แปรรูป):** นำเศษผ้าที่หมดอายุการใช้งานไปรีไซเคิลเป็นเส้นใยใหม่\n\n### ผลกระทบเชิงบวกจากการยืดอายุเสื้อผ้า\nผลการวิจัยระบุว่า **การยืดอายุการใช้งานของเสื้อผ้าออกไปเพียง 9 เดือน จะช่วยลด Carbon Footprint, ปริมาณการใช้น้ำ และขยะสิ่งทอได้มากถึง 20-30%**\n\n### มาร่วมหมุนเวียนแฟชั่นไปด้วยกันกับ RE-LOOP\nRE-LOOP ถูกสร้างขึ้นมาเพื่อเป็นศูนย์กลางการซื้อขายและแลกเปลี่ยนเสื้อผ้ามือสองที่โปร่งใส ปลอดภัย และใช้งานง่าย ให้คุณเปลี่ยนเสื้อผ้าล้นตู้เป็นรายได้ และค้นพบสไตล์ใหม่ในราคาที่คุ้มค่า มาร่วมสร้างอนาคตแฟชั่นที่ยั่งยืนไปพร้อมกันนะครับ!`,
+    coverImage: "https://images.unsplash.com/photo-1532453288672-3a27e9be9efd?w=1200&h=800&q=80&fit=crop",
+    category: "sustainability",
+    status: "published",
+    authorId: "40000000-0000-0000-0000-000000000001",
+    authorName: "ฝ่ายการตลาด RE-LOOP",
+    publishedAt: new Date(),
+  },
+];
 
 async function main() {
   await ensureSearchTextTrigger();
@@ -391,15 +428,40 @@ async function main() {
       create: product,
     });
   }
-  for (const video of DEMO_VIDEOS) {
-    await prisma.productVideo.upsert({
-      where: { id: video.id },
-      update: {},
-      create: video,
+  // Articles search_text trigger (ST-MKT-05 / UR-14 / FR-5.2.3)
+  await prisma.$executeRaw`
+    CREATE OR REPLACE FUNCTION articles_set_search_text() RETURNS trigger AS $$
+    BEGIN
+      NEW.search_text := concat_ws(' ',
+        NEW.title, coalesce(NEW.summary, ''), NEW.content, NEW.category, coalesce(NEW.author_name, '')
+      );
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `;
+  await prisma.$executeRaw`
+    CREATE OR REPLACE TRIGGER articles_search_text_trigger
+    BEFORE INSERT OR UPDATE ON articles
+    FOR EACH ROW EXECUTE FUNCTION articles_set_search_text();
+  `;
+
+  for (const article of DEMO_ARTICLES) {
+    const searchText = `${article.title} ${article.summary || ""} ${article.content} ${article.category} ${article.authorName}`.trim();
+    await prisma.article.upsert({
+      where: { id: article.id },
+      update: {
+        ...article,
+        searchText,
+      },
+      create: {
+        ...article,
+        searchText,
+      },
     });
   }
+
   console.log(
-    `[product-service] seeded ${CATEGORIES.length} categories, ${CONDITIONS.length} conditions, ${PRODUCTS.length} demo products across ${Object.keys(SELLER).length} stores, ${DEMO_VIDEOS.length} demo review clips`,
+    `[product-service] seeded ${CATEGORIES.length} categories, ${CONDITIONS.length} conditions, ${PRODUCTS.length} demo products across ${Object.keys(SELLER).length} stores, ${DEMO_VIDEOS.length} demo review clips, ${DEMO_ARTICLES.length} demo articles`,
   );
 }
 

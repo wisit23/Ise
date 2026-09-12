@@ -1,5 +1,6 @@
 import { Anuphan, Noto_Sans_Thai } from "next/font/google";
 import "./globals.css";
+import ChatSocketProvider from "../components/chat/ChatSocketProvider";
 
 /* Self-hosted by next/font at build time — no runtime request to Google, no
    FOUT, and Thai text renders identically on every OS instead of falling back
@@ -45,7 +46,13 @@ export default function RootLayout({ children }) {
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
         />
       </head>
-      <body className="font-sans">{children}</body>
+      {/* One chat socket for the whole session lives here rather than inside
+          any single page, so the NavBar badge and the inbox list stay live
+          on every route — not just while a chat room happens to be open.
+          See ChatSocketProvider's comment. */}
+      <body className="font-sans">
+        <ChatSocketProvider>{children}</ChatSocketProvider>
+      </body>
     </html>
   );
 }

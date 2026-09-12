@@ -30,6 +30,12 @@ const CLIENTS = [
       "backend/services/review-service/src/generated/prisma-client/index.js",
   },
   {
+    name: "chat-service",
+    schema: "backend/services/chat-service/prisma/schema.prisma",
+    output:
+      "backend/services/chat-service/src/generated/prisma-client/index.js",
+  },
+  {
     name: "support-service",
     schema: "backend/services/support-service/prisma/schema.prisma",
     output:

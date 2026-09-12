@@ -10,6 +10,7 @@ const SERVICES = {
   chat: process.env.CHAT_SERVICE_URL || "http://chat-service:3004",
   reviews: process.env.REVIEW_SERVICE_URL || "http://review-service:3005",
   support: process.env.SUPPORT_SERVICE_URL || "http://support-service:3006",
+  frontend: process.env.FRONTEND_SERVICE_URL || "http://frontend:3000",
 };
 
 // Routes that don't require a valid access token (register/login/refresh, public feed reads).
@@ -25,6 +26,7 @@ const PUBLIC_PATHS = [
   // schedule/bid all live on longer paths and stay gated by
   // product-service's own requireAuth.
   /^\/api\/products\/auctions\/[^/]+$/,
+  /^\/api\/products\/auctions\/rounds\/current$/,
   // Single-item browsing must stay open to guests; write/delete routes on the
   // same path are still gated by product-service's own requireAuth middleware.
   /^\/api\/products\/[^/]+$/,
@@ -39,6 +41,9 @@ const PUBLIC_PATHS = [
   // FAQ deflection (WF-10 step 2) must work for guests too; POST/PATCH on
   // this same path are still gated by support-service's own requireAuth.
   /^\/api\/support\/help(\/|$)/,
+  // Marketing & Community Articles (ST-MKT-05 / UR-14) must be browsable by guests;
+  // write/delete routes stay gated by product-service requireAuth/requireRole.
+  /^\/api\/products\/articles(\/|$)/,
 ];
 
 function isPublic(path) {
@@ -53,30 +58,31 @@ app.get("/health", (req, res) =>
 );
 
 app.use((req, res, next) => {
-  if (isPublic(req.path)) return next();
+  if (!req.path.startsWith("/api/")) {
+    return next();
+  }
 
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: "Missing bearer token" });
+
+  if (!token) {
+    if (isPublic(req.path)) return next();
+    return res.status(401).json({ error: "Missing bearer token" });
+  }
 
   try {
     const payload = verifyAccessToken(token);
     req.headers["x-user-id"] = payload.sub;
     req.headers["x-user-role"] = payload.role;
-    // Multi-role/permission claims (ADM-001) — fromGatewayHeaders reads these,
-    // so the gateway has to forward them or every permission check downstream
-    // would silently see an empty set. Both are ASCII-only by construction
-    // (role codes and permission slugs), so no encoding is needed here.
+    // Multi-role/permission claims (ADM-001)
     req.headers["x-user-roles"] = (payload.roles || []).join(",");
     req.headers["x-user-permissions"] = (payload.permissions || []).join(",");
-    // HTTP header values are Latin-1 only; displayName can be Thai (or any
-    // non-ASCII) text, which throws ERR_INVALID_CHAR in http-proxy if set
-    // raw. Encode here, decode in authMiddleware's fromGatewayHeaders.
     req.headers["x-user-display-name"] = encodeURIComponent(
       payload.displayName || "",
     );
     next();
   } catch {
+    if (isPublic(req.path)) return next();
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 });
@@ -115,12 +121,18 @@ app.use(
   "/api/orders",
   createProxyMiddleware({ target: SERVICES.orders, changeOrigin: true }),
 );
+// Handles regular HTTP requests to /api/chat/* only (REST endpoints) — the
+// WebSocket upgrade path (Socket.IO) is proxied separately in server.js's
+// own `server.on("upgrade", ...)` handler via a hand-rolled raw TCP pipe,
+// not through this middleware's `ws: true` option (that option was tried
+// and removed: http-proxy-middleware's upgrade handling corrupted the
+// response under concurrent WebSocket connections — see server.js's comment
+// for the full story).
 app.use(
   "/api/chat",
   createProxyMiddleware({
     target: SERVICES.chat,
     changeOrigin: true,
-    ws: true,
   }),
 );
 app.use(
@@ -130,6 +142,16 @@ app.use(
 app.use(
   "/api/support",
   createProxyMiddleware({ target: SERVICES.support, changeOrigin: true }),
+);
+
+// Fallback: proxy all web UI requests (pages, _next assets, favicon, etc.) to Frontend
+app.use(
+  "/",
+  createProxyMiddleware({
+    target: SERVICES.frontend,
+    changeOrigin: true,
+    ws: true,
+  }),
 );
 
 module.exports = app;

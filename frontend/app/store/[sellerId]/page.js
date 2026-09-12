@@ -10,6 +10,7 @@ import Pagination from "../../../components/Pagination";
 import { StarDisplay } from "../../../components/StarRating";
 import ReportModal from "../../../components/ReportModal";
 import ReviewMediaGallery from "../../../components/ReviewMediaGallery";
+import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import { apiFetch } from "../../../lib/api";
 import { getStoredUser } from "../../../lib/auth";
 
@@ -35,8 +36,10 @@ export default function StorePage() {
   const [reviewTotalPages, setReviewTotalPages] = useState(1);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [showReport, setShowReport] = useState(false);
+  const [user, setUser] = useState(undefined);
 
   useEffect(() => {
+    setUser(getStoredUser());
     apiFetch(`/api/auth/users/${sellerId}/public`)
       .then(setSeller)
       .catch(() => setSeller(null));
@@ -44,12 +47,26 @@ export default function StorePage() {
 
   useEffect(() => {
     setLoading(true);
+    const currentUser = getStoredUser();
+    const isOwner = currentUser?.id === sellerId;
+    const endpoint = isOwner
+      ? `/api/products/mine`
+      : `/api/products/by-seller/${sellerId}`;
+
     apiFetch(
-      `/api/products/by-seller/${sellerId}?page=${productPage}&limit=${PRODUCT_PAGE_SIZE}`,
+      `${endpoint}?page=${productPage}&limit=${PRODUCT_PAGE_SIZE}`,
     )
       .then((data) => {
-        setItems(data.items);
-        setProductTotal(data.total);
+        let itemsToDisplay = data.items;
+        // The 'mine' endpoint returns all statuses including sold and removed.
+        // For the store page, we only want to show available and hidden to the owner.
+        if (isOwner) {
+          itemsToDisplay = data.items.filter(
+            (p) => p.status === "available" || p.status === "hidden"
+          );
+        }
+        setItems(itemsToDisplay);
+        setProductTotal(isOwner ? itemsToDisplay.length : data.total);
         setProductTotalPages(data.totalPages);
       })
       .catch((err) => setError(err.message))
@@ -105,13 +122,27 @@ export default function StorePage() {
               </div>
             </div>
           </div>
-          {getStoredUser()?.id !== sellerId && (
-            <button
-              onClick={() => setShowReport(true)}
-              className="shrink-0 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
-            >
-              รายงานร้านค้านี้
-            </button>
+          {user !== undefined && user?.id !== sellerId && (
+            <div className="flex shrink-0 items-center gap-3">
+              {/* Chat is scoped to one PRODUCT conversation per pair this
+                  round (see chat-service's contextKey design) — there's no
+                  "message this seller in general" endpoint yet, so this
+                  opens/reopens the conversation about their first listed
+                  item. Hidden entirely for a store with no products, since
+                  there's nothing to anchor a conversation to. */}
+              {items.length > 0 && (
+                <ContactSellerButton
+                  productId={items[0].id}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              )}
+              <button
+                onClick={() => setShowReport(true)}
+                className="text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
+              >
+                รายงานร้านค้านี้
+              </button>
+            </div>
           )}
         </div>
       </section>

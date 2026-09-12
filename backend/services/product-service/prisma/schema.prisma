@@ -41,7 +41,6 @@ model Product {
   description          String    @default("")
   price                Int
   category             String
-  brand                String    @default("")
   condition            String    @default("Good")
   tags                 String[]
   location             String    @default("")
@@ -61,7 +60,7 @@ model Product {
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  // Denormalized concat of title/description/category/brand/condition/location/
+  // Denormalized concat of title/description/category/condition/location/
   // size/tags, kept in sync by a DB trigger (see prisma/seed.js — Postgres
   // can't use a native generated column here because array_to_string() is
   // STABLE, not IMMUTABLE). This is the one field search() matches against.
@@ -211,12 +210,30 @@ model AuctionItem {
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 
+  roundId           String?       @map("round_id")
+  round             AuctionRound? @relation(fields: [roundId], references: [id], onDelete: SetNull)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   bids    Bid[]   @relation("AuctionBids")
 
   @@index([sellerId])
   @@index([status])
+  @@index([roundId])
   @@map("auction_items")
+}
+
+model AuctionRound {
+  id                 String        @id @default(uuid())
+  title              String
+  submissionStartsAt DateTime      @map("submission_starts_at")
+  submissionEndsAt   DateTime      @map("submission_ends_at")
+  auctionStartsAt    DateTime      @map("auction_starts_at")
+  auctionEndsAt      DateTime      @map("auction_ends_at")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  auctions           AuctionItem[]
+
+  @@map("auction_rounds")
 }
 
 model Bid {
@@ -233,4 +250,34 @@ model Bid {
   @@index([auctionId, amount])
   @@index([bidderId])
   @@map("bids")
+}
+
+// Marketing Content & Community Articles (ST-MKT-05 / UR-14 / FR-5.2.3)
+model Article {
+  id          String        @id @default(uuid())
+  title       String
+  slug        String?       @unique
+  summary     String?       @db.Text
+  content     String        @db.Text
+  coverImage  String?       @map("cover_image")
+  category    String        @default("general")
+  status      ArticleStatus @default(draft)
+  authorId    String        @map("author_id")
+  authorName  String?       @map("author_name")
+  searchText  String        @default("") @map("search_text")
+  publishedAt DateTime?     @map("published_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([category])
+  @@index([status, category])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("articles")
+}
+
+enum ArticleStatus {
+  draft
+  published
+  archived
 }

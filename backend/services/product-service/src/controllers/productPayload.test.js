@@ -21,14 +21,12 @@ test("buildCreateProductData applies defaults and normalizes client arrays", () 
     ],
   });
 
-  assert.equal(data.brand, "");
   assert.deepEqual(data, {
     sellerId: "seller-1",
     title: "Denim jacket",
     description: "",
     price: 1200,
     category: "Jackets",
-    brand: "",
     condition: "Good",
     size: "Free size",
     tags: ["vintage", "denim"],
@@ -39,14 +37,6 @@ test("buildCreateProductData applies defaults and normalizes client arrays", () 
     ],
     location: "",
   });
-});
-
-test("trims brands on create and update while preserving empty defaults", () => {
-  assert.equal(
-    buildCreateProductData("seller-1", { brand: "  Nike  " }).brand,
-    "Nike",
-  );
-  assert.equal(buildProductPatch({ brand: "   " }).brand, "");
 });
 
 test("buildProductPatch includes only submitted fields", () => {
@@ -77,4 +67,15 @@ test("buildProductPatch preserves scalar values but ignores reservation status",
     condition: null,
     location: null,
   });
+});
+
+test("buildCreateProductData preserves status 'auction' if submitted", () => {
+  const data = buildCreateProductData("seller-1", {
+    title: "Vintage boots",
+    price: 3500,
+    category: "Shoes",
+    status: "auction",
+  });
+
+  assert.equal(data.status, "auction");
 });

@@ -11,6 +11,7 @@ const {
   buildProductPatch,
 } = require("./productPayload");
 const { parseCatalogFilters } = require("../features/catalog/catalogQuery");
+const sellerActivityClient = require("../services/sellerActivityClient");
 
 const MIN_MEDIA_COUNT = 4;
 const MAX_MEDIA_COUNT = 8;
@@ -23,8 +24,20 @@ function requireSellerRole(role) {
 
 /** ADMIN can list on a seller's behalf (moderation tooling) without having
  * gone through seller verification themselves. */
-function requireVerifiedSeller(role, kycVerified) {
-  if (role === "SELLER" && !kycVerified) {
+function requireVerifiedSeller(role, kycVerified, kycStatus) {
+  if (role !== "SELLER") return;
+
+  if (kycStatus === "EXPIRED") {
+    throw forbidden(
+      "your ID card has expired — please re-submit seller verification before listing",
+    );
+  }
+  if (kycStatus === "INACTIVE_EXPIRED") {
+    throw forbidden(
+      "your seller account has been inactive for over 1 year — please re-submit seller verification before listing",
+    );
+  }
+  if (!kycVerified) {
     throw forbidden(
       "seller account must complete identity verification before listing products",
     );
@@ -67,6 +80,7 @@ async function requireProductOwner(productId, sellerId, action) {
   if (product.sellerId !== sellerId) {
     throw forbidden(`only the seller can ${action} this listing`);
   }
+  return product;
 }
 
 async function feed(req, res, next) {
@@ -141,6 +155,30 @@ async function getOne(req, res, next) {
   try {
     const product = await productModel.findById(req.params.id);
     if (!product) throw notFound("product not found");
+    // Hidden products are invisible to buyers; the owner and admins can still
+    // load them (so the edit page works) but the status is exposed so the
+    // frontend can show a "currently hidden" badge.
+    if (product.status === "hidden") {
+      const requesterId = req.userId; // set by requireAuth; undefined for guests
+      if (requesterId !== product.sellerId && req.userRole !== "ADMIN") {
+        throw notFound("product not found");
+      }
+    }
+    res.json(product);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function toggleVisibility(req, res, next) {
+  try {
+    await requireProductOwner(req.params.id, req.userId, "hide/show");
+    const { visible } = req.body;
+    if (typeof visible !== "boolean") {
+      throw badRequest("visible (boolean) is required");
+    }
+    const product = await productModel.setVisibility(req.params.id, visible);
+    if (!product) throw notFound("product not found");
     res.json(product);
   } catch (err) {
     next(err);
@@ -150,9 +188,13 @@ async function getOne(req, res, next) {
 async function bySeller(req, res, next) {
   try {
     const pagination = parsePagination(req.query);
+    // If the requester is the owner of the store, show them their hidden products too.
+    const isOwner = req.userId && req.userId === req.params.sellerId;
+    console.log(`[bySeller] sellerId=${req.params.sellerId}, req.userId=${req.userId}, isOwner=${isOwner}`);
+    const allowedStatuses = isOwner ? ["available", "hidden"] : "available";
     const { items, total } = await productModel.listBySeller(
       req.params.sellerId,
-      { status: "available", skip: pagination.skip, take: pagination.take },
+      { status: allowedStatuses, skip: pagination.skip, take: pagination.take },
     );
     res.json(paginatedResponse(items, total, pagination));
   } catch (err) {
@@ -191,7 +233,7 @@ async function listFilterOptions(req, res, next) {
 async function create(req, res, next) {
   try {
     requireSellerRole(req.userRole);
-    requireVerifiedSeller(req.userRole, req.kycVerified);
+    requireVerifiedSeller(req.userRole, req.kycVerified, req.kycStatus);
     validateCreateRequest(req.body);
     requireValidMediaCount(req.body.media);
     await requireKnownCondition(req.body.condition);
@@ -200,6 +242,9 @@ async function create(req, res, next) {
     const product = await productModel.create(
       buildCreateProductData(req.userId, req.body),
     );
+    // Fire-and-forget: update lastActiveAt on the seller's profile so the
+    // daily inactivity job doesn't flag them if they've just listed something.
+    sellerActivityClient.recordActivity(req.userId);
     res.status(201).json(product);
   } catch (err) {
     next(err);
@@ -208,16 +253,24 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    await requireProductOwner(req.params.id, req.userId, "edit");
+    const product = await requireProductOwner(req.params.id, req.userId, "edit");
+    if (product.status === "auction") {
+      throw forbidden("cannot edit a product that is currently in an auction");
+    }
     await requireKnownCondition(req.body.condition);
     if (req.body.media !== undefined) requireValidMediaCount(req.body.media);
     if (req.body.category !== undefined) {
       await productModel.ensureCategory(req.body.category);
     }
 
-    res.json(
-      await productModel.update(req.params.id, buildProductPatch(req.body)),
+    const updated = await productModel.update(
+      req.params.id,
+      buildProductPatch(req.body),
     );
+    // Fire-and-forget: refreshes lastActiveAt so the inactivity job doesn't
+    // flag an active seller who edits rather than creates listings.
+    sellerActivityClient.recordActivity(req.userId);
+    res.json(updated);
   } catch (err) {
     next(err);
   }
@@ -225,7 +278,10 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    await requireProductOwner(req.params.id, req.userId, "remove");
+    const product = await requireProductOwner(req.params.id, req.userId, "remove");
+    if (product.status === "auction") {
+      throw forbidden("cannot remove a product that is currently in an auction");
+    }
     await productModel.remove(req.params.id);
     res.status(204).send();
   } catch (err) {
@@ -277,4 +333,5 @@ module.exports = {
   remove,
   mine,
   markStatusInternal,
+  toggleVisibility,
 };

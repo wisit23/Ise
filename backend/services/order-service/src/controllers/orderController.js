@@ -8,6 +8,7 @@ const {
 } = require("@reloop/shared");
 const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
+const chatClient = require("../services/chatClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
 
 async function create(req, res, next) {
@@ -116,6 +117,14 @@ async function updateStatus(req, res, next) {
       await productClient.setProductStatus(order.productId, "sold");
     }
 
+    // Best-effort — chatClient swallows its own errors internally (see its
+    // comment) so a chat-service outage can never fail this status update.
+    // Awaited anyway, not fire-and-forget: this is a low-traffic path
+    // (one call per status change, not per page view), and awaiting makes
+    // "the SYSTEM message exists by the time this request returns" an
+    // actual guarantee instead of a race a test would have to poll for.
+    await chatClient.notifyOrderStatusChanged(order, status);
+
     res.json(updated);
   } catch (err) {
     next(err);
@@ -194,6 +203,12 @@ async function createFromAuction(req, res, next) {
       );
     }
 
+    // Idempotency: if an order was already created for this auction (e.g. race between BullMQ worker and page visit), return it.
+    const existing = await orderModel.findByAuctionId(auctionId);
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
     const order = await orderModel.create({
       buyerId,
       sellerId,
@@ -207,6 +222,12 @@ async function createFromAuction(req, res, next) {
 
     res.status(201).json(order);
   } catch (err) {
+    if (err.code === "P2002") {
+      const existing = await orderModel.findByAuctionId(req.body.auctionId);
+      if (existing) {
+        return res.status(200).json(existing);
+      }
+    }
     next(err);
   }
 }

@@ -14,6 +14,7 @@ import Skeleton from "../../components/ui/Skeleton";
 import OrderLine from "../../components/OrderLine";
 import ReviewMediaUploader from "../../components/ReviewMediaUploader";
 import ReviewMediaGallery from "../../components/ReviewMediaGallery";
+import ContactSellerButton from "../../components/chat/ContactSellerButton";
 import { apiFetch, uploadDisputeEvidence } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -299,18 +300,43 @@ export default function OrdersPage() {
               >
                 <OrderLine
                   order={o}
+                  actions={
+                    <div className="flex items-center gap-2">
+                      <ContactSellerButton
+                        productId={o.productId}
+                        className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-panel disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                      {["pending", "pending_payment"].includes(o.status) && (
+                        <Link
+                          href="/cart"
+                          className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">
+                            shopping_cart_checkout
+                          </span>
+                          ไปชำระเงินที่ตะกร้า
+                        </Link>
+                      )}
+                    </div>
+                  }
                   status={
                     <span
                       className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
-                        STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
+                        o.auctionId &&
+                        ["pending", "pending_payment"].includes(o.status)
+                          ? "bg-amber-100 text-amber-800"
+                          : STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
                       }`}
                     >
-                      {STATUS_LABEL[o.status] || o.status}
+                      {o.auctionId &&
+                      ["pending", "pending_payment"].includes(o.status)
+                        ? "ชนะประมูล · รอชำระเงิน"
+                        : STATUS_LABEL[o.status] || o.status}
                     </span>
                   }
                   note={
                     <span className="text-xs text-ink-subtle">
-                      สั่งซื้อเมื่อ{" "}
+                      {o.auctionId ? "ชนะการประมูลเมื่อ " : "สั่งซื้อเมื่อ "}
                       {new Date(o.createdAt).toLocaleDateString("th-TH")}
                     </span>
                   }

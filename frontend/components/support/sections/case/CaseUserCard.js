@@ -30,6 +30,9 @@ export default function CaseUserCard({
   busy,
   onWarn,
   onBan,
+  warnLabel = "ตักเตือน",
+  banLabel = "แบนผู้ใช้นี้",
+  isRequester = false,
 }) {
   if (!userId) return null;
   const t = TONES[tone] ?? TONES.requester;
@@ -54,7 +57,7 @@ export default function CaseUserCard({
                 onClick={() => onWarn(userId)}
                 className="bg-amber-50 font-bold text-amber-700 hover:bg-amber-100 hover:text-amber-800"
               >
-                ตักเตือน
+                {warnLabel}
               </Button>
             )}
             {onBan && (
@@ -64,9 +67,13 @@ export default function CaseUserCard({
                 icon="block"
                 disabled={busy}
                 onClick={() => onBan(userId)}
-                className="bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
+                className={
+                  isRequester
+                    ? "border border-slate-200 bg-slate-100 text-xs font-semibold text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                    : "bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
+                }
               >
-                แบนผู้ใช้นี้
+                {banLabel}
               </Button>
             )}
           </div>
