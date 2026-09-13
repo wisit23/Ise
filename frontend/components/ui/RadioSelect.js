@@ -19,7 +19,7 @@ import React, { useState, useRef, useEffect, useId } from "react";
  * @param {string} [name] - Radio group name
  * @param {string} [placeholder] - Fallback placeholder text
  * @param {'panel'|'storefront'|'dark'} [variant='panel'] - Theme variant
- * @param {'sm'|'md'|'lg'} [size='md'] - Sizing preset
+ * @param {'xs'|'sm'|'md'|'lg'} [size='md'] - Sizing preset
  * @param {'auto'|'left'|'right'} [align='auto'] - Dropdown alignment (auto flips if near edge)
  * @param {boolean} [hoverToOpen=true] - Whether hovering opens the dropdown
  * @param {string} [className] - Wrapper class
@@ -180,27 +180,42 @@ export default function RadioSelect({
     }[variant] || variantStyles.form;
 
   // Size styles
-  const sizeStyles =
-    {
-      sm: {
-        trigger: "py-1.5 px-3 text-xs min-h-[34px] rounded-md",
-        menu: "p-1 rounded-lg text-xs mt-1.5",
-        option: "px-2.5 py-1.5 rounded-md text-xs gap-2",
-        arrow: "w-3.5 h-3.5",
-      },
-      md: {
-        trigger: "py-2 px-3 text-sm min-h-[38px] rounded-md",
-        menu: "p-1.5 rounded-lg text-sm mt-1.5",
-        option: "px-3 py-2 rounded-md text-sm gap-2.5",
-        arrow: "w-4 h-4",
-      },
-      lg: {
-        trigger: "py-2.5 px-4 text-sm font-medium min-h-[44px] rounded-md",
-        menu: "p-1.5 rounded-lg text-sm mt-2",
-        option: "px-3.5 py-2.5 rounded-md text-sm gap-3",
-        arrow: "w-4.5 h-4.5",
-      },
-    }[size] || sizeStyles.md;
+  const sizeStyles = {
+    xs: {
+      trigger: "py-1 px-2.5 text-xs min-h-[28px] rounded-md",
+      menu: "p-1 rounded-md text-xs mt-1",
+      option: "px-2 py-1 rounded-md text-xs gap-1.5",
+      arrow: "w-3 h-3 max-w-[12px] max-h-[12px]",
+      arrowPx: 12,
+    },
+    sm: {
+      trigger: "py-1.5 px-3 text-xs min-h-[34px] rounded-md",
+      menu: "p-1 rounded-lg text-xs mt-1.5",
+      option: "px-2.5 py-1.5 rounded-md text-xs gap-2",
+      arrow: "w-3.5 h-3.5 max-w-[14px] max-h-[14px]",
+      arrowPx: 14,
+    },
+    md: {
+      trigger: "py-2 px-3 text-sm min-h-[38px] rounded-md",
+      menu: "p-1.5 rounded-lg text-sm mt-1.5",
+      option: "px-3 py-2 rounded-md text-sm gap-2.5",
+      arrow: "w-4 h-4 max-w-[16px] max-h-[16px]",
+      arrowPx: 16,
+    },
+    lg: {
+      trigger: "py-2.5 px-4 text-sm font-medium min-h-[44px] rounded-md",
+      menu: "p-1.5 rounded-lg text-sm mt-2",
+      option: "px-3.5 py-2.5 rounded-md text-sm gap-3",
+      arrow: "w-4.5 h-4.5 max-w-[18px] max-h-[18px]",
+      arrowPx: 18,
+    },
+  }[size] || {
+    trigger: "py-2 px-3 text-sm min-h-[38px] rounded-md",
+    menu: "p-1.5 rounded-lg text-sm mt-1.5",
+    option: "px-3 py-2 rounded-md text-sm gap-2.5",
+    arrow: "w-4 h-4 max-w-[16px] max-h-[16px]",
+    arrowPx: 16,
+  };
 
   const containerClass =
     className.includes("w-") ||
@@ -261,11 +276,15 @@ export default function RadioSelect({
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 512 512"
+          width={sizeStyles.arrowPx || 16}
+          height={sizeStyles.arrowPx || 16}
           aria-hidden="true"
           className={`shrink-0 fill-current transition-transform duration-300 ease-out ${
             variantStyles.arrow
           } ${sizeStyles.arrow}`}
           style={{
+            width: sizeStyles.arrowPx || 16,
+            height: sizeStyles.arrowPx || 16,
             transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)",
           }}
         >

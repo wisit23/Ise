@@ -20,6 +20,7 @@ export default function SupportCaseDetails({
   actionBusy,
   actionError,
   onClose,
+  className = "",
 }) {
   const [internalNote, setInternalNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
@@ -55,12 +56,18 @@ export default function SupportCaseDetails({
       role="dialog"
       aria-modal="true"
       aria-labelledby="support-case-details-title"
-      className="relative z-10 flex h-full w-full max-w-[420px] shrink-0 flex-col overflow-y-auto border-l border-slate-200 bg-slate-50 shadow-2xl"
+      className={`relative z-10 flex h-full w-full max-w-[420px] shrink-0 flex-col overflow-y-auto border-l border-slate-200 bg-slate-50 shadow-2xl ${className}`}
     >
       {/* ── Header ── */}
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 bg-slate-50/70 sticky top-0 z-10">
-        <h3 id="support-case-details-title" className="flex items-center gap-1.5 text-sm font-bold text-slate-800">
-          <span className="material-symbols-outlined text-[17px] text-slate-500" aria-hidden="true">
+        <h3
+          id="support-case-details-title"
+          className="flex items-center gap-1.5 text-sm font-bold text-slate-800"
+        >
+          <span
+            className="material-symbols-outlined text-[17px] text-slate-500"
+            aria-hidden="true"
+          >
             description
           </span>
           รายละเอียดและการจัดการ
@@ -73,7 +80,12 @@ export default function SupportCaseDetails({
             title="ซ่อนแถบรายละเอียด"
             aria-label="ปิดรายละเอียด"
           >
-            <span className="material-symbols-outlined text-[18px]" aria-hidden="true">close</span>
+            <span
+              className="material-symbols-outlined text-[18px]"
+              aria-hidden="true"
+            >
+              close
+            </span>
           </button>
         )}
       </div>
@@ -84,16 +96,27 @@ export default function SupportCaseDetails({
         {/* ── Status & Priority Card ── */}
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-2xs">
           <div>
-            <p className="font-mono text-[11px] font-semibold text-indigo-600">{ticket.ticketNumber}</p>
-            <p className="mt-1 text-sm font-bold leading-snug text-slate-900">{ticket.subject}</p>
-            {ticket.description && <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-slate-600">{ticket.description}</p>}
+            <p className="font-mono text-[11px] font-semibold text-indigo-600">
+              {ticket.ticketNumber}
+            </p>
+            <p className="mt-1 text-sm font-bold leading-snug text-slate-900">
+              {ticket.subject}
+            </p>
+            {ticket.description && (
+              <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-slate-600">
+                {ticket.description}
+              </p>
+            )}
           </div>
           <div className="border-t border-slate-100" />
           <div className="flex items-center justify-between">
             <span className="text-slate-500 font-medium">สถานะ</span>
             <Badge
               text={TICKET_STATUS_LABEL[ticket.status] || ticket.status}
-              style={TICKET_STATUS_STYLE[ticket.status] || "bg-slate-100 text-slate-600"}
+              style={
+                TICKET_STATUS_STYLE[ticket.status] ||
+                "bg-slate-100 text-slate-600"
+              }
             />
           </div>
 
@@ -101,13 +124,17 @@ export default function SupportCaseDetails({
             <span className="text-slate-500 font-medium">ความเร่งด่วน</span>
             <Badge
               text={PRIORITY_LABEL[ticket.priority] || ticket.priority}
-              style={PRIORITY_STYLE[ticket.priority] || "bg-slate-100 text-slate-600"}
+              style={
+                PRIORITY_STYLE[ticket.priority] || "bg-slate-100 text-slate-600"
+              }
             />
           </div>
 
           <div className="flex items-center justify-between">
             <span className="text-slate-500 font-medium">หมวดหมู่</span>
-            <span className="font-semibold text-slate-800">{ticket.category}</span>
+            <span className="font-semibold text-slate-800">
+              {ticket.category}
+            </span>
           </div>
 
           <div className="flex items-center justify-between">
@@ -190,7 +217,8 @@ export default function SupportCaseDetails({
             <span className="material-symbols-outlined text-[15px] text-amber-600">
               lock
             </span>
-            โน้ตภายใน <span className="font-medium">({internalNotes.length})</span>
+            โน้ตภายใน{" "}
+            <span className="font-medium">({internalNotes.length})</span>
           </h4>
 
           {internalNotes.length > 0 && (
@@ -248,16 +276,17 @@ export default function SupportCaseDetails({
               </Button>
             )}
 
-            {nextStatuses.includes("IN_PROGRESS") && ticket.status !== "IN_PROGRESS" && (
-              <Button
-                variant="secondary"
-                onClick={() => onStatusChange("IN_PROGRESS")}
-                disabled={actionBusy}
-                className="w-full justify-center"
-              >
-                เริ่มดำเนินการ
-              </Button>
-            )}
+            {nextStatuses.includes("IN_PROGRESS") &&
+              ticket.status !== "IN_PROGRESS" && (
+                <Button
+                  variant="secondary"
+                  onClick={() => onStatusChange("IN_PROGRESS")}
+                  disabled={actionBusy}
+                  className="w-full justify-center"
+                >
+                  เริ่มดำเนินการ
+                </Button>
+              )}
 
             {nextStatuses.includes("RESOLVED") && (
               <Button

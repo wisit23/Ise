@@ -5,7 +5,7 @@ import {
   clearSession,
 } from "./auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 // Access tokens expire after 15 minutes (JWT_ACCESS_EXPIRES). Rather than
 // force a re-login every 15 minutes, a 401 triggers one silent refresh (via

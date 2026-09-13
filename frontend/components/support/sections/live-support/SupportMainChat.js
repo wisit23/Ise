@@ -8,11 +8,7 @@ import {
   useChatSocket,
   useChatSocketEvent,
 } from "../../../chat/ChatSocketProvider";
-import {
-  listMessages,
-  sendMessage,
-  markRead,
-} from "../../../../lib/chat";
+import { listMessages, sendMessage, markRead } from "../../../../lib/chat";
 import { uploadChatAttachment } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 import {
@@ -124,7 +120,10 @@ export default function SupportMainChat({
           ack.onlineUsers.forEach((uId) => {
             initialPresenceMapRef.current[uId] = true;
           });
-          if (ticket?.requesterId && ack.onlineUsers.includes(ticket.requesterId)) {
+          if (
+            ticket?.requesterId &&
+            ack.onlineUsers.includes(ticket.requesterId)
+          ) {
             setOtherOnline(true);
           }
         }
@@ -207,7 +206,9 @@ export default function SupportMainChat({
     try {
       const saved = await sendMessage(conversationId, text, token);
       setMessages((prev) =>
-        prev.map((m) => (m.id === optimisticId ? { ...saved, clientId: optimisticId } : m)),
+        prev.map((m) =>
+          m.id === optimisticId ? { ...saved, clientId: optimisticId } : m,
+        ),
       );
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
@@ -219,7 +220,12 @@ export default function SupportMainChat({
     if (!file || !conversationId) return;
     const token = tokenRef.current || getAccessToken();
     try {
-      const saved = await uploadChatAttachment(conversationId, file, caption, token);
+      const saved = await uploadChatAttachment(
+        conversationId,
+        file,
+        caption,
+        token,
+      );
       setMessages((prev) => mergeById(prev, [saved]));
       scrollToBottom(true);
     } catch {
@@ -253,12 +259,18 @@ export default function SupportMainChat({
 
   if (loadingTicket) {
     return (
-      <div className="flex flex-1 flex-col bg-white" aria-busy="true" aria-label="กำลังโหลดตั๋ว">
+      <div
+        className="flex flex-1 flex-col bg-white"
+        aria-busy="true"
+        aria-label="กำลังโหลดตั๋ว"
+      >
         <div className="h-[73px] animate-pulse border-b border-slate-200 px-4 py-3">
           <div className="h-5 w-48 rounded bg-slate-200" />
           <div className="mt-2 h-3 w-72 max-w-full rounded bg-slate-100" />
         </div>
-        <div className="flex flex-1 items-center justify-center text-sm text-slate-500">กำลังโหลดบทสนทนา...</div>
+        <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
+          กำลังโหลดบทสนทนา...
+        </div>
       </div>
     );
   }
@@ -271,7 +283,9 @@ export default function SupportMainChat({
             chat_bubble_outline
           </span>
         </div>
-        <h2 className="text-sm font-bold text-slate-700">ยังไม่ได้เลือกตั๋วสนทนา</h2>
+        <h2 className="text-sm font-bold text-slate-700">
+          ยังไม่ได้เลือกตั๋วสนทนา
+        </h2>
         <p className="mt-1 text-xs text-slate-500 max-w-sm">
           กรุณาเลือกตั๋วจากคิวด้านซ้ายมือเพื่อเริ่มการสนทนาสดกับลูกค้า
         </p>
@@ -282,14 +296,14 @@ export default function SupportMainChat({
   const isAssigned = Boolean(ticket.assigneeId);
 
   return (
-    <section className="flex flex-1 flex-col h-full overflow-hidden bg-white">
+    <section className="flex min-w-0 flex-1 flex-col h-full overflow-hidden bg-white">
       {/* ── Room Header ── */}
-      <div className="z-10 flex min-h-[72px] items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-3 py-3 shadow-xs backdrop-blur sm:px-5">
+      <div className="z-10 flex min-h-[72px] flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-3 sm:px-5">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={onBackToQueue}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 md:hidden"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 md:hidden"
             aria-label="กลับไปที่คิวงาน"
           >
             <span className="material-symbols-outlined">arrow_back</span>
@@ -305,13 +319,16 @@ export default function SupportMainChat({
           </div>
 
           <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <h2 className="truncate text-sm font-bold text-slate-900">
                 {ticket.subject}
               </h2>
               <Badge
                 text={TICKET_STATUS_LABEL[ticket.status] || ticket.status}
-                style={TICKET_STATUS_STYLE[ticket.status] || "bg-slate-100 text-slate-600"}
+                style={
+                  TICKET_STATUS_STYLE[ticket.status] ||
+                  "bg-slate-100 text-slate-600"
+                }
               />
             </div>
 
@@ -321,14 +338,15 @@ export default function SupportMainChat({
               </span>
               <span>•</span>
               <span className="truncate font-medium text-slate-600">
-                ผู้แจ้ง #{ticket.requesterId?.slice(0, 12)} · {otherOnline ? "ออนไลน์" : "ออฟไลน์"}
+                ผู้แจ้ง #{ticket.requesterId?.slice(0, 12)} ·{" "}
+                {otherOnline ? "ออนไลน์" : "ออฟไลน์"}
               </span>
             </div>
           </div>
         </div>
 
         {/* Action icons */}
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <Link
             href={`/support/tickets/${ticket.id}`}
             target="_blank"
@@ -346,7 +364,8 @@ export default function SupportMainChat({
             onClick={onToggleDetails}
             aria-expanded={showDetails}
             aria-controls="support-case-details"
-            className={`flex min-h-10 items-center gap-1 rounded-lg border px-3 text-xs font-semibold transition ${
+            aria-label="รายละเอียด Ticket"
+            className={`flex min-h-11 items-center gap-1 rounded-lg border px-3 text-xs font-semibold transition ${
               showDetails
                 ? "bg-slate-100 border-slate-300 text-slate-800"
                 : "border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -382,8 +401,15 @@ export default function SupportMainChat({
               ไม่มีห้องแชทสดสำหรับตั๋วนี้
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              ตั๋วนี้ถูกสร้างขึ้นก่อนระบบแชทสดจะเปิดใช้งาน
+              คุณยังเปิดรายละเอียดเพื่อตรวจสอบและจัดการ Ticket นี้ได้
             </p>
+            <button
+              type="button"
+              onClick={onToggleDetails}
+              className="mt-4 min-h-11 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+            >
+              เปิดรายละเอียด Ticket
+            </button>
           </div>
         ) : loading ? (
           <div className="flex flex-col justify-end space-y-4 py-8 animate-pulse">

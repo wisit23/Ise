@@ -17,30 +17,73 @@ const baseProps = {
 describe("SupportQueueSidebar", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("exposes accessible queue tabs and search controls", () => {
+  it("exposes accessible queue filters and search controls", () => {
     render(<SupportQueueSidebar {...baseProps} />);
 
-    expect(screen.getByRole("tab", { name: "งานของฉัน" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "งานของฉัน" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("textbox", { name: "ค้นหาตั๋ว" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "ค้นหาตั๋ว" }),
+    ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: "รอรับเรื่อง" }));
+    fireEvent.click(screen.getByRole("button", { name: "รอรับเรื่อง" }));
     expect(baseProps.onScopeChange).toHaveBeenCalledWith("unassigned");
   });
 
   it("shows a recoverable queue error", () => {
     render(
-      <SupportQueueSidebar
-        {...baseProps}
-        error="เซิร์ฟเวอร์ไม่ตอบสนอง"
-      />,
+      <SupportQueueSidebar {...baseProps} error="เซิร์ฟเวอร์ไม่ตอบสนอง" />,
     );
 
     expect(screen.getByText("โหลดคิวงานไม่สำเร็จ")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "ลองใหม่" }));
     expect(baseProps.onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a next action when the personal queue is empty", () => {
+    render(<SupportQueueSidebar {...baseProps} />);
+    fireEvent.click(screen.getByRole("button", { name: "ดูงานรอรับเรื่อง" }));
+    expect(baseProps.onScopeChange).toHaveBeenCalledWith("unassigned");
+  });
+
+  it("distinguishes no search results from an empty personal queue", () => {
+    render(<SupportQueueSidebar {...baseProps} search="missing" />);
+    expect(screen.getByText("ไม่พบ Ticket ที่ค้นหา")).toBeInTheDocument();
+    expect(screen.queryByText("ยังไม่มีงานในความดูแล")).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "ล้างคำค้นหา" })[1]);
+    expect(baseProps.onSearchChange).toHaveBeenCalledWith("");
+  });
+
+  it("labels stale results and suppresses urgency for a closed ticket", () => {
+    render(
+      <SupportQueueSidebar
+        {...baseProps}
+        error="offline"
+        tickets={[
+          {
+            id: "closed",
+            ticketNumber: "T-closed",
+            subject: "Closed case",
+            status: "CLOSED",
+            priority: "URGENT",
+            createdAt: "invalid",
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent("ขณะนี้แสดงข้อมูลเดิม");
+    expect(
+      screen.getByRole("button", { name: /Closed case/ }),
+    ).not.toHaveTextContent("ด่วนที่สุด");
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("announces loading instead of a misleading zero count", () => {
+    render(<SupportQueueSidebar {...baseProps} loading />);
+    expect(screen.getByRole("status")).toHaveTextContent("กำลังโหลดคิวงาน");
+    expect(screen.getByRole("button", { name: "รีเฟรชรายการ" })).toBeDisabled();
   });
 
   it("marks the selected ticket and opens it", () => {
