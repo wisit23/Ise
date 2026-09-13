@@ -66,7 +66,11 @@ test("KYC decisions enforce permission, version and single-decision rules", asyn
       },
     });
     application = await prisma.kycApplication.create({
-      data: { userId: seller.id, documentUrl: "https://example.test/doc.pdf" },
+      data: {
+        userId: seller.id,
+        storageKey: "kyc/test-doc.pdf",
+        fileType: "application/pdf",
+      },
     });
 
     const adminToken = tokenFor("admin-1", ["ADMIN"]);

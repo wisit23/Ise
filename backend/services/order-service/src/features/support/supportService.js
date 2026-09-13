@@ -1,7 +1,7 @@
 const { badRequest, forbidden } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 
-const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN"]);
+const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
 
 /**
  * CSS-002 (UR-17 / FR-4.1.1): bounded order lookup for support agents.

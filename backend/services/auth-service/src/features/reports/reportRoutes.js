@@ -55,6 +55,8 @@ router.post(
       const report = await reportService.reviewReport({
         reportId: req.params.id,
         adminId: req.userId,
+        staffId: req.userId,
+        requestId: req.id,
       });
       res.json(report);
     } catch (err) {
@@ -72,6 +74,7 @@ router.post(
       const report = await reportService.actionReport({
         reportId: req.params.id,
         adminId: req.userId,
+        staffId: req.userId,
         decision: req.body.decision,
         reason: req.body.reason,
         requestId: req.id,
@@ -92,6 +95,7 @@ router.post(
       const user = await reportService.suspendUser({
         targetId: req.params.id,
         adminId: req.userId,
+        staffId: req.userId,
         reason: req.body.reason,
         requestId: req.id,
       });
@@ -111,6 +115,7 @@ router.post(
       const user = await reportService.warnUser({
         targetId: req.params.id,
         adminId: req.userId,
+        staffId: req.userId,
         reason: req.body.reason,
         requestId: req.id,
       });
@@ -130,6 +135,7 @@ router.post(
       const user = await reportService.restoreUser({
         targetId: req.params.id,
         adminId: req.userId,
+        staffId: req.userId,
         reason: req.body.reason,
         requestId: req.id,
       });
@@ -148,6 +154,30 @@ router.get(
     try {
       const summary = await reportService.getUserSafetySummary(req.params.id);
       res.json(summary);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.get(
+  "/admin/users/:id",
+  requireAuth,
+  (req, res, next) => {
+    if (
+      req.permissions?.includes("admin:report:read") ||
+      req.permissions?.includes("support:case:read")
+    ) {
+      return next();
+    }
+    return res.status(403).json({
+      error: { code: "FORBIDDEN", message: "Forbidden", requestId: req.id },
+    });
+  },
+  async (req, res, next) => {
+    try {
+      const user = await reportService.getUserDetail(req.params.id);
+      res.json(user);
     } catch (err) {
       next(err);
     }

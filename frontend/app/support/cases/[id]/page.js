@@ -19,7 +19,10 @@ export default function DisputeCasePage() {
   const [deciding, setDeciding] = useState(false);
   const [openingEvidenceId, setOpeningEvidenceId] = useState(null);
 
-  const isAgent = user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
+  const isAgent =
+    user?.role === "CUSTOMER_SERVICE" ||
+    user?.role === "ADMIN" ||
+    user?.role === "TRUST_AND_SAFETY";
 
   function load() {
     const token = getAccessToken();

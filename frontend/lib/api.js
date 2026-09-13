@@ -161,7 +161,7 @@ export async function submitKyc(fields, documentFile, token) {
   for (const [key, value] of Object.entries(fields)) {
     if (value !== undefined && value !== null) form.append(key, value);
   }
-  form.append("document", documentFile);
+  if (documentFile) form.append("document", documentFile);
 
   let res = await fetch(`${API_URL}${path}`, {
     method: "POST",

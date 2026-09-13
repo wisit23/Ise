@@ -59,6 +59,9 @@ export default function SellerAuctionsPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [currentRoundInfo, setCurrentRoundInfo] = useState(null);
+  const [loadingRound, setLoadingRound] = useState(true);
+  const [kycStatus, setKycStatus] = useState(null);
 
   function load(currentUser) {
     setLoading(true);
@@ -68,6 +71,12 @@ export default function SellerAuctionsPage() {
       )
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+
+    setLoadingRound(true);
+    apiFetch("/api/products/auctions/rounds/current")
+      .then((data) => setCurrentRoundInfo(data))
+      .catch((err) => console.error("โหลดข้อมูลรอบประมูลไม่สำเร็จ:", err))
+      .finally(() => setLoadingRound(false));
   }
 
   useEffect(() => {
@@ -82,6 +91,9 @@ export default function SellerAuctionsPage() {
       setLoading(false);
       return;
     }
+    apiFetch("/api/auth/kyc/mine", { token })
+      .then((data) => setKycStatus(data.kycStatus))
+      .catch(() => setKycStatus("NONE"));
     load(storedUser);
   }, [router]);
 
@@ -106,6 +118,18 @@ export default function SellerAuctionsPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    if (kycStatus && kycStatus !== "VERIFIED") {
+      setError(
+        kycStatus === "PENDING"
+          ? "บัญชีอยู่ระหว่างการตรวจสอบเอกสารยืนยันตัวตน (KYC) กรุณารอการอนุมัติก่อนส่งสินค้าเข้าประมูล"
+          : "บัญชีผู้ขายต้องผ่านการยืนยันตัวตน (KYC) ก่อน จึงจะสามารถส่งสินค้าเข้าประมูลได้",
+      );
+      return;
+    }
+    if (!currentRoundInfo?.isSubmissionOpen) {
+      setError("ขณะนี้ไม่อยู่ในช่วงเวลาเปิดรับสินค้าเข้าประมูล หรือยังไม่มีรอบประมูล");
+      return;
+    }
     if (!form.title || !form.category) {
       setError("กรุณากรอกชื่อสินค้าและหมวดหมู่");
       return;
@@ -125,7 +149,8 @@ export default function SellerAuctionsPage() {
     try {
       // Same product as /sell creates, priced at the auction's starting
       // price so the listing still makes sense if it's ever viewed outside
-      // the auction flow.
+      // Created directly with status "auction" so it never appears
+      // in the general product feed, search, or seller storefront.
       const product = await apiFetch("/api/products", {
         method: "POST",
         body: {
@@ -138,6 +163,7 @@ export default function SellerAuctionsPage() {
           location: form.location,
           tags: form.tags,
           media: form.media,
+          status: "auction",
         },
       });
 
@@ -159,7 +185,7 @@ export default function SellerAuctionsPage() {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
-        <p className="mx-auto max-w-6xl px-4 py-10 text-gray-500">
+        <p className="mx-auto max-w-lg px-4 py-10 text-gray-500">
           กำลังโหลด...
         </p>
       </main>
@@ -168,14 +194,22 @@ export default function SellerAuctionsPage() {
 
   if (user?.role !== "SELLER") {
     return (
-      <main className="min-h-screen bg-gray-50">
+      <main className="flex min-h-screen flex-col bg-gray-50">
         <NavBar />
-        <p className="mx-auto max-w-6xl px-4 py-10 text-amber-800">
-          หน้านี้ใช้ได้เฉพาะบัญชีผู้ขายเท่านั้น
-        </p>
+        <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
+          <h1 className="mb-4 text-xl font-bold text-gray-900">
+            ลงสินค้าเข้าประมูล
+          </h1>
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            บัญชีนี้ไม่ใช่บัญชีผู้ขาย กรุณาเข้าสู่ระบบด้วยบัญชีผู้ขาย
+          </div>
+        </section>
+        <Footer />
       </main>
     );
   }
+
+  const isKycLocked = Boolean(kycStatus && kycStatus !== "VERIFIED");
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
@@ -189,10 +223,85 @@ export default function SellerAuctionsPage() {
           พร้อมตั้งราคาเริ่มต้นและเรทการเสนอราคา
         </p>
 
+        {/* แจ้งเตือนสถานะ KYC หากยังไม่ผ่านการยืนยันตัวตน */}
+        {isKycLocked && (
+          <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="font-semibold text-amber-900 text-base">
+                  ⚠️ บัญชีผู้ขายยังไม่ผ่านการยืนยันตัวตน (KYC)
+                </p>
+                <p className="mt-1 text-sm text-amber-800">
+                  {kycStatus === "PENDING"
+                    ? "เอกสารของคุณอยู่ระหว่างการตรวจสอบโดยเจ้าหน้าที่ กรุณารอผลอนุมัติก่อนลงสินค้าหรือส่งประมูล"
+                    : "ระบบกำหนดให้บัญชีผู้ขายต้องยืนยันตัวตนก่อน จึงจะสามารถลงขายหรือส่งสินค้าเข้าประมูลได้"}
+                </p>
+              </div>
+              <Link
+                href="/seller/onboarding"
+                className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 shrink-0"
+              >
+                ไปหน้ายืนยันตัวตน
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* ข้อมูลรอบการประมูลปัจจุบัน */}
+        {loadingRound ? (
+          <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500 animate-pulse">
+            กำลังตรวจสอบรอบการประมูล...
+          </div>
+        ) : currentRoundInfo?.isSubmissionOpen && currentRoundInfo?.round ? (
+          <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/70 p-5 shadow-sm">
+            <div className="flex items-center justify-between pb-3 border-b border-emerald-100">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                <span className="font-semibold text-emerald-900 text-base">
+                  รอบการประมูล: {currentRoundInfo.round.title}
+                </span>
+              </div>
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                🟢 กำลังเปิดรับสินค้า
+              </span>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-emerald-950">
+              <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
+                <div className="font-medium text-emerald-800 mb-1">📅 ช่วงเวลารับสินค้า</div>
+                <div className="text-xs text-gray-600">เริ่มรับ: {new Date(currentRoundInfo.round.submissionStartsAt).toLocaleString("th-TH")}</div>
+                <div className="text-xs font-semibold text-red-600">ปิดรับ: {new Date(currentRoundInfo.round.submissionEndsAt).toLocaleString("th-TH")}</div>
+              </div>
+              <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
+                <div className="font-medium text-emerald-800 mb-1">🔨 ช่วงเวลาประมูลจริง</div>
+                <div className="text-xs text-gray-600">เริ่มประมูล: {new Date(currentRoundInfo.round.auctionStartsAt).toLocaleString("th-TH")}</div>
+                <div className="text-xs text-gray-600">สิ้นสุด: {new Date(currentRoundInfo.round.auctionEndsAt).toLocaleString("th-TH")}</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
+            <div className="flex items-center gap-2 text-amber-900 font-semibold text-base mb-2">
+              <span>🔒 ขณะนี้ไม่มีรอบเปิดรับสินค้าเข้าประมูล หรือหมดเวลาเปิดรับแล้ว</span>
+            </div>
+            <p className="text-sm text-amber-800 leading-relaxed">
+              ผู้ขายจะสามารถส่งสินค้าเข้าประมูลได้เฉพาะในช่วงเวลาที่ทีมการตลาดเปิดรอบรับสมัครเท่านั้น
+              {currentRoundInfo?.round && (
+                <span className="block mt-1 text-xs text-amber-700">
+                  (รอบล่าสุด &ldquo;{currentRoundInfo.round.title}&rdquo; ปิดรับเมื่อ {new Date(currentRoundInfo.round.submissionEndsAt).toLocaleString("th-TH")})
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+
         <form
           onSubmit={handleSubmit}
-          className="flex flex-col gap-5 rounded-lg border border-gray-200 bg-white p-6"
+          className={`flex flex-col gap-5 rounded-lg border border-gray-200 bg-white p-6 ${
+            !currentRoundInfo?.isSubmissionOpen || isKycLocked ? "opacity-75 bg-gray-50/50" : ""
+          }`}
         >
+          <fieldset disabled={!currentRoundInfo?.isSubmissionOpen || isKycLocked || submitting} className="flex flex-col gap-5">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
               รูปภาพ / วิดีโอสินค้า
@@ -328,14 +437,19 @@ export default function SellerAuctionsPage() {
               />
             </div>
           </div>
+          </fieldset>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
-            disabled={submitting}
-            className="rounded-md bg-emerald-600 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            disabled={submitting || !currentRoundInfo?.isSubmissionOpen}
+            className="rounded-md bg-emerald-600 py-2.5 font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? "กำลังส่งเข้าประมูล..." : "ลงสินค้าเข้าประมูล"}
+            {!currentRoundInfo?.isSubmissionOpen
+              ? "ไม่อยู่ในช่วงเปิดรับสินค้าเข้าประมูล"
+              : submitting
+                ? "กำลังส่งเข้าประมูล..."
+                : "ลงสินค้าเข้าประมูล"}
           </button>
         </form>
 

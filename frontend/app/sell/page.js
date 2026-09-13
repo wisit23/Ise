@@ -127,14 +127,14 @@ export default function SellPage() {
         <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
           <h1 className="mb-4 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
           <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            บัญชีนี้เป็นบัญชีผู้ซื้อ ลงขายสินค้าไม่ได้ —
-            ต้องสมัครด้วยบัญชีผู้ขายก่อน
+            บัญชีนี้ยังไม่ได้เปิดร้านค้า —
+            ต้องยืนยันตัวตนผู้ขายก่อนจึงจะลงขายสินค้าได้
           </div>
           <Link
-            href="/register"
+            href="/seller/onboarding"
             className="mt-4 inline-block rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
           >
-            สมัครบัญชีผู้ขาย
+            ยืนยันตัวตนเพื่อเปิดร้านค้า
           </Link>
         </section>
         <Footer />

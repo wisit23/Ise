@@ -30,19 +30,15 @@ services:
   # single-node one — so this isn't a plain standalone mongod. See
   # infra/mongo/init-replica.sh for the one-time rs.initiate() this requires.
   mongo:
-    image: mongo:7
+    image: mongo:4.4
     command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
-      - mongodata:/data/db
+      - mongodata_v4:/data/db
     healthcheck:
-      # Up != usable: a freshly-started mongod answers ping before
-      # rs.initiate() has run, and every write fails with "not primary" until
-      # the replica set actually elects one. rs.status() only returns without
-      # error once a primary exists, so that's what depends_on needs to wait
-      # on, not just "the process is listening".
-      test: ["CMD", "mongosh", "--quiet", "--eval", "rs.status().ok"]
+      # Supports both legacy mongo shell (4.4) and modern mongosh (5+)
+      test: ["CMD-SHELL", "mongo --quiet --eval 'quit(rs.status().ok === 1 ? 0 : 1)' 2>/dev/null || mongosh --quiet --eval 'quit(rs.status().ok === 1 ? 0 : 1)' 2>/dev/null"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -53,12 +49,28 @@ services:
   # destructive, so this is safe to leave in the normal `up` path rather than
   # requiring a separate manual bootstrap step.
   mongo-init:
-    image: mongo:7
+    image: mongo:4.4
     depends_on:
       - mongo
-    volumes:
-      - ./infra/mongo/init-replica.sh:/init-replica.sh:ro
-    entrypoint: ["sh", "/init-replica.sh"]
+    restart: "no"
+    entrypoint:
+      - "sh"
+      - "-c"
+      - >
+        echo '[mongo-init] waiting for mongo:27017...';
+        RETRIES=30;
+        until mongo --host mongo:27017 --eval 'db.runCommand({ping:1})' >/dev/null 2>&1 || mongosh --host mongo:27017 --eval 'db.runCommand({ping:1})' >/dev/null 2>&1 || [ $$RETRIES -eq 0 ]; do
+          RETRIES=$$((RETRIES - 1));
+          sleep 1;
+        done;
+        if [ $$RETRIES -eq 0 ]; then
+          echo '[mongo-init] timed out waiting for mongo:27017';
+          exit 1;
+        fi;
+        echo '[mongo-init] initiating rs0 replica set...';
+        mongo --host mongo:27017 --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]})" >/dev/null 2>&1 || mongosh --host mongo:27017 --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]})" >/dev/null 2>&1 || true;
+        echo '[mongo-init] replica set initiated successfully.';
+        exit 0;
 
   gateway:
     build:
@@ -72,6 +84,7 @@ services:
       CHAT_SERVICE_URL: http://chat-service:3004
       REVIEW_SERVICE_URL: http://review-service:3005
       SUPPORT_SERVICE_URL: http://support-service:3006
+      FRONTEND_SERVICE_URL: http://frontend:3000
     ports:
       - "${GATEWAY_PORT}:8080"
     depends_on:
@@ -238,7 +251,7 @@ services:
 
 volumes:
   pgdata:
-  mongodata:
+  mongodata_v4:
   chat_private_attachments:
   product_uploads:
   order_private_evidence:

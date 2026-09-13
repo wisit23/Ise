@@ -15,16 +15,70 @@ const prisma = require("../../models/prismaClient");
 const registry = {
   SUSPEND_USER: {
     permission: "admin:user:suspend",
-    async preview({ id }) {
+    async preview({ id, adminId, staffId }) {
+      const actorId = staffId || adminId;
       const user = await prisma.user.findUnique({ where: { id } });
       if (!user) return { ok: false, reason: "user not found" };
+      if (id === actorId) {
+        return { ok: false, reason: "staff cannot suspend themselves" };
+      }
       if (user.status === "SUSPENDED") {
         return { ok: false, reason: "user is already suspended" };
       }
       return { ok: true };
     },
-    async execute({ id, reason, adminId }) {
-      return reportService.suspendUser({ targetId: id, adminId, reason });
+    async execute({ id, reason, adminId, staffId, requestId }) {
+      const actorId = staffId || adminId;
+      return reportService.suspendUser({
+        targetId: id,
+        adminId: actorId,
+        staffId: actorId,
+        reason,
+        requestId,
+      });
+    },
+  },
+  WARN_USER: {
+    permission: "admin:user:suspend",
+    async preview({ id, adminId, staffId }) {
+      const actorId = staffId || adminId;
+      const user = await prisma.user.findUnique({ where: { id } });
+      if (!user) return { ok: false, reason: "user not found" };
+      if (id === actorId) {
+        return { ok: false, reason: "staff cannot warn themselves" };
+      }
+      return { ok: true };
+    },
+    async execute({ id, reason, adminId, staffId, requestId }) {
+      const actorId = staffId || adminId;
+      return reportService.warnUser({
+        targetId: id,
+        adminId: actorId,
+        staffId: actorId,
+        reason,
+        requestId,
+      });
+    },
+  },
+  RESTORE_USER: {
+    permission: "admin:user:suspend",
+    async preview({ id }) {
+      const user = await prisma.user.findUnique({ where: { id } });
+      if (!user) return { ok: false, reason: "user not found" };
+      if (user.status !== "SUSPENDED") {
+        return { ok: false, reason: "user is not suspended" };
+      }
+      return { ok: true };
+    },
+    async execute({ id, reason, adminId, staffId, requestId }) {
+      const actorId = staffId || adminId;
+      return reportService.restoreUser({
+        targetId: id,
+        adminId: actorId,
+        staffId: actorId,
+        reason,
+        requestId,
+      });
     },
   },
 };

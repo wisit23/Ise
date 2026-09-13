@@ -19,7 +19,8 @@ const UNREAD_POLL_INTERVAL_MS = 15000;
 const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
   SELLER: "ผู้ขาย",
-  ADMIN: "แอดมิน",
+  ADMIN: "Trust and Safety",
+  TRUST_AND_SAFETY: "Trust and Safety",
   MARKETING: "การตลาด",
   CUSTOMER_SERVICE: "ฝ่ายบริการลูกค้า",
   EXECUTIVE: "ผู้บริหาร",
@@ -33,10 +34,12 @@ const ROLE_LABEL = {
 const DISCOVERY_LINKS = [
   { href: "/swipe", label: "ปัดดู", icon: "swipe" },
   { href: "/auctions", label: "ประมูล", icon: "gavel" },
+  { href: "/articles", label: "บทความ", icon: "menu_book" },
 ];
 
 export default function NavBar() {
   const [user, setUser] = useState(null);
+  const [kycStatus, setKycStatus] = useState(null);
   const [cartCount, setCartCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [q, setQ] = useState("");
@@ -51,6 +54,13 @@ export default function NavBar() {
 
     const token = getAccessToken();
     if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setKycStatus(payload.kycStatus || null);
+      } catch {
+        // ignore malformed token payload
+      }
+
       apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
         .then((data) => setCartCount(data.total))
         .catch((err) =>
@@ -173,11 +183,13 @@ export default function NavBar() {
       : "/products";
   }
 
-  const isSeller = user?.role === "SELLER";
+  const isSeller = user?.role === "SELLER" && kycStatus === "VERIFIED";
   const isExecutive = user?.role === "EXECUTIVE";
   const isMarketing = user?.role === "MARKETING";
   const isSupportAgent =
-    user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
+    user?.role === "CUSTOMER_SERVICE" ||
+    user?.role === "ADMIN" ||
+    user?.role === "TRUST_AND_SAFETY";
   // Every one of these is a role someone can hold *in addition to* being a
   // buyer on this same account — the header never assumes a visitor is only
   // one thing, which is why these sit in their own labelled group instead of
@@ -349,7 +361,9 @@ export default function NavBar() {
                 aria-expanded={menuOpen}
                 className="focus-ring flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-transparent transition hover:ring-brand-200"
               >
-                {user.firstName?.[0] || "?"}
+                {user.role === "ADMIN" || user.role === "TRUST_AND_SAFETY"
+                  ? "T"
+                  : user.firstName?.[0] || "?"}
               </button>
 
               {menuOpen && (
@@ -358,12 +372,20 @@ export default function NavBar() {
                   className="animate-dropdown-in absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-line bg-white py-2 shadow-lg"
                 >
                   <div className="border-b border-line px-4 py-3">
-                    <p className="truncate text-sm font-medium text-gray-900">
-                      {user.firstName} {user.lastName}
-                    </p>
-                    <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
-                      {ROLE_LABEL[user.role] || user.role}
-                    </span>
+                    {user.role === "ADMIN" || user.role === "TRUST_AND_SAFETY" ? (
+                      <p className="truncate text-sm font-semibold text-gray-900">
+                        Trust and Safety
+                      </p>
+                    ) : (
+                      <>
+                        <p className="truncate text-sm font-medium text-gray-900">
+                          {user.firstName} {user.lastName}
+                        </p>
+                        <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
+                          {ROLE_LABEL[user.role] || user.role}
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   {/* Work links live in their own labelled section rather

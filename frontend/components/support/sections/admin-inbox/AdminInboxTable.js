@@ -43,10 +43,36 @@ export default function AdminInboxTable({
         "font-mono text-[13px] font-semibold tracking-tight text-slate-500",
     },
     {
-      key: "requesterId",
-      header: "รหัสลูกค้า (ID)",
-      className: "text-sm font-medium text-slate-700",
-      render: (t) => t.requesterId?.slice(0, 12) ?? "—",
+      key: "parties",
+      header: "คู่กรณี / ผู้แจ้ง",
+      className: "text-xs font-medium",
+      render: (t) => (
+        <div className="flex flex-col gap-0.5">
+          {t.targetId ? (
+            <span
+              className="font-semibold text-orange-700"
+              title={`คู่กรณี: ${t.targetId}`}
+            >
+              <span className="mr-1 text-[10px] font-bold uppercase text-orange-500">
+                คู่กรณี:
+              </span>
+              <span className="font-mono">{t.targetId.slice(0, 8)}...</span>
+            </span>
+          ) : (
+            <span className="text-[11px] italic text-slate-400">
+              คู่กรณี: ไม่ระบุ
+            </span>
+          )}
+          <span className="text-slate-500" title={`ผู้แจ้ง: ${t.requesterId}`}>
+            <span className="mr-1 text-[10px] font-medium text-slate-400">
+              ผู้แจ้ง:
+            </span>
+            <span className="font-mono">
+              {t.requesterId ? `${t.requesterId.slice(0, 8)}...` : "—"}
+            </span>
+          </span>
+        </div>
+      ),
     },
     {
       key: "subject",

@@ -102,14 +102,14 @@ export default function UploadVideoPage() {
             อัปโหลดคลิปรีวิว
           </h1>
           <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            บัญชีนี้เป็นบัญชีผู้ซื้อ อัปโหลดคลิปรีวิวไม่ได้ —
-            ต้องสมัครด้วยบัญชีผู้ขายก่อน
+            บัญชีนี้ยังไม่ได้เปิดร้านค้า อัปโหลดคลิปรีวิวไม่ได้ —
+            ต้องยืนยันตัวตนผู้ขายก่อน
           </div>
           <Link
-            href="/register"
+            href="/seller/onboarding"
             className="mt-4 inline-block rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
           >
-            สมัครบัญชีผู้ขาย
+            ยืนยันตัวตนเพื่อเปิดร้านค้า
           </Link>
         </section>
         <Footer />

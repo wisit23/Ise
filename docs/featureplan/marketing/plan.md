@@ -145,19 +145,25 @@ router.post(
 
 ### Task MKT-004: Extended Segmentation and Content
 
+**Part A: Knowledge Base & Educational Articles System (UR-14 / FR-5.2.3 / ST-MKT-05) [COMPLETED]**
+- Model: `Article` in `reloop_product` with `ArticleStatus` (`draft`, `published`, `archived`)
+- Search: PostgreSQL `pg_trgm` GIN Trigram index + `GREATEST(word_similarity(q, search_text), similarity(q, search_text))` + `ILIKE` fallback (baseline search algorithm matching `MOCK-TRADE-011`)
+- APIs: Public `GET /api/products/articles`, `GET /:id` / Marketing `GET /marketing/all`, `POST /`, `PUT /:id`, `DELETE /:id`
+- UI: Public `/articles`, `/articles/[id]`, Navbar discovery link, Marketing dashboard tab `ArticlesSection` in `/marketing`
+- Status: Completed, verified with Jest tests (41/41 passing) and Next.js static build (24/24 pages)
+
+**Part B: Buyer Segmentation Rules (UR-13 / FR-5.1.4)**
 **Files:**
 
 - Create: `backend/services/product-service/src/features/segments/`
-- Create: `backend/services/product-service/src/features/content/`
 - Modify: `backend/services/product-service/prisma/schema.prisma`
-- Create: `frontend/app/marketing/content/page.js`
 - Test: `backend/services/product-service/src/features/segments/segmentRule.test.js`
 
-**Interfaces:** Produces deterministic `matchesSegment(profile, rule)` and versioned content publish
+**Interfaces:** Produces deterministic `matchesSegment(profile, rule)`
 
-- [ ] **Step 1: Write failing segment rule, empty-result and content-version tests**
+- [ ] **Step 1: Write failing segment rule, empty-result tests**
 - [ ] **Step 2: Run tests; confirm modules absent**
-- [ ] **Step 3: Implement deterministic fields and draft→published content**
+- [ ] **Step 3: Implement deterministic fields**
 
 ```js
 const SEGMENT_FIELDS = ["favoriteCategory", "preferredSize", "styleTag"];
@@ -170,8 +176,9 @@ function matchesSegment(profile, rule) {
 }
 ```
 
-- [ ] **Step 4: Verify empty segment, stale content version, publish role and persisted result**
-- [ ] **Step 5: Update docs and commit `feat(marketing): add segmentation and content`**
+- [ ] **Step 4: Verify empty segment, filter evaluation and persisted result**
+- [ ] **Step 5: Update docs and commit `feat(marketing): add segmentation`**
+
 
 ### Task MKT-005: Extended Auction and Swipe Contracts
 

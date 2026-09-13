@@ -32,7 +32,7 @@ function normalizeTags(tags) {
 }
 
 function buildCreateProductData(sellerId, body) {
-  return {
+  const data = {
     sellerId,
     title: body.title,
     description: body.description || "",
@@ -44,6 +44,10 @@ function buildCreateProductData(sellerId, body) {
     media: normalizeMedia(body.media),
     location: body.location || "",
   };
+  if (body.status === "auction") {
+    data.status = "auction";
+  }
+  return data;
 }
 
 function buildProductPatch(body) {

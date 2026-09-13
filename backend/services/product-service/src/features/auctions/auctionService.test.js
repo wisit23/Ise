@@ -11,6 +11,15 @@ const service = require("./auctionService");
 beforeEach((t) => {
   t.mock.method(auctionCloseQueue, "scheduleClose", async () => {});
   t.mock.method(auctionCloseQueue, "cancelClose", async () => {});
+  t.mock.method(repository, "setProductStatus", async () => {});
+  t.mock.method(repository, "findActiveSubmissionRound", async () => ({
+    id: "round-1",
+    title: "Round 1",
+    submissionStartsAt: new Date(Date.now() - 3600000),
+    submissionEndsAt: new Date(Date.now() + 3600000),
+    auctionStartsAt: new Date(Date.now() + 7200000),
+    auctionEndsAt: new Date(Date.now() + 14400000),
+  }));
 });
 
 test("canTransition allows only the documented lifecycle edges", () => {
@@ -93,13 +102,34 @@ test("submit creates a pending_approval auction for the owning seller", async (t
 
   assert.equal(auction.status, "pending_approval");
   assert.equal(auction.sellerId, "seller-1");
+  assert.equal(auction.roundId, "round-1");
 });
 
-test("approve rejects a non-Admin caller", async () => {
+test("approve rejects a non-Marketing/Admin caller", async () => {
   await assert.rejects(
-    service.approve({ user: { id: "u1", role: "MARKETING" }, auctionId: "a1" }),
+    service.approve({ user: { id: "u1", role: "BUYER" }, auctionId: "a1" }),
     (err) => err.status === 403,
   );
+});
+
+test("approve allows a Marketing caller and transitions to scheduled if round dates exist", async (t) => {
+  t.mock.method(repository, "findById", async () => ({
+    id: "a1",
+    status: "pending_approval",
+    scheduledStartAt: new Date(Date.now() + 7200000),
+    scheduledEndAt: new Date(Date.now() + 14400000),
+  }));
+  t.mock.method(repository, "updateStatus", async (id, data) => ({
+    id,
+    ...data,
+  }));
+
+  const res = await service.approve({
+    user: { id: "mkt-1", role: "MARKETING" },
+    auctionId: "a1",
+  });
+  assert.equal(res.status, "scheduled");
+  assert.equal(res.approvedBy, "mkt-1");
 });
 
 test("approve rejects moving out of a non-pending_approval state", async (t) => {
@@ -329,4 +359,306 @@ test("closing an auction with no bids never calls order-service", async (t) => {
   assert.equal(auction.status, "closed");
   assert.equal(auction.winningBidId, null);
   assert.equal(called, false);
+});
+
+test("submit transitions available product to 'auction' status", async (t) => {
+  let updatedStatus = null;
+  t.mock.method(repository, "findProductOwner", async () => ({
+    id: "p1",
+    sellerId: "seller-1",
+    status: "available",
+  }));
+  t.mock.method(repository, "setProductStatus", async (productId, status) => {
+    updatedStatus = status;
+  });
+  t.mock.method(repository, "create", async (data) => ({
+    id: "auction-1",
+    ...data,
+  }));
+
+  await service.submit({
+    user: { id: "seller-1", role: "SELLER" },
+    input: { productId: "p1", startingPrice: 100, bidIncrement: 10 },
+  });
+
+  assert.equal(updatedStatus, "auction");
+});
+
+test("submit accepts a product already created with 'auction' status without re-setting", async (t) => {
+  let setCalled = false;
+  t.mock.method(repository, "findProductOwner", async () => ({
+    id: "p1",
+    sellerId: "seller-1",
+    status: "auction",
+  }));
+  t.mock.method(repository, "setProductStatus", async () => {
+    setCalled = true;
+  });
+  t.mock.method(repository, "create", async (data) => ({
+    id: "auction-1",
+    ...data,
+  }));
+
+  const auction = await service.submit({
+    user: { id: "seller-1", role: "SELLER" },
+    input: { productId: "p1", startingPrice: 100, bidIncrement: 10 },
+  });
+
+  assert.equal(auction.status, "pending_approval");
+  assert.equal(setCalled, false);
+});
+
+test("reject resets product status back to 'available'", async (t) => {
+  let revertedStatus = null;
+  t.mock.method(repository, "findById", async () => ({
+    id: "a1",
+    productId: "p1",
+    status: "pending_approval",
+  }));
+  t.mock.method(repository, "setProductStatus", async (productId, status) => {
+    revertedStatus = status;
+  });
+  t.mock.method(repository, "updateStatus", async (id, data) => ({
+    id,
+    ...data,
+  }));
+
+  const result = await service.reject({
+    user: { id: "admin-1", role: "ADMIN" },
+    auctionId: "a1",
+  });
+
+  assert.equal(result.status, "rejected");
+  assert.equal(revertedStatus, "available");
+});
+
+test("cancel resets product status back to 'available'", async (t) => {
+  let revertedStatus = null;
+  t.mock.method(repository, "findById", async () => ({
+    id: "a1",
+    productId: "p1",
+    status: "scheduled",
+  }));
+  t.mock.method(repository, "setProductStatus", async (productId, status) => {
+    revertedStatus = status;
+  });
+  t.mock.method(repository, "updateStatus", async (id, data) => ({
+    id,
+    ...data,
+  }));
+
+  const result = await service.cancel({
+    user: { id: "mkt-1", role: "MARKETING" },
+    auctionId: "a1",
+  });
+
+  assert.equal(result.status, "cancelled");
+  assert.equal(revertedStatus, "available");
+});
+
+test("closing an auction with no bids resets product status back to 'available'", async (t) => {
+  let revertedStatus = null;
+  t.mock.method(repository, "findById", async () => ({
+    id: "a1",
+    productId: "p1",
+    status: "open",
+    sellerId: "seller-1",
+    product: { title: "Test product" },
+    scheduledStartAt: new Date(Date.now() - 60_000),
+    scheduledEndAt: new Date(Date.now() - 1000),
+  }));
+  t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "setProductStatus", async (productId, status) => {
+    revertedStatus = status;
+  });
+  t.mock.method(repository, "updateStatus", async (id, data) => ({
+    id,
+    ...data,
+  }));
+
+  await service.get("a1");
+
+  assert.equal(revertedStatus, "available");
+});
+
+test("submit rejects when no active auction round is accepting submissions", async (t) => {
+  t.mock.method(repository, "findProductOwner", async () => ({
+    id: "p1",
+    sellerId: "seller-1",
+    status: "available",
+  }));
+  t.mock.method(repository, "findActiveSubmissionRound", async () => null);
+
+  await assert.rejects(
+    service.submit({
+      user: { id: "seller-1", role: "SELLER" },
+      input: { productId: "p1", startingPrice: 100, bidIncrement: 10 },
+    }),
+    (err) => err.status === 400 && err.message.includes("ขณะนี้ไม่มีรอบเปิดรับสินค้าเข้าประมูล"),
+  );
+});
+
+test("createRound rejects non-Marketing/Admin callers", async () => {
+  await assert.rejects(
+    service.createRound({
+      user: { id: "u1", role: "SELLER" },
+      input: { title: "Round 1" },
+    }),
+    (err) => err.status === 403,
+  );
+});
+
+test("createRound rejects invalid or inverted dates", async () => {
+  const user = { id: "mkt-1", role: "MARKETING" };
+  // submissionEndsAt before submissionStartsAt
+  await assert.rejects(
+    service.createRound({
+      user,
+      input: {
+        title: "Round 1",
+        submissionStartsAt: "2026-09-10T10:00:00Z",
+        submissionEndsAt: "2026-09-09T10:00:00Z",
+        auctionStartsAt: "2026-09-11T10:00:00Z",
+        auctionEndsAt: "2026-09-12T10:00:00Z",
+      },
+    }),
+    (err) => err.status === 400,
+  );
+  // auctionStartsAt before submissionEndsAt
+  await assert.rejects(
+    service.createRound({
+      user,
+      input: {
+        title: "Round 1",
+        submissionStartsAt: "2026-09-01T10:00:00Z",
+        submissionEndsAt: "2026-09-05T10:00:00Z",
+        auctionStartsAt: "2026-09-04T10:00:00Z",
+        auctionEndsAt: "2026-09-06T10:00:00Z",
+      },
+    }),
+    (err) => err.status === 400,
+  );
+});
+
+test("createRound creates round for Marketing user", async (t) => {
+  t.mock.method(repository, "createRound", async (data) => ({
+    id: "round-1",
+    ...data,
+  }));
+
+  const round = await service.createRound({
+    user: { id: "mkt-1", role: "MARKETING" },
+    input: {
+      title: "Round 1",
+      submissionStartsAt: "2026-09-01T10:00:00Z",
+      submissionEndsAt: "2026-09-05T10:00:00Z",
+      auctionStartsAt: "2026-09-06T10:00:00Z",
+      auctionEndsAt: "2026-09-08T10:00:00Z",
+    },
+  });
+
+  assert.equal(round.id, "round-1");
+  assert.equal(round.title, "Round 1");
+});
+
+test("getCurrentRound correctly returns flags when active", async (t) => {
+  const now = new Date("2026-09-03T12:00:00Z");
+  t.mock.method(repository, "findCurrentRound", async () => ({
+    id: "round-1",
+    title: "Round 1",
+    submissionStartsAt: new Date("2026-09-01T00:00:00Z"),
+    submissionEndsAt: new Date("2026-09-05T00:00:00Z"),
+    auctionStartsAt: new Date("2026-09-06T00:00:00Z"),
+    auctionEndsAt: new Date("2026-09-08T00:00:00Z"),
+  }));
+
+  const info = await service.getCurrentRound(now);
+  assert.equal(info.isSubmissionOpen, true);
+  assert.equal(info.isAuctionActive, false);
+});
+
+test("placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and reschedules close job", async (t) => {
+  const initialEnd = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes remaining
+  let updatedEndAt = null;
+  let rescheduledAt = null;
+
+  t.mock.method(repository, "withAuctionLock", async (auctionId, fn) => {
+    const tx = {
+      auctionItem: {
+        findUnique: async () => ({
+          id: auctionId,
+          sellerId: "seller-1",
+          status: "open",
+          startingPrice: 100,
+          bidIncrement: 10,
+          scheduledEndAt: initialEnd,
+        }),
+        update: async ({ data }) => {
+          if (data.scheduledEndAt) updatedEndAt = data.scheduledEndAt;
+        },
+      },
+      bid: {
+        findUnique: async () => null,
+      },
+    };
+    return fn(tx);
+  });
+  t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "createBid", async (data) => ({ id: "b1", ...data }));
+  t.mock.method(auctionCloseQueue, "scheduleClose", async (auctionId, closeAt) => {
+    rescheduledAt = closeAt;
+  });
+
+  await service.placeBid({
+    user: { id: "buyer-1", role: "BUYER" },
+    auctionId: "a1",
+    amount: 100,
+    idempotencyKey: "key-extend-1",
+  });
+
+  assert.ok(updatedEndAt, "scheduledEndAt should have been updated");
+  assert.equal(
+    updatedEndAt.getTime(),
+    initialEnd.getTime() + 5 * 60 * 1000,
+    "should add exactly 5 minutes",
+  );
+  assert.equal(rescheduledAt.getTime(), updatedEndAt.getTime());
+});
+
+test("placeBid outside the last 5 minutes does NOT extend scheduledEndAt", async (t) => {
+  const initialEnd = new Date(Date.now() + 20 * 60 * 1000); // 20 minutes remaining
+  let updatedEndAt = null;
+
+  t.mock.method(repository, "withAuctionLock", async (auctionId, fn) => {
+    const tx = {
+      auctionItem: {
+        findUnique: async () => ({
+          id: auctionId,
+          sellerId: "seller-1",
+          status: "open",
+          startingPrice: 100,
+          bidIncrement: 10,
+          scheduledEndAt: initialEnd,
+        }),
+        update: async ({ data }) => {
+          if (data.scheduledEndAt) updatedEndAt = data.scheduledEndAt;
+        },
+      },
+      bid: {
+        findUnique: async () => null,
+      },
+    };
+    return fn(tx);
+  });
+  t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "createBid", async (data) => ({ id: "b1", ...data }));
+
+  await service.placeBid({
+    user: { id: "buyer-1", role: "BUYER" },
+    auctionId: "a1",
+    amount: 100,
+    idempotencyKey: "key-no-extend",
+  });
+
+  assert.equal(updatedEndAt, null, "should not extend if remaining > 5 minutes");
 });

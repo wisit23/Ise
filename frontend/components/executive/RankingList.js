@@ -1,4 +1,5 @@
-import { CATEGORICAL } from "../charts/palette";
+const MIN_BAR_PERCENT = 20;
+const LONG_BAR_THRESHOLD = 45;
 
 function baht(v) {
   return `฿${v.toLocaleString("th-TH")}`;
@@ -17,38 +18,60 @@ export default function RankingList({ rows, emptyText, unavailable }) {
   }
 
   const max = Math.max(...rows.map((r) => r.gmv), 1);
+  const total = rows.reduce((sum, r) => sum + (r.gmv || 0), 0) || 1;
 
   return (
-    <ol className="flex flex-col gap-3">
-      {rows.map((row, i) => (
-        <li key={row.id} className="flex items-center gap-3">
-          <span className="w-5 shrink-0 text-right text-sm font-semibold text-gray-500">
-            {i + 1}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-baseline justify-between gap-3">
-              <span className="truncate text-sm text-gray-800">
+    <ol className="flex flex-col gap-3 py-1">
+      {rows.map((row, i) => {
+        const pctOfMax = Math.max((row.gmv / max) * 100, MIN_BAR_PERCENT);
+        const sharePct = ((row.gmv / total) * 100).toFixed(0);
+        const isBarLong = pctOfMax >= LONG_BAR_THRESHOLD;
+
+        return (
+          <li key={row.id} className="flex items-center gap-3">
+            {/* Left: Rank & Title */}
+            <div className="flex items-center gap-1.5 w-28 sm:w-36 shrink-0 truncate">
+              <span className="text-xs font-bold text-slate-400">{i + 1}</span>
+              <span className="truncate text-xs font-semibold text-slate-800">
                 {row.label}
               </span>
-              <span className="shrink-0 text-sm font-semibold text-gray-900">
-                {baht(row.gmv)}
-                <span className="ml-1.5 font-normal text-gray-500">
-                  · {row.count.toLocaleString("th-TH")} ชิ้น
-                </span>
-              </span>
             </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-              <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${Math.max((row.gmv / max) * 100, 3)}%`,
-                  backgroundColor: CATEGORICAL[i % CATEGORICAL.length],
-                }}
-              />
+
+            {/* Right: Horizontal Bar */}
+            <div className="relative flex-1 h-8 rounded-lg bg-slate-100 overflow-hidden flex items-center">
+              {isBarLong ? (
+                <div
+                  className="h-full rounded-lg bg-[#3b82f6] flex items-center justify-between px-3 transition-all duration-500 shadow-2xs"
+                  style={{ width: `${pctOfMax}%` }}
+                >
+                  <span className="text-xs font-bold text-white whitespace-nowrap">
+                    {baht(row.gmv)}
+                  </span>
+                  <span className="text-[10px] font-medium text-blue-100 hidden sm:inline-flex items-center gap-1 ml-2 whitespace-nowrap">
+                    <span>{row.count.toLocaleString("th-TH")} ชิ้น</span>
+                    <span>{sharePct}%</span>
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center w-full h-full">
+                  <div
+                    className="h-full rounded-lg bg-[#3b82f6] flex items-center justify-start px-3 transition-all duration-500 shadow-2xs shrink-0"
+                    style={{ width: `${pctOfMax}%` }}
+                  >
+                    <span className="text-xs font-bold text-white whitespace-nowrap">
+                      {baht(row.gmv)}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-600 hidden sm:inline-flex items-center gap-1 ml-2.5 whitespace-nowrap">
+                    <span>{row.count.toLocaleString("th-TH")} ชิ้น</span>
+                    <span>{sharePct}%</span>
+                  </span>
+                </div>
+              )}
             </div>
-          </div>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ol>
   );
 }

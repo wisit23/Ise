@@ -68,3 +68,14 @@ test("buildProductPatch preserves scalar values but ignores reservation status",
     location: null,
   });
 });
+
+test("buildCreateProductData preserves status 'auction' if submitted", () => {
+  const data = buildCreateProductData("seller-1", {
+    title: "Vintage boots",
+    price: 3500,
+    category: "Shoes",
+    status: "auction",
+  });
+
+  assert.equal(data.status, "auction");
+});

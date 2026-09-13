@@ -1,5 +1,6 @@
 const prisma = require("./prismaClient");
 const { Prisma } = require("../generated/prisma-client");
+const { buildCatalogWhere } = require("../features/catalog/catalogQuery");
 
 const WITH_MEDIA = { photos: true, videos: true };
 
@@ -23,7 +24,8 @@ function toApiShape(product) {
   ]
     .sort((a, b) => a.position - b.position)
     .map((m) => ({ url: m.url, type: m.type }));
-  return { ...rest, media };
+  // `styleTags` is the catalog contract name; `tags` remains for seller/edit compatibility.
+  return { ...rest, styleTags: rest.tags || [], media };
 }
 
 /** Splits the incoming { url, type }[] media array into nested Prisma
@@ -58,27 +60,24 @@ function mediaToNestedCreate(media) {
  * use the same GIN gin_trgm_ops index on search_text (verified with
  * EXPLAIN — see docs/progress.md MOCK-TRADE-011 evidence table).
  */
-async function searchProducts({ q, category, status, skip = 0, take = 20 }) {
-  const statusFilter = status
-    ? Prisma.sql`status = ${status}`
-    : Prisma.sql`status <> 'removed'`;
-  const categoryFilter = category
-    ? Prisma.sql`AND category = ${category}`
-    : Prisma.empty;
-  const matchCondition = Prisma.sql`(search_text ILIKE '%' || ${q} || '%' OR ${q} <% search_text)`;
+async function searchProducts(filters) {
+  const { skip = 0, take = 20, q } = filters;
+  const where = buildCatalogWhere(filters, { PrismaClient: Prisma });
+  const order = q
+    ? Prisma.sql`GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) DESC, created_at DESC`
+    : Prisma.sql`created_at DESC`;
 
   const [rows, countRows] = await Promise.all([
     prisma.$queryRaw`
-      SELECT id, GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) AS rank
-      FROM products
-      WHERE ${statusFilter} ${categoryFilter} AND ${matchCondition}
-      ORDER BY rank DESC, created_at DESC
+      SELECT id FROM products
+      WHERE ${where}
+      ORDER BY ${order}
       LIMIT ${take} OFFSET ${skip}
     `,
     prisma.$queryRaw`
       SELECT count(*)::int AS count
       FROM products
-      WHERE ${statusFilter} ${categoryFilter} AND ${matchCondition}
+      WHERE ${where}
     `,
   ]);
 
@@ -101,11 +100,49 @@ async function searchProducts({ q, category, status, skip = 0, take = 20 }) {
   return { items, total };
 }
 
-async function list({ category, q, status, skip, take } = {}) {
-  if (q) return searchProducts({ q, category, status, skip, take });
+async function list({
+  category,
+  q,
+  brand,
+  style,
+  size,
+  condition,
+  minPrice,
+  maxPrice,
+  status,
+  skip,
+  take,
+} = {}) {
+  // Public catalog always uses the same PostgreSQL query builder, including when q is absent.
+  if (
+    status === "available" ||
+    q ||
+    brand ||
+    style ||
+    size ||
+    condition ||
+    minPrice !== undefined ||
+    maxPrice !== undefined
+  ) {
+    return searchProducts({
+      q,
+      category,
+      brand,
+      style,
+      size,
+      condition,
+      minPrice,
+      maxPrice,
+      status,
+      skip,
+      take,
+    });
+  }
 
   const where = {
-    ...(status ? { status } : { status: { not: "removed" } }),
+    ...(status
+      ? { status }
+      : { status: { notIn: ["removed", "hidden"] } }),
     ...(category ? { category } : {}),
   };
   const [items, total] = await Promise.all([
@@ -122,7 +159,13 @@ async function list({ category, q, status, skip, take } = {}) {
 }
 
 async function listBySeller(sellerId, { status, skip, take } = {}) {
-  const where = { sellerId, ...(status ? { status } : {}) };
+  let statusFilter = {};
+  if (Array.isArray(status)) {
+    statusFilter = { status: { in: status } };
+  } else if (status) {
+    statusFilter = { status };
+  }
+  const where = { sellerId, ...statusFilter };
   const [items, total] = await Promise.all([
     prisma.product.findMany({
       where,
@@ -187,6 +230,45 @@ async function remove(id) {
   }
 }
 
+/**
+ * Toggles a product between "available"/"reserved" and "hidden".
+ * - Hiding saves the current status in preRemovalStatus so we can restore it.
+ * - Unhiding restores the saved status (default: "available").
+ * If the product is "reserved" and gets hidden, it stays in preRemovalStatus
+ * so buyers see it gone from their cart until it is un-hidden.
+ */
+async function setVisibility(id, visible) {
+  if (visible) {
+    // Restore to whatever status it had before hiding (default: available).
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return null;
+    const restored = product.preRemovalStatus || "available";
+    return toApiShape(
+      await prisma.product.update({
+        where: { id },
+        data: { status: restored, preRemovalStatus: null },
+        include: WITH_MEDIA,
+      }),
+    );
+  } else {
+    // Only hide if currently browsable (available or reserved).
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return null;
+    if (product.status === "hidden" || product.status === "removed") {
+      return toApiShape(
+        await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+      );
+    }
+    return toApiShape(
+      await prisma.product.update({
+        where: { id },
+        data: { status: "hidden", preRemovalStatus: product.status },
+        include: WITH_MEDIA,
+      }),
+    );
+  }
+}
+
 function listCategories() {
   return prisma.category.findMany({ orderBy: { name: "asc" } });
 }
@@ -205,6 +287,29 @@ function listConditions() {
   return prisma.condition.findMany({ orderBy: { sortOrder: "asc" } });
 }
 
+async function listFilterOptions() {
+  const [brands, styles, sizes] = await Promise.all([
+    prisma.product.findMany({
+      where: { status: "available", brand: { not: "" } },
+      distinct: ["brand"],
+      select: { brand: true },
+      orderBy: { brand: "asc" },
+    }),
+    prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS value FROM products WHERE status = 'available' ORDER BY value`,
+    prisma.product.findMany({
+      where: { status: "available" },
+      distinct: ["size"],
+      select: { size: true },
+      orderBy: { size: "asc" },
+    }),
+  ]);
+  return {
+    brands: brands.map((x) => x.brand),
+    styles: styles.map((x) => x.value),
+    sizes: sizes.map((x) => x.size),
+  };
+}
+
 module.exports = {
   list,
   listBySeller,
@@ -212,7 +317,9 @@ module.exports = {
   create,
   update,
   remove,
+  setVisibility,
   listCategories,
   ensureCategory,
   listConditions,
+  listFilterOptions,
 };

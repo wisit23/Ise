@@ -62,11 +62,20 @@ export default function KycForm({
         <h2 className="mb-3 text-base font-semibold text-gray-900">
           2. รหัสประจำตัวประชาชนและที่อยู่
         </h2>
-        <div className="grid grid-cols-1 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <IdCardField
             value={form.idCardNumber}
             onChange={(idCardNumber) => onFormChange({ ...form, idCardNumber })}
           />
+          <Input
+            type="date"
+            label="วันหมดอายุบัตรประชาชน"
+            hint="ไม่บังคับ (บัตรตลอดชีพไม่ต้องกรอก)"
+            value={form.idCardExpiry || ""}
+            onChange={set("idCardExpiry")}
+          />
+        </div>
+        <div className="mt-4">
           <Textarea
             required
             rows={3}

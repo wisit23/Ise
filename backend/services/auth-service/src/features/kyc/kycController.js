@@ -9,8 +9,12 @@ const submit = [
         userId: req.userId,
         shopName: req.body.shopName,
         idCardNumber: req.body.idCardNumber,
+        idCardExpiry: req.body.idCardExpiry,
         address: req.body.address,
         bankAccount: req.body.bankAccount,
+        verifyMethod: req.body.verifyMethod,
+        thaiIdFullName: req.body.thaiIdFullName,
+        thaiIdPhone: req.body.thaiIdPhone,
         file: req.file,
       });
       res.status(201).json(result);

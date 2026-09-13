@@ -176,9 +176,17 @@ export default function ProductCard({ product, showSeller = true }) {
           </span>
         )}
 
-        <span className="absolute right-[.7rem] top-[.7rem] rounded-full bg-ink/70 px-[.75em] py-[.32em] text-xs font-medium text-white shadow-1 backdrop-blur-[8px]">
-          {freshnessLabel(product.createdAt)}
-        </span>
+        <div className="absolute right-[.7rem] top-[.7rem] flex flex-col items-end gap-1.5">
+          <span className="rounded-full bg-ink/70 px-[.75em] py-[.32em] text-xs font-medium text-white shadow-1 backdrop-blur-[8px]">
+            {freshnessLabel(product.createdAt)}
+          </span>
+          {product.status === "hidden" && (
+            <span className="flex items-center gap-1 rounded-full bg-yellow-500/90 px-[.75em] py-[.32em] text-xs font-medium text-white shadow-1 backdrop-blur-[8px]">
+              <span className="material-symbols-outlined text-[14px]">visibility_off</span>
+              ซ่อนอยู่
+            </span>
+          )}
+        </div>
 
         {/* A caption for the link the whole card already is — not a second
             action, just the affordance a still photo lacks. */}

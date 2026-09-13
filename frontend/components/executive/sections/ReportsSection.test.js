@@ -41,6 +41,9 @@ function serveSeries({ order = ORDER_SERIES, auth = AUTH_SERIES } = {}) {
       if (auth instanceof Error) return Promise.reject(auth);
       return Promise.resolve({ data: auth, meta: META });
     }
+    if (path.startsWith("/api/auth/executive/audit")) {
+      return Promise.resolve({ status: "ok" });
+    }
     return Promise.reject(new Error(`unexpected path ${path}`));
   });
 }
@@ -62,14 +65,21 @@ describe("ReportsSection", () => {
 
     render(<ReportsSection token="token" />);
 
-    const day1Row = (await screen.findByText("1. 01/ส.ค./69")).closest("tr");
+    const day1Row = (await screen.findByText("01/ส.ค./69")).closest("tr");
     expect(within(day1Row).getByText("฿500")).toBeInTheDocument();
     expect(within(day1Row).getByText("฿50")).toBeInTheDocument();
     expect(within(day1Row).getByText("2")).toBeInTheDocument();
     expect(within(day1Row).getByText("3")).toBeInTheDocument();
 
-    const day2Row = screen.getByText("2. 02/ส.ค./69").closest("tr");
+    const day2Row = screen.getByText("02/ส.ค./69").closest("tr");
     expect(within(day2Row).getAllByText("฿0")).toHaveLength(2);
+
+    // Sum row
+    const totalRow = screen.getByText("รวมทั้งหมด").closest("tr");
+    expect(within(totalRow).getByText("฿500")).toBeInTheDocument();
+    expect(within(totalRow).getByText("฿50")).toBeInTheDocument();
+    expect(within(totalRow).getByText("2")).toBeInTheDocument();
+    expect(within(totalRow).getByText("4")).toBeInTheDocument();
 
     expect(screen.queryByText(/MoM/)).not.toBeInTheDocument();
     expect(screen.queryByText(/YoY/)).not.toBeInTheDocument();
@@ -102,8 +112,8 @@ describe("ReportsSection", () => {
       target: { value: "year" },
     });
 
-    expect(await screen.findByText("1. มกราคม")).toBeInTheDocument();
-    expect(screen.getByText("2. กุมภาพันธ์")).toBeInTheDocument();
+    expect(await screen.findByText("มกราคม")).toBeInTheDocument();
+    expect(screen.getByText("กุมภาพันธ์")).toBeInTheDocument();
     expect(screen.queryByLabelText("เดือน")).not.toBeInTheDocument();
 
     expect(
@@ -121,7 +131,7 @@ describe("ReportsSection", () => {
 
     render(<ReportsSection token="token" />);
 
-    const day1Row = (await screen.findByText("1. 01/ส.ค./69")).closest("tr");
+    const day1Row = (await screen.findByText("01/ส.ค./69")).closest("tr");
     expect(within(day1Row).getAllByText("ไม่พร้อมใช้งาน").length).toBe(3);
     expect(within(day1Row).getByText("3")).toBeInTheDocument();
   });
@@ -143,7 +153,7 @@ describe("ReportsSection", () => {
     serveSeries();
 
     render(<ReportsSection token="token" />);
-    await screen.findByText("1. 01/ส.ค./69");
+    await screen.findByText("01/ส.ค./69");
 
     fireEvent.click(screen.getByRole("button", { name: /ดาวน์โหลด CSV/ }));
 
@@ -152,11 +162,12 @@ describe("ReportsSection", () => {
     expect(filename).toBe("reloop-executive-report-2026-08.csv");
 
     const lines = content.trim().split("\r\n");
-    expect(lines).toHaveLength(3);
+    expect(lines).toHaveLength(4);
     expect(lines[0]).toBe(
       "ช่วงเวลา,ยอดขาย (บาท),รายได้แพลตฟอร์ม (บาท),คำสั่งซื้อ (รายการ),ผู้ใช้งานที่ล็อกอิน (คน)",
     );
     expect(lines[1]).toBe("01/ส.ค./69,500,50,2,3");
     expect(lines[2]).toBe("02/ส.ค./69,0,0,0,1");
+    expect(lines[3]).toBe("รวมทั้งหมด,500,50,2,4");
   });
 });

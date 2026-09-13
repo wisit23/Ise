@@ -1,0 +1,12 @@
+# Development: docker compose up --build
+# Production: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.prod
+    environment:
+      NODE_ENV: production
+      WATCHPACK_POLLING: null
+      CHOKIDAR_USEPOLLING: null
+    volumes: !reset []

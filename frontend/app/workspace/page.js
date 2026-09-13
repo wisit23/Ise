@@ -22,7 +22,7 @@ const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "tickets", label: "Tickets", icon: "confirmation_number" },
   { key: "disputes", label: "Disputes", icon: "gavel" },
-  { key: "orders", label: "ค้นหาออเดอร์", icon: "search" },
+  { key: "orders", label: "ค้นหา", icon: "manage_search" },
   { key: "faq", label: "จัดการ FAQ", icon: "menu_book" },
 ];
 
@@ -31,7 +31,7 @@ const SECTIONS = [
 // anywhere in the CS agent's own tabs (see TicketsSection's dropped
 // ESCALATED filter option).
 const ADMIN_SECTIONS = [
-  { key: "admin_inbox", label: "เคสระดับแอดมิน", icon: "assignment_late" },
+  { key: "admin_inbox", label: "เคส Trust & Safety", icon: "assignment_late" },
   { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
   { key: "auction_approvals", label: "อนุมัติประมูล", icon: "sell" },
   { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
@@ -70,7 +70,11 @@ export default function SupportPanelPage() {
       </main>
     );
   }
-  if (user?.role !== "CUSTOMER_SERVICE" && user?.role !== "ADMIN") {
+  if (
+    user?.role !== "CUSTOMER_SERVICE" &&
+    user?.role !== "ADMIN" &&
+    user?.role !== "TRUST_AND_SAFETY"
+  ) {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
@@ -82,8 +86,11 @@ export default function SupportPanelPage() {
   }
 
   const token = getAccessToken();
-  const visibleSections =
-    user?.role === "ADMIN" ? [...SECTIONS, ...ADMIN_SECTIONS] : SECTIONS;
+  const isAdminOrSafety =
+    user?.role === "ADMIN" || user?.role === "TRUST_AND_SAFETY";
+  const visibleSections = isAdminOrSafety
+    ? [...SECTIONS, ...ADMIN_SECTIONS]
+    : SECTIONS;
   const activeSection = visibleSections.find((s) => s.key === section);
 
   return (
@@ -108,7 +115,7 @@ export default function SupportPanelPage() {
                     Re-loop panel
                   </span>
                   <span className="text-[10px] font-semibold tracking-wider text-emerald-600 uppercase">
-                    {user?.role === "ADMIN" ? "Administrator" : "Support Agent"}
+                    {isAdminOrSafety ? "Trust and Safety" : "Support Agent"}
                   </span>
                 </div>
               </div>

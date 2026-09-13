@@ -39,8 +39,16 @@ async function getDisputeView({ orderId, adminId }) {
  * a concurrent CS decision moved it), so the write is rejected instead of
  * silently clobbering whatever happened in between.
  */
-async function holdSimulatedFunds({ orderId, reason, version, adminId }) {
-  if (!reason) throw badRequest("reason is required");
+async function holdSimulatedFunds({
+  orderId,
+  reason,
+  version,
+  adminId,
+  staffId,
+}) {
+  const actorId = staffId || adminId;
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) throw badRequest("reason is required");
   if (typeof version !== "number") throw badRequest("version is required");
 
   const order = await prisma.order.findUnique({ where: { id: orderId } });
@@ -52,30 +60,46 @@ async function holdSimulatedFunds({ orderId, reason, version, adminId }) {
     throw conflict("order dispute state was modified — reload and retry");
   }
 
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      paymentSimulationStatus: "ON_HOLD",
-      version: { increment: 1 },
-      holdReason: reason,
-      heldAt: new Date(),
-      heldBy: adminId,
-      preDisputeStatus: order.status,
-      status: "disputed",
-      // Shared with CS's dispute flow — payoutHeld is the single answer to
-      // "is this seller's money frozen", whoever froze it.
-      payoutHeld: true,
-      disputedAt: order.disputedAt || new Date(),
-    },
-  });
-
-  await recordAudit({ orderId, actorId: adminId, action: "HOLD", reason });
+  const [updated] = await prisma.$transaction([
+    prisma.order.update({
+      where: { id: orderId },
+      data: {
+        paymentSimulationStatus: "ON_HOLD",
+        version: { increment: 1 },
+        holdReason: trimmedReason,
+        heldAt: new Date(),
+        heldBy: actorId,
+        preDisputeStatus: order.status,
+        status: "disputed",
+        // Shared with CS's dispute flow — payoutHeld is the single answer to
+        // "is this seller's money frozen", whoever froze it.
+        payoutHeld: true,
+        disputedAt: order.disputedAt || new Date(),
+      },
+    }),
+    prisma.disputeAudit.create({
+      data: {
+        orderId,
+        actorId,
+        action: "HOLD",
+        reason: trimmedReason,
+      },
+    }),
+  ]);
 
   return updated;
 }
 
-async function releaseSimulatedFunds({ orderId, reason, version, adminId }) {
-  if (!reason) throw badRequest("reason is required");
+async function releaseSimulatedFunds({
+  orderId,
+  reason,
+  version,
+  adminId,
+  staffId,
+}) {
+  const actorId = staffId || adminId;
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) throw badRequest("reason is required");
   if (typeof version !== "number") throw badRequest("version is required");
 
   const order = await prisma.order.findUnique({
@@ -97,23 +121,31 @@ async function releaseSimulatedFunds({ orderId, reason, version, adminId }) {
     order.dispute && order.dispute.status !== "DECIDED",
   );
 
-  const updated = await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      paymentSimulationStatus: "RELEASE_PENDING",
-      version: { increment: 1 },
-      holdReason: null,
-      heldAt: null,
-      heldBy: null,
-      preDisputeStatus: null,
-      status: csCaseStillOpen
-        ? order.status
-        : order.preDisputeStatus || order.status,
-      payoutHeld: csCaseStillOpen,
-    },
-  });
-
-  await recordAudit({ orderId, actorId: adminId, action: "RELEASE", reason });
+  const [updated] = await prisma.$transaction([
+    prisma.order.update({
+      where: { id: orderId },
+      data: {
+        paymentSimulationStatus: "RELEASE_PENDING",
+        version: { increment: 1 },
+        holdReason: null,
+        heldAt: null,
+        heldBy: null,
+        preDisputeStatus: null,
+        status: csCaseStillOpen
+          ? order.status
+          : order.preDisputeStatus || order.status,
+        payoutHeld: csCaseStillOpen,
+      },
+    }),
+    prisma.disputeAudit.create({
+      data: {
+        orderId,
+        actorId,
+        action: "RELEASE",
+        reason: trimmedReason,
+      },
+    }),
+  ]);
 
   return updated;
 }

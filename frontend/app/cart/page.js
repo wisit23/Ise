@@ -21,14 +21,23 @@ export function reservationCountdown(order, now) {
   const deadline = reservationDeadline(order);
   if (deadline === null) return null;
   const remainingSeconds = Math.max(0, Math.ceil((deadline - now) / 1000));
-  const minutes = Math.floor(remainingSeconds / 60);
+  const hours = Math.floor(remainingSeconds / 3600);
+  const minutes = Math.floor((remainingSeconds % 3600) / 60);
   const seconds = String(remainingSeconds % 60).padStart(2, "0");
+  if (hours > 0) {
+    return `${hours} ชม. ${minutes} นาที`;
+  }
   return `${minutes}:${seconds}`;
 }
 
 function reservationDeadline(order) {
   if (order.reservationExpiresAt) {
     return new Date(order.reservationExpiresAt).getTime();
+  }
+  if (order.auctionId) {
+    return order.createdAt
+      ? new Date(order.createdAt).getTime() + 24 * 60 * 60 * 1000
+      : null;
   }
   if (order.createdAt) {
     return new Date(order.createdAt).getTime() + 10 * 60 * 1000;
@@ -175,8 +184,8 @@ export default function CartPage() {
       <section className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 pb-28">
         <h1 className="mb-1 text-xl font-bold text-gray-900">ตะกร้าของฉัน</h1>
         <p className="mb-6 text-sm text-gray-500">
-          สินค้าที่เพิ่มลงตะกร้าจะถูกล็อกไว้ให้คุณ 10 นาที
-          กรุณาชำระเงินก่อนเวลาหมดหรือยกเลิกเพื่อคืนสินค้า
+          สินค้าที่เพิ่มลงตะกร้าจะถูกล็อกไว้ 10 นาที (หรือ 24 ชั่วโมงสำหรับสินค้าประมูลที่คุณชนะ)
+          กรุณาชำระเงินก่อนหมดเวลา
         </p>
 
         {error && <Alert className="mb-4">{error}</Alert>}
@@ -257,6 +266,17 @@ export default function CartPage() {
                             </span>
                             หมดเวลาจองแล้ว
                           </span>
+                        ) : o.auctionId ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                            <span
+                              className="material-symbols-outlined text-[15px] leading-none"
+                              aria-hidden="true"
+                            >
+                              gavel
+                            </span>
+                            ชนะการประมูล · รอชำระเงิน
+                            {countdown ? ` (เหลือเวลา ${countdown})` : ""}
+                          </span>
                         ) : countdown ? (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">
                             <span
@@ -275,13 +295,15 @@ export default function CartPage() {
                         )
                       }
                       actions={
-                        <button
-                          onClick={() => handleCancel(o.id)}
-                          disabled={busyId === o.id}
-                          className="focus-ring rounded px-1 text-sm text-ink-subtle transition hover:text-danger disabled:opacity-50"
-                        >
-                          ยกเลิก
-                        </button>
+                        !o.auctionId && (
+                          <button
+                            onClick={() => handleCancel(o.id)}
+                            disabled={busyId === o.id}
+                            className="focus-ring rounded px-1 text-sm text-ink-subtle transition hover:text-danger disabled:opacity-50"
+                          >
+                            ยกเลิก
+                          </button>
+                        )
                       }
                     />
                   </li>

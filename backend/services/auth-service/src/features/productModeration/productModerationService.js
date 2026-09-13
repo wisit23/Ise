@@ -9,26 +9,35 @@ const reportService = require("../reports/reportService");
  * privileged action lands in the same admin_audits table regardless of
  * which surface (Report inbox vs direct search) triggered it.
  */
-async function removeProduct({ productId, adminId, reason, requestId }) {
-  if (!reason) throw badRequest("reason is required");
+async function removeProduct({
+  productId,
+  adminId,
+  staffId,
+  reason,
+  requestId,
+}) {
+  const actorId = staffId || adminId;
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) throw badRequest("reason is required");
   const product = await productModerationClient.removeProduct(
     productId,
-    reason,
+    trimmedReason,
   );
   await reportService.recordAdminAction({
-    actorId: adminId,
+    actorId,
     action: "PRODUCT_REMOVED",
     targetId: productId,
-    reason,
+    reason: trimmedReason,
     requestId,
   });
   return product;
 }
 
-async function restoreProduct({ productId, adminId, requestId }) {
+async function restoreProduct({ productId, adminId, staffId, requestId }) {
+  const actorId = staffId || adminId;
   const product = await productModerationClient.restoreProduct(productId);
   await reportService.recordAdminAction({
-    actorId: adminId,
+    actorId,
     action: "PRODUCT_RESTORED",
     targetId: productId,
     reason: "restored via direct product moderation",
