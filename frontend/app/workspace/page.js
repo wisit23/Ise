@@ -100,9 +100,9 @@ export default function SupportPanelPage() {
     // Toasts are mounted at the panel root so every section beneath it can
     // report the outcome of an action without a blocking alert().
     <ToastProvider>
-      <div className="flex min-h-screen flex-col bg-slate-50/50">
+      <div className="flex h-dvh flex-col overflow-hidden bg-slate-50/50">
         <NavBar />
-        <div className="flex flex-1">
+        <div className="flex min-h-0 flex-1">
           {/* ── Sidebar ── */}
           <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
             {/* Brand */}
@@ -169,10 +169,8 @@ export default function SupportPanelPage() {
 
           {/* ── Main Content ── */}
           <main
-            className={`min-w-0 flex-1 flex flex-col ${
-              section === "tickets"
-                ? "h-[calc(100vh-4rem)] overflow-hidden"
-                : "overflow-y-auto"
+            className={`min-h-0 min-w-0 flex-1 flex flex-col ${
+              section === "tickets" ? "overflow-hidden" : "overflow-y-auto"
             }`}
           >
             {/* Top bar */}

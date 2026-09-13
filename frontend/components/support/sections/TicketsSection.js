@@ -177,14 +177,14 @@ export default function TicketsSection({
     <div className="relative h-full w-full overflow-hidden">
       <div
         className="h-full"
-        inert={viewMode === "table" ? "" : undefined}
+        inert={viewMode === "table"}
         aria-hidden={viewMode === "table"}
       >
         <LiveSupportSection token={token} initialTicketId={workspaceTicketId} />
       </div>
       <div
         className={`flex h-full w-full flex-col overflow-y-auto ${motion.table} ${viewMode === "table" ? motion.tableOpen : ""}`}
-        inert={viewMode !== "table" ? "" : undefined}
+        inert={viewMode !== "table"}
         aria-hidden={viewMode !== "table"}
       >
         <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
