@@ -17,16 +17,20 @@ export default function SupportQueueSidebar({
   search,
   onSearchChange,
   loading,
+  error,
   onRefresh,
+  className = "",
 }) {
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-r border-slate-200 bg-white">
+    <aside className={`h-full w-full shrink-0 flex-col border-r border-slate-200 bg-white md:w-80 lg:w-[22rem] ${className}`}>
       {/* ── Top Tabs / Filter ── */}
       <div className="border-b border-slate-200 p-3 bg-slate-50/70">
-        <div className="flex rounded-lg bg-slate-200/80 p-0.5 text-xs font-semibold">
+        <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-semibold" role="tablist" aria-label="เลือกคิวงาน">
           <button
             type="button"
             onClick={() => onScopeChange("mine")}
+            role="tab"
+            aria-selected={scope === "mine"}
             className={`flex-1 rounded-md py-1.5 text-center transition-all ${
               scope === "mine"
                 ? "bg-white text-emerald-700 shadow-xs"
@@ -38,6 +42,8 @@ export default function SupportQueueSidebar({
           <button
             type="button"
             onClick={() => onScopeChange("unassigned")}
+            role="tab"
+            aria-selected={scope === "unassigned"}
             className={`flex-1 rounded-md py-1.5 text-center transition-all ${
               scope === "unassigned"
                 ? "bg-white text-amber-700 shadow-xs"
@@ -49,6 +55,8 @@ export default function SupportQueueSidebar({
           <button
             type="button"
             onClick={() => onScopeChange("all")}
+            role="tab"
+            aria-selected={scope === "all"}
             className={`flex-1 rounded-md py-1.5 text-center transition-all ${
               scope === "all"
                 ? "bg-white text-slate-800 shadow-xs"
@@ -69,13 +77,15 @@ export default function SupportQueueSidebar({
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="ค้นหาเลขตั๋ว, หัวข้อ..."
-            className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-8 pr-8 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+            aria-label="ค้นหาตั๋ว"
+            className="min-h-10 w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-9 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           />
           {search && (
             <button
               type="button"
               onClick={() => onSearchChange("")}
-              className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+              className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              aria-label="ล้างคำค้นหา"
             >
               <span className="material-symbols-outlined text-[16px]">close</span>
             </button>
@@ -108,7 +118,16 @@ export default function SupportQueueSidebar({
 
       {/* ── Tickets List ── */}
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-        {loading && tickets.length === 0 ? (
+        {error && tickets.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+            <span className="material-symbols-outlined mb-2 text-[34px] text-red-300">cloud_off</span>
+            <p className="text-sm font-semibold text-slate-700">โหลดคิวงานไม่สำเร็จ</p>
+            <p className="mt-1 max-w-56 text-xs text-slate-500">{error}</p>
+            <button type="button" onClick={onRefresh} className="mt-4 min-h-10 rounded-lg border border-slate-200 px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+              ลองใหม่
+            </button>
+          </div>
+        ) : loading && tickets.length === 0 ? (
           <div className="p-4 space-y-3 animate-pulse">
             {[1, 2, 3, 4].map((n) => (
               <div key={n} className="rounded-xl border border-slate-100 p-3 space-y-2">
@@ -146,7 +165,8 @@ export default function SupportQueueSidebar({
                 key={t.id}
                 type="button"
                 onClick={() => onSelectTicket(t)}
-                className={`w-full text-left p-3.5 transition-all flex flex-col gap-1.5 ${
+                aria-current={isSelected ? "true" : undefined}
+                className={`w-full min-h-[92px] text-left p-3.5 transition-all flex flex-col gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 ${
                   isSelected
                     ? "bg-emerald-50/80 border-l-4 border-l-emerald-600 pl-2.5 shadow-2xs"
                     : "hover:bg-slate-50/80 border-l-4 border-l-transparent"

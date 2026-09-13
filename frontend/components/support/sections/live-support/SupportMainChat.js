@@ -15,6 +15,11 @@ import {
 } from "../../../../lib/chat";
 import { uploadChatAttachment } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
+import {
+  TICKET_STATUS_LABEL,
+  TICKET_STATUS_STYLE,
+} from "../../../../lib/supportConstants";
+import Badge from "../../../panel/ui/Badge";
 
 const PAGE_SIZE = 30;
 
@@ -26,10 +31,12 @@ function mergeById(existing, incoming) {
 
 export default function SupportMainChat({
   ticket,
+  loadingTicket,
   onAssignTicket,
   assigning,
   showDetails,
   onToggleDetails,
+  onBackToQueue,
 }) {
   const [user] = useState(() => getStoredUser());
   const [messages, setMessages] = useState([]);
@@ -244,9 +251,21 @@ export default function SupportMainChat({
     socket.emit(isTyping ? "typing:start" : "typing:stop", { conversationId });
   }
 
+  if (loadingTicket) {
+    return (
+      <div className="flex flex-1 flex-col bg-white" aria-busy="true" aria-label="กำลังโหลดตั๋ว">
+        <div className="h-[73px] animate-pulse border-b border-slate-200 px-4 py-3">
+          <div className="h-5 w-48 rounded bg-slate-200" />
+          <div className="mt-2 h-3 w-72 max-w-full rounded bg-slate-100" />
+        </div>
+        <div className="flex flex-1 items-center justify-center text-sm text-slate-500">กำลังโหลดบทสนทนา...</div>
+      </div>
+    );
+  }
+
   if (!ticket) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center bg-slate-50 p-8 text-center text-slate-400">
+      <div className="hidden flex-1 flex-col items-center justify-center bg-slate-50 p-8 text-center text-slate-400 md:flex">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 mb-3">
           <span className="material-symbols-outlined text-[32px]">
             chat_bubble_outline
@@ -265,8 +284,16 @@ export default function SupportMainChat({
   return (
     <section className="flex flex-1 flex-col h-full overflow-hidden bg-white">
       {/* ── Room Header ── */}
-      <div className="flex items-center justify-between border-b border-slate-200 px-6 py-3.5 bg-white/95 backdrop-blur shadow-xs z-10">
+      <div className="z-10 flex min-h-[72px] items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-3 py-3 shadow-xs backdrop-blur sm:px-5">
         <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={onBackToQueue}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 md:hidden"
+            aria-label="กลับไปที่คิวงาน"
+          >
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
           <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 text-sm font-bold text-white shadow-xs">
             {ticket.requesterId?.slice(0, 1).toUpperCase() || "U"}
             <span
@@ -278,29 +305,23 @@ export default function SupportMainChat({
           </div>
 
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <h2 className="truncate text-sm font-bold text-slate-900">
-                ผู้แจ้ง #{ticket.requesterId?.slice(0, 12)}
+                {ticket.subject}
               </h2>
-              {otherOnline ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  ออนไลน์
-                </span>
-              ) : (
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                  ออฟไลน์
-                </span>
-              )}
+              <Badge
+                text={TICKET_STATUS_LABEL[ticket.status] || ticket.status}
+                style={TICKET_STATUS_STYLE[ticket.status] || "bg-slate-100 text-slate-600"}
+              />
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
               <span className="font-mono font-bold text-indigo-600">
                 {ticket.ticketNumber}
               </span>
               <span>•</span>
-              <span className="truncate max-w-[280px] font-medium text-slate-700">
-                {ticket.subject}
+              <span className="truncate font-medium text-slate-600">
+                ผู้แจ้ง #{ticket.requesterId?.slice(0, 12)} · {otherOnline ? "ออนไลน์" : "ออฟไลน์"}
               </span>
             </div>
           </div>
@@ -311,7 +332,7 @@ export default function SupportMainChat({
           <Link
             href={`/support/tickets/${ticket.id}`}
             target="_blank"
-            className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+            className="hidden min-h-10 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 lg:flex"
             title="เปิดหน้ารายละเอียดตั๋วแบบเต็มในแท็บใหม่"
           >
             <span>ดูตั๋วเต็ม</span>
@@ -323,7 +344,9 @@ export default function SupportMainChat({
           <button
             type="button"
             onClick={onToggleDetails}
-            className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+            aria-expanded={showDetails}
+            aria-controls="support-case-details"
+            className={`flex min-h-10 items-center gap-1 rounded-lg border px-3 text-xs font-semibold transition ${
               showDetails
                 ? "bg-slate-100 border-slate-300 text-slate-800"
                 : "border-slate-200 text-slate-600 hover:bg-slate-50"
@@ -333,9 +356,7 @@ export default function SupportMainChat({
             <span className="material-symbols-outlined text-[16px]">
               dock_to_left
             </span>
-            <span className="hidden sm:inline">
-              {showDetails ? "ซ่อนข้อมูล" : "ดูข้อมูลเคส"}
-            </span>
+            <span className="hidden sm:inline">รายละเอียด</span>
           </button>
         </div>
       </div>
@@ -350,7 +371,7 @@ export default function SupportMainChat({
       {/* ── Messages Stream ── */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-6 py-4 bg-slate-50/40"
+        className="flex-1 overflow-y-auto bg-slate-50/40 px-3 py-4 sm:px-6"
       >
         {!conversationId ? (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center text-slate-400">
@@ -420,12 +441,12 @@ export default function SupportMainChat({
             🔒 การสนทนานี้ถูกปิดแล้ว (ตั๋วสถานะ: {ticket.status})
           </div>
         ) : !isAssigned ? (
-          <div className="flex items-center justify-between gap-4 bg-amber-50/90 border-t border-amber-200 px-6 py-3.5">
+          <div className="flex flex-col items-stretch gap-3 border-t border-amber-200 bg-amber-50/90 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="flex items-center gap-2 text-xs font-semibold text-amber-800">
               <span className="material-symbols-outlined text-[20px] text-amber-600">
                 assignment_ind
               </span>
-              <span>ยังไม่มีเจ้าหน้าที่รับเรื่องตั๋วนี้</span>
+              <span>รับงานก่อนจึงจะเริ่มตอบลูกค้าได้</span>
             </div>
             <button
               type="button"
@@ -433,7 +454,7 @@ export default function SupportMainChat({
               disabled={assigning}
               className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition"
             >
-              {assigning ? "กำลังรับงาน..." : "รับงานนี้ (Assign to Me)"}
+              {assigning ? "กำลังรับงาน..." : "รับงานนี้"}
             </button>
           </div>
         ) : (

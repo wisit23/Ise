@@ -129,33 +129,32 @@ export default function TicketsSection({
     return (
       <div className="flex h-full w-full flex-col overflow-hidden">
         {/* View Mode Bar */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2 shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              มุมมอง:
-            </span>
-            <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 py-2 sm:px-4">
+          <div className="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-semibold" role="tablist" aria-label="มุมมองตั๋ว">
               <button
                 type="button"
                 onClick={() => setViewMode("workspace")}
-                className="flex items-center gap-1.5 rounded-md bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-2xs transition"
+                role="tab"
+                aria-selected="true"
+                className="flex min-h-9 items-center gap-1.5 rounded-lg bg-white px-3 font-semibold text-emerald-700 shadow-2xs transition"
               >
                 <span className="material-symbols-outlined text-[16px]">
                   view_kanban
                 </span>
-                <span>โหมดปฏิบัติการแชท (Workspace)</span>
+                <span>สนทนา</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode("table")}
-                className="flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium text-slate-600 transition hover:text-slate-900"
+                role="tab"
+                aria-selected="false"
+                className="flex min-h-9 items-center gap-1.5 rounded-lg px-3 font-medium text-slate-600 transition hover:text-slate-900"
               >
                 <span className="material-symbols-outlined text-[16px]">
                   table_chart
                 </span>
-                <span>โหมดตารางสรุป (Table View)</span>
+                <span>รายการทั้งหมด</span>
               </button>
-            </div>
           </div>
         </div>
 
@@ -172,37 +171,36 @@ export default function TicketsSection({
   return (
     <div className="flex h-full w-full flex-col overflow-y-auto">
       {/* View Mode Bar */}
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-2.5 shadow-2xs">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            มุมมอง:
-          </span>
-          <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+      <div className="sticky top-0 z-10 flex items-center border-b border-slate-200 bg-white px-3 py-2 shadow-2xs sm:px-6">
+          <div className="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-semibold" role="tablist" aria-label="มุมมองตั๋ว">
             <button
               type="button"
               onClick={() => setViewMode("workspace")}
-              className="flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium text-slate-600 transition hover:text-slate-900"
+              role="tab"
+              aria-selected="false"
+              className="flex min-h-9 items-center gap-1.5 rounded-lg px-3 font-medium text-slate-600 transition hover:text-slate-900"
             >
               <span className="material-symbols-outlined text-[16px]">
                 view_kanban
               </span>
-              <span>โหมดปฏิบัติการแชท (Workspace)</span>
+              <span>สนทนา</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode("table")}
-              className="flex items-center gap-1.5 rounded-md bg-white px-3 py-1 text-xs font-semibold text-emerald-700 shadow-2xs transition"
+              role="tab"
+              aria-selected="true"
+              className="flex min-h-9 items-center gap-1.5 rounded-lg bg-white px-3 font-semibold text-emerald-700 shadow-2xs transition"
             >
               <span className="material-symbols-outlined text-[16px]">
                 table_chart
               </span>
-              <span>โหมดตารางสรุป (Table View)</span>
+              <span>รายการทั้งหมด</span>
             </button>
           </div>
-        </div>
       </div>
 
-      <div className="p-8 max-w-7xl mx-auto w-full">
+      <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 lg:p-8">
         <div className="animate-fade-in-up flex min-h-full flex-col">
           {error && <Alert className="mb-3">{error}</Alert>}
 

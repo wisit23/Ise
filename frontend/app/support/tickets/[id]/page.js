@@ -8,6 +8,7 @@ import ConfirmDialog from "../../../../components/ui/ConfirmDialog";
 import EmbeddedChat from "../../../../components/support/EmbeddedChat";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
+import { TICKET_STATUS_STYLE } from "../../../../lib/supportConstants";
 
 const STATUS_LABEL = {
   NEW: "รอรับเรื่อง",
@@ -141,53 +142,33 @@ export default function TicketThreadPage() {
   }
 
   const nextStatuses = isAgent ? AGENT_NEXT_STATUS[ticket.status] || [] : [];
+  const visibleLogs = ticket.conversationId
+    ? ticket.messages.filter((m) => m.isInternal || m.authorRole === "SYSTEM")
+    : ticket.messages;
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
       <NavBar />
-      <section className="mx-auto w-full max-w-2xl flex-1 px-4 py-8">
-        <div className="mb-1 flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs text-gray-500">{ticket.ticketNumber}</p>
-            <h1 className="text-xl font-bold text-gray-900">
-              {ticket.subject}
-            </h1>
+      <section className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:py-8">
+        <header className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-mono text-xs font-semibold text-indigo-600">{ticket.ticketNumber}</p>
+              <h1 className="mt-1 text-xl font-bold leading-tight text-slate-900 sm:text-2xl">{ticket.subject}</h1>
+              <p className="mt-2 text-xs text-slate-500">
+                เปิดเมื่อ {new Date(ticket.createdAt).toLocaleString("th-TH")}
+              </p>
+            </div>
+            <span className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${TICKET_STATUS_STYLE[ticket.status] || "border border-slate-200 bg-slate-50 text-slate-600"}`}>
+              {STATUS_LABEL[ticket.status] || ticket.status}
+            </span>
           </div>
-          <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
-            {STATUS_LABEL[ticket.status] || ticket.status}
-          </span>
-        </div>
-        {ticket.description && (
-          <p className="mb-4 text-sm text-gray-600">{ticket.description}</p>
-        )}
+        </header>
 
-        {isAgent && (
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3">
-            {!ticket.assigneeId && (
-              <button
-                onClick={handleAssign}
-                disabled={busyAction}
-                className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                รับเรื่องนี้
-              </button>
-            )}
-            {nextStatuses.map((s) => (
-              <button
-                key={s}
-                onClick={() => handleStatusChange(s)}
-                disabled={busyAction}
-                className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                → {STATUS_LABEL[s] || s}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ── Live Chat Embedded directly in the ticket page ── */}
-        {ticket.conversationId && (
-          <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0">
+          {ticket.conversationId ? (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
               <div className="flex items-center gap-2">
                 <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
@@ -197,10 +178,10 @@ export default function TicketThreadPage() {
                 </span>
                 <div>
                   <h2 className="text-xs font-bold text-slate-800">
-                    สนทนาสดกับฝ่ายบริการลูกค้า (Live Chat)
+                    บทสนทนา
                   </h2>
                   <p className="text-[11px] text-slate-500">
-                    สอบถาม ติดตามสถานะ หรือส่งหลักฐานเพิ่มเติมได้ที่นี่
+                    ข้อความและหลักฐานของคำร้องนี้
                   </p>
                 </div>
               </div>
@@ -215,17 +196,45 @@ export default function TicketThreadPage() {
               />
             </div>
           </div>
-        )}
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+              <h2 className="text-sm font-bold text-slate-800">ข้อความในคำร้อง</h2>
+              <p className="mt-1 text-xs text-slate-500">ตั๋วนี้ไม่มีห้องสนทนาแบบเรียลไทม์</p>
+            </div>
+          )}
+          </div>
 
-        {/* ── Ticket Log / Internal Notes ── */}
-        <div className="mb-2">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            ประวัติและบันทึกคำร้อง (Log & Notes)
-          </h3>
-        </div>
+          <aside className="space-y-4 lg:sticky lg:top-20">
+            {ticket.description && (
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+                <h2 className="text-xs font-bold text-slate-700">รายละเอียดที่แจ้ง</h2>
+                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-600">{ticket.description}</p>
+              </section>
+            )}
 
-        <ul className="mb-4 flex flex-col gap-2">
-          {ticket.messages.map((m) => (
+            {isAgent && (
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+                <h2 className="mb-3 text-xs font-bold text-slate-700">จัดการคำร้อง</h2>
+                <div className="flex flex-col gap-2">
+                  {!ticket.assigneeId && (
+                    <button onClick={handleAssign} disabled={busyAction} className="min-h-10 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">รับเรื่องนี้</button>
+                  )}
+                  {nextStatuses.map((s) => (
+                    <button key={s} onClick={() => handleStatusChange(s)} disabled={busyAction} className="min-h-10 rounded-lg border border-slate-200 px-3 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                      เปลี่ยนเป็น “{STATUS_LABEL[s] || s}”
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <details className="group rounded-xl border border-slate-200 bg-white shadow-xs" open={!ticket.conversationId}>
+              <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-xs font-bold text-slate-700">
+                <span>{ticket.conversationId ? "บันทึกภายในและกิจกรรม" : "ประวัติข้อความ"} ({visibleLogs.length})</span>
+                <span className="material-symbols-outlined text-[18px] text-slate-400 transition group-open:rotate-180">expand_more</span>
+              </summary>
+              <ul className="max-h-72 space-y-2 overflow-y-auto border-t border-slate-100 p-3">
+          {visibleLogs.map((m) => (
             <li
               key={m.id}
               className={`animate-slide-up rounded-lg border p-3 text-sm ${
@@ -254,15 +263,16 @@ export default function TicketThreadPage() {
               <p className="whitespace-pre-line text-gray-800">{m.body}</p>
             </li>
           ))}
-          {ticket.messages.length === 0 && (
-            <li className="text-sm text-gray-500">ยังไม่มีบันทึกในตั๋วนี้</li>
+          {visibleLogs.length === 0 && (
+            <li className="p-3 text-center text-xs text-gray-500">ยังไม่มีบันทึกในตั๋วนี้</li>
           )}
-        </ul>
+              </ul>
+            </details>
 
         {ticket.status !== "CLOSED" && (isAgent || !ticket.conversationId) && (
           <form
             onSubmit={handleReply}
-            className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-3"
+            className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 shadow-xs"
           >
             <textarea
               value={body}
@@ -284,7 +294,7 @@ export default function TicketThreadPage() {
                     onChange={(e) => setIsInternal(e.target.checked)}
                     className="h-3.5 w-3.5 accent-amber-500"
                   />
-                  โน้ตภายใน (ลูกค้าจะไม่เห็น)
+                  โน้ตภายใน ลูกค้าจะไม่เห็น
                 </label>
               ) : (
                 <span />
@@ -299,6 +309,8 @@ export default function TicketThreadPage() {
             </div>
           </form>
         )}
+          </aside>
+        </div>
       </section>
       <Footer />
 

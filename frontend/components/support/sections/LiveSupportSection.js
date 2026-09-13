@@ -14,9 +14,11 @@ export default function LiveSupportSection({ token, initialTicketId = null }) {
   const [search, setSearch] = useState("");
   const [tickets, setTickets] = useState([]);
   const [loadingQueue, setLoadingQueue] = useState(true);
+  const [queueError, setQueueError] = useState("");
 
   const [selectedTicketId, setSelectedTicketId] = useState(initialTicketId || null);
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [loadingTicket, setLoadingTicket] = useState(false);
 
   useEffect(() => {
     if (initialTicketId) {
@@ -24,7 +26,7 @@ export default function LiveSupportSection({ token, initialTicketId = null }) {
     }
   }, [initialTicketId]);
 
-  const [showDetails, setShowDetails] = useState(true);
+  const [showDetails, setShowDetails] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
 
@@ -32,6 +34,7 @@ export default function LiveSupportSection({ token, initialTicketId = null }) {
   const fetchQueue = useCallback(
     async (currentScope = scope, currentSearch = search) => {
       setLoadingQueue(true);
+      setQueueError("");
       try {
         const params = new URLSearchParams();
         if (currentScope) params.set("scope", currentScope);
@@ -44,18 +47,12 @@ export default function LiveSupportSection({ token, initialTicketId = null }) {
         const items = data.items || [];
         setTickets(items);
 
-        // Auto-select initial/first ticket if current selected is not in items
-        if (items.length > 0) {
-          setSelectedTicketId((prev) => {
-            const target = initialTicketId || prev;
-            if (target && items.some((t) => t.id === target)) {
-              return target;
-            }
-            if (!prev) return items[0].id;
-            return prev;
-          });
-        }
+        setSelectedTicketId((prev) => {
+          if (initialTicketId) return initialTicketId;
+          return prev && items.some((ticket) => ticket.id === prev) ? prev : null;
+        });
       } catch (err) {
+        setQueueError(err.message);
         toast.error(`โหลดคิวงานไม่สำเร็จ: ${err.message}`);
       } finally {
         setLoadingQueue(false);
@@ -65,7 +62,8 @@ export default function LiveSupportSection({ token, initialTicketId = null }) {
   );
 
   useEffect(() => {
-    fetchQueue(scope, search);
+    const timer = window.setTimeout(() => fetchQueue(scope, search), 300);
+    return () => window.clearTimeout(timer);
   }, [fetchQueue, scope, search]);
 
   // ── Fetch Selected Ticket Details ──
@@ -73,9 +71,11 @@ export default function LiveSupportSection({ token, initialTicketId = null }) {
     async (ticketId) => {
       if (!ticketId) {
         setSelectedTicket(null);
+        setLoadingTicket(false);
         return;
       }
       setActionError("");
+      setLoadingTicket(true);
       try {
         const fullTicket = await apiFetch(`/api/support/tickets/${ticketId}`, {
           token,
@@ -83,9 +83,14 @@ export default function LiveSupportSection({ token, initialTicketId = null }) {
         setSelectedTicket(fullTicket);
       } catch (err) {
         setActionError(err.message);
+        setSelectedTicket(null);
+        setSelectedTicketId(null);
+        toast.error(`โหลดรายละเอียดตั๋วไม่สำเร็จ: ${err.message}`);
+      } finally {
+        setLoadingTicket(false);
       }
     },
-    [token],
+    [token, toast],
   );
 
   useEffect(() => {
@@ -161,12 +166,15 @@ export default function LiveSupportSection({ token, initialTicketId = null }) {
   }
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-slate-100">
+    <div className="relative flex h-full w-full overflow-hidden bg-slate-100">
       {/* ── Left Column: Queue Sidebar ── */}
       <SupportQueueSidebar
         tickets={tickets}
         selectedTicketId={selectedTicketId}
-        onSelectTicket={(t) => setSelectedTicketId(t.id)}
+        onSelectTicket={(t) => {
+          setShowDetails(false);
+          setSelectedTicketId(t.id);
+        }}
         scope={scope}
         onScopeChange={(newScope) => {
           setScope(newScope);
@@ -175,29 +183,45 @@ export default function LiveSupportSection({ token, initialTicketId = null }) {
         search={search}
         onSearchChange={setSearch}
         loading={loadingQueue}
+        error={queueError}
         onRefresh={() => fetchQueue(scope, search)}
+        className={selectedTicketId ? "hidden md:flex" : "flex"}
       />
 
       {/* ── Center Column: Main Chat ── */}
       <SupportMainChat
         ticket={selectedTicket}
+        loadingTicket={loadingTicket}
         onAssignTicket={handleAssignTicket}
         assigning={actionBusy}
         showDetails={showDetails}
         onToggleDetails={() => setShowDetails((prev) => !prev)}
+        onBackToQueue={() => {
+          setShowDetails(false);
+          setSelectedTicketId(null);
+          setSelectedTicket(null);
+        }}
       />
 
       {/* ── Right Column: Case Details & Actions ── */}
       {showDetails && (
-        <SupportCaseDetails
-          ticket={selectedTicket}
-          onAssign={handleAssignTicket}
-          onStatusChange={handleStatusChange}
-          onAddInternalNote={handleAddInternalNote}
-          actionBusy={actionBusy}
-          actionError={actionError}
-          onClose={() => setShowDetails(false)}
-        />
+        <div className="absolute inset-0 z-30 flex justify-end" role="presentation">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-950/30 backdrop-blur-[1px]"
+            onClick={() => setShowDetails(false)}
+            aria-label="ปิดรายละเอียดคำร้อง"
+          />
+          <SupportCaseDetails
+            ticket={selectedTicket}
+            onAssign={handleAssignTicket}
+            onStatusChange={handleStatusChange}
+            onAddInternalNote={handleAddInternalNote}
+            actionBusy={actionBusy}
+            actionError={actionError}
+            onClose={() => setShowDetails(false)}
+          />
+        </div>
       )}
     </div>
   );
