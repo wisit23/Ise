@@ -355,6 +355,57 @@ describe("ChatRoomPage — live delivery vs. REST response race", () => {
     });
   });
 
+  it("ignores a slower response from the previous room after switching", async () => {
+    const conversation2 = {
+      id: "conv-2",
+      status: "ACTIVE",
+      participants: [
+        { userId: "buyer-1", role: "BUYER", lastReadAt: null },
+        { userId: "seller-2", role: "SELLER", displayName: "ร้านรองเท้า" },
+      ],
+    };
+    let resolveFirstRoom;
+    getConversation.mockImplementation((roomId) =>
+      roomId === "conv-1"
+        ? new Promise((resolve) => {
+            resolveFirstRoom = resolve;
+          })
+        : Promise.resolve(conversation2),
+    );
+    listConversations.mockResolvedValue({
+      items: [CONVERSATION, conversation2],
+    });
+    listMessages.mockImplementation((roomId) =>
+      Promise.resolve({
+        items:
+          roomId === "conv-2"
+            ? [
+                {
+                  id: "room-2-message",
+                  conversationId: "conv-2",
+                  senderId: "seller-2",
+                  type: "TEXT",
+                  body: "ข้อความห้องใหม่",
+                  createdAt: "2026-09-14T10:00:00.000Z",
+                },
+              ]
+            : [],
+        nextCursor: null,
+      }),
+    );
+
+    render(<ChatRoomPage />);
+    fireEvent.click(await screen.findByText("ร้านรองเท้า"));
+    expect(await screen.findByText("ข้อความห้องใหม่")).toBeInTheDocument();
+    await act(async () => resolveFirstRoom(CONVERSATION));
+
+    expect(screen.getAllByText("ร้านรองเท้า").length).toBeGreaterThan(0);
+    expect(screen.getByText("ข้อความห้องใหม่")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "ร้านของสะสม" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("transitions typing indicator smoothly when typing status changes", async () => {
     getConversation.mockResolvedValue(CONVERSATION);
     listMessages.mockResolvedValue({ items: [] });

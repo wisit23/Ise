@@ -217,4 +217,31 @@ describe("MessageList", () => {
 
     expect(screen.getByText("การสนทนาเริ่มต้นขึ้นแล้ว")).toBeInTheDocument();
   });
+
+  it("separates messages from different calendar days", () => {
+    render(
+      <MessageList
+        currentUserId="user-1"
+        activeRoomId="room-1"
+        messages={[
+          {
+            id: "day-1",
+            senderId: "user-2",
+            type: "TEXT",
+            body: "วันแรก",
+            createdAt: "2026-09-03T10:00:00.000Z",
+          },
+          {
+            id: "day-2",
+            senderId: "user-1",
+            type: "TEXT",
+            body: "วันถัดมา",
+            createdAt: "2026-09-04T10:00:00.000Z",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole("separator")).toHaveLength(2);
+  });
 });

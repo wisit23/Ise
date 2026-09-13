@@ -7,6 +7,25 @@ import {
   participantRoleLabel,
 } from "../../lib/chat";
 
+function formatConversationTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  if (sameDay) {
+    return date.toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  return date.toLocaleDateString("th-TH", {
+    day: "numeric",
+    month: "short",
+    year: date.getFullYear() === now.getFullYear() ? undefined : "2-digit",
+  });
+}
+
 /** The other participant's display name comes down with the conversation
  * itself — chat-service resolves it server-side for the participants of
  * rooms this user is already in (see chat-service/src/services/authClient.js).
@@ -23,12 +42,7 @@ export default function ConversationRow({
   const roleLabel = participantRoleLabel(other?.role);
   const unread = !isActive && hasUnread(conversation, currentUserId);
 
-  const timeFormatted = conversation.lastMessageAt
-    ? new Date(conversation.lastMessageAt).toLocaleTimeString("th-TH", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "";
+  const timeFormatted = formatConversationTime(conversation.lastMessageAt);
 
   function handleClick(e) {
     if (onSelect) {
@@ -48,6 +62,7 @@ export default function ConversationRow({
     <li className="list-none" data-conversation-id={conversation.id}>
       <Link
         href={`/chat/${conversation.id}`}
+        aria-current={isActive ? "page" : undefined}
         onClick={handleClick}
         className={`group relative flex items-center gap-3.5 px-4 py-3.5 transition-colors duration-200 ${
           isActive
@@ -110,7 +125,7 @@ export default function ConversationRow({
             {/* Timestamp & Unread */}
             <div className="flex items-center gap-1.5 shrink-0">
               {timeFormatted && (
-                <span className="text-[11px] text-gray-400 font-mono">
+                <span className="text-[11px] tabular-nums text-gray-500">
                   {timeFormatted}
                 </span>
               )}

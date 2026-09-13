@@ -68,6 +68,16 @@ export default function ChatRoomPage() {
   const tokenRef = useRef(null);
   const initialIdRef = useRef(id);
   const initialPresenceMapRef = useRef({});
+  const roomRequestRef = useRef(0);
+
+  useEffect(
+    () => () => {
+      roomRequestRef.current += 1;
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    },
+    [],
+  );
 
   const scrollToBottom = useCallback((smooth = true) => {
     if (scrollTimerRef.current) {
@@ -143,15 +153,18 @@ export default function ChatRoomPage() {
     async (roomId, currentUser) => {
       const token = tokenRef.current || getAccessToken();
       if (!token || !roomId || !currentUser) return;
+      const requestId = ++roomRequestRef.current;
       try {
         setError("");
         const conv = await getConversation(roomId, token);
+        if (requestId !== roomRequestRef.current) return;
         setConversation(conv);
         const other = otherParticipant(conv, currentUser.id);
         const name = other?.displayName || "ผู้ใช้";
         setOtherName(name);
 
         const page = await listMessages(roomId, { limit: PAGE_SIZE }, token);
+        if (requestId !== roomRequestRef.current) return;
         const reversed = [...page.items].reverse();
         setMessages(reversed);
         setOlderCursor(page.nextCursor);
@@ -176,9 +189,9 @@ export default function ChatRoomPage() {
           otherName: name,
         });
       } catch (err) {
-        setError(err.message);
+        if (requestId === roomRequestRef.current) setError(err.message);
       } finally {
-        setRoomLoading(false);
+        if (requestId === roomRequestRef.current) setRoomLoading(false);
       }
     },
     [updateConversationReadLocally, scrollToBottom],
@@ -241,6 +254,7 @@ export default function ChatRoomPage() {
         scrollToBottom(false);
       } else {
         setRoomLoading(true);
+        setConversation(null);
         setMessages([]);
         setOlderCursor(null);
         const currentUser = user || getStoredUser();
@@ -428,9 +442,7 @@ export default function ChatRoomPage() {
   // shows the locked banner without needing a page refresh.
   useChatSocketEvent("conversation:status", (data) => {
     if (data.conversationId !== activeRoomId) return;
-    setConversation((prev) =>
-      prev ? { ...prev, status: data.status } : prev,
-    );
+    setConversation((prev) => (prev ? { ...prev, status: data.status } : prev));
   });
 
   useChatSocketEvent("conversation:activity", () => {
@@ -605,7 +617,7 @@ export default function ChatRoomPage() {
           </div>
 
           {/* Right Column: Active Chat Room */}
-          <div className="flex h-full flex-1 flex-col overflow-hidden bg-slate-50/40">
+          <div className="flex min-w-0 h-full flex-1 flex-col overflow-hidden bg-slate-50/60">
             {/* Room Header */}
             <div className="shrink-0 flex items-center justify-between border-b border-gray-150 bg-white px-4 py-3">
               <div className="flex items-center gap-3">
@@ -666,12 +678,13 @@ export default function ChatRoomPage() {
                 <Link
                   href="/chat"
                   aria-label="กลับไปที่กล่องข้อความ"
-                  className="hidden h-9 w-9 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-600 md:flex"
+                  className="hidden min-h-10 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 md:flex"
                   title="ดูรายการแชททั้งหมด"
                 >
                   <span className="material-symbols-outlined text-[20px]">
                     inbox
                   </span>
+                  <span className="hidden lg:inline">กล่องข้อความ</span>
                 </Link>
               </div>
             </div>
@@ -686,7 +699,9 @@ export default function ChatRoomPage() {
             {/* Sticky Product Header */}
             {productId && <ChatProductHeader productId={productId} />}
             {/* Sticky Support Ticket Header */}
-            {supportTicketId && <ChatSupportHeader ticketId={supportTicketId} />}
+            {supportTicketId && (
+              <ChatSupportHeader ticketId={supportTicketId} />
+            )}
 
             {/* Messages Area - Permanently mounted container */}
             <div className="relative flex flex-1 flex-col overflow-hidden">
@@ -713,63 +728,65 @@ export default function ChatRoomPage() {
                   ref={scrollContainerRef}
                   className="flex-1 overflow-y-auto px-4 pt-2 pb-4"
                 >
-                  {olderCursor && (
-                    <div className="py-2 text-center">
-                      <button
-                        type="button"
-                        onClick={handleLoadOlder}
-                        disabled={loadingOlder}
-                        className="rounded-full bg-white/90 border border-gray-200 px-3.5 py-1 text-xs font-semibold text-emerald-600 shadow-2xs transition hover:bg-emerald-50 disabled:text-emerald-300"
-                      >
-                        {loadingOlder
-                          ? "กำลังโหลด..."
-                          : "โหลดข้อความเก่ากว่านี้"}
-                      </button>
-                    </div>
-                  )}
+                  <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
+                    {olderCursor && (
+                      <div className="py-2 text-center">
+                        <button
+                          type="button"
+                          onClick={handleLoadOlder}
+                          disabled={loadingOlder}
+                          className="rounded-full bg-white/90 border border-gray-200 px-3.5 py-1 text-xs font-semibold text-emerald-600 shadow-2xs transition hover:bg-emerald-50 disabled:text-emerald-300"
+                        >
+                          {loadingOlder
+                            ? "กำลังโหลด..."
+                            : "โหลดข้อความเก่ากว่านี้"}
+                        </button>
+                      </div>
+                    )}
 
-                  <MessageList
-                    messages={messages}
-                    currentUserId={user?.id}
-                    otherName={otherName}
-                    onPromptClick={handleSend}
-                    activeRoomId={activeRoomId}
-                  />
+                    <MessageList
+                      messages={messages}
+                      currentUserId={user?.id}
+                      otherName={otherName}
+                      onPromptClick={handleSend}
+                      activeRoomId={activeRoomId}
+                    />
 
-                  {/* Typing Indicator */}
-                  <div
-                    data-testid="typing-indicator-wrapper"
-                    className={`overflow-hidden transition-all duration-300 ease-out ${
-                      otherTyping
-                        ? "max-h-16 opacity-100 translate-y-0 py-2"
-                        : "max-h-0 opacity-0 -translate-y-1 py-0 pointer-events-none"
-                    }`}
-                    aria-hidden={!otherTyping}
-                  >
+                    {/* Typing Indicator */}
                     <div
-                      className="flex items-center gap-2 px-1"
-                      role="status"
-                      aria-label="กำลังพิมพ์"
+                      data-testid="typing-indicator-wrapper"
+                      className={`overflow-hidden transition-all duration-300 ease-out ${
+                        otherTyping
+                          ? "max-h-16 opacity-100 translate-y-0 py-2"
+                          : "max-h-0 opacity-0 -translate-y-1 py-0 pointer-events-none"
+                      }`}
+                      aria-hidden={!otherTyping}
                     >
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
-                        {otherName[0] || "?"}
-                      </div>
-                      <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-xs border border-gray-150 bg-white px-3.5 py-2 shadow-2xs">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-dot" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-dot [animation-delay:200ms]" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-dot [animation-delay:400ms]" />
-                        <span className="ml-1 text-xs font-medium text-gray-500">
-                          กำลังพิมพ์...
-                        </span>
+                      <div
+                        className="flex items-center gap-2 px-1"
+                        role="status"
+                        aria-label="กำลังพิมพ์"
+                      >
+                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
+                          {otherName[0] || "?"}
+                        </div>
+                        <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-xs border border-gray-150 bg-white px-3.5 py-2 shadow-2xs">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-dot" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-dot [animation-delay:200ms]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-dot [animation-delay:400ms]" />
+                          <span className="ml-1 text-xs font-medium text-gray-500">
+                            กำลังพิมพ์...
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div
-                    ref={messagesEndRef}
-                    className="h-6 shrink-0"
-                    aria-hidden="true"
-                  />
+                    <div
+                      ref={messagesEndRef}
+                      className="h-6 shrink-0"
+                      aria-hidden="true"
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -781,13 +798,15 @@ export default function ChatRoomPage() {
                   การสนทนานี้ถูกล็อกไว้ ไม่สามารถส่งข้อความเพิ่มได้
                 </div>
               ) : (
-                <MessageComposer
-                  onSend={handleSend}
-                  onAttach={handleAttach}
-                  onTyping={handleTyping}
-                  onFocus={() => scrollToBottom(true)}
-                  disabled={roomLoading && !conversation}
-                />
+                <div className="mx-auto w-full max-w-4xl">
+                  <MessageComposer
+                    onSend={handleSend}
+                    onAttach={handleAttach}
+                    onTyping={handleTyping}
+                    onFocus={() => scrollToBottom(true)}
+                    disabled={roomLoading && !conversation}
+                  />
+                </div>
               )}
             </div>
           </div>
