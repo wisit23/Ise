@@ -164,6 +164,7 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 **Status:** Role ADMIN replaced 100% by TRUST_AND_SAFETY — Complete across Monorepo
 
 **Evidence:**
+
 - `RoleCode` และ `Role` enum ใน `reloop_auth` schema ถูกแทนที่ด้วย `TRUST_AND_SAFETY` อย่างสมบูรณ์ ข้อมูลแถวเดิมใน Postgres ถูกแปลงเป็น `TRUST_AND_SAFETY` เรียบร้อย
 - `ROLE_PERMISSIONS` ใน `backend/shared/src/permissions.js` ใช้ key `TRUST_AND_SAFETY`
 - ทุก Microservice (`product-service`, `order-service`, `support-service`, `auth-service`) ตรวจสอบและบังคับสิทธิ์ด้วย `TRUST_AND_SAFETY`
@@ -177,6 +178,7 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 **Status:** Removed Auction Approvals from Trust & Safety Scope — Complete
 
 **Evidence:**
+
 - ตัดแท็บ "อนุมัติประมูล" (`auction_approvals`) ออกจาก Workspace ของ Trust & Safety ใน `frontend/app/workspace/page.js` และลบไฟล์คอมโพเนนต์ `AuctionApprovalsSection.js`
 - ปรับปรุง Backend `auctionService.js` โดยตัด `TRUST_AND_SAFETY` ออกจากสิทธิ์การจัดการประมูลทั้งหมด และกำหนดให้สิทธิ์ `approve`/`reject` เป็นของบทบาท `MARKETING`
 - ไม่มีการแก้ไขไฟล์ในฝั่งทีมการตลาด (`frontend/components/marketing/`) คงไว้เพื่อรอการ merge ร่วมกับเพื่อนร่วมทีมที่รับผิดชอบส่วนนั้น
@@ -189,6 +191,7 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 **Status:** Renamed "เคสระดับแอดมิน" to "เคส Trust & Safety" — Complete
 
 **Evidence:**
+
 - เปลี่ยน label ของแท็บ `admin_inbox` ใน `frontend/app/workspace/page.js` เป็น `"เคส Trust & Safety"`
 - เปลี่ยนข้อความนำทางใน `frontend/components/support/sections/DashboardSection.js` เป็น `sub="ดูที่เคส Trust & Safety"`
 - ผลการทดสอบ: Frontend tests 11/11 suites (37/37 tests) pass, ESLint สะอาด 0 errors / 0 warnings
@@ -200,6 +203,7 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 **Status:** Protect Requester & Prioritize Counterparty in Ticket Moderation (ADM-DEC-019) — Complete
 
 **Evidence:**
+
 - แก้ปัญหาการแบนผิดตัวระหว่างผู้แจ้งปัญหา (Requester) และคู่กรณี (Target) โดยสลับลำดับการ์ดให้แสดงคู่กรณีไว้ด้านบนสุดเป็นเป้าหมายหลักในการจัดการ
 - แยกสไตล์ปุ่มชัดเจน: ปุ่มคู่กรณีเป็นสีแดงเด่นชัด `[แบนคู่กรณี]` ส่วนปุ่มผู้ส่งคำร้องปรับเป็นปุ่มรองสีเทาอ่อน `[แบนผู้แจ้ง (ระวัง)]`
 - รองรับตั๋วที่ไม่ได้ผูกออเดอร์โดยแสดงกล่องสีส้มพร้อมช่องกรอก User ID ของคู่กรณีด้วยตนเองเพื่อดำเนินการ
@@ -215,6 +219,7 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 **Status:** Backend Architecture Refactoring for Trust & Safety (ADM-DEC-020) — Complete
 
 **Evidence:**
+
 - ห่อหุ้มคำสั่งฐานข้อมูลที่ต้องสอดคล้องกันแบบ All-or-Nothing ด้วย `prisma.$transaction` ครบทั้ง `auth-service` (`decideKyc` + `sellerProfile` + `adminAudit`) และ `order-service` (`holdSimulatedFunds`/`releaseSimulatedFunds` + `disputeAudit`) ป้องกันสถานะค้างครึ่งทาง (Inconsistent State)
 - บันทึก Audit Trail สำหรับการอนุมัติและปฏิเสธ KYC (`KYC_APPROVED`, `KYC_REJECTED`) ลงใน `adminAudit` อย่างครบถ้วน 100% ปิดช่องว่าง NFR-SP-03
 - เพิ่มคำสั่ง `WARN_USER` และ `RESTORE_USER` ลงใน Action Registry ของ Bulk Engine ใน `auth-service` รองรับการ Dry-run, Idempotency และ Batch Limit
@@ -229,6 +234,7 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 **Status:** Frontend Trust & Safety Architecture & UX Refactoring (ADM-DEC-021) — Complete
 
 **Evidence:**
+
 - ปรับปรุง `KycSection.js`: เพิ่มฟิลเตอร์สถานะ (`PENDING`, `VERIFIED`, `REJECTED`, `ALL`), Pagination, ครอบคำตัดสินใจด้วย `ConfirmDialog`, แจ้งเตือนผลลัพธ์ผ่าน `useToast`, และปรับการ์ดข้อมูลผู้ขายด้วย `Badge`
 - ปรับปรุง `AuditSection.js`: เปลี่ยนหัวข้อเป็น "Audit Log ของ Trust & Safety" และคอลัมน์เป็น "ผู้ดำเนินการ (Staff ID)", แก้ไขฟิลด์ `actorId`/`targetId`/`reason`, เพิ่ม Pagination, Dropdown Action Filter และช่องค้นหา Target ID
 - ปรับปรุง `ProductsSection.js`: ปรับสถานะเป็น "ถูกระงับโดย Trust & Safety", เพิ่ม Pagination สำหรับผลการค้นหาสินค้า และแจ้งเตือน Toast เมื่อกู้คืนสินค้า
@@ -243,6 +249,7 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 **Status:** Unified Search Center & Direct Moderation (ADM-DEC-022) — Complete
 
 **Evidence:**
+
 - เปลี่ยนหน้าแท็บ "ค้นหาออเดอร์" สู่ "ศูนย์ค้นหาข้อมูล Trust & Safety (Unified Search Center)" โดยมี dropdown ตัวเลือก 4 ประเภท: รหัสคำสั่งซื้อ (`orderId`), รหัสผู้ซื้อ (`buyerId`), รหัสผู้ขาย (`sellerId`), และรหัสผู้ใช้ทั่วไป (`userId`) พร้อม dynamic placeholder และปุ่มล้างคำค้นหา
 - แสดงการ์ดข้อมูลโปรไฟล์ผู้ใช้ฉบับเต็ม: ชื่อ, อีเมล, โทรศัพท์, สิทธิ์ผู้ใช้, สถานะบัญชี (`ACTIVE`/`SUSPENDED`), ปุ่มคัดลอก User ID, สถิติความปลอดภัย 3 ด้าน (`reportCount`, `warningCount`, `suspensionCount`) และข้อมูลร้านค้า KYC (`sellerProfile`)
 - เพิ่มการดำเนินการควบคุมความปลอดภัยโดยตรงบนการ์ดผู้ใช้: `[ตักเตือนผู้ใช้ (Warn)]`, `[ระงับบัญชี (Ban)]`, และ `[ปลดการระงับ (Restore)]` ควบคุมด้วย `ConfirmDialog` ที่บังคับระบุเหตุผลเพื่อบันทึกลง Audit Log และแจ้งเตือนผลผ่าน Toast พร้อมรีเฟรชข้อมูลทันที
@@ -298,3 +305,47 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 **Reset behavior:** ตั้งสองบัญชีเป็น ACTIVE, sync legacy role + UserRole และ revoke session เก่า; ไม่ลบ AdminAudit เดิม
 
 **Scope:** ใช้ยืนยันข้อ 1 ผ่านหน้าเว็บเท่านั้น ไม่เพิ่มฟีเจอร์ moderation อื่น
+
+> Updated: 2026-09-20 — TSR-02 Complete Hardening & Full Concurrency Verification (10 Review Priorities Passed 100%)
+
+**Status:** TSR-02 Remediated, Verified, and Complete on PostgreSQL Database
+
+**Completed Requirements & Hardening (10/10):**
+
+1. **Mandatory Claim before writing/deciding case:** บังคับตรวจสอบ `assignedTo === userId` ทั้งใน `disputeService.decide` และ `addEvidence` สำหรับเจ้าหน้าที่; เคสที่ `assignedTo === null` เป็น read-only (ตอบ 403 Forbidden); เคสที่ escalate แล้ว T&S ต้อง Claim ก่อนจึงจะตัดสินได้; UI ทั้งใน `DisputeDetailPanel.js` และหน้าเคสเดี่ยว `/support/cases/[id]` ซ่อนและล็อกฟอร์มการตัดสินจนกว่าจะ Claim สำเร็จ
+2. **Atomic CAS on Order state transitions:** ทั้ง `openDispute()` และ `decide()` อัปเดต `Order` ผ่าน conditional CAS (`tx.order.updateMany({ where: { id, version: expectedVersion, status: expectedStatus } })`) ตรวจสอบ affected rows (`count === 0`) และคืน 409 Conflict หากสถานะหรือ version เปลี่ยนพร้อมกัน; กำจัด `tx.order.update({ where: { id } })` ออกจาก state transition สำคัญทั้งหมด 100%
+3. **Payment flow hardening:** guard hold/dispute และ Order CAS ทำงานร่วมกับ transactional `ProductSyncEvent` outbox; Order transition กับ event commit ใน transaction เดียวกัน, worker retry จน Product service ตอบรับ, API คืน 202 เมื่อ projection ยัง pending และ client retry event เดิมได้; Product reservation completion รองรับ retry แบบ idempotent
+4. **Idempotent backfill & anomaly audit:** backfill re-read Order/Dispute/Hold ภายใน transaction ต่อรายการ, ใช้ Order version/status/dispute-status CAS, เก็บ `preDisputeStatus` ก่อนเปลี่ยนเป็น disputed และใช้ unique nullable `dedupeKey` ป้องกัน concurrent backfill สร้าง Hold ซ้ำ จึงไม่สามารถชุบ dispute ที่ถูกตัดสินหลัง initial scan กลับมาได้
+5. **Validate Reassign target & multi-role actor:** ตรวจสอบผู้รับโอนเคสผ่าน Auth ว่ามีตัวตน, ACTIVE และมี CS/T&S role; actor authorization ใช้ `req.userRoles` จึงรองรับ staff role ที่เป็น secondary role; internal Auth lookup มี timeout 5 วินาทีและไม่รับ `toRole` จาก client
+6. **Define Order statuses eligible for Hold:** กำหนดสถานะคำสั่งซื้อที่ T&S มีสิทธิ์ Hold ได้อย่างชัดเจน (`confirmed`, `shipped`, `completed`, `disputed`); ปฏิเสธสถานะ `pending`, `pending_payment`, `cancelled`, `refunded` (400 Bad Request) และบังคับตรวจใน atomic CAS transaction
+7. **Clean legacy hold fields:** ใน `adminDisputeService.releaseSimulatedFunds` เคลียร์ `heldBy: null` ควบคู่กับ `heldAt: null` และ `holdReason: null` เพื่อให้ `paymentSimulationStatus`, `payoutHeld`, และ active `OrderHold` สอดคล้องกันเสมอ
+8. **Real Concurrency Integration Tests (Promise.all):** เพิ่ม integration tests ใน `backend/services/order-service/test/dispute-ownership-hold.integration.test.js` จำลองการแข่งขันพร้อมกันจริงผ่าน `Promise.all` 5 scenarios:
+   - 2 agents concurrent Claim race (หนึ่ง 200, หนึ่ง 409)
+   - 2 admins concurrent Hold race with same version (หนึ่ง 200, หนึ่ง 409)
+   - Dispute Decision vs T&S Hold race on Order CAS (หนึ่ง 200, หนึ่ง 409)
+   - Hold eligibility + Concurrent Pay race (หนึ่ง 200, หนึ่ง 409)
+   - Reassign vs Decision race on Dispute (หนึ่ง 200, หนึ่ง 409)
+9. **Ownership test flow update:** ปรับ test flow ของการ escalate เป็น Escalate → T&S Claim → Decide อย่างสมบูรณ์ พร้อมทดสอบว่า unassigned CS/T&S ไม่สามารถตัดสินหรืออัปโหลดหลักฐานได้ (403 Forbidden)
+10. **Post-verification documentation:** เอกสาร `remediation-plan.md`, `progress.md`, และ `changelog.md` ได้รับการอัปเดตหลังจากทดสอบผ่าน 100% บน PostgreSQL จริง
+
+**Verification Evidence:**
+
+- Primary Integration Suite (`REQUIRE_INTEGRATION=1 node --test test/dispute-ownership-hold.integration.test.js`): **10/10 tests passed (0 skip, 0 fail)** รวม Product service failure → persisted outbox → retry สำเร็จ และ multi-role queue access
+- Negative integration-gate check: บังคับ `REQUIRE_INTEGRATION=1` กับ DB ที่เข้าไม่ได้แล้ว suite **exit 1, 0 skipped**
+- Full Integration Suites:
+  - `admin-hold.integration.test.js`: **1/1 passed**
+  - `dispute-decision.integration.test.js`: **2/2 passed**
+  - `evidence-access.integration.test.js`: **1/1 passed**
+  - `support-lookup.integration.test.js`: **1/1 passed**
+- Unit Tests:
+  - `disputeOwnership.test.js`: **6/6 passed**
+  - `holdBackfillService.test.js`: **3/3 passed**
+  - `orderTransitionService.test.js`: **7/7 passed**
+  - `productSyncService.test.js`: **2/2 passed**
+  - `authClient.test.js`: **1/1 passed**
+  - Product `reservationService.test.js`: **3/3 passed**
+  - `checkoutService.test.js`: **2/2 passed**
+- Full Backend Suite: `npm test` → **128 passed, 0 failed, 19 skipped** (integration ของ service อื่นที่ไม่มี DB ใน environment นี้)
+- Frontend Tests: `npm test` (Frontend Jest): **12/12 suites passed (46/46 tests)**
+- ESLint production scope: `npx eslint backend frontend scripts` ผ่าน 0 errors
+- Backfill Execution: `scripts/backfillHolds.js` → scanned 63 orders, 0 holds created, 0 ambiguous, 100% idempotent

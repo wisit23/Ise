@@ -18,6 +18,9 @@ const auditRoutes = require("./features/audit/auditRoutes");
 const metricsRoutes = require("./features/metrics/metricsRoutes");
 const productModerationRoutes = require("./features/productModeration/productModerationRoutes");
 
+const prisma = require("./models/prismaClient");
+const authService = require("./services/authService");
+
 const app = express();
 app.use(express.json());
 app.locals.validateAccessSession = validateAccessSession;
@@ -41,6 +44,29 @@ app.post(
           ? error
           : sessionUnavailable(),
       );
+    }
+  },
+);
+
+app.get(
+  "/internal/users/:id",
+  requireInternalToken,
+  async (req, res, next) => {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!user) return res.status(404).json({ error: "user not found" });
+      const roles = await authService.getUserRoles(user.id);
+      res.json({
+        id: user.id,
+        email: user.email,
+        status: user.status,
+        role: user.role,
+        roles,
+      });
+    } catch (err) {
+      next(err);
     }
   },
 );

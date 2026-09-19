@@ -53,6 +53,26 @@ export default function DisputeCasePage() {
     }
   }
 
+  const [claiming, setClaiming] = useState(false);
+
+  async function handleClaim() {
+    const token = getAccessToken();
+    setClaiming(true);
+    setError("");
+    try {
+      await apiFetch(`/api/orders/disputes/${dispute.id}/claim`, {
+        method: "POST",
+        token,
+        body: { version: dispute.version },
+      });
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setClaiming(false);
+    }
+  }
+
   async function handleDecision(decision) {
     if (!decisionReason.trim()) {
       setError("กรุณากรอกเหตุผลก่อนตัดสินเคส");
@@ -65,7 +85,7 @@ export default function DisputeCasePage() {
       await apiFetch(`/api/orders/disputes/${dispute.id}/decision`, {
         method: "POST",
         token,
-        body: { decision, reason: decisionReason },
+        body: { decision, reason: decisionReason, version: dispute.version },
       });
       load();
     } catch (err) {
@@ -160,35 +180,67 @@ export default function DisputeCasePage() {
             </p>
           </div>
         ) : isAgent ? (
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <h2 className="mb-2 text-sm font-semibold text-gray-900">
-              บันทึกผลการพิจารณา
-            </h2>
-            <textarea
-              value={decisionReason}
-              onChange={(e) => setDecisionReason(e.target.value)}
-              rows={3}
-              placeholder="เหตุผลประกอบการตัดสิน (บังคับกรอก)"
-              className="mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-            />
-            {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleDecision("APPROVE_REFUND")}
-                disabled={deciding}
-                className="flex-1 rounded-md bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                อนุมัติคืนเงิน
-              </button>
-              <button
-                onClick={() => handleDecision("REJECT")}
-                disabled={deciding}
-                className="flex-1 rounded-md border border-red-300 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-              >
-                ปฏิเสธคำร้อง
-              </button>
+          !dispute.assignedTo ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-center">
+              <h3 className="text-sm font-semibold text-amber-900">
+                เคสนี้ยังไม่มีผู้รับผิดชอบ (Claim Required)
+              </h3>
+              <p className="mt-1 text-xs text-amber-700">
+                {dispute.assignedRole === "TRUST_AND_SAFETY"
+                  ? "เคสถูกส่งต่อให้ Trust & Safety แล้ว กรุณากดรับเคสเพื่อเริ่มต้นดำเนินการ"
+                  : "กรุณากดรับเคสเพื่อเริ่มต้นตรวจสอบและตัดสินข้อพิพาท"}
+              </p>
+              {(dispute.assignedRole !== "TRUST_AND_SAFETY" ||
+                user?.role === "TRUST_AND_SAFETY") && (
+                <button
+                  onClick={handleClaim}
+                  disabled={claiming}
+                  className="mt-3 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {claiming ? "กำลังรับเคส..." : "รับเคสนี้ (Claim)"}
+                </button>
+              )}
             </div>
-          </div>
+          ) : dispute.assignedTo !== user?.id ? (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
+              <h3 className="text-sm font-semibold text-gray-700">
+                ส่วนการตัดสินเป็นแบบอ่านอย่างเดียว (Read-only)
+              </h3>
+              <p className="mt-1 text-xs text-gray-500">
+                เฉพาะเจ้าหน้าที่ผู้รับผิดชอบ ({dispute.assignedTo}) เท่านั้นที่สามารถตัดสินเคสนี้ได้
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-gray-200 bg-white p-4">
+              <h2 className="mb-2 text-sm font-semibold text-gray-900">
+                บันทึกผลการพิจารณา
+              </h2>
+              <textarea
+                value={decisionReason}
+                onChange={(e) => setDecisionReason(e.target.value)}
+                rows={3}
+                placeholder="เหตุผลประกอบการตัดสิน (บังคับกรอก)"
+                className="mb-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+              />
+              {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleDecision("APPROVE_REFUND")}
+                  disabled={deciding}
+                  className="flex-1 rounded-md bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  อนุมัติคืนเงิน
+                </button>
+                <button
+                  onClick={() => handleDecision("REJECT")}
+                  disabled={deciding}
+                  className="flex-1 rounded-md border border-red-300 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  ปฏิเสธคำร้อง
+                </button>
+              </div>
+            </div>
+          )
         ) : (
           <p className="text-sm text-gray-500">
             รอเจ้าหน้าที่ตรวจสอบและตัดสินเคส

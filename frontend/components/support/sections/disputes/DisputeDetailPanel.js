@@ -1,8 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import Badge from "../../../panel/ui/Badge";
 import Button from "../../../ui/Button";
+import ConfirmDialog from "../../../ui/ConfirmDialog";
+import Input from "../../../ui/Input";
+import Modal from "../../../ui/Modal";
 import Skeleton from "../../../ui/Skeleton";
 import Textarea from "../../../ui/Textarea";
 import {
@@ -60,6 +64,7 @@ export default function DisputeDetailPanel({
   details,
   detailsLoading,
   userRole,
+  currentUserId,
   closing,
   decisionReason,
   onDecisionReasonChange,
@@ -67,9 +72,20 @@ export default function DisputeDetailPanel({
   openingEvidenceId,
   onViewEvidence,
   onDecide,
+  onClaim,
+  claiming,
+  onReassign,
+  reassigning,
+  onEscalate,
+  escalating,
   onOpenChat,
   onClose,
 }) {
+  const [showEscalateDialog, setShowEscalateDialog] = useState(false);
+  const [showReassignDialog, setShowReassignDialog] = useState(false);
+  const [reassignToUserId, setReassignToUserId] = useState("");
+  const [reassignReason, setReassignReason] = useState("");
+
   const buyerId = dispute.order?.buyerId ?? dispute.buyerId ?? null;
   const sellerId = dispute.order?.sellerId ?? dispute.sellerId ?? null;
 
@@ -131,6 +147,103 @@ export default function DisputeDetailPanel({
       </div>
 
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto bg-slate-50/30 p-6">
+        {/* TSR-02: Single-owner assignment status card */}
+        <SectionCard icon="assignment_ind" title="การรับผิดชอบเคส (Case Ownership)" tone="indigo">
+          {details?.assignedTo ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500">ผู้รับผิดชอบ:</span>
+                    <span className="font-mono text-sm font-bold text-slate-800">
+                      {details.assignedTo}
+                    </span>
+                    <Badge
+                      text={
+                        details.assignedRole === "TRUST_AND_SAFETY"
+                          ? "Trust & Safety"
+                          : "Customer Service"
+                      }
+                      style={
+                        details.assignedRole === "TRUST_AND_SAFETY"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-blue-100 text-blue-800"
+                      }
+                    />
+                  </div>
+                  {details.claimedAt && (
+                    <p className="mt-0.5 text-[11px] text-slate-400">
+                      รับเคสเมื่อ {new Date(details.claimedAt).toLocaleString("th-TH")}
+                    </p>
+                  )}
+                </div>
+
+                {details.assignedTo === currentUserId ? (
+                  <Badge text="คุณเป็นผู้รับผิดชอบ" style="bg-emerald-100 text-emerald-800 font-bold" />
+                ) : (
+                  <Badge text="ดูแลโดยท่านอื่น (Read-only)" style="bg-slate-100 text-slate-600" />
+                )}
+              </div>
+
+              {/* Action buttons if current user is assignee or Trust & Safety supervisor */}
+              {details.status !== "DECIDED" &&
+                (details.assignedTo === currentUserId || userRole === "TRUST_AND_SAFETY") && (
+                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
+                    {userRole === "CUSTOMER_SERVICE" && details.assignedTo === currentUserId && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon="forward"
+                        loading={escalating}
+                        onClick={() => setShowEscalateDialog(true)}
+                      >
+                        ส่งต่อให้ Trust & Safety (Escalate)
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon="swap_horiz"
+                      loading={reassigning}
+                      onClick={() => setShowReassignDialog(true)}
+                    >
+                      เปลี่ยนผู้รับผิดชอบ (Reassign)
+                    </Button>
+                  </div>
+                )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-700">
+                  {details?.assignedRole === "TRUST_AND_SAFETY"
+                    ? "เคสส่งต่อให้ Trust & Safety"
+                    : "เคสนี้ยังไม่มีผู้รับผิดชอบ"}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {details?.assignedRole === "TRUST_AND_SAFETY"
+                    ? userRole === "TRUST_AND_SAFETY"
+                      ? "กดรับเคสเพื่อเริ่มต้นดำเนินการในฐานะ Trust & Safety"
+                      : "เคสถูกส่งต่อให้ทีม Trust & Safety แล้ว (รอเจ้าหน้าที่ T&S รับเคส)"
+                    : "กดรับเคสเพื่อเริ่มต้นดำเนินการและตัดสินข้อพิพาท"}
+                </p>
+              </div>
+              {details?.status !== "DECIDED" &&
+                (details?.assignedRole !== "TRUST_AND_SAFETY" ||
+                  userRole === "TRUST_AND_SAFETY") && (
+                  <Button
+                    size="sm"
+                    icon="pan_tool"
+                    loading={claiming}
+                    onClick={onClaim}
+                  >
+                    รับเคสนี้ (Claim)
+                  </Button>
+                )}
+            </div>
+          )}
+        </SectionCard>
+
         <SectionCard icon="info" title="เหตุผลที่เปิดเคส">
           <p className="text-sm leading-relaxed text-slate-800">
             {dispute.reason}
@@ -248,6 +361,30 @@ export default function DisputeDetailPanel({
                   {details.decisionReason}
                 </p>
               </div>
+            ) : !details?.assignedTo ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-6 text-center">
+                <span className="material-symbols-outlined text-[36px] text-amber-500">
+                  pan_tool
+                </span>
+                <h4 className="mt-2 text-sm font-bold text-slate-800">
+                  ต้องกดรับเคส (Claim) ก่อนดำเนินการ
+                </h4>
+                <p className="mt-1 text-xs text-slate-600">
+                  เคสนี้ยังไม่มีผู้รับผิดชอบ กรุณากดปุ่ม &quot;รับเคสนี้ (Claim)&quot; ด้านบนเพื่อเริ่มต้นตัดสินเคส
+                </p>
+              </div>
+            ) : details.assignedTo !== currentUserId ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
+                <span className="material-symbols-outlined text-[36px] text-slate-400">
+                  lock
+                </span>
+                <h4 className="mt-2 text-sm font-bold text-slate-700">
+                  ส่วนการตัดสินเป็นแบบอ่านอย่างเดียว (Read-only)
+                </h4>
+                <p className="mt-1 text-xs text-slate-500">
+                  เฉพาะเจ้าหน้าที่ผู้รับผิดชอบ ({details.assignedTo}) เท่านั้นที่สามารถบันทึกผลการพิจารณาเคสนี้ได้
+                </p>
+              </div>
             ) : (
               <SectionCard icon="edit_note" title="บันทึกผลการพิจารณา">
                 <Textarea
@@ -294,6 +431,77 @@ export default function DisputeDetailPanel({
           </>
         ) : null}
       </div>
+
+      {/* Escalate Confirm Dialog */}
+      <ConfirmDialog
+        open={showEscalateDialog}
+        title="ส่งต่อเคสให้ทีม Trust & Safety (Escalate)"
+        description="การส่งต่อเคสจะโอนสิทธิ์การดูแลให้ทีม Trust & Safety คุณจะไม่สามารถตัดสินเคสนี้ต่อได้"
+        confirmLabel="ยืนยันการส่งต่อ"
+        reason="required"
+        reasonLabel="เหตุผลในการส่งต่อ"
+        busy={escalating}
+        onConfirm={(reason) => {
+          onEscalate(reason);
+          setShowEscalateDialog(false);
+        }}
+        onCancel={() => setShowEscalateDialog(false)}
+      />
+
+      {/* Reassign Dialog */}
+      {showReassignDialog && (
+        <Modal
+          open={showReassignDialog}
+          onClose={() => setShowReassignDialog(false)}
+          title="เปลี่ยนผู้รับผิดชอบเคส (Reassign)"
+          description="ระบุ User ID ของเจ้าหน้าที่ที่ต้องการมอบหมายงานต่อ"
+          size="sm"
+          footer={
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setShowReassignDialog(false)}
+                disabled={reassigning}
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!reassignToUserId.trim() || !reassignReason.trim()) return;
+                  onReassign(reassignToUserId.trim(), reassignReason.trim());
+                  setShowReassignDialog(false);
+                }}
+                disabled={
+                  !reassignToUserId.trim() ||
+                  !reassignReason.trim() ||
+                  reassigning
+                }
+                loading={reassigning}
+              >
+                ยืนยันการมอบหมาย
+              </Button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            <Input
+              label="User ID ของผู้รับผิดชอบใหม่"
+              placeholder="เช่น cs-staff-02..."
+              value={reassignToUserId}
+              onChange={(e) => setReassignToUserId(e.target.value)}
+              required
+            />
+            <Textarea
+              label="เหตุผลในการส่งมอบงาน"
+              placeholder="ระบุเหตุผลในการเปลี่ยนผู้รับผิดชอบ..."
+              value={reassignReason}
+              onChange={(e) => setReassignReason(e.target.value)}
+              rows={3}
+              required
+            />
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

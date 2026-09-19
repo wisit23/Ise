@@ -9,6 +9,36 @@ const {
 const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
+const orderTransitionService = require("../services/orderTransitionService");
+const productSyncService = require("../services/productSyncService");
+
+function productSyncFor(order, status, purpose) {
+  if (status === "cancelled" && order.reservationId) {
+    return {
+      dedupeKey: `${purpose}:${order.id}:${order.version}`,
+      action: productSyncService.ACTIONS.RELEASE_RESERVATION,
+      productId: order.productId,
+      reservationId: order.reservationId,
+    };
+  }
+  return {
+    dedupeKey: `${purpose}:${order.id}:${order.version}`,
+    action: productSyncService.ACTIONS.SET_STATUS,
+    productId: order.productId,
+    targetStatus: status === "completed" ? "sold" : "available",
+  };
+}
+
+async function respondAfterProductSync(res, order, event) {
+  try {
+    await productSyncService.processEvent(event.id);
+    res.json(order);
+  } catch {
+    // The durable outbox worker will retry. A 202 tells the caller that the
+    // local transition committed but the cross-service projection is pending.
+    res.status(202).json({ ...order, productSyncPending: true });
+  }
+}
 
 async function create(req, res, next) {
   try {
@@ -100,22 +130,27 @@ async function updateStatus(req, res, next) {
       );
     }
 
-    const updated = await orderModel.updateStatus(req.params.id, status);
+    // TSR-02: Prevent participant updating status while order has open dispute or hold
+    orderTransitionService.assertCanParticipantUpdateStatus(order);
 
-    if (status === "cancelled") {
-      if (order.reservationId) {
-        await productClient.releaseProductReservation(
-          order.productId,
-          order.reservationId,
-        );
-      } else {
-        await productClient.setProductStatus(order.productId, "available");
-      }
-    }
-    if (status === "completed") {
-      await productClient.setProductStatus(order.productId, "sold");
+    if (["cancelled", "completed"].includes(status)) {
+      const { order: updated, event } =
+        await orderModel.transitionStatusWithProductSync({
+          id: req.params.id,
+          status,
+          expectedVersion: order.version,
+          expectedStatuses: [order.status],
+          productSync: productSyncFor(order, status, "ORDER_STATUS"),
+        });
+      await respondAfterProductSync(res, updated, event);
+      return;
     }
 
+    const updated = await orderModel.updateStatus(
+      req.params.id,
+      status,
+      order.version,
+    );
     res.json(updated);
   } catch (err) {
     next(err);
@@ -142,37 +177,61 @@ async function pay(req, res, next) {
     if (order.buyerId !== req.userId) {
       throw forbidden("only the buyer can pay for this order");
     }
+    if (order.status === "completed") {
+      const pendingEvent = await productSyncService.findPendingForOrder(
+        order.id,
+      );
+      if (pendingEvent) {
+        await respondAfterProductSync(res, order, pendingEvent);
+        return;
+      }
+    }
     if (!["pending", "pending_payment"].includes(order.status)) {
       throw badRequest(
         `order is already ${order.status}, it cannot be paid again`,
       );
     }
 
+    // Guard against active hold / dispute
+    orderTransitionService.assertCanParticipantUpdateStatus(order);
+
     if (
       order.reservationExpiresAt &&
       order.reservationExpiresAt <= new Date()
     ) {
-      await orderModel.updateStatus(req.params.id, "cancelled");
-      if (order.reservationId) {
-        await productClient.releaseProductReservation(
-          order.productId,
-          order.reservationId,
-        );
+      const { event } = await orderModel.transitionStatusWithProductSync({
+        id: req.params.id,
+        status: "cancelled",
+        expectedVersion: order.version,
+        expectedStatuses: ["pending", "pending_payment"],
+        productSync: productSyncFor(order, "cancelled", "RESERVATION_EXPIRED"),
+      });
+      try {
+        await productSyncService.processEvent(event.id);
+      } catch {
+        // Persisted in the outbox and retried by the worker.
       }
       throw conflict("reservation has expired");
     }
 
-    if (order.reservationId) {
-      await productClient.completeProductReservation(
-        order.productId,
-        order.reservationId,
-      );
-    } else {
-      await productClient.setProductStatus(order.productId, "sold");
-    }
-    const updated = await orderModel.updateStatus(req.params.id, "completed");
+    const productSync = order.reservationId
+      ? {
+          dedupeKey: `PAY:${order.id}:${order.version}`,
+          action: productSyncService.ACTIONS.COMPLETE_RESERVATION,
+          productId: order.productId,
+          reservationId: order.reservationId,
+        }
+      : productSyncFor(order, "completed", "PAY");
+    const { order: updated, event } =
+      await orderModel.transitionStatusWithProductSync({
+        id: req.params.id,
+        status: "completed",
+        expectedVersion: order.version,
+        expectedStatuses: ["pending", "pending_payment"],
+        productSync,
+      });
 
-    res.json(updated);
+    await respondAfterProductSync(res, updated, event);
   } catch (err) {
     next(err);
   }

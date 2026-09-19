@@ -21,6 +21,7 @@ module.exports = [
       ".github/skills/**",
       ".github/agents/**",
       ".github/hooks/**",
+      ".codex_tmp_review_comments/**",
     ],
   },
   js.configs.recommended,

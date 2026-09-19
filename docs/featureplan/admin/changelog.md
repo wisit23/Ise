@@ -281,12 +281,14 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
 ลบและแทนที่บทบาท `ADMIN` ออกจากทั้งระบบ 100% โดยเปลี่ยนเป็น `TRUST_AND_SAFETY` (Trust and Safety) ในทุกเลเยอร์ของระบบ โดยไม่มีการคง enum ค่า `ADMIN` ไว้เป็นหนี้ทางเทคนิค:
 
 **Shared & Database Schema:**
+
 - `backend/shared/src/permissions.js`: เปลี่ยน key ใน `ROLE_PERMISSIONS` จาก `ADMIN` เป็น `TRUST_AND_SAFETY` และปรับ `ALL_ROLES` ให้มี `TRUST_AND_SAFETY` แทน `ADMIN`
 - `backend/services/auth-service/prisma/schema.prisma`: แทนที่ `ADMIN` ด้วย `TRUST_AND_SAFETY` ใน `enum Role` และ `enum RoleCode`
 - PostgreSQL migration: รันสคริปต์อัปเดตข้อมูลเดิมใน `users` และ `user_roles` ที่เคยมี role `ADMIN` ให้กลายเป็น `TRUST_AND_SAFETY` จากนั้น `prisma db push --accept-data-loss` สำเร็จ ไม่พบข้อผิดพลาด
 - `seed-admin-demo.js` & `seed.js`: อัปเดตสคริปต์ seed ให้สร้างบัญชีด้วย role `TRUST_AND_SAFETY` (`admin@test.local`)
 
 **Backend Microservices Role Guards:**
+
 - `backend/services/product-service/src/controllers/productController.js`: `requireSellerRole` และ `adminSearch` เปลี่ยนจากการเช็ค `ADMIN` เป็น `TRUST_AND_SAFETY`
 - `backend/services/product-service/src/routes/uploadRoutes.js`: `requireRole("SELLER", "TRUST_AND_SAFETY")`
 - `backend/services/product-service/src/features/product-videos/productVideoService.js`: `UPLOAD_ROLES` เปลี่ยนเป็น `new Set(["SELLER", "TRUST_AND_SAFETY"])`
@@ -295,6 +297,7 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
 - `backend/services/order-service/src/features/support/supportService.js` & `disputeService.js`: `AGENT_ROLES` เปลี่ยนจาก `ADMIN` เป็น `TRUST_AND_SAFETY`
 
 **Frontend UI & Navigation:**
+
 - `frontend/components/NavBar.js`: `ROLE_LABEL` เปลี่ยนจาก `ADMIN: "แอดมิน"` เป็น `TRUST_AND_SAFETY: "Trust and Safety"`; `isSupportAgent` รองรับ `TRUST_AND_SAFETY`
 - `frontend/app/profile/page.js`: `ROLE_LABEL` มี `TRUST_AND_SAFETY: "Trust and Safety"`
 - `frontend/app/workspace/page.js`: สิทธิ์การเข้าถึงแท็บควบคุมความปลอดภัย และ Badge เปลี่ยนเป็น `"Trust and Safety"`
@@ -305,6 +308,7 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
 - `frontend/components/NavBar.js`: แก้ไขส่วนหัวของเมนูโปรไฟล์ให้แสดงเฉพาะข้อความ `"Trust and Safety"` บรรทัดเดียวอย่างกระชับเมื่อผู้ใช้ถือบทบาท `TRUST_AND_SAFETY` โดยไม่แสดงชื่อเดิม "แอดมิน ระบบ" พร้อมทั้งอัปเดตชื่อสตาฟฟ์ในฐานข้อมูลจริงและ seed.js เป็น "Trust and Safety"
 
 **Tests Verification:**
+
 - `backend/shared/src/permissions.test.js` & `authMiddleware.test.js`: 10/10 pass
 - `backend/services/auth-service/test/`: `admin-kyc`, `admin-reports`, `bounded-bulk`, `multi-role` 4/4 pass (พร้อมทั้ง sync `KycApplication` test fields `storageKey`/`fileType` ให้ตรงกับ schema ล่าสุด)
 - `backend/services/order-service/test/admin-hold.integration.test.js`: 1/1 pass
@@ -318,17 +322,21 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
 นำระบบและหน้าที่การอนุมัติประมูล (Auction Approvals) ออกจากบทบาท `Trust and Safety` ตามขอบเขตความรับผิดชอบ (Separation of Concerns) โดยงานส่วนนี้เป็นของทีมการตลาด (Marketing) และปฏิบัติตามคำสั่งที่ไม่แตะต้องโค้ดฝั่ง Marketing เพื่อรอ merge กับทีม:
 
 **Frontend Workspace Changes:**
+
 - `frontend/app/workspace/page.js`: ลบ import `AuctionApprovalsSection`, นำ `{ key: "auction_approvals", label: "อนุมัติประมูล", icon: "sell" }` ออกจากรายการแท็บ `ADMIN_SECTIONS` และลบ block แสดงผล `{section === "auction_approvals" && ...}`
 - `frontend/components/support/sections/AuctionApprovalsSection.js`: ลบไฟล์คอมโพเนนต์นี้ออกจากระบบอย่างสมบูรณ์
 
 **Backend Authorization:**
+
 - `backend/services/product-service/src/features/auctions/auctionService.js`: ตัด `TRUST_AND_SAFETY` ออกจากสิทธิ์ `approve`, `reject`, `schedule`, `cancel`, และ `submit` โดยคงการตรวจสอบสิทธิ์ `approve`/`reject` ไว้เฉพาะบทบาท `MARKETING`
 - `backend/services/product-service/src/features/auctions/auctionService.test.js`: ปรับ unit tests ให้การอนุมัติประมูลปฏิเสธ `TRUST_AND_SAFETY` ด้วย 403 Forbidden และยอมรับเฉพาะ `MARKETING`
 
 **Scope Boundary & Isolation:**
+
 - ไม่มีการแตะต้องหรือแก้ไขไฟล์ในส่วนของ Marketing (`frontend/components/marketing/` ฯลฯ) คงไว้สำหรับการ merge ร่วมกับเพื่อนร่วมทีมที่รับผิดชอบส่วนดังกล่าวโดยตรง
 
 **Tests Verification:**
+
 - Backend auctions unit tests: 17/17 pass
 - Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
 - Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
@@ -338,11 +346,13 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
 ปรับปรุงข้อความบน UI เพื่อให้สอดรับกับการเปลี่ยนบทบาทจาก `ADMIN` เป็น `TRUST_AND_SAFETY` 100%:
 
 **UI Changes:**
+
 - `frontend/app/workspace/page.js`: เปลี่ยนชื่อแท็บ `admin_inbox` จาก `"เคสระดับแอดมิน"` เป็น `"เคส Trust & Safety"`
 - `frontend/components/support/sections/DashboardSection.js`: เปลี่ยนข้อความนำทางบนการ์ด KPI Escalated Tickets สำหรับเจ้าหน้าที่จาก `"ดูที่เคสระดับแอดมิน"` เป็น `"ดูที่เคส Trust & Safety"`
 - `frontend/components/support/sections/tickets/TicketsTable.js`: อัปเดต inline comments ให้สื่อถึงบทบาท Trust and Safety
 
 **Tests Verification:**
+
 - Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
 - Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
 
@@ -351,6 +361,7 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
 แก้ไขปัญหาเจ้าหน้าที่สับสนและแบนผู้แจ้งปัญหา (Requester) แทนคู่กรณีที่ถูกร้องเรียน (Target) ในหน้าเคส Trust & Safety:
 
 **Frontend Changes:**
+
 - `frontend/components/support/sections/case/CaseUserCard.js`: เพิ่ม props `warnLabel`, `banLabel`, และ `isRequester` เพื่อปรับข้อความและปุ่มสำหรับผู้ส่งคำร้องให้เป็นสีเทาอ่อน/ขอบบาง ป้องกันการเข้าใจผิดว่าเป็นปุ่มลงโทษคู่กรณีหลัก
 - `frontend/components/support/sections/case/TicketCasePanel.js`:
   - สลับลำดับการ์ดนำ `คู่กรณี (Target - ผู้ถูกร้องเรียน)` มาแสดงเป็นอันดับแรกด้านบนสุด พร้อมปุ่มแบนสีแดง `[แบนคู่กรณี]`
@@ -365,10 +376,12 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
   - ปรับปรุงคอลัมน์ในตารางจากเดิม "รหัสลูกค้า (ID)" เป็น "คู่กรณี / ผู้แจ้ง" เพื่อแสดงรหัสคู่กรณี (สีส้ม) และผู้แจ้ง (สีเทา) ให้เห็นตั้งแต่ภาพรวม
 
 **Backend / Database Changes:**
+
 - `backend/services/support-service/prisma/seed.js`: เพิ่ม `targetId: SELLER_DENIM` ให้กับตั๋วข้อพิพาท `#CS-000002` และปรับการ upsert ให้ sync `targetId` เสมอ
 - อัปเดตข้อมูลตั๋ว `#CS-000002` ในฐานข้อมูลจริง `reloop_support` ให้มี `target_id = 10000000-0000-0000-0000-000000000001` (Denim Seller) เรียบร้อยแล้ว
 
 **Tests Verification:**
+
 - Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
 - Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
 
@@ -377,24 +390,30 @@ reason, requestId})` (บันทึก `USER_WARNED` audit, **ไม่แต�
 Refactor ปรับปรุงคุณภาพโค้ด สถาปัตยกรรม และความเสถียรของ Backend ที่เกี่ยวข้องกับระบบ **Trust & Safety** ข้าม 4 Microservices:
 
 **1. Database Atomicity (`prisma.$transaction`):**
+
 - `backend/services/auth-service/src/features/adminKyc/adminKycService.js`: ห่อหุ้มการอัปเดต `kycApplication` + `sellerProfile` + การบันทึก `adminAudit` ให้อยู่ใน Transaction เดียว ป้องกันข้อมูลค้างหรือสถานะไม่ตรงกันหากคำสั่งใดคำสั่งหนึ่งล้มเหลว
 - `backend/services/order-service/src/features/adminDisputes/adminDisputeService.js`: ห่อหุ้มการสั่งพักเงิน (`holdSimulatedFunds`) และการคืนเงิน (`releaseSimulatedFunds`) ให้อยู่ใน Transaction เดียวกันกับการบันทึก `disputeAudit`
 
 **2. Complete Audit Logging:**
+
 - บันทึก Audit Trail สำหรับการตัดสินใจ KYC (`KYC_APPROVED`, `KYC_REJECTED`) ลงในตาราง `admin_audits` อย่างครบถ้วน ปิดช่องว่าง NFR-SP-03
 - `reportService.js`: ปรับปรุง Safety Summary ให้นับจำนวนการระงับบัญชี (`suspensionCount`) และการตักเตือน (`warningCount`) เพิ่มเติม
 
 **3. Expanded Bulk Moderation Registry:**
+
 - `backend/services/auth-service/src/features/bulkActions/actionRegistry.js`: เพิ่มคำสั่ง `WARN_USER` และ `RESTORE_USER` รองรับการ Dry-run, Idempotency และจำกัดจำนวนต่อรอบ (Max batch size 100)
 - `bulkActionService.js`: ทำความสะอาดการส่งต่อพารามิเตอร์ `staffId`, `actorId`, และ `requestId`
 
 **4. Service-to-Service HTTP Resilience:**
+
 - `backend/services/auth-service/src/services/productModerationClient.js`: เพิ่ม Timeout 5,000ms ด้วย `AbortSignal.timeout` พร้อมจัดการ Error 504 Timeout ป้องกันปัญหาระบบค้างเมื่อเรียกข้ามเครือข่ายไปยัง `product-service`
 
 **5. Support Oversight Authorization:**
+
 - `backend/services/support-service/src/features/tickets/ticketService.js`: ปรับปรุง `assertAccess` ให้บทบาท `TRUST_AND_SAFETY` มีสิทธิ์ตรวจสอบและดูแลตั๋วทุกใบได้เสมอ แม้ตั๋วจะมีเจ้าหน้าที่ CS ท่านอื่นรับผิดชอบอยู่ก็ตาม (ขจัดปัญหา 403 Forbidden ที่เคยพบ)
 
 **Tests Verification:**
+
 - Shared permissions & authMiddleware unit tests: 10/10 pass
 - Auth-service PostgreSQL integration tests (`admin-kyc`, `admin-reports`, `bounded-bulk`): 3/3 pass (ครอบคลุมทั้ง `SUSPEND_USER`, `WARN_USER`, และ `RESTORE_USER`)
 - Order-service PostgreSQL integration test (`admin-hold`): 1/1 pass
@@ -408,30 +427,36 @@ Refactor ปรับปรุงคุณภาพโค้ด สถาปั�
 Refactor ปรับปรุงประสบการณ์ใช้งาน สถาปัตยกรรมคอมโพเนนต์ และความปลอดภัยในการใช้งาน (Safety Guards) ของระบบ **Trust & Safety** บน Frontend:
 
 **1. KYC Section Modernization & Controls (`frontend/components/support/sections/KycSection.js`):**
+
 - เพิ่มตัวเลือกกรองสถานะ (`PENDING`, `VERIFIED`, `REJECTED`, `ALL`) ทำให้สามารถเรียกดูใบสมัครที่ผ่านการตัดสินแล้วย้อนหลังได้
 - เพิ่มระบบ Pagination เชื่อมต่อกับ Backend Pagination API
 - นำ `ConfirmDialog` มาครอบการตัดสินใจอนุมัติ (`VERIFY`) และปฏิเสธ (`REJECT`) ป้องกันการกดพลาด พร้อมแจ้งเตือนผ่าน Toast
 - จัดรูปแบบการแสดงผลใหม่ด้วย `Badge` และดีไซน์การ์ดข้อมูลร้านค้าที่อ่านง่ายและสบายตา
 
 **2. Audit Log Overhaul (`frontend/components/support/sections/AuditSection.js`):**
+
 - ปรับคำศัพท์จาก "Audit Log ของแอดมิน" เป็น "Audit Log ของ Trust & Safety" และเปลี่ยนชื่อคอลัมน์เป็น "ผู้ดำเนินการ (Staff ID)"
 - แก้ไขการอ่านฟิลด์ข้อมูลจริง (`actorId`, `targetId`, `reason`) ขจัดปัญหาค่าว่าง/ขีดค้างในตาราง
 - เพิ่มตัวกรองประเภทการกระทำ (Action Filter) แบบ Dropdown และช่องค้นหารหัสเป้าหมาย (Target ID)
 - เพิ่ม Pagination รองรับการดูประวัติขนาดใหญ่
 
 **3. Product Moderation Polish (`frontend/components/support/sections/ProductsSection.js`):**
+
 - ปรับปรุงข้อความสถานะสินค้าเป็น "ถูกระงับโดย Trust & Safety"
 - เพิ่ม Pagination สำหรับผลลัพธ์การค้นหาสินค้า
 - เพิ่ม Toast แจ้งเตือนเมื่อกู้คืนสินค้าสำเร็จ
 
 **4. Dispute Fund Management Safeguards (`frontend/app/admin/disputes/[id]/page.js`):**
+
 - ครอบคำสั่งระงับเงิน (`Hold`) และปล่อยเงิน (`Release`) ด้วย `ConfirmDialog` พร้อมคำอธิบายผลกระทบทางการเงินชัดเจน
 - ปรับปรุงข้อความคำเตือนให้อ้างอิงถึงทีม Trust & Safety
 
 **5. Escalation Copy Alignment (`frontend/components/support/sections/AdminInboxSection.js`):**
+
 - ปรับปรุงข้อความส่งต่อตั๋วเป็น "ส่งต่อให้ทีม Trust & Safety?"
 
 **Tests Verification:**
+
 - Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
 - Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
 - Shared RBAC tests: 10/10 pass
@@ -441,6 +466,7 @@ Refactor ปรับปรุงประสบการณ์ใช้งา�
 ยกระดับหน้าแท็บค้นหาใน Workspace สู่ **"ศูนย์ค้นหาข้อมูล Trust & Safety (Unified Search Center)"** ค้นหาข้อมูลได้หลากหลายและสั่งการควบคุมความปลอดภัยได้ทันที:
 
 **1. Multi-Entity Search Dropdown & Dynamic Placeholders (`frontend/components/support/sections/OrdersSection.js`):**
+
 - เพิ่มตัวเลือกประเภทการค้นหาใน `RadioSelect`:
   - `orderId`: ค้นหารหัสคำสั่งซื้อ (Order ID)
   - `buyerId`: ค้นหาด้วยรหัสหรืออีเมลของผู้ซื้อ (Buyer ID / Email)
@@ -449,12 +475,14 @@ Refactor ปรับปรุงประสบการณ์ใช้งา�
 - ปรับเปลี่ยนข้อความ Placeholder อัตโนมัติตามประเภทที่เลือก พร้อมปุ่มล้างคำค้นหา (Clear input)
 
 **2. User Profile & Safety Summary Card:**
+
 - แสดงข้อมูลโปรไฟล์: ชื่อ-นามสกุล, อีเมล, เบอร์โทรศัพท์, สิทธิ์ผู้ใช้ (Roles), สถานะบัญชี (`ACTIVE` / `SUSPENDED`)
 - ปุ่มคัดลอก User ID พร้อม visual feedback
 - สถิติด้านความปลอดภัย 3 ด้าน: รายงานที่ได้รับ (`reportCount`), การตักเตือน (`warningCount`), ประวัติการถูกระงับบัญชี (`suspensionCount`)
 - ข้อมูลผู้ขาย (Seller Profile): แสดงชื่อร้านค้า, สถานะ KYC (`VERIFIED` / `PENDING` / `REJECTED`), เลขบัตรประชาชน, บัญชีธนาคาร, ที่อยู่
 
 **3. Direct Moderation Actions with ConfirmDialog:**
+
 - เพิ่มปุ่มสั่งการระดับ Trust & Safety บนการ์ดผู้ใช้:
   - `[ตักเตือนผู้ใช้ (Warn)]`: เปิด `ConfirmDialog` ระบุเหตุผล และเรียก `POST /api/auth/admin/users/:id/warn`
   - `[ระงับบัญชี (Ban)]`: แสดงเมื่อผู้ใช้ยังไม่ถูกระงับ เปิด `ConfirmDialog` (Danger tone) และเรียก `POST /api/auth/admin/users/:id/suspend`
@@ -462,15 +490,18 @@ Refactor ปรับปรุงประสบการณ์ใช้งา�
 - ทุกคำสั่งบังคับระบุเหตุผลเพื่อบันทึก Audit Log พร้อมแสดงผลผ่าน Toast และรีเฟรชข้อมูลสถานะผู้ใช้แบบ real-time
 
 **4. Associated Orders List & Order Jump Integration:**
+
 - แสดงรายการคำสั่งซื้อจริงทั้งหมดที่เกี่ยวข้องกับผู้ใช้ที่ค้นหา
 - ในการ์ดแสดงผลการค้นหาคำสั่งซื้อ (`orderId`) เพิ่มปุ่มด่วน `[ตรวจสอบผู้ซื้อ]` และ `[ตรวจสอบผู้ขาย]` เพื่อสลับประเภทค้นหาและเจาะลึกข้อมูลประวัติผู้ใช้ได้ทันทีในคลิกเดียว
 
 **5. Backend Endpoint Extension (`auth-service`):**
+
 - เพิ่มฟังก์ชัน `getUserDetail(identifier)` ใน `backend/services/auth-service/src/features/reports/reportService.js` รองรับการค้นหาผู้ใช้จาก ID, Email, และ Shop Name พร้อมคืน `safetySummary` และ `sellerProfile`
 - เพิ่ม Route `GET /admin/users/:id` ใน `reportRoutes.js` ป้องกันด้วย `requireAuth` และสิทธิ์ `admin:report:read` / `support:case:read`
 - เพิ่มชุดทดสอบ Integration ใน `test/admin-reports.integration.test.js`
 
 **Tests Verification:**
+
 - Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
 - Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
 - Shared RBAC tests (`permissions.test.js`): 4/4 pass
@@ -502,3 +533,99 @@ Refactor ปรับปรุงประสบการณ์ใช้งา�
 - เพิ่ม `prisma/seed-ban-demo.js` และคำสั่ง `npm run seed:ban-demo` สำหรับบัญชี Trust & Safety กับ Buyer เป้าหมายโดยเฉพาะ
 - seed รีเซ็ตเฉพาะสองบัญชีเป็น ACTIVE, ตั้ง role/UserRole และรหัสผ่านให้แน่นอน พร้อม revoke session เก่าก่อนเริ่มรอบทดสอบใหม่
 - ไม่ลบ Audit Log และไม่เพิ่ม workflow นอกข้อ 1 Ban enforcement ตาม ADM-DEC-024
+
+## 2026-09-19 — ปรับแผน TSR-02 เป็น single-owner dispute
+
+- เพิ่มกฎให้หนึ่ง Dispute มีผู้รับผิดชอบที่แก้ไขได้ทีละคน พร้อม Claim/Reassign/Escalate, optimistic concurrency และ Audit
+- กำหนดให้เจ้าหน้าที่อื่นดูเคสได้ตามสิทธิ์ แต่ UI เป็น read-only และ backend ปฏิเสธคำสั่งเขียนหากไม่ใช่ `assignedTo`
+- ยืนยันว่าเจ้าของเคสกับเหตุพักเงินแยกจากกัน: โอนผู้รับผิดชอบไม่สร้างหรือลบ Hold และการปิด dispute ไม่ปล่อย Hold จาก T&S
+- เปลี่ยนเฉพาะ remediation plan/decision/progress ยังไม่แก้ Order schema, API หรือหน้า UI
+
+## 2026-09-19 — ดำเนินการ TSR-02: เจ้าของเคสรายคน และกฎ Hold/Release ของข้อพิพาท (Implementation Complete)
+
+- **Database & Prisma Client:**
+  - เพิ่ม model `OrderHold` ใน `backend/services/order-service/prisma/schema.prisma` และ `database/order-service.prisma` บันทึก `orderId`, `source`, `referenceId`, `reason`, `heldBy`, `heldAt`, `releasedBy`, `releasedAt`, `releaseReason`
+  - เพิ่ม fields `assignedTo`, `assignedRole`, `claimedAt`, `version` (default: 1) ใน model `DisputeCase`
+  - รีเจนเนอเรต Prisma clients ด้วย `node scripts/ensurePrismaClients.js --force`
+- **Central Order Transition Service:**
+  - สร้าง `backend/services/order-service/src/services/orderTransitionService.js` รวบรวมฟังก์ชัน `addHold`, `releaseHold`, `hasActiveHolds`, `resolveHoldState` และ `assertCanParticipantUpdateStatus`
+  - ตรวจสอบ `isPayoutHeld` ตาม active holds จริง และการันตีว่าสถานะ `refunded` จากผลการตัดสินจะไม่ถูกเขียนทับกลับเป็น `completed` เมื่อ T&S ปลด Hold
+- **Dispute Model, Service, & Controller:**
+  - เพิ่มฟังก์ชัน `claim`, `reassign`, `escalate` พร้อมตรวจสอบ optimistic concurrency ผ่าน `version`
+  - บังคับสิทธิ์ Single-Owner: เจ้าหน้าที่คนอื่นที่ไม่ใช่ `assignedTo` ถูกบล็อกไม่ให้ตัดสินเคส (403) หรือเพิ่มหลักฐาน (403)
+  - ผูกการเปิดเคส dispute ให้สร้าง `OrderHold` ประเภท `"DISPUTE"` และการตัดสิน `decide` จะปลดเฉพาะ Hold ของตนเองผ่าน `orderTransitionService.releaseHold` โดยไม่กระทบ Hold จาก Trust & Safety
+  - เพิ่ม Audit Log: `CLAIM`, `REASSIGN`, `ESCALATE`, `DECIDE`
+  - เผยแพร่ API Routes: `POST /disputes/:id/claim`, `POST /disputes/:id/reassign`, `POST /disputes/:id/escalate`
+- **Order Controller & Hold Integration:**
+  - `updateStatus` ของ Order ป้องกันไม่ให้ buyer/seller เปลี่ยนสถานะคำสั่งซื้อขณะติดข้อพิพาทหรือเงินถูกระงับ (409 Conflict)
+  - `adminDisputeService.js` (Trust & Safety) เชื่อมต่อกับ `orderTransitionService` จัดการ Hold แยก source `"TRUST_AND_SAFETY"`
+- **Frontend Support UI:**
+  - `DisputesTable.js`: เพิ่มคอลัมน์ "ผู้รับผิดชอบ" แสดง Badge เจ้าหน้าที่หรือสถานะ "ยังไม่มีผู้รับผิดชอบ"
+  - `DisputeDetailPanel.js`: เพิ่ม Section "การรับผิดชอบเคส (Case Ownership)", ปุ่ม "รับเคสนี้ (Claim)", "ส่งต่อให้ Trust & Safety (Escalate)" และ "เปลี่ยนผู้รับผิดชอบ (Reassign)" พร้อม Dialog ยืนยันและระบุเหตุผล
+  - ล็อกปุ่มตัดสินและแสดง Badge "ดูแลโดยท่านอื่น (Read-only)" หากผู้ใช้ปัจจุบันไม่ได้เป็น `assignedTo`
+  - `DisputesSection.js`: จัดการ State `claiming`, `reassigning`, `escalating` และเชื่อมต่อ API handlers พร้อมรีเฟรชคิว
+- **Tests & Verification:**
+  - Unit tests `orderTransitionService.test.js` (7/7 passed)
+  - Unit tests `disputeOwnership.test.js` (4/4 passed)
+  - Integration test suite `dispute-ownership-hold.integration.test.js`
+  - Frontend Jest tests `npm run test:frontend` (12/12 suites, 46/46 tests passed)
+  - ESLint `backend frontend scripts` สะอาด ปราศจาก error
+
+## 2026-09-19 — TSR-02 Code Review Remediation & Live DB Verification (All 6 Points Resolved)
+
+แก้ไขข้อบกพร่องจากการ Review ครบทั้ง 6 จุด (4 P1, 2 P2):
+
+1. **[P1] Escalate Ownership & Role Protection:**
+   - แก้ไขเงื่อนไข Authorization ใน `disputeService.escalate` ให้เฉพาะเจ้าของเคส (`dispute.assignedTo === userId`) หรือเจ้าหน้าที่ `TRUST_AND_SAFETY` เท่านั้นที่มีสิทธิ์ escalate
+   - บล็อกไม่ให้เจ้าหน้าที่ CS เข้ามายึดเคสที่ส่งต่อให้ T&S แล้ว: เพิ่ม guard ใน `claim`, `decide`, และ `addEvidence` ของ `disputeService` ปฏิเสธ CS ด้วย 403 Forbidden หากเคสมี `assignedRole === "TRUST_AND_SAFETY"`
+   - เพิ่ม Role filter ใน SQL `updateMany` ของ `disputeModel.claim` ป้องกันการ race condition ในระดับฐานข้อมูล
+   - ปรับปรุง `DisputeDetailPanel.js` ให้ซ่อนปุ่ม "รับเคสนี้ (Claim)" สำหรับ CS เมื่อเคสอยู่ในความดูแลของ Trust & Safety
+2. **[P1] Hold Calculation on Release:**
+   - ใน `adminDisputeService.releaseSimulatedFunds` กำหนด `referenceId: "admin-hold"` เพื่อปลดเฉพาะ Hold ของตนเอง
+   - คำนวณ `payoutHeld` และสถานะผ่าน `orderTransitionService.resolveHoldState(tx, orderId, { releasingTsHold: true })` จาก `OrderHold` ที่ยัง active อยู่ทั้งหมด แทนการ hardcode `payoutHeld: csCaseStillOpen`
+3. **[P1] Atomic Optimistic Concurrency on Order:**
+   - ปรับ `adminDisputeService.holdSimulatedFunds` และ `releaseSimulatedFunds` ให้ทำ atomic conditional update ด้วย `tx.order.updateMany` ตรวจสอบ `id`, `version`, และ `paymentSimulationStatus` พร้อม increment `version: { increment: 1 }` ภายใน transaction เดียวกัน หากเกิด race condition จะโยน 409 Conflict
+   - ปรับ `orderModel.updateStatus` ให้รับ `expectedVersion` และทำ atomic conditional update ด้วย `updateMany`
+   - ปรับ `orderController.updateStatus` ให้ส่ง `order.version`
+   - ปรับ `disputeModel.openDispute` และ `disputeModel.decide` ให้ increment `Order.version` เสมอ
+4. **[P1] Integration Test Contracts & Real Postgres Execution:**
+   - แก้ไข contracts ใน `backend/services/order-service/test/dispute-ownership-hold.integration.test.js`:
+     - เริ่มต้น `version: 0` ตาม schema default
+     - แก้ไข route เป็น `POST /admin/:id/hold` และ `POST /admin/:id/release`
+     - ส่ง numeric version ใน payload ของ hold/release
+     - ใช้ `PATCH /:id/status` พร้อมสถานะที่ถูกต้อง
+     - ใส่ permissions ในโทเค็นผ่าน `permissionsForRoles`
+   - รันจริงกับฐานข้อมูล PostgreSQL (`127.0.0.1:5432/reloop_order`): **ผ่านครบทั้ง 4/4 tests (0 skip, 0 fail)**
+   - รัน integration tests ทั้งหมดใน order-service: `admin-hold`, `dispute-decision`, `dispute-ownership-hold` **ผ่านครบ 7/7 tests**
+5. **[P2] Mandatory Numeric Version:**
+   - บังคับ `typeof version !== "number"` ใน `claim`, `reassign`, `escalate`, และ `decide` ของ `disputeService` ตอบกลับด้วย 400 Bad Request
+6. **[P2] Backfill Service & Ambiguity Audit:**
+   - สร้าง `backend/services/order-service/src/services/holdBackfillService.js` และ CLI `scripts/backfillHolds.js`
+   - ตรวจจับ anomaly 4 รูปแบบ (payoutHeld ไม่มีที่มา, decision refund แต่สถานะไม่ refund, disputed status ไม่มี dispute, paymentSimulationStatus ไม่ sync กับ payoutHeld)
+   - รันสคริปต์จริงกับฐานข้อมูล: scanned 5 orders, created 2 holds, 0 ambiguous orders
+   - เพิ่มชุดทดสอบ unit test `holdBackfillService.test.js` (1/1 passed)
+
+## 2026-09-20 — TSR-02 10 Priorities Complete Hardening & Verification
+
+แก้ไขและยกระดับความปลอดภัยของ TSR-02 ตามข้อเสนอแนะ 10 ข้ออย่างสมบูรณ์:
+
+1. **Mandatory Claim before write/decide:** บังคับตรวจ `assignedTo === userId` ใน `decide` และ `addEvidence` สำหรับเจ้าหน้าที่; เคส `assignedTo === null` เป็น read-only ปฏิเสธด้วย 403 Forbidden; T&S ต้อง Claim เคส escalated ก่อนตัดสิน; ซ่อนและล็อกฟอร์มตัดสินใน `DisputeDetailPanel.js` และ `/support/cases/[id]`
+2. **Atomic CAS on Order State Transitions:** `openDispute` และ `decide` อัปเดต `Order` ผ่าน atomic CAS (`updateMany({ where: { id, version, status } })`) ตรวจสอบ affected rows และคืน 409 Conflict หากสถานะหรือ version เปลี่ยนพร้อมกัน; กำจัด `tx.order.update({ where: { id } })` ออกจาก state transitions สำคัญทั้งหมด
+3. **Payment Flow Hardening:** เพิ่ม guard hold/dispute ใน `orderController.pay()`; ส่ง `order.version` ให้ `orderModel.updateStatus()` ทั้งกรณีสำเร็จและกรณี reservation หมดอายุ; สลับให้ Order CAS สำเร็จก่อนตัดสต็อก
+4. **Idempotent Backfill & Anomaly Detection:** `holdBackfillService.js` ตรวจจับเคส dispute ที่ `payoutHeld=false` หรือสถานะ order ไม่ใช่ `disputed` เพื่อ sync ให้สอดคล้องกัน; รัน `scripts/backfillHolds.js` จริงกับฐานข้อมูลสแกน 63 รายการ พบ `createdHolds: 0`, `updatedOrders: 0`, `ambiguous: 0`
+5. **Validate Reassign Target:** ตรวจสอบเป้าหมายผ่าน `authClient.getUser(toUserId)` ว่ามีตัวตนจริงและสถานะ `ACTIVE`; ตรวจสอบ role ว่าเป็น `CUSTOMER_SERVICE` หรือ `TRUST_AND_SAFETY`; ดึง `assignedRole` จาก Auth service โดยตรง ไม่อนุญาตให้ใช้ `toRole` จาก payload
+6. **Define Eligible Hold Statuses:** กำหนดสถานะที่ T&S Hold ได้ (`confirmed`, `shipped`, `completed`, `disputed`); ปฏิเสธสถานะ `pending`, `pending_payment`, `cancelled`, `refunded` (400 Bad Request) ทั้งใน validation และ CAS transaction
+7. **Clean Legacy Hold Fields:** ใน `adminDisputeService.releaseSimulatedFunds` เคลียร์ `heldBy: null` ควบคู่กับ `heldAt: null` และ `holdReason: null`
+8. **Real Concurrency Integration Tests:** เพิ่ม integration tests ใน `dispute-ownership-hold.integration.test.js` จำลองการแข่งขันพร้อมกันจริงผ่าน `Promise.all` ครบทั้ง 4 race scenarios: แย่ง Claim, แย่ง Hold, Dispute Decision vs T&S Hold, Reassign vs Decision พร้อม Hold eligibility และ Concurrent Pay แยกตาม lifecycle ที่ไม่อนุญาตให้ Hold สถานะ `pending_payment`
+9. **Ownership Test Flow Update:** อัปเดต flow ของ escalate ในเทสต์เป็น Escalate → T&S Claim → Decide ครบวงจร พร้อมทดสอบ unassigned CS/T&S ไม่สามารถตัดสินหรือเพิ่มหลักฐานได้
+10. **Post-verification Documentation:** อัปเดต `remediation-plan.md`, `progress.md`, และ `changelog.md` หลังผลการทดสอบผ่าน 100% บน PostgreSQL จริง
+
+## 2026-09-20 — TSR-02 Final Review Closure
+
+- เพิ่ม transactional product-sync outbox: Order CAS และ `ProductSyncEvent` commit พร้อมกัน, ส่งทันทีเมื่อปลายทางพร้อม และมี worker retry แบบ exponential backoff เมื่อ Product service ล้ม; retry payment เดิมจะส่ง pending event ต่อแทนการสร้างธุรกรรมซ้ำ
+- ทำ `completeProductReservation` ให้ idempotent เมื่อคำสั่งเดิมสำเร็จแล้วแต่ response สูญหาย
+- เปลี่ยน Hold backfill เป็น per-order transaction ที่ re-read state, ตรวจ Order version/status และ Dispute status ด้วย CAS, บันทึก `preDisputeStatus` และใช้ `OrderHold.dedupeKey` กัน concurrent duplicate
+- รองรับ actor แบบ multi-role ผ่าน `req.userRoles`; role รอง CS/T&S สามารถอ่าน queue, claim/reassign/escalate/decide ตามสิทธิ์จริง
+- เพิ่ม timeout 5 วินาทีให้ internal Auth lookup และลบ `toRole` ที่ไม่ใช้จาก request contract
+- ทำ `REQUIRE_INTEGRATION=1` ให้ fail จริงเมื่อ DB เข้าไม่ได้ และแก้ชื่อ scenario เป็น Hold eligibility + Concurrent Pay ให้ตรงสิ่งที่ทดสอบ
+- ผลยืนยัน: primary PostgreSQL integration 10/10, related integration 5/5, targeted unit 24/24, full backend 128 passed/0 failed/19 skipped, frontend 46/46 และ ESLint `backend frontend scripts` ผ่าน

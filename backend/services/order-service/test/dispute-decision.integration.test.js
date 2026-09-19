@@ -4,6 +4,7 @@ const request = require("supertest");
 
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
+process.env.DATABASE_URL_ORDER ||= "postgresql://reloop:reloop_dev_password@127.0.0.1:5432/reloop_order";
 if (process.env.DATABASE_URL_ORDER) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_ORDER;
 }
@@ -42,9 +43,9 @@ async function makeCompletedOrder() {
     data: {
       buyerId,
       sellerId,
-      productId: `int-test-dispute-product-${Date.now()}`,
-      productTitle: "dispute test product",
-      price: 1000,
+      productId: `int-test-prod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      productTitle: "Test item",
+      price: 1500,
       status: "completed",
     },
   });
@@ -53,7 +54,7 @@ async function makeCompletedOrder() {
 test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   if (!(await databaseIsReachable())) {
     const message =
-      "DATABASE_URL_ORDER not set or database unreachable — set it to a disposable test database " +
+      "DATABASE_URL not set or database unreachable — set it to a disposable test database " +
       "(after running `npx prisma db push` against it from backend/services/order-service) to run this test";
     if (process.env.REQUIRE_INTEGRATION === "1") {
       throw new Error(`REQUIRE_INTEGRATION=1 but ${message}`);
@@ -64,22 +65,25 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
 
   const order = await makeCompletedOrder();
 
-  // A stranger cannot open a dispute on someone else's order.
+  // Stranger cannot open a dispute on an order they are not the buyer of.
   const strangerOpenRes = await request(app)
     .post(`/${order.id}/disputes`)
     .set("Authorization", `Bearer ${strangerToken}`)
-    .send({ reason: "not mine" });
+    .send({ reason: "not my order" });
   assert.equal(strangerOpenRes.status, 403);
 
   // Buyer opens the dispute.
   const openRes = await request(app)
     .post(`/${order.id}/disputes`)
     .set("Authorization", `Bearer ${buyerToken}`)
-    .send({ reason: "สินค้าชำรุด ไม่ตรงตามที่ตกลง" });
+    .send({ reason: "ของพัง เปิดกล่องมาแตกละเอียด" });
   assert.equal(openRes.status, 201);
+  assert.equal(openRes.body.status, "OPEN");
+  assert.equal(openRes.body.orderId, order.id);
+  assert.equal(openRes.body.openedBy, buyerId);
   const disputeId = openRes.body.id;
 
-  // Order flips to disputed + payout held (WF-08 step 3), atomically.
+  // Order enters disputed status and its payout is marked held.
   const orderAfterOpen = await prisma.order.findUnique({
     where: { id: order.id },
   });
@@ -98,11 +102,17 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
     .send({ reason: "อีกครั้ง" });
   assert.equal(duplicateOpenRes.status, 400);
 
-  // A stranger cannot view the dispute either.
-  const strangerViewRes = await request(app)
+  // Stranger cannot read the dispute.
+  const strangerGetRes = await request(app)
     .get(`/disputes/${disputeId}`)
     .set("Authorization", `Bearer ${strangerToken}`);
-  assert.equal(strangerViewRes.status, 403);
+  assert.equal(strangerGetRes.status, 403);
+
+  // Buyer can read the dispute.
+  const buyerGetRes = await request(app)
+    .get(`/disputes/${disputeId}`)
+    .set("Authorization", `Bearer ${buyerToken}`);
+  assert.equal(buyerGetRes.status, 200);
 
   // A buyer (not an agent) cannot decide.
   const buyerDecideRes = await request(app)
@@ -111,11 +121,19 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
     .send({ decision: "APPROVE_REFUND", reason: "should not work" });
   assert.equal(buyerDecideRes.status, 403);
 
-  // Reason is required (FR-3.2.2).
+  // Agent claims the dispute first (TSR-02 Requirement 1)
+  const claimRes = await request(app)
+    .post(`/disputes/${disputeId}/claim`)
+    .set("Authorization", `Bearer ${agentToken}`)
+    .send({ version: 0 });
+  assert.equal(claimRes.status, 200);
+  assert.equal(claimRes.body.version, 1);
+
+  // Decision requires a reason.
   const noReasonRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
     .set("Authorization", `Bearer ${agentToken}`)
-    .send({ decision: "APPROVE_REFUND" });
+    .send({ decision: "APPROVE_REFUND", version: 1 });
   assert.equal(noReasonRes.status, 400);
 
   // First decision succeeds.
@@ -125,6 +143,7 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
     .send({
       decision: "APPROVE_REFUND",
       reason: "หลักฐานชัดเจน สินค้าชำรุดจริง",
+      version: 1,
     });
   assert.equal(decideRes.status, 200);
   assert.equal(decideRes.body.decision, "APPROVE_REFUND");
@@ -141,17 +160,17 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   const secondDecisionRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
     .set("Authorization", `Bearer ${agentToken}`)
-    .send({ decision: "REJECT", reason: "เปลี่ยนใจ" });
+    .send({ decision: "REJECT", reason: "เปลี่ยนใจ", version: 2 });
   assert.equal(secondDecisionRes.status, 409);
 
-  // Audit trail recorded both the open and the decide.
+  // Audit trail recorded open, claim, and decide.
   const auditRows = await prisma.disputeAuditLog.findMany({
     where: { disputeId },
     orderBy: { createdAt: "asc" },
   });
   assert.deepEqual(
     auditRows.map((r) => r.action),
-    ["OPEN", "DECIDE"],
+    ["OPEN", "CLAIM", "DECIDE"],
   );
 });
 
@@ -168,10 +187,17 @@ test("REJECT decision unholds payout and returns the order to completed", async 
     .send({ reason: "ของไม่ตรงปก" });
   const disputeId = openRes.body.id;
 
+  // Agent claims dispute first
+  const claimRes = await request(app)
+    .post(`/disputes/${disputeId}/claim`)
+    .set("Authorization", `Bearer ${agentToken}`)
+    .send({ version: 0 });
+  assert.equal(claimRes.status, 200);
+
   const decideRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
     .set("Authorization", `Bearer ${agentToken}`)
-    .send({ decision: "REJECT", reason: "หลักฐานไม่เพียงพอ" });
+    .send({ decision: "REJECT", reason: "หลักฐานไม่เพียงพอ", version: 1 });
   assert.equal(decideRes.status, 200);
 
   const orderAfter = await prisma.order.findUnique({ where: { id: order.id } });

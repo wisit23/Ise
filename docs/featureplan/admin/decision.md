@@ -330,3 +330,12 @@
 - Reason: seed ปกติเป็น upsert-only และไม่รีเซ็ตสถานะหรือบทบาท จึงอาจเริ่มรอบทดสอบจากบัญชี SUSPENDED หรือสิทธิ์ที่ถูกแก้ไว้ การแยก fixture ช่วยให้รันซ้ำได้โดยไม่กระทบบัญชี demo อื่น
 - Audit policy: ไม่ลบ AdminAudit เดิม เพื่อรักษาหลักฐาน privileged action แบบ append-only; จำนวนประวัติ Ban จึงเพิ่มตามรอบทดสอบได้
 - Operational boundary: seed นี้ไม่รันอัตโนมัติตอน container start และใช้กับ local/manual QA เท่านั้น
+
+## ADM-DEC-025 — หนึ่ง Dispute มีผู้รับผิดชอบที่แก้ไขได้ทีละคน
+
+- Date: 2026-09-19
+- Status: Accepted for TSR-02 planning; ยังไม่เริ่ม implementation
+- Decision: `DisputeCase` ต้องมี `assignedTo`, `assignedRole`, `claimedAt` และ `version`; การ Claim/Reassign/Escalate ใช้ conditional update และ Audit โดยมีผู้แก้ไขเคสได้เพียงคนเดียวในแต่ละช่วงเวลา เจ้าหน้าที่อื่นอ่านได้ตามสิทธิ์แต่เขียนไม่ได้
+- Escalation: การส่งต่อจาก CS ไป T&S เป็นการโอน ownership ไม่ใช่ให้สองฝ่ายตัดสินเคสเดียวกันพร้อมกัน เจ้าของเดิมต้องเขียนต่อไม่ได้ทันทีหลังโอน
+- Hold boundary: ownership ของเคสกับเหตุพักเงินเป็นคนละแนวคิด ออเดอร์หนึ่งรายการอาจมี Hold จาก dispute และ fraud/account review พร้อมกันได้ แต่แต่ละคำสั่งปล่อยได้เฉพาะ Hold source/reference ของตน และ `payoutHeld` เป็นผลรวมของ active holds
+- Reason: ป้องกันเจ้าหน้าที่ตัดสินเคสซ้ำหรือเขียนทับกัน พร้อมป้องกันการปิด dispute จากการปล่อย Hold ที่ T&S หรือระบบอื่นยังต้องใช้

@@ -104,6 +104,33 @@ export default function DisputesTable({
       ),
     },
     {
+      key: "assignedTo",
+      header: "ผู้รับผิดชอบ",
+      align: "center",
+      render: (d) =>
+        d.assignedTo ? (
+          <div className="flex flex-col items-center gap-0.5">
+            <Badge
+              text={
+                d.assignedRole === "TRUST_AND_SAFETY"
+                  ? "Trust & Safety"
+                  : "Customer Service"
+              }
+              style={
+                d.assignedRole === "TRUST_AND_SAFETY"
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-blue-100 text-blue-800"
+              }
+            />
+            <span className="font-mono text-[11px] text-slate-500">
+              {d.assignedTo.slice(0, 8)}
+            </span>
+          </div>
+        ) : (
+          <Badge text="ยังไม่ได้รับเคส" style="bg-slate-100 text-slate-500" />
+        ),
+    },
+    {
       key: "createdAt",
       header: "วันที่เปิด",
       align: "center",
