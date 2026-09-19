@@ -9,6 +9,9 @@ process.env.DATABASE_URL ||=
 
 const { signAccessToken } = require("@reloop/shared");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 
 test("GET /health returns 200 ok without needing a database", async () => {
   const res = await request(app).get("/health");

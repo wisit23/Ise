@@ -8,6 +8,7 @@
     "dev": "node src/server.js",
     "start": "node src/server.js",
     "seed:admin-demo": "node prisma/seed-admin-demo.js",
+    "seed:ban-demo": "node prisma/seed-ban-demo.js",
     "seed:kyc-demo": "node prisma/seed-kyc-demo.js",
     "seed:report-demo": "node prisma/seed-report-demo.js"
   },

@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { createProxyMiddleware } = require("http-proxy-middleware");
-const { verifyAccessToken } = require("@reloop/shared");
+const { requireAuth } = require("@reloop/shared");
 
 const SERVICES = {
   auth: process.env.AUTH_SERVICE_URL || "http://auth-service:3001",
@@ -52,30 +52,23 @@ app.get("/health", (req, res) =>
 app.use((req, res, next) => {
   if (isPublic(req.path)) return next();
 
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token) return res.status(401).json({ error: "Missing bearer token" });
-
-  try {
-    const payload = verifyAccessToken(token);
-    req.headers["x-user-id"] = payload.sub;
-    req.headers["x-user-role"] = payload.role;
+  return requireAuth(req, res, () => {
+    req.headers["x-user-id"] = req.userId;
+    req.headers["x-user-role"] = req.userRole;
     // Multi-role/permission claims (ADM-001) — fromGatewayHeaders reads these,
     // so the gateway has to forward them or every permission check downstream
     // would silently see an empty set. Both are ASCII-only by construction
     // (role codes and permission slugs), so no encoding is needed here.
-    req.headers["x-user-roles"] = (payload.roles || []).join(",");
-    req.headers["x-user-permissions"] = (payload.permissions || []).join(",");
+    req.headers["x-user-roles"] = req.userRoles.join(",");
+    req.headers["x-user-permissions"] = req.permissions.join(",");
     // HTTP header values are Latin-1 only; displayName can be Thai (or any
     // non-ASCII) text, which throws ERR_INVALID_CHAR in http-proxy if set
     // raw. Encode here, decode in authMiddleware's fromGatewayHeaders.
     req.headers["x-user-display-name"] = encodeURIComponent(
-      payload.displayName || "",
+      req.userDisplayName || "",
     );
     next();
-  } catch {
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
+  });
 });
 
 app.use(

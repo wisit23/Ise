@@ -1,6 +1,7 @@
 const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const productModerationClient = require("../../services/productModerationClient");
+const { lockUser } = require("../../services/sessionService");
 
 function toPublicUser(user) {
   return {
@@ -137,7 +138,10 @@ async function actionReport({
     if (!report.productId) {
       throw badRequest("report has no target product to remove");
     }
-    await productModerationClient.removeProduct(report.productId, trimmedReason);
+    await productModerationClient.removeProduct(
+      report.productId,
+      trimmedReason,
+    );
   }
 
   const updated = await prisma.report.update({
@@ -165,22 +169,31 @@ async function suspendUser({ targetId, adminId, staffId, reason, requestId }) {
   if (!trimmedReason) throw badRequest("reason is required");
   if (targetId === actorId) throw forbidden("staff cannot suspend themselves");
 
-  const user = await prisma.user.findUnique({ where: { id: targetId } });
-  if (!user) throw notFound("user not found");
-  if (user.status === "SUSPENDED") throw conflict("user is already suspended");
+  return prisma.$transaction(async (tx) => {
+    const user = await lockUser(tx, targetId);
+    if (!user) throw notFound("user not found");
+    if (user.status === "SUSPENDED")
+      throw conflict("user is already suspended");
 
-  const updated = await prisma.user.update({
-    where: { id: targetId },
-    data: { status: "SUSPENDED" },
+    const updated = await tx.user.update({
+      where: { id: targetId },
+      data: { status: "SUSPENDED" },
+    });
+    await tx.refreshToken.updateMany({
+      where: { userId: targetId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await tx.adminAudit.create({
+      data: {
+        actorId,
+        action: "USER_SUSPENDED",
+        targetId,
+        reason: trimmedReason,
+        requestId,
+      },
+    });
+    return toPublicUser(updated);
   });
-  await recordAdminAction({
-    actorId,
-    action: "USER_SUSPENDED",
-    targetId,
-    reason: trimmedReason,
-    requestId,
-  });
-  return toPublicUser(updated);
 }
 
 /**
@@ -214,22 +227,31 @@ async function restoreUser({ targetId, adminId, staffId, reason, requestId }) {
   const trimmedReason = reason?.trim();
   if (!trimmedReason) throw badRequest("reason is required");
 
-  const user = await prisma.user.findUnique({ where: { id: targetId } });
-  if (!user) throw notFound("user not found");
-  if (user.status !== "SUSPENDED") throw conflict("user is not suspended");
+  return prisma.$transaction(async (tx) => {
+    const user = await lockUser(tx, targetId);
+    if (!user) throw notFound("user not found");
+    if (user.status !== "SUSPENDED") throw conflict("user is not suspended");
 
-  const updated = await prisma.user.update({
-    where: { id: targetId },
-    data: { status: "ACTIVE" },
+    const updated = await tx.user.update({
+      where: { id: targetId },
+      data: { status: "ACTIVE" },
+    });
+    // Also invalidates sessions belonging to accounts suspended before this rollout.
+    await tx.refreshToken.updateMany({
+      where: { userId: targetId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await tx.adminAudit.create({
+      data: {
+        actorId,
+        action: "USER_RESTORED",
+        targetId,
+        reason: trimmedReason,
+        requestId,
+      },
+    });
+    return toPublicUser(updated);
   });
-  await recordAdminAction({
-    actorId,
-    action: "USER_RESTORED",
-    targetId,
-    reason: trimmedReason,
-    requestId,
-  });
-  return toPublicUser(updated);
 }
 
 async function getUserSafetySummary(targetId) {
@@ -322,4 +344,3 @@ module.exports = {
   getUserDetail,
   recordAdminAction,
 };
-

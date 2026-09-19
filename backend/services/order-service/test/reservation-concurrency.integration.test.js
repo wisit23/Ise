@@ -72,6 +72,9 @@ test("only one of two buyers reserves a product and expiry cannot unlock a newer
   const address = productServer.address();
   process.env.PRODUCT_SERVICE_URL = `http://127.0.0.1:${address.port}`;
   const orderApp = require("../src/app");
+  // This feature suite uses signed identity fixtures; live session enforcement
+  // is covered separately by account-suspension.integration.test.js.
+  orderApp.locals.validateAccessSession = async () => {};
 
   const title = `${TEST_TITLE_PREFIX}${Date.now()}`;
   const product = await productPrisma.product.create({

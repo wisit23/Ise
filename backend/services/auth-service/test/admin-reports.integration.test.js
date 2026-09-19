@@ -79,6 +79,9 @@ test("report lifecycle enforces review-before-action and dispatches owner comman
   } = await startMockProductService();
   process.env.PRODUCT_SERVICE_URL = `http://localhost:${port}`;
   const app = require("../src/app");
+  // This feature suite uses signed identity fixtures; live session enforcement
+  // is covered separately by account-suspension.integration.test.js.
+  app.locals.validateAccessSession = async () => {};
 
   const adminId = `adm-003-admin+${Date.now()}`;
   let reporter;

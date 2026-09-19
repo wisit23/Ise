@@ -298,3 +298,35 @@
     - เพิ่ม Route `GET /admin/users/:id` รองรับสิทธิ์ `admin:report:read` และ `support:case:read`
 - Reason: ตอบสนองความต้องการของผู้ใช้งานที่ต้องการให้หน้าค้นหาสามารถทำงานได้จริงตามประเภทใน Dropdown ช่วยให้เจ้าหน้าที่ Trust & Safety สามารถตรวจสอบประวัติบุคคล (ผู้ซื้อ/ผู้ขาย) ความเสี่ยง ความน่าเชื่อถือ และสั่งการระงับหรือตักเตือนได้จากศูนย์ค้นหาทันทีโดยไม่ต้องสลับหน้าจอไปมา
 - Consequence: เจ้าหน้าที่สามารถสืบค้นและระงับยับยั้งผู้กระทำผิดได้อย่างรวดเร็ว มีข้อมูลประกอบการตัดสินใจครบถ้วนทั้งประวัติ KYC, สถิติความปลอดภัย และประวัติคำสั่งซื้อ
+
+## ADM-DEC-023 — บังคับ Ban ผ่าน session ที่ตรวจจาก Auth จริง
+
+- Date: 2026-09-18
+- Status: Accepted for implementation — ผู้ใช้ให้ทำเฉพาะข้อ 1 (Ban enforcement)
+- Scope: login, refresh, protected API, token เดิมหลัง Ban/Restore และข้อความแจ้งบัญชีถูกระงับ; ยังไม่ทำ Hold, Report UI, multi-role UI หรือ workflow อื่นในแผน
+- Decision: ใช้ `RefreshToken.id` ที่มีอยู่เป็น session ID (`sid`) ใน access token และตรวจสถานะ User/session จาก Auth ทุก protected request โดยไม่มี positive cache; Auth ตรวจฐานข้อมูลของตนโดยตรง ส่วน Gateway/บริการอื่นใช้ internal Auth API ที่มี internal token และ timeout
+- Reason: สถานะ SUSPENDED อย่างเดียวไม่ยกเลิก JWT; session ที่เพิกถอนได้ทำให้ access/refresh เดิมกลับมาใช้ไม่ได้หลัง Restore โดยไม่ต้องเพิ่ม authVersion/schema ใหม่
+- Concurrency: การออก session และ Suspend/Restore ใช้ user-row lock ภายใน transaction เพื่อไม่ให้ login ที่กำลังรันสร้าง session รอดหลัง Ban; Suspend/Restore เพิกถอน session และเขียน Audit ใน transaction เดียวกัน
+- Compatibility: access token เก่าที่ไม่มี sid ต้อง refresh เพื่อรับรูปแบบใหม่; refresh session เดิมที่ยัง ACTIVE ใช้เปลี่ยนผ่านได้ บัญชีถูกระงับถูกปฏิเสธเสมอ และ Restore เพิกถอน session เก่ารวมถึงข้อมูลก่อน rollout
+- Failure behavior: Auth ตรวจสอบไม่ได้ตอบ 503 และไม่อนุญาต protected action; 403 ACCOUNT_SUSPENDED แยกจาก 401 SESSION_REVOKED และ 403 สิทธิ์ไม่พอ
+- Limit: คำขอที่ผ่านการตรวจสิทธิ์ก่อน transaction Ban commit อาจเสร็จต่อได้; คำขอที่ตรวจหลัง commit ต้องถูกปฏิเสธ ไม่อ้างว่า rollback งานที่เริ่มก่อน Ban ได้
+- Tests: session lifecycle ต้องตรวจบน PostgreSQL ทดสอบแยก; ชุดทดสอบ feature อื่นที่ใช้ signed-token fixtures ต้องระบุ session-validator test double ชัดเจนและไม่ถือเป็นหลักฐาน end-to-end ของ Ban
+
+### ADM-DEC-023 — Implementation / verification addendum (2026-09-19)
+
+- Status: Implemented and targeted tests passed; ครบเฉพาะ Ban enforcement ที่ผู้ใช้อนุญาต ส่วน role UI ที่อยู่ใน TSR-01 ตามแผนเดิมยังไม่ทำ
+- Runtime dependency: ทุก protected request ต้องตรวจ Auth จึงเพิ่ม HTTP/DB work และพึ่งพา Auth availability; เลือกไม่มี positive cache เพื่อไม่เปิดช่วงเวลาที่ token หลัง Ban ยังผ่านได้ Timeout 3 วินาที และตอบ `AUTH_UNAVAILABLE` 503 เมื่อยืนยันไม่ได้
+- Configuration: บริการที่ใช้ remote validation ต้องมี `INTERNAL_SERVICE_TOKEN` ตรงกับ Auth; `AUTH_SERVICE_URL` มีค่าเริ่มต้น `http://auth-service:3001` สำหรับ Docker network ถ้ารัน service บน host ต้องกำหนด URL ที่เข้าถึง Auth ได้จริง
+- Rollout boundary: ต้องใช้โค้ดชุดนี้ร่วมกันใน Auth, Gateway, บริการที่ใช้ shared middleware และ Frontend; งานนี้ยังไม่ได้ rebuild/restart stack หลัก และไม่มีการเปลี่ยนฐานข้อมูลหลัก ไม่ถือว่าการทดสอบ source เป็นหลักฐาน rollout สำเร็จ
+- Verification boundary: integration test ใหม่ใช้ session/DB/Auth HTTP จริง ไม่มี validator bypass; direct service cases ตรวจการผ่าน/ปฏิเสธ auth ก่อน business validation ไม่ได้ทดสอบธุรกรรมครบทุก service Chat ปัจจุบันมีเพียง health endpoint และ public browsing ยังคงเข้าได้
+- Regression disposition: บันทึก Product test DB setup failures, Checkout baseline failures และ lint errors ในไฟล์ untracked เดิมไว้ใน progress/changelog โดยไม่ขยาย scope ไปแก้
+
+## ADM-DEC-024 — Dedicated repeatable seed สำหรับทดสอบ Ban ผ่านหน้าเว็บ
+
+- Date: 2026-09-19
+- Status: Accepted and implemented
+- Scope: เพิ่มเฉพาะข้อมูลทดสอบ manual QA ของ Ban enforcement ไม่เพิ่มหรือเปลี่ยน moderation workflow
+- Decision: ใช้บัญชีเฉพาะ `trust.ban@test.local` และ `buyer.ban@test.local` ผ่านคำสั่ง `npm run seed:ban-demo`; ทุกครั้งที่รันจะตั้งรหัสผ่าน/ชื่อ/legacy role/UserRole ให้ตรง fixture, เปลี่ยนสถานะเป็น ACTIVE และ revoke session ที่ยังไม่ถูก revoke ของสองบัญชีนี้
+- Reason: seed ปกติเป็น upsert-only และไม่รีเซ็ตสถานะหรือบทบาท จึงอาจเริ่มรอบทดสอบจากบัญชี SUSPENDED หรือสิทธิ์ที่ถูกแก้ไว้ การแยก fixture ช่วยให้รันซ้ำได้โดยไม่กระทบบัญชี demo อื่น
+- Audit policy: ไม่ลบ AdminAudit เดิม เพื่อรักษาหลักฐาน privileged action แบบ append-only; จำนวนประวัติ Ban จึงเพิ่มตามรอบทดสอบได้
+- Operational boundary: seed นี้ไม่รันอัตโนมัติตอน container start และใช้กับ local/manual QA เท่านั้น

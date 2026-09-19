@@ -1,27 +1,46 @@
 const { verifyAccessToken } = require("./jwt");
+const {
+  validateRemoteSession,
+  sessionUnavailable,
+} = require("./sessionValidation");
 
 /**
  * Verifies the Bearer JWT and attaches trusted user context to the request.
  * Used by services that receive requests directly from the gateway
  * (gateway already validates, but services re-validate defensively).
  */
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: "Missing bearer token" });
 
+  let payload;
   try {
-    const payload = verifyAccessToken(token);
-    req.userId = payload.sub;
-    req.userRole = payload.role;
-    req.userRoles = payload.roles || (payload.role ? [payload.role] : []);
-    req.permissions = payload.permissions || [];
-    req.kycVerified = Boolean(payload.kycVerified);
-    req.userDisplayName = payload.displayName || null;
-    next();
+    payload = verifyAccessToken(token);
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
+
+  try {
+    // Auth installs its local database validator. Other apps use the internal
+    // Auth API, including requests arriving directly without the gateway.
+    const validate =
+      req.app?.locals?.validateAccessSession || validateRemoteSession;
+    await validate(payload, token);
+  } catch (error) {
+    const err = ["SESSION_REVOKED", "ACCOUNT_SUSPENDED"].includes(error.code)
+      ? error
+      : sessionUnavailable();
+    return res.status(err.status).json({ error: err.message, code: err.code });
+  }
+
+  req.userId = payload.sub;
+  req.userRole = payload.role;
+  req.userRoles = payload.roles || (payload.role ? [payload.role] : []);
+  req.permissions = payload.permissions || [];
+  req.kycVerified = Boolean(payload.kycVerified);
+  req.userDisplayName = payload.displayName || null;
+  next();
 }
 
 function requireRole(...roles) {
