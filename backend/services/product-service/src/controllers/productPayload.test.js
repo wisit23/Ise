@@ -11,6 +11,7 @@ test("buildCreateProductData applies defaults and normalizes client arrays", () 
     title: "Denim jacket",
     price: 1200,
     category: "Jackets",
+    brand: " Levi's ",
     tags: [" Vintage ", "vintage", "", null, "DENIM"],
     media: [
       { url: "https://example.test/front.jpg", type: "image" },
@@ -27,6 +28,7 @@ test("buildCreateProductData applies defaults and normalizes client arrays", () 
     description: "",
     price: 1200,
     category: "Jackets",
+    brand: "Levi's",
     condition: "Good",
     size: "Free size",
     tags: ["vintage", "denim"],
@@ -57,6 +59,7 @@ test("buildProductPatch includes only submitted fields", () => {
 test("buildProductPatch preserves scalar values but ignores reservation status", () => {
   const patch = buildProductPatch({
     description: "",
+    brand: " Uniqlo ",
     condition: null,
     location: null,
     status: "sold",
@@ -64,6 +67,7 @@ test("buildProductPatch preserves scalar values but ignores reservation status",
 
   assert.deepEqual(patch, {
     description: "",
+    brand: "Uniqlo",
     condition: null,
     location: null,
   });

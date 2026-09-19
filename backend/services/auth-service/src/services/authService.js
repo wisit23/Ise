@@ -107,7 +107,7 @@ async function buildAccessTokenClaims(user) {
   };
 }
 
-async function issueTokenPair(user) {
+async function issueTokenPair(user, loginContext = null) {
   // jti guarantees uniqueness even if a user logs in twice within the same second
   // (same sub+role+iat would otherwise sign to the identical JWT string).
   const accessToken = signAccessToken(await buildAccessTokenClaims(user));
@@ -116,25 +116,36 @@ async function issueTokenPair(user) {
     role: user.role,
     jti: crypto.randomUUID(),
   });
+  const sessionId = crypto.randomUUID();
+  const refreshData = {
+    id: sessionId,
+    userId: user.id,
+    token: refreshToken,
+    expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+  };
 
-  await prisma.refreshToken.create({
-    data: {
-      userId: user.id,
-      token: refreshToken,
-      expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
-    },
-  });
+  if (loginContext) {
+    // Persist the token and its login-history row atomically so logout can
+    // close the exact session even when the user is logged in on many devices.
+    await prisma.$transaction([
+      prisma.refreshToken.create({ data: refreshData }),
+      prisma.loginLog.create({
+        data: {
+          userId: user.id,
+          sessionId,
+          ipAddress: loginContext.ipAddress,
+          userAgent: loginContext.userAgent,
+        },
+      }),
+    ]);
+  } else {
+    await prisma.refreshToken.create({ data: refreshData });
+  }
 
   return { accessToken, refreshToken };
 }
 
-async function register({
-  email,
-  password,
-  firstName,
-  lastName,
-  phone,
-}) {
+async function register({ email, password, firstName, lastName, phone }) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
   }
@@ -161,7 +172,7 @@ async function register({
   return { user: toPublicUser(user), ...tokens };
 }
 
-async function login({ email, password, ipAddress }) {
+async function login({ email, password, ipAddress, userAgent }) {
   if (!email || !password) throw badRequest("email and password are required");
 
   const user = await prisma.user.findUnique({ where: { email } });
@@ -170,9 +181,7 @@ async function login({ email, password, ipAddress }) {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw badRequest("invalid email or password");
 
-  await prisma.loginLog.create({ data: { userId: user.id, ipAddress } });
-
-  const tokens = await issueTokenPair(user);
+  const tokens = await issueTokenPair(user, { ipAddress, userAgent });
   return { user: toPublicUser(user), ...tokens };
 }
 
@@ -207,10 +216,23 @@ async function refresh(refreshToken) {
 
 async function logout(refreshToken) {
   if (!refreshToken) return;
-  await prisma.refreshToken.updateMany({
-    where: { token: refreshToken, revokedAt: null },
-    data: { revokedAt: new Date() },
+  const session = await prisma.refreshToken.findUnique({
+    where: { token: refreshToken },
+    select: { id: true },
   });
+  if (!session) return;
+
+  const loggedOutAt = new Date();
+  await prisma.$transaction([
+    prisma.refreshToken.updateMany({
+      where: { id: session.id, revokedAt: null },
+      data: { revokedAt: loggedOutAt },
+    }),
+    prisma.loginLog.updateMany({
+      where: { sessionId: session.id, logoutAt: null },
+      data: { logoutAt: loggedOutAt },
+    }),
+  ]);
 }
 
 async function getById(userId) {

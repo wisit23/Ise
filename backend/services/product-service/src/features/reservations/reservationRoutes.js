@@ -37,6 +37,23 @@ router.delete(
 );
 
 router.patch(
+  "/:id/reservations/:reservationId/extend",
+  requireInternalToken,
+  async (req, res, next) => {
+    try {
+      const result = await reservationService.extendProductReservation(
+        req.params.id,
+        req.params.reservationId,
+        new Date(req.body.expiresAt),
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.patch(
   "/:id/reservations/:reservationId/complete",
   requireInternalToken,
   async (req, res, next) => {

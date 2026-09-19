@@ -11,8 +11,8 @@ generator client {
   output   = "../src/generated/prisma-client"
 }
 
-// Status lifecycle: pending_payment (cart, product locked) -> completed (paid), or cancelled (product unlocked).
-// confirmed/shipped are reserved for a future fulfillment flow and are not driven by the UI yet.
+// Status lifecycle: pending_payment (cart, product locked) -> confirmed (paid, awaiting seller)
+// -> shipped -> completed, or cancelled (product unlocked).
 // disputed/refunded added for CSS-003 (WF-08): completed -> disputed -> refunded | completed.
 // Two roles touch a dispute and they share one payout-hold flag (`payoutHeld`):
 //   - CS owns the *case* (DisputeCase below) — buyer opens it, an agent decides it.
@@ -32,6 +32,7 @@ model Order {
   status               String    @default("pending_payment")
   reservationId        String?   @unique @map("reservation_id")
   reservationExpiresAt DateTime? @map("reservation_expires_at")
+  checkoutSessionId    String?   @map("checkout_session_id")
   // Set only when this order was created automatically because a buyer won
   // an auction in product-service, instead of a normal "buy now" checkout.
   // No FK — product-service owns the AuctionItem, this is a read-only
@@ -55,12 +56,37 @@ model Order {
 
   dispute         DisputeCase?
   adminEvidence   AdminDisputeEvidence[]
+  checkoutSession CheckoutSession?       @relation(fields: [checkoutSessionId], references: [id], onDelete: SetNull)
 
   @@index([buyerId])
   @@index([sellerId])
   @@index([auctionId])
   @@index([status, reservationExpiresAt])
+  @@index([checkoutSessionId])
   @@map("orders")
+}
+
+// One confirmation/QR-payment attempt can contain several cart orders. The
+// selected delivery address is stored as a snapshot so later profile edits do
+// not rewrite the shipping details of an already-confirmed checkout.
+model CheckoutSession {
+  id              String    @id @default(uuid())
+  buyerId         String    @map("buyer_id")
+  shippingAddress Json      @map("shipping_address")
+  couponCode      String?   @map("coupon_code")
+  subtotal        Int
+  discount        Int       @default(0)
+  total           Int
+  status          String    @default("pending")
+  expiresAt       DateTime  @map("expires_at")
+  paidAt          DateTime? @map("paid_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  orders          Order[]
+
+  @@index([buyerId, status])
+  @@index([status, expiresAt])
+  @@map("checkout_sessions")
 }
 
 // ADM-004: Admin's own lightweight evidence *reference* list, distinct from

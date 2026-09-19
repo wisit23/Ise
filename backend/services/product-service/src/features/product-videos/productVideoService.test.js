@@ -79,3 +79,48 @@ test("createClip stores the verified token name and ignores a body sellerName", 
   assert.equal(clip.videoUrl, "/uploads/a.mp4");
   assert.equal(clip.description, "Demo clip");
 });
+
+test("chooseClip rejects a non-existent card", async (t) => {
+  t.mock.method(repository, "findById", async () => null);
+
+  await assert.rejects(
+    service.chooseClip({
+      user: { id: "user-1", role: "BUYER" },
+      productVideoId: "missing-card",
+    }),
+    (err) => err.status === 404,
+  );
+});
+
+test("chooseClip upserts a choice for the user", async (t) => {
+  t.mock.method(repository, "findById", async (id) => ({ id }));
+  t.mock.method(repository, "upsertChoice", async ({ productVideoId, userId }) => ({
+    productVideoId,
+    userId,
+  }));
+
+  const result = await service.chooseClip({
+    user: { id: "user-1", role: "BUYER" },
+    productVideoId: "video-1",
+  });
+
+  assert.equal(result.productVideoId, "video-1");
+  assert.equal(result.userId, "user-1");
+});
+
+test("unchooseClip deletes the choice and returns chosen: false", async (t) => {
+  t.mock.method(repository, "findById", async (id) => ({ id }));
+  let deletedArgs = null;
+  t.mock.method(repository, "deleteChoice", async (args) => {
+    deletedArgs = args;
+    return { count: 1 };
+  });
+
+  const result = await service.unchooseClip({
+    user: { id: "user-1", role: "BUYER" },
+    productVideoId: "video-1",
+  });
+
+  assert.deepEqual(deletedArgs, { productVideoId: "video-1", userId: "user-1" });
+  assert.equal(result.chosen, false);
+});

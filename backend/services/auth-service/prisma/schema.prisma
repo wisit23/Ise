@@ -63,15 +63,40 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  buyerProfile    BuyerProfile?
-  sellerProfile   SellerProfile?
-  loginLogs       LoginLog[]
-  refreshTokens   RefreshToken[]
-  reports         Report[]
-  roles           UserRole[]
-  kycApplications KycApplication[]
+  buyerProfile      BuyerProfile?
+  sellerProfile     SellerProfile?
+  loginLogs         LoginLog[]
+  buyerActivityLogs BuyerActivityLog[]
+  refreshTokens     RefreshToken[]
+  reports           Report[]
+  roles             UserRole[]
+  kycApplications   KycApplication[]
+  addresses         UserAddress[]
 
   @@map("users")
+}
+
+// Delivery addresses shown on the authenticated profile page. They live in
+// auth-service because they are private user profile data, not order data.
+model UserAddress {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  recipientName String   @map("recipient_name")
+  phone         String
+  addressLine   String   @map("address_line")
+  subdistrict   String
+  district      String
+  province      String
+  postalCode    String   @map("postal_code")
+  isDefault     Boolean  @default(false) @map("is_default")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isDefault])
+  @@map("user_addresses")
 }
 
 // ER: Buyer — style/size/brand preference, filled in during the Phase 2 style quiz.
@@ -87,38 +112,66 @@ model BuyerProfile {
 
 // ER: Seller — shop info + KYC fields.
 model SellerProfile {
-  userId         String    @id @map("user_id")
-  user           User      @relation(fields: [userId], references: [id])
-  shopName       String    @map("shop_name")
-  idCardNumber   String?   @map("id_card_number")
+  userId        String    @id @map("user_id")
+  user          User      @relation(fields: [userId], references: [id])
+  shopName      String    @map("shop_name")
+  idCardNumber  String?   @map("id_card_number")
   // Expiry date printed on the ID card (optional — permanent-card holders leave this null).
   // The daily kycExpiryJob sets kycStatus = EXPIRED when this date is in the past.
-  idCardExpiry   DateTime? @map("id_card_expiry")
+  idCardExpiry  DateTime? @map("id_card_expiry")
   // Return/shipping address collected during seller verification.
-  address        String?
-  bankAccount    String?   @map("bank_account")
-  kycStatus      KycStatus @default(NONE) @map("kyc_status")
+  address       String?
+  bankAccount   String?   @map("bank_account")
+  kycStatus     KycStatus @default(NONE) @map("kyc_status")
   // Private storage key for the latest submitted ID card photo — never a
   // public URL, same reasoning as KycApplication.storageKey below.
-  kycStorageKey  String?   @map("kyc_storage_key")
-  verifiedAt     DateTime? @map("verified_at")
+  kycStorageKey String?   @map("kyc_storage_key")
+  verifiedAt    DateTime? @map("verified_at")
   // Timestamp of the seller's last listing activity (create or update a product).
   // The daily sellerInactivityJob sets kycStatus = INACTIVE_EXPIRED when this
   // (or verifiedAt if null) is older than 365 days.
-  lastActiveAt   DateTime? @map("last_active_at")
+  lastActiveAt  DateTime? @map("last_active_at")
 
   @@map("seller_profiles")
 }
 
 // ER: Login_Log — audit trail of sign-ins (NFR-SP-03).
 model LoginLog {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id])
-  loginAt   DateTime @default(now()) @map("login_at")
-  ipAddress String?  @map("ip_address")
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  sessionId String?   @unique @map("session_id")
+  loginAt   DateTime  @default(now()) @map("login_at")
+  logoutAt  DateTime? @map("logout_at")
+  ipAddress String?   @map("ip_address")
+  userAgent String?   @map("user_agent")
 
+  @@index([userId, loginAt])
   @@map("login_logs")
+}
+
+// Append-only buyer activity stream. Auth-service owns this table so buyers
+// and authorized auditors have one privacy-controlled history even though the
+// activities originate in several marketplace services.
+model BuyerActivityLog {
+  id         String   @id @default(uuid())
+  buyerId    String   @map("buyer_id")
+  buyer      User     @relation(fields: [buyerId], references: [id])
+  action     String
+  source     String
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  requestId  String?  @unique @map("request_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([buyerId, occurredAt])
+  @@index([action, occurredAt])
+  @@index([targetType, targetId])
+  @@map("buyer_activity_logs")
 }
 
 // Not in the ER diagram — required to support JWT refresh/revoke (see database/ER-changes.md).
@@ -231,8 +284,8 @@ model ExecutiveAuditLog {
   actorId     String   @map("actor_id")
   actorEmail  String?  @map("actor_email")
   actorRole   String?  @map("actor_role")
-  action      String   // e.g. "REPORT_EXPORT_CSV", "COMPLAINT_ACTIONED", "COMPLAINT_DISMISSED", "FINANCIAL_VIEW"
-  category    String   // e.g. "DATA_EXPORT", "MODERATION", "FINANCIAL", "SECURITY"
+  action      String // e.g. "REPORT_EXPORT_CSV", "COMPLAINT_ACTIONED", "COMPLAINT_DISMISSED", "FINANCIAL_VIEW"
+  category    String // e.g. "DATA_EXPORT", "MODERATION", "FINANCIAL", "SECURITY"
   targetType  String?  @map("target_type") // e.g. "report", "complaint", "order"
   targetId    String?  @map("target_id")
   description String

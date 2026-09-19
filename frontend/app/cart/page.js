@@ -150,26 +150,11 @@ export default function CartPage() {
     }
   }
 
-  async function handleCheckout() {
-    const token = getAccessToken();
+  function handleCheckout() {
+    if (selectedItems.length === 0) return;
     setPaying(true);
-    setNotice("");
-    try {
-      for (const order of selectedItems) {
-        await apiFetch(`/api/orders/${order.id}/pay`, {
-          method: "PATCH",
-          token,
-        });
-      }
-      setNotice("ชำระเงินสำเร็จ");
-      setItems((prev) => prev.filter((o) => !selected.has(o.id)));
-      setSelected(new Set());
-    } catch (err) {
-      setNotice(err.message);
-      load();
-    } finally {
-      setPaying(false);
-    }
+    const orderIds = selectedItems.map((order) => order.id).join(",");
+    router.push(`/checkout?orders=${encodeURIComponent(orderIds)}`);
   }
 
   const activeItems = items.filter(
@@ -184,8 +169,8 @@ export default function CartPage() {
       <section className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 pb-28">
         <h1 className="mb-1 text-xl font-bold text-gray-900">ตะกร้าของฉัน</h1>
         <p className="mb-6 text-sm text-gray-500">
-          สินค้าที่เพิ่มลงตะกร้าจะถูกล็อกไว้ 10 นาที (หรือ 24 ชั่วโมงสำหรับสินค้าประมูลที่คุณชนะ)
-          กรุณาชำระเงินก่อนหมดเวลา
+          สินค้าที่เพิ่มลงตะกร้าจะถูกล็อกไว้ 10 นาที (หรือ 24
+          ชั่วโมงสำหรับสินค้าประมูลที่คุณชนะ) กรุณาชำระเงินก่อนหมดเวลา
         </p>
 
         {error && <Alert className="mb-4">{error}</Alert>}
@@ -329,8 +314,8 @@ export default function CartPage() {
               className="rounded-md bg-emerald-600 px-6 py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {paying
-                ? "กำลังชำระเงิน..."
-                : `ชำระเงิน (${selectedItems.length})`}
+                ? "กำลังไปหน้ายืนยัน..."
+                : `ยืนยันรายการ (${selectedItems.length})`}
             </button>
           </div>
         </div>

@@ -135,3 +135,12 @@ h4 {
     scroll-behavior: auto !important;
   }
 }
+
+/* Prevent white focus outlines/flashes when clicking on video elements or swipe containers */
+video,
+video:focus,
+video:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}

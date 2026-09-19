@@ -1,11 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { uploadFiles, mediaUrl } from "../lib/api";
+import { uploadProductClip, mediaUrl } from "../lib/api";
 
-/** Single-video dropzone — same upload mechanics as MediaUploader (drag/drop
- * or click, POSTs straight to /uploads), simplified to exactly one file since
- * a review clip only ever attaches one video. */
+/** Single-video dropzone for swipe-feed clips. Files are uploaded through the
+ * product-video endpoint so product-service owns and persists them. */
 export default function VideoUploader({ value, onChange, token }) {
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -19,7 +18,7 @@ export default function VideoUploader({ value, onChange, token }) {
     setError("");
     setUploading(true);
     try {
-      const [uploaded] = await uploadFiles([file], token);
+      const uploaded = await uploadProductClip(file, token);
       onChange(uploaded.url);
     } catch (err) {
       setError(err.message);

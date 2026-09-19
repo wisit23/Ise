@@ -13,7 +13,7 @@ function createProductVideoRepository(prismaClient) {
     const [items, total] = await Promise.all([
       prismaClient.productVideo.findMany({
         where,
-        include: { product: true },
+        include: { product: { include: { photos: true } } },
         orderBy: { createdAt: "desc" },
         skip,
         take,
@@ -50,12 +50,19 @@ function createProductVideoRepository(prismaClient) {
     });
   }
 
+  function deleteChoice({ productVideoId, userId }) {
+    return prismaClient.swipeChoice.deleteMany({
+      where: { productVideoId, userId },
+    });
+  }
+
   return {
     listAvailable,
     findProductOwner,
     findById,
     create,
     upsertChoice,
+    deleteChoice,
   };
 }
 

@@ -10,6 +10,7 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const ALLOWED_MIME = /^image\/(jpeg|png|x-png|pjpeg|webp|gif)$/i;
 const ALLOWED_VIDEO_MIME = /^video\/(mp4|quicktime)$/i;
 const ALLOWED_EXT = /\.(jpe?g|png|webp|gif|mp4|mov)$/i;
+const ALLOWED_VIDEO_EXT = /\.(mp4|mov)$/i;
 
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
@@ -24,7 +25,8 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024, files: 8 },
   fileFilter(req, file, cb) {
     const isMimeOk =
-      ALLOWED_MIME.test(file.mimetype) || ALLOWED_VIDEO_MIME.test(file.mimetype);
+      ALLOWED_MIME.test(file.mimetype) ||
+      ALLOWED_VIDEO_MIME.test(file.mimetype);
     const isExtOk = ALLOWED_EXT.test(file.originalname);
     if (!isMimeOk && !isExtOk) {
       cb(badRequest(`unsupported file type: ${file.mimetype}`));
@@ -34,4 +36,19 @@ const upload = multer({
   },
 });
 
-module.exports = { upload, UPLOAD_DIR };
+const videoUpload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  fileFilter(req, file, cb) {
+    if (
+      !ALLOWED_VIDEO_MIME.test(file.mimetype) ||
+      !ALLOWED_VIDEO_EXT.test(file.originalname)
+    ) {
+      cb(badRequest("only MP4 and MOV video files are supported"));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+module.exports = { upload, videoUpload, UPLOAD_DIR };

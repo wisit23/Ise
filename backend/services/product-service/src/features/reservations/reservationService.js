@@ -108,6 +108,32 @@ async function releaseProductReservation(productId, reservationId) {
   return released.count === 1;
 }
 
+async function extendProductReservation(
+  productId,
+  reservationId,
+  expiresAt,
+  { now = new Date() } = {},
+) {
+  if (!(expiresAt instanceof Date) || Number.isNaN(expiresAt.getTime())) {
+    throw badRequest("expiresAt must be a valid date");
+  }
+  if (expiresAt <= now) throw badRequest("expiresAt must be in the future");
+
+  const extended = await prisma.product.updateMany({
+    where: {
+      id: productId,
+      status: "reserved",
+      reservationId,
+      reservationExpiresAt: { gt: now },
+    },
+    data: { reservationExpiresAt: expiresAt },
+  });
+  if (extended.count !== 1) {
+    throw conflict("reservation has expired or is no longer active");
+  }
+  return { expiresAt };
+}
+
 async function completeProductReservation(
   productId,
   reservationId,
@@ -128,6 +154,14 @@ async function completeProductReservation(
     },
   });
   if (completed.count !== 1) {
+    // A checkout confirmation can be retried after product-service succeeded
+    // but order-service temporarily failed to persist its own Order update.
+    // Treat an already-sold product as an idempotent completion.
+    const current = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { status: true },
+    });
+    if (current?.status === "sold") return;
     throw conflict("reservation has expired or is no longer active");
   }
 }
@@ -164,6 +198,7 @@ module.exports = {
   RESERVATION_TTL_MS,
   reserveProduct,
   releaseProductReservation,
+  extendProductReservation,
   completeProductReservation,
   releaseExpiredReservations,
   startReservationExpiryWorker,

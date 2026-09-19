@@ -9,6 +9,7 @@ const {
 const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
 const chatClient = require("../services/chatClient");
+const buyerActivityClient = require("../services/buyerActivityClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
 
 async function create(req, res, next) {
@@ -16,6 +17,9 @@ async function create(req, res, next) {
     const { order, created } = await reserveOrder({
       buyerId: req.userId,
       productId: req.body.productId,
+    });
+    await buyerActivityClient.recordOrderActivity(order, "ORDER_PLACED", {
+      reservationId: order.reservationId,
     });
     res.status(created ? 201 : 200).json(order);
   } catch (err) {
@@ -116,6 +120,13 @@ async function updateStatus(req, res, next) {
     if (status === "completed") {
       await productClient.setProductStatus(order.productId, "sold");
     }
+    if (status === "cancelled") {
+      await buyerActivityClient.recordOrderActivity(
+        updated,
+        "ORDER_CANCELLED",
+        { initiatedBy: req.userId },
+      );
+    }
 
     // Best-effort — chatClient swallows its own errors internally (see its
     // comment) so a chat-service outage can never fail this status update.
@@ -179,7 +190,8 @@ async function pay(req, res, next) {
     } else {
       await productClient.setProductStatus(order.productId, "sold");
     }
-    const updated = await orderModel.updateStatus(req.params.id, "completed");
+    const updated = await orderModel.updateStatus(req.params.id, "confirmed");
+    await buyerActivityClient.recordOrderActivity(updated, "PAYMENT_COMPLETED");
 
     res.json(updated);
   } catch (err) {

@@ -51,6 +51,9 @@ async function listByBuyer(buyerId, { status, skip, take } = {}) {
   const [items, total] = await Promise.all([
     prisma.order.findMany({
       where,
+      include: {
+        dispute: { select: { id: true, status: true } },
+      },
       orderBy: { createdAt: "desc" },
       skip,
       take,
@@ -68,6 +71,9 @@ async function listBySeller(sellerId, { status, skip, take } = {}) {
   const [items, total] = await Promise.all([
     prisma.order.findMany({
       where,
+      include: {
+        dispute: { select: { id: true, status: true } },
+      },
       orderBy: { createdAt: "desc" },
       skip,
       take,
