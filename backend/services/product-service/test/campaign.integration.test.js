@@ -4,6 +4,7 @@ const request = require("supertest");
 
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
+process.env.INTERNAL_SERVICE_TOKEN ||= "test-internal-token";
 if (process.env.DATABASE_URL_PRODUCT) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_PRODUCT;
 }
@@ -63,6 +64,7 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
   }
 
   const createdCampaignIds = [];
+  const createdProductIds = [];
 
   t.after(async () => {
     if (createdCampaignIds.length > 0) {
@@ -71,6 +73,11 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
       });
       await prisma.campaign.deleteMany({
         where: { id: { in: createdCampaignIds } },
+      });
+    }
+    if (createdProductIds.length > 0) {
+      await prisma.product.deleteMany({
+        where: { id: { in: createdProductIds } },
       });
     }
   });
@@ -262,9 +269,17 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
       .post(`/campaigns/${rejId}/submit`)
       .set("Authorization", `Bearer ${marketingToken}`);
 
-    const rejectRes = await request(app)
+    // Admin token must be forbidden
+    const adminRejectRes = await request(app)
       .post(`/campaigns/${rejId}/reject`)
       .set("Authorization", `Bearer ${adminToken}`)
+      .send({ reason: "แอดมินไม่มีสิทธิ์ดำเนินการ" });
+    assert.equal(adminRejectRes.status, 403);
+
+    // Marketing token succeeds
+    const rejectRes = await request(app)
+      .post(`/campaigns/${rejId}/reject`)
+      .set("Authorization", `Bearer ${marketingToken}`)
       .send({ reason: "งบประมาณไม่เพียงพอ" });
     assert.equal(rejectRes.status, 200);
     assert.equal(rejectRes.body.status, "rejected");
@@ -404,5 +419,369 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
     assert.equal(filterRes4.body[0].campaign.code, denimCode);
     assert.equal(filterRes4.body[0].estimatedDiscount, 200); // capped at 200 instead of 400
     assert.equal(filterRes4.body[0].finalPrice, 1800);
+  });
+
+  // 7. Internal Service-to-Service: quote-and-hold, Concurrency, Closed Public APIs & Upload RBAC
+  await t.test("Internal quote-and-hold endpoint, Concurrency, and Security Hardening", async () => {
+    const internalToken = process.env.INTERNAL_SERVICE_TOKEN;
+
+    // 7.1 Security: Requires x-internal-token
+    const noTokenRes = await request(app)
+      .post("/internal/campaigns/dummy-id/quote-and-hold")
+      .send({ userId: "buyer-wallet-test-01", orderId: "ord-1", productId: "prod-1" });
+    assert.equal(noTokenRes.status, 403);
+
+    const badTokenRes = await request(app)
+      .post("/internal/campaigns/dummy-id/quote-and-hold")
+      .set("x-internal-token", "wrong-token")
+      .send({ userId: "buyer-wallet-test-01", orderId: "ord-1", productId: "prod-1" });
+    assert.equal(badTokenRes.status, 403);
+
+    // Setup: Create and publish a test campaign for validation
+    const valCode = `INT_VAL_${timestamp}`;
+    const valCampRes = await request(app)
+      .post("/campaigns")
+      .set("Authorization", `Bearer ${marketingToken}`)
+      .send({
+        code: valCode,
+        name: "Internal Validation Test Campaign",
+        discountType: "PERCENT",
+        discountValue: 20,
+        maxDiscount: 200,
+        minOrderPrice: 300,
+        applicableCategory: "Denim",
+        startsAt: new Date(Date.now() - 3600000).toISOString(),
+        endsAt: new Date(Date.now() + 86400000).toISOString(),
+      });
+    assert.equal(valCampRes.status, 201);
+    const valCampId = valCampRes.body.id;
+    createdCampaignIds.push(valCampId);
+
+    await request(app)
+      .post(`/campaigns/${valCampId}/submit`)
+      .set("Authorization", `Bearer ${marketingToken}`);
+    await request(app)
+      .post(`/campaigns/${valCampId}/approve`)
+      .set("Authorization", `Bearer ${marketingToken}`);
+    await request(app)
+      .post(`/campaigns/${valCampId}/publish`)
+      .set("Authorization", `Bearer ${marketingToken}`);
+
+    // Claim voucher for buyer-wallet-test-01
+    await request(app)
+      .post(`/campaigns/${valCampId}/claim`)
+      .set("Authorization", `Bearer ${buyerToken}`);
+
+    // Create a valid reserved product for buyer-wallet-test-01
+    const validProduct = await prisma.product.create({
+      data: {
+        sellerId: "seller-test-01",
+        title: "Test Denim Jacket",
+        price: 500,
+        category: "Denim",
+        status: "reserved",
+        reservedBy: "buyer-wallet-test-01",
+        reservationExpiresAt: new Date(Date.now() + 600000),
+        reservationId: `res-val-${timestamp}`,
+      },
+    });
+    createdProductIds.push(validProduct.id);
+
+    // 7.2 Validation failure: User has NOT claimed this voucher
+    const unclaimedRes = await request(app)
+      .post(`/internal/campaigns/${valCampId}/quote-and-hold`)
+      .set("x-internal-token", internalToken)
+      .send({ userId: "unclaimed-user-99", orderId: "ord-test-unclaimed", productId: validProduct.id });
+    assert.equal(unclaimedRes.status, 400);
+    assert.match(unclaimedRes.body.error, /not claimed/i);
+
+    // 7.3 Validation failure: Product not reserved (create available product)
+    const unreservedProduct = await prisma.product.create({
+      data: {
+        sellerId: "seller-test-01",
+        title: "Unreserved Jeans",
+        price: 500,
+        category: "Denim",
+        status: "available",
+      },
+    });
+    createdProductIds.push(unreservedProduct.id);
+
+    const unreservedRes = await request(app)
+      .post(`/internal/campaigns/${valCampId}/quote-and-hold`)
+      .set("x-internal-token", internalToken)
+      .send({ userId: "buyer-wallet-test-01", orderId: "ord-test-unres", productId: unreservedProduct.id });
+    assert.equal(unreservedRes.status, 400);
+    assert.match(unreservedRes.body.error, /not reserved/i);
+
+    // 7.4 Validation failure: Product reserved by different buyer
+    const wrongBuyerProduct = await prisma.product.create({
+      data: {
+        sellerId: "seller-test-01",
+        title: "Someone Else Jeans",
+        price: 500,
+        category: "Denim",
+        status: "reserved",
+        reservedBy: "different-buyer-99",
+        reservationExpiresAt: new Date(Date.now() + 600000),
+        reservationId: `res-wrong-buyer-${timestamp}`,
+      },
+    });
+    createdProductIds.push(wrongBuyerProduct.id);
+
+    const wrongBuyerRes = await request(app)
+      .post(`/internal/campaigns/${valCampId}/quote-and-hold`)
+      .set("x-internal-token", internalToken)
+      .send({ userId: "buyer-wallet-test-01", orderId: "ord-test-wrong-buyer", productId: wrongBuyerProduct.id });
+    assert.equal(wrongBuyerRes.status, 400);
+    assert.match(wrongBuyerRes.body.error, /not reserved by this buyer/i);
+
+    // 7.5 Validation failure: Below minimum order price (price 200 < minOrderPrice 300)
+    const cheapProduct = await prisma.product.create({
+      data: {
+        sellerId: "seller-test-01",
+        title: "Cheap Denim Hat",
+        price: 200,
+        category: "Denim",
+        status: "reserved",
+        reservedBy: "buyer-wallet-test-01",
+        reservationExpiresAt: new Date(Date.now() + 600000),
+        reservationId: `res-cheap-${timestamp}`,
+      },
+    });
+    createdProductIds.push(cheapProduct.id);
+
+    const belowMinRes = await request(app)
+      .post(`/internal/campaigns/${valCampId}/quote-and-hold`)
+      .set("x-internal-token", internalToken)
+      .send({ userId: "buyer-wallet-test-01", orderId: "ord-test-cheap", productId: cheapProduct.id });
+    assert.equal(belowMinRes.status, 400);
+    assert.match(belowMinRes.body.error, /minimum order price/i);
+
+    // 7.6 Validation failure: Category mismatch (Shoes != Denim)
+    const shoesProduct = await prisma.product.create({
+      data: {
+        sellerId: "seller-test-01",
+        title: "Sneakers",
+        price: 500,
+        category: "Shoes",
+        status: "reserved",
+        reservedBy: "buyer-wallet-test-01",
+        reservationExpiresAt: new Date(Date.now() + 600000),
+        reservationId: `res-shoes-${timestamp}`,
+      },
+    });
+    createdProductIds.push(shoesProduct.id);
+
+    const catMismatchRes = await request(app)
+      .post(`/internal/campaigns/${valCampId}/quote-and-hold`)
+      .set("x-internal-token", internalToken)
+      .send({ userId: "buyer-wallet-test-01", orderId: "ord-test-shoes", productId: shoesProduct.id });
+    assert.equal(catMismatchRes.status, 400);
+    assert.match(catMismatchRes.body.error, /applicable for category/i);
+
+    // 7.7 Success: Standard percentage calculation and atomic hold (20% of 500 = 100, finalPrice = 400)
+    const quoteRes = await request(app)
+      .post(`/internal/campaigns/${valCampId}/quote-and-hold`)
+      .set("x-internal-token", internalToken)
+      .send({ userId: "buyer-wallet-test-01", orderId: "order-concurrent-1", productId: validProduct.id });
+    assert.equal(quoteRes.status, 200);
+    assert.equal(quoteRes.body.campaignCode, valCode);
+    assert.equal(quoteRes.body.discountAmount, 100);
+    assert.equal(quoteRes.body.finalPrice, 400);
+
+    // 7.8 CONCURRENCY TEST: Second checkout with different orderId attempting to use same voucher -> 409 Conflict
+    const concurrentRes = await request(app)
+      .post(`/internal/campaigns/${valCampId}/quote-and-hold`)
+      .set("x-internal-token", internalToken)
+      .send({ userId: "buyer-wallet-test-01", orderId: "order-concurrent-2", productId: validProduct.id });
+    assert.equal(concurrentRes.status, 409);
+    assert.match(concurrentRes.body.error, /held by another order/i);
+
+    // 7.9 Verify Public API Closure: hold, release, complete are NOT accessible as public routes
+    const publicHoldRes = await request(app)
+      .post(`/campaigns/${valCampId}/hold`)
+      .set("Authorization", `Bearer ${buyerToken}`)
+      .send({ orderId: "test-order" });
+    assert.equal(publicHoldRes.status, 404);
+
+    const publicReleaseRes = await request(app)
+      .post(`/campaigns/${valCampId}/release`)
+      .set("Authorization", `Bearer ${buyerToken}`)
+      .send({ orderId: "test-order" });
+    assert.equal(publicReleaseRes.status, 404);
+
+    const publicCompleteRes = await request(app)
+      .post(`/campaigns/${valCampId}/complete`)
+      .set("Authorization", `Bearer ${buyerToken}`)
+      .send({ orderId: "test-order" });
+    assert.equal(publicCompleteRes.status, 404);
+
+    // Public claim still works!
+    const publicClaimBuyer2 = await request(app)
+      .post(`/campaigns/${valCampId}/claim`)
+      .set("Authorization", `Bearer ${buyer2Token}`);
+    assert.equal(publicClaimBuyer2.status, 201);
+
+    // 7.10 Upload RBAC Hardening: ADMIN is forbidden from POST /uploads (only SELLER and MARKETING allowed)
+    const adminUploadRes = await request(app)
+      .post("/uploads")
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(adminUploadRes.status, 403);
+
+    const buyerUploadRes = await request(app)
+      .post("/uploads")
+      .set("Authorization", `Bearer ${buyerToken}`);
+    assert.equal(buyerUploadRes.status, 403);
+  });
+
+  // 8. Campaign Validation & Uppercase Normalization
+  await t.test("Validation: code normalization and partial update bounds", async () => {
+    const normCode = `norm_${timestamp}`;
+    const normRes = await request(app)
+      .post("/campaigns")
+      .set("Authorization", `Bearer ${marketingToken}`)
+      .send({
+        code: `  ${normCode}  `,
+        name: "Normalized Code Campaign",
+        discountType: "PERCENT",
+        discountValue: 15,
+        startsAt: new Date().toISOString(),
+        endsAt: new Date(Date.now() + 86400000).toISOString(),
+      });
+    assert.equal(normRes.status, 201);
+    assert.equal(normRes.body.code, normCode.toUpperCase());
+    createdCampaignIds.push(normRes.body.id);
+
+    // Partial update: discountValue > 100 on PERCENT -> 400
+    const overPercentRes = await request(app)
+      .patch(`/campaigns/${normRes.body.id}`)
+      .set("Authorization", `Bearer ${marketingToken}`)
+      .send({ discountValue: 150 });
+    assert.equal(overPercentRes.status, 400);
+
+    // Create fixed discount campaign with value 200
+    const fixedRes = await request(app)
+      .post("/campaigns")
+      .set("Authorization", `Bearer ${marketingToken}`)
+      .send({
+        code: `FIXED_${timestamp}`,
+        name: "Fixed Campaign",
+        discountType: "FIXED",
+        discountValue: 200,
+        startsAt: new Date().toISOString(),
+        endsAt: new Date(Date.now() + 86400000).toISOString(),
+      });
+    assert.equal(fixedRes.status, 201);
+    createdCampaignIds.push(fixedRes.body.id);
+
+    // Partial update: switch to PERCENT while existing value is 200 -> 400
+    const switchPercentRes = await request(app)
+      .patch(`/campaigns/${fixedRes.body.id}`)
+      .set("Authorization", `Bearer ${marketingToken}`)
+      .send({ discountType: "PERCENT" });
+    assert.equal(switchPercentRes.status, 400);
+
+    // Partial update: startsAt after endsAt -> 400
+    const badStartRes = await request(app)
+      .patch(`/campaigns/${normRes.body.id}`)
+      .set("Authorization", `Bearer ${marketingToken}`)
+      .send({ startsAt: new Date(Date.now() + 172800000).toISOString() }); // 2 days later
+    assert.equal(badStartRes.status, 400);
+  });
+
+  // 9. Gating Non-Published Campaigns on GET /campaigns/:id
+  await t.test("Gating: draft campaigns hidden from guest/buyer, visible to marketing", async () => {
+    const gateCode = `GATE_${timestamp}`;
+    const draftRes = await request(app)
+      .post("/campaigns")
+      .set("Authorization", `Bearer ${marketingToken}`)
+      .send({
+        code: gateCode,
+        name: "Gating Secret Draft",
+        discountType: "PERCENT",
+        discountValue: 10,
+        startsAt: new Date().toISOString(),
+        endsAt: new Date(Date.now() + 86400000).toISOString(),
+      });
+    assert.equal(draftRes.status, 201);
+    const gateCampId = draftRes.body.id;
+    createdCampaignIds.push(gateCampId);
+
+    // Guest without auth -> 404
+    const guestGetRes = await request(app).get(`/campaigns/${gateCampId}`);
+    assert.equal(guestGetRes.status, 404);
+
+    // Buyer -> 404
+    const buyerGetRes = await request(app)
+      .get(`/campaigns/${gateCampId}`)
+      .set("Authorization", `Bearer ${buyerToken}`);
+    assert.equal(buyerGetRes.status, 404);
+
+    // Marketing -> 200
+    const mktGetRes = await request(app)
+      .get(`/campaigns/${gateCampId}`)
+      .set("Authorization", `Bearer ${marketingToken}`);
+    assert.equal(mktGetRes.status, 200);
+    assert.equal(mktGetRes.body.code, gateCode);
+  });
+
+  // 10. Usage Limit Concurrency & Claim Semantics
+  await t.test("Claim Concurrency: quota full and duplicate claims return 409 Conflict", async () => {
+    const limitCode = `LIMIT_${timestamp}`;
+    const campRes = await request(app)
+      .post("/campaigns")
+      .set("Authorization", `Bearer ${marketingToken}`)
+      .send({
+        code: limitCode,
+        name: "Limited Claim Promo",
+        discountType: "PERCENT",
+        discountValue: 20,
+        usageLimit: 1, // Only 1 claim allowed
+        startsAt: new Date(Date.now() - 3600000).toISOString(),
+        endsAt: new Date(Date.now() + 86400000).toISOString(),
+      });
+    assert.equal(campRes.status, 201);
+    const limitCampId = campRes.body.id;
+    createdCampaignIds.push(limitCampId);
+
+    // Transition to published
+    await request(app)
+      .post(`/campaigns/${limitCampId}/submit`)
+      .set("Authorization", `Bearer ${marketingToken}`);
+    await request(app)
+      .post(`/campaigns/${limitCampId}/approve`)
+      .set("Authorization", `Bearer ${marketingToken}`);
+    await request(app)
+      .post(`/campaigns/${limitCampId}/publish`)
+      .set("Authorization", `Bearer ${marketingToken}`);
+
+    // Buyer 1 claims first -> 201 Created
+    const claim1Res = await request(app)
+      .post(`/campaigns/${limitCampId}/claim`)
+      .set("Authorization", `Bearer ${buyerToken}`);
+    assert.equal(claim1Res.status, 201);
+
+    // Buyer 2 claims -> 409 Conflict (quota full)
+    const claim2Res = await request(app)
+      .post(`/campaigns/${limitCampId}/claim`)
+      .set("Authorization", `Bearer ${buyer2Token}`);
+    assert.equal(claim2Res.status, 409);
+    assert.match(claim2Res.body.error, /usage limit reached/i);
+
+    // Buyer 1 tries to claim again -> 409 Conflict (already claimed)
+    const duplicateClaimRes = await request(app)
+      .post(`/campaigns/${limitCampId}/claim`)
+      .set("Authorization", `Bearer ${buyerToken}`);
+    assert.equal(duplicateClaimRes.status, 409);
+    assert.match(duplicateClaimRes.body.error, /already claimed/i);
+
+    // Verify campaign counts
+    const checkRes = await request(app)
+      .get(`/campaigns/${limitCampId}`)
+      .set("Authorization", `Bearer ${marketingToken}`);
+    assert.equal(checkRes.status, 200);
+    assert.equal(checkRes.body.claimedCount, 1);
+    assert.equal(checkRes.body.redeemedCount, 0);
   });
 });

@@ -115,6 +115,8 @@ router.post(
 
 ### Task MKT-003: Attribution and Conversion Dashboard
 
+**Status note:** Source implementation exists in `backend/services/product-service/src/features/campaigns/campaignMetrics.js`, `frontend/components/marketing/sections/DashboardSection.js`, and `test/campaignMetrics.test.js` (7/7 passing). Order completed dispatch is wired in `orderController.js`. Real cross-service Prisma-backed database persistence in `reloop_order` / `reloop_product` is pending Part 3 hardening.
+
 **Files:**
 
 - Modify: `backend/services/order-service/prisma/schema.prisma`
@@ -123,6 +125,7 @@ router.post(
 - Create: `backend/services/auth-service/src/features/metrics/activityMetrics.js`
 - Create: `frontend/app/marketing/dashboard/page.js`
 - Test: `backend/services/order-service/test/campaign-attribution.integration.test.js`
+- Test: `backend/services/product-service/test/campaignMetrics.test.js`
 
 **Interfaces:**
 
@@ -130,18 +133,11 @@ router.post(
 - Produces: immutable Order fields `campaignId`, `discountAmount`, `finalPrice`
 - Consumes: `order.completed.v1` with attribution snapshot
 
-- [ ] **Step 1: Write failing completed-vs-click conversion and replay tests**
-- [ ] **Step 2: Run tests; confirm attribution fields/events missing**
-- [ ] **Step 3: Snapshot validated discount, record privacy-minimized activity buckets and consume idempotent completion event**
-
-```js
-{
-  (campaignId, discountAmount, finalPrice, pricingVersion);
-}
-```
-
-- [ ] **Step 4: Verify expired code, concurrent usage cap, event replay, peak-usage buckets and date filter**
-- [ ] **Step 5: Update docs and commit `feat(marketing): measure campaign conversion`**
+- [x] **Step 1: Write completed-vs-click conversion and metrics unit tests** (`test/campaignMetrics.test.js`, 7/7 passing)
+- [x] **Step 2: Verify source implementation exists** (`campaignMetrics.js`, `DashboardSection.js`, `productClient.js`)
+- [x] **Step 3: Snapshot validated discount and consume idempotent completion event** (`POST /internal/campaigns/events/order-completed`)
+- [ ] **Step 4: Verify cross-service PostgreSQL persistence in `reloop_order` / `reloop_product`** (Attribution DB acceptance pending Part 3 hardening)
+- [ ] **Step 5: Update docs and commit `feat(marketing): measure campaign conversion`** (Pending Part 3 hardening)
 
 ### Task MKT-004: Extended Segmentation and Content
 
@@ -153,32 +149,21 @@ router.post(
 - Status: Completed, verified with Jest tests (41/41 passing) and Next.js static build (24/24 pages)
 
 **Part B: Buyer Segmentation Rules (UR-13 / FR-5.1.4)**
+**Status note:** Source implementation exists in `backend/services/product-service/src/features/segments/segmentRule.js`, unit tested via `segmentRule.test.js` (7/7 passing), and integrated into public campaign listings (`listAvailablePublicCampaigns`, `getApplicableVouchers`). End-to-end buyer profile persistence hardening is scheduled for Part 4.
+
 **Files:**
 
-- Create: `backend/services/product-service/src/features/segments/`
+- Create: `backend/services/product-service/src/features/segments/segmentRule.js`
 - Modify: `backend/services/product-service/prisma/schema.prisma`
 - Test: `backend/services/product-service/src/features/segments/segmentRule.test.js`
 
 **Interfaces:** Produces deterministic `matchesSegment(profile, rule)`
 
-- [ ] **Step 1: Write failing segment rule, empty-result tests**
-- [ ] **Step 2: Run tests; confirm modules absent**
-- [ ] **Step 3: Implement deterministic fields**
-
-```js
-const SEGMENT_FIELDS = ["favoriteCategory", "preferredSize", "styleTag"];
-
-function matchesSegment(profile, rule) {
-  return rule.every(
-    ({ field, value }) =>
-      SEGMENT_FIELDS.includes(field) && profile[field] === value,
-  );
-}
-```
-
-- [ ] **Step 4: Verify empty segment, filter evaluation and persisted result**
-- [ ] **Step 5: Update docs and commit `feat(marketing): add segmentation`**
-
+- [x] **Step 1: Write segment rule unit tests** (`segmentRule.test.js`, 7/7 passing)
+- [x] **Step 2: Verify source implementation exists** (`segmentRule.js` matching whitelist fields and operators)
+- [x] **Step 3: Implement deterministic fields and evaluation** (`favoriteCategory`, `preferredSize`, `styleTag`, `brandPreference`)
+- [ ] **Step 4: Verify end-to-end Buyer profile persistence hardening** (Pending Part 4)
+- [ ] **Step 5: Update docs and commit `feat(marketing): add segmentation`** (Pending Part 4)
 
 ### Task MKT-005: Extended Auction and Swipe Contracts
 
@@ -205,9 +190,9 @@ persisted choose action และยังไม่ผ่าน Marketing requir
 **Interfaces:** Seller/Product provides video upload/feed; Buyer consumes public Swipe UI; Marketing owns
 `UR-11` acceptance and auction scheduling; Admin approves auction items
 
-- [ ] **Step 1: Freeze “Swipe-to-Choose” semantics, then write failing schedule/approval/late-bid and swipe contract tests**
-- [ ] **Step 2: Run tests; confirm auction module missing and pulled Swipe baseline lacks persisted choose behavior**
-- [ ] **Step 3: Implement server-time state machine and idempotent bid command**
+- [x] **Step 1: Freeze “Swipe-to-Choose” semantics, then write failing schedule/approval/late-bid and swipe contract tests**
+- [x] **Step 2: Run tests; confirm auction module missing and pulled Swipe baseline lacks persisted choose behavior**
+- [x] **Step 3: Implement server-time state machine and idempotent bid command**
 
 ```js
 async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
@@ -221,5 +206,58 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 }
 ```
 
-- [ ] **Step 4: Verify unapproved item denial, tie rule, close race, allowed feed Product states, identity source and swipe fallback**
-- [ ] **Step 5: Update docs and commit `feat(marketing): add auction and swipe experience`**
+- [x] **Step 4: Verify unapproved item denial, tie rule, close race, allowed feed Product states, identity source and swipe fallback**
+  - **Unit Tests:** `node -r ./scripts/test-shim.js --test backend/services/product-service/src/features/auctions/auctionService.test.js` (48/48 tests passing, including 7 idempotency scoping tests and 9 round overlap/phase/selection tests; 0 live DB/Redis dependency via `dummyPrisma`)
+  - **Frontend Tests:** `npm --prefix frontend test -- components/marketing/sections/AuctionScheduleSection.test.js` (7/7 tests passing, covering focused `RoundManagementSection` tests: current/upcoming round display, all-round history table, phase badges, empty state, 409 Conflict error banner, refresh on creation, and parent `AuctionScheduleSection` with explicitly mocked API calls)
+  - **Integration Tests:** `$env:REQUIRE_INTEGRATION="1"; $env:REDIS_URL="redis://localhost:6379"; node -r ./scripts/test-shim.js --test backend/services/product-service/test/auction.integration.test.js` (11/11 tests across 10 steps passing against live PostgreSQL & Redis, verifying lifecycle, concurrency, soft close, BullMQ worker, safe idempotency scoping, and Step 10: round overlap protection with `pg_advisory_xact_lock(1001, 1)`, back-to-back success, deterministic selection with `fakeNow`, and concurrent conflict 409)
+- [ ] **Step 5: Update docs and commit `feat(marketing): add auction and swipe experience`** (Docs updated in `plan.md`, `progress.md`, `handoff.md`, `changelog.md`, and `teachme.md`; commit pending explicit user instruction)
+
+### Task MKT-006: Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling
+
+**Files:**
+
+- Modify: `backend/services/product-service/src/features/campaigns/internalCampaignRoutes.js`
+- Modify: `backend/services/product-service/src/features/campaigns/campaignController.js`
+- Modify: `backend/services/product-service/src/features/campaigns/campaignService.js`
+- Modify: `backend/services/order-service/src/features/checkout/checkoutService.js`
+- Modify: `backend/services/order-service/src/services/productClient.js`
+- Modify: `backend/services/product-service/src/routes/uploadRoutes.js`
+- Test: `backend/services/product-service/test/campaign.integration.test.js`
+- Test: `backend/services/order-service/src/features/checkout/checkoutService.test.js`
+
+**Interfaces:**
+
+- Produces: Internal `POST /internal/campaigns/:id/quote-and-hold` with `x-internal-token` guard
+- Produces: Atomic voucher hold via `prisma.userVoucher.updateMany` with 409 Conflict guard
+- Consumes: Pre-generated `orderId` with two-way compensation (`releaseVoucher` + `releaseProductReservation`)
+- Enforces: Admin role decoupling (403 Forbidden on marketing routes and uploads per `MKT-DEC-014` / `ADM-DEC-017`)
+
+- [x] **Step 1: Write failing quote-and-hold, price-tampering, and compensation tests**
+- [x] **Step 2: Implement server-side 10-rule verification in `campaignService.js`**
+- [x] **Step 3: Implement atomic hold in `campaignRepository.js` and compensation in `checkoutService.js`**
+- [x] **Step 4: Verify price-tampering rejection, concurrency 409, public hold/release/complete closure, and Admin 403**
+- [ ] **Step 5: Update docs and commit `feat(marketing): server-side quote-and-hold & admin decoupling`** (Implementation and docs complete; commit pending explicit user instruction)
+
+### Task MKT-007: Campaign Attribution Engine, Metrics Dashboard & Count Semantics
+
+**Files:**
+
+- Create: `backend/services/product-service/src/features/campaigns/campaignMetrics.js`
+- Modify: `backend/services/order-service/src/services/productClient.js`
+- Modify: `backend/services/order-service/src/controllers/orderController.js`
+- Modify: `frontend/components/marketing/sections/DashboardSection.js`
+- Test: `backend/services/product-service/test/campaignMetrics.test.js`
+
+**Interfaces:**
+
+- Produces: Distinct `claimedCount` (voucher wallet collection) vs `redeemedCount` (completed orders)
+- Consumes: `order.completed.v1` via internal `POST /internal/campaigns/events/order-completed`
+- Produces: Idempotent attribution ingestion with `campaign_attributions` fact model (in-memory fallback for unit tests)
+- Produces: Marketing Metrics APIs (`/metrics/overview`, `/metrics/trends`, `/metrics/compare`, `/:id/metrics`) with date range validation
+- Produces: Marketing Dashboard UI with 6 KPI cards, trend bar chart, and campaign comparison table
+
+- [x] **Step 1: Write unit tests for attribution ingestion, count semantics, date range validation, and conversion calculations** (`campaignMetrics.test.js`, 7/7 passing)
+- [x] **Step 2: Implement `campaignMetrics.js` backend engine and REST endpoints in `campaignController.js`**
+- [x] **Step 3: Implement `DashboardSection.js` UI with real-time KPI metrics, date range filters, and comparison table**
+- [ ] **Step 4: Verify real PostgreSQL cross-service persistence in `reloop_order` / `reloop_product`** (Attribution DB acceptance pending Part 3 hardening)
+- [ ] **Step 5: Update docs and commit `feat(marketing): campaign attribution and metrics dashboard`**

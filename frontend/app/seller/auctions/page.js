@@ -13,9 +13,9 @@ import { getAccessToken, getStoredUser } from "../../../lib/auth";
 import { fetchCategories, fetchConditions } from "../../../lib/catalog";
 
 const STATUS_LABEL = {
-  pending_approval: "รออนุมัติจาก Admin",
+  pending_approval: "รออนุมัติจาก Marketing",
   rejected: "ถูกปฏิเสธ",
-  approved: "อนุมัติแล้ว รอ Marketing ตั้งเวลา",
+  approved: "อนุมัติแล้ว (เตรียมเปิดประมูลตามรอบ)",
   scheduled: "ตั้งเวลาแล้ว รอเปิด",
   open: "กำลังประมูล",
   closed: "ปิดประมูลแล้ว",

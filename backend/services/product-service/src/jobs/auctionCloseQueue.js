@@ -59,4 +59,34 @@ function startWorker(closeAuctionById) {
   );
 }
 
-module.exports = { scheduleClose, cancelClose, startWorker };
+async function closeQueue() {
+  if (queue) {
+    try {
+      const conn = queue.opts?.connection;
+      await queue.close();
+      if (conn && typeof conn.quit === "function") {
+        await conn.quit().catch(() => conn.disconnect());
+      }
+    } catch {
+      // safe no-op if already closed
+    } finally {
+      queue = null;
+    }
+  }
+}
+
+async function stopWorker(worker) {
+  if (worker) {
+    try {
+      const conn = worker.opts?.connection;
+      await worker.close();
+      if (conn && typeof conn.quit === "function") {
+        await conn.quit().catch(() => conn.disconnect());
+      }
+    } catch {
+      // safe no-op if already closed
+    }
+  }
+}
+
+module.exports = { scheduleClose, cancelClose, startWorker, stopWorker, closeQueue, getQueue };

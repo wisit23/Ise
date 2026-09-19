@@ -210,9 +210,6 @@ export default function ProductDetailPage() {
         body: {
           productId: product.id,
           campaignId: selectedVoucher ? selectedVoucher.campaignId : null,
-          campaignCode: selectedVoucher ? selectedVoucher.campaign?.code : null,
-          discountAmount: selectedVoucher ? selectedVoucher.estimatedDiscount : 0,
-          finalPrice: selectedVoucher ? selectedVoucher.finalPrice : product.price,
         },
       });
       setAdded(true);

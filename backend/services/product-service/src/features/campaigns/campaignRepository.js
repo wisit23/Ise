@@ -5,14 +5,19 @@ const prisma = require("../../models/prismaClient");
  * Layering: route -> controller -> service -> repository -> PostgreSQL (reloop_product).
  */
 function createCampaignRepository(prismaClient) {
-  function createCampaign(data) {
-    return prismaClient.campaign.create({
+  async function createCampaign(data) {
+    const campaign = await prismaClient.campaign.create({
       data,
     });
+    return {
+      ...campaign,
+      claimedCount: campaign.usedCount ?? 0,
+      redeemedCount: 0,
+    };
   }
 
-  function findById(id) {
-    return prismaClient.campaign.findUnique({
+  async function findById(id) {
+    const campaign = await prismaClient.campaign.findUnique({
       where: { id },
       include: {
         _count: {
@@ -20,6 +25,25 @@ function createCampaignRepository(prismaClient) {
         },
       },
     });
+    if (!campaign) return null;
+
+    let redeemedCount = 0;
+    try {
+      redeemedCount = await prismaClient.userVoucher.count({
+        where: {
+          campaignId: id,
+          status: "USED",
+        },
+      });
+    } catch {
+      redeemedCount = 0;
+    }
+
+    return {
+      ...campaign,
+      claimedCount: campaign.usedCount ?? (campaign._count?.vouchers || 0),
+      redeemedCount,
+    };
   }
 
   function findByCode(code) {
@@ -90,7 +114,7 @@ function createCampaignRepository(prismaClient) {
       ];
     }
 
-    const [items, total] = await Promise.all([
+    const [rawItems, total] = await Promise.all([
       prismaClient.campaign.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -104,6 +128,30 @@ function createCampaignRepository(prismaClient) {
       }),
       prismaClient.campaign.count({ where }),
     ]);
+
+    const campaignIds = rawItems.map((c) => c.id);
+    let redeemedMap = new Map();
+    if (campaignIds.length > 0) {
+      try {
+        const redeemedCounts = await prismaClient.userVoucher.groupBy({
+          by: ["campaignId"],
+          where: {
+            campaignId: { in: campaignIds },
+            status: "USED",
+          },
+          _count: { id: true },
+        });
+        redeemedMap = new Map(redeemedCounts.map((r) => [r.campaignId, r._count.id]));
+      } catch {
+        redeemedMap = new Map();
+      }
+    }
+
+    const items = rawItems.map((c) => ({
+      ...c,
+      claimedCount: c.usedCount ?? (c._count?.vouchers || 0),
+      redeemedCount: redeemedMap.get(c.id) || 0,
+    }));
 
     return { items, total };
   }
@@ -235,6 +283,74 @@ function createCampaignRepository(prismaClient) {
     });
   }
 
+  function findProduct(productId) {
+    return prismaClient.product.findUnique({
+      where: { id: productId },
+    });
+  }
+
+  async function holdVoucherWithLock({ userId, campaignId, orderId }) {
+    const res = await prismaClient.userVoucher.updateMany({
+      where: {
+        userId,
+        campaignId,
+        status: "CLAIMED",
+        OR: [
+          { usedOrderId: null },
+          { usedOrderId: orderId },
+        ],
+      },
+      data: {
+        usedOrderId: orderId,
+      },
+    });
+    return res.count > 0;
+  }
+
+  async function claimVoucherAtomic({ userId, campaignId, usageLimit }) {
+    return prismaClient.$transaction(async (tx) => {
+      const existing = await tx.userVoucher.findUnique({
+        where: {
+          userId_campaignId: { userId, campaignId },
+        },
+      });
+      if (existing) {
+        const err = new Error("voucher already claimed by user");
+        err.statusCode = 409;
+        throw err;
+      }
+
+      const where = { id: campaignId };
+      if (usageLimit !== null && usageLimit !== undefined) {
+        where.usedCount = { lt: usageLimit };
+      }
+
+      const updateResult = await tx.campaign.updateMany({
+        where,
+        data: {
+          usedCount: { increment: 1 },
+        },
+      });
+
+      if (updateResult.count === 0) {
+        const err = new Error("campaign usage limit reached");
+        err.statusCode = 409;
+        throw err;
+      }
+
+      return tx.userVoucher.create({
+        data: {
+          campaignId,
+          userId,
+          status: "CLAIMED",
+        },
+        include: {
+          campaign: true,
+        },
+      });
+    });
+  }
+
   return {
     createCampaign,
     findById,
@@ -248,9 +364,12 @@ function createCampaignRepository(prismaClient) {
     findVoucher,
     listUserVouchers,
     incrementUsedCount,
+    claimVoucherAtomic,
     holdVoucher,
+    holdVoucherWithLock,
     releaseVoucher,
     completeVoucher,
+    findProduct,
   };
 }
 

@@ -85,6 +85,30 @@ async function setProductStatus(productId, status) {
   return res.json();
 }
 
+function quoteAndHold(campaignId, { userId, orderId, productId }) {
+  if (!campaignId) return Promise.resolve(null);
+  return reservationRequest(
+    `/internal/campaigns/${campaignId}/quote-and-hold`,
+    {
+      method: "POST",
+      body: JSON.stringify({ userId, orderId, productId }),
+    },
+    "failed to quote and hold voucher",
+  );
+}
+
+function validateVoucherDiscount(campaignId, { userId, price, category }) {
+  if (!campaignId) return Promise.resolve(null);
+  return reservationRequest(
+    `/internal/campaigns/${campaignId}/validate-discount`,
+    {
+      method: "POST",
+      body: JSON.stringify({ userId, price, category }),
+    },
+    "failed to validate voucher",
+  );
+}
+
 function holdVoucher(campaignId, { userId, orderId }) {
   if (!campaignId) return Promise.resolve(null);
   return reservationRequest(
@@ -100,10 +124,7 @@ function releaseVoucher(campaignId, { userId, orderId }) {
     `/internal/campaigns/${campaignId}/release`,
     { method: "POST", body: JSON.stringify({ userId, orderId }) },
     "failed to release voucher",
-  ).catch((err) => {
-    console.warn("releaseVoucher warning:", err.message);
-    return null;
-  });
+  );
 }
 
 function completeVoucher(campaignId, { userId, orderId }) {
@@ -112,10 +133,18 @@ function completeVoucher(campaignId, { userId, orderId }) {
     `/internal/campaigns/${campaignId}/complete`,
     { method: "POST", body: JSON.stringify({ userId, orderId }) },
     "failed to complete voucher",
-  ).catch((err) => {
-    console.warn("completeVoucher warning:", err.message);
-    return null;
-  });
+  );
+}
+
+function recordOrderCompleted(event) {
+  return reservationRequest(
+    "/internal/campaigns/events/order-completed",
+    {
+      method: "POST",
+      body: JSON.stringify(event),
+    },
+    "failed to record order completed event",
+  );
 }
 
 module.exports = {
@@ -124,7 +153,10 @@ module.exports = {
   releaseProductReservation,
   completeProductReservation,
   setProductStatus,
+  quoteAndHold,
+  validateVoucherDiscount,
   holdVoucher,
   releaseVoucher,
   completeVoucher,
+  recordOrderCompleted,
 };

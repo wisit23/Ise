@@ -374,4 +374,239 @@
   - รัน Jest ทั้งระบบ: ผ่าน 29/29 Test Suites (137/137 tests passing 100%)
   - รัน Next.js Production Build (`npm run build`): สำเร็จ 100% ไม่มีข้อผิดพลาด
 
+## 2026-09-18 — Complete Marketing Ownership & Admin Role Decoupling
+
+- **Requirement:** `MKT-DEC-002`, `MKT-DEC-009`, `MKT-DEC-011`, `MKT-DEC-013`, `ADM-DEC-017`
+- **Backend Role Hardening (`backend/services/product-service`):**
+  - **Campaigns (`campaignRoutes.js`, `campaignService.js`):** ปลดสิทธิ์บทบาท `ADMIN` ออกจาก Route และ Service ของระบบแคมเปญทั้งหมด ให้คงไว้เฉพาะบทบาท `MARKETING` เท่านั้น (ส่งผลให้ `GET /`, `POST /`, `submit`, `approve`, `reject`, `publish`, `end`, `PATCH`, `DELETE` รองรับเฉพาะ `MARKETING` 100%)
+  - **Auctions (`auctionService.js`):** ปรับปรุง `approve`, `reject`, `schedule`, `cancel`, `listRounds`, และ `createRound` ให้ตรวจสอบสิทธิ์ `user.role === 'MARKETING'` เท่านั้น หากผู้เรียกเป็น `ADMIN` จะได้รับ HTTP `403 Forbidden`
+  - **Articles (`articleRoutes.js`, `articleController.js`):** ปลดสิทธิ์ `ADMIN` ออกจากการจัดการบทความทั้งระบบ คงสิทธิ์เฉพาะ `MARKETING`
+- **Frontend UI & Terminology Harmonization:**
+  - **Marketing Dashboard (`frontend/components/marketing/sections/DashboardSection.js`):** เปลี่ยน Label การ์ด KPI จากเดิม "รออนุมัติจาก Admin" เป็น "รอการอนุมัติ (Marketing)" และ Subtitle เป็น "รอตรวจสอบและอนุมัติสินค้าในรอบประมูล"
+  - **Seller Auctions (`frontend/app/seller/auctions/page.js`):** ปรับสถานะในตารางของผู้ขายจากเดิม `pending_approval: "รออนุมัติจาก Admin"` เป็น `"รออนุมัติจาก Marketing"` และ `approved: "อนุมัติแล้ว (เตรียมเปิดประมูลตามรอบ)"`
+  - **Admin Workspace (`frontend/app/workspace/page.js`):** นำแท็บตกค้าง `auction_approvals` (อนุมัติประมูล) ออกจาก `ADMIN_SECTIONS` และลบการ Render ตามข้อตกลง `ADM-DEC-017` เพื่อไม่ให้หน้าจอซ้ำซ้อนกับ Marketing
+- **Testing & Verification:**
+  - อัปเดต `backend/services/product-service/src/features/auctions/auctionService.test.js` ปรับ Caller เป็น `role: 'MARKETING'` และเพิ่ม Test Cases ตรวจสอบว่าผู้เรียกบทบาท `ADMIN` จะถูกปฏิเสธด้วย `403 Forbidden`
+  - อัปเดต `backend/services/product-service/test/campaign.integration.test.js` ให้ Rejection Step ทดสอบทั้งกรณี `adminToken` ถูกปฏิเสธด้วย `403 Forbidden` และ `marketingToken` ทำงานสำเร็จ
+  - รัน Jest Tests ฝั่ง Frontend: ผ่านครบ 29/29 Test Suites (138/138 tests passing 100%)
+  - รัน Next.js Production Build (`npm run build`): ผ่าน 26/26 Static Pages ปราศจากข้อผิดพลาด
+
+## 2026-09-18 — Server-Side Voucher Validation & Discount Calculation (Anti-Tampering)
+
+- **Security & Architecture Hardening:**
+  - แก้ไขช่องโหว่ด้านความปลอดภัยจากการคำนวณส่วนลดและราคาสุทธิที่ Front End (`req.body.discountAmount`, `req.body.finalPrice`) ซึ่งอาจถูกผู้ไม่ประสงค์ดีปลอมแปลงราคา (Price Tampering)
+  - ย้ายการตรวจสอบสิทธิ์และคำนวณส่วนลดทั้งหมดมาอยู่ที่ฝั่ง Back End (Single Source of Truth)
+- **Product-Service Internal Endpoint:**
+  - เพิ่ม API ภายใน `POST /internal/campaigns/:id/validate-discount` ใน `internalCampaignRoutes.js` และ `campaignController.js` ป้องกันความปลอดภัยด้วย `requireInternalToken` (`x-internal-token`)
+  - พัฒนาฟังก์ชัน `validateAndCalculateDiscount` ใน `campaignService.js` ทำหน้าที่:
+    - ตรวจสอบสถานะแคมเปญต้องเป็น `published` และอยู่ในช่วงวันเวลาที่เปิดใช้งาน
+    - ตรวจสอบว่าผู้ซื้อเป็นเจ้าของคูปองจริง (`CLAIMED`) ในกระเป๋าคูปองของผู้ใช้
+    - ตรวจสอบยอดสั่งซื้อขั้นต่ำ (`minOrderPrice`) และหมวดหมู่สินค้าที่ร่วมรายการ (`applicableCategory`)
+    - คำนวณส่วนลดที่ถูกต้องตามกฎทางธุรกิจ (PERCENT พร้อมเพดาน `maxDiscount` หรือ FIXED) และหาราคาสุทธิที่แท้จริง
+- **Order-Service Checkout Hardening:**
+  - เพิ่ม `validateVoucherDiscount` ใน `productClient.js` เรียกใช้ API ภายในของ `product-service` แบบ Service-to-Service REST
+  - ปรับปรุง `checkoutService.reserveOrder`:
+    - เมินเฉยต่อค่า `discountAmount` และ `finalPrice` ที่ส่งมาจาก Client อย่างสิ้นเชิง
+    - หากมี `campaignId` จะเรียกตรวจสิทธิ์และคำนวณส่วนลดจาก `productClient.validateVoucherDiscount` โดยตรง
+    - หากเงื่อนไขคูปองไม่ถูกต้อง จะยกเลิกการล็อกสินค้า (release reservation) ทันที และโยน `400 Bad Request`
+    - กำหนด `finalPrice = product.price - verifiedDiscountAmount` จากผลการคำนวณที่ผ่านการยืนยันแล้วเท่านั้น
+  - ปรับปรุง `orderController.create` ให้รับเฉพาะ `buyerId`, `productId`, และ `campaignId`
+- **Frontend Sanitization (`frontend/app/products/[id]/page.js`):**
+  - ตัดการส่งฟิลด์ `discountAmount` และ `finalPrice` ออกจาก `addToCart` payload โดยส่งเฉพาะ `productId` และ `campaignId`
+- **Testing & Verification:**
+  - เพิ่ม Unit Tests ใน `order-service/src/features/checkout/checkoutService.test.js`:
+    - ตรวจสอบว่าระบบเพิกเฉยต่อราคาปลอมแปลงจาก Client (`discountAmount: 99999`) และใช้ส่วนลดจริงจาก Server
+    - ตรวจสอบการจัดการเมื่อการตรวจสอบคูปองล้มเหลว (ปล่อยการล็อกสินค้าและส่ง Error 400)
+  - เพิ่ม Integration Tests ใน `product-service/test/campaign.integration.test.js`:
+    - ตรวจสอบ Security Guard ของ Internal Token (ปฏิเสธ 403 หากไม่มี Token หรือ Token ผิด)
+    - ตรวจสอบการคำนวณแบบเปอร์เซ็นต์, เพดานลดสูงสุด (`maxDiscount`), การปฏิเสธเมื่อยอดไม่ถึงเกณฑ์ขั้นต่ำ, การปฏิเสธเมื่อหมวดหมู่ไม่ตรง, และการปฏิเสธเมื่อผู้ใช้ยังไม่ได้เก็บคูปอง
+  - ทดสอบ Jest Tests ฝั่ง Frontend: ผ่านครบ 29/29 Test Suites (138/138 tests passing)
+  - ทดสอบ Next.js Production Build (`npm run build`): สำเร็จสมบูรณ์ 100% (26/26 Static Pages)
+
+## 2026-09-18 — Full Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling
+
+- **Requirement:** `MKT-DEC-014`, `MKT-DEC-015`, `ADM-DEC-017`, `WF-11`
+- **Security & Architecture Hardening (Checkout & Anti-Tampering):**
+  - ย้ายการคำนวณและยืนยันส่วนลดมาประมวลผลที่ Backend 100% (Single Source of Truth) ป้องกันการปลอมแปลงราคา (Price Tampering)
+  - Frontend (`frontend/app/products/[id]/page.js`) ส่งเฉพาะ `productId` และ `campaignId` (optional)
+  - ห้ามเชื่อค่าจาก Client: `campaignCode`, `discountAmount`, `finalPrice` ถูกเพิกเฉยโดยสิ้นเชิง
+- **Product-Service Internal Quote-and-Hold API:**
+  - เพิ่ม `POST /internal/campaigns/:id/quote-and-hold` ป้องกันด้วย `requireInternalToken` (`x-internal-token`)
+  - ตรวจสอบเงื่อนไขจากฐานข้อมูล `reloop_product` โดยตรง 10 ข้อ:
+    1. Product มีอยู่จริงในระบบ
+    2. Product อยู่ในสถานะ `reserved`
+    3. ผู้ที่จองสินค้าตรงกับ Buyer คนนี้จริง (`reservedBy === userId`)
+    4. การจองสินค้ายังไม่หมดอายุ (`reservationExpiresAt > now`)
+    5. Buyer ถือคูปองนี้อยู่จริงในกระเป๋าคูปอง
+    6. คูปองอยู่ในสถานะ `CLAIMED`
+    7. คูปองไม่ถูก hold โดย Order อื่น (`usedOrderId === null || usedOrderId === orderId`)
+    8. Campaign อยู่ในสถานะ `published`
+    9. Campaign เริ่มแล้วและยังไม่หมดอายุ (`startsAt <= now <= endsAt`)
+    10. ราคาสินค้าถึงยอดขั้นต่ำ `minOrderPrice` และหมวดหมู่สินค้าตรงกับ `applicableCategory`
+  - คำนวณส่วนลดเอง:
+    - PERCENT: `Math.round(price * discountValue / 100)` เคารพ `maxDiscount`
+    - FIXED: `Math.min(discountValue, price)`
+    - `finalPrice = Math.max(0, price - discountAmount)`
+  - ป้องกัน Concurrency: ทำ Atomic Hold ด้วย `prisma.userVoucher.updateMany` ตรวจ `status: "CLAIMED"` และ `usedOrderId: null หรือ orderId เดิม` หากอัปเดตไม่สำเร็จ (count == 0) ตอบกลับ HTTP `409 Conflict` ทันที
+- **Public API Closure:**
+  - ปิด Public API ใน `campaignRoutes.js`: ลบ `POST /campaigns/:id/hold`, `POST /campaigns/:id/release`, `POST /campaigns/:id/complete` (เหลือเฉพาะ Internal API ส่วน `POST /campaigns/:id/claim` ยังคงเปิดเป็น Public ให้ผู้ซื้อกดรับสิทธิ์)
+- **Order-Service Checkout Hardening:**
+  - Pre-generate `orderId` (`crypto.randomUUID()`) ล่วงหน้าก่อนเรียก `quoteAndHold`
+  - บันทึก Order ด้วยราคาและส่วนลดที่ Backend คำนวณเท่านั้น
+  - หากพบ Order เดิมจาก reservation ให้คืน Order เดิมทันที ห้ามอัปเดตราคาจาก Client
+  - ระบบคืนสิทธิ์ (Compensation): หากการสร้าง Order ล้มเหลว จะปลดล็อกทั้ง Voucher hold (`releaseVoucher`) และ Product reservation (`releaseProductReservation`) ทันที
+  - รองรับ Idempotent retry (`P2002`)
+- **Admin Decoupling Completion:**
+  - ปรับปรุง `uploadRoutes.js`: เปลี่ยนเป็น `requireRole("SELLER", "MARKETING")` ปลด `ADMIN` ออกจาก Route อัปโหลดไฟล์อย่างสมบูรณ์
+- **Testing & Verification:**
+  - Unit Tests ใน `order-service/src/features/checkout/checkoutService.test.js`:
+    - เพิกเฉยต่อราคาปลอมแปลงจาก Client (`discountAmount: 99999`, `finalPrice: 0`)
+    - ทดสอบ Compensation: Order write ล้มเหลวจะปลดทั้ง Voucher hold และ Product reservation
+    - ทดสอบ Existing reservation ไม่ปรับราคา และ Idempotent retry (`P2002`)
+  - Integration Tests ใน `product-service/test/campaign.integration.test.js`:
+    - ทดสอบ Internal Token Guard (403 Forbidden เมื่อไม่มี Token)
+    - ทดสอบ 10 เงื่อนไขการตรวจ Product และ Voucher จากฐานข้อมูล
+    - ทดสอบ Concurrency: คำขอสองคำขอพร้อมกันด้วย Order ต่างกัน คำขอแรกสำเร็จ คำขอที่สองได้ 409 Conflict
+    - ตรวจสอบว่า Public hold/release/complete ตอบ 404 (ปิดสมบูรณ์) ขณะที่ claim ตอบ 201
+    - ตรวจสอบ `POST /uploads` ปฏิเสธ ADMIN ด้วย 403 Forbidden
+  - รัน Jest Tests ฝั่ง Frontend: ผ่าน 29/29 Suites (138/138 tests passing)
+  - รัน Next.js Production Build: สำเร็จสมบูรณ์ 26/26 Static Pages
+
+## 2026-09-18 — Campaign System Hardening, Buyer Segmentation, Attribution Engine & Dashboard UI (Tasks 1–11)
+
+- **Requirement:** `MKT-003`, `MKT-004 Part B`, `MKT-007`, `MKT-DEC-016`–`MKT-DEC-019`, `WF-11`
+- **Task 1: Count Semantics (Claimed vs Redeemed):**
+  - แยกนิยามตัวนับอย่างชัดเจน:
+    - `claimedCount`: จำนวนครั้งที่ผู้ซื้อกดเก็บคูปอง (map จาก `usedCount` ในโมเดล `Campaign`)
+    - `redeemedCount`: จำนวนคำสั่งซื้อที่ใช้คูปองนี้และชำระเงินสำเร็จจริง (นับจาก `UserVoucher` ที่สถานะ `USED` หรือตาราง `campaign_attributions`)
+  - อัปเดต `campaignRepository.js` ให้แสดงผลทั้ง `claimedCount` และ `redeemedCount` ในทุก API response
+- **Task 2: Usage Limit & Atomic Claim Concurrency:**
+  - เพิ่มฟังก์ชัน `claimVoucherAtomic` ใน `campaignRepository.js` ทำงานผ่าน `$transaction`:
+    - ใช้คำสั่ง Atomic conditional update:
+      `prisma.campaign.updateMany({ where: { id, usedCount: { lt: usageLimit } }, data: { usedCount: { increment: 1 } } })`
+    - หากสิทธิ์เต็ม (`count === 0`) โยน `AppError("Campaign usage limit reached", 409)`
+    - บันทึก `UserVoucher` ภายใน transaction เดียวกัน หากผู้ซื้อเคยกดเก็บแล้ว จะเกิด P2002 Unique Violation และแปลงเป็น 409 Conflict
+- **Task 3: Campaign Validation & Normalization:**
+  - ปรับปรุง `campaignService.js`:
+    - Normalization: บังคับตัดขอบช่องว่างและแปลงเป็นตัวพิมพ์ใหญ่ `code.trim().toUpperCase()` ทั้งใน `createDraft` และ `updateDraft`
+    - Bound Checks: บังคับ `discountValue <= 100` เมื่อ `discountType === "PERCENT"` ทั้งตอนสร้างและ partial update
+    - Date Bounds: ตรวจสอบ `startsAt < endsAt` (ปฏิเสธหาก `startsAt >= endsAt`)
+    - Numeric Bounds: บังคับค่าบวกสำหรับ `minOrderPrice >= 0`, `maxDiscount > 0`, `budget > 0`, `usageLimit > 0`
+- **Task 4: Non-Published Campaign Gating:**
+  - เพิ่ม `optionalAuth` middleware ใน `campaignRoutes.js`
+  - ปรับปรุง `campaignService.getCampaignById`:
+    - หากแคมเปญไม่อยู่ในสถานะ `published` (เช่น `draft`, `pending_approval`, `rejected`, `ended`) ผู้ใช้ที่เป็น Guest หรือผู้ใช้ที่มีบทบาท `BUYER` จะได้รับ HTTP `404 Not Found` เสมือนแคมเปญไม่มีอยู่จริง
+    - อนุญาตให้เข้าดูได้เฉพาะผู้ใช้ที่มีบทบาท `MARKETING`
+- **Task 5: Buyer Segmentation Engine:**
+  - สร้าง `backend/services/product-service/src/features/segments/segmentRule.js`
+  - ตรวจสอบความถูกต้องของกฎด้วย `validateSegmentRule(targetSegment)`
+  - ฟังก์ชัน `matchesSegment(buyerProfile, targetSegment)`:
+    - รองรับ `ALLOWED_FIELDS`: `favoriteCategory`, `preferredSize`, `sizePreference`, `styleTag`, `stylePreference`, `brandPreference`
+    - รองรับ `ALLOWED_OPERATORS`: `eq`, `neq`, `in`, `nin`
+    - รองรับ Case-insensitive matching และ Array evaluation
+  - เชื่อมต่อเข้ากับ `listAvailablePublicCampaigns` และ `getApplicableVouchers` เพื่อคัดกรองแคมเปญที่ผู้ซื้อมีสิทธิ์เข้าถึงตามโปรไฟล์
+- **Task 6 & 7: Attribution Snapshot & Order Completed Event (`order.completed.v1`):**
+  - ใน `backend/services/order-service/src/services/productClient.js`: เพิ่ม `recordOrderCompleted(event)`
+  - ใน `backend/services/order-service/src/controllers/orderController.js`: Dispatch event ทันทีที่ Order ถูกชำระเงิน (`pay()`) หรือปรับสถานะเป็น `completed` (`updateStatus`)
+  - ใน `backend/services/product-service/src/features/campaigns/campaignMetrics.js`:
+    - จัดเก็บ Fact ลงตาราง `campaign_attributions` (`event_id` PK, `order_id` UNIQUE, `campaign_id`, `discount_amount`, `final_price`, `completed_at`)
+    - รองรับ In-memory storage อัตโนมัติในกรณี Test/Mock environment
+    - รับประกัน Idempotency: เพิกเฉยต่อการส่ง Event ซ้ำด้วย `order_id` เดียวกัน
+  - ใน `internalCampaignRoutes.js` & `campaignController.js`: เพิ่ม Endpoint ภายใน `POST /internal/campaigns/events/order-completed`
+- **Task 8 & 9: Campaign Metrics Backend & Marketing Metrics API:**
+  - คำนวณ Attribution Metrics:
+    - `completedOrders`: จำนวนคำสั่งซื้อที่ใช้คูปองสำเร็จ
+    - `grossRevenue`: ยอดขายรวมก่อนหักส่วนลด
+    - `totalDiscount`: มูลค่าส่วนลดรวมที่ให้ลูกค้า
+    - `netRevenue`: รายรับสุทธิ (`grossRevenue - totalDiscount`)
+    - `conversionRate`: คำนวณเป็นร้อยละ `(redeemedCount / claimedCount) * 100` (หาก `claimedCount === 0` คืนค่า 0)
+  - ตรวจสอบช่วงวันที่ด้วย `validateDateRange(from, to)` (ปฏิเสธหาก `from > to`)
+  - เปิด REST API สำหรับบทบาท `MARKETING`:
+    - `GET /metrics/overview`: สรุปภาพรวมยอดขาย คำสั่งซื้อ และส่วนลด
+    - `GET /metrics/trends`: ข้อมูลแนวโน้มยอดขายและคำสั่งซื้อแบบ Time-series รายวัน
+    - `GET /metrics/compare`: ตารางเปรียบเทียบผลลัพธ์ระหว่างแต่ละแคมเปญ
+    - `GET /:id/metrics`: สถิติเฉพาะของแคมเปญที่ระบุ
+- **Task 10: Automated Tests Verification:**
+  - สร้างชุดทดสอบ Unit Tests:
+    - `backend/services/product-service/test/campaignValidation.test.js` (12 tests)
+    - `backend/services/product-service/src/features/segments/segmentRule.test.js` (7 tests)
+    - `backend/services/product-service/test/campaignMetrics.test.js` (7 tests)
+  - อัปเดต Integration Tests: `backend/services/product-service/test/campaign.integration.test.js`
+  - สร้าง `scripts/test-shim.js` และ `scripts/dummyPrisma.js` สำหรับการทดสอบบน Host Environment
+  - ผลการทดสอบ: ผ่าน 29/29 tests ใน Node test runner และผ่าน 29/29 suites (138/138 tests) ใน Jest ฝั่ง Frontend
+- **Task 11: Marketing Dashboard UI:**
+  - ปรับปรุง `frontend/components/marketing/sections/DashboardSection.js`:
+    - เพิ่มการ์ดสรุป KPI 6 ใบ: คำสั่งซื้อที่สำเร็จ, ยอดขายรวม, ส่วนลดที่มอบให้, ยอดขายสุทธิ, อัตรา Conversion Rate, และสัดส่วนสิทธิ์ที่ใช้จริงเทียบกับที่ถูกเก็บ
+    - เพิ่มตัวกรองช่วงเวลา (7 วัน, 30 วัน, 90 วัน, ทั้งหมด) พร้อมดึงข้อมูลแบบ Real-time จาก Metrics API
+    - เพิ่มกราฟแท่งแนวโน้มยอดขายรายวัน (`TrendBarChart`)
+    - เพิ่มตารางเปรียบเทียบแคมเปญ (Campaign Comparison Table)
+    - คงการแสดงผลท่อสินค้าประมูล (Auction Pipeline Overview) เดิมไว้ครบถ้วน
+    - คอมไพล์ Next.js Static Build ผ่าน 26/26 หน้า ปราศจาก Warning/Error
+
+## 2026-09-19 — Marketing Part 2: Auction Integration Testing, Safe Idempotency Scoping & Teardown Refinements
+
+- **Safe Idempotency Key Scoping (`auctionService.js`):**
+  - เพิ่มฟังก์ชัน `validateIdempotentBid(existing, { auctionId, userId, bidAmount })` ตรวจสอบความถูกต้องของพารามิเตอร์: `existing.auctionId === auctionId && existing.bidderId === userId && existing.amount === bidAmount`
+  - หากพารามิเตอร์ไม่ตรงกัน โยน HTTP `409 Conflict` (`"idempotency key reused with different bid parameters"`)
+  - คืนค่า Bid เดิมเฉพาะกรณี Retry ด้วยพารามิเตอร์เดียวกันทุกประการ
+  - ตรวจสอบ `idempotencyKey` ก่อนการตรวจสอบสถานะ `open` และ `scheduledEndAt` เพื่อให้การ Retry บนการประมูลที่ปิดแล้วสามารถดึง Bid เดิมกลับมาได้ถูกต้อง
+  - นำการตรวจสอบพารามิเตอร์นี้ไปใช้ใน `P2002` race condition recovery path ด้วย
+- **Strict Teardown Ordering & Error Aggregation (`auction.integration.test.js`):**
+  - จัดระเบียบการ Cleanup ใน `t.after()`:
+    1. ปิด Worker (`stopWorker`)
+    2. ยกเลิก Delayed Job ใน Redis (`cancelClose`)
+    3. ลบข้อมูลใน PostgreSQL ตามลำดับ Reverse-Dependency (`Bid` -> `AuctionItem` -> `Product` -> `AuctionRound`)
+    4. ปิด Queue (`closeQueue`) และตัดการเชื่อมต่อ Prisma (`$disconnect`)
+  - รวบรวม Error ทั้งหมดลงใน `cleanupErrors = []` และ throw รายงานผลรวมหากมีข้อผิดพลาด ไม่ swallow error ด้วย `.catch(() => {})`
+- **Strengthened Anti-Sniping Soft Close Assertion (`auction.integration.test.js`):**
+  - ยกระดับการ Assert BullMQ Delayed Job ใน Redis ให้ตรวจสอบว่า `(rescheduledJob.timestamp + rescheduledJob.opts.delay)` ตรงกับเวลา `updatedAuction.scheduledEndAt.getTime()` ภายในระยะคลาดเคลื่อนไม่เกิน 2 วินาที ($\Delta < 2000\text{ms}$)
+- **Dynamic Supertest Fallback (`scripts/test-shim.js`):**
+  - ปรับปรุงให้พยายาม `require("supertest")` จากระบบปกติก่อน หากไม่พบจึง fallback ไปยัง `supertest-shim.js` เพื่อรองรับทั้ง CI ที่มี package และ Local Host ที่ไม่มี devDependencies
+- **Automated Verification:**
+  - Unit Tests: `backend/services/product-service/src/features/auctions/auctionService.test.js` ผ่าน 39/39 tests (เพิ่ม 7 unit tests ใหม่)
+  - Integration Tests: `backend/services/product-service/test/auction.integration.test.js` ผ่าน 10/10 tests (1 suite, 9 subtests) บน PostgreSQL และ Redis จริง 100%
+  - รวม Marketing Unit Tests ทั้งหมด 68/68 tests ผ่าน 100%
+
+## 2026-09-19 — Feature: Auction Round Overlap Protection, Concurrency Serialization & Deterministic Selection (MKT-DEC-020)
+
+- **Problem:**
+  - เดิมตาราง `AuctionRound` อนุญาตให้สร้างหลายรอบได้ แต่ `createRound` ขาดการตรวจสอบช่วงเวลาที่ซ้อนทับกัน (Overlap)
+  - `findCurrentRound` เลือกจากแถวที่สร้างล่าสุด (`createdAt: "desc"`) แทนที่จะเลือกตามเวลาจริง (`now`)
+  - หากมีการสร้างรอบที่ช่วงเวลาชนกัน การส่งสินค้าของผู้ขายจะถูกผูกเข้ากับรอบที่สร้างใหม่สุดโดยไม่คำนึงถึงความเป็นจริง
+  - หน้าแดชบอร์ด Marketing แสดงเฉพาะรอบปัจจุบันที่ `/rounds/current` โดยไม่สามารถดูประวัติรอบทั้งหมดหรือสถานะรอบอื่นได้
+- **Architectural Solutions & Implementation:**
+  - **Strict Half-Open Time Boundaries Everywhere (`[Start, End)`):**
+    - กำหนดช่วงเวลาของรอบทั้งหมดเป็น Half-open interval $[S, E)$ โดยที่ $S = \text{submissionStartsAt}$ และ $E = \text{auctionEndsAt}$
+    - เงื่อนไข Overlap: สองรอบ $A [S_A, E_A)$ และ $B [S_B, E_B)$ ซ้อนทับกันเมื่อ $S_A < E_B \land S_B < E_A$
+    - อนุญาต Back-to-back rounds เมื่อรอบใหม่เริ่มตรงกับเวลาที่รอบก่อนหน้าจบพอดี ($E_A = S_B$)
+    - สถานะของรอบ 5 สถานะอิงเวลาจริง:
+      - `upcoming`: `now < submissionStartsAt`
+      - `submission`: `submissionStartsAt <= now && now < submissionEndsAt`
+      - `waiting`: `submissionEndsAt <= now && now < auctionStartsAt`
+      - `auction`: `auctionStartsAt <= now && now < auctionEndsAt`
+      - `ended`: `now >= auctionEndsAt`
+    - ปรับทุกจุดให้ใช้ `now < submissionEndsAt` อย่างสม่ำเสมอทั้งใน `auctionRepository.js` และ `auctionService.js`
+  - **PostgreSQL Advisory Lock Serialization (`pg_advisory_xact_lock(1001, 1)`):**
+    - ป้องกัน Concurrency Race Condition ระหว่างการตรวจหาการซ้อนทับ (`findConflictingRound`) และการสร้างรอบ (`createRound`)
+    - ใช้สองพารามิเตอร์ integer `(1001, 1)` เพื่อแยก Namespace ออกจาก Transaction อื่นๆ (เช่น Auction Lock ที่ใช้ Single 64-bit hashtext)
+    - ส่ง Transaction Client `tx` ผ่าน `withRoundLock(fn)` ไปยัง `findConflictingRound(..., tx)` และ `createRound(..., tx)` เพื่อให้ทำงานภายใต้ Lock เดียวกันอย่างแท้จริง
+    - หากพบการซ้อนทับ โยน HTTP `409 Conflict` พร้อมข้อความ Bilingual Thai/English ระบุ ID และ Title ของรอบที่ขัดแย้งอย่างชัดเจน
+  - **Deterministic Current-Round Selection (`findCurrentRound`):**
+    - เลือกรอบที่ Active อยู่ ณ เวลา `now` ก่อน (`submissionStartsAt <= now && now < auctionEndsAt`)
+    - หากไม่มีรอบที่ Active ให้เลือกรอบที่ใกล้จะมาถึงที่สุดเป็นอันดับแรก (`submissionStartsAt > now` เรียงตาม `submissionStartsAt ASC`)
+    - หากทุกรอบสิ้นสุดลงแล้ว (`now >= auctionEndsAt`) ให้คืนค่า `null`
+  - **Marketing UI All-Rounds History & Deterministic Card:**
+    - ปรับปรุง `frontend/components/marketing/sections/AuctionScheduleSection.js`:
+      - ดึงข้อมูลรอบทั้งหมดจาก `GET /api/products/auctions/rounds`
+      - แสดงตารางประวัติรอบการประมูลทั้งหมด (All Auction Rounds) พร้อมป้ายสถานะ (Phase Badge)
+      - การ์ดรอบการประมูลปัจจุบันแสดงข้อมูลรอบที่ Active หรือรอบถัดไปที่จะมาถึงพร้อมแถบกำกับ
+      - แสดงแบนเนอร์แจ้งเตือนสีแดงกรณีเกิด HTTP 409 Conflict
+      - กำหนด `htmlFor` และ `id` ให้กับฟอร์มสร้างรอบเพื่อความสมบูรณ์ด้าน Accessibility
+- **Automated Verification:**
+  - **Unit Tests:** `backend/services/product-service/src/features/auctions/auctionService.test.js` ผ่าน 48/48 tests (เพิ่ม 9 unit tests ครอบคลุม `deriveRoundPhase`, `createRound` validations/conflict/tx, `getCurrentRound` with fakeNow, and `listRounds`)
+  - **Frontend Jest Tests:** `frontend/components/marketing/sections/AuctionScheduleSection.test.js` ผ่าน 7/7 tests ครอบคลุมการทดสอบ `RoundManagementSection` named export (Current round, Upcoming round, All-rounds table, Empty state, 409 Conflict banner, Refresh after creation) และ Parent `AuctionScheduleSection` component พร้อม mock API ครบถ้วน
+  - **Auction Integration Tests (Real DB & Redis):** `backend/services/product-service/test/auction.integration.test.js` เพิ่ม Step 10: ผ่านครบ 11/11 tests across 10 steps บน PostgreSQL และ Redis จริง 100%
+  - ผลรวม Unit Tests ของ Product-Service ทั้งหมด 77/77 tests ผ่าน 100%
+
+
 

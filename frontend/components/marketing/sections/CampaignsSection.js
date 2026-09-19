@@ -74,6 +74,22 @@ function toLocalDatetimeInput(date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function formatSegmentSummary(rules) {
+  if (!Array.isArray(rules) || rules.length === 0) return "ทุกคน";
+  const r = rules[0];
+  const fieldLabels = {
+    favoriteCategory: "หมวดที่ชอบ",
+    preferredSize: "ไซส์",
+    sizePreference: "ไซส์",
+    styleTag: "สไตล์",
+    stylePreference: "สไตล์",
+    brandPreference: "แบรนด์",
+  };
+  const label = fieldLabels[r.field] || r.field;
+  const val = Array.isArray(r.value) ? r.value.join(", ") : r.value;
+  return `${label}: ${val}`;
+}
+
 export default function CampaignsSection({ token }) {
   const [campaigns, setCampaigns] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -97,6 +113,13 @@ export default function CampaignsSection({ token }) {
   const [budget, setBudget] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [endsAt, setEndsAt] = useState("");
+
+  // Target Segment state
+  const [segmentMode, setSegmentMode] = useState("all"); // "all" | "targeted"
+  const [segmentField, setSegmentField] = useState("preferredSize");
+  const [segmentOp, setSegmentOp] = useState("eq");
+  const [segmentValue, setSegmentValue] = useState("");
+
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -165,6 +188,10 @@ export default function CampaignsSection({ token }) {
     setApplicableCategory("");
     setUsageLimit("100");
     setBudget("");
+    setSegmentMode("all");
+    setSegmentField("preferredSize");
+    setSegmentOp("eq");
+    setSegmentValue("");
 
     const now = new Date();
     const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -189,6 +216,20 @@ export default function CampaignsSection({ token }) {
     setBudget(camp.budget ? String(camp.budget) : "");
     setStartsAt(toLocalDatetimeInput(camp.startsAt));
     setEndsAt(toLocalDatetimeInput(camp.endsAt));
+
+    const rule = Array.isArray(camp.targetSegment) && camp.targetSegment.length > 0 ? camp.targetSegment[0] : null;
+    if (rule && rule.field) {
+      setSegmentMode("targeted");
+      setSegmentField(rule.field);
+      setSegmentOp(rule.op || "eq");
+      setSegmentValue(Array.isArray(rule.value) ? rule.value.join(", ") : String(rule.value ?? ""));
+    } else {
+      setSegmentMode("all");
+      setSegmentField("preferredSize");
+      setSegmentOp("eq");
+      setSegmentValue("");
+    }
+
     setFormError("");
     setModalOpen(true);
   }
@@ -223,6 +264,21 @@ export default function CampaignsSection({ token }) {
       return;
     }
 
+    let targetSegment = null;
+    if (segmentMode === "targeted" && segmentValue.trim()) {
+      let finalVal = segmentValue.trim();
+      if ((segmentOp === "in" || segmentOp === "nin") && finalVal.includes(",")) {
+        finalVal = finalVal.split(",").map((s) => s.trim()).filter(Boolean);
+      }
+      targetSegment = [
+        {
+          field: segmentField,
+          op: segmentOp,
+          value: finalVal,
+        },
+      ];
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -236,6 +292,7 @@ export default function CampaignsSection({ token }) {
         applicableCategory: applicableCategory.trim() || null,
         usageLimit: usageLimit ? Number(usageLimit) : null,
         budget: budget ? Number(budget) : null,
+        targetSegment,
         startsAt: new Date(startsAt).toISOString(),
         endsAt: new Date(endsAt).toISOString(),
       };
@@ -547,6 +604,18 @@ export default function CampaignsSection({ token }) {
                             {camp.applicableCategory || "ทุกหมวดหมู่"}
                           </span>
                         </div>
+                        {Array.isArray(camp.targetSegment) && camp.targetSegment.length > 0 ? (
+                          <div className="mt-1">
+                            <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+                              <span className="material-symbols-outlined text-[12px]">group</span>
+                              {formatSegmentSummary(camp.targetSegment)}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="mt-0.5 text-[10px] text-slate-400">
+                            กลุ่มเป้าหมาย: ทุกคน
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-4 py-3.5 text-[11px] text-slate-600 space-y-1">
@@ -926,6 +995,116 @@ export default function CampaignsSection({ token }) {
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
               />
             </div>
+          </div>
+
+          {/* กำหนดกลุ่มเป้าหมาย (Buyer Segmentation) */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[18px] text-indigo-600">group</span>
+                <span className="text-xs font-bold text-slate-800">กลุ่มเป้าหมายผู้ซื้อ (Target Segment)</span>
+              </div>
+              <div className="flex items-center gap-3 text-xs">
+                <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="segmentMode"
+                    value="all"
+                    checked={segmentMode === "all"}
+                    onChange={() => setSegmentMode("all")}
+                    className="text-brand-600 focus:ring-brand-500"
+                  />
+                  <span className={segmentMode === "all" ? "font-bold text-brand-700" : "text-slate-600"}>ทุกคน (Universal)</span>
+                </label>
+                <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="segmentMode"
+                    value="targeted"
+                    checked={segmentMode === "targeted"}
+                    onChange={() => setSegmentMode("targeted")}
+                    className="text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className={segmentMode === "targeted" ? "font-bold text-indigo-700" : "text-slate-600"}>เฉพาะกลุ่มเป้าหมาย</span>
+                </label>
+              </div>
+            </div>
+
+            {segmentMode === "targeted" && (
+              <div className="pt-2 border-t border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    เงื่อนไขเป้าหมาย
+                  </label>
+                  <select
+                    value={segmentField}
+                    onChange={(e) => {
+                      setSegmentField(e.target.value);
+                      setSegmentValue("");
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  >
+                    <option value="preferredSize">ไซส์เสื้อผ้า (preferredSize)</option>
+                    <option value="styleTag">สไตล์การแต่งตัว (styleTag)</option>
+                    <option value="brandPreference">แบรนด์ที่ชื่นชอบ (brandPreference)</option>
+                    <option value="favoriteCategory">หมวดหมู่ที่ชอบ (favoriteCategory)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    การเปรียบเทียบ
+                  </label>
+                  <select
+                    value={segmentOp}
+                    onChange={(e) => setSegmentOp(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  >
+                    <option value="eq">ตรงกับ (eq)</option>
+                    <option value="neq">ไม่ตรงกับ (neq)</option>
+                    <option value="in">อยู่ในกลุ่ม (in)</option>
+                    <option value="nin">ไม่อยู่ในกลุ่ม (nin)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    ค่าเป้าหมาย
+                  </label>
+                  {segmentField === "preferredSize" ? (
+                    <select
+                      value={segmentValue}
+                      onChange={(e) => setSegmentValue(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                    >
+                      <option value="">-- เลือกไซส์ --</option>
+                      {["XS", "S", "M", "L", "XL", "2XL", "Free Size"].map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  ) : segmentField === "styleTag" ? (
+                    <select
+                      value={segmentValue}
+                      onChange={(e) => setSegmentValue(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                    >
+                      <option value="">-- เลือกสไตล์ --</option>
+                      {["Streetwear", "Vintage", "Minimal", "Y2K", "Casual", "Sportswear", "Workwear"].map((st) => (
+                        <option key={st} value={st.toLowerCase()}>{st}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder={segmentOp === "in" || segmentOp === "nin" ? "เช่น Nike, Adidas (คั่นด้วยจุลภาค)" : "ระบุค่า เช่น Nike หรือ เดรส"}
+                      value={segmentValue}
+                      onChange={(e) => setSegmentValue(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

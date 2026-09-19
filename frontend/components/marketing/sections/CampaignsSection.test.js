@@ -125,4 +125,46 @@ describe("CampaignsSection (Marketing Workspace)", () => {
 
     expect(screen.getByText("ยืนยันการลบแคมเปญ")).toBeInTheDocument();
   });
+
+  it("supports configuring and displaying buyer target segment in modal and table", async () => {
+    const targetedCampaigns = [
+      ...sampleCampaigns,
+      {
+        id: "camp-targeted",
+        name: "Y2K Fashion Exclusive",
+        code: "Y2KONLY",
+        description: "ส่วนลดสำหรับสาย Y2K",
+        discountType: "PERCENT",
+        discountValue: 20,
+        maxDiscount: 300,
+        minOrderPrice: 500,
+        status: "published",
+        targetSegment: [{ field: "styleTag", op: "eq", value: "y2k" }],
+        startsAt: "2026-08-01T00:00:00.000Z",
+        endsAt: "2026-08-31T23:59:59.000Z",
+        usageLimit: 50,
+        usedCount: 5,
+        _count: { vouchers: 5 },
+      },
+    ];
+    apiFetch.mockResolvedValueOnce({ items: targetedCampaigns, total: 4 });
+
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+
+    expect(await screen.findByText("Y2KONLY")).toBeInTheDocument();
+    expect(screen.getByText(/สไตล์: y2k/)).toBeInTheDocument();
+    expect(screen.getAllByText("กลุ่มเป้าหมาย: ทุกคน").length).toBeGreaterThanOrEqual(1);
+
+    // Open modal and toggle target segment
+    const createBtn = screen.getByRole("button", { name: /สร้างแคมเปญใหม่/i });
+    fireEvent.click(createBtn);
+
+    expect(screen.getByText("กลุ่มเป้าหมายผู้ซื้อ (Target Segment)")).toBeInTheDocument();
+    const targetedRadio = screen.getByLabelText("เฉพาะกลุ่มเป้าหมาย");
+    fireEvent.click(targetedRadio);
+
+    expect(screen.getByText("เงื่อนไขเป้าหมาย")).toBeInTheDocument();
+    expect(screen.getByText("การเปรียบเทียบ")).toBeInTheDocument();
+    expect(screen.getByText("ค่าเป้าหมาย")).toBeInTheDocument();
+  });
 });

@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const {
   badRequest,
   conflict,
@@ -11,34 +12,37 @@ const productClient = require("../services/productClient");
 const chatClient = require("../services/chatClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
 
+async function dispatchOrderCompletedEvent(order) {
+  const event = {
+    eventId: crypto.randomUUID(),
+    orderId: order.id,
+    campaignId: order.campaignId || null,
+    grossAmount: order.price,
+    discountAmount: order.discountAmount || 0,
+    netAmount:
+      order.finalPrice !== null && order.finalPrice !== undefined
+        ? order.finalPrice
+        : Math.max(0, order.price - (order.discountAmount || 0)),
+    completedAt: new Date().toISOString(),
+  };
+
+  try {
+    await productClient.recordOrderCompleted(event);
+  } catch (err) {
+    console.warn(
+      "[order-service] failed to dispatch order.completed.v1 event:",
+      err.message,
+    );
+  }
+}
+
 async function create(req, res, next) {
   try {
     const { order, created } = await reserveOrder({
       buyerId: req.userId,
       productId: req.body.productId,
       campaignId: req.body.campaignId,
-      campaignCode: req.body.campaignCode,
-      discountAmount: req.body.discountAmount,
-      finalPrice: req.body.finalPrice,
     });
-    if (order.campaignId) {
-      try {
-        await productClient.holdVoucher(order.campaignId, {
-          userId: req.userId,
-          orderId: order.id,
-        });
-      } catch (holdErr) {
-        await orderModel.updateCampaign(order.id, {
-          campaignId: null,
-          campaignCode: null,
-          discountAmount: 0,
-          finalPrice: order.price,
-        });
-        throw conflict(
-          "โค้ดส่วนลดนี้กำลังถูกใช้งานกับสินค้าชิ้นอื่นในตะกร้าอยู่",
-        );
-      }
-    }
     res.status(created ? 201 : 200).json(order);
   } catch (err) {
     next(err);
@@ -152,6 +156,7 @@ async function updateStatus(req, res, next) {
         });
       }
       await productClient.setProductStatus(order.productId, "sold");
+      await dispatchOrderCompletedEvent(order);
     }
 
     // Best-effort — chatClient swallows its own errors internally (see its
@@ -231,6 +236,7 @@ async function pay(req, res, next) {
     }
 
     const updated = await orderModel.updateStatus(req.params.id, "completed");
+    await dispatchOrderCompletedEvent(updated || order);
 
     res.json(updated);
   } catch (err) {

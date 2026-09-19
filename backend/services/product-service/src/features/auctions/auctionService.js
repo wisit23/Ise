@@ -138,10 +138,10 @@ async function submit({ user, input = {} }) {
   });
 }
 
-/** Marketing or Admin approves a pending auction. */
+/** Marketing approves a pending auction. */
 async function approve({ user, auctionId }) {
-  if (!["MARKETING", "ADMIN"].includes(user.role)) {
-    throw forbidden("only Marketing or Admin can approve auctions");
+  if (user?.role !== "MARKETING") {
+    throw forbidden("only Marketing can approve auctions");
   }
 
   const auction = await loadAuction(auctionId);
@@ -166,10 +166,10 @@ async function approve({ user, auctionId }) {
   });
 }
 
-/** Marketing or Admin rejects a pending auction. */
+/** Marketing rejects a pending auction. */
 async function reject({ user, auctionId }) {
-  if (!["MARKETING", "ADMIN"].includes(user.role)) {
-    throw forbidden("only Marketing or Admin can reject auctions");
+  if (user?.role !== "MARKETING") {
+    throw forbidden("only Marketing can reject auctions");
   }
 
   const auction = await loadAuction(auctionId);
@@ -180,10 +180,32 @@ async function reject({ user, auctionId }) {
   return auctionRepository.updateStatus(auctionId, { status: "rejected" });
 }
 
-/** Create an auction round by Marketing/Admin. */
+/**
+ * Derives round phase using strict half-open time boundaries:
+ * upcoming:   now < submissionStartsAt
+ * submission: submissionStartsAt <= now && now < submissionEndsAt
+ * waiting:    submissionEndsAt <= now && now < auctionStartsAt
+ * auction:    auctionStartsAt <= now && now < auctionEndsAt
+ * ended:      now >= auctionEndsAt
+ */
+function deriveRoundPhase(round, now = new Date()) {
+  if (!round) return null;
+  const subStart = new Date(round.submissionStartsAt);
+  const subEnd = new Date(round.submissionEndsAt);
+  const aucStart = new Date(round.auctionStartsAt);
+  const aucEnd = new Date(round.auctionEndsAt);
+
+  if (now < subStart) return "upcoming";
+  if (subStart <= now && now < subEnd) return "submission";
+  if (subEnd <= now && now < aucStart) return "waiting";
+  if (aucStart <= now && now < aucEnd) return "auction";
+  return "ended";
+}
+
+/** Create an auction round by Marketing with overlap protection under advisory lock. */
 async function createRound({ user, input = {} }) {
-  if (!["MARKETING", "ADMIN"].includes(user?.role)) {
-    throw forbidden("only Marketing or Admin can create auction rounds");
+  if (user?.role !== "MARKETING") {
+    throw forbidden("only Marketing can create auction rounds");
   }
 
   const { title, submissionStartsAt, submissionEndsAt, auctionStartsAt, auctionEndsAt } = input;
@@ -200,64 +222,87 @@ async function createRound({ user, input = {} }) {
     throw badRequest("all dates (submissionStartsAt, submissionEndsAt, auctionStartsAt, auctionEndsAt) must be valid dates");
   }
 
-  if (subEnd <= subStart) {
-    throw badRequest("submissionEndsAt must be after submissionStartsAt");
+  const isValidIntervalOrder =
+    subStart < subEnd &&
+    subEnd <= aucStart &&
+    aucStart < aucEnd;
+
+  if (!isValidIntervalOrder) {
+    if (subEnd <= subStart) {
+      throw badRequest("submissionEndsAt must be after submissionStartsAt");
+    }
+    if (aucStart < subEnd) {
+      throw badRequest("auctionStartsAt must be after or equal to submissionEndsAt");
+    }
+    if (aucEnd <= aucStart) {
+      throw badRequest("auctionEndsAt must be after auctionStartsAt");
+    }
+    throw badRequest(
+      "invalid round dates: must satisfy submissionStartsAt < submissionEndsAt <= auctionStartsAt < auctionEndsAt",
+    );
   }
 
-  if (aucStart < subEnd) {
-    throw badRequest("auctionStartsAt must be after or equal to submissionEndsAt");
-  }
+  return auctionRepository.withRoundLock(async (tx) => {
+    const conflicting = await auctionRepository.findConflictingRound(
+      { subStart, aucEnd },
+      tx,
+    );
+    if (conflicting) {
+      throw conflict(
+        `ช่วงเวลารอบประมูล (${subStart.toISOString()} - ${aucEnd.toISOString()}) ซ้อนทับกับรอบ "${conflicting.title}" (${new Date(conflicting.submissionStartsAt).toISOString()} - ${new Date(conflicting.auctionEndsAt).toISOString()}) / Round interval overlaps with existing round "${conflicting.title}"`,
+      );
+    }
 
-  if (aucEnd <= aucStart) {
-    throw badRequest("auctionEndsAt must be after auctionStartsAt");
-  }
-
-  return auctionRepository.createRound({
-    title: title.trim(),
-    submissionStartsAt: subStart,
-    submissionEndsAt: subEnd,
-    auctionStartsAt: aucStart,
-    auctionEndsAt: aucEnd,
+    return auctionRepository.createRound(
+      {
+        title: title.trim(),
+        submissionStartsAt: subStart,
+        submissionEndsAt: subEnd,
+        auctionStartsAt: aucStart,
+        auctionEndsAt: aucEnd,
+      },
+      tx,
+    );
   });
 }
 
-/** Get the current auction round and its status. */
+/** Get the current auction round, derived phase, and its status. */
 async function getCurrentRound(now = new Date()) {
-  const round = await auctionRepository.findCurrentRound();
+  const round = await auctionRepository.findCurrentRound(now);
   if (!round) {
     return {
       round: null,
+      phase: null,
       isSubmissionOpen: false,
       isAuctionActive: false,
     };
   }
 
-  const isSubmissionOpen =
-    now >= new Date(round.submissionStartsAt) &&
-    now <= new Date(round.submissionEndsAt);
-
-  const isAuctionActive =
-    now >= new Date(round.auctionStartsAt) &&
-    now <= new Date(round.auctionEndsAt);
-
+  const phase = deriveRoundPhase(round, now);
   return {
     round,
-    isSubmissionOpen,
-    isAuctionActive,
+    phase,
+    isSubmissionOpen: phase === "submission",
+    isAuctionActive: phase === "auction",
   };
 }
 
-/** List all auction rounds for Marketing/Admin. */
+/** List all auction rounds with derived phase for Marketing. */
 async function listRounds({ user }) {
-  if (!["MARKETING", "ADMIN"].includes(user?.role)) {
-    throw forbidden("only Marketing or Admin can list all auction rounds");
+  if (user?.role !== "MARKETING") {
+    throw forbidden("only Marketing can list all auction rounds");
   }
-  return auctionRepository.listRounds();
+  const rounds = await auctionRepository.listRounds();
+  const now = new Date();
+  return rounds.map((r) => ({
+    ...r,
+    phase: deriveRoundPhase(r, now),
+  }));
 }
 
 /** Marketing sets the open/close window for an approved auction. */
 async function schedule({ user, auctionId, startsAt, endsAt }) {
-  if (!["MARKETING", "ADMIN"].includes(user.role)) {
+  if (user?.role !== "MARKETING") {
     throw forbidden("only Marketing can schedule auctions");
   }
 
@@ -284,9 +329,9 @@ async function schedule({ user, auctionId, startsAt, endsAt }) {
   return updated;
 }
 
-/** Marketing/Admin can cancel an auction any time before it opens. */
+/** Marketing can cancel an auction any time before it opens. */
 async function cancel({ user, auctionId }) {
-  if (!["MARKETING", "ADMIN"].includes(user.role)) {
+  if (user?.role !== "MARKETING") {
     throw forbidden("only Marketing can cancel auctions");
   }
 
@@ -311,6 +356,17 @@ async function list({ status, skip, take, roundId }) {
   return auctionRepository.list({ status, skip, take, roundId });
 }
 
+function validateIdempotentBid(existing, { auctionId, userId, bidAmount }) {
+  if (
+    existing.auctionId !== auctionId ||
+    existing.bidderId !== userId ||
+    existing.amount !== bidAmount
+  ) {
+    throw conflict("idempotency key reused with different bid parameters");
+  }
+  return existing;
+}
+
 /**
  * Places a bid, holding a Postgres advisory lock on the auction for the
  * duration of the transaction so two simultaneous bids can never both read
@@ -332,6 +388,15 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
     if (!auction) throw notFound("auction not found");
     if (auction.sellerId === user.id) {
       throw forbidden("you cannot bid on your own auction");
+    }
+
+    const existing = await tx.bid.findUnique({ where: { idempotencyKey } });
+    if (existing) {
+      return validateIdempotentBid(existing, {
+        auctionId,
+        userId: user.id,
+        bidAmount,
+      });
     }
 
     const now = new Date();
@@ -365,7 +430,14 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
       // A retried request with the same idempotencyKey must return the
       // original bid, not a duplicate or a confusing 500.
       if (err.code === "P2002") {
-        return tx.bid.findUnique({ where: { idempotencyKey } });
+        const raceExisting = await tx.bid.findUnique({ where: { idempotencyKey } });
+        if (raceExisting) {
+          return validateIdempotentBid(raceExisting, {
+            auctionId,
+            userId: user.id,
+            bidAmount,
+          });
+        }
       }
       throw err;
     }
@@ -406,4 +478,5 @@ module.exports = {
   createRound,
   getCurrentRound,
   listRounds,
+  deriveRoundPhase,
 };

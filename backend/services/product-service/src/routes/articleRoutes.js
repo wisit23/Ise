@@ -8,7 +8,7 @@ const router = Router();
 router.get(
   "/marketing/all",
   requireAuth,
-  requireRole("MARKETING", "ADMIN"),
+  requireRole("MARKETING"),
   articleController.listMarketing,
 );
 
@@ -20,21 +20,21 @@ router.get("/:id", articleController.getOne);
 router.post(
   "/",
   requireAuth,
-  requireRole("MARKETING", "ADMIN"),
+  requireRole("MARKETING"),
   articleController.create,
 );
 
 router.put(
   "/:id",
   requireAuth,
-  requireRole("MARKETING", "ADMIN"),
+  requireRole("MARKETING"),
   articleController.update,
 );
 
 router.delete(
   "/:id",
   requireAuth,
-  requireRole("MARKETING", "ADMIN"),
+  requireRole("MARKETING"),
   articleController.remove,
 );
 

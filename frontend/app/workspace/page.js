@@ -16,7 +16,6 @@ import KycSection from "../../components/support/sections/KycSection";
 import AuditSection from "../../components/support/sections/AuditSection";
 import AdminInboxSection from "../../components/support/sections/AdminInboxSection";
 import ProductsSection from "../../components/support/sections/ProductsSection";
-import AuctionApprovalsSection from "../../components/support/sections/AuctionApprovalsSection";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -33,7 +32,6 @@ const SECTIONS = [
 const ADMIN_SECTIONS = [
   { key: "admin_inbox", label: "เคส Trust & Safety", icon: "assignment_late" },
   { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
-  { key: "auction_approvals", label: "อนุมัติประมูล", icon: "sell" },
   { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
 ];
@@ -234,9 +232,6 @@ export default function SupportPanelPage() {
                 {section === "kyc" && <KycSection token={token} />}
                 {section === "audit" && <AuditSection token={token} />}
                 {section === "products" && <ProductsSection token={token} />}
-                {section === "auction_approvals" && (
-                  <AuctionApprovalsSection token={token} />
-                )}
               </div>
             )}
           </main>

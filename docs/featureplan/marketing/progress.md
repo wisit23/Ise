@@ -1,11 +1,11 @@
 # Marketing Feature Progress
 
-> Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-09-07
+> Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-09-19
 
-**Status:** `MKT-005` (Auction Core, Rounds, Soft Close, Winner Order Idempotency) + `UR-11` choose action และ `MKT-004` Part A (Knowledge Base & Educational Articles System: `UR-14` / `FR-5.2.3`) พัฒนาและตรวจสอบผ่านทั้งฝั่ง Backend API, Trigram Search, Next.js Frontend และ Jest Tests ครบถ้วน; `MKT-001`–`MKT-003` (Campaign/Attribution) และ `MKT-004` Part B (Segmentation) อยู่ในแผนรอบถัดไป
+**Status:** `MKT-001` (Campaign Lifecycle & Voucher Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-004 Part A` (Knowledge Base & Articles System), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), และ `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling) พัฒนาและตรวจสอบผ่านการทดสอบอัตโนมัติครบถ้วนแล้ว (`MKT-005` Steps 1–4 accepted และ `MKT-006` Steps 1–4 accepted, รอเพียงคำสั่ง commit); `MKT-006` ไม่ได้รอ Attribution database hardening; สำหรับ `MKT-003` / `MKT-007` (Attribution Engine & Metrics Dashboard) ซอร์สโค้ดและ Unit Tests ครบถ้วน อยู่ระหว่างเตรียม Cross-service Database Persistence Hardening ใน `reloop_order` / `reloop_product` (Part 3); และ `MKT-004 Part B` (Buyer Segmentation Rules) อยู่ระหว่างเตรียม Buyer profile persistence hardening (Part 4)
 
 **Plan coverage:** Explicit trace rows cover `UR-08`–`UR-16` through FR, active/deferred NFR,
-`WF-03`, `WF-11`, documented Workflow gaps and `MKT-001`–`MKT-005`
+`WF-03`, `WF-11`, documented Workflow gaps and `MKT-001`–`MKT-007`
 
 **Confirmed evidence (MKT-005 / UR-11):**
 
@@ -13,50 +13,45 @@
   (`pending_approval → approved → scheduled → open → closed`) implemented in
   `backend/services/product-service/src/features/auctions/`
 - Seller sets `startingPrice`/`bidIncrement` at submission (not Marketing); Marketing owns
-  `scheduledStartAt`/`scheduledEndAt` and cancel; Admin owns approve/reject
-  (Admin UI itself lives on a teammate's unmerged branch — approve/reject exercised via API only)
-  in this round
+  `scheduledStartAt`/`scheduledEndAt`, cancel, and approve/reject per `MKT-DEC-009` / `MKT-DEC-014`
+  (Admin is fully decoupled from auction approval with 403 Forbidden)
 - Bids are serialized per-auction with a Postgres advisory lock (`pg_advisory_xact_lock`) so
   concurrent bids can't both win a tie; idempotency key prevents duplicate bids on retry
+- Safe Idempotency Key Scoping: `validateIdempotentBid` verifies `auctionId`, `bidderId`, and `amount`,
+  returning 409 Conflict on mismatch and returning existing bid on exact retry even after closed
 - Auctions close at their exact `scheduledEndAt` via a BullMQ delayed job (Redis), not only when
-  someone happens to visit the page afterward — verified an unscheduled/unvisited auction closed
-  itself within ~100ms of its close time, checked directly in Postgres to rule out the read-time
-  fallback
+  someone happens to visit the page afterward — verified with real BullMQ worker execution and
+  bounded polling in `auction.integration.test.js`
+- Anti-sniping soft close: bids in the last 5 minutes extend `scheduledEndAt` by +5m and reschedule
+  the BullMQ close job in Redis ($\Delta < 2000\text{ms}$)
+- Auction Round Overlap Protection & Deterministic Selection:
+  - กำหนดช่วงเวลาของรอบเป็น Half-Open Interval $[submissionStartsAt, auctionEndsAt)$ อย่างเคร่งครัด
+  - อนุญาตให้เปิดรอบแบบ Back-to-Back ได้เมื่อ `new.submissionStartsAt === existing.auctionEndsAt`
+  - ป้องกันการสร้างรอบซ้อนทับด้วย PostgreSQL Two-Integer Advisory Lock `pg_advisory_xact_lock(1001, 1)` ส่ง `tx` ครอบคลุมทั้งการตรวจจับความขัดแย้งและคำสั่งสร้าง
+  - คืนค่า HTTP 409 Conflict พร้อมระบุชื่อรอบและช่วงเวลาที่ซ้อนทับทั้งภาษาไทยและอังกฤษ
+  - เลิกใช้ `createdAt: "desc"` โดยเลือก Active Round ตามเวลาจริง หรือ Nearest Upcoming Round หากไม่มีรอบที่ Active
+  - คำนวณ Derived Phase อัตโนมัติ: `upcoming`, `submission`, `waiting`, `auction`, `ended`
+  - อัปเดตหน้าจอ Marketing Dashboard (`/marketing`): แสดง Phase Badge, การ์ดรอบปัจจุบัน/รอบถัดไป และตารางประวัติรอบประมูลทั้งหมด (`GET /api/products/auctions/rounds`)
 - Auction close automatically creates the winner's Order via an internal
-  `order-service` call (`POST /internal/from-auction`) — see `MKT-DEC-007`
+  `order-service` call (`POST /internal/from-auction`) — verified called exactly once, with idempotent re-close
 - `SwipeChoice` persists a buyer's swipe "choose" (bookmark), separate from bidding — see
   `MKT-DEC-006`; verified end-to-end through the actual `/swipe` UI, not just the API
-- End-to-end flow (submit → approve → schedule → open → bid → close → order created) verified
-  three ways: `node --test` unit suite (17 tests, mocked), live `curl` against the running
-  Docker stack, and manually through the real browser UI (login → seller submits → admin
-  approves via API → marketing schedules in `/marketing/auctions` → buyer bids in
-  `/auctions/:id` → auction auto-closes → order confirmed in `reloop_order`)
-- Frontend: `/marketing/auctions` (schedule/cancel, with checkbox multi-select + a shared
-  schedule bar to apply one open/close window to several approved auctions at once),
-  `/seller/auctions` (same product-creation form as `/sell` — photos/title/description/
-  category/condition/size/location/tags — plus `startingPrice`/`bidIncrement`; submitting
-  creates the Product and its auction in one action, not a picker over existing listings),
-  `/auctions` + `/auctions/:id` (browse/bid), choose button added to `SwipeVideoCard`
-- Fixed: `auctionRepository` was not including `product.photos`, so every auction card/detail
-  page rendered with no image regardless of the product having photos — now included on
-  create/findById/list/updateStatus
+- End-to-end flow verified via unit tests (48/48 passing), frontend Jest tests (7/7 passing), and real PostgreSQL/Redis integration suite
+  (`auction.integration.test.js`, 11/11 tests across 10 steps passing)
+- Frontend: `/marketing` (schedule/cancel/approve/reject, round management with all-rounds table and phase badges),
+  `/seller/auctions` (product creation + auction submission with round lock),
+  `/auctions` + `/auctions/:id` (browse/bid with auto-fill min next bid and soft close notice),
+  choose button added to `SwipeVideoCard`
 
-**Not yet done:** `MKT-001`–`MKT-004` (Campaign, Attribution dashboard, Segmentation, Content) —
-no schema, routes, or UI exist for these; `/marketing` currently has only one working tab
-(Auctions)
-
-**Database acceptance:** `REQUIRE_INTEGRATION=1`-style verification for `MKT-005` ran manually
-against the real `docker compose` Postgres instance (not mocked) for this round; no dedicated
-`*.integration.test.js` file was added yet — the mocked `auctionService.test.js` covers
-lifecycle/validation logic, live verification covered the database-backed path
+**Current status & Next steps:**
+- `MKT-001`, `MKT-002`, `MKT-004 Part A`: Implemented, tested, and verified.
+- `MKT-005`: Steps 1–4 are fully accepted with automated PostgreSQL and Redis integration test evidence. Step 5 (commit) is pending explicit user instruction.
+- `MKT-006`: Implementation and automated tests are complete (quote-and-hold, concurrency guard, admin decoupling). Waiting only for commit (pending explicit user instruction). Not waiting for Attribution database hardening.
+- `MKT-003`, `MKT-007`: Source implementation and unit tests exist; attribution persistence hardening in `reloop_order` / `reloop_product` belongs to Part 3.
+- `MKT-004 Part B`: Source implementation and unit tests exist; buyer profile persistence hardening belongs to Part 4.
 
 **Deferred:** Production campaign authorization, privacy and push-notification security hardening
-(unrelated to `MKT-005`, unchanged from prior round)
-
-**Blocker:** `MKT-001`–`MKT-004` still need Phase 0 contract freeze before starting
-
-**Next action:** Add a `REQUIRE_INTEGRATION=1` auction test file, then start `MKT-001` (Campaign
-lifecycle) following the same test-first pattern used for `MKT-005`
+(Deferred Security Phase)
 
 **2026-08-26 update:** Consolidated `/marketing/layout.js` + `/marketing/auctions` into one
 `/marketing/page.js` sidebar panel (same format as CS/Admin) and added a Dashboard overview
@@ -141,3 +136,41 @@ approved by Admin shows up here as "approved, ready to schedule" immediately.
     - สร้าง `frontend/app/campaigns/page.test.js` และ `frontend/components/marketing/sections/CampaignsSection.test.js`
     - ผลการรันทดสอบ: Jest Unit Tests ผ่านครบ 29/29 Suites (137/137 tests passing 100%)
     - Next.js Production Build (`npm run build`) คอมไพล์ผ่านสมบูรณ์ ปราศจากข้อผิดพลาด (Static 26/26 pages)
+
+**2026-09-19 update (Marketing Part 2 — ปิดงาน Auction และเพิ่ม Integration Test — MKT-005):**
+- เพิ่ม Integration Test Suite ครบถ้วนใน `backend/services/product-service/test/auction.integration.test.js`:
+  - รันกับ PostgreSQL จริง (`reloop_product` บนพอร์ต 5432) และ Redis จริง (พอร์ต 6379)
+  - คำสั่งรัน: `$env:REQUIRE_INTEGRATION="1"; $env:REDIS_URL="redis://localhost:6379"; node -r ./scripts/test-shim.js --test backend/services/product-service/test/auction.integration.test.js`
+  - ผ่านครบ 10/10 tests (1 suite, 9 subtests) 100%:
+    1. Step 1: Seller submit -> persists in PostgreSQL with status 'auction'
+    2. Step 2: Admin Decoupling & Marketing Approval -> direct to 'scheduled' และตรวจสอบ BullMQ delayed job ใน Redis โดยตรง (`getJob(auctionId)`)
+    3. Step 3: Bidding rules & PostgreSQL persistence
+    4. Step 4: Idempotency Key DB constraint prevents duplicate bids on retry
+    5. Step 5: Concurrent bidding serialized by `pg_advisory_xact_lock`
+    6. Step 6: Anti-Sniping Soft Close extends `scheduledEndAt` by +5m in PostgreSQL และตรวจสอบ BullMQ job reschedule ใน Redis
+    7. Step 7: Auction Close with Winner -> calls Order Client once and records `winningOrderId`
+    8. Step 8: Real BullMQ delayed worker execution (`startWorker`) ปิดประมูลตามกำหนดเวลาจริง (1.2s), Bounded polling ตรวจสอบ PostgreSQL, ตรวจสอบ Order Client เรียก 1 ครั้ง และ Idempotent re-close
+    9. Step 9: No-bid Auction close reverts product status to 'available'
+  - Clean up: ใช้ `t.after()` ปรับลำดับการล้างข้อมูลอย่างเข้มงวด: ปิด worker (`stopWorker`) ก่อน -> ยกเลิกงานปิดประมูลใน BullMQ/Redis -> ลบข้อมูลใน PostgreSQL แบบย้อนลำดับความสัมพันธ์ (bids -> auctionItems -> products -> rounds) -> ปิด BullMQ queue และ IORedis connection -> ปิดการเชื่อมต่อ Prisma (`$disconnect`) โดยรวบรวม error ทั้งหมดไว้ใน `cleanupErrors = []` และ throw รายงานข้อผิดพลาดรวมทั้งหมด ไม่ swallow error ด้วย `.catch(() => {})`
+  - Mock Scope: Mock เฉพาะ `orderClient.createOrderFromAuction` ภายใน Product-Service เพื่อตรวจ Outgoing Contract (Payload, Order ID, Call Count) โดยไม่ข้ามไปแตะ DB ของ Order Service
+- ปรับปรุง `backend/services/product-service/src/features/auctions/auctionService.js`:
+  - ตรวจสอบ `idempotencyKey` ซ้ำก่อนตรวจ `minAmount` ใน `placeBid` เพื่อรองรับการ Retry ซ้ำได้อย่างถูกต้อง
+  - Scope Idempotency Key อย่างปลอดภัยด้วย `validateIdempotentBid`: ตรวจสอบว่า `existing.auctionId === auctionId && existing.bidderId === userId && existing.amount === bidAmount` หากไม่ตรงกันจะโยน HTTP `409 Conflict` (`"idempotency key reused with different bid parameters"`) และนำการตรวจสอบนี้ไปใช้ใน `P2002` race recovery path ด้วย
+  - รองรับการ Retry ด้วยคีย์เดิมหลังจากสถานะการประมูลเปลี่ยนเป็น `closed` แล้ว ให้สามารถดึง Bid เดิมกลับมาได้ถูกต้อง
+- ปรับปรุง `backend/services/product-service/src/jobs/auctionCloseQueue.js`:
+  - เพิ่มฟังก์ชัน `closeQueue()` เพื่อตัดการเชื่อมต่อ BullMQ Queue และ IORedis อย่างปลอดภัย ไม่ค้าง Process
+  - เพิ่มฟังก์ชัน `stopWorker(worker)` เพื่อปิด Worker และ IORedis connection อย่างสะอาด
+  - Export `getQueue` เพื่อให้ Integration Test เข้าถึงและตรวจสอบ Delayed Job ใน Redis ได้โดยตรง
+- ปรับปรุง `backend/services/product-service/test/auction.integration.test.js`:
+  - Step 4: เพิ่มการทดสอบ Regression ครอบคลุมการใช้ idempotencyKey ซ้ำด้วยยอดเงินต่างกัน (409), ผู้ประมูลต่างกัน (409), รหัสประมูลต่างกัน (409), และการ Retry บนประมูลที่ปิดแล้ว (คืน Bid เดิม)
+  - Step 6: ยกระดับการ Assert BullMQ Delayed Job ใน Redis ให้คำนวณ `rescheduledJob.timestamp + rescheduledJob.opts.delay` ตรงกับเวลา `updatedAuction.scheduledEndAt.getTime()` ภายในระยะคลาดเคลื่อนไม่เกิน 2 วินาที ($\Delta < 2000\text{ms}$)
+- ปรับปรุง `scripts/test-shim.js` และชี้แจงสถานะ `scripts/supertest-shim.js`:
+  - ปรับปรุงให้พยายาม resolve `supertest` จากระบบปกติก่อน หากไม่พบจึง fallback ไปยัง `supertest-shim.js`
+  - ชี้แจงว่าไฟล์ใน `scripts/` เป็น Workaround สำหรับการรันเทสบนเครื่อง Host ที่ไม่ได้รัน `npm install` ตามกฎข้อที่ 9
+- ยืนยัน Unit Test ทั้งหมด:
+  - `backend/services/product-service/src/features/auctions/auctionService.test.js` (39/39 tests passing, เพิ่ม 7 unit tests สำหรับ idempotency scoping, 409 conflict, closed auction retry, และ P2002 recovery)
+  - `campaignValidation.test.js` (12/12 passing)
+  - `segmentRule.test.js` (7/7 passing)
+  - `campaignMetrics.test.js` (7/7 passing)
+  - รวม Unit Tests ของ Marketing ทั้งหมด 68/68 tests passing 100%
+

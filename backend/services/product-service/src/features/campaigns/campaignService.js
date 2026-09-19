@@ -1,5 +1,6 @@
 const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const defaultRepository = require("./campaignRepository");
+const { validateSegmentRule, matchesSegment } = require("../segments/segmentRule");
 
 const TRANSITIONS = {
   draft: ["pending_approval"],
@@ -21,8 +22,8 @@ function assertTransition(campaign, to) {
 }
 
 function assertMarketingOrAdmin(user) {
-  if (!user || !user.role || !["MARKETING", "ADMIN"].includes(user.role)) {
-    throw forbidden("insufficient permissions: MARKETING or ADMIN required");
+  if (!user || !user.role || user.role !== "MARKETING") {
+    throw forbidden("insufficient permissions: MARKETING role required");
   }
 }
 
@@ -31,8 +32,8 @@ function validateCampaignInput(input, { isUpdate = false } = {}) {
     if (!input.code || typeof input.code !== "string") {
       throw badRequest("campaign code is required");
     }
-    const cleanCode = input.code.trim();
-    if (!/^[A-Za-z0-9_-]{3,30}$/.test(cleanCode)) {
+    const cleanCode = input.code.trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{3,30}$/.test(cleanCode)) {
       throw badRequest(
         "invalid campaign code: must be 3-30 alphanumeric characters, hyphens or underscores",
       );
@@ -55,7 +56,7 @@ function validateCampaignInput(input, { isUpdate = false } = {}) {
     if (isNaN(val) || val <= 0 || !Number.isInteger(val)) {
       throw badRequest("discountValue must be a positive integer");
     }
-    const type = discountType || "PERCENT";
+    const type = discountType || (isUpdate ? undefined : "PERCENT");
     if (type === "PERCENT" && (val < 1 || val > 100)) {
       throw badRequest("percent discountValue must be between 1 and 100");
     }
@@ -110,6 +111,17 @@ function validateCampaignInput(input, { isUpdate = false } = {}) {
     if (end <= start) {
       throw badRequest("endsAt must be after startsAt");
     }
+  } else {
+    if (input.startsAt !== undefined && isNaN(new Date(input.startsAt).getTime())) {
+      throw badRequest("invalid startsAt date format");
+    }
+    if (input.endsAt !== undefined && isNaN(new Date(input.endsAt).getTime())) {
+      throw badRequest("invalid endsAt date format");
+    }
+  }
+
+  if (input.targetSegment !== undefined && input.targetSegment !== null) {
+    validateSegmentRule(input.targetSegment);
   }
 }
 
@@ -205,10 +217,17 @@ function createCampaignService(repository = defaultRepository) {
     if (input.targetSegment !== undefined) data.targetSegment = input.targetSegment;
 
     // Validate dates combination if either changed
-    const newStart = data.startsAt || campaign.startsAt;
-    const newEnd = data.endsAt || campaign.endsAt;
+    const newStart = data.startsAt ? new Date(data.startsAt) : new Date(campaign.startsAt);
+    const newEnd = data.endsAt ? new Date(data.endsAt) : new Date(campaign.endsAt);
     if (newEnd <= newStart) {
       throw badRequest("endsAt must be after startsAt");
+    }
+
+    // Validate effective discount combination
+    const effectiveType = data.discountType !== undefined ? data.discountType : campaign.discountType;
+    const effectiveValue = data.discountValue !== undefined ? data.discountValue : campaign.discountValue;
+    if (effectiveType === "PERCENT" && (effectiveValue < 1 || effectiveValue > 100)) {
+      throw badRequest("percent discountValue must be between 1 and 100");
     }
 
     return repository.updateCampaign(campaignId, data);
@@ -284,8 +303,25 @@ function createCampaignService(repository = defaultRepository) {
     });
   }
 
-  async function getCampaign({ campaignId }) {
-    return loadCampaign(campaignId);
+  async function getCampaign({ user, campaignId }) {
+    const campaign = await loadCampaign(campaignId);
+
+    const isMarketing = Boolean(
+      user && (user.role === "MARKETING" || user.roles?.includes("MARKETING"))
+    );
+
+    if (!isMarketing) {
+      const now = new Date();
+      if (
+        campaign.status !== "published" ||
+        now < new Date(campaign.startsAt) ||
+        now > new Date(campaign.endsAt)
+      ) {
+        throw notFound("campaign not found");
+      }
+    }
+
+    return campaign;
   }
 
   async function listCampaigns({ user, status, search, skip, take }) {
@@ -293,8 +329,9 @@ function createCampaignService(repository = defaultRepository) {
     return repository.listCampaigns({ status, search, skip, take });
   }
 
-  async function listAvailablePublicCampaigns() {
-    return repository.listAvailableCampaigns();
+  async function listAvailablePublicCampaigns({ profile } = {}) {
+    const campaigns = await repository.listAvailableCampaigns();
+    return campaigns.filter((c) => matchesSegment(profile, c.targetSegment));
   }
 
   async function claimVoucher({ user, campaignId }) {
@@ -308,15 +345,19 @@ function createCampaignService(repository = defaultRepository) {
     }
 
     const now = new Date();
-    if (now < campaign.startsAt) {
+    if (now < new Date(campaign.startsAt)) {
       throw badRequest("campaign has not started yet");
     }
-    if (now > campaign.endsAt) {
+    if (now > new Date(campaign.endsAt)) {
       throw badRequest("campaign has expired");
     }
 
-    if (campaign.usageLimit && campaign.usedCount >= campaign.usageLimit) {
-      throw badRequest("campaign usage limit reached");
+    if (
+      campaign.usageLimit !== null &&
+      campaign.usageLimit !== undefined &&
+      campaign.usedCount >= campaign.usageLimit
+    ) {
+      throw conflict("campaign usage limit reached");
     }
 
     const existing = await repository.findVoucher(user.id, campaignId);
@@ -325,6 +366,14 @@ function createCampaignService(repository = defaultRepository) {
     }
 
     try {
+      if (repository.claimVoucherAtomic) {
+        return await repository.claimVoucherAtomic({
+          userId: user.id,
+          campaignId,
+          usageLimit: campaign.usageLimit,
+        });
+      }
+
       const voucher = await repository.createVoucher({
         campaignId,
         userId: user.id,
@@ -332,9 +381,8 @@ function createCampaignService(repository = defaultRepository) {
       await repository.incrementUsedCount(campaignId);
       return voucher;
     } catch (err) {
-      // P2002: Unique constraint failed on the fields: (user_id, campaign_id)
-      if (err.code === "P2002") {
-        throw conflict("voucher already claimed by user");
+      if (err.status === 409 || err.statusCode === 409 || err.code === "P2002") {
+        throw conflict(err.message || "voucher already claimed by user");
       }
       throw err;
     }
@@ -347,7 +395,7 @@ function createCampaignService(repository = defaultRepository) {
     return repository.listUserVouchers(user.id, { status });
   }
 
-  async function getApplicableVouchers({ user, price, category }) {
+  async function getApplicableVouchers({ user, price, category, profile }) {
     if (!user || !user.id) {
       throw badRequest("user authentication required");
     }
@@ -374,6 +422,7 @@ function createCampaignService(repository = defaultRepository) {
       if (camp.status !== "published") continue;
       if (camp.startsAt > now || camp.endsAt < now) continue;
       if (orderPrice < camp.minOrderPrice) continue;
+      if (!matchesSegment(profile, camp.targetSegment)) continue;
 
       if (camp.applicableCategory) {
         if (
@@ -438,6 +487,168 @@ function createCampaignService(repository = defaultRepository) {
     return repository.completeVoucher({ userId: user.id, campaignId, orderId });
   }
 
+  async function validateAndCalculateDiscount({ campaignId, userId, price, category }) {
+    if (!campaignId) throw badRequest("campaignId is required");
+    const numericPrice = Number(price);
+    if (Number.isNaN(numericPrice) || numericPrice < 0) {
+      throw badRequest("valid price is required");
+    }
+
+    const campaign = await repository.findById(campaignId);
+    if (!campaign) {
+      throw notFound("campaign not found");
+    }
+
+    const now = new Date();
+    if (campaign.status !== "published") {
+      throw badRequest(`campaign is not active (status: ${campaign.status})`);
+    }
+    if (now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) {
+      throw badRequest("campaign is outside of its active date window");
+    }
+
+    if (userId) {
+      const voucher = await repository.findVoucher(userId, campaignId);
+      if (!voucher) {
+        throw badRequest("user has not claimed this voucher");
+      }
+      if (voucher.status === "USED") {
+        throw badRequest("voucher has already been used");
+      }
+      if (voucher.status === "EXPIRED") {
+        throw badRequest("voucher has expired");
+      }
+    }
+
+    if (campaign.minOrderPrice && numericPrice < campaign.minOrderPrice) {
+      throw badRequest(
+        `minimum order price of ฿${campaign.minOrderPrice.toLocaleString("th-TH")} required`,
+      );
+    }
+
+    if (campaign.applicableCategory && category) {
+      if (
+        campaign.applicableCategory.trim().toLowerCase() !==
+        category.trim().toLowerCase()
+      ) {
+        throw badRequest(
+          `voucher is only applicable for category: ${campaign.applicableCategory}`,
+        );
+      }
+    }
+
+    let discountAmount = 0;
+    if (campaign.discountType === "PERCENT") {
+      const rawDiscount = Math.round((numericPrice * campaign.discountValue) / 100);
+      discountAmount = campaign.maxDiscount
+        ? Math.min(rawDiscount, campaign.maxDiscount)
+        : rawDiscount;
+    } else if (campaign.discountType === "FIXED") {
+      discountAmount = Math.min(campaign.discountValue, numericPrice);
+    }
+
+    const finalPrice = Math.max(0, numericPrice - discountAmount);
+
+    return {
+      eligible: true,
+      campaignId: campaign.id,
+      campaignCode: campaign.code,
+      discountAmount,
+      finalPrice,
+    };
+  }
+
+  async function quoteAndHold({ campaignId, userId, orderId, productId }) {
+    if (!campaignId) throw badRequest("campaignId is required");
+    if (!userId) throw badRequest("userId is required");
+    if (!orderId) throw badRequest("orderId is required");
+    if (!productId) throw badRequest("productId is required");
+
+    // 1. Verify Product in DB
+    const product = await repository.findProduct(productId);
+    if (!product) {
+      throw badRequest("product not found");
+    }
+    if (product.status !== "reserved") {
+      throw badRequest(`product is not reserved (status: ${product.status})`);
+    }
+    if (product.reservedBy !== userId) {
+      throw badRequest("product is not reserved by this buyer");
+    }
+    const now = new Date();
+    if (!product.reservationExpiresAt || new Date(product.reservationExpiresAt) <= now) {
+      throw badRequest("product reservation has expired");
+    }
+
+    // 2. Verify Voucher in DB
+    const voucher = await repository.findVoucher(userId, campaignId);
+    if (!voucher) {
+      throw badRequest("user has not claimed this voucher");
+    }
+    if (voucher.status !== "CLAIMED") {
+      throw badRequest(`voucher is already ${voucher.status}`);
+    }
+    if (voucher.usedOrderId && voucher.usedOrderId !== orderId) {
+      throw conflict("voucher is currently held by another order");
+    }
+
+    // 3. Verify Campaign in DB
+    const campaign = await repository.findById(campaignId);
+    if (!campaign) {
+      throw notFound("campaign not found");
+    }
+    if (campaign.status !== "published") {
+      throw badRequest(`campaign is not active (status: ${campaign.status})`);
+    }
+    if (now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) {
+      throw badRequest("campaign is outside of its active date window");
+    }
+    if (campaign.minOrderPrice && product.price < campaign.minOrderPrice) {
+      throw badRequest(
+        `minimum order price of ฿${campaign.minOrderPrice.toLocaleString("th-TH")} required`,
+      );
+    }
+    if (campaign.applicableCategory && product.category) {
+      if (
+        campaign.applicableCategory.trim().toLowerCase() !==
+        product.category.trim().toLowerCase()
+      ) {
+        throw badRequest(
+          `voucher is only applicable for category: ${campaign.applicableCategory}`,
+        );
+      }
+    }
+
+    // 4. Calculate discount
+    let discountAmount = 0;
+    if (campaign.discountType === "PERCENT") {
+      const rawDiscount = Math.round((product.price * campaign.discountValue) / 100);
+      discountAmount = campaign.maxDiscount
+        ? Math.min(rawDiscount, campaign.maxDiscount)
+        : rawDiscount;
+    } else if (campaign.discountType === "FIXED") {
+      discountAmount = Math.min(campaign.discountValue, product.price);
+    }
+    const finalPrice = Math.max(0, product.price - discountAmount);
+
+    // 5. Concurrency protection: Atomic Hold
+    const held = await repository.holdVoucherWithLock({
+      userId,
+      campaignId,
+      orderId,
+    });
+    if (!held) {
+      throw conflict("voucher is currently held by another order or already used");
+    }
+
+    return {
+      campaignId: campaign.id,
+      campaignCode: campaign.code,
+      discountAmount,
+      finalPrice,
+    };
+  }
+
   function startCampaignExpiryWorker(intervalMs = 30000) {
     const sweep = () => {
       repository.autoExpireCampaigns().catch((err) => {
@@ -465,6 +676,8 @@ function createCampaignService(repository = defaultRepository) {
     claimVoucher,
     getMyVouchers,
     getApplicableVouchers,
+    validateAndCalculateDiscount,
+    quoteAndHold,
     holdVoucher,
     releaseVoucher,
     completeVoucher,

@@ -119,3 +119,76 @@
   5. **ระบบคัดกรองคูปองอัจฉริยะ (Smart Compatibility Filtering - `POST /campaigns/applicable`):** เมื่อคำนวณราคาที่ขั้นตอนชำระเงิน ระบบจะคัดกรองเฉพาะคูปองในกระเป๋าของผู้ซื้อที่: สถานะแคมเปญเป็น `published`, วันเวลาอยู่ในช่วงที่กำหนด, ยอดซื้อถึงเกณฑ์ขั้นต่ำ (`minOrderPrice`), และตรงตามหมวดหมู่สินค้า (`applicableCategory`) พร้อมคำนวณส่วนลดโดยประมาณ (`estimatedDiscount`) และเรียงลำดับจากคูปองที่ลดราคาได้มากที่สุดขึ้นก่อนอัตโนมัติ
 - Reason: ตอบโจทย์ข้อกำหนด `MKT-001`, `UR-15`, `UR-16`, และ `WF-11` อย่างสมบูรณ์ สร้างกลไกส่วนลดที่ปลอดภัยต่อการทุจริต (Fraud-resistant) และมอบประสบการณ์การใช้งานที่สะดวกสบายแก่ผู้ซื้อ
 - Consequence: เพิ่มโมเดล `Campaign` และ `UserVoucher` ในฐานข้อมูล `reloop_product`, เพิ่ม API Endpoints สำหรับทั้งฝ่ายการตลาดและผู้ซื้อทั่วไป, ปรับแต่ง API Gateway Whitelist ให้เส้นทางค้นหาแคมเปญที่เปิดใช้งานเป็น Public และมีชุด Integration Test ทดสอบการทำงานครอบคลุม 100%
+
+## MKT-DEC-014 — Complete Admin Role Decoupling in Marketing Domain
+
+- Date: 2026-09-18
+- Status: Accepted
+- Decision: ปลดสิทธิ์บทบาท `ADMIN` ออกจากโดเมนของฝ่ายการตลาดทั้งหมด ได้แก่:
+  1. Campaign Management (`campaignRoutes.js`, `campaignService.js`): บังคับสิทธิ์เฉพาะ `MARKETING`
+  2. Auction Management (`auctionService.js`): อนุมัติ/ปฏิเสธ/จัดรอบ/ยกเลิกรอบ เป็นสิทธิ์เฉพาะของ `MARKETING` (ผู้ขายลงสินค้าเป็น `SELLER`)
+  3. Article Management (`articleRoutes.js`, `articleController.js`): บังคับสิทธิ์เฉพาะ `MARKETING`
+  4. Media Upload (`uploadRoutes.js`): อนุญาตเฉพาะ `SELLER` และ `MARKETING` โดยนำ `ADMIN` ออก
+  5. Harmonization บน UI: เปลี่ยนข้อความ "รออนุมัติจาก Admin" เป็น "รออนุมัติจาก Marketing" และนำแท็บตกค้าง `auction_approvals` ออกจาก Admin Workspace
+- Reason: ขจัดสิทธิ์ Superuser เกินความจำเป็น (Least Privilege Principle) และทำให้ความรับผิดชอบของโดเมนการตลาดขึ้นตรงกับบทบาท `MARKETING` 100% ตามข้อตกลง `ADM-DEC-017`
+- Consequence: ผู้ใช้บทบาท `ADMIN` ที่พยายามเรียกใช้คำสั่งจัดการการตลาดจะได้รับ HTTP `403 Forbidden`
+
+## MKT-DEC-015 — Server-Side Voucher Quote-and-Hold with Atomic Concurrency Guard & Public API Closure
+
+- Date: 2026-09-18
+- Status: Accepted
+- Decision:
+  1. **Internal Quote-and-Hold Contract:** เพิ่ม `POST /internal/campaigns/:id/quote-and-hold` รับ `{ userId, orderId, productId }` และให้ Product Service อ่านข้อมูล Product จากฐานข้อมูลของตัวเองเพื่อตรวจสอบ 10 ข้อ ก่อนคำนวณราคาส่วนลดและราคาสุทธิ
+  2. **Atomic Concurrency Hold:** ใช้ `prisma.userVoucher.updateMany` ในการจองคูปอง หาก `count === 0` ตอบ `409 Conflict` ทันที
+  3. **Closure of Public Lifecycle APIs:** ปิด `POST /campaigns/:id/hold`, `/release`, `/complete` จาก Public Routes ใน `campaignRoutes.js` ให้ใช้งานผ่าน Internal API ระหว่างเซอร์วิสเท่านั้น ส่วน `POST /campaigns/:id/claim` ยังคงเปิดให้ผู้ซื้อกดรับสิทธิ์
+  4. **Pre-generated Order ID & Two-Way Compensation:** Order Service สร้าง UUID ของ `orderId` ล่วงหน้า และหากการบันทึก Order ล้มเหลว จะส่งคำขอยกเลิกทั้งการจองคูปองและการจองสินค้ากลับคืนทันที
+  5. **ห้ามเพิ่ม `pricing_version` หรือ `pricingVersion`:** เนื่องจากแคมเปญไม่สามารถแก้ไขข้อมูลได้หลังพ้นสถานะ draft จึงไม่จำเป็นต้องมีฟิลด์นี้
+- Reason: อุดช่องโหว่การปลอมแปลงราคาจากฝั่ง Client (Price Tampering) และป้องกัน Race Condition เมื่อมีการใช้คูปองพร้อมกัน
+- Consequence: การคำนวณราคาสั่งซื้อได้รับการคุ้มครองด้วย Server-Side Source of Truth 100%
+
+## MKT-DEC-016 — Claim Count vs Redemption Count Semantics
+
+- Date: 2026-09-18
+- Status: Accepted
+- Decision: แยกความหมายของตัวนับในระบบแคมเปญออกเป็นสองมิติ:
+  1. `claimedCount`: แสดงจำนวนครั้งที่ผู้ซื้อกดเก็บคูปองเข้าสู่กระเป๋าตนเอง (อ่านจาก `usedCount` ในโมเดล `Campaign`)
+  2. `redeemedCount`: แสดงจำนวนคำสั่งซื้อที่ใช้คูปองนี้และชำระเงินจนสำเร็จจริง (นับจาก `UserVoucher` ที่สถานะ `USED` หรือเรคอร์ดใน `campaign_attributions`)
+- Reason: ขจัดความสับสนระหว่างการเก็บสิทธิ์ (Voucher Collection) กับการใช้สิทธิ์ซื้อของจริง (Order Completion) ทำให้สามารถคำนวณ Conversion Funnel ได้อย่างถูกต้อง
+- Consequence: ใน API responses (`GET /campaigns`, `GET /campaigns/:id`) และตารางเปรียบเทียบใน Dashboard จะแสดงทั้งสองฟิลด์อย่างชัดเจน
+
+## MKT-DEC-017 — Buyer Segmentation Rule Engine & Safe Profile Matching
+
+- Date: 2026-09-18
+- Status: Accepted
+- Decision:
+  1. พัฒนาโมดูล `segmentRule.js` ภายใน Product Service เพื่อใช้ประเมินกฎของแคมเปญเป้าหมาย (`targetSegment`)
+  2. กำหนด Whitelist ของฟิลด์ที่อนุญาต (`ALLOWED_FIELDS`): `favoriteCategory`, `preferredSize`, `sizePreference`, `styleTag`, `stylePreference`, `brandPreference`
+  3. กำหนด Whitelist ของโอเปอเรเตอร์ที่อนุญาต (`ALLOWED_OPERATORS`): `eq`, `neq`, `in`, `nin`
+  4. หากแคมเปญไม่มีการกำหนด `targetSegment` ถือว่าเป็น Universal Campaign ซึ่งตรงกับผู้ซื้อทุกคน
+  5. หากแคมเปญมี `targetSegment` แต่ผู้ซื้อยังไม่ได้ระบุโปรไฟล์ หรือเป็น Guest จะไม่แสดงแคมเปญนั้นในรายการ
+- Reason: รองรับฟังก์ชันการตลาดแบบเฉพาะเจาะจงกลุ่มเป้าหมาย (Personalized Promotion / Segmentation) โดยยังคงรักษา Data Privacy และไม่เปิดให้รันโค้ดหรือโอเปอเรเตอร์ที่ไม่ปลอดภัย (Anti-Injection)
+- Consequence: แคมเปญที่กำหนดกลุ่มเป้าหมายจะถูกคัดกรองอัตโนมัติทั้งในหน้าแสดงคูปองสาธารณะ (`/campaigns/available`) และหน้าเช็คเอาต์ (`/campaigns/applicable`)
+
+## MKT-DEC-018 — Idempotent Attribution Persistence in Product Service via Internal Order Completed Event
+
+- Date: 2026-09-18
+- Status: Accepted
+- Decision:
+  1. Product Service เป็นผู้ถือครองตารางข้อเท็จจริงด้าน Attribution (`campaign_attributions`) โดยมีฟิลด์ `order_id` เป็น Unique Constraint
+  2. เมื่อ Order ถูกชำระเงินเสร็จสิ้น Order Service จะยิง Event `order.completed.v1` ผ่าน HTTP Internal Contract (`POST /internal/campaigns/events/order-completed`)
+  3. ฝั่ง Product Service ทำการ Ingestion แบบ Idempotent: หากพบว่า `order_id` เคยถูกบันทึกแล้ว จะเพิกเฉยต่ออีเวนต์ซ้ำทันที (Deduplication)
+  4. Product Service มี In-memory Storage Fallback อัตโนมัติสำหรับการรันเทสในสภาพแวดล้อมที่ไม่มีฐานข้อมูลจริง
+- Reason: สอดคล้องกับหลักการ Data Ownership ที่ Marketing อ่านข้อมูล Aggregate จากตาราง Attribution ของตนเอง โดยไม่ต้องข้ามไป Query หรือ Join กับตาราง `orders` ใน Order Database โดยตรง
+- Consequence: ทำให้การคำนวณยอดขายสุทธิและผลตอบแทนของแคมเปญ (ROI) มีความแม่นยำและทนทานต่อ Distributed Network Retries
+
+## MKT-DEC-019 — Marketing Metrics Aggregation & Date Range Boundaries
+
+- Date: 2026-09-18
+- Status: Accepted
+- Decision:
+  1. ฟังก์ชันคำนวณ Metrics (`overview`, `trends`, `compare`, `:id/metrics`) จะต้องตรวจสอบความถูกต้องของช่วงวันที่ (`from <= to`) เสมอ หากส่งค่าวันที่ไม่ถูกต้อง (`from > to` หรือ Invalid ISO String) จะตอบกลับ HTTP `400 Bad Request`
+  2. สูตรคำนวณ Conversion Rate คือ `(redeemedCount / claimedCount) * 100` หาก `claimedCount === 0` ให้คืนค่า `0` (ไม่ให้เกิดข้อผิดพลาด Division by Zero)
+  3. รายรับสุทธิ (`netRevenue`) คำนวณจาก `grossRevenue - totalDiscount`
+  4. ทุก Metrics Endpoint สงวนสิทธิ์เฉพาะบทบาท `MARKETING` เท่านั้น
+- Reason: มอบข้อมูลเชิงลึก (Business Insights) ให้ฝ่ายการตลาดนำไปใช้วิเคราะห์ผลตอบแทนและวางแผนโปรโมชันถัดไปได้อย่างน่าเชื่อถือ
+- Consequence: Marketing Dashboard (`DashboardSection.js`) มีข้อมูลพร้อมแสดงผลครบทั้งตัวเลขสรุป, กราฟแนวโน้มรายวัน, และตารางเปรียบเทียบ
