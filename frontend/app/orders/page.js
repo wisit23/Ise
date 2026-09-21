@@ -13,6 +13,8 @@ import EmptyState from "../../components/ui/EmptyState";
 import Skeleton from "../../components/ui/Skeleton";
 import OrderLine from "../../components/OrderLine";
 import ContactSellerButton from "../../components/chat/ContactSellerButton";
+import ReviewMediaUploader from "../../components/ReviewMediaUploader";
+import ReviewMediaGallery from "../../components/ReviewMediaGallery";
 import { apiFetch, uploadDisputeEvidence } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -54,6 +56,7 @@ const PAGE_SIZE = 8;
 function ReviewForm({ order, onSubmitted }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
+  const [media, setMedia] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -66,7 +69,7 @@ function ReviewForm({ order, onSubmitted }) {
       const review = await apiFetch("/api/reviews", {
         method: "POST",
         token,
-        body: { orderId: order.id, rating, comment },
+        body: { orderId: order.id, rating, comment, media },
       });
       onSubmitted(review);
     } catch (err) {
@@ -79,7 +82,7 @@ function ReviewForm({ order, onSubmitted }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-3 flex flex-col gap-2 rounded-md border border-gray-200 bg-gray-50 p-3"
+      className="mt-3 flex flex-col gap-2.5 rounded-md border border-gray-200 bg-gray-50 p-3"
     >
       <p className="text-xs text-gray-500">
         ให้คะแนนร้านค้าสำหรับคำสั่งซื้อนี้
@@ -91,6 +94,11 @@ function ReviewForm({ order, onSubmitted }) {
         placeholder="เล่าประสบการณ์การซื้อของคุณ (ไม่บังคับ)"
         rows={2}
         className="rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-emerald-500"
+      />
+      <ReviewMediaUploader
+        value={media}
+        onChange={setMedia}
+        disabled={submitting}
       />
       {error && <p className="text-xs text-red-600">{error}</p>}
       <button
@@ -317,7 +325,8 @@ export default function OrdersPage() {
                         o.auctionId &&
                         ["pending", "pending_payment"].includes(o.status)
                           ? "bg-amber-100 text-amber-800"
-                          : STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
+                          : STATUS_STYLE[o.status] ||
+                            "bg-gray-100 text-gray-600"
                       }`}
                     >
                       {o.auctionId &&
@@ -341,12 +350,17 @@ export default function OrdersPage() {
                   <div className="flex flex-col gap-2 border-t border-line bg-surface-subtle px-4 py-3">
                     {o.status === "completed" &&
                       (review ? (
-                        <div className="flex items-center gap-2 text-sm text-ink-muted">
-                          <StarDisplay value={review.rating} />
-                          {review.comment && (
-                            <span className="text-ink-subtle">
-                              &quot;{review.comment}&quot;
-                            </span>
+                        <div className="flex flex-col gap-1 text-sm text-ink-muted">
+                          <div className="flex items-center gap-2">
+                            <StarDisplay value={review.rating} />
+                            {review.comment && (
+                              <span className="text-ink-subtle">
+                                &quot;{review.comment}&quot;
+                              </span>
+                            )}
+                          </div>
+                          {review.media && review.media.length > 0 && (
+                            <ReviewMediaGallery media={review.media} />
                           )}
                         </div>
                       ) : openReviewFor === o.id ? (

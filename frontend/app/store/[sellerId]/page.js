@@ -11,6 +11,7 @@ import { StarDisplay } from "../../../components/StarRating";
 import ReportModal from "../../../components/ReportModal";
 import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import EditShopModal from "../../../components/seller/EditShopModal";
+import ReviewMediaGallery from "../../../components/ReviewMediaGallery";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
@@ -250,6 +251,9 @@ export default function StorePage() {
                 </div>
                 {r.comment && (
                   <p className="mt-1.5 text-sm text-gray-700">{r.comment}</p>
+                )}
+                {r.media && r.media.length > 0 && (
+                  <ReviewMediaGallery media={r.media} />
                 )}
               </li>
             ))}
