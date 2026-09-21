@@ -207,6 +207,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL_REVIEW}
+    volumes:
+      - review_uploads:/app/services/review-service/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -266,4 +268,5 @@ volumes:
   mongodata_v4:
   chat_private_attachments:
   product_uploads:
+  review_uploads:
   order_private_evidence:

@@ -1,5 +1,58 @@
 # Buyer Feature Changelog
 
+> แต่ละรายการเป็น historical snapshot ณ วันนั้น; ใช้รายการล่าสุดและ `progress.md` เป็นสถานะปัจจุบัน
+
+## 2026-09-07 — Buyer review, review media and Swipe reconciliation
+
+- `BUY-004` มี Buyer review flow บน `/orders`: ส่งคะแนน/ข้อความได้เฉพาะ Order ที่ `completed`,
+  `review-service` ตรวจ buyer จาก Order contract และฐานข้อมูลบังคับหนึ่งรีวิวต่อ `orderId`.
+- หน้า Product detail และ Storefront แสดงคะแนนเฉลี่ย รายการรีวิวแบบแบ่งหน้า ชื่อผู้รีวิวแบบลดการเปิดเผย
+  identifier และ media gallery; ส่วน Contact Seller entry ตามแผนยังไม่มีใน source จึงคง `BUY-004` เป็น Partial.
+- เพิ่ม `ReviewPhoto`/`ReviewVideo` พร้อมลำดับ media, uploader สูงสุด 5 ไฟล์ใน UI และ gallery/lightbox
+  สำหรับรูปหรือวิดีโอ; API ยังคงเพดาน metadata 8 รายการจนกว่าจะปรับ contract ให้ตรงกัน.
+- แยกไฟล์รีวิวใหม่ออกจาก Product storage: `POST /api/reviews/uploads` เขียนเข้า
+  `review-service` volume `review_uploads` และเปิดอ่านผ่าน `/review-uploads/*`; รูป/คลิปสินค้ายังคงอยู่
+  `product-service` volume `product_uploads`. URL รีวิวเดิม `/uploads/*` ยังอ่านแบบเดิมได้และยังไม่ได้ migrate.
+- `/swipe` มี persisted bookmark ผ่าน `POST /api/products/videos/:id/choose` และ `SwipeChoice`
+  ตาม `MKT-DEC-006`; เพิ่ม touch swipe ขึ้น/ลง, keyboard navigation และ card snap. อย่างไรก็ตามยังไม่มี
+  automated contract/PostgreSQL test สำหรับ choose โดยตรง, service ยังไม่ reject role ที่ไม่ใช่ Buyer
+  และยังไม่อ่าน chosen state กลับหลัง reload จึงไม่ยก `BUY-005` หรือ `UR-11` เป็น Done.
+- Evidence รอบนี้: review/gateway focused tests 15/15, frontend 47/47, frontend build, targeted ESLint,
+  `docker compose config` และ Docker build ของ review-service/gateway ผ่าน. Root backend suite ยังไม่ green:
+  Order checkout integration 2 รายการหยุดที่ `PrismaClientInitializationError` เมื่อ database ไม่ได้รัน.
+
+## 2026-09-06 — Review list on Product and Storefront
+
+- Commit `1696bb8` เพิ่มรายการรีวิวของผู้ขายใต้ Product detail และ Storefront พร้อม pagination,
+  average rating และการดึง public buyer label สำหรับแสดงผล.
+- Orders page อ่าน `/api/reviews/mine` เพื่อไม่ให้แสดงฟอร์มซ้ำหลังส่งรีวิวแล้ว.
+- การแสดงรีวิวทำได้แล้ว แต่ยังไม่มี Contact Seller entry และยังไม่มี forced cross-service create-review
+  acceptance จึงบันทึกเป็น `BUY-004` Partial เท่านั้น.
+
+## 2026-09-05 — BUY-001 PostgreSQL acceptance verified
+
+- Ran the catalog acceptance against an isolated disposable `postgres:16-alpine` container on
+  `localhost:55432`, mounting `infra/postgres/init-databases.sql`.
+- Applied the Product schema, seeded the database, and passed
+  `REQUIRE_INTEGRATION=1 node --test backend/services/product-service/test/catalog.integration.test.js`
+  1/1; frontend BUY-001 Jest 2/2 and lint also passed.
+- The container was removed automatically. BUY-001 is verified locally; broader Buyer completion is
+  not claimed.
+
+## 2026-09-05 — BUY-001 correction review
+
+- Corrected filter apply pagination reset, retained active filters across page changes, and reset control values on clear.
+- Named frontend test mocks and flushed initial effects; latest evidence: catalog contract 3/3, frontend 2/2, Prisma validate/generate, targeted formatting and lint passed.
+- Forced PostgreSQL catalog integration was attempted but unavailable; BUY-001 remains blocked and no full implementation acceptance is claimed.
+- Normalized create/update brands by trimming whitespace and reconciled `ProductSummary` with `brand` and `styleTags`.
+
+## 2026-09-05 — BUY-001 Catalog Search and Filters
+
+- เพิ่ม PostgreSQL catalog query builder ที่ใช้ร่วมกันทั้งค้นหาและกรองโดยไม่มีคำค้น
+- รองรับ category, style จาก persisted `tags`, brand, size, condition และ min/max price แบบ AND
+- เพิ่มการตรวจราคาที่ไม่ใช่ตัวเลข ติดลบ และช่วงราคากลับด้านให้ตอบ 400 ผ่าน controller
+- เพิ่ม controls ที่เข้าถึงได้บนหน้า Products และ contract/frontend tests; ยังไม่ได้อ้างฐานข้อมูลจริง เพราะไม่ได้รัน integration
+
 ## 2026-07-30 — Planning Round 0
 
 - Trace `UR-01`–`UR-07` ไปยัง Core/Extended tasks
@@ -114,7 +167,7 @@
   - **Root Cause:** ใน `frontend/app/auctions/[id]/page.js` แสดงเฉพาะ `auction.product.photos[0]` เพียงรูปเดียว
   - **Fix:** ติดตั้ง `MediaGallery` ในหน้า `/auctions/[id]` แสดงรูปย่อ Thumbnails และสลับดูรูปภาพ/วิดีโอของสินค้าประมูลได้ครบทุกรูป ปรับเป็น `object-contain` ไม่ให้ถูกตัดขอบ
 - **Enhancement (24-Hour Auction Winner Payment Window & Direct Checkout):**
-  - หน้าตะกร้า (`/cart`): สินค้าประมูลได้รับเวลาชำระเงิน 24 ชั่วโมง พร้อมป้าย *"🔨 ชนะการประมูล · รอชำระเงิน"* และซ่อนปุ่มยกเลิกป้องกันการกดพลาด
-  - หน้ารายละเอียดสินค้า (`/products/:id`): เมื่อผู้ชนะประมูลเปิดดู สินค้าจะไม่ขึ้นสีเทา "สินค้าไม่พร้อมขาย" อีกต่อไป แต่ขึ้นแบนเนอร์สีเขียวแสดงความยินดีพร้อมปุ่ม *"💳 ไปชำระเงินที่ตะกร้าสินค้า"*
-  - หน้าคำสั่งซื้อ (`/orders`): แสดงสถานะ *"ชนะประมูล · รอชำระเงิน"* พร้อมปุ่มลัด *"💳 ไปชำระเงินที่ตะกร้า"*
+  - หน้าตะกร้า (`/cart`): สินค้าประมูลได้รับเวลาชำระเงิน 24 ชั่วโมง พร้อมป้าย _"🔨 ชนะการประมูล · รอชำระเงิน"_ และซ่อนปุ่มยกเลิกป้องกันการกดพลาด
+  - หน้ารายละเอียดสินค้า (`/products/:id`): เมื่อผู้ชนะประมูลเปิดดู สินค้าจะไม่ขึ้นสีเทา "สินค้าไม่พร้อมขาย" อีกต่อไป แต่ขึ้นแบนเนอร์สีเขียวแสดงความยินดีพร้อมปุ่ม _"💳 ไปชำระเงินที่ตะกร้าสินค้า"_
+  - หน้าคำสั่งซื้อ (`/orders`): แสดงสถานะ _"ชนะประมูล · รอชำระเงิน"_ พร้อมปุ่มลัด _"💳 ไปชำระเงินที่ตะกร้า"_
 - **Verification:** Unit tests ผ่าน 38/38, ทดสอบ API ดึงรายการตะกร้าสินค้าประมูลสำเร็จครบถ้วน

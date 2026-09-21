@@ -6,6 +6,7 @@ const request = require("supertest");
 // proxy layer fails fast (connection refused) instead of hanging on a DNS
 // lookup for a Docker-only hostname like "auth-service".
 process.env.AUTH_SERVICE_URL = "http://127.0.0.1:1";
+process.env.REVIEW_SERVICE_URL = "http://127.0.0.1:1";
 
 const app = require("./app");
 
@@ -14,6 +15,16 @@ test("GET /health returns 200 ok without needing auth", async () => {
   assert.equal(res.status, 200);
   assert.equal(res.body.status, "ok");
   assert.equal(res.body.service, "gateway");
+});
+
+test("public review media is not blocked by the auth check", async () => {
+  const res = await request(app).get("/review-uploads/example.jpg");
+  assert.notEqual(res.status, 401);
+});
+
+test("review media upload remains protected", async () => {
+  const res = await request(app).post("/api/reviews/uploads");
+  assert.equal(res.status, 401);
 });
 
 test("a protected route with no bearer token is rejected with 401", async () => {

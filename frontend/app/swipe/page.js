@@ -30,12 +30,12 @@ export default function SwipeFeed() {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-white">
+    <div className="flex h-screen h-dvh flex-col overflow-hidden bg-white">
       <div className="z-50 w-full shrink-0 bg-white shadow-sm">
         <NavBar />
       </div>
 
-      <div className="relative flex flex-1 w-full items-center justify-center overflow-hidden bg-black">
+      <div className="relative flex min-h-0 w-full flex-1 items-center justify-center overflow-hidden bg-black">
         {loading ? (
           <div className="animate-pulse text-lg text-gray-300">
             กำลังโหลดวิดีโอรีวิว...

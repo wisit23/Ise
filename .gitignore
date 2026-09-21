@@ -9,6 +9,8 @@ frontend/package-lock.json
 *.log
 backend/services/product-service/uploads/*
 !backend/services/product-service/uploads/.gitkeep
+backend/services/review-service/uploads/*
+!backend/services/review-service/uploads/.gitkeep
 backend/services/order-service/private-evidence/*
 !backend/services/order-service/private-evidence/.gitkeep
 .DS_Store

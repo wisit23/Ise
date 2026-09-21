@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { uploadFiles, mediaUrl } from "../lib/api";
+import { uploadReviewFiles, mediaUrl } from "../lib/api";
 
 const MAX_FILES = 5;
 
@@ -35,7 +35,7 @@ export default function ReviewMediaUploader({
 
     setUploading(true);
     try {
-      const uploaded = await uploadFiles(filesToUpload);
+      const uploaded = await uploadReviewFiles(filesToUpload);
       onChange([...value, ...uploaded]);
     } catch (err) {
       setError(err.message || "อัปโหลดไฟล์ไม่สำเร็จ");
