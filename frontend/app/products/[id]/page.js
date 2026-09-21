@@ -10,7 +10,14 @@ import { StarDisplay } from "../../../components/StarRating";
 import ReportModal from "../../../components/ReportModal";
 import Alert from "../../../components/ui/Alert";
 import { apiFetch } from "../../../lib/api";
-import { getAccessToken, getStoredUser } from "../../../lib/auth";
+import {
+  getAccessToken,
+  getAccessTokenClaims,
+  getStoredUser,
+  getCurrentRoles,
+  isCustomerAccountRoles,
+  canPurchaseProduct,
+} from "../../../lib/auth";
 import { fetchConditions } from "../../../lib/catalog";
 
 const STATUS_LABEL = {
@@ -31,6 +38,42 @@ export default function ProductDetailPage() {
   const [conditionLabels, setConditionLabels] = useState({});
   const [reviewSummary, setReviewSummary] = useState(null);
   const [showReport, setShowReport] = useState(false);
+<<<<<<< Updated upstream
+=======
+  const [myPendingOrder, setMyPendingOrder] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [reviewPage, setReviewPage] = useState(1);
+  const [reviewTotalPages, setReviewTotalPages] = useState(1);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [viewer, setViewer] = useState({
+    ready: false,
+    isAuthenticated: false,
+    userId: null,
+    roles: [],
+  });
+
+  useEffect(() => {
+    const token = getAccessToken();
+    const user = getStoredUser();
+    const claims = getAccessTokenClaims();
+    const roles = getCurrentRoles();
+    setViewer({
+      ready: true,
+      isAuthenticated: Boolean(token),
+      userId: claims?.sub || user?.id || null,
+      roles,
+    });
+
+    if (token && id && isCustomerAccountRoles(roles)) {
+      apiFetch("/api/orders/mine?status=pending_payment&limit=100", { token })
+        .then((data) => {
+          const match = data.items?.find((o) => o.productId === id);
+          if (match) setMyPendingOrder(match);
+        })
+        .catch(() => {});
+    }
+  }, [id]);
+>>>>>>> Stashed changes
 
   useEffect(() => {
     apiFetch(`/api/products/${id}`)
@@ -59,8 +102,7 @@ export default function ProductDetailPage() {
       router.push("/login");
       return null;
     }
-    const user = getStoredUser();
-    if (user?.id === product.sellerId) {
+    if (viewer.userId === product.sellerId) {
       setNotice("คุณไม่สามารถซื้อสินค้าของตัวเองได้");
       return null;
     }
@@ -114,6 +156,16 @@ export default function ProductDetailPage() {
   }
 
   const available = product.status === "available";
+  const isOwnProduct = viewer.userId === product.sellerId;
+  // Guests keep the existing login CTA. Logged-in staff are read-only.
+  const canPurchase =
+    viewer.ready &&
+    canPurchaseProduct({
+      isAuthenticated: viewer.isAuthenticated,
+      userId: viewer.userId,
+      roles: viewer.roles,
+      sellerId: product.sellerId,
+    });
   const sellerName = seller
     ? seller.shopName || `${seller.firstName} ${seller.lastName}`
     : "ผู้ขาย";
@@ -212,15 +264,32 @@ export default function ProductDetailPage() {
                 )}
               </div>
             </div>
+<<<<<<< Updated upstream
             <Link
               href={`/store/${product.sellerId}`}
               className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
             >
               ดูร้านค้า
             </Link>
+=======
+            <div className="flex shrink-0 items-center gap-2">
+              {!isOwnProduct && (
+                <ContactSellerButton
+                  productId={product.id}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3.5 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              )}
+              <Link
+                href={`/store/${product.sellerId}`}
+                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                ดูร้านค้า
+              </Link>
+            </div>
+>>>>>>> Stashed changes
           </div>
 
-          {getStoredUser()?.id === product.sellerId ? (
+          {isOwnProduct ? (
             <Link
               href={`/products/${product.id}/edit`}
               className="mt-3 inline-block text-xs font-medium text-gray-500 hover:text-emerald-600 hover:underline"
@@ -263,7 +332,62 @@ export default function ProductDetailPage() {
             </div>
           )}
 
+<<<<<<< Updated upstream
           {!added && (
+=======
+          {product.status === "auction" && (
+            <div className="mt-4 animate-slide-up flex items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-sky-600 text-[22px] shrink-0">
+                  gavel
+                </span>
+                <span className="font-medium">
+                  สินค้านี้อยู่ในระบบประมูล ไม่สามารถสั่งซื้อแบบปกติได้
+                </span>
+              </div>
+              <Link
+                href="/auctions"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-sky-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-sky-700 active:scale-95"
+              >
+                ไปที่ลานประมูล
+                <span className="material-symbols-outlined text-[15px]">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
+          )}
+
+          {myPendingOrder && (
+            <div className="mt-4 animate-slide-up flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-emerald-600 text-[24px] shrink-0">
+                  shopping_cart_checkout
+                </span>
+                <div>
+                  <p className="font-bold text-emerald-900">
+                    {myPendingOrder.auctionId
+                      ? "🎉 คุณเป็นผู้ชนะการประมูลสินค้านี้!"
+                      : "สินค้านี้อยู่ในตะกร้าของคุณแล้ว"}
+                  </p>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    รายการนี้ถูกล็อกไว้รอให้คุณชำระเงิน กรุณากดไปที่ตะกร้าเพื่อดำเนินการ
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/cart"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-700 active:scale-95"
+              >
+                ไปชำระเงิน
+                <span className="material-symbols-outlined text-[15px]">
+                  arrow_forward
+                </span>
+              </Link>
+            </div>
+          )}
+
+          {canPurchase && !added && (
+>>>>>>> Stashed changes
             <div className="mt-6 flex gap-3">
               <button
                 onClick={handleAddToCart}

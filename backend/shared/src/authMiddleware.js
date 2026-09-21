@@ -1,4 +1,5 @@
 const { verifyAccessToken } = require("./jwt");
+const { isCustomerAccount, isValidRoleCombination } = require("./permissions");
 
 /**
  * Verifies the Bearer JWT and attaches trusted user context to the request.
@@ -12,9 +13,19 @@ function requireAuth(req, res, next) {
 
   try {
     const payload = verifyAccessToken(token);
+    const roles = payload.roles || (payload.role ? [payload.role] : []);
+    if (!isValidRoleCombination(roles)) {
+      return res.status(403).json({
+        error: {
+          code: "INVALID_ROLE_COMBINATION",
+          message: "Account role configuration is invalid",
+          requestId: req.id,
+        },
+      });
+    }
     req.userId = payload.sub;
     req.userRole = payload.role;
-    req.userRoles = payload.roles || (payload.role ? [payload.role] : []);
+    req.userRoles = roles;
     req.permissions = payload.permissions || [];
     req.kycVerified = Boolean(payload.kycVerified);
     req.userDisplayName = payload.displayName || null;
@@ -45,6 +56,18 @@ function requirePermission(permission) {
       },
     });
   };
+}
+
+/** Purchase/cart actions belong to customer accounts only. */
+function requireCustomerAccount(req, res, next) {
+  if (isCustomerAccount(req.userRoles)) return next();
+  return res.status(403).json({
+    error: {
+      code: "CUSTOMER_ACCOUNT_REQUIRED",
+      message: "A separate buyer or seller account is required to purchase",
+      requestId: req.id,
+    },
+  });
 }
 
 /** Trusts x-user-* headers set by the gateway after it verified the JWT. */
@@ -82,6 +105,7 @@ module.exports = {
   requireAuth,
   requireRole,
   requirePermission,
+  requireCustomerAccount,
   fromGatewayHeaders,
   requireInternalToken,
 };

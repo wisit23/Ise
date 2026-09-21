@@ -27,6 +27,15 @@ async function main() {
     },
   });
 
+  await prisma.userRole.upsert({
+    where: { userId_role: { userId: user.id, role: "ADMIN" } },
+    update: {},
+    create: { userId: user.id, role: "ADMIN" },
+  });
+  await prisma.userRole.deleteMany({
+    where: { userId: user.id, role: { not: "ADMIN" } },
+  });
+
   console.log(
     `[auth-service] demo admin ready: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`,
   );

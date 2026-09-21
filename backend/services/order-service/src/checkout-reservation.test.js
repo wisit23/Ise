@@ -13,6 +13,11 @@ const productClient = require("./services/productClient");
 const app = require("./app");
 
 const buyerToken = signAccessToken({ sub: "buyer-a", role: "BUYER" });
+const sellerToken = signAccessToken({ sub: "seller-b", role: "SELLER" });
+const executiveToken = signAccessToken({
+  sub: "executive-a",
+  role: "EXECUTIVE",
+});
 const expiresAt = new Date(Date.now() + 10 * 60 * 1_000).toISOString();
 
 test("checkout persists the reservation identity returned by product-service", async (t) => {
@@ -84,4 +89,46 @@ test("checkout releases the exact reservation when Order creation fails", async 
       buyerId: "buyer-a",
     },
   ]);
+});
+
+test("a seller account may buy another seller's product", async (t) => {
+  t.mock.method(productClient, "reserveProduct", async () => ({
+    created: true,
+    reservationId: "reservation-seller-b",
+    expiresAt,
+    product: {
+      id: "product-other-shop",
+      sellerId: "seller-a",
+      title: "Other shop product",
+      price: 750,
+    },
+  }));
+  t.mock.method(orderModel, "findByReservationId", async () => null);
+  t.mock.method(orderModel, "create", async (data) => ({
+    id: "order-s",
+    ...data,
+  }));
+
+  const response = await request(app)
+    .post("/")
+    .set("Authorization", `Bearer ${sellerToken}`)
+    .send({ productId: "product-other-shop" });
+
+  assert.equal(response.status, 201);
+  assert.equal(response.body.buyerId, "seller-b");
+});
+
+test("a staff account is denied before product-service is called", async (t) => {
+  const reserve = t.mock.method(productClient, "reserveProduct", async () => {
+    throw new Error("must not be called");
+  });
+
+  const response = await request(app)
+    .post("/")
+    .set("Authorization", `Bearer ${executiveToken}`)
+    .send({ productId: "product-a" });
+
+  assert.equal(response.status, 403);
+  assert.equal(response.body.error.code, "CUSTOMER_ACCOUNT_REQUIRED");
+  assert.equal(reserve.mock.callCount(), 0);
 });

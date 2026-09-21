@@ -1,5 +1,9 @@
 const { Router } = require("express");
-const { requireAuth, requireInternalToken } = require("@reloop/shared");
+const {
+  requireAuth,
+  requireInternalToken,
+  requireCustomerAccount,
+} = require("@reloop/shared");
 const orderController = require("../controllers/orderController");
 const disputeController = require("../features/disputes/disputeController");
 const disputeRoutes = require("../features/disputes/disputeRoutes");
@@ -12,7 +16,7 @@ const router = Router();
 router.use("/disputes", disputeRoutes);
 router.use("/support", supportRoutes);
 
-router.post("/", requireAuth, orderController.create);
+router.post("/", requireAuth, requireCustomerAccount, orderController.create);
 router.get("/mine", requireAuth, orderController.mine);
 router.get("/selling", requireAuth, orderController.selling);
 router.get(
@@ -28,7 +32,12 @@ router.post(
 );
 router.get("/:id", requireAuth, orderController.getOne);
 router.patch("/:id/status", requireAuth, orderController.updateStatus);
-router.patch("/:id/pay", requireAuth, orderController.pay);
+router.patch(
+  "/:id/pay",
+  requireAuth,
+  requireCustomerAccount,
+  orderController.pay,
+);
 router.post("/:id/disputes", requireAuth, disputeController.open);
 
 module.exports = router;

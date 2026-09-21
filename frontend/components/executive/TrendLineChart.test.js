@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import TrendLineChart from "./TrendLineChart";
+import TrendLineChart, { getSmoothPath } from "./TrendLineChart";
 
 describe("TrendLineChart", () => {
   const mockData = [
@@ -56,5 +56,17 @@ describe("TrendLineChart", () => {
     expect(screen.getByText("฿100,000")).toBeInTheDocument();
     expect(screen.getByText("฿80,000")).toBeInTheDocument();
     expect(screen.getByText("ไม่พร้อมใช้งาน")).toBeInTheDocument();
+  });
+
+  it("keeps consecutive zero-value points flat on the baseline", () => {
+    const path = getSmoothPath([
+      { x: 0, y: 100 },
+      { x: 10, y: 100 },
+      { x: 20, y: 100 },
+      { x: 30, y: 20 },
+    ]);
+
+    expect(path).toContain("C 1.7 100.0, 6.7 100.0, 10.0 100.0");
+    expect(path).toContain("C 13.3 100.0, 16.7 100.0, 20.0 100.0");
   });
 });

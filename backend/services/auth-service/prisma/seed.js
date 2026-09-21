@@ -100,6 +100,99 @@ const SUPPORT_AGENTS = [
   },
 ];
 
+<<<<<<< Updated upstream
+=======
+async function upsertUser({ id, email, firstName, lastName, role, shopName, passwordHash }) {
+  const existingByEmail = await prisma.user.findUnique({ where: { email } });
+  if (existingByEmail) {
+    await prisma.user.update({
+      where: { email },
+      data: {
+        role,
+        firstName,
+        lastName,
+        passwordHash,
+        ...(shopName
+          ? {
+              sellerProfile: {
+                upsert: {
+                  create: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                  update: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                },
+              },
+            }
+          : {}),
+      },
+    });
+
+    await prisma.userRole.upsert({
+      where: { userId_role: { userId: existingByEmail.id, role } },
+      update: {},
+      create: { userId: existingByEmail.id, role },
+    });
+    await prisma.userRole.deleteMany({
+      where: { userId: existingByEmail.id, role: { not: role } },
+    });
+    return;
+  }
+
+  const existingById = await prisma.user.findUnique({ where: { id } });
+  if (existingById) {
+    await prisma.user.update({
+      where: { id },
+      data: {
+        email,
+        role,
+        firstName,
+        lastName,
+        passwordHash,
+        ...(shopName
+          ? {
+              sellerProfile: {
+                upsert: {
+                  create: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                  update: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                },
+              },
+            }
+          : {}),
+      },
+    });
+
+    await prisma.userRole.upsert({
+      where: { userId_role: { userId: id, role } },
+      update: {},
+      create: { userId: id, role },
+    });
+    await prisma.userRole.deleteMany({
+      where: { userId: id, role: { not: role } },
+    });
+    return;
+  }
+
+  await prisma.user.create({
+    data: {
+      id,
+      email,
+      passwordHash,
+      firstName,
+      lastName,
+      role,
+      ...(shopName
+        ? {
+            sellerProfile: {
+              create: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+            },
+          }
+        : {}),
+      roles: {
+        create: { role },
+      },
+    },
+  });
+}
+
+>>>>>>> Stashed changes
 async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
