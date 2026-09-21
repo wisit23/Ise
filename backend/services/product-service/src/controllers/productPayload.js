@@ -56,7 +56,11 @@ function buildProductPatch(body) {
   const patch = {};
 
   for (const field of SIMPLE_UPDATE_FIELDS) {
-    if (body[field] !== undefined) patch[field] = body[field];
+    if (body[field] !== undefined)
+      patch[field] =
+        field === "brand" && typeof body[field] === "string"
+          ? body[field].trim()
+          : body[field];
   }
 
   if (body.tags !== undefined) patch.tags = normalizeTags(body.tags);

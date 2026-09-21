@@ -158,26 +158,11 @@ export default function CartPage() {
     }
   }
 
-  async function handleCheckout() {
-    const token = getAccessToken();
+  function handleCheckout() {
+    if (selectedItems.length === 0) return;
     setPaying(true);
-    setNotice("");
-    try {
-      for (const order of selectedItems) {
-        await apiFetch(`/api/orders/${order.id}/pay`, {
-          method: "PATCH",
-          token,
-        });
-      }
-      setNotice("ชำระเงินสำเร็จ");
-      setItems((prev) => prev.filter((o) => !selected.has(o.id)));
-      setSelected(new Set());
-    } catch (err) {
-      setNotice(err.message);
-      load();
-    } finally {
-      setPaying(false);
-    }
+    const orderIds = selectedItems.map((order) => order.id).join(",");
+    router.push(`/checkout?orders=${encodeURIComponent(orderIds)}`);
   }
 
   const activeItems = items.filter(
@@ -359,8 +344,8 @@ export default function CartPage() {
               className="rounded-md bg-emerald-600 px-6 py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {paying
-                ? "กำลังชำระเงิน..."
-                : `ชำระเงิน (${selectedItems.length})`}
+                ? "กำลังไปหน้ายืนยัน..."
+                : `ยืนยันรายการ (${selectedItems.length})`}
             </button>
           </div>
         </div>

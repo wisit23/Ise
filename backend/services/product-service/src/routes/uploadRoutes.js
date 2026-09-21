@@ -1,5 +1,5 @@
 const { Router } = require("express");
-const { requireAuth } = require("@reloop/shared");
+const { requireAuth, requireRole } = require("@reloop/shared");
 const { upload } = require("../middleware/upload");
 const uploadController = require("../controllers/uploadController");
 

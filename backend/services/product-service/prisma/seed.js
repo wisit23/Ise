@@ -321,8 +321,9 @@ const DEMO_VIDEOS = [
 // products.search_text/search_vector can't be native generated columns (the
 // expression needs array_to_string(), which is STABLE not IMMUTABLE — see
 // schema.prisma), so a trigger fills the same role: keep it auto-computed on
-// every insert/update no matter which code path touches the row (API, this
-// seed script, or anything added later). `db push` doesn't run arbitrary
+// every change, including the searchable brand field, so q can find brands
+// regardless of which code path touches the row (API, this seed script, or
+// anything added later). `db push` doesn't run arbitrary
 // SQL, so this — the one hook that already runs on every container
 // start — is where it's (idempotently) installed.
 async function ensureSearchTextTrigger() {
@@ -347,6 +348,7 @@ async function ensureSearchTextTrigger() {
         setweight(to_tsvector('simple', coalesce(NEW.title, '')), 'A') ||
         setweight(to_tsvector('simple', coalesce(array_to_string(NEW.tags, ' '), '')), 'A') ||
         setweight(to_tsvector('simple', coalesce(NEW.category, '')), 'B') ||
+        setweight(to_tsvector('simple', coalesce(NEW.brand, '')), 'B') ||
         setweight(to_tsvector('simple', coalesce(NEW.description, '')), 'C') ||
         setweight(to_tsvector('simple', concat_ws(' ', NEW.brand, NEW.condition, NEW.location, NEW.size)), 'D');
       RETURN NEW;
@@ -416,6 +418,23 @@ const DEMO_ARTICLES = [
   },
 ];
 
+function inferDemoBrand(product) {
+  const searchable =
+    `${product.title} ${(product.tags || []).join(" ")}`.toLowerCase();
+  const knownBrands = [
+    ["Levi's", ["levi's", "levis", "501"]],
+    ["Uniqlo", ["uniqlo"]],
+    ["Converse", ["converse"]],
+    ["Nike", ["nike", "airzoom", "air zoom"]],
+    ["Adidas", ["adidas"]],
+  ];
+  return (
+    knownBrands.find(([, aliases]) =>
+      aliases.some((alias) => searchable.includes(alias)),
+    )?.[0] || ""
+  );
+}
+
 async function main() {
   await ensureSearchTextTrigger();
 
@@ -434,7 +453,11 @@ async function main() {
     });
   }
   for (const product of PRODUCTS) {
-    const { photos: photoSet, ...fields } = product;
+    const productWithBrand = {
+      ...product,
+      brand: product.brand || inferDemoBrand(product),
+    };
+    const { photos: photoSet, ...fields } = productWithBrand;
     await prisma.product.upsert({
       where: { id: product.id },
       // A reseed used to be a no-op for existing rows (`update: {}`), so
@@ -444,7 +467,7 @@ async function main() {
         ...fields,
         photos: { deleteMany: {}, create: photoSet.create },
       },
-      create: product,
+      create: productWithBrand,
     });
   }
   // Articles search_text trigger (ST-MKT-05 / UR-14 / FR-5.2.3)

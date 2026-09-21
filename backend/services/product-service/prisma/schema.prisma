@@ -62,7 +62,7 @@ model Product {
   createdAt            DateTime                 @default(now()) @map("created_at")
   updatedAt            DateTime                 @updatedAt @map("updated_at")
 
-  // Denormalized concat of title/description/category/condition/location/
+  // Denormalized concat of title/description/category/brand/condition/location/
   // size/tags, kept in sync by a DB trigger (see prisma/seed.js — Postgres
   // can't use a native generated column here because array_to_string() is
   // STABLE, not IMMUTABLE). This is the one field search() matches against.

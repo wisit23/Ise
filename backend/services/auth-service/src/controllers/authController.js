@@ -11,7 +11,11 @@ async function register(req, res, next) {
 
 async function login(req, res, next) {
   try {
-    const result = await authService.login({ ...req.body, ipAddress: req.ip });
+    const result = await authService.login({
+      ...req.body,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") || null,
+    });
     res.json(result);
   } catch (err) {
     next(err);

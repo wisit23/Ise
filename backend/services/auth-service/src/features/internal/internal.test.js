@@ -3,6 +3,9 @@ const assert = require("node:assert/strict");
 const request = require("supertest");
 
 process.env.INTERNAL_SERVICE_TOKEN ||= "test-internal-token";
+if (process.env.DATABASE_URL_AUTH) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL_AUTH;
+}
 
 const app = require("../../app");
 const authService = require("../../services/authService");
@@ -93,6 +96,7 @@ test("getDisplayNames against a real database", async (t) => {
   });
 
   t.after(async () => {
+    await prisma.sellerProfile.deleteMany({ where: { userId: seller.id } });
     await prisma.user.deleteMany({
       where: { id: { in: [buyer.id, seller.id] } },
     });

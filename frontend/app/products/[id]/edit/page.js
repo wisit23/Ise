@@ -330,6 +330,7 @@ export default function EditProductPage() {
                 แบรนด์ (Brand)
               </label>
               <input
+                aria-label="แบรนด์"
                 placeholder="เช่น Nike, Adidas, Levi's, Uniqlo"
                 value={form.brand || ""}
                 onChange={update("brand")}

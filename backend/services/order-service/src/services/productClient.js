@@ -59,6 +59,17 @@ function releaseProductReservation(productId, reservationId) {
   );
 }
 
+function extendProductReservation(productId, reservationId, expiresAt) {
+  return reservationRequest(
+    `/internal/products/${productId}/reservations/${reservationId}/extend`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ expiresAt: expiresAt.toISOString() }),
+    },
+    "failed to extend product reservation",
+  );
+}
+
 function completeProductReservation(productId, reservationId) {
   return reservationRequest(
     `/internal/products/${productId}/reservations/${reservationId}/complete`,
@@ -151,6 +162,7 @@ module.exports = {
   getProduct,
   reserveProduct,
   releaseProductReservation,
+  extendProductReservation,
   completeProductReservation,
   setProductStatus,
   quoteAndHold,

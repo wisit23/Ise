@@ -6,6 +6,7 @@ requireEnv(["DATABASE_URL"]);
 const app = require("./app");
 const orderModel = require("./models/orderModel");
 const productClient = require("./services/productClient");
+const checkoutSessionService = require("./features/checkoutSessions/checkoutSessionService");
 
 const PORT = process.env.ORDER_PORT || 3003;
 app.listen(PORT, () => {
@@ -16,4 +17,5 @@ app.listen(PORT, () => {
     });
   }, 15000);
   timer.unref();
+  checkoutSessionService.startExpiryWorker();
 });

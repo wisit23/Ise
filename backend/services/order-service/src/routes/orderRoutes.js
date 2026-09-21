@@ -8,6 +8,7 @@ const orderController = require("../controllers/orderController");
 const disputeController = require("../features/disputes/disputeController");
 const disputeRoutes = require("../features/disputes/disputeRoutes");
 const supportRoutes = require("../features/support/supportRoutes");
+const checkoutSessionRoutes = require("../features/checkoutSessions/checkoutSessionRoutes");
 
 const router = Router();
 
@@ -15,6 +16,7 @@ const router = Router();
 // or "support" as an order id.
 router.use("/disputes", disputeRoutes);
 router.use("/support", supportRoutes);
+router.use("/checkout-sessions", checkoutSessionRoutes);
 
 router.post("/", requireAuth, requireCustomerAccount, orderController.create);
 router.get("/mine", requireAuth, orderController.mine);

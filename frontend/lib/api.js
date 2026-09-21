@@ -86,11 +86,11 @@ export async function apiFetch(path, { method = "GET", body, token } = {}) {
 
 /** Uploads files as multipart/form-data. Browser sets the boundary itself, so
  * Content-Type must NOT be set manually here (unlike apiFetch's JSON body). */
-async function uploadMediaTo(path, files, token) {
+async function uploadMediaTo(path, files, token, fieldName = "files") {
   const authToken = token ?? getAccessToken();
 
   const form = new FormData();
-  for (const file of files) form.append("files", file);
+  for (const file of files) form.append(fieldName, file);
 
   let res = await fetch(`${API_URL}${path}`, {
     method: "POST",
@@ -117,9 +117,22 @@ async function uploadMediaTo(path, files, token) {
   return data.media;
 }
 
-// Product listing images and seller clips remain owned by product-service.
+// Product listing media remains owned by product-service.
 export function uploadFiles(files, token) {
   return uploadMediaTo("/uploads", files, token);
+}
+
+// Swipe-feed clips use a dedicated product-service endpoint. The service writes
+// the file under /app/services/product-service/uploads, which Docker persists
+// in the product_uploads named volume.
+export async function uploadProductClip(file, token) {
+  const [uploaded] = await uploadMediaTo(
+    "/api/products/videos/upload",
+    [file],
+    token,
+    "video",
+  );
+  return uploaded;
 }
 
 // Review images and videos are written to review-service's separate storage.

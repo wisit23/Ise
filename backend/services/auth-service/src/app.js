@@ -11,6 +11,8 @@ const metricsRoutes = require("./features/metrics/metricsRoutes");
 const executiveAuditRoutes = require("./features/executiveAudit/executiveAuditRoutes");
 const productModerationRoutes = require("./features/productModeration/productModerationRoutes");
 const sellerActivityRoutes = require("./features/sellerActivity/sellerActivityRoutes");
+const profileAddressRoutes = require("./features/profileAddresses/profileAddressRoutes");
+const buyerAuditRoutes = require("./features/buyerAudit/buyerAuditRoutes");
 
 const app = express();
 app.use(express.json());
@@ -22,6 +24,8 @@ app.get("/health", (req, res) =>
 app.use("/executive", metricsRoutes);
 app.use("/executive", executiveAuditRoutes);
 app.use("/internal", internalRoutes);
+app.use("/me/addresses", profileAddressRoutes);
+app.use("/", buyerAuditRoutes);
 app.use("/", authRoutes);
 app.use("/admin/kyc", adminKycRoutes);
 app.use("/kyc", kycRoutes);

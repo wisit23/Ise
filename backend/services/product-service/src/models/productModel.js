@@ -44,7 +44,7 @@ function mediaToNestedCreate(media) {
 }
 
 /** Full-text-ish search against Product.searchText (a trigger-maintained
- * concat of title/description/category/condition/location/size/tags — see
+ * concat of title/description/category/brand/condition/location/size/tags — see
  * prisma/schema.prisma and prisma/seed.js's ensureSearchTextTrigger).
  *
  * Postgres full-text search (tsvector/to_tsquery) can't be used here: it has

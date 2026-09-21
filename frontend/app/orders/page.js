@@ -21,7 +21,7 @@ import { getAccessToken } from "../../lib/auth";
 const STATUS_LABEL = {
   pending: "อยู่ในตะกร้า",
   pending_payment: "อยู่ในตะกร้า",
-  confirmed: "ยืนยันแล้ว",
+  confirmed: "รอยืนยัน",
   shipped: "จัดส่งแล้ว",
   completed: "สำเร็จ",
   cancelled: "ยกเลิกแล้ว",
@@ -308,13 +308,17 @@ export default function OrdersPage() {
                       />
                       {["pending", "pending_payment"].includes(o.status) && (
                         <Link
-                          href="/cart"
+                          href={
+                            o.checkoutSessionId
+                              ? `/payment/${o.checkoutSessionId}`
+                              : `/checkout?orders=${o.id}`
+                          }
                           className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-700"
                         >
                           <span className="material-symbols-outlined text-[15px]">
-                            shopping_cart_checkout
+                            qr_code_2
                           </span>
-                          ไปชำระเงินที่ตะกร้า
+                          ไปชำระเงิน
                         </Link>
                       )}
                     </div>
