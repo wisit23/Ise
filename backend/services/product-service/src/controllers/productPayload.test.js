@@ -27,6 +27,7 @@ test("buildCreateProductData applies defaults and normalizes client arrays", () 
     description: "",
     price: 1200,
     category: "Jackets",
+    brand: "",
     condition: "Good",
     size: "Free size",
     tags: ["vintage", "denim"],

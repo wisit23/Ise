@@ -66,6 +66,7 @@ export default function EditProductPage() {
         description: p.description || "",
         price: String(p.price),
         category: p.category,
+        brand: p.brand || "",
         condition: p.condition,
         size: p.size || "",
         location: p.location || "",
@@ -111,6 +112,7 @@ export default function EditProductPage() {
           description: form.description,
           price: Math.round(Number(form.price)),
           category: form.category,
+          brand: (form.brand || "").trim(),
           condition: form.condition,
           size: form.size || "Free size",
           location: form.location,
@@ -127,7 +129,11 @@ export default function EditProductPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("คุณต้องการลบสินค้านี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้")) {
+    if (
+      !confirm(
+        "คุณต้องการลบสินค้านี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้",
+      )
+    ) {
       return;
     }
     const token = getAccessToken();
@@ -224,8 +230,13 @@ export default function EditProductPage() {
 
         {isHidden && (
           <div className="mb-4 flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-            <span className="material-symbols-outlined text-[18px]">visibility_off</span>
-            <span>สินค้านี้ถูกซ่อนอยู่ — ผู้ซื้อจะไม่เห็นจนกว่าคุณจะกด &quot;แสดงสินค้า&quot;</span>
+            <span className="material-symbols-outlined text-[18px]">
+              visibility_off
+            </span>
+            <span>
+              สินค้านี้ถูกซ่อนอยู่ — ผู้ซื้อจะไม่เห็นจนกว่าคุณจะกด
+              &quot;แสดงสินค้า&quot;
+            </span>
           </div>
         )}
         <form
@@ -316,6 +327,20 @@ export default function EditProductPage() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
+                แบรนด์ (Brand)
+              </label>
+              <input
+                placeholder="เช่น Nike, Adidas, Levi's, Uniqlo"
+                value={form.brand || ""}
+                onChange={update("brand")}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
                 ไซส์
               </label>
               <input
@@ -324,17 +349,16 @@ export default function EditProductPage() {
                 className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
               />
             </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              สถานที่ตั้งสินค้า
-            </label>
-            <input
-              value={form.location}
-              onChange={update("location")}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-            />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                สถานที่ตั้งสินค้า
+              </label>
+              <input
+                value={form.location}
+                onChange={update("location")}
+                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+              />
+            </div>
           </div>
 
           <div>

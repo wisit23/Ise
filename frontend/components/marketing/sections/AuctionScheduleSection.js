@@ -35,8 +35,26 @@ function fmt(dt) {
   return dt ? new Date(dt).toLocaleString("th-TH") : "—";
 }
 
-function RoundManagementSection({ token, onRoundCreated }) {
+const ROUND_PHASE_LABEL = {
+  upcoming: "รอเปิดรับสินค้า",
+  submission: "กำลังเปิดรับสินค้า",
+  waiting: "ปิดรับสินค้าแล้ว รอรอบประมูล",
+  auction: "กำลังเคาะประมูล",
+  ended: "ปิดรอบแล้ว",
+};
+
+const ROUND_PHASE_STYLE = {
+  upcoming: "bg-sky-50 text-sky-700 border-sky-200",
+  submission: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  waiting: "bg-amber-50 text-amber-700 border-amber-200",
+  auction:
+    "bg-emerald-100 text-emerald-800 border-emerald-300 font-bold animate-pulse",
+  ended: "bg-slate-100 text-slate-500 border-slate-200",
+};
+
+export function RoundManagementSection({ token, onRoundCreated }) {
   const [roundInfo, setRoundInfo] = useState(null);
+  const [allRounds, setAllRounds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -47,16 +65,26 @@ function RoundManagementSection({ token, onRoundCreated }) {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
-  function loadRound() {
+  function loadRounds() {
     setLoading(true);
-    apiFetch("/api/products/auctions/rounds/current", { token })
-      .then((data) => setRoundInfo(data))
+    Promise.all([
+      apiFetch("/api/products/auctions/rounds/current", { token }).catch(
+        () => null,
+      ),
+      apiFetch("/api/products/auctions/rounds", { token }).catch(() => ({
+        items: [],
+      })),
+    ])
+      .then(([currentData, listData]) => {
+        setRoundInfo(currentData);
+        setAllRounds(listData?.items || []);
+      })
       .catch((err) => console.error(err))
       .finally(() => setLoading(false));
   }
 
   useEffect(() => {
-    loadRound();
+    loadRounds();
   }, [token]);
 
   async function handleCreateRound(e) {
@@ -86,7 +114,7 @@ function RoundManagementSection({ token, onRoundCreated }) {
       setSubEndsAt("");
       setAucStartsAt("");
       setAucEndsAt("");
-      loadRound();
+      loadRounds();
       if (onRoundCreated) onRoundCreated();
     } catch (err) {
       setFormError(err.message);
@@ -96,17 +124,21 @@ function RoundManagementSection({ token, onRoundCreated }) {
   }
 
   const round = roundInfo?.round;
+  const phase = roundInfo?.phase;
 
   return (
     <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
         <div>
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <span className="material-symbols-outlined text-emerald-600 text-xl">event_available</span>
+            <span className="material-symbols-outlined text-emerald-600 text-xl">
+              event_available
+            </span>
             การจัดการรอบการประมูล (Auction Rounds)
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
             กำหนดช่วงเวลารับสินค้าและช่วงเวลาเริ่มประมูลจริงสำหรับผู้ขาย
+            พร้อมป้องกันรอบซ้อนทับ
           </p>
         </div>
         <button
@@ -121,12 +153,23 @@ function RoundManagementSection({ token, onRoundCreated }) {
       </div>
 
       {showCreateForm && (
-        <form onSubmit={handleCreateRound} className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 animate-fade-in-up">
-          <h4 className="text-sm font-bold text-emerald-950 mb-3">เปิดรอบประมูลใหม่</h4>
-          {formError && <p className="mb-3 text-xs text-red-600 font-medium">{formError}</p>}
+        <form
+          onSubmit={handleCreateRound}
+          className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 animate-fade-in-up"
+        >
+          <h4 className="text-sm font-bold text-emerald-950 mb-3">
+            เปิดรอบประมูลใหม่
+          </h4>
+          {formError && (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 font-medium">
+              ⚠️ {formError}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div className="md:col-span-2">
-              <label className="block text-slate-700 font-medium mb-1">ชื่อรอบการประมูล</label>
+              <label className="block text-slate-700 font-medium mb-1">
+                ชื่อรอบการประมูล
+              </label>
               <input
                 required
                 type="text"
@@ -138,10 +181,18 @@ function RoundManagementSection({ token, onRoundCreated }) {
             </div>
 
             <div className="space-y-3 rounded-lg bg-white p-3 border border-emerald-100">
-              <span className="font-semibold text-emerald-800 block text-xs">📅 ช่วงเวลารับสินค้าจากผู้ขาย</span>
+              <span className="font-semibold text-emerald-800 block text-xs">
+                📅 ช่วงเวลารับสินค้าจากผู้ขาย
+              </span>
               <div>
-                <label className="block text-slate-500 mb-0.5">วัน-เวลาเริ่มเปิดรับ</label>
+                <label
+                  htmlFor="subStartsAt"
+                  className="block text-slate-500 mb-0.5"
+                >
+                  วัน-เวลาเริ่มเปิดรับ
+                </label>
                 <input
+                  id="subStartsAt"
                   required
                   type="datetime-local"
                   value={subStartsAt}
@@ -150,8 +201,14 @@ function RoundManagementSection({ token, onRoundCreated }) {
                 />
               </div>
               <div>
-                <label className="block text-slate-500 mb-0.5">วัน-เวลาปิดรับสินค้า</label>
+                <label
+                  htmlFor="subEndsAt"
+                  className="block text-slate-500 mb-0.5"
+                >
+                  วัน-เวลาปิดรับสินค้า
+                </label>
                 <input
+                  id="subEndsAt"
                   required
                   type="datetime-local"
                   value={subEndsAt}
@@ -162,10 +219,18 @@ function RoundManagementSection({ token, onRoundCreated }) {
             </div>
 
             <div className="space-y-3 rounded-lg bg-white p-3 border border-emerald-100">
-              <span className="font-semibold text-emerald-800 block text-xs">🔨 ช่วงเวลาประมูลจริง</span>
+              <span className="font-semibold text-emerald-800 block text-xs">
+                🔨 ช่วงเวลาประมูลจริง
+              </span>
               <div>
-                <label className="block text-slate-500 mb-0.5">วัน-เวลาเริ่มเปิดประมูล</label>
+                <label
+                  htmlFor="aucStartsAt"
+                  className="block text-slate-500 mb-0.5"
+                >
+                  วัน-เวลาเริ่มเปิดประมูล
+                </label>
                 <input
+                  id="aucStartsAt"
                   required
                   type="datetime-local"
                   value={aucStartsAt}
@@ -174,8 +239,14 @@ function RoundManagementSection({ token, onRoundCreated }) {
                 />
               </div>
               <div>
-                <label className="block text-slate-500 mb-0.5">วัน-เวลาสิ้นสุดการประมูล</label>
+                <label
+                  htmlFor="aucEndsAt"
+                  className="block text-slate-500 mb-0.5"
+                >
+                  วัน-เวลาสิ้นสุดการประมูล
+                </label>
                 <input
+                  id="aucEndsAt"
                   required
                   type="datetime-local"
                   value={aucEndsAt}
@@ -205,6 +276,7 @@ function RoundManagementSection({ token, onRoundCreated }) {
         </form>
       )}
 
+      {/* รอบปัจจุบัน / รอบถัดไป */}
       <div className="mt-4">
         {loading ? (
           <p className="text-xs text-slate-400">กำลังโหลดสถานะรอบประมูล...</p>
@@ -212,36 +284,108 @@ function RoundManagementSection({ token, onRoundCreated }) {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl bg-slate-50 p-4 border border-slate-200/70">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-bold text-slate-900">{round.title}</span>
-                {roundInfo?.isSubmissionOpen ? (
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                    🟢 เปิดรับสินค้าอยู่
+                <span className="text-sm font-bold text-slate-900">
+                  {round.title}
+                </span>
+                {phase && (
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                      ROUND_PHASE_STYLE[phase] ||
+                      "bg-slate-100 text-slate-600 border-slate-200"
+                    }`}
+                  >
+                    {ROUND_PHASE_LABEL[phase] || phase}
                   </span>
-                ) : (
-                  <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
-                    🔒 ปิดรับสินค้าแล้ว
+                )}
+                {phase === "upcoming" && (
+                  <span className="text-xs text-sky-600 font-medium">
+                    (รอบที่กำลังจะมาถึง)
                   </span>
                 )}
               </div>
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
                 <span>
-                  <strong>รับสินค้า:</strong> {new Date(round.submissionStartsAt).toLocaleString("th-TH")} — {new Date(round.submissionEndsAt).toLocaleString("th-TH")}
+                  <strong>รับสินค้า:</strong>{" "}
+                  {new Date(round.submissionStartsAt).toLocaleString("th-TH")} —{" "}
+                  {new Date(round.submissionEndsAt).toLocaleString("th-TH")}
                 </span>
                 <span>
-                  <strong>เคาะประมูลจริง:</strong> {new Date(round.auctionStartsAt).toLocaleString("th-TH")} — {new Date(round.auctionEndsAt).toLocaleString("th-TH")}
+                  <strong>เคาะประมูลจริง:</strong>{" "}
+                  {new Date(round.auctionStartsAt).toLocaleString("th-TH")} —{" "}
+                  {new Date(round.auctionEndsAt).toLocaleString("th-TH")}
                 </span>
               </div>
             </div>
             <div className="text-xs text-slate-500 font-medium">
-              สินค้าในรอบนี้: <span className="font-bold text-slate-800">{round._count?.auctions ?? 0}</span> รายการ
+              สินค้าในรอบนี้:{" "}
+              <span className="font-bold text-slate-800">
+                {round._count?.auctions ?? 0}
+              </span>{" "}
+              รายการ
             </div>
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">
-            ยังไม่มีรอบการประมูล กรุณากด &ldquo;สร้างรอบประมูลใหม่&rdquo; ด้านบนเพื่อกำหนดช่วงเวลารับสินค้า
+            ยังไม่มีรอบการประมูลที่กำลังดำเนินอยู่หรือกำลังจะมาถึง กรุณากด
+            &ldquo;สร้างรอบประมูลใหม่&rdquo; ด้านบนเพื่อกำหนดช่วงเวลารับสินค้า
           </div>
         )}
       </div>
+
+      {/* ตารางรายการรอบประมูลทั้งหมด (All Auction Rounds) */}
+      {allRounds.length > 0 && (
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-sm text-slate-400">
+              history
+            </span>
+            ประวัติและรายการรอบการประมูลทั้งหมด ({allRounds.length})
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 font-medium">
+                  <th className="pb-2 font-medium">ชื่อรอบ</th>
+                  <th className="pb-2 font-medium">สถานะ</th>
+                  <th className="pb-2 font-medium">ช่วงเวลารับสินค้า</th>
+                  <th className="pb-2 font-medium">ช่วงเวลาประมูลจริง</th>
+                  <th className="pb-2 font-medium text-right">จำนวนสินค้า</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {allRounds.map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50/50">
+                    <td className="py-2.5 font-semibold text-slate-900">
+                      {r.title}
+                    </td>
+                    <td className="py-2.5">
+                      <span
+                        className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                          ROUND_PHASE_STYLE[r.phase] ||
+                          "bg-slate-100 text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        {ROUND_PHASE_LABEL[r.phase] || r.phase || "—"}
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-slate-600">
+                      {new Date(r.submissionStartsAt).toLocaleString("th-TH")} —{" "}
+                      {new Date(r.submissionEndsAt).toLocaleString("th-TH")}
+                    </td>
+                    <td className="py-2.5 text-slate-600">
+                      {new Date(r.auctionStartsAt).toLocaleString("th-TH")} —{" "}
+                      {new Date(r.auctionEndsAt).toLocaleString("th-TH")}
+                    </td>
+                    <td className="py-2.5 text-right font-medium text-slate-700">
+                      {r._count?.auctions ?? 0}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

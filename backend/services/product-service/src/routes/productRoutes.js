@@ -1,9 +1,14 @@
 const { Router } = require("express");
-const { requireAuth, requireInternalToken, fromGatewayHeaders } = require("@reloop/shared");
+const {
+  requireAuth,
+  requireInternalToken,
+  fromGatewayHeaders,
+} = require("@reloop/shared");
 const productController = require("../controllers/productController");
 const productVideoRoutes = require("../features/product-videos/productVideoRoutes");
 const auctionRoutes = require("../features/auctions/auctionRoutes");
 const articleRoutes = require("./articleRoutes");
+const campaignRoutes = require("../features/campaigns/campaignRoutes");
 
 const router = Router();
 
@@ -12,22 +17,31 @@ router.get("/feed", productController.feed);
 router.get("/search", productController.search);
 
 // Feature routes must come before "/:id" so Express does not read "videos"/
-// "auctions"/"articles" as a product id.
+// "auctions"/"articles"/"campaigns" as a product id.
 router.use("/videos", productVideoRoutes);
 router.use("/auctions", auctionRoutes);
 router.use("/articles", articleRoutes);
+router.use("/campaigns", campaignRoutes);
 
 // Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);
 router.get("/admin/search", requireAuth, productController.adminSearch);
-router.get("/by-seller/:sellerId", fromGatewayHeaders, productController.bySeller);
+router.get(
+  "/by-seller/:sellerId",
+  fromGatewayHeaders,
+  productController.bySeller,
+);
 router.get("/categories", productController.listCategories);
 router.get("/conditions", productController.listConditions);
 router.get("/filters", productController.listFilterOptions);
 
 router.get("/:id", fromGatewayHeaders, productController.getOne);
 router.post("/", requireAuth, productController.create);
-router.patch("/:id/visibility", requireAuth, productController.toggleVisibility);
+router.patch(
+  "/:id/visibility",
+  requireAuth,
+  productController.toggleVisibility,
+);
 router.patch("/:id", requireAuth, productController.update);
 router.delete("/:id", requireAuth, productController.remove);
 

@@ -17,8 +17,10 @@ function getActor(req) {
 
 function requireMarketingRole(req) {
   const actor = getActor(req);
-  if (!actor.role || !["MARKETING", "ADMIN"].includes(actor.role)) {
-    throw forbidden("เฉพาะฝ่ายการตลาด (Marketing) หรือผู้ดูแลระบบเท่านั้นที่มีสิทธิ์ดำเนินการนี้");
+  if (!actor.role || actor.role !== "MARKETING") {
+    throw forbidden(
+      "เฉพาะฝ่ายการตลาด (Marketing) เท่านั้นที่มีสิทธิ์ดำเนินการนี้",
+    );
   }
 }
 
@@ -42,8 +44,7 @@ async function getOne(req, res, next) {
   try {
     const { id } = req.params;
     const actor = getActor(req);
-    const isMarketingStaff =
-      actor.role && ["MARKETING", "ADMIN"].includes(actor.role);
+    const isMarketingStaff = actor.role === "MARKETING";
     const article = await articleModel.getById(id, {
       allowDraft: isMarketingStaff,
     });
@@ -112,7 +113,8 @@ async function update(req, res, next) {
 
     const payload = {};
     if (title !== undefined) payload.title = title.trim();
-    if (summary !== undefined) payload.summary = summary ? summary.trim() : null;
+    if (summary !== undefined)
+      payload.summary = summary ? summary.trim() : null;
     if (content !== undefined) payload.content = content.trim();
     if (coverImage !== undefined) payload.coverImage = coverImage || null;
     if (category !== undefined) payload.category = category;

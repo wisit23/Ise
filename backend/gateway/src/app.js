@@ -41,6 +41,8 @@ const PUBLIC_PATHS = [
   // Marketing & Community Articles (ST-MKT-05 / UR-14) must be browsable by guests;
   // write/delete routes stay gated by product-service requireAuth/requireRole.
   /^\/api\/products\/articles(\/|$)/,
+  // Marketing Campaigns & Promotions (MKT-001 / UR-15 / UR-16) - public browsing of active campaigns
+  /^\/api\/products\/campaigns\/(available|published)$/,
 ];
 
 function isPublic(path) {

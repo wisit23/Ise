@@ -35,36 +35,38 @@ generator client {
 //     table — tags here are freeform, not a curated taxonomy).
 // Status lifecycle: available -> reserved (in a buyer's cart) -> sold, or removed by the seller.
 model Product {
-  id                   String    @id @default(uuid())
-  sellerId             String    @map("seller_id")
+  id                   String                   @id @default(uuid())
+  sellerId             String                   @map("seller_id")
   title                String
-  description          String    @default("")
+  description          String                   @default("")
   price                Int
   category             String
-  condition            String    @default("Good")
+  brand                String                   @default("")
+  searchVector         Unsupported("tsvector")? @map("search_vector")
+  condition            String                   @default("Good")
   tags                 String[]
-  location             String    @default("")
-  size                 String    @default("Free size")
-  status               String    @default("available")
+  location             String                   @default("")
+  size                 String                   @default("Free size")
+  status               String                   @default("available")
   // BUY-xxx: a cart reservation holds the listing for 10 minutes; the expiry
   // worker in features/reservations releases it when the clock runs out.
-  reservationId        String?   @unique @map("reservation_id")
-  reservedBy           String?   @map("reserved_by")
-  reservationExpiresAt DateTime? @map("reservation_expires_at")
+  reservationId        String?                  @unique @map("reservation_id")
+  reservedBy           String?                  @map("reserved_by")
+  reservationExpiresAt DateTime?                @map("reservation_expires_at")
   // ADM-003: set when Admin removes a listing via POST /internal/moderation/:id/remove.
   // preRemovalStatus remembers what `status` was before removal so restore can
   // put the listing back where it actually was (not force it to "available").
-  moderatedAt          DateTime? @map("moderated_at")
-  moderationReason     String?   @map("moderation_reason")
-  preRemovalStatus     String?   @map("pre_removal_status")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
+  moderatedAt          DateTime?                @map("moderated_at")
+  moderationReason     String?                  @map("moderation_reason")
+  preRemovalStatus     String?                  @map("pre_removal_status")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
 
   // Denormalized concat of title/description/category/condition/location/
   // size/tags, kept in sync by a DB trigger (see prisma/seed.js — Postgres
   // can't use a native generated column here because array_to_string() is
   // STABLE, not IMMUTABLE). This is the one field search() matches against.
-  searchText  String   @default("") @map("search_text")
+  searchText String @default("") @map("search_text")
 
   photos      Photo[]
   videos      Video[]
@@ -73,6 +75,7 @@ model Product {
 
   @@index([sellerId])
   @@index([status, category])
+  @@index([searchVector], type: Gin, map: "products_search_vector_idx")
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([status, reservationExpiresAt])
   @@map("products")
@@ -146,7 +149,7 @@ model ProductVideo {
   productId   String   @map("product_id")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   choices SwipeChoice[]
 
   @@index([productId])
@@ -188,32 +191,32 @@ enum AuctionStatus {
 }
 
 model AuctionItem {
-  id                String        @id @default(uuid())
-  productId         String        @unique @map("product_id")
-  sellerId          String        @map("seller_id")
-  status            AuctionStatus @default(draft)
+  id               String        @id @default(uuid())
+  productId        String        @unique @map("product_id")
+  sellerId         String        @map("seller_id")
+  status           AuctionStatus @default(draft)
   // Seller-owned pricing (see MKT/marketing decision log: Seller sets these,
   // not Marketing — Marketing only controls the schedule).
-  startingPrice     Int           @map("starting_price")
-  bidIncrement      Int           @map("bid_increment")
+  startingPrice    Int           @map("starting_price")
+  bidIncrement     Int           @map("bid_increment")
   // Marketing-owned schedule.
-  scheduledStartAt  DateTime?     @map("scheduled_start_at")
-  scheduledEndAt    DateTime?     @map("scheduled_end_at")
-  openedAt          DateTime?     @map("opened_at")
-  closedAt          DateTime?     @map("closed_at")
-  approvedBy        String?       @map("approved_by")
-  approvedAt        DateTime?     @map("approved_at")
-  winningBidId      String?       @unique @map("winning_bid_id")
+  scheduledStartAt DateTime?     @map("scheduled_start_at")
+  scheduledEndAt   DateTime?     @map("scheduled_end_at")
+  openedAt         DateTime?     @map("opened_at")
+  closedAt         DateTime?     @map("closed_at")
+  approvedBy       String?       @map("approved_by")
+  approvedAt       DateTime?     @map("approved_at")
+  winningBidId     String?       @unique @map("winning_bid_id")
   // Order created in order-service once the auction closes with a winner —
   // read via provider contract, never a cross-service DB read.
-  winningOrderId    String?       @map("winning_order_id")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
+  winningOrderId   String?       @map("winning_order_id")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
-  roundId           String?       @map("round_id")
-  round             AuctionRound? @relation(fields: [roundId], references: [id], onDelete: SetNull)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  bids    Bid[]   @relation("AuctionBids")
+  roundId String?       @map("round_id")
+  round   AuctionRound? @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  bids    Bid[]         @relation("AuctionBids")
 
   @@index([sellerId])
   @@index([status])
@@ -222,28 +225,28 @@ model AuctionItem {
 }
 
 model AuctionRound {
-  id                 String        @id @default(uuid())
+  id                 String   @id @default(uuid())
   title              String
-  submissionStartsAt DateTime      @map("submission_starts_at")
-  submissionEndsAt   DateTime      @map("submission_ends_at")
-  auctionStartsAt    DateTime      @map("auction_starts_at")
-  auctionEndsAt      DateTime      @map("auction_ends_at")
-  createdAt          DateTime      @default(now()) @map("created_at")
-  updatedAt          DateTime      @updatedAt @map("updated_at")
+  submissionStartsAt DateTime @map("submission_starts_at")
+  submissionEndsAt   DateTime @map("submission_ends_at")
+  auctionStartsAt    DateTime @map("auction_starts_at")
+  auctionEndsAt      DateTime @map("auction_ends_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
-  auctions           AuctionItem[]
+  auctions AuctionItem[]
 
   @@map("auction_rounds")
 }
 
 model Bid {
-  id             String      @id @default(uuid())
-  auctionId      String      @map("auction_id")
-  bidderId       String      @map("bidder_id")
+  id             String   @id @default(uuid())
+  auctionId      String   @map("auction_id")
+  bidderId       String   @map("bidder_id")
   amount         Int
   // Client-supplied key so a retried request never creates a second bid.
-  idempotencyKey String      @unique @map("idempotency_key")
-  createdAt      DateTime    @default(now()) @map("created_at")
+  idempotencyKey String   @unique @map("idempotency_key")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   auction AuctionItem @relation("AuctionBids", fields: [auctionId], references: [id], onDelete: Cascade)
 
@@ -280,4 +283,76 @@ enum ArticleStatus {
   draft
   published
   archived
+}
+
+// Marketing Campaign Domain (MKT-001 / UR-15 / UR-16 / WF-11)
+enum CampaignStatus {
+  draft
+  pending_approval
+  approved
+  published
+  ended
+  rejected
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum VoucherStatus {
+  CLAIMED
+  USED
+  EXPIRED
+}
+
+model Campaign {
+  id                 String         @id @default(uuid())
+  code               String         @unique
+  name               String
+  description        String?        @db.Text
+  discountType       DiscountType   @default(PERCENT) @map("discount_type")
+  discountValue      Int            @map("discount_value")
+  minOrderPrice      Int            @default(0) @map("min_order_price")
+  maxDiscount        Int?           @map("max_discount")
+  applicableCategory String?        @map("applicable_category")
+  budget             Int?
+  usageLimit         Int?           @map("usage_limit")
+  usedCount          Int            @default(0) @map("used_count")
+  status             CampaignStatus @default(draft)
+  startsAt           DateTime       @map("starts_at")
+  endsAt             DateTime       @map("ends_at")
+  createdById        String         @map("created_by_id")
+  approvedById       String?        @map("approved_by_id")
+  approvedAt         DateTime?      @map("approved_at")
+  version            Int            @default(1)
+  targetSegment      Json?          @map("target_segment")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  vouchers UserVoucher[]
+
+  @@index([status])
+  @@index([code])
+  @@index([startsAt, endsAt])
+  @@map("campaigns")
+}
+
+// Buyer Voucher Wallet (Claimed vouchers per user)
+model UserVoucher {
+  id          String        @id @default(uuid())
+  campaignId  String        @map("campaign_id")
+  userId      String        @map("user_id")
+  status      VoucherStatus @default(CLAIMED)
+  claimedAt   DateTime      @default(now()) @map("claimed_at")
+  usedAt      DateTime?     @map("used_at")
+  usedOrderId String?       @map("used_order_id")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, campaignId])
+  @@index([userId])
+  @@index([campaignId])
+  @@index([status])
+  @@map("user_vouchers")
 }

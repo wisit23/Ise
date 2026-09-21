@@ -29,6 +29,10 @@ model Order {
   productId            String    @map("product_id")
   productTitle         String    @map("product_title")
   price                Int
+  campaignId           String?   @map("campaign_id")
+  campaignCode         String?   @map("campaign_code")
+  discountAmount       Int       @default(0) @map("discount_amount")
+  finalPrice           Int?      @map("final_price")
   status               String    @default("pending_payment")
   reservationId        String?   @unique @map("reservation_id")
   reservationExpiresAt DateTime? @map("reservation_expires_at")

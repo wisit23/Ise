@@ -33,6 +33,7 @@ const ROLE_LABEL = {
    nothing here ever moves or hides. */
 const DISCOVERY_LINKS = [
   { href: "/swipe", label: "ปัดดู", icon: "swipe" },
+  { href: "/campaigns", label: "คูปอง", icon: "confirmation_number" },
   { href: "/auctions", label: "ประมูล", icon: "gavel" },
   { href: "/articles", label: "บทความ", icon: "menu_book" },
 ];
@@ -372,7 +373,8 @@ export default function NavBar() {
                   className="animate-dropdown-in absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-line bg-white py-2 shadow-lg"
                 >
                   <div className="border-b border-line px-4 py-3">
-                    {user.role === "ADMIN" || user.role === "TRUST_AND_SAFETY" ? (
+                    {user.role === "ADMIN" ||
+                    user.role === "TRUST_AND_SAFETY" ? (
                       <p className="truncate text-sm font-semibold text-gray-900">
                         Trust and Safety
                       </p>
@@ -550,6 +552,20 @@ export default function NavBar() {
                       receipt_long
                     </span>
                     คำสั่งซื้อของฉัน
+                  </Link>
+
+                  <Link
+                    href="/campaigns?tab=mine"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <span
+                      className="material-symbols-outlined text-[18px] text-ink-subtle"
+                      aria-hidden="true"
+                    >
+                      loyalty
+                    </span>
+                    คูปองส่วนลดของฉัน
                   </Link>
 
                   <Link

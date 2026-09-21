@@ -110,6 +110,7 @@ export default function ProductCard({ product, showSeller = true }) {
   const meta = [
     ...new Set(
       [
+        product.brand || null,
         product.size === "-" ? null : product.size,
         product.category,
         product.location,
@@ -182,7 +183,9 @@ export default function ProductCard({ product, showSeller = true }) {
           </span>
           {product.status === "hidden" && (
             <span className="flex items-center gap-1 rounded-full bg-yellow-500/90 px-[.75em] py-[.32em] text-xs font-medium text-white shadow-1 backdrop-blur-[8px]">
-              <span className="material-symbols-outlined text-[14px]">visibility_off</span>
+              <span className="material-symbols-outlined text-[14px]">
+                visibility_off
+              </span>
               ซ่อนอยู่
             </span>
           )}

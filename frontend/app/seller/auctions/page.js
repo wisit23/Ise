@@ -13,9 +13,9 @@ import { getAccessToken, getStoredUser } from "../../../lib/auth";
 import { fetchCategories, fetchConditions } from "../../../lib/catalog";
 
 const STATUS_LABEL = {
-  pending_approval: "รออนุมัติจาก Admin",
+  pending_approval: "รออนุมัติจาก Marketing",
   rejected: "ถูกปฏิเสธ",
-  approved: "อนุมัติแล้ว รอ Marketing ตั้งเวลา",
+  approved: "อนุมัติแล้ว (เตรียมเปิดประมูลตามรอบ)",
   scheduled: "ตั้งเวลาแล้ว รอเปิด",
   open: "กำลังประมูล",
   closed: "ปิดประมูลแล้ว",
@@ -127,7 +127,9 @@ export default function SellerAuctionsPage() {
       return;
     }
     if (!currentRoundInfo?.isSubmissionOpen) {
-      setError("ขณะนี้ไม่อยู่ในช่วงเวลาเปิดรับสินค้าเข้าประมูล หรือยังไม่มีรอบประมูล");
+      setError(
+        "ขณะนี้ไม่อยู่ในช่วงเวลาเปิดรับสินค้าเข้าประมูล หรือยังไม่มีรอบประมูล",
+      );
       return;
     }
     if (!form.title || !form.category) {
@@ -268,27 +270,58 @@ export default function SellerAuctionsPage() {
 
             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-emerald-950">
               <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
-                <div className="font-medium text-emerald-800 mb-1">📅 ช่วงเวลารับสินค้า</div>
-                <div className="text-xs text-gray-600">เริ่มรับ: {new Date(currentRoundInfo.round.submissionStartsAt).toLocaleString("th-TH")}</div>
-                <div className="text-xs font-semibold text-red-600">ปิดรับ: {new Date(currentRoundInfo.round.submissionEndsAt).toLocaleString("th-TH")}</div>
+                <div className="font-medium text-emerald-800 mb-1">
+                  📅 ช่วงเวลารับสินค้า
+                </div>
+                <div className="text-xs text-gray-600">
+                  เริ่มรับ:{" "}
+                  {new Date(
+                    currentRoundInfo.round.submissionStartsAt,
+                  ).toLocaleString("th-TH")}
+                </div>
+                <div className="text-xs font-semibold text-red-600">
+                  ปิดรับ:{" "}
+                  {new Date(
+                    currentRoundInfo.round.submissionEndsAt,
+                  ).toLocaleString("th-TH")}
+                </div>
               </div>
               <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
-                <div className="font-medium text-emerald-800 mb-1">🔨 ช่วงเวลาประมูลจริง</div>
-                <div className="text-xs text-gray-600">เริ่มประมูล: {new Date(currentRoundInfo.round.auctionStartsAt).toLocaleString("th-TH")}</div>
-                <div className="text-xs text-gray-600">สิ้นสุด: {new Date(currentRoundInfo.round.auctionEndsAt).toLocaleString("th-TH")}</div>
+                <div className="font-medium text-emerald-800 mb-1">
+                  🔨 ช่วงเวลาประมูลจริง
+                </div>
+                <div className="text-xs text-gray-600">
+                  เริ่มประมูล:{" "}
+                  {new Date(
+                    currentRoundInfo.round.auctionStartsAt,
+                  ).toLocaleString("th-TH")}
+                </div>
+                <div className="text-xs text-gray-600">
+                  สิ้นสุด:{" "}
+                  {new Date(
+                    currentRoundInfo.round.auctionEndsAt,
+                  ).toLocaleString("th-TH")}
+                </div>
               </div>
             </div>
           </div>
         ) : (
           <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
             <div className="flex items-center gap-2 text-amber-900 font-semibold text-base mb-2">
-              <span>🔒 ขณะนี้ไม่มีรอบเปิดรับสินค้าเข้าประมูล หรือหมดเวลาเปิดรับแล้ว</span>
+              <span>
+                🔒 ขณะนี้ไม่มีรอบเปิดรับสินค้าเข้าประมูล หรือหมดเวลาเปิดรับแล้ว
+              </span>
             </div>
             <p className="text-sm text-amber-800 leading-relaxed">
               ผู้ขายจะสามารถส่งสินค้าเข้าประมูลได้เฉพาะในช่วงเวลาที่ทีมการตลาดเปิดรอบรับสมัครเท่านั้น
               {currentRoundInfo?.round && (
                 <span className="block mt-1 text-xs text-amber-700">
-                  (รอบล่าสุด &ldquo;{currentRoundInfo.round.title}&rdquo; ปิดรับเมื่อ {new Date(currentRoundInfo.round.submissionEndsAt).toLocaleString("th-TH")})
+                  (รอบล่าสุด &ldquo;{currentRoundInfo.round.title}&rdquo;
+                  ปิดรับเมื่อ{" "}
+                  {new Date(
+                    currentRoundInfo.round.submissionEndsAt,
+                  ).toLocaleString("th-TH")}
+                  )
                 </span>
               )}
             </p>
@@ -298,145 +331,152 @@ export default function SellerAuctionsPage() {
         <form
           onSubmit={handleSubmit}
           className={`flex flex-col gap-5 rounded-lg border border-gray-200 bg-white p-6 ${
-            !currentRoundInfo?.isSubmissionOpen || isKycLocked ? "opacity-75 bg-gray-50/50" : ""
+            !currentRoundInfo?.isSubmissionOpen || isKycLocked
+              ? "opacity-75 bg-gray-50/50"
+              : ""
           }`}
         >
-          <fieldset disabled={!currentRoundInfo?.isSubmissionOpen || isKycLocked || submitting} className="flex flex-col gap-5">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              รูปภาพ / วิดีโอสินค้า
-            </label>
-            <MediaUploader
-              value={form.media}
-              onChange={(media) => setForm({ ...form, media })}
-              token={getAccessToken()}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              ชื่อสินค้า
-            </label>
-            <input
-              required
-              placeholder="เช่น เสื้อยืดวินเทจ Nike"
-              value={form.title}
-              onChange={update("title")}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              รายละเอียดสินค้า
-            </label>
-            <textarea
-              placeholder="สภาพสินค้า ตำหนิ (ถ้ามี) และเหตุผลที่ขาย"
-              value={form.description}
-              onChange={update("description")}
-              rows={4}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+          <fieldset
+            disabled={
+              !currentRoundInfo?.isSubmissionOpen || isKycLocked || submitting
+            }
+            className="flex flex-col gap-5"
+          >
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                หมวดหมู่
+                รูปภาพ / วิดีโอสินค้า
+              </label>
+              <MediaUploader
+                value={form.media}
+                onChange={(media) => setForm({ ...form, media })}
+                token={getAccessToken()}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                ชื่อสินค้า
               </label>
               <input
                 required
-                list="category-suggestions"
-                placeholder="พิมพ์หรือเลือกหมวดหมู่"
-                value={form.category}
-                onChange={update("category")}
+                placeholder="เช่น เสื้อยืดวินเทจ Nike"
+                value={form.title}
+                onChange={update("title")}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
               />
-              <datalist id="category-suggestions">
-                {categories.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
             </div>
-            <div>
-              <Select
-                label="สภาพสินค้า"
-                value={form.condition}
-                onChange={update("condition")}
-                options={conditions}
-                required
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                ไซส์
+                รายละเอียดสินค้า
               </label>
-              <input
-                placeholder="เช่น M, 40, Free size"
-                value={form.size}
-                onChange={update("size")}
+              <textarea
+                placeholder="สภาพสินค้า ตำหนิ (ถ้ามี) และเหตุผลที่ขาย"
+                value={form.description}
+                onChange={update("description")}
+                rows={4}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                สถานที่ตั้งสินค้า
-              </label>
-              <input
-                placeholder="เช่น กรุงเทพฯ, จตุจักร"
-                value={form.location}
-                onChange={update("location")}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-              />
-            </div>
-          </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              แท็ก
-            </label>
-            <TagInput
-              value={form.tags}
-              onChange={(tags) => setForm({ ...form, tags })}
-              placeholder="พิมพ์แท็กแล้วกด Enter เช่น vintage, denim"
-            />
-          </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  หมวดหมู่
+                </label>
+                <input
+                  required
+                  list="category-suggestions"
+                  placeholder="พิมพ์หรือเลือกหมวดหมู่"
+                  value={form.category}
+                  onChange={update("category")}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+                />
+                <datalist id="category-suggestions">
+                  {categories.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <Select
+                  label="สภาพสินค้า"
+                  value={form.condition}
+                  onChange={update("condition")}
+                  options={conditions}
+                  required
+                />
+              </div>
+            </div>
 
-          <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  ไซส์
+                </label>
+                <input
+                  placeholder="เช่น M, 40, Free size"
+                  value={form.size}
+                  onChange={update("size")}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  สถานที่ตั้งสินค้า
+                </label>
+                <input
+                  placeholder="เช่น กรุงเทพฯ, จตุจักร"
+                  value={form.location}
+                  onChange={update("location")}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                ราคาเริ่มต้น (บาท)
+                แท็ก
               </label>
-              <input
-                required
-                type="number"
-                min="1"
-                step="1"
-                placeholder="0"
-                value={form.startingPrice}
-                onChange={update("startingPrice")}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+              <TagInput
+                value={form.tags}
+                onChange={(tags) => setForm({ ...form, tags })}
+                placeholder="พิมพ์แท็กแล้วกด Enter เช่น vintage, denim"
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                เพิ่มขั้นต่ำต่อครั้ง (บาท)
-              </label>
-              <input
-                required
-                type="number"
-                min="1"
-                step="1"
-                placeholder="0"
-                value={form.bidIncrement}
-                onChange={update("bidIncrement")}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
-              />
+
+            <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-5">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  ราคาเริ่มต้น (บาท)
+                </label>
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="0"
+                  value={form.startingPrice}
+                  onChange={update("startingPrice")}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  เพิ่มขั้นต่ำต่อครั้ง (บาท)
+                </label>
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="0"
+                  value={form.bidIncrement}
+                  onChange={update("bidIncrement")}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+                />
+              </div>
             </div>
-          </div>
           </fieldset>
 
           {error && <p className="text-sm text-red-600">{error}</p>}

@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const {
   badRequest,
   conflict,
@@ -11,11 +12,36 @@ const productClient = require("../services/productClient");
 const chatClient = require("../services/chatClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
 
+async function dispatchOrderCompletedEvent(order) {
+  const event = {
+    eventId: crypto.randomUUID(),
+    orderId: order.id,
+    campaignId: order.campaignId || null,
+    grossAmount: order.price,
+    discountAmount: order.discountAmount || 0,
+    netAmount:
+      order.finalPrice !== null && order.finalPrice !== undefined
+        ? order.finalPrice
+        : Math.max(0, order.price - (order.discountAmount || 0)),
+    completedAt: new Date().toISOString(),
+  };
+
+  try {
+    await productClient.recordOrderCompleted(event);
+  } catch (err) {
+    console.warn(
+      "[order-service] failed to dispatch order.completed.v1 event:",
+      err.message,
+    );
+  }
+}
+
 async function create(req, res, next) {
   try {
     const { order, created } = await reserveOrder({
       buyerId: req.userId,
       productId: req.body.productId,
+      campaignId: req.body.campaignId,
     });
     res.status(created ? 201 : 200).json(order);
   } catch (err) {
@@ -31,6 +57,9 @@ async function mine(req, res, next) {
       throw badRequest(
         `status must be one of ${orderModel.VALID_STATUSES.join(", ")}`,
       );
+    }
+    if (!status || status === "pending_payment") {
+      await orderModel.cleanExpiredOrders(productClient);
     }
     const { items, total } = await orderModel.listByBuyer(req.userId, {
       status,
@@ -104,6 +133,12 @@ async function updateStatus(req, res, next) {
     const updated = await orderModel.updateStatus(req.params.id, status);
 
     if (status === "cancelled") {
+      if (order.campaignId) {
+        await productClient.releaseVoucher(order.campaignId, {
+          userId: order.buyerId,
+          orderId: order.id,
+        });
+      }
       if (order.reservationId) {
         await productClient.releaseProductReservation(
           order.productId,
@@ -114,7 +149,14 @@ async function updateStatus(req, res, next) {
       }
     }
     if (status === "completed") {
+      if (order.campaignId) {
+        await productClient.completeVoucher(order.campaignId, {
+          userId: order.buyerId,
+          orderId: order.id,
+        });
+      }
       await productClient.setProductStatus(order.productId, "sold");
+      await dispatchOrderCompletedEvent(order);
     }
 
     // Best-effort — chatClient swallows its own errors internally (see its
@@ -162,6 +204,12 @@ async function pay(req, res, next) {
       order.reservationExpiresAt <= new Date()
     ) {
       await orderModel.updateStatus(req.params.id, "cancelled");
+      if (order.campaignId) {
+        await productClient.releaseVoucher(order.campaignId, {
+          userId: order.buyerId,
+          orderId: order.id,
+        });
+      }
       if (order.reservationId) {
         await productClient.releaseProductReservation(
           order.productId,
@@ -179,7 +227,16 @@ async function pay(req, res, next) {
     } else {
       await productClient.setProductStatus(order.productId, "sold");
     }
+
+    if (order.campaignId) {
+      await productClient.completeVoucher(order.campaignId, {
+        userId: order.buyerId,
+        orderId: order.id,
+      });
+    }
+
     const updated = await orderModel.updateStatus(req.params.id, "completed");
+    await dispatchOrderCompletedEvent(updated || order);
 
     res.json(updated);
   } catch (err) {

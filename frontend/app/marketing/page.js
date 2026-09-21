@@ -8,9 +8,11 @@ import { getAccessToken, getStoredUser } from "../../lib/auth";
 import DashboardSection from "../../components/marketing/sections/DashboardSection";
 import AuctionScheduleSection from "../../components/marketing/sections/AuctionScheduleSection";
 import ArticlesSection from "../../components/marketing/sections/ArticlesSection";
+import CampaignsSection from "../../components/marketing/sections/CampaignsSection";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
+  { key: "campaigns", label: "แคมเปญและคูปอง", icon: "confirmation_number" },
   { key: "auctions", label: "ตารางประมูล", icon: "gavel" },
   { key: "articles", label: "จัดการบทความ", icon: "article" },
 ];
@@ -139,6 +141,7 @@ export default function MarketingPanelPage() {
             {section === "dashboard" && (
               <DashboardSection token={token} onNavigate={setSection} />
             )}
+            {section === "campaigns" && <CampaignsSection token={token} />}
             {section === "auctions" && <AuctionScheduleSection token={token} />}
             {section === "articles" && <ArticlesSection token={token} />}
           </div>

@@ -89,23 +89,54 @@ function createAuctionRepository(prismaClient) {
     });
   }
 
-  function createRound(data) {
-    return prismaClient.auctionRound.create({ data });
+  function withRoundLock(fn) {
+    return prismaClient.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(1001, 1)`;
+      return fn(tx);
+    });
+  }
+
+  function findConflictingRound({ subStart, aucEnd }, tx = prismaClient) {
+    return tx.auctionRound.findFirst({
+      where: {
+        submissionStartsAt: { lt: aucEnd },
+        auctionEndsAt: { gt: subStart },
+      },
+    });
+  }
+
+  function createRound(data, tx = prismaClient) {
+    return tx.auctionRound.create({ data });
   }
 
   function findActiveSubmissionRound(now = new Date()) {
     return prismaClient.auctionRound.findFirst({
       where: {
         submissionStartsAt: { lte: now },
-        submissionEndsAt: { gte: now },
+        submissionEndsAt: { gt: now },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ submissionStartsAt: "asc" }, { id: "asc" }],
     });
   }
 
-  function findCurrentRound() {
+  async function findCurrentRound(now = new Date()) {
+    const active = await prismaClient.auctionRound.findFirst({
+      where: {
+        submissionStartsAt: { lte: now },
+        auctionEndsAt: { gt: now },
+      },
+      orderBy: [{ submissionStartsAt: "asc" }, { id: "asc" }],
+      include: {
+        _count: { select: { auctions: true } },
+      },
+    });
+    if (active) return active;
+
     return prismaClient.auctionRound.findFirst({
-      orderBy: { createdAt: "desc" },
+      where: {
+        submissionStartsAt: { gt: now },
+      },
+      orderBy: [{ submissionStartsAt: "asc" }, { id: "asc" }],
       include: {
         _count: { select: { auctions: true } },
       },
@@ -114,7 +145,7 @@ function createAuctionRepository(prismaClient) {
 
   function listRounds() {
     return prismaClient.auctionRound.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: { submissionStartsAt: "desc" },
       include: {
         _count: { select: { auctions: true } },
       },
@@ -140,6 +171,8 @@ function createAuctionRepository(prismaClient) {
     createBid,
     withAuctionLock,
     setProductStatus,
+    withRoundLock,
+    findConflictingRound,
     createRound,
     findActiveSubmissionRound,
     findCurrentRound,
