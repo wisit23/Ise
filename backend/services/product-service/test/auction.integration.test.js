@@ -25,6 +25,9 @@ process.env.REDIS_URL = REDIS_URL;
 const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 const auctionService = require("../src/features/auctions/auctionService");
 const auctionRepository = require("../src/features/auctions/auctionRepository");
 const orderClient = require("../src/features/auctions/orderClient");

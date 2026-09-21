@@ -474,3 +474,31 @@ Refactor ปรับปรุงประสบการณ์ใช้งา�
 - Frontend unit tests (`npm run test:frontend`): 11/11 suites pass (37/37 tests pass)
 - Lint check (`npm run lint`): 0 errors, 0 warnings สะอาดทั้ง monorepo
 - Shared RBAC tests (`permissions.test.js`): 4/4 pass
+
+## 2026-09-18 — TSR-01 Ban enforcement (เริ่มดำเนินการ)
+
+- ผู้ใช้อนุญาตเฉพาะข้อ 1: ทำให้ระงับบัญชีมีผลกับ login, refresh และ token ที่ออกแล้ว
+- ตรวจพบโครงสร้าง RefreshToken รองรับ session revocation อยู่แล้ว จึงเลือกใช้ sid โดยไม่เพิ่ม schema/migration
+- ออกแบบ live session validation ที่ Auth/Gateway/shared middleware และ transaction สำหรับ Suspend/Restore/session issuance ตาม ADM-DEC-023
+- ยังไม่แก้ Hold/Release หรือฟีเจอร์อื่น; ผลทดสอบจะบันทึกหลัง implementation
+
+## 2026-09-19 — TSR-01 Ban enforcement (implementation และ targeted verification เสร็จ)
+
+- Auth ออก access token ที่มี `sid` ผูกกับ RefreshToken; ปฏิเสธ login/refresh ของบัญชี SUSPENDED และตรวจ User/session จริงทุก protected request
+- Gateway และ shared middleware เรียก `POST /internal/sessions/validate` ของ Auth ด้วย internal token; Auth ตรวจ DB โดยตรง บริการอื่นปฏิเสธคำขอด้วย 503 เมื่อยืนยัน session ไม่ได้
+- Suspend/Restore ล็อก user row และเปลี่ยนสถานะ เพิกถอนทุก refresh session และเขียน AdminAudit ใน transaction เดียวกัน; การออก session ใช้ lock เดียวกัน ป้องกัน login แข่งกับ Ban
+- Restore ไม่ทำให้ token เดิมกลับมาใช้ได้ ต้อง login ใหม่; access token รุ่นเก่าที่ยังไม่มี sid เปลี่ยนผ่านด้วย refresh ที่ยังใช้ได้
+- Frontend จัดการ `ACCOUNT_SUSPENDED` ใน JSON/upload/private-file helpers: ล้าง session และพาไปหน้า login พร้อมเหตุผล; ไม่ล้าง session เมื่อเป็น 403 สิทธิ์ไม่พอหรือ Auth/network ขัดข้องชั่วคราว
+- เพิ่ม Ban integration test ด้วย PostgreSQL แยกและ HTTP Auth จริง ทดสอบ Gateway และ direct Product/Order/Support/Review; เพิ่ม shared/frontend tests และปรับ session-validator fixtures เฉพาะชุดทดสอบ feature เดิม ไม่เปลี่ยนพฤติกรรมของ feature เหล่านั้น
+- ผลยืนยัน: Backend targeted 30/30 ผ่าน ไม่มี skip; Frontend 12 suites / 46 tests ผ่าน; ESLint `backend frontend scripts` ผ่าน และ diff whitespace check ผ่านเมื่อกำหนด `cr-at-eol` ให้ตรงกับไฟล์ CRLF เดิม
+- Regression รวมยังไม่ผ่านทั้งหมด: 111 passed / 7 failed / 5 skipped; 5 failures เกิดจากฐานทดสอบไม่มี Product schema และ 2 Checkout tests ใช้ mock เดิมไม่ตรง implementation ยืนยันว่า fail เหมือนกันด้วย test และ auth middleware จาก HEAD ก่อนแก้ ไม่แก้ปัญหานอก scope นี้
+- Lint ทั้งโฟลเดอร์ `.` พบ 10 errors ใน `.codex_tmp_review_comments` ซึ่งเป็นไฟล์ untracked เดิม; ไม่แก้ไฟล์เหล่านั้นและไม่อ้างว่า monorepo ทั้งหมดผ่าน
+- ไม่มี schema/migration ใหม่ และไม่ได้ rebuild/restart Docker stack หลักในงานนี้; การยืนยันทำกับ source และฐานทดสอบแยก ข้ออื่นใน remediation plan ยังไม่เริ่ม
+
+- Test cleanup (2026-09-19): ลบ container/volume `ise-tsr01-postgres` และไฟล์ baseline ชั่วคราวของงานนี้แล้ว ไม่แตะ container ของ stack หลัก
+
+## 2026-09-19 — เพิ่ม Ban browser-QA seed
+
+- เพิ่ม `prisma/seed-ban-demo.js` และคำสั่ง `npm run seed:ban-demo` สำหรับบัญชี Trust & Safety กับ Buyer เป้าหมายโดยเฉพาะ
+- seed รีเซ็ตเฉพาะสองบัญชีเป็น ACTIVE, ตั้ง role/UserRole และรหัสผ่านให้แน่นอน พร้อม revoke session เก่าก่อนเริ่มรอบทดสอบใหม่
+- ไม่ลบ Audit Log และไม่เพิ่ม workflow นอกข้อ 1 Ban enforcement ตาม ADM-DEC-024

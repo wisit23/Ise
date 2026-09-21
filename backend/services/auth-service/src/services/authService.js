@@ -12,6 +12,7 @@ const {
   notFound,
 } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
+const { assertActive, revokedSession, lockUser } = require("./sessionService");
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches JWT_REFRESH_EXPIRES
 
@@ -31,11 +32,11 @@ function toPublicUser(user) {
  * `role` column — this is what makes existing Buyer/Seller accounts keep
  * working without a bulk backfill migration (ADM-001 Step 4).
  */
-async function getUserRoles(userId) {
-  const assigned = await prisma.userRole.findMany({ where: { userId } });
+async function getUserRoles(userId, db = prisma) {
+  const assigned = await db.userRole.findMany({ where: { userId } });
   if (assigned.length > 0) return assigned.map((r) => r.role);
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await db.user.findUnique({ where: { id: userId } });
   return user ? [user.role] : [];
 }
 
@@ -83,20 +84,20 @@ async function removeRole(userId, role) {
   return getUserRoles(userId);
 }
 
-async function buildAccessTokenClaims(user) {
+async function buildAccessTokenClaims(user, db = prisma) {
   const displayName = [user.firstName, user.lastName]
     .filter(Boolean)
     .join(" ")
     .trim();
 
-  const roles = await getUserRoles(user.id);
+  const roles = await getUserRoles(user.id, db);
   const permissions = permissionsForRoles(roles);
 
   // Queried fresh (not trusted from the caller's `user` object) so a
   // just-decided VERIFIED status shows up the next time this user's access
   // token is refreshed (every 15m), without requiring re-login — same
   // staleness window roles/permissions already accept.
-  const sellerProfile = await prisma.sellerProfile.findUnique({
+  const sellerProfile = await db.sellerProfile.findUnique({
     where: { userId: user.id },
     select: { kycStatus: true },
   });
@@ -115,41 +116,43 @@ async function buildAccessTokenClaims(user) {
 }
 
 async function issueTokenPair(user, loginContext = null) {
-  // jti guarantees uniqueness even if a user logs in twice within the same second
-  // (same sub+role+iat would otherwise sign to the identical JWT string).
-  const accessToken = signAccessToken(await buildAccessTokenClaims(user));
-  const refreshToken = signRefreshToken({
-    sub: user.id,
-    role: user.role,
-    jti: crypto.randomUUID(),
-  });
-  const sessionId = crypto.randomUUID();
-  const refreshData = {
-    id: sessionId,
-    userId: user.id,
-    token: refreshToken,
-    expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
-  };
+  return prisma.$transaction(async (tx) => {
+    user = await lockUser(tx, user.id);
+    assertActive(user);
 
-  if (loginContext) {
-    // Persist the token and its login-history row atomically so logout can
-    // close the exact session even when the user is logged in on many devices.
-    await prisma.$transaction([
-      prisma.refreshToken.create({ data: refreshData }),
-      prisma.loginLog.create({
+    // jti guarantees uniqueness even if a user logs in twice within the same second
+    // (same sub+role+iat would otherwise sign to the identical JWT string).
+    const refreshToken = signRefreshToken({
+      sub: user.id,
+      role: user.role,
+      jti: crypto.randomUUID(),
+    });
+    const session = await tx.refreshToken.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId: user.id,
+        token: refreshToken,
+        expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+      },
+    });
+
+    if (loginContext) {
+      await tx.loginLog.create({
         data: {
           userId: user.id,
-          sessionId,
+          sessionId: session.id,
           ipAddress: loginContext.ipAddress,
           userAgent: loginContext.userAgent,
         },
-      }),
-    ]);
-  } else {
-    await prisma.refreshToken.create({ data: refreshData });
-  }
+      });
+    }
 
-  return { accessToken, refreshToken };
+    const accessToken = signAccessToken({
+      ...(await buildAccessTokenClaims(user, tx)),
+      sid: session.id,
+    });
+    return { accessToken, refreshToken };
+  });
 }
 
 async function register({ email, password, firstName, lastName, phone }) {
@@ -187,6 +190,7 @@ async function login({ email, password, ipAddress, userAgent }) {
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw badRequest("invalid email or password");
+  assertActive(user);
 
   const tokens = await issueTokenPair(user, { ipAddress, userAgent });
   return { user: toPublicUser(user), ...tokens };
@@ -202,23 +206,27 @@ async function refresh(refreshToken) {
     throw badRequest("invalid or expired refresh token");
   }
 
-  const stored = await prisma.refreshToken.findUnique({
-    where: { token: refreshToken },
-    include: { user: true },
-  });
-  if (
-    !stored ||
-    stored.userId !== payload.sub ||
-    stored.revokedAt ||
-    stored.expiresAt < new Date()
-  ) {
-    throw badRequest("refresh token is no longer valid");
-  }
+  return prisma.$transaction(async (tx) => {
+    const user = await lockUser(tx, payload.sub);
+    assertActive(user);
+    const stored = await tx.refreshToken.findUnique({
+      where: { token: refreshToken },
+    });
+    if (
+      !stored ||
+      stored.userId !== payload.sub ||
+      stored.revokedAt ||
+      stored.expiresAt < new Date()
+    ) {
+      throw revokedSession();
+    }
 
-  const accessToken = signAccessToken(
-    await buildAccessTokenClaims(stored.user),
-  );
-  return { accessToken };
+    const accessToken = signAccessToken({
+      ...(await buildAccessTokenClaims(user, tx)),
+      sid: stored.id,
+    });
+    return { accessToken };
+  });
 }
 
 async function logout(refreshToken) {

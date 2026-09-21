@@ -10,7 +10,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 // Access tokens expire after 15 minutes (JWT_ACCESS_EXPIRES). Rather than
 // force a re-login every 15 minutes, a 401 triggers one silent refresh (via
 // the 7-day refresh token) and the original request is retried once. If the
-// refresh itself fails, the session really is dead and we log the user out.
+// refresh rejects the session, log out; keep it during temporary Auth outages.
 let refreshPromise = null;
 
 async function refreshAccessToken() {
@@ -32,18 +32,37 @@ async function doRefresh() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
     });
-    if (!res.ok) return null;
     const data = await res.json();
+    rejectSuspended(data);
+    if (res.status >= 500) {
+      throw Object.assign(
+        new Error(data?.error || "ไม่สามารถตรวจสอบสถานะบัญชีได้ กรุณาลองใหม่"),
+        { transient: true },
+      );
+    }
+    if (!res.ok) return null;
     setAccessToken(data.accessToken);
     return data.accessToken;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error.code === "ACCOUNT_SUSPENDED" || error.transient) throw error;
+    throw new Error("ไม่สามารถตรวจสอบสถานะบัญชีได้ กรุณาลองใหม่");
   }
 }
 
-function forceLogout() {
+function forceLogout(reason) {
   clearSession();
-  if (typeof window !== "undefined") window.location.href = "/login";
+  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+    window.location.href =
+      reason === "suspended" ? "/login?reason=suspended" : "/login";
+  }
+}
+
+function rejectSuspended(data) {
+  if (data?.code !== "ACCOUNT_SUSPENDED") return;
+  forceLogout("suspended");
+  throw Object.assign(new Error(data.error || "บัญชีนี้ถูกระงับการใช้งาน"), {
+    code: data.code,
+  });
 }
 
 export async function apiFetch(path, { method = "GET", body, token } = {}) {
@@ -73,6 +92,7 @@ export async function apiFetch(path, { method = "GET", body, token } = {}) {
   }
 
   const data = res.status === 204 ? null : await res.json().catch(() => null);
+  rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     let errorMsg = data?.error;
@@ -110,6 +130,7 @@ async function uploadMediaTo(path, files, token, fieldName = "files") {
   }
 
   const data = await res.json().catch(() => null);
+  rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     throw new Error(data?.error || `Upload failed (${res.status})`);
@@ -167,6 +188,7 @@ export async function uploadDisputeEvidence(disputeId, file, token) {
   }
 
   const data = await res.json().catch(() => null);
+  rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     throw new Error(data?.error || `Evidence upload failed (${res.status})`);
@@ -204,6 +226,7 @@ export async function submitKyc(fields, documentFile, token) {
   }
 
   const data = await res.json().catch(() => null);
+  rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     let errorMsg = data?.error;
@@ -255,6 +278,7 @@ export async function uploadChatAttachment(
   }
 
   const data = await res.json().catch(() => null);
+  rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     let errorMsg = data?.error;
@@ -286,6 +310,8 @@ export async function fetchAuthedBlobUrl(path, token) {
   }
 
   if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    rejectSuspended(data);
     if (res.status === 401) forceLogout();
     throw new Error(`Request failed (${res.status})`);
   }

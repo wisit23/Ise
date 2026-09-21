@@ -20,6 +20,9 @@ if (process.env.DATABASE_URL_ORDER) {
 
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 const { signAccessToken, permissionsForRoles } = require("@reloop/shared");
 
 const TEST_TITLE_PREFIX = "adm-004-integration-test ";

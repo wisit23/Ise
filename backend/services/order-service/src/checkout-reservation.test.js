@@ -11,6 +11,9 @@ const { signAccessToken } = require("@reloop/shared");
 const orderModel = require("./models/orderModel");
 const productClient = require("./services/productClient");
 const app = require("./app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 
 const buyerToken = signAccessToken({ sub: "buyer-a", role: "BUYER" });
 const sellerToken = signAccessToken({ sub: "seller-b", role: "SELLER" });

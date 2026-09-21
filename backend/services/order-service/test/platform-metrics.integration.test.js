@@ -15,6 +15,9 @@ if (process.env.DATABASE_URL_ORDER) {
 const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 
 const FIXTURE_BUYER_PREFIX = "mock-trade-executive-metrics-buyer-";
 
@@ -53,7 +56,7 @@ test("executive platform metrics against a real database", async (t) => {
   });
 
   // Window fixtures fall inside; two completed orders (1000 + 2000 = gmv 3000,
-  // platformRevenue 300 at the 10% default rate) plus one pending and one
+  // platformRevenue 90 at the explicit 3% rate) plus one pending and one
   // cancelled order that must NOT count toward gmv/completedOrders.
   const windowFrom = new Date("2026-01-01T00:00:00.000Z");
   const windowTo = new Date("2026-02-01T00:00:00.000Z");
@@ -110,7 +113,7 @@ test("executive platform metrics against a real database", async (t) => {
     assert.equal(res.status, 200);
     assert.deepEqual(res.body.data, {
       gmv: 3000,
-      platformRevenue: 300,
+      platformRevenue: 90,
       completedOrders: 2,
     });
     assert.equal(res.body.meta.definitionVersion, "v1");

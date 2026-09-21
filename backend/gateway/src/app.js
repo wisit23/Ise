@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { createProxyMiddleware } = require("http-proxy-middleware");
-const { verifyAccessToken } = require("@reloop/shared");
+const { requireAuth } = require("@reloop/shared");
 
 const SERVICES = {
   auth: process.env.AUTH_SERVICE_URL || "http://auth-service:3001",
@@ -72,21 +72,17 @@ app.use((req, res, next) => {
     return res.status(401).json({ error: "Missing bearer token" });
   }
 
-  try {
-    const payload = verifyAccessToken(token);
-    req.headers["x-user-id"] = payload.sub;
-    req.headers["x-user-role"] = payload.role;
+  return requireAuth(req, res, () => {
+    req.headers["x-user-id"] = req.userId;
+    req.headers["x-user-role"] = req.userRole;
     // Multi-role/permission claims (ADM-001)
-    req.headers["x-user-roles"] = (payload.roles || []).join(",");
-    req.headers["x-user-permissions"] = (payload.permissions || []).join(",");
+    req.headers["x-user-roles"] = req.userRoles.join(",");
+    req.headers["x-user-permissions"] = req.permissions.join(",");
     req.headers["x-user-display-name"] = encodeURIComponent(
-      payload.displayName || "",
+      req.userDisplayName || "",
     );
     next();
-  } catch {
-    if (isPublic(req.path)) return next();
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
+  });
 });
 
 app.use(

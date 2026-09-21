@@ -8,6 +8,9 @@ process.env.JWT_REFRESH_SECRET = "test-refresh-secret";
 
 const { signAccessToken } = require("@reloop/shared");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 const ticketModel = require("../src/features/tickets/ticketModel");
 const ticketService = require("../src/features/tickets/ticketService");
 const prisma = require("../src/models/prismaClient");

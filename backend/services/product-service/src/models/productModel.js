@@ -64,7 +64,11 @@ async function searchProducts(filters) {
   const { skip = 0, take = 20, q } = filters;
   const where = buildCatalogWhere(filters, { PrismaClient: Prisma });
   const order = q
-    ? Prisma.sql`GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) DESC, created_at DESC`
+    ? Prisma.sql`
+        ts_rank_cd(search_vector, plainto_tsquery('simple', ${q})) DESC,
+        GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) DESC,
+        created_at DESC
+      `
     : Prisma.sql`created_at DESC`;
 
   const [rows, countRows] = await Promise.all([

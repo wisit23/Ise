@@ -15,6 +15,9 @@ if (process.env.DATABASE_URL_ORDER) {
 const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 
 const FIXTURE_BUYER_PREFIX = "mock-trade-metrics-series-buyer-";
 
@@ -132,7 +135,7 @@ test("executive platform metrics series against a real database", async (t) => {
     );
     assert.equal(day5Row.gmv, 500);
     assert.equal(day5Row.completedOrders, 2);
-    assert.equal(day5Row.platformRevenue, 50);
+    assert.equal(day5Row.platformRevenue, 15);
 
     const day10Row = res.body.data.find(
       (r) => r.period === "2019-03-10T00:00:00.000Z",

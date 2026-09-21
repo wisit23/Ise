@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Footer from "../../components/Footer";
@@ -15,6 +15,14 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (
+      new URLSearchParams(window.location.search).get("reason") === "suspended"
+    ) {
+      setError("บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อฝ่ายช่วยเหลือ");
+    }
+  }, []);
 
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });

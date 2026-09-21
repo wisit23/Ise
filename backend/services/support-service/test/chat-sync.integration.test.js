@@ -5,11 +5,24 @@ const request = require("supertest");
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
 
-const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 
 const CHAT_SERVICE_URL = process.env.CHAT_SERVICE_URL;
+const AUTH_PUBLIC_URL = process.env.AUTH_PUBLIC_URL;
+
+async function login(email) {
+  const response = await fetch(`${AUTH_PUBLIC_URL}/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password: "password123" }),
+  });
+  assert.equal(response.status, 200);
+  return response.json();
+}
 
 async function waitFor(predicate, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
@@ -22,19 +35,18 @@ async function waitFor(predicate, timeoutMs = 5_000) {
 }
 
 test("SUPPORT chat message updates ticket first-response and audit exactly once", async (t) => {
-  if (!CHAT_SERVICE_URL) {
-    t.skip("CHAT_SERVICE_URL is required for the cross-service test");
+  if (!CHAT_SERVICE_URL || !AUTH_PUBLIC_URL) {
+    t.skip(
+      "CHAT_SERVICE_URL and AUTH_PUBLIC_URL are required for the cross-service test",
+    );
     return;
   }
 
-  const suffix = Date.now();
-  const requesterId = `chat-sync-requester-${suffix}`;
-  const agentId = `chat-sync-agent-${suffix}`;
-  const requesterToken = signAccessToken({ sub: requesterId, role: "BUYER" });
-  const agentToken = signAccessToken({
-    sub: agentId,
-    role: "CUSTOMER_SERVICE",
-  });
+  const requesterSession = await login("buyer.demo@example.com");
+  const agentSession = await login("cs.nan@example.com");
+  const agentId = agentSession.user.id;
+  const requesterToken = requesterSession.accessToken;
+  const agentToken = agentSession.accessToken;
 
   const create = await request(app)
     .post("/tickets")

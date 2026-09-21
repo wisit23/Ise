@@ -10,18 +10,60 @@ const {
   requirePermission,
   requireCustomerAccount,
 } = require("./authMiddleware");
+const { sessionError } = require("./sessionValidation");
 
-test("requireAuth exposes the display name from a verified access token", () => {
+const activeSessionApp = {
+  locals: { validateAccessSession: async () => {} },
+};
+
+test("requireAuth never attaches identity or calls next for a denied session", async () => {
+  for (const error of [
+    sessionError(403, "ACCOUNT_SUSPENDED", "suspended"),
+    sessionError(401, "SESSION_REVOKED", "revoked"),
+    new Error("database unavailable"),
+  ]) {
+    const req = {
+      headers: {
+        authorization: `Bearer ${signAccessToken({ sub: "buyer-1" })}`,
+      },
+      app: {
+        locals: {
+          validateAccessSession: async () => {
+            throw error;
+          },
+        },
+      },
+    };
+    let status;
+    const res = {
+      status(value) {
+        status = value;
+        return this;
+      },
+      json() {},
+    };
+    await requireAuth(req, res, () =>
+      assert.fail("denied session reached handler"),
+    );
+    assert.equal(status, error.status || 503);
+    assert.equal(req.userId, undefined);
+  }
+});
+
+test("requireAuth exposes the display name from a verified access token", async () => {
   const token = signAccessToken({
     sub: "seller-1",
     role: "SELLER",
     displayName: "Trusted Seller",
   });
-  const req = { headers: { authorization: `Bearer ${token}` } };
+  const req = {
+    headers: { authorization: `Bearer ${token}` },
+    app: activeSessionApp,
+  };
   const res = {};
   let nextCalled = false;
 
-  requireAuth(req, res, () => {
+  await requireAuth(req, res, () => {
     nextCalled = true;
   });
 
@@ -31,41 +73,50 @@ test("requireAuth exposes the display name from a verified access token", () => 
   assert.equal(req.userDisplayName, "Trusted Seller");
 });
 
-test("requireAuth uses null when an older access token has no display name", () => {
+test("requireAuth uses null when an older access token has no display name", async () => {
   const token = signAccessToken({ sub: "seller-1", role: "SELLER" });
-  const req = { headers: { authorization: `Bearer ${token}` } };
+  const req = {
+    headers: { authorization: `Bearer ${token}` },
+    app: activeSessionApp,
+  };
 
-  requireAuth(req, {}, () => {});
+  await requireAuth(req, {}, () => {});
 
   assert.equal(req.userDisplayName, null);
 });
 
-test("requireAuth falls back to a single-item roles array for a legacy token", () => {
+test("requireAuth falls back to a single-item roles array for a legacy token", async () => {
   const token = signAccessToken({ sub: "seller-1", role: "SELLER" });
-  const req = { headers: { authorization: `Bearer ${token}` } };
+  const req = {
+    headers: { authorization: `Bearer ${token}` },
+    app: activeSessionApp,
+  };
 
-  requireAuth(req, {}, () => {});
+  await requireAuth(req, {}, () => {});
 
   assert.deepEqual(req.userRoles, ["SELLER"]);
   assert.deepEqual(req.permissions, []);
 });
 
-test("requireAuth reads multi-role claims when present", () => {
+test("requireAuth reads multi-role claims when present", async () => {
   const token = signAccessToken({
     sub: "customer-1",
     role: "SELLER",
     roles: ["BUYER", "SELLER"],
     permissions: ["order:purchase", "product:write"],
   });
-  const req = { headers: { authorization: `Bearer ${token}` } };
+  const req = {
+    headers: { authorization: `Bearer ${token}` },
+    app: activeSessionApp,
+  };
 
-  requireAuth(req, {}, () => {});
+  await requireAuth(req, {}, () => {});
 
   assert.deepEqual(req.userRoles, ["BUYER", "SELLER"]);
   assert.deepEqual(req.permissions, ["order:purchase", "product:write"]);
 });
 
-test("requireAuth rejects mixed staff/customer claims", () => {
+test("requireAuth rejects mixed staff/customer claims", async () => {
   const token = signAccessToken({
     sub: "user-invalid",
     role: "BUYER",
@@ -76,6 +127,7 @@ test("requireAuth rejects mixed staff/customer claims", () => {
   const req = {
     headers: { authorization: `Bearer ${token}` },
     id: "req-invalid-role",
+    app: activeSessionApp,
   };
   const res = {
     status(code) {
@@ -87,7 +139,7 @@ test("requireAuth rejects mixed staff/customer claims", () => {
     },
   };
 
-  requireAuth(req, res, () => {
+  await requireAuth(req, res, () => {
     throw new Error("next should not be called");
   });
 

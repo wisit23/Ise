@@ -1,5 +1,14 @@
 const express = require("express");
-const { errorHandler } = require("@reloop/shared");
+const {
+  errorHandler,
+  requireInternalToken,
+  verifyAccessToken,
+  sessionUnavailable,
+} = require("@reloop/shared");
+const {
+  validateAccessSession,
+  revokedSession,
+} = require("./services/sessionService");
 const authRoutes = require("./routes/authRoutes");
 const internalRoutes = require("./features/internal/internalRoutes");
 const adminKycRoutes = require("./features/adminKyc/adminKycRoutes");
@@ -16,6 +25,30 @@ const buyerAuditRoutes = require("./features/buyerAudit/buyerAuditRoutes");
 
 const app = express();
 app.use(express.json());
+app.locals.validateAccessSession = validateAccessSession;
+
+app.post(
+  "/internal/sessions/validate",
+  requireInternalToken,
+  async (req, res, next) => {
+    let payload;
+    try {
+      payload = verifyAccessToken(req.body.accessToken);
+    } catch {
+      return next(revokedSession());
+    }
+    try {
+      await validateAccessSession(payload);
+      res.json({ active: true });
+    } catch (error) {
+      next(
+        error.code === "SESSION_REVOKED" || error.code === "ACCOUNT_SUSPENDED"
+          ? error
+          : sessionUnavailable(),
+      );
+    }
+  },
+);
 
 app.get("/health", (req, res) =>
   res.json({ status: "ok", service: "auth-service" }),

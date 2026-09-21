@@ -251,3 +251,50 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 - ผลการทดสอบ: Frontend unit tests 11/11 suites (37/37 tests) pass, ESLint 0 errors / 0 warnings สะอาดทั้ง monorepo, Shared RBAC tests (4/4 pass)
 
 **Next action:** ส่งมอบงานให้ผู้ใช้งานตรวจสอบและทดสอบการใช้งานจริง
+
+> Updated: 2026-09-18 — TSR-01 / ข้อ 1 Ban enforcement
+
+**Status:** In progress — ได้รับอนุญาตเฉพาะทำให้ Ban ระงับการใช้งานจริง
+
+**Scope:** login/refresh, protected API ของทุก service ผ่าน shared middleware, session เดิมหลัง Ban/Restore และข้อความแจ้งผู้ใช้
+
+**Approach:** ใช้ RefreshToken.id เป็น sid, ตรวจสถานะจาก Auth ทุกคำขอ, เพิกถอน session/Audit แบบ atomic; ดู ADM-DEC-023
+
+**Verification:** Pending — จะใช้ฐาน PostgreSQL ทดสอบแยกและทดสอบ gateway/direct service; ยังไม่อ้างว่าทำงานครบ
+
+**Remaining plan:** Hold/Release, Inbox, KYC UI, Audit UI, role UI และ workflow อื่นยังไม่เริ่ม
+
+> Updated: 2026-09-19 — ข้อ 1 Ban enforcement เท่านั้น
+
+**Status:** Implementation complete; targeted verification passed; ยังไม่ rollout Docker stack หลัก
+
+**Completed:** ปิด login/refresh ของบัญชีถูกระงับ, ตรวจ session จริงที่ Auth/Gateway/shared middleware, เพิกถอนทุก session พร้อม Audit แบบ atomic, ป้องกัน login แข่งกับ Ban, Restore ต้อง login ใหม่ และ Frontend แสดงเหตุผลการระงับโดยไม่ logout เมื่อ Auth ขัดข้องชั่วคราว
+
+**Evidence:**
+
+- Backend targeted: 30/30 passed, 0 skipped — `account-suspension.integration.test.js`, Auth register-login/multi-role/admin-reports/bounded-bulk/admin-kyc, shared authMiddleware/permissions/sessionValidation และ Gateway app tests
+- Ban integration: 8 scenarios + parent test รวม 9 ผ่าน ใช้ PostgreSQL แยกและ HTTP Auth จริง ครอบคลุม active/legacy sessions, RBAC/self-ban denial, multi-session Ban, Restore, pre-rollout suspended account, concurrent login/Ban, audit failure rollback และ Auth unavailable ผ่าน Gateway/direct services
+- Frontend: `node ../node_modules/jest/bin/jest.js --runInBand --coverage=false` จาก frontend ผ่าน 12/12 suites, 46/46 tests รวม API session tests ใหม่ 9 รายการ
+- Lint: `node node_modules/eslint/bin/eslint.js backend frontend scripts` ผ่าน; `git -c core.whitespace=cr-at-eol diff --check` ผ่าน (ไฟล์เดิมส่วนใหญ่ใช้ CRLF)
+- ฐานทดสอบใช้ PostgreSQL ชั่วคราวแยกบน `127.0.0.1:55439/tsr01_test` เฉพาะ Auth schema; การรันยืนยันตั้ง `DATABASE_URL_AUTH` และ `REQUIRE_INTEGRATION=1` ไม่ใช้ฐานหลัก
+
+**Known verification limits:**
+
+- Backend broad run: 123 tests = 111 passed / 7 failed / 5 skipped ไม่ใช่ผลผ่านทั้งระบบ; 5 failures เป็น Product schema ที่ไม่มีในฐานทดสอบ และ 2 Checkout failures ยืนยันซ้ำด้วย test + middleware ก่อนแก้แล้วล้มเหลวเหมือนกัน
+- Lint `.` ยังมี 10 errors ในไฟล์ untracked เดิมภายใต้ `.codex_tmp_review_comments`; ไม่อยู่ในงานนี้
+- ยังไม่ได้ทดสอบผ่าน browser หรือ rebuild/restart Docker stack หลัก; ต้องใช้ Auth/Gateway/shared consumers/Frontend รุ่นนี้ร่วมกันเพื่อให้พฤติกรรมใหม่มีผล ดู runtime config ใน ADM-DEC-023 addendum
+- คำขอที่ผ่าน auth ก่อน Ban commit อาจทำงานต่อจนจบได้; ไม่ได้ยกเลิกธุรกรรมที่เริ่มไปแล้ว
+
+**Scope stop:** หยุดที่ข้อ 1 Ban enforcement ตามคำสั่งผู้ใช้ ไม่เริ่ม Hold/Release, Inbox, KYC/Audit UI, role UI หรือข้ออื่น และไม่ถือว่า TSR-01 ส่วน role UI เสร็จแล้ว
+
+- Test cleanup (2026-09-19): ลบ container/volume `ise-tsr01-postgres` และไฟล์ baseline ชั่วคราวของงานนี้แล้ว ไม่แตะ container ของ stack หลัก
+
+> Updated: 2026-09-19 — Ban browser-QA seed
+
+**Status:** Seed implementation complete; รอผลการรันกับ local Docker stack และ browser-flow smoke check
+
+**Fixtures:** Trust & Safety `trust.ban@test.local` และเป้าหมาย Buyer `buyer.ban@test.local` ใช้รหัสผ่าน `BanDemo123!` ทั้งคู่ รันด้วย `npm run seed:ban-demo` ใน auth-service
+
+**Reset behavior:** ตั้งสองบัญชีเป็น ACTIVE, sync legacy role + UserRole และ revoke session เก่า; ไม่ลบ AdminAudit เดิม
+
+**Scope:** ใช้ยืนยันข้อ 1 ผ่านหน้าเว็บเท่านั้น ไม่เพิ่มฟีเจอร์ moderation อื่น

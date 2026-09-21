@@ -17,6 +17,9 @@ if (process.env.DATABASE_URL_SUPPORT) {
 const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 
 const requesterId = `int-test-requester-${Date.now()}`;
 const agentAId = `int-test-agent-a-${Date.now()}`;

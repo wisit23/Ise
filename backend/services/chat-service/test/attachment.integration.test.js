@@ -27,6 +27,9 @@ process.env.CHAT_RATE_LIMIT_CREATE_CONVERSATION ||= "100000";
 
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 // The rate limiter opens a Redis connection lazily on the first limited
 // request; without closing it the test process stays alive forever.
 const { closeRateLimitClient } = require("../src/middleware/rateLimit");

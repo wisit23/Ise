@@ -15,6 +15,9 @@ process.env.INTERNAL_SERVICE_TOKEN ||= "test-internal-token";
 const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
 const { MAX_MESSAGE_LENGTH } = require("../src/limits");
 const { closeRateLimitClient } = require("../src/middleware/rateLimit");
 
