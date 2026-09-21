@@ -18,13 +18,17 @@ function isValidCursor(cursor) {
 /** Builds the Prisma findMany args for one page. `before`, if given, must
  * already be validated with isValidCursor — an invalid cursor is a 400 at
  * the controller, not silently ignored here. */
-function buildPageQuery({ conversationId, before, limit }) {
+function buildPageQuery({ conversationId, before, limit, includeInternal = false }) {
+  const where = {
+    conversationId,
+    deletedAt: null,
+    ...(before ? { id: { lt: before } } : {}),
+  };
+  if (!includeInternal) {
+    where.visibility = { not: "INTERNAL" };
+  }
   return {
-    where: {
-      conversationId,
-      deletedAt: null,
-      ...(before ? { id: { lt: before } } : {}),
-    },
+    where,
     orderBy: { id: "desc" },
     // Fetch one extra row so we can tell whether there's a next page
     // without a separate count() query.

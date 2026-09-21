@@ -66,8 +66,15 @@ model Message {
   deletedAt      DateTime?
   createdAt      DateTime  @default(now())
 
+  syncStatus     String?
+  syncedAt       DateTime?
+  syncAttempts   Int       @default(0)
+  nextRetryAt    DateTime?
+  lastSyncError  String?
+
   conversation Conversation @relation(fields: [conversationId], references: [id])
 
   @@index([conversationId, createdAt])
   @@index([conversationId, deletedAt, createdAt])
+  @@index([syncStatus, nextRetryAt])
 }

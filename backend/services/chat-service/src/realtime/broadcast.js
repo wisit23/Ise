@@ -51,6 +51,20 @@ function userRoomName(userId) {
  */
 function broadcastMessage(conversation, message) {
   if (!ioInstance) return;
+
+  // Internal notes must remain private and must not be broadcast into the public room
+  if (message.visibility === "INTERNAL") {
+    for (const participant of conversation.participants || []) {
+      if (participant.leftAt) continue;
+      if (participant.role === "AGENT" || participant.role === "ADMIN") {
+        ioInstance
+          .to(userRoomName(participant.userId))
+          .emit("message:new", message);
+      }
+    }
+    return;
+  }
+
   ioInstance.to(roomName(conversation.id)).emit("message:new", message);
 
   const activity = {

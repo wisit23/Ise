@@ -73,6 +73,7 @@ services:
         exit 0;
 
   gateway:
+    init: true
     build:
       context: .
       dockerfile: backend/gateway/Dockerfile
@@ -101,6 +102,7 @@ services:
       retries: 10
 
   auth-service:
+    init: true
     build:
       context: .
       dockerfile: backend/services/auth-service/Dockerfile
@@ -119,6 +121,7 @@ services:
       retries: 10
 
   product-service:
+    init: true
     build:
       context: .
       dockerfile: backend/services/product-service/Dockerfile
@@ -139,6 +142,7 @@ services:
       retries: 10
 
   order-service:
+    init: true
     build:
       context: .
       dockerfile: backend/services/order-service/Dockerfile
@@ -160,6 +164,7 @@ services:
       retries: 10
 
   chat-service:
+    init: true
     build:
       context: .
       dockerfile: backend/services/chat-service/Dockerfile
@@ -191,6 +196,7 @@ services:
       retries: 10
 
   review-service:
+    init: true
     build:
       context: .
       dockerfile: backend/services/review-service/Dockerfile
@@ -209,6 +215,7 @@ services:
       retries: 10
 
   support-service:
+    init: true
     build:
       context: .
       dockerfile: backend/services/support-service/Dockerfile
@@ -229,6 +236,7 @@ services:
       retries: 10
 
   frontend:
+    init: true
     build:
       context: .
       dockerfile: frontend/Dockerfile

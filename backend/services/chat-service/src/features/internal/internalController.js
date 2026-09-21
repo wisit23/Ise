@@ -4,6 +4,7 @@ const conversationModel = require("../conversations/conversationModel");
 const messageModel = require("../messages/messageModel");
 const { contextKeyForInternalContextId } = require("./internalContext");
 const broadcast = require("../../realtime/broadcast");
+const { syncSupportMessage } = require("../sync/supportSyncWorker");
 
 const DUPLICATE_KEY_ERROR = "P2002";
 const VALID_STATUSES = ["ACTIVE", "ARCHIVED", "LOCKED"];
@@ -84,11 +85,12 @@ async function sendMessage(req, res, next) {
     const conversation = await conversationModel.findById(req.params.id);
     if (!conversation) throw notFound("Conversation not found");
 
-    const { senderId, senderRole, type, body, payload } = req.body;
+    const { senderId, senderRole, type, body, payload, visibility } = req.body;
     if (!senderId || !senderRole) {
       throw badRequest("senderId and senderRole are required");
     }
 
+    const isSupport = conversation.contextType === "SUPPORT";
     const message = await messageModel.createAndTouch({
       conversationId: conversation.id,
       senderId,
@@ -96,7 +98,14 @@ async function sendMessage(req, res, next) {
       type: type || "SYSTEM",
       body: body || "",
       payload,
+      visibility: visibility || "ALL",
+      syncStatus: isSupport ? "PENDING" : null,
     });
+
+    if (isSupport) {
+      syncSupportMessage(conversation, message);
+    }
+
     broadcast.broadcastMessage(conversation, message);
     res.status(201).json(message);
   } catch (err) {
@@ -170,8 +179,17 @@ async function getTranscript(req, res, next) {
     const conversation = await conversationModel.findById(req.params.id);
     if (!conversation) throw notFound("Conversation not found");
 
+    const includeInternal = req.query.includeInternal === "true";
+    const where = {
+      conversationId: conversation.id,
+      deletedAt: null,
+    };
+    if (!includeInternal) {
+      where.visibility = { not: "INTERNAL" };
+    }
+
     const messages = await prisma.message.findMany({
-      where: { conversationId: conversation.id },
+      where,
       orderBy: { createdAt: "asc" },
     });
     res.json({ conversation, messages });

@@ -3,11 +3,12 @@ const prisma = require("../../models/prismaClient");
 const { buildPageQuery, paginate } = require("./cursor");
 const { MAX_MESSAGE_LENGTH } = require("../../limits");
 
-async function listPage(conversationId, before, limit) {
+async function listPage(conversationId, before, limit, { includeInternal = false } = {}) {
   const { where, orderBy, take } = buildPageQuery({
     conversationId,
     before,
     limit,
+    includeInternal,
   });
   const rows = await prisma.message.findMany({ where, orderBy, take });
   return paginate(rows, limit);
@@ -33,6 +34,8 @@ async function createAndTouch({
   payload,
   preview: previewOverride,
   participants,
+  visibility = "ALL",
+  syncStatus = null,
 }) {
   // Enforced HERE, at the one function every write path goes through, for
   // the same reason getForParticipant is the one authorization point: a
@@ -53,7 +56,18 @@ async function createAndTouch({
     PREVIEW_LENGTH,
   );
   const now = new Date();
-  const [message] = await prisma.$transaction([
+  const isInternal = visibility === "INTERNAL";
+
+  const conversationUpdateData = {};
+  if (!isInternal) {
+    conversationUpdateData.lastMessageAt = now;
+    conversationUpdateData.lastMessagePreview = preview;
+  }
+  if (participants) {
+    conversationUpdateData.participants = { set: participants };
+  }
+
+  const txOperations = [
     prisma.message.create({
       data: {
         conversationId,
@@ -62,6 +76,9 @@ async function createAndTouch({
         type,
         body: body || "",
         payload: payload ?? null,
+        visibility: visibility || "ALL",
+        syncStatus: syncStatus || null,
+        syncAttempts: 0,
         // See messageService.sendMessage's comment on this same field —
         // Prisma's MongoDB connector needs it written explicitly or every
         // `deletedAt: null` read filter silently excludes this message.
@@ -69,27 +86,32 @@ async function createAndTouch({
         createdAt: now,
       },
     }),
-    prisma.conversation.update({
-      where: { id: conversationId },
-      data: {
-        lastMessageAt: now,
-        lastMessagePreview: preview,
-        ...(participants ? { participants: { set: participants } } : {}),
-      },
-    }),
-  ]);
+  ];
+
+  if (Object.keys(conversationUpdateData).length > 0) {
+    txOperations.push(
+      prisma.conversation.update({
+        where: { id: conversationId },
+        data: conversationUpdateData,
+      }),
+    );
+  }
+
+  const [message] = await prisma.$transaction(txOperations);
   return message;
 }
 
-function countUnread({ conversationId, userId, since }) {
-  return prisma.message.count({
-    where: {
-      conversationId,
-      senderId: { not: userId },
-      deletedAt: null,
-      createdAt: { gt: since },
-    },
-  });
+function countUnread({ conversationId, userId, since, includeInternal = false }) {
+  const where = {
+    conversationId,
+    senderId: { not: userId },
+    deletedAt: null,
+    createdAt: { gt: since },
+  };
+  if (!includeInternal) {
+    where.visibility = { not: "INTERNAL" };
+  }
+  return prisma.message.count({ where });
 }
 
 module.exports = { listPage, countUnread, createAndTouch };
