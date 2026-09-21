@@ -17,6 +17,7 @@ import AuditSection from "../../components/support/sections/AuditSection";
 import AdminInboxSection from "../../components/support/sections/AdminInboxSection";
 import ProductsSection from "../../components/support/sections/ProductsSection";
 import AuctionApprovalsSection from "../../components/support/sections/AuctionApprovalsSection";
+import SellerChangeRequestsSection from "../../components/support/sections/SellerChangeRequestsSection";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -35,6 +36,7 @@ const ADMIN_SECTIONS = [
   { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
   { key: "auction_approvals", label: "อนุมัติประมูล", icon: "sell" },
   { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
+  { key: "shop_changes", label: "ตรวจข้อมูลร้านค้า", icon: "storefront" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
 ];
 
@@ -219,6 +221,9 @@ export default function SupportPanelPage() {
               {section === "products" && <ProductsSection token={token} />}
               {section === "auction_approvals" && (
                 <AuctionApprovalsSection token={token} />
+              )}
+              {section === "shop_changes" && (
+                <SellerChangeRequestsSection token={token} />
               )}
             </div>
           </main>

@@ -249,12 +249,118 @@ async function getPublicSellerProfile(userId) {
     lastName: user.lastName,
     shopName: user.sellerProfile?.shopName || null,
     memberSince: user.createdAt,
-    // Real trust signal for the storefront: a buyer-facing "verified seller"
-    // badge is only honest if it reflects the actual KYC state, not just
-    // "this account has the SELLER role" (every seller gets that at
-    // registration, before any verification happens).
     kycStatus: user.sellerProfile?.kycStatus || "NONE",
   };
+}
+
+/** Fetch the authenticated seller's own shop profile (includes private fields). */
+async function getMyShopProfile(userId) {
+  const profile = await prisma.sellerProfile.findUnique({
+    where: { userId },
+  });
+  if (!profile) throw notFound("seller profile not found");
+  return {
+    shopName: profile.shopName,
+    address: profile.address,
+    bankAccount: profile.bankAccount,
+  };
+}
+
+/** Seller submits a request to change their shop profile fields.
+ *  At least one of shopName/address/bankAccount must be provided, plus a comment. */
+async function submitShopChangeRequest(sellerId, { shopName, address, bankAccount, comment }) {
+  if (!comment || !comment.trim()) throw badRequest("comment is required");
+  if (!shopName && !address && !bankAccount)
+    throw badRequest("at least one field (shopName, address, bankAccount) must be provided");
+
+  // Block submission if the seller already has a PENDING request
+  const existing = await prisma.shopChangeRequest.findFirst({
+    where: { sellerId, status: "PENDING" },
+  });
+  if (existing) throw conflict("you already have a pending change request");
+
+  const req = await prisma.shopChangeRequest.create({
+    data: {
+      sellerId,
+      shopName: shopName || null,
+      address: address || null,
+      bankAccount: bankAccount || null,
+      comment: comment.trim(),
+    },
+  });
+  return req;
+}
+
+/** Seller fetches their own change-request history. */
+async function listMyChangeRequests(sellerId) {
+  const items = await prisma.shopChangeRequest.findMany({
+    where: { sellerId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+  return { items };
+}
+
+/** Admin fetches all PENDING shop change requests (with seller info). */
+async function listPendingChangeRequests() {
+  const items = await prisma.shopChangeRequest.findMany({
+    where: { status: "PENDING" },
+    orderBy: { createdAt: "asc" },
+    include: {
+      seller: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          sellerProfile: { select: { shopName: true, address: true, bankAccount: true } },
+        },
+      },
+    },
+  });
+  return { items };
+}
+
+/** Admin approves or rejects a shop change request.
+ *  If approved, applies the changed fields to the SellerProfile. */
+async function decideChangeRequest(adminId, requestId, { decision, adminNote }) {
+  if (!["APPROVED", "REJECTED"].includes(decision))
+    throw badRequest("decision must be APPROVED or REJECTED");
+
+  const req = await prisma.shopChangeRequest.findUnique({ where: { id: requestId } });
+  if (!req) throw notFound("change request not found");
+  if (req.status !== "PENDING") throw conflict("request has already been decided");
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // Mark the request
+    const decided = await tx.shopChangeRequest.update({
+      where: { id: requestId },
+      data: {
+        status: decision,
+        adminNote: adminNote || null,
+        reviewedBy: adminId,
+        reviewedAt: new Date(),
+      },
+    });
+
+    // Apply changes to SellerProfile only on approval
+    if (decision === "APPROVED") {
+      const patch = {};
+      if (req.shopName) patch.shopName = req.shopName;
+      if (req.address) patch.address = req.address;
+      if (req.bankAccount) patch.bankAccount = req.bankAccount;
+      if (Object.keys(patch).length > 0) {
+        await tx.sellerProfile.update({
+          where: { userId: req.sellerId },
+          data: patch,
+        });
+      }
+    }
+
+    return decided;
+  });
+
+  return updated;
 }
 
 module.exports = {
@@ -265,6 +371,11 @@ module.exports = {
   getById,
   updateProfile,
   getPublicSellerProfile,
+  getMyShopProfile,
+  submitShopChangeRequest,
+  listMyChangeRequests,
+  listPendingChangeRequests,
+  decideChangeRequest,
   getUserRoles,
   assignRole,
   removeRole,

@@ -61,13 +61,14 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  buyerProfile    BuyerProfile?
-  sellerProfile   SellerProfile?
-  loginLogs       LoginLog[]
-  refreshTokens   RefreshToken[]
-  reports         Report[]
-  roles           UserRole[]
-  kycApplications KycApplication[]
+  buyerProfile      BuyerProfile?
+  sellerProfile     SellerProfile?
+  loginLogs         LoginLog[]
+  refreshTokens     RefreshToken[]
+  reports           Report[]
+  roles             UserRole[]
+  kycApplications   KycApplication[]
+  shopChangeRequests ShopChangeRequest[]
 
   @@map("users")
 }
@@ -220,4 +221,29 @@ model KycApplication {
   decidedBy   String?   @map("decided_by")
 
   @@map("kyc_applications")
+}
+
+// Seller-initiated request to change their shop profile fields.
+// Admin must approve before the SellerProfile is updated — keeps an
+// audit trail of every change request and its outcome.
+model ShopChangeRequest {
+  id          String    @id @default(uuid())
+  sellerId    String    @map("seller_id")
+  seller      User      @relation(fields: [sellerId], references: [id])
+  // Fields the seller wants to change (null = no change requested for that field)
+  shopName    String?   @map("shop_name")
+  address     String?
+  bankAccount String?   @map("bank_account")
+  // Required: seller must explain what changed and why
+  comment     String
+  // PENDING | APPROVED | REJECTED
+  status      String    @default("PENDING")
+  adminNote   String?   @map("admin_note")
+  reviewedBy  String?   @map("reviewed_by")
+  reviewedAt  DateTime? @map("reviewed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([sellerId])
+  @@index([status])
+  @@map("shop_change_requests")
 }

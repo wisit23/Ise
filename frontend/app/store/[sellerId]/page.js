@@ -9,8 +9,9 @@ import Reveal from "../../../components/ui/Reveal";
 import Pagination from "../../../components/Pagination";
 import { StarDisplay } from "../../../components/StarRating";
 import ReportModal from "../../../components/ReportModal";
+import EditShopModal from "../../../components/seller/EditShopModal";
 import { apiFetch } from "../../../lib/api";
-import { getStoredUser } from "../../../lib/auth";
+import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
 const PRODUCT_PAGE_SIZE = 12;
 const REVIEW_PAGE_SIZE = 5;
@@ -34,13 +35,33 @@ export default function StorePage() {
   const [reviewTotalPages, setReviewTotalPages] = useState(1);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [showReport, setShowReport] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [pendingRequest, setPendingRequest] = useState(null);
   const [user, setUser] = useState(undefined);
 
+  const isOwner = user !== undefined && user?.id === sellerId;
+
+  function loadPendingRequest() {
+    const token = getAccessToken();
+    if (!token) return;
+    apiFetch("/api/auth/shop/change-requests", { token })
+      .then((data) => {
+        const pending = (data?.items || []).find((r) => r.status === "PENDING");
+        setPendingRequest(pending || null);
+      })
+      .catch(() => {});
+  }
+
   useEffect(() => {
-    setUser(getStoredUser());
+    const currentUser = getStoredUser();
+    setUser(currentUser);
     apiFetch(`/api/auth/users/${sellerId}/public`)
       .then(setSeller)
       .catch(() => setSeller(null));
+
+    if (currentUser?.id === sellerId) {
+      loadPendingRequest();
+    }
   }, [sellerId]);
 
   useEffect(() => {
@@ -60,7 +81,10 @@ export default function StorePage() {
         // For the store page, we only want to show available and hidden to the owner.
         if (isOwner) {
           itemsToDisplay = data.items.filter(
-            (p) => p.status === "available" || p.status === "hidden"
+            (p) =>
+              p.status === "available" ||
+              p.status === "hidden" ||
+              p.status === "sold"
           );
         }
         setItems(itemsToDisplay);
@@ -120,19 +144,57 @@ export default function StorePage() {
               </div>
             </div>
           </div>
-          {/* user is undefined during SSR, preventing mismatch */}
-          {user !== undefined && user?.id !== sellerId && (
-            <button
-              onClick={() => setShowReport(true)}
-              className="shrink-0 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
-            >
-              รายงานร้านค้านี้
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setShowEditModal(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px] text-emerald-600">
+                  edit_square
+                </span>
+                แก้ไขข้อมูลร้านค้า
+              </button>
+            )}
+            {/* user is undefined during SSR, preventing mismatch */}
+            {user !== undefined && !isOwner && (
+              <button
+                onClick={() => setShowReport(true)}
+                className="shrink-0 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
+              >
+                รายงานร้านค้านี้
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
       <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+        {isOwner && pendingRequest && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-sm text-amber-900 shadow-sm">
+            <div className="flex items-start gap-2.5">
+              <span className="material-symbols-outlined text-[20px] text-amber-600 shrink-0 mt-0.5">
+                pending_actions
+              </span>
+              <div>
+                <p className="font-semibold text-amber-900">
+                  คำขอแก้ไขข้อมูลร้านค้าของคุณอยู่ระหว่างรอแอดมินตรวจสอบ
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  ยื่นเมื่อ {new Date(pendingRequest.createdAt).toLocaleString("th-TH")} · เหตุผล: "{pendingRequest.comment}"
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="text-xs font-semibold text-amber-800 underline hover:text-amber-950 shrink-0"
+            >
+              ดูรายละเอียดคำขอ
+            </button>
+          </div>
+        )}
+
         {error && <p className="text-sm text-red-600">{error}</p>}
         {!loading && items.length === 0 && (
           <p className="text-gray-500">ร้านนี้ยังไม่มีสินค้าวางขาย</p>
@@ -192,6 +254,21 @@ export default function StorePage() {
         targetId={sellerId}
         targetLabel={sellerName}
       />
+
+      {isOwner && (
+        <EditShopModal
+          open={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          sellerId={sellerId}
+          currentShopName={seller?.shopName || ""}
+          onSuccess={() => {
+            loadPendingRequest();
+            apiFetch(`/api/auth/users/${sellerId}/public`)
+              .then(setSeller)
+              .catch(() => {});
+          }}
+        />
+      )}
 
       <Footer />
     </main>
