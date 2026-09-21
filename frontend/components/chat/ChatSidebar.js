@@ -31,7 +31,13 @@ export default function ChatSidebar({
 
   // Query online status for all participants visible in the sidebar
   useEffect(() => {
-    if (!socket || !socketConnected || !nonSupportConversations || !currentUserId) return;
+    if (
+      !socket ||
+      !socketConnected ||
+      !nonSupportConversations ||
+      !currentUserId
+    )
+      return;
     const userIds = nonSupportConversations
       .map((c) => otherParticipant(c, currentUserId)?.userId)
       .filter(Boolean);
@@ -103,10 +109,10 @@ export default function ChatSidebar({
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden bg-white">
       {/* Sidebar Header */}
-      <div className="shrink-0 border-b border-gray-100 p-4">
-        <div className="flex items-center justify-between gap-3 mb-3">
+      <div className="shrink-0 border-b border-gray-100 px-4 pb-3 pt-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-bold tracking-tight text-gray-900">
+            <h1 className="text-lg font-bold tracking-tight text-gray-900">
               ข้อความ
             </h1>
             {unreadTotal > 0 && (
@@ -134,13 +140,13 @@ export default function ChatSidebar({
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ค้นหาการสนทนา..."
             aria-label="ค้นหาการสนทนา"
-            className="w-full rounded-xl border border-gray-200 bg-gray-50/70 py-2 pl-9 pr-8 text-xs text-gray-900 placeholder:text-gray-400 transition focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+            className="min-h-10 w-full rounded-xl border border-gray-200 bg-gray-50/70 py-2 pl-9 pr-10 text-sm text-gray-900 placeholder:text-gray-500 transition focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
               aria-label="ล้างการค้นหา"
             >
               <span className="material-symbols-outlined text-[16px]">

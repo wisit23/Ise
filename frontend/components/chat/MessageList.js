@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { Fragment, useRef } from "react";
 import MessageAttachment from "./MessageAttachment";
 
 const QUICK_PROMPTS = [
@@ -9,6 +9,44 @@ const QUICK_PROMPTS = [
   "ขอดูรูปเพิ่มเติมหน่อยครับ",
   "สภาพสินค้าเป็นอย่างไรบ้างครับ?",
 ];
+
+function dateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function formatDateLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "ไม่ทราบวันที่";
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return "วันนี้";
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "เมื่อวาน";
+  return date.toLocaleDateString("th-TH", {
+    day: "numeric",
+    month: "short",
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+}
+
+function DateDivider({ value }) {
+  const label = formatDateLabel(value);
+  return (
+    <li
+      role="separator"
+      aria-label={`วันที่ ${label}`}
+      className="my-4 flex items-center gap-3 text-[11px] font-medium text-slate-500"
+    >
+      <span className="h-px flex-1 bg-slate-200/80" />
+      <span className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 shadow-2xs">
+        {label}
+      </span>
+      <span className="h-px flex-1 bg-slate-200/80" />
+    </li>
+  );
+}
 
 /** Pure presentation — expects `messages` already sorted oldest-to-newest
  * (callers reverse the backend's newest-first pages before passing them in;
@@ -79,13 +117,20 @@ export default function MessageList({
   return (
     <ul className="flex flex-col py-3 px-1">
       {messages.map((m, index) => {
+        const showDate =
+          index === 0 ||
+          dateKey(m.createdAt) !== dateKey(messages[index - 1]?.createdAt);
+
         if (m.type === "SYSTEM") {
           return (
-            <li key={m.id} className="my-2.5 text-center animate-fade-in">
-              <span className="rounded-full bg-gray-100/90 border border-gray-200/60 px-3.5 py-1 text-[11px] font-medium text-gray-500 shadow-2xs">
-                {m.body}
-              </span>
-            </li>
+            <Fragment key={m.id}>
+              {showDate && <DateDivider value={m.createdAt} />}
+              <li className="my-2.5 text-center animate-fade-in">
+                <span className="rounded-full bg-gray-100/90 border border-gray-200/60 px-3.5 py-1 text-[11px] font-medium text-gray-500 shadow-2xs">
+                  {m.body}
+                </span>
+              </li>
+            </Fragment>
           );
         }
 
@@ -140,83 +185,85 @@ export default function MessageList({
         }
 
         return (
-          <li
-            key={m.clientId || m.id}
-            className={`flex items-end gap-2 ${
-              own ? "justify-end" : "justify-start"
-            } ${isFirstInGroup ? "mt-3" : "mt-1"}`}
-          >
-            {/* Receiver Avatar on the left */}
-            {!own && (
-              <div className="w-7 shrink-0 mb-0.5">
-                {isLastInGroup ? (
-                  <div
-                    className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-700 text-xs font-semibold shadow-2xs animate-fade-in"
-                    title={otherName}
-                  >
-                    {otherName?.[0] || "?"}
-                  </div>
-                ) : (
-                  <div className="h-7 w-7" />
-                )}
-              </div>
-            )}
-
-            {/* Bubble */}
-            <div
-              data-testid="message-bubble"
-              data-animate={shouldAnimate ? "pop" : "none"}
-              className={`relative max-w-[78%] sm:max-w-[70%] px-4 py-2.5 text-sm transition-all duration-150 ${
-                shouldAnimate ? "animate-message-pop" : ""
-              } ${
-                own
-                  ? "origin-bottom-right bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs " +
-                    (isLastInGroup
-                      ? "rounded-2xl rounded-br-xs"
-                      : "rounded-2xl rounded-r-md")
-                  : "origin-bottom-left bg-white border border-gray-150 text-gray-900 shadow-xs " +
-                    (isLastInGroup
-                      ? "rounded-2xl rounded-bl-xs"
-                      : "rounded-2xl rounded-l-md")
-              }`}
+          <Fragment key={m.clientId || m.id}>
+            {showDate && <DateDivider value={m.createdAt} />}
+            <li
+              className={`flex items-end gap-2 ${
+                own ? "justify-end" : "justify-start"
+              } ${isFirstInGroup ? "mt-3" : "mt-1"}`}
             >
-              {(m.type === "IMAGE" || m.type === "FILE") && (
-                <div className={m.body ? "mb-2" : ""}>
-                  <MessageAttachment message={m} own={own} />
+              {/* Receiver Avatar on the left */}
+              {!own && (
+                <div className="w-7 shrink-0 mb-0.5">
+                  {isLastInGroup ? (
+                    <div
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-700 text-xs font-semibold shadow-2xs animate-fade-in"
+                      title={otherName}
+                    >
+                      {otherName?.[0] || "?"}
+                    </div>
+                  ) : (
+                    <div className="h-7 w-7" />
+                  )}
                 </div>
               )}
 
-              {m.body && (
-                <p className="whitespace-pre-line leading-relaxed selection:bg-emerald-200 selection:text-emerald-950">
-                  {m.body}
-                </p>
-              )}
-
-              {/* Timestamp & Status */}
+              {/* Bubble */}
               <div
-                className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
-                  own ? "text-emerald-100/90" : "text-gray-400"
+                data-testid="message-bubble"
+                data-animate={shouldAnimate ? "pop" : "none"}
+                className={`relative max-w-[78%] sm:max-w-[70%] px-4 py-2.5 text-sm transition-all duration-150 ${
+                  shouldAnimate ? "animate-message-pop" : ""
+                } ${
+                  own
+                    ? "origin-bottom-right bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs " +
+                      (isLastInGroup
+                        ? "rounded-2xl rounded-br-xs"
+                        : "rounded-2xl rounded-r-md")
+                    : "origin-bottom-left bg-white border border-gray-150 text-gray-900 shadow-xs " +
+                      (isLastInGroup
+                        ? "rounded-2xl rounded-bl-xs"
+                        : "rounded-2xl rounded-l-md")
                 }`}
               >
-                <span>
-                  {new Date(m.createdAt).toLocaleTimeString("th-TH", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-
-                {own && (
-                  <span
-                    className="material-symbols-outlined text-[13px] leading-none"
-                    title={isOptimistic ? "กำลังส่ง..." : "ส่งแล้ว"}
-                    aria-hidden="true"
-                  >
-                    {isOptimistic ? "schedule" : "done_all"}
-                  </span>
+                {(m.type === "IMAGE" || m.type === "FILE") && (
+                  <div className={m.body ? "mb-2" : ""}>
+                    <MessageAttachment message={m} own={own} />
+                  </div>
                 )}
+
+                {m.body && (
+                  <p className="whitespace-pre-line leading-relaxed selection:bg-emerald-200 selection:text-emerald-950">
+                    {m.body}
+                  </p>
+                )}
+
+                {/* Timestamp & Status */}
+                <div
+                  className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
+                    own ? "text-emerald-100/90" : "text-gray-400"
+                  }`}
+                >
+                  <span>
+                    {new Date(m.createdAt).toLocaleTimeString("th-TH", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+
+                  {own && (
+                    <span
+                      className="material-symbols-outlined text-[13px] leading-none"
+                      title={isOptimistic ? "กำลังส่ง..." : "ส่งแล้ว"}
+                      aria-hidden="true"
+                    >
+                      {isOptimistic ? "schedule" : "done_all"}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          </li>
+            </li>
+          </Fragment>
         );
       })}
     </ul>

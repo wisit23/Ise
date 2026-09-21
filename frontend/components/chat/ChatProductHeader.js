@@ -66,10 +66,10 @@ export default function ChatProductHeader({ productId }) {
   const statusInfo = STATUS_CONFIG[product.status] || STATUS_CONFIG.available;
 
   return (
-    <div className="shrink-0 sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] backdrop-blur-md">
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-4 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.03)] backdrop-blur-md">
+      <div className="flex min-w-0 items-center gap-2.5">
         {/* Product Image / Thumbnail */}
-        <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-gray-100 bg-gray-50">
+        <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-gray-100 bg-gray-50">
           {thumbUrl ? (
             <img
               src={thumbUrl}
@@ -92,7 +92,7 @@ export default function ChatProductHeader({ productId }) {
               {product.title}
             </h2>
             <span
-              className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusInfo.className}`}
+              className={`hidden shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium sm:inline-flex ${statusInfo.className}`}
             >
               {statusInfo.label}
             </span>
@@ -106,7 +106,7 @@ export default function ChatProductHeader({ productId }) {
       {/* View Listing CTA */}
       <Link
         href={`/products/${product.id}`}
-        className="flex shrink-0 items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-xs transition hover:border-emerald-500 hover:bg-emerald-50"
+        className="flex min-h-10 shrink-0 items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-emerald-800 shadow-xs transition hover:border-emerald-500 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
       >
         <span>ดูสินค้า</span>
         <span

@@ -2,7 +2,7 @@ import { io } from "socket.io-client";
 import { apiFetch } from "./api";
 import { getAccessToken } from "./auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 let conversationCache = null;
 

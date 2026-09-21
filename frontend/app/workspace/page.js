@@ -8,7 +8,9 @@ import RadioSelect from "../../components/ui/RadioSelect";
 import Link from "next/link";
 
 import DashboardSection from "../../components/support/sections/DashboardSection";
-import TicketsSection from "../../components/support/sections/TicketsSection";
+import TicketsSection, {
+  TicketViewControl,
+} from "../../components/support/sections/TicketsSection";
 import DisputesSection from "../../components/support/sections/DisputesSection";
 import OrdersSection from "../../components/support/sections/OrdersSection";
 import FaqSection from "../../components/support/sections/FaqSection";
@@ -43,6 +45,7 @@ export default function SupportPanelPage() {
   const [user, setUser] = useState(undefined);
   const [section, setSection] = useState("dashboard");
   const [ticketsFilter, setTicketsFilter] = useState("");
+  const [ticketViewMode, setTicketViewMode] = useState("workspace");
   const [disputesFilter, setDisputesFilter] = useState("");
 
   function navigateTo(tab, filter) {
@@ -97,9 +100,9 @@ export default function SupportPanelPage() {
     // Toasts are mounted at the panel root so every section beneath it can
     // report the outcome of an action without a blocking alert().
     <ToastProvider>
-      <div className="flex min-h-screen flex-col bg-slate-50/50">
+      <div className="flex h-dvh flex-col overflow-hidden bg-slate-50/50">
         <NavBar />
-        <div className="flex flex-1">
+        <div className="flex min-h-0 flex-1">
           {/* ── Sidebar ── */}
           <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
             {/* Brand */}
@@ -166,14 +169,12 @@ export default function SupportPanelPage() {
 
           {/* ── Main Content ── */}
           <main
-            className={`min-w-0 flex-1 flex flex-col ${
-              section === "tickets"
-                ? "h-[calc(100vh-4rem)] overflow-hidden"
-                : "overflow-y-auto"
+            className={`min-h-0 min-w-0 flex-1 flex flex-col ${
+              section === "tickets" ? "overflow-hidden" : "overflow-y-auto"
             }`}
           >
             {/* Top bar */}
-            <div className="sticky top-0 z-10 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+            <div className="sticky top-0 z-30 flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-3 py-2 sm:px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                   <span className="material-symbols-outlined text-[18px]">
@@ -185,19 +186,27 @@ export default function SupportPanelPage() {
                 </h1>
               </div>
               {/* Mobile section switcher */}
-              <div className="flex items-center gap-3 sm:hidden">
-                <RadioSelect
-                  value={section}
-                  onChange={setSection}
-                  options={visibleSections.map((s) => ({
-                    value: s.key,
-                    label: s.label,
-                    icon: s.icon,
-                  }))}
-                  size="sm"
-                  variant="panel"
-                  align="right"
-                />
+              <div className="ml-auto flex items-center gap-2">
+                {section === "tickets" && (
+                  <TicketViewControl
+                    value={ticketViewMode}
+                    onChange={setTicketViewMode}
+                  />
+                )}
+                <div className="flex items-center gap-3 sm:hidden">
+                  <RadioSelect
+                    value={section}
+                    onChange={setSection}
+                    options={visibleSections.map((s) => ({
+                      value: s.key,
+                      label: s.label,
+                      icon: s.icon,
+                    }))}
+                    size="sm"
+                    variant="panel"
+                    align="right"
+                  />
+                </div>
               </div>
             </div>
 
@@ -205,6 +214,8 @@ export default function SupportPanelPage() {
             {section === "tickets" ? (
               <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 <TicketsSection
+                  viewMode={ticketViewMode}
+                  setViewMode={setTicketViewMode}
                   token={token}
                   userId={user?.id}
                   statusFilter={ticketsFilter}
@@ -220,7 +231,9 @@ export default function SupportPanelPage() {
                     onNavigate={navigateTo}
                   />
                 )}
-                {section === "admin_inbox" && <AdminInboxSection token={token} />}
+                {section === "admin_inbox" && (
+                  <AdminInboxSection token={token} />
+                )}
                 {section === "disputes" && (
                   <DisputesSection
                     token={token}
