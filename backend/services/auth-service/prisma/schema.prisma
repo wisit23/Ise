@@ -63,13 +63,14 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  buyerProfile    BuyerProfile?
-  sellerProfile   SellerProfile?
-  loginLogs       LoginLog[]
-  refreshTokens   RefreshToken[]
-  reports         Report[]
-  roles           UserRole[]
-  kycApplications KycApplication[]
+  buyerProfile       BuyerProfile?
+  sellerProfile      SellerProfile?
+  loginLogs          LoginLog[]
+  refreshTokens      RefreshToken[]
+  reports            Report[]
+  roles              UserRole[]
+  kycApplications    KycApplication[]
+  shopChangeRequests ShopChangeRequest[]
 
   @@map("users")
 }
@@ -87,25 +88,25 @@ model BuyerProfile {
 
 // ER: Seller — shop info + KYC fields.
 model SellerProfile {
-  userId         String    @id @map("user_id")
-  user           User      @relation(fields: [userId], references: [id])
-  shopName       String    @map("shop_name")
-  idCardNumber   String?   @map("id_card_number")
+  userId        String    @id @map("user_id")
+  user          User      @relation(fields: [userId], references: [id])
+  shopName      String    @map("shop_name")
+  idCardNumber  String?   @map("id_card_number")
   // Expiry date printed on the ID card (optional — permanent-card holders leave this null).
   // The daily kycExpiryJob sets kycStatus = EXPIRED when this date is in the past.
-  idCardExpiry   DateTime? @map("id_card_expiry")
+  idCardExpiry  DateTime? @map("id_card_expiry")
   // Return/shipping address collected during seller verification.
-  address        String?
-  bankAccount    String?   @map("bank_account")
-  kycStatus      KycStatus @default(NONE) @map("kyc_status")
+  address       String?
+  bankAccount   String?   @map("bank_account")
+  kycStatus     KycStatus @default(NONE) @map("kyc_status")
   // Private storage key for the latest submitted ID card photo — never a
   // public URL, same reasoning as KycApplication.storageKey below.
-  kycStorageKey  String?   @map("kyc_storage_key")
-  verifiedAt     DateTime? @map("verified_at")
+  kycStorageKey String?   @map("kyc_storage_key")
+  verifiedAt    DateTime? @map("verified_at")
   // Timestamp of the seller's last listing activity (create or update a product).
   // The daily sellerInactivityJob sets kycStatus = INACTIVE_EXPIRED when this
   // (or verifiedAt if null) is older than 365 days.
-  lastActiveAt   DateTime? @map("last_active_at")
+  lastActiveAt  DateTime? @map("last_active_at")
 
   @@map("seller_profiles")
 }
@@ -231,8 +232,8 @@ model ExecutiveAuditLog {
   actorId     String   @map("actor_id")
   actorEmail  String?  @map("actor_email")
   actorRole   String?  @map("actor_role")
-  action      String   // e.g. "REPORT_EXPORT_CSV", "COMPLAINT_ACTIONED", "COMPLAINT_DISMISSED", "FINANCIAL_VIEW"
-  category    String   // e.g. "DATA_EXPORT", "MODERATION", "FINANCIAL", "SECURITY"
+  action      String // e.g. "REPORT_EXPORT_CSV", "COMPLAINT_ACTIONED", "COMPLAINT_DISMISSED", "FINANCIAL_VIEW"
+  category    String // e.g. "DATA_EXPORT", "MODERATION", "FINANCIAL", "SECURITY"
   targetType  String?  @map("target_type") // e.g. "report", "complaint", "order"
   targetId    String?  @map("target_id")
   description String
@@ -246,4 +247,29 @@ model ExecutiveAuditLog {
   @@index([category])
   @@index([createdAt])
   @@map("executive_audit_logs")
+}
+
+// Seller-initiated request to change their shop profile fields.
+// Admin must approve before the SellerProfile is updated — keeps an
+// audit trail of every change request and its outcome.
+model ShopChangeRequest {
+  id          String    @id @default(uuid())
+  sellerId    String    @map("seller_id")
+  seller      User      @relation(fields: [sellerId], references: [id])
+  // Fields the seller wants to change (null = no change requested for that field)
+  shopName    String?   @map("shop_name")
+  address     String?
+  bankAccount String?   @map("bank_account")
+  // Required: seller must explain what changed and why
+  comment     String
+  // PENDING | APPROVED | REJECTED
+  status      String    @default("PENDING")
+  adminNote   String?   @map("admin_note")
+  reviewedBy  String?   @map("reviewed_by")
+  reviewedAt  DateTime? @map("reviewed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([sellerId])
+  @@index([status])
+  @@map("shop_change_requests")
 }

@@ -63,6 +63,58 @@ async function publicProfile(req, res, next) {
   }
 }
 
+async function getMyShopProfile(req, res, next) {
+  try {
+    const profile = await authService.getMyShopProfile(req.userId);
+    res.json(profile);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function submitShopChangeRequest(req, res, next) {
+  try {
+    const result = await authService.submitShopChangeRequest(
+      req.userId,
+      req.body,
+    );
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getMyChangeRequests(req, res, next) {
+  try {
+    const result = await authService.listMyChangeRequests(req.userId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getPendingChangeRequests(req, res, next) {
+  try {
+    const result = await authService.listPendingChangeRequests();
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function decideChangeRequest(req, res, next) {
+  try {
+    const result = await authService.decideChangeRequest(
+      req.userId,
+      req.params.id,
+      req.body,
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -71,4 +123,9 @@ module.exports = {
   me,
   updateMe,
   publicProfile,
+  getMyShopProfile,
+  submitShopChangeRequest,
+  getMyChangeRequests,
+  getPendingChangeRequests,
+  decideChangeRequest,
 };

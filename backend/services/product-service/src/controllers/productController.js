@@ -190,8 +190,9 @@ async function bySeller(req, res, next) {
     const pagination = parsePagination(req.query);
     // If the requester is the owner of the store, show them their hidden products too.
     const isOwner = req.userId && req.userId === req.params.sellerId;
-    console.log(`[bySeller] sellerId=${req.params.sellerId}, req.userId=${req.userId}, isOwner=${isOwner}`);
-    const allowedStatuses = isOwner ? ["available", "hidden"] : "available";
+    const allowedStatuses = isOwner
+      ? ["available", "hidden", "sold"]
+      : ["available", "sold"];
     const { items, total } = await productModel.listBySeller(
       req.params.sellerId,
       { status: allowedStatuses, skip: pagination.skip, take: pagination.take },
@@ -253,7 +254,11 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    const product = await requireProductOwner(req.params.id, req.userId, "edit");
+    const product = await requireProductOwner(
+      req.params.id,
+      req.userId,
+      "edit",
+    );
     if (product.status === "auction") {
       throw forbidden("cannot edit a product that is currently in an auction");
     }
@@ -278,9 +283,15 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    const product = await requireProductOwner(req.params.id, req.userId, "remove");
+    const product = await requireProductOwner(
+      req.params.id,
+      req.userId,
+      "remove",
+    );
     if (product.status === "auction") {
-      throw forbidden("cannot remove a product that is currently in an auction");
+      throw forbidden(
+        "cannot remove a product that is currently in an auction",
+      );
     }
     await productModel.remove(req.params.id);
     res.status(204).send();

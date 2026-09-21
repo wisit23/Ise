@@ -18,6 +18,7 @@ import KycSection from "../../components/support/sections/KycSection";
 import AuditSection from "../../components/support/sections/AuditSection";
 import AdminInboxSection from "../../components/support/sections/AdminInboxSection";
 import ProductsSection from "../../components/support/sections/ProductsSection";
+import SellerChangeRequestsSection from "../../components/support/sections/SellerChangeRequestsSection";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -36,6 +37,10 @@ const ADMIN_SECTIONS = [
   { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
   { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
+];
+
+const ADMIN_ONLY_SECTIONS = [
+  { key: "shop_changes", label: "ตรวจข้อมูลร้านค้า", icon: "storefront" },
 ];
 
 export default function SupportPanelPage() {
@@ -90,7 +95,11 @@ export default function SupportPanelPage() {
   const isAdminOrSafety =
     user?.role === "ADMIN" || user?.role === "TRUST_AND_SAFETY";
   const visibleSections = isAdminOrSafety
-    ? [...SECTIONS, ...ADMIN_SECTIONS]
+    ? [
+        ...SECTIONS,
+        ...ADMIN_SECTIONS,
+        ...(user?.role === "ADMIN" ? ADMIN_ONLY_SECTIONS : []),
+      ]
     : SECTIONS;
   const activeSection = visibleSections.find((s) => s.key === section);
 
@@ -245,6 +254,9 @@ export default function SupportPanelPage() {
                 {section === "kyc" && <KycSection token={token} />}
                 {section === "audit" && <AuditSection token={token} />}
                 {section === "products" && <ProductsSection token={token} />}
+                {section === "shop_changes" && (
+                  <SellerChangeRequestsSection token={token} />
+                )}
               </div>
             )}
           </main>

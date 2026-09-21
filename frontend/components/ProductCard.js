@@ -189,13 +189,31 @@ export default function ProductCard({ product, showSeller = true }) {
               ซ่อนอยู่
             </span>
           )}
+          {product.status === "sold" && (
+            <span className="flex items-center gap-1 rounded-full bg-rose-600 px-[.75em] py-[.32em] text-xs font-bold text-white shadow-1 backdrop-blur-[8px]">
+              <span className="material-symbols-outlined text-[14px]">
+                check_circle
+              </span>
+              ขายแล้ว
+            </span>
+          )}
         </div>
+
+        {product.status === "sold" && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 backdrop-blur-[1px]">
+            <span className="rounded-md border border-white/30 bg-black/75 px-3 py-1 text-xs font-bold tracking-wider text-white shadow-lg uppercase">
+              ขายแล้ว
+            </span>
+          </div>
+        )}
 
         {/* A caption for the link the whole card already is — not a second
             action, just the affordance a still photo lacks. */}
         <div className="pointer-events-none absolute inset-x-[.7rem] bottom-[.7rem] translate-y-2.5 opacity-0 transition-all duration-300 ease-ease group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 max-[560px]:translate-y-0 max-[560px]:opacity-100">
           <span className="flex items-center justify-center gap-1.5 rounded-sm bg-white/[.92] p-[.7em] text-sm font-semibold text-ink shadow-2 backdrop-blur-[10px]">
-            ดูรายละเอียด
+            {product.status === "sold"
+              ? "ดูรายละเอียด (ขายแล้ว)"
+              : "ดูรายละเอียด"}
             <span
               className="material-symbols-outlined text-[16px] leading-none"
               aria-hidden="true"
@@ -225,9 +243,16 @@ export default function ProductCard({ product, showSeller = true }) {
           </p>
         )}
 
-        <p className="mt-[.55rem] font-display text-[1.18rem] font-bold tracking-[-.02em] text-ink">
-          ฿{product.price.toLocaleString("th-TH")}
-        </p>
+        <div className="mt-[.55rem] flex items-center justify-between gap-2">
+          <p className="font-display text-[1.18rem] font-bold tracking-[-.02em] text-ink">
+            ฿{product.price.toLocaleString("th-TH")}
+          </p>
+          {product.status === "sold" && (
+            <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 border border-rose-200">
+              ขายแล้ว
+            </span>
+          )}
+        </div>
 
         {showSeller && (
           <div className="mt-[.7rem] flex items-center gap-[.45rem] border-t border-line pt-[.7rem] text-xs text-ink-subtle">
