@@ -11,6 +11,7 @@ const { signAccessToken } = require("@reloop/shared");
 const app = require("./app");
 
 const buyerToken = signAccessToken({ sub: "buyer-1", role: "BUYER" });
+const executiveToken = signAccessToken({ sub: "exec-1", role: "EXECUTIVE" });
 
 test("GET /health returns 200 ok without needing a database", async () => {
   const res = await request(app).get("/health");
@@ -47,4 +48,13 @@ test("POST /videos from a BUYER account is rejected with 403 before touching the
     .set("Authorization", `Bearer ${buyerToken}`)
     .send({ videoUrl: "https://example.test/a.mp4", productId: "p1" });
   assert.equal(res.status, 403);
+});
+
+test("POST /auctions/:id/bids from a staff account is rejected before touching the database", async () => {
+  const res = await request(app)
+    .post("/auctions/auction-1/bids")
+    .set("Authorization", `Bearer ${executiveToken}`)
+    .send({ amount: 100, idempotencyKey: "staff-bid" });
+  assert.equal(res.status, 403);
+  assert.equal(res.body.error.code, "CUSTOMER_ACCOUNT_REQUIRED");
 });

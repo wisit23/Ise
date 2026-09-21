@@ -6,6 +6,7 @@ const {
   verifyRefreshToken,
   permissionsForRoles,
   ALL_ROLES,
+  isValidRoleCombination,
   badRequest,
   conflict,
   notFound,
@@ -53,7 +54,13 @@ async function ensureRoleRowsMigrated(userId) {
 async function assignRole(userId, role) {
   if (!ALL_ROLES.includes(role)) throw badRequest("unknown role");
 
-  await ensureRoleRowsMigrated(userId);
+  const currentRoles = await ensureRoleRowsMigrated(userId);
+  const nextRoles = [...new Set([...currentRoles, role])];
+  if (!isValidRoleCombination(nextRoles)) {
+    throw conflict(
+      "customer roles (BUYER/SELLER) cannot be combined with a staff role, and a staff account can have only one staff role",
+    );
+  }
   await prisma.userRole.upsert({
     where: { userId_role: { userId, role } },
     update: {},

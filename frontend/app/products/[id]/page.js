@@ -13,7 +13,14 @@ import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import Alert from "../../../components/ui/Alert";
 import Modal from "../../../components/ui/Modal";
 import { apiFetch } from "../../../lib/api";
-import { getAccessToken, getStoredUser } from "../../../lib/auth";
+import {
+  getAccessToken,
+  getAccessTokenClaims,
+  getStoredUser,
+  getCurrentRoles,
+  isCustomerAccountRoles,
+  canPurchaseProduct,
+} from "../../../lib/auth";
 import { fetchConditions } from "../../../lib/catalog";
 
 const STATUS_LABEL = {
@@ -70,10 +77,26 @@ export default function ProductDetailPage() {
   const [availableCampaigns, setAvailableCampaigns] = useState([]);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
+  const [viewer, setViewer] = useState({
+    ready: false,
+    isAuthenticated: false,
+    userId: null,
+    roles: [],
+  });
 
   useEffect(() => {
     const token = getAccessToken();
-    if (token && id) {
+    const user = getStoredUser();
+    const claims = getAccessTokenClaims();
+    const roles = getCurrentRoles();
+    setViewer({
+      ready: true,
+      isAuthenticated: Boolean(token),
+      userId: claims?.sub || user?.id || null,
+      roles,
+    });
+
+    if (token && id && isCustomerAccountRoles(roles)) {
       apiFetch("/api/orders/mine?status=pending_payment&limit=100", { token })
         .then((data) => {
           const match = data.items?.find((o) => o.productId === id);
@@ -195,8 +218,7 @@ export default function ProductDetailPage() {
       router.push("/login");
       return null;
     }
-    const user = getStoredUser();
-    if (user?.id === product.sellerId) {
+    if (viewer.userId === product.sellerId) {
       setNotice("คุณไม่สามารถซื้อสินค้าของตัวเองได้");
       return null;
     }
@@ -253,6 +275,16 @@ export default function ProductDetailPage() {
   }
 
   const available = product.status === "available";
+  const isOwnProduct = viewer.userId === product.sellerId;
+  // Guests keep the existing login CTA. Logged-in staff are read-only.
+  const canPurchase =
+    viewer.ready &&
+    canPurchaseProduct({
+      isAuthenticated: viewer.isAuthenticated,
+      userId: viewer.userId,
+      roles: viewer.roles,
+      sellerId: product.sellerId,
+    });
   const sellerName = seller
     ? seller.shopName || `${seller.firstName} ${seller.lastName}`
     : "ผู้ขาย";
@@ -492,7 +524,7 @@ export default function ProductDetailPage() {
             </div>
           </div>
 
-          {getStoredUser()?.id === product.sellerId ? (
+          {isOwnProduct ? (
             <Link
               href={`/products/${product.id}/edit`}
               className="mt-3 inline-block text-xs font-medium text-gray-500 hover:text-emerald-600 hover:underline"
@@ -587,7 +619,7 @@ export default function ProductDetailPage() {
             </div>
           )}
 
-          {!added && (
+          {canPurchase && !added && (
             <div className="mt-6 flex gap-3">
               {myPendingOrder ? (
                 <Link

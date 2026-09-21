@@ -1,6 +1,8 @@
 node_modules/
 .next/
 dist/
+# This repository uses the root npm-workspace lockfile.
+frontend/package-lock.json
 .env
 .env.local
 .env.*.local

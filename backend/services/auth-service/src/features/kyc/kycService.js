@@ -1,5 +1,6 @@
 const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
+const { assignRole } = require("../../services/authService");
 const { absolutePath } = require("./kycStorage");
 
 /** Seller-facing submission — creates the seller_profiles row on first
@@ -52,7 +53,9 @@ async function submitKyc({
   });
   if (!user) throw notFound("user not found");
 
-  // Upgrade BUYER role to SELLER on first KYC submission.
+  // Add SELLER to the customer account on first KYC submission. The shared
+  // role policy rejects staff accounts, while BUYER + SELLER remains valid.
+  await assignRole(userId, "SELLER");
   if (user.role !== "SELLER") {
     await prisma.user.update({
       where: { id: userId },

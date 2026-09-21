@@ -10,7 +10,11 @@ import EmptyState from "../../components/ui/EmptyState";
 import Skeleton from "../../components/ui/Skeleton";
 import OrderLine from "../../components/OrderLine";
 import { apiFetch } from "../../lib/api";
-import { getAccessToken } from "../../lib/auth";
+import {
+  getAccessToken,
+  getCurrentRoles,
+  isCustomerAccountRoles,
+} from "../../lib/auth";
 
 export function isReservationExpired(order, now) {
   const deadline = reservationDeadline(order);
@@ -60,6 +64,10 @@ export default function CartPage() {
     const token = getAccessToken();
     if (!token) {
       router.push("/login");
+      return;
+    }
+    if (!isCustomerAccountRoles(getCurrentRoles())) {
+      router.push("/");
       return;
     }
     setLoading(true);

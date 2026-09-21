@@ -100,7 +100,15 @@ const SUPPORT_AGENTS = [
   },
 ];
 
-async function upsertUser({ id, email, firstName, lastName, role, shopName, passwordHash }) {
+async function upsertUser({
+  id,
+  email,
+  firstName,
+  lastName,
+  role,
+  shopName,
+  passwordHash,
+}) {
   const existingByEmail = await prisma.user.findUnique({ where: { email } });
   if (existingByEmail) {
     await prisma.user.update({
@@ -114,8 +122,16 @@ async function upsertUser({ id, email, firstName, lastName, role, shopName, pass
           ? {
               sellerProfile: {
                 upsert: {
-                  create: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
-                  update: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                  create: {
+                    shopName,
+                    kycStatus: "VERIFIED",
+                    verifiedAt: new Date(),
+                  },
+                  update: {
+                    shopName,
+                    kycStatus: "VERIFIED",
+                    verifiedAt: new Date(),
+                  },
                 },
               },
             }
@@ -127,6 +143,9 @@ async function upsertUser({ id, email, firstName, lastName, role, shopName, pass
       where: { userId_role: { userId: existingByEmail.id, role } },
       update: {},
       create: { userId: existingByEmail.id, role },
+    });
+    await prisma.userRole.deleteMany({
+      where: { userId: existingByEmail.id, role: { not: role } },
     });
     return;
   }
@@ -145,8 +164,16 @@ async function upsertUser({ id, email, firstName, lastName, role, shopName, pass
           ? {
               sellerProfile: {
                 upsert: {
-                  create: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
-                  update: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+                  create: {
+                    shopName,
+                    kycStatus: "VERIFIED",
+                    verifiedAt: new Date(),
+                  },
+                  update: {
+                    shopName,
+                    kycStatus: "VERIFIED",
+                    verifiedAt: new Date(),
+                  },
                 },
               },
             }
@@ -158,6 +185,9 @@ async function upsertUser({ id, email, firstName, lastName, role, shopName, pass
       where: { userId_role: { userId: id, role } },
       update: {},
       create: { userId: id, role },
+    });
+    await prisma.userRole.deleteMany({
+      where: { userId: id, role: { not: role } },
     });
     return;
   }
@@ -173,7 +203,11 @@ async function upsertUser({ id, email, firstName, lastName, role, shopName, pass
       ...(shopName
         ? {
             sellerProfile: {
-              create: { shopName, kycStatus: "VERIFIED", verifiedAt: new Date() },
+              create: {
+                shopName,
+                kycStatus: "VERIFIED",
+                verifiedAt: new Date(),
+              },
             },
           }
         : {}),
@@ -247,7 +281,8 @@ async function main() {
       id: "50000000-0000-0000-0000-000000000001",
       reporterId: BUYERS[0].id,
       targetId: SELLERS[1].id,
-      reason: "พฤติกรรมฉ้อโกง: ผู้ขายหลอกให้โอนเงินมัดจำล่วงหน้านอกแพลตฟอร์มแล้วเงียบหาย บล็อกการติดต่อ",
+      reason:
+        "พฤติกรรมฉ้อโกง: ผู้ขายหลอกให้โอนเงินมัดจำล่วงหน้านอกแพลตฟอร์มแล้วเงียบหาย บล็อกการติดต่อ",
       status: "OPEN",
       reportedAt: new Date(Date.now() - 2 * 3600 * 1000),
     },
@@ -255,7 +290,8 @@ async function main() {
       id: "50000000-0000-0000-0000-000000000002",
       reporterId: BUYERS[0].id,
       targetId: SELLERS[1].id,
-      reason: "สินค้าผิดกฎหมายหรือละเมิดลิขสิทธิ์: สินค้าแบรนด์เนมปลอม ละเมิดลิขสิทธิ์อย่างชัดเจน ไม่ใช่ของแท้ตามที่โฆษณา",
+      reason:
+        "สินค้าผิดกฎหมายหรือละเมิดลิขสิทธิ์: สินค้าแบรนด์เนมปลอม ละเมิดลิขสิทธิ์อย่างชัดเจน ไม่ใช่ของแท้ตามที่โฆษณา",
       status: "OPEN",
       reportedAt: new Date(Date.now() - 5 * 3600 * 1000),
     },
@@ -263,7 +299,8 @@ async function main() {
       id: "50000000-0000-0000-0000-000000000003",
       reporterId: BUYERS[0].id,
       targetId: SELLERS[1].id,
-      reason: "พฤติกรรมฉ้อโกง: ได้รับสลิปยืนยันแต่ไม่ยอมจัดส่งสินค้าตามกำหนด ผัดวันประกันพรุ่งมาหลายสัปดาห์",
+      reason:
+        "พฤติกรรมฉ้อโกง: ได้รับสลิปยืนยันแต่ไม่ยอมจัดส่งสินค้าตามกำหนด ผัดวันประกันพรุ่งมาหลายสัปดาห์",
       status: "REVIEWED",
       reportedAt: new Date(Date.now() - 24 * 3600 * 1000),
     },
@@ -272,7 +309,8 @@ async function main() {
       id: "50000000-0000-0000-0000-000000000004",
       reporterId: BUYERS[0].id,
       targetId: SELLERS[2].id,
-      reason: "สินค้าไม่ตรงปก: สภาพสินค้าชำรุดเสียหายหนัก มีรอยฉีกขาดที่ไม่ระบุในรูปถ่ายประกาศ",
+      reason:
+        "สินค้าไม่ตรงปก: สภาพสินค้าชำรุดเสียหายหนัก มีรอยฉีกขาดที่ไม่ระบุในรูปถ่ายประกาศ",
       status: "OPEN",
       reportedAt: new Date(Date.now() - 12 * 3600 * 1000),
     },
@@ -280,7 +318,8 @@ async function main() {
       id: "50000000-0000-0000-0000-000000000005",
       reporterId: BUYERS[0].id,
       targetId: SELLERS[2].id,
-      reason: "สินค้าไม่ตรงปก: ส่งสินค้าผิดขนาด ไซส์และสีไม่ตรงกับรายละเอียดที่ลงขายในระบบ",
+      reason:
+        "สินค้าไม่ตรงปก: ส่งสินค้าผิดขนาด ไซส์และสีไม่ตรงกับรายละเอียดที่ลงขายในระบบ",
       status: "ACTIONED",
       reportedAt: new Date(Date.now() - 48 * 3600 * 1000),
     },
@@ -289,7 +328,8 @@ async function main() {
       id: "50000000-0000-0000-0000-000000000006",
       reporterId: BUYERS[0].id,
       targetId: SELLERS[3].id,
-      reason: "สินค้าผิดกฎหมายหรือละเมิดลิขสิทธิ์: นำกระเป๋าละเมิดลิขสิทธิ์มาลงขาย มีการปลอมแปลงป้ายตราสินค้า",
+      reason:
+        "สินค้าผิดกฎหมายหรือละเมิดลิขสิทธิ์: นำกระเป๋าละเมิดลิขสิทธิ์มาลงขาย มีการปลอมแปลงป้ายตราสินค้า",
       status: "OPEN",
       reportedAt: new Date(Date.now() - 8 * 3600 * 1000),
     },
@@ -298,7 +338,8 @@ async function main() {
       id: "50000000-0000-0000-0000-000000000007",
       reporterId: BUYERS[0].id,
       targetId: SELLERS[0].id,
-      reason: "พฤติกรรมฉ้อโกง: แจ้งเลขพัสดุปลอม ไม่สามารถตรวจสอบสถานะในระบบขนส่งได้",
+      reason:
+        "พฤติกรรมฉ้อโกง: แจ้งเลขพัสดุปลอม ไม่สามารถตรวจสอบสถานะในระบบขนส่งได้",
       status: "DISMISSED",
       reportedAt: new Date(Date.now() - 72 * 3600 * 1000),
     },

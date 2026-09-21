@@ -1,7 +1,19 @@
-import { render, screen, act, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  act,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react";
 import NavBar from "./NavBar";
 import { getUnreadCount } from "../lib/chat";
-import { getAccessToken, getStoredUser } from "../lib/auth";
+import {
+  getAccessToken,
+  getAccessTokenClaims,
+  getStoredUser,
+  getCurrentRoles,
+} from "../lib/auth";
+import { apiFetch } from "../lib/api";
 
 jest.mock("../lib/api", () => ({
   apiFetch: jest.fn().mockResolvedValue({ total: 0 }),
@@ -14,14 +26,18 @@ jest.mock("../lib/catalog", () => ({
 
 jest.mock("../lib/chat", () => ({ getUnreadCount: jest.fn() }));
 
-jest.mock("../lib/auth", () => ({
-  getAccessToken: jest.fn(),
-  getStoredUser: jest.fn(),
-  clearSession: jest.fn(),
-}));
+jest.mock("../lib/auth", () => {
+  const actual = jest.requireActual("../lib/auth");
+  return {
+    ...actual,
+    getAccessToken: jest.fn(),
+    getAccessTokenClaims: jest.fn(),
+    getStoredUser: jest.fn(),
+    getCurrentRoles: jest.fn(),
+    clearSession: jest.fn(),
+  };
+});
 
-// The badge reads the app-wide socket through the provider's hooks; the
-// fake is injected at that seam so a pushed event can be fired by hand.
 const mockSocketState = { socket: null, connected: false };
 
 jest.mock("./chat/ChatSocketProvider", () => {
@@ -57,22 +73,131 @@ function createFakeSocket() {
   };
 }
 
+function mockBuyer() {
+  getStoredUser.mockReturnValue({
+    id: "buyer-1",
+    firstName: "ผู้ซื้อ",
+    role: "BUYER",
+  });
+  getAccessToken.mockReturnValue("token-123");
+  getAccessTokenClaims.mockReturnValue({});
+  getCurrentRoles.mockReturnValue(["BUYER"]);
+  getUnreadCount.mockResolvedValue({ total: 0 });
+}
+
+describe("NavBar role permissions", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSocketState.socket = null;
+    mockSocketState.connected = false;
+    mockBuyer();
+  });
+
+  it("shows an executive only their work menu and logout", () => {
+    getStoredUser.mockReturnValue({
+      id: "exec-1",
+      firstName: "Executive",
+      role: "EXECUTIVE",
+    });
+    getCurrentRoles.mockReturnValue(["EXECUTIVE"]);
+    render(<NavBar />);
+
+    expect(
+      screen.queryByRole("link", { name: /^ตะกร้า/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /^ข้อความ/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /^ลงขาย$/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "เมนูโปรไฟล์" }));
+
+    expect(
+      screen.getByRole("link", { name: "แดชบอร์ดผู้บริหาร" }),
+    ).toBeInTheDocument();
+    for (const customerMenu of [
+      "ลงขายสินค้า",
+      "คำสั่งซื้อของฉัน",
+      "คูปองส่วนลดของฉัน",
+      "ตั๋วแจ้งปัญหาของฉัน",
+      "ศูนย์ช่วยเหลือ",
+      "ตั้งค่าโปรไฟล์",
+    ]) {
+      expect(
+        screen.queryByRole("link", { name: customerMenu }),
+      ).not.toBeInTheDocument();
+    }
+    expect(
+      screen.getByRole("button", { name: "ออกจากระบบ" }),
+    ).toBeInTheDocument();
+    expect(apiFetch).not.toHaveBeenCalled();
+    expect(getUnreadCount).not.toHaveBeenCalled();
+  });
+
+  it("keeps customer account menus and shortcuts for buyers", async () => {
+    render(<NavBar />);
+
+    expect(
+      await screen.findByRole("link", { name: /^ลงขาย$/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^ตะกร้า/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^ข้อความ/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "เมนูโปรไฟล์" }));
+
+    for (const customerMenu of [
+      "ลงขายสินค้า",
+      "คำสั่งซื้อของฉัน",
+      "คูปองส่วนลดของฉัน",
+      "ตั๋วแจ้งปัญหาของฉัน",
+      "ศูนย์ช่วยเหลือ",
+      "ตั้งค่าโปรไฟล์",
+    ]) {
+      expect(
+        screen.getByRole("link", { name: customerMenu }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("keeps seller work menus together with customer account menus", async () => {
+    getStoredUser.mockReturnValue({
+      id: "seller-1",
+      firstName: "Seller",
+      role: "SELLER",
+    });
+    getCurrentRoles.mockReturnValue(["SELLER"]);
+    getAccessTokenClaims.mockReturnValue({ kycStatus: "VERIFIED" });
+
+    render(<NavBar />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "เมนูโปรไฟล์" }));
+
+    for (const sellerMenu of [
+      "แดชบอร์ดผู้ขาย",
+      "ร้านค้าของฉัน",
+      "อัปโหลดคลิปรีวิว",
+      "ส่งสินค้าประมูล",
+      "ลงขายสินค้า",
+      "คำสั่งซื้อของฉัน",
+      "คูปองส่วนลดของฉัน",
+    ]) {
+      expect(
+        screen.getByRole("link", { name: sellerMenu }),
+      ).toBeInTheDocument();
+    }
+  });
+});
+
 describe("NavBar unread badge", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSocketState.socket = null;
     mockSocketState.connected = false;
-    getStoredUser.mockReturnValue({
-      id: "buyer-1",
-      firstName: "ผู้ซื้อ",
-      role: "BUYER",
-    });
-    getAccessToken.mockReturnValue("token-123");
+    mockBuyer();
   });
 
   it("shows no badge when there is nothing unread", async () => {
-    getUnreadCount.mockResolvedValue({ total: 0 });
-
     render(<NavBar />);
 
     const link = await screen.findByRole("link", { name: /^ข้อความ$/ });
@@ -92,16 +217,14 @@ describe("NavBar unread badge", () => {
     ).toBeInTheDocument();
   });
 
-  it("updates the badge live on a pushed activity event, without a reload", async () => {
+  it("updates the badge live on a pushed activity event", async () => {
     const fakeSocket = createFakeSocket();
     mockSocketState.socket = fakeSocket;
     mockSocketState.connected = true;
-    getUnreadCount.mockResolvedValue({ total: 0 });
 
     render(<NavBar />);
     await screen.findByRole("link", { name: /^ข้อความ$/ });
 
-    // A message arrives while the user is on some other page entirely.
     getUnreadCount.mockResolvedValue({ total: 1 });
     act(() =>
       fakeSocket._trigger("conversation:activity", {
@@ -116,17 +239,14 @@ describe("NavBar unread badge", () => {
     ).toBeInTheDocument();
   });
 
-  it("re-reads the total when the socket reconnects (it missed events while down)", async () => {
+  it("re-reads the total when the socket reconnects", async () => {
     const fakeSocket = createFakeSocket();
     mockSocketState.socket = fakeSocket;
     mockSocketState.connected = false;
-    getUnreadCount.mockResolvedValue({ total: 0 });
 
     const { rerender } = render(<NavBar />);
     await screen.findByRole("link", { name: /^ข้อความ$/ });
 
-    // Whatever arrived during the outage is only discoverable by asking
-    // again — a reconnect is exactly when that has to happen.
     getUnreadCount.mockResolvedValue({ total: 5 });
     mockSocketState.connected = true;
     rerender(<NavBar />);
@@ -136,7 +256,7 @@ describe("NavBar unread badge", () => {
     ).toBeInTheDocument();
   });
 
-  it("updates the badge when a local chat:unread-sync event is dispatched", async () => {
+  it("updates the badge when a local chat sync event is dispatched", async () => {
     getUnreadCount.mockResolvedValue({ total: 2 });
 
     render(<NavBar />);
@@ -144,7 +264,6 @@ describe("NavBar unread badge", () => {
       await screen.findByRole("link", { name: /มี 2 รายการที่ยังไม่อ่าน/ }),
     ).toBeInTheDocument();
 
-    // All messages are marked read in chat page
     getUnreadCount.mockResolvedValue({ total: 0 });
     act(() => {
       window.dispatchEvent(new CustomEvent("chat:unread-sync"));
@@ -160,6 +279,7 @@ describe("NavBar unread badge", () => {
   it("never asks for an unread count when nobody is logged in", async () => {
     getAccessToken.mockReturnValue(null);
     getStoredUser.mockReturnValue(null);
+    getCurrentRoles.mockReturnValue([]);
 
     render(<NavBar />);
 

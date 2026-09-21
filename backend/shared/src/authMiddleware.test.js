@@ -5,7 +5,11 @@ process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
 
 const { signAccessToken } = require("./jwt");
-const { requireAuth, requirePermission } = require("./authMiddleware");
+const {
+  requireAuth,
+  requirePermission,
+  requireCustomerAccount,
+} = require("./authMiddleware");
 
 test("requireAuth exposes the display name from a verified access token", () => {
   const token = signAccessToken({
@@ -48,17 +52,53 @@ test("requireAuth falls back to a single-item roles array for a legacy token", (
 
 test("requireAuth reads multi-role claims when present", () => {
   const token = signAccessToken({
-    sub: "staff-1",
-    role: "ADMIN",
-    roles: ["ADMIN", "CUSTOMER_SERVICE"],
-    permissions: ["admin:user:ban", "support:case:read"],
+    sub: "customer-1",
+    role: "SELLER",
+    roles: ["BUYER", "SELLER"],
+    permissions: ["order:purchase", "product:write"],
   });
   const req = { headers: { authorization: `Bearer ${token}` } };
 
   requireAuth(req, {}, () => {});
 
-  assert.deepEqual(req.userRoles, ["ADMIN", "CUSTOMER_SERVICE"]);
-  assert.deepEqual(req.permissions, ["admin:user:ban", "support:case:read"]);
+  assert.deepEqual(req.userRoles, ["BUYER", "SELLER"]);
+  assert.deepEqual(req.permissions, ["order:purchase", "product:write"]);
+});
+
+test("requireAuth rejects mixed staff/customer claims", () => {
+  const token = signAccessToken({
+    sub: "user-invalid",
+    role: "BUYER",
+    roles: ["BUYER", "EXECUTIVE"],
+  });
+  let statusCode;
+  let body;
+  const req = {
+    headers: { authorization: `Bearer ${token}` },
+    id: "req-invalid-role",
+  };
+  const res = {
+    status(code) {
+      statusCode = code;
+      return this;
+    },
+    json(payload) {
+      body = payload;
+    },
+  };
+
+  requireAuth(req, res, () => {
+    throw new Error("next should not be called");
+  });
+
+  assert.equal(statusCode, 403);
+  assert.deepEqual(body, {
+    error: {
+      code: "INVALID_ROLE_COMBINATION",
+      message: "Account role configuration is invalid",
+      requestId: "req-invalid-role",
+    },
+  });
 });
 
 test("requirePermission allows a matching permission through", () => {
@@ -94,4 +134,33 @@ test("requirePermission returns a structured 403 for a missing permission", () =
   assert.deepEqual(body, {
     error: { code: "FORBIDDEN", message: "Forbidden", requestId: "req-1" },
   });
+});
+
+test("requireCustomerAccount allows customer-only roles", () => {
+  let nextCalled = false;
+  requireCustomerAccount({ userRoles: ["BUYER", "SELLER"] }, {}, () => {
+    nextCalled = true;
+  });
+  assert.equal(nextCalled, true);
+});
+
+test("requireCustomerAccount denies staff and mixed staff/customer roles", () => {
+  for (const roles of [["EXECUTIVE"], ["BUYER", "EXECUTIVE"]]) {
+    let statusCode;
+    let body;
+    const res = {
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(payload) {
+        body = payload;
+      },
+    };
+    requireCustomerAccount({ userRoles: roles, id: "req-2" }, res, () => {
+      throw new Error("next should not be called");
+    });
+    assert.equal(statusCode, 403);
+    assert.equal(body.error.code, "CUSTOMER_ACCOUNT_REQUIRED");
+  }
 });

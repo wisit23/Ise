@@ -1,5 +1,5 @@
 const { Router } = require("express");
-const { requireAuth } = require("@reloop/shared");
+const { requireAuth, requireCustomerAccount } = require("@reloop/shared");
 const auctionController = require("./auctionController");
 
 const router = Router();
@@ -26,6 +26,11 @@ router.patch("/:id/schedule", requireAuth, auctionController.schedule);
 router.patch("/:id/cancel", requireAuth, auctionController.cancel);
 
 // Buyer bidding.
-router.post("/:id/bids", requireAuth, auctionController.bid);
+router.post(
+  "/:id/bids",
+  requireAuth,
+  requireCustomerAccount,
+  auctionController.bid,
+);
 
 module.exports = router;
