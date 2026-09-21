@@ -3,6 +3,7 @@ const conversationService = require("../conversations/conversationService");
 const messageModel = require("../messages/messageModel");
 const prisma = require("../../models/prismaClient");
 const { absolutePath } = require("./attachmentStorage");
+const { syncSupportMessage } = require("../sync/supportSyncWorker");
 
 /** image/* renders inline as a bubble; everything else (pdf, video) is
  * offered as a download. Two message types rather than one keeps the
@@ -49,6 +50,7 @@ async function attach({ conversationId, senderId, file, caption }) {
     p.userId === senderId ? { ...p, lastReadAt: now } : p,
   );
 
+  const isSupport = conversation.contextType === "SUPPORT";
   const message = await messageModel.createAndTouch({
     conversationId,
     senderId,
@@ -66,7 +68,12 @@ async function attach({ conversationId, senderId, file, caption }) {
     },
     preview: body || previewFor(type, file.originalname),
     participants: updatedParticipants,
+    syncStatus: isSupport ? "PENDING" : null,
   });
+
+  if (isSupport) {
+    syncSupportMessage(conversation, message);
+  }
 
   return {
     message,

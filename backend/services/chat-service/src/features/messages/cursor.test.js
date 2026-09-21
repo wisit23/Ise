@@ -19,7 +19,11 @@ test("buildPageQuery with no cursor has no id filter and takes limit+1", () => {
     before: undefined,
     limit: 30,
   });
-  assert.deepEqual(q.where, { conversationId: "c1", deletedAt: null });
+  assert.deepEqual(q.where, {
+    conversationId: "c1",
+    deletedAt: null,
+    visibility: { not: "INTERNAL" },
+  });
   assert.deepEqual(q.orderBy, { id: "desc" });
   assert.equal(q.take, 31);
 });
@@ -34,8 +38,21 @@ test("buildPageQuery with a cursor filters id < cursor", () => {
     conversationId: "c1",
     deletedAt: null,
     id: { lt: "507f1f77bcf86cd799439011" },
+    visibility: { not: "INTERNAL" },
   });
   assert.equal(q.take, 11);
+});
+
+test("buildPageQuery with includeInternal: true omits visibility filter", () => {
+  const q = buildPageQuery({
+    conversationId: "c1",
+    limit: 10,
+    includeInternal: true,
+  });
+  assert.deepEqual(q.where, {
+    conversationId: "c1",
+    deletedAt: null,
+  });
 });
 
 test("paginate returns nextCursor=null when there is no extra row", () => {

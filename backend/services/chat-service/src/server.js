@@ -17,4 +17,7 @@ createSocketServer(server);
 // close() exists for test harnesses; the long-running process just gets
 // killed, so it's intentionally unused here.
 
+const { startSupportSyncWorker } = require("./features/sync/supportSyncWorker");
+startSupportSyncWorker();
+
 server.listen(PORT, () => console.log(`[chat-service] listening on ${PORT}`));

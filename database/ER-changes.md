@@ -1,3 +1,5 @@
+> **Document status (2026-09-09): Historical plan / evidence baseline.** ข้อกำหนด/การสัมภาษณ์/หลักฐานเดิมเก็บไว้; ข้อความว่ายังไม่ทำหรือผลตรวจในเนื้อหาเดิมใช้เฉพาะช่วงเวลานั้น. สถานะ source aad4092 ดู [current state](../docs/current-state.md), [validation](../docs/validation.md), [known issues](../docs/known-issues.md). ไม่ถือ requirement, mockup หรือ checklist ว่า implemented/accepted โดยอัตโนมัติ.
+
 # RE-LOOP — Database change log (vs. `docs/erdatabase.png`)
 
 This file tracks every deviation from the original ER diagram, with the reason for each change.

@@ -55,19 +55,21 @@ model SupportTicket {
   @@index([status, priority, slaDueAt])
   @@index([requesterId, createdAt])
   @@index([assigneeId, status])
+  @@index([conversationId])
   @@map("support_tickets")
 }
 
 model TicketMessage {
-  id         String   @id @default(uuid())
-  ticketId   String   @map("ticket_id")
-  authorId   String   @map("author_id")
-  authorRole String   @map("author_role") // REQUESTER|AGENT|SYSTEM
-  body       String
+  id            String   @id @default(uuid())
+  ticketId      String   @map("ticket_id")
+  authorId      String   @map("author_id")
+  authorRole    String   @map("author_role") // REQUESTER|AGENT|SYSTEM
+  body          String
   // Internal team note — never returned to the requester's own view of the
   // ticket (see ticketService.js's requester-facing projection).
-  isInternal Boolean  @default(false) @map("is_internal")
-  createdAt  DateTime @default(now()) @map("created_at")
+  isInternal    Boolean  @default(false) @map("is_internal")
+  chatMessageId String?  @unique @map("chat_message_id")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
@@ -85,6 +87,10 @@ model TicketAuditLog {
   fromValue String?  @map("from_value")
   toValue   String?  @map("to_value")
   reason    String?
+  // Used only for operations that must be idempotent (for example, joining
+  // the same chat room repeatedly). NULL keeps ordinary append-only audit
+  // events unrestricted in PostgreSQL.
+  dedupeKey String?  @unique @map("dedupe_key")
   createdAt DateTime @default(now()) @map("created_at")
 
   ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)

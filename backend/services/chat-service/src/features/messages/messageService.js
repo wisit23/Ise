@@ -4,6 +4,7 @@ const conversationService = require("../conversations/conversationService");
 const conversationModel = require("../conversations/conversationModel");
 const messageModel = require("./messageModel");
 const { isValidCursor } = require("./cursor");
+const { syncSupportMessage } = require("../sync/supportSyncWorker");
 
 const EPOCH = new Date(0);
 
@@ -42,6 +43,7 @@ async function sendMessage(conversationId, senderId, body) {
     p.userId === senderId ? { ...p, lastReadAt: now } : p,
   );
 
+  const isSupport = conversation.contextType === "SUPPORT";
   const message = await messageModel.createAndTouch({
     conversationId,
     senderId,
@@ -49,7 +51,13 @@ async function sendMessage(conversationId, senderId, body) {
     type: "TEXT",
     body: trimmed,
     participants: updatedParticipants,
+    syncStatus: isSupport ? "PENDING" : null,
   });
+
+  if (isSupport) {
+    syncSupportMessage(conversation, message);
+  }
+
   return {
     message,
     conversation: { ...conversation, participants: updatedParticipants },
@@ -60,11 +68,23 @@ async function listMessages(conversationId, userId, before, limit) {
   // Re-uses the exact same authorization check as reading the conversation
   // itself — a single choke point, not a second copy of the participant
   // logic that could drift out of sync.
-  await conversationService.getForParticipant(conversationId, userId);
+  const conversation = await conversationService.getForParticipant(
+    conversationId,
+    userId,
+  );
   if (before !== undefined && !isValidCursor(before)) {
     throw badRequest("before must be a valid message id");
   }
-  return messageModel.listPage(conversationId, before, limit);
+  const participant = conversation.participants.find(
+    (p) => p.userId === userId,
+  );
+  const isStaff =
+    participant &&
+    (participant.role === "AGENT" || participant.role === "ADMIN");
+
+  return messageModel.listPage(conversationId, before, limit, {
+    includeInternal: Boolean(isStaff),
+  });
 }
 
 async function markRead(conversationId, userId) {
