@@ -38,13 +38,7 @@ export default function ProductDetailPage() {
   const [conditionLabels, setConditionLabels] = useState({});
   const [reviewSummary, setReviewSummary] = useState(null);
   const [showReport, setShowReport] = useState(false);
-<<<<<<< Updated upstream
-=======
   const [myPendingOrder, setMyPendingOrder] = useState(null);
-  const [reviews, setReviews] = useState([]);
-  const [reviewPage, setReviewPage] = useState(1);
-  const [reviewTotalPages, setReviewTotalPages] = useState(1);
-  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [viewer, setViewer] = useState({
     ready: false,
     isAuthenticated: false,
@@ -73,7 +67,6 @@ export default function ProductDetailPage() {
         .catch(() => {});
     }
   }, [id]);
->>>>>>> Stashed changes
 
   useEffect(() => {
     apiFetch(`/api/products/${id}`)
@@ -264,29 +257,12 @@ export default function ProductDetailPage() {
                 )}
               </div>
             </div>
-<<<<<<< Updated upstream
             <Link
               href={`/store/${product.sellerId}`}
               className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
             >
               ดูร้านค้า
             </Link>
-=======
-            <div className="flex shrink-0 items-center gap-2">
-              {!isOwnProduct && (
-                <ContactSellerButton
-                  productId={product.id}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3.5 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                />
-              )}
-              <Link
-                href={`/store/${product.sellerId}`}
-                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-              >
-                ดูร้านค้า
-              </Link>
-            </div>
->>>>>>> Stashed changes
           </div>
 
           {isOwnProduct ? (
@@ -332,9 +308,6 @@ export default function ProductDetailPage() {
             </div>
           )}
 
-<<<<<<< Updated upstream
-          {!added && (
-=======
           {product.status === "auction" && (
             <div className="mt-4 animate-slide-up flex items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800 shadow-sm">
               <div className="flex items-center gap-2.5">
@@ -370,7 +343,8 @@ export default function ProductDetailPage() {
                       : "สินค้านี้อยู่ในตะกร้าของคุณแล้ว"}
                   </p>
                   <p className="text-xs text-emerald-700 mt-0.5">
-                    รายการนี้ถูกล็อกไว้รอให้คุณชำระเงิน กรุณากดไปที่ตะกร้าเพื่อดำเนินการ
+                    รายการนี้ถูกล็อกไว้รอให้คุณชำระเงิน
+                    กรุณากดไปที่ตะกร้าเพื่อดำเนินการ
                   </p>
                 </div>
               </div>
@@ -387,7 +361,6 @@ export default function ProductDetailPage() {
           )}
 
           {canPurchase && !added && (
->>>>>>> Stashed changes
             <div className="mt-6 flex gap-3">
               <button
                 onClick={handleAddToCart}

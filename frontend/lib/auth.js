@@ -2,8 +2,6 @@ const ACCESS_KEY = "reloop_access_token";
 const REFRESH_KEY = "reloop_refresh_token";
 const USER_KEY = "reloop_user";
 
-<<<<<<< Updated upstream
-=======
 export const CUSTOMER_ROLES = ["BUYER", "SELLER"];
 export const STAFF_ROLES = [
   "CUSTOMER_SERVICE",
@@ -19,11 +17,11 @@ function notifyAuthChange() {
   }
 }
 
->>>>>>> Stashed changes
 export function saveSession({ accessToken, refreshToken, user }) {
   localStorage.setItem(ACCESS_KEY, accessToken);
   localStorage.setItem(REFRESH_KEY, refreshToken);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  notifyAuthChange();
 }
 
 export function getAccessToken() {
@@ -33,6 +31,7 @@ export function getAccessToken() {
 
 export function setAccessToken(accessToken) {
   localStorage.setItem(ACCESS_KEY, accessToken);
+  notifyAuthChange();
 }
 
 export function getRefreshToken() {
@@ -116,4 +115,5 @@ export function clearSession() {
   localStorage.removeItem(ACCESS_KEY);
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
+  notifyAuthChange();
 }

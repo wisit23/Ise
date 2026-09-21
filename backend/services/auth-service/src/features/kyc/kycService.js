@@ -30,15 +30,15 @@ async function submitKyc({
     include: { sellerProfile: true },
   });
   if (!user) throw notFound("user not found");
-<<<<<<< Updated upstream
-=======
 
   // Add SELLER to the customer account on first KYC submission. The shared
   // role policy rejects staff accounts, while BUYER + SELLER remains valid.
   await assignRole(userId, "SELLER");
->>>>>>> Stashed changes
   if (user.role !== "SELLER") {
-    throw forbidden("only seller accounts can submit seller verification");
+    await prisma.user.update({
+      where: { id: userId },
+      data: { role: "SELLER" },
+    });
   }
   if (user.sellerProfile?.kycStatus === "VERIFIED") {
     throw conflict("this account is already verified");

@@ -38,6 +38,7 @@ test("checkout persists the reservation identity returned by product-service", a
     status: "pending",
     ...data,
   }));
+  t.mock.method(orderModel, "findByReservationId", async () => null);
 
   const response = await request(app)
     .post("/")
@@ -52,6 +53,7 @@ test("checkout persists the reservation identity returned by product-service", a
 test("checkout releases the exact reservation when Order creation fails", async (t) => {
   t.mock.method(console, "error", () => {});
   t.mock.method(productClient, "reserveProduct", async () => ({
+    created: true,
     reservationId: "reservation-b",
     reservedBy: "buyer-a",
     expiresAt,
@@ -66,13 +68,14 @@ test("checkout releases the exact reservation when Order creation fails", async 
   t.mock.method(orderModel, "create", async () => {
     throw new Error("simulated Order database failure");
   });
+  t.mock.method(orderModel, "findByReservationId", async () => null);
 
   const releases = [];
   t.mock.method(
     productClient,
-    "releaseReservation",
-    async (productId, reservationId, buyerId) => {
-      releases.push({ productId, reservationId, buyerId });
+    "releaseProductReservation",
+    async (productId, reservationId) => {
+      releases.push({ productId, reservationId });
     },
   );
 
@@ -86,7 +89,6 @@ test("checkout releases the exact reservation when Order creation fails", async 
     {
       productId: "product-b",
       reservationId: "reservation-b",
-      buyerId: "buyer-a",
     },
   ]);
 });

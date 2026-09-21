@@ -5,12 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
-<<<<<<< Updated upstream
 import { apiFetch, mediaUrl } from "../../../lib/api";
-import { getAccessToken, getStoredUser } from "../../../lib/auth";
-=======
-import MediaGallery from "../../../components/MediaGallery";
-import { apiFetch } from "../../../lib/api";
 import {
   getAccessToken,
   getAccessTokenClaims,
@@ -18,7 +13,6 @@ import {
   getCurrentRoles,
   isCustomerAccountRoles,
 } from "../../../lib/auth";
->>>>>>> Stashed changes
 
 const STATUS_LABEL = {
   pending_approval: "รออนุมัติ",
@@ -143,22 +137,10 @@ export default function AuctionDetailPage() {
     ? highest.amount + auction.bidIncrement
     : auction.startingPrice;
   const isOpen = auction.status === "open";
-<<<<<<< Updated upstream
-  const isOwnAuction = user && user.id === auction.sellerId;
-=======
   const isOwnAuction = viewer.userId === auction.sellerId;
   const canBid =
     viewer.ready &&
     (!viewer.isAuthenticated || isCustomerAccountRoles(viewer.roles));
-  const isWinner = Boolean(
-    viewer.userId && highest && viewer.userId === highest.bidderId,
-  );
-
-  const productMedia = [
-    ...(auction.product?.photos || []).map((p) => ({ ...p, type: "image" })),
-    ...(auction.product?.videos || []).map((v) => ({ ...v, type: "video" })),
-  ].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
->>>>>>> Stashed changes
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">

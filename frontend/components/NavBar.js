@@ -107,6 +107,7 @@ function resolveMenuHref(item, context) {
 
 export default function NavBar() {
   const [user, setUser] = useState(null);
+  const [kycStatus, setKycStatus] = useState(null);
   const [cartCount, setCartCount] = useState(0);
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -119,12 +120,6 @@ export default function NavBar() {
 
     const token = getAccessToken();
     if (token) {
-<<<<<<< Updated upstream
-      apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
-        .then((data) => setCartCount(data.total))
-        .catch((err) =>
-          console.error("โหลดจำนวนสินค้าในตะกร้าไม่สำเร็จ:", err),
-=======
       const claims = getAccessTokenClaims();
       setKycStatus(claims?.kycStatus || null);
 
@@ -135,12 +130,6 @@ export default function NavBar() {
             console.error("โหลดจำนวนสินค้าในตะกร้าไม่สำเร็จ:", err),
           );
       }
-      getUnreadCount(token)
-        .then((data) => setUnreadCount(data.total))
-        .catch((err) =>
-          console.error("โหลดจำนวนข้อความที่ยังไม่อ่านไม่สำเร็จ:", err),
->>>>>>> Stashed changes
-        );
     }
   }, []);
 
@@ -187,18 +176,6 @@ export default function NavBar() {
       : "/products";
   }
 
-<<<<<<< Updated upstream
-  const isSeller = user?.role === "SELLER";
-  const isExecutive = user?.role === "EXECUTIVE";
-  const isMarketing = user?.role === "MARKETING";
-  const isSupportAgent =
-    user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
-  // Every one of these is a role someone can hold *in addition to* being a
-  // buyer on this same account — the header never assumes a visitor is only
-  // one thing, which is why these sit in their own labelled group instead of
-  // gating an entirely separate header.
-  const hasWorkLinks = isSupportAgent || isSeller || isExecutive || isMarketing;
-=======
   const currentRoles = user ? getCurrentRoles() : [];
   const hasValidRoleCombination = isValidRoleCombinationRoles(currentRoles);
   const isCustomerAccount =
@@ -214,7 +191,6 @@ export default function NavBar() {
     ? "SELLER"
     : currentRoles[0] || user?.role;
   const canUseCart = isCustomerAccount;
->>>>>>> Stashed changes
 
   return (
     <header className="sticky top-0 z-nav border-b border-line bg-white/90 backdrop-blur">
@@ -331,31 +307,8 @@ export default function NavBar() {
           </Link>
         )}
 
-        {user && (
-          <Link
-<<<<<<< Updated upstream
-=======
-            href="/chat"
-            aria-label={`ข้อความ${unreadCount > 0 ? ` มี ${unreadCount} รายการที่ยังไม่อ่าน` : ""}`}
-            className="focus-ring relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
-          >
-            <span
-              className="material-symbols-outlined text-[21px] leading-none"
-              aria-hidden="true"
-            >
-              chat_bubble
-            </span>
-            {unreadCount > 0 && (
-              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
-                {unreadCount}
-              </span>
-            )}
-          </Link>
-        )}
-
         {canUseCart && (
           <Link
->>>>>>> Stashed changes
             href="/cart"
             aria-label={`ตะกร้า${cartCount > 0 ? ` มี ${cartCount} รายการ` : ""}`}
             className="focus-ring relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
@@ -384,13 +337,9 @@ export default function NavBar() {
                 aria-expanded={menuOpen}
                 className="focus-ring flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-transparent transition hover:ring-brand-200"
               >
-<<<<<<< Updated upstream
-                {user.firstName?.[0] || "?"}
-=======
                 {displayRole === "ADMIN" || displayRole === "TRUST_AND_SAFETY"
                   ? "T"
                   : user.firstName?.[0] || "?"}
->>>>>>> Stashed changes
               </button>
 
               {menuOpen && (
@@ -399,14 +348,6 @@ export default function NavBar() {
                   className="animate-dropdown-in absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-line bg-white py-2 shadow-lg"
                 >
                   <div className="border-b border-line px-4 py-3">
-<<<<<<< Updated upstream
-                    <p className="truncate text-sm font-medium text-gray-900">
-                      {user.firstName} {user.lastName}
-                    </p>
-                    <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
-                      {ROLE_LABEL[user.role] || user.role}
-                    </span>
-=======
                     {displayRole === "ADMIN" ||
                     displayRole === "TRUST_AND_SAFETY" ? (
                       <p className="truncate text-sm font-semibold text-gray-900">
@@ -422,7 +363,6 @@ export default function NavBar() {
                         </span>
                       </>
                     )}
->>>>>>> Stashed changes
                   </div>
 
                   {availableWorkItems.length > 0 && (
