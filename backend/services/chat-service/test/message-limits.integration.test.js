@@ -170,7 +170,17 @@ test("send rate limit against a real Redis", async (t) => {
   }
 
   const { RATE_LIMITS } = require("../src/limits");
-  const { limit } = RATE_LIMITS.sendMessage;
+  const { limit, windowSeconds } = RATE_LIMITS.sendMessage;
+
+  // The limiter deliberately uses fixed wall-clock windows. Avoid starting a
+  // flood close enough to a boundary that one logical test burst is split
+  // across two windows and the 31st request is correctly treated as the first
+  // request of the next window.
+  const windowMs = windowSeconds * 1000;
+  const remainingMs = windowMs - (Date.now() % windowMs);
+  if (remainingMs < 2000) {
+    await new Promise((resolve) => setTimeout(resolve, remainingMs + 50));
+  }
 
   // A user of its own, so the budget can't be spent by another test.
   const flooderId = `int-test-flood-${Date.now()}`;

@@ -245,6 +245,7 @@
   - **ยกระดับสิทธิ์กำกับดูแลใน Support Service:** ปรับปรุง `assertAccess` ใน `ticketService.js` ให้ผู้ใช้งานบทบาท `TRUST_AND_SAFETY` สามารถเปิดดูรายละเอียดของตั๋วทุกใบได้ (รวมถึงตั๋วที่มีเจ้าหน้าที่ CS รับผิดชอบอยู่และถูกส่งต่อมา) แก้ไขปัญหา 403 Forbidden เดิมที่เคยถูกบันทึกเป็นข้อจำกัดไว้
   - **ปรับปรุง Domain Naming และ Input Sanitization:** ทำความสะอาดพารามิเตอร์ภายในเป็น `actorId` / `staffId` (พร้อมคง backward compatibility สำหรับ `adminId`) และทำการตัดช่องว่างข้อความ (trim) เหตุผลก่อนบันทึกลงฐานข้อมูลเสมอ
 - Reason: กำจัด Technical Debt, เสริมความเสถียรของฐานข้อมูล (ACID Transactional Guarantees), ป้องกันการค้างของการเรียกข้ามเครือข่าย และทำให้สิทธิ์การกำกับดูแลของฝ่าย Trust & Safety ชัดเจนสมบูรณ์
+
 ## ADM-DEC-021 — ปรับปรุงสถาปัตยกรรมและประสบการณ์ผู้ใช้งาน Frontend ฝั่ง Trust & Safety (UX Consistency, Confirmation Modals, Pagination & Complete Terminology)
 
 - Date: 2026-09-07
@@ -330,3 +331,12 @@
 - Reason: seed ปกติเป็น upsert-only และไม่รีเซ็ตสถานะหรือบทบาท จึงอาจเริ่มรอบทดสอบจากบัญชี SUSPENDED หรือสิทธิ์ที่ถูกแก้ไว้ การแยก fixture ช่วยให้รันซ้ำได้โดยไม่กระทบบัญชี demo อื่น
 - Audit policy: ไม่ลบ AdminAudit เดิม เพื่อรักษาหลักฐาน privileged action แบบ append-only; จำนวนประวัติ Ban จึงเพิ่มตามรอบทดสอบได้
 - Operational boundary: seed นี้ไม่รันอัตโนมัติตอน container start และใช้กับ local/manual QA เท่านั้น
+
+## ADM-DEC-025 — หนึ่ง Dispute มีผู้รับผิดชอบที่แก้ไขได้ทีละคน
+
+- Date: 2026-09-19
+- Status: Accepted for TSR-02 planning; ยังไม่เริ่ม implementation
+- Decision: `DisputeCase` ต้องมี `assignedTo`, `assignedRole`, `claimedAt` และ `version`; การ Claim/Reassign/Escalate ใช้ conditional update และ Audit โดยมีผู้แก้ไขเคสได้เพียงคนเดียวในแต่ละช่วงเวลา เจ้าหน้าที่อื่นอ่านได้ตามสิทธิ์แต่เขียนไม่ได้
+- Escalation: การส่งต่อจาก CS ไป T&S เป็นการโอน ownership ไม่ใช่ให้สองฝ่ายตัดสินเคสเดียวกันพร้อมกัน เจ้าของเดิมต้องเขียนต่อไม่ได้ทันทีหลังโอน
+- Hold boundary: ownership ของเคสกับเหตุพักเงินเป็นคนละแนวคิด ออเดอร์หนึ่งรายการอาจมี Hold จาก dispute และ fraud/account review พร้อมกันได้ แต่แต่ละคำสั่งปล่อยได้เฉพาะ Hold source/reference ของตน และ `payoutHeld` เป็นผลรวมของ active holds
+- Reason: ป้องกันเจ้าหน้าที่ตัดสินเคสซ้ำหรือเขียนทับกัน พร้อมป้องกันการปิด dispute จากการปล่อย Hold ที่ T&S หรือระบบอื่นยังต้องใช้

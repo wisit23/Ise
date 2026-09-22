@@ -1,5 +1,6 @@
 const { badRequest, conflict, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
+const orderTransitionService = require("../../services/orderTransitionService");
 
 /** Append-only — never updated or deleted (ADM-DEC-003: evidence must persist). */
 async function recordAudit({ orderId, actorId, action, reason }) {
@@ -33,6 +34,8 @@ async function getDisputeView({ orderId, adminId }) {
   return { order, evidence, disputeCase: order.dispute || null };
 }
 
+const ALLOWED_HOLD_STATUSES = ["confirmed", "shipped", "completed", "disputed"];
+
 /**
  * `version` is the optimistic-lock value the caller last saw — a mismatch
  * means the hold state changed since (e.g. someone already released it, or
@@ -53,6 +56,9 @@ async function holdSimulatedFunds({
 
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw notFound("order not found");
+  if (!ALLOWED_HOLD_STATUSES.includes(order.status)) {
+    throw badRequest(`order status '${order.status}' cannot be placed on hold`);
+  }
   if (order.paymentSimulationStatus !== "RELEASE_PENDING") {
     throw conflict("order funds are already on hold");
   }
@@ -60,32 +66,60 @@ async function holdSimulatedFunds({
     throw conflict("order dispute state was modified — reload and retry");
   }
 
-  const [updated] = await prisma.$transaction([
-    prisma.order.update({
-      where: { id: orderId },
+  const [updated] = await prisma.$transaction(async (tx) => {
+    await orderTransitionService.addHold(tx, {
+      orderId,
+      source: "TRUST_AND_SAFETY",
+      referenceId: "admin-hold",
+      reason: trimmedReason,
+      heldBy: actorId,
+    });
+
+    const preDispute =
+      order.preDisputeStatus && order.preDisputeStatus !== "disputed"
+        ? order.preDisputeStatus
+        : order.status === "disputed"
+          ? "completed"
+          : order.status;
+
+    const { count } = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        version,
+        paymentSimulationStatus: "RELEASE_PENDING",
+        status: { in: ALLOWED_HOLD_STATUSES },
+      },
       data: {
         paymentSimulationStatus: "ON_HOLD",
         version: { increment: 1 },
         holdReason: trimmedReason,
         heldAt: new Date(),
         heldBy: actorId,
-        preDisputeStatus: order.status,
+        preDisputeStatus: preDispute,
         status: "disputed",
-        // Shared with CS's dispute flow — payoutHeld is the single answer to
-        // "is this seller's money frozen", whoever froze it.
         payoutHeld: true,
         disputedAt: order.disputedAt || new Date(),
       },
-    }),
-    prisma.disputeAudit.create({
+    });
+    if (count === 0) {
+      throw conflict(
+        "order state was modified concurrently — reload and retry",
+      );
+    }
+
+    const orderUpdated = await tx.order.findUnique({ where: { id: orderId } });
+
+    await tx.disputeAudit.create({
       data: {
         orderId,
         actorId,
         action: "HOLD",
         reason: trimmedReason,
       },
-    }),
-  ]);
+    });
+
+    return [orderUpdated];
+  });
 
   return updated;
 }
@@ -114,38 +148,66 @@ async function releaseSimulatedFunds({
     throw conflict("order dispute state was modified — reload and retry");
   }
 
-  // An undecided CS case is still holding this payout for its own reasons.
-  // Admin releasing its own hold must not also release CS's — otherwise money
-  // would be freed while an agent is still deciding the refund.
-  const csCaseStillOpen = Boolean(
-    order.dispute && order.dispute.status !== "DECIDED",
-  );
+  const [updated] = await prisma.$transaction(async (tx) => {
+    // Release only this specific administrative hold
+    await orderTransitionService.releaseHold(tx, {
+      orderId,
+      source: "TRUST_AND_SAFETY",
+      referenceId: "admin-hold",
+      reason: trimmedReason,
+      releasedBy: actorId,
+    });
 
-  const [updated] = await prisma.$transaction([
-    prisma.order.update({
-      where: { id: orderId },
+    // Recalculate hold state from all remaining active holds (including dispute, account sanction, etc.)
+    const holdState = await orderTransitionService.resolveHoldState(
+      tx,
+      orderId,
+      {
+        releasingTsHold: true,
+      },
+    );
+
+    const { count } = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        version,
+        paymentSimulationStatus: "ON_HOLD",
+      },
       data: {
         paymentSimulationStatus: "RELEASE_PENDING",
         version: { increment: 1 },
         holdReason: null,
         heldAt: null,
         heldBy: null,
-        preDisputeStatus: null,
-        status: csCaseStillOpen
-          ? order.status
-          : order.preDisputeStatus || order.status,
-        payoutHeld: csCaseStillOpen,
+        preDisputeStatus:
+          holdState.nextStatus === "disputed"
+            ? order.preDisputeStatus && order.preDisputeStatus !== "disputed"
+              ? order.preDisputeStatus
+              : "completed"
+            : null,
+        status: holdState.nextStatus,
+        payoutHeld: holdState.isPayoutHeld,
       },
-    }),
-    prisma.disputeAudit.create({
+    });
+    if (count === 0) {
+      throw conflict(
+        "order state was modified concurrently — reload and retry",
+      );
+    }
+
+    const orderUpdated = await tx.order.findUnique({ where: { id: orderId } });
+
+    await tx.disputeAudit.create({
       data: {
         orderId,
         actorId,
         action: "RELEASE",
         reason: trimmedReason,
       },
-    }),
-  ]);
+    });
+
+    return [orderUpdated];
+  });
 
   return updated;
 }

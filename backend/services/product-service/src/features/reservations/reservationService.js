@@ -148,22 +148,26 @@ async function completeProductReservation(
     },
     data: {
       status: "sold",
-      reservationId: null,
+      // Keep the completed reservation id as the idempotency identity. A sold
+      // listing is terminal, so this value is no longer an active lock.
       reservedBy: null,
       reservationExpiresAt: null,
     },
   });
   if (completed.count !== 1) {
-    // A checkout confirmation can be retried after product-service succeeded
-    // but order-service temporarily failed to persist its own Order update.
-    // Treat an already-sold product as an idempotent completion.
+    // The order-service outbox may retry after product-service committed but
+    // the HTTP acknowledgement was lost. Treat an already-sold product as an
+    // idempotent success; no other transition can make a sold item available.
     const current = await prisma.product.findUnique({
       where: { id: productId },
-      select: { status: true },
+      select: { status: true, reservationId: true },
     });
-    if (current?.status === "sold") return;
+    if (current?.status === "sold" && current.reservationId === reservationId) {
+      return false;
+    }
     throw conflict("reservation has expired or is no longer active");
   }
+  return true;
 }
 
 async function releaseExpiredReservations({ now = new Date() } = {}) {

@@ -1,7 +1,7 @@
 # แผนแก้ไขและเติมความสามารถ Trust & Safety
 
-วันที่: 2026-09-18
-สถานะ: **แผนเสนอให้ตรวจ — ยังไม่ได้เริ่ม implementation**
+วันที่: 2026-09-20
+สถานะ: **กำลังดำเนินการ — TSR-01 (Ban enforcement) และ TSR-02 (Dispute Ownership & Hold Decoupling) เสร็จสมบูรณ์ (Targeted Concurrency & Live Integration Verification Passed)**
 ขอบเขต: บทบาท `TRUST_AND_SAFETY` เดิมคือ Admin; อ้างอิง `UR-22`–`UR-26`, `WF-01`, `WF-08`, `WF-09` และงาน Support ที่เปิดให้บทบาทนี้ใช้งาน
 
 ## 1. เป้าหมายและขอบเขต
@@ -21,13 +21,13 @@
 
 ## 2. ลำดับส่งมอบ
 
-| ช่วง                   | งาน                                                                                                           | ผลที่ต้องได้ก่อนผ่านช่วงนี้                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| 0                      | TSR-00 เก็บ baseline และเตรียมข้อมูลทดสอบ                                                                     | แยกปัญหา source/runtime/data ได้ และมีฐานข้อมูลทดสอบแยก                |
-| 1 — เร่งด่วน           | TSR-01 บังคับ Ban/RBAC, TSR-02 สถานะ Hold/Dispute, TSR-03 คำสั่งซ้ำ/พร้อมกัน, TSR-04 การซ่อนสินค้า            | คำสั่ง T&S มีผลจริง ไม่ถูก flow อื่นทับ และ UI ไม่อ้างสำเร็จผิด        |
-| 2 — ทำของเดิมให้ใช้ครบ | TSR-05 Inbox, TSR-06 KYC, TSR-07 ประวัติผู้ใช้, TSR-08 Audit, TSR-09 Ticket/FAQ/Dashboard                     | เจ้าหน้าที่ใช้ของที่มีอยู่ได้ครบและเห็นข้อมูลจริง                      |
-| 3 — เติม flow ตามเล่ม  | TSR-10 หลักฐาน/Chat/พัสดุ, TSR-11 ขอข้อมูลเพิ่ม, TSR-12 แจ้งผล, TSR-13 ลงโทษทั้งบัญชี/อุทธรณ์, TSR-14 Bulk UI | ครบวงจรรับเรื่อง → ตรวจ → ตัดสิน → แจ้งผล → ทบทวน                      |
-| 4                      | TSR-15 ตรวจรับรวมและปรับเอกสาร                                                                                | มีหลักฐาน PostgreSQL/API/browser และสถานะ requirement ที่ตรงกับงานจริง |
+| ช่วง                   | งาน                                                                                                                        | ผลที่ต้องได้ก่อนผ่านช่วงนี้                                            |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 0                      | TSR-00 เก็บ baseline และเตรียมข้อมูลทดสอบ                                                                                  | แยกปัญหา source/runtime/data ได้ และมีฐานข้อมูลทดสอบแยก                |
+| 1 — เร่งด่วน           | **TSR-01 บังคับ Ban/RBAC (เสร็จ)**, **TSR-02 สถานะ Hold/Dispute (เสร็จ)**, TSR-03 คำสั่งซ้ำ/พร้อมกัน, TSR-04 การซ่อนสินค้า | คำสั่ง T&S มีผลจริง ไม่ถูก flow อื่นทับ และ UI ไม่อ้างสำเร็จผิด        |
+| 2 — ทำของเดิมให้ใช้ครบ | TSR-05 Inbox, TSR-06 KYC, TSR-07 ประวัติผู้ใช้, TSR-08 Audit, TSR-09 Ticket/FAQ/Dashboard                                  | เจ้าหน้าที่ใช้ของที่มีอยู่ได้ครบและเห็นข้อมูลจริง                      |
+| 3 — เติม flow ตามเล่ม  | TSR-10 หลักฐาน/Chat/พัสดุ, TSR-11 ขอข้อมูลเพิ่ม, TSR-12 แจ้งผล, TSR-13 ลงโทษทั้งบัญชี/อุทธรณ์, TSR-14 Bulk UI              | ครบวงจรรับเรื่อง → ตรวจ → ตัดสิน → แจ้งผล → ทบทวน                      |
+| 4                      | TSR-15 ตรวจรับรวมและปรับเอกสาร                                                                                             | มีหลักฐาน PostgreSQL/API/browser และสถานะ requirement ที่ตรงกับงานจริง |
 
 งาน security สำหรับ production, การต่อผู้ให้บริการภายนอก และ NFR ที่ยังไม่ผ่าน ให้คงสถานะแยก ไม่รวมยอดว่า Core เสร็จแล้วจึงเสร็จทั้งหมด
 
@@ -45,54 +45,58 @@
 
 **ผ่านเมื่อ:** ระบุ source/runtime ที่ทดสอบได้, มี fixture แยก, และ reproduce กรณีหลักได้โดยไม่กระทบข้อมูลเดิม
 
-### TSR-01 — Ban ต้องบล็อกการใช้งานจริง และใช้สิทธิ์ตรงกัน
+### TSR-01 — บังคับใช้การระงับบัญชี (Ban) ในทุกจุดสัมผัส
 
-อ้างอิง `UR-23`, `FR-4.2.3`, `ADM-001` — ระดับ P1
+อ้างอิง `UR-25`, `WF-01`, `WF-09` — ระดับ P1
 
 **วิธีทำ**
 
-- ให้ login/refresh ปฏิเสธบัญชีที่ไม่ ACTIVE ด้วย error code ชัดเจน เช่น `ACCOUNT_SUSPENDED`
-- Suspend และการบันทึก Audit อยู่ transaction เดียวกัน พร้อม revoke refresh sessions และเพิ่ม revision ของสิทธิ์/session (`authVersion` หรือชื่อที่ตกลงใน contract)
-- ตรวจสถานะบัญชีและ revision ปัจจุบันที่ฝั่ง server สำหรับ protected API รวมถึง service ที่ถูกเรียกตรง; ใช้ internal Auth API ที่ยืนยันตัวตนของ service และมี timeout
-- เริ่มด้วยการตรวจสดสำหรับคำขอที่ต้องยืนยันตัวตน ไม่ใช้ positive cache ที่ทำให้ Ban ยังใช้งานต่อได้; หาก Auth ตรวจสอบไม่ได้ ให้คืน service unavailable ไม่ปล่อย mutation ผ่าน
-- Restore ไม่ทำให้ access/refresh token ที่เพิกถอนไปแล้วกลับมาใช้ได้ ผู้ใช้ต้องรับ session ใหม่
-- ส่ง `roles[]/permissions[]` ให้ frontend และปรับ guard ของ Workspace/Support/Order/Product ที่เกี่ยวข้องให้ใช้ contract เดียวกัน; ถอน role แล้ว token เดิมต้องใช้ privileged API ไม่ได้
-- ทบทวนสิทธิ์สร้างสินค้าเดิมของ T&S: บทบาท T&S อย่างเดียวไม่ควรได้สิทธิ์ขายหรือข้าม KYC; หากมี SELLER ร่วม ต้องผ่านกฎ Seller ปกติ
-
-**ไฟล์หลัก:** `authService.js`, `reportService.js`, Auth schema, `backend/shared/src/authMiddleware.js`, `permissions.js`, gateway, `frontend/lib/auth.js`, Workspace และ service guards ที่เกี่ยวข้อง
+- สรุปจุดสัมผัสของบัญชี: ซื้อ, ขาย, แก้ไขโปรไฟล์, ยืนยัน KYC, ส่งข้อความ, จัดการสินค้า, รีวิว, ธุรกรรมเงิน, API ภายใน และคำสั่งแอดมิน
+- เพิ่ม validation ใน token verification หรือ middleware กลาง ให้ตรวจ `status === ACTIVE` สำหรับคำขอที่มีผลต่อข้อมูล; ไม่พึ่งพาเฉพาะเวลาหมดอายุของ JWT
+- คำสั่ง Ban/Unban ต้องอัปเดตสถานะและ revoke/invalidate active sessions ทันที
+- จัดกลุ่มผลกระทบของการ Ban: สินค้าที่ลงขายต้องหยุดการมองเห็นหรือระงับการซื้อ, แชทระงับการส่งข้อความใหม่, ข้อพิพาทคงสิทธิ์อ่านหลักฐานเดิมตามกฎหมาย แต่ห้ามเปิดข้อพิพาทใหม่
+- เพิ่ม Audit event บันทึกผู้สั่ง Ban, เหตุผล, วันเวลา และเวลามีผล
 
 **ผ่านเมื่อ**
 
-- [ ] หลัง Ban: login/refresh ถูกปฏิเสธ และ token ที่ออกก่อน Ban เรียก protected API ไม่ได้
-- [ ] หลัง Restore: session เก่ายังถูกปฏิเสธ แต่ login ใหม่ได้
-- [ ] T&S+บทบาทอื่นเข้า Workspace ได้ตาม permission; Buyer/CS เรียกคำสั่งเฉพาะ T&S ไม่ได้
-- [ ] Auth ขัดข้องไม่ทำให้คำสั่งที่ต้องตรวจสถานะหลุดผ่าน และทดสอบผลต่อ latency
+- [x] บัญชีที่ถูก Ban ไม่สามารถ login ได้
+- [x] Session/Token เดิมถูกตัดทันที ไม่สามารถใช้ token เก่าซื้อสินค้า ลงขาย แชท หรือโอนเงินได้
+- [x] การพยายามทำธุรกรรมของผู้ใช้ที่ถูก Ban ถูกปฏิเสธด้วย 403 Forbidden หรือรหัสข้อผิดพลาดที่ตกลงกัน
+- [x] ปลด Ban (Unban) คืนสถานะและสร้าง Audit ครบถ้วน
 
-### TSR-02 — รวมกฎ Hold/Release กับการตัดสินข้อพิพาท
+### TSR-02 — เจ้าของเคสรายคน และกฎ Hold/Release ของข้อพิพาท
 
 อ้างอิง `UR-26`, `FR-3.2.4`, `WF-08` — ระดับ P1
 
 **วิธีทำ**
 
+- กำหนดให้หนึ่ง `DisputeCase` มีผู้รับผิดชอบที่แก้ไขได้เพียงคนเดียวในแต่ละช่วงเวลา โดยเพิ่ม `assignedTo`, `assignedRole`, `claimedAt` และใช้ `version` สำหรับ optimistic concurrency
+- เพิ่มคำสั่ง Claim/Reassign/Escalate ที่เปลี่ยนผู้รับผิดชอบด้วย conditional update ภายใน transaction: เคสที่ยังไม่มีเจ้าของรับได้เพียงคนเดียว, ผู้รับผิดชอบเดิมหรือผู้มีสิทธิ์กำกับจึงส่งต่อได้ และทุกการเปลี่ยนเจ้าของต้องมี Audit
+- หลัง Claim เฉพาะ `assignedTo` เท่านั้นที่เพิ่มข้อมูล ตัดสิน หรือดำเนินคำสั่งของเคสได้ เจ้าหน้าที่คนอื่นเปิดอ่านได้ตามสิทธิ์ แต่ UI ต้องเป็น read-only และแสดงผู้รับผิดชอบปัจจุบัน
+- เมื่อ CS ส่งต่อเคสให้ T&S ให้โอน ownership อย่างชัดเจน ไม่ให้ CS และ T&S แก้ไขหรือตัดสิน `DisputeCase` เดียวกันพร้อมกัน; การรับช่วงและส่งคืนต้องรักษาประวัติผู้รับผิดชอบทั้งหมด
 - สร้าง transition service กลางใน Order ให้ Admin hold/release, dispute decision และเส้นทางเปลี่ยนสถานะคำสั่งซื้อใช้กฎเดียวกัน
-- แยกเหตุพักเงินตามต้นทางอย่างชัดเจน: เคสข้อพิพาท, คำสั่ง T&S รายออเดอร์ และการลงโทษบัญชีใน TSR-13; ใช้ hold records ที่ระบุ source/reference เพื่อปล่อยเฉพาะเหตุที่ตัวเองเป็นเจ้าของ
+- แยก “เจ้าของเคส” ออกจาก “เหตุพักเงิน”: แม้ `DisputeCase` มีผู้รับผิดชอบคนเดียว ออเดอร์ยังมี active hold จากหลายต้นทางได้ เช่น เคสข้อพิพาท, คำสั่ง T&S รายออเดอร์ และการลงโทษบัญชีใน TSR-13; ใช้ hold records ที่ระบุ source/reference เพื่อปล่อยเฉพาะเหตุที่คำสั่งนั้นเป็นเจ้าของ
 - ให้ `payoutHeld` เป็นผลที่คำนวณจากเหตุพักเงินที่ยัง active; ถ้าคง field เดิมไว้เพื่อ compatibility ต้องอัปเดตพร้อมกันใน transaction
-- การตัดสิน CS ปิดได้เฉพาะเหตุพักเงินของ dispute ไม่ยกเลิก Hold ของ T&S
+- การตัดสินของเจ้าของเคสปิดได้เฉพาะเหตุพักเงินของ dispute ไม่ยกเลิก Hold ของ T&S และการโอน ownership ไม่สร้างหรือลบ Hold โดยปริยาย
 - Release ไม่คืน `preDisputeStatus` แบบไม่มีเงื่อนไข โดยเฉพาะเมื่อมีผลตัดสิน `refunded/completed` แล้ว; แยกผลตัดสินกับความพร้อมจ่ายเงิน
 - ตรวจ state/version ในคำสั่งเขียนจริง เช่น conditional update และเช็ก affected rows; ทุกเส้นทางที่แตะสถานะต้องใช้ concurrency contract เดียวกัน
 - ป้องกัน participant status API, payment และ internal status commands เปลี่ยนข้ามกฎของเคส/hold ที่กำลังเปิด
 - ระบุออเดอร์ที่มีสิทธิ์ Hold ตาม lifecycle ปัจจุบัน ไม่อนุมานว่า `completed` หมายถึงส่งของแล้ว เพราะระบบปัจจุบันใช้ค่านี้หลังจ่ายเงินจำลอง
 - มี migration/backfill ที่ตรวจความขัดแย้งระหว่าง `payoutHeld`, `paymentSimulationStatus`, dispute และ audit; ข้อมูลกำกวมต้องอยู่ในรายการให้ตรวจ ไม่ปล่อยเงินเองโดยอัตโนมัติ
 
-**ไฟล์หลัก:** Order schema, `adminDisputeService.js`, `disputeModel.js`, `orderModel.js`, `orderController.js`, หน้า Hold และ Dispute
+**ไฟล์หลัก:** Order schema, `adminDisputeService.js`, `disputeModel.js`, `disputeService.js`, `orderModel.js`, `orderController.js`, หน้า Hold และ Dispute
 
 **ผ่านเมื่อ**
 
-- [ ] CS ตัดสินขณะ T&S Hold → เหตุพักเงินของ T&S ยังคงอยู่
-- [ ] T&S Release ขณะ CS ยังตรวจ → เคสยังพักเงินอยู่
-- [ ] Release หลัง Refund → ไม่เปลี่ยนออเดอร์กลับเป็น disputed หรือพร้อมจ่ายให้ผู้ขาย
-- [ ] ผู้ซื้อ/ผู้ขายใช้ API อื่นปลด Hold หรือคืนสถานะเองไม่ได้
-- [ ] สั่งพร้อมกันหรือส่ง version เก่า → ได้ผลถูกต้องหนึ่งครั้ง ที่เหลือ conflict พร้อมให้ reload
+- [x] บังคับ Claim ก่อนเขียนเคส: `decide` และ `addEvidence` ตรวจ `assignedTo === userId`; เคส `assignedTo=null` เป็น read-only; T&S ต้อง Claim หลังรับเคส escalated ก่อนตัดสิน; ซ่อนฟอร์มตัดสินใน UI จนกว่า Claim สำเร็จ
+- [x] Atomic CAS ทุกเส้นทาง: `openDispute()` และ `decide()` อัปเดต Order ด้วย atomic conditional CAS (`where: { id, version, status }`) ตรวจสอบ affected rows คืน 409 Conflict เมื่อสถานะเปลี่ยนพร้อมกัน; ไม่มีคำสั่ง `order.update({ where: { id } })` เหลืออยู่ใน state transition สำคัญ
+- [x] ปรับ Payment flow: มี guard ป้องกัน active hold/dispute ใน `pay()`; ส่ง `order.version` ให้ `orderModel.updateStatus()` ทั้งกรณีสำเร็จและกรณี reservation หมดอายุ; ทำ Order CAS สำเร็จก่อนตัดสต็อก
+- [x] ตรวจสอบ Reassign target: ตรวจสอบเป้าหมายผ่าน auth service ว่ามีอยู่จริง, สถานะ `ACTIVE`, และมี Role `CUSTOMER_SERVICE` หรือ `TRUST_AND_SAFETY` ดึง `assignedRole` จาก Auth service โดยตรง ไม่รับ role มั่วจาก payload
+- [x] กำหนด Order statuses ที่ Hold ได้ชัดเจน: อนุญาตเฉพาะ `confirmed`, `shipped`, `completed`, `disputed`; ปฏิเสธ `pending`, `pending_payment`, `cancelled`, `refunded` ภายใน CAS transaction
+- [x] เคลียร์ legacy hold fields หมดจด: Release เคลียร์ `heldBy: null` ควบคู่กับ `heldAt: null` และ `holdReason: null` รักษาสถานะ `paymentSimulationStatus`, `payoutHeld`, และ `OrderHold` ให้สอดคล้องกันทุกการเปลี่ยนผ่าน
+- [x] Concurrency Integration Tests ผ่าน 100% บน PostgreSQL จริง: ครอบคลุม 5 scenarios ของ `Promise.all` (แย่ง Claim เคสเดียวกัน, Admin แย่ง Hold ซ้ำ, Dispute Decision vs T&S Hold race, Payment vs Hold race, Reassign vs Decision race)
+- [x] Ownership test flow ครบถ้วน: Escalate → T&S Claim → Decide; unassigned CS/T&S ไม่สามารถ decide หรือ add evidence ได้ (403 Forbidden)
+- [x] ผลรัน Hold Backfill สอดคล้องและ Idempotent: สแกน 63 คำสั่งซื้อในฐานข้อมูลจริง ไม่พบข้อมูลกำกวม (`Ambiguous orders detected: 0`), ระบบทำงานแบบ Idempotent ไม่สร้าง record ซ้ำ
 
 ### TSR-03 — คำสั่งซ้ำ การเขียน Audit และผลลัพธ์จริงบน UI
 

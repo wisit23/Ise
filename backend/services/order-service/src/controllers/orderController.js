@@ -12,6 +12,36 @@ const productClient = require("../services/productClient");
 const chatClient = require("../services/chatClient");
 const buyerActivityClient = require("../services/buyerActivityClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
+const orderTransitionService = require("../services/orderTransitionService");
+const productSyncService = require("../services/productSyncService");
+
+function productSyncFor(order, status, purpose) {
+  if (status === "cancelled" && order.reservationId) {
+    return {
+      dedupeKey: `${purpose}:${order.id}:${order.version}`,
+      action: productSyncService.ACTIONS.RELEASE_RESERVATION,
+      productId: order.productId,
+      reservationId: order.reservationId,
+    };
+  }
+  return {
+    dedupeKey: `${purpose}:${order.id}:${order.version}`,
+    action: productSyncService.ACTIONS.SET_STATUS,
+    productId: order.productId,
+    targetStatus: status === "completed" ? "sold" : "available",
+  };
+}
+
+async function respondAfterProductSync(res, order, event) {
+  try {
+    await productSyncService.processEvent(event.id);
+    res.json(order);
+  } catch {
+    // The durable outbox worker will retry. A 202 tells the caller that the
+    // local transition committed but the cross-service projection is pending.
+    res.status(202).json({ ...order, productSyncPending: true });
+  }
+}
 
 async function dispatchOrderCompletedEvent(order) {
   const event = {
@@ -134,40 +164,39 @@ async function updateStatus(req, res, next) {
       );
     }
 
-    const updated = await orderModel.updateStatus(req.params.id, status);
+    // TSR-02: Prevent participant updating status while order has open dispute or hold
+    orderTransitionService.assertCanParticipantUpdateStatus(order);
 
-    if (status === "cancelled") {
+    if (["cancelled", "completed"].includes(status)) {
+      const { order: updated, event } =
+        await orderModel.transitionStatusWithProductSync({
+          id: req.params.id,
+          status,
+          expectedVersion: order.version,
+          expectedStatuses: [order.status],
+          productSync: productSyncFor(order, status, "ORDER_STATUS"),
+        });
+
       if (order.campaignId) {
-        await productClient.releaseVoucher(order.campaignId, {
+        const voucherAction =
+          status === "cancelled" ? "releaseVoucher" : "completeVoucher";
+        await productClient[voucherAction](order.campaignId, {
           userId: order.buyerId,
           orderId: order.id,
         });
       }
-      if (order.reservationId) {
-        await productClient.releaseProductReservation(
-          order.productId,
-          order.reservationId,
-        );
+      if (status === "completed") {
+        await dispatchOrderCompletedEvent(updated);
       } else {
-        await productClient.setProductStatus(order.productId, "available");
+        await buyerActivityClient.recordOrderActivity(
+          updated,
+          "ORDER_CANCELLED",
+          { initiatedBy: req.userId },
+        );
       }
-    }
-    if (status === "completed") {
-      if (order.campaignId) {
-        await productClient.completeVoucher(order.campaignId, {
-          userId: order.buyerId,
-          orderId: order.id,
-        });
-      }
-      await productClient.setProductStatus(order.productId, "sold");
-      await dispatchOrderCompletedEvent(order);
-    }
-    if (status === "cancelled") {
-      await buyerActivityClient.recordOrderActivity(
-        updated,
-        "ORDER_CANCELLED",
-        { initiatedBy: req.userId },
-      );
+      await chatClient.notifyOrderStatusChanged(order, status);
+      await respondAfterProductSync(res, updated, event);
+      return;
     }
 
     // Best-effort — chatClient swallows its own errors internally (see its
@@ -178,6 +207,11 @@ async function updateStatus(req, res, next) {
     // actual guarantee instead of a race a test would have to poll for.
     await chatClient.notifyOrderStatusChanged(order, status);
 
+    const updated = await orderModel.updateStatus(
+      req.params.id,
+      status,
+      order.version,
+    );
     res.json(updated);
   } catch (err) {
     next(err);
@@ -204,51 +238,75 @@ async function pay(req, res, next) {
     if (order.buyerId !== req.userId) {
       throw forbidden("only the buyer can pay for this order");
     }
+    if (order.status === "confirmed") {
+      const pendingEvent = await productSyncService.findPendingForOrder(
+        order.id,
+      );
+      if (pendingEvent) {
+        await respondAfterProductSync(res, order, pendingEvent);
+        return;
+      }
+    }
     if (!["pending", "pending_payment"].includes(order.status)) {
       throw badRequest(
         `order is already ${order.status}, it cannot be paid again`,
       );
     }
 
+    // Guard against active hold / dispute
+    orderTransitionService.assertCanParticipantUpdateStatus(order);
+
     if (
       order.reservationExpiresAt &&
       order.reservationExpiresAt <= new Date()
     ) {
-      await orderModel.updateStatus(req.params.id, "cancelled");
+      const { event } = await orderModel.transitionStatusWithProductSync({
+        id: req.params.id,
+        status: "cancelled",
+        expectedVersion: order.version,
+        expectedStatuses: ["pending", "pending_payment"],
+        productSync: productSyncFor(order, "cancelled", "RESERVATION_EXPIRED"),
+      });
       if (order.campaignId) {
         await productClient.releaseVoucher(order.campaignId, {
           userId: order.buyerId,
           orderId: order.id,
         });
       }
-      if (order.reservationId) {
-        await productClient.releaseProductReservation(
-          order.productId,
-          order.reservationId,
-        );
+      try {
+        await productSyncService.processEvent(event.id);
+      } catch {
+        // Persisted in the outbox and retried by the worker.
       }
       throw conflict("reservation has expired");
     }
 
-    if (order.reservationId) {
-      await productClient.completeProductReservation(
-        order.productId,
-        order.reservationId,
-      );
-    } else {
-      await productClient.setProductStatus(order.productId, "sold");
-    }
+    const productSync = order.reservationId
+      ? {
+          dedupeKey: `PAY:${order.id}:${order.version}`,
+          action: productSyncService.ACTIONS.COMPLETE_RESERVATION,
+          productId: order.productId,
+          reservationId: order.reservationId,
+        }
+      : productSyncFor(order, "completed", "PAY");
+    const { order: updated, event } =
+      await orderModel.transitionStatusWithProductSync({
+        id: req.params.id,
+        status: "confirmed",
+        expectedVersion: order.version,
+        expectedStatuses: ["pending", "pending_payment"],
+        productSync,
+      });
+
     if (order.campaignId) {
       await productClient.completeVoucher(order.campaignId, {
         userId: order.buyerId,
         orderId: order.id,
       });
     }
-
-    const updated = await orderModel.updateStatus(req.params.id, "confirmed");
     await buyerActivityClient.recordOrderActivity(updated, "PAYMENT_COMPLETED");
 
-    res.json(updated);
+    await respondAfterProductSync(res, updated, event);
   } catch (err) {
     next(err);
   }

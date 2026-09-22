@@ -20,6 +20,7 @@ export default function DisputesSection({
   userRole,
   status,
   setStatus,
+  currentUser,
 }) {
   const toast = useToast();
 
@@ -44,6 +45,9 @@ export default function DisputesSection({
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [decisionReason, setDecisionReason] = useState("");
   const [deciding, setDeciding] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
+  const [escalating, setEscalating] = useState(false);
   const [openingEvidenceId, setOpeningEvidenceId] = useState(null);
 
   function closeDispute() {
@@ -118,6 +122,95 @@ export default function DisputesSection({
     }
   }
 
+  async function refreshQueue() {
+    const params = new URLSearchParams({ page, limit: PAGE_SIZE });
+    if (status) params.set("status", status);
+    if (q) params.set("q", q);
+    try {
+      const data = await apiFetch(`/api/orders/disputes/queue?${params}`, {
+        token,
+      });
+      setItems(data.items || []);
+    } catch (err) {
+      console.error("Failed to refresh queue:", err);
+    }
+  }
+
+  async function handleClaim() {
+    if (!disputeDetails) return;
+    setClaiming(true);
+    try {
+      const updated = await apiFetch(
+        `/api/orders/disputes/${disputeDetails.id}/claim`,
+        {
+          method: "POST",
+          token,
+          body: { version: disputeDetails.version },
+        },
+      );
+      toast.success("รับเคสสำเร็จ");
+      setDisputeDetails(updated);
+      refreshQueue();
+    } catch (err) {
+      toast.error(err.message);
+      if (err.status === 409) {
+        loadDisputeDetails(selectedDispute.orderId);
+      }
+    } finally {
+      setClaiming(false);
+    }
+  }
+
+  async function handleReassign(toUserId, reason) {
+    if (!disputeDetails) return;
+    setReassigning(true);
+    try {
+      const updated = await apiFetch(
+        `/api/orders/disputes/${disputeDetails.id}/reassign`,
+        {
+          method: "POST",
+          token,
+          body: { toUserId, reason, version: disputeDetails.version },
+        },
+      );
+      toast.success("เปลี่ยนผู้รับผิดชอบเรียบร้อย");
+      setDisputeDetails(updated);
+      refreshQueue();
+    } catch (err) {
+      toast.error(err.message);
+      if (err.status === 409) {
+        loadDisputeDetails(selectedDispute.orderId);
+      }
+    } finally {
+      setReassigning(false);
+    }
+  }
+
+  async function handleEscalate(reason) {
+    if (!disputeDetails) return;
+    setEscalating(true);
+    try {
+      const updated = await apiFetch(
+        `/api/orders/disputes/${disputeDetails.id}/escalate`,
+        {
+          method: "POST",
+          token,
+          body: { reason, version: disputeDetails.version },
+        },
+      );
+      toast.success("ส่งต่อเคสให้ทีม Trust & Safety สำเร็จ");
+      setDisputeDetails(updated);
+      refreshQueue();
+    } catch (err) {
+      toast.error(err.message);
+      if (err.status === 409) {
+        loadDisputeDetails(selectedDispute.orderId);
+      }
+    } finally {
+      setEscalating(false);
+    }
+  }
+
   async function handleDecision(decision) {
     if (!decisionReason.trim()) return;
     setDeciding(true);
@@ -125,7 +218,11 @@ export default function DisputesSection({
       await apiFetch(`/api/orders/disputes/${disputeDetails.id}/decision`, {
         method: "POST",
         token,
-        body: { decision, reason: decisionReason },
+        body: {
+          decision,
+          reason: decisionReason,
+          version: disputeDetails?.version,
+        },
       });
       toast.success(
         decision === "APPROVE_REFUND"
@@ -133,15 +230,12 @@ export default function DisputesSection({
           : "ปฏิเสธคำร้องเรียบร้อย",
       );
       loadDisputeDetails(selectedDispute.orderId);
-      const params = new URLSearchParams({ page, limit: PAGE_SIZE });
-      if (status) params.set("status", status);
-      if (q) params.set("q", q);
-      const data = await apiFetch(`/api/orders/disputes/queue?${params}`, {
-        token,
-      });
-      setItems(data.items || []);
+      refreshQueue();
     } catch (err) {
       toast.error(err.message);
+      if (err.status === 409) {
+        loadDisputeDetails(selectedDispute.orderId);
+      }
     } finally {
       setDeciding(false);
     }
@@ -220,6 +314,7 @@ export default function DisputesSection({
             details={disputeDetails}
             detailsLoading={detailsLoading}
             userRole={userRole}
+            currentUserId={currentUser?.id}
             closing={closingDispute}
             decisionReason={decisionReason}
             onDecisionReasonChange={setDecisionReason}
@@ -227,6 +322,12 @@ export default function DisputesSection({
             openingEvidenceId={openingEvidenceId}
             onViewEvidence={handleViewEvidence}
             onDecide={handleDecision}
+            onClaim={handleClaim}
+            claiming={claiming}
+            onReassign={handleReassign}
+            reassigning={reassigning}
+            onEscalate={handleEscalate}
+            escalating={escalating}
             onOpenChat={() => {
               setShowDisputeChat(true);
               setClosingChat(false);

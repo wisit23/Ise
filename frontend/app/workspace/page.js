@@ -245,6 +245,7 @@ export default function SupportPanelPage() {
                   <DisputesSection
                     token={token}
                     userRole={user?.role}
+                    currentUser={user}
                     status={disputesFilter}
                     setStatus={setDisputesFilter}
                   />

@@ -23,6 +23,9 @@ const sellerActivityRoutes = require("./features/sellerActivity/sellerActivityRo
 const profileAddressRoutes = require("./features/profileAddresses/profileAddressRoutes");
 const buyerAuditRoutes = require("./features/buyerAudit/buyerAuditRoutes");
 
+const prisma = require("./models/prismaClient");
+const authService = require("./services/authService");
+
 const app = express();
 app.use(express.json());
 app.locals.validateAccessSession = validateAccessSession;
@@ -49,6 +52,25 @@ app.post(
     }
   },
 );
+
+app.get("/internal/users/:id", requireInternalToken, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!user) return res.status(404).json({ error: "user not found" });
+    const roles = await authService.getUserRoles(user.id);
+    res.json({
+      id: user.id,
+      email: user.email,
+      status: user.status,
+      role: user.role,
+      roles,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 app.get("/health", (req, res) =>
   res.json({ status: "ok", service: "auth-service" }),

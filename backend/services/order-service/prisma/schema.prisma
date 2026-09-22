@@ -58,9 +58,11 @@ model Order {
   heldBy                  String?   @map("held_by")
   preDisputeStatus        String?   @map("pre_dispute_status")
 
-  dispute         DisputeCase?
-  adminEvidence   AdminDisputeEvidence[]
-  checkoutSession CheckoutSession?       @relation(fields: [checkoutSessionId], references: [id], onDelete: SetNull)
+  dispute           DisputeCase?
+  adminEvidence     AdminDisputeEvidence[]
+  holds             OrderHold[]
+  productSyncEvents ProductSyncEvent[]
+  checkoutSession   CheckoutSession?       @relation(fields: [checkoutSessionId], references: [id], onDelete: SetNull)
 
   @@index([buyerId])
   @@index([sellerId])
@@ -91,6 +93,54 @@ model CheckoutSession {
   @@index([buyerId, status])
   @@index([status, expiresAt])
   @@map("checkout_sessions")
+}
+
+// TSR-02: Decoupled active hold sources per order (Dispute, T&S Hold, Account Sanction).
+// payoutHeld on Order is computed from whether any active (released_at is null) hold exists.
+model OrderHold {
+  id            String    @id @default(uuid())
+  orderId       String    @map("order_id")
+  source        String // DISPUTE | TRUST_AND_SAFETY | ACCOUNT_SANCTION
+  referenceId   String?   @map("reference_id")
+  reason        String
+  heldBy        String    @map("held_by")
+  heldAt        DateTime  @default(now()) @map("held_at")
+  releasedAt    DateTime? @map("released_at")
+  releasedBy    String?   @map("released_by")
+  releaseReason String?   @map("release_reason")
+  // Populated only by the legacy backfill. PostgreSQL permits multiple NULLs,
+  // while a non-null key makes concurrent backfill executions idempotent.
+  dedupeKey     String?   @unique @map("dedupe_key")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, releasedAt])
+  @@map("order_holds")
+}
+
+// Transactional outbox for cross-service product state changes. The Order
+// transition and this event are committed together; a retry worker delivers
+// pending events until product-service acknowledges them.
+model ProductSyncEvent {
+  id            String    @id @default(uuid())
+  orderId       String    @map("order_id")
+  dedupeKey     String    @unique @map("dedupe_key")
+  action        String // COMPLETE_RESERVATION | RELEASE_RESERVATION | SET_STATUS
+  productId     String    @map("product_id")
+  reservationId String?   @map("reservation_id")
+  targetStatus  String?   @map("target_status")
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at")
+  processedAt   DateTime? @map("processed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([processedAt, nextAttemptAt])
+  @@index([orderId, processedAt])
+  @@map("product_sync_events")
 }
 
 // ADM-004: Admin's own lightweight evidence *reference* list, distinct from
@@ -143,6 +193,11 @@ model DisputeCase {
   version          Int       @default(0)
   createdAt        DateTime  @default(now()) @map("created_at")
 
+  // TSR-02 / ADM-DEC-025: Single-owner dispute assignment
+  assignedTo   String?   @map("assigned_to")
+  assignedRole String?   @map("assigned_role")
+  claimedAt    DateTime? @map("claimed_at")
+
   order    Order             @relation(fields: [orderId], references: [id])
   evidence DisputeEvidence[]
   auditLog DisputeAuditLog[]
@@ -156,7 +211,7 @@ model DisputeAuditLog {
   id        String   @id @default(uuid())
   disputeId String   @map("dispute_id")
   actorId   String   @map("actor_id")
-  action    String // OPEN|VIEW_EVIDENCE|DECIDE
+  action    String // OPEN|VIEW_EVIDENCE|CLAIM|REASSIGN|ESCALATE|DECIDE
   detail    String?
   createdAt DateTime @default(now()) @map("created_at")
 
