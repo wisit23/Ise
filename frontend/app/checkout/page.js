@@ -11,12 +11,7 @@ import Button from "../../components/ui/Button";
 import Skeleton from "../../components/ui/Skeleton";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
-import {
-  CHECKOUT_COUPONS,
-  calculateCheckoutDiscount,
-  formatCheckoutCountdown,
-  remainingSeconds,
-} from "../../lib/checkout";
+import { formatCheckoutCountdown, remainingSeconds } from "../../lib/checkout";
 
 function orderDeadline(order) {
   if (order.reservationExpiresAt) return order.reservationExpiresAt;
@@ -30,7 +25,6 @@ export default function CheckoutPage() {
   const [orders, setOrders] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
-  const [couponCode, setCouponCode] = useState("");
   const [now, setNow] = useState(Date.now());
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -88,8 +82,21 @@ export default function CheckoutPage() {
   }, [orders]);
   const cartSeconds = remainingSeconds(expiresAt, now);
   const subtotal = orders.reduce((sum, order) => sum + order.price, 0);
-  const discount = calculateCheckoutDiscount(couponCode, subtotal);
-  const total = subtotal - discount;
+  const discount = orders.reduce(
+    (sum, order) => sum + (order.discountAmount || 0),
+    0,
+  );
+  const total = orders.reduce(
+    (sum, order) =>
+      sum +
+      (order.finalPrice === null || order.finalPrice === undefined
+        ? order.price - (order.discountAmount || 0)
+        : order.finalPrice),
+    0,
+  );
+  const appliedVouchers = orders.filter(
+    (order) => order.campaignId && order.campaignCode,
+  );
   const selectedAddress = addresses.find(
     (address) => address.id === selectedAddressId,
   );
@@ -113,7 +120,6 @@ export default function CheckoutPage() {
         body: {
           orderIds: orders.map((order) => order.id),
           shippingAddress: selectedAddress,
-          couponCode: couponCode || null,
         },
       });
       router.push(`/payment/${session.id}`);
@@ -239,60 +245,39 @@ export default function CheckoutPage() {
               </section>
 
               <section className="rounded-xl border border-line bg-white p-5 shadow-1">
-                <h2 className="font-bold text-gray-900">เลือกโค้ดส่วนลด</h2>
+                <h2 className="font-bold text-gray-900">
+                  Voucher จาก Marketing
+                </h2>
                 <p className="mb-4 text-sm text-ink-muted">
-                  เลือกใช้ได้ 1 โค้ดต่อคำสั่งซื้อ
+                  Voucher ถูกตรวจสอบและล็อกไว้ตอนเพิ่มสินค้าแล้ว
                 </p>
-                <div className="space-y-2">
-                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-line p-3">
-                    <input
-                      type="radio"
-                      name="coupon"
-                      checked={!couponCode}
-                      onChange={() => setCouponCode("")}
-                      className="accent-brand-600"
-                    />
-                    <span className="text-sm font-medium">
-                      ไม่ใช้โค้ดส่วนลด
-                    </span>
-                  </label>
-                  {CHECKOUT_COUPONS.map((coupon) => {
-                    const disabled = subtotal < coupon.minSpend;
-                    return (
-                      <label
-                        key={coupon.code}
-                        className={`flex items-center gap-3 rounded-lg border p-3 ${
-                          disabled
-                            ? "cursor-not-allowed border-line bg-gray-50 opacity-55"
-                            : "cursor-pointer border-line hover:border-brand-300"
-                        }`}
+                {appliedVouchers.length === 0 ? (
+                  <p className="rounded-lg border border-line bg-gray-50 p-3 text-sm text-ink-muted">
+                    ไม่มี Voucher ที่ใช้กับรายการนี้
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {appliedVouchers.map((order) => (
+                      <div
+                        key={order.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"
                       >
-                        <input
-                          type="radio"
-                          name="coupon"
-                          value={coupon.code}
-                          checked={couponCode === coupon.code}
-                          disabled={disabled}
-                          onChange={() => setCouponCode(coupon.code)}
-                          className="accent-brand-600"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-sm font-bold text-brand-700">
-                              {coupon.code}
-                            </span>
-                            <span className="text-sm font-semibold text-gray-900">
-                              {coupon.title}
-                            </span>
-                          </div>
-                          <p className="text-xs text-ink-muted">
-                            {coupon.description}
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-gray-900">
+                            {order.productTitle}
+                          </p>
+                          <p className="font-mono text-xs font-bold text-emerald-700">
+                            {order.campaignCode}
                           </p>
                         </div>
-                      </label>
-                    );
-                  })}
-                </div>
+                        <span className="shrink-0 text-sm font-semibold text-emerald-700">
+                          -฿
+                          {(order.discountAmount || 0).toLocaleString("th-TH")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <section className="overflow-hidden rounded-xl border border-line bg-white shadow-1">

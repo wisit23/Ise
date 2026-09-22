@@ -39,6 +39,10 @@ const ORDER = {
   id: "order-1",
   productTitle: "เสื้อแจ็คเก็ตวินเทจ",
   price: 1000,
+  campaignId: "campaign-1",
+  campaignCode: "SAVE200",
+  discountAmount: 200,
+  finalPrice: 800,
   status: "pending_payment",
   reservationExpiresAt: "2099-08-10T12:10:00.000Z",
   createdAt: "2099-08-10T12:00:00.000Z",
@@ -69,19 +73,22 @@ beforeEach(() => {
   });
 });
 
-test("shows address, coupon choices, selected products, and order summary", async () => {
+test("shows the Marketing voucher and its server-calculated order summary", async () => {
   render(<CheckoutPage />);
 
-  expect(await screen.findByText("เสื้อแจ็คเก็ตวินเทจ")).toBeInTheDocument();
+  expect(
+    (await screen.findAllByText("เสื้อแจ็คเก็ตวินเทจ")).length,
+  ).toBeGreaterThanOrEqual(2);
   expect(screen.getByText("สมชาย ใจดี")).toBeInTheDocument();
 
-  fireEvent.click(screen.getByDisplayValue("RELOOPNEW"));
-  expect(screen.getByText("฿950")).toBeInTheDocument();
+  expect(screen.getByText("SAVE200")).toBeInTheDocument();
+  expect(screen.getAllByText("-฿200")).toHaveLength(2);
+  expect(screen.getByText("฿800")).toBeInTheDocument();
 });
 
 test("creates a checkout session before opening the QR page", async () => {
   render(<CheckoutPage />);
-  await screen.findByText("เสื้อแจ็คเก็ตวินเทจ");
+  await screen.findAllByText("เสื้อแจ็คเก็ตวินเทจ");
 
   fireEvent.click(screen.getByRole("button", { name: /ยืนยันและไปสแกน QR/i }));
 
@@ -97,6 +104,10 @@ test("creates a checkout session before opening the QR page", async () => {
         }),
       }),
     );
+    const checkoutCall = apiFetch.mock.calls.find(
+      ([path]) => path === "/api/orders/checkout-sessions",
+    );
+    expect(checkoutCall[1].body).not.toHaveProperty("couponCode");
     expect(push).toHaveBeenCalledWith("/payment/session-1");
   });
 });

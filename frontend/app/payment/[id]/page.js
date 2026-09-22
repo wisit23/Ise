@@ -229,8 +229,13 @@ export default function PaymentPage() {
                   <dd>฿{session.subtotal.toLocaleString("th-TH")}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <dt className="text-ink-muted">โค้ดส่วนลด</dt>
-                  <dd>{session.couponCode || "ไม่ได้ใช้"}</dd>
+                  <dt className="text-ink-muted">Voucher จาก Marketing</dt>
+                  <dd>
+                    {session.orders
+                      ?.filter((order) => order.campaignCode)
+                      .map((order) => order.campaignCode)
+                      .join(", ") || "ไม่ได้ใช้"}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-ink-muted">ส่วนลด</dt>

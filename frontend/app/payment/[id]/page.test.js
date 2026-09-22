@@ -40,9 +40,18 @@ const SESSION = {
   id: "session-1",
   status: "pending",
   subtotal: 1000,
-  discount: 50,
-  total: 950,
-  couponCode: "RELOOPNEW",
+  discount: 200,
+  total: 800,
+  couponCode: null,
+  orders: [
+    {
+      id: "order-1",
+      productTitle: "เสื้อแจ็คเก็ตวินเทจ",
+      campaignCode: "SAVE200",
+      discountAmount: 200,
+      finalPrice: 800,
+    },
+  ],
   expiresAt: "2099-08-10T12:10:00.000Z",
   shippingAddress: {
     recipientName: "สมชาย ใจดี",
@@ -52,7 +61,6 @@ const SESSION = {
     province: "กรุงเทพมหานคร",
     postalCode: "10110",
   },
-  orders: [{ id: "order-1" }],
 };
 
 beforeEach(() => {
@@ -77,7 +85,8 @@ test("renders a scannable QR payment summary with a fresh countdown", async () =
   expect(
     await screen.findByRole("heading", { name: "สแกน QR Code เพื่อชำระเงิน" }),
   ).toBeInTheDocument();
-  expect(screen.getByText("฿950")).toBeInTheDocument();
+  expect(screen.getByText("฿800")).toBeInTheDocument();
+  expect(screen.getByText("SAVE200")).toBeInTheDocument();
   expect(await screen.findByAltText("QR Code สำหรับชำระเงิน")).toHaveAttribute(
     "src",
     "data:image/png;base64,qr",

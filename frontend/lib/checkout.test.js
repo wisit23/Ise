@@ -1,14 +1,4 @@
-import {
-  calculateCheckoutDiscount,
-  formatCheckoutCountdown,
-  remainingSeconds,
-} from "./checkout";
-
-test("calculates checkout coupons without exceeding their cap", () => {
-  expect(calculateCheckoutDiscount("RELOOPNEW", 1000)).toBe(50);
-  expect(calculateCheckoutDiscount("VINTAGE15", 2000)).toBe(150);
-  expect(calculateCheckoutDiscount("VINTAGE15", 300)).toBe(0);
-});
+import { formatCheckoutCountdown, remainingSeconds } from "./checkout";
 
 test("formats a server deadline as a checkout countdown", () => {
   expect(

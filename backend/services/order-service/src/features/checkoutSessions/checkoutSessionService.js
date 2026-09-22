@@ -16,12 +16,6 @@ const ADDRESS_FIELDS = [
   "postalCode",
 ];
 
-const COUPONS = {
-  RELOOPNEW: { minSpend: 300, type: "fixed", value: 50 },
-  FREESHIP40: { minSpend: 200, type: "fixed", value: 40 },
-  VINTAGE15: { minSpend: 500, type: "percent", value: 15, max: 150 },
-};
-
 function normalizeAddress(address) {
   if (!address || typeof address !== "object" || Array.isArray(address)) {
     throw badRequest("shippingAddress is required");
@@ -36,21 +30,35 @@ function normalizeAddress(address) {
   return snapshot;
 }
 
-function calculateDiscount(couponCode, subtotal) {
-  if (!couponCode) return { couponCode: null, discount: 0 };
-  const normalized = String(couponCode).trim().toUpperCase();
-  const coupon = COUPONS[normalized];
-  if (!coupon) throw badRequest("coupon code is invalid");
-  if (subtotal < coupon.minSpend) {
-    throw badRequest(`coupon requires a minimum spend of ${coupon.minSpend}`);
-  }
+function calculateOrderTotals(orders) {
+  return orders.reduce(
+    (totals, order) => {
+      const price = Number(order.price);
+      const discount = Number(order.discountAmount || 0);
+      const finalPrice =
+        order.finalPrice === null || order.finalPrice === undefined
+          ? price - discount
+          : Number(order.finalPrice);
 
-  const raw =
-    coupon.type === "percent"
-      ? Math.floor((subtotal * coupon.value) / 100)
-      : coupon.value;
-  const discount = Math.min(raw, coupon.max ?? raw, subtotal);
-  return { couponCode: normalized, discount };
+      if (
+        !Number.isSafeInteger(price) ||
+        !Number.isSafeInteger(discount) ||
+        !Number.isSafeInteger(finalPrice) ||
+        price < 0 ||
+        discount < 0 ||
+        discount > price ||
+        finalPrice !== price - discount
+      ) {
+        throw conflict(`order ${order.id} has invalid campaign pricing`);
+      }
+
+      totals.subtotal += price;
+      totals.discount += discount;
+      totals.total += finalPrice;
+      return totals;
+    },
+    { subtotal: 0, discount: 0, total: 0 },
+  );
 }
 
 function createCheckoutSessionService(
@@ -201,8 +209,12 @@ function createCheckoutSessionService(
       }
     }
 
-    const subtotal = orders.reduce((sum, order) => sum + order.price, 0);
-    const coupon = calculateDiscount(couponCode, subtotal);
+    if (couponCode) {
+      throw badRequest(
+        "legacy checkout coupon codes are no longer supported; select a Marketing voucher before adding the product",
+      );
+    }
+    const totals = calculateOrderTotals(orders);
     const expiresAt = new Date(clock.getTime() + PAYMENT_TTL_MS);
 
     await Promise.all(
@@ -222,10 +234,10 @@ function createCheckoutSessionService(
         data: {
           buyerId,
           shippingAddress: addressSnapshot,
-          couponCode: coupon.couponCode,
-          subtotal,
-          discount: coupon.discount,
-          total: subtotal - coupon.discount,
+          couponCode: null,
+          subtotal: totals.subtotal,
+          discount: totals.discount,
+          total: totals.total,
           expiresAt,
         },
       });
@@ -370,5 +382,5 @@ const service = createCheckoutSessionService(
 
 module.exports = service;
 module.exports.createCheckoutSessionService = createCheckoutSessionService;
-module.exports.calculateDiscount = calculateDiscount;
+module.exports.calculateOrderTotals = calculateOrderTotals;
 module.exports.PAYMENT_TTL_MS = PAYMENT_TTL_MS;

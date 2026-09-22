@@ -85,6 +85,25 @@ const SAVED_ADDRESSES = [
   },
 ];
 
+const VOUCHERS = [
+  {
+    id: "voucher-1",
+    campaignId: "campaign-1",
+    status: "CLAIMED",
+    usedOrderId: null,
+    campaign: {
+      code: "SAVE200",
+      name: "ลดสองร้อย",
+      description: "แคมเปญจาก Marketing",
+      discountType: "FIXED",
+      discountValue: 200,
+      minOrderPrice: 500,
+      applicableCategory: null,
+      endsAt: "2099-12-31T23:59:59.000Z",
+    },
+  },
+];
+
 describe("ProfilePage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -100,6 +119,9 @@ describe("ProfilePage", () => {
       }
       if (path === "/api/reviews/mine?limit=50") {
         return Promise.resolve({ items: [], totalPages: 1 });
+      }
+      if (path === "/api/products/campaigns/my-vouchers") {
+        return Promise.resolve(VOUCHERS);
       }
       return Promise.resolve(null);
     });
@@ -195,7 +217,7 @@ describe("ProfilePage", () => {
     expect(screen.getByText("เพิ่มที่อยู่จัดส่งใหม่")).toBeInTheDocument();
   });
 
-  it("switches to coupons tab and allows redeeming coupon code", async () => {
+  it("shows vouchers loaded from the Marketing campaign API", async () => {
     render(<ProfilePage />);
 
     const couponTabBtn = screen.getByRole("button", {
@@ -206,20 +228,13 @@ describe("ProfilePage", () => {
     expect(
       screen.getByRole("heading", { name: "โค้ดส่วนลดของฉัน" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("RELOOPNEW")).toBeInTheDocument();
-
-    // Type a new coupon
-    const input = screen.getByPlaceholderText(/กรอกรหัสส่วนลด เช่น NEW50/i);
-    fireEvent.change(input, { target: { value: "PROMO100" } });
-
-    const redeemBtn = screen.getByRole("button", { name: /เก็บโค้ด/i });
-    fireEvent.click(redeemBtn);
-
     await waitFor(() => {
-      expect(
-        screen.getByText(/เก็บโค้ด "PROMO100" สำเร็จแล้ว/i),
-      ).toBeInTheDocument();
-      expect(screen.getByText("PROMO100")).toBeInTheDocument();
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/api/products/campaigns/my-vouchers",
+        { token: "test-token" },
+      );
+      expect(screen.getByText("SAVE200")).toBeInTheDocument();
+      expect(screen.getByText("แคมเปญจาก Marketing")).toBeInTheDocument();
     });
   });
 });

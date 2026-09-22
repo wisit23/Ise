@@ -89,58 +89,31 @@ function matchesOrderFilter(order, filterKey) {
   return option?.statuses.includes(order.status) || false;
 }
 
-// Mock discount coupons initial state
-const INITIAL_COUPONS = [
-  {
-    id: "c-1",
-    code: "RELOOPNEW",
-    title: "ส่วนลด ฿50 สมาชิกใหม่",
-    description: "ลดทันที 50 บาท เมื่อช้อปครบ 300 บาท สำหรับคำสั่งซื้อแรก",
-    minSpend: 300,
-    discountAmount: "฿50",
-    discountType: "fixed",
-    expiresAt: "30 เม.ย. 2025",
-    category: "ทุกหมวดหมู่",
-    status: "active",
-  },
-  {
-    id: "c-2",
-    code: "FREESHIP40",
-    title: "โค้ดส่งฟรี สูงสุด ฿40",
-    description: "ช่วยแบ่งเบาค่าจัดส่ง สูงสุด 40 บาท เมื่อช้อปครบ 200 บาท",
-    minSpend: 200,
-    discountAmount: "ส่งฟรี",
-    discountType: "shipping",
-    expiresAt: "15 พ.ค. 2025",
-    category: "ร้านค้าทั่วไป",
-    status: "active",
-  },
-  {
-    id: "c-3",
-    code: "VINTAGE15",
-    title: "ลด 15% หมวดแฟชั่นวินเทจ",
-    description:
-      "ลด 15% สูงสุด 150 บาท สำหรับสินค้าหมวดเสื้อผ้าและรองเท้ามือสอง",
-    minSpend: 500,
-    discountAmount: "15%",
-    discountType: "percent",
-    expiresAt: "31 พ.ค. 2025",
-    category: "แฟชั่น & วินเทจ",
-    status: "active",
-  },
-  {
-    id: "c-4",
-    code: "SUMMER30",
-    title: "ส่วนลด ฿30 ซัมเมอร์เซล",
-    description: "ส่วนลดพิเศษต้อนรับหน้าร้อน",
-    minSpend: 250,
-    discountAmount: "฿30",
-    discountType: "fixed",
-    expiresAt: "10 เม.ย. 2025",
-    category: "ทุกหมวดหมู่",
-    status: "expired",
-  },
-];
+function toCouponView(voucher) {
+  const campaign = voucher.campaign || {};
+  const isActive = voucher.status === "CLAIMED" && !voucher.usedOrderId;
+  return {
+    id: voucher.id,
+    code: campaign.code || "-",
+    title: campaign.name || campaign.code || "Voucher",
+    description: campaign.description || "Voucher จากแคมเปญ Marketing",
+    minSpend: Number(campaign.minOrderPrice || 0),
+    discountAmount:
+      campaign.discountType === "PERCENT"
+        ? `${campaign.discountValue || 0}%`
+        : `฿${Number(campaign.discountValue || 0).toLocaleString("th-TH")}`,
+    discountType: campaign.discountType,
+    expiresAt: campaign.endsAt
+      ? new Date(campaign.endsAt).toLocaleDateString("th-TH", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : "ไม่ระบุ",
+    category: campaign.applicableCategory || "ทุกหมวดหมู่",
+    status: isActive ? "active" : "expired",
+  };
+}
 
 const BLANK_ADDRESS = {
   recipientName: "",
@@ -184,9 +157,8 @@ export default function ProfilePage() {
   const [addressNotice, setAddressNotice] = useState("");
 
   // Coupons state
-  const [coupons, setCoupons] = useState(INITIAL_COUPONS);
-  const [couponCodeInput, setCouponCodeInput] = useState("");
-  const [couponNotice, setCouponNotice] = useState("");
+  const [coupons, setCoupons] = useState([]);
+  const [couponsLoading, setCouponsLoading] = useState(true);
   const [couponError, setCouponError] = useState("");
   const [copiedCode, setCopiedCode] = useState(null);
   const [couponFilter, setCouponFilter] = useState("active");
@@ -229,6 +201,14 @@ export default function ProfilePage() {
       })
       .catch(() => setReviewsByOrderId({}))
       .finally(() => setReviewsLoading(false));
+
+    apiFetch("/api/products/campaigns/my-vouchers", { token })
+      .then((data) => {
+        const items = Array.isArray(data) ? data : data?.items || [];
+        setCoupons(items.map(toCouponView));
+      })
+      .catch((err) => setCouponError(err.message || "โหลด Voucher ไม่สำเร็จ"))
+      .finally(() => setCouponsLoading(false));
 
     Promise.all([
       apiFetch("/api/auth/me", { token }),
@@ -380,43 +360,6 @@ export default function ProfilePage() {
     } finally {
       setAddressLoading(false);
     }
-  }
-
-  // Coupon handlers
-  function handleRedeemCoupon(e) {
-    e.preventDefault();
-    const code = couponCodeInput.trim().toUpperCase();
-    setCouponError("");
-    setCouponNotice("");
-
-    if (!code) {
-      setCouponError("กรุณากรอกรหัสส่วนลด");
-      return;
-    }
-
-    if (coupons.some((c) => c.code.toUpperCase() === code)) {
-      setCouponError("คุณมีโค้ดส่วนลดนี้อยู่ในระบบแล้ว");
-      return;
-    }
-
-    // Add new coupon
-    const newCoupon = {
-      id: `c-${Date.now()}`,
-      code,
-      title: `ส่วนลดพิเศษ ${code}`,
-      description: `โค้ดส่วนลดพิเศษสำหรับผู้ใช้งาน RE-LOOP ช้อปครบ 200.- ลดทันที 50.-`,
-      minSpend: 200,
-      discountAmount: "฿50",
-      discountType: "fixed",
-      expiresAt: "30 พ.ค. 2025",
-      category: "ทุกหมวดหมู่",
-      status: "active",
-    };
-
-    setCoupons((prev) => [newCoupon, ...prev]);
-    setCouponNotice(`เก็บโค้ด "${code}" สำเร็จแล้ว! ใช้งานได้ทันที`);
-    setCouponCodeInput("");
-    setTimeout(() => setCouponNotice(""), 5000);
   }
 
   function handleCopyCode(code) {
@@ -1018,40 +961,10 @@ export default function ProfilePage() {
                 โค้ดส่วนลดของฉัน
               </h2>
               <p className="mt-1 text-sm text-ink-muted">
-                กรอกโค้ดส่วนลดเพื่อเก็บสิทธิ์
-                หรือเลือกดูคูปองที่คุณมีสำหรับใช้ช้อปปิ้ง
+                Voucher ที่คุณรับจากแคมเปญ Marketing และสถานะการใช้งานจริง
               </p>
             </div>
 
-            {/* Input Code Form */}
-            <form
-              onSubmit={handleRedeemCoupon}
-              className="mb-6 flex flex-col gap-3 rounded-lg border border-line bg-surface-subtle p-4 sm:flex-row sm:items-center"
-            >
-              <div className="relative flex-1">
-                <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-ink-subtle">
-                  confirmation_number
-                </span>
-                <input
-                  type="text"
-                  value={couponCodeInput}
-                  onChange={(e) =>
-                    setCouponCodeInput(e.target.value.toUpperCase())
-                  }
-                  placeholder="กรอกรหัสส่วนลด เช่น NEW50, FREESHIP"
-                  className="focus-ring w-full rounded-md border border-line-strong bg-white py-2 pl-10 pr-3 text-sm font-medium tracking-wide uppercase placeholder:normal-case placeholder:text-ink-subtle"
-                />
-              </div>
-              <Button type="submit" icon="add_shopping_cart">
-                เก็บโค้ด
-              </Button>
-            </form>
-
-            {couponNotice && (
-              <Alert tone="success" className="mb-4">
-                {couponNotice}
-              </Alert>
-            )}
             {couponError && (
               <Alert tone="error" className="mb-4">
                 {couponError}
@@ -1098,11 +1011,15 @@ export default function ProfilePage() {
             </div>
 
             {/* Coupon Cards List */}
-            {filteredCoupons.length === 0 ? (
+            {couponsLoading ? (
+              <p className="py-8 text-center text-sm text-ink-muted">
+                กำลังโหลด Voucher...
+              </p>
+            ) : filteredCoupons.length === 0 ? (
               <EmptyState
                 icon="confirmation_number"
                 title="ไม่มีโค้ดส่วนลดในหมวดนี้"
-                description="ลองกรอกรหัสส่วนลดใหม่เพื่อรับสิทธิพิเศษเพิ่มเติม"
+                description="ไปที่หน้าแคมเปญเพื่อรับ Voucher จาก Marketing"
               />
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

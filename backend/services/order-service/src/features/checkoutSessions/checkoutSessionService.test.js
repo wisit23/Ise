@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   createCheckoutSessionService,
-  calculateDiscount,
+  calculateOrderTotals,
   PAYMENT_TTL_MS,
 } = require("./checkoutSessionService");
 
@@ -33,19 +33,103 @@ const ADDRESS = {
   postalCode: "10110",
 };
 
-test("coupon discount rules match the checkout UI", () => {
-  assert.deepEqual(calculateDiscount("RELOOPNEW", 1000), {
-    couponCode: "RELOOPNEW",
-    discount: 50,
-  });
-  assert.deepEqual(calculateDiscount("VINTAGE15", 2000), {
-    couponCode: "VINTAGE15",
-    discount: 150,
-  });
+test("checkout totals use the Marketing voucher prices stored on orders", () => {
+  assert.deepEqual(
+    calculateOrderTotals([
+      pendingOrder({
+        discountAmount: 200,
+        finalPrice: 800,
+        campaignId: "campaign-1",
+        campaignCode: "SAVE200",
+      }),
+      pendingOrder({
+        id: "order-2",
+        price: 500,
+        discountAmount: 0,
+        finalPrice: 500,
+      }),
+    ]),
+    { subtotal: 1500, discount: 200, total: 1300 },
+  );
+});
+
+test("checkout rejects inconsistent persisted campaign pricing", () => {
   assert.throws(
-    () => calculateDiscount("UNKNOWN", 1000),
+    () =>
+      calculateOrderTotals([
+        pendingOrder({ discountAmount: 200, finalPrice: 900 }),
+      ]),
+    (err) => err.status === 409,
+  );
+});
+
+test("checkout derives final price for orders created before finalPrice existed", () => {
+  assert.deepEqual(
+    calculateOrderTotals([
+      pendingOrder({ discountAmount: 0, finalPrice: null }),
+    ]),
+    { subtotal: 1000, discount: 0, total: 1000 },
+  );
+});
+
+test("legacy hard-coded checkout coupons are rejected", async () => {
+  const order = pendingOrder();
+  const prisma = {
+    order: { findMany: async () => [order] },
+    checkoutSession: { findUnique: async () => null },
+  };
+  const service = createCheckoutSessionService(prisma, {});
+
+  await assert.rejects(
+    service.create({
+      buyerId: "buyer-1",
+      orderIds: ["order-1"],
+      shippingAddress: ADDRESS,
+      couponCode: "RELOOPNEW",
+      now: new Date("2026-08-10T12:00:00.000Z"),
+    }),
     (err) => err.status === 400,
   );
+});
+
+test("creating a checkout session preserves Marketing voucher totals", async () => {
+  const now = new Date("2026-08-10T12:00:00.000Z");
+  const order = pendingOrder({
+    campaignId: "campaign-1",
+    campaignCode: "SAVE200",
+    discountAmount: 200,
+    finalPrice: 800,
+  });
+  let sessionData;
+  const tx = {
+    checkoutSession: {
+      create: async ({ data }) => {
+        sessionData = { id: "session-1", ...data };
+        return sessionData;
+      },
+      findUnique: async () => ({ ...sessionData, orders: [order] }),
+    },
+    order: { updateMany: async () => ({ count: 1 }) },
+  };
+  const prisma = {
+    order: { findMany: async () => [order] },
+    checkoutSession: { findUnique: async () => null },
+    $transaction: async (callback) => callback(tx),
+  };
+  const products = { extendProductReservation: async () => {} };
+  const service = createCheckoutSessionService(prisma, products);
+
+  const session = await service.create({
+    buyerId: "buyer-1",
+    orderIds: ["order-1"],
+    shippingAddress: ADDRESS,
+    now,
+  });
+
+  assert.equal(session.subtotal, 1000);
+  assert.equal(session.discount, 200);
+  assert.equal(session.total, 800);
+  assert.equal(session.couponCode, null);
 });
 
 test("creating a checkout session starts a fresh ten-minute payment window", async () => {
@@ -82,12 +166,11 @@ test("creating a checkout session starts a fresh ten-minute payment window", asy
     buyerId: "buyer-1",
     orderIds: ["order-1"],
     shippingAddress: ADDRESS,
-    couponCode: "RELOOPNEW",
     now,
   });
 
   const expectedExpiry = new Date(now.getTime() + PAYMENT_TTL_MS);
-  assert.equal(session.total, 950);
+  assert.equal(session.total, 1000);
   assert.equal(session.expiresAt.toISOString(), expectedExpiry.toISOString());
   assert.equal(
     extended[0].expiresAt.toISOString(),
