@@ -48,7 +48,6 @@ export default function SupportMainChat({
   const endRef = useRef(null);
   const tokenRef = useRef(getAccessToken());
   const roomJoinedRef = useRef(null);
-  const initialPresenceMapRef = useRef({});
 
   const { socket, connected } = useChatSocket();
   const conversationId = ticket?.conversationId;
@@ -113,26 +112,21 @@ export default function SupportMainChat({
     if (!socket || !connected || !conversationId) return;
     if (roomJoinedRef.current === conversationId) return;
 
-    socket.emit("join", { conversationId }, (ack) => {
+    socket.emit("join", conversationId, (ack) => {
       if (ack?.ok) {
         roomJoinedRef.current = conversationId;
-        if (ack.onlineUsers) {
-          ack.onlineUsers.forEach((uId) => {
-            initialPresenceMapRef.current[uId] = true;
-          });
-          if (
-            ticket?.requesterId &&
-            ack.onlineUsers.includes(ticket.requesterId)
-          ) {
-            setOtherOnline(true);
-          }
+        const requesterPresence = ticket?.requesterId
+          ? ack.onlineUsers?.[ticket.requesterId]
+          : undefined;
+        if (typeof requesterPresence === "boolean") {
+          setOtherOnline(requesterPresence);
         }
       }
     });
 
     return () => {
       if (roomJoinedRef.current === conversationId) {
-        socket.emit("leave", { conversationId });
+        socket.emit("leave", conversationId);
         roomJoinedRef.current = null;
       }
     };
@@ -206,12 +200,15 @@ export default function SupportMainChat({
     try {
       const saved = await sendMessage(conversationId, text, token);
       setMessages((prev) =>
-        prev.map((m) =>
-          m.id === optimisticId ? { ...saved, clientId: optimisticId } : m,
+        mergeById(
+          prev.filter((m) => m.id !== optimisticId),
+          [saved],
         ),
       );
-    } catch {
+    } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      setError(`ส่งข้อความไม่สำเร็จ: ${err.message}`);
+      throw err;
     }
   }
 
@@ -228,8 +225,9 @@ export default function SupportMainChat({
       );
       setMessages((prev) => mergeById(prev, [saved]));
       scrollToBottom(true);
-    } catch {
+    } catch (err) {
       setError("ส่งไฟล์ไม่สำเร็จ กรุณาลองใหม่");
+      throw err;
     }
   }
 
@@ -254,7 +252,7 @@ export default function SupportMainChat({
 
   function handleTyping(isTyping) {
     if (!socket || !conversationId) return;
-    socket.emit(isTyping ? "typing:start" : "typing:stop", { conversationId });
+    socket.emit(isTyping ? "typing:start" : "typing:stop", conversationId);
   }
 
   if (loadingTicket) {

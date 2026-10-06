@@ -292,6 +292,7 @@ export default function OrdersPage() {
             const disputed =
               o.status === "disputed" ||
               o.status === "refunded" ||
+              Boolean(o.dispute) ||
               justDisputedIds.has(o.id);
             return (
               <li

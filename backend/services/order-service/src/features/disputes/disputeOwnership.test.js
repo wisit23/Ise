@@ -5,6 +5,7 @@ const disputeModel = require("./disputeModel");
 const disputeService = require("./disputeService");
 const orderModel = require("../../models/orderModel");
 const authClient = require("../../services/authClient");
+const chatClient = require("../../services/chatClient");
 
 authClient.setMockUserResolver(async (id) => {
   if (id?.startsWith("multi-")) {
@@ -235,11 +236,14 @@ test("disputeService.escalate transfers dispute to Trust & Safety", async (t) =>
 test("disputeService.decide and addEvidence enforce single ownership", async (t) => {
   const origFindById = disputeModel.findById;
   const origDecide = disputeModel.decide;
+  const origLock = chatClient.lockDisputeConversation;
 
   t.after(() => {
     disputeModel.findById = origFindById;
     disputeModel.decide = origDecide;
+    chatClient.lockDisputeConversation = origLock;
   });
+  chatClient.lockDisputeConversation = async () => {};
 
   disputeModel.findById = async () => ({
     id: "d1",

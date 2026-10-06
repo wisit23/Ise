@@ -1,4 +1,4 @@
-const { badRequest, notFound } = require("@reloop/shared");
+const { badRequest, conflict, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 
 function generateTicketNumber() {
@@ -57,6 +57,9 @@ async function listQueue({
   const where = {};
   if (scope === "unassigned") where.assigneeId = null;
   else if (scope === "mine") where.assigneeId = assigneeId;
+  else if (scope === "all" && role === "CUSTOMER_SERVICE") {
+    where.OR = [{ assigneeId: null }, { assigneeId }];
+  }
 
   if (status) {
     where.status = status;
@@ -68,24 +71,26 @@ async function listQueue({
     // Default queue view: exclude ESCALATED (since they go to Admin Inbox)
     if (scope !== "all") {
       where.status = { notIn: ["CLOSED", "ESCALATED"] };
-    } else {
-      where.status = { notIn: ["ESCALATED"] };
+      } else if (role !== "ADMIN" && role !== "TRUST_AND_SAFETY") {
+        where.status = { notIn: ["ESCALATED"] };
     }
   }
 
   if (priority) where.priority = priority;
 
   if (search) {
-    where.OR = [
+    const searchClause = [
       { subject: { contains: search, mode: "insensitive" } },
       { ticketNumber: { contains: search, mode: "insensitive" } },
     ];
+    if (where.OR) where.AND = [{ OR: searchClause }];
+    else where.OR = searchClause;
   }
 
   const [items, total] = await Promise.all([
     prisma.supportTicket.findMany({
       where,
-      orderBy: [{ priority: "desc" }, { slaDueAt: "asc" }],
+      orderBy: [{ priority: "desc" }, { slaDueAt: "asc" }, { id: "asc" }],
       skip,
       take,
     }),
@@ -119,11 +124,19 @@ async function transitionStatus({ id, version, status, extra = {} }) {
 /** Stores the chat-service conversation ID on a ticket. Called once during
  * ticket creation — not an optimistic-lock update because only the creating
  * request ever writes this field, so there is no race. */
-function setConversationId(ticketId, conversationId) {
-  return prisma.supportTicket.update({
-    where: { id: ticketId },
+async function setConversationId(ticketId, conversationId) {
+  const updated = await prisma.supportTicket.updateMany({
+    where: { id: ticketId, conversationId: null },
     data: { conversationId },
   });
+  if (updated.count > 0) return;
+  const ticket = await prisma.supportTicket.findUnique({
+    where: { id: ticketId },
+  });
+  if (!ticket) throw notFound("ticket not found");
+  if (ticket.conversationId !== conversationId) {
+    throw conflict("ticket is linked to a different conversation");
+  }
 }
 
 /**

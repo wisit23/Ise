@@ -11,6 +11,11 @@ const router = Router();
 router.get("/queue", requireAuth, disputeController.queue);
 router.get("/by-order/:orderId", requireAuth, disputeController.getByOrderId);
 router.get("/:id", requireAuth, disputeController.getOne);
+router.post(
+  "/:id/conversation",
+  requireAuth,
+  disputeController.joinConversation,
+);
 router.post("/:id/evidence", requireAuth, disputeController.uploadEvidence);
 router.get(
   "/:id/evidence/:evidenceId",

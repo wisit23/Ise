@@ -2,6 +2,7 @@ const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const orderModel = require("../../models/orderModel");
 const disputeModel = require("./disputeModel");
 const authClient = require("../../services/authClient");
+const chatClient = require("../../services/chatClient");
 const { absolutePath } = require("./evidenceStorage");
 
 const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
@@ -90,6 +91,40 @@ async function getByOrderId({ orderId, userId, role, roles }) {
   const dispute = await disputeModel.findByOrderId(orderId);
   if (!dispute) throw notFound("this order has no dispute");
   return assertAccess({ dispute, userId, role, roles });
+}
+
+async function joinConversation({ disputeId, userId, role, roles }) {
+  const dispute = await getById({ disputeId, userId, role, roles });
+  const order = await orderModel.findById(dispute.orderId);
+  if (!order) throw notFound("order not found");
+
+  let chatRole;
+  if (userId === order.buyerId) chatRole = "BUYER";
+  else if (userId === order.sellerId) chatRole = "SELLER";
+  else if (
+    hasRole(role, roles, "ADMIN") ||
+    hasRole(role, roles, "TRUST_AND_SAFETY")
+  ) {
+    chatRole = "ADMIN";
+  } else if (hasRole(role, roles, "CUSTOMER_SERVICE")) {
+    if (
+      dispute.assignedRole === "TRUST_AND_SAFETY" ||
+      dispute.assignedTo !== userId
+    ) {
+      throw forbidden("only the assigned agent can join this dispute chat");
+    }
+    chatRole = "AGENT";
+  } else throw forbidden("you do not have access to this dispute chat");
+
+  const conversationId = await chatClient.joinDisputeConversation(
+    dispute,
+    order,
+    {
+      userId,
+      role: chatRole,
+    },
+  );
+  return { conversationId, readOnly: dispute.status === "DECIDED" };
 }
 
 async function listQueue({ role, roles, status, search, skip, take }) {
@@ -410,6 +445,16 @@ async function decide({
     decidedBy: userId,
   });
   if (!updated) throw conflict("this dispute already has a decision");
+  try {
+    await chatClient.lockDisputeConversation(updated, order);
+  } catch (err) {
+    // The decision is committed in PostgreSQL. A later chat open retries the
+    // lock; expose the failed side effect so operators can reconcile it.
+    console.error(
+      `[disputeService] chat lock failed for ${disputeId}: ${err.message}`,
+    );
+    return { ...updated, chatLockError: err.message };
+  }
   return updated;
 }
 
@@ -417,6 +462,7 @@ module.exports = {
   open,
   getById,
   getByOrderId,
+  joinConversation,
   addEvidence,
   viewEvidence,
   claim,

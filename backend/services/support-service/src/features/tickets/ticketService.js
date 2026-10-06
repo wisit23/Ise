@@ -315,7 +315,11 @@ async function joinTicketChat({ ticketId, userId, role }) {
 
   // Authorization check
   if (ticket.status === "ESCALATED") {
-    if (role !== "ADMIN" && role !== "TRUST_AND_SAFETY") {
+    if (
+      ticket.requesterId !== userId &&
+      role !== "ADMIN" &&
+      role !== "TRUST_AND_SAFETY"
+    ) {
       throw forbidden(
         "only admin or trust & safety can access an escalated ticket",
       );

@@ -123,7 +123,22 @@ export default function LiveSupportSection({
           token,
         });
         if (request !== detailRequest.current) return;
-        setSelectedTicket(fullTicket);
+        try {
+          const room = await apiFetch(`/api/support/tickets/${ticketId}/join`, {
+            method: "POST",
+            token,
+          });
+          if (!room?.conversationId) throw new Error("ไม่พบห้องสนทนา");
+          if (request !== detailRequest.current) return;
+          setSelectedTicket({
+            ...fullTicket,
+            conversationId: room.conversationId,
+          });
+        } catch (chatError) {
+          if (request !== detailRequest.current) return;
+          setSelectedTicket({ ...fullTicket, conversationId: null });
+          setActionError(`เปิดแชทไม่สำเร็จ: ${chatError.message}`);
+        }
       } catch (err) {
         if (request !== detailRequest.current) return;
         setActionError(err.message);
@@ -152,16 +167,21 @@ export default function LiveSupportSection({
   // ── Ticket Actions ──
   async function handleAssignTicket() {
     if (!selectedTicketId) return;
+    const ticketId = selectedTicketId;
     setActionBusy(true);
     setActionError("");
     try {
-      await apiFetch(`/api/support/tickets/${selectedTicketId}/assign`, {
+      await apiFetch(`/api/support/tickets/${ticketId}/assign`, {
         method: "POST",
         token,
       });
-      toast.success("รับงานเรียบร้อยแล้ว ตั๋วย้ายมาอยู่ในคิวของคุณ");
-      await fetchTicketDetails(selectedTicketId);
-      await fetchQueue(scope, search);
+      queueRequest.current++;
+      setSearch("");
+      setScope("mine");
+      setShowDetails(false);
+      setSelectedTicketId(ticketId);
+      toast.success("รับงานเรียบร้อยแล้ว เปิดงานในคิวของคุณ");
+      await fetchTicketDetails(ticketId);
     } catch (err) {
       setActionError(err.message);
       toast.error(`รับงานไม่สำเร็จ: ${err.message}`);

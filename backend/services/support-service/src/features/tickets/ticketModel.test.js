@@ -3,6 +3,44 @@ const assert = require("node:assert/strict");
 const prisma = require("../../models/prismaClient");
 const ticketModel = require("./ticketModel");
 
+test("admin history includes closed and escalated tickets", async (t) => {
+  const originalFind = prisma.supportTicket.findMany;
+  const originalCount = prisma.supportTicket.count;
+  t.after(() => {
+    prisma.supportTicket.findMany = originalFind;
+    prisma.supportTicket.count = originalCount;
+  });
+  let where;
+  prisma.supportTicket.findMany = async (args) => { where = args.where; return []; };
+  prisma.supportTicket.count = async () => 0;
+  await ticketModel.listQueue({ role: "ADMIN", scope: "all", skip: 0, take: 20 });
+  assert.deepEqual(where, {});
+  await ticketModel.listQueue({ role: "CUSTOMER_SERVICE", scope: "all", assigneeId: "agent-1", search: "refund", skip: 0, take: 20 });
+  assert.deepEqual(where.OR, [{ assigneeId: null }, { assigneeId: "agent-1" }]);
+  assert.equal(where.AND[0].OR.length, 2);
+});
+
+test("conversation repair never overwrites another room", async (t) => {
+  const originalUpdate = prisma.supportTicket.updateMany;
+  const originalFind = prisma.supportTicket.findUnique;
+  t.after(() => {
+    prisma.supportTicket.updateMany = originalUpdate;
+    prisma.supportTicket.findUnique = originalFind;
+  });
+  let where;
+  prisma.supportTicket.updateMany = async (args) => {
+    where = args.where;
+    return { count: 0 };
+  };
+  prisma.supportTicket.findUnique = async () => ({ conversationId: "room-existing" });
+  await ticketModel.setConversationId("ticket-1", "room-existing");
+  assert.deepEqual(where, { id: "ticket-1", conversationId: null });
+  await assert.rejects(
+    () => ticketModel.setConversationId("ticket-1", "room-other"),
+    (err) => err.status === 409,
+  );
+});
+
 test("recordChatMessage returns alreadyRecorded: true on duplicate chatMessageId", async () => {
   const origFindUnique = prisma.ticketMessage.findUnique;
 

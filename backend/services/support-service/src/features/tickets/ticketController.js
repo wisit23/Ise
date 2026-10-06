@@ -1,5 +1,6 @@
 const { parsePagination, paginatedResponse } = require("@reloop/shared");
 const ticketService = require("./ticketService");
+const { effectiveStaffRole } = require("../staffRole");
 
 async function create(req, res, next) {
   try {
@@ -34,7 +35,7 @@ async function queue(req, res, next) {
   try {
     const pagination = parsePagination(req.query, 20);
     const { items, total } = await ticketService.listQueue({
-      role: req.userRole,
+      role: effectiveStaffRole(req),
       userId: req.userId,
       scope: req.query.scope,
       status: req.query.status,
@@ -54,7 +55,7 @@ async function getOne(req, res, next) {
     const ticket = await ticketService.getTicket({
       ticketId: req.params.id,
       userId: req.userId,
-      role: req.userRole,
+      role: effectiveStaffRole(req),
     });
     res.json(ticket);
   } catch (err) {
@@ -67,7 +68,7 @@ async function reply(req, res, next) {
     const message = await ticketService.reply({
       ticketId: req.params.id,
       userId: req.userId,
-      role: req.userRole,
+      role: effectiveStaffRole(req),
       body: req.body.body,
       isInternal: req.body.isInternal,
     });
@@ -82,7 +83,7 @@ async function assign(req, res, next) {
     const ticket = await ticketService.assignToSelf({
       ticketId: req.params.id,
       userId: req.userId,
-      role: req.userRole,
+      role: effectiveStaffRole(req),
     });
     res.json(ticket);
   } catch (err) {
@@ -95,7 +96,7 @@ async function changeStatus(req, res, next) {
     const ticket = await ticketService.changeStatus({
       ticketId: req.params.id,
       userId: req.userId,
-      role: req.userRole,
+      role: effectiveStaffRole(req),
       status: req.body.status,
       reason: req.body.reason,
     });
@@ -110,7 +111,7 @@ async function getConversation(req, res, next) {
     const result = await ticketService.getTicketConversation({
       ticketId: req.params.id,
       userId: req.userId,
-      role: req.userRole,
+      role: effectiveStaffRole(req),
     });
     res.json(result);
   } catch (err) {
@@ -123,7 +124,7 @@ async function joinChat(req, res, next) {
     const result = await ticketService.joinTicketChat({
       ticketId: req.params.id,
       userId: req.userId,
-      role: req.userRole,
+      role: effectiveStaffRole(req),
     });
     res.json(result);
   } catch (err) {

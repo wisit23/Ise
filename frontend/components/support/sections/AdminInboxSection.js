@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import Alert from "../../ui/Alert";
 import ConfirmDialog from "../../ui/ConfirmDialog";
@@ -29,7 +29,12 @@ export default function AdminInboxSection({ token }) {
   const [q, setQ] = useState("");
   const [qInput, setQInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("OPEN");
+  const [ticketStatus, setTicketStatus] = useState("ALL");
+  const [source, setSource] = useState("tickets");
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [conversationId, setConversationId] = useState(null);
+  const [chatLoading, setChatLoading] = useState(false);
+  const selectionRequest = useRef(0);
   const [closingTicket, setClosingTicket] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -44,12 +49,43 @@ export default function AdminInboxSection({ token }) {
   const [pendingAction, setPendingAction] = useState(null);
 
   function closeTicket() {
+    selectionRequest.current += 1;
     setClosingTicket(true);
     setTimeout(() => {
       setSelectedTicket(null);
+      setConversationId(null);
       setClosingTicket(false);
       setActionError("");
     }, DRAWER_EXIT_MS);
+  }
+
+  async function selectCase(item) {
+    const request = ++selectionRequest.current;
+    setSelectedTicket(item);
+    setConversationId(null);
+    setActionError("");
+    setReportReason("");
+    setReportDecision("");
+    if (item._type === "REPORT") return;
+    setChatLoading(true);
+    try {
+      const detail = await apiFetch(`/api/support/tickets/${item.id}`, {
+        token,
+      });
+      if (request !== selectionRequest.current) return;
+      setSelectedTicket(detail);
+      const room = await apiFetch(`/api/support/tickets/${item.id}/join`, {
+        method: "POST",
+        token,
+      });
+      if (request !== selectionRequest.current) return;
+      if (!room?.conversationId) throw new Error("ไม่พบห้องสนทนาของคำร้อง");
+      setConversationId(room.conversationId);
+    } catch (err) {
+      if (request === selectionRequest.current) setActionError(err.message);
+    } finally {
+      if (request === selectionRequest.current) setChatLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -59,54 +95,64 @@ export default function AdminInboxSection({ token }) {
       page,
       limit: PAGE_SIZE,
       scope: "all",
-      status: "ESCALATED",
     });
     if (q) params.set("q", q);
+    if (ticketStatus !== "ALL") params.set("status", ticketStatus);
 
-    const pTickets = apiFetch(`/api/support/tickets/queue?${params}`, {
-      token,
-    }).catch(() => ({ items: [], totalPages: 1 }));
+    const repParams = new URLSearchParams({
+      page,
+      limit: PAGE_SIZE,
+      status: statusFilter || "ALL",
+    });
+    const request =
+      source === "tickets"
+        ? apiFetch(`/api/support/tickets/queue?${params}`, { token })
+        : apiFetch(`/api/auth/admin/reports?${repParams}`, { token });
 
-    const repParams = new URLSearchParams();
-    repParams.set("status", statusFilter || "OPEN");
-    const pReports = apiFetch(`/api/auth/admin/reports?${repParams}`, {
-      token,
-    }).catch(() => ({ items: [], totalPages: 1 }));
-
-    Promise.all([pTickets, pReports])
-      .then(([tData, rData]) => {
-        let merged = tData.items || [];
-        if (rData && rData.items) {
-          const mapped = rData.items.map((r) => ({
-            id: r.id,
-            _type: "REPORT",
-            ticketNumber: `REP-${r.id.slice(0, 6).toUpperCase()}`,
-            subject: r.reason || "รายงาน",
-            requesterId: r.reporterId,
-            targetId: r.targetId,
-            priority: "URGENT",
-            status:
-              r.status === "OPEN"
-                ? "NEW"
-                : r.status === "REVIEWED"
-                  ? "IN_PROGRESS"
-                  : "RESOLVED",
-            // Report rows use `reportedAt`, not `createdAt` (see the Report
-            // model) — using the wrong field here produced "Invalid Date" in
-            // the table and broke the merged sort (NaN comparisons).
-            createdAt: r.reportedAt,
-            rawReport: r,
-          }));
-          merged = [...merged, ...mapped].sort(
-            (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-          );
-        }
-        setItems(merged);
-        setTotalPages(Math.max(tData.totalPages || 1, rData.totalPages || 1));
+    let cancelled = false;
+    request
+      .then((data) => {
+        if (cancelled) return;
+        setError("");
+        const rows =
+          source === "tickets"
+            ? data.items || []
+            : (data.items || []).map((r) => ({
+                id: r.id,
+                _type: "REPORT",
+                ticketNumber: `REP-${r.id.slice(0, 6).toUpperCase()}`,
+                subject: r.reason || "รายงาน",
+                requesterId: r.reporterId,
+                targetId: r.targetId,
+                priority: "URGENT",
+                status:
+                  r.status === "OPEN"
+                    ? "NEW"
+                    : r.status === "REVIEWED"
+                      ? "IN_PROGRESS"
+                      : "RESOLVED",
+                // Report rows use `reportedAt`, not `createdAt` (see the Report
+                // model) — using the wrong field here produced "Invalid Date" in
+                // the table and broke the merged sort (NaN comparisons).
+                createdAt: r.reportedAt,
+                rawReport: r,
+              }));
+        setItems(rows);
+        setTotalPages(data.totalPages || 1);
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [page, q, statusFilter, token, refreshKey]);
+      .catch((err) => {
+        if (!cancelled) {
+          setItems([]);
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [page, q, statusFilter, ticketStatus, source, token, refreshKey]);
 
   function refreshAfterAction() {
     setRefreshKey((k) => k + 1);
@@ -298,10 +344,39 @@ export default function AdminInboxSection({ token }) {
   return (
     <>
       <div className="animate-fade-in-up flex min-h-full flex-col">
-        {error && <Alert className="mb-3">{error}</Alert>}
+        <div
+          className="mb-4 flex gap-2"
+          role="tablist"
+          aria-label="ประเภทเคส Admin"
+        >
+          {[
+            ["tickets", "ตั๋วที่ส่งต่อ"],
+            ["reports", "รายงานผู้ใช้"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={source === key}
+              onClick={() => {
+                selectionRequest.current += 1;
+                setSelectedTicket(null);
+                setConversationId(null);
+                setSource(key);
+                setPage(1);
+                setItems([]);
+              }}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold ${source === key ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {error && <Alert className="mb-3">{error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setRefreshKey((k) => k + 1)}>ลองใหม่</button></Alert>}
 
         <AdminInboxTable
           items={items}
+          source={source}
           loading={loading}
           qInput={qInput}
           onQInputChange={setQInput}
@@ -310,6 +385,8 @@ export default function AdminInboxSection({ token }) {
             setPage(1);
           }}
           statusFilter={statusFilter}
+          ticketStatus={ticketStatus}
+          onTicketStatusChange={(v) => { setTicketStatus(v); setPage(1); }}
           onStatusFilterChange={(v) => {
             setStatusFilter(v);
             setPage(1);
@@ -317,7 +394,7 @@ export default function AdminInboxSection({ token }) {
           page={page}
           totalPages={totalPages}
           onPageChange={setPage}
-          onSelectTicket={setSelectedTicket}
+          onSelectTicket={selectCase}
         />
       </div>
 
@@ -341,6 +418,8 @@ export default function AdminInboxSection({ token }) {
           ) : (
             <TicketCasePanel
               ticket={selectedTicket}
+              conversationId={conversationId}
+              chatLoading={chatLoading}
               actionBusy={actionBusy}
               actionError={actionError}
               onAssign={handleAssign}

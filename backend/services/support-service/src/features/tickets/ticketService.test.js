@@ -98,6 +98,41 @@ test("joinTicketChat forbids normal CS agent on ESCALATED ticket", async () => {
   }
 });
 
+test("requester retains access to their escalated ticket conversation", async (t) => {
+  const originalFind = ticketModel.findById;
+  const originalAdd = chatClient.addParticipantToConversation;
+  const originalAuditFind = prisma.ticketAuditLog.findFirst;
+  const originalAudit = auditLog.record;
+  t.after(() => {
+    ticketModel.findById = originalFind;
+    chatClient.addParticipantToConversation = originalAdd;
+    prisma.ticketAuditLog.findFirst = originalAuditFind;
+    auditLog.record = originalAudit;
+  });
+  ticketModel.findById = async () => ({
+    id: "ticket-esc-1",
+    requesterId: "buyer-1",
+    assigneeId: "agent-1",
+    status: "ESCALATED",
+    conversationId: "conv-esc-1",
+  });
+  let role;
+  chatClient.addParticipantToConversation = async (_id, _userId, value) => {
+    role = value;
+  };
+  prisma.ticketAuditLog.findFirst = async () => ({ id: "existing-audit" });
+  auditLog.record = async () => {
+    throw new Error("unexpected audit write");
+  };
+  const result = await ticketService.joinTicketChat({
+    ticketId: "ticket-esc-1",
+    userId: "buyer-1",
+    role: "BUYER",
+  });
+  assert.equal(result.conversationId, "conv-esc-1");
+  assert.equal(role, "BUYER");
+});
+
 test("changeStatus does not falsely report chatLocked: true if chat locking failed", async () => {
   const origFindById = ticketModel.findById;
   const origTransitionStatus = ticketModel.transitionStatus;

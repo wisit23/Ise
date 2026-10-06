@@ -43,6 +43,21 @@ async function getByOrderId(req, res, next) {
   }
 }
 
+async function joinConversation(req, res, next) {
+  try {
+    res.json(
+      await disputeService.joinConversation({
+        disputeId: req.params.id,
+        userId: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function queue(req, res, next) {
   try {
     const pagination = parsePagination(req.query, 20);
@@ -164,6 +179,7 @@ module.exports = {
   open,
   getOne,
   getByOrderId,
+  joinConversation,
   queue,
   uploadEvidence,
   viewEvidence,

@@ -9,10 +9,11 @@ jest.mock("../../ui/ToastProvider", () => {
 });
 jest.mock("./live-support/SupportMainChat", () => ({
   __esModule: true,
-  default: ({ ticket, onToggleDetails }) => (
+  default: ({ ticket, onToggleDetails, onAssignTicket }) => (
     <div>
       <span data-testid="ticket">{ticket?.subject || "loading"}</span>
       <button onClick={onToggleDetails}>Details</button>
+      <button onClick={onAssignTicket}>Assign</button>
     </div>
   ),
 }));
@@ -73,4 +74,37 @@ it("keeps the details mounted until the exit motion finishes", async () => {
     jest.advanceTimersByTime(220);
   });
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("opens a claimed ticket in the mine queue without losing the selection", async () => {
+  let assigned = false;
+  apiFetch.mockImplementation((url) => {
+    if (url.includes("/queue?")) {
+      const scope = new URL(`http://localhost${url}`).searchParams.get("scope");
+      return Promise.resolve({ items: scope === "mine" && !assigned ? [] : [tickets[0]] });
+    }
+    if (url.endsWith("/a/assign")) {
+      assigned = true;
+      return Promise.resolve({});
+    }
+    if (url.endsWith("/a/join")) return Promise.resolve({ conversationId: "room-a" });
+    return Promise.resolve(tickets[0]);
+  });
+
+  render(<LiveSupportSection token="test" />);
+  fireEvent.click(screen.getByRole("button", { name: "รอรับเรื่อง" }));
+  await act(async () => {
+    jest.advanceTimersByTime(300);
+  });
+  fireEvent.click(screen.getByRole("button", { name: /Ticket A/ }));
+  await act(async () => {});
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+  });
+  expect(screen.getByRole("button", { name: "งานของฉัน" })).toHaveAttribute("aria-pressed", "true");
+  await act(async () => {
+    jest.advanceTimersByTime(300);
+  });
+  expect(screen.getByTestId("ticket")).toHaveTextContent("Ticket A");
+  expect(screen.getByRole("button", { name: /Ticket A/ })).toHaveAttribute("aria-current", "true");
 });

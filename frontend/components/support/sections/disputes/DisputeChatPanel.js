@@ -8,6 +8,7 @@ import EmbeddedChat from "../../EmbeddedChat";
 export default function DisputeChatPanel({
   dispute,
   conversationId,
+  readOnly,
   closing,
   onClose,
 }) {
@@ -57,6 +58,7 @@ export default function DisputeChatPanel({
       <div className="flex flex-1 flex-col overflow-hidden">
         <EmbeddedChat
           conversationId={conversationId}
+          readOnly={readOnly}
           maxHeight="100%"
         />
       </div>

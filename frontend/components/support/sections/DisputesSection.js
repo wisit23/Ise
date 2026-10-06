@@ -40,6 +40,8 @@ export default function DisputesSection({
   const [selectedDispute, setSelectedDispute] = useState(null);
   const [closingDispute, setClosingDispute] = useState(false);
   const [showDisputeChat, setShowDisputeChat] = useState(false);
+  const [chatRoom, setChatRoom] = useState(null);
+  const [openingChat, setOpeningChat] = useState(false);
   const [closingChat, setClosingChat] = useState(false);
   const [disputeDetails, setDisputeDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -104,8 +106,28 @@ export default function DisputesSection({
     setDisputeDetails(null);
     setDecisionReason("");
     setShowDisputeChat(false);
+    setChatRoom(null);
     setClosingChat(false);
     loadDisputeDetails(d.orderId);
+  }
+
+  async function handleOpenChat() {
+    if (!disputeDetails?.id || openingChat) return;
+    setOpeningChat(true);
+    try {
+      const room = await apiFetch(
+        `/api/orders/disputes/${disputeDetails.id}/conversation`,
+        { method: "POST", token },
+      );
+      if (!room?.conversationId) throw new Error("ไม่พบห้องสนทนาของข้อพิพาท");
+      setChatRoom(room);
+      setClosingChat(false);
+      setShowDisputeChat(true);
+    } catch (err) {
+      toast.error(`เปิดแชทข้อพิพาทไม่สำเร็จ: ${err.message}`);
+    } finally {
+      setOpeningChat(false);
+    }
   }
 
   async function handleViewEvidence(ev) {
@@ -131,8 +153,10 @@ export default function DisputesSection({
         token,
       });
       setItems(data.items || []);
+      setTotalPages(data.totalPages || 1);
+      setError("");
     } catch (err) {
-      console.error("Failed to refresh queue:", err);
+      setError(err.message);
     }
   }
 
@@ -215,15 +239,24 @@ export default function DisputesSection({
     if (!decisionReason.trim()) return;
     setDeciding(true);
     try {
-      await apiFetch(`/api/orders/disputes/${disputeDetails.id}/decision`, {
-        method: "POST",
-        token,
-        body: {
-          decision,
-          reason: decisionReason,
-          version: disputeDetails?.version,
+      const decided = await apiFetch(
+        `/api/orders/disputes/${disputeDetails.id}/decision`,
+        {
+          method: "POST",
+          token,
+          body: {
+            decision,
+            reason: decisionReason,
+            version: disputeDetails?.version,
+          },
         },
-      });
+      );
+      if (decided?.chatLockError) {
+        toast.error(
+          "ตัดสินข้อพิพาทแล้ว แต่ล็อกแชทไม่สำเร็จ ระบบจะลองอีกครั้งเมื่อเปิดแชท",
+        );
+      }
+      setChatRoom((room) => (room ? { ...room, readOnly: true } : room));
       toast.success(
         decision === "APPROVE_REFUND"
           ? "อนุมัติคืนเงินเรียบร้อย"
@@ -250,6 +283,7 @@ export default function DisputesSection({
       .then((data) => {
         setItems(data.items || []);
         setTotalPages(data.totalPages || 1);
+        setError("");
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -304,6 +338,8 @@ export default function DisputesSection({
           {(showDisputeChat || closingChat) && (
             <DisputeChatPanel
               dispute={selectedDispute}
+              conversationId={chatRoom?.conversationId}
+              readOnly={chatRoom?.readOnly}
               closing={closingChat}
               onClose={closeDisputeChat}
             />
@@ -329,9 +365,9 @@ export default function DisputesSection({
             onEscalate={handleEscalate}
             escalating={escalating}
             onOpenChat={() => {
-              setShowDisputeChat(true);
-              setClosingChat(false);
+              handleOpenChat();
             }}
+            openingChat={openingChat}
             onClose={closeDispute}
           />
         </div>

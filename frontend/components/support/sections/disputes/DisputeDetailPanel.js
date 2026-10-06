@@ -79,6 +79,7 @@ export default function DisputeDetailPanel({
   onEscalate,
   escalating,
   onOpenChat,
+  openingChat,
   onClose,
 }) {
   const [showEscalateDialog, setShowEscalateDialog] = useState(false);
@@ -287,7 +288,10 @@ export default function DisputeDetailPanel({
                   ผู้ซื้อ #{(buyerId ?? "").slice(0, 12)}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  กดปุ่ม &quot;แชท&quot; เพื่อเปิดหน้าต่างสนทนา
+                  {userRole === "CUSTOMER_SERVICE" &&
+                  details?.assignedTo !== currentUserId
+                    ? "รับเคสก่อนจึงจะเปิดแชทได้"
+                    : "กดปุ่มแชทเพื่อเปิดหน้าต่างสนทนา"}
                 </p>
               </div>
             </div>
@@ -296,6 +300,13 @@ export default function DisputeDetailPanel({
               variant="secondary"
               icon="chat"
               onClick={onOpenChat}
+              disabled={
+                detailsLoading ||
+                !details ||
+                openingChat ||
+                (userRole === "CUSTOMER_SERVICE" &&
+                  details.assignedTo !== currentUserId)
+              }
             >
               แชท
             </Button>

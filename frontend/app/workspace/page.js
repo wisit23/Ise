@@ -76,11 +76,9 @@ export default function SupportPanelPage() {
       </main>
     );
   }
-  if (
-    user?.role !== "CUSTOMER_SERVICE" &&
-    user?.role !== "ADMIN" &&
-    user?.role !== "TRUST_AND_SAFETY"
-  ) {
+  const roles = new Set([user?.role, ...(Array.isArray(user?.roles) ? user.roles : [])]);
+  const staffRole = ["ADMIN", "TRUST_AND_SAFETY", "CUSTOMER_SERVICE"].find((role) => roles.has(role));
+  if (!staffRole) {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
@@ -92,13 +90,12 @@ export default function SupportPanelPage() {
   }
 
   const token = getAccessToken();
-  const isAdminOrSafety =
-    user?.role === "ADMIN" || user?.role === "TRUST_AND_SAFETY";
+  const isAdminOrSafety = staffRole === "ADMIN" || staffRole === "TRUST_AND_SAFETY";
   const visibleSections = isAdminOrSafety
     ? [
         ...SECTIONS,
         ...ADMIN_SECTIONS,
-        ...(user?.role === "ADMIN" ? ADMIN_ONLY_SECTIONS : []),
+        ...(staffRole === "ADMIN" ? ADMIN_ONLY_SECTIONS : []),
       ]
     : SECTIONS;
   const activeSection = visibleSections.find((s) => s.key === section);
@@ -234,7 +231,7 @@ export default function SupportPanelPage() {
                 {section === "dashboard" && (
                   <DashboardSection
                     token={token}
-                    userRole={user?.role}
+                    userRole={staffRole}
                     onNavigate={navigateTo}
                   />
                 )}
@@ -244,7 +241,7 @@ export default function SupportPanelPage() {
                 {section === "disputes" && (
                   <DisputesSection
                     token={token}
-                    userRole={user?.role}
+                    userRole={staffRole}
                     currentUser={user}
                     status={disputesFilter}
                     setStatus={setDisputesFilter}
