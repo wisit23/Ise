@@ -139,12 +139,15 @@ export default function MessageComposer({
       }
     } else {
       // Regular text send
+      setValue("");
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "44px";
+        textareaRef.current.focus();
+      }
       try {
         await onSend(trimmed);
-        setValue("");
-        if (textareaRef.current) textareaRef.current.style.height = "44px";
       } catch {
-        // Keep draft text on failure
+        setValue((draft) => (draft ? `${value}\n${draft}` : value));
       } finally {
         setSending(false);
       }
@@ -310,7 +313,7 @@ export default function MessageComposer({
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onFocus={onFocus}
-            disabled={disabled || sending}
+            disabled={disabled || (sending && Boolean(pendingFile))}
             rows={1}
             placeholder={
               pendingFile ? "เพิ่มคำบรรยายรูปภาพ..." : "พิมพ์ข้อความ..."

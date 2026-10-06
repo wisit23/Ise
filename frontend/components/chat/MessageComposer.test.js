@@ -51,7 +51,26 @@ describe("MessageComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
 
     await waitFor(() => expect(onSend).toHaveBeenCalled());
-    expect(textarea).toHaveValue("will fail");
+    await waitFor(() => expect(textarea).toHaveValue("will fail"));
+  });
+
+  it("keeps focus and a new draft while the previous message is sending", async () => {
+    let finishSend;
+    const onSend = jest.fn(() => new Promise((resolve) => { finishSend = resolve; }));
+    render(<MessageComposer onSend={onSend} />);
+
+    const textarea = screen.getByLabelText("พิมพ์ข้อความ");
+    fireEvent.change(textarea, { target: { value: "first" } });
+    fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
+    expect(textarea).toHaveFocus();
+    expect(textarea).not.toBeDisabled();
+    fireEvent.change(textarea, { target: { value: "second" } });
+    await waitFor(() => expect(textarea).toHaveValue("second"));
+
+    finishSend();
+    await waitFor(() => expect(screen.getByRole("button", { name: "ส่งข้อความ" })).toBeEnabled());
+    expect(textarea).toHaveFocus();
+    expect(textarea).toHaveValue("second");
   });
 
   it("disables input and send button when disabled", () => {

@@ -37,6 +37,7 @@ async function attach({ conversationId, senderId, file, caption }) {
   const conversation = await conversationService.getForParticipant(
     conversationId,
     senderId,
+    { write: true },
   );
   if (conversation.status === "LOCKED") {
     throw new AppError(409, "This conversation is locked");

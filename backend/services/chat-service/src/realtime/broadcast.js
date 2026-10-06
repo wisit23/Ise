@@ -8,6 +8,7 @@
 // are silent no-ops — exactly the CHAT-001-style requirement that requiring
 // a module never opens a connection by itself.
 let ioInstance = null;
+const { getCaseAccess } = require("../services/caseAccessClient");
 
 function setIo(io) {
   ioInstance = io;
@@ -52,6 +53,13 @@ function userRoomName(userId) {
 function broadcastMessage(conversation, message) {
   if (!ioInstance) return;
 
+  if (conversation.contextType === "SUPPORT" || conversation.contextType === "DISPUTE") {
+    broadcastCaseMessage(conversation, message).catch((err) => {
+      console.error(`[chat-service] case broadcast failed: ${err.message}`);
+    });
+    return;
+  }
+
   // Internal notes must remain private and must not be broadcast into the public room
   if (message.visibility === "INTERNAL") {
     for (const participant of conversation.participants || []) {
@@ -81,6 +89,32 @@ function broadcastMessage(conversation, message) {
   }
 }
 
+async function broadcastCaseMessage(conversation, message) {
+  const participants = (conversation.participants || []).filter((p) => !p.leftAt);
+  const checked = await Promise.allSettled(participants.map(async (p) => ({
+    participant: p,
+    access: await getCaseAccess(conversation, p.userId, p.role),
+  })));
+  const seen = new Set();
+  for (const result of checked) {
+    if (result.status !== "fulfilled") continue; // fail closed during owner outage
+    const { participant, access } = result.value;
+    if (!access.allowed || seen.has(participant.userId)) continue;
+    if (message.visibility === "INTERNAL" &&
+      participant.role !== "AGENT" && participant.role !== "ADMIN") continue;
+    seen.add(participant.userId);
+    ioInstance.to(userRoomName(participant.userId)).emit("message:new", message);
+    if (message.visibility !== "INTERNAL") {
+      ioInstance.to(userRoomName(participant.userId)).emit("conversation:activity", {
+        conversationId: conversation.id,
+        messageId: message.id,
+        senderId: message.senderId,
+        createdAt: message.createdAt,
+      });
+    }
+  }
+}
+
 function broadcastActivity(userId, activity) {
   if (!ioInstance) return;
   ioInstance.to(userRoomName(userId)).emit("conversation:activity", activity);
@@ -91,6 +125,26 @@ function broadcastActivity(userId, activity) {
  * show the locked banner without needing a full page refresh. */
 function broadcastStatusChange(conversation, newStatus) {
   if (!ioInstance) return;
+  if (conversation.contextType === "SUPPORT" || conversation.contextType === "DISPUTE") {
+    const participants = (conversation.participants || []).filter((p) => !p.leftAt);
+    Promise.allSettled(participants.map(async (p) => ({
+      participant: p,
+      access: await getCaseAccess(conversation, p.userId, p.role),
+    }))).then((checked) => {
+      const seen = new Set();
+      for (const result of checked) {
+        if (result.status !== "fulfilled") continue;
+        const { participant, access } = result.value;
+        if (!access.allowed || seen.has(participant.userId)) continue;
+        seen.add(participant.userId);
+        ioInstance.to(userRoomName(participant.userId)).emit("conversation:status", {
+          conversationId: conversation.id,
+          status: newStatus,
+        });
+      }
+    }).catch((err) => console.error(`[chat-service] case status broadcast failed: ${err.message}`));
+    return;
+  }
   ioInstance.to(roomName(conversation.id)).emit("conversation:status", {
     conversationId: conversation.id,
     status: newStatus,

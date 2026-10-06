@@ -31,6 +31,11 @@ test("SUPPORT context key is deterministic for the same ticketId", () => {
   assert.equal(buildContextKey("SUPPORT", { ticketId: "t1" }), "SUPPORT:t1");
 });
 
+test("DISPUTE context key is stable and requires a dispute ID", () => {
+  assert.equal(buildContextKey("DISPUTE", { disputeId: "d1" }), "DISPUTE:d1");
+  assert.throws(() => buildContextKey("DISPUTE", {}));
+});
+
 test("DIRECT context key is order-independent (A,B) === (B,A)", () => {
   const ab = buildContextKey("DIRECT", { userIdA: "u1", userIdB: "u2" });
   const ba = buildContextKey("DIRECT", { userIdA: "u2", userIdB: "u1" });

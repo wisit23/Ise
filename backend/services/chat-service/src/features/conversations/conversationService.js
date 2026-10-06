@@ -3,6 +3,7 @@ const { buildContextKey } = require("./contextKey");
 const conversationModel = require("./conversationModel");
 const productClient = require("../../services/productClient");
 const authClient = require("../../services/authClient");
+const { getCaseAccess } = require("../../services/caseAccessClient");
 
 const DUPLICATE_KEY_ERROR = "P2002";
 
@@ -101,18 +102,29 @@ function isParticipant(conversation, userId) {
   );
 }
 
-async function getForParticipant(conversationId, userId) {
+async function getForParticipant(conversationId, userId, { write = false } = {}) {
   const conversation = await conversationModel.findById(conversationId);
   if (!conversation) throw notFound("Conversation not found");
   if (!isParticipant(conversation, userId)) {
     throw new AppError(403, "Forbidden");
+  }
+  const participant = conversation.participants.find((p) => p.userId === userId && !p.leftAt);
+  const access = await getCaseAccess(conversation, userId, participant.role);
+  if (!access.allowed || (write && !access.writable)) {
+    throw new AppError(403, "Case chat access was revoked or is read-only");
   }
   return conversation;
 }
 
 async function listInbox(userId, filter = {}) {
   const conversations = await conversationModel.listForParticipant(userId, filter);
-  return withDisplayNames(conversations);
+  const accessible = await Promise.all(conversations.map(async (conversation) => {
+    const participant = conversation.participants.find((p) => p.userId === userId && !p.leftAt);
+    if (!participant) return null;
+    const access = await getCaseAccess(conversation, userId, participant.role);
+    return access.allowed ? conversation : null;
+  }));
+  return withDisplayNames(accessible.filter(Boolean));
 }
 
 module.exports = {

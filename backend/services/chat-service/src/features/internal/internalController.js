@@ -5,6 +5,11 @@ const messageModel = require("../messages/messageModel");
 const { contextKeyForInternalContextId } = require("./internalContext");
 const broadcast = require("../../realtime/broadcast");
 const { syncSupportMessage } = require("../sync/supportSyncWorker");
+const {
+  isValidCursor,
+  buildPageQuery,
+  paginate,
+} = require("../messages/cursor");
 
 const DUPLICATE_KEY_ERROR = "P2002";
 const VALID_STATUSES = ["ACTIVE", "ARCHIVED", "LOCKED"];
@@ -171,28 +176,33 @@ async function updateStatus(req, res, next) {
   }
 }
 
-/** Full, unpaginated message history for one conversation — evidence
- * gathering (a dispute, a report review), not for driving a chat UI, which
- * is why this deliberately skips the public cursor-pagination contract. */
+/** Bounded history for evidence gathering. `before` walks toward older IDs. */
 async function getTranscript(req, res, next) {
   try {
     const conversation = await conversationModel.findById(req.params.id);
     if (!conversation) throw notFound("Conversation not found");
 
-    const includeInternal = req.query.includeInternal === "true";
-    const where = {
-      conversationId: conversation.id,
-      deletedAt: null,
-    };
-    if (!includeInternal) {
-      where.visibility = { not: "INTERNAL" };
+    const before = req.query.before;
+    if (before && !isValidCursor(before))
+      throw badRequest("invalid transcript cursor");
+    const requestedLimit =
+      req.query.limit === undefined ? 50 : Number(req.query.limit);
+    if (!Number.isInteger(requestedLimit) || requestedLimit < 1) {
+      throw badRequest("limit must be a positive integer");
     }
-
-    const messages = await prisma.message.findMany({
-      where,
-      orderBy: { createdAt: "asc" },
+    const limit = Math.min(100, requestedLimit);
+    const query = buildPageQuery({
+      conversationId: conversation.id,
+      before,
+      limit,
+      includeInternal: req.query.includeInternal === "true",
     });
-    res.json({ conversation, messages });
+    const page = paginate(await prisma.message.findMany(query), limit);
+    res.json({
+      conversation,
+      messages: page.items.reverse(),
+      nextCursor: page.nextCursor,
+    });
   } catch (err) {
     next(err);
   }
