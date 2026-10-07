@@ -7,13 +7,23 @@ const prisma = require("../../models/prismaClient");
  * route -> controller -> service -> repository -> PostgreSQL.
  */
 function createProductVideoRepository(prismaClient) {
-  async function listAvailable({ skip, take }) {
+  async function listAvailable({ skip, take, userId = null }) {
     const where = { product: { status: "available" } };
 
     const [items, total] = await Promise.all([
       prismaClient.productVideo.findMany({
         where,
-        include: { product: { include: { photos: true } } },
+        include: {
+          product: { include: { photos: true } },
+          ...(userId
+            ? {
+                choices: {
+                  where: { userId },
+                  select: { id: true },
+                },
+              }
+            : {}),
+        },
         orderBy: { createdAt: "desc" },
         skip,
         take,
@@ -21,7 +31,14 @@ function createProductVideoRepository(prismaClient) {
       prismaClient.productVideo.count({ where }),
     ]);
 
-    return { items, total };
+    const formattedItems = items.map((clip) => {
+      const chosen = Boolean(userId && clip.choices && clip.choices.length > 0);
+      const item = { ...clip, chosen };
+      delete item.choices;
+      return item;
+    });
+
+    return { items: formattedItems, total };
   }
 
   function findProductOwner(productId) {

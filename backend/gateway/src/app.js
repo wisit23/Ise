@@ -55,6 +55,18 @@ function isPublic(path) {
 const app = express();
 app.use(cors());
 
+// Strip untrusted inbound x-user-* headers so external clients cannot spoof user identity
+app.use((req, res, next) => {
+  if (req.headers) {
+    for (const key of Object.keys(req.headers)) {
+      if (key.toLowerCase().startsWith("x-user-")) {
+        delete req.headers[key];
+      }
+    }
+  }
+  next();
+});
+
 app.get("/health", (req, res) =>
   res.json({ status: "ok", service: "gateway" }),
 );

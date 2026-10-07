@@ -121,8 +121,8 @@ export default function SellerProductList({
           className="border-0 bg-transparent py-10"
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow-sm">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-xl border border-slate-200/70 bg-white shadow-sm">
+          <table className="min-w-[500px] sm:min-w-full w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50 text-left text-xs font-semibold text-slate-500">
                 <th className="px-4 py-3">สินค้า</th>

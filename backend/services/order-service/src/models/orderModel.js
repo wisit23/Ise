@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const { conflict } = require("@reloop/shared");
 const prisma = require("./prismaClient");
 
@@ -212,7 +213,46 @@ async function transitionStatusWithProductSync({
       },
     });
     const order = await tx.order.findUnique({ where: { id } });
-    return { order, event };
+
+    let attributionEvent = null;
+    if (status === "completed" && order?.campaignId) {
+      if (!tx || !tx.attributionOutboxEvent) {
+        throw new Error(
+          "attributionOutboxEvent model is required on Prisma client",
+        );
+      }
+      const grossAmount = order.price;
+      const discountAmount = order.discountAmount || 0;
+      const netAmount =
+        order.finalPrice !== null && order.finalPrice !== undefined
+          ? order.finalPrice
+          : Math.max(0, grossAmount - discountAmount);
+      const completedAt = new Date();
+
+      try {
+        attributionEvent = await tx.attributionOutboxEvent.create({
+          data: {
+            id: crypto.randomUUID(),
+            orderId: id,
+            campaignId: order.campaignId,
+            grossAmount,
+            discountAmount,
+            netAmount,
+            completedAt,
+          },
+        });
+      } catch (err) {
+        if (err.code === "P2002") {
+          attributionEvent = await tx.attributionOutboxEvent.findUnique({
+            where: { orderId: id },
+          });
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    return { order, event, attributionEvent };
   });
 }
 

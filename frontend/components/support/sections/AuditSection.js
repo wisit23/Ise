@@ -85,7 +85,10 @@ export default function AuditSection({ token }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
+          <form
+            onSubmit={handleSearchSubmit}
+            className="flex items-center gap-2"
+          >
             <input
               type="text"
               value={searchTarget}
@@ -121,7 +124,9 @@ export default function AuditSection({ token }) {
 
       {loading ? (
         <div className="flex h-48 items-center justify-center rounded-xl border border-slate-200 bg-white">
-          <p className="text-sm font-medium text-slate-500">กำลังโหลดประวัติ Audit Log...</p>
+          <p className="text-sm font-medium text-slate-500">
+            กำลังโหลดประวัติ Audit Log...
+          </p>
         </div>
       ) : entries.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
@@ -140,19 +145,31 @@ export default function AuditSection({ token }) {
           <table className="w-full min-w-[800px] border-collapse text-left text-xs text-slate-700">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/70">
-                <th className="p-3.5 font-bold text-slate-600">เวลาที่บันทึก</th>
+                <th className="p-3.5 font-bold text-slate-600">
+                  เวลาที่บันทึก
+                </th>
                 <th className="p-3.5 font-bold text-slate-600">
                   ผู้ดำเนินการ (Staff ID)
                 </th>
-                <th className="p-3.5 font-bold text-slate-600">การดำเนินการ (Action)</th>
-                <th className="p-3.5 font-bold text-slate-600">เป้าหมาย (Target ID)</th>
-                <th className="p-3.5 font-bold text-slate-600">เหตุผล / บันทึก</th>
+                <th className="p-3.5 font-bold text-slate-600">
+                  การดำเนินการ (Action)
+                </th>
+                <th className="p-3.5 font-bold text-slate-600">
+                  เป้าหมาย (Target ID)
+                </th>
+                <th className="p-3.5 font-bold text-slate-600">
+                  เหตุผล / บันทึก
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {entries.map((log) => {
                 const actor = log.actorId || log.adminId || "—";
-                const target = log.targetId || log.targetUserId || log.targetProductId || "—";
+                const target =
+                  log.targetId ||
+                  log.targetUserId ||
+                  log.targetProductId ||
+                  "—";
                 const badgeStyle =
                   ACTION_STYLE[log.action] || "bg-slate-100 text-slate-700";
 
@@ -171,9 +188,14 @@ export default function AuditSection({ token }) {
                       <Badge text={log.action} style={badgeStyle} />
                     </td>
                     <td className="p-3.5 font-mono text-slate-800 font-semibold">
-                      {target.length > 16 ? `${target.slice(0, 14)}...` : target}
+                      {target.length > 16
+                        ? `${target.slice(0, 14)}...`
+                        : target}
                     </td>
-                    <td className="p-3.5 max-w-xs truncate text-slate-600 font-medium" title={log.reason}>
+                    <td
+                      className="p-3.5 max-w-xs truncate text-slate-600 font-medium"
+                      title={log.reason}
+                    >
                       {log.reason || "—"}
                     </td>
                   </tr>

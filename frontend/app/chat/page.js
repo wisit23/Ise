@@ -30,7 +30,9 @@ export default function ChatInboxPage() {
     setUser(getStoredUser());
     listConversations(token)
       .then((data) => {
-        const items = (data.items || []).filter((c) => c.contextType !== "SUPPORT");
+        const items = (data.items || []).filter(
+          (c) => c.contextType !== "SUPPORT",
+        );
         setConversations(items);
         setCachedConversations(items);
       })
@@ -45,7 +47,9 @@ export default function ChatInboxPage() {
     if (!token) return;
     listConversations(token)
       .then((data) => {
-        const items = (data.items || []).filter((c) => c.contextType !== "SUPPORT");
+        const items = (data.items || []).filter(
+          (c) => c.contextType !== "SUPPORT",
+        );
         setConversations(items);
         setCachedConversations(items);
       })
@@ -62,7 +66,9 @@ export default function ChatInboxPage() {
       if (document.hidden) return;
       listConversations(token)
         .then((data) => {
-          const items = (data.items || []).filter((c) => c.contextType !== "SUPPORT");
+          const items = (data.items || []).filter(
+            (c) => c.contextType !== "SUPPORT",
+          );
           setConversations(items);
         })
         .catch(() => {});
@@ -77,7 +83,9 @@ export default function ChatInboxPage() {
     if (!token) return;
     listConversations(token)
       .then((data) => {
-        const items = (data.items || []).filter((c) => c.contextType !== "SUPPORT");
+        const items = (data.items || []).filter(
+          (c) => c.contextType !== "SUPPORT",
+        );
         setConversations(items);
       })
       .catch(() => {});

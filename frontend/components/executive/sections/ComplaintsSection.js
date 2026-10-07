@@ -61,7 +61,8 @@ export default function ComplaintsSection({ token }) {
   const selectedTargetShopName =
     selectedTarget?.shopName ||
     data.items.find((r) => r.targetId === selectedTargetId)?.targetShopName ||
-    highRiskTargets.find((t) => t.targetId === selectedTargetId)?.targetShopName;
+    highRiskTargets.find((t) => t.targetId === selectedTargetId)
+      ?.targetShopName;
 
   const selectedTargetOwnerName =
     selectedTarget?.name ||
@@ -93,7 +94,8 @@ export default function ComplaintsSection({ token }) {
               </span>
               <div>
                 <h3 className="text-sm font-bold text-red-900">
-                  ตรวจพบเป้าหมายที่มีข้อร้องเรียนสูงผิดปกติ (ความเสี่ยงทางธุรกิจ)
+                  ตรวจพบเป้าหมายที่มีข้อร้องเรียนสูงผิดปกติ
+                  (ความเสี่ยงทางธุรกิจ)
                 </h3>
                 <p className="mt-0.5 text-xs text-red-700 leading-relaxed">
                   มีร้านค้า/เป้าหมายที่ถูกรายงานสะสมตั้งแต่{" "}
@@ -115,7 +117,9 @@ export default function ComplaintsSection({ token }) {
                       className="inline-flex items-center gap-1.5 rounded-lg bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 hover:bg-red-200 transition-colors"
                     >
                       <span>
-                        {t.targetShopName || t.targetName || t.targetId.slice(0, 8)}
+                        {t.targetShopName ||
+                          t.targetName ||
+                          t.targetId.slice(0, 8)}
                       </span>
                       <span className="rounded-full bg-red-600 px-1.5 py-0.2 text-[10px] text-white">
                         {t.count} ครั้ง
@@ -221,13 +225,17 @@ export default function ComplaintsSection({ token }) {
               {selectedTargetShopName && (
                 <span className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 font-bold text-slate-900 border border-indigo-200 shadow-2xs">
                   <span>ชื่อร้าน:</span>
-                  <span className="text-indigo-950">{selectedTargetShopName}</span>
+                  <span className="text-indigo-950">
+                    {selectedTargetShopName}
+                  </span>
                 </span>
               )}
               {selectedTargetOwnerName && (
                 <span className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 font-medium text-slate-800 border border-indigo-200 shadow-2xs">
                   <span>เจ้าของร้าน:</span>
-                  <span className="font-semibold text-slate-900">{selectedTargetOwnerName}</span>
+                  <span className="font-semibold text-slate-900">
+                    {selectedTargetOwnerName}
+                  </span>
                 </span>
               )}
               <span className="font-mono text-[11px] text-slate-500">
@@ -370,4 +378,3 @@ export default function ComplaintsSection({ token }) {
     </div>
   );
 }
-

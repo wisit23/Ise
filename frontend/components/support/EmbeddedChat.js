@@ -3,15 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import MessageList from "../chat/MessageList";
 import MessageComposer from "../chat/MessageComposer";
-import {
-  useChatSocket,
-  useChatSocketEvent,
-} from "../chat/ChatSocketProvider";
-import {
-  listMessages,
-  sendMessage,
-  markRead,
-} from "../../lib/chat";
+import { useChatSocket, useChatSocketEvent } from "../chat/ChatSocketProvider";
+import { listMessages, sendMessage, markRead } from "../../lib/chat";
 import { uploadChatAttachment } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 
@@ -121,13 +114,11 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     setMessages((prev) => {
       // Deduplicate optimistic messages by matching clientId or body+sender
       const isDuplicate = prev.some(
-        (m) =>
-          m.id === msg.id ||
-          (m.clientId && m.clientId === msg.clientId),
+        (m) => m.id === msg.id || (m.clientId && m.clientId === msg.clientId),
       );
       if (isDuplicate) {
         return prev.map((m) =>
-          (m.clientId && m.clientId === msg.clientId) ? msg : m,
+          m.clientId && m.clientId === msg.clientId ? msg : m,
         );
       }
       return [...prev, msg];
@@ -164,7 +155,9 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     try {
       const saved = await sendMessage(conversationId, text, token);
       setMessages((prev) =>
-        prev.map((m) => (m.id === optimisticId ? { ...saved, clientId: optimisticId } : m)),
+        prev.map((m) =>
+          m.id === optimisticId ? { ...saved, clientId: optimisticId } : m,
+        ),
       );
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
@@ -176,7 +169,12 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     if (!file || !conversationId) return;
     const token = tokenRef.current || getAccessToken();
     try {
-      const saved = await uploadChatAttachment(conversationId, file, caption, token);
+      const saved = await uploadChatAttachment(
+        conversationId,
+        file,
+        caption,
+        token,
+      );
       setMessages((prev) => mergeById(prev, [saved]));
       scrollToBottom(true);
     } catch {

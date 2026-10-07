@@ -55,10 +55,7 @@ export default function DisputeChatPanel({
       </div>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <EmbeddedChat
-          conversationId={conversationId}
-          maxHeight="100%"
-        />
+        <EmbeddedChat conversationId={conversationId} maxHeight="100%" />
       </div>
     </div>
   );

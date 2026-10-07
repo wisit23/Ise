@@ -41,6 +41,8 @@
 - `MKT-003`: Order attribution snapshot persists in `reloop_order`; metrics rebuild from persisted facts
 - `MKT-004`: segment rule/content revision/status persists in the owner database
 - `MKT-005`: auction event, approved listing and bids persist in `reloop_product`
+- `UR-08`: User analytics (active users, new users, hourly usage, peak hour) aggregate in `reloop_auth` (Auth Service); active users from `LoginLog` + `BuyerActivityLog`, new users from `User`, gap-filled hourly buckets, deterministic peak hour, no PII.
+- `Marketing Audit Trail`: Append-only audit logs persist in `reloop_product` (`MarketingAuditLog`); atomic transactions with business mutations in Campaign, Auction, and Article; deterministic `idempotencyKey` for SYSTEM retryable actions; zero client write API.
 - Database tests run with `REQUIRE_INTEGRATION=1`; an unavailable database must fail, not skip
 
 ### Task MKT-001: Campaign Domain and Lifecycle
@@ -115,29 +117,41 @@ router.post(
 
 ### Task MKT-003: Attribution and Conversion Dashboard
 
-**Status note:** Source implementation exists in `backend/services/product-service/src/features/campaigns/campaignMetrics.js`, `frontend/components/marketing/sections/DashboardSection.js`, and `test/campaignMetrics.test.js` (7/7 passing). Order completed dispatch is wired in `orderController.js`. Real cross-service Prisma-backed database persistence in `reloop_order` / `reloop_product` is pending Part 3 hardening.
+**Status note:** Source implementation exists in `backend/services/product-service/src/features/campaigns/campaignMetrics.js`, `frontend/components/marketing/sections/DashboardSection.js`, and `test/campaignMetrics.test.js` (Campaign Metrics 13 test cases โดยไม่รวม parent suite ของ node:test; historical baseline: 7/7, then 10/10). Order completed dispatch is wired in `orderController.js`. Real cross-service Prisma-backed database persistence in `reloop_order` / `reloop_product` verified across PostgreSQL integration suites.
 
 **Files:**
 
 - Modify: `backend/services/order-service/prisma/schema.prisma`
 - Create: `backend/services/order-service/src/features/attribution/attributionService.js`
 - Create: `backend/services/product-service/src/features/campaigns/campaignMetrics.js`
+- Modify: `backend/services/auth-service/src/app.js`
 - Create: `backend/services/auth-service/src/features/metrics/activityMetrics.js`
+- Create: `backend/services/auth-service/src/features/metrics/marketingMetricsController.js`
+- Create: `backend/services/auth-service/src/features/metrics/marketingMetricsRoutes.js`
+- Modify: `frontend/lib/api.js`
+- Modify: `frontend/components/marketing/sections/DashboardSection.js`
 - Create: `frontend/app/marketing/dashboard/page.js`
 - Test: `backend/services/order-service/test/campaign-attribution.integration.test.js`
 - Test: `backend/services/product-service/test/campaignMetrics.test.js`
+- Test: `backend/services/auth-service/src/features/metrics/activityMetrics.test.js`
+- Test: `backend/services/auth-service/test/user-analytics.integration.test.js`
+- Test: `backend/gateway/src/marketing-analytics.cross-service.test.js`
+- Test: `frontend/components/marketing/sections/DashboardSection.test.js`
+- Test: `frontend/lib/api.test.js`
 
 **Interfaces:**
 
 - Consumes: campaign validation endpoint at checkout
 - Produces: immutable Order fields `campaignId`, `discountAmount`, `finalPrice`
 - Consumes: `order.completed.v1` with attribution snapshot
+- Produces: `GET /api/auth/marketing/analytics/user-usage` (UR-08 Marketing User Usage Analytics)
 
-- [x] **Step 1: Write completed-vs-click conversion and metrics unit tests** (`test/campaignMetrics.test.js`, 7/7 passing)
+- [x] **Step 1: Write completed-vs-click conversion and metrics unit tests** (`test/campaignMetrics.test.js`, Campaign Metrics 13 test cases โดยไม่รวม parent suite ของ node:test; historical baseline: 10/10)
 - [x] **Step 2: Verify source implementation exists** (`campaignMetrics.js`, `DashboardSection.js`, `productClient.js`)
 - [x] **Step 3: Snapshot validated discount and consume idempotent completion event** (`POST /internal/campaigns/events/order-completed`)
-- [ ] **Step 4: Verify cross-service PostgreSQL persistence in `reloop_order` / `reloop_product`** (Attribution DB acceptance pending Part 3 hardening)
-- [ ] **Step 5: Update docs and commit `feat(marketing): measure campaign conversion`** (Pending Part 3 hardening)
+- [x] **Step 4: Verify cross-service PostgreSQL persistence in `reloop_order` / `reloop_product`** (Verified with `REQUIRE_INTEGRATION=1` in `product-service/test/campaign-attribution.integration.test.js` [10/10 tests passing] and `order-service/test/campaign-attribution.integration.test.js` [6/6 tests passing])
+- [x] **Step 5: Implement and verify UR-08 Marketing User Analytics in Auth Service and Marketing Dashboard** (Verified via `activityMetrics.test.js` [7/7 passing], `marketing-analytics.cross-service.test.js` [2/2 passing 100% on live PostgreSQL; historical initial: 1/1], `user-analytics.integration.test.js` [1/1 passing without skips with `REQUIRE_INTEGRATION=1`], and frontend Jest tests [30/30 passing across `DashboardSection.test.js` and `api.test.js`; historical initial: 17/17])
+- [ ] **Step 6: Update docs and commit `feat(marketing): measure campaign conversion & user analytics`** (Implementation, integration verification, and documentation complete; commit pending explicit user instruction)
 
 ### Task MKT-004: Extended Segmentation and Content
 
@@ -168,10 +182,17 @@ router.post(
 
 ### Task MKT-005: Extended Auction and Swipe Contracts
 
-**Refactored source baseline (partial evidence, not acceptance):** ProductVideo provider แยก
+**Refactored source baseline & UR-11 Hardening (Automated Acceptance Verified):** ProductVideo provider แยก
 route/controller/service/repository, feed แสดง Product `available` เท่านั้น, seller identity
-มาจาก signed JWT และ Swipe UI มี component/tests/per-active-video playback แล้ว แต่ยังไม่มี
-persisted choose action และยังไม่ผ่าน Marketing requirement/contract review
+มาจาก signed JWT และ Swipe UI มี component/tests/per-active-video playback ครบถ้วนแล้ว
+สำหรับการเลือกการ์ดสินค้า (`UR-11` Swipe-to-Choose) ได้รับการ Hardening และผ่านการทดสอบอัตโนมัติครบทุกระดับ:
+Buyer-only authorization (403 Forbidden สำหรับ Role อื่น, 401 Unauthorized สำหรับผู้ไม่ล็อกอิน),
+Server-side persistence พร้อม Batch Query relation บน `reloop_product` (ไม่มีปัญหา N+1 query),
+User isolation (แยกสถานะ chosen รายบุคคล, Guest คืน chosen: false),
+Anti-spoofing บน API Gateway และ Public route (ห้ามเชื่อถือ client x-user-* header เมื่อไม่มี Bearer token),
+Idempotent choose, ป้องกัน 500 error ใน safe unchoose, และ Frontend optimistic rollback
+ผ่านการทดสอบ Backend/Gateway (29/29 tests), Frontend Swipe (3/3 suites, 42/42 tests), และ PostgreSQL Integration (`REQUIRE_INTEGRATION=1`, 1/1 suite);
+ทั้งนี้ Browser E2E / Responsive UI verification บนเบราว์เซอร์จริงยังไม่ได้ดำเนินการและคงสถานะเป็น Final Acceptance ที่รอดำเนินการ
 
 **Files:**
 
@@ -208,9 +229,20 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 ```
 
 - [x] **Step 4: Verify unapproved item denial, tie rule, close race, allowed feed Product states, identity source and swipe fallback**
-  - **Unit Tests:** `node -r ./scripts/test-shim.js --test backend/services/product-service/src/features/auctions/auctionService.test.js` (48/48 tests passing, including 7 idempotency scoping tests and 9 round overlap/phase/selection tests; 0 live DB/Redis dependency via `dummyPrisma`)
-  - **Frontend Tests:** `npm --prefix frontend test -- components/marketing/sections/AuctionScheduleSection.test.js` (7/7 tests passing, covering focused `RoundManagementSection` tests: current/upcoming round display, all-round history table, phase badges, empty state, 409 Conflict error banner, refresh on creation, and parent `AuctionScheduleSection` with explicitly mocked API calls)
-  - **Integration Tests:** `$env:REQUIRE_INTEGRATION="1"; $env:REDIS_URL="redis://localhost:6379"; node -r ./scripts/test-shim.js --test backend/services/product-service/test/auction.integration.test.js` (11/11 tests across 10 steps passing against live PostgreSQL & Redis, verifying lifecycle, concurrency, soft close, BullMQ worker, safe idempotency scoping, and Step 10: round overlap protection with `pg_advisory_xact_lock(1001, 1)`, back-to-back success, deterministic selection with `fakeNow`, and concurrent conflict 409)
+  - **Auction Unit Tests:** `node -r ./scripts/test-shim.js --test backend/services/product-service/src/features/auctions/auctionService.test.js` (48/48 tests passing, including 7 idempotency scoping tests and 9 round overlap/phase/selection tests; 0 live DB/Redis dependency via `dummyPrisma`)
+  - **Auction Frontend Tests:** `npm --prefix frontend test -- components/marketing/sections/AuctionScheduleSection.test.js` (7/7 tests passing, covering focused `RoundManagementSection` tests: current/upcoming round display, all-round history table, phase badges, empty state, 409 Conflict error banner, refresh on creation, and parent `AuctionScheduleSection` with explicitly mocked API calls)
+  - **Auction Integration Tests:** `$env:REQUIRE_INTEGRATION="1"; $env:REDIS_URL="redis://localhost:6379"; node -r ./scripts/test-shim.js --test backend/services/product-service/test/auction.integration.test.js` (11/11 tests across 10 steps passing against live PostgreSQL & Redis, verifying lifecycle, concurrency, soft close, BullMQ worker, safe idempotency scoping, and Step 10: round overlap protection with `pg_advisory_xact_lock(1001, 1)`, back-to-back success, deterministic selection with `fakeNow`, and concurrent conflict 409)
+  - **UR-11 Swipe Hardening Tests:**
+    - **Backend & Gateway Targeted Tests:** 29/29 tests passing 100%
+      - Gateway App Tests (`backend/gateway/src/app.test.js`): 5/5 tests (covering Gateway auth routing and public routes; gateway header stripping verified via implementation review and lint, dedicated automated test pending)
+      - Product Service App Tests (`backend/services/product-service/src/app.test.js`): 10/10 tests
+      - Product Video Repository Tests (`backend/services/product-service/src/features/product-videos/productVideoRepository.test.js`): 2/2 tests (Guest chosen: false, User-specific chosen, no choices relation leak)
+      - Product Video Service Tests (`backend/services/product-service/src/features/product-videos/productVideoService.test.js`): 12/12 tests (403 for SELLER/MARKETING/ADMIN, Multi-role BUYER, pagination forwarding)
+      - Total Backend & Gateway Targeted Tests: 5 + 10 + 2 + 12 = 29 tests
+    - **Frontend Swipe Component Tests:** 3/3 suites, 42/42 tests passing 100% (`SwipeVideoCard.test.js` 28/28, `SwipeFeedViewer.test.js` 8/8, `page.test.js` 6/6)
+    - **PostgreSQL Integration Test:** `swipe-choose.integration.test.js` 1/1 suite (10 verification assertions) passing 100% with `REQUIRE_INTEGRATION=1` without skips against live `reloop_product`
+    - **Quality Checks:** `npm run lint` passing (0 errors, 0 warnings), `npm run format:check` passing, `git diff --check` passing
+    - **Acceptance Note:** Browser E2E / Responsive UI verification on real browsers is pending final acceptance
 - [ ] **Step 5: Update docs and commit `feat(marketing): add auction and swipe experience`** (Docs updated in `plan.md`, `progress.md`, `handoff.md`, `changelog.md`, and `teachme.md`; commit pending explicit user instruction)
 
 ### Task MKT-006: Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling
@@ -257,8 +289,77 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 - Produces: Marketing Metrics APIs (`/metrics/overview`, `/metrics/trends`, `/metrics/compare`, `/:id/metrics`) with date range validation
 - Produces: Marketing Dashboard UI with 6 KPI cards, trend bar chart, and campaign comparison table
 
-- [x] **Step 1: Write unit tests for attribution ingestion, count semantics, date range validation, and conversion calculations** (`campaignMetrics.test.js`, 7/7 passing)
+- [x] **Step 1: Write unit tests for attribution ingestion, count semantics, date range validation, and conversion calculations** (`campaignMetrics.test.js`, Campaign Metrics 13 test cases โดยไม่รวม parent suite ของ node:test; historical baseline: 10/10)
 - [x] **Step 2: Implement `campaignMetrics.js` backend engine and REST endpoints in `campaignController.js`**
 - [x] **Step 3: Implement `DashboardSection.js` UI with real-time KPI metrics, date range filters, and comparison table**
-- [ ] **Step 4: Verify real PostgreSQL cross-service persistence in `reloop_order` / `reloop_product`** (Attribution DB acceptance pending Part 3 hardening)
-- [ ] **Step 5: Update docs and commit `feat(marketing): campaign attribution and metrics dashboard`**
+- [x] **Step 4: Verify real PostgreSQL cross-service persistence in `reloop_order` / `reloop_product`** (Verified with `REQUIRE_INTEGRATION=1` across three suites: Product Service isolated suite [12 subtests], Order Service Outbox isolated suite [6 subtests], and Genuine Cross-Service suite [9 subtests querying both `reloop_order` and `reloop_product` over live HTTP, covering full order completion, deduplication, identity & attribute conflicts, failure backoff, worker sweep, and no-campaign bypass])
+- [x] **Step 5: Update docs and finalize Task 1 completion** (Implementation, cross-service integration verification across both PostgreSQL databases in reproducible repository test environment, and documentation complete; commit pending explicit user instruction)
+
+### Task UR-08: User/Peak-Usage Analytics for Marketing
+
+**Files:**
+
+- Create: `backend/services/auth-service/src/features/metrics/activityMetrics.js`
+- Modify: `backend/services/auth-service/src/routes/marketingMetricsRoutes.js`
+- Modify: `backend/gateway/src/app.js`
+- Modify: `frontend/lib/api.js`
+- Modify: `frontend/components/marketing/sections/DashboardSection.js`
+- Test: `backend/services/auth-service/src/features/metrics/activityMetrics.test.js`
+- Test: `backend/services/auth-service/test/user-analytics.integration.test.js`
+- Test: `backend/gateway/src/marketing-analytics.cross-service.test.js`
+- Test: `frontend/components/marketing/sections/DashboardSection.test.js`
+- Test: `frontend/lib/api.test.js`
+
+**Interfaces:**
+
+- Produces: `GET /api/auth/marketing/analytics/user-usage` with `from`, `to`, `timezone` query parameters
+- Timezone contract: `Asia/Bangkok` (+07:00) strictly enforced; rejects unsupported timezones with HTTP 400 Bad Request
+- Boundary semantics: Half-open interval `[from, to)` (UI converts inclusive date to exclusive next-day Bangkok midnight)
+- Service boundary: `Auth Service` owns User & activity data (`LoginLog`, `BuyerActivityLog`, `User`); no direct cross-database queries
+- Produces: Whitelisted aggregate projection (activeUsers, newUsers, peakHour, hourlyUsage) with zero PII
+- Produces: Marketing Dashboard section with 3 KPI cards, peak hour, hourly chart, honest error state (displays `—` and `ไม่พร้อมใช้งาน`, not 0), and retry capability
+
+- [x] **Step 1: Write unit tests for activityMetrics engine, Asia/Bangkok date parsing, gap filling, deterministic peak hour, and PII prevention** (`activityMetrics.test.js`, 7/7 passing 100%)
+- [x] **Step 2: Implement activityMetrics engine with PostgreSQL timezone conversion `(activity_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Bangkok'`**
+- [x] **Step 3: Implement Gateway proxy with untrusted header stripping and JWT verification; implement frontend DashboardSection with honest error state, Thai date boundary conversion, and retry**
+- [x] **Step 4: Verify against live PostgreSQL with `REQUIRE_INTEGRATION=1` without skips** (`user-analytics.integration.test.js` 1/1 passing 100%; `marketing-analytics.cross-service.test.js` 2/2 passing 100% asserting HTTP 200 OK via Gateway -> Auth Service -> PostgreSQL, Bangkok timezone, no PII, 401/403 security, and DB error propagation)
+- [x] **Step 5: Verify frontend test suite and quality gates** (`DashboardSection.test.js` + `api.test.js` 30/30 passing 100%; `npm run lint` and `npm run format:check` clean; commit pending explicit user instruction)
+
+### Task MKT-AUDIT: Marketing Audit Trail (Append-Only Immutable Ledger)
+
+**Files:**
+
+- Modify: `backend/services/product-service/prisma/schema.prisma`
+- Create: `backend/services/product-service/src/features/audit/marketingAuditSanitizer.js`
+- Create: `backend/services/product-service/src/features/audit/marketingAuditRepository.js`
+- Create: `backend/services/product-service/src/features/audit/marketingAuditService.js`
+- Create: `backend/services/product-service/src/features/audit/marketingAuditController.js`
+- Create: `backend/services/product-service/src/features/audit/marketingAuditRoutes.js`
+- Modify: `backend/services/product-service/src/routes/productRoutes.js`
+- Modify: `backend/services/product-service/src/features/campaigns/campaignRepository.js`
+- Modify: `backend/services/product-service/src/features/campaigns/campaignService.js`
+- Modify: `backend/services/product-service/src/features/auctions/auctionRepository.js`
+- Modify: `backend/services/product-service/src/features/auctions/auctionService.js`
+- Modify: `backend/services/product-service/src/models/articleModel.js`
+- Modify: `backend/services/product-service/src/controllers/articleController.js`
+- Modify: `frontend/lib/api.js`
+- Create: `frontend/components/marketing/sections/AuditTrailSection.js`
+- Modify: `frontend/app/marketing/page.js`
+- Test: `backend/services/product-service/src/features/audit/marketingAuditService.test.js`
+- Test: `backend/services/product-service/test/marketing-audit.integration.test.js`
+- Test: `frontend/components/marketing/sections/AuditTrailSection.test.js`
+- Test: `frontend/app/marketing/page.test.js`
+
+**Interfaces:**
+
+- Model: `MarketingAuditLog` mapped to `marketing_audit_logs` in `reloop_product`
+- 18 Actions Whitelisted: `CAMPAIGN_CREATE`, `CAMPAIGN_UPDATE`, `CAMPAIGN_SUBMIT`, `CAMPAIGN_APPROVE`, `CAMPAIGN_REJECT`, `CAMPAIGN_PUBLISH`, `CAMPAIGN_END`, `AUCTION_ROUND_CREATE`, `AUCTION_ITEM_APPROVE`, `AUCTION_ITEM_REJECT`, `AUCTION_ITEM_SCHEDULE`, `AUCTION_ITEM_CANCEL`, `AUCTION_ITEM_CLOSE`, `ARTICLE_CREATE`, `ARTICLE_UPDATE`, `ARTICLE_PUBLISH`, `ARTICLE_ARCHIVE`, `ARTICLE_DELETE`
+- Read-only Endpoint: `GET /api/products/marketing/audit-logs` (Gateway) and `GET /marketing/audit-logs` (Direct) with query filters (`entityType`, `action`, `actorId`, `from`, `to`, `page`, `limit`)
+- RBAC: Guarded by `requireAuth` + `requireMarketingAccess` (role: `MARKETING` only; `BUYER`, `SELLER`, `ADMIN` return 403 Forbidden per `MKT-DEC-014`; permission bypass blocked)
+- Security: Zero client-facing write/update/delete endpoints; recursive credential sanitization; SYSTEM actor determinism with unique `idempotencyKey` via `createMany({ skipDuplicates: true })` + `findUnique` (no 25P02 transaction abort)
+
+- [x] **Step 1: Write unit tests for sanitizer, audit service, and validation** (`marketingAuditService.test.js`, 6/6 passing 100%)
+- [x] **Step 2: Add Prisma model `MarketingAuditLog` and push to PostgreSQL `reloop_product`**
+- [x] **Step 3: Wire business mutations into atomic database transactions with audit writes across Campaign, Auction, and Article**
+- [x] **Step 4: Implement read-only REST endpoint and Next.js UI component `AuditTrailSection` with details modal, filters, and pagination**
+- [x] **Step 5: Verify real PostgreSQL integration suite (`REQUIRE_INTEGRATION=1`) and frontend Jest tests** (`marketing-audit.integration.test.js` 11/11 passing 100% [1 parent suite + 10 subtests]; `AuditTrailSection.test.js` [13/13] + `page.test.js` [6/6] = 19/19 passing 100%; regression suites clean; commit pending explicit user instruction)

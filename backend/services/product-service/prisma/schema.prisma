@@ -17,6 +17,7 @@ generator client {
   provider        = "prisma-client-js"
   output          = "../src/generated/prisma-client"
   previewFeatures = ["postgresqlExtensions"]
+  binaryTargets   = ["native", "windows", "linux-musl-openssl-3.0.x"]
 }
 
 // ER: ties to docs/erdatabase.png's Product entity (Photo/Video are separate
@@ -355,4 +356,43 @@ model UserVoucher {
   @@index([campaignId])
   @@index([status])
   @@map("user_vouchers")
+}
+
+// Marketing Campaign Attribution Facts (MKT-003 / MKT-007 / UR-09 / UR-12)
+// Persisted immutable record of an order completed with an applied campaign voucher.
+// Idempotency: eventId is primary key; orderId is unique.
+model CampaignAttribution {
+  eventId        String   @id @map("event_id")
+  orderId        String   @unique @map("order_id")
+  campaignId     String   @map("campaign_id")
+  grossAmount    Int      @map("gross_amount")
+  discountAmount Int      @map("discount_amount")
+  netAmount      Int      @map("net_amount")
+  completedAt    DateTime @map("completed_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([campaignId])
+  @@index([completedAt])
+  @@map("campaign_attributions")
+}
+
+// Marketing Audit Log (append-only audit trail for Marketing operations)
+model MarketingAuditLog {
+  id             String   @id @default(uuid())
+  actorId        String   @map("actor_id")
+  actorRole      String   @map("actor_role")
+  action         String
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id")
+  previousState  Json?    @map("previous_state")
+  newState       Json?    @map("new_state")
+  metadata       Json?
+  idempotencyKey String?  @unique @map("idempotency_key")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([actorId])
+  @@map("marketing_audit_logs")
 }

@@ -20,7 +20,7 @@ export default function SwipeVideoCard({ video, isActive }) {
   const dialogRef = useRef(null);
   const prevCommentOpenRef = useRef(false);
 
-  const [chosen, setChosen] = useState(false);
+  const [chosen, setChosen] = useState(() => Boolean(video?.chosen));
   const [choosing, setChoosing] = useState(false);
   const [isFollowed, setIsFollowed] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -39,15 +39,19 @@ export default function SwipeVideoCard({ video, isActive }) {
     }
   }, [isMuted]);
 
-  // Restore liked and followed states from storage
+  // Restore liked and followed states from storage or sync from API
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const storedLikes = JSON.parse(
-        localStorage.getItem("reloop_liked_videos") || "[]",
-      );
-      if (storedLikes.includes(video.id)) {
-        setChosen(true);
+      if (typeof video?.chosen === "boolean") {
+        setChosen(video.chosen);
+      } else {
+        const storedLikes = JSON.parse(
+          localStorage.getItem("reloop_liked_videos") || "[]",
+        );
+        if (storedLikes.includes(video.id)) {
+          setChosen(true);
+        }
       }
       if (video.sellerId) {
         const storedFollows = JSON.parse(
@@ -60,7 +64,7 @@ export default function SwipeVideoCard({ video, isActive }) {
     } catch {
       // Safe fallback
     }
-  }, [video.id, video.sellerId]);
+  }, [video.id, video.sellerId, video?.chosen]);
 
   // Synchronize followed state across clips from the same seller
   useEffect(() => {
@@ -341,7 +345,11 @@ export default function SwipeVideoCard({ video, isActive }) {
     }
 
     setChoosing(true);
-    const nextChosen = !chosen;
+    const previousChosen = chosen;
+    const nextChosen = !previousChosen;
+
+    // Optimistically update UI so user gets immediate visual feedback
+    setChosen(nextChosen);
 
     try {
       if (nextChosen) {
@@ -352,10 +360,6 @@ export default function SwipeVideoCard({ video, isActive }) {
         await apiFetch(`/api/products/videos/${video.id}/choose`, {
           method: "DELETE",
         });
-      }
-
-      if (isMountedRef.current) {
-        setChosen(nextChosen);
       }
 
       try {
@@ -373,7 +377,10 @@ export default function SwipeVideoCard({ video, isActive }) {
         // Safe fallback
       }
     } catch {
-      // Swallow error allowing retry
+      // Rollback optimistic state if the request failed
+      if (isMountedRef.current) {
+        setChosen(previousChosen);
+      }
     } finally {
       if (isMountedRef.current) {
         setChoosing(false);

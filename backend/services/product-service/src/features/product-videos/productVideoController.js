@@ -11,6 +11,7 @@ async function listFeed(req, res, next) {
     const { items, total } = await productVideoService.listFeed({
       skip: pagination.skip,
       take: pagination.take,
+      userId: req.userId || null,
     });
 
     res.json(paginatedResponse(items, total, pagination));
@@ -56,10 +57,14 @@ async function createClip(req, res, next) {
 async function chooseClip(req, res, next) {
   try {
     const choice = await productVideoService.chooseClip({
-      user: { id: req.userId, role: req.userRole },
+      user: {
+        id: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+      },
       productVideoId: req.params.id,
     });
-    res.status(201).json(choice);
+    res.status(200).json(choice);
   } catch (err) {
     next(err);
   }
@@ -68,7 +73,11 @@ async function chooseClip(req, res, next) {
 async function unchooseClip(req, res, next) {
   try {
     const result = await productVideoService.unchooseClip({
-      user: { id: req.userId, role: req.userRole },
+      user: {
+        id: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+      },
       productVideoId: req.params.id,
     });
     res.json(result);

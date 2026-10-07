@@ -1,8 +1,8 @@
 # Marketing Feature Progress
 
-> Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-09-19
+> Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-10-05
 
-**Status:** `MKT-001` (Campaign Lifecycle & Voucher Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-004 Part A` (Knowledge Base & Articles System), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), และ `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling) พัฒนาและตรวจสอบผ่านการทดสอบอัตโนมัติครบถ้วนแล้ว (`MKT-005` Steps 1–4 accepted และ `MKT-006` Steps 1–4 accepted, รอเพียงคำสั่ง commit); `MKT-006` ไม่ได้รอ Attribution database hardening; สำหรับ `MKT-003` / `MKT-007` (Attribution Engine & Metrics Dashboard) ซอร์สโค้ดและ Unit Tests ครบถ้วน อยู่ระหว่างเตรียม Cross-service Database Persistence Hardening ใน `reloop_order` / `reloop_product` (Part 3); และ `MKT-004 Part B` (Buyer Segmentation Rules) อยู่ระหว่างเตรียม Buyer profile persistence hardening (Part 4)
+**Status:** `MKT-001` (Campaign Lifecycle & Voucher Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-003` / `MKT-007` (Durable Campaign Attribution & Conversion Metrics Dashboard), `MKT-004 Part A` (Knowledge Base & Articles System), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling), `UR-11` (Swipe-to-Choose Hardening: Buyer Authorization, Persistence, User Isolation & Anti-Spoofing), `UR-08` (User/Peak-Usage Analytics สำหรับ Marketing: Active Users, New Users, Hourly Usage, Peak Hour & Date Range Filtering), และ `Marketing Audit Trail` (Append-Only Audit Log for Campaigns, Auctions, and Articles with Atomic Mutation Contracts & SYSTEM Idempotency) พัฒนาและตรวจสอบผ่านการทดสอบอัตโนมัติครบถ้วนสมบูรณ์แล้ว (Completed & Verified); รอเพียงคำสั่ง commit; และ `MKT-004 Part B` (Buyer Segmentation Rules) อยู่ระหว่างเตรียม Buyer profile persistence hardening (Part 4)
 
 **Plan coverage:** Explicit trace rows cover `UR-08`–`UR-16` through FR, active/deferred NFR,
 `WF-03`, `WF-11`, documented Workflow gaps and `MKT-001`–`MKT-007`
@@ -34,21 +34,49 @@
   - อัปเดตหน้าจอ Marketing Dashboard (`/marketing`): แสดง Phase Badge, การ์ดรอบปัจจุบัน/รอบถัดไป และตารางประวัติรอบประมูลทั้งหมด (`GET /api/products/auctions/rounds`)
 - Auction close automatically creates the winner's Order via an internal
   `order-service` call (`POST /internal/from-auction`) — verified called exactly once, with idempotent re-close
-- `SwipeChoice` persists a buyer's swipe "choose" (bookmark), separate from bidding — see
-  `MKT-DEC-006`; verified end-to-end through the actual `/swipe` UI, not just the API
+- `SwipeChoice` (UR-11 Swipe-to-Choose Hardening — Completed & Verified):
+  - Buyer-only authorization: อนุญาตเฉพาะบทบาท `BUYER` สำหรับ `POST /:id/choose`, `DELETE /:id/choose`, และ `POST /:id/unchoose` โดย Role อื่น (`SELLER`, `MARKETING`, `ADMIN`) ได้รับ 403 Forbidden และ unauthenticated ได้รับ 401 Unauthorized ทั้งใน Route middleware (`requireBuyerRole`) และ Service layer (`isBuyer`)
+  - Server-side persistence & Batch Query: `GET /videos/feed` แนบสถานะ `chosen: Boolean(...)` โดยอาศัย batch query Prisma relation include (`choices: { where: { userId }, select: { id: true } }`) ปราศจากปัญหา N+1 query และตัด `choices` relation ออกจาก response เพื่อรักษาความเป็นส่วนตัว
+  - User isolation: แยกสถานะ `chosen` เด็ดขาดรายผู้ซื้อ (Buyer B ไม่เห็นสถานะของ Buyer A) และ Guest ได้รับ `chosen: false` เสมอ
+  - Anti-spoofing & Optional auth: `optionalAuth` บน public feed เพิกเฉยต่อ Header `x-user-*` เมื่อไม่มี Bearer token และ API Gateway ทำการ strip untrusted `x-user-*` headers ก่อนสร้าง trusted identity headers (gateway header stripping ผ่าน implementation review/lint แต่ยังไม่มี dedicated automated test) ยืนยันว่าการปลอม `x-user-id` ไม่สามารถอ่านสถานะ chosen ของผู้อื่นได้
+  - Idempotency & Safe unchoose: `upsertChoice` ป้องกันการสร้างแถวซ้ำใน `swipe_choices` และ `deleteChoice` (`deleteMany`) ป้องกัน 500 error เมื่อยกเลิกเลือกรายการที่ไม่ได้เลือก
+  - Frontend persistence & Optimistic rollback: `SwipeVideoCard.js` เริ่มต้นจาก `video.chosen`, ซิงค์เมื่อ refetch, และ rollback เมื่อเกิด API failure
+  - SwipeChoice ทำหน้าที่เป็น Bookmark ความสนใจเท่านั้น ไม่ใช่การประมูล (Auction bid) ตาม `MKT-DEC-006` และ `MKT-DEC-021`
+  - Automated tests passing: Backend/Gateway targeted tests (29/29 tests: Gateway app tests 5, Product-service app tests 10, ProductVideoRepository tests 2, ProductVideoService tests 12), Frontend swipe component tests (3/3 suites, 42/42 tests: `SwipeVideoCard.test.js` 28/28, `SwipeFeedViewer.test.js` 8/8, `page.test.js` 6/6), และ Real PostgreSQL integration test (`swipe-choose.integration.test.js` 1/1 suite with `REQUIRE_INTEGRATION=1` without skips)
+  - หมายเหตุ: Browser E2E และ Responsive testing บนเบราว์เซอร์จริงยังไม่ได้รัน และคงไว้เป็น Final acceptance ที่รอดำเนินการ
+- `Marketing Audit Trail` (Append-Only Audit Log for Campaigns, Auctions, and Articles — Completed & Verified):
+  - Model `MarketingAuditLog` ใน PostgreSQL ของ `product-service` (`reloop_product`) ผ่าน Prisma schema push & generate พร้อม Indexes: `createdAt`, `[entityType, entityId]`, `action`, `actorId`
+  - Action Contract ครบถ้วนทุก Domain:
+    - Campaign: `CAMPAIGN_CREATE`, `CAMPAIGN_UPDATE`, `CAMPAIGN_SUBMIT`, `CAMPAIGN_APPROVE`, `CAMPAIGN_REJECT`, `CAMPAIGN_PUBLISH`, `CAMPAIGN_END`
+    - Auction: `AUCTION_ROUND_CREATE`, `AUCTION_ITEM_APPROVE`, `AUCTION_ITEM_REJECT`, `AUCTION_ITEM_SCHEDULE`, `AUCTION_ITEM_CANCEL`, `AUCTION_ITEM_CLOSE`
+    - Article: `ARTICLE_CREATE`, `ARTICLE_UPDATE`, `ARTICLE_PUBLISH`, `ARTICLE_ARCHIVE`, `ARTICLE_DELETE`
+  - Atomic Database Transactions: การบันทึก Audit Log เกิดขึ้นภายใน `tx` เดียวกับ Business Mutation หาก Audit ล้มเหลว Mutation จะถูก Rollback; หาก Mutation ล้มเหลว จะไม่มี Audit Log ถูกบันทึก
+  - SYSTEM Actor & Idempotency: เหตุการณ์อัตโนมัติ (`autoExpireCampaigns`, `closeAuction`) บันทึกด้วย `actorId: "SYSTEM"`, `actorRole: "SYSTEM"` พร้อม `idempotencyKey` แบบ Deterministic ป้องกันการบันทึกซ้ำกรณี Worker Retry โดยใช้ `createMany({ data: [...], skipDuplicates: true })` + `findUnique` (`INSERT ... ON CONFLICT DO NOTHING`) ที่ไม่ทำให้ PostgreSQL transaction block ถูก abort ด้วย `25P02`
+  - Secret Sanitizer (`sanitizeAuditData`): กรองคีย์ละเอียดอ่อน (`password`, `passwordHash`, `accessToken`, `refreshToken`, `token`, `secret`, `authorization`, `cookie`, `apiKey`, `credential`) แบบ Recursive ลึกใน Object และ Array, รองรับ WeakSet ป้องกัน Circular References, และแปลง `Date` เป็น ISO String
+  - Read-Only API Contract: `GET /api/products/marketing/audit-logs` (Gateway) และ `GET /marketing/audit-logs` (Direct) ตรวจสอบสิทธิ์ `requireAuth` + `requireMarketingAccess` (อนุญาตเฉพาะบทบาท `MARKETING` เท่านั้น; `BUYER`, `SELLER` และ `ADMIN` ได้รับ HTTP 403 Forbidden per `MKT-DEC-014`, permission bypass ถูกบล็อก), ป้องกัน Anti-Spoofing โดยไม่เชื่อถือ Header `x-user-*` จากไคลเอนต์, และไม่มี Endpoint สำหรับ Write/Update/Delete audit log
+  - Bangkok Date Filter Contract: คิวรีช่วงเวลาแบบ Half-Open Interval `[from, to)` ในเวลา `Asia/Bangkok` (+07:00) และ UI แปลงวันที่เป็น `[00:00:00+07:00, next-day 00:00:00+07:00)` พร้อมตรวจสอบ `from <= to`
+  - Frontend Panel (`AuditTrailSection.js`): แท็บ "ประวัติการดำเนินงาน" (`audit`, icon `history`) ใน `/marketing` พร้อมการกรอง (Action, Entity Type, Actor ID, Date Range), ตารางพร้อม Action Badges และ SYSTEM Actor Badge, Detail Modal แสดง JSON State, และครบถ้วนทุกสถานะ UI (Loading, Empty, Error with Retry)
+  - Automated Tests Passing:
+    - Unit tests: 6/6 tests passing (`marketingAuditService.test.js`)
+    - PostgreSQL Integration tests: 11/11 tests passing (1 suite + 10 subtests in `marketing-audit.integration.test.js` with `REQUIRE_INTEGRATION=1` without skips)
+    - Regression tests: Campaign 11/11 tests, Auction 11/11 tests, Article 1/1 test passing
+    - Frontend tests: 19/19 tests passing (`page.test.js` 6/6, `AuditTrailSection.test.js` 13/13)
+    - Host Node version: `v22.16.0`
 - End-to-end flow verified via unit tests (48/48 passing), frontend Jest tests (7/7 passing), and real PostgreSQL/Redis integration suite
   (`auction.integration.test.js`, 11/11 tests across 10 steps passing)
 - Frontend: `/marketing` (schedule/cancel/approve/reject, round management with all-rounds table and phase badges),
   `/seller/auctions` (product creation + auction submission with round lock),
   `/auctions` + `/auctions/:id` (browse/bid with auto-fill min next bid and soft close notice),
-  choose button added to `SwipeVideoCard`
+  choose button on `SwipeVideoCard` fully wired to backend with optimistic rollback
 
 **Current status & Next steps:**
 
 - `MKT-001`, `MKT-002`, `MKT-004 Part A`: Implemented, tested, and verified.
-- `MKT-005`: Steps 1–4 are fully accepted with automated PostgreSQL and Redis integration test evidence. Step 5 (commit) is pending explicit user instruction.
-- `MKT-006`: Implementation and automated tests are complete (quote-and-hold, concurrency guard, admin decoupling). Waiting only for commit (pending explicit user instruction). Not waiting for Attribution database hardening.
-- `MKT-003`, `MKT-007`: Source implementation and unit tests exist; attribution persistence hardening in `reloop_order` / `reloop_product` belongs to Part 3.
+- `MKT-003`, `MKT-007`: Completed & verified with Transactional Outbox, Prisma facts, and PostgreSQL integration tests across `reloop_order` and `reloop_product`; waiting for commit.
+- `MKT-005`: Steps 1–4 are fully accepted with automated PostgreSQL and Redis integration test evidence; `UR-11` Swipe-to-Choose Hardening is completed and verified across unit, component, and PostgreSQL integration tests (Browser E2E / Responsive UI testing is pending final acceptance); Step 5 (commit) is pending explicit user instruction.
+- `MKT-006`: Implementation and automated tests are complete (quote-and-hold, concurrency guard, admin decoupling). Waiting only for commit (pending explicit user instruction).
+- `UR-08`: User & Peak-Usage Analytics completed & verified across unit, cross-service, PostgreSQL integration, and frontend tests; waiting for commit.
+- `Marketing Audit Trail`: Completed & verified across unit, component, and PostgreSQL integration tests (`REQUIRE_INTEGRATION=1` without skips); waiting for commit.
 - `MKT-004 Part B`: Source implementation and unit tests exist; buyer profile persistence hardening belongs to Part 4.
 
 **Deferred:** Production campaign authorization, privacy and push-notification security hardening
@@ -175,8 +203,197 @@ approved by Admin shows up here as "approved, ready to schedule" immediately.
   - ปรับปรุงให้พยายาม resolve `supertest` จากระบบปกติก่อน หากไม่พบจึง fallback ไปยัง `supertest-shim.js`
   - ชี้แจงว่าไฟล์ใน `scripts/` เป็น Workaround สำหรับการรันเทสบนเครื่อง Host ที่ไม่ได้รัน `npm install` ตามกฎข้อที่ 9
 - ยืนยัน Unit Test ทั้งหมด:
-  - `backend/services/product-service/src/features/auctions/auctionService.test.js` (39/39 tests passing, เพิ่ม 7 unit tests สำหรับ idempotency scoping, 409 conflict, closed auction retry, และ P2002 recovery)
+  - `backend/services/product-service/src/features/auctions/auctionService.test.js` (48/48 tests passing; historical baseline: 39/39 tests)
   - `campaignValidation.test.js` (12/12 passing)
   - `segmentRule.test.js` (7/7 passing)
-  - `campaignMetrics.test.js` (7/7 passing)
-  - รวม Unit Tests ของ Marketing ทั้งหมด 68/68 tests passing 100%
+  - `campaignMetrics.test.js` (Campaign Metrics 13 test cases โดยไม่รวม parent suite ของ node:test; historical baseline: 10/10 passing)
+  - `backend/services/product-service/src/controllers/productPayload.test.js` (4/4 tests passing)
+  - รวม Unit Tests ของ Marketing ทั้งหมด 84/84 tests passing 100% (Auction Service = 48, Campaign Validation = 12, Segment Rule = 7, Campaign Metrics = 13, Product Payload = 4; รวม 48 + 12 + 7 + 13 + 4 = 84; historical baseline: 71 tests)
+
+**2026-10-03 update (Marketing Task 1 — Durable Campaign Attribution & Outbox Persistence Hardening — MKT-003, MKT-007, UR-09, UR-12):**
+
+- **Database Schemas & Persistence Sync:**
+  - **Product Service (`reloop_product`):** เพิ่มโมเดล `CampaignAttribution` ใน `prisma/schema.prisma` (`eventId` @id, `orderId` @unique, `campaignId` index, `completedAt` index, `grossAmount`, `discountAmount`, `netAmount`, `createdAt`) กำหนด `binaryTargets = ["native", "windows", "linux-musl-openssl-3.0.x"]` ทำการ `prisma db push` สร้างตาราง `campaign_attributions` และ `prisma generate` ซิงก์ Client
+  - **Order Service (`reloop_order`):** เพิ่มโมเดล `AttributionOutboxEvent` ใน `prisma/schema.prisma` (`id` @id, `orderId` @unique, `campaignId`, `grossAmount`, `discountAmount`, `netAmount`, `completedAt`, `attempts`, `nextAttemptAt`, `processedAt`, `lastError`, `createdAt`, `updatedAt`) เชื่อม Relation เข้ากับ `Order` กำหนด `binaryTargets = ["native", "windows", "linux-musl-openssl-3.0.x"]` ทำการ `prisma db push` สร้างตาราง `attribution_outbox_events` และ `prisma generate` ซิงก์ Client
+- **Order Service Transactional Outbox Pattern:**
+  - อัปเดต `orderModel.transitionStatusWithProductSync`: สร้างแถว `AttributionOutboxEvent` ร่วมในฐานข้อมูล Transaction เดียวกันแบบ Atomic ทันทีเมื่อออเดอร์เปลี่ยนสถานะเป็น `completed` และมี `order.campaignId` (ออเดอร์ที่ไม่มีแคมเปญจะไม่สร้างแถวใน Outbox)
+  - กำจัด Silent Feature-detection: ปรับปรุง `orderModel.js` และ `attributionOutboxService.js` ให้ fail loudly (โยน Error ชัดเจน) หาก Prisma model ขาดหาย เพื่อป้องกันไม่ให้ออเดอร์ที่มี campaign สำเร็จได้โดยปราศจาก outbox durability record
+  - สร้าง `attributionOutboxService.js`: รองรับ `deliver` (ส่งออกข้อมูลทั้ง Event Envelope มาตรฐานและ Flat compatibility fields), `processEvent` (บันทึก `processedAt` เมื่อสำเร็จ หรือบันทึก `attempts`, `lastError` และคำนวณ `nextAttemptAt` ด้วย Exponential Backoff เมื่อล้มเหลว), `processPendingEvents` (กวาดส่งแถวที่ค้างและถึงเวลา Retry เป็นแบทช์), และ `startWorker` / `stopWorker`
+  - ปรับปรุง `orderController.js`: ทริกเกอร์ `attributionOutboxService.processEvent` ส่งทันทีแบบ Best-effort เมื่อเปลี่ยนสถานะสำเร็จ พร้อม Log error และมอบหมายให้ Worker ช่วย Retry เบื้องหลัง
+  - ปรับปรุง `productClient.js`: คำนวณ `getProductServiceUrl()` และ `getInternalToken()` แบบ Dynamic ต่อ Request เพื่อความยืดหยุ่นและการทดสอบในสภาพแวดล้อมต่างๆ
+  - อัปเดต `order-service/src/server.js`: เริ่มต้นรัน `attributionOutboxService.startWorker()` เมื่อเปิดเซิร์ฟเวอร์
+- **Product Service Metrics & Attribution Deduplication:**
+  - Refactor `campaignMetrics.js`: ลบ Dynamic runtime raw SQL `CREATE TABLE` ออกอย่างสิ้นเชิง และใช้ Prisma Client บันทึกลงในตาราง `campaign_attributions`
+  - กำจัด Silent In-memory Fallback ใน Production: บังคับให้ `campaignMetrics.js` ในเส้นทาง Production ทำการ Fail loudly (`throw new Error(...)`) หาก Prisma client ขาดโมเดล `campaignAttribution` โดยสงวน In-memory store ไว้เฉพาะ Unit Test Adapter ที่ถูก Inject เข้ามาอย่างชัดเจนเท่านั้น
+  - ตรวจจับและ Deduplicate การ Retry ซ้ำ: ทั้งกรณีส่ง Event เดิมซ้ำ (`eventId`) และกรณีคำสั่งซื้อเดิมส่งมาด้วย Event ID ใหม่ (`orderId`)
+  - เสริมความปลอดภัย Idempotency และ Identity Conflict:
+    - การใช้ `eventId` เดิมซ้ำกับ `orderId` ใหม่ที่มีข้อมูลตรงกันทั้งหมดจะถูกปฏิเสธด้วย HTTP 409 Conflict ทันที เพื่อป้องกัน Identity Spoofing / Event ID reuse
+    - คำสั่งซื้อเดิม (`orderId` เดิม) ที่ส่งมาด้วย `eventId` ใหม่พร้อมข้อมูลที่ตรงกันทั้งหมด จะถือเป็น Valid Deduplicated Retry และคืนสถานะสำเร็จแบบ deduplicated (HTTP 200)
+    - ครอบคลุมทั้งขั้นตอน Pre-check ก่อนบันทึก และขั้นตอนฟื้นฟู `P2002` Unique Constraint Race Recovery
+  - ส่งต่อ Database Error เมื่อทำงานในโหมดฐานข้อมูลจริง (ไม่ swallow error) เพื่อให้ฝั่ง Order Service Outbox ทราบและเข้าสู่กระบวนการ Retry Backoff ได้อย่างถูกต้อง
+- **Automated Verification Evidence (Real PostgreSQL with REQUIRE_INTEGRATION=1):**
+  - **Genuine Cross-Service PostgreSQL Integration Suite (`order-service/test/cross-service-attribution.integration.test.js`):** ผ่านครบ 9/9 subtests (10/10 tests passing 100%) บน Repository Test Environment:
+    1. Order completion in `reloop_order` -> สร้าง `AttributionOutboxEvent` -> HTTP via `productClient` -> Product Service Container endpoint -> `CampaignAttribution` ใน `reloop_product` -> อัปเดต `processedAt` ใน `reloop_order`
+    2. Real HTTP delivery via `productClient` ส่งข้อมูลสำเร็จและอัปเดต `processedAt`
+    3. Verification in `reloop_product`: บันทึก `CampaignAttribution` ลงตารางจริง
+    4. Idempotent Retry: ส่ง Outbox Event ซ้ำ ไม่สร้าง attribution row ซ้ำใน `reloop_product` และคงสถานะ `processedAt`
+    5. Conflicting Payload: การส่งข้อมูลขัดแย้ง (`netAmount` เปลี่ยนแปลง) ได้รับ HTTP 409 Conflict จาก Product Service
+    6. Identity Conflict: การนำ `eventId` เดิมไปใช้กับ `orderId` ใหม่ คืนค่า HTTP 409 Conflict แม้ตัวเลขจะตรงกันทั้งหมด
+    7. Delivery Failure & Backoff: เมื่อปลายทางล้มเหลว (503) บันทึก `lastError` และ `nextAttemptAt` ใน `reloop_order` โดยคง `processedAt = null`
+    8. Worker Sweep: `processPendingEvents` กวาดส่งงานที่ค้างผ่าน HTTP ไปยัง Product Service และบันทึกใน `reloop_product` สำเร็จ
+    9. Non-campaign Orders: Order ที่ไม่มีแคมเปญไม่สร้าง Outbox Event ใน `reloop_order`
+  - **Product Service PostgreSQL Integration Suite (`product-service/test/campaign-attribution.integration.test.js`):** ผ่านครบ 12/12 subtests (13/13 tests passing 100%) บนฐานข้อมูล `reloop_product` จริง:
+    1. Security: `POST /internal/campaigns/events/order-completed` ปฏิเสธคำขอที่ไม่มี `x-internal-token` ด้วย 403 Forbidden
+    2. Ingestion: บันทึก `order.completed.v1` ลงตาราง `campaign_attributions` จริง
+    3. Idempotency: การส่งซ้ำไม่เพิ่มแถวซ้ำในฐานข้อมูล
+    4. Idempotency: การส่งคำสั่งซื้อเดิมซ้ำด้วย eventId ใหม่ถูก Deduplicate
+    5. Idempotency Conflict: การส่งคำสั่งซื้อเดิมด้วยข้อมูลที่ขัดแย้ง คืนค่า HTTP 409 Conflict
+    6. Identity Conflict: การใช้ `eventId` เดิมซ้ำกับ `orderId` อื่น คืนค่า HTTP 409 Conflict
+    7. ออเดอร์ที่ไม่มีแคมเปญถูกข้ามอย่างถูกต้อง ไม่บันทึก attribution fact
+    8. Metrics: `GET /campaigns/:id/metrics` คำนวณรายได้ ส่วนลด และ Conversion Rate จากข้อมูลจริงใน PostgreSQL
+    9. Metrics: `GET /campaigns/metrics/overview` รวบรวมสถิติทุกแคมเปญ
+    10. Metrics: `GET /campaigns/metrics/trends` ส่งคืน Daily Time-series
+    11. Validation: ตรวจสอบ Date range `from > to` คืน 400 Bad Request
+    12. RBAC: ปฏิเสธ Role ที่ไม่ใช่ Marketing (403 Forbidden)
+  - **Order Service Outbox PostgreSQL Integration Suite (`order-service/test/campaign-attribution.integration.test.js`):** ผ่านครบ 6/6 subtests (7/7 tests passing 100%) บนฐานข้อมูล `reloop_order` จริง:
+    1. Atomic Outbox Event Creation เมื่อ Order เปลี่ยนเป็น `completed` ใน PostgreSQL
+    2. ออเดอร์ที่ไม่มี CampaignId ไม่สร้างแถวใน Outbox
+    3. Outbox Delivery ส่ง REST Contract พร้อม `x-internal-token` และอัปเดต `processedAt` ใน PostgreSQL
+    4. Retry & Backoff: เมื่อปลายทางล้มเหลว (503) อัปเดต `attempts`, `lastError`, `nextAttemptAt` และคง `processedAt = null`
+    5. Sweep Recovery: `processPendingEvents` กวาดส่งงานที่ค้างได้สำเร็จเมื่อระบบปลายทางฟื้นตัว
+    6. Idempotent Acknowledgment: รองรับคำตอบ `deduplicated: true` ได้อย่างราบรื่น
+  - **Unit Tests:**
+    - `product-service/test/campaignMetrics.test.js`: Campaign Metrics 13 test cases โดยไม่รวม parent suite ของ node:test (passing 100% ครอบคลุม Fail-loud in production path, Identity Conflict, และ `P2002` Race Recovery)
+    - `order-service/src/services/attributionOutboxService.test.js`: ผ่าน 7/7 subtests (8/8 tests passing 100% ครอบคลุม Fail-loud durability)
+    - `order-service` Unit Tests รวมทั้งหมด: ผ่านครบ 53/53 tests 100% ปราศจาก Regression
+    - รวม Marketing Unit Tests ทั้งหมด: 84 total tests passing 100% (Auction Service 48 + Campaign Validation 12 + Segment Rule 7 + Campaign Metrics 13 + Product Payload 4 = 84; historical baseline: 71 tests)
+
+**2026-10-04 update (UR-11: Swipe-to-Choose Hardening — Completed & Verified):**
+
+- **ความต้องการและการรักษาความปลอดภัย (Requirements & Hardening):**
+  - **Buyer-Only Authorization:** บังคับสิทธิ์เฉพาะผู้ใช้บทบาท `BUYER` (ทั้ง `req.userRole === "BUYER"` และ `req.userRoles.includes("BUYER")`) สำหรับเอนด์พอยต์ `POST /:id/choose`, `DELETE /:id/choose`, และ `POST /:id/unchoose` โดยบทบาท `SELLER`, `MARKETING`, `ADMIN` ถูกปฏิเสธด้วย HTTP `403 Forbidden` และผู้ที่ยังไม่เข้าสู่ระบบถูกปฏิเสธด้วย HTTP `401 Unauthorized` ทั้งระดับ Route Middleware (`requireBuyerRole`) และ Service Layer (`isBuyer`)
+  - **Server-Side Persistence & Batch Query (No N+1):** ปรับปรุง `productVideoRepository.listAvailable` ให้รับ `userId` และดึงสถานะการเลือกผ่าน Prisma relation include `choices: { where: { userId }, select: { id: true } }` รวดเดียวใน Batch Query โดยไม่เกิดปัญหา N+1 query พร้อมแมปเป็น `chosen: Boolean(...)` และตัด relation `choices` ออกจาก Response สาธารณะทั้งหมด
+  - **User Isolation & Guest Handling:** แยกสถานะ `chosen` เด็ดขาดระหว่างผู้ซื้อแต่ละคน (Buyer B จะไม่เห็นสถานะที่ Buyer A เลือก) และ Guest ที่ไม่มี Token จะได้รับ `chosen: false` เสมอทุกรายการ
+  - **Client Identity Anti-Spoofing & Optional Authentication:**
+    - เอนด์พอยต์สาธารณะ `GET /api/products/videos/feed` รองรับ Optional Auth แต่ไม่เชื่อถือ Header `x-user-id` หรือ `x-user-role` ที่ส่งมาจากภายนอกโดยไม่มี Bearer Token (กำหนด `userId = null` เสมอหากไม่มี Token ที่ถูกต้อง)
+    - API Gateway (`backend/gateway/src/app.js`) ทำการลบ (Strip) Inbound Headers ที่ขึ้นต้นด้วย `x-user-` ทั้งหมดจากไคลเอนต์ภายนอกทิ้งทันทีก่อนเริ่ม Route Request เพื่อให้มั่นใจว่า Trusted Identity Headers จะถูกสร้างขึ้นโดย Gateway หลังตรวจ Token สำเร็จเท่านั้น (ผ่านการตรวจสอบ Implementation review และ Lint แล้ว โดยยังไม่มี Dedicated automated test สำหรับ Gateway header stripping)
+  - **Idempotency & Safe Unchoose:**
+    - `upsertChoice`: บันทึกลงตาราง `swipe_choices` แบบ Idempotent ผ่าน Prisma `upsert` บน Composite Unique `@@unique([productVideoId, userId])` รับประกันการเลือกซ้ำไม่สร้างแถวซ้ำ
+    - `deleteChoice`: ใช้ `deleteMany` จัดการการยกเลิกเลือกรายการที่ยังไม่ได้เลือกอย่างปลอดภัย ส่งคืน `{ chosen: false }` โดยไม่เกิดข้อผิดพลาด HTTP 500
+  - **Frontend Persistence & Optimistic Rollback:**
+    - `SwipeVideoCard.js`: เริ่มต้นสถานะการเลือกจากการ์ด `video.chosen` และเพิ่ม `useEffect` ซิงค์สถานะเมื่อ `video.chosen` เปลี่ยนแปลงหลังการ Refetch
+    - ทำ Optimistic Update ทันทีเมื่อผู้ใช้คลิก และหากการเรียก API ล้มเหลว (Network Failure / 403 / 500) จะทำการ Rollback กลับสู่สถานะก่อนหน้าทันที
+  - **Decoupled Semantics:** ยืนยันตาม `MKT-DEC-006` และ `MKT-DEC-021` ว่า `SwipeChoice` ทำหน้าที่เป็นเพียง Bookmark ความสนใจของผู้ซื้อเท่านั้น ไม่มีความสัมพันธ์กับการประมูลสินค้า (Auction) และไม่ใช่การเสนอราคา (Bid)
+- **หลักฐานการทดสอบอัตโนมัติ (Automated Verification Evidence):**
+  - **Backend & Gateway Targeted Tests:** ผ่านครบ 29/29 tests 100%
+    - Gateway App Tests (`backend/gateway/src/app.test.js`): ผ่าน 5/5 tests (ครอบคลุม Gateway auth routing และ Public routes; สำหรับ header stripping ผ่าน implementation review/lint แต่ยังไม่มี dedicated automated test)
+    - Product Service App Tests (`backend/services/product-service/src/app.test.js`): ผ่าน 10/10 tests
+    - Product Video Repository Tests (`backend/services/product-service/src/features/product-videos/productVideoRepository.test.js`): ผ่าน 2/2 tests (ครอบคลุม Guest chosen: false, User-specific chosen, และการตัด choices relation ออกจากผลลัพธ์)
+    - Product Video Service Tests (`backend/services/product-service/src/features/product-videos/productVideoService.test.js`): ผ่าน 12/12 tests (ครอบคลุม 403 สำหรับ SELLER, MARKETING, ADMIN, Multi-role BUYER, และ Pagination forwarding)
+    - รวม Backend & Gateway Targeted Tests: 5 + 10 + 2 + 12 = 29 tests
+  - **Frontend Swipe Component Tests:** ผ่านครบ 3/3 suites (42/42 tests passing 100%)
+    - `SwipeVideoCard.test.js`: ผ่านครบ 28/28 tests (ครอบคลุม Initial render จาก `video.chosen`, Refetch sync, และ Rollback เมื่อ API error ทั้ง Choose และ Unchoose)
+    - `SwipeFeedViewer.test.js`: ผ่านครบ 8/8 tests (ครอบคลุมการเลื่อนดูคลิป, Touch swipe, Desktop navigation, และ Query sync)
+    - `page.test.js`: ผ่านครบ 6/6 tests
+  - **PostgreSQL Integration Test (`REQUIRE_INTEGRATION=1`):**
+    - `backend/services/product-service/test/swipe-choose.integration.test.js`: ผ่าน 1/1 suite (10 verification assertions) บน PostgreSQL `reloop_product` จริง ปราศจากการ Skip:
+      1. 401 Unauthorized บน `POST /choose`, `DELETE /choose`, `POST /unchoose` เมื่อไม่มี Token
+      2. 403 Forbidden สำหรับ `SELLER`, `MARKETING`, `ADMIN` ทุกคำสั่ง
+      3. 200 OK และบันทึกลงตาราง `swipe_choices` จริงสำหรับ `BUYER`
+      4. Idempotency: การเลือกซ้ำไม่สร้างแถวซ้ำในฐานข้อมูล (`count === 1`)
+      5. Guest Feed: ทุกรายการได้รับ `chosen: false`
+      6. Buyer A Feed: รายการที่เลือกได้รับ `chosen: true`
+      7. User Isolation: Buyer B เห็นรายการที่ Buyer A เลือกเป็น `chosen: false`
+      8. Identity Anti-Spoofing: ส่ง Header `x-user-id: ur11-buyer-a` โดยไม่มี Bearer Token ได้รับ `chosen: false` ไม่สามารถอ่านข้อมูลผู้อื่นได้
+      9. Safe Unchoose: Unchoose รายการที่ไม่ได้เลือกไม่เกิด HTTP 500
+      10. Unchoose สำเร็จ: ลบแถวออกจากฐานข้อมูลและฟีดอัปเดตเป็น `chosen: false`
+  - **Quality Gates & Code Formatting:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style!)
+    - `git diff --check`: ผ่าน 100% (ไม่มีข้อผิดพลาด whitespace)
+- **หมายเหตุการตรวจรับ (Pending Acceptance Note):**
+  - การทดสอบอัตโนมัติระดับ Backend, Frontend Component, และ PostgreSQL Integration สมบูรณ์และผ่านการตรวจรับครบถ้วนแล้ว
+  - การทดสอบ Browser E2E / Responsive UI verification บนเบราว์เซอร์จริงยังไม่ได้ดำเนินการ และคงสถานะเป็น Final Acceptance ที่รอดำเนินการต่อไป
+
+**2026-10-05 update (UR-08: User/Peak-Usage Analytics สำหรับ Marketing — Completed & Verified):**
+
+- **ความต้องการและขอบเขต (Scope & Requirements):**
+  - แสดงผลสถิติผู้ใช้งานและช่วงเวลาการใช้งานสูงสุดบน Marketing Dashboard (`/marketing`) ตามช่วงวันที่เลือก
+  - ตัวชี้วัดสำคัญ 4 รายการ:
+    1. Active Users (จำนวนผู้ใช้ที่ไม่ซ้ำกัน [distinct users] ที่มีกิจกรรมจากแหล่งข้อมูลที่เชื่อถือได้ในช่วงวันที่กำหนด)
+    2. New Users (จำนวนบัญชีผู้ใช้ใหม่ที่สร้างขึ้นในช่วงวันที่กำหนด `user.createdAt`)
+    3. Hourly Usage Aggregation (การรวมสถิติการใช้งานรายชั่วโมงตาม Asia/Bangkok [+07:00] bucket พร้อมเติมช่วงว่าง [gap filling] เป็น 0 ครบทุกชั่วโมงใน `[from, to)`)
+    4. Peak Usage Hour (ช่วงเวลาชั่วโมงที่มีการใช้งานสูงสุดตาม Asia/Bangkok พร้อม deterministic tie-breaking เลือกชั่วโมงแรกสุดกรณีตัวเลขเท่ากัน)
+    5. Date-Range Filtering (รองรับช่วงเวลาแบบ Half-Open Interval `[from, to)` จำกัดไม่เกิน 31 วัน โดยช่อง "ถึงวันที่" บน UI เป็น inclusive สำหรับผู้ใช้ และแปลงเป็น 00:00:00+07:00 ของวันถัดไปก่อนส่ง API)
+- **Timezone Contract (Asia/Bangkok Enforcement & Date Boundaries):**
+  - กำหนด Business Timezone ของ UR-08 เป็น `Asia/Bangkok` (+07:00) อย่างเคร่งครัด
+  - API รองรับเฉพาะ timezone `Asia/Bangkok` เท่านั้น และปฏิเสธ timezone อื่นด้วย HTTP 400 Bad Request ทันที
+  - จัดการ Timezone ใน PostgreSQL อย่างแม่นยำ: เนื่องจาก Prisma เก็บ `DateTime` เป็น `timestamp without time zone` ใน UTC จึงต้องแปลงผ่าน `(activity_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Bangkok'` ก่อนทำ `date_trunc('hour', ...)` และจัดรูปแบบเป็น `to_char(..., 'YYYY-MM-DD"T"HH24:MI:SS+07:00')`
+  - Gap filling, Peak hour calculation, และการแสดงผลบน Frontend ใช้ timezone `Asia/Bangkok` เดียวกันทั้งหมด โดยไม่มีข้อความ `UTC` ปรากฏบนหน้าจอ
+  - ตัวแปลงวันที่ใน Frontend (`convertThaiDateFilterToRange`) รองรับขอบเขตวันข้ามเดือน ข้ามปี และปีอธิกสุรทิน (Leap Year) อย่างแม่นยำ
+  - ป้องกันการส่ง Partial request: ไม่ยิง API เมื่อผู้ใช้กรอกเพียง `from` หรือ `to` เพียงค่าเดียว
+- **การรักษา Service Boundary และความปลอดภัยข้อมูล (Service Ownership & Anti-PII):**
+  - ข้อมูล User และ Activity ทั้งหมดถูกเป็นเจ้าของโดย `Auth Service` โดยตรง (`User`, `LoginLog`, `BuyerActivityLog`) ไม่ให้ Product Service หรือบริการอื่น Query ข้ามฐานข้อมูล
+  - API Gateway (`backend/gateway/src/app.js`) ทำหน้าที่ Proxy ไปยัง `GET /api/auth/marketing/analytics/user-usage` โดยตัด Inbound Header `x-user-*` ทิ้ง ป้องกันการทำ Header Spoofing และตรวจสอบสิทธิ์ผ่าน JWT เท่านั้น
+  - อนุญาตเฉพาะผู้ใช้ที่มีบทบาท `MARKETING` (ผ่านทั้ง `userRole` เดี่ยวและ `userRoles` array ในระบบ Multi-role); ผู้ใช้บทบาทอื่น (`BUYER`, `SELLER`) ได้รับ HTTP 403 Forbidden; ผู้ไม่ล็อกอินได้รับ HTTP 401 Unauthorized
+  - Response Data Serializer (`serializeUserAnalytics`) ส่งออกเฉพาะ Whitelisted Aggregate Metrics เท่านั้น ปราศจาก PII (ไม่มี email, phone, name, userId, หรือ raw payload ใดๆ)
+  - ไม่ใช้ In-memory fallback ใน Production; หากเกิด Database Connection Error ระบบจะ propagate error เป็น HTTP 500 ทันที ไม่กลืน error หรือคืนค่าเลขศูนย์หลอก
+- **Frontend Dashboard Implementation & Error State (`DashboardSection.js`):**
+  - แยก State `userAnalytics`, `userAnalyticsLoading`, `userAnalyticsError` อย่างเป็นอิสระ
+  - การจัดการ Error ซื่อสัตย์ ไม่กลืน HTTP error ให้แสดงเป็นเลขศูนย์:
+    - เมื่อ API ล้มเหลว: แสดง Error Banner พร้อมปุ่ม Retry, ค่า KPI แสดง `—` และ `ไม่พร้อมใช้งาน` (ห้ามแสดง 0), Peak Hour แสดง `ไม่พร้อมใช้งาน`, และกราฟแสดง Error Message (ไม่แสดง Empty State)
+    - เมื่อ Retry สำเร็จ: ปิด Error Banner และกลับมาแสดงผลตัวเลขจริง
+    - เมื่อข้อมูลว่างจริง (Empty State): แสดงผลเลข 0 สำหรับ Active/New Users พร้อมแสดง Empty State Banner
+  - Data Visualization: แสดงกราฟแท่ง Hourly Usage (`TrendBarChart`) ควบคู่กับ Accessible Table View (`<details>` สำหรับ screen reader / accessibility)
+- **หลักฐานการทดสอบอัตโนมัติ (Automated Verification Evidence):**
+  - Backend Unit Tests: `backend/services/auth-service/src/features/metrics/activityMetrics.test.js` ผ่าน 7/7 tests 100% (Range validation, Asia/Bangkok hourly bucketing, Deterministic peak hour tie-breaking, Whitelisted PII prevention, Gap filling, DB error propagation, และ RBAC Multi-role)
+  - Gateway Cross-Service Integration Tests: `backend/gateway/src/marketing-analytics.cross-service.test.js` ผ่าน 2/2 tests 100% (Success path ผ่าน Gateway -> Auth Service -> PostgreSQL จริง ได้รับ HTTP 200 OK, ยืนยัน Timezone Asia/Bangkok, ตรวจสอบ No PII, ตรวจสอบ 401/403/400 security guards ครบถ้วน, และยืนยัน Database Error Propagates เป็น HTTP 500 อย่างชัดเจน)
+  - PostgreSQL Integration Test: `backend/services/auth-service/test/user-analytics.integration.test.js` ผ่าน 1/1 suite (100% passing, 0 skips) บน PostgreSQL จริง ด้วย `$env:REQUIRE_INTEGRATION="1"` และ fail loud เมื่อ DB ออฟไลน์
+  - Frontend Client & UI Tests: `npm run test:frontend -- frontend/components/marketing/sections/DashboardSection.test.js frontend/lib/api.test.js` ผ่าน 30/30 tests 100% (DashboardSection 20/20 tests ครอบคลุม Thai date conversions, Bangkok formatting, Error state ไม่แสดง 0, Empty state, และ Retry; api 10/10 tests)
+  - Quality Gates: `npm run lint` ผ่าน (0 errors, 0 warnings), `npm run format:check` ผ่าน (All matched files use Prettier code style!), `git diff --check` ผ่าน
+
+**2026-10-05 update (Marketing Audit Trail: Append-Only Immutable Ledger, Atomic DB Transactions, Marketing-only RBAC, SYSTEM Idempotency & Date Filter Contract — Completed & Verified):**
+
+- **ความต้องการและสถาปัตยกรรม (Scope & Architecture):**
+  - ติดตั้งระบบ Marketing Audit Trail แบบ Append-Only Immutable Ledger ใน PostgreSQL `reloop_product` ตาราง `marketing_audit_logs` อ้างอิงตาม `MKT-DEC-022`
+  - ครอบคลุม 18 Marketing Actions:
+    - Campaign: `CAMPAIGN_CREATE`, `CAMPAIGN_UPDATE`, `CAMPAIGN_SUBMIT`, `CAMPAIGN_APPROVE`, `CAMPAIGN_REJECT`, `CAMPAIGN_PUBLISH`, `CAMPAIGN_END`
+    - Auction: `AUCTION_ROUND_CREATE`, `AUCTION_ITEM_APPROVE`, `AUCTION_ITEM_REJECT`, `AUCTION_ITEM_SCHEDULE`, `AUCTION_ITEM_CANCEL`, `AUCTION_ITEM_CLOSE`
+    - Article: `ARTICLE_CREATE`, `ARTICLE_UPDATE`, `ARTICLE_PUBLISH`, `ARTICLE_ARCHIVE`, `ARTICLE_DELETE`
+  - ห้าม Client สร้าง, แก้ไข หรือลบ Audit Log (Zero Client-facing Write API)
+- **การแก้ไขตามผล Code Review (Code Review Resolutions):**
+  1. **Marketing-only Authorization (`marketingAuditRoutes.js`):**
+     - จำกัดสิทธิ์การอ่าน Audit Log เฉพาะบทบาท `MARKETING` เท่านั้น (`requireMarketingAccess`)
+     - ปฏิเสธ `BUYER`, `SELLER` และ `ADMIN` ด้วย HTTP 403 Forbidden ตาม `MKT-DEC-014`
+     - ป้องกันไม่ให้ Permission `analytics:read:marketing` หรือ `audit:read:marketing` ทำการ Bypass Role Check ได้
+     - ดึง Identity จาก Server-verified JWT Token เท่านั้น; ผู้ไม่ล็อกอินได้รับ 401 Unauthorized และการปลอมแปลง `x-user-role` ได้รับ 403 Forbidden
+  2. **SYSTEM Idempotency in PostgreSQL Transactions (`marketingAuditRepository.js`):**
+     - แก้ไขปัญหา PostgreSQL Abort Transaction ด้วย `25P02: current transaction is aborted` เมื่อดักจับ `P2002` ภายใน Transaction บล็อก
+     - โซลูชัน: ใช้ `createMany({ data: [{ id: crypto.randomUUID(), ...data }], skipDuplicates: true })` + `findUnique` ซึ่งคอมไพล์เป็น `INSERT ... ON CONFLICT DO NOTHING` บน PostgreSQL ทำให้ Transaction บล็อกไม่ถูก Abort และดึงเรคอร์ดที่มีอยู่เดิมกลับมาได้อย่างปลอดภัย 100%
+     - Audit ปกติที่ไม่มี `idempotencyKey` ยังคงใช้ `create` และ Fail Loud ตามปกติ
+  3. **Bangkok Date Filter & Boundary Contract:**
+     - กำหนด Business Timezone เป็น `Asia/Bangkok` (+07:00)
+     - UI (`convertAuditDateFilter`) แปลงวันที่แบบ Inclusive เป็นช่วง Half-Open Interval `[from, to)` ในเวลาไทย: `[fromDateT00:00:00+07:00, nextDayT00:00:00+07:00)` และตรวจสอบ `from <= to`
+     - Backend คิวรีด้วย `createdAt >= fromDate` และ `createdAt < toDate` (`lt: toDate`)
+  4. **Duplicate Declarations Removal & Lint:**
+     - ลบฟังก์ชันซ้ำซ้อน `deleteCampaign` ใน `campaignRepository.js` และ `getById` ใน `articleModel.js` โดยคงตัวที่รองรับ `{ tx }` ไว้
+     - ผ่าน `npm run lint` 0 errors, 0 warnings
+  5. **Integration Test Isolation & Full Coverage:**
+     - ขจัด Fixed +500 days offset ด้วย `Math.max(Date.now(), maxExistingRoundEnd) + 1h` ป้องกันการชนกับรอบประมูลที่มีอยู่เดิมเมื่อรันซ้ำ
+     - ครอบคลุมการทดสอบครบ 10 Subtests ใน `marketing-audit.integration.test.js`
+- **หลักฐานการทดสอบอัตโนมัติ (Automated Verification Evidence):**
+  - **Host Node.js Version:** `v22.16.0` (รายงานตามจริง)
+  - **Backend Unit Tests:** `backend/services/product-service/src/features/audit/marketingAuditService.test.js` ผ่าน 6/6 tests 100%
+  - **PostgreSQL Integration Tests:** `backend/services/product-service/test/marketing-audit.integration.test.js` ผ่าน 11/11 tests (1 parent suite + 10 subtests) 100% บน PostgreSQL จริง (`reloop_product`) ด้วย `$env:REQUIRE_INTEGRATION="1"` ปราศจากการ Skip
+  - **Regression Integration Tests:**
+    - Campaign Suite (`campaign.integration.test.js`): ผ่าน 11/11 tests 100%
+    - Auction Suite (`auction.integration.test.js`): ผ่าน 11/11 tests 100%
+    - Article Suite (`article.integration.test.js`): ผ่าน 1/1 test 100%
+  - **Frontend Component Tests:**
+    - `frontend/components/marketing/sections/AuditTrailSection.test.js`: ผ่าน 13/13 tests 100%
+    - `frontend/app/marketing/page.test.js`: ผ่าน 6/6 tests 100%
+    - รวม Frontend Tests: ผ่าน 19/19 tests 100%
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style!)
+    - `git diff --check`: ผ่าน 100% (ไม่มีข้อผิดพลาด whitespace)

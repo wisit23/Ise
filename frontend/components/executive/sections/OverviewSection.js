@@ -89,7 +89,11 @@ export default function OverviewSection({ token }) {
 
         setTrend({
           gmv: extractSeries(recentWindows, recentSettled, "gmv"),
-          revenue: extractSeries(recentWindows, recentSettled, "platformRevenue"),
+          revenue: extractSeries(
+            recentWindows,
+            recentSettled,
+            "platformRevenue",
+          ),
         });
       })
       .catch((err) => !cancelled && setError(err.message))

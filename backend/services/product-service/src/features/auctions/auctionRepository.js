@@ -50,8 +50,9 @@ function createAuctionRepository(prismaClient) {
     return { items, total };
   }
 
-  function updateStatus(id, data) {
-    return prismaClient.auctionItem.update({
+  function updateStatus(id, data, tx = prismaClient) {
+    const client = tx || prismaClient;
+    return client.auctionItem.update({
       where: { id },
       data,
       include: WITH_PRODUCT,
@@ -161,7 +162,12 @@ function createAuctionRepository(prismaClient) {
     });
   }
 
+  function transaction(fn) {
+    return prismaClient.$transaction(fn);
+  }
+
   return {
+    transaction,
     findProductOwner,
     create,
     findById,

@@ -4,6 +4,7 @@ import {
   uploadDisputeEvidence,
   submitKyc,
   fetchAuthedBlobUrl,
+  getMarketingUserAnalytics,
 } from "./api";
 import { saveSession, getAccessToken, getRefreshToken } from "./auth";
 
@@ -83,5 +84,33 @@ test("a valid legacy session refreshes and retries the request", async () => {
   expect(getAccessToken()).toBe("new-access-with-sid");
   expect(fetch.mock.calls[2][1].headers.Authorization).toBe(
     "Bearer new-access-with-sid",
+  );
+});
+
+test("getMarketingUserAnalytics constructs query and returns data", async () => {
+  fetch.mockResolvedValue(
+    response(200, {
+      activeUsers: 10,
+      newUsers: 3,
+      peakHour: { hour: "2026-06-01T14:00:00.000Z", usageCount: 5 },
+      hourlyUsage: [],
+    }),
+  );
+
+  const res = await getMarketingUserAnalytics(
+    { from: "2026-06-01", to: "2026-06-07", timezone: "Asia/Bangkok" },
+    "custom-token",
+  );
+
+  expect(res.activeUsers).toBe(10);
+  expect(fetch).toHaveBeenCalledWith(
+    expect.stringContaining(
+      "/api/auth/marketing/analytics/user-usage?from=2026-06-01&to=2026-06-07&timezone=Asia%2FBangkok",
+    ),
+    expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: "Bearer custom-token",
+      }),
+    }),
   );
 });

@@ -110,6 +110,51 @@ test("chooseClip upserts a choice for the user", async (t) => {
 
   assert.equal(result.productVideoId, "video-1");
   assert.equal(result.userId, "user-1");
+  assert.equal(result.chosen, true);
+});
+
+test("chooseClip rejects non-buyer roles (SELLER, MARKETING, ADMIN) with 403", async () => {
+  for (const role of ["SELLER", "MARKETING", "ADMIN", "SUPPORT"]) {
+    await assert.rejects(
+      service.chooseClip({
+        user: { id: "user-1", role },
+        productVideoId: "video-1",
+      }),
+      (err) => err.status === 403,
+    );
+  }
+});
+
+test("chooseClip accepts user when roles array contains BUYER", async (t) => {
+  t.mock.method(repository, "findById", async (id) => ({ id }));
+  t.mock.method(
+    repository,
+    "upsertChoice",
+    async ({ productVideoId, userId }) => ({
+      productVideoId,
+      userId,
+    }),
+  );
+
+  const result = await service.chooseClip({
+    user: { id: "user-buyer-multi", roles: ["BUYER", "REVIEWER"] },
+    productVideoId: "video-1",
+  });
+
+  assert.equal(result.chosen, true);
+  assert.equal(result.userId, "user-buyer-multi");
+});
+
+test("unchooseClip rejects non-buyer roles (SELLER, MARKETING, ADMIN) with 403", async () => {
+  for (const role of ["SELLER", "MARKETING", "ADMIN", "SUPPORT"]) {
+    await assert.rejects(
+      service.unchooseClip({
+        user: { id: "user-1", role },
+        productVideoId: "video-1",
+      }),
+      (err) => err.status === 403,
+    );
+  }
 });
 
 test("unchooseClip deletes the choice and returns chosen: false", async (t) => {
@@ -130,4 +175,21 @@ test("unchooseClip deletes the choice and returns chosen: false", async (t) => {
     userId: "user-1",
   });
   assert.equal(result.chosen, false);
+});
+
+test("listFeed passes userId to repository when provided", async (t) => {
+  let passedArgs = null;
+  t.mock.method(repository, "listAvailable", async (args) => {
+    passedArgs = args;
+    return { items: [{ id: "video-1", chosen: true }], total: 1 };
+  });
+
+  const result = await service.listFeed({
+    skip: 0,
+    take: 10,
+    userId: "buyer-123",
+  });
+
+  assert.deepEqual(passedArgs, { skip: 0, take: 10, userId: "buyer-123" });
+  assert.equal(result.items[0].chosen, true);
 });

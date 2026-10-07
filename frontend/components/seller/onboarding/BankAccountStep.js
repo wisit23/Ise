@@ -17,7 +17,9 @@ function LockedInfoRow({ icon, label, value }) {
         {icon}
       </span>
       <span className="text-xs text-ink-muted">{label}:</span>
-      <span className="ml-auto text-xs font-semibold text-gray-900">{value}</span>
+      <span className="ml-auto text-xs font-semibold text-gray-900">
+        {value}
+      </span>
       <span
         className="material-symbols-outlined text-[14px] text-brand-400 shrink-0"
         aria-hidden="true"
@@ -70,21 +72,37 @@ export default function BankAccountStep({
       {/* สรุปข้อมูลล็อคจาก Thai ID */}
       <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-4">
         <div className="mb-3 flex items-center gap-2">
-          <span className="material-symbols-outlined text-[18px] text-brand-600">verified_user</span>
+          <span className="material-symbols-outlined text-[18px] text-brand-600">
+            verified_user
+          </span>
           <p className="text-xs font-semibold text-brand-700 uppercase tracking-wide">
             ข้อมูลจาก Thai ID (ล็อค)
           </p>
         </div>
         <div className="flex flex-col gap-2">
-          <LockedInfoRow icon="person" label="ชื่อ-นามสกุล" value={thaiIdData?.fullName} />
-          <LockedInfoRow icon="badge" label="เลขบัตรประชาชน" value={thaiIdData?.idNumber} />
-          <LockedInfoRow icon="call" label="เบอร์โทร" value={thaiIdData?.phone} />
+          <LockedInfoRow
+            icon="person"
+            label="ชื่อ-นามสกุล"
+            value={thaiIdData?.fullName}
+          />
+          <LockedInfoRow
+            icon="badge"
+            label="เลขบัตรประชาชน"
+            value={thaiIdData?.idNumber}
+          />
+          <LockedInfoRow
+            icon="call"
+            label="เบอร์โทร"
+            value={thaiIdData?.phone}
+          />
         </div>
       </div>
 
       {/* ชื่อร้านค้า */}
       <div>
-        <h3 className="mb-3 text-sm font-semibold text-gray-900">ข้อมูลร้านค้า</h3>
+        <h3 className="mb-3 text-sm font-semibold text-gray-900">
+          ข้อมูลร้านค้า
+        </h3>
         <Input
           required
           label="ชื่อร้านค้า"
@@ -126,12 +144,7 @@ export default function BankAccountStep({
         >
           ย้อนกลับ
         </Button>
-        <Button
-          type="submit"
-          size="lg"
-          loading={submitting}
-          className="flex-1"
-        >
+        <Button type="submit" size="lg" loading={submitting} className="flex-1">
           {submitting
             ? "กำลังบันทึกข้อมูลยืนยันตัวตน..."
             : "ยืนยันข้อมูลเพื่อเป็นผู้ขาย"}

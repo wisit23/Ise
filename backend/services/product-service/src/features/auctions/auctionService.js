@@ -1,7 +1,16 @@
 const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const auctionRepository = require("./auctionRepository");
+const defaultPrisma = require("../../models/prismaClient");
+const { recordMarketingAudit } = require("../audit/marketingAuditService");
 const orderClient = require("./orderClient");
 const auctionCloseQueue = require("../../jobs/auctionCloseQueue");
+
+function runInTransaction(fn) {
+  if (auctionRepository.transaction) {
+    return auctionRepository.transaction(fn);
+  }
+  return defaultPrisma.$transaction(fn);
+}
 
 // UR-10/UR-11 (MKT-005) lifecycle. Seller submits -> Admin approves/rejects ->
 // Marketing schedules the open/close window -> system opens/closes it ->
@@ -55,9 +64,10 @@ async function maybeAdvance(auction, now = new Date()) {
   return auction;
 }
 
-async function closeAuction(auction, now) {
+async function closeAuction(auction, now = new Date()) {
+  const auctionId = typeof auction === "string" ? auction : auction?.id;
   // Re-fetch to avoid race conditions if already closed concurrently (e.g. BullMQ worker vs page read)
-  const fresh = await auctionRepository.findById(auction.id);
+  const fresh = await auctionRepository.findById(auctionId);
   if (!fresh || fresh.status === "closed") {
     return fresh || auction;
   }
@@ -76,16 +86,56 @@ async function closeAuction(auction, now) {
       price: winningBid.amount,
     });
     winningOrderId = order.id;
-  } else {
-    // If no bids were placed, release product back to "available"
-    await auctionRepository.setProductStatus(auction.productId, "available");
   }
 
-  return auctionRepository.updateStatus(auction.id, {
-    status: "closed",
-    closedAt: now,
-    winningBidId: winningBid ? winningBid.id : null,
-    winningOrderId,
+  return runInTransaction(async (tx) => {
+    // Under transaction, check if already closed concurrently
+    const current = await tx.auctionItem.findUnique({
+      where: { id: auction.id },
+      include: {
+        product: { include: { photos: { orderBy: { position: "asc" } } } },
+        round: true,
+      },
+    });
+    if (!current || current.status === "closed") {
+      return current || auction;
+    }
+
+    if (!winningBid) {
+      // If no bids were placed, release product back to "available"
+      await auctionRepository.setProductStatus(
+        auction.productId,
+        "available",
+        tx,
+      );
+    }
+
+    const updated = await auctionRepository.updateStatus(
+      auction.id,
+      {
+        status: "closed",
+        closedAt: now,
+        winningBidId: winningBid ? winningBid.id : null,
+        winningOrderId,
+      },
+      tx,
+    );
+
+    await recordMarketingAudit(
+      {
+        actorId: "SYSTEM",
+        actorRole: "SYSTEM",
+        action: "AUCTION_ITEM_CLOSE",
+        entityType: "AUCTION_ITEM",
+        entityId: auction.id,
+        previousState: auction,
+        newState: updated,
+        idempotencyKey: `AUCTION_ITEM_CLOSE:${auction.id}`,
+      },
+      { tx },
+    );
+
+    return updated;
   });
 }
 
@@ -151,20 +201,58 @@ async function approve({ user, auctionId }) {
   // If the auction already has scheduled dates (from round), transition directly to scheduled!
   if (auction.scheduledStartAt && auction.scheduledEndAt) {
     assertTransition(auction, "scheduled");
-    const updated = await auctionRepository.updateStatus(auctionId, {
-      status: "scheduled",
-      approvedBy: user.id,
-      approvedAt: new Date(),
+    const updated = await runInTransaction(async (tx) => {
+      const res = await auctionRepository.updateStatus(
+        auctionId,
+        {
+          status: "scheduled",
+          approvedBy: user.id,
+          approvedAt: new Date(),
+        },
+        tx,
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "AUCTION_ITEM_APPROVE",
+          entityType: "AUCTION_ITEM",
+          entityId: auctionId,
+          previousState: auction,
+          newState: res,
+        },
+        { tx },
+      );
+      return res;
     });
     await auctionCloseQueue.scheduleClose(auctionId, auction.scheduledEndAt);
     return updated;
   }
 
   assertTransition(auction, "approved");
-  return auctionRepository.updateStatus(auctionId, {
-    status: "approved",
-    approvedBy: user.id,
-    approvedAt: new Date(),
+  return runInTransaction(async (tx) => {
+    const updated = await auctionRepository.updateStatus(
+      auctionId,
+      {
+        status: "approved",
+        approvedBy: user.id,
+        approvedAt: new Date(),
+      },
+      tx,
+    );
+    await recordMarketingAudit(
+      {
+        actorId: user.id,
+        actorRole: user.role,
+        action: "AUCTION_ITEM_APPROVE",
+        entityType: "AUCTION_ITEM",
+        entityId: auctionId,
+        previousState: auction,
+        newState: updated,
+      },
+      { tx },
+    );
+    return updated;
   });
 }
 
@@ -177,9 +265,31 @@ async function reject({ user, auctionId }) {
   const auction = await loadAuction(auctionId);
   assertTransition(auction, "rejected");
 
-  await auctionRepository.setProductStatus(auction.productId, "available");
-
-  return auctionRepository.updateStatus(auctionId, { status: "rejected" });
+  return runInTransaction(async (tx) => {
+    await auctionRepository.setProductStatus(
+      auction.productId,
+      "available",
+      tx,
+    );
+    const updated = await auctionRepository.updateStatus(
+      auctionId,
+      { status: "rejected" },
+      tx,
+    );
+    await recordMarketingAudit(
+      {
+        actorId: user.id,
+        actorRole: user.role,
+        action: "AUCTION_ITEM_REJECT",
+        entityType: "AUCTION_ITEM",
+        entityId: auctionId,
+        previousState: auction,
+        newState: updated,
+      },
+      { tx },
+    );
+    return updated;
+  });
 }
 
 /**
@@ -265,7 +375,7 @@ async function createRound({ user, input = {} }) {
       );
     }
 
-    return auctionRepository.createRound(
+    const round = await auctionRepository.createRound(
       {
         title: title.trim(),
         submissionStartsAt: subStart,
@@ -275,6 +385,21 @@ async function createRound({ user, input = {} }) {
       },
       tx,
     );
+
+    await recordMarketingAudit(
+      {
+        actorId: user.id,
+        actorRole: user.role,
+        action: "AUCTION_ROUND_CREATE",
+        entityType: "AUCTION_ROUND",
+        entityId: round.id,
+        previousState: null,
+        newState: round,
+      },
+      { tx },
+    );
+
+    return round;
   });
 }
 
@@ -329,10 +454,29 @@ async function schedule({ user, auctionId, startsAt, endsAt }) {
   if (start <= new Date()) throw badRequest("startsAt must be in the future");
   if (end <= start) throw badRequest("endsAt must be after startsAt");
 
-  const updated = await auctionRepository.updateStatus(auctionId, {
-    status: "scheduled",
-    scheduledStartAt: start,
-    scheduledEndAt: end,
+  const updated = await runInTransaction(async (tx) => {
+    const res = await auctionRepository.updateStatus(
+      auctionId,
+      {
+        status: "scheduled",
+        scheduledStartAt: start,
+        scheduledEndAt: end,
+      },
+      tx,
+    );
+    await recordMarketingAudit(
+      {
+        actorId: user.id,
+        actorRole: user.role,
+        action: "AUCTION_ITEM_SCHEDULE",
+        entityType: "AUCTION_ITEM",
+        entityId: auctionId,
+        previousState: auction,
+        newState: res,
+      },
+      { tx },
+    );
+    return res;
   });
 
   // Books the exact-time close job now, not lazily — see auctionCloseQueue.js.
@@ -350,11 +494,34 @@ async function cancel({ user, auctionId }) {
   const auction = await loadAuction(auctionId);
   assertTransition(auction, "cancelled");
 
-  await auctionRepository.setProductStatus(auction.productId, "available");
-
-  const updated = await auctionRepository.updateStatus(auctionId, {
-    status: "cancelled",
+  const updated = await runInTransaction(async (tx) => {
+    await auctionRepository.setProductStatus(
+      auction.productId,
+      "available",
+      tx,
+    );
+    const res = await auctionRepository.updateStatus(
+      auctionId,
+      {
+        status: "cancelled",
+      },
+      tx,
+    );
+    await recordMarketingAudit(
+      {
+        actorId: user.id,
+        actorRole: user.role,
+        action: "AUCTION_ITEM_CANCEL",
+        entityType: "AUCTION_ITEM",
+        entityId: auctionId,
+        previousState: auction,
+        newState: res,
+      },
+      { tx },
+    );
+    return res;
   });
+
   await auctionCloseQueue.cancelClose(auctionId);
   return updated;
 }
@@ -489,6 +656,7 @@ module.exports = {
   list,
   placeBid,
   maybeAdvance,
+  closeAuction,
   createRound,
   getCurrentRound,
   listRounds,

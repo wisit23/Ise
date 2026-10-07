@@ -110,11 +110,7 @@ export default function KycSection({ token }) {
   async function confirmDecision(reason) {
     if (!pendingDecision) return;
     const { application, decision } = pendingDecision;
-    const finalReason = (
-      reason ||
-      reasonById[application.id] ||
-      ""
-    ).trim();
+    const finalReason = (reason || reasonById[application.id] || "").trim();
 
     if (!finalReason) {
       toast.error("กรุณาระบุเหตุผลในการตัดสินใจ");
@@ -208,7 +204,9 @@ export default function KycSection({ token }) {
 
       {loading ? (
         <div className="flex h-48 items-center justify-center rounded-xl border border-slate-200 bg-white">
-          <p className="text-sm font-medium text-slate-500">กำลังโหลดรายการ...</p>
+          <p className="text-sm font-medium text-slate-500">
+            กำลังโหลดรายการ...
+          </p>
         </div>
       ) : applications.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
@@ -266,7 +264,9 @@ export default function KycSection({ token }) {
                   <div className="rounded-lg bg-slate-50 p-4 text-xs text-slate-700">
                     <dl className="flex flex-col gap-2">
                       <div className="flex justify-between gap-2 border-b border-slate-200/60 pb-1.5">
-                        <dt className="font-medium text-slate-500">ชื่อร้านค้า</dt>
+                        <dt className="font-medium text-slate-500">
+                          ชื่อร้านค้า
+                        </dt>
                         <dd className="font-bold text-slate-900">
                           {app.user?.sellerProfile?.shopName ?? "—"}
                         </dd>
@@ -286,7 +286,9 @@ export default function KycSection({ token }) {
                         </dd>
                       </div>
                       <div className="flex justify-between gap-2">
-                        <dt className="font-medium text-slate-500">บัญชีธนาคาร</dt>
+                        <dt className="font-medium text-slate-500">
+                          บัญชีธนาคาร
+                        </dt>
                         <dd className="font-mono text-slate-800">
                           {app.user?.sellerProfile?.bankAccount ?? "—"}
                         </dd>

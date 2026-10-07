@@ -63,16 +63,13 @@ async function searchPublished({ q, category, skip = 0, take = 12 }) {
   return { items, total };
 }
 
-async function getById(id, { allowDraft = false } = {}) {
-  const article = await prisma.article.findUnique({
-    where: { id },
-  });
-  if (!article) return null;
-  if (!allowDraft && article.status !== "published") return null;
-  return article;
-}
-
-async function listAllForMarketing({ status, category, q, skip = 0, take = 20 }) {
+async function listAllForMarketing({
+  status,
+  category,
+  q,
+  skip = 0,
+  take = 20,
+}) {
   const statusFilter = status ? { status } : {};
   const categoryFilter = category ? { category } : {};
 
@@ -132,21 +129,36 @@ async function listAllForMarketing({ status, category, q, skip = 0, take = 20 })
   return { items, total };
 }
 
-async function create({
-  title,
-  slug,
-  summary,
-  content,
-  coverImage,
-  category = "general",
-  status = "draft",
-  authorId,
-  authorName,
-}) {
-  const isPublished = status === "published";
-  const searchText = `${title} ${summary || ""} ${content} ${category} ${authorName || ""}`.trim();
+async function getById(id, { allowDraft = false, tx } = {}) {
+  const client = tx || prisma;
+  const article = await client.article.findUnique({
+    where: { id },
+  });
+  if (!article) return null;
+  if (!allowDraft && article.status !== "published") return null;
+  return article;
+}
 
-  return prisma.article.create({
+async function create(
+  {
+    title,
+    slug,
+    summary,
+    content,
+    coverImage,
+    category = "general",
+    status = "draft",
+    authorId,
+    authorName,
+  },
+  { tx } = {},
+) {
+  const client = tx || prisma;
+  const isPublished = status === "published";
+  const searchText =
+    `${title} ${summary || ""} ${content} ${category} ${authorName || ""}`.trim();
+
+  return client.article.create({
     data: {
       title,
       slug: slug || undefined,
@@ -163,8 +175,9 @@ async function create({
   });
 }
 
-async function update(id, data) {
-  const existing = await prisma.article.findUnique({ where: { id } });
+async function update(id, data, { tx } = {}) {
+  const client = tx || prisma;
+  const existing = await client.article.findUnique({ where: { id } });
   if (!existing) return null;
 
   const updateData = { ...data };
@@ -178,18 +191,24 @@ async function update(id, data) {
   const content = data.content ?? existing.content;
   const category = data.category ?? existing.category;
   const authorName = data.authorName ?? existing.authorName ?? "";
-  updateData.searchText = `${title} ${summary} ${content} ${category} ${authorName}`.trim();
+  updateData.searchText =
+    `${title} ${summary} ${content} ${category} ${authorName}`.trim();
 
-  return prisma.article.update({
+  return client.article.update({
     where: { id },
     data: updateData,
   });
 }
 
-async function remove(id) {
-  return prisma.article.delete({
+async function remove(id, { tx } = {}) {
+  const client = tx || prisma;
+  return client.article.delete({
     where: { id },
   });
+}
+
+function transaction(fn) {
+  return prisma.$transaction(fn);
 }
 
 module.exports = {
@@ -199,4 +218,5 @@ module.exports = {
   create,
   update,
   remove,
+  transaction,
 };

@@ -972,7 +972,7 @@ export default function ProfilePage() {
             )}
 
             {/* Filter active vs expired */}
-            <div className="mb-6 flex gap-2 border-b border-line pb-3 text-sm font-medium">
+            <div className="mb-6 flex flex-wrap gap-2 border-b border-line pb-3 text-sm font-medium">
               <button
                 type="button"
                 onClick={() => setCouponFilter("active")}

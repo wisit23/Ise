@@ -659,7 +659,9 @@ export default function OrdersSection({ token }) {
                           #{order.id}
                         </span>
                         <Badge
-                          text={ORDER_STATUS_LABEL[order.status] || order.status}
+                          text={
+                            ORDER_STATUS_LABEL[order.status] || order.status
+                          }
                           style={
                             ORDER_STATUS_STYLE[order.status] ||
                             "bg-slate-100 text-slate-700"

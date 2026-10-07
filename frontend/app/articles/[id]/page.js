@@ -11,10 +11,22 @@ import ErrorState from "../../../components/ui/ErrorState";
 import { apiFetch, mediaUrl } from "../../../lib/api";
 
 const CATEGORY_MAP = {
-  care: { label: "การดูแลเสื้อผ้า", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  styling: { label: "เคล็ดลับการแต่งตัว", color: "bg-purple-50 text-purple-700 border-purple-200" },
-  sustainability: { label: "แฟชั่นยั่งยืน", color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  general: { label: "สาระน่ารู้", color: "bg-amber-50 text-amber-700 border-amber-200" },
+  care: {
+    label: "การดูแลเสื้อผ้า",
+    color: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  styling: {
+    label: "เคล็ดลับการแต่งตัว",
+    color: "bg-purple-50 text-purple-700 border-purple-200",
+  },
+  sustainability: {
+    label: "แฟชั่นยั่งยืน",
+    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
+  general: {
+    label: "สาระน่ารู้",
+    color: "bg-amber-50 text-amber-700 border-amber-200",
+  },
 };
 
 function formatThaiDate(dateString) {
@@ -61,7 +73,7 @@ function ArticleContentRenderer({ content }) {
             }
             return part;
           })}
-        </p>
+        </p>,
       );
       paragraphBuffer = [];
     }
@@ -83,7 +95,7 @@ function ArticleContentRenderer({ content }) {
           className="text-xl sm:text-2xl font-bold text-slate-900 mt-8 mb-3 tracking-tight flex items-center gap-2"
         >
           {trimmed.slice(4)}
-        </h3>
+        </h3>,
       );
     } else if (trimmed.startsWith("## ")) {
       flushParagraph(`before-h2-${index}`);
@@ -93,14 +105,17 @@ function ArticleContentRenderer({ content }) {
           className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-10 mb-4 tracking-tight"
         >
           {trimmed.slice(3)}
-        </h2>
+        </h2>,
       );
     } else if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
       flushParagraph(`before-li-${index}`);
       const liText = trimmed.slice(2);
       const parts = liText.split(/(\*\*[^*]+\*\*)/g);
       elements.push(
-        <li key={`li-${index}`} className="ml-5 list-disc text-slate-700 leading-relaxed mb-2">
+        <li
+          key={`li-${index}`}
+          className="ml-5 list-disc text-slate-700 leading-relaxed mb-2"
+        >
           {parts.map((part, i) => {
             if (part.startsWith("**") && part.endsWith("**")) {
               return (
@@ -111,7 +126,7 @@ function ArticleContentRenderer({ content }) {
             }
             return part;
           })}
-        </li>
+        </li>,
       );
     } else if (trimmed.startsWith("![")) {
       flushParagraph(`before-img-${index}`);
@@ -119,14 +134,21 @@ function ArticleContentRenderer({ content }) {
       const match = trimmed.match(/!\[(.*?)\]\((.*?)\)/);
       if (match) {
         elements.push(
-          <figure key={`img-${index}`} className="my-8 overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
-            <img src={mediaUrl(match[2])} alt={match[1]} className="w-full max-h-[480px] object-cover" />
+          <figure
+            key={`img-${index}`}
+            className="my-8 overflow-hidden rounded-2xl border border-slate-200 shadow-sm"
+          >
+            <img
+              src={mediaUrl(match[2])}
+              alt={match[1]}
+              className="w-full max-h-[480px] object-cover"
+            />
             {match[1] && (
               <figcaption className="p-3 text-center text-xs text-slate-500 bg-slate-50">
                 {match[1]}
               </figcaption>
             )}
-          </figure>
+          </figure>,
         );
       }
     } else {
@@ -162,9 +184,13 @@ export default function ArticleDetailPage() {
 
         // Fetch related articles from same category
         if (data.article?.category) {
-          apiFetch(`/api/products/articles?category=${data.article.category}&limit=4`)
+          apiFetch(
+            `/api/products/articles?category=${data.article.category}&limit=4`,
+          )
             .then((res) => {
-              const others = (res.items || []).filter((a) => a.id !== id).slice(0, 3);
+              const others = (res.items || [])
+                .filter((a) => a.id !== id)
+                .slice(0, 3);
               setRelated(others);
             })
             .catch(() => {});
@@ -235,7 +261,10 @@ export default function ArticleDetailPage() {
             หน้าแรก
           </Link>
           <span className="text-slate-300">/</span>
-          <Link href="/articles" className="hover:text-slate-900 transition-colors">
+          <Link
+            href="/articles"
+            className="hover:text-slate-900 transition-colors"
+          >
             บทความ
           </Link>
           <span className="text-slate-300">/</span>
@@ -282,7 +311,8 @@ export default function ArticleDetailPage() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-500">
-                  เผยแพร่เมื่อ {formatThaiDate(article.publishedAt || article.createdAt)}
+                  เผยแพร่เมื่อ{" "}
+                  {formatThaiDate(article.publishedAt || article.createdAt)}
                 </div>
               </div>
             </div>
@@ -319,14 +349,17 @@ export default function ArticleDetailPage() {
         {/* Author Bio Box */}
         <div className="rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-emerald-50/70 to-teal-50/40 p-6 mb-12 flex items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white font-bold">
-            <span className="material-symbols-outlined text-[24px]">campaign</span>
+            <span className="material-symbols-outlined text-[24px]">
+              campaign
+            </span>
           </div>
           <div>
             <h4 className="text-sm font-bold text-slate-900 mb-1">
               {article.authorName || "ฝ่ายการตลาด RE-LOOP"}
             </h4>
             <p className="text-xs text-slate-600 leading-relaxed">
-              มุ่งมั่นส่งเสริมวัฒนธรรมการแต่งตัวอย่างยั่งยืน และสนับสนุนคอมมูนิตี้แฟชั่นหมุนเวียน (Circular Fashion) 
+              มุ่งมั่นส่งเสริมวัฒนธรรมการแต่งตัวอย่างยั่งยืน
+              และสนับสนุนคอมมูนิตี้แฟชั่นหมุนเวียน (Circular Fashion)
               เพื่อให้ทุกคนสนุกกับการแต่งตัวพร้อมร่วมดูแลสิ่งแวดล้อม
             </p>
           </div>
@@ -336,7 +369,9 @@ export default function ArticleDetailPage() {
         {related.length > 0 && (
           <section className="border-t border-slate-200/80 pt-10">
             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-              <span className="material-symbols-outlined text-brand-600">auto_stories</span>
+              <span className="material-symbols-outlined text-brand-600">
+                auto_stories
+              </span>
               บทความที่คุณอาจสนใจ
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
@@ -355,7 +390,9 @@ export default function ArticleDetailPage() {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-slate-300">
-                        <span className="material-symbols-outlined">menu_book</span>
+                        <span className="material-symbols-outlined">
+                          menu_book
+                        </span>
                       </div>
                     )}
                   </div>

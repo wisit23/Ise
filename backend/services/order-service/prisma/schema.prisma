@@ -7,8 +7,9 @@ datasource db {
 // this npm workspace hoists @prisma/client to one shared location, so every
 // service that generates a client there fights over the same physical folder.
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma-client"
+  provider      = "prisma-client-js"
+  output        = "../src/generated/prisma-client"
+  binaryTargets = ["native", "windows", "linux-musl-openssl-3.0.x"]
 }
 
 // Status lifecycle: pending_payment (cart, product locked) -> confirmed (paid, awaiting seller)
@@ -61,8 +62,9 @@ model Order {
   dispute           DisputeCase?
   adminEvidence     AdminDisputeEvidence[]
   holds             OrderHold[]
-  productSyncEvents ProductSyncEvent[]
-  checkoutSession   CheckoutSession?       @relation(fields: [checkoutSessionId], references: [id], onDelete: SetNull)
+  productSyncEvents      ProductSyncEvent[]
+  attributionOutboxEvent AttributionOutboxEvent?
+  checkoutSession        CheckoutSession?        @relation(fields: [checkoutSessionId], references: [id], onDelete: SetNull)
 
   @@index([buyerId])
   @@index([sellerId])
@@ -142,6 +144,32 @@ model ProductSyncEvent {
   @@index([orderId, processedAt])
   @@map("product_sync_events")
 }
+
+// Transactional outbox for marketing campaign attribution events (MKT-003 / MKT-007 / UR-09 / UR-12).
+// Committed atomically with the Order status transition to "completed".
+// A background retry worker delivers pending events with exponential backoff until product-service acknowledges.
+model AttributionOutboxEvent {
+  id             String    @id @default(uuid())
+  orderId        String    @unique @map("order_id")
+  campaignId     String    @map("campaign_id")
+  grossAmount    Int       @map("gross_amount")
+  discountAmount Int       @map("discount_amount")
+  netAmount      Int       @map("net_amount")
+  completedAt    DateTime  @map("completed_at")
+  attempts       Int       @default(0)
+  lastError      String?   @map("last_error")
+  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
+  processedAt    DateTime? @map("processed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([processedAt, nextAttemptAt])
+  @@index([orderId, processedAt])
+  @@map("attribution_outbox_events")
+}
+
 
 // ADM-004: Admin's own lightweight evidence *reference* list, distinct from
 // CS's DisputeEvidence below (which stores actual uploaded files against a

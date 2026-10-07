@@ -323,3 +323,34 @@ export function mediaUrl(url) {
   if (!url) return url;
   return url.startsWith("http") ? url : `${API_URL}${url}`;
 }
+
+export async function getMarketingUserAnalytics(
+  { from, to, timezone } = {},
+  token,
+) {
+  const query = new URLSearchParams();
+  if (from) query.set("from", from);
+  if (to) query.set("to", to);
+  if (timezone) query.set("timezone", timezone);
+  const qStr = query.toString() ? `?${query.toString()}` : "";
+  return await apiFetch(`/api/auth/marketing/analytics/user-usage${qStr}`, {
+    token,
+  });
+}
+
+export async function getMarketingAuditLogs(params = {}, token) {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", params.page);
+  if (params.limit) query.set("limit", params.limit);
+  if (params.action) query.set("action", params.action);
+  if (params.entityType) query.set("entityType", params.entityType);
+  if (params.entityId) query.set("entityId", params.entityId);
+  if (params.actorId) query.set("actorId", params.actorId);
+  if (params.actorRole) query.set("actorRole", params.actorRole);
+  if (params.from) query.set("from", params.from);
+  if (params.to) query.set("to", params.to);
+  const qStr = query.toString() ? `?${query.toString()}` : "";
+  return await apiFetch(`/api/products/marketing/audit-logs${qStr}`, {
+    token,
+  });
+}

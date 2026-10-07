@@ -29,7 +29,10 @@ async function list(req, res, next) {
     const filter = {};
     if (contextType) filter.contextType = contextType;
     if (excludeContextType) filter.excludeContextType = excludeContextType;
-    const conversations = await conversationService.listInbox(req.userId, filter);
+    const conversations = await conversationService.listInbox(
+      req.userId,
+      filter,
+    );
     res.json({ items: conversations });
   } catch (err) {
     next(err);

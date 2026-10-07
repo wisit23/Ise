@@ -850,4 +850,129 @@ describe("SwipeVideoCard", () => {
       `ติดตาม ${mockVideo.sellerName}`,
     );
   });
+
+  it("initializes chosen state correctly from video.chosen", async () => {
+    // 1. Initialized with chosen: true
+    let renderResult;
+    await act(async () => {
+      renderResult = render(
+        <SwipeVideoCard
+          video={{ ...mockVideo, chosen: true }}
+          isActive={true}
+        />,
+      );
+    });
+    const chosenBtn = screen.getByRole("button", { name: "บันทึกไว้แล้ว" });
+    expect(chosenBtn).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("ถูกใจแล้ว")).toBeInTheDocument();
+
+    // 2. Initialized with chosen: false
+    await act(async () => {
+      renderResult.rerender(
+        <SwipeVideoCard
+          video={{ ...mockVideo, id: "vid-unliked", chosen: false }}
+          isActive={true}
+        />,
+      );
+    });
+    const unchosenBtn = screen.getByRole("button", { name: "สนใจสินค้านี้" });
+    expect(unchosenBtn).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("ถูกใจ")).toBeInTheDocument();
+  });
+
+  it("synchronizes chosen state when video.chosen updates upon refetch/reload", async () => {
+    let renderResult;
+    await act(async () => {
+      renderResult = render(
+        <SwipeVideoCard
+          video={{ ...mockVideo, chosen: false }}
+          isActive={true}
+        />,
+      );
+    });
+
+    let likeBtn = screen.getByRole("button", { name: "สนใจสินค้านี้" });
+    expect(likeBtn).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("ถูกใจ")).toBeInTheDocument();
+
+    // Simulate feed refetch with updated video.chosen = true
+    await act(async () => {
+      renderResult.rerender(
+        <SwipeVideoCard
+          video={{ ...mockVideo, chosen: true }}
+          isActive={true}
+        />,
+      );
+    });
+
+    likeBtn = screen.getByRole("button", { name: "บันทึกไว้แล้ว" });
+    expect(likeBtn).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("ถูกใจแล้ว")).toBeInTheDocument();
+
+    // Simulate feed refetch with updated video.chosen = false
+    await act(async () => {
+      renderResult.rerender(
+        <SwipeVideoCard
+          video={{ ...mockVideo, chosen: false }}
+          isActive={true}
+        />,
+      );
+    });
+
+    likeBtn = screen.getByRole("button", { name: "สนใจสินค้านี้" });
+    expect(likeBtn).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("ถูกใจ")).toBeInTheDocument();
+  });
+
+  it("rolls back optimistic chosen state when choose request fails", async () => {
+    apiFetch.mockRejectedValueOnce(new Error("Network failure"));
+
+    await act(async () => {
+      render(
+        <SwipeVideoCard
+          video={{ ...mockVideo, chosen: false }}
+          isActive={true}
+        />,
+      );
+    });
+
+    const likeBtn = screen.getByRole("button", { name: "สนใจสินค้านี้" });
+    expect(likeBtn).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("ถูกใจ")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(likeBtn);
+    });
+
+    // Should rollback to false after rejection
+    expect(likeBtn).toHaveAttribute("aria-pressed", "false");
+    expect(likeBtn).toHaveAttribute("aria-label", "สนใจสินค้านี้");
+    expect(screen.getByText("ถูกใจ")).toBeInTheDocument();
+  });
+
+  it("rolls back optimistic chosen state when unchoose request fails", async () => {
+    apiFetch.mockRejectedValueOnce(new Error("Server error"));
+
+    await act(async () => {
+      render(
+        <SwipeVideoCard
+          video={{ ...mockVideo, chosen: true }}
+          isActive={true}
+        />,
+      );
+    });
+
+    const chosenBtn = screen.getByRole("button", { name: "บันทึกไว้แล้ว" });
+    expect(chosenBtn).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("ถูกใจแล้ว")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(chosenBtn);
+    });
+
+    // Should rollback to true after rejection
+    expect(chosenBtn).toHaveAttribute("aria-pressed", "true");
+    expect(chosenBtn).toHaveAttribute("aria-label", "บันทึกไว้แล้ว");
+    expect(screen.getByText("ถูกใจแล้ว")).toBeInTheDocument();
+  });
 });

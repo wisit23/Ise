@@ -128,6 +128,7 @@ export default function NavBar() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   const menuRef = useRef(null);
   const { connected: socketConnected } = useChatSocket();
@@ -233,6 +234,7 @@ export default function NavBar() {
     function handleEscape(e) {
       if (e.key === "Escape") {
         setMenuOpen(false);
+        setMobileMenuOpen(false);
         menuRef.current?.querySelector("button")?.focus();
       }
     }
@@ -283,7 +285,7 @@ export default function NavBar() {
 
   return (
     <header className="sticky top-0 z-nav border-b border-line bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-[64px] w-[min(100%-2.5rem,1280px)] items-center gap-5 sm:h-[72px]">
+      <div className="mx-auto flex h-[64px] max-w-7xl w-full items-center justify-between gap-2 px-3.5 sm:px-6 lg:px-8 sm:h-[72px]">
         <Link
           href="/"
           aria-label="RE-LOOP หน้าแรก"
@@ -300,7 +302,10 @@ export default function NavBar() {
           <span className="hidden sm:inline">RE-LOOP</span>
         </Link>
 
-        <form onSubmit={handleSearch} className="hidden min-w-0 flex-1 sm:flex">
+        <form
+          onSubmit={handleSearch}
+          className="hidden min-w-0 flex-1 sm:flex mx-2 lg:mx-4"
+        >
           <div className="flex w-full max-w-[520px] items-center gap-[.6rem] rounded-full border-[1.5px] border-line bg-surface-subtle p-[.4rem] pl-[1.1rem] transition duration-[250ms] focus-within:border-brand-600 focus-within:bg-white focus-within:ring-4 focus-within:ring-brand-50">
             <span
               className="material-symbols-outlined shrink-0 text-[18px] leading-none text-ink-subtle"
@@ -324,12 +329,11 @@ export default function NavBar() {
           </div>
         </form>
 
-        {/* On small screens the label is hidden and only the icon remains, so
-            each link carries its own aria-label rather than relying on text
-            that may not be rendered. */}
+        {/* On mobile and tablet (< xl) the discovery nav is moved to the mobile drawer so search has room.
+            On desktop (xl+) it is displayed inline next to search and action buttons. */}
         <nav
           aria-label="สำรวจสินค้า"
-          className="ml-auto flex shrink-0 items-center gap-0.5 md:ml-0"
+          className="hidden xl:flex shrink-0 items-center gap-0.5"
         >
           <Menu
             label="สินค้า"
@@ -381,187 +385,292 @@ export default function NavBar() {
           ))}
         </nav>
 
-        {isCustomerAccount && (
-          <Link
-            href="/sell"
-            className="focus-ring hidden shrink-0 items-center gap-[.35rem] rounded-full border-[1.5px] border-brand-600/40 px-[.85em] py-[.42em] text-sm font-medium text-brand-700 transition hover:border-brand-600 hover:bg-brand-50 md:flex"
-          >
-            <span
-              className="material-symbols-outlined text-[18px] leading-none"
-              aria-hidden="true"
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {isCustomerAccount && (
+            <Link
+              href="/sell"
+              className="focus-ring hidden shrink-0 items-center gap-[.35rem] rounded-full border-[1.5px] border-brand-600/40 px-[.85em] py-[.42em] text-sm font-medium text-brand-700 transition hover:border-brand-600 hover:bg-brand-50 xl:flex"
             >
-              add_circle
-            </span>
-            ลงขาย
-          </Link>
-        )}
-
-        {canUseCart && (
-          <Link
-            href="/chat"
-            aria-label={`ข้อความ${unreadCount > 0 ? ` มี ${unreadCount} รายการที่ยังไม่อ่าน` : ""}`}
-            className="focus-ring relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
-          >
-            <span
-              className="material-symbols-outlined text-[21px] leading-none"
-              aria-hidden="true"
-            >
-              chat_bubble
-            </span>
-            {unreadCount > 0 && (
-              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
-                {unreadCount}
-              </span>
-            )}
-          </Link>
-        )}
-
-        {canUseCart && (
-          <Link
-            href="/cart"
-            aria-label={`ตะกร้า${cartCount > 0 ? ` มี ${cartCount} รายการ` : ""}`}
-            className="focus-ring relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
-          >
-            <span
-              className="material-symbols-outlined text-[21px] leading-none"
-              aria-hidden="true"
-            >
-              shopping_cart
-            </span>
-            {cartCount > 0 && (
-              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
-                {cartCount}
-              </span>
-            )}
-          </Link>
-        )}
-
-        <div className="shrink-0">
-          {user ? (
-            <div className="relative" ref={menuRef}>
-              <button
-                onClick={() => setMenuOpen((v) => !v)}
-                aria-label="เมนูโปรไฟล์"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                className="focus-ring flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-transparent transition hover:ring-brand-200"
+              <span
+                className="material-symbols-outlined text-[18px] leading-none"
+                aria-hidden="true"
               >
-                {displayRole === "ADMIN" || displayRole === "TRUST_AND_SAFETY"
-                  ? "T"
-                  : user.firstName?.[0] || "?"}
-              </button>
+                add_circle
+              </span>
+              ลงขาย
+            </Link>
+          )}
 
-              {menuOpen && (
-                <div
-                  role="menu"
-                  className="animate-dropdown-in absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-line bg-white py-2 shadow-lg"
+          {canUseCart && (
+            <Link
+              href="/chat"
+              aria-label={`ข้อความ${unreadCount > 0 ? ` มี ${unreadCount} รายการที่ยังไม่อ่าน` : ""}`}
+              className="focus-ring relative grid h-9 w-9 sm:h-10 sm:w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
+            >
+              <span
+                className="material-symbols-outlined text-[20px] sm:text-[21px] leading-none"
+                aria-hidden="true"
+              >
+                chat_bubble
+              </span>
+              {unreadCount > 0 && (
+                <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
+                  {unreadCount}
+                </span>
+              )}
+            </Link>
+          )}
+
+          {canUseCart && (
+            <Link
+              href="/cart"
+              aria-label={`ตะกร้า${cartCount > 0 ? ` มี ${cartCount} รายการ` : ""}`}
+              className="focus-ring relative grid h-9 w-9 sm:h-10 sm:w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
+            >
+              <span
+                className="material-symbols-outlined text-[20px] sm:text-[21px] leading-none"
+                aria-hidden="true"
+              >
+                shopping_cart
+              </span>
+              {cartCount > 0 && (
+                <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+          )}
+
+          <div className="shrink-0">
+            {user ? (
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setMenuOpen((v) => !v)}
+                  aria-label="เมนูโปรไฟล์"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  className="focus-ring flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-transparent transition hover:ring-brand-200"
                 >
-                  <div className="border-b border-line px-4 py-3">
-                    {displayRole === "ADMIN" ||
-                    displayRole === "TRUST_AND_SAFETY" ? (
-                      <p className="truncate text-sm font-semibold text-gray-900">
-                        Trust and Safety
-                      </p>
-                    ) : (
-                      <>
-                        <p className="truncate text-sm font-medium text-gray-900">
-                          {user.firstName} {user.lastName}
+                  {displayRole === "ADMIN" || displayRole === "TRUST_AND_SAFETY"
+                    ? "T"
+                    : user.firstName?.[0] || "?"}
+                </button>
+
+                {menuOpen && (
+                  <div
+                    role="menu"
+                    className="animate-dropdown-in absolute -right-10 xl:right-0 top-11 w-64 max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-4.75rem)] overflow-y-auto overscroll-contain rounded-lg border border-line bg-white py-2 shadow-lg"
+                  >
+                    <div className="border-b border-line px-4 py-3">
+                      {displayRole === "ADMIN" ||
+                      displayRole === "TRUST_AND_SAFETY" ? (
+                        <p className="truncate text-sm font-semibold text-gray-900">
+                          Trust and Safety
                         </p>
-                        <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
-                          {ROLE_LABEL[displayRole] || displayRole}
-                        </span>
+                      ) : (
+                        <>
+                          <p className="truncate text-sm font-medium text-gray-900">
+                            {user.firstName} {user.lastName}
+                          </p>
+                          <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
+                            {ROLE_LABEL[displayRole] || displayRole}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {availableWorkItems.length > 0 && (
+                      <>
+                        <p className="px-4 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
+                          การทำงาน
+                        </p>
+
+                        {availableWorkItems.map((item) => (
+                          <Link
+                            key={item.label}
+                            href={resolveMenuHref(item, { userId: user.id })}
+                            onClick={() => setMenuOpen(false)}
+                            className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <span
+                              className="material-symbols-outlined text-[18px] text-ink-subtle"
+                              aria-hidden="true"
+                            >
+                              {item.icon}
+                            </span>
+                            {item.label}
+                          </Link>
+                        ))}
+
+                        <div className="my-1 border-t border-line" />
                       </>
                     )}
-                  </div>
 
-                  {availableWorkItems.length > 0 && (
-                    <>
-                      <p className="px-4 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
-                        การทำงาน
-                      </p>
+                    {isCustomerAccount && (
+                      <>
+                        <p className="px-4 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
+                          บัญชีของฉัน
+                        </p>
 
-                      {availableWorkItems.map((item) => (
-                        <Link
-                          key={item.label}
-                          href={resolveMenuHref(item, { userId: user.id })}
-                          onClick={() => setMenuOpen(false)}
-                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <span
-                            className="material-symbols-outlined text-[18px] text-ink-subtle"
-                            aria-hidden="true"
-                          >
-                            {item.icon}
-                          </span>
-                          {item.label}
-                        </Link>
-                      ))}
-
-                      <div className="my-1 border-t border-line" />
-                    </>
-                  )}
-
-                  {isCustomerAccount && (
-                    <>
-                      <p className="px-4 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
-                        บัญชีของฉัน
-                      </p>
-
-                      {CUSTOMER_ACCOUNT_MENU_ITEMS.map((item) => (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={() => setMenuOpen(false)}
-                          className={`flex items-center gap-2.5 px-4 py-2 text-sm hover:bg-gray-50 ${
-                            item.accent
-                              ? "font-medium text-brand-700 hover:bg-brand-50"
-                              : "text-gray-700"
-                          }`}
-                        >
-                          <span
-                            className={`material-symbols-outlined text-[18px] ${
-                              item.accent ? "" : "text-ink-subtle"
+                        {CUSTOMER_ACCOUNT_MENU_ITEMS.map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setMenuOpen(false)}
+                            className={`flex items-center gap-2.5 px-4 py-2 text-sm hover:bg-gray-50 ${
+                              item.accent
+                                ? "font-medium text-brand-700 hover:bg-brand-50"
+                                : "text-gray-700"
                             }`}
-                            aria-hidden="true"
                           >
-                            {item.icon}
-                          </span>
-                          {item.label}
-                        </Link>
-                      ))}
+                            <span
+                              className={`material-symbols-outlined text-[18px] ${
+                                item.accent ? "" : "text-ink-subtle"
+                              }`}
+                              aria-hidden="true"
+                            >
+                              {item.icon}
+                            </span>
+                            {item.label}
+                          </Link>
+                        ))}
 
-                      <div className="my-1 border-t border-line" />
-                    </>
-                  )}
+                        <div className="my-1 border-t border-line" />
+                      </>
+                    )}
 
-                  <button
-                    onClick={handleLogout}
-                    className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-500 hover:bg-gray-50"
-                  >
-                    <span
-                      className="material-symbols-outlined text-[18px]"
-                      aria-hidden="true"
+                    <button
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm text-gray-500 hover:bg-gray-50"
                     >
-                      logout
-                    </span>
-                    ออกจากระบบ
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm">
-              <Link
-                href="/login"
-                className="focus-ring rounded-sm px-[.9em] py-[.55em] font-medium text-ink-muted transition hover:bg-surface-panel hover:text-ink"
-              >
-                เข้าสู่ระบบ
-              </Link>
-              <Button href="/register">สมัครสมาชิก</Button>
-            </div>
-          )}
+                      <span
+                        className="material-symbols-outlined text-[18px]"
+                        aria-hidden="true"
+                      >
+                        logout
+                      </span>
+                      ออกจากระบบ
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
+                <Link
+                  href="/login"
+                  className="focus-ring rounded-sm px-2.5 py-1.5 sm:px-[.9em] sm:py-[.55em] font-medium text-ink-muted transition hover:bg-surface-panel hover:text-ink whitespace-nowrap"
+                >
+                  เข้าสู่ระบบ
+                </Link>
+                <Button
+                  href="/register"
+                  size="sm"
+                  className="hidden xs:inline-flex sm:inline-flex"
+                >
+                  สมัครสมาชิก
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Hamburger toggle button for Mobile/Tablet (< xl) */}
+          <button
+            type="button"
+            aria-label="เมนูหลัก"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            className="focus-ring grid h-9 w-9 sm:h-10 sm:w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink xl:hidden"
+          >
+            <span
+              className="material-symbols-outlined text-[24px] leading-none"
+              aria-hidden="true"
+            >
+              {mobileMenuOpen ? "close" : "menu"}
+            </span>
+          </button>
         </div>
       </div>
+
+      {/* Mobile Navigation Drawer */}
+      {mobileMenuOpen && (
+        <nav
+          id="mobile-navigation"
+          data-testid="mobile-nav-drawer"
+          aria-label="เมนูนำทางสำหรับอุปกรณ์พกพา"
+          className="border-t border-line bg-white px-4 py-3 xl:hidden shadow-lg animate-in slide-in-from-top-2"
+        >
+          <div className="grid grid-cols-2 gap-2 pb-3 border-b border-line">
+            <Link
+              href="/products"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 rounded-lg bg-surface-subtle px-3 py-2 text-sm font-medium text-ink hover:bg-surface-panel transition-colors"
+            >
+              <span
+                className="material-symbols-outlined text-[18px] text-ink-muted"
+                aria-hidden="true"
+              >
+                grid_view
+              </span>
+              สินค้าทั้งหมด
+            </Link>
+            {DISCOVERY_LINKS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 rounded-lg bg-surface-subtle px-3 py-2 text-sm font-medium text-ink hover:bg-surface-panel transition-colors"
+              >
+                <span
+                  className="material-symbols-outlined text-[18px] text-ink-muted"
+                  aria-hidden="true"
+                >
+                  {item.icon}
+                </span>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
+          {categories.length > 0 && (
+            <div className="py-2.5 border-b border-line">
+              <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle mb-1.5">
+                หมวดหมู่ยอดนิยม
+              </p>
+              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                {categories.slice(0, 8).map((c) => (
+                  <Link
+                    key={c.name}
+                    href={`/products?category=${encodeURIComponent(c.name)}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-200 transition-colors"
+                  >
+                    {c.name}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isCustomerAccount && (
+            <div className="pt-2.5">
+              <Link
+                href="/sell"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 transition-colors"
+              >
+                <span
+                  className="material-symbols-outlined text-[18px]"
+                  aria-hidden="true"
+                >
+                  add_circle
+                </span>
+                ลงขายสินค้าของคุณ
+              </Link>
+            </div>
+          )}
+        </nav>
+      )}
 
       <form
         onSubmit={handleSearch}

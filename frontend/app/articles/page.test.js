@@ -62,7 +62,9 @@ describe("ArticlesPage", () => {
       await screen.findByText("5 วิธีดูแลเสื้อผ้ามือสองให้เหมือนใหม่"),
     ).toBeInTheDocument();
     expect(screen.getByText("เคล็ดลับการถนอมผ้า")).toBeInTheDocument();
-    expect(screen.getAllByText("การดูแลเสื้อผ้า").length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText("การดูแลเสื้อผ้า").length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("shows error message when API fails", async () => {

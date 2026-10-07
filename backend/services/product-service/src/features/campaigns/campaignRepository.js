@@ -1,12 +1,18 @@
 const prisma = require("../../models/prismaClient");
+const { recordAudit } = require("../audit/marketingAuditRepository");
 
 /**
  * Database access for the Campaign and Voucher Wallet feature.
  * Layering: route -> controller -> service -> repository -> PostgreSQL (reloop_product).
  */
 function createCampaignRepository(prismaClient) {
-  async function createCampaign(data) {
-    const campaign = await prismaClient.campaign.create({
+  function transaction(fn) {
+    return prismaClient.$transaction(fn);
+  }
+
+  async function createCampaign(data, { tx } = {}) {
+    const client = tx || prismaClient;
+    const campaign = await client.campaign.create({
       data,
     });
     return {
@@ -16,8 +22,9 @@ function createCampaignRepository(prismaClient) {
     };
   }
 
-  async function findById(id) {
-    const campaign = await prismaClient.campaign.findUnique({
+  async function findById(id, { tx } = {}) {
+    const client = tx || prismaClient;
+    const campaign = await client.campaign.findUnique({
       where: { id },
       include: {
         _count: {
@@ -29,7 +36,7 @@ function createCampaignRepository(prismaClient) {
 
     let redeemedCount = 0;
     try {
-      redeemedCount = await prismaClient.userVoucher.count({
+      redeemedCount = await client.userVoucher.count({
         where: {
           campaignId: id,
           status: "USED",
@@ -46,51 +53,69 @@ function createCampaignRepository(prismaClient) {
     };
   }
 
-  function findByCode(code) {
-    return prismaClient.campaign.findUnique({
+  function findByCode(code, { tx } = {}) {
+    const client = tx || prismaClient;
+    return client.campaign.findUnique({
       where: { code },
     });
   }
 
-  function updateCampaign(id, data) {
-    return prismaClient.campaign.update({
+  function updateCampaign(id, data, { tx } = {}) {
+    const client = tx || prismaClient;
+    return client.campaign.update({
       where: { id },
       data,
     });
   }
 
+  async function deleteCampaign(id, { tx } = {}) {
+    const client = tx || prismaClient;
+    return client.campaign.delete({
+      where: { id },
+    });
+  }
+
   async function autoExpireCampaigns(now = new Date()) {
     try {
-      const result = await prismaClient.campaign.updateMany({
+      const expiredCampaigns = await prismaClient.campaign.findMany({
         where: {
           status: "published",
           endsAt: { lt: now },
         },
-        data: {
-          status: "ended",
-        },
       });
 
-      const endedCampaigns = await prismaClient.campaign.findMany({
-        where: {
-          OR: [{ status: "ended" }, { endsAt: { lt: now } }],
-        },
-        select: { id: true },
-      });
-
-      if (endedCampaigns.length > 0) {
-        await prismaClient.userVoucher.updateMany({
-          where: {
-            status: "CLAIMED",
-            campaignId: { in: endedCampaigns.map((c) => c.id) },
-          },
-          data: {
-            status: "EXPIRED",
-          },
+      let count = 0;
+      for (const camp of expiredCampaigns) {
+        await prismaClient.$transaction(async (tx) => {
+          const updated = await tx.campaign.update({
+            where: { id: camp.id },
+            data: { status: "ended" },
+          });
+          await tx.userVoucher.updateMany({
+            where: {
+              status: "CLAIMED",
+              campaignId: camp.id,
+            },
+            data: { status: "EXPIRED" },
+          });
+          await recordAudit(
+            {
+              actorId: "SYSTEM",
+              actorRole: "SYSTEM",
+              action: "CAMPAIGN_END",
+              entityType: "CAMPAIGN",
+              entityId: camp.id,
+              previousState: camp,
+              newState: updated,
+              idempotencyKey: `CAMPAIGN_END:${camp.id}`,
+            },
+            { tx },
+          );
         });
+        count++;
       }
 
-      return result.count;
+      return count;
     } catch (err) {
       console.warn("[product-service] autoExpireCampaigns error:", err.message);
       return 0;
@@ -215,12 +240,6 @@ function createCampaignRepository(prismaClient) {
       data: {
         usedCount: { increment: 1 },
       },
-    });
-  }
-
-  function deleteCampaign(id) {
-    return prismaClient.campaign.delete({
-      where: { id },
     });
   }
 
@@ -351,6 +370,7 @@ function createCampaignRepository(prismaClient) {
   }
 
   return {
+    transaction,
     createCampaign,
     findById,
     findByCode,

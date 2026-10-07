@@ -143,8 +143,8 @@
 - **Auction Winner Checkout Flow & Cart Bug Fix:**
   - แก้ไข `order-service` (`listByBuyer` ใน `orderModel.js`): คำสั่งซื้อจากการประมูลมี `reservationExpiresAt = NULL` เดิมถูก SQL `WHERE reservation_expires_at > NOW()` คัดทิ้ง ทำให้ตะกร้าว่างเปล่า ปรับให้ดึงคำสั่งซื้อประมูล (`auctionId != null`) ขึ้นมาแสดงอย่างถูกต้อง
   - ขยายระยะเวลาชำระเงินสำหรับสินค้าประมูลในตะกร้า (`/cart`) เป็น 24 ชั่วโมง พร้อมป้ายกำกับชัดเจนและปิดปุ่มยกเลิกป้องกันการกดพลาด
-  - ในหน้ารายละเอียดสินค้า (`/products/:id`) และหน้าประมูล (`/auctions/:id`): แสดงแบนเนอร์ยินดีกับผู้ชนะและปุ่มสีเขียว *"💳 ไปชำระเงินที่ตะกร้าสินค้า"*
-  - ในหน้าคำสั่งซื้อ (`/orders`): แสดงสถานะ *"ชนะประมูล · รอชำระเงิน"* พร้อมปุ่มลัดนำทางไปยังตะกร้า
+  - ในหน้ารายละเอียดสินค้า (`/products/:id`) และหน้าประมูล (`/auctions/:id`): แสดงแบนเนอร์ยินดีกับผู้ชนะและปุ่มสีเขียว _"💳 ไปชำระเงินที่ตะกร้าสินค้า"_
+  - ในหน้าคำสั่งซื้อ (`/orders`): แสดงสถานะ _"ชนะประมูล · รอชำระเงิน"_ พร้อมปุ่มลัดนำทางไปยังตะกร้า
 - **Auth Service Demo Seed & KYC Auto-Verify:**
   - แก้ไข `auth-service/prisma/seed.js` ป้องกัน Prisma Error P2002 เมื่อมีอีเมลเดิมในระบบ และตั้งสถานะผู้ขายเดโมเป็น `VERIFIED` อัตโนมัติ
 - **Verification:** Frontend test 38/38 ผ่าน, API cart/order integration ตอบกลับถูกต้อง และรูปภาพแสดงผลคมชัดทุกรูป
@@ -184,5 +184,3 @@
   - **Database Constraint:** เพิ่ม `@unique` ให้กับฟิลด์ `auctionId` ใน `Order` schema ของ `reloop_order` ป้องกันการสร้างคำสั่งซื้อซ้ำในระดับ PostgreSQL
   - **Product Service Guard:** เพิ่มการดึงสถานะล่าสุด (`findById`) ซ้ำอีกครั้งใน `closeAuction` ก่อนเริ่มสร้าง Order เพื่อป้องกัน Race Condition จากหลาย Process
 - **Verification:** ทดสอบจำลอง Race Condition ปฏิเสธการสร้างซ้ำด้วย Error Code `P2002`, รายการซ้ำในตะกร้าหายไป, คำสั่งซื้อที่ชำระแล้วแสดงผลถูกต้อง และ Unit Tests ผ่านครบ 30/30 รายการ
-
-

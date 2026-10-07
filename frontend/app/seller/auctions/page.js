@@ -379,7 +379,7 @@ export default function SellerAuctionsPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
                   หมวดหมู่
@@ -409,7 +409,7 @@ export default function SellerAuctionsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
                   ไซส์
@@ -445,7 +445,7 @@ export default function SellerAuctionsPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100 pt-5">
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
                   ราคาเริ่มต้น (บาท)
@@ -505,12 +505,12 @@ export default function SellerAuctionsPage() {
             {myAuctions.map((a) => (
               <li
                 key={a.id}
-                className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+                className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <Link
                     href={`/auctions/${a.id}`}
-                    className="truncate font-medium text-gray-900 hover:text-emerald-600"
+                    className="block truncate font-medium text-gray-900 hover:text-emerald-600"
                   >
                     {a.product?.title || a.productId}
                   </Link>

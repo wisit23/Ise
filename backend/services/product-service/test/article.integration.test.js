@@ -81,11 +81,15 @@ test("articles API permissions, search, and CRUD", async (t) => {
   assert.equal(created.status, "published");
 
   // 4. Search finds the newly created article by Thai keyword
-  const searchRes = await request(app)
-    .get(`/articles?q=${encodeURIComponent("ซักผ้าวินเทจ")}`);
+  const searchRes = await request(app).get(
+    `/articles?q=${encodeURIComponent("ซักผ้าวินเทจ")}`,
+  );
   assert.equal(searchRes.status, 200);
   const found = searchRes.body.items.some((item) => item.id === created.id);
-  assert.ok(found, "Search should find newly created article using trigram search");
+  assert.ok(
+    found,
+    "Search should find newly created article using trigram search",
+  );
 
   // 5. MARKETING can update article
   const updateRes = await request(app)

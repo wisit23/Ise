@@ -38,7 +38,11 @@ export default function ProductsSection({ token }) {
   const [busyId, setBusyId] = useState(null);
   const [reasonById, setReasonById] = useState({});
 
-  async function searchProducts(targetPage = 1, searchQuery = query, removedOnly = includeRemoved) {
+  async function searchProducts(
+    targetPage = 1,
+    searchQuery = query,
+    removedOnly = includeRemoved,
+  ) {
     if (!searchQuery.trim()) return;
     setLoading(true);
     setError("");
@@ -258,7 +262,9 @@ export default function ProductsSection({ token }) {
             <Pagination
               page={page}
               totalPages={totalPages}
-              onChange={(newPage) => searchProducts(newPage, query, includeRemoved)}
+              onChange={(newPage) =>
+                searchProducts(newPage, query, includeRemoved)
+              }
             />
           </div>
         )}

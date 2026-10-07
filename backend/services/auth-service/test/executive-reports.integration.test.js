@@ -137,7 +137,9 @@ test("executive complaint feed against a real database", async (t) => {
       .set("Authorization", `Bearer ${executiveToken}`);
     assert.equal(targetRes.status, 200);
     assert.ok(
-      targetRes.body.data.items.every((item) => item.targetId === reportedTarget),
+      targetRes.body.data.items.every(
+        (item) => item.targetId === reportedTarget,
+      ),
     );
 
     // Anomaly threshold testing: Add 3rd report for reportedTarget to trigger anomaly detection (>= 3)
@@ -157,9 +159,10 @@ test("executive complaint feed against a real database", async (t) => {
       .set("Authorization", `Bearer ${executiveToken}`);
     assert.equal(anomalyRes.status, 200);
     assert.equal(anomalyRes.body.data.anomalySummary.detected, true);
-    const highRiskFound = anomalyRes.body.data.anomalySummary.highRiskTargets.find(
-      (t) => t.targetId === reportedTarget,
-    );
+    const highRiskFound =
+      anomalyRes.body.data.anomalySummary.highRiskTargets.find(
+        (t) => t.targetId === reportedTarget,
+      );
     assert.ok(highRiskFound, "reported target should be flagged as high risk");
     assert.equal(highRiskFound.count, 3);
 

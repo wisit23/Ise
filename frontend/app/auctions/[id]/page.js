@@ -268,7 +268,10 @@ export default function AuctionDetailPage() {
                 บัญชีพนักงานสามารถดูรายละเอียดได้ แต่ไม่สามารถเสนอราคาได้
               </p>
             ) : isOpen ? (
-              <form onSubmit={handleBid} className="flex items-start gap-3">
+              <form
+                onSubmit={handleBid}
+                className="flex flex-col sm:flex-row items-stretch sm:items-start gap-3"
+              >
                 <div className="flex-1">
                   <div className="mb-1 flex items-center justify-between">
                     <label className="text-sm font-medium text-gray-700">
@@ -294,7 +297,7 @@ export default function AuctionDetailPage() {
                 <button
                   type="submit"
                   disabled={bidding}
-                  className="mt-6 rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 shadow-sm"
+                  className="sm:mt-6 rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 shadow-sm text-center"
                 >
                   {bidding ? "กำลังส่ง..." : "เสนอราคา"}
                 </button>

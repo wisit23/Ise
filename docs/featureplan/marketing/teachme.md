@@ -287,3 +287,73 @@ Seed พยายาม upsert:  where: { id: "40000000-0001" }
      จากนั้นจึงสร้าง Test Rounds ทั้งหมดอิงจาก `testBaseMs` สิ่งนี้ทำให้ชุดทดสอบสามารถรันซ้ำกี่ครั้งก็ได้ (Idempotent Test Execution) โดยไม่มีวันเกิดปัญหาเวลาชนกับข้อมูลเดิมในฐานข้อมูล
 
 **Teach-back:** ทำไมการกำหนดนิยามช่วงเวลาแบบ Half-Open Interval $[S, E)$ จึงเป็นมาตรฐานอุตสาหกรรมสำหรับระบบ Scheduling และ Time-series?
+
+## Round 20 — Public Endpoint Optional Authentication, Anti-Spoofing & Server-Side Persistence (UR-11)
+
+1. **Public Endpoint รองรับ Optional Authentication:**
+   - เอนด์พอยต์สาธารณะ เช่น `GET /videos/feed` สามารถเปิดให้ผู้ใช้ทั่วไป (Guest) เข้าชมฟีดวิดีโอได้โดยไม่ต้องล็อกอิน
+   - ในขณะเดียวกัน หากเป็นผู้ซื้อที่เข้าสู่ระบบและแนบ Bearer Token มาด้วย ระบบจะสามารถแนบสถานะเฉพาะบุคคล (`chosen: true/false`) ส่งกลับไปด้วยในคราวเดียว โดยอาศัย Batch Query ร่วมกับ Prisma relation include (`choices: { where: { userId }, select: { id: true } }`) ซึ่งหลีกเลี่ยงปัญหา N+1 query ได้อย่างสิ้นเชิง
+
+2. **ห้ามเชื่อถือ `x-user-*` Header จาก Inbound Client:**
+   - ในสถาปัตยกรรม Microservices ที่ใช้ Gateway หากบริการปลายทางเชื่อถือ Header เช่น `x-user-id` หรือ `x-user-role` ที่ถูกส่งตรงเข้ามา จะเปิดช่องโหว่ร้ายแรงให้ผู้ไม่หวังดีสามารถ Spoof ข้อมูลเพื่อสวมรอยหรือแอบดูสถานะส่วนบุคคล (เช่น การแอบดูคลิปที่ผู้ใช้อื่น bookmark ไว้) ได้โดยไม่ต้องมีรหัสผ่าน
+   - บน Public Endpoint หากไม่มี `Authorization: Bearer` Token ที่ถูกต้อง ต้องเซ็ต `userId = null` เสมอ ห้ามดึงค่าจาก Header ใดๆ ที่ยังไม่ผ่านการ Verify
+
+3. **Gateway Identity Headers ต้องสร้างหลังตรวจ Token เท่านั้น (Strip Untrusted Headers):**
+   - API Gateway มีหน้าที่เป็นด่านหน้าในการลบ (Strip) Inbound Headers ที่ขึ้นต้นด้วย `x-user-` ทั้งหมดจากไคลเอนต์ภายนอกทิ้งทันทีก่อนเริ่ม Route Request
+   - Gateway จะสร้างและแนบ Header `x-user-id`, `x-user-role` ส่งไปยังเซอร์วิสด้านในเฉพาะหลังจากที่ได้ทำการตรวจสอบความถูกต้องของ JWT Token และ Session สำเร็จเรียบร้อยแล้วเท่านั้น
+
+4. **Persistence ต้องอิง Backend ไม่ใช่ `localStorage`:**
+   - การบันทึกสถานะสำคัญของผู้ใช้ (เช่น การเลือก/Bookmark สินค้าที่สนใจตาม UR-11) ต้องมี Source of Truth อยู่ในฐานข้อมูลของ Backend (ตาราง `swipe_choices` ใน PostgreSQL)
+   - การพึ่งพา `localStorage` เพียงอย่างเดียวทำให้ข้อมูลไม่คงอยู่เมื่อเปลี่ยนอุปกรณ์ และสูญหายเมื่อล้างแคช
+   - ฟรอนต์เอนด์สามารถทำ Optimistic Update เพื่อให้ UX ตอบสนองรวดเร็วได้ แต่ต้องซิงค์สถานะตั้งต้นจาก Backend เสมอ และต้องมีกลไก Rollback กลับสู่สถานะเดิมทันทีหากการเรียก API ล้มเหลว
+
+**Teach-back:** ทำไมการทำ Optional Authentication บน Public Endpoint จึงต้องตรวจสอบ Token ผ่าน Trusted Auth Middleware เสมอ แทนที่จะเชื่อ Header identity ที่ส่งมา?
+
+## Round 21 — Marketing Audit Trail: Atomic Transactions, PostgreSQL 25P02 Transaction Abort Trap, Marketing-only RBAC & Date Filtering
+
+1. **Atomic Transaction Coupling (Business Mutation + Audit Record in Same PostgreSQL Tx):**
+   - การบันทึก Audit Log ที่แยกอยู่นอก Transaction หรือทำผ่าน Async Logging ทั่วไป เสี่ยงต่อการเกิดปัญหาข้อมูลไม่สอดคล้องอย่างรุนแรง 2 แบบ:
+     - **Phantom Audit:** มีการบันทึก Audit Log สำเร็จ แต่ Business Mutation ล้มเหลว (เช่น เกิด Constraint Violation หรือ Network Crash) ทำให้ Audit Log รายงานสิ่งที่ไม่ได้เกิดขึ้นจริง
+     - **Silent Drift:** Business Mutation สำเร็จ แต่ระบบบันทึก Audit ขัดข้อง ทำให้การเปลี่ยนแปลงที่สำคัญขาดหายไปจากประวัติการตรวจสอบ
+   - **แนวทางที่ถูกต้อง:** ส่งผ่าน Transaction Client `tx` ไปยัง `marketingAuditRepository.recordAudit` ภายใน `prisma.$transaction(async (tx) => ...)` เดียวกันกับ Business Mutation เสมอ:
+     - หากบันทึก Audit ไม่สำเร็จ $\rightarrow$ คำสั่งธุรกิจจะ Rollback ทั้งหมด
+     - หากคำสั่งธุรกิจล้มเหลว $\rightarrow$ จะไม่มี Audit Log หลุดรอดเข้าไปในฐานข้อมูล
+
+2. **The PostgreSQL `25P02` Transaction Abort Trap vs. `createMany({ skipDuplicates: true })`:**
+   - ในการทำ Idempotent Ingestion หรือ Deduplication โดยทั่วไป เรามักคุ้นเคยกับแพทเทิร์น `try { create() } catch (err) { if (err.code === 'P2002') return findUnique() }`
+   - **กับดักร้ายแรงใน PostgreSQL Transaction:** เมื่อเกิด Unique Constraint Violation (`P2002`) ขึ้นภายใน PostgreSQL Transaction บล็อก PostgreSQL Engine จะทำเครื่องหมายว่า Transaction นั้นถูก **Aborted** ทันที และปฏิเสธคำสั่ง SQL ใดๆ ที่ตามมาหลังจากนั้นด้วยข้อผิดพลาด:
+     `25P02: current transaction is aborted, commands ignored until end of transaction block`
+   - ผลคือคำสั่ง `tx.marketingAuditLog.findUnique(...)` ที่อยู่ใน catch block จะล้มเหลวด้วย `25P02` เสมอ และทำให้ Business Mutation ทั้งหมดถูก Rollback ไปด้วย แม้ว่าเราจะตั้งใจดักจับ error ก็ตาม!
+   - **แนวทางที่ถูกต้อง:** หลีกเลี่ยงไม่ให้เกิด Error ในระดับ SQL ตั้งแต่แรก โดยใช้ `createMany({ data: [{ id: crypto.randomUUID(), ...data }], skipDuplicates: true })`:
+     - Prisma จะแปลงคำสั่งนี้เป็น PostgreSQL `INSERT INTO ... ON CONFLICT DO NOTHING`
+     - หากมี `idempotencyKey` ซ้ำ PostgreSQL จะข้ามคำสั่งไปอย่างเงียบๆ โดยไม่โยน Constraint Error และ**ไม่ทำให้ Transaction ถูก Abort**
+     - จากนั้นคำสั่ง `tx.marketingAuditLog.findUnique(...)` ในบรรทัดถัดไปจึงสามารถดึงเรคอร์ดเดิมขึ้นมาได้อย่างปลอดภัย 100% ภายใต้ Transaction เดิม
+     - ส่วน Audit ทั่วไปที่ไม่มี `idempotencyKey` ยังคงใช้ `create` เพื่อให้ Fail Loud เมื่อเกิดปัญหาที่ไม่ได้คาดคิด
+
+3. **Marketing-Only Authorization & Admin Decoupling (`MKT-DEC-014`):**
+   - การออกแบบระบบตามหลัก Least Privilege กำหนดให้โดเมนของฝ่ายการตลาดเป็นความรับผิดชอบของบทบาท `MARKETING` เท่านั้น
+   - บทบาทอื่น เช่น `BUYER`, `SELLER` และแม้กระทั่ง `ADMIN` ต้องได้รับ HTTP `403 Forbidden`
+   - การมี Permission เช่น `analytics:read:marketing` หรือ `audit:read:marketing` ต้องไม่ทำให้ผู้ใช้บทบาทอื่นสามารถ Bypass การตรวจสอบบทบาทเข้ามาได้
+   - Identity ของผู้ใช้ต้องมาจาก Server-verified JWT Claims เท่านั้น (`req.user.role`, `req.user.id`) ห้ามไว้วางใจ Header `x-user-role` หรือ `x-user-id` ที่ Client ส่งมา เพื่อป้องกัน Identity Spoofing
+
+4. **Bangkok Business Timezone Date Boundaries (`[from, to)` Half-Open Interval):**
+   - ผู้ใช้งานบนหน้าเว็บกรอกวันที่ผ่าน `<input type="date">` ซึ่งเป็น Inclusive date (เช่น เลือก "2026-10-05" ถึง "2026-10-05" เพื่อดูข้อมูลของวันนี้ทั้งวัน)
+   - แต่ในการ Query ฐานข้อมูล หากนำ `2026-10-05` ไปใช้ตรงๆ จะกลายเป็น `2026-10-05T00:00:00` ซึ่งจะตัดข้อมูลที่เกิดขึ้นระหว่างวันทิ้งทั้งหมด
+   - **แนวทางที่ถูกต้อง:**
+     - Frontend แปลงเป็นช่วง Half-Open Interval `[from, to)` ในเวลาไทย (`Asia/Bangkok` / `+07:00`):
+       `from = 2026-10-05T00:00:00+07:00`
+       `to = 2026-10-06T00:00:00+07:00` (00:00:00 ของวันถัดไป)
+     - Backend ตรวจสอบ `from <= to` (หากไม่ถูกต้องคืนค่า 400 Bad Request)
+     - SQL Query ใช้เงื่อนไข Half-Open: `createdAt >= fromDate AND createdAt < toDate` (`lt: toDate`) ซึ่งครอบคลุมทุกเสี้ยววินาทีของวันที่เลือกอย่างสมบูรณ์
+
+5. **Recursive Secret Redaction with Circular Reference Safety:**
+   - Previous State, New State และ Metadata อาจมีข้อมูลที่มีความละเอียดอ่อนสูงติดมาด้วย เช่น รหัสผ่าน, Tokens, Headers หรือ Cookies
+   - ตัว Sanitizer ต้องทำการคัดกรองแบบ Recursive ทั้งใน Object และ Array พร้อมตัด Key ที่ต้องห้ามออกอย่างเด็ดขาด
+   - ต้องใช้ `WeakSet` ตรวจจับการอ้างอิงแบบวนซ้ำ (Circular References) เพื่อป้องกันปัญหา Maximum Call Stack Size Exceeded หรือ Infinite Loop
+
+6. **Event Loop Teardown in Multi-Module Integration Suites:**
+   - เมื่อชุดทดสอบ Integration มีการกระตุ้นฟังก์ชันในโดเมนที่มี Background Queue เชื่อมโยงอยู่ (เช่น Auction Item Approval ที่เชื่อมโยงกับ BullMQ/IORedis):
+   - Node.js Test Runner จะค้าง (Hang) ไม่สามารถปิดโปรเซสได้หากการเชื่อมต่อของ Queue ยังคงเปิดอยู่
+   - ใน `t.after()` ของชุดทดสอบ ต้องเรียก `auctionCloseQueue.closeQueue()` ควบคู่กับ `prisma.$disconnect()` เสมอ เพื่อคืน Handle ทั้งหมดและทำให้ Event Loop ยุติการทำงานได้อย่างราบรื่น
+
+**Teach-back:** เพราะเหตุใดการดักจับ `P2002` (Unique Constraint Error) ภายใน PostgreSQL Transaction ถึงทำให้ Transaction ใช้งานต่อไม่ได้ (`25P02`) และทำไมการใช้ `createMany({ skipDuplicates: true })` ถึงเป็นทางออกที่ถูกต้องสำหรับ Atomic Deduplication ใน Transaction เดียวกัน?

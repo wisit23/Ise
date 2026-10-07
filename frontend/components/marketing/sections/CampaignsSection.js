@@ -79,7 +79,7 @@ function formatSegmentSummary(rules) {
     sizePreference: "ไซส์",
     styleTag: "สไตล์",
     stylePreference: "สไตล์",
-    brandPreference: "แบรนด์",
+    brandPreference: "แบรนด์ที่สนใจ",
   };
   const label = fieldLabels[r.field] || r.field;
   const val = Array.isArray(r.value) ? r.value.join(", ") : r.value;
@@ -112,9 +112,35 @@ export default function CampaignsSection({ token }) {
 
   // Target Segment state
   const [segmentMode, setSegmentMode] = useState("all"); // "all" | "targeted"
-  const [segmentField, setSegmentField] = useState("preferredSize");
-  const [segmentOp, setSegmentOp] = useState("eq");
+  const [segmentField, setSegmentField] = useState("brandPreference");
+  const [segmentOp, setSegmentOp] = useState("in");
   const [segmentValue, setSegmentValue] = useState("");
+  const [availableBrands, setAvailableBrands] = useState([]);
+  const [loadingBrands, setLoadingBrands] = useState(false);
+  const [brandsError, setBrandsError] = useState("");
+  const [selectedBrands, setSelectedBrands] = useState([]);
+  const [brandSearch, setBrandSearch] = useState("");
+
+  const trimmedSearch = brandSearch.trim();
+  const isBrandSelectDisabled =
+    loadingBrands || !!brandsError || availableBrands.length === 0;
+  const exactMatchBrand = trimmedSearch
+    ? availableBrands.find(
+        (b) =>
+          b.trim().toLowerCase() === trimmedSearch.toLowerCase() &&
+          !selectedBrands.some(
+            (sb) => sb.trim().toLowerCase() === b.trim().toLowerCase(),
+          ),
+      ) || null
+    : null;
+  const filteredBrands = availableBrands
+    .filter((b) => {
+      if (!trimmedSearch) return true;
+      return b.toLowerCase().includes(trimmedSearch.toLowerCase());
+    })
+    .filter(
+      (b) => !selectedBrands.some((sb) => sb.toLowerCase() === b.toLowerCase()),
+    );
 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -164,12 +190,66 @@ export default function CampaignsSection({ token }) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoadingBrands(true);
+    setBrandsError("");
+    apiFetch("/api/products/filters")
+      .then((data) => {
+        if (!cancelled) {
+          if (data && Array.isArray(data.brands)) {
+            setAvailableBrands(data.brands.filter(Boolean));
+          } else {
+            setAvailableBrands([]);
+          }
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error("Could not load filter brands:", err);
+          setBrandsError("ไม่สามารถโหลดรายชื่อแบรนด์จากระบบได้");
+          setAvailableBrands([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBrands(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     loadCampaigns();
   }, [token, statusFilter]);
 
   function handleSearchSubmit(e) {
     e.preventDefault();
     loadCampaigns();
+  }
+
+  function handleSelectBrand(name) {
+    if (!name) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const matchedBrand = availableBrands.find(
+      (b) => b.trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (!matchedBrand) return;
+    const lower = matchedBrand.toLowerCase();
+    if (selectedBrands.some((b) => b.trim().toLowerCase() === lower)) {
+      setBrandSearch("");
+      return;
+    }
+    setSelectedBrands((prev) => [...prev, matchedBrand]);
+    setBrandSearch("");
+  }
+
+  function handleRemoveBrand(nameToRemove) {
+    setSelectedBrands((prev) =>
+      prev.filter(
+        (b) => b.trim().toLowerCase() !== nameToRemove.trim().toLowerCase(),
+      ),
+    );
   }
 
   function openCreateModal() {
@@ -185,8 +265,10 @@ export default function CampaignsSection({ token }) {
     setUsageLimit("100");
     setBudget("");
     setSegmentMode("all");
-    setSegmentField("preferredSize");
-    setSegmentOp("eq");
+    setSegmentField("brandPreference");
+    setSegmentOp("in");
+    setSelectedBrands([]);
+    setBrandSearch("");
     setSegmentValue("");
 
     const now = new Date();
@@ -220,18 +302,54 @@ export default function CampaignsSection({ token }) {
     if (rule && rule.field) {
       setSegmentMode("targeted");
       setSegmentField(rule.field);
-      setSegmentOp(rule.op || "eq");
-      setSegmentValue(
-        Array.isArray(rule.value)
-          ? rule.value.join(", ")
-          : String(rule.value ?? ""),
-      );
+      const rawOp = rule.operator || rule.op;
+      let op = rawOp;
+      if (rule.field === "brandPreference") {
+        if (rawOp === "neq" || rawOp === "nin") {
+          op = "nin";
+        } else {
+          op = "in";
+        }
+      } else {
+        op = rawOp || "eq";
+      }
+      setSegmentOp(op);
+      if (rule.field === "brandPreference") {
+        const rawBrands = Array.isArray(rule.value)
+          ? rule.value
+          : typeof rule.value === "string"
+            ? rule.value
+                .split(",")
+                .map((b) => b.trim())
+                .filter(Boolean)
+            : [];
+        const seen = new Set();
+        const brandList = [];
+        for (const b of rawBrands) {
+          const lower = b.trim().toLowerCase();
+          if (lower && !seen.has(lower)) {
+            seen.add(lower);
+            brandList.push(b.trim());
+          }
+        }
+        setSelectedBrands(brandList);
+        setSegmentValue("");
+      } else {
+        setSelectedBrands([]);
+        setSegmentValue(
+          Array.isArray(rule.value)
+            ? rule.value.join(", ")
+            : String(rule.value ?? ""),
+        );
+      }
     } else {
       setSegmentMode("all");
-      setSegmentField("preferredSize");
-      setSegmentOp("eq");
+      setSegmentField("brandPreference");
+      setSegmentOp("in");
+      setSelectedBrands([]);
       setSegmentValue("");
     }
+    setBrandSearch("");
 
     setFormError("");
     setModalOpen(true);
@@ -268,24 +386,43 @@ export default function CampaignsSection({ token }) {
     }
 
     let targetSegment = null;
-    if (segmentMode === "targeted" && segmentValue.trim()) {
-      let finalVal = segmentValue.trim();
-      if (
-        (segmentOp === "in" || segmentOp === "nin") &&
-        finalVal.includes(",")
-      ) {
-        finalVal = finalVal
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
+    if (segmentMode === "targeted") {
+      if (segmentField === "brandPreference") {
+        if (!selectedBrands || selectedBrands.length === 0) {
+          setFormError("กรุณาระบุหรือเลือกอย่างน้อย 1 แบรนด์เป้าหมาย");
+          return;
+        }
+        targetSegment = [
+          {
+            field: "brandPreference",
+            operator: segmentOp === "nin" ? "nin" : "in",
+            value: selectedBrands,
+          },
+        ];
+      } else {
+        const trimmedVal = segmentValue.trim();
+        if (!trimmedVal) {
+          setFormError("กรุณาระบุหรือเลือกค่าเป้าหมาย");
+          return;
+        }
+        let finalVal = trimmedVal;
+        if (
+          (segmentOp === "in" || segmentOp === "nin") &&
+          finalVal.includes(",")
+        ) {
+          finalVal = finalVal
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        }
+        targetSegment = [
+          {
+            field: segmentField,
+            operator: segmentOp,
+            value: finalVal,
+          },
+        ];
       }
-      targetSegment = [
-        {
-          field: segmentField,
-          op: segmentOp,
-          value: finalVal,
-        },
-      ];
     }
 
     setSaving(true);
@@ -393,11 +530,11 @@ export default function CampaignsSection({ token }) {
     <div className="space-y-6">
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl transition-all animate-in fade-in slide-in-from-bottom-5">
-          <span className="material-symbols-outlined text-emerald-400 text-lg">
+        <div className="fixed bottom-6 left-4 right-4 sm:left-auto sm:right-6 max-w-[calc(100vw-2rem)] sm:max-w-md z-50 flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl transition-all animate-in fade-in slide-in-from-bottom-5">
+          <span className="material-symbols-outlined text-emerald-400 text-lg shrink-0">
             check_circle
           </span>
-          <span>{toastMessage}</span>
+          <span className="truncate">{toastMessage}</span>
         </div>
       )}
 
@@ -414,7 +551,7 @@ export default function CampaignsSection({ token }) {
         </div>
         <Button
           onClick={openCreateModal}
-          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-medium py-2 px-4 rounded-xl shadow-sm"
+          className="flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-medium py-2 px-4 rounded-xl shadow-sm w-full sm:w-auto justify-center shrink-0"
         >
           <span className="material-symbols-outlined text-lg">add_circle</span>
           สร้างแคมเปญใหม่
@@ -422,7 +559,7 @@ export default function CampaignsSection({ token }) {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-semibold text-slate-500">
@@ -479,12 +616,12 @@ export default function CampaignsSection({ token }) {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
         <form
           onSubmit={handleSearchSubmit}
-          className="flex flex-1 items-center gap-2"
+          className="flex flex-1 items-center gap-2 w-full"
         >
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
               search
             </span>
@@ -498,20 +635,20 @@ export default function CampaignsSection({ token }) {
           </div>
           <button
             type="submit"
-            className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition"
+            className="rounded-xl bg-slate-100 px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition shrink-0"
           >
             ค้นหา
           </button>
         </form>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full md:w-auto">
           <label className="text-xs font-semibold text-slate-500 shrink-0">
             สถานะ:
           </label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-700 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-100"
+            className="w-full md:w-auto rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-700 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-100"
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -540,8 +677,8 @@ export default function CampaignsSection({ token }) {
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full min-w-[780px] text-left text-xs">
               <thead className="border-b border-slate-200/80 bg-slate-50/75 text-[11px] font-bold tracking-wider text-slate-500 uppercase">
                 <tr>
                   <th className="px-4 py-3">รหัส / ชื่อแคมเปญ</th>
@@ -868,7 +1005,7 @@ export default function CampaignsSection({ token }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 รหัสโค้ดโปรโมชัน (Code) *
@@ -925,7 +1062,7 @@ export default function CampaignsSection({ token }) {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 {discountType === "PERCENT"
@@ -964,7 +1101,7 @@ export default function CampaignsSection({ token }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 ยอดซื้อขั้นต่ำ (บาท)
@@ -998,7 +1135,7 @@ export default function CampaignsSection({ token }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 จำนวนสิทธิ์ใช้งานรวม (สิทธิ์)
@@ -1036,7 +1173,7 @@ export default function CampaignsSection({ token }) {
                   group
                 </span>
                 <span className="text-xs font-bold text-slate-800">
-                  กลุ่มเป้าหมายผู้ซื้อ (Target Segment)
+                  กลุ่มผู้ซื้อจากความสนใจ (Buyer interest targeting)
                 </span>
               </div>
               <div className="flex items-center gap-3 text-xs">
@@ -1065,7 +1202,14 @@ export default function CampaignsSection({ token }) {
                     name="segmentMode"
                     value="targeted"
                     checked={segmentMode === "targeted"}
-                    onChange={() => setSegmentMode("targeted")}
+                    onChange={() => {
+                      setSegmentMode("targeted");
+                      if (segmentField === "brandPreference") {
+                        if (segmentOp !== "in" && segmentOp !== "nin") {
+                          setSegmentOp("in");
+                        }
+                      }
+                    }}
                     className="text-indigo-600 focus:ring-indigo-500"
                   />
                   <span
@@ -1081,72 +1225,214 @@ export default function CampaignsSection({ token }) {
               </div>
             </div>
 
-            {segmentMode === "targeted" && (
-              <div className="pt-2 border-t border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    เงื่อนไขเป้าหมาย
-                  </label>
-                  <select
-                    value={segmentField}
-                    onChange={(e) => {
-                      setSegmentField(e.target.value);
-                      setSegmentValue("");
-                    }}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                  >
-                    <option value="preferredSize">
-                      ไซส์เสื้อผ้า (preferredSize)
-                    </option>
-                    <option value="styleTag">สไตล์การแต่งตัว (styleTag)</option>
-                    <option value="brandPreference">
-                      แบรนด์ที่ชื่นชอบ (brandPreference)
-                    </option>
-                    <option value="favoriteCategory">
-                      หมวดหมู่ที่ชอบ (favoriteCategory)
-                    </option>
-                  </select>
-                </div>
+            <p className="text-[11px] text-slate-500">
+              ใช้กำหนดว่าผู้ซื้อกลุ่มใดเหมาะกับโปรโมชันนี้
+              ไม่ใช่การกำหนดว่าสินค้าแบรนด์ใดใช้คูปองได้
+            </p>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    การเปรียบเทียบ
-                  </label>
-                  <select
-                    value={segmentOp}
-                    onChange={(e) => setSegmentOp(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                  >
-                    <option value="eq">ตรงกับ (eq)</option>
-                    <option value="neq">ไม่ตรงกับ (neq)</option>
-                    <option value="in">อยู่ในกลุ่ม (in)</option>
-                    <option value="nin">ไม่อยู่ในกลุ่ม (nin)</option>
-                  </select>
+            {segmentMode === "targeted" && (
+              <div className="pt-2 border-t border-slate-200/80 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      เงื่อนไขเป้าหมาย
+                    </label>
+                    <select
+                      value={segmentField}
+                      onChange={(e) => {
+                        const newField = e.target.value;
+                        if (newField === segmentField) return;
+                        setSegmentField(newField);
+                        setSelectedBrands([]);
+                        setBrandSearch("");
+                        setSegmentValue("");
+                        if (newField === "brandPreference") {
+                          setSegmentOp("in");
+                        } else {
+                          setSegmentOp("eq");
+                        }
+                      }}
+                      aria-label="เลือกเงื่อนไขเป้าหมาย"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                    >
+                      <option value="brandPreference">
+                        แบรนด์ที่สนใจ (brandPreference)
+                      </option>
+                      <option value="favoriteCategory">
+                        หมวดหมู่ที่สนใจ (favoriteCategory)
+                      </option>
+                      <option value="styleTag">
+                        สไตล์แฟชั่นที่สนใจ (styleTag)
+                      </option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      การเปรียบเทียบ
+                    </label>
+                    {segmentField === "brandPreference" ? (
+                      <select
+                        value={segmentOp}
+                        onChange={(e) => setSegmentOp(e.target.value)}
+                        aria-label="เลือกการเปรียบเทียบ"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                      >
+                        <option value="in">ตรงกับแบรนด์ใดแบรนด์หนึ่ง</option>
+                        <option value="nin">ไม่รวมแบรนด์ที่เลือก</option>
+                      </select>
+                    ) : (
+                      <select
+                        value={segmentOp}
+                        onChange={(e) => setSegmentOp(e.target.value)}
+                        aria-label="เลือกการเปรียบเทียบ"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                      >
+                        <option value="eq">ตรงกับ</option>
+                        <option value="neq">ไม่ตรงกับ</option>
+                      </select>
+                    )}
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     ค่าเป้าหมาย
                   </label>
-                  {segmentField === "preferredSize" ? (
+                  {segmentField === "brandPreference" ? (
+                    <div className="space-y-2">
+                      {/* Selected Brand Chips */}
+                      {selectedBrands.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 p-2 bg-white rounded-xl border border-slate-200 min-h-[38px] items-center">
+                          {selectedBrands.map((b) => (
+                            <span
+                              key={b}
+                              className="inline-flex items-center gap-1 rounded-lg bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 text-xs font-medium text-indigo-700"
+                            >
+                              <span>{b}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveBrand(b)}
+                                aria-label={`ลบแบรนด์ ${b}`}
+                                className="text-indigo-400 hover:text-indigo-800 transition ml-0.5 text-sm leading-none focus:outline-none"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-slate-400 italic px-1">
+                          ยังไม่ได้เลือกแบรนด์ (เลือกจากรายการด้านล่าง
+                          หรือพิมพ์ค้นหาแล้วกดเลือก)
+                        </div>
+                      )}
+
+                      {/* Brand search and add input */}
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={brandSearch}
+                          disabled={isBrandSelectDisabled}
+                          onChange={(e) => setBrandSearch(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              if (exactMatchBrand) {
+                                handleSelectBrand(exactMatchBrand);
+                              }
+                            }
+                          }}
+                          placeholder={
+                            loadingBrands
+                              ? "กำลังโหลดรายชื่อแบรนด์..."
+                              : brandsError
+                                ? "ไม่สามารถค้นหาแบรนด์ได้ (เกิดข้อผิดพลาด)"
+                                : availableBrands.length === 0
+                                  ? "ไม่มีข้อมูลแบรนด์ในระบบ"
+                                  : "ค้นหาชื่อแบรนด์ในระบบ เช่น Nike..."
+                          }
+                          aria-label="ค้นหาหรือระบุแบรนด์"
+                          className="flex-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 disabled:bg-slate-100 disabled:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (exactMatchBrand) {
+                              handleSelectBrand(exactMatchBrand);
+                            }
+                          }}
+                          disabled={isBrandSelectDisabled || !exactMatchBrand}
+                          aria-label="เพิ่มแบรนด์"
+                          className="rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0"
+                        >
+                          เลือก
+                        </button>
+                      </div>
+
+                      {/* Suggestions / Available Brands List */}
+                      {loadingBrands ? (
+                        <p className="text-[11px] text-slate-400">
+                          กำลังโหลดรายชื่อแบรนด์...
+                        </p>
+                      ) : brandsError ? (
+                        <p className="text-[11px] text-rose-500 font-medium">
+                          {brandsError}
+                        </p>
+                      ) : availableBrands.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 italic">
+                          ไม่มีข้อมูลแบรนด์ในระบบ
+                          (ไม่สามารถกำหนดกลุ่มเป้าหมายตามแบรนด์ได้)
+                        </p>
+                      ) : (
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-medium text-slate-400 block">
+                            แบรนด์ที่มีในระบบ (คลิกเพื่อเลือก):
+                          </span>
+                          {filteredBrands.length === 0 ? (
+                            <p className="text-[11px] text-slate-400 italic py-1">
+                              ไม่พบแบรนด์ที่ตรงกับคำค้นหา
+                            </p>
+                          ) : (
+                            <div
+                              tabIndex={0}
+                              aria-label="รายการแบรนด์ที่มีในระบบ"
+                              className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1.5 bg-white rounded-xl border border-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-300"
+                            >
+                              {filteredBrands.map((brand) => (
+                                <button
+                                  key={brand}
+                                  type="button"
+                                  onClick={() => handleSelectBrand(brand)}
+                                  className="inline-flex items-center rounded-lg bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200/60 px-2 py-0.5 text-[11px] text-slate-600 transition"
+                                >
+                                  + {brand}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : segmentField === "favoriteCategory" ? (
                     <select
                       value={segmentValue}
                       onChange={(e) => setSegmentValue(e.target.value)}
+                      aria-label="เลือกหมวดหมู่ที่สนใจ"
                       className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
                     >
-                      <option value="">-- เลือกไซส์ --</option>
-                      {["XS", "S", "M", "L", "XL", "2XL", "Free Size"].map(
-                        (s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ),
-                      )}
+                      <option value="">-- เลือกหมวดหมู่ --</option>
+                      {categories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
                     </select>
                   ) : segmentField === "styleTag" ? (
                     <select
                       value={segmentValue}
                       onChange={(e) => setSegmentValue(e.target.value)}
+                      aria-label="เลือกสไตล์แฟชั่นที่สนใจ"
                       className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
                     >
                       <option value="">-- เลือกสไตล์ --</option>
@@ -1167,13 +1453,10 @@ export default function CampaignsSection({ token }) {
                   ) : (
                     <input
                       type="text"
-                      placeholder={
-                        segmentOp === "in" || segmentOp === "nin"
-                          ? "เช่น Nike, Adidas (คั่นด้วยจุลภาค)"
-                          : "ระบุค่า เช่น Nike หรือ เดรส"
-                      }
+                      placeholder="ระบุค่าเป้าหมาย"
                       value={segmentValue}
                       onChange={(e) => setSegmentValue(e.target.value)}
+                      aria-label="ระบุค่าเป้าหมาย"
                       className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
                     />
                   )}
@@ -1182,7 +1465,7 @@ export default function CampaignsSection({ token }) {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 วันเวลาเริ่มต้น *
@@ -1210,18 +1493,18 @@ export default function CampaignsSection({ token }) {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setModalOpen(false)}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+              className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
             >
               ยกเลิก
             </button>
             <Button
               type="submit"
               disabled={saving}
-              className="bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-sm"
+              className="w-full sm:w-auto bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-sm"
             >
               {saving ? "กำลังบันทึก..." : "บันทึกแคมเปญ"}
             </Button>
@@ -1256,11 +1539,11 @@ export default function CampaignsSection({ token }) {
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"
               onClick={() => setRejectTarget(null)}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+              className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
             >
               ยกเลิก
             </button>
@@ -1268,7 +1551,7 @@ export default function CampaignsSection({ token }) {
               type="button"
               onClick={handleConfirmReject}
               disabled={rejecting}
-              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-4 py-2 shadow-sm transition"
+              className="w-full sm:w-auto rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-4 py-2 shadow-sm transition"
             >
               {rejecting ? "กำลังปฏิเสธ..." : "ยืนยันปฏิเสธ"}
             </button>

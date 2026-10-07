@@ -607,3 +607,198 @@
   - **Frontend Jest Tests:** `frontend/components/marketing/sections/AuctionScheduleSection.test.js` ผ่าน 7/7 tests ครอบคลุมการทดสอบ `RoundManagementSection` named export (Current round, Upcoming round, All-rounds table, Empty state, 409 Conflict banner, Refresh after creation) และ Parent `AuctionScheduleSection` component พร้อม mock API ครบถ้วน
   - **Auction Integration Tests (Real DB & Redis):** `backend/services/product-service/test/auction.integration.test.js` เพิ่ม Step 10: ผ่านครบ 11/11 tests across 10 steps บน PostgreSQL และ Redis จริง 100%
   - ผลรวม Unit Tests ของ Product-Service ทั้งหมด 77/77 tests ผ่าน 100%
+
+## 2026-10-03 — Feature: Marketing Task 1 — Durable Campaign Attribution Engine, Outbox Pattern & PostgreSQL Persistence Hardening (MKT-003, MKT-007, UR-09, UR-12)
+
+- **Problem & Requirements:**
+  - เดิม Campaign Attribution (`MKT-003`, `MKT-007`) ขาดการบันทึกสถานะลงฐานข้อมูลแบบถาวร โดยอาศัย Dynamic SQL `CREATE TABLE` ชั่วคราว และไม่มีการรับประกันความน่าเชื่อถือหาก Product Service ขัดข้องขณะ Order เสร็จสิ้น
+  - การส่ง Event `order.completed` เป็นแบบ Fire-and-forget ขาด Retry Mechanism และ Exponential Backoff หากเกิด Network Failure ข้อมูล Attribution จะสูญหายทันที
+  - ขาดการทดสอบ Integration Test ครอบคลุมการทำงานร่วมกับ PostgreSQL จริงทั้งสองฐานข้อมูล (`reloop_order` และ `reloop_product`) โดยแยกเขตความรับผิดชอบ (Service Boundary) อย่างเคร่งครัด
+- **Architectural Solutions & Implementation:**
+  - **Reloop Order Schema & Transactional Outbox Pattern (`order-service`):**
+    - เพิ่มโมเดล `AttributionOutboxEvent` ใน `backend/services/order-service/prisma/schema.prisma` (`id`, `orderId` @unique, `campaignId`, `grossAmount`, `discountAmount`, `netAmount`, `completedAt`, `attempts`, `nextAttemptAt`, `processedAt`, `lastError`)
+    - สร้างแถว Outbox ใน Transaction เดียวกันกับ `Order.status = "completed"` อย่าง Atomic ใน `orderModel.transitionStatusWithProductSync`
+    - กำจัด Silent Feature-detection: ปรับปรุง `orderModel.js` และ `attributionOutboxService.js` ให้ fail loudly หาก Prisma model ขาดหาย เพื่อป้องกันไม่ให้ออเดอร์ที่มี campaign สำเร็จได้โดยปราศจาก outbox durability record
+    - สร้าง `attributionOutboxService.js`: รองรับการส่ง Event พร้อม Payload มาตรฐานและ Flat compatibility fields, บันทึกสถานะ `processedAt` เมื่อสำเร็จ หรือบันทึกข้อผิดพลาดและคำนวณ `nextAttemptAt` ด้วย Exponential Backoff เมื่อล้มเหลว
+    - ระบบ Batch Worker (`processPendingEvents`, `startWorker`) กวาดส่งงานที่ค้างอย่างสม่ำเสมอ
+    - ปรับปรุง `productClient.js` ให้ประเมิน `PRODUCT_SERVICE_URL` และ `INTERNAL_SERVICE_TOKEN` แบบ Dynamic ต่อ Request เพื่อรองรับทั้ง Live Stack และ Isolated Integration Testing
+  - **Reloop Product Schema & Campaign Attribution Fact Model (`product-service`):**
+    - เพิ่มโมเดล `CampaignAttribution` ใน `backend/services/product-service/prisma/schema.prisma` (`eventId` @id, `orderId` @unique, `campaignId` index, `completedAt` index, `grossAmount`, `discountAmount`, `netAmount`)
+    - Refactor `campaignMetrics.js`: ลบ Dynamic raw SQL ออกอย่างสิ้นเชิง และใช้ Prisma Client บันทึกลงในตาราง `campaign_attributions`
+    - กำจัด Silent In-memory Fallback ใน Production: บังคับให้ `campaignMetrics.js` ในเส้นทาง Production ทำการ Fail loudly (`throw new Error(...)`) หาก Prisma client ขาดโมเดล `campaignAttribution` โดยสงวน In-memory store ไว้เฉพาะ Unit Test Adapter ที่ถูก Inject เข้ามาอย่างชัดเจนเท่านั้น
+    - เสริมความปลอดภัย Idempotency และ Identity Conflict:
+      - การใช้ `eventId` เดิมซ้ำกับ `orderId` ใหม่ที่มีข้อมูลตรงกันทั้งหมดจะถูกปฏิเสธด้วย HTTP 409 Conflict ทันที เพื่อป้องกัน Identity Spoofing / Event ID reuse
+      - คำสั่งซื้อเดิม (`orderId` เดิม) ที่ส่งมาด้วย `eventId` ใหม่พร้อมข้อมูลที่ตรงกันทั้งหมด จะถือเป็น Valid Deduplicated Retry และคืนสถานะสำเร็จแบบ deduplicated (HTTP 200)
+      - ครอบคลุมทั้งขั้นตอน Pre-check ก่อนบันทึก และขั้นตอนฟื้นฟู `P2002` Unique Constraint Race Recovery
+    - ส่งต่อ Error ในโหมด DB จริง ไม่ swallow error เพื่อเปิดทางให้ Outbox Retry
+  - **Strict Cross-Service Boundary & Reproducible Testing:**
+    - ไม่มีการ Query ข้าม Database ใน Production Code: Order Service จัดการเฉพาะ `reloop_order` และ Product Service จัดการเฉพาะ `reloop_product`
+    - การส่งผ่านข้อมูลกระทำผ่าน REST Contract `POST /internal/campaigns/events/order-completed` พร้อม Header `x-internal-token` (ป้องกันด้วย 403 Forbidden เมื่อ Token ไม่ถูกต้อง)
+    - รัน Cross-service integration test ได้อย่าง Reproducible จาก Repository Test Environment โดยใช้ Generated Prisma Client ทั้งสองตัวจากโปรเจกต์ (`backend/services/order-service/src/generated/prisma-client` และ `backend/services/product-service/src/generated/prisma-client`) ปราศจากการพึ่งพาการก็อปปี้ไฟล์ไปยัง Production Container และเมื่อ Fallback รัน Express app ในเครื่องจะผูกกับ `DATABASE_URL_PRODUCT` แยกจาก Order DB อย่างถูกต้อง
+- **Automated Verification Evidence:**
+  - **Genuine Cross-Service PostgreSQL Integration Suite (`order-service/test/cross-service-attribution.integration.test.js`):** ผ่านครบ 9/9 subtests (10/10 tests passing 100%) บน Repository Test Environment ด้วย `REQUIRE_INTEGRATION=1` ทดสอบ Full Lifecycle ข้าม 2 Database จริง:
+    1. Order completion ใน `reloop_order` สร้าง `AttributionOutboxEvent` แบบ Atomic
+    2. ส่งผ่าน HTTP ไปยัง Product Service และอัปเดต `processedAt` ใน `reloop_order`
+    3. ตรวจสอบใน `reloop_product`: บันทึก `CampaignAttribution` ลงตารางจริง
+    4. Idempotent Retry: ส่งซ้ำได้ผล deduplicated และไม่สร้างแถวซ้ำ
+    5. Conflicting Payload: ข้อมูลตัวเลขขัดแย้งคืน 409 Conflict
+    6. Identity Conflict: นำ `eventId` เดิมไปใช้กับ `orderId` อื่นคืน 409 Conflict แม้ตัวเลขจะตรงกันทั้งหมด
+    7. Failure Backoff: ปลายทางล้มเหลว (503) บันทึก `lastError` และ `nextAttemptAt` ใน `reloop_order` โดยคง `processedAt = null`
+    8. Worker Sweep: `processPendingEvents` กวาดส่งงานที่ค้างผ่าน HTTP ไปบันทึกใน `reloop_product` สำเร็จ
+    9. Non-campaign Orders: คำสั่งซื้อที่ไม่มีแคมเปญไม่สร้าง Outbox event ใน `reloop_order`
+  - **Product Service PostgreSQL Integration Suite (`product-service/test/campaign-attribution.integration.test.js`):** ผ่านครบ 12/12 subtests (13/13 tests passing 100%) บน PostgreSQL `reloop_product` จริงด้วย `REQUIRE_INTEGRATION=1` (ทดสอบความปลอดภัย 403, การบันทึกลงตารางจริง, Idempotency ซ้ำ, 409 Conflict on payload mismatch, 409 Conflict on eventId reuse, No-campaign bypass, และการคำนวณ KPIs: Gross/Net Revenue, Discounts, Conversion Rate, Trends, และ Date Range Validation)
+  - **Order Service Outbox PostgreSQL Integration Suite (`order-service/test/campaign-attribution.integration.test.js`):** ผ่านครบ 6/6 subtests (7/7 tests passing 100%) บน PostgreSQL `reloop_order` จริงด้วย `REQUIRE_INTEGRATION=1` (ทดสอบ Atomic Outbox row creation, No-campaign bypass, Outbox delivery พร้อม `x-internal-token`, Retry backoff on failure 503, Sweep recovery of pending events, และ Idempotent acknowledgment)
+  - **Unit Tests:**
+    - `product-service/test/campaignMetrics.test.js`: ผ่านครบ Campaign Metrics 13 test cases โดยไม่รวม parent suite ของ node:test (passing 100% ครอบคลุม Fail-loud in production path, Identity Conflict, และ `P2002` Race Recovery)
+    - `order-service/src/services/attributionOutboxService.test.js`: ผ่านครบ 7/7 subtests (8/8 tests passing 100% ครอบคลุม Fail-loud durability)
+    - `order-service` Unit Tests รวมทั้งหมด: ผ่านครบ 53/53 tests 100% ปราศจาก Regression
+    - รวม Marketing Unit Tests ทั้งหมด: 84 total tests passing 100% (Auction Service 48 + Campaign Validation 12 + Segment Rule 7 + Campaign Metrics 13 + Product Payload 4 = 84; historical baseline: 71 tests)
+
+## 2026-10-04 — Feature: UR-11 Swipe-to-Choose Hardening (Buyer Authorization, Persistence, User Isolation & Identity Spoof Prevention)
+
+- **Problem & Requirements:**
+  - เดิม `UR-11` (Swipe-to-Choose) ขาดการตรวจสอบสิทธิ์เฉพาะผู้ซื้อ (Buyer-only Authorization) โดยเปิดให้บทบาทอื่นเรียก API choose/unchoose ได้
+  - ฟีดสินค้าสาธารณะ (`GET /api/products/videos/feed`) ไม่ได้เชื่อมโยงกับสถานะ `chosen` ของผู้ซื้อในฐานข้อมูล ทำให้สถานะการ Bookmark หายไปเมื่อ Refresh หรือเปลี่ยนอุปกรณ์
+  - การพึ่งพา Header `x-user-id` บน Public Endpoint โดยไม่มี Bearer Token เปิดช่องโหว่ Identity Spoofing ทำให้ผู้ไม่หวังดีสามารถส่ง `x-user-id` ของผู้ใช้อื่นมาเพื่อแอบดู Bookmark ได้
+  - ชุดทดสอบเดิมขาดการครอบคลุมกรณี Unchoose รายการที่ไม่ได้เลือก, การป้องกัน N+1 query, และการ Rollback สถานะฝั่งฟรอนต์เอนด์เมื่อเกิด Network Failure
+- **Implementation & Security Hardening:**
+  - **Buyer-Only Authorization:**
+    - กำหนด Route Middleware `requireBuyerRole` บน `POST /:id/choose`, `DELETE /:id/choose`, และ `POST /:id/unchoose` ตรวจสอบทั้ง `req.userRole === "BUYER"` และ `req.userRoles.includes("BUYER")` หากเป็นบทบาทอื่น (`SELLER`, `MARKETING`, `ADMIN`) จะถูกปฏิเสธด้วย HTTP `403 Forbidden` และหากไม่มี Token จะถูกปฏิเสธด้วย HTTP `401 Unauthorized`
+    - เพิ่มการตรวจสอบระดับ Service Layer ใน `productVideoService.js` (`isBuyer(user)`) เพื่อป้องกันการเรียกใช้งานฟังก์ชันข้ามช่องทาง
+  - **Server-Side Persistence & Batch Query (No N+1):**
+    - ปรับปรุง `productVideoRepository.listAvailable` ให้รับ `userId` และใช้ Prisma relation include `choices: { where: { userId }, select: { id: true } }` ดึงข้อมูลสถานะการเลือกของผู้ใช้ใน Query เดียว
+    - แมปฟิลด์ `chosen: Boolean(...)` และตัดความสัมพันธ์ `choices` ออกจาก Response สาธารณะทั้งหมด เพื่อรักษาความเป็นส่วนตัวของข้อมูล
+  - **User Isolation & Guest Handling:**
+    - แยกสถานะ `chosen` เด็ดขาดระหว่างผู้ซื้อแต่ละคน (การเลือกของ Buyer A ไม่ปรากฏเป็น true ในฟีดของ Buyer B)
+    - สำหรับผู้ใช้งานทั่วไป (Guest) ฟีดจะส่งคืน `chosen: false` เสมอทุกรายการ
+  - **Anti-Spoofing & Optional Authentication:**
+    - ปรับปรุง `optionalAuth` ใน `productVideoRoutes.js`: หากไม่มี `Authorization: Bearer` Token จะกำหนด `userId = null` เสมอ โดยไม่เชื่อถือ Header `x-user-id` หรือ `x-user-role` ที่ส่งมากับ Request สาธารณะ
+    - หากมี Bearer Token จะส่งต่อให้ Trusted Auth Middleware (`requireAuth`) ตรวจสอบ JWT Signature และความถูกต้องของ Session
+    - ปรับปรุง API Gateway (`backend/gateway/src/app.js`): ลบ Header ที่ขึ้นต้นด้วย `x-user-` ทั้งหมดจาก Inbound Client ก่อนเริ่ม Route Request เพื่อให้มั่นใจว่า Trusted Identity Headers จะถูกสร้างขึ้นโดย Gateway หลังตรวจ Token สำเร็จเท่านั้น (ผ่านการตรวจสอบ Implementation review และ Lint แล้ว โดยยังไม่มี Dedicated automated test สำหรับ Gateway header stripping)
+  - **Idempotency & Safe Unchoose:**
+    - `productVideoRepository.upsertChoice`: ใช้ Prisma `upsert` บน Composite Unique `@@unique([productVideoId, userId])` รับประกันการเลือกซ้ำไม่สร้างแถวซ้ำใน `swipe_choices`
+    - `productVideoRepository.deleteChoice`: ใช้ Prisma `deleteMany` จัดการการยกเลิกเลือกรายการที่ยังไม่ได้เลือกอย่างปลอดภัย ส่งคืน `{ chosen: false }` โดยไม่เกิดข้อผิดพลาด HTTP 500
+  - **Frontend Persistence & Optimistic Rollback:**
+    - `SwipeVideoCard.js`: กำหนดค่าเริ่มต้นจาก `video.chosen` และเพิ่ม `useEffect` ซิงค์สถานะเมื่อ `video.chosen` อัปเดตหลัง Refetch
+    - ดำเนินการ Optimistic Update ทันทีเมื่อผู้ใช้คลิก และหาก API ปลายทางล้มเหลว (Network Error / 403 / 500) จะทำการ Rollback กลับสู่สถานะก่อนหน้าทันที
+  - **Requirement Boundary:** ยืนยันตาม `MKT-DEC-006` และ `MKT-DEC-021` ว่า `SwipeChoice` ทำหน้าที่เป็นเพียง Bookmark ความสนใจของผู้ซื้อเท่านั้น ไม่มีความสัมพันธ์กับการประมูลสินค้า (Auction) และไม่ใช่การเสนอราคา (Bid)
+- **Automated Verification Evidence:**
+  - **Backend & Gateway Targeted Tests:** ผ่านครบ 29/29 tests 100%
+    - Gateway App Tests (`backend/gateway/src/app.test.js`): ผ่าน 5/5 tests (ครอบคลุม Gateway auth routing และ Public routes; สำหรับ header stripping ผ่าน implementation review/lint แต่ยังไม่มี dedicated automated test)
+    - Product Service App Tests (`backend/services/product-service/src/app.test.js`): ผ่าน 10/10 tests
+    - Product Video Repository Tests (`backend/services/product-service/src/features/product-videos/productVideoRepository.test.js`): ผ่าน 2/2 tests (ครอบคลุม Guest chosen: false, User-specific chosen, และยืนยันไม่รั่วไหล choices relation)
+    - Product Video Service Tests (`backend/services/product-service/src/features/product-videos/productVideoService.test.js`): ผ่าน 12/12 tests (ครอบคลุม 403 ทุก Role ที่ไม่ใช่ BUYER, Multi-role BUYER, และ Pagination forwarding)
+    - รวม Backend & Gateway Targeted Tests: 5 + 10 + 2 + 12 = 29 tests
+  - **Frontend Swipe Component Tests:** ผ่านครบ 3/3 suites (42/42 tests passing 100%)
+    - `frontend/components/swipe/SwipeVideoCard.test.js`: ผ่านครบ 28/28 tests (รวมการทดสอบ Initial render จาก `video.chosen`, Refetch sync, และ Rollback เมื่อเกิดข้อผิดพลาดทั้งฝั่ง Choose และ Unchoose)
+    - `frontend/components/swipe/SwipeFeedViewer.test.js`: ผ่านครบ 8/8 tests (ครอบคลุมการเลื่อนดูคลิป, Touch swipe, Desktop controls, และ Query synchronization)
+    - `frontend/app/swipe/page.test.js`: ผ่านครบ 6/6 tests
+  - **PostgreSQL Integration Test (`REQUIRE_INTEGRATION=1`):**
+    - `backend/services/product-service/test/swipe-choose.integration.test.js`: ผ่าน 1/1 suite (10 verification assertions) บน PostgreSQL `reloop_product` จริง ปราศจากการ Skip:
+      1. 401 Unauthorized บน `POST /choose`, `DELETE /choose`, `POST /unchoose` เมื่อไม่มี Token
+      2. 403 Forbidden สำหรับ `SELLER`, `MARKETING`, `ADMIN` ทุกคำสั่ง
+      3. 200 OK และบันทึกลงตาราง `swipe_choices` จริงสำหรับ `BUYER`
+      4. Idempotency: การเลือกซ้ำไม่สร้างแถวซ้ำในฐานข้อมูล (`count === 1`)
+      5. Guest Feed: ทุกรายการได้รับ `chosen: false`
+      6. Buyer A Feed: รายการที่เลือกได้รับ `chosen: true`
+      7. User Isolation: Buyer B เห็นรายการที่ Buyer A เลือกเป็น `chosen: false`
+      8. Identity Anti-Spoofing: ส่ง Header `x-user-id: ur11-buyer-a` โดยไม่มี Bearer Token ได้รับ `chosen: false` ไม่สามารถอ่านข้อมูลผู้อื่นได้
+      9. Safe Unchoose: Unchoose รายการที่ไม่ได้เลือกไม่เกิด HTTP 500
+      10. Unchoose สำเร็จ: ลบแถวออกจากฐานข้อมูลและฟีดอัปเดตเป็น `chosen: false`
+  - **Quality Gates & Formatting:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style!)
+    - `git diff --check`: ผ่าน 100% (ไม่มีข้อผิดพลาด whitespace)
+- **Pending Acceptance Note:** ชุดทดสอบอัตโนมัติระดับ Backend, Frontend Component, และ PostgreSQL Integration ผ่านการตรวจสอบครบถ้วนแล้ว แต่ Browser E2E / Responsive UI verification บนเบราว์เซอร์จริงยังไม่ได้ดำเนินการและคงสถานะเป็น Final Acceptance ที่รอดำเนินการต่อไป
+
+## 2026-10-05 — Feature: UR-08 Marketing User & Peak-Usage Analytics Dashboard (Code Review Resolved)
+
+- **Problem & Requirements:**
+  - Marketing Dashboard (`/marketing`) ต้องการแสดงผลข้อมูลจริงเกี่ยวกับสถิติผู้ใช้งานและช่วงเวลาการใช้งานสูงสุด (Peak Usage Hour) ตามช่วงวันที่เลือก เพื่อใช้ประกอบการวางแผนแคมเปญ
+  - ตัวชี้วัดสำคัญ 4 รายการ: Active Users, New Users, Hourly Usage Aggregation, และ Peak Usage Hour พร้อม Date-range filtering
+  - ต้องรักษา Service Boundary: ข้อมูลผู้ใช้และกิจกรรมเป็นของ Auth Service ห้าม Product Service หรือบริการอื่น Query ข้ามฐานข้อมูลโดยตรง
+  - Response ต้องเป็น Aggregate เท่านั้น ปราศจาก PII (ไม่มี email, phone, displayName, userId หรือ payload กิจกรรมส่วนบุคคล)
+  - ห้ามใช้ In-memory fallback ใน Production และ Database Error ต้องไม่ถูกกลืนเป็นเลขศูนย์
+- **Code Review Resolutions:**
+  - **1. Timezone & Date Range:**
+    - กำหนด Business Timezone ของ UR-08 เป็น `Asia/Bangkok` (+07:00) อย่างเคร่งครัด
+    - ปฏิเสธ Timezone อื่นด้วย HTTP 400 Bad Request
+    - แปลง UTC `timestamp without time zone` ของ Prisma ผ่าน `(activity_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Bangkok'` ใน SQL ก่อนทำ `date_trunc('hour', ...)` เพื่อให้ได้ชั่วโมงและ Peak Hour ตามเวลาไทยที่ถูกต้อง
+    - ตัวแปลงวันที่ใน Frontend (`convertThaiDateFilterToRange`) กำหนดให้ `from` เป็น 00:00:00+07:00 และ `to` เป็น 00:00:00+07:00 ของวันถัดไป (`[from, to)` exclusive boundary) รองรับขอบเขตสิ้นเดือน สิ้นปี และ Leap Year อย่างถูกต้อง
+    - ป้องกันการส่ง Partial request ระหว่างผู้ใช้กรอกวันที่
+    - ลบข้อความ "UTC" ทั้งหมดออกจาก UI Dashboard
+  - **2. Gateway Cross-Service Integration Test:**
+    - ปรับปรุง `backend/gateway/src/marketing-analytics.cross-service.test.js` ไม่ยอมรับ HTTP 500 เป็นผลสำเร็จ
+    - Success path ทำงานร่วมกับ PostgreSQL จริงผ่าน Gateway -> Auth Service -> PostgreSQL ได้รับ HTTP 200 OK
+    - ตรวจสอบ `activeUsers`, `newUsers`, `peakHour`, `hourlyUsage` (24 buckets พร้อมรูปแบบ `+07:00`), `range.timezone = "Asia/Bangkok"`, และยืนยันว่าไม่มี PII
+    - แยก Test "DB error propagates" เป็นอีก Subtest หนึ่งที่ยืนยันว่า HTTP 500 ส่งต่อออกมาอย่างถูกต้อง
+    - Fail loud เมื่อ `REQUIRE_INTEGRATION=1` และ DB ไม่พร้อม (ไม่มีการ skip)
+  - **3. Dashboard Honest Error State:**
+    - ปรับปรุง `frontend/components/marketing/sections/DashboardSection.js`
+    - เมื่อ API ล้มเหลว แสดง Error Banner พร้อมปุ่ม Retry, การ์ด KPI แสดง `—` และ `ไม่พร้อมใช้งาน` (ห้ามแสดง 0 หลอก), และกราฟไม่แสดง Empty State
+    - เมื่อกด Retry สำเร็จ สามารถล้าง Error และกลับมาแสดงข้อมูลจริงได้
+    - เมื่อข้อมูลว่างจริง (Empty State) ยังคงแสดงเลข 0 และ Empty State Banner ได้ตามปกติ
+- **Automated Verification Evidence:**
+  - **Backend Unit Tests:** `backend/services/auth-service/src/features/metrics/activityMetrics.test.js` ผ่าน 7/7 tests 100%
+  - **Gateway Cross-Service Tests:** `backend/gateway/src/marketing-analytics.cross-service.test.js` ผ่าน 2/2 tests 100% บน PostgreSQL จริงด้วย `$env:REQUIRE_INTEGRATION="1"`
+  - **PostgreSQL Integration Test:** `backend/services/auth-service/test/user-analytics.integration.test.js` ผ่าน 1/1 suite 100% (0 skips) บน PostgreSQL จริง
+  - **Frontend Client & UI Tests:** ผ่าน 30/30 tests 100% (`DashboardSection.test.js` 20/20 tests, `api.test.js` 10/10 tests)
+  - **Quality Gates:** `npm run lint` ผ่าน (0 errors, 0 warnings), `npm run format:check` ผ่าน (All matched files use Prettier code style!), `git diff --check` ผ่าน (ไม่มีข้อผิดพลาด whitespace)
+
+## 2026-10-05 — Feature: Marketing Audit Trail (Append-Only Audit Log for Campaigns, Auctions, and Articles — Code Review Resolved)
+
+- **Problem & Requirements:**
+  - ฝ่ายการตลาดต้องการระบบบันทึกประวัติการดำเนินงาน (Marketing Audit Trail) ที่โปร่งใสและตรวจสอบย้อนหลังได้ สำหรับการเปลี่ยนแปลงสถานะและการจัดการแคมเปญการตลาด, สินค้าและรอบประมูล, และบทความให้ความรู้
+  - ต้องเป็นระบบ Append-Only อย่างแท้จริง: ห้ามเปิด Client Write/Update/Delete API และไม่มี Business API ให้ผู้ใช้แก้ไขหรือลบบันทึกได้
+  - ต้องผูกการบันทึก Audit Log เข้ากับ Business Mutations ใน Database Transaction เดียวกัน (Atomic Transaction): หาก Audit บันทึกล้มเหลว Business Mutation ต้องถูก Rollback ทั้งหมด; หาก Business Mutation ล้มเหลว จะต้องไม่มี Audit Log ถูกบันทึก
+  - สำหรับเหตุการณ์อัตโนมัติ (Automatic Actions เช่น Auto-expiry, Worker Auction Close) ต้องใช้ Actor `SYSTEM` (`actorId: "SYSTEM"`, `actorRole: "SYSTEM"`) และมี `idempotencyKey` แบบ Deterministic เพื่อป้องกันการบันทึก Audit Log ซ้ำซ้อนกรณีเกิด Worker Retry
+  - ข้อมูล `metadata`, `previousState`, และ `newState` ต้องผ่านการ Sanitize ตัดข้อมูลละเอียดอ่อน (Passwords, Tokens, Secrets, Cookies, API Keys, Credentials) ทั้งหมดอย่างปลอดภัย
+  - ฝั่งฟรอนต์เอนด์ต้องมีแท็บ "ประวัติการดำเนินงาน" ในแดชบอร์ด `/marketing` พร้อมการกรอง, การแบ่งหน้า, การแสดงรายละเอียด, และสถานะการโหลด/ข้อผิดพลาดที่ชัดเจน
+- **Code Review Resolutions:**
+  - **1. Marketing-only Authorization & Admin Decoupling:**
+    - กำหนดสิทธิ์การอ่าน Audit Log (`GET /marketing/audit-logs` และ `/api/products/marketing/audit-logs`) ให้จำกัดเฉพาะบทบาท `MARKETING` เท่านั้น (`requireMarketingAccess`)
+    - บทบาท `BUYER`, `SELLER` และ `ADMIN` ได้รับ HTTP `403 Forbidden` ตามหลักการ Least Privilege และ `MKT-DEC-014`
+    - ป้องกันการ Bypass: Permission `analytics:read:marketing` หรือ `audit:read:marketing` ไม่สามารถทำให้ผู้ใช้บทบาทอื่นเข้าถึงได้
+    - ป้องกัน Identity Spoofing: ผู้ใช้ที่ไม่ผ่านการล็อกอินได้รับ HTTP 401 Unauthorized และการส่ง header `x-user-role` ปลอมแปลงโดยไม่มี Token ได้รับ 403
+    - อัปเดตเอกสารทั้งหมดจาก Marketing/Admin เป็น Marketing-only
+  - **2. SYSTEM Idempotency in PostgreSQL Transactions (No 25P02 Transaction Abort):**
+    - แก้ไขปัญหาการดักจับ Prisma Error `P2002` ภายใน Transaction บล็อก ซึ่งทำให้ PostgreSQL abort transaction ทั้งหมด (`25P02: current transaction is aborted, commands ignored until end of transaction block`) จนไม่สามารถสั่ง `findUnique` ต่อใน Transaction เดิมได้
+    - โซลูชัน: ใช้ `createMany({ data: [{ id: crypto.randomUUID(), ...data }], skipDuplicates: true })` ซึ่งแปลงเป็น SQL `INSERT ... ON CONFLICT DO NOTHING` บน PostgreSQL ทำให้ Transaction ไม่ถูก Abort และสามารถเรียก `findUnique` ดึงเรคอร์ดเดิมกลับมาได้อย่างปลอดภัย 100%
+    - การบันทึก Audit ปกติที่ไม่มี `idempotencyKey` ยังคงใช้ `create` และ Fail Loud ตามปกติ
+  - **3. Bangkok Date Filter & Boundary Contract:**
+    - กำหนด Business Timezone สำหรับ Audit Trail เป็น `Asia/Bangkok` (+07:00)
+    - ฟรอนต์เอนด์ (`convertAuditDateFilter`) แปลงวันที่จากช่องเลือกแบบ inclusive ให้กลายเป็น Half-Open Interval `[from, to)` ในเวลาไทย: `from` คือ 00:00:00+07:00 และ `to` คือ 00:00:00+07:00 ของวันถัดไป (เช่น วันที่เดียวกันครอบคลุม 24 ชม. เต็มวัน)
+    - ฝั่ง Backend ตรวจสอบช่วงวันที่ `from <= to` หากไม่ถูกต้องคืนค่า HTTP 400 Bad Request
+    - คิวรีฐานข้อมูลใช้ `createdAt >= fromDate` และ `createdAt < toDate` (`lt: toDate`) ตรงตามหลัก Half-Open Interval
+  - **4. Duplicate Declarations Removal & Lint Cleanup:**
+    - ลบฟังก์ชันซ้ำซ้อน `deleteCampaign` ใน `campaignRepository.js` และ `getById` ใน `articleModel.js` โดยคงการทำงานเวอร์ชันที่รองรับ `{ tx }` ไว้
+    - แทนที่ตัวแปร Token ให้ถูกต้องในชุดทดสอบ และผ่านการตรวจ `npm run lint` 0 errors, 0 warnings
+  - **5. Integration Test Isolation & Full Lifecycle Coverage:**
+    - กำจัด Fixed +500 days offset ในการสร้าง Test Fixture โดยใช้ `Math.max(Date.now(), maxExistingRoundEnd) + 1h` ป้องกันการชนกับรอบประมูลที่มีอยู่เดิมเมื่อรันซ้ำ
+    - ครอบคลุมการทดสอบครบทุก Domain Action: `CAMPAIGN_REJECT`, automatic `CAMPAIGN_END` by `SYSTEM`, `AUCTION_ITEM_REJECT`, `AUCTION_ITEM_SCHEDULE`, `AUCTION_ITEM_CLOSE`, Atomic Rollback on Audit Failure, Zero Audit on Failed Mutation, Concurrent Retry Deduplication via `Promise.all`, และ Marketing-only RBAC
+- **Automated Verification Evidence:**
+  - **Node.js Environment:** Host Node version `v22.16.0` (รายงานตามสภาพแวดล้อมจริง)
+  - **Audit Unit Tests:** `backend/services/product-service/src/features/audit/marketingAuditService.test.js` ผ่าน 6/6 tests 100% (createMany skipDuplicates idempotency, same-day Bangkok parsing, month boundary, invalid range, pagination bounds, secret sanitizer)
+  - **Audit PostgreSQL Integration Suite:** `backend/services/product-service/test/marketing-audit.integration.test.js` ผ่าน 11/11 tests (1 parent suite + 10 subtests) 100% บน PostgreSQL จริง (`reloop_product`) ด้วย `$env:REQUIRE_INTEGRATION="1"` ปราศจากการ Skip:
+    1. RBAC: Marketing-only authorization, 401 unauth, 403 for Buyer, Seller, Admin, permission bypass prevention, anti-spoofing
+    2. Read-only contract: Client write/update/delete endpoints do not exist (404/405)
+    3. Campaign lifecycle: Atomic mutations for CREATE, UPDATE, SUBMIT, APPROVE, REJECT, PUBLISH, END
+    4. Automatic SYSTEM actions: CAMPAIGN_END and AUCTION_ITEM_CLOSE with deterministic idempotencyKey
+    5. Concurrent retry deduplication: Promise.all creates no duplicate audit and zero 25P02 error
+    6. Transaction atomicity: Audit failure rolls back business mutation, failed mutation creates no audit
+    7. Auction lifecycle: AUCTION_ROUND_CREATE, ITEM_APPROVE, ITEM_REJECT, ITEM_SCHEDULE, ITEM_CANCEL, ITEM_CLOSE
+    8. Article lifecycle: CREATE, UPDATE, PUBLISH, ARCHIVE, DELETE audit
+    9. API Filtering and date range semantics: [from, to) interval, same-day, month boundary, invalid range, pagination
+    10. Sanitizer verification: No secrets present in audit logs or API output
+  - **Regression Integration Tests:**
+    - Campaign Suite (`campaign.integration.test.js`): ผ่าน 11/11 tests 100%
+    - Auction Suite (`auction.integration.test.js`): ผ่าน 11/11 tests 100%
+    - Article Suite (`article.integration.test.js`): ผ่าน 1/1 test 100%
+  - **Frontend UI & Component Tests:**
+    - `frontend/components/marketing/sections/AuditTrailSection.test.js`: ผ่าน 13/13 tests 100% (Render audit log rows, Action badge styles, Filter submissions, Details modal view, Empty state, Error state with retry, Accessible form labels, `convertAuditDateFilter` same-day and multi-day, Date validation error)
+    - `frontend/app/marketing/page.test.js`: ผ่าน 6/6 tests 100%
+    - รวม Frontend Tests: ผ่าน 19/19 tests 100%
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style!)
+    - `git diff --check`: ผ่าน 100% (ไม่มีข้อผิดพลาด whitespace)

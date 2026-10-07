@@ -1,5 +1,7 @@
 const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const defaultRepository = require("./campaignRepository");
+const defaultPrisma = require("../../models/prismaClient");
+const { recordMarketingAudit } = require("../audit/marketingAuditService");
 const {
   validateSegmentRule,
   matchesSegment,
@@ -134,9 +136,19 @@ function validateCampaignInput(input, { isUpdate = false } = {}) {
   }
 }
 
-function createCampaignService(repository = defaultRepository) {
-  async function loadCampaign(id) {
-    const campaign = await repository.findById(id);
+function createCampaignService(
+  repository = defaultRepository,
+  prismaClient = defaultPrisma,
+) {
+  function runInTransaction(fn) {
+    if (repository.transaction) {
+      return repository.transaction(fn);
+    }
+    return prismaClient.$transaction(fn);
+  }
+
+  async function loadCampaign(id, { tx } = {}) {
+    const campaign = await repository.findById(id, { tx });
     if (!campaign) throw notFound("campaign not found");
     return campaign;
   }
@@ -181,7 +193,22 @@ function createCampaignService(repository = defaultRepository) {
       targetSegment: input.targetSegment || null,
     };
 
-    return repository.createCampaign(data);
+    return runInTransaction(async (tx) => {
+      const campaign = await repository.createCampaign(data, { tx });
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_CREATE",
+          entityType: "CAMPAIGN",
+          entityId: campaign.id,
+          previousState: null,
+          newState: campaign,
+        },
+        { tx },
+      );
+      return campaign;
+    });
   }
 
   async function updateDraft({ user, campaignId, input }) {
@@ -256,7 +283,22 @@ function createCampaignService(repository = defaultRepository) {
       throw badRequest("percent discountValue must be between 1 and 100");
     }
 
-    return repository.updateCampaign(campaignId, data);
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(campaignId, data, { tx });
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_UPDATE",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
+    });
   }
 
   async function deleteDraft({ user, campaignId }) {
@@ -277,8 +319,27 @@ function createCampaignService(repository = defaultRepository) {
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "pending_approval");
 
-    return repository.updateCampaign(campaignId, {
-      status: "pending_approval",
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "pending_approval",
+        },
+        { tx },
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_SUBMIT",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 
@@ -289,10 +350,29 @@ function createCampaignService(repository = defaultRepository) {
 
     // Option 2 (Approved in Plan): Self-approval allowed for demo/evaluation.
     // Record approvedById and approvedAt for audit traceability.
-    return repository.updateCampaign(campaignId, {
-      status: "approved",
-      approvedById: user.id,
-      approvedAt: new Date(),
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "approved",
+          approvedById: user.id,
+          approvedAt: new Date(),
+        },
+        { tx },
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_APPROVE",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 
@@ -301,11 +381,31 @@ function createCampaignService(repository = defaultRepository) {
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "rejected");
 
-    return repository.updateCampaign(campaignId, {
-      status: "rejected",
-      description: reason
-        ? `${campaign.description || ""}\n[REJECT REASON]: ${reason}`.trim()
-        : campaign.description,
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "rejected",
+          description: reason
+            ? `${campaign.description || ""}\n[REJECT REASON]: ${reason}`.trim()
+            : campaign.description,
+        },
+        { tx },
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_REJECT",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+          metadata: reason ? { reason } : null,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 
@@ -314,8 +414,27 @@ function createCampaignService(repository = defaultRepository) {
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "published");
 
-    return repository.updateCampaign(campaignId, {
-      status: "published",
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "published",
+        },
+        { tx },
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_PUBLISH",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 
@@ -324,8 +443,27 @@ function createCampaignService(repository = defaultRepository) {
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "ended");
 
-    return repository.updateCampaign(campaignId, {
-      status: "ended",
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "ended",
+        },
+        { tx },
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_END",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 

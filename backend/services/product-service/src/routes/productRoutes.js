@@ -9,6 +9,7 @@ const productVideoRoutes = require("../features/product-videos/productVideoRoute
 const auctionRoutes = require("../features/auctions/auctionRoutes");
 const articleRoutes = require("./articleRoutes");
 const campaignRoutes = require("../features/campaigns/campaignRoutes");
+const marketingAuditRoutes = require("../features/audit/marketingAuditRoutes");
 
 const router = Router();
 
@@ -17,11 +18,13 @@ router.get("/feed", productController.feed);
 router.get("/search", productController.search);
 
 // Feature routes must come before "/:id" so Express does not read "videos"/
-// "auctions"/"articles"/"campaigns" as a product id.
+// "auctions"/"articles"/"campaigns"/"marketing" as a product id.
 router.use("/videos", productVideoRoutes);
 router.use("/auctions", auctionRoutes);
 router.use("/articles", articleRoutes);
 router.use("/campaigns", campaignRoutes);
+router.use("/marketing/audit-logs", marketingAuditRoutes);
+router.use("/api/products/marketing/audit-logs", marketingAuditRoutes);
 
 // Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);

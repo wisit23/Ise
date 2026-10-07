@@ -192,3 +192,65 @@
   4. ทุก Metrics Endpoint สงวนสิทธิ์เฉพาะบทบาท `MARKETING` เท่านั้น
 - Reason: มอบข้อมูลเชิงลึก (Business Insights) ให้ฝ่ายการตลาดนำไปใช้วิเคราะห์ผลตอบแทนและวางแผนโปรโมชันถัดไปได้อย่างน่าเชื่อถือ
 - Consequence: Marketing Dashboard (`DashboardSection.js`) มีข้อมูลพร้อมแสดงผลครบทั้งตัวเลขสรุป, กราฟแนวโน้มรายวัน, และตารางเปรียบเทียบ
+
+## MKT-DEC-020 — Auction Round Overlap Protection, Concurrency Serialization & Deterministic Selection
+
+- Date: 2026-09-19
+- Status: Accepted
+- Decision:
+  1. **Strict Half-Open Time Boundaries $[S, E)$:** กำหนดช่วงเวลาของรอบประมูลทั้งหมดเป็น Half-Open Interval $[S, E)$ โดยที่ $S = \text{submissionStartsAt}$ และ $E = \text{auctionEndsAt}$ โดยเงื่อนไข Overlap คือ $S_A < E_B \land S_B < E_A$ และอนุญาต Back-to-back rounds ได้เมื่อ $E_A = S_B$
+  2. **PostgreSQL Advisory Lock Serialization:** ป้องกัน Concurrency Race Condition ในการตรวจหาและสร้างรอบประมูลที่ซ้อนทับกันด้วย `pg_advisory_xact_lock(1001, 1)` ร่วมกับ Transaction Client `tx` และตอบกลับด้วย HTTP `409 Conflict` พร้อมข้อความแจ้งเตือนสองภาษา (Bilingual Thai/English) ระบุ ID และ Title ของรอบที่ขัดแย้ง
+  3. **Deterministic Selection (`findCurrentRound`):** เลือกรอบที่ Active ตามเวลาจริง (`now`) ก่อน หากไม่มีให้เลือกรอบถัดไปที่ใกล้มาถึงที่สุด (Upcoming) และหากสิ้นสุดหมดแล้วคืนค่า `null`
+  4. **Derived Phases:** คำนวณ Derived Phase 5 สถานะตามเวลาจริง: `upcoming`, `submission`, `waiting`, `auction`, `ended`
+  5. **Marketing UI History & Alert:** แสดงประวัติรอบทั้งหมด (All-Rounds Table), Phase Badges, การ์ดแสดงรอบปัจจุบัน/ถัดไป และแบนเนอร์แจ้งเตือนสีแดงกรณีเกิดข้อขัดแย้ง 409 Conflict บนแดชบอร์ด `/marketing`
+- Reason: ขจัดปัญหาการสร้างรอบประมูลทับซ้อนกันและการผูกสินค้าประมูลกับรอบที่สร้างใหม่สุดโดยไม่คำนึงถึงช่วงเวลาจริง
+- Consequence: ระบบจัดการรอบประมูลมีความสอดคล้องระดับฐานข้อมูล ทนทานต่อ Concurrency และแสดงผลประวัติรอบทั้งหมดในแดชบอร์ดอย่างถูกต้อง
+
+## MKT-DEC-021 — UR-11 Swipe-to-Choose Hardening, Buyer Authorization, Persistence & Feed Isolation
+
+- Date: 2026-10-04
+- Status: Accepted
+- Decision:
+  1. **SwipeChoice Semantics:** `SwipeChoice` ทำหน้าที่เป็น Buyer bookmark / interest list บนการ์ด `ProductVideo` เท่านั้น ไม่มีความสัมพันธ์กับระบบประมูล (Auction) และไม่ใช่การเคาะราคา (Bid)
+  2. **Buyer-only Authorization:** อนุญาตเฉพาะผู้ใช้ที่มีบทบาท `BUYER` (ทั้ง `req.userRole === "BUYER"` และ `req.userRoles.includes("BUYER")`) เท่านั้นในการเรียกใช้งาน `POST /:id/choose`, `DELETE /:id/choose`, และ `POST /:id/unchoose` โดยผู้ใช้บทบาท `SELLER`, `MARKETING`, `ADMIN` และอื่นๆ จะถูกปฏิเสธด้วย HTTP `403 Forbidden` และผู้ที่ยังไม่ได้เข้าสู่ระบบจะถูกปฏิเสธด้วย HTTP `401 Unauthorized` ทั้งในระดับ Route Middleware (`requireBuyerRole`) และ Service Layer (`isBuyer`)
+  3. **Optional Authentication on Public Feed:** เส้นทาง `GET /api/products/videos/feed` เปิดให้สาธารณะเข้าชมได้ และรองรับ Optional Authentication:
+     - หากไม่มี Bearer token ให้ถือเป็น Guest และส่งคืน `chosen: false` สำหรับทุกรายการ
+     - หากมี Bearer token ให้ตรวจสอบผ่าน Trusted Auth Middleware (`requireAuth`) และดึงสถานะ `chosen` เฉพาะของผู้ใช้ปัจจุบันผ่าน Batch Query (Prisma relation include `choices: { where: { userId }, select: { id: true } }`) โดยไม่เกิด N+1 query
+     - ป้องกันการรั่วไหลข้ามผู้ใช้ (User Isolation): ผู้ใช้ Buyer B จะไม่เห็นสถานะ chosen ของ Buyer A
+  4. **Client-supplied `x-user-*` Anti-Spoofing:** ห้ามเชื่อถือ Header `x-user-*` ที่ไคลเอนต์ภายนอกส่งเข้ามาโดยไม่มี Bearer Token:
+     - API Gateway ทำการลบ Header ที่ขึ้นต้นด้วย `x-user-` ทั้งหมดจาก Inbound Request ก่อนส่งต่อไปยัง Downstream Services
+     - Product Service ใน `optionalAuth` ไม่ดึงข้อมูลผู้ใช้จาก Header `x-user-*` หากไม่มี `Authorization: Bearer` Token ที่ผ่านการตรวจสอบความถูกต้องแล้ว ทำให้การปลอมแปลง `x-user-id` ไม่สามารถเข้าถึงสถานะ chosen ของผู้ใช้อื่นได้
+  5. **Data Privacy & Idempotency:** ตัดความสัมพันธ์ `choices` ออกจาก Response สาธารณะทั้งหมด (`chosen` เป็น Boolean เท่านั้น), การเลือกซ้ำเป็น Idempotent ไม่สร้าง Record ซ้ำซ้อน, และการยกเลิกเลือกรายการที่ไม่ได้เลือกไม่ก่อให้เกิด HTTP 500
+  6. **Supersede Resolution:** มตินี้ทำการยืนยันความถูกต้องและแทนที่ (Supersede & Resolve) `MKT-DEC-005` ที่เคยมีสถานะเป็น Needs decision อย่างเป็นทางการ
+- Reason: ยกระดับความปลอดภัย ขจัดช่องโหว่ Identity Spoofing และสร้างการรับประกันความสอดคล้องของข้อมูลระดับฐานข้อมูลตามข้อกำหนด UR-11
+- Consequence: ผู้ซื้อสามารถบันทึกและซิงค์การ์ดสินค้าที่สนใจข้ามอุปกรณ์ได้อย่างปลอดภัย และระบบมีชุดทดสอบอัตโนมัติครบทั้ง Unit Tests, Frontend Component Tests, และ PostgreSQL Integration Test รองรับ
+
+## MKT-DEC-022 — Marketing Audit Trail Architecture, Atomic Mutation Contracts & SYSTEM Idempotency
+
+- Date: 2026-10-05
+- Status: Accepted
+- Decision:
+  1. **Storage & Service Boundary:** กำหนดให้เก็บ Marketing Audit Log ใน PostgreSQL ของ `product-service` (`reloop_product`) ผ่าน Prisma Model `MarketingAuditLog` (`marketing_audit_logs`) เพื่อรองรับ Atomic Database Transaction เดียวกันกับการเปลี่ยนแปลงสถานะทางธุรกิจ (Business Mutations) ของ Campaign, Auction, และ Article
+  2. **Append-Only Contract & Read-Only Exposure (Marketing-only Authorization):**
+     - ตาราง `marketing_audit_logs` เป็น Append-Only ห้ามเปิด API ให้ Client สร้าง, แก้ไข (`PUT`/`PATCH`), หรือลบ (`DELETE`) Audit Log โดยตรง
+     - เปิดเฉพาะ Read-Only Query Endpoint: `GET /api/products/marketing/audit-logs` (ผ่าน Gateway) และ `GET /marketing/audit-logs` (Direct Service) สงวนสิทธิ์เฉพาะบทบาท `MARKETING` เท่านั้น (`requireAuth` + `requireMarketingAccess`)
+     - บทบาท `BUYER`, `SELLER` และ `ADMIN` ต้องได้รับ HTTP `403 Forbidden` ตามหลักการ Least Privilege และ `MKT-DEC-014` (Admin Decoupling)
+     - Permission เช่น `analytics:read:marketing` หรือ `audit:read:marketing` ต้องไม่ทำให้บทบาทอื่นที่ไม่ใช่ `MARKETING` สามารถ bypass สิทธิ์เข้ามาดูได้
+     - ป้องกัน Anti-Spoofing: ดึง Identity จาก Server-verified Token เท่านั้น ไม่เชื่อถือ Header `x-user-*` ที่ Client ส่งมา
+     - รองรับการกรองตาม `action`, `entityType`, `actorId`, `from`, `to` (Half-open interval `[from, to)` ในเวลา `Asia/Bangkok` ตรวจสอบ `from <= to`) และ Pagination Clamping (สูงสุด 100 รายการต่อหน้า, ค่าเริ่มต้น 20)
+  3. **Verified Actor Identity & SYSTEM Actor Idempotency in PostgreSQL Transactions:**
+     - `actorId` และ `actorRole` ของผู้ใช้ต้องมาจาก Server Verified Token Identity (`req.user.id`, `req.user.role`) เท่านั้น ป้องกันการปลอมแปลงผ่าน Client Header
+     - สำหรับ Automatic/Worker Actions (เช่น `autoExpireCampaigns`, `closeAuction`) กำหนดให้ใช้:
+       - `actorId: "SYSTEM"`
+       - `actorRole: "SYSTEM"`
+       - กำหนด `idempotencyKey` แบบ Deterministic (เช่น `CAMPAIGN_END:${id}`, `AUCTION_ITEM_CLOSE:${id}`) เพื่อป้องกันการบันทึก Audit Log ซ้ำซ้อนกรณีเกิด Worker Retry
+       - **Transaction-Safe Idempotency via `createMany({ skipDuplicates: true })`:** ใน PostgreSQL การดักจับ Prisma Error `P2002` ภายใน Transaction บล็อก จะทำให้สถานะ Transaction ถูก Abort ทันที (`25P02: current transaction is aborted, commands ignored until end of transaction block`) และไม่สามารถสั่ง `findUnique` ต่อใน Transaction เดิมได้ ดังนั้นการบันทึก Audit ที่มี `idempotencyKey` จึงต้องใช้ `createMany({ data: [{ id: crypto.randomUUID(), ...data }], skipDuplicates: true })` ซึ่งแปลงเป็น SQL `INSERT ... ON CONFLICT DO NOTHING` บน PostgreSQL ทำให้ Transaction ไม่ถูก Abort และสามารถเรียก `findUnique` ดึงเรคอร์ดที่มีอยู่เดิมกลับมาได้อย่างปลอดภัย 100% ส่วน Audit ปกติที่ไม่มี `idempotencyKey` ยังคงใช้ `create` และ Fail Loud ตามปกติ
+  4. **Strict Atomic Transactions:**
+     - การบันทึก Audit Log ต้องอยู่ใน Database Transaction เดียวกันกับการเปลี่ยนแปลงข้อมูลทางธุรกิจ หาก Audit ล้มเหลว Business Mutation ต้อง Rollback ทั้งหมด; หาก Business Mutation ล้มเหลว จะต้องไม่มี Audit Log ถูกบันทึก
+  5. **Secret Sanitization:**
+     - ฟังก์ชัน `sanitizeAuditData` ทำการ Redact ฟิลด์ที่ละเอียดอ่อน (`password`, `passwordHash`, `accessToken`, `refreshToken`, `token`, `secret`, `authorization`, `cookie`, `apiKey`, `credential`) แบบ Recursive ทั้งใน Object และ Array, ป้องกัน Circular References, และแปลง `Date` เป็น ISO String ป้องกันข้อมูลหลุดรอดสู่ฐานข้อมูลและ API Response
+  6. **UI Integration:**
+     - เพิ่มแท็บ "ประวัติการดำเนินงาน" (`key: "audit"`, `label: "ประวัติการดำเนินงาน"`, `icon: "history"`) ในหน้า `/marketing` พร้อมการ์ดตัวกรอง, ตารางแสดงรายการ, Badge แยกการกระทำ, SYSTEM Actor Badge, กล่องข้อความแสดงรายละเอียด (Detail Modal) สำหรับ `previousState`, `newState`, และ `metadata`, พร้อม Loading, Empty, และ Error Retry States
+     - Date Filter แปลงวันที่แบบเลือกวันเดียวกัน (Same-day) เป็นช่วงเวลาเต็มวันในเวลาไทย `[00:00:00+07:00, วันถัดไป 00:00:00+07:00)` และตรวจสอบ `from <= to`
+- Reason: สร้างระบบตรวจสอบการดำเนินงานของฝ่ายการตลาดที่โปร่งใส ตรวจสอบย้อนกลับได้ มีความสอดคล้องระดับฐานข้อมูล ป้องกันข้อมูลรั่วไหล และทนทานต่อ Retry ภายใต้ Fixed Scope Baseline
+- Consequence: Campaign, Auction, และ Article ทุกเหตุการณ์สำคัญถูกบันทึก Audit โดยอัตโนมัติ พร้อมชุดทดสอบอัตโนมัติ Unit Tests (6/6), PostgreSQL Integration Tests (11/11 tests: 1 suite + 10 subtests with `REQUIRE_INTEGRATION=1` without skips), และ Frontend Component Tests (19/19) ครบถ้วน

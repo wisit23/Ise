@@ -377,6 +377,8 @@ describe("ChatInboxPage", () => {
     render(<ChatInboxPage />);
 
     expect(await screen.findByText("ร้านค้ากิ๊ฟช็อป")).toBeInTheDocument();
-    expect(screen.queryByText("ตั๋วซัพพอร์ตถูกเปิดแล้ว")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("ตั๋วซัพพอร์ตถูกเปิดแล้ว"),
+    ).not.toBeInTheDocument();
   });
 });

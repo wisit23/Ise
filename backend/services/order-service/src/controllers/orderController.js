@@ -1,4 +1,3 @@
-const crypto = require("crypto");
 const {
   badRequest,
   conflict,
@@ -14,6 +13,7 @@ const buyerActivityClient = require("../services/buyerActivityClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
 const orderTransitionService = require("../services/orderTransitionService");
 const productSyncService = require("../services/productSyncService");
+const attributionOutboxService = require("../services/attributionOutboxService");
 
 function productSyncFor(order, status, purpose) {
   if (status === "cancelled" && order.reservationId) {
@@ -40,30 +40,6 @@ async function respondAfterProductSync(res, order, event) {
     // The durable outbox worker will retry. A 202 tells the caller that the
     // local transition committed but the cross-service projection is pending.
     res.status(202).json({ ...order, productSyncPending: true });
-  }
-}
-
-async function dispatchOrderCompletedEvent(order) {
-  const event = {
-    eventId: crypto.randomUUID(),
-    orderId: order.id,
-    campaignId: order.campaignId || null,
-    grossAmount: order.price,
-    discountAmount: order.discountAmount || 0,
-    netAmount:
-      order.finalPrice !== null && order.finalPrice !== undefined
-        ? order.finalPrice
-        : Math.max(0, order.price - (order.discountAmount || 0)),
-    completedAt: new Date().toISOString(),
-  };
-
-  try {
-    await productClient.recordOrderCompleted(event);
-  } catch (err) {
-    console.warn(
-      "[order-service] failed to dispatch order.completed.v1 event:",
-      err.message,
-    );
   }
 }
 
@@ -168,14 +144,17 @@ async function updateStatus(req, res, next) {
     orderTransitionService.assertCanParticipantUpdateStatus(order);
 
     if (["cancelled", "completed"].includes(status)) {
-      const { order: updated, event } =
-        await orderModel.transitionStatusWithProductSync({
-          id: req.params.id,
-          status,
-          expectedVersion: order.version,
-          expectedStatuses: [order.status],
-          productSync: productSyncFor(order, status, "ORDER_STATUS"),
-        });
+      const {
+        order: updated,
+        event,
+        attributionEvent,
+      } = await orderModel.transitionStatusWithProductSync({
+        id: req.params.id,
+        status,
+        expectedVersion: order.version,
+        expectedStatuses: [order.status],
+        productSync: productSyncFor(order, status, "ORDER_STATUS"),
+      });
 
       if (order.campaignId) {
         const voucherAction =
@@ -186,7 +165,17 @@ async function updateStatus(req, res, next) {
         });
       }
       if (status === "completed") {
-        await dispatchOrderCompletedEvent(updated);
+        if (attributionEvent) {
+          // Immediately attempt delivery of the durable outbox event; background worker retries on error
+          attributionOutboxService
+            .processEvent(attributionEvent.id)
+            .catch((err) => {
+              console.warn(
+                "[order-service] immediate attribution dispatch deferred to outbox worker:",
+                err.message,
+              );
+            });
+        }
       } else {
         await buyerActivityClient.recordOrderActivity(
           updated,

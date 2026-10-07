@@ -138,7 +138,10 @@ async function actionReport({
     if (!report.productId) {
       throw badRequest("report has no target product to remove");
     }
-    await productModerationClient.removeProduct(report.productId, trimmedReason);
+    await productModerationClient.removeProduct(
+      report.productId,
+      trimmedReason,
+    );
   }
 
   const updated = await prisma.report.update({

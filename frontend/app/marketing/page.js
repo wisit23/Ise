@@ -9,12 +9,14 @@ import DashboardSection from "../../components/marketing/sections/DashboardSecti
 import AuctionScheduleSection from "../../components/marketing/sections/AuctionScheduleSection";
 import ArticlesSection from "../../components/marketing/sections/ArticlesSection";
 import CampaignsSection from "../../components/marketing/sections/CampaignsSection";
+import AuditTrailSection from "../../components/marketing/sections/AuditTrailSection";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "campaigns", label: "แคมเปญและคูปอง", icon: "confirmation_number" },
   { key: "auctions", label: "ตารางประมูล", icon: "gavel" },
   { key: "articles", label: "จัดการบทความ", icon: "article" },
+  { key: "audit", label: "ประวัติการดำเนินงาน", icon: "history" },
 ];
 
 export default function MarketingPanelPage() {
@@ -60,7 +62,7 @@ export default function MarketingPanelPage() {
       <NavBar />
       <div className="flex flex-1">
         {/* ── Sidebar ── */}
-        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
+        <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200/60 bg-white lg:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
           <div className="flex h-16 items-center border-b border-slate-200/60 px-4 bg-white">
             <div className="flex items-center gap-3">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-violet-50 text-violet-600">
@@ -110,40 +112,43 @@ export default function MarketingPanelPage() {
 
         {/* ── Main Content ── */}
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
-            <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                <span className="material-symbols-outlined text-[18px]">
-                  {activeSection?.icon}
+          <div className="sticky top-0 z-10 border-b border-slate-200/60 bg-white/80 backdrop-blur-md shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+            <div className="flex h-16 items-center justify-between px-3.5 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 mr-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <span className="material-symbols-outlined text-[18px]">
+                    {activeSection?.icon}
+                  </span>
                 </span>
-              </span>
-              <h1 className="text-lg font-bold tracking-tight text-slate-900">
-                {activeSection?.label}
-              </h1>
-            </div>
-            <div className="flex items-center gap-3 sm:hidden">
-              <RadioSelect
-                value={section}
-                onChange={setSection}
-                options={SECTIONS.map((s) => ({
-                  value: s.key,
-                  label: s.label,
-                  icon: s.icon,
-                }))}
-                size="sm"
-                variant="panel"
-                align="right"
-              />
+                <h1 className="text-sm sm:text-base md:text-lg font-bold tracking-tight text-slate-900 truncate">
+                  {activeSection?.label}
+                </h1>
+              </div>
+              <div className="flex items-center gap-2 lg:hidden shrink-0">
+                <RadioSelect
+                  value={section}
+                  onChange={setSection}
+                  options={SECTIONS.map((s) => ({
+                    value: s.key,
+                    label: s.label,
+                    icon: s.icon,
+                  }))}
+                  size="sm"
+                  variant="panel"
+                  align="right"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="p-8 max-w-7xl mx-auto">
+          <div className="p-3.5 sm:p-6 lg:p-8 max-w-7xl mx-auto min-w-0">
             {section === "dashboard" && (
               <DashboardSection token={token} onNavigate={setSection} />
             )}
             {section === "campaigns" && <CampaignsSection token={token} />}
             {section === "auctions" && <AuctionScheduleSection token={token} />}
             {section === "articles" && <ArticlesSection token={token} />}
+            {section === "audit" && <AuditTrailSection token={token} />}
           </div>
         </main>
       </div>

@@ -22,10 +22,22 @@ const CATEGORIES = [
 ];
 
 const CATEGORY_MAP = {
-  care: { label: "การดูแลเสื้อผ้า", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  styling: { label: "เคล็ดลับการแต่งตัว", color: "bg-purple-50 text-purple-700 border-purple-200" },
-  sustainability: { label: "แฟชั่นยั่งยืน", color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  general: { label: "สาระน่ารู้", color: "bg-amber-50 text-amber-700 border-amber-200" },
+  care: {
+    label: "การดูแลเสื้อผ้า",
+    color: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  styling: {
+    label: "เคล็ดลับการแต่งตัว",
+    color: "bg-purple-50 text-purple-700 border-purple-200",
+  },
+  sustainability: {
+    label: "แฟชั่นยั่งยืน",
+    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
+  general: {
+    label: "สาระน่ารู้",
+    color: "bg-amber-50 text-amber-700 border-amber-200",
+  },
 };
 
 function formatThaiDate(dateString) {
@@ -102,15 +114,17 @@ function ArticlesPageContent() {
       <header className="relative overflow-hidden bg-gradient-to-b from-brand-50/80 via-white to-slate-50/60 border-b border-slate-200/70 pt-10 pb-12 px-4">
         <div className="mx-auto max-w-5xl text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100/80 border border-emerald-200 text-emerald-800 text-xs font-semibold mb-4">
-            <span className="material-symbols-outlined text-[16px]">menu_book</span>
+            <span className="material-symbols-outlined text-[16px]">
+              menu_book
+            </span>
             RE-LOOP Community & Knowledge Hub
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-3">
             สาระน่ารู้ & เคล็ดลับแฟชั่นหมุนเวียน
           </h1>
           <p className="text-slate-600 max-w-2xl mx-auto text-sm sm:text-base leading-relaxed">
-            รวมบทความ ไอเดียการแต่งตัว วิธีดูแลรักษาเสื้อผ้ามือสอง และเรื่องราวดีๆ 
-            เพื่อร่วมสร้างโลกที่ยั่งยืนผ่านการใช้ซ้ำอย่างคุ้มค่า
+            รวมบทความ ไอเดียการแต่งตัว วิธีดูแลรักษาเสื้อผ้ามือสอง
+            และเรื่องราวดีๆ เพื่อร่วมสร้างโลกที่ยั่งยืนผ่านการใช้ซ้ำอย่างคุ้มค่า
           </p>
 
           {/* Search Box */}
@@ -132,7 +146,9 @@ function ArticlesPageContent() {
                   onClick={() => setQ("")}
                   className="absolute right-3 p-1 text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[18px]">close</span>
+                  <span className="material-symbols-outlined text-[18px]">
+                    close
+                  </span>
                 </button>
               )}
             </div>
@@ -174,7 +190,8 @@ function ArticlesPageContent() {
           <span>
             {debouncedQ ? (
               <>
-                ผลการค้นหาสำหรับ &ldquo;<strong className="text-slate-800">{debouncedQ}</strong>&rdquo;
+                ผลการค้นหาสำหรับ &ldquo;
+                <strong className="text-slate-800">{debouncedQ}</strong>&rdquo;
               </>
             ) : (
               "บทความล่าสุด"
@@ -188,7 +205,10 @@ function ArticlesPageContent() {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="rounded-2xl border border-slate-200/80 bg-white p-4">
+              <div
+                key={i}
+                className="rounded-2xl border border-slate-200/80 bg-white p-4"
+              >
                 <Skeleton className="h-44 w-full rounded-xl mb-4" />
                 <Skeleton className="h-4 w-20 mb-2" />
                 <Skeleton className="h-6 w-4/5 mb-3" />
@@ -233,7 +253,9 @@ function ArticlesPageContent() {
                       />
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 bg-slate-50">
-                        <span className="material-symbols-outlined text-[44px]">menu_book</span>
+                        <span className="material-symbols-outlined text-[44px]">
+                          menu_book
+                        </span>
                       </div>
                     )}
                     <div className="absolute top-3 left-3">
@@ -248,7 +270,11 @@ function ArticlesPageContent() {
                   {/* Article Card Details */}
                   <div className="flex flex-col flex-1 p-5">
                     <div className="flex items-center gap-2 text-[11px] text-slate-500 mb-2">
-                      <span>{formatThaiDate(article.publishedAt || article.createdAt)}</span>
+                      <span>
+                        {formatThaiDate(
+                          article.publishedAt || article.createdAt,
+                        )}
+                      </span>
                       <span>·</span>
                       <span>อ่าน {estimateReadingTime(article.content)}</span>
                     </div>
@@ -271,7 +297,10 @@ function ArticlesPageContent() {
                         {article.authorName || "ฝ่ายการตลาด RE-LOOP"}
                       </span>
                       <span className="font-semibold text-brand-600 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">
-                        อ่านต่อ <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                        อ่านต่อ{" "}
+                        <span className="material-symbols-outlined text-[14px]">
+                          arrow_forward
+                        </span>
                       </span>
                     </div>
                   </div>

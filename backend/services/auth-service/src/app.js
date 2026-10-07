@@ -22,6 +22,7 @@ const productModerationRoutes = require("./features/productModeration/productMod
 const sellerActivityRoutes = require("./features/sellerActivity/sellerActivityRoutes");
 const profileAddressRoutes = require("./features/profileAddresses/profileAddressRoutes");
 const buyerAuditRoutes = require("./features/buyerAudit/buyerAuditRoutes");
+const marketingMetricsRoutes = require("./features/metrics/marketingMetricsRoutes");
 
 const prisma = require("./models/prismaClient");
 const authService = require("./services/authService");
@@ -78,6 +79,7 @@ app.get("/health", (req, res) =>
 
 app.use("/executive", metricsRoutes);
 app.use("/executive", executiveAuditRoutes);
+app.use("/marketing", marketingMetricsRoutes);
 app.use("/internal", internalRoutes);
 app.use("/me/addresses", profileAddressRoutes);
 app.use("/", buyerAuditRoutes);

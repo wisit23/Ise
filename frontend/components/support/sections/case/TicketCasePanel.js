@@ -142,9 +142,7 @@ export default function TicketCasePanel({
                     variant="ghost"
                     icon="warning"
                     disabled={actionBusy || !manualTargetId.trim()}
-                    onClick={() =>
-                      onWarnUser(manualTargetId.trim(), "คู่กรณี")
-                    }
+                    onClick={() => onWarnUser(manualTargetId.trim(), "คู่กรณี")}
                     className="bg-amber-100 font-bold text-amber-800 hover:bg-amber-200"
                   >
                     ตักเตือนคู่กรณี
@@ -156,9 +154,7 @@ export default function TicketCasePanel({
                     variant="ghost"
                     icon="block"
                     disabled={actionBusy || !manualTargetId.trim()}
-                    onClick={() =>
-                      onBanUser(manualTargetId.trim(), "คู่กรณี")
-                    }
+                    onClick={() => onBanUser(manualTargetId.trim(), "คู่กรณี")}
                     className="bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
                   >
                     แบนคู่กรณี
@@ -180,9 +176,7 @@ export default function TicketCasePanel({
           busy={actionBusy}
           warnLabel="ตักเตือนผู้แจ้ง"
           banLabel="แบนผู้แจ้ง (ระวัง)"
-          onWarn={
-            onWarnUser ? (uid) => onWarnUser(uid, "ผู้แจ้ง") : undefined
-          }
+          onWarn={onWarnUser ? (uid) => onWarnUser(uid, "ผู้แจ้ง") : undefined}
           onBan={onBanUser ? (uid) => onBanUser(uid, "ผู้แจ้ง") : undefined}
         />
 

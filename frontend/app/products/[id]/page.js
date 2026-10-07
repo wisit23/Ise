@@ -484,9 +484,9 @@ export default function ProductDetailPage() {
             </div>
           )}
 
-          <div className="mt-6 flex items-center justify-between rounded-lg border border-gray-200 p-4">
+          <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-lg border border-gray-200 p-4">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-700">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-700">
                 {sellerName?.[0] || "?"}
               </span>
               <div>
@@ -509,7 +509,7 @@ export default function ProductDetailPage() {
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-wrap shrink-0 items-center gap-2">
               {getStoredUser()?.id !== product.sellerId && (
                 <ContactSellerButton
                   productId={product.id}
@@ -518,7 +518,7 @@ export default function ProductDetailPage() {
               )}
               <Link
                 href={`/store/${product.sellerId}`}
-                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 text-center"
               >
                 ดูร้านค้า
               </Link>
