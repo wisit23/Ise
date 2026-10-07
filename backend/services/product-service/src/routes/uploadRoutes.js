@@ -6,7 +6,7 @@ const uploadController = require("../controllers/uploadController");
 const router = Router();
 
 // Product listing images and seller video clips only. Review media is owned
-// by review-service and uploaded through /api/reviews/uploads.
+// by the review uploader in product-service through /api/reviews/uploads.
 router.post(
   "/",
   requireAuth,

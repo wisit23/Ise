@@ -218,7 +218,7 @@ async function updateStatus(req, res, next) {
   }
 }
 
-/** Called by review-service (service-to-service, internal token) to check whether
+/** Called by product-service's review feature (service-to-service, internal token) to check whether
  * an order exists/belongs to the reviewer/is eligible for a review. */
 async function getOneInternal(req, res, next) {
   try {

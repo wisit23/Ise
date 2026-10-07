@@ -36,7 +36,7 @@ async function create(req, res, next) {
         const url = item.url.trim();
         if (!url.startsWith("/review-uploads/")) {
           throw badRequest(
-            "review media must be uploaded through review-service",
+            "review media must be uploaded through the review uploader",
           );
         }
         const type = item.type === "video" ? "video" : "image";

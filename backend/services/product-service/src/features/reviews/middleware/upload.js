@@ -4,7 +4,14 @@ const crypto = require("crypto");
 const multer = require("multer");
 const { badRequest } = require("@reloop/shared");
 
-const REVIEW_UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
+const REVIEW_UPLOAD_DIR = path.join(
+  __dirname,
+  "..",
+  "..",
+  "..",
+  "..",
+  "review-uploads",
+);
 fs.mkdirSync(REVIEW_UPLOAD_DIR, { recursive: true });
 
 const ALLOWED_IMAGE_MIME = /^image\/(jpeg|png|x-png|pjpeg|webp|gif)$/i;

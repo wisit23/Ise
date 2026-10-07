@@ -24,12 +24,6 @@ const CLIENTS = [
       "backend/services/order-service/src/generated/prisma-client/index.js",
   },
   {
-    name: "review-service",
-    schema: "backend/services/review-service/prisma/schema.prisma",
-    output:
-      "backend/services/review-service/src/generated/prisma-client/index.js",
-  },
-  {
     name: "chat-service",
     schema: "backend/services/chat-service/prisma/schema.prisma",
     output:

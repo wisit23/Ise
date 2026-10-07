@@ -1,0 +1,458 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector:
+    app: gateway
+  ports:
+    - name: tcp
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: gateway
+          image: reloop/gateway:local
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: reloop-config
+            - secretRef:
+                name: reloop-secrets
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "2", memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - name: tcp
+      port: 3001
+      targetPort: 3001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: auth-service
+          image: reloop/auth-service:local
+          imagePullPolicy: Never
+          command: ["sh", "-c"]
+          args:
+            - npx prisma db push --skip-generate && node src/server.js
+          ports:
+            - containerPort: 3001
+          envFrom:
+            - configMapRef:
+                name: reloop-config
+            - secretRef:
+                name: reloop-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reloop-secrets
+                  key: DATABASE_URL_AUTH
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "2", memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-service
+spec:
+  selector:
+    app: product-service
+  ports:
+    - name: tcp
+      port: 3002
+      targetPort: 3002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-service
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: product-service
+  template:
+    metadata:
+      labels:
+        app: product-service
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: product-service
+          image: reloop/product-service:local
+          imagePullPolicy: Never
+          command: ["sh", "-c"]
+          args:
+            - npx prisma db push --skip-generate && node src/server.js
+          ports:
+            - containerPort: 3002
+          envFrom:
+            - configMapRef:
+                name: reloop-config
+            - secretRef:
+                name: reloop-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reloop-secrets
+                  key: DATABASE_URL_PRODUCT
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3002
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "2", memory: 512Mi}
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/services/product-service/uploads
+            - name: review-uploads
+              mountPath: /app/services/product-service/review-uploads
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: product-service-uploads
+        - name: review-uploads
+          persistentVolumeClaim:
+            claimName: product-service-review-uploads
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+spec:
+  selector:
+    app: order-service
+  ports:
+    - name: tcp
+      port: 3003
+      targetPort: 3003
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: order-service
+          image: reloop/order-service:local
+          imagePullPolicy: Never
+          command: ["sh", "-c"]
+          args:
+            - npx prisma db push --skip-generate && node src/server.js
+          ports:
+            - containerPort: 3003
+          envFrom:
+            - configMapRef:
+                name: reloop-config
+            - secretRef:
+                name: reloop-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reloop-secrets
+                  key: DATABASE_URL_ORDER
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3003
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3003
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "2", memory: 512Mi}
+          volumeMounts:
+            - name: private-evidence
+              mountPath: /app/services/order-service/private-evidence
+      volumes:
+        - name: private-evidence
+          persistentVolumeClaim:
+            claimName: order-service-private-evidence
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chat-service
+spec:
+  selector:
+    app: chat-service
+  ports:
+    - name: tcp
+      port: 3004
+      targetPort: 3004
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-service
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: chat-service
+  template:
+    metadata:
+      labels:
+        app: chat-service
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: chat-service
+          image: reloop/chat-service:local
+          imagePullPolicy: Never
+          command: ["sh", "-c"]
+          args:
+            - npx prisma db push --skip-generate && node src/server.js
+          ports:
+            - containerPort: 3004
+          envFrom:
+            - configMapRef:
+                name: reloop-config
+            - secretRef:
+                name: reloop-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reloop-secrets
+                  key: DATABASE_URL_CHAT
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3004
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3004
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "2", memory: 512Mi}
+          volumeMounts:
+            - name: private-attachments
+              mountPath: /app/services/chat-service/private-attachments
+      volumes:
+        - name: private-attachments
+          persistentVolumeClaim:
+            claimName: chat-service-private-attachments
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: support-service
+spec:
+  selector:
+    app: support-service
+  ports:
+    - name: tcp
+      port: 3006
+      targetPort: 3006
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: support-service
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: support-service
+  template:
+    metadata:
+      labels:
+        app: support-service
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: support-service
+          image: reloop/support-service:local
+          imagePullPolicy: Never
+          command: ["sh", "-c"]
+          args:
+            - npx prisma db push --skip-generate && node src/server.js
+          ports:
+            - containerPort: 3006
+          envFrom:
+            - configMapRef:
+                name: reloop-config
+            - secretRef:
+                name: reloop-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: reloop-secrets
+                  key: DATABASE_URL_SUPPORT
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3006
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "2", memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: tcp
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: frontend
+          image: reloop/frontend:local
+          imagePullPolicy: Never
+          command: ["sh", "-c"]
+          args:
+            - npm run dev -- --hostname 0.0.0.0
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: reloop-config
+            - secretRef:
+                name: reloop-secrets
+          startupProbe:
+            httpGet:
+              path: /
+              port: 3000
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "2", memory: 2Gi}

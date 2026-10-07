@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reloop-config
+data:
+  NODE_ENV: development
+  POSTGRES_USER: reloop
+  REDIS_URL: redis://redis:6379
+  JWT_ACCESS_EXPIRES: 15m
+  JWT_REFRESH_EXPIRES: 7d
+  AUTH_SERVICE_URL: http://auth-service:3001
+  PRODUCT_SERVICE_URL: http://product-service:3002
+  ORDER_SERVICE_URL: http://order-service:3003
+  CHAT_SERVICE_URL: http://chat-service:3004
+  SUPPORT_SERVICE_URL: http://support-service:3006
+  FRONTEND_SERVICE_URL: http://frontend:3000
+  NEXT_PUBLIC_API_URL: http://localhost:8080
+  GATEWAY_PORT: "8080"
+  AUTH_PORT: "3001"
+  PRODUCT_PORT: "3002"
+  ORDER_PORT: "3003"
+  CHAT_PORT: "3004"
+  SUPPORT_PORT: "3006"

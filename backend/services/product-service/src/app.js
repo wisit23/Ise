@@ -7,6 +7,9 @@ const metricsRoutes = require("./features/metrics/metricsRoutes");
 const reservationRoutes = require("./features/reservations/reservationRoutes");
 const internalCampaignRoutes = require("./features/campaigns/internalCampaignRoutes");
 const { UPLOAD_DIR } = require("./middleware/upload");
+const reviewRoutes = require("./features/reviews/routes/reviewRoutes");
+const reviewUploadRoutes = require("./features/reviews/routes/uploadRoutes");
+const { REVIEW_UPLOAD_DIR } = require("./features/reviews/middleware/upload");
 
 const app = express();
 app.use(express.json());
@@ -22,6 +25,9 @@ app.use("/executive", metricsRoutes);
 // marketplace images), while POST /uploads below still requires auth.
 app.use("/uploads", express.static(UPLOAD_DIR));
 app.use("/uploads", uploadRoutes);
+app.use("/review-uploads", express.static(REVIEW_UPLOAD_DIR));
+app.use("/reviews/uploads", reviewUploadRoutes);
+app.use("/reviews", reviewRoutes);
 
 app.use("/internal/products", reservationRoutes);
 app.use("/internal/campaigns", internalCampaignRoutes);
