@@ -380,8 +380,26 @@ export default function CampaignsSection({ token }) {
       setFormError("กรุณาระบุทั้งวันเวลาเริ่มต้นและสิ้นสุด");
       return;
     }
-    if (new Date(endsAt) <= new Date(startsAt)) {
+    const startDate = new Date(startsAt);
+    const endDate = new Date(endsAt);
+    const now = new Date();
+
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      setFormError("รูปแบบวันเวลาเริ่มต้นหรือสิ้นสุดไม่ถูกต้อง");
+      return;
+    }
+    if (endDate.getTime() <= now.getTime()) {
+      setFormError(
+        "ไม่สามารถกำหนดช่วงเวลาที่สิ้นสุดไปแล้วได้ วันเวลาสิ้นสุดต้องอยู่ในอนาคต",
+      );
+      return;
+    }
+    if (endDate <= startDate) {
       setFormError("วันเวลาสิ้นสุดต้องอยู่หลังวันเวลาเริ่มต้น");
+      return;
+    }
+    if (startDate.getTime() < now.getTime() - 60000) {
+      setFormError("ไม่สามารถกำหนดวันเวลาเริ่มต้นย้อนหลังในอดีตได้");
       return;
     }
 
@@ -812,11 +830,34 @@ export default function CampaignsSection({ token }) {
                             />
                           </div>
                         )}
-                        {camp.budget && (
-                          <div className="text-[10px] text-slate-400 mt-0.5">
-                            งบ: ฿{camp.budget.toLocaleString("th-TH")}
-                          </div>
-                        )}
+                        {camp.budget ? (
+                          <>
+                            <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                              {`ใช้แล้ว ฿${(camp.spentBudget || 0).toLocaleString("th-TH")} / ฿${camp.budget.toLocaleString("th-TH")}`}
+                            </div>
+                            <div
+                              className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1"
+                              title="สัดส่วนงบประมาณที่ใช้"
+                            >
+                              <div
+                                className={`h-full rounded-full ${
+                                  (camp.spentBudget || 0) >= camp.budget
+                                    ? "bg-rose-500"
+                                    : "bg-amber-500"
+                                }`}
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    Math.round(
+                                      ((camp.spentBudget || 0) / camp.budget) *
+                                        100,
+                                    ),
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                          </>
+                        ) : null}
                       </td>
 
                       <td className="px-4 py-3.5">
@@ -1472,7 +1513,9 @@ export default function CampaignsSection({ token }) {
               </label>
               <input
                 type="datetime-local"
+                aria-label="วันเวลาเริ่มต้น"
                 value={startsAt}
+                min={toLocalDatetimeInput(new Date())}
                 onChange={(e) => setStartsAt(e.target.value)}
                 required
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
@@ -1485,7 +1528,9 @@ export default function CampaignsSection({ token }) {
               </label>
               <input
                 type="datetime-local"
+                aria-label="วันเวลาสิ้นสุด"
                 value={endsAt}
+                min={startsAt || toLocalDatetimeInput(new Date())}
                 onChange={(e) => setEndsAt(e.target.value)}
                 required
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"

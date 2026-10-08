@@ -30,7 +30,14 @@ function baht(v) {
 }
 
 function fmt(dt) {
-  return dt ? new Date(dt).toLocaleString("th-TH") : "—";
+  if (!dt) return "—";
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 export default function AuctionDetailPage() {
@@ -61,7 +68,12 @@ export default function AuctionDetailPage() {
   const load = useCallback(() => {
     apiFetch(`/api/products/auctions/${id}`)
       .then(setAuction)
-      .catch((err) => setError(err.message));
+      .catch((err) =>
+        setError(
+          err.message ||
+            "เกิดข้อผิดพลาดในการโหลดข้อมูลการประมูล กรุณาลองใหม่อีกครั้ง",
+        ),
+      );
   }, [id]);
 
   useEffect(load, [load]);
@@ -106,7 +118,7 @@ export default function AuctionDetailPage() {
     }
     const value = Number(amount);
     if (!Number.isInteger(value) || value <= 0) {
-      setError("กรุณาระบุจำนวนเงินให้ถูกต้อง");
+      setError("จำนวนเงินเสนอราคาต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
       return;
     }
     setBidding(true);
@@ -124,7 +136,9 @@ export default function AuctionDetailPage() {
       setAmount("");
       load();
     } catch (err) {
-      setError(err.message);
+      setError(
+        err.message || "เกิดข้อผิดพลาดในการเสนอราคา กรุณาลองใหม่อีกครั้ง",
+      );
     } finally {
       setBidding(false);
     }
@@ -145,7 +159,9 @@ export default function AuctionDetailPage() {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
-        <p className="mx-auto max-w-4xl px-4 py-10 text-red-600">{error}</p>
+        <p className="mx-auto max-w-4xl px-4 py-10 text-red-600">
+          {error || "ไม่พบข้อมูลรายการประมูลที่ระบุ"}
+        </p>
       </main>
     );
   }

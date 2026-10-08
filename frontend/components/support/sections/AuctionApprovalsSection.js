@@ -26,7 +26,12 @@ export default function AuctionApprovalsSection({ token }) {
       token,
     })
       .then((data) => setItems(data.items || []))
-      .catch((err) => setError(err.message))
+      .catch((err) =>
+        setError(
+          err.message ||
+            "เกิดข้อผิดพลาดในการโหลดคำขอเปิดประมูล กรุณาลองใหม่อีกครั้ง",
+        ),
+      )
       .finally(() => setLoading(false));
   }, [token, refreshKey]);
 
@@ -40,7 +45,9 @@ export default function AuctionApprovalsSection({ token }) {
       });
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      setError(err.message);
+      setError(
+        err.message || "เกิดข้อผิดพลาดในการทำรายการ กรุณาลองใหม่อีกครั้ง",
+      );
     } finally {
       setBusyId(null);
     }

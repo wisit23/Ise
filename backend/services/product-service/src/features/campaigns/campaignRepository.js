@@ -107,6 +107,7 @@ function createCampaignRepository(prismaClient) {
               entityId: camp.id,
               previousState: camp,
               newState: updated,
+              metadata: { reason: "EXPIRED" },
               idempotencyKey: `CAMPAIGN_END:${camp.id}`,
             },
             { tx },
@@ -338,7 +339,25 @@ function createCampaignRepository(prismaClient) {
         throw err;
       }
 
-      const where = { id: campaignId };
+      const camp = await tx.campaign.findUnique({
+        where: { id: campaignId },
+      });
+      if (!camp || camp.status !== "published") {
+        const err = new Error("แคมเปญไม่ได้เปิดใช้งานอยู่");
+        err.statusCode = 409;
+        throw err;
+      }
+      if (
+        camp.budget !== null &&
+        camp.budget !== undefined &&
+        camp.spentBudget >= camp.budget
+      ) {
+        const err = new Error("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
+        err.statusCode = 409;
+        throw err;
+      }
+
+      const where = { id: campaignId, status: "published" };
       if (usageLimit !== null && usageLimit !== undefined) {
         where.usedCount = { lt: usageLimit };
       }
@@ -369,6 +388,19 @@ function createCampaignRepository(prismaClient) {
     });
   }
 
+  async function expireClaimedVouchers(campaignId, { tx } = {}) {
+    const client = tx || prismaClient;
+    return client.userVoucher.updateMany({
+      where: {
+        campaignId,
+        status: "CLAIMED",
+      },
+      data: {
+        status: "EXPIRED",
+      },
+    });
+  }
+
   return {
     transaction,
     createCampaign,
@@ -379,6 +411,7 @@ function createCampaignRepository(prismaClient) {
     listCampaigns,
     listAvailableCampaigns,
     autoExpireCampaigns,
+    expireClaimedVouchers,
     createVoucher,
     findVoucher,
     listUserVouchers,

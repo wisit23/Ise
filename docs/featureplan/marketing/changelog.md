@@ -802,3 +802,51 @@
     - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
     - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style!)
     - `git diff --check`: ผ่าน 100% (ไม่มีข้อผิดพลาด whitespace)
+
+## 2026-10-08 — Feature: Campaign Date Validation and Budget Tracking with Auto-End (MKT-DEC-023)
+
+- **Problem & Requirements:**
+  - เดิมแคมเปญสามารถตั้งวันเวลาเริ่มต้นและสิ้นสุดย้อนหลังในอดีตได้ทั้งตอนสร้าง Draft และแก้ไข Draft ทำให้เกิดแคมเปญที่หมดอายุตั้งแต่ยังไม่ได้เผยแพร่ หรือเผยแพร่แคมเปญที่หมดอายุแล้วได้
+  - งบประมาณแคมเปญ (Budget) ไม่มีการนับและควบคุมการใช้งานจริง ทำให้ยอดส่วนลดสะสมเกินเพดานงบประมาณโดยไม่มีการปิดแคมเปญอัตโนมัติ
+  - เมื่อแคมเปญสิ้นสุดลง โค้ดส่วนลดยังคงถูก Claim หรือนำไปใช้งานในคำสั่งซื้อได้ และคูปองสถานะ `CLAIMED` ที่ค้างอยู่ไม่ได้ถูกยกเลิกสิทธิ์
+  - ข้อความแจ้งเตือนทางฝั่งฟรอนต์เอนด์และแบ็กเอนด์ไม่ชัดเจน ขาดการตรวจสอบ min attribute บนช่องเลือกวันเวลา
+- **Implementation Details (MKT-DEC-023):**
+  - **1. Server-Side Date Boundary Validation:**
+    - ตรวจสอบ `endsAt <= now`: ปฏิเสธด้วยข้อความ "ไม่สามารถกำหนดช่วงเวลาที่สิ้นสุดไปแล้วได้ วันเวลาสิ้นสุดต้องอยู่ในอนาคต"
+    - ตรวจสอบ `startsAt < now - 60s`: ปฏิเสธด้วยข้อความ "ไม่สามารถกำหนดวันเวลาเริ่มต้นย้อนหลังในอดีตได้" (อนุญาต clock skew เล็กน้อย 60 วินาที)
+    - ตรวจสอบ `endsAt <= startsAt`: ปฏิเสธด้วยข้อความ "วันเวลาสิ้นสุดต้องอยู่หลังวันเวลาเริ่มต้น"
+    - ใน `updateDraft`: ตรวจสอบการเปลี่ยนวันเวลารวมถึงค่าเดิมและค่าใหม่ โดยตรวจ `endsAt <= now` ก่อน `endsAt <= startsAt` เพื่อแจ้งเตือนการหมดอายุในอดีตอย่างถูกต้อง
+    - ใน `publishCampaign`: ปฏิเสธแคมเปญที่ `endsAt <= now` ด้วยข้อความ "ไม่สามารถเผยแพร่แคมเปญได้เนื่องจากแคมเปญหมดอายุแล้ว" และปฏิเสธหากงบประมาณเต็มแล้ว หาก `startsAt <= now < endsAt` อนุญาตให้แคมเปญมีผลใช้งานได้ทันทีตาม Workflow ที่ Reviewer ยืนยัน (`draft → pending_approval → approved → published → ended/rejected`) โดยไม่เพิ่มสถานะ Scheduled หรือ Live
+  - **2. Budget Tracking from Outbox & Auto-End after Completed Attribution Processing:**
+    - เพิ่มคอลัมน์ `spent_budget` (`spentBudget Int @default(0)`) ใน Prisma Schema สำหรับโมเดล `Campaign`
+    - นิยาม Budget: งบประมาณถูกนับเมื่อ Product Service ประมวลผล completed attribution event (`order.completed.v1`) จาก Transactional Outbox ของ Order Service (ขอบเขตความเป็นจริง: เป็นการ auto-end after completed attribution processing ไม่ใช่ strict real-time hard cap หรือป้องกันยอดเกินงบ 100% เพราะคำสั่งซื้อสุดท้ายอาจดันให้ยอดรวม `spentBudget` เกิน `budget` ได้เล็กน้อยก่อนปิดแคมเปญ)
+    - ใน `recordOrderCompletedEvent`: ดำเนินการภายใน Database Transaction เดียวกันอย่างเป็น Atomic:
+      1. ตรวจสอบ Idempotency ของ Attribution Event ผ่าน Unique Constraint (ไม่นับงบซ้ำเมื่อเกิด Event Retry)
+      2. บันทึก Attribution และเพิ่มยอด `spentBudget` ผ่าน `{ increment: discountAmount }`
+      3. ตรวจสอบเงื่อนไขเพดานงบประมาณ: หาก `spentBudget >= budget` สั่ง auto-end after completed attribution processing เปลี่ยนสถานะ Campaign เป็น `ended` ทันที
+      4. ยกเลิกสิทธิ์ Voucher ค้างใช้: ปรับสถานะ Voucher ที่เป็น `CLAIMED` ทั้งหมดของแคมเปญให้กลายเป็น `EXPIRED`
+      5. บันทึก SYSTEM Audit Log สำหรับการปิดแคมเปญอัตโนมัติ (`action: "CAMPAIGN_END"`, `metadata: { reason: "BUDGET_REACHED" }`) พร้อม Deterministic `idempotencyKey` เพื่อความปลอดภัย
+    - ป้องกันการใช้งานหลัง Budget เต็มหรือแคมเปญ Ended: ปฏิเสธ `claimVoucher` (409), `getApplicableVouchers` (คืน []), `validateDiscount` (400) และ `quoteAndHold` (400) ทันที
+  - **3. Frontend Date & Budget Experience:**
+    - เพิ่ม `min` attribute บนช่องระบุ `startsAt` (เวลาปัจจุบัน) และ `endsAt` (เวลาเริ่มต้นหรือเวลาปัจจุบัน)
+    - เพิ่ม Accessible labels (`aria-label="วันเวลาเริ่มต้น"`, `aria-label="วันเวลาสิ้นสุด"`)
+    - Client-side validation ก่อนส่งข้อมูล พร้อมแสดง Error Alert ภาษาไทยที่ชัดเจน
+    - แสดงสถานะการใช้งบประมาณในแดชบอร์ดแคมเปญ: "ใช้แล้ว ฿{spentBudget} / ฿{budget}" พร้อม Progress Bar แสดงสัดส่วนการใช้งบ
+- **Automated Verification Evidence:**
+  - **Campaign Validation & Budget Unit Tests:** `node --test backend/services/product-service/test/campaignValidation.test.js` ผ่าน 23/23 tests 100%
+  - **Attribution & Budget Metrics Tests:** `node --test backend/services/product-service/test/campaignMetrics.test.js` ผ่าน 14/14 tests 100% (รวม idempotency, retry deduplication, budget exceeded threshold, atomic counter)
+  - **PostgreSQL Integration Tests (`REQUIRE_INTEGRATION=1`):**
+    - `campaign-budget.integration.test.js`: ผ่าน 6/6 tests (1 suite + 5 subtests) 100% (0 skips)
+    - `campaign.integration.test.js`: ผ่าน 11/11 tests 100% (0 skips)
+    - `campaign-attribution.integration.test.js` (product-service): ผ่าน 13/13 tests 100% (0 skips)
+    - `campaign-attribution.integration.test.js` (order-service): ผ่าน 7/7 tests 100% (0 skips)
+  - **Auction Regression Tests:**
+    - `auctionService.test.js`: ผ่าน 53/53 tests 100%
+    - `AuctionScheduleSection.test.js`: ผ่าน 8/8 tests 100%
+  - **Frontend UI Tests:**
+    - `frontend/components/marketing/sections/CampaignsSection.test.js`: ผ่าน 16/16 tests 100% (รวม date min attributes, client-side validation alerts, budget progress rendering)
+  - **Environment & Quality Gates:**
+    - Node.js Runtime: `v22.16.0` (Host)
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `git diff --check`: ผ่าน 100%
+  - **Schema/ER Status:** เพิ่มคอลัมน์ `spent_budget` ในตาราง `campaigns` เรียบร้อยแล้ว แต่ **ER Diagram update pending** (รออัปเดตไฟล์ภาพ/เอกสารสถาปัตยกรรมระดับภาพรวม `docs/erdatabase.png` / `docs/S2G5_RE-LOOP_ISE.md`) ห้ามถือว่าปิดเอกสารครบ 100% จนกว่าจะอัปเดตแผนภาพ ER

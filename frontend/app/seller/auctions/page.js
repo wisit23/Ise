@@ -36,6 +36,17 @@ function baht(v) {
   return `฿${v.toLocaleString("th-TH")}`;
 }
 
+function fmt(dt) {
+  if (!dt) return "—";
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 const EMPTY_FORM = {
   title: "",
   description: "",
@@ -69,7 +80,12 @@ export default function SellerAuctionsPage() {
       .then((data) =>
         setMyAuctions(data.items.filter((a) => a.sellerId === currentUser.id)),
       )
-      .catch((err) => setError(err.message))
+      .catch((err) =>
+        setError(
+          err.message ||
+            "เกิดข้อผิดพลาดในการโหลดรายการประมูล กรุณาลองใหม่อีกครั้ง",
+        ),
+      )
       .finally(() => setLoading(false));
 
     setLoadingRound(true);
@@ -132,18 +148,18 @@ export default function SellerAuctionsPage() {
       );
       return;
     }
-    if (!form.title || !form.category) {
-      setError("กรุณากรอกชื่อสินค้าและหมวดหมู่");
+    if (!form.title?.trim() || !form.category) {
+      setError("กรุณากรอกชื่อสินค้าและเลือกหมวดหมู่ให้ครบถ้วน");
       return;
     }
     const startingPrice = Number(form.startingPrice);
     const bidIncrement = Number(form.bidIncrement);
     if (!Number.isInteger(startingPrice) || startingPrice <= 0) {
-      setError("ราคาเริ่มต้นต้องเป็นจำนวนเต็มมากกว่า 0");
+      setError("ราคาเริ่มต้นต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
       return;
     }
     if (!Number.isInteger(bidIncrement) || bidIncrement <= 0) {
-      setError("เพิ่มขั้นต่ำต่อครั้งต้องเป็นจำนวนเต็มมากกว่า 0");
+      setError("ราคาเสนอเพิ่มขั้นต่ำต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
       return;
     }
 
@@ -274,16 +290,10 @@ export default function SellerAuctionsPage() {
                   📅 ช่วงเวลารับสินค้า
                 </div>
                 <div className="text-xs text-gray-600">
-                  เริ่มรับ:{" "}
-                  {new Date(
-                    currentRoundInfo.round.submissionStartsAt,
-                  ).toLocaleString("th-TH")}
+                  เริ่มรับ: {fmt(currentRoundInfo.round.submissionStartsAt)}
                 </div>
                 <div className="text-xs font-semibold text-red-600">
-                  ปิดรับ:{" "}
-                  {new Date(
-                    currentRoundInfo.round.submissionEndsAt,
-                  ).toLocaleString("th-TH")}
+                  ปิดรับ: {fmt(currentRoundInfo.round.submissionEndsAt)}
                 </div>
               </div>
               <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
@@ -291,16 +301,10 @@ export default function SellerAuctionsPage() {
                   🔨 ช่วงเวลาประมูลจริง
                 </div>
                 <div className="text-xs text-gray-600">
-                  เริ่มประมูล:{" "}
-                  {new Date(
-                    currentRoundInfo.round.auctionStartsAt,
-                  ).toLocaleString("th-TH")}
+                  เริ่มประมูล: {fmt(currentRoundInfo.round.auctionStartsAt)}
                 </div>
                 <div className="text-xs text-gray-600">
-                  สิ้นสุด:{" "}
-                  {new Date(
-                    currentRoundInfo.round.auctionEndsAt,
-                  ).toLocaleString("th-TH")}
+                  สิ้นสุด: {fmt(currentRoundInfo.round.auctionEndsAt)}
                 </div>
               </div>
             </div>
@@ -317,11 +321,7 @@ export default function SellerAuctionsPage() {
               {currentRoundInfo?.round && (
                 <span className="block mt-1 text-xs text-amber-700">
                   (รอบล่าสุด &ldquo;{currentRoundInfo.round.title}&rdquo;
-                  ปิดรับเมื่อ{" "}
-                  {new Date(
-                    currentRoundInfo.round.submissionEndsAt,
-                  ).toLocaleString("th-TH")}
-                  )
+                  ปิดรับเมื่อ {fmt(currentRoundInfo.round.submissionEndsAt)})
                 </span>
               )}
             </p>

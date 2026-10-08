@@ -254,3 +254,36 @@
      - Date Filter แปลงวันที่แบบเลือกวันเดียวกัน (Same-day) เป็นช่วงเวลาเต็มวันในเวลาไทย `[00:00:00+07:00, วันถัดไป 00:00:00+07:00)` และตรวจสอบ `from <= to`
 - Reason: สร้างระบบตรวจสอบการดำเนินงานของฝ่ายการตลาดที่โปร่งใส ตรวจสอบย้อนกลับได้ มีความสอดคล้องระดับฐานข้อมูล ป้องกันข้อมูลรั่วไหล และทนทานต่อ Retry ภายใต้ Fixed Scope Baseline
 - Consequence: Campaign, Auction, และ Article ทุกเหตุการณ์สำคัญถูกบันทึก Audit โดยอัตโนมัติ พร้อมชุดทดสอบอัตโนมัติ Unit Tests (6/6), PostgreSQL Integration Tests (11/11 tests: 1 suite + 10 subtests with `REQUIRE_INTEGRATION=1` without skips), และ Frontend Component Tests (19/19) ครบถ้วน
+
+## MKT-DEC-023 — Campaign Workflow Confirmation, Server-Side Date Bounds & Budget Tracking with Auto-End
+
+- Date: 2026-10-08
+- Status: Accepted
+- Context:
+  - Reviewer ยืนยันการยอมรับ Workflow ปัจจุบันของ Campaign โดยไม่ต้องเพิ่มสถานะย่อยอย่าง Scheduled หรือ Live:
+    `draft → pending_approval → approved → published → ended/rejected`
+  - ช่วงเวลาการใช้งานของแคมเปญถูกควบคุมโดยตรงผ่าน `startsAt` และ `endsAt`
+  - นิยามของงบประมาณ (Budget): งบประมาณถูกนับเมื่อ Product Service ประมวลผล completed attribution event (`order.completed.v1`) ที่ได้รับจาก Transactional Outbox ของ Order Service
+  - ขอบเขตและความจริงของระบบ: การควบคุมงบประมาณเป็นการ auto-end after completed attribution processing ไม่ใช่ strict real-time hard cap และไม่ได้รับประกันการป้องกันยอดเกินงบ 100% เนื่องจากคำสั่งซื้อที่ถือสิทธิ์คูปองและชำระเงินสำเร็จตามลำดับเวลาอาจทำให้ออเดอร์สุดท้ายมียอดส่วนลดที่ดันให้ `spentBudget` สูงกว่า `budget` ได้เล็กน้อยก่อนที่แคมเปญจะถูก auto-end
+- Decision:
+  1. **Workflow Confirmation:** ยืนยัน Workflow เดิม 6 สถานะ (`draft`, `pending_approval`, `approved`, `published`, `ended`, `rejected`) โดยไม่มีสถานะ Scheduled/Live และไม่ขยายขอบเขตไปยัง UR-13
+  2. **Server-Side Date Validation:**
+     - การสร้างแคมเปญ (Create Draft): ปฏิเสธช่วงเวลาที่สิ้นสุดไปแล้ว (`endsAt <= now`), ปฏิเสธการตั้ง `startsAt` ย้อนหลังในอดีต (`startsAt < now - 60s` อนุญาต clock skew 60 วินาที), และต้องมี `endsAt > startsAt`
+     - การแก้ไขแคมเปญ (Update Draft): ตรวจสอบช่วงเวลารวมทั้งค่าใหม่และค่าเดิม ปฏิเสธช่วงเวลาที่สิ้นสุดไปแล้ว และห้ามแก้ `startsAt` ย้อนหลัง
+     - การเผยแพร่ (Publish): ปฏิเสธแคมเปญที่ `endsAt` หมดอายุแล้ว หากเผยแพร่หลัง `startsAt` แต่ยังไม่ถึง `endsAt` ให้เริ่มใช้งานได้ทันที (`published`)
+     - ข้อความแจ้งเตือนทั้งหมดเป็นภาษาไทยที่อ่านเข้าใจง่าย
+  3. **Atomic Budget Tracking & Auto-End after Completed Attribution Processing:**
+     - เพิ่มคอลัมน์ `spent_budget` (`spentBudget Int @default(0)`) ในตาราง `campaigns`
+     - เมื่อ Product Service ประมวลผล Attribution Event `order.completed.v1` จาก Outbox ให้เพิ่มยอด `spentBudget` แบบ Atomic Increment ด้วยยอด `discountAmount`
+     - ตรวจสอบยอดสะสม หาก `spentBudget >= budget` ให้ดำเนินการ auto-end after completed attribution processing โดยเปลี่ยนสถานะ Campaign เป็น `ended` ทันทีภายใน Database Transaction เดียวกัน พร้อมบันทึก `MarketingAuditLog` ดำเนินการโดย `SYSTEM` ระบุ `metadata: { reason: "BUDGET_REACHED" }` และใช้ Deterministic Idempotency Key ป้องกัน Event Retry
+     - เมื่อแคมเปญสิ้นสุด (`ended`) ไม่ว่าจะหมดอายุหรือ auto-end หลังประมวลผลงบประมาณ คูปองที่อยู่ในสถานะ `CLAIMED` ที่ยังไม่ได้ใช้จะถูกปรับเป็น `EXPIRED` ทันที
+     - แคมเปญที่ `ended` หรือยอด `spentBudget >= budget` จะไม่สามารถ Claim, ไม่แสดงใน Applicable Vouchers, และปฏิเสธ Quote-and-Hold
+  4. **Frontend UI & Validation:**
+     - ฟอร์มสร้าง/แก้ไขแคมเปญเพิ่มคุณสมบัติ `min` ให้ช่อง `datetime-local` ตามเวลาปัจจุบัน
+     - ตรวจสอบความถูกต้องของวันเวลาฝั่ง Frontend พร้อมข้อความเตือนภาษาไทยก่อนส่งข้อมูล
+     - แดชบอร์ดแสดงข้อมูลงบประมาณในตารางเป็น `"ใช้แล้ว ฿X / ฿Budget"` พร้อมแถบความคืบหน้า (Budget Progress Bar)
+- Reason: ป้องกันการสร้างแคมเปญย้อนหลังที่หมดอายุไปแล้ว ติดตามงบประมาณที่จ่ายจริงเมื่อคำสั่งซื้อสำเร็จ ปิดแคมเปญอัตโนมัติเมื่อถึงเพดานงบ และรับประกันความสอดคล้องของข้อมูลแบบ Transactional และ Idempotent
+- Consequence:
+  - ระบบโปรโมชันมีความรัดกุม ลดโอกาสการใช้งบประมาณบานปลาย (Financial Leakage) ผ่านการ auto-end after completed attribution processing, มี Audit Trail ตรวจสอบได้
+  - ผ่านชุดทดสอบ Unit Tests (37/37), PostgreSQL Integration Tests สำหรับ Budget จริง (`campaign-budget.integration.test.js` 6/6 tests with `REQUIRE_INTEGRATION=1` without skips), PostgreSQL Attribution Integration Tests (12/12 subtests), และ Frontend Component Tests (16/16)
+  - **Schema/ER Status:** เพิ่มคอลัมน์ `spent_budget` ใน Prisma Schema และฐานข้อมูล PostgreSQL จริงแล้ว แต่ **ER Diagram update pending** (รออัปเดตไฟล์ภาพ/เอกสารสถาปัตยกรรมระดับภาพรวม `docs/erdatabase.png` / `docs/S2G5_RE-LOOP_ISE.md`) ห้ามถือว่าเอกสารปิดสมบูรณ์ 100% จนกว่าจะอัปเดตแผนภาพ ER

@@ -20,6 +20,18 @@ beforeEach((t) => {
     auctionStartsAt: new Date(Date.now() + 7200000),
     auctionEndsAt: new Date(Date.now() + 14400000),
   }));
+  const mockAuditTx = {
+    marketingAuditLog: {
+      create: async () => ({ id: "audit-1" }),
+      createMany: async () => ({ count: 1 }),
+      findUnique: async () => ({ id: "audit-1" }),
+    },
+    auctionItem: {
+      findUnique: async () => ({ id: "a1", status: "open" }),
+      update: async () => ({ id: "a1", status: "closed" }),
+    },
+  };
+  t.mock.method(repository, "transaction", async (fn) => fn(mockAuditTx));
 });
 
 test("canTransition allows only the documented lifecycle edges", () => {
@@ -292,7 +304,10 @@ test("placeBid rejects a bid under the current highest + increment", async (t) =
       amount: 155,
       idempotencyKey: "k1",
     }),
-    (err) => err.status === 400 && err.message === "bid must be at least 160",
+    (err) =>
+      err.status === 400 &&
+      err.message.includes("ราคาเสนอประมูลต้องไม่ต่ำกว่า") &&
+      err.message.includes("160"),
   );
 });
 
@@ -402,8 +417,7 @@ test("placeBid throws 409 Conflict when idempotencyKey is reused with different 
       amount: 120, // different amount
       idempotencyKey: "k1",
     }),
-    (err) =>
-      err.status === 409 && err.message.includes("idempotency key reused"),
+    (err) => err.status === 409 && err.message.includes("คำขอนี้ถูกส่งซ้ำ"),
   );
 });
 
@@ -434,8 +448,7 @@ test("placeBid throws 409 Conflict when idempotencyKey is reused with different 
       amount: 110,
       idempotencyKey: "k1",
     }),
-    (err) =>
-      err.status === 409 && err.message.includes("idempotency key reused"),
+    (err) => err.status === 409 && err.message.includes("คำขอนี้ถูกส่งซ้ำ"),
   );
 });
 
@@ -466,8 +479,7 @@ test("placeBid throws 409 Conflict when idempotencyKey is reused with different 
       amount: 110,
       idempotencyKey: "k1",
     }),
-    (err) =>
-      err.status === 409 && err.message.includes("idempotency key reused"),
+    (err) => err.status === 409 && err.message.includes("คำขอนี้ถูกส่งซ้ำ"),
   );
 });
 
@@ -592,8 +604,7 @@ test("placeBid P2002 race recovery throws 409 Conflict if race-created bid has d
       amount: 110,
       idempotencyKey: "k-race",
     }),
-    (err) =>
-      err.status === 409 && err.message.includes("idempotency key reused"),
+    (err) => err.status === 409 && err.message.includes("คำขอนี้ถูกส่งซ้ำ"),
   );
 });
 
@@ -816,7 +827,13 @@ test("createRound rejects invalid or inverted dates", async () => {
 });
 
 test("createRound creates round for Marketing user", async (t) => {
-  t.mock.method(repository, "withRoundLock", async (fn) => fn("mock-tx"));
+  const mockTx = {
+    marketingAuditLog: {
+      create: async () => ({ id: "audit-1" }),
+      findUnique: async () => null,
+    },
+  };
+  t.mock.method(repository, "withRoundLock", async (fn) => fn(mockTx));
   t.mock.method(repository, "findConflictingRound", async () => null);
   t.mock.method(repository, "createRound", async (data) => ({
     id: "round-1",
@@ -1032,7 +1049,9 @@ test("createRound validates input dates and boundaries", async () => {
   // Missing title
   await assert.rejects(
     service.createRound({ user, input: { title: "" } }),
-    (err) => err.status === 400 && err.message.includes("title is required"),
+    (err) =>
+      err.status === 400 &&
+      err.message.includes("กรุณากรอกชื่อรอบการประมูลให้ครบถ้วน"),
   );
 
   // Invalid date
@@ -1047,7 +1066,7 @@ test("createRound validates input dates and boundaries", async () => {
         auctionEndsAt: "2026-10-03T00:00:00.000Z",
       },
     }),
-    (err) => err.status === 400 && err.message.includes("valid dates"),
+    (err) => err.status === 400 && err.message.includes("กรุณาระบุวันและเวลา"),
   );
 
   // submissionEndsAt <= submissionStartsAt
@@ -1064,7 +1083,9 @@ test("createRound validates input dates and boundaries", async () => {
     }),
     (err) =>
       err.status === 400 &&
-      err.message.includes("submissionEndsAt must be after submissionStartsAt"),
+      err.message.includes(
+        "เวลาปิดรับสินค้าต้องอยู่หลังเวลาเริ่มเปิดรับสินค้า",
+      ),
   );
 
   // auctionStartsAt < submissionEndsAt
@@ -1082,7 +1103,7 @@ test("createRound validates input dates and boundaries", async () => {
     (err) =>
       err.status === 400 &&
       err.message.includes(
-        "auctionStartsAt must be after or equal to submissionEndsAt",
+        "เวลาเริ่มการประมูลต้องอยู่หลังหรือตรงกับเวลาปิดรับสินค้า",
       ),
   );
 
@@ -1100,7 +1121,9 @@ test("createRound validates input dates and boundaries", async () => {
     }),
     (err) =>
       err.status === 400 &&
-      err.message.includes("auctionEndsAt must be after auctionStartsAt"),
+      err.message.includes(
+        "เวลาสิ้นสุดการประมูลต้องอยู่หลังเวลาเริ่มการประมูล",
+      ),
   );
 });
 
@@ -1136,8 +1159,13 @@ test("createRound throws 409 Conflict when overlapping round exists", async (t) 
       assert.equal(err.status, 409);
       assert.ok(err.message.includes("Existing Round 1"));
       assert.ok(
-        err.message.includes("Round interval overlaps with existing round"),
+        err.message.includes(
+          "ไม่สามารถสร้างรอบประมูลได้ เนื่องจากช่วงเวลาที่เลือกทับกับรอบ 'Existing Round 1'",
+        ),
       );
+      assert.ok(!err.message.includes(".000Z"));
+      assert.ok(!err.message.includes("T00:00:00"));
+      assert.ok(!err.message.includes("Round interval overlaps"));
       return true;
     },
   );
@@ -1147,13 +1175,19 @@ test("createRound succeeds and passes tx when no conflict exists", async (t) => 
   const user = { id: "mkt-1", role: "MARKETING" };
   let createdWithTx = null;
 
-  t.mock.method(repository, "withRoundLock", async (fn) => fn("mock-tx"));
+  const mockTx = {
+    marketingAuditLog: {
+      create: async () => ({ id: "audit-1" }),
+      findUnique: async () => null,
+    },
+  };
+  t.mock.method(repository, "withRoundLock", async (fn) => fn(mockTx));
   t.mock.method(repository, "findConflictingRound", async (params, tx) => {
-    assert.equal(tx, "mock-tx");
+    assert.equal(tx, mockTx);
     return null;
   });
   t.mock.method(repository, "createRound", async (data, tx) => {
-    assert.equal(tx, "mock-tx");
+    assert.equal(tx, mockTx);
     createdWithTx = tx;
     return { id: "round-new-1", ...data };
   });
@@ -1170,7 +1204,7 @@ test("createRound succeeds and passes tx when no conflict exists", async (t) => 
   });
 
   assert.equal(created.id, "round-new-1");
-  assert.equal(createdWithTx, "mock-tx");
+  assert.equal(createdWithTx, mockTx);
 });
 
 test("getCurrentRound returns active round containing now with derived phase", async (t) => {
@@ -1258,4 +1292,106 @@ test("listRounds attaches derived phase to each round", async (t) => {
   assert.equal(result.length, 2);
   assert.equal(result[0].phase, "ended");
   assert.equal(result[1].phase, "upcoming");
+});
+
+test("auction error messages do not leak internal status or English technical terms", async (t) => {
+  t.mock.method(repository, "findById", async () => ({
+    id: "a1",
+    status: "draft",
+  }));
+
+  await assert.rejects(
+    service.approve({
+      user: { id: "mkt-1", role: "MARKETING" },
+      auctionId: "a1",
+    }),
+    (err) => {
+      assert.equal(err.status, 409);
+      assert.ok(err.message.includes("ไม่สามารถเปลี่ยนสถานะรายการประมูล"));
+      assert.ok(err.message.includes("ฉบับร่าง"));
+      assert.ok(!err.message.includes("cannot move auction from draft"));
+      return true;
+    },
+  );
+});
+
+test("schedule rejects past startsAt with friendly Thai message", async (t) => {
+  t.mock.method(repository, "findById", async () => ({
+    id: "a1",
+    status: "approved",
+  }));
+
+  await assert.rejects(
+    service.schedule({
+      user: { id: "mkt-1", role: "MARKETING" },
+      auctionId: "a1",
+      startsAt: "2020-01-01T00:00:00.000Z",
+      endsAt: "2099-01-01T00:00:00.000Z",
+    }),
+    (err) => {
+      assert.equal(err.status, 400);
+      assert.ok(
+        err.message.includes("เวลาเปิดประมูลต้องเป็นวันและเวลาในอนาคต"),
+      );
+      assert.ok(!err.message.includes("startsAt must be in the future"));
+      return true;
+    },
+  );
+});
+
+test("schedule rejects endsAt before startsAt with friendly Thai message", async (t) => {
+  t.mock.method(repository, "findById", async () => ({
+    id: "a1",
+    status: "approved",
+  }));
+
+  await assert.rejects(
+    service.schedule({
+      user: { id: "mkt-1", role: "MARKETING" },
+      auctionId: "a1",
+      startsAt: "2099-01-02T00:00:00.000Z",
+      endsAt: "2099-01-01T00:00:00.000Z",
+    }),
+    (err) => {
+      assert.equal(err.status, 400);
+      assert.ok(
+        err.message.includes("เวลาปิดประมูลต้องอยู่หลังเวลาเปิดประมูล"),
+      );
+      assert.ok(!err.message.includes("endsAt must be after startsAt"));
+      return true;
+    },
+  );
+});
+
+test("placeBid validates missing idempotencyKey with clear Thai message", async () => {
+  await assert.rejects(
+    service.placeBid({
+      user: { id: "buyer-1" },
+      auctionId: "a1",
+      amount: 100,
+      idempotencyKey: "",
+    }),
+    (err) => {
+      assert.equal(err.status, 400);
+      assert.ok(err.message.includes("ข้อมูลคำขอไม่สมบูรณ์"));
+      assert.ok(!err.message.includes("idempotencyKey is required"));
+      return true;
+    },
+  );
+});
+
+test("placeBid validates non-positive amount with clear Thai message", async () => {
+  await assert.rejects(
+    service.placeBid({
+      user: { id: "buyer-1" },
+      auctionId: "a1",
+      amount: -10,
+      idempotencyKey: "key-1",
+    }),
+    (err) => {
+      assert.equal(err.status, 400);
+      assert.ok(err.message.includes("จำนวนเงินเสนอราคาต้องเป็นจำนวนเต็มบวก"));
+      return true;
+    },
+  );
 });

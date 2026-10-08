@@ -1,5 +1,6 @@
 const { badRequest, conflict } = require("@reloop/shared");
 const defaultPrisma = require("../../models/prismaClient");
+const { recordAudit } = require("../audit/marketingAuditRepository");
 
 function createCampaignMetricsService(
   prismaClient = defaultPrisma,
@@ -154,7 +155,7 @@ function createCampaignMetricsService(
 
     // 1. Persistent PostgreSQL Path (Production & Integration Tests)
     if (hasPrismaAttributionModel(prismaClient)) {
-      // Check existing by eventId or orderId for idempotent deduplication
+      // Check existing by eventId or orderId for idempotent deduplication before transaction
       const existing = await prismaClient.campaignAttribution.findFirst({
         where: {
           OR: [{ eventId }, { orderId }],
@@ -165,19 +166,93 @@ function createCampaignMetricsService(
         return { recorded: true, deduplicated: true, fact: existing };
       }
 
+      const runTx =
+        typeof prismaClient.$transaction === "function"
+          ? (fn) => prismaClient.$transaction(fn)
+          : (fn) => fn(prismaClient);
+
       try {
-        const fact = await prismaClient.campaignAttribution.create({
-          data: {
-            eventId,
-            orderId,
-            campaignId,
-            grossAmount,
-            discountAmount,
-            netAmount,
-            completedAt,
-          },
+        const txResult = await runTx(async (tx) => {
+          // Re-check existing in tx for race safety
+          const inTxExisting = await tx.campaignAttribution.findFirst({
+            where: {
+              OR: [{ eventId }, { orderId }],
+            },
+          });
+          if (inTxExisting) {
+            assertMatchingAttribution(inTxExisting, incomingAttributes);
+            return { recorded: true, deduplicated: true, fact: inTxExisting };
+          }
+
+          const fact = await tx.campaignAttribution.create({
+            data: {
+              eventId,
+              orderId,
+              campaignId,
+              grossAmount,
+              discountAmount,
+              netAmount,
+              completedAt,
+            },
+          });
+
+          // Atomic budget increment and threshold check
+          if (campaignId && tx.campaign) {
+            const camp = await tx.campaign.findUnique({
+              where: { id: campaignId },
+            });
+            if (camp) {
+              const updated = await tx.campaign.update({
+                where: { id: campaignId },
+                data: {
+                  spentBudget: { increment: discountAmount },
+                },
+              });
+
+              // Check if budget reached
+              if (
+                updated.budget !== null &&
+                updated.budget !== undefined &&
+                updated.spentBudget >= updated.budget &&
+                updated.status !== "ended"
+              ) {
+                const endedCampaign = await tx.campaign.update({
+                  where: { id: campaignId },
+                  data: { status: "ended" },
+                });
+
+                if (tx.userVoucher) {
+                  await tx.userVoucher.updateMany({
+                    where: {
+                      campaignId,
+                      status: "CLAIMED",
+                    },
+                    data: { status: "EXPIRED" },
+                  });
+                }
+
+                await recordAudit(
+                  {
+                    actorId: "SYSTEM",
+                    actorRole: "SYSTEM",
+                    action: "CAMPAIGN_END",
+                    entityType: "CAMPAIGN",
+                    entityId: campaignId,
+                    previousState: updated,
+                    newState: endedCampaign,
+                    metadata: { reason: "BUDGET_REACHED" },
+                    idempotencyKey: `CAMPAIGN_END_BUDGET:${campaignId}`,
+                  },
+                  { tx },
+                );
+              }
+            }
+          }
+
+          return { recorded: true, fact };
         });
-        return { recorded: true, fact };
+
+        return txResult;
       } catch (err) {
         if (err.code === "P2002") {
           // Unique constraint race: retrieve the existing fact
@@ -216,6 +291,35 @@ function createCampaignMetricsService(
       completedAt,
     };
     memoryAttributions.set(eventId, factRecord);
+
+    if (campaignId && prismaClient && prismaClient.campaign) {
+      if (typeof prismaClient.campaign.findUnique === "function") {
+        const camp = await prismaClient.campaign.findUnique({
+          where: { id: campaignId },
+        });
+        if (camp) {
+          camp.spentBudget = (camp.spentBudget || 0) + discountAmount;
+          if (
+            camp.budget !== null &&
+            camp.budget !== undefined &&
+            camp.spentBudget >= camp.budget &&
+            camp.status !== "ended"
+          ) {
+            camp.status = "ended";
+            if (
+              prismaClient.userVoucher &&
+              typeof prismaClient.userVoucher.updateMany === "function"
+            ) {
+              await prismaClient.userVoucher.updateMany({
+                where: { campaignId, status: "CLAIMED" },
+                data: { status: "EXPIRED" },
+              });
+            }
+          }
+        }
+      }
+    }
+
     return { recorded: true, fact: factRecord };
   }
 

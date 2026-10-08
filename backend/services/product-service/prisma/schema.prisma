@@ -318,6 +318,7 @@ model Campaign {
   maxDiscount        Int?           @map("max_discount")
   applicableCategory String?        @map("applicable_category")
   budget             Int?
+  spentBudget        Int            @default(0) @map("spent_budget")
   usageLimit         Int?           @map("usage_limit")
   usedCount          Int            @default(0) @map("used_count")
   status             CampaignStatus @default(draft)

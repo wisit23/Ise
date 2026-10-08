@@ -98,36 +98,38 @@ function validateCampaignInput(input, { isUpdate = false } = {}) {
     }
   }
 
-  if (input.startsAt !== undefined && input.endsAt !== undefined) {
-    const start = new Date(input.startsAt);
-    const end = new Date(input.endsAt);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw badRequest("invalid startsAt or endsAt date format");
-    }
-    if (end <= start) {
-      throw badRequest("endsAt must be after startsAt");
-    }
-  } else if (!isUpdate) {
+  if (!isUpdate) {
     if (!input.startsAt || !input.endsAt) {
-      throw badRequest("both startsAt and endsAt dates are required");
+      throw badRequest("กรุณาระบุทั้งวันเวลาเริ่มต้นและสิ้นสุดของแคมเปญ");
     }
     const start = new Date(input.startsAt);
     const end = new Date(input.endsAt);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw badRequest("invalid startsAt or endsAt date format");
+      throw badRequest("รูปแบบวันเวลาเริ่มต้นหรือสิ้นสุดไม่ถูกต้อง");
     }
     if (end <= start) {
-      throw badRequest("endsAt must be after startsAt");
+      throw badRequest("วันเวลาสิ้นสุดต้องอยู่หลังวันเวลาเริ่มต้น");
+    }
+    const now = new Date();
+    // ตอนสร้าง Draft ห้ามกำหนดช่วงเวลาที่สิ้นสุดไปแล้ว
+    if (end.getTime() <= now.getTime()) {
+      throw badRequest(
+        "ไม่สามารถกำหนดช่วงเวลาที่สิ้นสุดไปแล้วได้ วันเวลาสิ้นสุดต้องอยู่ในอนาคต",
+      );
+    }
+    // ห้ามกำหนด startsAt ย้อนหลังโดยไม่มีเหตุผล (อนุญาต clock skew ไม่เกิน 60 วินาที)
+    if (start.getTime() < now.getTime() - 60000) {
+      throw badRequest("ไม่สามารถกำหนดวันเวลาเริ่มต้นย้อนหลังในอดีตได้");
     }
   } else {
     if (
       input.startsAt !== undefined &&
       isNaN(new Date(input.startsAt).getTime())
     ) {
-      throw badRequest("invalid startsAt date format");
+      throw badRequest("รูปแบบวันเวลาเริ่มต้นไม่ถูกต้อง");
     }
     if (input.endsAt !== undefined && isNaN(new Date(input.endsAt).getTime())) {
-      throw badRequest("invalid endsAt date format");
+      throw badRequest("รูปแบบวันเวลาสิ้นสุดไม่ถูกต้อง");
     }
   }
 
@@ -263,8 +265,20 @@ function createCampaignService(
     const newEnd = data.endsAt
       ? new Date(data.endsAt)
       : new Date(campaign.endsAt);
+    const now = new Date();
+    if (newEnd.getTime() <= now.getTime()) {
+      throw badRequest(
+        "ไม่สามารถกำหนดช่วงเวลาที่สิ้นสุดไปแล้วได้ วันเวลาสิ้นสุดต้องอยู่ในอนาคต",
+      );
+    }
     if (newEnd <= newStart) {
-      throw badRequest("endsAt must be after startsAt");
+      throw badRequest("วันเวลาสิ้นสุดต้องอยู่หลังวันเวลาเริ่มต้น");
+    }
+    if (
+      input.startsAt !== undefined &&
+      newStart.getTime() < now.getTime() - 60000
+    ) {
+      throw badRequest("ไม่สามารถกำหนดวันเวลาเริ่มต้นย้อนหลังในอดีตได้");
     }
 
     // Validate effective discount combination
@@ -414,6 +428,20 @@ function createCampaignService(
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "published");
 
+    const now = new Date();
+    if (new Date(campaign.endsAt) <= now) {
+      throw badRequest("ไม่สามารถเผยแพร่แคมเปญได้เนื่องจากแคมเปญหมดอายุแล้ว");
+    }
+    if (
+      campaign.budget !== null &&
+      campaign.budget !== undefined &&
+      (campaign.spentBudget || 0) >= campaign.budget
+    ) {
+      throw badRequest(
+        "ไม่สามารถเผยแพร่แคมเปญได้เนื่องจากงบประมาณถูกใช้เต็มจำนวนแล้ว",
+      );
+    }
+
     return runInTransaction(async (tx) => {
       const updated = await repository.updateCampaign(
         campaignId,
@@ -451,6 +479,14 @@ function createCampaignService(
         },
         { tx },
       );
+      if (repository.expireClaimedVouchers) {
+        await repository.expireClaimedVouchers(campaignId, { tx });
+      } else if (tx && tx.userVoucher) {
+        await tx.userVoucher.updateMany({
+          where: { campaignId, status: "CLAIMED" },
+          data: { status: "EXPIRED" },
+        });
+      }
       await recordMarketingAudit(
         {
           actorId: user.id,
@@ -514,6 +550,14 @@ function createCampaignService(
     }
     if (now > new Date(campaign.endsAt)) {
       throw badRequest("campaign has expired");
+    }
+
+    if (
+      campaign.budget !== null &&
+      campaign.budget !== undefined &&
+      (campaign.spentBudget || 0) >= campaign.budget
+    ) {
+      throw conflict("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
     }
 
     const existing = await repository.findVoucher(user.id, campaignId);
@@ -589,6 +633,13 @@ function createCampaignService(
       if (!camp) continue;
       if (camp.status !== "published") continue;
       if (camp.startsAt > now || camp.endsAt < now) continue;
+      if (
+        camp.budget !== null &&
+        camp.budget !== undefined &&
+        (camp.spentBudget || 0) >= camp.budget
+      ) {
+        continue;
+      }
       if (orderPrice < camp.minOrderPrice) continue;
       if (!matchesSegment(profile, camp.targetSegment)) continue;
 
@@ -678,6 +729,13 @@ function createCampaignService(
     }
     if (now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) {
       throw badRequest("campaign is outside of its active date window");
+    }
+    if (
+      campaign.budget !== null &&
+      campaign.budget !== undefined &&
+      (campaign.spentBudget || 0) >= campaign.budget
+    ) {
+      throw badRequest("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
     }
 
     if (userId) {
@@ -780,6 +838,13 @@ function createCampaignService(
     }
     if (now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) {
       throw badRequest("campaign is outside of its active date window");
+    }
+    if (
+      campaign.budget !== null &&
+      campaign.budget !== undefined &&
+      (campaign.spentBudget || 0) >= campaign.budget
+    ) {
+      throw badRequest("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
     }
     if (campaign.minOrderPrice && product.price < campaign.minOrderPrice) {
       throw badRequest(

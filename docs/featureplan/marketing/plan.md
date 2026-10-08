@@ -363,3 +363,31 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 - [x] **Step 3: Wire business mutations into atomic database transactions with audit writes across Campaign, Auction, and Article**
 - [x] **Step 4: Implement read-only REST endpoint and Next.js UI component `AuditTrailSection` with details modal, filters, and pagination**
 - [x] **Step 5: Verify real PostgreSQL integration suite (`REQUIRE_INTEGRATION=1`) and frontend Jest tests** (`marketing-audit.integration.test.js` 11/11 passing 100% [1 parent suite + 10 subtests]; `AuditTrailSection.test.js` [13/13] + `page.test.js` [6/6] = 19/19 passing 100%; regression suites clean; commit pending explicit user instruction)
+
+### Task MKT-BUDGET-DATE: Campaign Date Validation and Budget Tracking with Auto-End (MKT-DEC-023)
+
+**Files:**
+
+- Modify: `backend/services/product-service/prisma/schema.prisma`
+- Modify: `backend/services/product-service/src/features/campaigns/campaignRepository.js`
+- Modify: `backend/services/product-service/src/features/campaigns/campaignService.js`
+- Modify: `backend/services/product-service/src/features/campaigns/campaignMetrics.js`
+- Modify: `frontend/components/marketing/sections/CampaignsSection.js`
+- Test: `backend/services/product-service/test/campaignValidation.test.js`
+- Test: `backend/services/product-service/test/campaignMetrics.test.js`
+- Test: `backend/services/product-service/test/campaign-budget.integration.test.js`
+- Test: `backend/services/product-service/test/campaign.integration.test.js`
+- Test: `frontend/components/marketing/sections/CampaignsSection.test.js`
+
+**Interfaces:**
+
+- Model: `Campaign` has `spentBudget Int @default(0) @map("spent_budget")` in `reloop_product`
+- Validation: Server-side rejection of past dates on create/update and expired endsAt on publish; Thai error messages
+- Budget Tracking: Atomic increment of `spentBudget` by `discountAmount` when processing `order.completed.v1` from Outbox; auto-end after completed attribution processing when `spentBudget >= budget` with `SYSTEM` audit log (`reason: "BUDGET_REACHED"`); automatic expiry of `CLAIMED` vouchers; claim/applicable/quote-and-hold post-ended gating (note: not a strict real-time hard cap, overshoot possible on final order)
+- UI: HTML `min` on `datetime-local` inputs; pre-submit validation; `"ใช้แล้ว ฿X / ฿Budget"` display with budget progress bar
+
+- [x] **Step 1: Add unit tests for past dates, publish expiry, budget ceiling (below/equal/above), idempotency, and concurrency** (`campaignValidation.test.js` 23/23, `campaignMetrics.test.js` 14/14)
+- [x] **Step 2: Add `spent_budget` column to Prisma schema and synchronize database via `prisma db push`**
+- [x] **Step 3: Implement server-side date validation, atomic budget increment on order completed event, auto-end trigger, and CLAIMED voucher expiration**
+- [x] **Step 4: Update frontend `CampaignsSection.js` with `min` attributes, client validation warnings, and `"ใช้แล้ว ฿X / ฿Budget"` progress display**
+- [x] **Step 5: Verify live PostgreSQL integration tests (`REQUIRE_INTEGRATION=1` 0 skips) and frontend test suite** (`campaign-budget.integration.test.js` 6/6, `campaign.integration.test.js` 11/11, `campaign-attribution.integration.test.js` 13/13, `CampaignsSection.test.js` 16/16; Schema active, ER Diagram update pending)

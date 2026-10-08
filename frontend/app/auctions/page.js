@@ -25,7 +25,12 @@ export default function AuctionsPage() {
         setOpenAuctions(open.items);
         setScheduledAuctions(scheduled.items);
       })
-      .catch((err) => setError(err.message))
+      .catch((err) =>
+        setError(
+          err.message ||
+            "เกิดข้อผิดพลาดในการโหลดรายการประมูล กรุณาลองใหม่อีกครั้ง",
+        ),
+      )
       .finally(() => setLoading(false));
   }, []);
 

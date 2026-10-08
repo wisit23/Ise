@@ -29,19 +29,46 @@ const TRANSITIONS = {
   cancelled: [],
 };
 
+function getStatusThai(status) {
+  const labels = {
+    draft: "ฉบับร่าง",
+    pending_approval: "รอการอนุมัติ",
+    approved: "อนุมัติแล้ว",
+    scheduled: "ตั้งเวลาแล้ว",
+    open: "กำลังเปิดประมูล",
+    closed: "ปิดการประมูลแล้ว",
+    rejected: "ถูกปฏิเสธ",
+    cancelled: "ยกเลิกแล้ว",
+  };
+  return labels[status] || status;
+}
+
+function formatThaiDateTime(date) {
+  if (!date) return "";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
 function canTransition(from, to) {
   return Boolean(TRANSITIONS[from] && TRANSITIONS[from].includes(to));
 }
 
 function assertTransition(auction, to) {
   if (!canTransition(auction.status, to)) {
-    throw conflict(`cannot move auction from ${auction.status} to ${to}`);
+    throw conflict(
+      `ไม่สามารถเปลี่ยนสถานะรายการประมูลจาก "${getStatusThai(auction.status)}" เป็น "${getStatusThai(to)}" ได้ในขณะนี้`,
+    );
   }
 }
 
 async function loadAuction(id) {
   const auction = await auctionRepository.findById(id);
-  if (!auction) throw notFound("auction not found");
+  if (!auction) throw notFound("ไม่พบข้อมูลรายการประมูลที่ระบุ");
   return auction;
 }
 
@@ -142,35 +169,40 @@ async function closeAuction(auction, now = new Date()) {
 /** Seller submits one of their own available products for auction. */
 async function submit({ user, input = {} }) {
   if (!["SELLER", "ADMIN"].includes(user.role)) {
-    throw forbidden("only seller accounts can submit an auction");
+    throw forbidden(
+      "เฉพาะบัญชีผู้ขายเท่านั้นที่สามารถส่งสินค้าเข้าร่วมประมูลได้",
+    );
   }
 
   const productId = input.productId;
-  if (!productId) throw badRequest("productId is required");
+  if (!productId)
+    throw badRequest("กรุณาระบุสินค้าที่ต้องการส่งเข้าร่วมประมูล");
 
   const startingPrice = Number(input.startingPrice);
   const bidIncrement = Number(input.bidIncrement);
   if (!Number.isInteger(startingPrice) || startingPrice <= 0) {
-    throw badRequest("startingPrice must be a positive whole number");
+    throw badRequest("ราคาเริ่มต้นต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
   }
   if (!Number.isInteger(bidIncrement) || bidIncrement <= 0) {
-    throw badRequest("bidIncrement must be a positive whole number");
+    throw badRequest("ราคาเสนอเพิ่มขั้นต่ำต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
   }
 
   const product = await auctionRepository.findProductOwner(productId);
-  if (!product) throw notFound("product not found");
+  if (!product) throw notFound("ไม่พบข้อมูลสินค้าที่ระบุ");
   if (product.sellerId !== user.id) {
-    throw forbidden("you can only auction your own products");
+    throw forbidden("คุณสามารถส่งได้เฉพาะสินค้าของตนเองเข้าร่วมประมูลเท่านั้น");
   }
   if (!["available", "auction"].includes(product.status)) {
-    throw badRequest("product must be available to enter an auction");
+    throw badRequest(
+      "สินค้าต้องอยู่ในสถานะพร้อมขายจึงจะสามารถส่งเข้าร่วมประมูลได้",
+    );
   }
 
   // Check if there is an active submission round
   const activeRound = await auctionRepository.findActiveSubmissionRound();
   if (!activeRound) {
     throw badRequest(
-      "ขณะนี้ไม่มีรอบเปิดรับสินค้าเข้าประมูล หรือหมดเวลาเปิดรับแล้ว",
+      "ขณะนี้ไม่มีรอบเปิดรับสินค้าเข้าประมูล หรือหมดเวลาเปิดรับสินค้าแล้ว กรุณารอรอบถัดไป",
     );
   }
 
@@ -193,7 +225,7 @@ async function submit({ user, input = {} }) {
 /** Marketing approves a pending auction. */
 async function approve({ user, auctionId }) {
   if (user?.role !== "MARKETING") {
-    throw forbidden("only Marketing can approve auctions");
+    throw forbidden("เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์อนุมัติรายการประมูล");
   }
 
   const auction = await loadAuction(auctionId);
@@ -259,7 +291,7 @@ async function approve({ user, auctionId }) {
 /** Marketing rejects a pending auction. */
 async function reject({ user, auctionId }) {
   if (user?.role !== "MARKETING") {
-    throw forbidden("only Marketing can reject auctions");
+    throw forbidden("เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์ปฏิเสธรายการประมูล");
   }
 
   const auction = await loadAuction(auctionId);
@@ -317,7 +349,7 @@ function deriveRoundPhase(round, now = new Date()) {
 /** Create an auction round by Marketing with overlap protection under advisory lock. */
 async function createRound({ user, input = {} }) {
   if (user?.role !== "MARKETING") {
-    throw forbidden("only Marketing can create auction rounds");
+    throw forbidden("เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์สร้างรอบการประมูล");
   }
 
   const {
@@ -328,7 +360,7 @@ async function createRound({ user, input = {} }) {
     auctionEndsAt,
   } = input;
   if (!title || typeof title !== "string" || !title.trim()) {
-    throw badRequest("title is required");
+    throw badRequest("กรุณากรอกชื่อรอบการประมูลให้ครบถ้วน");
   }
 
   const subStart = new Date(submissionStartsAt);
@@ -340,7 +372,7 @@ async function createRound({ user, input = {} }) {
     [subStart, subEnd, aucStart, aucEnd].some((d) => Number.isNaN(d.getTime()))
   ) {
     throw badRequest(
-      "all dates (submissionStartsAt, submissionEndsAt, auctionStartsAt, auctionEndsAt) must be valid dates",
+      "กรุณาระบุวันและเวลาเปิดรับสินค้าและวันเวลาประมูลให้ครบถ้วนและถูกต้อง",
     );
   }
 
@@ -349,18 +381,22 @@ async function createRound({ user, input = {} }) {
 
   if (!isValidIntervalOrder) {
     if (subEnd <= subStart) {
-      throw badRequest("submissionEndsAt must be after submissionStartsAt");
+      throw badRequest(
+        "เวลาปิดรับสินค้าต้องอยู่หลังเวลาเริ่มเปิดรับสินค้า กรุณาตรวจสอบช่วงเวลารับสินค้า",
+      );
     }
     if (aucStart < subEnd) {
       throw badRequest(
-        "auctionStartsAt must be after or equal to submissionEndsAt",
+        "เวลาเริ่มการประมูลต้องอยู่หลังหรือตรงกับเวลาปิดรับสินค้า กรุณาตรวจสอบลำดับเวลา",
       );
     }
     if (aucEnd <= aucStart) {
-      throw badRequest("auctionEndsAt must be after auctionStartsAt");
+      throw badRequest(
+        "เวลาสิ้นสุดการประมูลต้องอยู่หลังเวลาเริ่มการประมูล กรุณาตรวจสอบช่วงเวลาประมูล",
+      );
     }
     throw badRequest(
-      "invalid round dates: must satisfy submissionStartsAt < submissionEndsAt <= auctionStartsAt < auctionEndsAt",
+      "ลำดับเวลาไม่ถูกต้อง: ช่วงเวลาเปิดรับสินค้าต้องมาก่อนช่วงเวลาเริ่มประมูลจริง กรุณาตรวจสอบวันและเวลาที่เลือก",
     );
   }
 
@@ -370,8 +406,10 @@ async function createRound({ user, input = {} }) {
       tx,
     );
     if (conflicting) {
+      const conflictStart = formatThaiDateTime(conflicting.submissionStartsAt);
+      const conflictEnd = formatThaiDateTime(conflicting.auctionEndsAt);
       throw conflict(
-        `ช่วงเวลารอบประมูล (${subStart.toISOString()} - ${aucEnd.toISOString()}) ซ้อนทับกับรอบ "${conflicting.title}" (${new Date(conflicting.submissionStartsAt).toISOString()} - ${new Date(conflicting.auctionEndsAt).toISOString()}) / Round interval overlaps with existing round "${conflicting.title}"`,
+        `ไม่สามารถสร้างรอบประมูลได้ เนื่องจากช่วงเวลาที่เลือกทับกับรอบ '${conflicting.title}' ซึ่งจัดระหว่าง ${conflictStart} ถึง ${conflictEnd} กรุณาเลือกช่วงเวลาใหม่`,
       );
     }
 
@@ -427,7 +465,9 @@ async function getCurrentRound(now = new Date()) {
 /** List all auction rounds with derived phase for Marketing. */
 async function listRounds({ user }) {
   if (user?.role !== "MARKETING") {
-    throw forbidden("only Marketing can list all auction rounds");
+    throw forbidden(
+      "เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์ดูรายการรอบการประมูลทั้งหมด",
+    );
   }
   const rounds = await auctionRepository.listRounds();
   const now = new Date();
@@ -440,7 +480,7 @@ async function listRounds({ user }) {
 /** Marketing sets the open/close window for an approved auction. */
 async function schedule({ user, auctionId, startsAt, endsAt }) {
   if (user?.role !== "MARKETING") {
-    throw forbidden("only Marketing can schedule auctions");
+    throw forbidden("เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์ตั้งเวลาเปิดประมูล");
   }
 
   const auction = await loadAuction(auctionId);
@@ -449,10 +489,18 @@ async function schedule({ user, auctionId, startsAt, endsAt }) {
   const start = new Date(startsAt);
   const end = new Date(endsAt);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    throw badRequest("startsAt/endsAt must be valid dates");
+    throw badRequest("กรุณาระบุวันและเวลาเปิดและปิดประมูลให้ครบถ้วนและถูกต้อง");
   }
-  if (start <= new Date()) throw badRequest("startsAt must be in the future");
-  if (end <= start) throw badRequest("endsAt must be after startsAt");
+  if (start <= new Date()) {
+    throw badRequest(
+      "เวลาเปิดประมูลต้องเป็นวันและเวลาในอนาคต กรุณาเลือกวันเวลาใหม่",
+    );
+  }
+  if (end <= start) {
+    throw badRequest(
+      "เวลาปิดประมูลต้องอยู่หลังเวลาเปิดประมูล กรุณาตรวจสอบช่วงเวลาอีกครั้ง",
+    );
+  }
 
   const updated = await runInTransaction(async (tx) => {
     const res = await auctionRepository.updateStatus(
@@ -488,7 +536,7 @@ async function schedule({ user, auctionId, startsAt, endsAt }) {
 /** Marketing can cancel an auction any time before it opens. */
 async function cancel({ user, auctionId }) {
   if (user?.role !== "MARKETING") {
-    throw forbidden("only Marketing can cancel auctions");
+    throw forbidden("เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์ยกเลิกการประมูล");
   }
 
   const auction = await loadAuction(auctionId);
@@ -541,7 +589,9 @@ function validateIdempotentBid(existing, { auctionId, userId, bidAmount }) {
     existing.bidderId !== userId ||
     existing.amount !== bidAmount
   ) {
-    throw conflict("idempotency key reused with different bid parameters");
+    throw conflict(
+      "คำขอนี้ถูกส่งซ้ำด้วยข้อมูลราคาที่ไม่ตรงกับครั้งก่อนหน้า กรุณารีเฟรชหน้าจอแล้วลองใหม่อีกครั้ง",
+    );
   }
   return existing;
 }
@@ -554,19 +604,23 @@ function validateIdempotentBid(existing, { auctionId, userId, bidAmount }) {
  * ties: whichever bid the database commits first wins the amount.
  */
 async function placeBid({ user, auctionId, amount, idempotencyKey }) {
-  if (!idempotencyKey) throw badRequest("idempotencyKey is required");
+  if (!idempotencyKey) {
+    throw badRequest(
+      "ข้อมูลคำขอไม่สมบูรณ์ (ขาดรหัสป้องกันการทำรายการซ้ำ) กรุณาลองใหม่อีกครั้ง",
+    );
+  }
   const bidAmount = Number(amount);
   if (!Number.isInteger(bidAmount) || bidAmount <= 0) {
-    throw badRequest("amount must be a positive whole number");
+    throw badRequest("จำนวนเงินเสนอราคาต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
   }
 
   return auctionRepository.withAuctionLock(auctionId, async (tx) => {
     const auction = await tx.auctionItem.findUnique({
       where: { id: auctionId },
     });
-    if (!auction) throw notFound("auction not found");
+    if (!auction) throw notFound("ไม่พบข้อมูลรายการประมูลที่ระบุ");
     if (auction.sellerId === user.id) {
-      throw forbidden("you cannot bid on your own auction");
+      throw forbidden("คุณไม่สามารถเสนอราคาประมูลสินค้าของตนเองได้");
     }
 
     const existing = await tx.bid.findUnique({ where: { idempotencyKey } });
@@ -585,10 +639,12 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
         data: { status: "open", openedAt: now },
       });
     } else if (auction.status !== "open") {
-      throw conflict(`auction is ${auction.status}, not open for bidding`);
+      throw conflict(
+        `รายการประมูลนี้ยังไม่เปิดให้เสนอราคา (สถานะปัจจุบัน: ${getStatusThai(auction.status)})`,
+      );
     }
     if (auction.scheduledEndAt && auction.scheduledEndAt <= now) {
-      throw conflict("auction has already ended");
+      throw conflict("การประมูลนี้สิ้นสุดลงแล้ว ไม่สามารถเสนอราคาเพิ่มได้");
     }
 
     const current = await auctionRepository.highestBid(auctionId, tx);
@@ -596,7 +652,9 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
       ? current.amount + auction.bidIncrement
       : auction.startingPrice;
     if (bidAmount < minAmount) {
-      throw badRequest(`bid must be at least ${minAmount}`);
+      throw badRequest(
+        `ราคาเสนอประมูลต้องไม่ต่ำกว่า ${minAmount.toLocaleString("th-TH")} บาท`,
+      );
     }
 
     let createdBid;

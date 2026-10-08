@@ -32,7 +32,14 @@ function baht(v) {
 }
 
 function fmt(dt) {
-  return dt ? new Date(dt).toLocaleString("th-TH") : "—";
+  if (!dt) return "—";
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 const ROUND_PHASE_LABEL = {
@@ -90,8 +97,14 @@ export function RoundManagementSection({ token, onRoundCreated }) {
   async function handleCreateRound(e) {
     e.preventDefault();
     setFormError("");
-    if (!title || !subStartsAt || !subEndsAt || !aucStartsAt || !aucEndsAt) {
-      setFormError("กรุณากรอกข้อมูลให้ครบทุกช่อง");
+    if (!title || !title.trim()) {
+      setFormError("กรุณากรอกชื่อรอบการประมูลให้ครบถ้วน");
+      return;
+    }
+    if (!subStartsAt || !subEndsAt || !aucStartsAt || !aucEndsAt) {
+      setFormError(
+        "กรุณาระบุวันและเวลาเปิดรับสินค้าและวันเวลาประมูลให้ครบถ้วน",
+      );
       return;
     }
 
@@ -101,7 +114,7 @@ export function RoundManagementSection({ token, onRoundCreated }) {
         method: "POST",
         token,
         body: {
-          title,
+          title: title.trim(),
           submissionStartsAt: new Date(subStartsAt).toISOString(),
           submissionEndsAt: new Date(subEndsAt).toISOString(),
           auctionStartsAt: new Date(aucStartsAt).toISOString(),
@@ -117,7 +130,9 @@ export function RoundManagementSection({ token, onRoundCreated }) {
       loadRounds();
       if (onRoundCreated) onRoundCreated();
     } catch (err) {
-      setFormError(err.message);
+      setFormError(
+        err.message || "เกิดข้อผิดพลาดในการสร้างรอบประมูล กรุณาลองใหม่อีกครั้ง",
+      );
     } finally {
       setSaving(false);
     }
@@ -305,14 +320,12 @@ export function RoundManagementSection({ token, onRoundCreated }) {
               </div>
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
                 <span>
-                  <strong>รับสินค้า:</strong>{" "}
-                  {new Date(round.submissionStartsAt).toLocaleString("th-TH")} —{" "}
-                  {new Date(round.submissionEndsAt).toLocaleString("th-TH")}
+                  <strong>รับสินค้า:</strong> {fmt(round.submissionStartsAt)} —{" "}
+                  {fmt(round.submissionEndsAt)}
                 </span>
                 <span>
-                  <strong>เคาะประมูลจริง:</strong>{" "}
-                  {new Date(round.auctionStartsAt).toLocaleString("th-TH")} —{" "}
-                  {new Date(round.auctionEndsAt).toLocaleString("th-TH")}
+                  <strong>เคาะประมูลจริง:</strong> {fmt(round.auctionStartsAt)}{" "}
+                  — {fmt(round.auctionEndsAt)}
                 </span>
               </div>
             </div>
@@ -369,12 +382,10 @@ export function RoundManagementSection({ token, onRoundCreated }) {
                       </span>
                     </td>
                     <td className="py-2.5 text-slate-600">
-                      {new Date(r.submissionStartsAt).toLocaleString("th-TH")} —{" "}
-                      {new Date(r.submissionEndsAt).toLocaleString("th-TH")}
+                      {fmt(r.submissionStartsAt)} — {fmt(r.submissionEndsAt)}
                     </td>
                     <td className="py-2.5 text-slate-600">
-                      {new Date(r.auctionStartsAt).toLocaleString("th-TH")} —{" "}
-                      {new Date(r.auctionEndsAt).toLocaleString("th-TH")}
+                      {fmt(r.auctionStartsAt)} — {fmt(r.auctionEndsAt)}
                     </td>
                     <td className="py-2.5 text-right font-medium text-slate-700">
                       {r._count?.auctions ?? 0}
@@ -400,7 +411,7 @@ function BulkScheduleBar({ count, onApply, onClear }) {
     e.preventDefault();
     setError("");
     if (!startsAt || !endsAt) {
-      setError("กรุณาระบุเวลาเปิดและปิดประมูล");
+      setError("กรุณาระบุวันและเวลาเปิดและปิดประมูลให้ครบถ้วน");
       return;
     }
     setSaving(true);
@@ -412,7 +423,9 @@ function BulkScheduleBar({ count, onApply, onClear }) {
       setStartsAt("");
       setEndsAt("");
     } catch (err) {
-      setError(err.message);
+      setError(
+        err.message || "เกิดข้อผิดพลาดในการตั้งเวลาประมูล กรุณาลองใหม่อีกครั้ง",
+      );
     } finally {
       setSaving(false);
     }
@@ -481,7 +494,12 @@ export default function AuctionScheduleSection({ token }) {
     const qs = statusFilter ? `&status=${statusFilter}` : "";
     apiFetch(`/api/products/auctions?limit=50${qs}`, { token })
       .then((data) => setAuctions(data.items))
-      .catch((err) => setError(err.message))
+      .catch((err) =>
+        setError(
+          err.message ||
+            "เกิดข้อผิดพลาดในการโหลดรายการประมูล กรุณาลองใหม่อีกครั้ง",
+        ),
+      )
       .finally(() => setLoading(false));
   }
 
@@ -513,7 +531,7 @@ export default function AuctionScheduleSection({ token }) {
     load();
     if (failed > 0) {
       throw new Error(
-        `ตั้งเวลาสำเร็จ ${ids.length - failed}/${ids.length} รายการ — ${failed} รายการล้มเหลว (สถานะอาจเปลี่ยนไปแล้ว)`,
+        `ตั้งเวลาสำเร็จ ${ids.length - failed}/${ids.length} รายการ — ${failed} รายการไม่สำเร็จ (สถานะอาจไม่พร้อมตั้งเวลา)`,
       );
     }
   }
@@ -526,7 +544,10 @@ export default function AuctionScheduleSection({ token }) {
       });
       load();
     } catch (err) {
-      setError(err.message);
+      setError(
+        err.message ||
+          "เกิดข้อผิดพลาดในการอนุมัติรายการประมูล กรุณาลองใหม่อีกครั้ง",
+      );
     }
   }
 
@@ -538,7 +559,10 @@ export default function AuctionScheduleSection({ token }) {
       });
       load();
     } catch (err) {
-      setError(err.message);
+      setError(
+        err.message ||
+          "เกิดข้อผิดพลาดในการปฏิเสธรายการประมูล กรุณาลองใหม่อีกครั้ง",
+      );
     }
   }
 
@@ -555,7 +579,10 @@ export default function AuctionScheduleSection({ token }) {
       });
       load();
     } catch (err) {
-      setError(err.message);
+      setError(
+        err.message ||
+          "เกิดข้อผิดพลาดในการยกเลิกรายการประมูล กรุณาลองใหม่อีกครั้ง",
+      );
     }
   }
 

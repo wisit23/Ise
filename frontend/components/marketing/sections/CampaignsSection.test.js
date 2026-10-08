@@ -46,8 +46,8 @@ describe("CampaignsSection (Marketing Workspace)", () => {
       maxDiscount: null,
       minOrderPrice: 200,
       status: "draft",
-      startsAt: "2026-07-01T00:00:00.000Z",
-      endsAt: "2026-07-31T23:59:59.000Z",
+      startsAt: "2026-11-15T00:00:00.000Z",
+      endsAt: "2026-12-15T23:59:59.000Z",
       usageLimit: 100,
       usedCount: 0,
       _count: { vouchers: 0 },
@@ -596,5 +596,98 @@ describe("CampaignsSection (Marketing Workspace)", () => {
 
     // "Nike" chip should now be present
     expect(screen.getByLabelText("ลบแบรนด์ Nike")).toBeInTheDocument();
+  });
+
+  it("displays budget progress and 'ใช้แล้ว ฿X / ฿Budget' formatting in table", async () => {
+    const budgetCampaign = {
+      id: "camp-budget",
+      name: "Budget Test Campaign",
+      code: "BUDGET2026",
+      discountType: "FIXED",
+      discountValue: 100,
+      budget: 5000,
+      spentBudget: 1500,
+      usageLimit: 50,
+      usedCount: 15,
+      status: "published",
+      startsAt: "2026-11-01T00:00:00.000Z",
+      endsAt: "2026-11-30T23:59:59.000Z",
+    };
+    apiFetch.mockImplementation(() =>
+      Promise.resolve({ items: [budgetCampaign], total: 1 }),
+    );
+
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+
+    expect(await screen.findByText("BUDGET2026")).toBeInTheDocument();
+    expect(screen.getByText("ใช้แล้ว ฿1,500 / ฿5,000")).toBeInTheDocument();
+    expect(screen.getByTitle("สัดส่วนงบประมาณที่ใช้")).toBeInTheDocument();
+  });
+
+  it("enforces min attribute on datetime inputs and shows Thai validation errors for past dates", async () => {
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+
+    const createBtn = await screen.findByRole("button", {
+      name: /สร้างแคมเปญใหม่/i,
+    });
+    fireEvent.click(createBtn);
+
+    expect(screen.getByText("สร้างแคมเปญใหม่")).toBeInTheDocument();
+
+    const startInput = screen.getByLabelText(/วันเวลาเริ่มต้น/i);
+    const endInput = screen.getByLabelText(/วันเวลาสิ้นสุด/i);
+
+    expect(startInput).toHaveAttribute("min");
+    expect(endInput).toHaveAttribute("min");
+
+    fireEvent.change(screen.getByPlaceholderText(/เช่น SUMMER20/i), {
+      target: { value: "DATEVALID" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/เช่น ลดพิเศษต้อนรับ/i), {
+      target: { value: "Date Validation Camp" },
+    });
+
+    const form = startInput.closest("form");
+
+    // Test 1: endsAt in past
+    fireEvent.change(startInput, {
+      target: { value: "2026-01-01T10:00" },
+    });
+    fireEvent.change(endInput, {
+      target: { value: "2026-01-02T10:00" },
+    });
+    fireEvent.submit(form);
+
+    expect(
+      screen.getByText(
+        "ไม่สามารถกำหนดช่วงเวลาที่สิ้นสุดไปแล้วได้ วันเวลาสิ้นสุดต้องอยู่ในอนาคต",
+      ),
+    ).toBeInTheDocument();
+
+    // Test 2: endsAt <= startsAt (in the future)
+    fireEvent.change(startInput, {
+      target: { value: "2027-01-10T10:00" },
+    });
+    fireEvent.change(endInput, {
+      target: { value: "2027-01-05T10:00" },
+    });
+    fireEvent.submit(form);
+
+    expect(
+      screen.getByText("วันเวลาสิ้นสุดต้องอยู่หลังวันเวลาเริ่มต้น"),
+    ).toBeInTheDocument();
+
+    // Test 3: startsAt in the past
+    fireEvent.change(startInput, {
+      target: { value: "2026-01-01T10:00" },
+    });
+    fireEvent.change(endInput, {
+      target: { value: "2027-01-01T10:00" },
+    });
+    fireEvent.submit(form);
+
+    expect(
+      screen.getByText("ไม่สามารถกำหนดวันเวลาเริ่มต้นย้อนหลังในอดีตได้"),
+    ).toBeInTheDocument();
   });
 });

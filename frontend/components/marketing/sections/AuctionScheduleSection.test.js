@@ -171,15 +171,15 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     fireEvent.change(aucStartInput, { target: { value: "2026-10-04T12:00" } });
     fireEvent.change(aucEndInput, { target: { value: "2026-10-06T12:00" } });
 
-    // Mock API 409 error
+    // Mock API 409 error with realistic user-friendly Thai message
+    const realOverlapMessage =
+      "ไม่สามารถสร้างรอบประมูลได้ เนื่องจากช่วงเวลาที่เลือกทับกับรอบ 'รอบประมูลประจำสัปดาห์ที่ 1' ซึ่งจัดระหว่าง 1 ต.ค. 2569 07:00 ถึง 5 ต.ค. 2569 19:00 กรุณาเลือกช่วงเวลาใหม่";
     apiFetch.mockImplementation((url, opts) => {
       if (
         opts?.method === "POST" &&
         url.includes("/api/products/auctions/rounds")
       ) {
-        const error = new Error(
-          'ช่วงเวลารอบประมูลซ้อนทับกับรอบ "รอบประมูลประจำสัปดาห์ที่ 1"',
-        );
+        const error = new Error(realOverlapMessage);
         error.status = 409;
         return Promise.reject(error);
       }
@@ -189,10 +189,27 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     const submitBtn = screen.getByRole("button", { name: /บันทึกและเปิดรอบ/ });
     fireEvent.click(submitBtn);
 
+    const errorAlert = await screen.findByText(new RegExp(realOverlapMessage));
+    expect(errorAlert).toBeInTheDocument();
+    expect(errorAlert.textContent).not.toContain(".000Z");
+    expect(errorAlert.textContent).not.toContain("T00:00:00");
+    expect(errorAlert.textContent).not.toContain("overlap");
+  });
+
+  it("displays client validation error when required fields are missing", async () => {
+    render(<RoundManagementSection token={mockToken} />);
+
+    const openBtn = await screen.findByRole("button", {
+      name: /สร้างรอบประมูลใหม่/,
+    });
+    fireEvent.click(openBtn);
+
+    // Try submitting with empty title
+    const submitBtn = screen.getByRole("button", { name: /บันทึกและเปิดรอบ/ });
+    fireEvent.submit(submitBtn.closest("form"));
+
     expect(
-      await screen.findByText(
-        /ช่วงเวลารอบประมูลซ้อนทับกับรอบ "รอบประมูลประจำสัปดาห์ที่ 1"/,
-      ),
+      await screen.findByText(/กรุณากรอกชื่อรอบการประมูลให้ครบถ้วน/),
     ).toBeInTheDocument();
   });
 

@@ -1,16 +1,17 @@
 # Marketing Feature Handoff
 
-> อัปเดตล่าสุด: 2026-10-05
+> อัปเดตล่าสุด: 2026-10-08
 
 ## Ownership
 
 - Owner: ศิวกร วรวัฒน์อมรชัย
 - Reviewer: อัสนัย เมืองรอด
 - Requirement scope: `UR-08`–`UR-16`
-- Current status: `MKT-001` (Campaign Domain & Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-003` / `MKT-007` (Durable Campaign Attribution Engine, Outbox Pattern & Conversion Metrics Dashboard), `MKT-004 Part A` (Articles & Knowledge Base), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling), `UR-11` (Swipe-to-Choose Hardening: Buyer Authorization, Persistence, User Isolation & Anti-Spoofing), `UR-08` (User/Peak-Usage Analytics สำหรับ Marketing: Active Users, New Users, Hourly Usage & Peak Hour Dashboard), และ Marketing Audit Trail (Append-Only Immutable Ledger ใน PostgreSQL `reloop_product`, Atomic Business Transactions, SYSTEM Actor Determinism, Secret Redaction & Read-Only Marketing UI) พัฒนาและทดสอบผ่านการทดสอบอัตโนมัติครบถ้วนแล้ว (`MKT-003`/`MKT-007` Steps 1–4 accepted ด้วยหลักฐาน PostgreSQL จริงบน Order Outbox และ Product CampaignAttribution ทั้งสองฝั่ง; `MKT-005` Steps 1–4 accepted; `MKT-006` Steps 1–4 accepted; `UR-11` automated tests accepted; `UR-08` automated tests accepted; Marketing Audit Trail automated tests accepted; รอเพียงคำสั่ง commit; Browser E2E / Responsive UI verification รอ final acceptance); และ `MKT-004 Part B` อยู่ระหว่างเตรียม Buyer profile persistence hardening (Part 4)
+- Current status: `MKT-001` (Campaign Domain & Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-003` / `MKT-007` (Durable Campaign Attribution Engine, Outbox Pattern & Conversion Metrics Dashboard), `MKT-004 Part A` (Articles & Knowledge Base), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling), `UR-11` (Swipe-to-Choose Hardening: Buyer Authorization, Persistence, User Isolation & Anti-Spoofing), `UR-08` (User/Peak-Usage Analytics สำหรับ Marketing: Active Users, New Users, Hourly Usage & Peak Hour Dashboard), Marketing Audit Trail (Append-Only Immutable Ledger ใน PostgreSQL `reloop_product`, Atomic Business Transactions, SYSTEM Actor Determinism, Secret Redaction & Read-Only Marketing UI), และ Campaign Date Validation & Budget Tracking with Auto-End (`MKT-DEC-023`: Server-Side Date Boundaries, Atomic spentBudget tracking, auto-end after completed attribution processing, CLAIMED Voucher Expiration, และ Marketing UI Budget Progress) ผ่านการทดสอบอัตโนมัติครบถ้วนแล้ว (`MKT-003`/`MKT-007` Steps 1–4 accepted; `MKT-005` Steps 1–4 accepted; `MKT-006` Steps 1–4 accepted; `UR-11` automated tests accepted; `UR-08` automated tests accepted; Marketing Audit Trail automated tests accepted; MKT-DEC-023 automated tests accepted; รอ commit; ER Diagram update pending; Browser E2E / Responsive UI verification รอ final acceptance); และ `MKT-004 Part B` อยู่ระหว่างเตรียม Buyer profile persistence hardening (Part 4)
 
 ## Scope to hand off
 
+- Campaign Date Validation and Budget Tracking: Server-side date boundaries, atomic spentBudget tracking, auto-end after completed attribution processing, CLAIMED voucher expiry on ended, and Marketing UI budget display (Verified with automated tests per `MKT-DEC-023`; ER Diagram update pending)
 - Marketing Audit Trail: Append-Only Immutable Audit Log for Campaigns, Auctions, and Articles (Completed & Verified in Product Service & Marketing UI per `MKT-DEC-022`)
 - `UR-08`: User/Peak-Usage Analytics for Marketing (Completed & Verified in Auth Service, Gateway & Dashboard UI)
 - `MKT-001`: Campaign Domain and Lifecycle (Completed & Verified)
@@ -270,3 +271,42 @@
     - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
     - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style!)
     - `git diff --check`: ผ่าน 100% (0 errors)
+
+### 2026-10-08 Update — Campaign Date Validation and Budget Tracking with Auto-End (MKT-DEC-023)
+
+- **Overview:**
+  - ได้รับการยืนยัน Workflow จาก Reviewer โดยคง Workflow 6 สถานะ (`draft → pending_approval → approved → published → ended/rejected`) โดยไม่มีสถานะ Scheduled/Live และไม่ขยายขอบเขตไปยัง UR-13
+  - กำหนดนิยาม Budget: ยอดส่วนลดรวมที่ระบบจ่ายให้ Order ที่ completed แล้ว โดยงบประมาณถูกนับเมื่อ Product Service ประมวลผล completed attribution event (`order.completed.v1`) จาก Transactional Outbox ของ Order Service
+  - ขอบเขตและความจริง: เป็นการ auto-end after completed attribution processing ไม่ใช่ strict real-time hard cap และไม่ได้รับประกันการป้องกันยอดเกินงบ 100% เนื่องจากคำสั่งซื้อสุดท้ายอาจดันให้ยอดใช้สะสมเกินงบได้เล็กน้อยก่อนปิดแคมเปญ
+  - เพิ่มการตรวจสอบช่วงเวลาแคมเปญฝั่ง Server-side:
+    - ห้ามตั้งช่วงเวลาที่สิ้นสุดไปแล้ว (`endsAt <= now`)
+    - ห้ามตั้ง `startsAt` ย้อนหลังในอดีต (`startsAt < now - 60s`)
+    - ตรวจสอบช่วงเวลาตอนแก้ไข Draft ทั้งค่าใหม่และค่าเดิม
+    - ตรวจสอบตอน Publish: ปฏิเสธแคมเปญที่ `endsAt` หมดอายุแล้ว และหากเผยแพร่หลัง `startsAt` แต่ยังไม่ถึง `endsAt` ให้เริ่มใช้งานได้ทันที
+    - ข้อความแจ้งเตือนทั้งหมดเป็นภาษาไทยที่อ่านเข้าใจง่าย
+  - ติดตั้งการติดตามงบประมาณและการปิดแคมเปญอัตโนมัติ (Budget Tracking & Auto-End):
+    - เพิ่มคอลัมน์ `spent_budget` (`spentBudget Int @default(0)`) ในโมเดล `Campaign` (`reloop_product`) ผ่าน `prisma db push`
+    - เมื่อ Product Service ประมวลผล Attribution Event `order.completed.v1` จาก Outbox: Atomic Increment `spentBudget` ด้วย `discountAmount`
+    - เมื่อ `spentBudget >= budget`: สั่ง auto-end after completed attribution processing เปลี่ยนสถานะเป็น `ended` ทันทีภายใน Transaction เดียวกัน พร้อมบันทึก SYSTEM MarketingAuditLog ด้วยเหตุผล `BUDGET_REACHED` และ idempotency key ป้องกัน retry นับซ้ำ
+    - ปรับสถานะ Voucher ที่มีสถานะ `CLAIMED` เป็น `EXPIRED` ทันทีเมื่อแคมเปญ `ended`
+    - สกัดกั้น Claim, ไม่แสดงใน Applicable Voucher, และปฏิเสธ Quote-and-Hold เมื่อแคมเปญ `ended` หรือยอด `spentBudget >= budget`
+  - ฝั่งฟรอนต์เอนด์:
+    - กำหนด `min` attribute ให้ช่อง `datetime-local` ตามเวลาปัจจุบัน
+    - ตรวจสอบวันเวลาและแสดงข้อความภาษาไทยก่อนส่งฟอร์ม
+    - แสดงข้อมูลงบประมาณในตารางเป็น `"ใช้แล้ว ฿X / ฿Budget"` พร้อมแถบความคืบหน้า (Budget Progress Bar)
+- **Automated Verification Evidence:**
+  - **Campaign Validation Unit Tests:** `campaignValidation.test.js` ผ่าน 23/23 tests 100%
+  - **Campaign Metrics Unit Tests:** `campaignMetrics.test.js` ผ่าน 14/14 tests 100%
+  - **Auction Service Unit Tests:** `auctionService.test.js` ผ่าน 53/53 tests 100%
+  - **Product Service Budget PostgreSQL Integration Suite:** `campaign-budget.integration.test.js` ผ่าน 6/6 tests (1 suite + 5 subtests) 100% (`REQUIRE_INTEGRATION=1` 0 skips)
+  - **Product Service Campaign PostgreSQL Integration Suite:** `campaign.integration.test.js` ผ่าน 11/11 tests 100% (`REQUIRE_INTEGRATION=1` 0 skips)
+  - **Product Service Attribution PostgreSQL Integration Suite:** `campaign-attribution.integration.test.js` ผ่าน 13/13 tests 100% (`REQUIRE_INTEGRATION=1` 0 skips)
+  - **Order Service Attribution Outbox PostgreSQL Integration Suite:** `order-service/.../campaign-attribution.integration.test.js` ผ่าน 7/7 tests 100% (`REQUIRE_INTEGRATION=1` 0 skips)
+  - **Frontend Component Tests:**
+    - `CampaignsSection.test.js`: ผ่าน 16/16 tests 100%
+    - `AuctionScheduleSection.test.js`: ผ่าน 8/8 tests 100%
+  - **Environment & Quality Gates:**
+    - Node.js Runtime: `v22.16.0` (Host)
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `git diff --check`: ผ่าน 100%
+  - **Schema/ER Status:** เพิ่มคอลัมน์ `spent_budget` ในตาราง `campaigns` เรียบร้อยแล้ว แต่ **ER Diagram update pending** (รออัปเดตไฟล์ภาพ/เอกสารสถาปัตยกรรมระดับภาพรวม `docs/erdatabase.png` / `docs/S2G5_RE-LOOP_ISE.md`) ห้ามถือว่าปิดเอกสารครบ 100% จนกว่าจะอัปเดตแผนภาพ ER
