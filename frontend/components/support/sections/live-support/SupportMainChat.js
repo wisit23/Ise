@@ -373,7 +373,7 @@ export default function SupportMainChat({
             <span className="material-symbols-outlined text-[16px]">
               dock_to_left
             </span>
-            <span className="hidden sm:inline">รายละเอียด</span>
+            <span className="hidden sm:inline">ดูข้อมูลบริบท</span>
           </button>
         </div>
       </div>

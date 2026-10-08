@@ -1,10 +1,16 @@
 const { badRequest, notFound } = require("@reloop/shared");
+const { createHash } = require("node:crypto");
 const prisma = require("../../models/prismaClient");
 const conversationModel = require("../conversations/conversationModel");
 const messageModel = require("../messages/messageModel");
 const { contextKeyForInternalContextId } = require("./internalContext");
 const broadcast = require("../../realtime/broadcast");
 const { syncSupportMessage } = require("../sync/supportSyncWorker");
+const {
+  isValidCursor,
+  buildPageQuery,
+  paginate,
+} = require("../messages/cursor");
 
 const DUPLICATE_KEY_ERROR = "P2002";
 const VALID_STATUSES = ["ACTIVE", "ARCHIVED", "LOCKED"];
@@ -85,13 +91,20 @@ async function sendMessage(req, res, next) {
     const conversation = await conversationModel.findById(req.params.id);
     if (!conversation) throw notFound("Conversation not found");
 
-    const { senderId, senderRole, type, body, payload, visibility } = req.body;
+    const { senderId, senderRole, type, body, payload, visibility, eventKey } = req.body;
     if (!senderId || !senderRole) {
       throw badRequest("senderId and senderRole are required");
     }
 
     const isSupport = conversation.contextType === "SUPPORT";
-    const message = await messageModel.createAndTouch({
+    if (eventKey && (typeof eventKey !== "string" || eventKey.length > 128)) {
+      throw badRequest("eventKey must be a string of at most 128 characters");
+    }
+    const messageId = eventKey ? createHash("sha256").update(`${conversation.id}:${eventKey}`).digest("hex").slice(0, 24) : null;
+    let message;
+    try {
+      message = await messageModel.createAndTouch({
+      messageId,
       conversationId: conversation.id,
       senderId,
       senderRole,
@@ -100,7 +113,14 @@ async function sendMessage(req, res, next) {
       payload,
       visibility: visibility || "ALL",
       syncStatus: isSupport ? "PENDING" : null,
-    });
+      });
+    } catch (err) {
+      if (messageId && err.code === "P2002") {
+        const existing = await prisma.message.findUnique({ where: { id: messageId } });
+        if (existing?.conversationId === conversation.id) return res.status(200).json(existing);
+      }
+      throw err;
+    }
 
     if (isSupport) {
       syncSupportMessage(conversation, message);
@@ -171,28 +191,37 @@ async function updateStatus(req, res, next) {
   }
 }
 
-/** Full, unpaginated message history for one conversation — evidence
- * gathering (a dispute, a report review), not for driving a chat UI, which
- * is why this deliberately skips the public cursor-pagination contract. */
+/** Bounded history for evidence gathering. `before` walks toward older IDs. */
 async function getTranscript(req, res, next) {
   try {
     const conversation = await conversationModel.findById(req.params.id);
     if (!conversation) throw notFound("Conversation not found");
 
-    const includeInternal = req.query.includeInternal === "true";
-    const where = {
-      conversationId: conversation.id,
-      deletedAt: null,
-    };
-    if (!includeInternal) {
-      where.visibility = { not: "INTERNAL" };
+    const before = req.query.before;
+    if (before && !isValidCursor(before))
+      throw badRequest("invalid transcript cursor");
+    const requestedLimit =
+      req.query.limit === undefined ? 50 : Number(req.query.limit);
+    if (!Number.isInteger(requestedLimit) || requestedLimit < 1) {
+      throw badRequest("limit must be a positive integer");
     }
-
-    const messages = await prisma.message.findMany({
-      where,
-      orderBy: { createdAt: "asc" },
+    const limit = Math.min(100, requestedLimit);
+    const beforeMessage = before ? await prisma.message.findUnique({ where: { id: before } }) : undefined;
+    if (before && (!beforeMessage || beforeMessage.conversationId !== conversation.id ||
+      (req.query.includeInternal !== "true" && beforeMessage.visibility === "INTERNAL"))) throw badRequest("invalid transcript cursor");
+    const query = buildPageQuery({
+      conversationId: conversation.id,
+      before,
+      beforeMessage,
+      limit,
+      includeInternal: req.query.includeInternal === "true",
     });
-    res.json({ conversation, messages });
+    const page = paginate(await prisma.message.findMany(query), limit);
+    res.json({
+      conversation,
+      messages: page.items.reverse(),
+      nextCursor: page.nextCursor,
+    });
   } catch (err) {
     next(err);
   }

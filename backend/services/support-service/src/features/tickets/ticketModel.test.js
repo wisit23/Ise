@@ -1,234 +1,165 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const prisma = require("../../models/prismaClient");
-const ticketModel = require("./ticketModel");
+const model = require("./ticketModel");
+const { toTicket } = require("./ticketShape");
 
-test("admin history includes closed and escalated tickets", async (t) => {
-  const originalFind = prisma.supportTicket.findMany;
-  const originalCount = prisma.supportTicket.count;
-  t.after(() => {
-    prisma.supportTicket.findMany = originalFind;
-    prisma.supportTicket.count = originalCount;
+test("admin queue includes closed/escalated while CS sees only own or unassigned cases", () => {
+  const admin = model.queueFilter({ role: "ADMIN", scope: "all" });
+  assert.equal(admin.sql, "");
+  const staff = model.queueFilter({
+    role: "CUSTOMER_SERVICE",
+    scope: "all",
+    assigneeId: "agent-1",
+    search: "ref%und",
   });
-  let where;
-  prisma.supportTicket.findMany = async (args) => { where = args.where; return []; };
-  prisma.supportTicket.count = async () => 0;
-  await ticketModel.listQueue({ role: "ADMIN", scope: "all", skip: 0, take: 20 });
-  assert.deepEqual(where, {});
-  await ticketModel.listQueue({ role: "CUSTOMER_SERVICE", scope: "all", assigneeId: "agent-1", search: "refund", skip: 0, take: 20 });
-  assert.deepEqual(where.OR, [{ assigneeId: null }, { assigneeId: "agent-1" }]);
-  assert.equal(where.AND[0].OR.length, 2);
+  assert.match(staff.sql, /assignment_id IS NULL OR a.assignee_id/);
+  assert.match(staff.sql, /s.code <> 'ESCALATED'/);
+  assert.deepEqual(staff.values, ["agent-1", "%ref\\%und%", "%ref\\%und%"]);
 });
-
-test("conversation repair never overwrites another room", async (t) => {
-  const originalUpdate = prisma.supportTicket.updateMany;
-  const originalFind = prisma.supportTicket.findUnique;
-  t.after(() => {
-    prisma.supportTicket.updateMany = originalUpdate;
-    prisma.supportTicket.findUnique = originalFind;
+test("conversation repair accepts the same link but never replaces another room", async () => {
+  const db = {
+    supportTicket: { findUnique: async () => ({ id: "ticket-1" }) },
+    ticketChatLink: {
+      findUnique: async () => ({ conversationId: "room-existing" }),
+    },
+    $executeRaw: async () => 0,
+  };
+  await model.setConversationId("ticket-1", "room-existing", db);
+  await assert.rejects(model.setConversationId("ticket-1", "room-other", db), {
+    status: 409,
   });
-  let where;
-  prisma.supportTicket.updateMany = async (args) => {
-    where = args.where;
-    return { count: 0 };
-  };
-  prisma.supportTicket.findUnique = async () => ({ conversationId: "room-existing" });
-  await ticketModel.setConversationId("ticket-1", "room-existing");
-  assert.deepEqual(where, { id: "ticket-1", conversationId: null });
-  await assert.rejects(
-    () => ticketModel.setConversationId("ticket-1", "room-other"),
-    (err) => err.status === 409,
-  );
 });
 
-test("recordChatMessage returns alreadyRecorded: true on duplicate chatMessageId", async () => {
-  const origFindUnique = prisma.ticketMessage.findUnique;
-
-  prisma.ticketMessage.findUnique = ({ where }) => {
-    if (where.chatMessageId === "existing-msg-1") {
-      return Promise.resolve({
-        id: "tm-1",
-        chatMessageId: "existing-msg-1",
-        body: "hello",
-      });
-    }
-    return Promise.resolve(null);
-  };
-
-  try {
-    const result = await ticketModel.recordChatMessage({
-      ticketId: "ticket-1",
-      chatMessageId: "existing-msg-1",
-      authorId: "user-1",
-      authorRole: "BUYER",
-      body: "hello",
-    });
-
-    assert.equal(result.alreadyRecorded, true);
-    assert.equal(result.message.chatMessageId, "existing-msg-1");
-  } finally {
-    prisma.ticketMessage.findUnique = origFindUnique;
-  }
-});
-
-test("recordChatMessage atomically updates firstResponseAt only for customer-facing agent reply", async () => {
-  const origFindUniqueMsg = prisma.ticketMessage.findUnique;
-  const origFindUniqueTicket = prisma.supportTicket.findUnique;
-  const origTransaction = prisma.$transaction;
-
-  let capturedTicketUpdateMany = null;
-  let capturedAudit = null;
-
-  prisma.ticketMessage.findUnique = () => Promise.resolve(null);
-  prisma.supportTicket.findUnique = () =>
-    Promise.resolve({
-      id: "ticket-10",
-      ticketNumber: "#CS-123456",
-      requesterId: "buyer-1",
-      conversationId: "conv-1",
-      firstResponseAt: null,
-    });
-
-  const txMock = {
-    ticketMessage: {
-      findUnique: () => Promise.resolve(null),
-      create: ({ data }) => Promise.resolve({ id: "tm-new", ...data }),
-    },
+function chatDb(t, { existing = null } = {}) {
+  const records = { messages: [], audits: [], achieved: [] };
+  const db = {
     supportTicket: {
-      updateMany: (args) => {
-        capturedTicketUpdateMany = args;
-        return Promise.resolve({ count: 1 });
-      },
-    },
-    ticketAuditLog: {
-      create: ({ data }) => {
-        capturedAudit = data;
-        return Promise.resolve({ id: "audit-1", ...data });
-      },
-    },
-  };
-
-  prisma.$transaction = async (fn) => fn(txMock);
-
-  try {
-    const replyDate = new Date("2026-09-20T10:00:00Z");
-    const result = await ticketModel.recordChatMessage({
-      ticketId: "ticket-10",
-      conversationId: "conv-1",
-      chatMessageId: "agent-reply-1",
-      authorId: "agent-99",
-      authorRole: "AGENT",
-      body: "We are reviewing your claim.",
-      isInternal: false,
-      createdAt: replyDate.toISOString(),
-    });
-
-    assert.equal(result.alreadyRecorded, false);
-    // Crucial: firstResponseAt update must be atomic via updateMany with where: { firstResponseAt: null }
-    assert.ok(capturedTicketUpdateMany, "Atomic updateMany must be called");
-    assert.deepEqual(capturedTicketUpdateMany.where, {
-      id: "ticket-10",
-      firstResponseAt: null,
-    });
-    assert.deepEqual(capturedTicketUpdateMany.data, {
-      firstResponseAt: replyDate,
-    });
-    assert.ok(capturedAudit);
-    assert.equal(capturedAudit.action, "REPLY");
-  } finally {
-    prisma.ticketMessage.findUnique = origFindUniqueMsg;
-    prisma.supportTicket.findUnique = origFindUniqueTicket;
-    prisma.$transaction = origTransaction;
-  }
-});
-
-test("recordChatMessage does NOT update firstResponseAt when message is internal note", async () => {
-  const origFindUniqueMsg = prisma.ticketMessage.findUnique;
-  const origFindUniqueTicket = prisma.supportTicket.findUnique;
-  const origTransaction = prisma.$transaction;
-
-  let ticketUpdateCalled = false;
-
-  prisma.ticketMessage.findUnique = () => Promise.resolve(null);
-  prisma.supportTicket.findUnique = () =>
-    Promise.resolve({
-      id: "ticket-11",
-      requesterId: "buyer-1",
-      conversationId: "conv-11",
-      firstResponseAt: null,
-    });
-
-  const txMock = {
-    ticketMessage: {
-      findUnique: () => Promise.resolve(null),
-      create: ({ data }) => Promise.resolve({ id: "tm-int", ...data }),
-    },
-    supportTicket: {
-      updateMany: () => {
-        ticketUpdateCalled = true;
-        return Promise.resolve({ count: 0 });
-      },
-    },
-    ticketAuditLog: {
-      create: ({ data }) => Promise.resolve({ id: "audit-2", ...data }),
-    },
-  };
-
-  prisma.$transaction = async (fn) => fn(txMock);
-
-  try {
-    const result = await ticketModel.recordChatMessage({
-      ticketId: "ticket-11",
-      conversationId: "conv-11",
-      chatMessageId: "agent-internal-note-1",
-      authorId: "agent-99",
-      authorRole: "AGENT",
-      body: "Private agent-only investigation notes.",
-      isInternal: true,
-      createdAt: new Date().toISOString(),
-    });
-
-    assert.equal(result.alreadyRecorded, false);
-    // Internal notes must NEVER update firstResponseAt
-    assert.equal(ticketUpdateCalled, false);
-  } finally {
-    prisma.ticketMessage.findUnique = origFindUniqueMsg;
-    prisma.supportTicket.findUnique = origFindUniqueTicket;
-    prisma.$transaction = origTransaction;
-  }
-});
-
-test("recordChatMessage rejects invalid date format safely", async () => {
-  const origFindUniqueMsg = prisma.ticketMessage.findUnique;
-  prisma.ticketMessage.findUnique = () => Promise.resolve(null);
-
-  try {
-    await assert.rejects(
-      () =>
-        ticketModel.recordChatMessage({
-          ticketId: "ticket-1",
-          chatMessageId: "msg-bad-date",
-          authorId: "user-1",
-          authorRole: "BUYER",
-          body: "hi",
-          createdAt: "not-a-valid-date",
-        }),
-      { status: 400 },
-    );
-  } finally {
-    prisma.ticketMessage.findUnique = origFindUniqueMsg;
-  }
-});
-
-test("recordChatMessage rejects missing chatMessageId", async () => {
-  await assert.rejects(
-    () =>
-      ticketModel.recordChatMessage({
-        ticketId: "ticket-1",
-        authorId: "user-1",
-        authorRole: "BUYER",
-        body: "hi",
+      findUnique: async () => ({
+        id: "ticket-1",
+        requesterId: "buyer-1",
+        chatLink: { conversationId: "conv-1" },
       }),
+    },
+    ticketMessage: {
+      findUnique: async () => existing,
+      create: async ({ data }) => {
+        records.messages.push(data);
+        return { id: "message-1", ...data };
+      },
+    },
+    ticketSlaTarget: {
+      updateMany: async (args) => {
+        records.achieved.push(args);
+        return { count: 1 };
+      },
+    },
+    ticketAuditLog: {
+      findUnique: async () => existing,
+      create: async ({ data }) => {
+        records.audits.push(data);
+        return data;
+      },
+    },
+  };
+  t.mock.method(prisma, "$transaction", async (work) => work(db));
+  return records;
+}
+const chatInput = {
+  ticketId: "ticket-1",
+  conversationId: "conv-1",
+  chatMessageId: "msg-1",
+  authorId: "agent-1",
+  authorRole: "AGENT",
+  body: "Answer",
+  createdAt: "2026-10-07T00:00:00Z",
+};
+test("duplicate chat delivery does not create another message/audit", async (t) => {
+  const records = chatDb(t, {
+    existing: { id: "message-1", ticketId: "ticket-1" },
+  });
+  assert.equal(
+    (await model.recordChatMessage(chatInput)).alreadyRecorded,
+    true,
+  );
+  assert.equal(records.messages.length, 0);
+  assert.equal(records.audits.length, 0);
+});
+test("duplicate delivery still validates ticket/conversation correlation", async (t) => {
+  chatDb(t, { existing: { id: "message-1", ticketId: "ticket-1" } });
+  await assert.rejects(
+    model.recordChatMessage({ ...chatInput, conversationId: "other-room" }),
     { status: 400 },
   );
+});
+test("customer-facing reply satisfies FIRST_RESPONSE and audits in the same transaction", async (t) => {
+  const records = chatDb(t);
+  const result = await model.recordChatMessage(chatInput);
+  assert.equal(result.alreadyRecorded, false);
+  assert.deepEqual(records.achieved[0].where, {
+    ticketId: "ticket-1",
+    metricType: "FIRST_RESPONSE",
+    OR: [{ achievedAt: null }, { achievedAt: { gt: new Date(chatInput.createdAt) } }],
+  });
+  assert.equal(
+    +records.achieved[0].data.achievedAt,
+    +new Date(chatInput.createdAt),
+  );
+  assert.equal(records.audits[0].action, "REPLY");
+  assert.equal(records.audits[0].dedupeKey, "chat:msg-1");
+  assert.equal(records.messages.length, 0);
+  assert.equal(records.audits[0].payload.body, undefined);
+});
+test("internal notes and requester messages never satisfy FIRST_RESPONSE", async (t) => {
+  const records = chatDb(t);
+  await model.recordChatMessage({ ...chatInput, isInternal: true });
+  await model.recordChatMessage({
+    ...chatInput,
+    authorId: "buyer-1",
+    authorRole: "BUYER",
+  });
+  assert.equal(records.achieved.length, 0);
+});
+test("invalid chat dates/IDs are rejected before database work", async () => {
+  await assert.rejects(
+    model.recordChatMessage({ ...chatInput, createdAt: "bad-date" }),
+    { status: 400 },
+  );
+  await assert.rejects(
+    model.recordChatMessage({ ...chatInput, chatMessageId: undefined }),
+    { status: 400 },
+  );
+});
+test("API projection derives current assignee, SLA and lifecycle without exposing history", () => {
+  const row = {
+    id: "ticket-1",
+    category: { code: "ORDER" },
+    priority: { code: "NORMAL" },
+    currentStatus: { code: "RESOLVED" },
+    assignments: [{ assigneeId: "agent-1" }],
+    statusHistory: [
+      { toStatus: { code: "RESOLVED" }, createdAt: new Date(1000) },
+    ],
+    slaTargets: [
+      {
+        metricType: "FIRST_RESPONSE",
+        dueAt: new Date(2000),
+        achievedAt: new Date(100),
+      },
+      {
+        metricType: "RESOLUTION",
+        dueAt: new Date(3000),
+        achievedAt: new Date(1000),
+      },
+    ],
+    chatLink: { conversationId: "conv-1" },
+    messages: [],
+  };
+  const result = toTicket(row);
+  assert.equal(result.status, "RESOLVED");
+  assert.equal(result.assigneeId, "agent-1");
+  assert.equal(+result.firstResponseAt, 100);
+  assert.equal(+result.resolvedAt, 1000);
+  assert.equal(result.conversationId, "conv-1");
+  assert.equal("statusHistory" in result, false);
 });

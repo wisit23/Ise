@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const { requireInternalToken } = require("@reloop/shared");
 const internalController = require("./internalController");
+const supportMessages = require("./supportMessages");
 
 const router = Router();
 
@@ -15,6 +16,8 @@ router.get(
   internalController.getByContext,
 );
 router.post("/conversations/:id/messages", internalController.sendMessage);
+router.post("/conversations/:id/replies", supportMessages.reply);
+router.post("/conversations/:id/import-support-message", supportMessages.importMessage);
 router.post(
   "/conversations/:id/participants",
   internalController.addParticipant,

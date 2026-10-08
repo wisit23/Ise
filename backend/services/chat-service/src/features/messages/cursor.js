@@ -5,10 +5,8 @@
 // can silently re-show or skip rows once page 1 has grown). Cursoring on the
 // last-seen message id sidesteps that entirely.
 //
-// MongoDB ObjectIds are lexicographically sortable in a way that tracks
-// creation order (their first 4 bytes are a Unix timestamp), so filtering
-// `id < cursor` with `orderBy: id desc` walks backward through history
-// correctly without needing a separate createdAt comparison.
+// Historical imports and deterministic idempotency IDs do not encode time.
+// Runtime callers resolve the cursor row, then use createdAt + ID tie-breaker.
 const OBJECT_ID_RE = /^[a-f0-9]{24}$/i;
 
 function isValidCursor(cursor) {
@@ -21,20 +19,24 @@ function isValidCursor(cursor) {
 function buildPageQuery({
   conversationId,
   before,
+  beforeMessage,
   limit,
   includeInternal = false,
 }) {
   const where = {
     conversationId,
     deletedAt: null,
-    ...(before ? { id: { lt: before } } : {}),
+    ...(beforeMessage ? { OR: [
+      { createdAt: { lt: beforeMessage.createdAt } },
+      { createdAt: beforeMessage.createdAt, id: { lt: beforeMessage.id } },
+    ] } : before ? { id: { lt: before } } : {}),
   };
   if (!includeInternal) {
     where.visibility = { not: "INTERNAL" };
   }
   return {
     where,
-    orderBy: { id: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     // Fetch one extra row so we can tell whether there's a next page
     // without a separate count() query.
     take: limit + 1,

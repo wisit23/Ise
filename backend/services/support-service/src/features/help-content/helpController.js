@@ -52,6 +52,7 @@ async function publish(req, res, next) {
     const article = await helpService.publish({
       role: effectiveStaffRole(req),
       id: req.params.id,
+      version: req.body?.version,
     });
     res.json(article);
   } catch (err) {
@@ -59,4 +60,20 @@ async function publish(req, res, next) {
   }
 }
 
-module.exports = { search, manage, create, publish };
+async function revise(req, res, next) {
+  try {
+    const article = await helpService.revise({
+      role: effectiveStaffRole(req),
+      id: req.params.id,
+      authorId: req.userId,
+      title: req.body.title,
+      body: req.body.body,
+      category: req.body.category,
+    });
+    res.status(201).json(article);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { search, manage, create, revise, publish };

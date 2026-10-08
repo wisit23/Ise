@@ -9,9 +9,13 @@ async function listPage(
   limit,
   { includeInternal = false } = {},
 ) {
+  const beforeMessage = before ? await prisma.message.findUnique({ where: { id: before } }) : undefined;
+  if (before && (!beforeMessage || beforeMessage.conversationId !== conversationId ||
+      (!includeInternal && beforeMessage.visibility === "INTERNAL"))) throw badRequest("invalid message cursor");
   const { where, orderBy, take } = buildPageQuery({
     conversationId,
     before,
+    beforeMessage,
     limit,
     includeInternal,
   });
@@ -31,6 +35,7 @@ const PREVIEW_LENGTH = 120;
  * without the matching Conversation preview update, or vice versa.
  */
 async function createAndTouch({
+  messageId,
   conversationId,
   senderId,
   senderRole,
@@ -75,6 +80,7 @@ async function createAndTouch({
   const txOperations = [
     prisma.message.create({
       data: {
+        ...(messageId ? { id: messageId } : {}),
         conversationId,
         senderId,
         senderRole,

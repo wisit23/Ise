@@ -4,6 +4,7 @@ const {
   notFound,
   conflict,
   AppError,
+  scoreCase,
 } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const ticketModel = require("./ticketModel");
@@ -11,15 +12,10 @@ const { canTransition } = require("./ticketState");
 const { calculatePriority, calculateSlaDueAt } = require("../sla/priority");
 const auditLog = require("../audit/auditLog");
 const chatClient = require("../../services/chatClient");
+const orderClient = require("../../services/orderClient");
+const riskClient = require("../../services/riskClient");
 
 const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
-const CATEGORIES = new Set([
-  "ORDER",
-  "PAYMENT",
-  "ACCOUNT",
-  "TECHNICAL",
-  "OTHER",
-]);
 
 function isAgent(role) {
   return AGENT_ROLES.has(role);
@@ -29,7 +25,7 @@ function isAgent(role) {
 function toRequesterView(ticket) {
   return {
     ...ticket,
-    messages: ticket.messages.filter((m) => !m.isInternal),
+    messages: (ticket.messages || []).filter((m) => !m.isInternal),
   };
 }
 
@@ -55,18 +51,48 @@ async function createTicket({
   targetId,
 }) {
   if (!subject?.trim()) throw badRequest("subject is required");
-  if (!CATEGORIES.has(category)) {
-    throw badRequest(`category must be one of ${[...CATEGORIES].join(", ")}`);
-  }
+  if (typeof category !== "string" || !category.trim())
+    throw badRequest("category is required");
   if (targetId && targetId === requesterId) {
     throw badRequest("cannot name yourself as the counterparty");
   }
 
+  let order = null;
+  if (orderId) {
+    order = await orderClient.getOrder(orderId);
+    if (!order) throw notFound("order not found");
+    if (order.buyerId !== requesterId && order.sellerId !== requesterId) {
+      throw forbidden("you do not own this order");
+    }
+    const counterpartyId =
+      order.buyerId === requesterId ? order.sellerId : order.buyerId;
+    if (targetId && targetId !== counterpartyId)
+      throw badRequest("targetId does not match this order");
+    targetId = counterpartyId;
+  }
+  let reportCount = 0;
+  if (targetId) {
+    try {
+      reportCount = await riskClient.getReportCount(targetId);
+    } catch (err) {
+      reportCount = 4;
+      console.error(`[ticketService] risk lookup unavailable: ${err.message}`);
+    }
+  }
+  const amount = order?.finalPrice ?? order?.price ?? 0;
   const priority = calculatePriority({
     isDispute: Boolean(orderId) && category === "PAYMENT",
     category,
+    orderAmount: amount,
   });
   const slaDueAt = calculateSlaDueAt(priority);
+  const { priorityScore } = scoreCase({
+    amount,
+    reportCount,
+    reason: `${subject} ${description || ""}`,
+    isDispute: category === "PAYMENT",
+    slaExpiresAt: slaDueAt,
+  });
 
   const ticket = await ticketModel.create({
     requesterId,
@@ -76,15 +102,8 @@ async function createTicket({
     orderId: orderId || null,
     targetId: targetId || null,
     priority,
-    slaDueAt,
-  });
-
-  await auditLog.record({
-    ticketId: ticket.id,
-    actorId: requesterId,
-    action: "STATUS_CHANGE",
-    fromValue: null,
-    toValue: "NEW",
+    priorityScore,
+    riskReportCount: reportCount,
   });
 
   // Best-effort: open a chat room for this support ticket so the requester
@@ -108,9 +127,34 @@ async function createTicket({
   return ticket;
 }
 
-async function getTicket({ ticketId, userId, role }) {
+function toTicketMessage(message, ticketId) {
+  return { id: message.id, ticketId, chatMessageId: message.id,
+    authorId: message.senderId,
+    authorRole: ["AGENT", "ADMIN", "TRUST_AND_SAFETY"].includes(message.senderRole) ? "AGENT" : message.senderRole === "SYSTEM" ? "SYSTEM" : "REQUESTER",
+    body: message.body, type: message.type, payload: message.payload,
+    isInternal: message.visibility === "INTERNAL", createdAt: message.createdAt };
+}
+
+async function getTicket({ ticketId, userId, role, before, limit }) {
   const ticket = await assertAccess({ ticketId, userId, role });
-  return isAgent(role) ? ticket : toRequesterView(ticket);
+  if (ticket.status === "ESCALATED" && role === "CUSTOMER_SERVICE" && ticket.requesterId !== userId)
+    throw forbidden("only admin or trust & safety can access an escalated ticket");
+  const includeInternal = isAgent(role) && ticket.requesterId !== userId;
+  try {
+    const page = ticket.conversationId
+      ? await chatClient.getTicketMessages(ticket.conversationId, { includeInternal, before, limit })
+      : { messages: [], nextCursor: null };
+    ticket.messages = page.messages.map((m) => toTicketMessage(m, ticket.id));
+    ticket.messagesNextCursor = page.nextCursor;
+    ticket.chatAvailable = true;
+  } catch (error) {
+    if (![502, 503, 504].includes(error.status)) throw error;
+    // Ticket operations remain available, but never imply an unavailable history is empty.
+    ticket.messages = [];
+    ticket.chatAvailable = false;
+    ticket.chatError = "Message history is temporarily unavailable";
+  }
+  return includeInternal ? ticket : toRequesterView(ticket);
 }
 
 async function listMine(requesterId, pagination) {
@@ -127,7 +171,7 @@ async function listQueue({
   ...pagination
 }) {
   if (!isAgent(role)) throw forbidden("only support agents can view the queue");
-  return ticketModel.listQueue({
+  const queue = await ticketModel.listQueue({
     role,
     scope,
     assigneeId: userId,
@@ -136,10 +180,32 @@ async function listQueue({
     search,
     ...pagination,
   });
+  return {
+    ...queue,
+    items: queue.items.map((ticket) => {
+      const score = scoreCase({
+        reportCount: ticket.riskReportCount,
+        reason: `${ticket.subject} ${ticket.description}`,
+        isDispute: ticket.category === "PAYMENT",
+        slaExpiresAt: ticket.slaDueAt,
+      });
+      return {
+        ...ticket,
+        priorityScore: score.priorityScore,
+        priority:
+          score.priority === "CRITICAL" || ticket.priority === "URGENT"
+            ? "URGENT"
+            : score.priority,
+      };
+    }),
+  };
 }
 
-async function reply({ ticketId, userId, role, body, isInternal }) {
-  if (!body?.trim()) throw badRequest("body is required");
+async function reply({ ticketId, userId, role, body, isInternal, eventKey }) {
+  if (typeof body !== "string" || !body.trim()) throw badRequest("body is required");
+  if (role === "ADMIN" && !isInternal) {
+    throw forbidden("Admin audit is read-only for customer conversations");
+  }
   const ticket = await assertAccess({ ticketId, userId, role });
 
   if (ticket.status === "CLOSED") {
@@ -148,35 +214,16 @@ async function reply({ ticketId, userId, role, body, isInternal }) {
 
   // A non-agent's isInternal is ignored rather than rejected — only agents
   // can ever produce an internal-only message either way.
-  const authorRole = isAgent(role) ? "AGENT" : "REQUESTER";
-  const message = await ticketModel.addMessage({
-    ticketId,
-    authorId: userId,
-    authorRole,
+  const joined = await joinTicketChat({ ticketId, userId, role });
+  const message = await chatClient.sendTicketMessage(joined.conversationId, {
+    senderId: userId,
     body: body.trim(),
-    isInternal: Boolean(isInternal) && isAgent(role),
+    visibility: Boolean(isInternal) && isAgent(role) && ticket.requesterId !== userId ? "INTERNAL" : "ALL",
+    eventKey,
   });
-
-  const extra = {};
-  if (!ticket.firstResponseAt && authorRole === "AGENT") {
-    extra.firstResponseAt = new Date();
-  }
-  if (Object.keys(extra).length > 0) {
-    await ticketModel.transitionStatus({
-      id: ticketId,
-      version: ticket.version,
-      status: ticket.status,
-      extra,
-    });
-  }
-
-  await auditLog.record({
-    ticketId,
-    actorId: userId,
-    action: "REPLY",
-  });
-
-  return message;
+  // Chat persists PENDING metadata delivery before acknowledging the message.
+  // Its retry worker updates CS SLA/audit even if CS crashes after this call.
+  return toTicketMessage(message, ticketId);
 }
 
 async function assignToSelf({ ticketId, userId, role }) {
@@ -185,6 +232,10 @@ async function assignToSelf({ ticketId, userId, role }) {
   const ticket = await ticketModel.findById(ticketId);
   if (!ticket) throw notFound("ticket not found");
   if (ticket.assigneeId) throw conflict("ticket already has an assignee");
+  if (ticket.status === "ESCALATED" && role === "CUSTOMER_SERVICE")
+    throw forbidden(
+      "only admin or trust & safety can claim an escalated ticket",
+    );
 
   const ok = await ticketModel.assign({
     id: ticketId,
@@ -192,14 +243,6 @@ async function assignToSelf({ ticketId, userId, role }) {
     assigneeId: userId,
   });
   if (!ok) throw conflict("ticket was already taken or modified");
-
-  await auditLog.record({
-    ticketId,
-    actorId: userId,
-    action: "ASSIGN",
-    fromValue: null,
-    toValue: userId,
-  });
 
   // Best-effort: add the agent to the support chat room.
   const assigned = await ticketModel.findById(ticketId);
@@ -217,27 +260,25 @@ async function changeStatus({ ticketId, userId, role, status, reason }) {
   if (!canTransition(ticket.status, status)) {
     throw badRequest(`cannot transition from ${ticket.status} to ${status}`);
   }
-
-  const extra = {};
-  if (status === "RESOLVED") extra.resolvedAt = new Date();
-  if (status === "CLOSED") extra.closedAt = new Date();
+  if (status === "ESCALATED" && !reason?.trim()) {
+    throw badRequest("escalation reason is required");
+  }
+  if (
+    status === "ESCALATED" &&
+    role === "CUSTOMER_SERVICE" &&
+    ticket.assigneeId !== userId
+  ) {
+    throw forbidden("only the assigned agent can escalate this ticket");
+  }
 
   const ok = await ticketModel.transitionStatus({
     id: ticketId,
     version: ticket.version,
     status,
-    extra,
+    actorId: userId,
+    reason: reason?.trim() || null,
   });
   if (!ok) throw conflict("ticket was modified concurrently, reload and retry");
-
-  await auditLog.record({
-    ticketId,
-    actorId: userId,
-    action: "STATUS_CHANGE",
-    fromValue: ticket.status,
-    toValue: status,
-    reason: reason || null,
-  });
 
   // Best-effort chat notifications for meaningful status changes.
   const updated = await ticketModel.findById(ticketId);
@@ -412,6 +453,7 @@ async function joinTicketChat({ ticketId, userId, role }) {
       ticketId: ticket.id,
       actorId: userId,
       action,
+      dedupeKey: `join:${ticket.id}:${userId}:${action}`,
       fromValue: ticket.assigneeId || null,
       toValue: userId,
       reason: isHandoff

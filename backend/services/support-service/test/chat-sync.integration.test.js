@@ -4,8 +4,14 @@ const request = require("supertest");
 
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
+if (process.env.DATABASE_URL_SUPPORT)
+  process.env.DATABASE_URL = process.env.DATABASE_URL_SUPPORT;
 
 const prisma = require("../src/models/prismaClient");
+const {
+  ticketInclude,
+  toTicket,
+} = require("../src/features/tickets/ticketShape");
 const app = require("../src/app");
 // This feature suite uses signed identity fixtures; live session enforcement
 // is covered separately by account-suspension.integration.test.js.
@@ -75,20 +81,22 @@ test("SUPPORT chat message updates ticket first-response and audit exactly once"
   const chatMessage = await sent.json();
 
   const synced = await waitFor(async () => {
-    const ticket = await prisma.supportTicket.findUnique({
-      where: { id: create.body.id },
-      include: { messages: true, auditLog: true },
-    });
-    return ticket?.messages.some((m) => m.chatMessageId === chatMessage.id)
+    const ticket = toTicket(
+      await prisma.supportTicket.findUnique({
+        where: { id: create.body.id },
+        include: { ...ticketInclude, messages: true, auditLog: true },
+      }),
+    );
+    return ticket?.auditLog.some((m) => m.dedupeKey === "chat:" + chatMessage.id)
       ? ticket
       : null;
   });
 
-  assert.ok(synced, "chat message was not mirrored into support-service");
+  assert.ok(synced, "chat metadata event was not delivered into support-service");
   assert.ok(synced.firstResponseAt);
   assert.equal(
     synced.messages.filter((m) => m.chatMessageId === chatMessage.id).length,
-    1,
+    0,
   );
   assert.equal(
     synced.auditLog.filter(

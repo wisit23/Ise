@@ -26,5 +26,7 @@ router.post("/:id/claim", requireAuth, disputeController.claim);
 router.post("/:id/reassign", requireAuth, disputeController.reassign);
 router.post("/:id/escalate", requireAuth, disputeController.escalate);
 router.post("/:id/decision", requireAuth, disputeController.decide);
+router.post("/:id/request-evidence", requireAuth, disputeController.requestMoreEvidence);
+router.get("/:id/audit-transcript", requireAuth, disputeController.auditTranscript);
 
 module.exports = router;

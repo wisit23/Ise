@@ -56,6 +56,8 @@ async function getOne(req, res, next) {
       ticketId: req.params.id,
       userId: req.userId,
       role: effectiveStaffRole(req),
+      before: req.query.before,
+      limit: req.query.limit,
     });
     res.json(ticket);
   } catch (err) {
@@ -71,6 +73,7 @@ async function reply(req, res, next) {
       role: effectiveStaffRole(req),
       body: req.body.body,
       isInternal: req.body.isInternal,
+      eventKey: req.get("Idempotency-Key") || req.body.eventKey,
     });
     res.status(201).json(message);
   } catch (err) {

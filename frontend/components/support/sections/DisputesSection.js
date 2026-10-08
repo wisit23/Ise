@@ -41,6 +41,7 @@ export default function DisputesSection({
   const [closingDispute, setClosingDispute] = useState(false);
   const [showDisputeChat, setShowDisputeChat] = useState(false);
   const [chatRoom, setChatRoom] = useState(null);
+  const [chatSide, setChatSide] = useState("buyer");
   const [openingChat, setOpeningChat] = useState(false);
   const [closingChat, setClosingChat] = useState(false);
   const [disputeDetails, setDisputeDetails] = useState(null);
@@ -107,20 +108,22 @@ export default function DisputesSection({
     setDecisionReason("");
     setShowDisputeChat(false);
     setChatRoom(null);
+    setChatSide("buyer");
     setClosingChat(false);
     loadDisputeDetails(d.orderId);
   }
 
-  async function handleOpenChat() {
+  async function handleOpenChat(side = "buyer") {
     if (!disputeDetails?.id || openingChat) return;
     setOpeningChat(true);
     try {
       const room = await apiFetch(
         `/api/orders/disputes/${disputeDetails.id}/conversation`,
-        { method: "POST", token },
+        { method: "POST", token, body: { side } },
       );
       if (!room?.conversationId) throw new Error("ไม่พบห้องสนทนาของข้อพิพาท");
       setChatRoom(room);
+      setChatSide(side);
       setClosingChat(false);
       setShowDisputeChat(true);
     } catch (err) {
@@ -222,7 +225,7 @@ export default function DisputesSection({
           body: { reason, version: disputeDetails.version },
         },
       );
-      toast.success("ส่งต่อเคสให้ทีม Trust & Safety สำเร็จ");
+      toast.success("ส่งต่อเคสให้ Admin สำเร็จ");
       setDisputeDetails(updated);
       refreshQueue();
     } catch (err) {
@@ -248,6 +251,7 @@ export default function DisputesSection({
             decision,
             reason: decisionReason,
             version: disputeDetails?.version,
+            idempotencyKey: `${disputeDetails.id}:${disputeDetails.version}:${decision}`,
           },
         },
       );
@@ -260,7 +264,7 @@ export default function DisputesSection({
       toast.success(
         decision === "APPROVE_REFUND"
           ? "อนุมัติคืนเงินเรียบร้อย"
-          : "ปฏิเสธคำร้องเรียบร้อย",
+          : "ปล่อยเงินให้ผู้ขายเรียบร้อย",
       );
       loadDisputeDetails(selectedDispute.orderId);
       refreshQueue();
@@ -340,6 +344,9 @@ export default function DisputesSection({
               dispute={selectedDispute}
               conversationId={chatRoom?.conversationId}
               readOnly={chatRoom?.readOnly}
+              side={chatSide}
+              onSideChange={handleOpenChat}
+              switching={openingChat}
               closing={closingChat}
               onClose={closeDisputeChat}
             />
@@ -365,7 +372,7 @@ export default function DisputesSection({
             onEscalate={handleEscalate}
             escalating={escalating}
             onOpenChat={() => {
-              handleOpenChat();
+              handleOpenChat("buyer");
             }}
             openingChat={openingChat}
             onClose={closeDispute}

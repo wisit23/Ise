@@ -7,5 +7,6 @@ module.exports = {
   ...require("./pagination"),
   ...require("./permissions"),
   ...require("./executiveMetrics"),
+  ...require("./casePriority"),
   events: require("./events").EVENTS,
 };

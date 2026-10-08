@@ -21,7 +21,7 @@ test("ticket owner preserves requester history and revokes escalated CS", async 
     .set("x-internal-token", "unit-internal-token");
   assert.deepEqual((await call("buyer-1", "BUYER")).body, { allowed: true, writable: true });
   assert.deepEqual((await call("old-agent", "AGENT")).body, { allowed: false, writable: false });
-  assert.deepEqual((await call("admin-1", "ADMIN")).body, { allowed: true, writable: true });
+  assert.deepEqual((await call("admin-1", "ADMIN")).body, { allowed: true, writable: false });
   status = "CLOSED";
   assert.deepEqual((await call("buyer-1", "BUYER")).body, { allowed: true, writable: false });
 });

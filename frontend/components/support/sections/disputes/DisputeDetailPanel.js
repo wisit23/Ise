@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Badge from "../../../panel/ui/Badge";
 import Button from "../../../ui/Button";
-import ConfirmDialog from "../../../ui/ConfirmDialog";
 import Input from "../../../ui/Input";
 import Modal from "../../../ui/Modal";
 import Skeleton from "../../../ui/Skeleton";
@@ -83,12 +82,21 @@ export default function DisputeDetailPanel({
   onClose,
 }) {
   const [showEscalateDialog, setShowEscalateDialog] = useState(false);
+  const [escalateMemo, setEscalateMemo] = useState({ problem: "", authority: "", recommendation: "" });
   const [showReassignDialog, setShowReassignDialog] = useState(false);
   const [reassignToUserId, setReassignToUserId] = useState("");
   const [reassignReason, setReassignReason] = useState("");
+  const [showOrderDrawer, setShowOrderDrawer] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const buyerId = dispute.order?.buyerId ?? dispute.buyerId ?? null;
   const sellerId = dispute.order?.sellerId ?? dispute.sellerId ?? null;
+  const escrowAmount = dispute.order?.finalPrice ?? dispute.order?.price;
+  const remainingMs = new Date(details?.slaExpiresAt || dispute.slaExpiresAt || 0).getTime() - now;
 
   return (
     <div
@@ -142,10 +150,13 @@ export default function DisputeDetailPanel({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100 bg-slate-50/70">
-        <PartyCell label="ผู้ซื้อ (Buyer)" id={buyerId} tone="buyer" />
-        <PartyCell label="ผู้ขาย (Seller)" id={sellerId} tone="seller" />
+      <div className="grid grid-cols-3 gap-2 border-b border-amber-100 bg-amber-50 p-4 text-xs">
+        <div><span className="block text-slate-500">ยอดระงับ (Escrow Hold)</span><strong className="text-base text-amber-800">{typeof escrowAmount === "number" ? `฿${escrowAmount.toLocaleString("th-TH")}` : "ตรวจสอบออเดอร์"}</strong></div>
+        <div><span className="block text-slate-500">สาเหตุ</span><strong className="line-clamp-2 text-slate-800">{dispute.reason}</strong></div>
+        <div><span className="block text-slate-500">SLA คงเหลือ</span><strong className={remainingMs <= 0 ? "text-red-700" : "text-slate-800"}>{Number.isFinite(remainingMs) && (details?.slaExpiresAt || dispute.slaExpiresAt) ? remainingMs <= 0 ? "เกินกำหนด" : `${Math.ceil(remainingMs / 60000)} นาที` : "ยังไม่กำหนด"}</strong></div>
       </div>
+
+      <button type="button" onClick={() => setShowOrderDrawer(true)} className="border-b border-slate-100 px-6 py-2 text-left text-xs font-bold text-indigo-700 hover:bg-indigo-50">ดูรายละเอียดออเดอร์ →</button>
 
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto bg-slate-50/30 p-6">
         {/* TSR-02: Single-owner assignment status card */}
@@ -232,7 +243,9 @@ export default function DisputeDetailPanel({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-bold text-slate-700">
-                  {details?.assignedRole === "TRUST_AND_SAFETY"
+                  {details?.assignedRole === "ADMIN"
+                    ? "เคสส่งต่อให้ Admin"
+                    : details?.assignedRole === "TRUST_AND_SAFETY"
                     ? "เคสส่งต่อให้ Trust & Safety"
                     : "เคสนี้ยังไม่มีผู้รับผิดชอบ"}
                 </p>
@@ -245,8 +258,8 @@ export default function DisputeDetailPanel({
                 </p>
               </div>
               {details?.status !== "DECIDED" &&
-                (details?.assignedRole !== "TRUST_AND_SAFETY" ||
-                  userRole === "TRUST_AND_SAFETY") && (
+                (details?.assignedRole !== "ADMIN" || userRole === "ADMIN") &&
+                (details?.assignedRole !== "TRUST_AND_SAFETY" || userRole === "TRUST_AND_SAFETY") && (
                   <Button
                     size="sm"
                     icon="pan_tool"
@@ -319,10 +332,7 @@ export default function DisputeDetailPanel({
           </div>
         ) : details ? (
           <>
-            <SectionCard
-              icon="folder_open"
-              title={`หลักฐานประกอบ (${details.evidence?.length || 0} ไฟล์)`}
-            >
+            <div className="order-first"><SectionCard icon="compare" title={`เปรียบเทียบหลักฐาน (${details.evidence?.length || 0} ไฟล์)`}>
               {!details.evidence?.length ? (
                 <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-slate-200 py-8 text-slate-500">
                   <span className="material-symbols-outlined text-[36px]">
@@ -331,8 +341,10 @@ export default function DisputeDetailPanel({
                   <p className="text-sm">ยังไม่มีหลักฐานแนบมา</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-4 gap-3">
-                  {details.evidence.map((ev) => {
+                <div className="grid grid-cols-2 gap-3">
+                  {[[buyerId, "หลักฐานผู้ซื้อ", "border-emerald-200"], [sellerId, "หลักฐานผู้ขาย", "border-blue-200"]].map(([partyId, label, border]) => <div key={partyId} className={`min-h-36 rounded-lg border p-2 ${border}`}>
+                    <p className="mb-2 text-xs font-bold">{label}</p>
+                    <div className="grid grid-cols-2 gap-2">{details.evidence.filter((ev) => ev.uploaderId === partyId).map((ev) => {
                     const isVideo = ev.fileType.startsWith("video/");
                     return (
                       <button
@@ -354,10 +366,11 @@ export default function DisputeDetailPanel({
                         </span>
                       </button>
                     );
-                  })}
+                  })}{!details.evidence.some((ev) => ev.uploaderId === partyId) && <p className="col-span-2 text-xs text-slate-500">ยังไม่มีหลักฐาน</p>}</div>
+                  </div>)}
                 </div>
               )}
-            </SectionCard>
+            </SectionCard></div>
 
             {details.status === "DECIDED" ? (
               <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm">
@@ -381,7 +394,7 @@ export default function DisputeDetailPanel({
                   </span>
                   {details.decision === "APPROVE_REFUND"
                     ? "อนุมัติคืนเงิน"
-                    : "ปฏิเสธคำร้อง"}
+                    : "ปล่อยเงินให้ผู้ขาย"}
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-slate-700">
                   {details.decisionReason}
@@ -400,7 +413,7 @@ export default function DisputeDetailPanel({
                   (Claim)&quot; ด้านบนเพื่อเริ่มต้นตัดสินเคส
                 </p>
               </div>
-            ) : details.assignedTo !== currentUserId ? (
+            ) : userRole !== "ADMIN" || details.assignedTo !== currentUserId ? (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
                 <span className="material-symbols-outlined text-[36px] text-slate-400">
                   lock
@@ -409,8 +422,8 @@ export default function DisputeDetailPanel({
                   ส่วนการตัดสินเป็นแบบอ่านอย่างเดียว (Read-only)
                 </h4>
                 <p className="mt-1 text-xs text-slate-500">
-                  เฉพาะเจ้าหน้าที่ผู้รับผิดชอบ ({details.assignedTo})
-                  เท่านั้นที่สามารถบันทึกผลการพิจารณาเคสนี้ได้
+                  เฉพาะ Admin ที่รับเคส ({details.assignedTo})
+                  เท่านั้นที่สามารถบันทึกคำตัดสินได้
                 </p>
               </div>
             ) : (
@@ -442,17 +455,11 @@ export default function DisputeDetailPanel({
                       icon="block"
                       className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
                       disabled={deciding || !decisionReason.trim()}
-                      onClick={() => onDecide("REJECT")}
+                      onClick={() => onDecide("RELEASE_ESCROW")}
                     >
-                      ปฏิเสธคำร้อง
+                      ปล่อยเงินให้ผู้ขาย
                     </Button>
                   </div>
-                  {userRole !== "ADMIN" && (
-                    <p className="text-center text-xs font-medium text-slate-500">
-                      หากต้องการให้ Admin ช่วยระงับเงินไว้ก่อนตัดสิน แจ้งทีม
-                      Admin โดยตรง
-                    </p>
-                  )}
                 </div>
               </SectionCard>
             )}
@@ -461,20 +468,26 @@ export default function DisputeDetailPanel({
       </div>
 
       {/* Escalate Confirm Dialog */}
-      <ConfirmDialog
+      <Modal
         open={showEscalateDialog}
-        title="ส่งต่อเคสให้ทีม Trust & Safety (Escalate)"
-        description="การส่งต่อเคสจะโอนสิทธิ์การดูแลให้ทีม Trust & Safety คุณจะไม่สามารถตัดสินเคสนี้ต่อได้"
-        confirmLabel="ยืนยันการส่งต่อ"
-        reason="required"
-        reasonLabel="เหตุผลในการส่งต่อ"
-        busy={escalating}
-        onConfirm={(reason) => {
-          onEscalate(reason);
+        title="ส่งต่อเคสให้ Admin (Escalate)"
+        description="สรุปปัญหา อำนาจที่ต้องใช้ และข้อเสนอแนะ ก่อนส่งเข้า Admin Inbox"
+        onClose={() => setShowEscalateDialog(false)}
+        footer={<div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setShowEscalateDialog(false)}>ยกเลิก</Button><Button loading={escalating} disabled={escalating || Object.values(escalateMemo).some((v) => !v.trim())} onClick={() => {
+          onEscalate(`ปัญหา: ${escalateMemo.problem.trim()}\nขาดอำนาจ: ${escalateMemo.authority.trim()}\nข้อเสนอแนะ: ${escalateMemo.recommendation.trim()}`);
           setShowEscalateDialog(false);
-        }}
-        onCancel={() => setShowEscalateDialog(false)}
-      />
+        }}>ยืนยันการส่งต่อ</Button></div>}
+      ><div className="space-y-3">{[["problem", "ปัญหาคืออะไร"], ["authority", "ขาดอำนาจอะไร"], ["recommendation", "CS เสนอแนะอะไร"]].map(([key, label]) => <Textarea key={key} rows={2} label={label} required value={escalateMemo[key]} onChange={(e) => setEscalateMemo((old) => ({ ...old, [key]: e.target.value }))} />)}</div></Modal>
+
+      {showOrderDrawer && <div className="absolute inset-0 z-20 flex justify-end bg-slate-900/40" onClick={() => setShowOrderDrawer(false)} role="presentation">
+        <aside role="dialog" aria-label="รายละเอียดออเดอร์" className="h-full w-full max-w-sm overflow-y-auto bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <button type="button" onClick={() => setShowOrderDrawer(false)} className="mb-4 text-sm font-bold text-slate-600">← ปิดรายละเอียด</button>
+          <h3 className="mb-3 font-bold">รายละเอียดออเดอร์</h3>
+          <p className="break-all text-xs">Order ID: {dispute.orderId}</p>
+          <p className="mt-2 text-sm">{dispute.order?.productTitle || "สินค้า"}</p>
+          <div className="mt-4 divide-y border-y"><PartyCell label="ผู้ซื้อ" id={buyerId} tone="buyer" /><PartyCell label="ผู้ขาย" id={sellerId} tone="seller" /></div>
+        </aside>
+      </div>}
 
       {/* Reassign Dialog */}
       {showReassignDialog && (

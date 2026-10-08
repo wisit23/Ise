@@ -26,8 +26,9 @@ function addEvidence(data) {
   return prisma.disputeEvidence.create({ data });
 }
 
-async function listQueue({ status, search, skip, take }) {
+async function listQueue({ status, assignedRole, search, skip, take }) {
   const where = {};
+  if (assignedRole) where.assignedRole = assignedRole;
   if (status) {
     where.status = status;
   }
@@ -41,7 +42,7 @@ async function listQueue({ status, search, skip, take }) {
   const [items, total] = await Promise.all([
     prisma.disputeCase.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ slaExpiresAt: "asc" }, { priorityScore: "desc" }, { createdAt: "asc" }],
       skip,
       take,
       include: { order: true },
@@ -57,7 +58,7 @@ function auditLog(data) {
 }
 
 /** Opens a dispute and puts the order into `disputed` + payout-held, atomically. */
-function openDispute({ orderId, openedBy, reason, expectedVersion }) {
+function openDispute({ orderId, openedBy, reason, expectedVersion, priority, priorityScore, riskReportCount, slaExpiresAt }) {
   return prisma.$transaction(async (tx) => {
     const existingOrder = await tx.order.findUnique({ where: { id: orderId } });
     if (!existingOrder) throw notFound("order not found");
@@ -97,7 +98,7 @@ function openDispute({ orderId, openedBy, reason, expectedVersion }) {
     }
 
     const dispute = await tx.disputeCase.create({
-      data: { orderId, openedBy, reason },
+      data: { orderId, openedBy, reason, priority, priorityScore, riskReportCount, slaExpiresAt },
     });
 
     await orderTransitionService.addHold(tx, {
@@ -123,10 +124,10 @@ async function claim({ id, version, userId, role }) {
       assignedTo: null,
       status: { in: ["OPEN", "NEEDS_INFO"] },
     };
-    if (role !== "TRUST_AND_SAFETY") {
+    if (role !== "TRUST_AND_SAFETY" && role !== "ADMIN") {
       where.OR = [
         { assignedRole: null },
-        { assignedRole: { not: "TRUST_AND_SAFETY" } },
+        { assignedRole: { notIn: ["TRUST_AND_SAFETY", "ADMIN"] } },
       ];
     }
 
@@ -195,7 +196,7 @@ async function reassign({ id, version, actorId, toUserId, toRole, reason }) {
   });
 }
 
-/** Escalate dispute: transfers ownership to TRUST_AND_SAFETY role. */
+/** Escalate dispute: transfers ownership to Admin verdict queue. */
 async function escalate({ id, version, actorId, toUserId, reason }) {
   return prisma.$transaction(async (tx) => {
     const { count } = await tx.disputeCase.updateMany({
@@ -206,7 +207,9 @@ async function escalate({ id, version, actorId, toUserId, reason }) {
       },
       data: {
         assignedTo: toUserId || null,
-        assignedRole: "TRUST_AND_SAFETY",
+        assignedRole: "ADMIN",
+        escalationNote: reason,
+        escalatedBy: actorId,
         claimedAt: toUserId ? new Date() : null,
         version: { increment: 1 },
       },
@@ -223,7 +226,7 @@ async function escalate({ id, version, actorId, toUserId, reason }) {
         disputeId: id,
         actorId,
         action: "ESCALATE",
-        detail: `escalated to TRUST_AND_SAFETY: ${reason}`,
+        detail: `escalated to ADMIN: ${reason}`,
       },
     });
 
@@ -241,6 +244,7 @@ async function decide({
   decision,
   decisionReason,
   decidedBy,
+  verdictKey,
 }) {
   return prisma.$transaction(async (tx) => {
     const { count } = await tx.disputeCase.updateMany({
@@ -250,6 +254,7 @@ async function decide({
         decision,
         decisionReason,
         decidedBy,
+        verdictKey,
         decidedAt: new Date(),
         version: { increment: 1 },
       },
@@ -313,6 +318,28 @@ async function decide({
   });
 }
 
+async function requestMoreEvidence({ id, version, actorId, reason }) {
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.disputeCase.findUnique({ where: { id } });
+    if (!current || current.status === "DECIDED") return null;
+    const { count } = await tx.disputeCase.updateMany({
+      where: { id, version, status: { in: ["OPEN", "NEEDS_INFO"] }, assignedTo: actorId, assignedRole: "ADMIN" },
+      data: {
+        status: "NEEDS_INFO",
+        assignedTo: current.escalatedBy,
+        assignedRole: "CUSTOMER_SERVICE",
+        claimedAt: current.escalatedBy ? new Date() : null,
+        evidenceDeadline: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        escalationNote: reason,
+        version: { increment: 1 },
+      },
+    });
+    if (!count) return null;
+    await tx.disputeAuditLog.create({ data: { disputeId: id, actorId, action: "REQUEST_MORE_EVIDENCE", detail: reason } });
+    return tx.disputeCase.findUnique({ where: { id }, include: { evidence: true } });
+  });
+}
+
 module.exports = {
   findByOrderId,
   findById,
@@ -324,5 +351,6 @@ module.exports = {
   reassign,
   escalate,
   decide,
+  requestMoreEvidence,
   listQueue,
 };

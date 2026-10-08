@@ -236,7 +236,7 @@ export default function SupportPanelPage() {
                   />
                 )}
                 {section === "admin_inbox" && (
-                  <AdminInboxSection token={token} />
+                  <AdminInboxSection token={token} currentUserId={user?.id} />
                 )}
                 {section === "disputes" && (
                   <DisputesSection

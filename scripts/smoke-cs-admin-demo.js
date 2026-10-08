@@ -29,9 +29,9 @@ async function login(email) {
 }
 
 async function run() {
-  const [admin, cs, otherCs, buyer] = await Promise.all([
+  const [admin, cs, otherCs, buyer, seller] = await Promise.all([
     login("admin@example.com"), login("cs.nan@example.com"),
-    login("cs.beam@example.com"), login("buyer.demo@example.com"),
+    login("cs.beam@example.com"), login("buyer.demo@example.com"), login("shop.denim@example.com"),
   ]);
   const [ticketQueue, disputeQueue, reports] = await Promise.all([
     request("/api/support/tickets/queue?scope=all&limit=50", { token: admin }),
@@ -74,14 +74,22 @@ async function run() {
   assert.equal(escalatedHistory.status, 200, "Admin could not read escalated ticket history");
   assert.ok(escalatedHistory.data.items.some((message) => message.body.includes("โอนเงินเพิ่ม")));
 
-  const [csDisputeJoin, buyerDisputeJoin, decidedJoin] = await Promise.all([
+  const [csDisputeJoin, buyerDisputeJoin, sellerDisputeJoin, csSellerJoin, decidedJoin] = await Promise.all([
     request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: cs, method: "POST" }),
     request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: buyer, method: "POST" }),
-    request(`/api/orders/disputes/${ID.disputes[2]}/conversation`, { token: admin, method: "POST" }),
+    request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: seller, method: "POST" }),
+    request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: cs, method: "POST", body: { side: "seller" } }),
+    request(`/api/orders/disputes/${ID.disputes[3]}/conversation`, { token: admin, method: "POST" }),
   ]);
   assert.equal(csDisputeJoin.status, 200, "Assigned CS could not open dispute chat");
   assert.equal(buyerDisputeJoin.status, 200, "Buyer could not open own dispute chat");
   assert.equal(csDisputeJoin.data.conversationId, buyerDisputeJoin.data.conversationId);
+  assert.equal(sellerDisputeJoin.status, 200, "Seller could not open own dispute chat");
+  assert.equal(csSellerJoin.status, 200, "Assigned CS could not open seller chat");
+  assert.equal(sellerDisputeJoin.data.conversationId, csSellerJoin.data.conversationId);
+  assert.notEqual(csDisputeJoin.data.conversationId, csSellerJoin.data.conversationId, "Buyer and seller chat must be separate rooms");
+  assert.equal((await request(`/api/chat/conversations/${csDisputeJoin.data.conversationId}/messages?limit=10`, { token: seller })).status, 403, "Seller must not read buyer chat");
+  assert.equal((await request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: buyer, method: "POST", body: { side: "seller" } })).status, 403, "Buyer must not open seller chat");
   assert.equal(decidedJoin.status, 200, "Admin could not open decided dispute history");
   assert.equal(decidedJoin.data.readOnly, true);
   const disputeHistory = await request(
@@ -90,10 +98,15 @@ async function run() {
   );
   assert.equal(disputeHistory.status, 200, "Assigned CS could not read dispute history");
   assert.ok(disputeHistory.data.items.some((message) => message.body.includes("สินค้าไม่ตรงภาพ")));
+  assert.equal((await request(`/api/chat/conversations/${decidedJoin.data.conversationId}/messages`, { token: admin, method: "POST", body: { body: "Admin must not chat" } })).status, 403);
+  const audit = await request(`/api/orders/disputes/${ID.disputes[3]}/audit-transcript?side=buyer`, { token: admin });
+  assert.equal(audit.status, 200, "Admin could not read dispute transcript");
+  assert.ok(audit.data.messages.length > 0);
+  assert.equal((await request(`/api/orders/disputes/${ID.disputes[3]}/audit-transcript?side=buyer`, { token: cs })).status, 403);
   assert.equal((await request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, {
     token: otherCs, method: "POST",
   })).status, 403, "Unassigned CS should not enter another agent's dispute");
-  console.log("CS/Admin API smoke passed: queues, ticket and dispute history, internal-note privacy, read-only decision and dispute access.");
+  console.log("CS/Admin API smoke passed: queues, private buyer/seller rooms, admin transcripts, read-only audit, and case access.");
 }
 
 if (require.main === module) run().catch((err) => {

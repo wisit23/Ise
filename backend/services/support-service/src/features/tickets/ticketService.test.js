@@ -6,6 +6,13 @@ const ticketModel = require("./ticketModel");
 const chatClient = require("../../services/chatClient");
 const auditLog = require("../audit/auditLog");
 
+test("Admin cannot send a customer-facing ticket reply", async () => {
+  await assert.rejects(
+    () => ticketService.reply({ ticketId: "ticket-1", userId: "admin-1", role: "ADMIN", body: "hello", isInternal: false }),
+    (err) => err.status === 403,
+  );
+});
+
 test("joinTicketChat is idempotent on repeated calls and writes audit log exactly once", async () => {
   const origFindById = ticketModel.findById;
   const origAuditFindFirst = prisma.ticketAuditLog.findFirst;

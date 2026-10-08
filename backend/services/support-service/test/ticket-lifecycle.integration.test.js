@@ -51,13 +51,35 @@ test("support ticket lifecycle against a real database", async (t) => {
   if (!(await databaseIsReachable())) {
     const message =
       "DATABASE_URL_SUPPORT not set or database unreachable — set it to a disposable test database " +
-      "(after running `npx prisma db push` against it from backend/services/support-service) to run this test";
+      "(after running `node prisma/migrate.js` and `node prisma/seed.js` from backend/services/support-service) to run this test";
     if (process.env.REQUIRE_INTEGRATION === "1") {
       throw new Error(`REQUIRE_INTEGRATION=1 but ${message}`);
     }
     t.skip(message);
     return;
   }
+
+  // Real SQL lifecycle, isolated Chat transport; real cross-service delivery is
+  // exercised separately in chat-sync.integration.test.js.
+  const chat = require("../src/services/chatClient");
+  const model = require("../src/features/tickets/ticketModel");
+  const messages = [];
+  t.mock.method(chat, "createSupportConversation", async (ticketId) => ({ id: "room-" + ticketId }));
+  t.mock.method(chat, "addAgentToConversation", async () => ({}));
+  t.mock.method(chat, "addParticipantToConversation", async () => ({}));
+  t.mock.method(chat, "sendSystemMessage", async () => ({}));
+  t.mock.method(chat, "lockConversation", async () => true);
+  t.mock.method(chat, "getTicketMessages", async (_id, { includeInternal }) => ({ messages: messages.filter((m) => includeInternal || m.visibility !== "INTERNAL"), nextCursor: null }));
+  t.mock.method(chat, "sendTicketMessage", async (conversationId, data) => {
+    const ticketId = conversationId.slice(5);
+    const message = { id: String(messages.length + 1).padStart(24, "0"), senderId: data.senderId,
+      senderRole: data.senderId === requesterId ? "BUYER" : "AGENT", body: data.body,
+      visibility: data.visibility, createdAt: new Date() };
+    messages.push(message);
+    await model.recordChatMessage({ ticketId, conversationId, chatMessageId: message.id,
+      authorId: message.senderId, authorRole: message.senderRole, isInternal: message.visibility === "INTERNAL", createdAt: message.createdAt });
+    return message;
+  });
 
   // Create as the requester.
   const createRes = await request(app)
@@ -66,7 +88,7 @@ test("support ticket lifecycle against a real database", async (t) => {
     .send({ subject: "สินค้าไม่ถึงตามกำหนด", category: "ORDER" });
   assert.equal(createRes.status, 201);
   assert.equal(createRes.body.status, "NEW");
-  assert.match(createRes.body.ticketNumber, /^#CS-\d{6}$/);
+  assert.match(createRes.body.ticketNumber, /^#CS-\d{6,}$/);
   const id = createRes.body.id;
 
   // A stranger (not the requester, not an agent on an unassigned ticket... wait, unassigned tickets ARE visible to any agent, but not to a random BUYER stranger).

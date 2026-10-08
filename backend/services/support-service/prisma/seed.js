@@ -1,33 +1,6 @@
-// Idempotent: installs the HelpArticle.search_text trigger (rerunnable, see
-// ensureSearchTextTrigger) and upserts demo FAQ content by fixed slug.
-const { PrismaClient } = require("../src/generated/prisma-client");
-
-const prisma = new PrismaClient();
-
-// help_articles.search_text can't be a native Postgres generated column
-// (array_to_string()/concat_ws() are STABLE not IMMUTABLE — see
-// schema.prisma and MOCK-TRADE-011's productModel.js for the same issue), so
-// a trigger fills the same role. `db push` doesn't run arbitrary SQL, so this
-// script — the one hook that already runs on every container start — is
-// where it's (idempotently) installed.
-async function ensureSearchTextTrigger() {
-  await prisma.$executeRaw`
-    CREATE OR REPLACE FUNCTION help_articles_set_search_text() RETURNS trigger AS $$
-    BEGIN
-      NEW.search_text := concat_ws(' ', NEW.title, NEW.body, NEW.category);
-      RETURN NEW;
-    END;
-    $$ LANGUAGE plpgsql;
-  `;
-  await prisma.$executeRaw`
-    CREATE OR REPLACE TRIGGER help_articles_search_text_trigger
-    BEFORE INSERT OR UPDATE ON help_articles
-    FOR EACH ROW EXECUTE FUNCTION help_articles_set_search_text();
-  `;
-  await prisma.$executeRaw`UPDATE help_articles SET updated_at = updated_at;`;
-}
-
-const SUPPORT_AGENT_ID = "20000000-0000-0000-0000-000000000001";
+const prisma = require("../src/models/prismaClient");
+const helpModel = require("../src/features/help-content/helpModel");
+const { seedReferenceData } = require("./seedReferenceData");
 
 const ARTICLES = [
   {
@@ -55,31 +28,26 @@ const ARTICLES = [
     category: "OTHER",
   },
 ];
-
 async function main() {
-  await ensureSearchTextTrigger();
-
+  await seedReferenceData(prisma);
   for (const article of ARTICLES) {
-    await prisma.helpArticle.upsert({
-      where: { slug: article.slug },
-      update: {},
-      create: {
-        ...article,
-        status: "PUBLISHED",
-        authorId: SUPPORT_AGENT_ID,
-        publishedAt: new Date(),
-      },
+    if (await prisma.helpArticle.findUnique({ where: { slug: article.slug } }))
+      continue;
+    const draft = await helpModel.create({
+      ...article,
+      authorId: "system:faq-seed",
     });
+    await helpModel.publish(draft.id);
   }
-
   console.log(
-    `[support-service] installed search_text trigger, seeded ${ARTICLES.length} FAQ articles and no automatic demo tickets`,
+    "[support-service] reference data and published FAQ revisions ready",
   );
 }
-
-main()
-  .catch((err) => {
-    console.error(err);
-    process.exitCode = 1;
-  })
-  .finally(() => prisma.$disconnect());
+if (require.main === module)
+  main()
+    .catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
+    })
+    .finally(() => prisma.$disconnect());
+module.exports = { main };

@@ -28,6 +28,19 @@ const agentToken = signAccessToken({
   sub: "int-test-dispute-agent",
   role: "CUSTOMER_SERVICE",
 });
+const adminToken = signAccessToken({ sub: "int-test-dispute-admin", role: "ADMIN" });
+
+async function escalateAndClaim(disputeId, version) {
+  const escalated = await request(app).post(`/disputes/${disputeId}/escalate`)
+    .set("Authorization", `Bearer ${agentToken}`)
+    .send({ reason: "ต้องให้ Admin ตัดสินเงิน", version });
+  assert.equal(escalated.status, 200);
+  const claimed = await request(app).post(`/disputes/${disputeId}/claim`)
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({ version: escalated.body.version });
+  assert.equal(claimed.status, 200);
+  return claimed.body;
+}
 
 async function databaseIsReachable() {
   if (!process.env.DATABASE_URL) return false;
@@ -129,22 +142,24 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
     .send({ version: 0 });
   assert.equal(claimRes.status, 200);
   assert.equal(claimRes.body.version, 1);
+  const adminClaim = await escalateAndClaim(disputeId, claimRes.body.version);
 
   // Decision requires a reason.
   const noReasonRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
-    .set("Authorization", `Bearer ${agentToken}`)
-    .send({ decision: "APPROVE_REFUND", version: 1 });
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({ decision: "APPROVE_REFUND", version: adminClaim.version, idempotencyKey: `no-reason-${disputeId}` });
   assert.equal(noReasonRes.status, 400);
 
   // First decision succeeds.
   const decideRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
-    .set("Authorization", `Bearer ${agentToken}`)
+    .set("Authorization", `Bearer ${adminToken}`)
     .send({
       decision: "APPROVE_REFUND",
       reason: "หลักฐานชัดเจน สินค้าชำรุดจริง",
-      version: 1,
+      version: adminClaim.version,
+      idempotencyKey: `refund-${disputeId}`,
     });
   assert.equal(decideRes.status, 200);
   assert.equal(decideRes.body.decision, "APPROVE_REFUND");
@@ -160,8 +175,8 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   // A second decision on the same dispute is rejected — exactly-one guarantee.
   const secondDecisionRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
-    .set("Authorization", `Bearer ${agentToken}`)
-    .send({ decision: "REJECT", reason: "เปลี่ยนใจ", version: 2 });
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({ decision: "REJECT", reason: "เปลี่ยนใจ", version: decideRes.body.version, idempotencyKey: `second-${disputeId}` });
   assert.equal(secondDecisionRes.status, 409);
 
   // Audit trail recorded open, claim, and decide.
@@ -171,11 +186,11 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   });
   assert.deepEqual(
     auditRows.map((r) => r.action),
-    ["OPEN", "CLAIM", "DECIDE"],
+    ["OPEN", "CLAIM", "ESCALATE", "CLAIM", "DECIDE"],
   );
 });
 
-test("REJECT decision unholds payout and returns the order to completed", async (t) => {
+test("RELEASE_ESCROW verdict unholds payout and returns the order to completed", async (t) => {
   if (!(await databaseIsReachable())) {
     t.skip("covered by the previous test's database-availability check");
     return;
@@ -194,12 +209,14 @@ test("REJECT decision unholds payout and returns the order to completed", async 
     .set("Authorization", `Bearer ${agentToken}`)
     .send({ version: 0 });
   assert.equal(claimRes.status, 200);
+  const adminClaim = await escalateAndClaim(disputeId, claimRes.body.version);
 
   const decideRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
-    .set("Authorization", `Bearer ${agentToken}`)
-    .send({ decision: "REJECT", reason: "หลักฐานไม่เพียงพอ", version: 1 });
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({ decision: "RELEASE_ESCROW", reason: "หลักฐานไม่เพียงพอ", version: adminClaim.version, idempotencyKey: `release-${disputeId}` });
   assert.equal(decideRes.status, 200);
+  assert.equal(decideRes.body.decision, "RELEASE_ESCROW");
 
   const orderAfter = await prisma.order.findUnique({ where: { id: order.id } });
   assert.equal(orderAfter.status, "completed");

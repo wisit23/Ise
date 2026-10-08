@@ -50,6 +50,7 @@ export default function TicketCasePanel({
   onWarnUser,
   onBanUser,
   onOpenLiveChat,
+  auditReadOnly = false,
 }) {
   const [manualTargetId, setManualTargetId] = useState("");
   const nextStatuses = AGENT_NEXT_STATUS[ticket.status] || [];
@@ -103,6 +104,10 @@ export default function TicketCasePanel({
             </span>
           </div>
         </SectionCard>
+
+        {ticket.status === "ESCALATED" && <SectionCard icon="description" title="CS Memo">
+          <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">{ticket.escalationNote || "ยังไม่มีสรุปจาก CS"}</p>
+        </SectionCard>}
 
         {/* Counterparty is the primary focus of moderation when handling disputes/complaints.
             Rendered first so Trust & Safety officers act on the accused party by default. */}
@@ -244,7 +249,7 @@ export default function TicketCasePanel({
             <div className="mt-3">
               <EmbeddedChat
                 conversationId={conversationId}
-                readOnly={ticket.status === "CLOSED"}
+                readOnly={auditReadOnly || ticket.status === "CLOSED"}
               />
             </div>
           ) : !onOpenLiveChat ? (

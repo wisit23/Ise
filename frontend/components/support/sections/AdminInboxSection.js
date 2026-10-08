@@ -9,6 +9,7 @@ import AdminInboxTable from "./admin-inbox/AdminInboxTable";
 import CaseDrawer from "./case/CaseDrawer";
 import ReportCasePanel from "./admin-inbox/ReportCasePanel";
 import TicketCasePanel from "./case/TicketCasePanel";
+import AdminDisputeAuditPanel from "./admin-inbox/AdminDisputeAuditPanel";
 import { PAGE_SIZE } from "../../../lib/supportConstants";
 import { apiFetch } from "../../../lib/api";
 
@@ -18,7 +19,7 @@ const DRAWER_EXIT_MS = 280;
    list. This component owns the data and the actions; the queue table and the
    report panel live in ./admin-inbox, while the drawer shell and the ticket
    panel are shared with the CS Tickets tab in ./case. */
-export default function AdminInboxSection({ token }) {
+export default function AdminInboxSection({ token, currentUserId }) {
   const toast = useToast();
 
   const [items, setItems] = useState([]);
@@ -29,8 +30,9 @@ export default function AdminInboxSection({ token }) {
   const [q, setQ] = useState("");
   const [qInput, setQInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("OPEN");
-  const [ticketStatus, setTicketStatus] = useState("ALL");
-  const [source, setSource] = useState("tickets");
+  const [ticketStatus, setTicketStatus] = useState("ESCALATED");
+  const [source, setSource] = useState("all");
+  const [selectedDispute, setSelectedDispute] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [conversationId, setConversationId] = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
@@ -60,6 +62,10 @@ export default function AdminInboxSection({ token }) {
   }
 
   async function selectCase(item) {
+    if (item._type === "DISPUTE") {
+      setSelectedDispute(item);
+      return;
+    }
     const request = ++selectionRequest.current;
     setSelectedTicket(item);
     setConversationId(null);
@@ -97,17 +103,29 @@ export default function AdminInboxSection({ token }) {
       scope: "all",
     });
     if (q) params.set("q", q);
-    if (ticketStatus !== "ALL") params.set("status", ticketStatus);
+    if (source === "all" || ticketStatus !== "ALL") params.set("status", source === "all" ? "ESCALATED" : ticketStatus);
 
     const repParams = new URLSearchParams({
       page,
       limit: PAGE_SIZE,
       status: statusFilter || "ALL",
     });
-    const request =
-      source === "tickets"
-        ? apiFetch(`/api/support/tickets/queue?${params}`, { token })
-        : apiFetch(`/api/auth/admin/reports?${repParams}`, { token });
+    const disputeParams = new URLSearchParams({ page, limit: PAGE_SIZE, status: "OPEN", assignedRole: "ADMIN" });
+    if (q) disputeParams.set("q", q);
+    const request = source === "all"
+      ? Promise.all([
+          apiFetch(`/api/support/tickets/queue?${params}`, { token }),
+          apiFetch(`/api/orders/disputes/queue?${disputeParams}`, { token }),
+        ]).then(([tickets, disputes]) => ({
+          items: [...(tickets.items || []).map((t) => ({ ...t, _type: "TICKET" })), ...(disputes.items || []).map((d) => ({ ...d, _type: "DISPUTE" }))]
+            .sort((a, b) => new Date(a.slaExpiresAt || a.slaDueAt || a.createdAt) - new Date(b.slaExpiresAt || b.slaDueAt || b.createdAt)),
+          totalPages: Math.max(tickets.totalPages || 1, disputes.totalPages || 1),
+        }))
+      : source === "disputes"
+        ? apiFetch(`/api/orders/disputes/queue?${disputeParams}`, { token })
+        : source === "tickets"
+          ? apiFetch(`/api/support/tickets/queue?${params}`, { token })
+          : apiFetch(`/api/auth/admin/reports?${repParams}`, { token });
 
     let cancelled = false;
     request
@@ -115,8 +133,8 @@ export default function AdminInboxSection({ token }) {
         if (cancelled) return;
         setError("");
         const rows =
-          source === "tickets"
-            ? data.items || []
+          source === "tickets" || source === "all" || source === "disputes"
+            ? (data.items || []).map((row) => source === "disputes" ? { ...row, _type: "DISPUTE" } : row)
             : (data.items || []).map((r) => ({
                 id: r.id,
                 _type: "REPORT",
@@ -137,7 +155,9 @@ export default function AdminInboxSection({ token }) {
                 createdAt: r.reportedAt,
                 rawReport: r,
               }));
-        setItems(rows);
+        setItems((previous) => source === "all" && page > 1
+          ? [...previous, ...rows].sort((a, b) => new Date(a.slaExpiresAt || a.slaDueAt || a.createdAt) - new Date(b.slaExpiresAt || b.slaDueAt || b.createdAt))
+          : rows);
         setTotalPages(data.totalPages || 1);
       })
       .catch((err) => {
@@ -155,6 +175,8 @@ export default function AdminInboxSection({ token }) {
   }, [page, q, statusFilter, ticketStatus, source, token, refreshKey]);
 
   function refreshAfterAction() {
+    setPage(1);
+    setItems([]);
     setRefreshKey((k) => k + 1);
     if (selectedTicket) {
       if (selectedTicket._type === "REPORT") {
@@ -336,7 +358,7 @@ export default function AdminInboxSection({ token }) {
         description: "ตั๋วจะถูกยกระดับไปยังคิวของ Trust & Safety",
         confirmLabel: "ส่งต่อ",
         tone: "primary",
-        reason: "optional",
+        reason: "required",
         reasonLabel: "เหตุผลที่ยกระดับ",
       },
     }[pendingAction?.kind] ?? {};
@@ -350,7 +372,9 @@ export default function AdminInboxSection({ token }) {
           aria-label="ประเภทเคส Admin"
         >
           {[
-            ["tickets", "ตั๋วที่ส่งต่อ"],
+            ["all", "ทั้งหมด"],
+            ["disputes", "ข้อพิพาทรอตัดสินเงิน"],
+            ["tickets", "ทิกเก็ตขออนุมัติพิเศษ"],
             ["reports", "รายงานผู้ใช้"],
           ].map(([key, label]) => (
             <button
@@ -361,6 +385,7 @@ export default function AdminInboxSection({ token }) {
               onClick={() => {
                 selectionRequest.current += 1;
                 setSelectedTicket(null);
+                setSelectedDispute(null);
                 setConversationId(null);
                 setSource(key);
                 setPage(1);
@@ -374,7 +399,24 @@ export default function AdminInboxSection({ token }) {
         </div>
         {error && <Alert className="mb-3">{error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setRefreshKey((k) => k + 1)}>ลองใหม่</button></Alert>}
 
-        <AdminInboxTable
+        {(source === "all" || source === "disputes") ? <div className="space-y-2">
+          <form onSubmit={(e) => { e.preventDefault(); setQ(qInput.trim()); setPage(1); setItems([]); }} className="mb-3 flex gap-2"><input value={qInput} onChange={(e) => setQInput(e.target.value)} aria-label="ค้นหาเคส Admin" placeholder="ค้นหาเลขออเดอร์หรือเหตุผล" className="min-w-0 flex-1 rounded-lg border bg-white px-3 py-2 text-sm" /><button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">ค้นหา</button></form>
+          {loading && <p className="text-sm text-slate-500">กำลังโหลดคิวงาน...</p>}
+          {!loading && items.length === 0 && <p className="rounded-xl border bg-white p-6 text-sm text-slate-500">ไม่มีเคสที่รอ Admin</p>}
+          {items.map((item) => {
+            const isDispute = item._type === "DISPUTE";
+            const amount = item.order?.finalPrice ?? item.order?.price;
+            const deadline = item.slaExpiresAt || item.slaDueAt;
+            return <button type="button" key={`${item._type || "TICKET"}-${item.id}`} onClick={() => selectCase(item)} className="grid w-full grid-cols-1 gap-2 rounded-xl border bg-white p-4 text-left shadow-sm hover:border-indigo-300 sm:grid-cols-5">
+              <span className="text-sm font-bold"><span className={`mr-2 rounded px-2 py-1 text-[10px] ${isDispute ? "bg-amber-100 text-amber-800" : "bg-indigo-100 text-indigo-800"}`}>{isDispute ? "DISPUTE" : "TICKET"}</span>{isDispute ? item.orderId?.slice(0, 10) : item.ticketNumber}</span>
+              <span className="truncate text-sm">{isDispute ? item.reason : item.subject}</span>
+              <span className="text-xs">Hold: {isDispute && typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</span>
+              <span className="text-xs">SLA: {deadline ? new Date(deadline).toLocaleString("th-TH") : "—"}</span>
+              <span className="truncate text-xs">CS: {isDispute ? item.escalatedBy || "—" : item.assigneeId || "—"}</span>
+            </button>;
+          })}
+          {source === "all" && page < totalPages && <button type="button" onClick={() => setPage((p) => p + 1)} className="rounded-lg border bg-white px-4 py-2 text-sm font-bold text-indigo-700">โหลดเคสเพิ่ม</button>}
+        </div> : <AdminInboxTable
           items={items}
           source={source}
           loading={loading}
@@ -395,7 +437,7 @@ export default function AdminInboxSection({ token }) {
           totalPages={totalPages}
           onPageChange={setPage}
           onSelectTicket={selectCase}
-        />
+        />}
       </div>
 
       <CaseDrawer
@@ -418,6 +460,7 @@ export default function AdminInboxSection({ token }) {
           ) : (
             <TicketCasePanel
               ticket={selectedTicket}
+              auditReadOnly
               conversationId={conversationId}
               chatLoading={chatLoading}
               actionBusy={actionBusy}
@@ -443,6 +486,8 @@ export default function AdminInboxSection({ token }) {
             />
           ))}
       </CaseDrawer>
+
+      {selectedDispute && <AdminDisputeAuditPanel dispute={selectedDispute} token={token} currentUserId={currentUserId} onClose={() => setSelectedDispute(null)} onUpdated={() => { setPage(1); setItems([]); setRefreshKey((k) => k + 1); }} />}
 
       <ConfirmDialog
         open={Boolean(pendingAction)}

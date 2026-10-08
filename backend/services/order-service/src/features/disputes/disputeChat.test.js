@@ -31,9 +31,10 @@ test("dispute chat reuses the case room and authorizes the assigned agent", asyn
     sellerId: "seller-1",
   });
   let joins = 0;
-  chatClient.joinDisputeConversation = async (_dispute, _order, actor) => {
+  chatClient.joinDisputeConversation = async (_dispute, _order, actor, side) => {
     joins += 1;
     assert.equal(actor.role, "AGENT");
+    assert.equal(side, "buyer");
     return "room-1";
   };
 
@@ -65,7 +66,7 @@ test("dispute chat reuses the case room and authorizes the assigned agent", asyn
     userId: "agent-1",
     role: "CUSTOMER_SERVICE",
   });
-  assert.deepEqual(first, { conversationId: "room-1", readOnly: false });
+  assert.deepEqual(first, { conversationId: "room-1", side: "buyer", readOnly: false });
   assert.deepEqual(second, first);
   assert.equal(joins, 2);
 });

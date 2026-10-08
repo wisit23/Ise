@@ -3,7 +3,7 @@
 // conversation every time, so two concurrent "Contact Seller" clicks race on
 // Conversation.contextKey's unique index instead of on an application-level
 // check-then-create (which is not actually atomic — see conversationService.js).
-const CONTEXT_TYPES = ["PRODUCT", "ORDER", "SUPPORT", "DIRECT"];
+const CONTEXT_TYPES = ["PRODUCT", "ORDER", "DISPUTE", "DISPUTE_BUYER", "DISPUTE_SELLER", "SUPPORT", "DIRECT"];
 
 function buildContextKey(contextType, params = {}) {
   switch (contextType) {
@@ -18,6 +18,17 @@ function buildContextKey(contextType, params = {}) {
       const { orderId } = params;
       if (!orderId) throw new Error("ORDER context requires orderId");
       return `ORDER:${orderId}`;
+    }
+    case "DISPUTE": {
+      const { disputeId } = params;
+      if (!disputeId) throw new Error("DISPUTE context requires disputeId");
+      return `DISPUTE:${disputeId}`;
+    }
+    case "DISPUTE_BUYER":
+    case "DISPUTE_SELLER": {
+      const { disputeId } = params;
+      if (!disputeId) throw new Error(`${contextType} context requires disputeId`);
+      return `${contextType}:${disputeId}`;
     }
     case "SUPPORT": {
       const { ticketId } = params;

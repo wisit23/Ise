@@ -1,5 +1,9 @@
 # Customer Service Database Redesign
 
+> Implementation ที่ปรับเข้ากับโค้ดจริงอยู่ใน [customer-service-implementation.md](customer-service-implementation.md)
+> รวม TICKET_MESSAGE ที่ต้องคงไว้, SLA cycle สำหรับ reopen, IDs เดิม และแผน migration แบบ additive.
+> เอกสารข้างล่างเป็นแบบตั้งต้น; ใช้ Prisma schema และ implementation report สำหรับชื่อ/constraints ที่นำไปใช้จริง.
+
 ## 1. เป้าหมาย
 
 ออกแบบฐานข้อมูล `support-service` ใหม่สำหรับ PostgreSQL โดยลดความรับผิดชอบของ

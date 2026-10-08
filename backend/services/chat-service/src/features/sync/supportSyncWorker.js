@@ -13,17 +13,6 @@ function calculateBackoffMs(attempts) {
   return Math.min(INITIAL_BACKOFF_MS * 2 ** exponent, MAX_BACKOFF_MS);
 }
 
-function resolveBodyText(message) {
-  if (typeof message.body === "string" && message.body.trim()) {
-    return message.body.trim();
-  }
-  if (message.payload?.filename) {
-    return `[ไฟล์แนบ: ${message.payload.filename}]`;
-  }
-  if (message.type === "IMAGE") return "📷 รูปภาพ";
-  return `[${message.type || "MESSAGE"}]`;
-}
-
 async function deliverMessage(
   conversation,
   message,
@@ -50,8 +39,6 @@ async function deliverMessage(
           authorId: message.senderId,
           authorRole: message.senderRole,
           type: message.type,
-          body: resolveBodyText(message),
-          payload: message.payload,
           isInternal: message.visibility === "INTERNAL",
           createdAt: message.createdAt,
         }),

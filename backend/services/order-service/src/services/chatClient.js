@@ -43,20 +43,20 @@ async function internalPatch(path, body) {
   return res.json();
 }
 
-// The unique DISPUTE context key makes this safe to retry after a timeout.
-// Order-service decides membership; the browser never supplies participants.
-async function joinDisputeConversation(dispute, order, actor) {
+// Each party has a separate room. The actor can only request their own side;
+// order-service decides membership and chat-service rechecks it on every read.
+async function joinDisputeConversation(dispute, order, actor, side) {
+  const contextType = side === "seller" ? "DISPUTE_SELLER" : "DISPUTE_BUYER";
+  const partyId = side === "seller" ? order.sellerId : order.buyerId;
+  const partyRole = side === "seller" ? "SELLER" : "BUYER";
   try {
     const conversation = await internalPost("/internal/conversations", {
-      contextType: "DISPUTE",
+      contextType,
       contextId: dispute.id,
-      createdBy: order.buyerId,
-      participants: [
-        { userId: order.buyerId, role: "BUYER" },
-        { userId: order.sellerId, role: "SELLER" },
-      ],
+      createdBy: partyId,
+      participants: [{ userId: partyId, role: partyRole }],
     });
-    if (actor.role !== "BUYER" && actor.role !== "SELLER") {
+    if (actor.userId !== partyId) {
       await internalPost(
         `/internal/conversations/${conversation.id}/participants`,
         {
@@ -77,10 +77,45 @@ async function joinDisputeConversation(dispute, order, actor) {
 }
 
 async function lockDisputeConversation(dispute, order) {
-  await joinDisputeConversation(dispute, order, {
-    userId: order.buyerId,
-    role: "BUYER",
+  await Promise.all(["buyer", "seller"].map((side) =>
+    joinDisputeConversation(dispute, order, {
+      userId: side === "buyer" ? order.buyerId : order.sellerId,
+      role: side === "buyer" ? "BUYER" : "SELLER",
+    }, side),
+  ));
+}
+
+async function internalGet(path, { allowMissing = false } = {}) {
+  const res = await fetch(`${CHAT_SERVICE_URL}${path}`, {
+    signal: AbortSignal.timeout(5000),
+    headers: { "x-internal-token": INTERNAL_TOKEN },
   });
+  if (allowMissing && res.status === 404) return null;
+  if (!res.ok) throw new AppError(503, `chat-service ${path} returned ${res.status}`);
+  return res.json();
+}
+
+async function getDisputeTranscript(disputeId, side, before) {
+  const type = side === "legacy" ? "DISPUTE" : side === "seller" ? "DISPUTE_SELLER" : "DISPUTE_BUYER";
+  const room = await internalGet(`/internal/conversations/by-context/${type}/${encodeURIComponent(disputeId)}`, { allowMissing: true });
+  if (!room) return { messages: [], nextCursor: null };
+  const query = new URLSearchParams({ limit: "100", includeInternal: "true" });
+  if (before) query.set("before", before);
+  return internalGet(`/internal/conversations/${encodeURIComponent(room.id)}/transcript?${query}`);
+}
+
+async function sendDisputeNotice(dispute, order, eventKey, body) {
+  await Promise.all(["buyer", "seller"].map(async (side) => {
+    const partyId = side === "buyer" ? order.buyerId : order.sellerId;
+    const conversationId = await joinDisputeConversation(dispute, order, {
+      userId: partyId, role: side === "buyer" ? "BUYER" : "SELLER",
+    }, side);
+    await internalPost(`/internal/conversations/${conversationId}/messages`, {
+      senderId: "system", senderRole: "SYSTEM", type: "SYSTEM", body,
+      eventKey: `${dispute.id}:${eventKey}`,
+      payload: { disputeId: dispute.id, event: eventKey },
+    });
+  }));
 }
 
 /**
@@ -123,4 +158,6 @@ module.exports = {
   notifyOrderStatusChanged,
   joinDisputeConversation,
   lockDisputeConversation,
+  getDisputeTranscript,
+  sendDisputeNotice,
 };
