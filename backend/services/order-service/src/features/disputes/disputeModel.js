@@ -1,239 +1,302 @@
 const { conflict, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
-const orderTransitionService = require("../../services/orderTransitionService");
-
-function findByOrderId(orderId) {
-  return prisma.disputeCase.findUnique({
-    where: { orderId },
-    include: { evidence: true },
+const orderModel = require("../../models/orderModel");
+const transitions = require("../../services/orderTransitionService");
+const INCLUDE = { evidence: true, caseLog: { orderBy: { createdAt: "asc" } } };
+function evidenceView(row) {
+  return (
+    row && {
+      ...row,
+      disputeId: row.disputeCaseId,
+      storageKey: row.evidencePath,
+    }
+  );
+}
+function caseView(row) {
+  if (!row) return null;
+  return {
+    ...orderModel.disputeView(row),
+    evidence: (row.evidence || []).map(evidenceView),
+    auditLog: row.caseLog || [],
+    ...(row.order ? { order: orderModel.view(row.order) } : {}),
+  };
+}
+async function findByOrderId(orderId) {
+  return caseView(
+    await prisma.disputeCase.findUnique({
+      where: { orderId },
+      include: INCLUDE,
+    }),
+  );
+}
+async function findById(id) {
+  return caseView(
+    await prisma.disputeCase.findUnique({ where: { id }, include: INCLUDE }),
+  );
+}
+async function findEvidence(disputeId, evidenceId) {
+  return evidenceView(
+    await prisma.disputeEvidence.findFirst({
+      where: { id: evidenceId, disputeCaseId: disputeId },
+    }),
+  );
+}
+function caseLogData(before, after, actorId, action, detail) {
+  return {
+    disputeCaseId: before.id,
+    actorId,
+    action,
+    detail,
+    fromAssignedTo: before.assignedTo ?? null,
+    toAssignedTo: after.assignedTo ?? null,
+    fromAssignedRole: before.assignedRole ?? null,
+    toAssignedRole: after.assignedRole ?? null,
+  };
+}
+async function auditLog({
+  disputeEvidenceId,
+  evidenceId,
+  actorId,
+  action,
+  detail,
+}) {
+  return prisma.disputeAuditLog.create({
+    data: {
+      disputeEvidenceId: disputeEvidenceId || evidenceId,
+      actorId,
+      action,
+      detail,
+    },
   });
 }
-
-function findById(id) {
-  return prisma.disputeCase.findUnique({
-    where: { id },
-    include: { evidence: true },
+async function addEvidence({
+  disputeId,
+  uploaderId,
+  storageKey,
+  fileType,
+  evidenceDeadline = null,
+  caseVersion,
+  assignedTo,
+}) {
+  return prisma.$transaction(async (tx) => {
+    const dispute = await tx.disputeCase.findUnique({
+      where: { id: disputeId },
+    });
+    if (!dispute) throw notFound("dispute not found");
+    const changed = await tx.disputeCase.updateMany({
+      where: {
+        id: disputeId,
+        decision: null,
+        version: caseVersion,
+        ...(assignedTo ? { assignedTo } : {}),
+      },
+      data: { version: { increment: 1 } },
+    });
+    if (changed.count !== 1)
+      throw conflict("dispute changed during evidence upload");
+    const row = await tx.disputeEvidence.create({
+      data: {
+        disputeCaseId: disputeId,
+        uploaderId,
+        evidencePath: storageKey,
+        fileType,
+        status: "SUBMITTED",
+        evidenceDeadline,
+      },
+    });
+    await tx.disputeAuditLog.create({
+      data: {
+        disputeEvidenceId: row.id,
+        actorId: uploaderId,
+        action: "UPLOAD",
+        detail: "Evidence uploaded to case " + disputeId,
+      },
+    });
+    return evidenceView(row);
   });
 }
-
-function findEvidence(disputeId, evidenceId) {
-  return prisma.disputeEvidence.findFirst({
-    where: { id: evidenceId, disputeId },
+async function setEvidenceDeadline({
+  disputeId,
+  evidenceId,
+  actorId,
+  deadline,
+  version,
+  caseVersion,
+}) {
+  return prisma.$transaction(async (tx) => {
+    const claimed = await tx.disputeCase.updateMany({
+      where: {
+        id: disputeId,
+        assignedTo: actorId,
+        version: caseVersion,
+        decision: null,
+      },
+      data: { version: { increment: 1 } },
+    });
+    if (claimed.count !== 1) throw conflict("case ownership or state changed");
+    const changed = await tx.disputeEvidence.updateMany({
+      where: { id: evidenceId, disputeCaseId: disputeId, version },
+      data: { evidenceDeadline: deadline, version: { increment: 1 } },
+    });
+    if (changed.count !== 1)
+      throw conflict("evidence changed — reload and retry");
+    await tx.disputeAuditLog.create({
+      data: {
+        disputeEvidenceId: evidenceId,
+        actorId,
+        action: "DEADLINE_SET",
+        detail: deadline.toISOString(),
+      },
+    });
+    return evidenceView(
+      await tx.disputeEvidence.findUnique({ where: { id: evidenceId } }),
+    );
   });
 }
-
-function addEvidence(data) {
-  return prisma.disputeEvidence.create({ data });
-}
-
 async function listQueue({ status, search, skip, take }) {
   const where = {};
-  if (status) {
-    where.status = status;
+  if (status === "DECIDED") where.decision = { not: null };
+  else if (status === "OPEN") {
+    where.decision = null;
+    where.evidence = { none: { status: "NEEDS_INFO" } };
+  } else if (status === "NEEDS_INFO") {
+    where.decision = null;
+    where.evidence = { some: { status: "NEEDS_INFO" } };
   }
-  if (search) {
+  if (search)
     where.OR = [
       { reason: { contains: search, mode: "insensitive" } },
       { orderId: { contains: search, mode: "insensitive" } },
     ];
-  }
-
   const [items, total] = await Promise.all([
     prisma.disputeCase.findMany({
       where,
       orderBy: { createdAt: "desc" },
       skip,
       take,
-      include: { order: true },
+      include: { ...INCLUDE, order: { include: orderModel.INCLUDE } },
     }),
     prisma.disputeCase.count({ where }),
   ]);
-
-  return { items, total };
+  return { items: items.map(caseView), total };
 }
-
-function auditLog(data) {
-  return prisma.disputeAuditLog.create({ data });
-}
-
-/** Opens a dispute and puts the order into `disputed` + payout-held, atomically. */
-function openDispute({ orderId, openedBy, reason, expectedVersion }) {
+async function openDispute({
+  orderId,
+  openedBy,
+  reason,
+  disputeType,
+  expectedVersion,
+}) {
   return prisma.$transaction(async (tx) => {
-    const existingOrder = await tx.order.findUnique({ where: { id: orderId } });
-    if (!existingOrder) throw notFound("order not found");
-
-    const targetVersion =
-      typeof expectedVersion === "number"
-        ? expectedVersion
-        : existingOrder.version;
-
-    const preDispute =
-      existingOrder.preDisputeStatus &&
-      existingOrder.preDisputeStatus !== "disputed"
-        ? existingOrder.preDisputeStatus
-        : existingOrder.status === "disputed"
-          ? "completed"
-          : existingOrder.status || "completed";
-
-    // Atomic CAS transition on Order
-    const { count } = await tx.order.updateMany({
+    const order = await tx.order.findUnique({ where: { id: orderId } });
+    if (!order) throw notFound("order not found");
+    const changed = await tx.order.updateMany({
       where: {
         id: orderId,
-        version: targetVersion,
+        version: expectedVersion ?? order.version,
         status: { in: ["completed", "disputed"] },
       },
       data: {
         status: "disputed",
-        payoutHeld: true,
-        disputedAt: existingOrder.disputedAt || new Date(),
-        preDisputeStatus: preDispute,
+        preDisputeStatus: order.preDisputeStatus || order.status,
         version: { increment: 1 },
       },
     });
-    if (count === 0) {
+    if (changed.count !== 1)
       throw conflict(
         "order state was modified concurrently — reload and retry",
       );
-    }
-
     const dispute = await tx.disputeCase.create({
-      data: { orderId, openedBy, reason },
+      data: { orderId, createdBy: openedBy, reason, disputeType },
     });
-
-    await orderTransitionService.addHold(tx, {
+    await transitions.addHold(tx, {
       orderId,
       source: "DISPUTE",
       referenceId: dispute.id,
       reason,
-      heldBy: openedBy,
+      holdBy: openedBy,
     });
-    await tx.disputeAuditLog.create({
-      data: { disputeId: dispute.id, actorId: openedBy, action: "OPEN" },
+    await tx.disputeCaseLog.create({
+      data: caseLogData(dispute, dispute, openedBy, "OPEN", reason),
     });
-    return dispute;
+    return caseView({ ...dispute, evidence: [] });
   });
 }
-
-/** Claim dispute: only succeeds if currently unassigned and at matching version. */
-async function claim({ id, version, userId, role }) {
+async function changeAssignment({
+  id,
+  version,
+  actorId,
+  action,
+  detail,
+  data,
+  claimRole,
+}) {
   return prisma.$transaction(async (tx) => {
-    const where = {
-      id,
-      version,
-      assignedTo: null,
-      status: { in: ["OPEN", "NEEDS_INFO"] },
-    };
-    if (role !== "TRUST_AND_SAFETY") {
-      where.OR = [
-        { assignedRole: null },
-        { assignedRole: { not: "TRUST_AND_SAFETY" } },
-      ];
+    const before = await tx.disputeCase.findUnique({ where: { id } });
+    if (!before) return null;
+    const where = { id, version, decision: null };
+    if (action === "CLAIM") {
+      where.assignedTo = null;
+      if (claimRole !== "TRUST_AND_SAFETY")
+        where.OR = [
+          { assignedRole: null },
+          { assignedRole: { not: "TRUST_AND_SAFETY" } },
+        ];
     }
-
-    const { count } = await tx.disputeCase.updateMany({
+    const changed = await tx.disputeCase.updateMany({
       where,
-      data: {
-        assignedTo: userId,
-        assignedRole: role,
-        claimedAt: new Date(),
-        version: { increment: 1 },
-      },
+      data: { ...data, version: { increment: 1 } },
     });
-    if (count === 0) return null;
-
-    const dispute = await tx.disputeCase.findUnique({
+    if (changed.count !== 1) return null;
+    const after = await tx.disputeCase.findUnique({
       where: { id },
-      include: { evidence: true },
+      include: INCLUDE,
     });
-
-    await tx.disputeAuditLog.create({
-      data: {
-        disputeId: id,
-        actorId: userId,
-        action: "CLAIM",
-        detail: `claimed by ${userId} (${role})`,
-      },
+    await tx.disputeCaseLog.create({
+      data: caseLogData(before, after, actorId, action, detail),
     });
-
-    return dispute;
+    return caseView(after);
   });
 }
-
-/** Reassign dispute: transfers ownership to another staff member. */
-async function reassign({ id, version, actorId, toUserId, toRole, reason }) {
-  return prisma.$transaction(async (tx) => {
-    const { count } = await tx.disputeCase.updateMany({
-      where: {
-        id,
-        version,
-        status: { in: ["OPEN", "NEEDS_INFO"] },
-      },
-      data: {
-        assignedTo: toUserId,
-        assignedRole: toRole,
-        claimedAt: new Date(),
-        version: { increment: 1 },
-      },
-    });
-    if (count === 0) return null;
-
-    const dispute = await tx.disputeCase.findUnique({
-      where: { id },
-      include: { evidence: true },
-    });
-
-    await tx.disputeAuditLog.create({
-      data: {
-        disputeId: id,
-        actorId,
-        action: "REASSIGN",
-        detail: `reassigned to ${toUserId} (${toRole}): ${reason}`,
-      },
-    });
-
-    return dispute;
+function claim({ id, version, userId, role }) {
+  return changeAssignment({
+    id,
+    version,
+    actorId: userId,
+    action: "CLAIM",
+    detail: "Case claimed by " + userId,
+    claimRole: role,
+    data: { assignedTo: userId, assignedRole: role, assignedAt: new Date() },
   });
 }
-
-/** Escalate dispute: transfers ownership to TRUST_AND_SAFETY role. */
-async function escalate({ id, version, actorId, toUserId, reason }) {
-  return prisma.$transaction(async (tx) => {
-    const { count } = await tx.disputeCase.updateMany({
-      where: {
-        id,
-        version,
-        status: { in: ["OPEN", "NEEDS_INFO"] },
-      },
-      data: {
-        assignedTo: toUserId || null,
-        assignedRole: "TRUST_AND_SAFETY",
-        claimedAt: toUserId ? new Date() : null,
-        version: { increment: 1 },
-      },
-    });
-    if (count === 0) return null;
-
-    const dispute = await tx.disputeCase.findUnique({
-      where: { id },
-      include: { evidence: true },
-    });
-
-    await tx.disputeAuditLog.create({
-      data: {
-        disputeId: id,
-        actorId,
-        action: "ESCALATE",
-        detail: `escalated to TRUST_AND_SAFETY: ${reason}`,
-      },
-    });
-
-    return dispute;
+function reassign({ id, version, actorId, toUserId, toRole, reason }) {
+  return changeAssignment({
+    id,
+    version,
+    actorId,
+    action: "REASSIGN",
+    detail: reason,
+    data: {
+      assignedTo: toUserId,
+      assignedRole: toRole,
+      assignedAt: new Date(),
+    },
   });
 }
-
-/** One-way decision: only succeeds while the dispute is still OPEN/NEEDS_INFO
- * at `version` — the optimistic lock is what makes "exactly one decision"
- * hold even under a race between two agents. */
+function escalate({ id, version, actorId, toUserId, reason }) {
+  return changeAssignment({
+    id,
+    version,
+    actorId,
+    action: "ESCALATE",
+    detail: reason,
+    data: {
+      assignedTo: toUserId || null,
+      assignedRole: "TRUST_AND_SAFETY",
+      assignedAt: toUserId ? new Date() : null,
+    },
+  });
+}
 async function decide({
   id,
   version,
@@ -243,86 +306,65 @@ async function decide({
   decidedBy,
 }) {
   return prisma.$transaction(async (tx) => {
-    const { count } = await tx.disputeCase.updateMany({
-      where: { id, version, status: { in: ["OPEN", "NEEDS_INFO"] } },
+    const before = await tx.disputeCase.findUnique({ where: { id } });
+    if (!before) return null;
+    const changed = await tx.disputeCase.updateMany({
+      where: { id, version, decision: null, assignedTo: decidedBy },
       data: {
-        status: "DECIDED",
         decision,
-        decisionReason,
         decidedBy,
         decidedAt: new Date(),
         version: { increment: 1 },
       },
     });
-    if (count === 0) return null;
-
-    const dispute = await tx.disputeCase.findUnique({ where: { id } });
-
-    // Release only the DISPUTE hold (TSR-02: does not release T&S Hold)
-    await orderTransitionService.releaseHold(tx, {
-      orderId: dispute.orderId,
+    if (changed.count !== 1) return null;
+    await transitions.releaseHold(tx, {
+      orderId: before.orderId,
       source: "DISPUTE",
       referenceId: id,
-      reason: decisionReason,
       releasedBy: decidedBy,
     });
-
-    // Recalculate hold state and safe next status
-    const holdState = await orderTransitionService.resolveHoldState(
-      tx,
-      dispute.orderId,
-    );
-
-    const orderStatus =
-      decision === "APPROVE_REFUND"
-        ? "refunded"
-        : holdState?.nextStatus || "completed";
-    const isPayoutHeld = Boolean(holdState?.isPayoutHeld);
-
-    const orderWhere = {
-      id: dispute.orderId,
-      status: "disputed",
-    };
-    if (typeof expectedOrderVersion === "number") {
-      orderWhere.version = expectedOrderVersion;
-    }
-
-    const { count: orderCount } = await tx.order.updateMany({
-      where: orderWhere,
-      data: {
-        status: orderStatus,
-        payoutHeld: isPayoutHeld,
-        version: { increment: 1 },
+    const state = await transitions.resolveHoldState(tx, before.orderId);
+    const orderChanged = await tx.order.updateMany({
+      where: {
+        id: before.orderId,
+        version: expectedOrderVersion,
+        status: "disputed",
       },
+      data: { status: state.nextStatus, version: { increment: 1 } },
     });
-    if (orderCount === 0) {
+    if (orderChanged.count !== 1)
       throw conflict(
         "order state was modified concurrently — reload and retry",
       );
-    }
-
-    await tx.disputeAuditLog.create({
-      data: {
-        disputeId: id,
-        actorId: decidedBy,
-        action: "DECIDE",
-        detail: `${decision}: ${decisionReason}`,
-      },
+    const after = await tx.disputeCase.findUnique({
+      where: { id },
+      include: INCLUDE,
     });
-    return dispute;
+    await tx.disputeCaseLog.create({
+      data: caseLogData(
+        before,
+        after,
+        decidedBy,
+        "DECIDE",
+        decision + ": " + decisionReason,
+      ),
+    });
+    return caseView(after);
   });
 }
-
 module.exports = {
   findByOrderId,
   findById,
   findEvidence,
   addEvidence,
   auditLog,
+  setEvidenceDeadline,
+  listQueue,
   openDispute,
   claim,
   reassign,
   escalate,
   decide,
-  listQueue,
+  caseView,
 };

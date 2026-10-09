@@ -1,193 +1,168 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-
-const orderTransitionService = require("./orderTransitionService");
-
-test("addHold creates an active hold record via tx", async () => {
-  let createdPayload = null;
-  const mockTx = {
-    orderHold: {
+const transitions = require("./orderTransitionService");
+const { money } = require("../models/money");
+function fixture(decision = "REJECT") {
+  const payment = { id: "pay-1", paymentAmount: money("1000.50") };
+  const holds = [];
+  const order = {
+    id: "o1",
+    status: "disputed",
+    preDisputeStatus: "completed",
+    dispute: { decision },
+  };
+  const matches = (h, w) =>
+    (!w.id || h.id === w.id) &&
+    (!w.source || h.source === w.source) &&
+    (!w.referenceId || h.referenceId === w.referenceId) &&
+    (!w.paymentId || h.paymentId === w.paymentId) &&
+    (w.releaseAt !== null || !h.releaseAt);
+  const db = {
+    payment: { findFirst: async () => payment },
+    order: { findUnique: async () => order },
+    hold: {
+      findFirst: async ({ where }) => holds.find((h) => matches(h, where)),
+      findMany: async ({ where }) => holds.filter((h) => matches(h, where)),
       create: async ({ data }) => {
-        createdPayload = data;
-        return { id: "hold-1", ...data };
+        const h = { id: "h" + holds.length, releaseAt: null, ...data };
+        holds.push(h);
+        return h;
       },
-    },
-  };
-
-  const hold = await orderTransitionService.addHold(mockTx, {
-    orderId: "order-123",
-    source: "TRUST_AND_SAFETY",
-    referenceId: "ref-abc",
-    reason: "Suspicious activity detected",
-    heldBy: "admin-user",
-  });
-
-  assert.equal(hold.id, "hold-1");
-  assert.equal(createdPayload.orderId, "order-123");
-  assert.equal(createdPayload.source, "TRUST_AND_SAFETY");
-  assert.equal(createdPayload.referenceId, "ref-abc");
-  assert.equal(createdPayload.reason, "Suspicious activity detected");
-  assert.equal(createdPayload.heldBy, "admin-user");
-  assert.ok(createdPayload.heldAt instanceof Date);
-});
-
-test("releaseHold marks active holds as released", async () => {
-  let updateWhere = null;
-  let updateData = null;
-  const mockTx = {
-    orderHold: {
       updateMany: async ({ where, data }) => {
-        updateWhere = where;
-        updateData = data;
-        return { count: 1 };
+        const list = holds.filter((h) => matches(h, where));
+        list.forEach((h) => Object.assign(h, data));
+        return { count: list.length };
       },
+      count: async () => holds.filter((h) => !h.releaseAt).length,
     },
   };
-
-  const count = await orderTransitionService.releaseHold(mockTx, {
-    orderId: "order-123",
+  return { db, holds, payment, order };
+}
+test("one payment has overlapping hold reasons; releasing dispute leaves T&S active", async () => {
+  const { db, holds, payment } = fixture();
+  for (const [source, referenceId] of [
+    ["DISPUTE", "case1"],
+    ["TRUST_AND_SAFETY", "o1"],
+  ]) {
+    await transitions.addHold(db, {
+      orderId: "o1",
+      source,
+      referenceId,
+      reason: "Investigate",
+      holdBy: "agent",
+    });
+  }
+  assert.equal(holds.length, 2);
+  assert.ok(
+    holds.every(
+      (h) => h.paymentId === payment.id && h.holdAmount.equals("1000.50"),
+    ),
+  );
+  assert.equal(payment.paymentAmount.toString(), "1000.5");
+  assert.equal(holds[0].holdBy, "agent");
+  assert.ok(holds[0].holdAt instanceof Date);
+  await transitions.releaseHold(db, {
+    orderId: "o1",
     source: "DISPUTE",
-    referenceId: "disp-1",
-    reason: "Dispute rejected by agent",
-    releasedBy: "agent-1",
+    referenceId: "case1",
+    releasedBy: "cs1",
   });
-
-  assert.equal(count, 1);
-  assert.deepEqual(updateWhere, {
-    orderId: "order-123",
-    source: "DISPUTE",
-    releasedAt: null,
-    referenceId: "disp-1",
+  assert.equal(holds[0].releasedBy, "cs1");
+  assert.ok(holds[0].releaseAmount.equals(holds[0].holdAmount));
+  assert.equal(holds[1].releaseAt, null);
+  assert.deepEqual(await transitions.resolveHoldState(db, "o1"), {
+    isPayoutHeld: true,
+    nextStatus: "disputed",
+    activeHoldCount: 1,
   });
-  assert.equal(updateData.releasedBy, "agent-1");
-  assert.equal(updateData.releaseReason, "Dispute rejected by agent");
-  assert.ok(updateData.releasedAt instanceof Date);
-});
-
-test("hasActiveHolds returns boolean based on count", async () => {
-  const mockTxWithHolds = {
-    orderHold: { count: async () => 2 },
-  };
-  const mockTxWithoutHolds = {
-    orderHold: { count: async () => 0 },
-  };
-
+  await transitions.releaseHold(db, {
+    orderId: "o1",
+    source: "TRUST_AND_SAFETY",
+    referenceId: "o1",
+    releasedBy: "ts1",
+  });
+  assert.equal(await transitions.hasActiveHolds(db, "o1"), false);
   assert.equal(
-    await orderTransitionService.hasActiveHolds(mockTxWithHolds, "o1"),
+    (await transitions.resolveHoldState(db, "o1")).nextStatus,
+    "completed",
+  );
+});
+test("refund waits for the final active reason", async () => {
+  const { db } = fixture("APPROVE_REFUND");
+  await transitions.addHold(db, {
+    orderId: "o1",
+    source: "TRUST_AND_SAFETY",
+    referenceId: "o1",
+    reason: "Investigate",
+    holdBy: "ts",
+  });
+  assert.equal(
+    (await transitions.resolveHoldState(db, "o1")).nextStatus,
+    "disputed",
+  );
+  await transitions.releaseHold(db, {
+    orderId: "o1",
+    source: "TRUST_AND_SAFETY",
+    referenceId: "o1",
+    releasedBy: "ts",
+  });
+  assert.equal(
+    (await transitions.resolveHoldState(db, "o1")).nextStatus,
+    "refunded",
+  );
+});
+test("same reason is idempotent and another reference is not released", async () => {
+  const { db, holds } = fixture();
+  const input = {
+    orderId: "o1",
+    source: "DISPUTE",
+    referenceId: "case1",
+    reason: "Review",
+    holdBy: "buyer",
+  };
+  await transitions.addHold(db, input);
+  await transitions.addHold(db, input);
+  assert.equal(holds.length, 1);
+  assert.equal(
+    await transitions.releaseHold(db, {
+      ...input,
+      referenceId: "case2",
+      releasedBy: "cs",
+    }),
+    0,
+  );
+});
+test("unpaid orders cannot create holds", async () => {
+  const { db } = fixture();
+  db.payment.findFirst = async () => null;
+  await assert.rejects(
+    transitions.addHold(db, {
+      orderId: "o1",
+      source: "DISPUTE",
+      referenceId: "c1",
+    }),
+    /successful payment/,
+  );
+});
+test("open case stays frozen even if its hold is missing", async () => {
+  const { db } = fixture(null);
+  assert.equal(
+    (await transitions.resolveHoldState(db, "o1")).isPayoutHeld,
     true,
   );
-  assert.equal(
-    await orderTransitionService.hasActiveHolds(mockTxWithoutHolds, "o2"),
-    false,
-  );
 });
-
-test("resolveHoldState preserves hold when other hold sources remain active", async () => {
-  const mockTx = {
-    order: {
-      findUnique: async () => ({
-        id: "order-1",
-        status: "disputed",
-        preDisputeStatus: "completed",
-        paymentSimulationStatus: "NORMAL",
-        dispute: { status: "DECIDED", decision: "REJECT" },
-      }),
-    },
-    orderHold: {
-      count: async () => 1, // T&S hold still active
-    },
-  };
-
-  const state = await orderTransitionService.resolveHoldState(
-    mockTx,
-    "order-1",
+test("participants cannot mutate disputed or held orders", () => {
+  for (const order of [
+    { status: "disputed" },
+    { status: "completed", payoutHeld: true },
+    { status: "completed", paymentSimulationStatus: "ON_HOLD" },
+  ]) {
+    assert.throws(
+      () => transitions.assertCanParticipantUpdateStatus(order),
+      (err) => err.status === 409,
+    );
+  }
+  assert.doesNotThrow(() =>
+    transitions.assertCanParticipantUpdateStatus({ status: "confirmed" }),
   );
-  assert.equal(state.isPayoutHeld, true);
-  assert.equal(state.nextStatus, "disputed");
-  assert.equal(state.activeHoldCount, 1);
-});
-
-test("resolveHoldState restores preDisputeStatus when all holds released and dispute was REJECT", async () => {
-  const mockTx = {
-    order: {
-      findUnique: async () => ({
-        id: "order-1",
-        status: "disputed",
-        preDisputeStatus: "delivered",
-        paymentSimulationStatus: "NORMAL",
-        dispute: { status: "DECIDED", decision: "REJECT" },
-      }),
-    },
-    orderHold: {
-      count: async () => 0, // No active holds
-    },
-  };
-
-  const state = await orderTransitionService.resolveHoldState(
-    mockTx,
-    "order-1",
-  );
-  assert.equal(state.isPayoutHeld, false);
-  assert.equal(state.nextStatus, "delivered");
-  assert.equal(state.activeHoldCount, 0);
-});
-
-test("resolveHoldState locks status as refunded when APPROVE_REFUND occurred", async () => {
-  const mockTx = {
-    order: {
-      findUnique: async () => ({
-        id: "order-1",
-        status: "refunded",
-        preDisputeStatus: "completed",
-        paymentSimulationStatus: "NORMAL",
-        dispute: { status: "DECIDED", decision: "APPROVE_REFUND" },
-      }),
-    },
-    orderHold: {
-      count: async () => 0,
-    },
-  };
-
-  const state = await orderTransitionService.resolveHoldState(
-    mockTx,
-    "order-1",
-  );
-  assert.equal(state.isPayoutHeld, false);
-  assert.equal(state.nextStatus, "refunded");
-});
-
-test("assertCanParticipantUpdateStatus rejects mutating disputed or held orders", () => {
-  assert.throws(
-    () =>
-      orderTransitionService.assertCanParticipantUpdateStatus({
-        status: "disputed",
-      }),
-    /cannot update status while order has an open dispute/,
-  );
-
-  assert.throws(
-    () =>
-      orderTransitionService.assertCanParticipantUpdateStatus({
-        status: "completed",
-        payoutHeld: true,
-      }),
-    /cannot update status while order payout is on hold/,
-  );
-
-  assert.throws(
-    () =>
-      orderTransitionService.assertCanParticipantUpdateStatus({
-        status: "completed",
-        paymentSimulationStatus: "ON_HOLD",
-      }),
-    /cannot update status while order funds are on hold/,
-  );
-
-  assert.doesNotThrow(() => {
-    orderTransitionService.assertCanParticipantUpdateStatus({
-      status: "in_transit",
-      payoutHeld: false,
-      paymentSimulationStatus: "NORMAL",
-    });
-  });
 });

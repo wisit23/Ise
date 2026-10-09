@@ -30,6 +30,49 @@ function createMockPrisma(overrides = {}) {
   };
 }
 
+for (const [field, value, message] of [
+  ["recipientName", " ", "กรุณากรอกชื่อผู้รับ"],
+  ["phone", "", "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก"],
+  ["phone", "12345", "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก"],
+  ["phone", "abcdefghij", "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก"],
+  ["postalCode", "ABCDE", "รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก"],
+  ["postalCode", "1234", "รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก"],
+]) {
+  test(`TC05: invalid ${field} is rejected before the address transaction`, async () => {
+    const db = createMockPrisma();
+    let transactions = 0;
+    db.$transaction = async () => {
+      transactions += 1;
+    };
+    const service = createProfileAddressService(db);
+    await assert.rejects(
+      service.create("user-1", { ...ADDRESS, [field]: value }),
+      (err) => err.status === 400 && err.message === message,
+    );
+    assert.equal(transactions, 0);
+  });
+}
+
+test("TC05: partial address updates validate supplied phone and postal code", async () => {
+  const service = createProfileAddressService(
+    createMockPrisma({
+      findFirst: async () => ({ id: "address-1", userId: "user-1" }),
+    }),
+  );
+  await assert.rejects(
+    service.update("user-1", "address-1", { phone: "12345" }),
+    (err) => err.status === 400,
+  );
+  await assert.rejects(
+    service.update("user-1", "address-1", { postalCode: "ABCDE" }),
+    (err) => err.status === 400,
+  );
+  const result = await service.update("user-1", "address-1", {
+    province: "เชียงใหม่",
+  });
+  assert.equal(result.province, "เชียงใหม่");
+});
+
 test("the first saved address becomes the default and belongs to the user", async () => {
   let createData;
   const prisma = createMockPrisma({

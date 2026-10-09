@@ -2,6 +2,7 @@ const {
   badRequest,
   notFound,
   forbidden,
+  conflict,
   parsePagination,
   paginatedResponse,
 } = require("@reloop/shared");
@@ -293,7 +294,18 @@ async function remove(req, res, next) {
         "cannot remove a product that is currently in an auction",
       );
     }
-    await productModel.remove(req.params.id);
+    if (
+      product.status === "reserved" ||
+      (product.status === "hidden" && product.preRemovalStatus === "reserved")
+    ) {
+      throw conflict("ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+    }
+    const removed = await productModel.remove(req.params.id, req.userId);
+    if (!removed) {
+      throw conflict(
+        "สถานะสินค้าเปลี่ยนแล้ว กรุณาโหลดใหม่ ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้",
+      );
+    }
     res.status(204).send();
   } catch (err) {
     next(err);

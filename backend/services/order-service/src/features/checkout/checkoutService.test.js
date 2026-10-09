@@ -216,9 +216,11 @@ test("calculates discount and finalPrice from backend quoteAndHold, ignoring cli
 
   assert.equal(result.created, true);
   // Server must enforce the server-validated values, NOT the attacker's values!
-  assert.equal(createdOrderData.discountAmount, 100);
-  assert.equal(createdOrderData.finalPrice, 900);
-  assert.equal(createdOrderData.campaignCode, "SAVE10");
+  assert.equal(createdOrderData.originalAmount.toString(), "1000");
+  assert.equal(createdOrderData.ordersAmount.toString(), "900");
+  assert.equal(createdOrderData.campaignId, "camp-10");
+  assert.equal(result.order.discountAmount, 100);
+  assert.equal(result.order.campaignCode, "SAVE10");
   assert.ok(createdOrderData.id, "pre-generated orderId exists");
 });
 

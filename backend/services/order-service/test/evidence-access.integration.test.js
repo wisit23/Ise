@@ -1,3 +1,4 @@
+const { createOrder } = require("./fixtures");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
@@ -52,20 +53,24 @@ test("dispute evidence: private storage, authz on view, audit trail", async (t) 
     return;
   }
 
-  const order = await prisma.order.create({
+  const order = await createOrder(prisma, {
     data: {
       buyerId,
       sellerId,
       productId: `int-test-evidence-product-${Date.now()}`,
-      productTitle: "evidence test product",
-      price: 800,
+      originalAmount: 800,
+      ordersAmount: 800,
+      orderType: "BUY_NOW",
       status: "completed",
     },
   });
   const openRes = await request(app)
     .post(`/${order.id}/disputes`)
     .set("Authorization", `Bearer ${buyerToken}`)
-    .send({ reason: "สินค้าชำรุด แนบรูปประกอบ" });
+    .send({
+      disputeType: "ITEM_NOT_AS_DESCRIBED",
+      reason: "สินค้าชำรุด แนบรูปประกอบ",
+    });
   const disputeId = openRes.body.id;
 
   const uploadRes = await request(app)
@@ -118,7 +123,7 @@ test("dispute evidence: private storage, authz on view, audit trail", async (t) 
   // Every successful view is audit-logged (NFR-SP-03) — the stranger's
   // rejected attempt and the missing-token attempt are not.
   const viewLogs = await prisma.disputeAuditLog.findMany({
-    where: { disputeId, action: "VIEW_EVIDENCE" },
+    where: { disputeEvidenceId: evidenceId, action: "VIEW_EVIDENCE" },
   });
   assert.equal(viewLogs.length, 2); // buyer's view + agent's view
 });

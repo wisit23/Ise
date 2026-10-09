@@ -8,6 +8,7 @@ async function open(req, res, next) {
       orderId: req.params.id,
       userId: req.userId,
       reason: req.body.reason,
+      disputeType: req.body.disputeType,
     });
     res.status(201).json(dispute);
   } catch (err) {
@@ -160,6 +161,23 @@ async function decide(req, res, next) {
   }
 }
 
+async function setEvidenceDeadline(req, res, next) {
+  try {
+    res.json(
+      await disputeService.setEvidenceDeadline({
+        disputeId: req.params.id,
+        evidenceId: req.params.evidenceId,
+        userId: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+        deadline: req.body.deadline,
+        version: req.body.version,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
 module.exports = {
   open,
   getOne,
@@ -171,4 +189,5 @@ module.exports = {
   reassign,
   escalate,
   decide,
+  setEvidenceDeadline,
 };

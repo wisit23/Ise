@@ -8,12 +8,17 @@ const {
 } = require("@reloop/shared");
 const reviewModel = require("../models/reviewModel");
 const orderClient = require("../services/orderClient");
+const {
+  assertReviewCommentAllowed,
+} = require("../services/reviewCommentPolicy");
 
 const MAX_REVIEW_MEDIA = 8;
 
 async function create(req, res, next) {
   try {
     const { orderId, rating, comment, media } = req.body;
+    const reviewComment = comment ?? "";
+    assertReviewCommentAllowed(reviewComment);
     if (!orderId) throw badRequest("orderId is required");
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       throw badRequest("rating must be a whole number from 1 to 5");
@@ -62,7 +67,7 @@ async function create(req, res, next) {
       sellerId: order.sellerId,
       productId: order.productId || null,
       rating,
-      comment: (comment || "").slice(0, 1000),
+      comment: reviewComment.slice(0, 1000),
       media: normalizedMedia,
     });
     res.status(201).json(review);

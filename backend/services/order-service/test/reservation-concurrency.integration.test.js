@@ -196,9 +196,13 @@ test("only one of two buyers reserves a product and expiry cannot unlock a newer
     assert.equal(afterExpirySweep.reservedBy, null);
     assert.equal(afterExpirySweep.reservationExpiresAt, null);
   } finally {
-    await orderPrisma.order.deleteMany({
-      where: { productTitle: { startsWith: TEST_TITLE_PREFIX } },
+    await orderPrisma.orderLog.deleteMany({
+      where: { order: { productId: product.id } },
     });
+    await orderPrisma.order.deleteMany({
+      where: { productId: product.id },
+    });
+    await orderPrisma.basket.deleteMany({ where: { productId: product.id } });
     await productPrisma.product.deleteMany({
       where: { title: { startsWith: TEST_TITLE_PREFIX } },
     });

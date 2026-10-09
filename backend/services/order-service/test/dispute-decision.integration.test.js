@@ -1,3 +1,4 @@
+const { createOrder, findOrder } = require("./fixtures");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
@@ -40,13 +41,14 @@ async function databaseIsReachable() {
 }
 
 async function makeCompletedOrder() {
-  return prisma.order.create({
+  return createOrder(prisma, {
     data: {
       buyerId,
       sellerId,
       productId: `int-test-prod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      productTitle: "Test item",
-      price: 1500,
+      originalAmount: 1500,
+      ordersAmount: 1500,
+      orderType: "BUY_NOW",
       status: "completed",
     },
   });
@@ -70,14 +72,17 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   const strangerOpenRes = await request(app)
     .post(`/${order.id}/disputes`)
     .set("Authorization", `Bearer ${strangerToken}`)
-    .send({ reason: "not my order" });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "not my order" });
   assert.equal(strangerOpenRes.status, 403);
 
   // Buyer opens the dispute.
   const openRes = await request(app)
     .post(`/${order.id}/disputes`)
     .set("Authorization", `Bearer ${buyerToken}`)
-    .send({ reason: "ของพัง เปิดกล่องมาแตกละเอียด" });
+    .send({
+      disputeType: "ITEM_NOT_AS_DESCRIBED",
+      reason: "ของพัง เปิดกล่องมาแตกละเอียด",
+    });
   assert.equal(openRes.status, 201);
   assert.equal(openRes.body.status, "OPEN");
   assert.equal(openRes.body.orderId, order.id);
@@ -85,12 +90,11 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   const disputeId = openRes.body.id;
 
   // Order enters disputed status and its payout is marked held.
-  const orderAfterOpen = await prisma.order.findUnique({
+  const orderAfterOpen = await findOrder(prisma, {
     where: { id: order.id },
   });
   assert.equal(orderAfterOpen.status, "disputed");
   assert.equal(orderAfterOpen.payoutHeld, true);
-  assert.ok(orderAfterOpen.disputedAt);
 
   // Can't open a second dispute on the same order — status check catches it
   // first (order is "disputed", not "completed", once the first dispute
@@ -100,7 +104,7 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   const duplicateOpenRes = await request(app)
     .post(`/${order.id}/disputes`)
     .set("Authorization", `Bearer ${buyerToken}`)
-    .send({ reason: "อีกครั้ง" });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "อีกครั้ง" });
   assert.equal(duplicateOpenRes.status, 400);
 
   // Stranger cannot read the dispute.
@@ -151,7 +155,7 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   assert.equal(decideRes.body.status, "DECIDED");
 
   // Order reflects the refund and payout is released from hold.
-  const orderAfterDecision = await prisma.order.findUnique({
+  const orderAfterDecision = await findOrder(prisma, {
     where: { id: order.id },
   });
   assert.equal(orderAfterDecision.status, "refunded");
@@ -165,8 +169,8 @@ test("dispute lifecycle: hold payout, one-way decision, RBAC", async (t) => {
   assert.equal(secondDecisionRes.status, 409);
 
   // Audit trail recorded open, claim, and decide.
-  const auditRows = await prisma.disputeAuditLog.findMany({
-    where: { disputeId },
+  const auditRows = await prisma.disputeCaseLog.findMany({
+    where: { disputeCaseId: disputeId },
     orderBy: { createdAt: "asc" },
   });
   assert.deepEqual(
@@ -185,7 +189,7 @@ test("REJECT decision unholds payout and returns the order to completed", async 
   const openRes = await request(app)
     .post(`/${order.id}/disputes`)
     .set("Authorization", `Bearer ${buyerToken}`)
-    .send({ reason: "ของไม่ตรงปก" });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "ของไม่ตรงปก" });
   const disputeId = openRes.body.id;
 
   // Agent claims dispute first
@@ -201,7 +205,7 @@ test("REJECT decision unholds payout and returns the order to completed", async 
     .send({ decision: "REJECT", reason: "หลักฐานไม่เพียงพอ", version: 1 });
   assert.equal(decideRes.status, 200);
 
-  const orderAfter = await prisma.order.findUnique({ where: { id: order.id } });
+  const orderAfter = await findOrder(prisma, { where: { id: order.id } });
   assert.equal(orderAfter.status, "completed");
   assert.equal(orderAfter.payoutHeld, false);
 });

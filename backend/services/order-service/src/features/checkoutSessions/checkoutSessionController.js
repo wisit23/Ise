@@ -5,6 +5,7 @@ async function create(req, res, next) {
     const session = await checkoutSessionService.create({
       buyerId: req.userId,
       orderIds: req.body.orderIds,
+      addressId: req.body.addressId,
       shippingAddress: req.body.shippingAddress,
       couponCode: req.body.couponCode,
     });
@@ -38,4 +39,18 @@ async function confirm(req, res, next) {
   }
 }
 
-module.exports = { create, get, confirm };
+async function updateAddress(req, res, next) {
+  try {
+    res.json(
+      await checkoutSessionService.updateAddress({
+        buyerId: req.userId,
+        sessionId: req.params.id,
+        addressId: req.body.addressId,
+        shippingAddress: req.body.shippingAddress,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+module.exports = { create, get, confirm, updateAddress };

@@ -21,5 +21,10 @@ router.post("/:id/claim", requireAuth, disputeController.claim);
 router.post("/:id/reassign", requireAuth, disputeController.reassign);
 router.post("/:id/escalate", requireAuth, disputeController.escalate);
 router.post("/:id/decision", requireAuth, disputeController.decide);
+router.patch(
+  "/:id/evidence/:evidenceId/deadline",
+  requireAuth,
+  disputeController.setEvidenceDeadline,
+);
 
 module.exports = router;

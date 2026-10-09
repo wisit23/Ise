@@ -1,55 +1,104 @@
-// Manual-QA fixture for ADM-004 (Dispute Evidence and Simulated Fund Hold) —
-// NOT run automatically by Docker. Run with `npm run seed:dispute-demo` to get
-// an order + evidence to click through at /admin/disputes/<id>. Idempotent:
-// fixed ids, safe to re-run. sellerId matches the fixed demo seller from
-// auth-service/prisma/seed.js so the order looks like a real listing.
+// Manual QA fixture; explicit demo identities, idempotent and no resets.
 require("dotenv").config();
 const { PrismaClient } = require("../src/generated/prisma-client");
-
 const prisma = new PrismaClient();
-
 const ORDER_ID = "30000000-0000-0000-0000-000000000001";
 const EVIDENCE_ID = "30000000-0000-0000-0000-000000000002";
-
 async function main() {
+  const buyerId = "20000000-0000-0000-0000-000000000003";
   await prisma.order.upsert({
     where: { id: ORDER_ID },
-    update: {
-      status: "shipped",
-      paymentSimulationStatus: "RELEASE_PENDING",
-      version: 1,
-      holdReason: null,
-      heldAt: null,
-      heldBy: null,
-      preDisputeStatus: null,
-    },
+    update: {},
     create: {
       id: ORDER_ID,
-      buyerId: "20000000-0000-0000-0000-000000000003", // matches demo reporter in auth-service seed-report-demo.js
-      sellerId: "10000000-0000-0000-0000-000000000001", // matches auth-service/prisma/seed.js demo seller
+      buyerId,
+      sellerId: "10000000-0000-0000-0000-000000000001",
       productId: "demo-dispute-product",
-      productTitle: "เสื้อยืดวินเทจทดสอบ",
-      price: 590,
-      status: "shipped",
+      orderType: "BUY_NOW",
+      originalAmount: "590.50",
+      ordersAmount: "590.50",
+      status: "disputed",
+      preDisputeStatus: "completed",
     },
   });
-
-  await prisma.adminDisputeEvidence.upsert({
+  await prisma.payment.upsert({
+    where: { id: ORDER_ID + "-payment" },
+    update: {},
+    create: {
+      id: ORDER_ID + "-payment",
+      orderId: ORDER_ID,
+      paymentType: "DEMO",
+      paymentStatus: "paid",
+      paymentAmount: "590.50",
+      paidAt: new Date(),
+    },
+  });
+  const dispute = await prisma.disputeCase.upsert({
+    where: { orderId: ORDER_ID },
+    update: {},
+    create: {
+      orderId: ORDER_ID,
+      createdBy: buyerId,
+      reason: "ผู้ซื้อแจ้งว่าสินค้าเสียหาย",
+      disputeType: "DAMAGED_ITEM",
+      caseLog: {
+        create: { actorId: buyerId, action: "OPEN", detail: "Demo complaint" },
+      },
+    },
+  });
+  await prisma.hold.upsert({
+    where: { id: ORDER_ID + "-hold" },
+    update: {},
+    create: {
+      id: ORDER_ID + "-hold",
+      paymentId: ORDER_ID + "-payment",
+      source: "DISPUTE",
+      referenceId: dispute.id,
+      holdReason: "Demo complaint",
+      holdStatus: "ON_HOLD",
+      holdAmount: "590.50",
+      holdAt: new Date(),
+      holdBy: buyerId,
+    },
+  });
+  await prisma.disputeEvidence.upsert({
     where: { id: EVIDENCE_ID },
     update: {},
     create: {
       id: EVIDENCE_ID,
-      orderId: ORDER_ID,
-      evidenceRef: "https://example.com/chat-screenshot.png",
-      note: "ผู้ซื้อแจ้งว่าไม่ได้รับสินค้า",
-      submittedBy: "cs-agent-demo",
+      disputeCaseId: dispute.id,
+      uploaderId: buyerId,
+      evidencePath: "demo-damage.jpg",
+      fileType: "image/jpeg",
+      status: "SUBMITTED",
+      auditLog: {
+        create: {
+          actorId: buyerId,
+          action: "UPLOAD",
+          detail:
+            "Demo evidence reference (supply a local demo-damage.jpg to view)",
+        },
+      },
     },
   });
-
-  console.log(`[order-service] demo dispute order ready: ${ORDER_ID}`);
-  console.log(`[order-service] เปิด /admin/disputes/${ORDER_ID} เพื่อดู`);
+  await prisma.safetyDisputeEvidence.upsert({
+    where: { evidenceId: EVIDENCE_ID },
+    update: {},
+    create: {
+      orderId: ORDER_ID,
+      evidenceId: EVIDENCE_ID,
+      status: "PENDING",
+      logs: {
+        create: {
+          actorId: buyerId,
+          action: "CREATED",
+          detail: "Demo evidence awaiting review",
+        },
+      },
+    },
+  });
+  console.log("[order-service] demo dispute ready: " + ORDER_ID);
 }
-
 main()
   .catch((err) => {
     console.error(err);

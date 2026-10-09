@@ -17,6 +17,7 @@ const router = Router();
 router.use("/disputes", disputeRoutes);
 router.use("/support", supportRoutes);
 router.use("/checkout-sessions", checkoutSessionRoutes);
+router.use("/checkouts", checkoutSessionRoutes);
 
 router.post("/", requireAuth, requireCustomerAccount, orderController.create);
 router.get("/mine", requireAuth, orderController.mine);
@@ -34,6 +35,11 @@ router.post(
 );
 router.get("/:id", requireAuth, orderController.getOne);
 router.patch("/:id/status", requireAuth, orderController.updateStatus);
+router.patch(
+  "/:id/shipping-address",
+  requireAuth,
+  orderController.updateShippingAddress,
+);
 router.patch(
   "/:id/pay",
   requireAuth,
