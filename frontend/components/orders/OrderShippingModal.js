@@ -67,7 +67,7 @@ export default function OrderShippingModal({
         body: { status: "shipped" },
       });
       setOrder(updated);
-      setSuccess("บันทึกการจัดส่งสินค้าเรียบร้อยแล้ว สถานะเปลี่ยนเป็นอยู่ระหว่างการขนส่ง");
+      setSuccess("บันทึกการจัดส่งสินค้าเรียบร้อยแล้ว");
       onShipped?.(updated);
     } catch (err) {
       setError(err.message || "อัปเดตสถานะการจัดส่งไม่สำเร็จ");
@@ -193,7 +193,7 @@ export default function OrderShippingModal({
                   onClick={handleMarkShipped}
                   className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
                 >
-                  ยืนยันการจัดส่งสินค้า (เปลี่ยนเป็นอยู่ระหว่างการขนส่ง)
+                  ยืนยันการจัดส่งสินค้า
                 </Button>
               )}
 
