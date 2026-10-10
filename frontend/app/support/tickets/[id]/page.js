@@ -40,6 +40,7 @@ export default function TicketThreadPage() {
   const [body, setBody] = useState("");
   const [isInternal, setIsInternal] = useState(false);
   const [sending, setSending] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [busyAction, setBusyAction] = useState(false);
   const [escalating, setEscalating] = useState(false);
 
@@ -83,6 +84,17 @@ export default function TicketThreadPage() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function loadOlderMessages() {
+    setLoadingOlder(true);
+    try {
+      const page = await apiFetch(`/api/support/tickets/${id}?before=${encodeURIComponent(ticket.messagesNextCursor)}`, { token: getAccessToken() });
+      if (page.chatAvailable === false) return;
+      setTicket((current) => ({ ...current, messagesNextCursor: page.messagesNextCursor,
+        messages: [...page.messages, ...current.messages].filter((message, index, all) => all.findIndex((m) => m.id === message.id) === index) }));
+    } catch (err) { setError(err.message); }
+    finally { setLoadingOlder(false); }
   }
 
   async function handleAssign() {
@@ -273,6 +285,14 @@ export default function TicketThreadPage() {
                   expand_more
                 </span>
               </summary>
+              {ticket.chatAvailable === false && (
+                <p role="status" className="px-4 py-2 text-xs text-amber-700">ประวัติข้อความไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่</p>
+              )}
+              {ticket.messagesNextCursor && (
+                <button type="button" onClick={loadOlderMessages} disabled={loadingOlder} className="w-full px-4 py-2 text-xs text-indigo-600">
+                  {loadingOlder ? "กำลังโหลด..." : "โหลดบันทึกก่อนหน้า"}
+                </button>
+              )}
               <ul className="max-h-72 space-y-2 overflow-y-auto border-t border-slate-100 p-3">
                 {visibleLogs.map((m) => (
                   <li
@@ -307,7 +327,7 @@ export default function TicketThreadPage() {
                     </p>
                   </li>
                 ))}
-                {visibleLogs.length === 0 && (
+                {visibleLogs.length === 0 && ticket.chatAvailable !== false && (
                   <li className="p-3 text-center text-xs text-gray-500">
                     ยังไม่มีบันทึกในตั๋วนี้
                   </li>

@@ -6,8 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js",
-    "seed:dispute-demo": "node prisma/seed-dispute-demo.js"
+    "start": "node src/server.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

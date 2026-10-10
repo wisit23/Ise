@@ -2,7 +2,6 @@ const { Server } = require("socket.io");
 const { createAdapter } = require("@socket.io/redis-adapter");
 const IORedis = require("ioredis");
 const { verifySocketAuth } = require("./socketAuth");
-const conversationModel = require("../features/conversations/conversationModel");
 const conversationService = require("../features/conversations/conversationService");
 const presence = require("../realtime/presence");
 const broadcast = require("./broadcast");
@@ -85,8 +84,9 @@ function createSocketServer(httpServer) {
 
     // Broadcast to conversation rooms and participant user rooms that this user is online
     try {
-      const userConvs = await conversationModel.findByParticipant(userId);
+      const userConvs = await conversationService.listInbox(userId);
       for (const c of userConvs) {
+        if (["SUPPORT", "DISPUTE", "DISPUTE_BUYER", "DISPUTE_SELLER"].includes(c.contextType)) continue;
         socket.to(broadcast.roomName(c.id)).emit("presence", {
           userId,
           online: true,
@@ -111,31 +111,28 @@ function createSocketServer(httpServer) {
     // time, not just trusted from the handshake).
     socket.on("join", async (conversationId, ack) => {
       try {
-        const conversation = await conversationModel.findById(conversationId);
-        if (
-          !conversation ||
-          !conversationService.isParticipant(conversation, userId)
-        ) {
-          if (typeof ack === "function") ack({ error: "forbidden" });
-          return;
+        const conversation = await conversationService.getForParticipant(conversationId, userId);
+        const isCase = ["SUPPORT", "DISPUTE", "DISPUTE_BUYER", "DISPUTE_SELLER"].includes(conversation.contextType);
+        // Case access can change while a socket is connected. Case events use
+        // authorized user rooms, so never retain a stale conversation-room join.
+        if (!isCase) {
+          socket.join(broadcast.roomName(conversationId));
+          joinedConversations.add(conversationId);
         }
-        socket.join(broadcast.roomName(conversationId));
-        joinedConversations.add(conversationId);
         await presence.setOnline(userId);
-        socket
-          .to(broadcast.roomName(conversationId))
+        if (!isCase) socket.to(broadcast.roomName(conversationId))
           .emit("presence", { userId, online: true });
 
         const onlineUsers = {};
-        for (const p of conversation.participants || []) {
+        for (const p of isCase ? [] : conversation.participants || []) {
           if (p.userId !== userId) {
             onlineUsers[p.userId] = await isUserOnline(p.userId);
           }
         }
 
         if (typeof ack === "function") ack({ ok: true, onlineUsers });
-      } catch {
-        if (typeof ack === "function") ack({ error: "internal" });
+      } catch (err) {
+        if (typeof ack === "function") ack({ error: err.status === 403 ? "forbidden" : "internal" });
       }
     });
 
@@ -197,8 +194,9 @@ function createSocketServer(httpServer) {
       if (!isStillOnline) {
         await presence.clearOnline(userId).catch(() => {});
         try {
-          const userConvs = await conversationModel.findByParticipant(userId);
+          const userConvs = await conversationService.listInbox(userId);
           for (const c of userConvs) {
+            if (["SUPPORT", "DISPUTE", "DISPUTE_BUYER", "DISPUTE_SELLER"].includes(c.contextType)) continue;
             io.to(broadcast.roomName(c.id)).emit("presence", {
               userId,
               online: false,

@@ -253,6 +253,9 @@ async function lockConversation(conversationId, timeoutMs) {
 }
 
 module.exports = {
+  sendTicketMessage,
+  getTicketMessages,
+  importTicketMessage,
   createSupportConversation,
   getConversationByContext,
   addParticipantToConversation,
@@ -261,3 +264,18 @@ module.exports = {
   lockConversation,
   DEFAULT_TIMEOUT_MS,
 };
+
+function sendTicketMessage(conversationId, data) {
+  return internalPost(`/internal/conversations/${encodeURIComponent(conversationId)}/replies`, data);
+}
+
+async function getTicketMessages(conversationId, { includeInternal = false, before, limit = 100 } = {}) {
+  const query = new URLSearchParams({ includeInternal: String(includeInternal), limit: String(limit) });
+  if (before) query.set("before", before);
+  const res = await requestWithTimeout(`/internal/conversations/${encodeURIComponent(conversationId)}/transcript?${query}`);
+  return res.json();
+}
+
+function importTicketMessage(conversationId, data) {
+  return internalPost(`/internal/conversations/${encodeURIComponent(conversationId)}/import-support-message`, data);
+}

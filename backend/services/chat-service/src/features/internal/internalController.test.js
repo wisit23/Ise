@@ -91,3 +91,35 @@ test("getTranscript includes internal notes when includeInternal is true", async
     prisma.message.findMany = origFindMany;
   }
 });
+
+test("getTranscript bounds history and exposes an older cursor", async () => {
+  const origFindById = prisma.conversation.findUnique;
+  const origFindMany = prisma.message.findMany;
+  const ids = ["bbbbbbbbbbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaaaaaaaaaa"];
+  let args;
+  prisma.conversation.findUnique = async () => ({ id: "conv-1" });
+  prisma.message.findMany = async (query) => {
+    args = query;
+    return ids.map((id) => ({ id }));
+  };
+  let payload;
+  try {
+    await getTranscript(
+      { params: { id: "conv-1" }, query: { limit: "1" } },
+      {
+        json: (value) => {
+          payload = value;
+        },
+      },
+      (err) => {
+        throw err;
+      },
+    );
+    assert.equal(args.take, 2);
+    assert.equal(payload.messages.length, 1);
+    assert.equal(payload.nextCursor, ids[0]);
+  } finally {
+    prisma.conversation.findUnique = origFindById;
+    prisma.message.findMany = origFindMany;
+  }
+});

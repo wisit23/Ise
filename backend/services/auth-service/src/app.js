@@ -59,13 +59,17 @@ app.get("/internal/users/:id", requireInternalToken, async (req, res, next) => {
       where: { id: req.params.id },
     });
     if (!user) return res.status(404).json({ error: "user not found" });
-    const roles = await authService.getUserRoles(user.id);
+    const [roles, reportCount] = await Promise.all([
+      authService.getUserRoles(user.id),
+      prisma.report.count({ where: { targetId: user.id } }),
+    ]);
     res.json({
       id: user.id,
       email: user.email,
       status: user.status,
       role: user.role,
       roles,
+      reportCount,
     });
   } catch (err) {
     next(err);

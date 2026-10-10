@@ -3,15 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import MessageList from "../chat/MessageList";
 import MessageComposer from "../chat/MessageComposer";
-import {
-  useChatSocket,
-  useChatSocketEvent,
-} from "../chat/ChatSocketProvider";
-import {
-  listMessages,
-  sendMessage,
-  markRead,
-} from "../../lib/chat";
+import { useChatSocket, useChatSocketEvent } from "../chat/ChatSocketProvider";
+import { listMessages, sendMessage, markRead } from "../../lib/chat";
 import { uploadChatAttachment } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 
@@ -35,7 +28,11 @@ function mergeById(existing, incoming) {
  *  - conversationId: The chat-service conversation ID to display.
  *  - maxHeight: CSS max-height for the chat container (default "400px").
  */
-export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
+export default function EmbeddedChat({
+  conversationId,
+  maxHeight = "400px",
+  readOnly = false,
+}) {
   const [user] = useState(() => getStoredUser());
   const [messages, setMessages] = useState([]);
   const [olderCursor, setOlderCursor] = useState(null);
@@ -103,13 +100,13 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     if (!socket || !connected || !conversationId) return;
     if (roomJoinedRef.current === conversationId) return;
 
-    socket.emit("join", { conversationId }, (ack) => {
+    socket.emit("join", conversationId, (ack) => {
       if (ack?.ok) roomJoinedRef.current = conversationId;
     });
 
     return () => {
       if (roomJoinedRef.current === conversationId) {
-        socket.emit("leave", { conversationId });
+        socket.emit("leave", conversationId);
         roomJoinedRef.current = null;
       }
     };
@@ -121,13 +118,11 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     setMessages((prev) => {
       // Deduplicate optimistic messages by matching clientId or body+sender
       const isDuplicate = prev.some(
-        (m) =>
-          m.id === msg.id ||
-          (m.clientId && m.clientId === msg.clientId),
+        (m) => m.id === msg.id || (m.clientId && m.clientId === msg.clientId),
       );
       if (isDuplicate) {
         return prev.map((m) =>
-          (m.clientId && m.clientId === msg.clientId) ? msg : m,
+          m.clientId && m.clientId === msg.clientId ? msg : m,
         );
       }
       return [...prev, msg];
@@ -164,10 +159,15 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     try {
       const saved = await sendMessage(conversationId, text, token);
       setMessages((prev) =>
-        prev.map((m) => (m.id === optimisticId ? { ...saved, clientId: optimisticId } : m)),
+        mergeById(
+          prev.filter((m) => m.id !== optimisticId),
+          [saved],
+        ),
       );
-    } catch {
+    } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      setError(`ส่งข้อความไม่สำเร็จ: ${err.message}`);
+      throw err;
     }
   }
 
@@ -176,11 +176,17 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     if (!file || !conversationId) return;
     const token = tokenRef.current || getAccessToken();
     try {
-      const saved = await uploadChatAttachment(conversationId, file, caption, token);
+      const saved = await uploadChatAttachment(
+        conversationId,
+        file,
+        caption,
+        token,
+      );
       setMessages((prev) => mergeById(prev, [saved]));
       scrollToBottom(true);
-    } catch {
+    } catch (err) {
       setError("ส่งไฟล์ไม่สำเร็จ กรุณาลองใหม่");
+      throw err;
     }
   }
 
@@ -206,7 +212,7 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
   // ── Typing indicator ──
   function handleTyping(isTyping) {
     if (!socket || !conversationId) return;
-    socket.emit(isTyping ? "typing:start" : "typing:stop", { conversationId });
+    socket.emit(isTyping ? "typing:start" : "typing:stop", conversationId);
   }
 
   if (!conversationId) {
@@ -275,7 +281,7 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
 
       {/* Composer / Locked */}
       <div className="shrink-0 border-t border-slate-200 bg-white">
-        {locked ? (
+        {locked || readOnly ? (
           <div className="px-3 py-2 text-center text-[11px] font-medium text-slate-400">
             การสนทนานี้ถูกปิดแล้ว
           </div>

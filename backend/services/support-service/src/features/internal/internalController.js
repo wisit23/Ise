@@ -23,7 +23,6 @@ async function handleChatEvent(req, res, next) {
       data.senderRole ||
       message.senderRole ||
       message.authorRole;
-    const body = data.body ?? message.body;
     const isInternal = Boolean(
       data.isInternal ??
       (data.visibility === "INTERNAL" || message.visibility === "INTERNAL"),
@@ -52,7 +51,6 @@ async function handleChatEvent(req, res, next) {
       chatMessageId: chatMessageId.trim(),
       authorId: authorId.trim(),
       authorRole: authorRole.trim(),
-      body,
       isInternal,
       createdAt,
     });

@@ -1,0 +1,162 @@
+flowchart TB
+    %% Customer Service ER Diagram - Chen notation
+    %% Rectangle = Entity, Oval = Attribute, Diamond = Relationship
+
+    %% ==================== ENTITIES ====================
+    CAT["Ticket Category"]
+    PRI["Ticket Priority"]
+    STA["Ticket Status"]
+    TKT["Support Ticket"]
+    ASG["Ticket Assignment"]
+    STH["Ticket Status History"]
+    POL["SLA Policy"]
+    SLT["Ticket SLA Target"]
+    MSG["Ticket Message"]
+    AUD["Ticket Audit Event"]
+    LNK["Ticket Chat Link"]
+    HCAT["Help Category"]
+    ART["Help Article"]
+    REV["Help Article Revision"]
+
+    %% ==================== RELATIONSHIPS ====================
+    R_CAT{"classifies"}
+    R_PRI{"prioritizes"}
+    R_STA{"current state"}
+    R_ASG{"assigned through"}
+    R_STH{"changes through"}
+    R_FROM{"from status"}
+    R_TO{"to status"}
+    R_POLICY_PRI{"configured for"}
+    R_POLICY_CAT{"optionally scoped to"}
+    R_SLA_TKT{"tracks"}
+    R_SLA_POL{"defined by"}
+    R_MSG{"contains"}
+    R_AUD{"records"}
+    R_CHAT{"links"}
+    R_REV{"has revisions"}
+    R_HELP_CAT{"categorizes"}
+
+    CAT -->|"1"| R_CAT -->|"N"| TKT
+    PRI -->|"1"| R_PRI -->|"N"| TKT
+    STA -->|"1"| R_STA -->|"N"| TKT
+
+    TKT -->|"1"| R_ASG -->|"N"| ASG
+    TKT -->|"1"| R_STH -->|"N"| STH
+    STA -->|"1"| R_FROM -->|"N"| STH
+    STA -->|"1"| R_TO -->|"N"| STH
+
+    PRI -->|"1"| R_POLICY_PRI -->|"N"| POL
+    CAT -->|"1"| R_POLICY_CAT -->|"0..N"| POL
+    TKT -->|"1"| R_SLA_TKT -->|"N"| SLT
+    POL -->|"1"| R_SLA_POL -->|"N"| SLT
+
+    TKT -->|"1"| R_MSG -->|"N"| MSG
+    TKT -->|"1"| R_AUD -->|"N"| AUD
+    TKT -->|"1"| R_CHAT -->|"0..1"| LNK
+
+    ART -->|"1"| R_REV -->|"N"| REV
+    HCAT -->|"1"| R_HELP_CAT -->|"N"| REV
+
+    %% ==================== KEY ATTRIBUTES ====================
+    CAT_ID(["id PK"]) --- CAT
+    CAT_CODE(["code UK"]) --- CAT
+    CAT_NAME(["name"]) --- CAT
+
+    PRI_ID(["id PK"]) --- PRI
+    PRI_CODE(["code UK"]) --- PRI
+    PRI_RANK(["rank UK"]) --- PRI
+
+    STA_ID(["id PK"]) --- STA
+    STA_CODE(["code UK"]) --- STA
+    STA_TERMINAL(["is terminal"]) --- STA
+
+    TKT_ID(["id PK"]) --- TKT
+    TKT_NO(["ticket number UK"]) --- TKT
+    TKT_REQUESTER(["requester id - soft ref"]) --- TKT
+    TKT_SUBJECT(["subject"]) --- TKT
+    TKT_DESCRIPTION(["description"]) --- TKT
+    TKT_ORDER(["order id - soft ref"]) --- TKT
+    TKT_TARGET(["target user id - soft ref"]) --- TKT
+    TKT_VERSION(["lock version"]) --- TKT
+    TKT_CREATED(["created at"]) --- TKT
+
+    ASG_ID(["id PK"]) --- ASG
+    ASG_TICKET(["ticket id FK"]) --- ASG
+    ASG_USER(["assignee id - soft ref"]) --- ASG
+    ASG_BY(["assigned by id - soft ref"]) --- ASG
+    ASG_START(["assigned at"]) --- ASG
+    ASG_END(["ended at"]) --- ASG
+
+    STH_ID(["id PK"]) --- STH
+    STH_TICKET(["ticket id FK"]) --- STH
+    STH_FROM(["from status id FK"]) --- STH
+    STH_TO(["to status id FK"]) --- STH
+    STH_ACTOR(["changed by id - soft ref"]) --- STH
+    STH_TIME(["created at"]) --- STH
+
+    POL_ID(["id PK"]) --- POL
+    POL_CAT(["category id FK - nullable"]) --- POL
+    POL_PRI(["priority id FK"]) --- POL
+    POL_RESPONSE(["first response minutes"]) --- POL
+    POL_RESOLUTION(["resolution minutes"]) --- POL
+    POL_FROM(["effective from"]) --- POL
+    POL_TO(["effective to"]) --- POL
+
+    SLT_ID(["id PK"]) --- SLT
+    SLT_TICKET(["ticket id FK"]) --- SLT
+    SLT_POLICY(["policy id FK"]) --- SLT
+    SLT_TYPE(["metric type"]) --- SLT
+    SLT_DUE(["due at"]) --- SLT
+    SLT_DONE(["achieved at"]) --- SLT
+    SLT_BREACH(["breached at"]) --- SLT
+
+    MSG_ID(["id PK"]) --- MSG
+    MSG_TICKET(["ticket id FK"]) --- MSG
+    MSG_AUTHOR(["author id - soft ref"]) --- MSG
+    MSG_ROLE(["author role"]) --- MSG
+    MSG_BODY(["body"]) --- MSG
+    MSG_INTERNAL(["is internal"]) --- MSG
+    MSG_CHAT(["chat message id UK - soft ref"]) --- MSG
+    MSG_CREATED(["created at"]) --- MSG
+
+    AUD_ID(["id PK"]) --- AUD
+    AUD_TICKET(["ticket id FK"]) --- AUD
+    AUD_ACTOR(["actor id - soft ref"]) --- AUD
+    AUD_TYPE(["event type"]) --- AUD
+    AUD_DEDUPE(["dedupe key UK"]) --- AUD
+    AUD_PAYLOAD(["payload JSONB"]) --- AUD
+    AUD_CREATED(["created at"]) --- AUD
+
+    LNK_TICKET(["ticket id PK, FK"]) --- LNK
+    LNK_CONV(["conversation id UK - soft ref"]) --- LNK
+    LNK_TIME(["linked at"]) --- LNK
+
+    HCAT_ID(["id PK"]) --- HCAT
+    HCAT_CODE(["code UK"]) --- HCAT
+    HCAT_NAME(["name"]) --- HCAT
+
+    ART_ID(["id PK"]) --- ART
+    ART_SLUG(["slug UK"]) --- ART
+    ART_STATUS(["status"]) --- ART
+    ART_PUBLISHED(["published version"]) --- ART
+    ART_CREATOR(["created by id - soft ref"]) --- ART
+    ART_CREATED(["created at"]) --- ART
+
+    REV_ID(["id PK"]) --- REV
+    REV_ARTICLE(["article id FK"]) --- REV
+    REV_VERSION(["version UK per article"]) --- REV
+    REV_CATEGORY(["category id FK"]) --- REV
+    REV_TITLE(["title"]) --- REV
+    REV_BODY(["body"]) --- REV
+    REV_AUTHOR(["author id - soft ref"]) --- REV
+    REV_SEARCH(["search text"]) --- REV
+    REV_CREATED(["created at"]) --- REV
+
+    %% ==================== STYLES ====================
+    classDef entity fill:#ffffff,stroke:#222222,stroke-width:2px,color:#111111;
+    classDef attribute fill:#ffffff,stroke:#666666,stroke-width:1px,color:#111111;
+    classDef relationship fill:#ffffff,stroke:#222222,stroke-width:2px,color:#111111;
+
+    class CAT,PRI,STA,TKT,ASG,STH,POL,SLT,MSG,AUD,LNK,HCAT,ART,REV entity;
+    class R_CAT,R_PRI,R_STA,R_ASG,R_STH,R_FROM,R_TO,R_POLICY_PRI,R_POLICY_CAT,R_SLA_TKT,R_SLA_POL,R_MSG,R_AUD,R_CHAT,R_REV,R_HELP_CAT relationship;
+    class CAT_ID,CAT_CODE,CAT_NAME,PRI_ID,PRI_CODE,PRI_RANK,STA_ID,STA_CODE,STA_TERMINAL,TKT_ID,TKT_NO,TKT_REQUESTER,TKT_SUBJECT,TKT_DESCRIPTION,TKT_ORDER,TKT_TARGET,TKT_VERSION,TKT_CREATED,ASG_ID,ASG_TICKET,ASG_USER,ASG_BY,ASG_START,ASG_END,STH_ID,STH_TICKET,STH_FROM,STH_TO,STH_ACTOR,STH_TIME,POL_ID,POL_CAT,POL_PRI,POL_RESPONSE,POL_RESOLUTION,POL_FROM,POL_TO,SLT_ID,SLT_TICKET,SLT_POLICY,SLT_TYPE,SLT_DUE,SLT_DONE,SLT_BREACH,MSG_ID,MSG_TICKET,MSG_AUTHOR,MSG_ROLE,MSG_BODY,MSG_INTERNAL,MSG_CHAT,MSG_CREATED,AUD_ID,AUD_TICKET,AUD_ACTOR,AUD_TYPE,AUD_DEDUPE,AUD_PAYLOAD,AUD_CREATED,LNK_TICKET,LNK_CONV,LNK_TIME,HCAT_ID,HCAT_CODE,HCAT_NAME,ART_ID,ART_SLUG,ART_STATUS,ART_PUBLISHED,ART_CREATOR,ART_CREATED,REV_ID,REV_ARTICLE,REV_VERSION,REV_CATEGORY,REV_TITLE,REV_BODY,REV_AUTHOR,REV_SEARCH,REV_CREATED attribute;

@@ -15,20 +15,29 @@ import {
 
 const STATUS_OPTIONS = [
   { value: "OPEN", label: "รอดำเนินการ (OPEN)" },
+  { value: "REVIEWED", label: "ตรวจสอบแล้ว (REVIEWED)" },
   { value: "ACTIONED", label: "จัดการแล้ว (ACTIONED)" },
   { value: "DISMISSED", label: "ยกเลิกแล้ว (DISMISSED)" },
   { value: "", label: "ทั้งหมด (ALL)" },
+];
+const TICKET_OPTIONS = [
+  { value: "ALL", label: "ทุกสถานะ" },
+  ...["NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_CUSTOMER", "ESCALATED", "RESOLVED", "CLOSED"]
+    .map((value) => ({ value, label: TICKET_STATUS_LABEL[value] || value })),
 ];
 
 /* The queue view: search, status filter, the case table and its pager.
    Presentational only — every piece of state lives in AdminInboxSection. */
 export default function AdminInboxTable({
   items,
+  source,
   loading,
   qInput,
   onQInputChange,
   onSearch,
   statusFilter,
+  ticketStatus,
+  onTicketStatusChange,
   onStatusFilterChange,
   page,
   totalPages,
@@ -134,28 +143,37 @@ export default function AdminInboxTable({
   return (
     <>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSearch();
-          }}
-          className="flex-1"
-        >
-          <Input
-            icon="search"
-            value={qInput}
-            onChange={(e) => onQInputChange(e.target.value)}
-            aria-label="ค้นหาเคส"
-            placeholder="ค้นหาเคส..."
-          />
-        </form>
+        {source === "tickets" && (
+          <><form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSearch();
+            }}
+            className="flex-1"
+          >
+            <Input
+              icon="search"
+              value={qInput}
+              onChange={(e) => onQInputChange(e.target.value)}
+              aria-label="ค้นหาเคส"
+              placeholder="ค้นหาเคส..."
+            />
+          </form><DropdownFilter
+            value={ticketStatus}
+            onChange={onTicketStatusChange}
+            options={TICKET_OPTIONS}
+            align="right"
+          /></>
+        )}
 
-        <DropdownFilter
-          value={statusFilter}
-          onChange={onStatusFilterChange}
-          options={STATUS_OPTIONS}
-          align="right"
-        />
+        {source === "reports" && (
+          <DropdownFilter
+            value={statusFilter}
+            onChange={onStatusFilterChange}
+            options={STATUS_OPTIONS}
+            align="right"
+          />
+        )}
       </div>
 
       <DataTable

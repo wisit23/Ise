@@ -5,6 +5,7 @@ const disputeModel = require("./disputeModel");
 const disputeService = require("./disputeService");
 const orderModel = require("../../models/orderModel");
 const authClient = require("../../services/authClient");
+const chatClient = require("../../services/chatClient");
 
 authClient.setMockUserResolver(async (id) => {
   if (id?.startsWith("multi-")) {
@@ -83,6 +84,10 @@ test("disputeService.claim enforces role, unassigned check, and optimistic concu
     assignedTo: null,
     version: 2,
   });
+  await assert.rejects(
+    () => disputeService.claim({ disputeId: "d1", userId: "admin-1", role: "ADMIN", version: 2 }),
+    (err) => err.status === 403 && err.message.includes("escalated"),
+  );
   await assert.rejects(
     () =>
       disputeService.claim({
@@ -235,20 +240,33 @@ test("disputeService.escalate transfers dispute to Trust & Safety", async (t) =>
 test("disputeService.decide and addEvidence enforce single ownership", async (t) => {
   const origFindById = disputeModel.findById;
   const origDecide = disputeModel.decide;
+  const origLock = chatClient.lockDisputeConversation;
+  const origNotice = chatClient.sendDisputeNotice;
+  const origOrder = orderModel.findById;
 
   t.after(() => {
     disputeModel.findById = origFindById;
     disputeModel.decide = origDecide;
+    chatClient.lockDisputeConversation = origLock;
+    chatClient.sendDisputeNotice = origNotice;
+    orderModel.findById = origOrder;
   });
+  chatClient.lockDisputeConversation = async () => {};
+  chatClient.sendDisputeNotice = async () => {};
+  orderModel.findById = async () => ({ id: "o1", buyerId: "buyer-1", sellerId: "seller-1", version: 1 });
 
   disputeModel.findById = async () => ({
     id: "d1",
     status: "OPEN",
-    assignedTo: "agent-owner",
-    assignedRole: "CUSTOMER_SERVICE",
+    assignedTo: "admin-owner",
+    assignedRole: "ADMIN",
     version: 1,
     orderId: "o1",
   });
+  await assert.rejects(
+    () => disputeService.addEvidence({ disputeId: "d1", userId: "admin-owner", role: "ADMIN", file: { filename: "x.png", mimetype: "image/png" } }),
+    (err) => err.status === 403,
+  );
 
   // Non-assigned agent cannot decide
   await assert.rejects(
@@ -262,7 +280,7 @@ test("disputeService.decide and addEvidence enforce single ownership", async (t)
         version: 1,
       }),
     (err) =>
-      err.status === 403 && err.message.includes("only the assigned agent"),
+      err.status === 403 && err.message.includes("only Admin"),
   );
 
   // Non-assigned agent cannot add evidence
@@ -275,29 +293,32 @@ test("disputeService.decide and addEvidence enforce single ownership", async (t)
         file: { filename: "ev.jpg", mimetype: "image/jpeg" },
       }),
     (err) =>
-      err.status === 403 && err.message.includes("only the assigned agent"),
+      err.status === 403 && err.message.includes("Admin queue"),
   );
 
   // Assigned agent can decide
-  disputeModel.decide = async ({ decidedBy, decision, decisionReason }) => ({
+  disputeModel.decide = async ({ decidedBy, decision, decisionReason, verdictKey }) => ({
     id: "d1",
+    orderId: "o1",
     status: "DECIDED",
     decidedBy,
     decision,
     decisionReason,
+    verdictKey,
     version: 2,
   });
 
   const decisionResult = await disputeService.decide({
     disputeId: "d1",
-    userId: "agent-owner",
-    role: "CUSTOMER_SERVICE",
+    userId: "admin-owner",
+    role: "ADMIN",
     decision: "APPROVE_REFUND",
     reason: "valid proof",
     version: 1,
+    idempotencyKey: "test-verdict-1",
   });
   assert.equal(decisionResult.status, "DECIDED");
-  assert.equal(decisionResult.decidedBy, "agent-owner");
+  assert.equal(decisionResult.decidedBy, "admin-owner");
 });
 
 test("disputeService requires numeric version on claim, reassign, escalate, and decide", async (t) => {
@@ -356,7 +377,7 @@ test("disputeService requires numeric version on claim, reassign, escalate, and 
       disputeService.decide({
         disputeId: "d1",
         userId: "agent-1",
-        role: "CUSTOMER_SERVICE",
+        role: "ADMIN",
         decision: "APPROVE_REFUND",
         reason: "proof",
       }),
@@ -391,12 +412,12 @@ test("disputeService prevents non-assignee from escalating and prevents CS from 
     (err) => err.status === 403,
   );
 
-  // 2. Escalated dispute assignedRole is TRUST_AND_SAFETY, unassigned to specific agent
+  // 2. Escalated dispute is in the Admin queue, unassigned to a specific admin
   disputeModel.findById = async () => ({
     id: "d1",
     status: "OPEN",
     assignedTo: null,
-    assignedRole: "TRUST_AND_SAFETY",
+    assignedRole: "ADMIN",
     version: 2,
   });
 
@@ -409,7 +430,7 @@ test("disputeService prevents non-assignee from escalating and prevents CS from 
         role: "CUSTOMER_SERVICE",
         version: 2,
       }),
-    (err) => err.status === 403 && err.message.includes("only Trust & Safety"),
+    (err) => err.status === 403 && err.message.includes("only Admin"),
   );
 
   // CS agent cannot decide it
@@ -423,7 +444,7 @@ test("disputeService prevents non-assignee from escalating and prevents CS from 
         reason: "CS cannot decide escalated case",
         version: 2,
       }),
-    (err) => err.status === 403 && err.message.includes("only Trust & Safety"),
+    (err) => err.status === 403 && err.message.includes("only Admin"),
   );
 
   // CS agent cannot add evidence to it
@@ -435,6 +456,6 @@ test("disputeService prevents non-assignee from escalating and prevents CS from 
         role: "CUSTOMER_SERVICE",
         file: { filename: "test.jpg", mimetype: "image/jpeg" },
       }),
-    (err) => err.status === 403 && err.message.includes("only Trust & Safety"),
+    (err) => err.status === 403 && err.message.includes("Admin queue"),
   );
 });

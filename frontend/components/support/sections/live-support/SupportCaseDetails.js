@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Badge from "../../../panel/ui/Badge";
 import Button from "../../../ui/Button";
 import Alert from "../../../ui/Alert";
+import Modal from "../../../ui/Modal";
 import {
   TICKET_STATUS_LABEL,
   TICKET_STATUS_STYLE,
@@ -24,6 +25,8 @@ export default function SupportCaseDetails({
 }) {
   const [internalNote, setInternalNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  const [showEscalate, setShowEscalate] = useState(false);
+  const [memo, setMemo] = useState({ problem: "", authority: "", recommendation: "" });
 
   useEffect(() => {
     function closeOnEscape(event) {
@@ -313,7 +316,7 @@ export default function SupportCaseDetails({
             {nextStatuses.includes("ESCALATED") && (
               <Button
                 variant="ghost"
-                onClick={() => onStatusChange("ESCALATED")}
+                onClick={() => setShowEscalate(true)}
                 disabled={actionBusy}
                 className="w-full justify-center bg-red-50 text-red-600 hover:bg-red-100 font-bold"
               >
@@ -323,6 +326,17 @@ export default function SupportCaseDetails({
           </div>
         </div>
       </div>
+      <Modal
+        open={showEscalate}
+        title="ส่งเรื่องต่อให้ Admin"
+        onClose={() => setShowEscalate(false)}
+        footer={<div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setShowEscalate(false)}>ยกเลิก</Button><Button disabled={actionBusy || Object.values(memo).some((v) => !v.trim())} onClick={() => {
+          onStatusChange("ESCALATED", `ปัญหา: ${memo.problem.trim()}\nขาดอำนาจ: ${memo.authority.trim()}\nข้อเสนอแนะ: ${memo.recommendation.trim()}`);
+          setShowEscalate(false);
+        }}>ส่งเรื่องต่อ</Button></div>}
+      >
+        <div className="space-y-3">{[["problem", "ปัญหาคืออะไร"], ["authority", "ขาดอำนาจอะไร"], ["recommendation", "CS เสนอแนะอะไร"]].map(([key, label]) => <label key={key} className="block text-sm font-bold text-slate-700">{label}<textarea rows={2} value={memo[key]} onChange={(e) => setMemo((old) => ({ ...old, [key]: e.target.value }))} className="mt-1 w-full rounded-lg border p-2 font-normal" /></label>)}</div>
+      </Modal>
     </aside>
   );
 }

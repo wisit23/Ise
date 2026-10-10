@@ -44,6 +44,22 @@ async function getByOrderId(req, res, next) {
   }
 }
 
+async function joinConversation(req, res, next) {
+  try {
+    res.json(
+      await disputeService.joinConversation({
+        disputeId: req.params.id,
+        userId: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+        side: req.body?.side,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function queue(req, res, next) {
   try {
     const pagination = parsePagination(req.query, 20);
@@ -51,7 +67,13 @@ async function queue(req, res, next) {
       role: req.userRole,
       roles: req.userRoles,
       status: req.query.status,
+      assignedRole: req.query.assignedRole,
       search: req.query.q,
+      scope: req.query.scope,
+      work: req.query.work,
+      userId: req.userId,
+      priority: req.query.priority,
+      sort: req.query.sort,
       skip: pagination.skip,
       take: pagination.take,
     });
@@ -154,8 +176,43 @@ async function decide(req, res, next) {
       decision: req.body.decision,
       reason: req.body.reason,
       version: req.body.version,
+      idempotencyKey: req.get("Idempotency-Key") || req.body.idempotencyKey,
     });
     res.json(dispute);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function requestMoreEvidence(req, res, next) {
+  try {
+    res.json(
+      await disputeService.requestMoreEvidence({
+        disputeId: req.params.id,
+        userId: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+        reason: req.body.reason,
+        version: req.body.version,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function auditTranscript(req, res, next) {
+  try {
+    res.json(
+      await disputeService.getAuditTranscript({
+        disputeId: req.params.id,
+        userId: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+        side: req.query.side || "buyer",
+        before: req.query.before,
+      }),
+    );
   } catch (err) {
     next(err);
   }
@@ -190,4 +247,20 @@ module.exports = {
   escalate,
   decide,
   setEvidenceDeadline,
+};
+module.exports = {
+  setEvidenceDeadline,
+  open,
+  getOne,
+  getByOrderId,
+  joinConversation,
+  queue,
+  uploadEvidence,
+  viewEvidence,
+  claim,
+  reassign,
+  escalate,
+  decide,
+  requestMoreEvidence,
+  auditTranscript,
 };

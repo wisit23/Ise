@@ -1,0 +1,4 @@
+ALTER TABLE "support_tickets"
+  ADD COLUMN IF NOT EXISTS "priority_score" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "risk_report_count" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "escalation_note" TEXT;

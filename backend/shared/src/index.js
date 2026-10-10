@@ -1,4 +1,8 @@
 module.exports = {
+  ...require("./serializableTransaction"),
+  ...require("./customerServiceConfig"),
+  ...require("./staffRoles"),
+  ...require("./staffDisplay"),
   ...require("./jwt"),
   ...require("./authMiddleware"),
   ...require("./errors"),
@@ -7,5 +11,7 @@ module.exports = {
   ...require("./pagination"),
   ...require("./permissions"),
   ...require("./executiveMetrics"),
+  ...require("./casePriority"),
+  ...require("./servicePolicy"),
   events: require("./events").EVENTS,
 };

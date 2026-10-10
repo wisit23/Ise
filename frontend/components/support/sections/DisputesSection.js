@@ -40,6 +40,9 @@ export default function DisputesSection({
   const [selectedDispute, setSelectedDispute] = useState(null);
   const [closingDispute, setClosingDispute] = useState(false);
   const [showDisputeChat, setShowDisputeChat] = useState(false);
+  const [chatRoom, setChatRoom] = useState(null);
+  const [chatSide, setChatSide] = useState("buyer");
+  const [openingChat, setOpeningChat] = useState(false);
   const [closingChat, setClosingChat] = useState(false);
   const [disputeDetails, setDisputeDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -104,8 +107,30 @@ export default function DisputesSection({
     setDisputeDetails(null);
     setDecisionReason("");
     setShowDisputeChat(false);
+    setChatRoom(null);
+    setChatSide("buyer");
     setClosingChat(false);
     loadDisputeDetails(d.orderId);
+  }
+
+  async function handleOpenChat(side = "buyer") {
+    if (!disputeDetails?.id || openingChat) return;
+    setOpeningChat(true);
+    try {
+      const room = await apiFetch(
+        `/api/orders/disputes/${disputeDetails.id}/conversation`,
+        { method: "POST", token, body: { side } },
+      );
+      if (!room?.conversationId) throw new Error("ไม่พบห้องสนทนาของข้อพิพาท");
+      setChatRoom(room);
+      setChatSide(side);
+      setClosingChat(false);
+      setShowDisputeChat(true);
+    } catch (err) {
+      toast.error(`เปิดแชทข้อพิพาทไม่สำเร็จ: ${err.message}`);
+    } finally {
+      setOpeningChat(false);
+    }
   }
 
   async function handleViewEvidence(ev) {
@@ -131,8 +156,10 @@ export default function DisputesSection({
         token,
       });
       setItems(data.items || []);
+      setTotalPages(data.totalPages || 1);
+      setError("");
     } catch (err) {
-      console.error("Failed to refresh queue:", err);
+      setError(err.message);
     }
   }
 
@@ -198,7 +225,7 @@ export default function DisputesSection({
           body: { reason, version: disputeDetails.version },
         },
       );
-      toast.success("ส่งต่อเคสให้ทีม Trust & Safety สำเร็จ");
+      toast.success("ส่งต่อเคสให้ Admin สำเร็จ");
       setDisputeDetails(updated);
       refreshQueue();
     } catch (err) {
@@ -215,19 +242,29 @@ export default function DisputesSection({
     if (!decisionReason.trim()) return;
     setDeciding(true);
     try {
-      await apiFetch(`/api/orders/disputes/${disputeDetails.id}/decision`, {
-        method: "POST",
-        token,
-        body: {
-          decision,
-          reason: decisionReason,
-          version: disputeDetails?.version,
+      const decided = await apiFetch(
+        `/api/orders/disputes/${disputeDetails.id}/decision`,
+        {
+          method: "POST",
+          token,
+          body: {
+            decision,
+            reason: decisionReason,
+            version: disputeDetails?.version,
+            idempotencyKey: `${disputeDetails.id}:${disputeDetails.version}:${decision}`,
+          },
         },
-      });
+      );
+      if (decided?.chatLockError) {
+        toast.error(
+          "ตัดสินข้อพิพาทแล้ว แต่ล็อกแชทไม่สำเร็จ ระบบจะลองอีกครั้งเมื่อเปิดแชท",
+        );
+      }
+      setChatRoom((room) => (room ? { ...room, readOnly: true } : room));
       toast.success(
         decision === "APPROVE_REFUND"
           ? "อนุมัติคืนเงินเรียบร้อย"
-          : "ปฏิเสธคำร้องเรียบร้อย",
+          : "ปล่อยเงินให้ผู้ขายเรียบร้อย",
       );
       loadDisputeDetails(selectedDispute.orderId);
       refreshQueue();
@@ -250,6 +287,7 @@ export default function DisputesSection({
       .then((data) => {
         setItems(data.items || []);
         setTotalPages(data.totalPages || 1);
+        setError("");
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -304,6 +342,11 @@ export default function DisputesSection({
           {(showDisputeChat || closingChat) && (
             <DisputeChatPanel
               dispute={selectedDispute}
+              conversationId={chatRoom?.conversationId}
+              readOnly={chatRoom?.readOnly}
+              side={chatSide}
+              onSideChange={handleOpenChat}
+              switching={openingChat}
               closing={closingChat}
               onClose={closeDisputeChat}
             />
@@ -329,9 +372,9 @@ export default function DisputesSection({
             onEscalate={handleEscalate}
             escalating={escalating}
             onOpenChat={() => {
-              setShowDisputeChat(true);
-              setClosingChat(false);
+              handleOpenChat("buyer");
             }}
+            openingChat={openingChat}
             onClose={closeDispute}
           />
         </div>

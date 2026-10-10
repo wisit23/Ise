@@ -15,6 +15,9 @@
   ],
   "scripts": {
     "dev": "docker compose up --build",
+    "demo:cs-admin": "node scripts/demo-cs-admin.js",
+    "smoke:cs-admin": "node scripts/smoke-cs-admin-demo.js",
+    "smoke:cs-admin-verdict": "node scripts/smoke-cs-admin-verdict.js",
     "down": "docker compose down",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

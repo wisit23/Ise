@@ -45,13 +45,29 @@ async function createDraft({ role, authorId, title, body, category }) {
   });
 }
 
-async function publish({ role, id }) {
-  if (!AGENT_ROLES.has(role)) {
-    throw forbidden("only support agents can publish help articles");
-  }
-  const article = await helpModel.publish(id);
+async function revise({ role, id, authorId, title, body, category }) {
+  if (!AGENT_ROLES.has(role))
+    throw forbidden("only support agents can write help articles");
+  if (!title?.trim() || !body?.trim() || !category?.trim())
+    throw badRequest("title, body and category are required");
+  const article = await helpModel.revise({
+    id,
+    authorId,
+    title: title.trim(),
+    body: body.trim(),
+    category: category.trim(),
+  });
   if (!article) throw notFound("help article not found");
   return article;
 }
 
-module.exports = { searchPublic, listForAgent, createDraft, publish };
+async function publish({ role, id, version }) {
+  if (!AGENT_ROLES.has(role)) {
+    throw forbidden("only support agents can publish help articles");
+  }
+  const article = await helpModel.publish(id, version);
+  if (!article) throw notFound("help article not found");
+  return article;
+}
+
+module.exports = { searchPublic, listForAgent, createDraft, revise, publish };

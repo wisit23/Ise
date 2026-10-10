@@ -38,7 +38,7 @@ test("help article draft -> publish flow and search visibility", async (t) => {
   if (!(await databaseIsReachable())) {
     const message =
       "DATABASE_URL_SUPPORT not set or database unreachable — set it to a disposable test database " +
-      "(after running `npx prisma db push` against it from backend/services/support-service) to run this test";
+      "(after running `node prisma/migrate.js` and `node prisma/seed.js` from backend/services/support-service) to run this test";
     if (process.env.REQUIRE_INTEGRATION === "1") {
       throw new Error(`REQUIRE_INTEGRATION=1 but ${message}`);
     }

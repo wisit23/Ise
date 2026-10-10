@@ -6,7 +6,10 @@
   "type": "commonjs",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "db:migrate": "node prisma/migrate.js",
+    "db:seed": "node prisma/seed.js",
+    "db:migrate-messages": "node prisma/migrateMessagesToChat.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

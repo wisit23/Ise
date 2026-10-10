@@ -135,22 +135,35 @@ model OrderLog {
 }
 
 model DisputeCase {
-  id           String            @id @default(uuid())
-  orderId      String            @unique @map("order_id")
-  createdBy    String            @map("created_by")
-  reason       String
-  decision     String?
-  disputeType  String            @map("dispute_type")
-  version      Int               @default(0) @map("dispute_case_version")
-  createdAt    DateTime          @default(now()) @map("created_at")
-  decidedBy    String?           @map("decided_by")
-  decidedAt    DateTime?         @map("decided_at")
-  assignedTo   String?           @map("assigned_to")
-  assignedRole String?           @map("assigned_role")
-  assignedAt   DateTime?         @map("assigned_at")
-  order        Order             @relation(fields: [orderId], references: [id])
-  evidence     DisputeEvidence[]
-  caseLog      DisputeCaseLog[]
+  id               String            @id @default(uuid())
+  orderId          String            @unique @map("order_id")
+  createdBy        String            @map("created_by")
+  reason           String
+  decision         String?
+  disputeType      String            @map("dispute_type")
+  status           String            @default("OPEN")
+  decisionReason   String?           @map("decision_reason")
+  verdictKey       String?           @unique @map("verdict_key")
+  escalationNote   String?           @map("escalation_note")
+  escalatedBy      String?           @map("escalated_by")
+  priority         String            @default("NORMAL")
+  priorityScore    Int               @default(0) @map("priority_score")
+  riskReportCount  Int               @default(0) @map("risk_report_count")
+  slaExpiresAt     DateTime?         @map("sla_expires_at")
+  slaPolicyVersion String?           @map("sla_policy_version")
+  firstReviewDueAt DateTime?         @map("first_review_due_at")
+  firstReviewedAt  DateTime?         @map("first_reviewed_at")
+  decisionDueAt    DateTime?         @map("decision_due_at")
+  version          Int               @default(0) @map("dispute_case_version")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  decidedBy        String?           @map("decided_by")
+  decidedAt        DateTime?         @map("decided_at")
+  assignedTo       String?           @map("assigned_to")
+  assignedRole     String?           @map("assigned_role")
+  assignedAt       DateTime?         @map("assigned_at")
+  order            Order             @relation(fields: [orderId], references: [id])
+  evidence         DisputeEvidence[]
+  caseLog          DisputeCaseLog[]
 
   @@map("dispute_case")
 }

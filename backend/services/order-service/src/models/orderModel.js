@@ -29,7 +29,7 @@ function disputeView(row) {
       ? "DECIDED"
       : row.evidence?.some((e) => e.status === "NEEDS_INFO")
         ? "NEEDS_INFO"
-        : "OPEN",
+        : row.status || "OPEN",
   };
 }
 function view(row) {

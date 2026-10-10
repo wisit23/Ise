@@ -79,6 +79,7 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
     status: "IN_PROGRESS",
     assigneeId: "agent-A",
     conversationId: conversationId,
+    chatLink: { conversationId },
     firstResponseAt: null,
   };
 
@@ -89,6 +90,7 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
   const originalTicketFindUnique = prisma.supportTicket.findUnique;
   const originalTicketUpdate = prisma.supportTicket.update;
   const originalTicketAuditCreate = prisma.ticketAuditLog.create;
+  const originalAuditFind = prisma.ticketAuditLog.findUnique;
   const originalTicketMessageCreate = prisma.ticketMessage.create;
   const originalTransaction = prisma.$transaction;
 
@@ -124,6 +126,7 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
     storedAudits.push(audit);
     return audit;
   };
+  prisma.ticketAuditLog.findUnique = async ({ where }) => storedAudits.find((a) => a.dedupeKey === where.dedupeKey) || null;
 
   prisma.$transaction = async (callback) => {
     return callback({
@@ -143,7 +146,15 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
         },
       },
       ticketAuditLog: {
+        findUnique: prisma.ticketAuditLog.findUnique,
         create: prisma.ticketAuditLog.create,
+      },
+      ticketSlaTarget: {
+        updateMany: async ({ data }) => {
+          if (!fakeTicket.firstResponseAt)
+            fakeTicket.firstResponseAt = data.achievedAt;
+          return { count: 1 };
+        },
       },
     });
   };
@@ -153,6 +164,7 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
     prisma.supportTicket.findUnique = originalTicketFindUnique;
     prisma.supportTicket.update = originalTicketUpdate;
     prisma.ticketAuditLog.create = originalTicketAuditCreate;
+    prisma.ticketAuditLog.findUnique = originalAuditFind;
     prisma.ticketMessage.create = originalTicketMessageCreate;
     prisma.$transaction = originalTransaction;
   });
@@ -174,7 +186,7 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
   );
 
   await t.test(
-    "first delivery creates exactly one TicketMessage and one REPLY audit log",
+    "first delivery creates only one metadata REPLY audit event",
     async () => {
       const result = await ticketModel.recordChatMessage({
         ticketId,
@@ -186,8 +198,8 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
       });
 
       assert.equal(result.alreadyRecorded, false);
-      assert.equal(result.message.chatMessageId, chatMessageId);
-      assert.equal(storedMessages.length, 1);
+      assert.equal(result.event.payload.chatMessageId, chatMessageId);
+      assert.equal(storedMessages.length, 0);
       assert.equal(storedAudits.length, 1);
       assert.equal(storedAudits[0].action, "REPLY");
       assert.equal(storedAudits[0].ticketId, ticketId);
@@ -211,11 +223,11 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
       });
 
       assert.equal(result2.alreadyRecorded, true);
-      assert.equal(result2.message.chatMessageId, chatMessageId);
+      assert.equal(result2.event.payload.chatMessageId, chatMessageId);
       assert.equal(
         storedMessages.length,
-        1,
-        "Must still have exactly one TicketMessage",
+        0,
+        "Must never create TicketMessage",
       );
       assert.equal(
         storedAudits.length,

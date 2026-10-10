@@ -50,4 +50,17 @@ describe("SupportCaseDetails", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("requires a three-part CS memo before escalation", () => {
+    const onStatusChange = jest.fn();
+    render(<SupportCaseDetails ticket={ticket} onClose={jest.fn()} onAssign={jest.fn()} onStatusChange={onStatusChange} onAddInternalNote={jest.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "ส่งต่อให้ Admin" }));
+    const submit = screen.getByRole("button", { name: "ส่งเรื่องต่อ" });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "ปัญหาคืออะไร" }), { target: { value: "สินค้าไม่ตรงปก" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "ขาดอำนาจอะไร" }), { target: { value: "คืนเงิน" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "CS เสนอแนะอะไร" }), { target: { value: "คืนเงินผู้ซื้อ" } });
+    fireEvent.click(submit);
+    expect(onStatusChange).toHaveBeenCalledWith("ESCALATED", "ปัญหา: สินค้าไม่ตรงปก\nขาดอำนาจ: คืนเงิน\nข้อเสนอแนะ: คืนเงินผู้ซื้อ");
+  });
 });
