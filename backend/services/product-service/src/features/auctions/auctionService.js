@@ -4,12 +4,68 @@ const defaultPrisma = require("../../models/prismaClient");
 const { recordMarketingAudit } = require("../audit/marketingAuditService");
 const orderClient = require("./orderClient");
 const auctionCloseQueue = require("../../jobs/auctionCloseQueue");
+const chatClient = require("./chatClient");
+const MAX_CANCELLATION_REASON_LENGTH = 500;
+
+const {
+  requireSellerRole,
+  requireVerifiedSeller,
+  validateCreateRequest,
+  requireValidMediaCount,
+  requireKnownCondition,
+} = require("../../services/productValidation");
+const productModel = require("../../models/productModel");
+const { buildCreateProductData } = require("../../controllers/productPayload");
+const sellerActivityClient = require("../../services/sellerActivityClient");
+
+function isCategoryAllowedInRound(round, category) {
+  if (!round) return false;
+  const cats = round.categories;
+  if (!Array.isArray(cats) || cats.length === 0) {
+    return true;
+  }
+  return cats.includes(category);
+}
 
 function runInTransaction(fn) {
   if (auctionRepository.transaction) {
     return auctionRepository.transaction(fn);
   }
   return defaultPrisma.$transaction(fn);
+}
+
+function runWithAuctionLock(auctionId, fn) {
+  if (auctionRepository.withAuctionLock) {
+    return auctionRepository.withAuctionLock(auctionId, fn);
+  }
+  return runInTransaction(fn);
+}
+
+function runWithProductLock(productId, fn) {
+  if (auctionRepository.withProductLock) {
+    return auctionRepository.withProductLock(productId, fn);
+  }
+  return runInTransaction(fn);
+}
+
+function runWithRoundMutationLock(roundId, fn, options = {}) {
+  if (auctionRepository.withRoundMutationLock) {
+    return auctionRepository.withRoundMutationLock(roundId, fn, options);
+  }
+  if (options?.productId) {
+    return runWithProductLock(options.productId, fn);
+  }
+  return runInTransaction(fn);
+}
+
+async function readLiveRoundInTx(roundId, tx) {
+  if (
+    typeof tx?.$executeRaw !== "function" &&
+    typeof tx?.auctionRound?.findUnique === "function"
+  ) {
+    return tx.auctionRound.findUnique({ where: { id: roundId } });
+  }
+  return auctionRepository.findRoundForSubmission(roundId, tx);
 }
 
 // UR-10/UR-11 (MKT-005) lifecycle. Seller submits -> Admin approves/rejects ->
@@ -23,7 +79,7 @@ const TRANSITIONS = {
   pending_approval: ["approved", "rejected", "scheduled"],
   approved: ["scheduled", "cancelled"],
   scheduled: ["open", "cancelled"],
-  open: ["closed"],
+  open: ["closed", "cancelled"],
   closed: [],
   rejected: [],
   cancelled: [],
@@ -41,17 +97,6 @@ function getStatusThai(status) {
     cancelled: "ยกเลิกแล้ว",
   };
   return labels[status] || status;
-}
-
-function formatThaiDateTime(date) {
-  if (!date) return "";
-  const d = new Date(date);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("th-TH", {
-    timeZone: "Asia/Bangkok",
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
 }
 
 function canTransition(from, to) {
@@ -93,52 +138,57 @@ async function maybeAdvance(auction, now = new Date()) {
 
 async function closeAuction(auction, now = new Date()) {
   const auctionId = typeof auction === "string" ? auction : auction?.id;
-  // Re-fetch to avoid race conditions if already closed concurrently (e.g. BullMQ worker vs page read)
-  const fresh = await auctionRepository.findById(auctionId);
-  if (!fresh || fresh.status === "closed") {
-    return fresh || auction;
-  }
-  auction = fresh;
 
-  const winningBid = await auctionRepository.highestBid(auction.id);
+  return runWithAuctionLock(auctionId, async (tx) => {
+    let current = null;
+    if (
+      typeof tx?.$executeRaw === "function" &&
+      typeof tx?.auctionItem?.findUnique === "function"
+    ) {
+      current = await tx.auctionItem.findUnique({
+        where: { id: auctionId },
+        include: {
+          product: { include: { photos: { orderBy: { position: "asc" } } } },
+          round: true,
+        },
+      });
+    } else {
+      current = await auctionRepository.findById(auctionId, tx);
+    }
 
-  let winningOrderId = null;
-  if (winningBid) {
-    const order = await orderClient.createOrderFromAuction({
-      auctionId: auction.id,
-      productId: auction.productId,
-      productTitle: auction.product.title,
-      sellerId: auction.sellerId,
-      buyerId: winningBid.bidderId,
-      price: winningBid.amount,
-    });
-    winningOrderId = order.id;
-  }
-
-  return runInTransaction(async (tx) => {
-    // Under transaction, check if already closed concurrently
-    const current = await tx.auctionItem.findUnique({
-      where: { id: auction.id },
-      include: {
-        product: { include: { photos: { orderBy: { position: "asc" } } } },
-        round: true,
-      },
-    });
-    if (!current || current.status === "closed") {
+    if (
+      !current ||
+      current.status === "closed" ||
+      current.status === "cancelled" ||
+      current.round?.cancelledAt
+    ) {
       return current || auction;
     }
 
-    if (!winningBid) {
-      // If no bids were placed, release product back to "available"
+    const winningBid = await auctionRepository.highestBid(current.id, tx);
+
+    let winningOrderId = null;
+    if (winningBid) {
+      const order = await orderClient.createOrderFromAuction({
+        auctionId: current.id,
+        productId: current.productId,
+        productTitle: current.product?.title,
+        sellerId: current.sellerId,
+        buyerId: winningBid.bidderId,
+        price: winningBid.amount,
+      });
+      winningOrderId = order.id;
+    } else {
+      // If no bids were placed, release product back to "auction_action_required" (never auto-revert to "available")
       await auctionRepository.setProductStatus(
-        auction.productId,
-        "available",
+        current.productId,
+        "auction_action_required",
         tx,
       );
     }
 
     const updated = await auctionRepository.updateStatus(
-      auction.id,
+      current.id,
       {
         status: "closed",
         closedAt: now,
@@ -154,10 +204,10 @@ async function closeAuction(auction, now = new Date()) {
         actorRole: "SYSTEM",
         action: "AUCTION_ITEM_CLOSE",
         entityType: "AUCTION_ITEM",
-        entityId: auction.id,
-        previousState: auction,
+        entityId: current.id,
+        previousState: current,
         newState: updated,
-        idempotencyKey: `AUCTION_ITEM_CLOSE:${auction.id}`,
+        idempotencyKey: `AUCTION_ITEM_CLOSE:${current.id}`,
       },
       { tx },
     );
@@ -166,17 +216,35 @@ async function closeAuction(auction, now = new Date()) {
   });
 }
 
-/** Seller submits one of their own available products for auction. */
+/** Seller submits a new product or one of their own available products for auction. */
 async function submit({ user, input = {} }) {
-  if (!["SELLER", "ADMIN"].includes(user.role)) {
-    throw forbidden(
-      "เฉพาะบัญชีผู้ขายเท่านั้นที่สามารถส่งสินค้าเข้าร่วมประมูลได้",
-    );
+  requireSellerRole(user?.role);
+
+  const roundId =
+    input.roundId && typeof input.roundId === "string"
+      ? input.roundId.trim()
+      : "";
+  if (!roundId) {
+    throw badRequest("กรุณาเลือกรอบประมูลก่อนส่งสินค้าเข้าร่วม");
   }
 
-  const productId = input.productId;
-  if (!productId)
-    throw badRequest("กรุณาระบุสินค้าที่ต้องการส่งเข้าร่วมประมูล");
+  const chosenRound = await auctionRepository.findRoundForSubmission(roundId);
+  if (!chosenRound) {
+    throw badRequest("ไม่พบรอบประมูลที่เลือก กรุณากลับไปเลือกรอบใหม่");
+  }
+  if (chosenRound.cancelledAt) {
+    throw badRequest("รอบประมูลนี้ถูกยกเลิกแล้ว ไม่สามารถส่งสินค้าเข้าร่วมได้");
+  }
+
+  const now = new Date();
+  if (now < new Date(chosenRound.submissionStartsAt)) {
+    throw badRequest(
+      "รอบประมูลนี้ยังไม่เปิดรับสินค้า กรุณาเลือกรอบที่กำลังเปิดรับ",
+    );
+  }
+  if (now >= new Date(chosenRound.submissionEndsAt)) {
+    throw badRequest("รอบประมูลนี้ปิดรับสินค้าแล้ว กรุณาเลือกรอบอื่น");
+  }
 
   const startingPrice = Number(input.startingPrice);
   const bidIncrement = Number(input.bidIncrement);
@@ -187,38 +255,179 @@ async function submit({ user, input = {} }) {
     throw badRequest("ราคาเสนอเพิ่มขั้นต่ำต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
   }
 
-  const product = await auctionRepository.findProductOwner(productId);
-  if (!product) throw notFound("ไม่พบข้อมูลสินค้าที่ระบุ");
-  if (product.sellerId !== user.id) {
-    throw forbidden("คุณสามารถส่งได้เฉพาะสินค้าของตนเองเข้าร่วมประมูลเท่านั้น");
-  }
-  if (!["available", "auction"].includes(product.status)) {
-    throw badRequest(
-      "สินค้าต้องอยู่ในสถานะพร้อมขายจึงจะสามารถส่งเข้าร่วมประมูลได้",
+  // Flow A: Existing product submission (Requirement 4 & Seller Recovery)
+  // Acquires locks in fixed order: Round Lock -> Product Lock
+  if (input.productId) {
+    return runWithRoundMutationLock(
+      chosenRound.id,
+      async (tx) => {
+        // Re-verify round state inside transaction after acquiring Round Lock
+        const liveRound = await readLiveRoundInTx(chosenRound.id, tx);
+        const txNow = new Date();
+        if (!liveRound) {
+          throw badRequest("ไม่พบรอบประมูลที่เลือก กรุณากลับไปเลือกรอบใหม่");
+        }
+        if (liveRound.cancelledAt) {
+          throw badRequest(
+            "รอบประมูลนี้ถูกยกเลิกแล้ว ไม่สามารถส่งสินค้าเข้าร่วมได้",
+          );
+        }
+        if (txNow < new Date(liveRound.submissionStartsAt)) {
+          throw badRequest(
+            "รอบประมูลนี้ยังไม่เปิดรับสินค้า กรุณาเลือกรอบที่กำลังเปิดรับ",
+          );
+        }
+        if (txNow >= new Date(liveRound.submissionEndsAt)) {
+          throw badRequest("รอบประมูลนี้ปิดรับสินค้าแล้ว กรุณาเลือกรอบอื่น");
+        }
+
+        const product = await auctionRepository.findProductOwner(
+          input.productId,
+          tx,
+        );
+        if (!product) throw notFound("ไม่พบข้อมูลสินค้าที่ระบุ");
+        if (product.sellerId !== user.id) {
+          throw forbidden(
+            "คุณสามารถส่งได้เฉพาะสินค้าของตนเองเข้าร่วมประมูลเท่านั้น",
+          );
+        }
+        if (
+          !["available", "auction", "auction_action_required"].includes(
+            product.status,
+          )
+        ) {
+          throw badRequest(
+            "สินค้าต้องอยู่ในสถานะพร้อมขายหรือรอการดำเนินการจึงจะสามารถส่งเข้าร่วมประมูลได้",
+          );
+        }
+
+        // Must check product.category from database against round's allowed categories
+        // Ignore any category passed by client in input!
+        if (
+          !isCategoryAllowedInRound(chosenRound, product.category) ||
+          !isCategoryAllowedInRound(liveRound, product.category)
+        ) {
+          throw badRequest(
+            `รอบประมูลนี้ไม่เปิดรับสินค้าหมวดหมู่ ‘${product.category}’ กรุณาเลือกรอบอื่นหรือเปลี่ยนหมวดหมู่สินค้า`,
+          );
+        }
+
+        const activeAuction =
+          await auctionRepository.findActiveAuctionByProductId(product.id, tx);
+        if (activeAuction) {
+          throw conflict(
+            "สินค้านี้กำลังอยู่ในรายการประมูลที่ยังดำเนินการอยู่ ไม่สามารถส่งซ้ำได้",
+          );
+        }
+
+        if (product.status !== "auction") {
+          await auctionRepository.setProductStatus(product.id, "auction", tx);
+        }
+        const auctionItem = await auctionRepository.create(
+          {
+            productId: product.id,
+            sellerId: user.id,
+            startingPrice,
+            bidIncrement,
+            status: "pending_approval",
+            roundId: liveRound.id,
+            scheduledStartAt: liveRound.auctionStartsAt,
+            scheduledEndAt: liveRound.auctionEndsAt,
+          },
+          tx,
+        );
+
+        sellerActivityClient.recordActivity(user.id);
+
+        return auctionItem;
+      },
+      { productId: input.productId },
     );
   }
 
-  // Check if there is an active submission round
-  const activeRound = await auctionRepository.findActiveSubmissionRound();
-  if (!activeRound) {
+  // Flow B: New product submission with atomic Product and AuctionItem creation (Requirements 2 & 3)
+  requireVerifiedSeller(user?.role, user?.kycVerified, user?.kycStatus);
+
+  const category =
+    input.category && typeof input.category === "string"
+      ? input.category.trim()
+      : "";
+  if (!category) {
+    throw badRequest("กรุณาระบุหมวดหมู่สินค้า");
+  }
+
+  const knownCategory = await auctionRepository.findCategory(category);
+  if (!knownCategory) {
+    throw badRequest(`หมวดหมู่ "${category}" ไม่มีอยู่ในระบบ`);
+  }
+
+  if (!isCategoryAllowedInRound(chosenRound, category)) {
     throw badRequest(
-      "ขณะนี้ไม่มีรอบเปิดรับสินค้าเข้าประมูล หรือหมดเวลาเปิดรับสินค้าแล้ว กรุณารอรอบถัดไป",
+      `รอบประมูลนี้ไม่เปิดรับสินค้าหมวดหมู่ ‘${category}’ กรุณาเลือกรอบอื่นหรือเปลี่ยนหมวดหมู่สินค้า`,
     );
   }
 
-  if (product.status !== "auction") {
-    await auctionRepository.setProductStatus(productId, "auction");
-  }
+  // Validate product fields using existing rules
+  validateCreateRequest({
+    title: input.title,
+    price: startingPrice,
+    category,
+  });
+  requireValidMediaCount(input.media);
+  await requireKnownCondition(input.condition);
 
-  return auctionRepository.create({
-    productId,
-    sellerId: user.id,
-    startingPrice,
-    bidIncrement,
-    status: "pending_approval",
-    roundId: activeRound.id,
-    scheduledStartAt: activeRound.auctionStartsAt,
-    scheduledEndAt: activeRound.auctionEndsAt,
+  // Acquires Round Lock (same key as cancelRound) before checking round and creating Product/AuctionItem
+  return runWithRoundMutationLock(chosenRound.id, async (tx) => {
+    // Re-verify round state inside transaction after acquiring Round Lock
+    const liveRound = await readLiveRoundInTx(chosenRound.id, tx);
+    const txNow = new Date();
+    if (!liveRound) {
+      throw badRequest("ไม่พบรอบประมูลที่เลือก กรุณากลับไปเลือกรอบใหม่");
+    }
+    if (liveRound.cancelledAt) {
+      throw badRequest(
+        "รอบประมูลนี้ถูกยกเลิกแล้ว ไม่สามารถส่งสินค้าเข้าร่วมได้",
+      );
+    }
+    if (txNow < new Date(liveRound.submissionStartsAt)) {
+      throw badRequest(
+        "รอบประมูลนี้ยังไม่เปิดรับสินค้า กรุณาเลือกรอบที่กำลังเปิดรับ",
+      );
+    }
+    if (txNow >= new Date(liveRound.submissionEndsAt)) {
+      throw badRequest("รอบประมูลนี้ปิดรับสินค้าแล้ว กรุณาเลือกรอบอื่น");
+    }
+    if (!isCategoryAllowedInRound(liveRound, category)) {
+      throw badRequest(
+        `รอบประมูลนี้ไม่เปิดรับสินค้าหมวดหมู่ ‘${category}’ กรุณาเลือกรอบอื่นหรือเปลี่ยนหมวดหมู่สินค้า`,
+      );
+    }
+
+    const productData = buildCreateProductData(user.id, {
+      ...input,
+      category,
+      price: startingPrice,
+      status: "auction",
+    });
+    const product = await productModel.create(productData, tx);
+
+    const auctionItem = await auctionRepository.create(
+      {
+        productId: product.id,
+        sellerId: user.id,
+        startingPrice,
+        bidIncrement,
+        status: "pending_approval",
+        roundId: liveRound.id,
+        scheduledStartAt: liveRound.auctionStartsAt,
+        scheduledEndAt: liveRound.auctionEndsAt,
+      },
+      tx,
+    );
+
+    sellerActivityClient.recordActivity(user.id);
+
+    return auctionItem;
   });
 }
 
@@ -229,6 +438,9 @@ async function approve({ user, auctionId }) {
   }
 
   const auction = await loadAuction(auctionId);
+  if (auction.round?.cancelledAt) {
+    throw badRequest("ไม่สามารถอนุมัติรายการสินค้าในรอบประมูลที่ถูกยกเลิกได้");
+  }
 
   // If the auction already has scheduled dates (from round), transition directly to scheduled!
   if (auction.scheduledStartAt && auction.scheduledEndAt) {
@@ -334,6 +546,7 @@ async function reject({ user, auctionId }) {
  */
 function deriveRoundPhase(round, now = new Date()) {
   if (!round) return null;
+  if (round.cancelledAt) return "cancelled";
   const subStart = new Date(round.submissionStartsAt);
   const subEnd = new Date(round.submissionEndsAt);
   const aucStart = new Date(round.auctionStartsAt);
@@ -358,9 +571,42 @@ async function createRound({ user, input = {} }) {
     submissionEndsAt,
     auctionStartsAt,
     auctionEndsAt,
+    categories,
   } = input;
   if (!title || typeof title !== "string" || !title.trim()) {
     throw badRequest("กรุณากรอกชื่อรอบการประมูลให้ครบถ้วน");
+  }
+
+  let roundCategories = [];
+  if (categories !== undefined && categories !== null) {
+    if (!Array.isArray(categories)) {
+      throw badRequest(
+        "รูปแบบหมวดหมู่สินค้าไม่ถูกต้อง หมวดหมู่ต้องเป็นรายการ (array)",
+      );
+    }
+    if (categories.length > 0) {
+      for (const item of categories) {
+        if (typeof item !== "string" || !item.trim()) {
+          throw badRequest("ชื่อหมวดหมู่ต้องเป็นข้อความที่ไม่ว่างเปล่า");
+        }
+      }
+      const uniqueCats = [
+        ...new Set(categories.map((c) => c.trim()).filter(Boolean)),
+      ];
+      if (uniqueCats.length === 0) {
+        throw badRequest(
+          "กรุณาระบุหมวดหมู่อย่างน้อยหนึ่งหมวดหมู่ หรือเลือกรับทุกหมวดหมู่",
+        );
+      }
+      const knownCategories = await auctionRepository.listCategories();
+      const knownSet = new Set(knownCategories.map((c) => c.name));
+      for (const cat of uniqueCats) {
+        if (!knownSet.has(cat)) {
+          throw badRequest(`หมวดหมู่ "${cat}" ไม่มีอยู่ในระบบ`);
+        }
+      }
+      roundCategories = uniqueCats;
+    }
   }
 
   const subStart = new Date(submissionStartsAt);
@@ -400,22 +646,11 @@ async function createRound({ user, input = {} }) {
     );
   }
 
-  return auctionRepository.withRoundLock(async (tx) => {
-    const conflicting = await auctionRepository.findConflictingRound(
-      { subStart, aucEnd },
-      tx,
-    );
-    if (conflicting) {
-      const conflictStart = formatThaiDateTime(conflicting.submissionStartsAt);
-      const conflictEnd = formatThaiDateTime(conflicting.auctionEndsAt);
-      throw conflict(
-        `ไม่สามารถสร้างรอบประมูลได้ เนื่องจากช่วงเวลาที่เลือกทับกับรอบ '${conflicting.title}' ซึ่งจัดระหว่าง ${conflictStart} ถึง ${conflictEnd} กรุณาเลือกช่วงเวลาใหม่`,
-      );
-    }
-
+  return runInTransaction(async (tx) => {
     const round = await auctionRepository.createRound(
       {
         title: title.trim(),
+        categories: roundCategories,
         submissionStartsAt: subStart,
         submissionEndsAt: subEnd,
         auctionStartsAt: aucStart,
@@ -441,24 +676,119 @@ async function createRound({ user, input = {} }) {
   });
 }
 
-/** Get the current auction round, derived phase, and its status. */
+/** Get current round status, active submission rounds, and active auction rounds. */
 async function getCurrentRound(now = new Date()) {
-  const round = await auctionRepository.findCurrentRound(now);
-  if (!round) {
-    return {
-      round: null,
-      phase: null,
-      isSubmissionOpen: false,
-      isAuctionActive: false,
-    };
-  }
+  const [activeSubmissionRounds, activeAuctionRounds, upcomingRounds] =
+    await Promise.all([
+      auctionRepository.findActiveSubmissionRounds
+        ? auctionRepository.findActiveSubmissionRounds(now)
+        : [],
+      auctionRepository.findActiveAuctionRounds
+        ? auctionRepository.findActiveAuctionRounds(now)
+        : [],
+      auctionRepository.findUpcomingRounds
+        ? auctionRepository.findUpcomingRounds(now)
+        : [],
+    ]);
 
-  const phase = deriveRoundPhase(round, now);
+  const isSubmissionOpen = activeSubmissionRounds.length > 0;
+  const isAuctionActive = activeAuctionRounds.length > 0;
+  const nextRound = upcomingRounds[0] || null;
+
+  const round =
+    activeAuctionRounds[0] || activeSubmissionRounds[0] || nextRound || null;
+
+  const phase = round ? deriveRoundPhase(round, now) : null;
+
   return {
     round,
     phase,
-    isSubmissionOpen: phase === "submission",
-    isAuctionActive: phase === "auction",
+    isSubmissionOpen,
+    isAuctionActive,
+    activeSubmissionRounds: activeSubmissionRounds.map((r) => ({
+      ...r,
+      phase: deriveRoundPhase(r, now),
+    })),
+    activeAuctionRounds: activeAuctionRounds.map((r) => ({
+      ...r,
+      phase: deriveRoundPhase(r, now),
+    })),
+    nextRound: nextRound
+      ? { ...nextRound, phase: deriveRoundPhase(nextRound, now) }
+      : null,
+  };
+}
+
+/** Public buyer browsing of active and upcoming auction rounds (including cancelled rounds until auctionEndsAt). */
+async function browseRounds(now = new Date()) {
+  const [activeAuctionRounds, upcomingRounds] = await Promise.all([
+    auctionRepository.findActiveAuctionRounds
+      ? auctionRepository.findActiveAuctionRounds(now, {
+          includeCancelled: true,
+        })
+      : [],
+    auctionRepository.findUpcomingRounds
+      ? auctionRepository.findUpcomingRounds(now, {
+          includeCancelled: true,
+        })
+      : [],
+  ]);
+
+  const isBeforeAuctionEnd = (r) =>
+    !r.auctionEndsAt || new Date(r.auctionEndsAt) > now;
+
+  return {
+    activeAuctionRounds: activeAuctionRounds
+      .filter(isBeforeAuctionEnd)
+      .map((r) => ({
+        ...r,
+        visibleItemCount: r.visibleItemCount ?? r._count?.auctions ?? 0,
+        phase: deriveRoundPhase(r, now),
+      })),
+    upcomingRounds: upcomingRounds.filter(isBeforeAuctionEnd).map((r) => ({
+      ...r,
+      visibleItemCount: r.visibleItemCount ?? r._count?.auctions ?? 0,
+      phase: deriveRoundPhase(r, now),
+    })),
+  };
+}
+
+/** Get a single round by ID. */
+async function getRound(roundId, now = new Date()) {
+  if (!roundId) throw badRequest("กรุณาระบุรหัสรอบการประมูล");
+  const round = await auctionRepository.findRoundForSubmission(roundId);
+  if (!round) throw notFound("ไม่พบรอบประมูลที่เลือก กรุณากลับไปเลือกรอบใหม่");
+  return {
+    ...round,
+    phase: deriveRoundPhase(round, now),
+  };
+}
+
+/** List items belonging to a specific round for public buyer view. */
+async function listRoundItems(roundId, now = new Date()) {
+  if (!roundId) throw badRequest("กรุณาระบุรหัสรอบการประมูล");
+  const roundData = await auctionRepository.findRoundWithItems(roundId);
+  if (!roundData) {
+    throw notFound("ไม่พบรอบประมูลที่เลือก กรุณากลับไปเลือกรอบใหม่");
+  }
+  const { auctions, ...round } = roundData;
+  const rawItems = auctions || [];
+  const reconciled = await Promise.all(
+    rawItems.map((item) => maybeAdvance(item, now)),
+  );
+  const items = reconciled.filter(
+    (item) =>
+      item &&
+      ["open", "scheduled", "cancelled"].includes(item.status) &&
+      new Date(item.scheduledEndAt) > now,
+  );
+  return {
+    round: {
+      ...round,
+      visibleItemCount: items.length,
+      phase: deriveRoundPhase(round, now),
+    },
+    items,
   };
 }
 
@@ -533,45 +863,162 @@ async function schedule({ user, auctionId, startsAt, endsAt }) {
   return updated;
 }
 
-/** Marketing can cancel an auction any time before it opens. */
-async function cancel({ user, auctionId }) {
+/**
+ * Marketing cancels a single approved, scheduled, or open auction item with reason, lock, audit, and chat notification.
+ * Idempotent when called again on an already-cancelled item: does not re-mutate state or re-write audit logs,
+ * and retries chat notifications using deterministic idempotency keys.
+ */
+async function cancel({ user, auctionId, reason, cancellationReason }) {
   if (user?.role !== "MARKETING") {
     throw forbidden("เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์ยกเลิกการประมูล");
   }
 
-  const auction = await loadAuction(auctionId);
-  assertTransition(auction, "cancelled");
+  const rawReason =
+    cancellationReason !== undefined ? cancellationReason : reason;
+  if (typeof rawReason !== "string" || !rawReason.trim()) {
+    throw badRequest("กรุณาระบุเหตุผลในการยกเลิกรายการประมูล");
+  }
+  const trimmedReason = rawReason.trim();
+  if (trimmedReason.length > MAX_CANCELLATION_REASON_LENGTH) {
+    throw badRequest(
+      `เหตุผลในการยกเลิกรายการประมูลต้องมีความยาวไม่เกิน ${MAX_CANCELLATION_REASON_LENGTH} ตัวอักษร`,
+    );
+  }
 
-  const updated = await runInTransaction(async (tx) => {
-    await auctionRepository.setProductStatus(
-      auction.productId,
-      "available",
-      tx,
-    );
-    const res = await auctionRepository.updateStatus(
-      auctionId,
-      {
-        status: "cancelled",
-      },
-      tx,
-    );
-    await recordMarketingAudit(
-      {
-        actorId: user.id,
-        actorRole: user.role,
-        action: "AUCTION_ITEM_CANCEL",
-        entityType: "AUCTION_ITEM",
-        entityId: auctionId,
-        previousState: auction,
-        newState: res,
-      },
-      { tx },
-    );
-    return res;
+  const { updatedAuction, round, previousStatus, bidderIds, idempotentRetry } =
+    await runWithAuctionLock(auctionId, async (tx) => {
+      let auction = null;
+      if (
+        typeof tx?.$executeRaw === "function" &&
+        typeof tx?.auctionItem?.findUnique === "function"
+      ) {
+        auction = await tx.auctionItem.findUnique({
+          where: { id: auctionId },
+          include: {
+            product: true,
+            round: true,
+            bids: { select: { bidderId: true } },
+          },
+        });
+      } else {
+        auction = await auctionRepository.findById(auctionId, tx);
+      }
+
+      if (!auction) throw notFound("ไม่พบข้อมูลรายการประมูลที่ระบุ");
+
+      const uniqueBidders = [
+        ...new Set((auction.bids || []).map((b) => b.bidderId).filter(Boolean)),
+      ];
+
+      if (auction.status === "cancelled") {
+        const wasOpen = Boolean(auction.openedAt || uniqueBidders.length > 0);
+        return {
+          updatedAuction: auction,
+          round: auction.round || null,
+          previousStatus: wasOpen ? "open" : "cancelled",
+          sellerId: auction.sellerId,
+          bidderIds: uniqueBidders,
+          idempotentRetry: true,
+        };
+      }
+
+      if (auction.round?.cancelledAt) {
+        throw badRequest("รอบประมูลนี้ถูกยกเลิกไปแล้ว");
+      }
+      if (auction.winningOrderId) {
+        throw badRequest(
+          "ไม่สามารถยกเลิกรายการประมูลที่สร้างคำสั่งซื้อแล้วได้",
+        );
+      }
+      if (auction.status === "pending_approval") {
+        throw badRequest(
+          "รายการที่อยู่ในสถานะรอการอนุมัติต้องใช้การปฏิเสธสินค้า (Reject) ไม่สามารถยกเลิกได้",
+        );
+      }
+      if (!["approved", "scheduled", "open"].includes(auction.status)) {
+        throw conflict(
+          `ไม่สามารถเปลี่ยนสถานะรายการประมูลจาก "${getStatusThai(auction.status)}" เป็น "${getStatusThai("cancelled")}" ได้ในขณะนี้`,
+        );
+      }
+
+      const now = new Date();
+      await auctionRepository.setProductStatus(
+        auction.productId,
+        "auction_action_required",
+        tx,
+      );
+      const res = await auctionRepository.updateStatus(
+        auctionId,
+        {
+          status: "cancelled",
+          cancellationReason: trimmedReason,
+          cancelledAt: now,
+          cancelledBy: user.id,
+        },
+        tx,
+      );
+
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "AUCTION_ITEM_CANCEL",
+          entityType: "AUCTION_ITEM",
+          entityId: auctionId,
+          previousState: {
+            id: auction.id,
+            status: auction.status,
+            roundId: auction.roundId || null,
+            productId: auction.productId,
+          },
+          newState: {
+            id: res.id,
+            status: res.status,
+            cancellationReason: trimmedReason,
+            cancelledAt: now,
+            cancelledBy: user.id,
+          },
+          metadata: {
+            cancellationReason: trimmedReason,
+            roundId: auction.roundId || null,
+            productId: auction.productId,
+            previousStatus: auction.status,
+            affectedBidderCount: uniqueBidders.length,
+          },
+          idempotencyKey: `AUCTION_ITEM_CANCEL:${auctionId}`,
+        },
+        { tx },
+      );
+
+      return {
+        updatedAuction: res,
+        round: auction.round || res.round || null,
+        previousStatus: auction.status,
+        sellerId: auction.sellerId || res.sellerId,
+        bidderIds: uniqueBidders,
+        idempotentRetry: false,
+      };
+    });
+
+  if (!idempotentRetry) {
+    await auctionCloseQueue.cancelClose(auctionId);
+  }
+
+  const effectiveReason = updatedAuction?.cancellationReason || trimmedReason;
+  const chatResult = await chatClient.notifyItemCancelled({
+    item: updatedAuction,
+    round,
+    reason: effectiveReason,
+    wasOpen: previousStatus === "open",
+    sellerId: updatedAuction?.sellerId,
+    bidderIds,
   });
 
-  await auctionCloseQueue.cancelClose(auctionId);
-  return updated;
+  return {
+    ...updatedAuction,
+    ...(idempotentRetry ? { idempotentRetry: true } : {}),
+    warnings: chatResult?.warnings || [],
+  };
 }
 
 async function get(auctionId) {
@@ -617,8 +1064,12 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
   return auctionRepository.withAuctionLock(auctionId, async (tx) => {
     const auction = await tx.auctionItem.findUnique({
       where: { id: auctionId },
+      include: { round: true },
     });
     if (!auction) throw notFound("ไม่พบข้อมูลรายการประมูลที่ระบุ");
+    if (auction.status === "cancelled" || auction.round?.cancelledAt) {
+      throw conflict("รอบประมูลนี้ถูกยกเลิกแล้ว ไม่สามารถเสนอราคาได้");
+    }
     if (auction.sellerId === user.id) {
       throw forbidden("คุณไม่สามารถเสนอราคาประมูลสินค้าของตนเองได้");
     }
@@ -703,6 +1154,228 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
   });
 }
 
+/**
+ * Marketing cancels an entire auction round atomically with audit logging and notifications.
+ * Idempotent when called again on an already-cancelled round: does not re-mutate state or re-write audit logs,
+ * and retries chat notifications using deterministic idempotency keys.
+ */
+async function cancelRound({ user, roundId, reason }) {
+  if (user?.role !== "MARKETING") {
+    throw forbidden("เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์ยกเลิกรอบการประมูล");
+  }
+
+  if (typeof reason !== "string" || !reason.trim()) {
+    throw badRequest("กรุณาระบุเหตุผลในการยกเลิกรอบประมูล");
+  }
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length > MAX_CANCELLATION_REASON_LENGTH) {
+    throw badRequest(
+      `เหตุผลในการยกเลิกรอบประมูลต้องมีความยาวไม่เกิน ${MAX_CANCELLATION_REASON_LENGTH} ตัวอักษร`,
+    );
+  }
+
+  const {
+    cancelledRound,
+    activeAuctions,
+    sellerIds,
+    bidderIds,
+    idempotentRetry,
+  } = await auctionRepository.withRoundLock(roundId, async (tx) => {
+    const round = await tx.auctionRound.findUnique({
+      where: { id: roundId },
+      include: {
+        auctions: {
+          include: {
+            product: true,
+            bids: true,
+          },
+        },
+      },
+    });
+
+    if (!round) {
+      throw notFound("ไม่พบรอบการประมูลที่ระบุ");
+    }
+
+    if (round.cancelledAt) {
+      const cancelledItems = (round.auctions || []).filter(
+        (a) => a.status === "cancelled",
+      );
+      const uniqueSellerIds = [
+        ...new Set(cancelledItems.map((a) => a.sellerId).filter(Boolean)),
+      ];
+      const cancelledAtTime = new Date(round.cancelledAt);
+      const wasAuctionPhase =
+        round.auctionStartsAt &&
+        round.auctionEndsAt &&
+        new Date(round.auctionStartsAt) <= cancelledAtTime &&
+        cancelledAtTime < new Date(round.auctionEndsAt);
+      const hasAnyBids = (round.auctions || []).some(
+        (a) => Array.isArray(a.bids) && a.bids.length > 0,
+      );
+      const uniqueBidderIds =
+        wasAuctionPhase || hasAnyBids
+          ? [
+              ...new Set(
+                (round.auctions || [])
+                  .flatMap((a) => (a.bids || []).map((b) => b.bidderId))
+                  .filter(Boolean),
+              ),
+            ]
+          : [];
+      return {
+        cancelledRound: {
+          ...round,
+          cancellationReason: round.cancellationReason || trimmedReason,
+        },
+        activeAuctions: [],
+        sellerIds: uniqueSellerIds,
+        bidderIds: uniqueBidderIds,
+        idempotentRetry: true,
+      };
+    }
+
+    const now = new Date();
+    const phase = deriveRoundPhase(round, now);
+    if (phase === "ended") {
+      throw badRequest("ไม่สามารถยกเลิกรอบประมูลที่สิ้นสุดแล้วได้");
+    }
+
+    const hasWinningOrder = (round.auctions || []).some(
+      (a) => a.winningOrderId,
+    );
+    if (hasWinningOrder) {
+      throw badRequest(
+        "ไม่สามารถยกเลิกรอบประมูลที่มีรายการสร้างคำสั่งซื้อแล้วได้",
+      );
+    }
+
+    const cancelledRoundRecord = await tx.auctionRound.update({
+      where: { id: roundId },
+      data: {
+        cancelledAt: now,
+        cancelledBy: user.id,
+        cancellationReason: trimmedReason,
+      },
+    });
+
+    const activeList = (round.auctions || []).filter((a) =>
+      ["draft", "pending_approval", "approved", "scheduled", "open"].includes(
+        a.status,
+      ),
+    );
+
+    if (activeList.length > 0) {
+      const activeIds = activeList.map((a) => a.id);
+      await tx.auctionItem.updateMany({
+        where: { id: { in: activeIds } },
+        data: {
+          status: "cancelled",
+          cancellationReason: trimmedReason,
+          cancelledAt: now,
+          cancelledBy: user.id,
+        },
+      });
+
+      const productIds = [
+        ...new Set(activeList.map((a) => a.productId).filter(Boolean)),
+      ];
+      if (productIds.length > 0) {
+        await tx.product.updateMany({
+          where: { id: { in: productIds } },
+          data: { status: "auction_action_required" },
+        });
+      }
+    }
+
+    const affectedItemCount = activeList.length;
+    const uniqueSellerIds = [
+      ...new Set(activeList.map((a) => a.sellerId).filter(Boolean)),
+    ];
+    const affectedSellerCount = uniqueSellerIds.length;
+
+    // Only notify bidders if round was cancelled during active auction phase
+    const uniqueBidderIds =
+      phase === "auction"
+        ? [
+            ...new Set(
+              (round.auctions || [])
+                .flatMap((a) => (a.bids || []).map((b) => b.bidderId))
+                .filter(Boolean),
+            ),
+          ]
+        : [];
+    const affectedBidderCount = uniqueBidderIds.length;
+
+    await recordMarketingAudit(
+      {
+        actorId: user.id,
+        actorRole: user.role,
+        action: "AUCTION_ROUND_CANCEL",
+        entityType: "AUCTION_ROUND",
+        entityId: roundId,
+        previousState: {
+          id: round.id,
+          title: round.title,
+          phase,
+          cancelledAt: round.cancelledAt,
+        },
+        newState: {
+          id: cancelledRoundRecord.id,
+          title: cancelledRoundRecord.title,
+          phase: "cancelled",
+          cancelledAt: cancelledRoundRecord.cancelledAt,
+          cancelledBy: user.id,
+          cancellationReason: trimmedReason,
+        },
+        metadata: {
+          cancellationReason: trimmedReason,
+          roundId,
+          productIds: [
+            ...new Set(activeList.map((a) => a.productId).filter(Boolean)),
+          ],
+          affectedItemCount,
+          affectedSellerCount,
+          affectedBidderCount,
+          sellerIds: uniqueSellerIds,
+          bidderIds: uniqueBidderIds,
+        },
+        idempotencyKey: `AUCTION_ROUND_CANCEL:${roundId}`,
+      },
+      { tx },
+    );
+
+    return {
+      cancelledRound: cancelledRoundRecord,
+      activeAuctions: activeList,
+      sellerIds: uniqueSellerIds,
+      bidderIds: uniqueBidderIds,
+      idempotentRetry: false,
+    };
+  });
+
+  if (!idempotentRetry) {
+    // Cancel BullMQ scheduled close jobs for all active items in the round
+    await Promise.allSettled(
+      activeAuctions.map((a) => auctionCloseQueue.cancelClose(a.id)),
+    );
+  }
+
+  // Send non-blocking chat notifications
+  const chatResult = await chatClient.notifyRoundCancelled({
+    round: cancelledRound,
+    sellerIds,
+    bidderIds,
+  });
+
+  return {
+    ...cancelledRound,
+    phase: "cancelled",
+    ...(idempotentRetry ? { idempotentRetry: true } : {}),
+    warnings: chatResult?.warnings || [],
+  };
+}
+
 module.exports = {
   canTransition,
   submit,
@@ -717,6 +1390,11 @@ module.exports = {
   closeAuction,
   createRound,
   getCurrentRound,
+  browseRounds,
+  getRound,
+  listRoundItems,
   listRounds,
   deriveRoundPhase,
+  cancelRound,
+  isCategoryAllowedInRound,
 };

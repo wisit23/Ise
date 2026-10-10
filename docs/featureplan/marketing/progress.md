@@ -435,3 +435,140 @@ approved by Admin shows up here as "approved, ready to schedule" immediately.
     - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
     - `git diff --check`: ผ่าน 100%
   - **Schema/ER Status:** เพิ่มคอลัมน์ `spent_budget` ในตาราง `campaigns` เรียบร้อยแล้ว แต่ **ER Diagram update pending** (รออัปเดตไฟล์ภาพ/เอกสารสถาปัตยกรรมระดับภาพรวม `docs/erdatabase.png` / `docs/S2G5_RE-LOOP_ISE.md`) ห้ามถือว่าปิดเอกสารครบ 100% จนกว่าจะอัปเดตแผนภาพ ER
+
+**2026-10-09 update (Auction Round Categories & Atomic Product/AuctionItem Submission — Code Review Resolved per MKT-DEC-024; ER Diagram Update Pending):**
+
+- **Auction Round Categories Configuration (Requirement 1):**
+  - เพิ่มคอลัมน์ `categories String[] @default([])` ในโมเดล `AuctionRound` (`reloop_product`) และซิงก์สู่ PostgreSQL จริงด้วย `prisma db push`
+  - Marketing สามารถเลือกได้ระหว่าง "รับทุกหมวดหมู่" (`categories: []`) หรือ "เลือกเฉพาะบางหมวดหมู่" (`categories: [...]`)
+  - โหลดหมวดหมู่จากตาราง `Category` เดิมของระบบ (`GET /api/products/categories`) ห้าม Hardcode และห้ามสร้างตาราง Category ซ้ำ
+  - ตรวจสอบความถูกต้องของหมวดหมู่ว่ามีอยู่จริงในระบบก่อนบันทึก และรักษา Backward Compatibility สำหรับรอบเดิมที่ไม่มีหมวดหมู่ให้ตีความเป็น "ทุกหมวดหมู่"
+  - แสดงผลหมวดหมู่ที่เปิดรับทั้งในการ์ดรอบปัจจุบันและตารางประวัติรอบทั้งหมด
+- **Pre-creation Validation & Shared Validation Service (Requirement 2):**
+  - รวมตรรกะการตรวจสอบสินค้า (`requireSellerRole`, `requireVerifiedSeller`, `validateCreateRequest`, `requireValidMediaCount`, `requireKnownCondition`) ไว้ที่โมดูลกลาง `backend/services/product-service/src/services/productValidation.js`
+  - ปรับ Flow ผู้ขายให้ส่ง Request เดียวไปยัง `POST /api/products/auctions` โดย `auctionService` เรียกใช้ validation จากโมดูลกลางโดยตรง (ไม่มี dependency ย้อนทิศทางไปหา controller)
+  - Backend ตรวจสอบสิทธิ์ผู้ขาย, การยืนยันตัวตน KYC (`requireVerifiedSeller`), ตรวจสอบรอบที่กำลังเปิดรับสินค้า, ตรวจสอบหมวดหมู่ว่ามีอยู่จริงและรอบเปิดรับ, ตรวจสอบราคาเริ่มต้นและราคาเสนอเพิ่มขั้นต่ำ, ตรวจสอบข้อมูลสินค้า สภาพสินค้า และรูปภาพ (4-8 รูป)
+  - หาก Validation ข้อใดไม่ผ่าน ปฏิเสธทันทีด้วยข้อความภาษาไทยที่อ่านเข้าใจง่าย โดยไม่สร้าง Product และไม่สร้าง AuctionItem
+- **Atomic Product & AuctionItem Creation with In-Transaction Re-check (Requirement 3):**
+  - สร้าง `Product` (`status: "auction"`) และ `AuctionItem` (`status: "pending_approval"`, ผูกกับ `product.id`, `round.id`, และ `sellerId`) พร้อมกันภายใน PostgreSQL Database Transaction เดียวกัน (`runInTransaction`)
+  - โหลด `AuctionRound` ซ้ำผ่าน Transaction Client (`tx`) ภายใน Database Transaction เพื่อป้องกันกรณีรอบประมูลหมดเวลาระหว่างขั้นตอนตรวจสอบกับการเขียนข้อมูล หากรอบหมดเวลาหรือไม่อนุญาตหมวดหมู่ ให้ Rollback ทันที
+  - หากขั้นตอนใดล้มเหลว Rollback ทั้งหมด ไม่ทิ้ง Product สถานะ auction ตกค้างในฐานข้อมูล
+- **Existing Product Flow Backward Compatibility (Requirement 4):**
+  - รักษา Flow สมัครประมูลด้วย `productId` เดิม
+  - ตรวจสอบสิทธิ์และสถานะสินค้า (`available`/`auction`)
+  - ตรวจสอบ `product.category` จากฐานข้อมูลจริงเทียบกับหมวดหมู่ที่รอบเปิดรับ โดยเพิกเฉยต่อ category ที่ Client ส่งมา
+  - ตรวจสอบความถูกต้องของรอบภายใน Transaction เช่นกัน
+- **Test Fixture Isolation & Clean Cascade Deletion:**
+  - ปรับ Integration Test ให้ cleanup เฉพาะ Fixture ID ที่สร้างขึ้นเอง (`createdBidIds`, `createdAuctionIds`, `createdProductIds`, `createdRoundIds`) โดยไม่ใช้ `updateMany` กระทบข้อมูลรอบภายนอก
+  - เพิ่ม Assertions ยืนยันหลัง Cleanup ว่าไม่มี Test Fixture ใดตกค้างในฐานข้อมูล
+- **Automated Verification Evidence:**
+  - **Host Node.js Version:** `v22.16.0`
+  - **Backend Unit Tests:** `backend/services/product-service/src/features/auctions/auctionService.test.js` ผ่านครบ 68/68 tests 100%
+  - **PostgreSQL Integration Tests:** `backend/services/product-service/test/auction.integration.test.js` ผ่านครบ 17/17 tests (1 parent suite + 16 subtests รวม Step 11-16: Atomic Creation, Rollback, Category Rejection, Flow A DB Category, Backward Compatibility, และ In-Transaction Round Expiration Rollback) 100% บน PostgreSQL และ Redis จริง ด้วย `REQUIRE_INTEGRATION=1` ปราศจากการ Skip
+  - **Frontend Component Tests:**
+    - `AuctionScheduleSection.test.js`: ผ่านครบ 11/11 tests 100%
+    - `app/seller/auctions/page.test.js`: ผ่านครบ 5/5 tests 100%
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `git diff --check`: ผ่าน 100%
+    - `npm run secret-scan`: ผ่าน 100% (0 potential secrets)
+  - **Schema/ER Status:** เพิ่มคอลัมน์ `categories` ในตาราง `auction_rounds` เรียบร้อยแล้ว แต่ **ER Diagram update pending** (รออัปเดตไฟล์ภาพ/เอกสารสถาปัตยกรรมระดับภาพรวม `docs/erdatabase.png` / `docs/S2G5_RE-LOOP_ISE.md`)
+
+**2026-10-09 update (Marketing Auction Pre-approval UX Improvement — Modal & Photo Inspection):**
+
+- **Overview & UX Improvement:**
+  - ปรับปรุง UX สำหรับฝ่ายการตลาดในการตรวจสอบสินค้าก่อนอนุมัติเข้าประมูล (`pending_approval`) ให้สามารถดูรูปภาพทุกมุมและรายละเอียดสินค้าครบถ้วนได้ใน Modal บนหน้า Marketing เดิม โดยไม่ต้องสลับหน้าไปยัง `/products/[id]` และกลับมายังรายการประมูลเดิมได้ทันทีโดยไม่สูญเสีย Status Filter
+  - เพิ่มคอมโพเนนต์ `frontend/components/marketing/sections/AuctionReviewModal.js`
+  - เพิ่มปุ่ม "ตรวจสอบสินค้า" ในรายการประมูลสถานะ `pending_approval`
+  - Gallery รูปสินค้า: แสดงรูปภาพหลักแบบ `object-contain` และ Thumbnails สำหรับสลับดูรูปภาพทั้งหมดที่เรียงตาม `position` จาก API พร้อม Fallback "ไม่มีรูปสินค้า" เมื่อไม่มีรูป และแสดง "ไม่ระบุ" เมื่อข้อมูลบางช่องว่าง
+  - Modal Controls: รองรับการปิดด้วยปุ่มมุมขวาบน, ปุ่ม "กลับไปหน้ารายการประมูล", และปุ่ม Escape พร้อมคืน Focus
+  - Unified Approve/Reject Actions: เรียกใช้ Handler กลางและ API เดิม (`PATCH /api/products/auctions/:id/approve` และ `reject`) เดียวกันกับปุ่มในรายการเดิม
+  - Loading & Error Guard: ป้องกันการกดซ้ำ (Disable buttons), แสดงสถานะ "กำลังอนุมัติ..." / "กำลังปฏิเสธ...", ล็อกไม่ให้ปิด Modal ขณะส่งคำขอ, และแสดงข้อความ Error ภาษาไทยที่เข้าใจง่ายใน Modal หาก API ล้มเหลว
+  - Scope: ออกแบบสำหรับ Web Browser บนคอมพิวเตอร์และ Laptop เท่านั้น (1024px - 1920px) ออกแบบ Layout เพื่อไม่ให้เกิด Horizontal Scroll ตั้งแต่ 1024px ขึ้นไป ไม่รองรับ Mobile/Tablet
+  - Clean Code & Presentation Sharing: แยก Presentation Constants และ Formatter ที่ใช้ร่วมกันเป็นโมดูลขนาดเล็ก `auctionPresentation.js` (`STATUS_LABEL`, `STATUS_STYLE`, `baht`) ลดความซ้ำซ้อนระหว่าง `AuctionScheduleSection.js` และ `AuctionReviewModal.js`
+- **Automated Verification Evidence:**
+  - **Frontend Component Tests:**
+    - `AuctionScheduleSection.test.js`: ผ่านครบ 29/29 tests 100% (รวม 18 tests ใหม่สำหรับ Review Modal และ UX Flow)
+    - Frontend Test Suites รวมทั้งระบบ: ผ่านครบ 50/50 suites (328/328 tests passing 100%)
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npx prettier --check`: ผ่าน 100%
+    - `git diff --check`: ผ่าน 100%
+  - **Status & Scope Note:**
+    - Frontend-only UX improvement: ไม่มีการแก้ Backend Logic, Schema หรือ Database
+    - ยืนยันการทำงานผ่าน Automated Component Tests ครบถ้วน โดยยังไม่ได้ยืนยันผ่าน Browser จริง หรือยืนยัน Responsive บนหน้าจอจริง เพราะ localhost:8080 ไม่ได้รันในสภาพแวดล้อมนี้ และไม่ถือว่า Responsive/Browser E2E ผ่านจนกว่าจะเปิดตรวจบน Browser จริง
+
+**2026-10-09 update (Concurrent Auction Rounds & Explicit Round Selection — MKT-DEC-025):**
+
+- **Overview:**
+  - ยกเลิกข้อจำกัด Cross-round Overlap Protection ตามมติ MKT-DEC-025 เพื่อให้ฝ่ายการตลาดสามารถสร้างรอบประมูลที่คาบเกี่ยวหรือทับซ้อนเวลากันได้ทุกกรณี
+  - พัฒนาระบบการเลือกรอบแบบชัดแจ้ง (Explicit Round Selection) สำหรับผู้ขายและผู้ซื้อ โดยระบบไม่ผูกรอบหรือเปลี่ยนหน้าอัตโนมัติ
+  - แยกรายการสินค้าในแต่ละรอบอย่างเด็ดขาด (Round Item Isolation)
+- **Backend & Database Implementation:**
+  - `auctionRepository.js`: ปลด Cross-round overlap conflict check โดย `findConflictingRound`, `withRoundLock`, `findActiveSubmissionRound` และ `findCurrentRound` ถูกลบออกจาก Production Code แล้ว, เพิ่ม `findActiveSubmissionRounds(now)`, `findActiveAuctionRounds(now)`, `findUpcomingRounds(now)`, และ `findRoundWithItems(roundId)` (กรองเฉพาะ status `open` และ `scheduled`)
+  - `auctionService.js`: `createRound` บันทึกรอบและ `MarketingAuditLog` (`AUCTION_ROUND_CREATE`) ร่วมกันแบบ Atomic Transaction, `getCurrentRound` คืน `{ round, phase, isSubmissionOpen, isAuctionActive, activeSubmissionRounds, activeAuctionRounds, nextRound }`, `submit` บังคับ `input.roundId` (ขาดส่งตอบ 400 Bad Request `"กรุณาเลือกรอบประมูลก่อนส่งสินค้าเข้าร่วม"`), ตรวจสอบรอบมีอยู่จริง (400), ยังไม่เปิดรับ (400), ปิดรับแล้ว (400), ตรวจสอบหมวดหมู่ตรงกับที่รอบเปิดรับทั้ง Flow A/B พร้อม re-verify รอบใน Transaction Client (`tx`), และเพิ่ม `browseRounds()`, `getRound(roundId)`, และ `listRoundItems(roundId)` (มี lifecycle reconciliation ผ่าน `maybeAdvance` และกรองเฉพาะ visible items)
+  - `auctionController.js` & `auctionRoutes.js`: เพิ่ม Endpoints: `GET /rounds/browse`, `GET /rounds/:roundId`, `GET /rounds/:roundId/items`
+  - `backend/gateway/src/app.js`: อัปเดต `PUBLIC_PATHS` ให้ครอบคลุม `/^\/api\/products\/auctions(\/.*)?$/`
+- **Frontend Implementation (Desktop Web):**
+  - `/seller/auctions`: หน้าเลือกรอบแสดง Round Cards สำหรับทุกรอบใน `activeSubmissionRounds` พร้อมปุ่ม "เลือกรอบนี้", แสดง Empty State พร้อมปุ่มโหลดใหม่เมื่อไม่มีรอบ, และแสดงประวัติสินค้าของผู้ขาย (`myAuctions`)
+  - `/seller/auctions/submit`: อ่าน `roundId` จาก Query Parameter (ครอบด้วย `<Suspense>`), หากขาด `roundId` หรือรอบปิดรับ แสดงแบนเนอร์แจ้งเตือนและปุ่ม "เปลี่ยนรอบประมูล" และซ่อนแบบฟอร์มลงสินค้า; หากเลือกรอบถูกต้อง แสดงแบนเนอร์สรุปข้อมูลรอบที่เลือก พร้อมปุ่ม "เปลี่ยนรอบประมูล" และส่ง `roundId` ใน Request Payload
+  - `/auctions`: หน้ารวมรอบประมูลสำหรับผู้ซื้อ แสดงรอบที่กำลังประมูลและรอบเร็วๆ นี้อย่างชัดเจน ห้าม Auto-navigate แม้มีรอบเดียว พร้อม Empty State
+  - `/auctions/rounds/[roundId]`: แสดงข้อมูลรอบ, ปุ่มกลับหน้ารวมรอบ, ปุ่ม "เปลี่ยนรอบประมูล" (Round Switcher Popover พร้อมปุ่ม "ลองใหม่" เมื่อโหลดล้มเหลว และข้อความแจ้งเตือนเมื่อไม่มีรอบอื่น) รองรับ Escape key, และรายการสินค้าเฉพาะรอบนี้แยกกลุ่ม "กำลังประมูล" และ "เร็วๆ นี้"
+  - `/auctions/[id]`: แสดงชื่อรอบที่สินค้าสังกัด และลิงก์ "← กลับไปดูสินค้าทั้งหมดในรอบนี้" ชี้ไปยัง `/auctions/rounds/${auction.roundId}`
+  - `AuctionScheduleSection.js`: ปรับปรุงข้อความหัวเรื่องให้สอดคล้องกับ MKT-DEC-025 แสดงหลายรอบพร้อมกัน และรองรับการสร้างรอบที่ทับซ้อนเวลาได้
+- **Automated Verification Evidence:**
+  - **Host Node.js Version:** `v22.16.0` บนสภาพแวดล้อมจริง (ห้ามอ้างว่ารัน Final Regression บน Node 24)
+  - **Backend Unit Tests:** `backend/services/product-service/src/features/auctions/auctionService.test.js` ผ่านครบ **77/77 tests 100%**
+  - **PostgreSQL Integration Tests (`REQUIRE_INTEGRATION=1`):**
+    - `auction.integration.test.js`: ผ่านครบ **18/18 tests (1 suite + 17 subtests)** บน PostgreSQL และ Redis จริง 100% ปราศจากการ Skip ครอบคลุม Step 1-17
+  - **Frontend Component Tests:** ผ่านครบ **6/6 suites (52/52 tests passed 100%)** (โดย `app/auctions/rounds/[roundId]/page.test.js` เป็น 7/7 ผ่าน)
+  - **Frontend ทั้งระบบ:** ผ่านครบ **54/54 suites (346/346 tests passed 100%)**
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npm run format:check`: ผ่าน 100%
+    - Production Build (`next build`): ผ่าน 100%
+    - `git diff --check`: ผ่าน 100%
+- **Scope & Constraints:**
+  - รองรับเฉพาะ Web Browser บนคอมพิวเตอร์และ Laptop (ความกว้างตั้งแต่ 1024px ขึ้นไป ได้แก่ 1024×768, 1366×768, 1440×900, 1920×1080) ไม่ทำ Mobile UI หรือ Mobile Flow
+  - Browser E2E และ Responsive บน Browser จริงยังไม่ได้รัน (การแสดงผลทดสอบผ่าน JSDOM และ Integration Tests) เนื่องจาก `localhost:8080` ไม่ได้รันในสภาพแวดล้อมนี้
+  - MKT-DEC-025 ไม่มีการเพิ่ม Schema หรือ Migration ใหม่ (การเปลี่ยนแปลง Schema ใน Working Tree เป็นของงาน MKT-DEC-024 เดิม)
+
+**2026-10-10 update (Auction Item & Round Cancellation, Seller Recovery Lifecycle & Round Filter in Marketing Approval — MKT-DEC-026):**
+
+- **Overview:**
+  - แยก 3 การกระทำอย่างชัดเจน: (A) ปฏิเสธสินค้า (`ปฏิเสธสินค้า` สำหรับ `pending_approval` บันทึก `AUCTION_ITEM_REJECT`), (B) ยกเลิกรายการประมูลรายสินค้า (`ยกเลิกรายการประมูล` สำหรับ `approved`, `scheduled`, `open` ผ่าน `PATCH /api/products/auctions/:id/cancel` บันทึก `AUCTION_ITEM_CANCEL` โดยไม่กระทบรายการอื่นในรอบเดียวกัน), และ (C) ยกเลิกรอบประมูลทั้งรอบ (`ยกเลิกรอบประมูล` ผ่าน `PATCH /api/products/auctions/rounds/:roundId/cancel` บันทึก `AUCTION_ROUND_CANCEL`)
+  - พัฒนา Seller Recovery Lifecycle: เมื่อรายการหรือรอบถูกยกเลิก หรือปิดประมูลโดยไม่มีผู้เสนอราคา (0 bids) สินค้าจะเปลี่ยนสถานะเป็น `auction_action_required` (ห้ามกลับเป็น `available` อัตโนมัติ) โดยเก็บ `AuctionItem` และ `Bid` เดิมไว้เป็นประวัติ และผู้ขายมี 2 ทางเลือกภายใต้ `withProductLock(productId)`: (A) ส่งเข้ารอบใหม่ด้วย `AuctionItem` ID ใหม่ หรือ (B) นำกลับไปขายปกติพร้อมกำหนดราคาขายใหม่ (`POST /api/products/:id/relist-available`)
+  - ปิด Race Condition ระหว่าง `submit` / `cancelRound` / `cancel` / `placeBid` / `closeAuction` ด้วย Unified Lock Strategy:
+    - `withRoundMutationLock(roundId, fn, { productId })` ใช้ lock key เดียวกับ `withRoundLock(roundId)` (`hashtext(roundId)`) สำหรับทั้ง Flow A (ล็อกตามลำดับ `Round Lock -> Product Lock` เสมอ) และ Flow B ใน `auctionService.submit` พร้อมอ่าน `AuctionRound` ใหม่ภายใน `tx` ก่อนสร้าง `Product` หรือ `AuctionItem`
+    - `withAuctionLock(auctionId)` และ `withRoundLock(roundId)` (ซึ่งล็อกรอบและล็อก `AuctionItem` ทุกตัวในรอบตามลำดับ `id ASC` พร้อมอ่านข้อมูลใหม่ใน `tx` ก่อนสร้าง Winner Order)
+  - ส่งแจ้งเตือนผ่าน Internal Chat Service ในห้อง 1-on-1 `AUCTION:${roundId}:${userId}` แสดงผู้ส่งว่า `"ระบบฝ่ายการตลาด"` เป็นห้องอ่านอย่างเดียว (Read-Only) พร้อมบังคับ `Message.idempotencyKey @unique` ในระดับฐานข้อมูล MongoDB และรองรับการกดส่งแจ้งเตือนซ้ำ (`"ลองส่งแจ้งเตือนอีกครั้ง"`) แบบ Idempotent โดยไม่เปลี่ยนสถานะซ้ำและไม่สร้าง Audit Log ซ้ำ
+- **Backend & Database Implementation:**
+  - `backend/services/product-service/prisma/schema.prisma`: เพิ่ม `cancellationReason`, `cancelledAt`, `cancelledBy` ทั้งใน `AuctionRound` และ `AuctionItem`, นำ `@unique` ออกจาก `AuctionItem.productId` เปลี่ยนเป็น index `@@index([productId])`, รองรับสถานะ `auction_action_required` ใน `Product` และซิงก์เข้า PostgreSQL `reloop_product` จริง
+  - `backend/services/chat-service/prisma/schema.prisma`: เพิ่ม `@unique` บน `Message.idempotencyKey` และซิงก์เข้า MongoDB `reloop_chat` จริง
+  - `auctionService.js` & `auctionRepository.js`:
+    - `submit`: ทั้ง Flow A และ Flow B ใช้ `withRoundMutationLock` และอ่าน `AuctionRound` ใหม่ใน `tx` เพื่อป้องกันการสร้าง `AuctionItem` หรือ `Product` ในรอบที่เพิ่งถูกยกเลิก
+    - `cancel` & `cancelRound`: ยกเลิกรายสินค้าภายใต้ `withAuctionLock(auctionId)` และยกเลิกทั้งรอบภายใต้ `withRoundLock(roundId)` พร้อมรองรับ Idempotent Notification Retry เมื่อเรียกซ้ำบนรายการ/รอบที่ยกเลิกแล้ว
+    - `browseRounds` & `findUpcomingRounds`: ส่ง `{ includeCancelled: true }` เพื่อให้รอบ Upcoming ที่ถูกยกเลิกยังคงแสดงจนถึง `auctionEndsAt` เดิม
+    - `closeAuction`: ล็อกด้วย `withAuctionLock(auctionId)` และตรวจสอบสถานะซ้ำใน `tx` เพื่อป้องกันการสร้าง Winner Order หลังรายการหรือรอบถูกยกเลิก และปรับเป็น `auction_action_required` เมื่อ 0 bids
+  - `chatClient.js`, `internalController.js` & `messageModel.js`: เรียก `createAndTouch` โดยตรงและดักจับ Unique Conflict (`P2002`/`P2034`) คืนข้อความเดิม (`findByIdempotencyKey`, HTTP 200) แบบ Atomic, ชื่อผู้ส่ง `"ระบบฝ่ายการตลาด"`, และบล็อกการตอบกลับ/แนบไฟล์ในห้อง `AUCTION` ด้วย `403 Forbidden`
+- **Frontend Implementation (Desktop Web >= 1024px):**
+  - `AuctionScheduleSection.js` & `AuctionReviewModal.js`: ตัวกรองรอบค่าเริ่มต้น `"ทุกรอบประมูล"`, แสดงข้อความผิดพลาดภาษาไทยเมื่อโหลดรอบไม่สำเร็จ, แยกปุ่ม `"ปฏิเสธสินค้า"`, `"ยกเลิกรายการประมูล"`, `"ยกเลิกรอบประมูล"`, ใช้ Confirmation Modal ทั้งการยกเลิกรายสินค้าและทั้งรอบ และแสดงแบนเนอร์เตือนพร้อมปุ่ม `"ลองส่งแจ้งเตือนอีกครั้ง"` เมื่อส่งแจ้งเตือนแชทไม่ครบ
+  - `/auctions`, `/auctions/rounds/[roundId]`, `/auctions/[id]`: แสดงรอบที่ถูกยกเลิก (ทั้ง Active และ Upcoming) จนถึง `auctionEndsAt` เดิม และซ่อนเมื่อพ้น `auctionEndsAt`, แสดงรายการที่ถูกยกเลิกในหน้ารอบพร้อม Badge `"ยกเลิกแล้ว"`, เหตุผลการยกเลิก และปิดปุ่มประมูล
+  - `/chat/[id]` & `ConversationRow.js`: แสดงชื่อ `"ระบบฝ่ายการตลาด"` และซ่อนช่องพิมพ์ข้อความพร้อมแสดงแบนเนอร์ห้องแจ้งเตือนแบบอ่านอย่างเดียว
+- **Automated Verification Evidence:**
+  - **Host Node.js Version:** `v22.16.0` บน Windows (ไม่ได้รันบน Node 24)
+  - **Backend Unit Tests (0 fail, 0 skip):**
+    - `backend/services/product-service/src/features/auctions/auctionService.test.js`: ผ่านครบ **102/102 tests (0 fail, 0 skip)**
+    - `backend/services/product-service/src/controllers/productRelist.test.js`: ผ่านครบ **5/5 tests (0 fail, 0 skip)**
+    - `backend/services/chat-service/src/features/conversations/contextKey.test.js`: ผ่านครบ **9/9 tests (0 fail, 0 skip)**
+    - `backend/services/chat-service/src/features/internal/internalController.test.js`: ผ่านครบ **5/5 tests (0 fail, 0 skip)**
+    - `backend/services/chat-service/src/features/messages/messageModel.test.js`: ผ่านครบ **4/4 tests (0 fail, 0 skip)**
+    - `backend/services/chat-service/src/features/attachments/attachmentService.test.js`: ผ่านครบ **4/4 tests (0 fail, 0 skip)**
+  - **PostgreSQL & Redis Integration Tests (`REQUIRE_INTEGRATION=1`):**
+    - `backend/services/product-service/test/auction.integration.test.js`: ผ่านครบ **22/22 tests (1 suite + 21 steps, 0 fail, 0 skip)**
+  - **Chat MongoDB & Cross-Service Integration Tests (`REQUIRE_INTEGRATION=1`):**
+    - `backend/services/chat-service/test/internal-api.integration.test.js`: ผ่านครบ **17/17 tests (1 suite + 16 subtests, 0 fail, 0 skip)**
+  - **Frontend Tests (Jest):**
+    - `npm --prefix frontend test -- --watchAll=false`: ผ่านครบ **54/54 suites (359/359 tests passed, 0 fail, 0 skip)**
+  - **Quality Gates:** `npm --prefix frontend run build`, `npm run lint`, `npm run format:check`, `git diff --check` ผ่านครบ
+  - **Browser E2E:** **Pending** (ยังไม่ได้รันบนเบราว์เซอร์จริง)

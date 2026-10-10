@@ -85,29 +85,75 @@ async function sendMessage(req, res, next) {
     const conversation = await conversationModel.findById(req.params.id);
     if (!conversation) throw notFound("Conversation not found");
 
-    const { senderId, senderRole, type, body, payload, visibility } = req.body;
+    const {
+      senderId,
+      senderRole,
+      type,
+      body,
+      payload,
+      visibility,
+      idempotencyKey: bodyIdempotencyKey,
+    } = req.body;
     if (!senderId || !senderRole) {
       throw badRequest("senderId and senderRole are required");
     }
 
+    const rawKey =
+      bodyIdempotencyKey ||
+      (payload && typeof payload === "object" ? payload.idempotencyKey : null);
+    const idempotencyKey =
+      typeof rawKey === "string" && rawKey.trim() ? rawKey.trim() : null;
+
+    const finalPayload = idempotencyKey
+      ? {
+          ...(payload && typeof payload === "object" ? payload : {}),
+          idempotencyKey,
+        }
+      : payload;
+
     const isSupport = conversation.contextType === "SUPPORT";
-    const message = await messageModel.createAndTouch({
-      conversationId: conversation.id,
-      senderId,
-      senderRole,
-      type: type || "SYSTEM",
-      body: body || "",
-      payload,
-      visibility: visibility || "ALL",
-      syncStatus: isSupport ? "PENDING" : null,
-    });
+    const MAX_ATTEMPTS = 4;
 
-    if (isSupport) {
-      syncSupportMessage(conversation, message);
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const message = await messageModel.createAndTouch({
+          conversationId: conversation.id,
+          senderId,
+          senderRole,
+          type: type || "SYSTEM",
+          body: body || "",
+          payload: finalPayload,
+          visibility: visibility || "ALL",
+          syncStatus: isSupport ? "PENDING" : null,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        });
+
+        if (isSupport) {
+          syncSupportMessage(conversation, message);
+        }
+
+        broadcast.broadcastMessage(conversation, message);
+        return res.status(201).json(message);
+      } catch (err) {
+        if (
+          idempotencyKey &&
+          (err.code === DUPLICATE_KEY_ERROR || err.code === "P2034")
+        ) {
+          const existing = await messageModel.findByIdempotencyKey(
+            conversation.id,
+            idempotencyKey,
+          );
+          if (existing) {
+            return res.status(200).json(existing);
+          }
+        }
+        if (err.code === "P2034" && attempt < MAX_ATTEMPTS) {
+          await new Promise((resolve) => setTimeout(resolve, 15 * attempt));
+          continue;
+        }
+        throw err;
+      }
     }
-
-    broadcast.broadcastMessage(conversation, message);
-    res.status(201).json(message);
   } catch (err) {
     next(err);
   }

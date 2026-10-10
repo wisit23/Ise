@@ -2,7 +2,12 @@ const { parsePagination, paginatedResponse } = require("@reloop/shared");
 const auctionService = require("./auctionService");
 
 function currentUser(req) {
-  return { id: req.userId, role: req.userRole };
+  return {
+    id: req.userId,
+    role: req.userRole,
+    kycVerified: req.kycVerified,
+    kycStatus: req.kycStatus,
+  };
 }
 
 async function submit(req, res, next) {
@@ -60,6 +65,8 @@ async function cancel(req, res, next) {
     const auction = await auctionService.cancel({
       user: currentUser(req),
       auctionId: req.params.id,
+      reason: req.body?.reason,
+      cancellationReason: req.body?.cancellationReason,
     });
     res.json(auction);
   } catch (err) {
@@ -115,6 +122,33 @@ async function getCurrentRound(req, res, next) {
   }
 }
 
+async function browseRounds(req, res, next) {
+  try {
+    const data = await auctionService.browseRounds();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getRoundDetails(req, res, next) {
+  try {
+    const data = await auctionService.getRound(req.params.roundId);
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getRoundItems(req, res, next) {
+  try {
+    const data = await auctionService.listRoundItems(req.params.roundId);
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function createRound(req, res, next) {
   try {
     const round = await auctionService.createRound({
@@ -138,6 +172,19 @@ async function listRounds(req, res, next) {
   }
 }
 
+async function cancelRound(req, res, next) {
+  try {
+    const round = await auctionService.cancelRound({
+      user: currentUser(req),
+      roundId: req.params.roundId,
+      reason: req.body?.reason ?? req.body?.cancellationReason,
+    });
+    res.json(round);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   submit,
   approve,
@@ -148,6 +195,10 @@ module.exports = {
   list,
   bid,
   getCurrentRound,
+  browseRounds,
+  getRoundDetails,
+  getRoundItems,
   createRound,
   listRounds,
+  cancelRound,
 };

@@ -41,6 +41,7 @@ async function createAndTouch({
   participants,
   visibility = "ALL",
   syncStatus = null,
+  idempotencyKey = null,
 }) {
   // Enforced HERE, at the one function every write path goes through, for
   // the same reason getForParticipant is the one authorization point: a
@@ -81,6 +82,7 @@ async function createAndTouch({
         type,
         body: body || "",
         payload: payload ?? null,
+        ...(idempotencyKey ? { idempotencyKey } : {}),
         visibility: visibility || "ALL",
         syncStatus: syncStatus || null,
         syncAttempts: 0,
@@ -106,6 +108,32 @@ async function createAndTouch({
   return message;
 }
 
+async function findByIdempotencyKey(conversationId, idempotencyKey) {
+  if (!idempotencyKey) return null;
+  if (typeof prisma.message?.findUnique === "function") {
+    const found = await prisma.message.findUnique({
+      where: { idempotencyKey },
+    });
+    if (
+      found &&
+      found.deletedAt === null &&
+      (!conversationId || found.conversationId === conversationId)
+    ) {
+      return found;
+    }
+  }
+  if (typeof prisma.message?.findFirst === "function") {
+    return prisma.message.findFirst({
+      where: {
+        ...(conversationId ? { conversationId } : {}),
+        idempotencyKey,
+        deletedAt: null,
+      },
+    });
+  }
+  return null;
+}
+
 function countUnread({
   conversationId,
   userId,
@@ -124,4 +152,9 @@ function countUnread({
   return prisma.message.count({ where });
 }
 
-module.exports = { listPage, countUnread, createAndTouch };
+module.exports = {
+  listPage,
+  countUnread,
+  createAndTouch,
+  findByIdempotencyKey,
+};

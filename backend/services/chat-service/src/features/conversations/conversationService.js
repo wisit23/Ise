@@ -80,18 +80,36 @@ async function createOrOpenProductConversation({ productId, buyerId }) {
  * resolved name keeps `displayName: null` and the UI falls back to a generic
  * label instead of the request failing.
  */
+const SYSTEM_DISPLAY_NAMES = {
+  system: "ระบบฝ่ายการตลาด",
+  "system-marketing": "ระบบฝ่ายการตลาด",
+};
+
 async function withDisplayNames(conversations) {
-  const ids = conversations.flatMap((c) =>
-    (c.participants || []).map((p) => p.userId),
-  );
+  const ids = conversations
+    .flatMap((c) => (c.participants || []).map((p) => p.userId))
+    .filter((id) => !SYSTEM_DISPLAY_NAMES[id]);
   const names = await authClient.getDisplayNames(ids);
 
   return conversations.map((conversation) => ({
     ...conversation,
-    participants: (conversation.participants || []).map((participant) => ({
-      ...participant,
-      displayName: names.get(participant.userId) || null,
-    })),
+    participants: (conversation.participants || []).map((participant) => {
+      const isAuctionSystem =
+        conversation.contextType === "AUCTION" &&
+        (participant.role === "SYSTEM" ||
+          Boolean(SYSTEM_DISPLAY_NAMES[participant.userId]));
+      const resolvedName =
+        (isAuctionSystem
+          ? SYSTEM_DISPLAY_NAMES[participant.userId] || "ระบบฝ่ายการตลาด"
+          : null) ||
+        SYSTEM_DISPLAY_NAMES[participant.userId] ||
+        names.get(participant.userId) ||
+        null;
+      return {
+        ...participant,
+        displayName: resolvedName,
+      };
+    }),
   }));
 }
 

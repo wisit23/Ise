@@ -41,6 +41,12 @@ async function attach({ conversationId, senderId, file, caption }) {
   if (conversation.status === "LOCKED") {
     throw new AppError(409, "This conversation is locked");
   }
+  if (conversation.contextType === "AUCTION") {
+    throw new AppError(
+      403,
+      "ห้องแจ้งเตือนจากระบบฝ่ายการตลาดเป็นแบบอ่านอย่างเดียว ไม่สามารถส่งไฟล์แนบได้",
+    );
+  }
 
   const sender = conversation.participants.find((p) => p.userId === senderId);
   const type = messageTypeFor(file.mimetype);

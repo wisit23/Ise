@@ -470,4 +470,51 @@ describe("ChatRoomPage — live delivery vs. REST response race", () => {
     expect(screen.getByText("ออฟไลน์")).toBeInTheDocument();
     expect(dot.className).toContain("bg-slate-300");
   });
+
+  it("renders 'ระบบฝ่ายการตลาด' and read-only banner (hiding composer) for AUCTION notification rooms", async () => {
+    const auctionConv = {
+      id: "conv-1",
+      contextType: "AUCTION",
+      contextId: "round-1:buyer-1",
+      status: "ACTIVE",
+      participants: [
+        { userId: "buyer-1", role: "BUYER", lastReadAt: null },
+        {
+          userId: "system-marketing",
+          role: "SYSTEM",
+          displayName: "ระบบฝ่ายการตลาด",
+        },
+      ],
+    };
+    getConversation.mockResolvedValue(auctionConv);
+    listMessages.mockResolvedValue({
+      items: [
+        {
+          id: "msg-sys-1",
+          conversationId: "conv-1",
+          senderId: "system-marketing",
+          senderRole: "SYSTEM",
+          type: "SYSTEM",
+          body: 'รายการประมูลสินค้า "กล้องวินเทจ" ถูกยกเลิกเนื่องจาก: สินค้าชำรุด',
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      nextCursor: null,
+    });
+    listConversations.mockResolvedValue({ items: [auctionConv] });
+
+    render(<ChatRoomPage />);
+
+    expect(
+      (await screen.findAllByText("ระบบฝ่ายการตลาด")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("ผู้ใช้")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/รายการประมูลสินค้า "กล้องวินเทจ" ถูกยกเลิกเนื่องจาก/),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("auction-readonly-banner")).toHaveTextContent(
+      "ห้องแจ้งเตือนจากระบบฝ่ายการตลาด (อ่านอย่างเดียว ไม่สามารถส่งข้อความตอบกลับได้)",
+    );
+    expect(screen.queryByLabelText("พิมพ์ข้อความ")).not.toBeInTheDocument();
+  });
 });

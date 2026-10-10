@@ -4,10 +4,18 @@ const auctionController = require("./auctionController");
 
 const router = Router();
 
-// Auction Rounds (Marketing owns creation, Public can view current round status)
+// Auction Rounds (Marketing owns creation, Public can view rounds and items)
 router.get("/rounds/current", auctionController.getCurrentRound);
+router.get("/rounds/browse", auctionController.browseRounds);
+router.get("/rounds/:roundId/items", auctionController.getRoundItems);
+router.get("/rounds/:roundId", auctionController.getRoundDetails);
 router.get("/rounds", requireAuth, auctionController.listRounds);
 router.post("/rounds", requireAuth, auctionController.createRound);
+router.patch(
+  "/rounds/:roundId/cancel",
+  requireAuth,
+  auctionController.cancelRound,
+);
 
 // Public browsing — gateway lets these through without a bearer token, same
 // as the product feed.

@@ -391,3 +391,58 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 - [x] **Step 3: Implement server-side date validation, atomic budget increment on order completed event, auto-end trigger, and CLAIMED voucher expiration**
 - [x] **Step 4: Update frontend `CampaignsSection.js` with `min` attributes, client validation warnings, and `"ใช้แล้ว ฿X / ฿Budget"` progress display**
 - [x] **Step 5: Verify live PostgreSQL integration tests (`REQUIRE_INTEGRATION=1` 0 skips) and frontend test suite** (`campaign-budget.integration.test.js` 6/6, `campaign.integration.test.js` 11/11, `campaign-attribution.integration.test.js` 13/13, `CampaignsSection.test.js` 16/16; Schema active, ER Diagram update pending)
+
+### Task MKT-AUCTION-CANCEL: Auction Item & Round Cancellation, Seller Recovery Lifecycle & Round Filter (MKT-DEC-026)
+
+**Files:**
+
+- Modify: `backend/services/product-service/prisma/schema.prisma`
+- Modify: `backend/services/chat-service/prisma/schema.prisma`
+- Modify: `backend/services/product-service/src/features/auctions/auctionRepository.js`
+- Modify: `backend/services/product-service/src/features/auctions/auctionService.js`
+- Modify: `backend/services/product-service/src/features/auctions/auctionController.js`
+- Modify: `backend/services/product-service/src/features/auctions/chatClient.js`
+- Modify: `backend/services/product-service/src/features/audit/marketingAuditService.js`
+- Modify: `backend/services/product-service/src/controllers/productController.js`
+- Modify: `backend/services/chat-service/src/features/conversations/contextKey.js`
+- Modify: `backend/services/chat-service/src/features/conversations/conversationService.js`
+- Modify: `backend/services/chat-service/src/features/internal/internalController.js`
+- Modify: `backend/services/chat-service/src/features/messages/messageModel.js`
+- Modify: `backend/services/chat-service/src/features/messages/messageService.js`
+- Modify: `backend/services/chat-service/src/features/attachments/attachmentService.js`
+- Modify: `frontend/components/marketing/sections/AuctionScheduleSection.js`
+- Modify: `frontend/components/marketing/sections/AuctionReviewModal.js`
+- Modify: `frontend/app/auctions/page.js`
+- Modify: `frontend/app/auctions/rounds/[roundId]/page.js`
+- Modify: `frontend/app/auctions/[id]/page.js`
+- Modify: `frontend/app/seller/auctions/page.js`
+- Modify: `frontend/app/seller/auctions/submit/page.js`
+- Modify: `frontend/lib/chat.js`
+- Modify: `frontend/components/chat/ConversationRow.js`
+- Modify: `frontend/app/chat/[id]/page.js`
+- Test: `backend/services/product-service/src/features/auctions/auctionService.test.js`
+- Test: `backend/services/product-service/src/controllers/productRelist.test.js`
+- Test: `backend/services/product-service/test/auction.integration.test.js`
+- Test: `backend/services/chat-service/src/features/conversations/contextKey.test.js`
+- Test: `backend/services/chat-service/src/features/internal/internalController.test.js`
+- Test: `backend/services/chat-service/src/features/messages/messageModel.test.js`
+- Test: `backend/services/chat-service/src/features/attachments/attachmentService.test.js`
+- Test: `backend/services/chat-service/test/internal-api.integration.test.js`
+- Test: `frontend/components/marketing/sections/AuctionScheduleSection.test.js`
+- Test: `frontend/app/auctions/page.test.js`
+- Test: `frontend/app/seller/auctions/page.test.js`
+- Test: `frontend/tests/chat/chat-room.test.js`
+
+**Interfaces:**
+
+- Single-Item Cancellation: `PATCH /api/products/auctions/:id/cancel` (MARKETING only; `approved`, `scheduled`, `open`; required reason 1–500 chars; blocks `pending_approval` and `winningOrderId != null`; `AuctionItem` -> `cancelled`, `Product` -> `auction_action_required`; `AUCTION_ITEM_CANCEL` audit log; `notifyItemCancelled` chat notification; idempotent notification retry when already cancelled)
+- Round Cancellation: `PATCH /api/products/auctions/rounds/:roundId/cancel` (MARKETING only; required reason 1–500 chars; blocks `ended`, or any item with `winningOrderId != null`; locks round and all items in ascending ID order; `AUCTION_ROUND_CANCEL` audit log; `notifyRoundCancelled` chat notification; idempotent notification retry when already cancelled)
+- Submit vs CancelRound Serialization: `withRoundMutationLock(roundId, fn, { productId })` acquires the same round lock key (`hashtext(roundId)`) as `withRoundLock(roundId)` in both Flow A (fixed order `Round Lock -> Product Lock`) and Flow B, re-verifying `AuctionRound` inside `tx` before creating `Product` or `AuctionItem`
+- Seller Recovery Lifecycle: `ProductStatus.auction_action_required` excluded from catalog/checkout; Flow A (`submit` with `productId` under `withRoundMutationLock` / `withProductLock`) and Flow B (`POST /api/products/:id/relist-available` with positive integer `newPrice` under `withProductLock`)
+- Chat Notifications: 1-on-1 `AUCTION:${roundId}:${userId}` context with `"system-marketing"` (`"ระบบฝ่ายการตลาด"`), atomic DB uniqueness on `Message.idempotencyKey` (`@unique`), and read-only enforcement (`403` on user messages/attachments)
+
+- [x] **Step 1: Sync Prisma schemas (`AuctionRound` + `AuctionItem` cancellation fields, `ProductStatus.auction_action_required`, remove `@unique` on `AuctionItem.productId` in PostgreSQL `reloop_product`; `Message.idempotencyKey @unique` in MongoDB `reloop_chat`)**
+- [x] **Step 2: Implement race-free `submit` (`withRoundMutationLock`), `cancel` (item), `cancelRound` (round), `closeAuction`, and `relistAvailable` using PostgreSQL advisory locks**
+- [x] **Step 3: Implement atomic DB-idempotent read-only `"ระบบฝ่ายการตลาด"` chat notifications (`notifyItemCancelled` & `notifyRoundCancelled`) and idempotent notification retry**
+- [x] **Step 4: Implement Marketing Round Filter (`"ทุกรอบประมูล"`), distinct Reject/Cancel Item/Cancel Round buttons & confirmation modals, `"ลองส่งแจ้งเตือนอีกครั้ง"` retry button, Public Auction cancelled visibility (including upcoming cancelled rounds until `auctionEndsAt`), and Seller Recovery UI**
+- [x] **Step 5: Verify unit tests (`auctionService.test.js` 102/102, `productRelist.test.js` 5/5, `contextKey.test.js` 9/9, `internalController.test.js` 5/5, `messageModel.test.js` 4/4, `attachmentService.test.js` 4/4), real PostgreSQL & Redis integration tests (`auction.integration.test.js`, `REQUIRE_INTEGRATION=1`, 22/22 pass, 0 skips), real MongoDB & cross-service chat integration tests (`internal-api.integration.test.js`, `REQUIRE_INTEGRATION=1`, 17/17 pass, 0 skips), and frontend Jest suite (54/54 suites, 359/359 pass, 0 skips)**

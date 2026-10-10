@@ -37,6 +37,17 @@ test("DIRECT context key is order-independent (A,B) === (B,A)", () => {
   assert.equal(ab, ba);
 });
 
+test("AUCTION context key is deterministic for the same roundId+userId", () => {
+  const a = buildContextKey("AUCTION", { roundId: "r1", userId: "u1" });
+  const b = buildContextKey("AUCTION", { roundId: "r1", userId: "u1" });
+  assert.equal(a, b);
+  assert.equal(a, "AUCTION:r1:u1");
+});
+
+test("AUCTION context key requires both roundId and userId", () => {
+  assert.throws(() => buildContextKey("AUCTION", { roundId: "r1" }));
+  assert.throws(() => buildContextKey("AUCTION", { userId: "u1" }));
+});
 test("unknown contextType throws", () => {
   assert.throws(() => buildContextKey("BOGUS", {}));
 });

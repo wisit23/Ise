@@ -35,6 +35,12 @@ async function sendMessage(conversationId, senderId, body) {
   if (conversation.status === "LOCKED") {
     throw new AppError(409, "This conversation is locked");
   }
+  if (conversation.contextType === "AUCTION") {
+    throw new AppError(
+      403,
+      "ห้องแจ้งเตือนจากระบบฝ่ายการตลาดเป็นแบบอ่านอย่างเดียว ไม่สามารถส่งข้อความตอบกลับได้",
+    );
+  }
 
   const sender = conversation.participants.find((p) => p.userId === senderId);
   const trimmed = body.trim();

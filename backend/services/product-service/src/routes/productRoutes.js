@@ -46,6 +46,12 @@ router.patch(
   productController.toggleVisibility,
 );
 router.patch("/:id", requireAuth, productController.update);
+router.post(
+  "/:id/relist-available",
+  requireAuth,
+  productController.relistAvailable,
+);
+router.post("/:id/relist", requireAuth, productController.relistAvailable);
 router.delete("/:id", requireAuth, productController.remove);
 
 router.patch(

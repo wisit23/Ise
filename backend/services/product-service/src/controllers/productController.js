@@ -6,76 +6,23 @@ const {
   paginatedResponse,
 } = require("@reloop/shared");
 const productModel = require("../models/productModel");
+const auctionRepository = require("../features/auctions/auctionRepository");
 const {
   buildCreateProductData,
   buildProductPatch,
 } = require("./productPayload");
 const { parseCatalogFilters } = require("../features/catalog/catalogQuery");
 const sellerActivityClient = require("../services/sellerActivityClient");
+const {
+  requireSellerRole,
+  requireVerifiedSeller,
+  validateCreateRequest,
+  requireValidMediaCount,
+  requireKnownCondition,
+} = require("../services/productValidation");
 
-const MIN_MEDIA_COUNT = 4;
-const MAX_MEDIA_COUNT = 8;
-
-function requireSellerRole(role) {
-  if (!["SELLER", "ADMIN"].includes(role)) {
-    throw forbidden("only seller accounts can list products for sale");
-  }
-}
-
-/** ADMIN can list on a seller's behalf (moderation tooling) without having
- * gone through seller verification themselves. */
-function requireVerifiedSeller(role, kycVerified, kycStatus) {
-  if (role !== "SELLER") return;
-
-  if (kycStatus === "EXPIRED") {
-    throw forbidden(
-      "your ID card has expired — please re-submit seller verification before listing",
-    );
-  }
-  if (kycStatus === "INACTIVE_EXPIRED") {
-    throw forbidden(
-      "your seller account has been inactive for over 1 year — please re-submit seller verification before listing",
-    );
-  }
-  if (!kycVerified) {
-    throw forbidden(
-      "seller account must complete identity verification before listing products",
-    );
-  }
-}
-
-function validateCreateRequest({ title, price, category }) {
-  if (!title || !price || !category) {
-    throw badRequest("title, price, category are required");
-  }
-  if (!Number.isInteger(price) || price <= 0) {
-    throw badRequest("price must be a positive whole number");
-  }
-}
-
-/** Standardizes listing quality: at least a handful of angles, capped so the
- * gallery stays scannable. Client-side MediaUploader enforces the same
- * bounds; this is the authoritative check. */
-function requireValidMediaCount(media) {
-  const count = Array.isArray(media) ? media.length : 0;
-  if (count < MIN_MEDIA_COUNT || count > MAX_MEDIA_COUNT) {
-    throw badRequest(
-      `media must include between ${MIN_MEDIA_COUNT} and ${MAX_MEDIA_COUNT} photos/videos (got ${count})`,
-    );
-  }
-}
-
-async function requireKnownCondition(value) {
-  if (value === undefined) return;
-
-  const conditions = await productModel.listConditions();
-  if (!conditions.some((condition) => condition.value === value)) {
-    throw badRequest("condition is not a recognized value");
-  }
-}
-
-async function requireProductOwner(productId, sellerId, action) {
-  const product = await productModel.findById(productId);
+async function requireProductOwner(productId, sellerId, action, tx) {
+  const product = await productModel.findById(productId, tx);
   if (!product) throw notFound("product not found");
   if (product.sellerId !== sellerId) {
     throw forbidden(`only the seller can ${action} this listing`);
@@ -304,6 +251,7 @@ async function mine(req, res, next) {
   try {
     const pagination = parsePagination(req.query);
     const { items, total } = await productModel.listBySeller(req.userId, {
+      status: req.query.status,
       skip: pagination.skip,
       take: pagination.take,
     });
@@ -330,6 +278,51 @@ async function markStatusInternal(req, res, next) {
   }
 }
 
+async function relistAvailable(req, res, next) {
+  try {
+    const productId = req.params.id;
+    const price = Number(req.body.price);
+    if (!Number.isInteger(price) || price <= 0) {
+      throw badRequest("ราคาขายใหม่ต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
+    }
+    const lockFn = auctionRepository.withProductLock
+      ? (fn) => auctionRepository.withProductLock(productId, fn)
+      : (fn) => fn(null);
+    const updated = await lockFn(async (tx) => {
+      const product = await requireProductOwner(
+        productId,
+        req.userId,
+        "relist",
+        tx,
+      );
+      if (product.status !== "auction_action_required") {
+        throw badRequest(
+          "เฉพาะสินค้าที่รอการดำเนินการหลังประมูลเท่านั้นที่สามารถนำกลับมาขายปกติได้",
+        );
+      }
+      const activeAuction =
+        await auctionRepository.findActiveAuctionByProductId(productId, tx);
+      if (activeAuction) {
+        throw badRequest(
+          "สินค้านี้กำลังอยู่ในรายการประมูลที่ยังดำเนินการอยู่ ไม่สามารถนำกลับมาขายปกติได้",
+        );
+      }
+      return productModel.update(
+        productId,
+        {
+          price,
+          status: "available",
+        },
+        tx,
+      );
+    });
+    sellerActivityClient.recordActivity(req.userId);
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   feed,
   search,
@@ -345,4 +338,10 @@ module.exports = {
   mine,
   markStatusInternal,
   toggleVisibility,
+  relistAvailable,
+  requireSellerRole,
+  requireVerifiedSeller,
+  validateCreateRequest,
+  requireValidMediaCount,
+  requireKnownCondition,
 };

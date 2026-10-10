@@ -103,8 +103,22 @@ export function hasUnread(conversation, currentUserId) {
   return new Date(conversation.lastMessageAt) > new Date(self.lastReadAt);
 }
 
+export const AUCTION_SYSTEM_DISPLAY_NAME = "ระบบฝ่ายการตลาด";
+
+export function isReadOnlyAuctionConversation(conversation) {
+  return conversation?.contextType === "AUCTION";
+}
+
 export function otherParticipant(conversation, currentUserId) {
-  return conversation.participants.find((p) => p.userId !== currentUserId);
+  return conversation?.participants?.find((p) => p.userId !== currentUserId);
+}
+
+export function conversationDisplayName(conversation, currentUserId) {
+  const other = otherParticipant(conversation, currentUserId);
+  if (conversation?.contextType === "AUCTION") {
+    return other?.displayName || AUCTION_SYSTEM_DISPLAY_NAME;
+  }
+  return other?.displayName || "ผู้ใช้";
 }
 
 /** The Thai label for a participant's role IN THIS ROOM.
@@ -127,7 +141,8 @@ const ROLE_LABELS = {
   SYSTEM: "ระบบ",
 };
 
-export function participantRoleLabel(role) {
+export function participantRoleLabel(role, contextType) {
+  if (contextType === "AUCTION") return "ระบบ";
   return ROLE_LABELS[role] || null;
 }
 

@@ -16,6 +16,16 @@ function contextKeyForInternalContextId(contextType, contextId) {
       return buildContextKey("ORDER", { orderId: contextId });
     case "SUPPORT":
       return buildContextKey("SUPPORT", { ticketId: contextId });
+    case "AUCTION": {
+      const parts = contextId.split(":");
+      if (parts.length < 2 || !parts[0] || !parts[1]) {
+        throw badRequest("AUCTION contextId requires 'roundId:userId'");
+      }
+      return buildContextKey("AUCTION", {
+        roundId: parts[0],
+        userId: parts[1],
+      });
+    }
     default:
       throw badRequest(
         `Internal API does not support creating contextType '${contextType}' from a single contextId`,

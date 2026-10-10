@@ -282,6 +282,308 @@ test("Internal API against a real MongoDB replica set", async (t) => {
       assert.equal(res.status, 400);
     },
   );
+
+  await t.test(
+    "AUCTION context: 1-on-1 user isolation, 'ระบบฝ่ายการตลาด' display name, and 403 read-only enforcement on replies and attachments",
+    async () => {
+      const { signAccessToken } = require("@reloop/shared");
+      const roundId = `int-round-${Date.now()}`;
+      const aucSellerId = `int-auc-seller-${Date.now()}`;
+      const aucBuyer1Id = `int-auc-buyer1-${Date.now()}`;
+      const aucBuyer2Id = `int-auc-buyer2-${Date.now()}`;
+
+      const sellerConvRes = await request(app)
+        .post("/internal/conversations")
+        .set("x-internal-token", TOKEN)
+        .send({
+          contextType: "AUCTION",
+          contextId: `${roundId}:${aucSellerId}`,
+          createdBy: "system-marketing",
+          participants: [
+            { userId: aucSellerId, role: "SELLER" },
+            { userId: "system-marketing", role: "SYSTEM" },
+          ],
+        });
+      assert.equal(sellerConvRes.status, 201);
+      assert.equal(sellerConvRes.body.participants.length, 2);
+
+      const buyer1ConvRes = await request(app)
+        .post("/internal/conversations")
+        .set("x-internal-token", TOKEN)
+        .send({
+          contextType: "AUCTION",
+          contextId: `${roundId}:${aucBuyer1Id}`,
+          createdBy: "system-marketing",
+          participants: [
+            { userId: aucBuyer1Id, role: "BUYER" },
+            { userId: "system-marketing", role: "SYSTEM" },
+          ],
+        });
+      assert.equal(buyer1ConvRes.status, 201);
+      assert.equal(buyer1ConvRes.body.participants.length, 2);
+      assert.notEqual(
+        sellerConvRes.body.id,
+        buyer1ConvRes.body.id,
+        "Seller and Buyer must receive strictly isolated 1-on-1 AUCTION rooms",
+      );
+
+      // Deliver system messages to each isolated room
+      const sellerMsgRes = await request(app)
+        .post(`/internal/conversations/${sellerConvRes.body.id}/messages`)
+        .set("x-internal-token", TOKEN)
+        .send({
+          senderId: "system-marketing",
+          senderRole: "SYSTEM",
+          type: "SYSTEM",
+          body: "แจ้งผู้ขาย: รอบประมูลถูกยกเลิก",
+          idempotencyKey: `auction.round_cancelled:${roundId}:${aucSellerId}`,
+          payload: { event: "auction.round_cancelled", roundId },
+        });
+      assert.equal(sellerMsgRes.status, 201);
+
+      const buyer1MsgRes = await request(app)
+        .post(`/internal/conversations/${buyer1ConvRes.body.id}/messages`)
+        .set("x-internal-token", TOKEN)
+        .send({
+          senderId: "system-marketing",
+          senderRole: "SYSTEM",
+          type: "SYSTEM",
+          body: "แจ้งผู้ประมูล: รอบประมูลถูกยกเลิก",
+          idempotencyKey: `auction.round_cancelled:${roundId}:${aucBuyer1Id}`,
+          payload: { event: "auction.round_cancelled", roundId },
+        });
+      assert.equal(buyer1MsgRes.status, 201);
+
+      const sellerToken = signAccessToken({ sub: aucSellerId, role: "SELLER" });
+      const buyer1Token = signAccessToken({ sub: aucBuyer1Id, role: "BUYER" });
+      const buyer2Token = signAccessToken({ sub: aucBuyer2Id, role: "BUYER" });
+
+      // Verify display name "ระบบฝ่ายการตลาด" and isolation on GET /conversations
+      const sellerListRes = await request(app)
+        .get("/conversations")
+        .set("Authorization", `Bearer ${sellerToken}`);
+      assert.equal(sellerListRes.status, 200);
+      const sellerRoom = sellerListRes.body.items.find(
+        (c) => c.id === sellerConvRes.body.id,
+      );
+      assert.ok(sellerRoom, "Seller must see their own AUCTION room");
+      assert.equal(sellerRoom.participants.length, 2);
+      const sysParticipant = sellerRoom.participants.find(
+        (p) => p.userId === "system-marketing",
+      );
+      assert.equal(sysParticipant?.displayName, "ระบบฝ่ายการตลาด");
+      assert.equal(
+        sellerListRes.body.items.some((c) => c.id === buyer1ConvRes.body.id),
+        false,
+        "Seller must NOT see Buyer 1's AUCTION room",
+      );
+
+      // Verify Buyer 1 cannot read Seller's room and non-participant Buyer 2 cannot read either
+      const crossReadRes = await request(app)
+        .get(`/conversations/${sellerConvRes.body.id}/messages`)
+        .set("Authorization", `Bearer ${buyer1Token}`);
+      assert.equal(crossReadRes.status, 403);
+
+      const outsiderReadRes = await request(app)
+        .get(`/conversations/${buyer1ConvRes.body.id}/messages`)
+        .set("Authorization", `Bearer ${buyer2Token}`);
+      assert.equal(outsiderReadRes.status, 403);
+
+      // Read-only enforcement: User cannot reply (POST /conversations/:id/messages -> 403)
+      const replyRes = await request(app)
+        .post(`/conversations/${sellerConvRes.body.id}/messages`)
+        .set("Authorization", `Bearer ${sellerToken}`)
+        .send({ body: "พยายามตอบกลับห้องระบบ" });
+      assert.equal(replyRes.status, 403);
+
+      const buyerReplyRes = await request(app)
+        .post(`/conversations/${buyer1ConvRes.body.id}/messages`)
+        .set("Authorization", `Bearer ${buyer1Token}`)
+        .send({ body: "ผู้ซื้อพยายามตอบกลับห้องระบบ" });
+      assert.equal(buyerReplyRes.status, 403);
+
+      // Read-only enforcement: User cannot upload attachment (POST /conversations/:id/attachments -> 403)
+      const attachRes = await request(app)
+        .post(`/conversations/${sellerConvRes.body.id}/attachments`)
+        .set("Authorization", `Bearer ${sellerToken}`)
+        .attach("file", Buffer.from("fake-image-bytes"), {
+          filename: "test.png",
+          contentType: "image/png",
+        });
+      assert.equal(attachRes.status, 403);
+    },
+  );
+
+  await t.test(
+    "AUCTION atomic DB idempotency: concurrent requests with identical idempotencyKey create exactly 1 Message in MongoDB",
+    async () => {
+      const roundId = `int-conc-round-${Date.now()}`;
+      const targetUserId = `int-conc-user-${Date.now()}`;
+
+      const convRes = await request(app)
+        .post("/internal/conversations")
+        .set("x-internal-token", TOKEN)
+        .send({
+          contextType: "AUCTION",
+          contextId: `${roundId}:${targetUserId}`,
+          createdBy: "system-marketing",
+          participants: [
+            { userId: targetUserId, role: "SELLER" },
+            { userId: "system-marketing", role: "SYSTEM" },
+          ],
+        });
+      assert.equal(convRes.status, 201);
+      const convId = convRes.body.id;
+      const sharedKey = `auction.item_cancelled:item-${Date.now()}:${targetUserId}`;
+
+      // Fire 5 concurrent requests with the exact same idempotencyKey against MongoDB
+      const concurrentResults = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          request(app)
+            .post(`/internal/conversations/${convId}/messages`)
+            .set("x-internal-token", TOKEN)
+            .send({
+              senderId: "system-marketing",
+              senderRole: "SYSTEM",
+              type: "SYSTEM",
+              body: "ข้อความทดสอบ Concurrent Idempotency",
+              idempotencyKey: sharedKey,
+              payload: { event: "auction.item_cancelled" },
+            }),
+        ),
+      );
+
+      for (const r of concurrentResults) {
+        assert.ok(
+          [200, 201].includes(r.status),
+          `Expected 200 or 201 but got ${r.status}: ${JSON.stringify(r.body)}`,
+        );
+      }
+
+      const distinctMsgIds = [
+        ...new Set(concurrentResults.map((r) => r.body.id)),
+      ];
+      assert.equal(
+        distinctMsgIds.length,
+        1,
+        "All concurrent requests must resolve to the exact same Message ID",
+      );
+
+      const dbMessages = await prisma.message.findMany({
+        where: { conversationId: convId, idempotencyKey: sharedKey },
+      });
+      assert.equal(
+        dbMessages.length,
+        1,
+        "MongoDB must contain exactly 1 Message document for the idempotencyKey",
+      );
+    },
+  );
+
+  await t.test(
+    "Cross-service chatClient notification partial failure + retry delivers only missing recipient without duplicating delivered messages",
+    async () => {
+      const http = require("node:http");
+      const server = http.createServer(app);
+      await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const { port } = server.address();
+      const baseUrl = `http://127.0.0.1:${port}`;
+
+      const prevChatUrl = process.env.CHAT_SERVICE_URL;
+      process.env.CHAT_SERVICE_URL = baseUrl;
+
+      // Clear cached chatClient module so it picks up CHAT_SERVICE_URL
+      const chatClientPath =
+        require.resolve("../../product-service/src/features/auctions/chatClient");
+      delete require.cache[chatClientPath];
+      const chatClient = require(chatClientPath);
+
+      const roundId = `int-partial-round-${Date.now()}`;
+      const sellerUser = `int-partial-seller-${Date.now()}`;
+      const bidder1User = `int-partial-bidder1-${Date.now()}`;
+      const bidder2User = `int-partial-bidder2-${Date.now()}`;
+
+      const origFetch = global.fetch;
+      let failBidder2Once = true;
+      global.fetch = async (url, opts) => {
+        if (
+          failBidder2Once &&
+          typeof url === "string" &&
+          url.includes("/messages") &&
+          opts?.body
+        ) {
+          const parsed = JSON.parse(opts.body);
+          if (
+            parsed.idempotencyKey &&
+            parsed.idempotencyKey.endsWith(`:${bidder2User}`)
+          ) {
+            failBidder2Once = false;
+            return {
+              ok: false,
+              status: 503,
+              text: async () => "Simulated transient failure for bidder 2",
+            };
+          }
+        }
+        return origFetch(url, opts);
+      };
+
+      try {
+        const roundObj = {
+          id: roundId,
+          title: "รอบทดสอบ Cross-Service Retry",
+          cancellationReason: "เหตุขัดข้องทางระบบ",
+        };
+
+        // 1st attempt: sellerUser and bidder1User succeed, bidder2User fails
+        const attempt1 = await chatClient.notifyRoundCancelled({
+          round: roundObj,
+          sellerIds: [sellerUser],
+          bidderIds: [bidder1User, bidder2User],
+        });
+        assert.equal(attempt1.deliveredCount, 2);
+        assert.equal(attempt1.failedCount, 1);
+        assert.equal(attempt1.warnings.length, 1);
+
+        // 2nd attempt (retry): all 3 succeed; sellerUser and bidder1User are deduplicated (200 OK), bidder2User is created (201)
+        const attempt2 = await chatClient.notifyRoundCancelled({
+          round: roundObj,
+          sellerIds: [sellerUser],
+          bidderIds: [bidder1User, bidder2User],
+        });
+        assert.equal(attempt2.deliveredCount, 3);
+        assert.equal(attempt2.failedCount, 0);
+        assert.equal(attempt2.warnings.length, 0);
+
+        // Verify in MongoDB that each of the 3 recipients has exactly 1 conversation and 1 message
+        for (const uid of [sellerUser, bidder1User, bidder2User]) {
+          const conv = await prisma.conversation.findUnique({
+            where: { contextKey: `AUCTION:${roundId}:${uid}` },
+          });
+          assert.ok(conv, `Conversation must exist for ${uid}`);
+          assert.equal(conv.participants.length, 2);
+
+          const msgs = await prisma.message.findMany({
+            where: { conversationId: conv.id },
+          });
+          assert.equal(
+            msgs.length,
+            1,
+            `Recipient ${uid} must have exactly 1 message after retry (got ${msgs.length})`,
+          );
+        }
+      } finally {
+        global.fetch = origFetch;
+        if (prevChatUrl === undefined) {
+          delete process.env.CHAT_SERVICE_URL;
+        } else {
+          process.env.CHAT_SERVICE_URL = prevChatUrl;
+        }
+        delete require.cache[chatClientPath];
+        await new Promise((resolve) => server.close(resolve));
+      }
+    },
+  );
 });
 
 // Runs once after every test in this file, whether they passed, failed or

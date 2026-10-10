@@ -72,7 +72,7 @@ model Product {
   photos      Photo[]
   videos      Video[]
   reviewClips ProductVideo[]
-  auction     AuctionItem?
+  auctions    AuctionItem[]
 
   @@index([sellerId])
   @@index([status, category])
@@ -193,7 +193,7 @@ enum AuctionStatus {
 
 model AuctionItem {
   id               String        @id @default(uuid())
-  productId        String        @unique @map("product_id")
+  productId        String        @map("product_id")
   sellerId         String        @map("seller_id")
   status           AuctionStatus @default(draft)
   // Seller-owned pricing (see MKT/marketing decision log: Seller sets these,
@@ -207,6 +207,9 @@ model AuctionItem {
   closedAt         DateTime?     @map("closed_at")
   approvedBy       String?       @map("approved_by")
   approvedAt       DateTime?     @map("approved_at")
+  cancellationReason String?       @map("cancellation_reason")
+  cancelledAt        DateTime?     @map("cancelled_at")
+  cancelledBy        String?       @map("cancelled_by")
   winningBidId     String?       @unique @map("winning_bid_id")
   // Order created in order-service once the auction closes with a winner —
   // read via provider contract, never a cross-service DB read.
@@ -219,6 +222,7 @@ model AuctionItem {
   product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   bids    Bid[]         @relation("AuctionBids")
 
+  @@index([productId])
   @@index([sellerId])
   @@index([status])
   @@index([roundId])
@@ -228,10 +232,14 @@ model AuctionItem {
 model AuctionRound {
   id                 String   @id @default(uuid())
   title              String
+  categories         String[] @default([])
   submissionStartsAt DateTime @map("submission_starts_at")
   submissionEndsAt   DateTime @map("submission_ends_at")
   auctionStartsAt    DateTime @map("auction_starts_at")
   auctionEndsAt      DateTime @map("auction_ends_at")
+  cancellationReason String?   @map("cancellation_reason")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancelledBy        String?   @map("cancelled_by")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
