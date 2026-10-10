@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const {
   badRequest,
   conflict,
@@ -8,14 +9,77 @@ const {
 } = require("@reloop/shared");
 const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
+const chatClient = require("../services/chatClient");
+const buyerActivityClient = require("../services/buyerActivityClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
+const orderTransitionService = require("../services/orderTransitionService");
+const productSyncService = require("../services/productSyncService");
+
+function productSyncFor(order, status, purpose) {
+  if (status === "cancelled" && order.reservationId) {
+    return {
+      dedupeKey: `${purpose}:${order.id}:${order.version}`,
+      action: productSyncService.ACTIONS.RELEASE_RESERVATION,
+      productId: order.productId,
+      reservationId: order.reservationId,
+    };
+  }
+  return {
+    dedupeKey: `${purpose}:${order.id}:${order.version}`,
+    action: productSyncService.ACTIONS.SET_STATUS,
+    productId: order.productId,
+    targetStatus: status === "completed" ? "sold" : "available",
+  };
+}
+
+async function respondAfterProductSync(res, order, event) {
+  try {
+    await productSyncService.processEvent(event.id);
+    res.json(order);
+  } catch {
+    // The durable outbox worker will retry. A 202 tells the caller that the
+    // local transition committed but the cross-service projection is pending.
+    res.status(202).json({ ...order, productSyncPending: true });
+  }
+}
+
+async function dispatchOrderCompletedEvent(order) {
+  const event = {
+    eventId: crypto.randomUUID(),
+    orderId: order.id,
+    campaignId: order.campaignId || null,
+    grossAmount: order.price,
+    discountAmount: order.discountAmount || 0,
+    netAmount:
+      order.finalPrice !== null && order.finalPrice !== undefined
+        ? order.finalPrice
+        : Math.max(0, order.price - (order.discountAmount || 0)),
+    completedAt: new Date().toISOString(),
+  };
+
+  try {
+    await productClient.recordOrderCompleted(event);
+  } catch (err) {
+    console.warn(
+      "[order-service] failed to dispatch order.completed.v1 event:",
+      err.message,
+    );
+  }
+}
 
 async function create(req, res, next) {
   try {
     const { order, created } = await reserveOrder({
       buyerId: req.userId,
       productId: req.body.productId,
+      campaignId: req.body.campaignId,
     });
+    await buyerActivityClient.recordOrderActivity(order, "ORDER_PLACED", {
+      reservationId: order.reservationId,
+    });
+    if (created) {
+      await chatClient.notifyOrderPlaced(order);
+    }
     res.status(created ? 201 : 200).json(order);
   } catch (err) {
     next(err);
@@ -30,6 +94,9 @@ async function mine(req, res, next) {
       throw badRequest(
         `status must be one of ${orderModel.VALID_STATUSES.join(", ")}`,
       );
+    }
+    if (!status || status === "pending_payment") {
+      await orderModel.cleanExpiredOrders(productClient);
     }
     const { items, total } = await orderModel.listByBuyer(req.userId, {
       status,
@@ -100,22 +167,54 @@ async function updateStatus(req, res, next) {
       );
     }
 
-    const updated = await orderModel.updateStatus(req.params.id, status);
+    // TSR-02: Prevent participant updating status while order has open dispute or hold
+    orderTransitionService.assertCanParticipantUpdateStatus(order);
 
-    if (status === "cancelled") {
-      if (order.reservationId) {
-        await productClient.releaseProductReservation(
-          order.productId,
-          order.reservationId,
-        );
-      } else {
-        await productClient.setProductStatus(order.productId, "available");
+    if (["cancelled", "completed"].includes(status)) {
+      const { order: updated, event } =
+        await orderModel.transitionStatusWithProductSync({
+          id: req.params.id,
+          status,
+          expectedVersion: order.version,
+          expectedStatuses: [order.status],
+          productSync: productSyncFor(order, status, "ORDER_STATUS"),
+        });
+
+      if (order.campaignId) {
+        const voucherAction =
+          status === "cancelled" ? "releaseVoucher" : "completeVoucher";
+        await productClient[voucherAction](order.campaignId, {
+          userId: order.buyerId,
+          orderId: order.id,
+        });
       }
-    }
-    if (status === "completed") {
-      await productClient.setProductStatus(order.productId, "sold");
+      if (status === "completed") {
+        await dispatchOrderCompletedEvent(updated);
+      } else {
+        await buyerActivityClient.recordOrderActivity(
+          updated,
+          "ORDER_CANCELLED",
+          { initiatedBy: req.userId },
+        );
+      }
+      await chatClient.notifyOrderStatusChanged(order, status);
+      await respondAfterProductSync(res, updated, event);
+      return;
     }
 
+    // Best-effort — chatClient swallows its own errors internally (see its
+    // comment) so a chat-service outage can never fail this status update.
+    // Awaited anyway, not fire-and-forget: this is a low-traffic path
+    // (one call per status change, not per page view), and awaiting makes
+    // "the SYSTEM message exists by the time this request returns" an
+    // actual guarantee instead of a race a test would have to poll for.
+    await chatClient.notifyOrderStatusChanged(order, status);
+
+    const updated = await orderModel.updateStatus(
+      req.params.id,
+      status,
+      order.version,
+    );
     res.json(updated);
   } catch (err) {
     next(err);
@@ -142,37 +241,76 @@ async function pay(req, res, next) {
     if (order.buyerId !== req.userId) {
       throw forbidden("only the buyer can pay for this order");
     }
+    if (order.status === "confirmed") {
+      const pendingEvent = await productSyncService.findPendingForOrder(
+        order.id,
+      );
+      if (pendingEvent) {
+        await respondAfterProductSync(res, order, pendingEvent);
+        return;
+      }
+    }
     if (!["pending", "pending_payment"].includes(order.status)) {
       throw badRequest(
         `order is already ${order.status}, it cannot be paid again`,
       );
     }
 
+    // Guard against active hold / dispute
+    orderTransitionService.assertCanParticipantUpdateStatus(order);
+
     if (
       order.reservationExpiresAt &&
       order.reservationExpiresAt <= new Date()
     ) {
-      await orderModel.updateStatus(req.params.id, "cancelled");
-      if (order.reservationId) {
-        await productClient.releaseProductReservation(
-          order.productId,
-          order.reservationId,
-        );
+      const { event } = await orderModel.transitionStatusWithProductSync({
+        id: req.params.id,
+        status: "cancelled",
+        expectedVersion: order.version,
+        expectedStatuses: ["pending", "pending_payment"],
+        productSync: productSyncFor(order, "cancelled", "RESERVATION_EXPIRED"),
+      });
+      if (order.campaignId) {
+        await productClient.releaseVoucher(order.campaignId, {
+          userId: order.buyerId,
+          orderId: order.id,
+        });
+      }
+      try {
+        await productSyncService.processEvent(event.id);
+      } catch {
+        // Persisted in the outbox and retried by the worker.
       }
       throw conflict("reservation has expired");
     }
 
-    if (order.reservationId) {
-      await productClient.completeProductReservation(
-        order.productId,
-        order.reservationId,
-      );
-    } else {
-      await productClient.setProductStatus(order.productId, "sold");
-    }
-    const updated = await orderModel.updateStatus(req.params.id, "completed");
+    const productSync = order.reservationId
+      ? {
+          dedupeKey: `PAY:${order.id}:${order.version}`,
+          action: productSyncService.ACTIONS.COMPLETE_RESERVATION,
+          productId: order.productId,
+          reservationId: order.reservationId,
+        }
+      : productSyncFor(order, "completed", "PAY");
+    const { order: updated, event } =
+      await orderModel.transitionStatusWithProductSync({
+        id: req.params.id,
+        status: "confirmed",
+        expectedVersion: order.version,
+        expectedStatuses: ["pending", "pending_payment"],
+        productSync,
+      });
 
-    res.json(updated);
+    if (order.campaignId) {
+      await productClient.completeVoucher(order.campaignId, {
+        userId: order.buyerId,
+        orderId: order.id,
+      });
+    }
+    await buyerActivityClient.recordOrderActivity(updated, "PAYMENT_COMPLETED");
+    await chatClient.notifyOrderPaid(updated);
+
+    await respondAfterProductSync(res, updated, event);
   } catch (err) {
     next(err);
   }
@@ -194,6 +332,12 @@ async function createFromAuction(req, res, next) {
       );
     }
 
+    // Idempotency: if an order was already created for this auction (e.g. race between BullMQ worker and page visit), return it.
+    const existing = await orderModel.findByAuctionId(auctionId);
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
     const order = await orderModel.create({
       buyerId,
       sellerId,
@@ -204,9 +348,16 @@ async function createFromAuction(req, res, next) {
     });
 
     await productClient.setProductStatus(productId, "reserved");
+    await chatClient.notifyOrderPlaced(order);
 
     res.status(201).json(order);
   } catch (err) {
+    if (err.code === "P2002") {
+      const existing = await orderModel.findByAuctionId(req.body.auctionId);
+      if (existing) {
+        return res.status(200).json(existing);
+      }
+    }
     next(err);
   }
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import NavBar from "../../../../components/NavBar";
 import Footer from "../../../../components/Footer";
+import ConfirmDialog from "../../../../components/ui/ConfirmDialog";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 
@@ -22,6 +23,7 @@ export default function AdminDisputeDetailPage() {
   const [loading, setLoading] = useState(true);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
 
   function load(token) {
     setLoading(true);
@@ -45,16 +47,23 @@ export default function AdminDisputeDetailPage() {
     load(token);
   }, [params.id, router]);
 
-  // Menu visibility is UX only — the server enforces admin:dispute:hold /
-  // admin:dispute:release on every request regardless of what this page shows
-  // (ADM-DEC-002: no Frontend guard counts as authorization).
-  async function submit(action) {
-    const token = getAccessToken();
-    const trimmedReason = reason.trim();
-    if (!trimmedReason) {
+  function handleInitiateAction(action) {
+    const trimmed = reason.trim();
+    if (!trimmed) {
       setError("กรุณาระบุเหตุผลก่อนดำเนินการ");
       return;
     }
+    setError("");
+    setPendingAction({ action, defaultReason: trimmed });
+  }
+
+  async function confirmAction(inputReason) {
+    if (!pendingAction) return;
+    const { action } = pendingAction;
+    const finalReason = (inputReason || reason).trim();
+    setPendingAction(null);
+
+    const token = getAccessToken();
     setError("");
     setBusy(true);
     try {
@@ -63,7 +72,7 @@ export default function AdminDisputeDetailPage() {
         {
           method: "POST",
           token,
-          body: { reason: trimmedReason, version: order.version },
+          body: { reason: finalReason, version: order.version },
         },
       );
       setOrder(updated);
@@ -86,12 +95,12 @@ export default function AdminDisputeDetailPage() {
     );
   }
 
-  if (user?.role !== "ADMIN") {
+  if (user?.role !== "TRUST_AND_SAFETY" && user?.role !== "ADMIN") {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
         <p className="mx-auto max-w-3xl px-4 py-10 text-amber-800">
-          หน้านี้ใช้ได้เฉพาะบัญชีแอดมินเท่านั้น
+          หน้านี้ใช้ได้เฉพาะเจ้าหน้าที่ Trust & Safety เท่านั้น
         </p>
       </main>
     );
@@ -168,7 +177,7 @@ export default function AdminDisputeDetailPage() {
             {disputeCase.status !== "DECIDED" && (
               <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
                 ⚠ เคสนี้ยังไม่ถูกตัดสินโดยฝ่าย CS — หากกด &quot;ปล่อยเงิน&quot;
-                ระบบจะยกเลิก เฉพาะการระงับที่ Admin สั่งเอง
+                ระบบจะยกเลิกเฉพาะการระงับที่ฝ่าย Trust & Safety สั่งเอง
                 แต่เงินจะยังถูกพักไว้ต่อจนกว่า CS จะตัดสินใจ
               </p>
             )}
@@ -213,14 +222,14 @@ export default function AdminDisputeDetailPage() {
           />
           <div className="flex gap-2">
             <button
-              onClick={() => submit("hold")}
+              onClick={() => handleInitiateAction("hold")}
               disabled={busy || onHold}
               className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
             >
               ระงับเงิน (Hold)
             </button>
             <button
-              onClick={() => submit("release")}
+              onClick={() => handleInitiateAction("release")}
               disabled={busy || !onHold}
               className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
             >
@@ -229,6 +238,32 @@ export default function AdminDisputeDetailPage() {
           </div>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        busy={busy}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={confirmAction}
+        {...(pendingAction?.action === "hold"
+          ? {
+              title: "ยืนยันการระงับเงินคำสั่งซื้อ (Hold)?",
+              description: `ยอดเงินจำลอง ${baht(order.price)} จะถูกเปลี่ยนสถานะเป็น ON_HOLD และสถานะคำสั่งซื้อจะเปลี่ยนเป็น disputed จนกว่าจะมีคำตัดสิน`,
+              confirmLabel: "ยืนยันระงับเงิน",
+              tone: "danger",
+              reason: "optional",
+              reasonLabel: "เหตุผลประกอบการระงับเงิน",
+            }
+          : {
+              title: "ยืนยันการปล่อยเงินคำสั่งซื้อ (Release)?",
+              description:
+                "ระบบจะยกเลิกการระงับเงินจำลอง และคืนสถานะคำสั่งซื้อกลับสู่ขั้นตอนเดิมก่อนเกิดข้อพิพาท",
+              confirmLabel: "ยืนยันปล่อยเงิน",
+              tone: "primary",
+              reason: "optional",
+              reasonLabel: "เหตุผลประกอบการปล่อยเงิน",
+            })}
+      />
+
       <Footer />
     </main>
   );

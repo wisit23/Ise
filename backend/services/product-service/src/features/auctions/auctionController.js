@@ -79,9 +79,10 @@ async function getOne(req, res, next) {
 async function list(req, res, next) {
   try {
     const pagination = parsePagination(req.query, 10);
-    const { status } = req.query;
+    const { status, roundId } = req.query;
     const { items, total } = await auctionService.list({
       status,
+      roundId,
       skip: pagination.skip,
       take: pagination.take,
     });
@@ -105,6 +106,38 @@ async function bid(req, res, next) {
   }
 }
 
+async function getCurrentRound(req, res, next) {
+  try {
+    const data = await auctionService.getCurrentRound();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function createRound(req, res, next) {
+  try {
+    const round = await auctionService.createRound({
+      user: currentUser(req),
+      input: req.body,
+    });
+    res.status(201).json(round);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listRounds(req, res, next) {
+  try {
+    const rounds = await auctionService.listRounds({
+      user: currentUser(req),
+    });
+    res.json({ items: rounds });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   submit,
   approve,
@@ -114,4 +147,7 @@ module.exports = {
   getOne,
   list,
   bid,
+  getCurrentRound,
+  createRound,
+  listRounds,
 };

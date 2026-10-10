@@ -12,7 +12,7 @@ import EmptyState from "../../components/ui/EmptyState";
 import ErrorState from "../../components/ui/ErrorState";
 import Skeleton from "../../components/ui/Skeleton";
 import { apiFetch } from "../../lib/api";
-import { fetchCategories } from "../../lib/catalog";
+import { fetchCategories, fetchConditions } from "../../lib/catalog";
 
 const PAGE_SIZE = 12;
 
@@ -23,24 +23,40 @@ function ProductsPageInner() {
 
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [conditions, setConditions] = useState([]);
+  const [options, setOptions] = useState({ brands: [], styles: [], sizes: [] });
   const [q, setQ] = useState(urlQuery);
   const [category, setCategory] = useState(urlCategory);
+  const [style, setStyle] = useState("");
+  const [brand, setBrand] = useState("");
+  const [size, setSize] = useState("");
+  const [condition, setCondition] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  async function load(query, cat, pageNum) {
+  async function load(
+    query,
+    cat,
+    pageNum,
+    active = { style, brand, size, condition, minPrice, maxPrice },
+  ) {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
       if (cat) params.set("category", cat);
+      for (const [key, value] of Object.entries(active))
+        if (value) params.set(key, value);
       params.set("page", pageNum);
       params.set("limit", PAGE_SIZE);
-      const path = query
-        ? `/api/products/search?q=${encodeURIComponent(query)}&${params}`
-        : `/api/products/feed?${params}`;
+      const path =
+        query || Object.values(active).some(Boolean) || cat
+          ? `/api/products/search${query ? `?q=${encodeURIComponent(query)}&` : "?"}${params}`
+          : `/api/products/feed?${params}`;
       const data = await apiFetch(path);
       setItems(data.items);
       setTotalPages(data.totalPages);
@@ -64,12 +80,23 @@ function ProductsPageInner() {
     fetchCategories()
       .then(setCategories)
       .catch((err) => console.error("Failed to load categories:", err));
+    fetchConditions()
+      .then(setConditions)
+      .catch((err) => console.error("Failed to load conditions:", err));
+    apiFetch("/api/products/filters")
+      .then(setOptions)
+      .catch((err) => console.error("Failed to load filters:", err));
   }, []);
+
+  function applyFilters() {
+    const active = { style, brand, size, condition, minPrice, maxPrice };
+    setPage(1);
+    load(q, category, 1, active);
+  }
 
   function handleSearch(e) {
     e.preventDefault();
-    setPage(1);
-    load(q, category, 1);
+    applyFilters();
   }
 
   function toggleCategory(c) {
@@ -79,9 +106,48 @@ function ProductsPageInner() {
     load(q, next, 1);
   }
 
+  const hasActiveFilters = Boolean(
+    q ||
+    category ||
+    style ||
+    brand ||
+    size ||
+    condition ||
+    minPrice ||
+    maxPrice,
+  );
+
+  function clearFilters() {
+    const empty = {
+      style: "",
+      brand: "",
+      size: "",
+      condition: "",
+      minPrice: "",
+      maxPrice: "",
+    };
+    setQ("");
+    setCategory("");
+    setStyle("");
+    setBrand("");
+    setSize("");
+    setCondition("");
+    setMinPrice("");
+    setMaxPrice("");
+    setPage(1);
+    load("", "", 1, empty);
+  }
+
   function handlePageChange(next) {
     setPage(next);
-    load(q, category, next);
+    load(q, category, next, {
+      style,
+      brand,
+      size,
+      condition,
+      minPrice,
+      maxPrice,
+    });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -122,6 +188,78 @@ function ProductsPageInner() {
         </aside>
 
         <div>
+          <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-line bg-white p-3 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              ["style", style, setStyle, "สไตล์"],
+              ["brand", brand, setBrand, "แบรนด์"],
+              ["size", size, setSize, "ขนาด"],
+            ].map(([key, value, setter, label]) => (
+              <select
+                key={key}
+                aria-label={label}
+                value={value}
+                onChange={(e) => {
+                  setter(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-md border border-line-strong px-2 py-2 text-sm"
+              >
+                <option value="">{label}: ทั้งหมด</option>
+                {(options[key === "style" ? "styles" : `${key}s`] || []).map(
+                  (item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ),
+                )}
+              </select>
+            ))}
+            <select
+              aria-label="สภาพสินค้า"
+              value={condition}
+              onChange={(e) => {
+                setCondition(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-md border border-line-strong px-2 py-2 text-sm"
+            >
+              <option value="">สภาพ: ทั้งหมด</option>
+              {conditions.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <input
+              aria-label="ราคาต่ำสุด"
+              inputMode="numeric"
+              type="number"
+              min="0"
+              placeholder="ราคาต่ำสุด"
+              value={minPrice}
+              onChange={(e) => setMinPrice(e.target.value)}
+              className="rounded-md border border-line-strong px-2 py-2 text-sm"
+            />
+            <input
+              aria-label="ราคาสูงสุด"
+              inputMode="numeric"
+              type="number"
+              min="0"
+              placeholder="ราคาสูงสุด"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              className="rounded-md border border-line-strong px-2 py-2 text-sm"
+            />
+            <Button type="button" variant="secondary" onClick={applyFilters}>
+              ใช้ตัวกรอง
+            </Button>
+            {hasActiveFilters && (
+              <Button type="button" variant="secondary" onClick={clearFilters}>
+                ล้างตัวกรอง
+              </Button>
+            )}
+          </div>
+
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-xl font-bold text-gray-900">
               {category || "สินค้าทั้งหมด"}
@@ -172,21 +310,16 @@ function ProductsPageInner() {
               icon="search_off"
               title="ไม่พบสินค้าที่ตรงกับเงื่อนไข"
               description={
-                q || category
+                hasActiveFilters
                   ? "ลองใช้คำค้นอื่น หรือล้างตัวกรองเพื่อดูสินค้าทั้งหมด"
                   : "ยังไม่มีสินค้าในระบบตอนนี้"
               }
               action={
-                (q || category) && (
+                hasActiveFilters && (
                   <Button
                     variant="secondary"
                     icon="filter_alt_off"
-                    onClick={() => {
-                      setQ("");
-                      setCategory("");
-                      setPage(1);
-                      load("", "", 1);
-                    }}
+                    onClick={clearFilters}
                   >
                     ล้างตัวกรอง
                   </Button>

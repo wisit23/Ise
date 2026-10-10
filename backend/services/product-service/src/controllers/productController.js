@@ -10,6 +10,7 @@ const {
   buildCreateProductData,
   buildProductPatch,
 } = require("./productPayload");
+const { parseCatalogFilters } = require("../features/catalog/catalogQuery");
 const sellerActivityClient = require("../services/sellerActivityClient");
 
 const MIN_MEDIA_COUNT = 4;
@@ -79,6 +80,7 @@ async function requireProductOwner(productId, sellerId, action) {
   if (product.sellerId !== sellerId) {
     throw forbidden(`only the seller can ${action} this listing`);
   }
+  return product;
 }
 
 async function feed(req, res, next) {
@@ -99,11 +101,15 @@ async function feed(req, res, next) {
 
 async function search(req, res, next) {
   try {
-    const { q, category } = req.query;
+    let filters;
+    try {
+      filters = parseCatalogFilters(req.query);
+    } catch (err) {
+      throw badRequest(err.message);
+    }
     const pagination = parsePagination(req.query);
     const { items, total } = await productModel.list({
-      q,
-      category,
+      ...filters,
       status: "available",
       skip: pagination.skip,
       take: pagination.take,
@@ -122,11 +128,19 @@ async function adminSearch(req, res, next) {
     if (req.userRole !== "ADMIN") {
       throw forbidden("only admin accounts can use this search");
     }
-    const { q, category, status } = req.query;
+    let filters;
+    try {
+      filters = parseCatalogFilters(req.query);
+    } catch (err) {
+      throw badRequest(err.message);
+    }
+    const status =
+      req.query.status === undefined
+        ? undefined
+        : String(req.query.status).trim();
     const pagination = parsePagination(req.query);
     const { items, total } = await productModel.list({
-      q,
-      category,
+      ...filters,
       status,
       skip: pagination.skip,
       take: pagination.take,
@@ -209,6 +223,14 @@ async function listConditions(req, res, next) {
   }
 }
 
+async function listFilterOptions(req, res, next) {
+  try {
+    res.json(await productModel.listFilterOptions());
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function create(req, res, next) {
   try {
     requireSellerRole(req.userRole);
@@ -232,21 +254,28 @@ async function create(req, res, next) {
 
 async function update(req, res, next) {
   try {
-    await requireProductOwner(req.params.id, req.userId, "edit");
+    const product = await requireProductOwner(
+      req.params.id,
+      req.userId,
+      "edit",
+    );
+    if (product.status === "auction") {
+      throw forbidden("cannot edit a product that is currently in an auction");
+    }
     await requireKnownCondition(req.body.condition);
     if (req.body.media !== undefined) requireValidMediaCount(req.body.media);
     if (req.body.category !== undefined) {
       await productModel.ensureCategory(req.body.category);
     }
 
-    const product = await productModel.update(
+    const updated = await productModel.update(
       req.params.id,
       buildProductPatch(req.body),
     );
     // Fire-and-forget: refreshes lastActiveAt so the inactivity job doesn't
     // flag an active seller who edits rather than creates listings.
     sellerActivityClient.recordActivity(req.userId);
-    res.json(product);
+    res.json(updated);
   } catch (err) {
     next(err);
   }
@@ -254,7 +283,16 @@ async function update(req, res, next) {
 
 async function remove(req, res, next) {
   try {
-    await requireProductOwner(req.params.id, req.userId, "remove");
+    const product = await requireProductOwner(
+      req.params.id,
+      req.userId,
+      "remove",
+    );
+    if (product.status === "auction") {
+      throw forbidden(
+        "cannot remove a product that is currently in an auction",
+      );
+    }
     await productModel.remove(req.params.id);
     res.status(204).send();
   } catch (err) {
@@ -300,6 +338,7 @@ module.exports = {
   bySeller,
   listCategories,
   listConditions,
+  listFilterOptions,
   create,
   update,
   remove,

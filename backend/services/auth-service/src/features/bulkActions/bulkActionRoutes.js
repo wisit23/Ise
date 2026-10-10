@@ -16,6 +16,8 @@ router.post("/admin/bulk", requireAuth, async (req, res, next) => {
       dryRun: req.body.dryRun,
       idempotencyKey: req.body.idempotencyKey,
       adminId: req.userId,
+      staffId: req.userId,
+      requestId: req.id,
       permissions: req.permissions,
     });
     res.json(result);

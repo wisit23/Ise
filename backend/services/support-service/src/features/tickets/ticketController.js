@@ -105,4 +105,40 @@ async function changeStatus(req, res, next) {
   }
 }
 
-module.exports = { create, mine, queue, getOne, reply, assign, changeStatus };
+async function getConversation(req, res, next) {
+  try {
+    const result = await ticketService.getTicketConversation({
+      ticketId: req.params.id,
+      userId: req.userId,
+      role: req.userRole,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function joinChat(req, res, next) {
+  try {
+    const result = await ticketService.joinTicketChat({
+      ticketId: req.params.id,
+      userId: req.userId,
+      role: req.userRole,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  create,
+  mine,
+  queue,
+  getOne,
+  reply,
+  assign,
+  changeStatus,
+  getConversation,
+  joinChat,
+};

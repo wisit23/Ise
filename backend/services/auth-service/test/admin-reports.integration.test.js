@@ -79,6 +79,9 @@ test("report lifecycle enforces review-before-action and dispatches owner comman
   } = await startMockProductService();
   process.env.PRODUCT_SERVICE_URL = `http://localhost:${port}`;
   const app = require("../src/app");
+  // This feature suite uses signed identity fixtures; live session enforcement
+  // is covered separately by account-suspension.integration.test.js.
+  app.locals.validateAccessSession = async () => {};
 
   const adminId = `adm-003-admin+${Date.now()}`;
   let reporter;
@@ -205,6 +208,16 @@ test("report lifecycle enforces review-before-action and dispatches owner comman
     assert.equal(summaryRes.body.completedOrdersAvailable, false);
     assert.equal(summaryRes.body.reportCount, 1);
     assert.ok(summaryRes.body.priorActions >= 2); // suspend + restore
+
+    // ADM-DEC-022: User detail lookup with safety summary
+    const userDetailRes = await request(app)
+      .get(`/admin/users/${target.id}`)
+      .set("Authorization", `Bearer ${adminToken}`);
+    assert.equal(userDetailRes.status, 200);
+    assert.equal(userDetailRes.body.id, target.id);
+    assert.equal(userDetailRes.body.email, target.email);
+    assert.ok(userDetailRes.body.safetySummary);
+    assert.equal(userDetailRes.body.safetySummary.reportCount, 1);
   } finally {
     if (reporter) {
       await prisma.report.deleteMany({ where: { reporterId: reporter.id } });

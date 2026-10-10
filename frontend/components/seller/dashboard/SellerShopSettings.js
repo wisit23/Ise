@@ -87,9 +87,12 @@ export default function SellerShopSettings() {
 
     // Only send fields that actually differ from current profile
     const patch = {};
-    if (shopName.trim() && shopName.trim() !== profile?.shopName) patch.shopName = shopName.trim();
-    if (address.trim() !== (profile?.address || "")) patch.address = address.trim();
-    if (bankAccount.trim() !== (profile?.bankAccount || "")) patch.bankAccount = bankAccount.trim();
+    if (shopName.trim() && shopName.trim() !== profile?.shopName)
+      patch.shopName = shopName.trim();
+    if (address.trim() !== (profile?.address || ""))
+      patch.address = address.trim();
+    if (bankAccount.trim() !== (profile?.bankAccount || ""))
+      patch.bankAccount = bankAccount.trim();
 
     if (Object.keys(patch).length === 0) {
       setError("ไม่มีข้อมูลที่เปลี่ยนแปลง กรุณาแก้ไขอย่างน้อย 1 ช่อง");
@@ -116,9 +119,12 @@ export default function SellerShopSettings() {
   return (
     <div className="animate-fade-in-up space-y-8 max-w-2xl">
       <div>
-        <h2 className="text-base font-semibold text-slate-800">ข้อมูลร้านค้าปัจจุบัน</h2>
+        <h2 className="text-base font-semibold text-slate-800">
+          ข้อมูลร้านค้าปัจจุบัน
+        </h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          หากต้องการเปลี่ยนแปลง ให้แก้ไขและส่งคำขอด้านล่าง — Admin จะตรวจสอบก่อนมีผล
+          หากต้องการเปลี่ยนแปลง ให้แก้ไขและส่งคำขอด้านล่าง — Admin
+          จะตรวจสอบก่อนมีผล
         </p>
       </div>
 
@@ -134,25 +140,39 @@ export default function SellerShopSettings() {
             </div>
             <div>
               <p className="text-xs text-slate-400 mb-1">ที่อยู่ / จัดส่ง</p>
-              <p className="font-medium whitespace-pre-line">{profile?.address || "—"}</p>
+              <p className="font-medium whitespace-pre-line">
+                {profile?.address || "—"}
+              </p>
             </div>
             <div>
               <p className="text-xs text-slate-400 mb-1">เลขบัญชีธนาคาร</p>
-              <p className="font-mono font-medium">{profile?.bankAccount || "—"}</p>
+              <p className="font-mono font-medium">
+                {profile?.bankAccount || "—"}
+              </p>
             </div>
           </div>
 
           {/* Pending warning */}
           {hasPending && (
             <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">pending</span>
-              <span>คุณมีคำขอที่รอตรวจสอบอยู่แล้ว ไม่สามารถส่งคำขอใหม่ได้จนกว่า Admin จะตัดสินใจ</span>
+              <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">
+                pending
+              </span>
+              <span>
+                คุณมีคำขอที่รอตรวจสอบอยู่แล้ว ไม่สามารถส่งคำขอใหม่ได้จนกว่า
+                Admin จะตัดสินใจ
+              </span>
             </div>
           )}
 
           {/* Edit form */}
-          <form onSubmit={handleSubmit} className="rounded-xl border border-slate-200/70 bg-white p-6 shadow-sm space-y-5">
-            <h3 className="text-sm font-semibold text-slate-800">ส่งคำขอแก้ไขข้อมูลร้านค้า</h3>
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-xl border border-slate-200/70 bg-white p-6 shadow-sm space-y-5"
+          >
+            <h3 className="text-sm font-semibold text-slate-800">
+              ส่งคำขอแก้ไขข้อมูลร้านค้า
+            </h3>
 
             <Field label="ชื่อร้านค้า">
               <input
@@ -204,13 +224,17 @@ export default function SellerShopSettings() {
 
             {error && (
               <p className="flex items-center gap-1.5 text-sm text-red-600">
-                <span className="material-symbols-outlined text-[15px]">error</span>
+                <span className="material-symbols-outlined text-[15px]">
+                  error
+                </span>
                 {error}
               </p>
             )}
             {success && (
               <p className="flex items-center gap-1.5 text-sm text-emerald-700">
-                <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                <span className="material-symbols-outlined text-[15px]">
+                  check_circle
+                </span>
                 {success}
               </p>
             )}
@@ -228,7 +252,9 @@ export default function SellerShopSettings() {
 
       {/* History */}
       <div>
-        <h3 className="mb-3 text-sm font-semibold text-slate-700">ประวัติคำขอ</h3>
+        <h3 className="mb-3 text-sm font-semibold text-slate-700">
+          ประวัติคำขอ
+        </h3>
         {loadingHistory ? (
           <p className="text-sm text-slate-400">กำลังโหลด...</p>
         ) : history.length === 0 ? (
@@ -265,19 +291,25 @@ export default function SellerShopSettings() {
                   {req.shopName && (
                     <div>
                       <dt className="text-xs text-slate-400">ชื่อร้านใหม่</dt>
-                      <dd className="font-medium text-slate-700">{req.shopName}</dd>
+                      <dd className="font-medium text-slate-700">
+                        {req.shopName}
+                      </dd>
                     </div>
                   )}
                   {req.address && (
                     <div>
                       <dt className="text-xs text-slate-400">ที่อยู่ใหม่</dt>
-                      <dd className="font-medium text-slate-700 whitespace-pre-line">{req.address}</dd>
+                      <dd className="font-medium text-slate-700 whitespace-pre-line">
+                        {req.address}
+                      </dd>
                     </div>
                   )}
                   {req.bankAccount && (
                     <div>
                       <dt className="text-xs text-slate-400">เลขบัญชีใหม่</dt>
-                      <dd className="font-mono font-medium text-slate-700">{req.bankAccount}</dd>
+                      <dd className="font-mono font-medium text-slate-700">
+                        {req.bankAccount}
+                      </dd>
                     </div>
                   )}
                 </dl>

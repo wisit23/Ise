@@ -66,8 +66,23 @@ async function chooseClip({ user, productVideoId }) {
   });
 }
 
+/**
+ * Removes a buyer's "interested" bookmark on one clip (unlike/unchoose).
+ */
+async function unchooseClip({ user, productVideoId }) {
+  const clip = await productVideoRepository.findById(productVideoId);
+  if (!clip) throw notFound("swipe card not found");
+
+  await productVideoRepository.deleteChoice({
+    productVideoId,
+    userId: user.id,
+  });
+  return { chosen: false };
+}
+
 module.exports = {
   listFeed,
   createClip,
   chooseClip,
+  unchooseClip,
 };

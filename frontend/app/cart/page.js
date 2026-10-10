@@ -10,7 +10,11 @@ import EmptyState from "../../components/ui/EmptyState";
 import Skeleton from "../../components/ui/Skeleton";
 import OrderLine from "../../components/OrderLine";
 import { apiFetch } from "../../lib/api";
-import { getAccessToken } from "../../lib/auth";
+import {
+  getAccessToken,
+  getCurrentRoles,
+  isCustomerAccountRoles,
+} from "../../lib/auth";
 
 export function isReservationExpired(order, now) {
   const deadline = reservationDeadline(order);
@@ -21,14 +25,23 @@ export function reservationCountdown(order, now) {
   const deadline = reservationDeadline(order);
   if (deadline === null) return null;
   const remainingSeconds = Math.max(0, Math.ceil((deadline - now) / 1000));
-  const minutes = Math.floor(remainingSeconds / 60);
+  const hours = Math.floor(remainingSeconds / 3600);
+  const minutes = Math.floor((remainingSeconds % 3600) / 60);
   const seconds = String(remainingSeconds % 60).padStart(2, "0");
+  if (hours > 0) {
+    return `${hours} ชม. ${minutes} นาที`;
+  }
   return `${minutes}:${seconds}`;
 }
 
 function reservationDeadline(order) {
   if (order.reservationExpiresAt) {
     return new Date(order.reservationExpiresAt).getTime();
+  }
+  if (order.auctionId) {
+    return order.createdAt
+      ? new Date(order.createdAt).getTime() + 24 * 60 * 60 * 1000
+      : null;
   }
   if (order.createdAt) {
     return new Date(order.createdAt).getTime() + 10 * 60 * 1000;
@@ -51,6 +64,10 @@ export default function CartPage() {
     const token = getAccessToken();
     if (!token) {
       router.push("/login");
+      return;
+    }
+    if (!isCustomerAccountRoles(getCurrentRoles())) {
+      router.push("/");
       return;
     }
     setLoading(true);
@@ -141,33 +158,26 @@ export default function CartPage() {
     }
   }
 
-  async function handleCheckout() {
-    const token = getAccessToken();
+  function handleCheckout() {
+    if (selectedItems.length === 0) return;
     setPaying(true);
-    setNotice("");
-    try {
-      for (const order of selectedItems) {
-        await apiFetch(`/api/orders/${order.id}/pay`, {
-          method: "PATCH",
-          token,
-        });
-      }
-      setNotice("ชำระเงินสำเร็จ");
-      setItems((prev) => prev.filter((o) => !selected.has(o.id)));
-      setSelected(new Set());
-    } catch (err) {
-      setNotice(err.message);
-      load();
-    } finally {
-      setPaying(false);
-    }
+    const orderIds = selectedItems.map((order) => order.id).join(",");
+    router.push(`/checkout?orders=${encodeURIComponent(orderIds)}`);
   }
 
   const activeItems = items.filter(
     (order) => !isReservationExpired(order, now),
   );
   const selectedItems = activeItems.filter((o) => selected.has(o.id));
-  const total = selectedItems.reduce((sum, o) => sum + o.price, 0);
+  const totalOriginal = selectedItems.reduce((sum, o) => sum + o.price, 0);
+  const total = selectedItems.reduce((sum, o) => {
+    const itemPrice =
+      o.finalPrice !== null && o.finalPrice !== undefined
+        ? o.finalPrice
+        : Math.max(0, o.price - (o.discountAmount || 0));
+    return sum + itemPrice;
+  }, 0);
+  const totalDiscount = totalOriginal - total;
 
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
@@ -175,8 +185,8 @@ export default function CartPage() {
       <section className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 pb-28">
         <h1 className="mb-1 text-xl font-bold text-gray-900">ตะกร้าของฉัน</h1>
         <p className="mb-6 text-sm text-gray-500">
-          สินค้าที่เพิ่มลงตะกร้าจะถูกล็อกไว้ให้คุณ 10 นาที
-          กรุณาชำระเงินก่อนเวลาหมดหรือยกเลิกเพื่อคืนสินค้า
+          สินค้าที่เพิ่มลงตะกร้าจะถูกล็อกไว้ 10 นาที (หรือ 24
+          ชั่วโมงสำหรับสินค้าประมูลที่คุณชนะ) กรุณาชำระเงินก่อนหมดเวลา
         </p>
 
         {error && <Alert className="mb-4">{error}</Alert>}
@@ -226,7 +236,10 @@ export default function CartPage() {
                 const expired = isReservationExpired(o, now);
                 const countdown = reservationCountdown(o, now);
                 return (
-                  <li key={o.id} className="transition-colors hover:bg-slate-50/50">
+                  <li
+                    key={o.id}
+                    className="transition-colors hover:bg-slate-50/50"
+                  >
                     <OrderLine
                       order={o}
                       highlight={expired}
@@ -254,6 +267,17 @@ export default function CartPage() {
                             </span>
                             หมดเวลาจองแล้ว
                           </span>
+                        ) : o.auctionId ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                            <span
+                              className="material-symbols-outlined text-[15px] leading-none"
+                              aria-hidden="true"
+                            >
+                              gavel
+                            </span>
+                            ชนะการประมูล · รอชำระเงิน
+                            {countdown ? ` (เหลือเวลา ${countdown})` : ""}
+                          </span>
                         ) : countdown ? (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">
                             <span
@@ -272,13 +296,15 @@ export default function CartPage() {
                         )
                       }
                       actions={
-                        <button
-                          onClick={() => handleCancel(o.id)}
-                          disabled={busyId === o.id}
-                          className="focus-ring rounded px-1 text-sm text-ink-subtle transition hover:text-danger disabled:opacity-50"
-                        >
-                          ยกเลิก
-                        </button>
+                        !o.auctionId && (
+                          <button
+                            onClick={() => handleCancel(o.id)}
+                            disabled={busyId === o.id}
+                            className="focus-ring rounded px-1 text-sm text-ink-subtle transition hover:text-danger disabled:opacity-50"
+                          >
+                            ยกเลิก
+                          </button>
+                        )
                       }
                     />
                   </li>
@@ -294,9 +320,23 @@ export default function CartPage() {
           <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4">
             <div className="text-sm text-gray-600">
               เลือกแล้ว {selectedItems.length} รายการ ·{" "}
-              <span className="text-lg font-bold text-emerald-600">
-                ฿{total.toLocaleString("th-TH")}
-              </span>
+              {totalDiscount > 0 ? (
+                <>
+                  <span className="text-xs text-gray-400 line-through mr-1.5">
+                    ฿{totalOriginal.toLocaleString("th-TH")}
+                  </span>
+                  <span className="text-lg font-bold text-emerald-600">
+                    ฿{total.toLocaleString("th-TH")}
+                  </span>
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full ml-2">
+                    ลดไป ฿{totalDiscount.toLocaleString("th-TH")}
+                  </span>
+                </>
+              ) : (
+                <span className="text-lg font-bold text-emerald-600">
+                  ฿{total.toLocaleString("th-TH")}
+                </span>
+              )}
             </div>
             <button
               onClick={handleCheckout}
@@ -304,8 +344,8 @@ export default function CartPage() {
               className="rounded-md bg-emerald-600 px-6 py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {paying
-                ? "กำลังชำระเงิน..."
-                : `ชำระเงิน (${selectedItems.length})`}
+                ? "กำลังไปหน้ายืนยัน..."
+                : `ยืนยันรายการ (${selectedItems.length})`}
             </button>
           </div>
         </div>

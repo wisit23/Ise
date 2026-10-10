@@ -33,3 +33,8 @@ test("PATCH /:id/pay with no bearer token is rejected with 401", async () => {
   const res = await request(app).patch("/o1/pay");
   assert.equal(res.status, 401);
 });
+
+test("POST /checkout-sessions with no bearer token is rejected with 401", async () => {
+  const res = await request(app).post("/checkout-sessions");
+  assert.equal(res.status, 401);
+});

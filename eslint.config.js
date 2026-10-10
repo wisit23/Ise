@@ -11,6 +11,7 @@ module.exports = [
       "**/dist/**",
       "**/coverage/**",
       "**/generated/**",
+      "**/.snapshots/**",
       "frontend/next-env.d.ts",
       // Local AI coding-assistant tooling (gitignored, never shipped). CI
       // never sees these because they aren't committed, but a developer
@@ -21,6 +22,7 @@ module.exports = [
       ".github/skills/**",
       ".github/agents/**",
       ".github/hooks/**",
+      ".codex_tmp_review_comments/**",
     ],
   },
   js.configs.recommended,

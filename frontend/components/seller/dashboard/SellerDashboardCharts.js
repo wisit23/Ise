@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 import TrendBarChart from "../../charts/TrendBarChart";
 import LineChart from "../../charts/LineChart";
 import DonutChart from "../../charts/DonutChart";
@@ -12,8 +10,18 @@ import { baht } from "./sellerStatus";
 
 /** Thai month abbreviations (index 0 = January). */
 const MONTH_LABELS = [
-  "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
-  "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.",
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
 ];
 
 /**
@@ -136,7 +144,11 @@ export default function SellerDashboardCharts({
       {/* ── Row 1: Monthly revenue bar chart (full width) ── */}
       <ChartCard title="ยอดขายรายเดือน (12 เดือน)" icon="bar_chart">
         {hasMonthlyData ? (
-          <TrendBarChart data={monthlyRevenue} formatValue={baht} height={200} />
+          <TrendBarChart
+            data={monthlyRevenue}
+            formatValue={baht}
+            height={200}
+          />
         ) : (
           <div className="flex h-40 items-center justify-center text-sm text-gray-400">
             ยังไม่มียอดขายในปีนี้
@@ -192,7 +204,9 @@ export default function SellerDashboardCharts({
               className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline"
             >
               ดูทั้งหมด
-              <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+              <span className="material-symbols-outlined text-[14px]">
+                chevron_right
+              </span>
             </button>
           )}
         </div>

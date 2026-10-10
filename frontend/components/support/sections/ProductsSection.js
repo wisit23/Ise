@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { apiFetch } from "../../../lib/api";
+import Pagination from "../../Pagination";
 import Badge from "../../panel/ui/Badge";
 import ConfirmDialog from "../../ui/ConfirmDialog";
 import { useToast } from "../../ui/ToastProvider";
@@ -9,7 +10,7 @@ const STATUS_LABEL = {
   available: "พร้อมขาย",
   reserved: "ถูกจองไว้",
   sold: "ขายแล้ว",
-  removed: "ถูกลบโดยแอดมิน",
+  removed: "ถูกระงับโดย Trust & Safety",
 };
 
 const STATUS_STYLE = {
@@ -19,43 +20,53 @@ const STATUS_STYLE = {
   removed: "bg-red-50 text-red-600",
 };
 
-// ─── Products Section (Admin only) ─────────────────────────────────────────
-// Lets Admin find any listing and remove/restore it directly, instead of
-// only being reachable when a Report happens to reference the product.
+// ─── Products Section (Trust & Safety only) ───────────────────────────────────
+// Lets Trust & Safety officers find any listing and remove/restore it directly,
+// instead of only being reachable when a Report happens to reference the product.
 
 export default function ProductsSection({ token }) {
   const toast = useToast();
-  // Product awaiting delete confirmation. Was window.confirm(), which froze
-  // the tab and could not show the reason the admin had just typed.
   const [pendingRemoval, setPendingRemoval] = useState(null);
   const [query, setQuery] = useState("");
   const [includeRemoved, setIncludeRemoved] = useState(false);
   const [items, setItems] = useState([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
   const [reasonById, setReasonById] = useState({});
 
-  async function handleSearch(e) {
-    e.preventDefault();
-    if (!query.trim()) return;
+  async function searchProducts(targetPage = 1, searchQuery = query, removedOnly = includeRemoved) {
+    if (!searchQuery.trim()) return;
     setLoading(true);
     setError("");
     setSearched(true);
     try {
-      const params = new URLSearchParams({ q: query.trim(), limit: 20 });
-      if (includeRemoved) params.set("status", "removed");
+      const params = new URLSearchParams({
+        q: searchQuery.trim(),
+        limit: "15",
+        page: String(targetPage),
+      });
+      if (removedOnly) params.set("status", "removed");
       const data = await apiFetch(`/api/products/admin/search?${params}`, {
         token,
       });
       setItems(data.items || []);
+      setTotalPages(data.totalPages || 1);
+      setPage(targetPage);
     } catch (err) {
       setError(err.message);
       setItems([]);
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleSearch(e) {
+    e.preventDefault();
+    searchProducts(1, query, includeRemoved);
   }
 
   function handleRemove(product) {
@@ -106,8 +117,10 @@ export default function ProductsSection({ token }) {
           p.id === product.id ? { ...p, status: updated.status } : p,
         ),
       );
+      toast.success(`กู้คืนสินค้า "${product.title}" สำเร็จ`);
     } catch (err) {
       setError(err.message);
+      toast.error(err.message);
     } finally {
       setBusyId(null);
     }
@@ -239,18 +252,28 @@ export default function ProductsSection({ token }) {
             </li>
           ))}
         </ul>
+
+        {totalPages > 1 && (
+          <div className="mt-6 w-full max-w-4xl">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onChange={(newPage) => searchProducts(newPage, query, includeRemoved)}
+            />
+          </div>
+        )}
       </div>
 
       <ConfirmDialog
         open={Boolean(pendingRemoval)}
         busy={busyId === pendingRemoval?.id}
-        title="ยืนยันลบสินค้า?"
+        title="ยืนยันระงับสินค้า?"
         description={
           pendingRemoval
-            ? `"${pendingRemoval.title}" จะถูกซ่อนจากผู้ซื้อทันที และผู้ขายจะเห็นสถานะ "ถูกลบโดยแอดมิน"`
+            ? `"${pendingRemoval.title}" จะถูกซ่อนจากผู้ซื้อทันที และผู้ขายจะเห็นสถานะ "ถูกระงับโดย Trust & Safety"`
             : undefined
         }
-        confirmLabel="ลบสินค้า"
+        confirmLabel="ระงับสินค้า"
         tone="danger"
         onCancel={() => setPendingRemoval(null)}
         onConfirm={confirmRemove}

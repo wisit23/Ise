@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { createProxyMiddleware } = require("http-proxy-middleware");
-const { verifyAccessToken } = require("@reloop/shared");
+const { requireAuth } = require("@reloop/shared");
 
 const SERVICES = {
   auth: process.env.AUTH_SERVICE_URL || "http://auth-service:3001",
@@ -10,6 +10,7 @@ const SERVICES = {
   chat: process.env.CHAT_SERVICE_URL || "http://chat-service:3004",
   reviews: process.env.REVIEW_SERVICE_URL || "http://review-service:3005",
   support: process.env.SUPPORT_SERVICE_URL || "http://support-service:3006",
+  frontend: process.env.FRONTEND_SERVICE_URL || "http://frontend:3000",
 };
 
 // Routes that don't require a valid access token (register/login/refresh, public feed reads).
@@ -25,17 +26,26 @@ const PUBLIC_PATHS = [
   // schedule/bid all live on longer paths and stay gated by
   // product-service's own requireAuth.
   /^\/api\/products\/auctions\/[^/]+$/,
+  /^\/api\/products\/auctions\/rounds\/current$/,
   // Single-item browsing must stay open to guests; write/delete routes on the
   // same path are still gated by product-service's own requireAuth middleware.
   /^\/api\/products\/[^/]+$/,
   // Uploaded media must render for guests too; POST /uploads (creating new
   // files) is still gated by product-service's own requireAuth/requireRole.
   /^\/uploads\//,
+  // Review media is public too, but lives in review-service's separate volume.
+  // POST /api/reviews/uploads is not matched here and still requires auth.
+  /^\/review-uploads\//,
   // A store page's rating must be visible to guests browsing without an account.
   /^\/api\/reviews\/by-seller\//,
   // FAQ deflection (WF-10 step 2) must work for guests too; POST/PATCH on
   // this same path are still gated by support-service's own requireAuth.
   /^\/api\/support\/help(\/|$)/,
+  // Marketing & Community Articles (ST-MKT-05 / UR-14) must be browsable by guests;
+  // write/delete routes stay gated by product-service requireAuth/requireRole.
+  /^\/api\/products\/articles(\/|$)/,
+  // Marketing Campaigns & Promotions (MKT-001 / UR-15 / UR-16) - public browsing of active campaigns
+  /^\/api\/products\/campaigns\/(available|published)$/,
 ];
 
 function isPublic(path) {
@@ -50,6 +60,10 @@ app.get("/health", (req, res) =>
 );
 
 app.use((req, res, next) => {
+  if (!req.path.startsWith("/api/")) {
+    return next();
+  }
+
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
 
@@ -58,21 +72,17 @@ app.use((req, res, next) => {
     return res.status(401).json({ error: "Missing bearer token" });
   }
 
-  try {
-    const payload = verifyAccessToken(token);
-    req.headers["x-user-id"] = payload.sub;
-    req.headers["x-user-role"] = payload.role;
+  return requireAuth(req, res, () => {
+    req.headers["x-user-id"] = req.userId;
+    req.headers["x-user-role"] = req.userRole;
     // Multi-role/permission claims (ADM-001)
-    req.headers["x-user-roles"] = (payload.roles || []).join(",");
-    req.headers["x-user-permissions"] = (payload.permissions || []).join(",");
+    req.headers["x-user-roles"] = req.userRoles.join(",");
+    req.headers["x-user-permissions"] = req.permissions.join(",");
     req.headers["x-user-display-name"] = encodeURIComponent(
-      payload.displayName || "",
+      req.userDisplayName || "",
     );
     next();
-  } catch {
-    if (isPublic(req.path)) return next();
-    return res.status(401).json({ error: "Invalid or expired token" });
-  }
+  });
 });
 
 app.use(
@@ -98,15 +108,29 @@ app.use(
   }),
 );
 app.use(
+  "/review-uploads",
+  createProxyMiddleware({
+    target: SERVICES.reviews,
+    changeOrigin: true,
+    pathRewrite: (path) => `/review-uploads${path}`,
+  }),
+);
+app.use(
   "/api/orders",
   createProxyMiddleware({ target: SERVICES.orders, changeOrigin: true }),
 );
+// Handles regular HTTP requests to /api/chat/* only (REST endpoints) — the
+// WebSocket upgrade path (Socket.IO) is proxied separately in server.js's
+// own `server.on("upgrade", ...)` handler via a hand-rolled raw TCP pipe,
+// not through this middleware's `ws: true` option (that option was tried
+// and removed: http-proxy-middleware's upgrade handling corrupted the
+// response under concurrent WebSocket connections — see server.js's comment
+// for the full story).
 app.use(
   "/api/chat",
   createProxyMiddleware({
     target: SERVICES.chat,
     changeOrigin: true,
-    ws: true,
   }),
 );
 app.use(
@@ -116,6 +140,16 @@ app.use(
 app.use(
   "/api/support",
   createProxyMiddleware({ target: SERVICES.support, changeOrigin: true }),
+);
+
+// Fallback: proxy all web UI requests (pages, _next assets, favicon, etc.) to Frontend
+app.use(
+  "/",
+  createProxyMiddleware({
+    target: SERVICES.frontend,
+    changeOrigin: true,
+    ws: true,
+  }),
 );
 
 module.exports = app;

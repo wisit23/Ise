@@ -108,6 +108,32 @@ async function releaseProductReservation(productId, reservationId) {
   return released.count === 1;
 }
 
+async function extendProductReservation(
+  productId,
+  reservationId,
+  expiresAt,
+  { now = new Date() } = {},
+) {
+  if (!(expiresAt instanceof Date) || Number.isNaN(expiresAt.getTime())) {
+    throw badRequest("expiresAt must be a valid date");
+  }
+  if (expiresAt <= now) throw badRequest("expiresAt must be in the future");
+
+  const extended = await prisma.product.updateMany({
+    where: {
+      id: productId,
+      status: "reserved",
+      reservationId,
+      reservationExpiresAt: { gt: now },
+    },
+    data: { reservationExpiresAt: expiresAt },
+  });
+  if (extended.count !== 1) {
+    throw conflict("reservation has expired or is no longer active");
+  }
+  return { expiresAt };
+}
+
 async function completeProductReservation(
   productId,
   reservationId,
@@ -122,14 +148,26 @@ async function completeProductReservation(
     },
     data: {
       status: "sold",
-      reservationId: null,
+      // Keep the completed reservation id as the idempotency identity. A sold
+      // listing is terminal, so this value is no longer an active lock.
       reservedBy: null,
       reservationExpiresAt: null,
     },
   });
   if (completed.count !== 1) {
+    // The order-service outbox may retry after product-service committed but
+    // the HTTP acknowledgement was lost. Treat an already-sold product as an
+    // idempotent success; no other transition can make a sold item available.
+    const current = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { status: true, reservationId: true },
+    });
+    if (current?.status === "sold" && current.reservationId === reservationId) {
+      return false;
+    }
     throw conflict("reservation has expired or is no longer active");
   }
+  return true;
 }
 
 async function releaseExpiredReservations({ now = new Date() } = {}) {
@@ -164,6 +202,7 @@ module.exports = {
   RESERVATION_TTL_MS,
   reserveProduct,
   releaseProductReservation,
+  extendProductReservation,
   completeProductReservation,
   releaseExpiredReservations,
   startReservationExpiryWorker,

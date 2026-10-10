@@ -26,7 +26,10 @@ function conflict(message = "Conflict") {
 function errorHandler(err, req, res, next) {
   const status = err.status || 500;
   if (status >= 500) console.error(err);
-  res.status(status).json({ error: err.message || "Internal server error" });
+  res.status(status).json({
+    error: err.message || "Internal server error",
+    ...(err.code ? { code: err.code } : {}),
+  });
 }
 
 module.exports = {

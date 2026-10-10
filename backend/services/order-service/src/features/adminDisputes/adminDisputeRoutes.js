@@ -32,6 +32,7 @@ router.post(
         reason: req.body.reason,
         version: req.body.version,
         adminId: req.userId,
+        staffId: req.userId,
       });
       res.json(order);
     } catch (err) {
@@ -51,6 +52,7 @@ router.post(
         reason: req.body.reason,
         version: req.body.version,
         adminId: req.userId,
+        staffId: req.userId,
       });
       res.json(order);
     } catch (err) {

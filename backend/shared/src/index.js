@@ -2,6 +2,7 @@ module.exports = {
   ...require("./jwt"),
   ...require("./authMiddleware"),
   ...require("./errors"),
+  ...require("./sessionValidation"),
   ...require("./env"),
   ...require("./pagination"),
   ...require("./permissions"),

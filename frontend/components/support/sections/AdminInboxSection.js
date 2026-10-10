@@ -83,6 +83,7 @@ export default function AdminInboxSection({ token }) {
             ticketNumber: `REP-${r.id.slice(0, 6).toUpperCase()}`,
             subject: r.reason || "รายงาน",
             requesterId: r.reporterId,
+            targetId: r.targetId,
             priority: "URGENT",
             status:
               r.status === "OPEN"
@@ -226,10 +227,10 @@ export default function AdminInboxSection({ token }) {
               ids: [action.userId],
               reason:
                 reason ||
-                `Banned from Admin Inbox (Ticket: ${selectedTicket?.ticketNumber})`,
+                `Banned ${action.roleLabel || "user"} from Admin Inbox (Ticket: ${selectedTicket?.ticketNumber})`,
             },
           }),
-        "ระงับบัญชีผู้ใช้สำเร็จ",
+        `ระงับบัญชี${action.roleLabel || "ผู้ใช้"}สำเร็จ`,
       );
     }
 
@@ -240,32 +241,53 @@ export default function AdminInboxSection({ token }) {
           token,
           body: { reason },
         }),
-      "บันทึกการตักเตือนสำเร็จ",
+      `บันทึกการตักเตือน${action.roleLabel || "ผู้ใช้"}สำเร็จ`,
     );
   }
 
+  const isRequester = pendingAction?.isRequester;
+  const targetUserId = pendingAction?.userId;
+  const roleLabel = pendingAction?.roleLabel || "ผู้ใช้";
+
   const confirmCopy =
     {
-      ban: {
-        title: "ระงับบัญชีผู้ใช้นี้?",
-        description:
-          "ผู้ใช้จะเข้าสู่ระบบไม่ได้ทันที (SUSPEND_USER) และจะถูกบันทึกใน Audit Log",
-        confirmLabel: "ระงับบัญชี",
-        tone: "danger",
-        reason: "optional",
-        reasonLabel: "เหตุผลในการระงับ",
-      },
-      warn: {
-        title: "ตักเตือนผู้ใช้นี้?",
-        description: "คำเตือนจะถูกบันทึกไว้ในประวัติผู้ใช้",
-        confirmLabel: "บันทึกการตักเตือน",
-        tone: "primary",
-        reason: "required",
-        reasonLabel: "เหตุผลในการตักเตือน",
-      },
+      ban: isRequester
+        ? {
+            title: "⚠️ ยืนยันการระงับบัญชีผู้แจ้งปัญหา?",
+            description: `คุณกำลังจะระงับบัญชี (SUSPEND) ของ "${roleLabel}" (รหัส: ${targetUserId}) ซึ่งเป็นผู้ส่งคำร้องเข้ามา ไม่ใช่คู่กรณี บัญชีนี้จะไม่สามารถเข้าใช้งานระบบได้ทันที`,
+            confirmLabel: "ยืนยันระงับบัญชีผู้แจ้ง",
+            tone: "danger",
+            reason: "optional",
+            reasonLabel: "เหตุผลในการระงับผู้แจ้ง",
+          }
+        : {
+            title: `ระงับบัญชีคู่กรณี (${targetUserId ? targetUserId.slice(0, 8) : ""}...)?`,
+            description: `ผู้ใช้เป้าหมาย/คู่กรณี (รหัส: ${targetUserId}) จะเข้าสู่ระบบไม่ได้ทันที (SUSPEND_USER) และจะถูกบันทึกใน Audit Log`,
+            confirmLabel: "ระงับบัญชีคู่กรณี",
+            tone: "danger",
+            reason: "optional",
+            reasonLabel: "เหตุผลในการระงับคู่กรณี",
+          },
+      warn: isRequester
+        ? {
+            title: `ตักเตือนผู้แจ้งปัญหา (${targetUserId ? targetUserId.slice(0, 8) : ""}...)?`,
+            description: `บันทึกคำเตือนไปยังประวัติของ "${roleLabel}" (ผู้ส่งคำร้อง)`,
+            confirmLabel: "ตักเตือนผู้แจ้ง",
+            tone: "primary",
+            reason: "required",
+            reasonLabel: "เหตุผลในการตักเตือนผู้แจ้ง",
+          }
+        : {
+            title: `ตักเตือนคู่กรณี (${targetUserId ? targetUserId.slice(0, 8) : ""}...)?`,
+            description: `บันทึกคำเตือนไปยังประวัติของคู่กรณี (รหัส: ${targetUserId})`,
+            confirmLabel: "ตักเตือนคู่กรณี",
+            tone: "primary",
+            reason: "required",
+            reasonLabel: "เหตุผลในการตักเตือนคู่กรณี",
+          },
       escalate: {
-        title: "ส่งต่อให้ Admin?",
-        description: "ตั๋วจะถูกยกระดับไปยังคิวของ Admin",
+        title: "ส่งต่อให้ทีม Trust & Safety?",
+        description: "ตั๋วจะถูกยกระดับไปยังคิวของ Trust & Safety",
         confirmLabel: "ส่งต่อ",
         tone: "primary",
         reason: "optional",
@@ -323,10 +345,22 @@ export default function AdminInboxSection({ token }) {
               actionError={actionError}
               onAssign={handleAssign}
               onStatusChange={handleStatusChange}
-              onWarnUser={(userId) =>
-                setPendingAction({ kind: "warn", userId })
+              onWarnUser={(userId, rLabel) =>
+                setPendingAction({
+                  kind: "warn",
+                  userId,
+                  roleLabel: rLabel || "คู่กรณี",
+                  isRequester: rLabel?.includes("ผู้แจ้ง"),
+                })
               }
-              onBanUser={(userId) => setPendingAction({ kind: "ban", userId })}
+              onBanUser={(userId, rLabel) =>
+                setPendingAction({
+                  kind: "ban",
+                  userId,
+                  roleLabel: rLabel || "คู่กรณี",
+                  isRequester: rLabel?.includes("ผู้แจ้ง"),
+                })
+              }
             />
           ))}
       </CaseDrawer>

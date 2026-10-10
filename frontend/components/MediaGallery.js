@@ -23,7 +23,7 @@ export default function MediaGallery({ media, alt }) {
             <img
               src={mediaUrl(current.url)}
               alt={alt}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain bg-gray-50"
             />
           )
         ) : (

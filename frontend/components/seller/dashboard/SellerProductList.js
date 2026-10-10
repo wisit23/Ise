@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Button from "../../ui/Button";
 import EmptyState from "../../ui/EmptyState";
+import OrderShippingModal from "../../orders/OrderShippingModal";
 import {
   PRODUCT_STATUS_LABEL,
   PRODUCT_STATUS_STYLE,
@@ -21,10 +22,14 @@ const STATUS_FILTERS = [
 
 export default function SellerProductList({
   products,
+  orders = [],
   statusFilter: propStatusFilter,
   onStatusFilterChange,
+  onOrderUpdated,
 }) {
   const [localStatusFilter, setLocalStatusFilter] = useState("");
+  const [selectedOrderForShipping, setSelectedOrderForShipping] = useState(null);
+  const [shippingModalOpen, setShippingModalOpen] = useState(false);
   const statusFilter =
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
@@ -36,7 +41,9 @@ export default function SellerProductList({
       (p) =>
         !search ||
         p.title?.toLowerCase().includes(search.toLowerCase()) ||
-        (p.tags || []).some((t) => t.toLowerCase().includes(search.toLowerCase()))
+        (p.tags || []).some((t) =>
+          t.toLowerCase().includes(search.toLowerCase()),
+        ),
     );
 
   if (products.length === 0) {
@@ -95,7 +102,9 @@ export default function SellerProductList({
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <p>
           แสดง{" "}
-          <span className="font-semibold text-slate-700">{filtered.length}</span>{" "}
+          <span className="font-semibold text-slate-700">
+            {filtered.length}
+          </span>{" "}
           รายการ จากทั้งหมด {products.length} สินค้า
         </p>
         {statusFilter && (
@@ -163,24 +172,61 @@ export default function SellerProductList({
                       style={PRODUCT_STATUS_STYLE[p.status]}
                     />
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    {p.status !== "sold" ? (
-                      <Link
-                        href={`/products/${p.id}/edit`}
-                        className="focus-ring rounded text-xs font-medium text-slate-500 hover:text-emerald-700 hover:underline"
-                      >
-                        แก้ไข
-                      </Link>
-                    ) : (
-                      <span className="text-xs text-slate-300">—</span>
-                    )}
-                  </td>
+                  {(() => {
+                    const awaitingOrder = (orders || []).find(
+                      (o) => o.productId === p.id && o.status === "confirmed",
+                    );
+
+                    return (
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {awaitingOrder && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOrderForShipping(awaitingOrder);
+                                setShippingModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-xs font-semibold shadow-2xs transition"
+                              title="จัดส่งสินค้าสำหรับคำสั่งซื้อนี้"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">
+                                local_shipping
+                              </span>
+                              <span>จัดส่งสินค้า</span>
+                            </button>
+                          )}
+                          {p.status !== "sold" ? (
+                            <Link
+                              href={`/products/${p.id}/edit`}
+                              className="focus-ring rounded text-xs font-medium text-slate-500 hover:text-emerald-700 hover:underline"
+                            >
+                              แก้ไข
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })()}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Shipping Fulfillment Modal */}
+      <OrderShippingModal
+        orderId={selectedOrderForShipping?.id}
+        initialOrder={selectedOrderForShipping}
+        isOpen={shippingModalOpen}
+        onClose={() => setShippingModalOpen(false)}
+        onShipped={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+      />
     </div>
   );
 }

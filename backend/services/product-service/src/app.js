@@ -5,6 +5,7 @@ const uploadRoutes = require("./routes/uploadRoutes");
 const moderationRoutes = require("./features/moderation/moderationRoutes");
 const metricsRoutes = require("./features/metrics/metricsRoutes");
 const reservationRoutes = require("./features/reservations/reservationRoutes");
+const internalCampaignRoutes = require("./features/campaigns/internalCampaignRoutes");
 const { UPLOAD_DIR } = require("./middleware/upload");
 
 const app = express();
@@ -23,6 +24,7 @@ app.use("/uploads", express.static(UPLOAD_DIR));
 app.use("/uploads", uploadRoutes);
 
 app.use("/internal/products", reservationRoutes);
+app.use("/internal/campaigns", internalCampaignRoutes);
 app.use("/", productRoutes);
 app.use("/internal/moderation", moderationRoutes);
 

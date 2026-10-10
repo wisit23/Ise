@@ -5,12 +5,12 @@ import {
   clearSession,
 } from "./auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 // Access tokens expire after 15 minutes (JWT_ACCESS_EXPIRES). Rather than
 // force a re-login every 15 minutes, a 401 triggers one silent refresh (via
 // the 7-day refresh token) and the original request is retried once. If the
-// refresh itself fails, the session really is dead and we log the user out.
+// refresh rejects the session, log out; keep it during temporary Auth outages.
 let refreshPromise = null;
 
 async function refreshAccessToken() {
@@ -32,18 +32,37 @@ async function doRefresh() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
     });
-    if (!res.ok) return null;
     const data = await res.json();
+    rejectSuspended(data);
+    if (res.status >= 500) {
+      throw Object.assign(
+        new Error(data?.error || "ไม่สามารถตรวจสอบสถานะบัญชีได้ กรุณาลองใหม่"),
+        { transient: true },
+      );
+    }
+    if (!res.ok) return null;
     setAccessToken(data.accessToken);
     return data.accessToken;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error.code === "ACCOUNT_SUSPENDED" || error.transient) throw error;
+    throw new Error("ไม่สามารถตรวจสอบสถานะบัญชีได้ กรุณาลองใหม่");
   }
 }
 
-function forceLogout() {
+function forceLogout(reason) {
   clearSession();
-  if (typeof window !== "undefined") window.location.href = "/login";
+  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+    window.location.href =
+      reason === "suspended" ? "/login?reason=suspended" : "/login";
+  }
+}
+
+function rejectSuspended(data) {
+  if (data?.code !== "ACCOUNT_SUSPENDED") return;
+  forceLogout("suspended");
+  throw Object.assign(new Error(data.error || "บัญชีนี้ถูกระงับการใช้งาน"), {
+    code: data.code,
+  });
 }
 
 export async function apiFetch(path, { method = "GET", body, token } = {}) {
@@ -73,6 +92,7 @@ export async function apiFetch(path, { method = "GET", body, token } = {}) {
   }
 
   const data = res.status === 204 ? null : await res.json().catch(() => null);
+  rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     let errorMsg = data?.error;
@@ -86,13 +106,13 @@ export async function apiFetch(path, { method = "GET", body, token } = {}) {
 
 /** Uploads files as multipart/form-data. Browser sets the boundary itself, so
  * Content-Type must NOT be set manually here (unlike apiFetch's JSON body). */
-export async function uploadFiles(files, token) {
+async function uploadMediaTo(path, files, token, fieldName = "files") {
   const authToken = token ?? getAccessToken();
 
   const form = new FormData();
-  for (const file of files) form.append("files", file);
+  for (const file of files) form.append(fieldName, file);
 
-  let res = await fetch(`${API_URL}/uploads`, {
+  let res = await fetch(`${API_URL}${path}`, {
     method: "POST",
     headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
     body: form,
@@ -101,7 +121,7 @@ export async function uploadFiles(files, token) {
   if (res.status === 401 && authToken) {
     const newToken = await refreshAccessToken();
     if (newToken) {
-      res = await fetch(`${API_URL}/uploads`, {
+      res = await fetch(`${API_URL}${path}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${newToken}` },
         body: form,
@@ -110,11 +130,35 @@ export async function uploadFiles(files, token) {
   }
 
   const data = await res.json().catch(() => null);
+  rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     throw new Error(data?.error || `Upload failed (${res.status})`);
   }
   return data.media;
+}
+
+// Product listing media remains owned by product-service.
+export function uploadFiles(files, token) {
+  return uploadMediaTo("/uploads", files, token);
+}
+
+// Swipe-feed clips use a dedicated product-service endpoint. The service writes
+// the file under /app/services/product-service/uploads, which Docker persists
+// in the product_uploads named volume.
+export async function uploadProductClip(file, token) {
+  const [uploaded] = await uploadMediaTo(
+    "/api/products/videos/upload",
+    [file],
+    token,
+    "video",
+  );
+  return uploaded;
+}
+
+// Review images and videos are written to review-service's separate storage.
+export function uploadReviewFiles(files, token) {
+  return uploadMediaTo("/api/reviews/uploads", files, token);
 }
 
 /** Uploads one file as dispute evidence — a separate, private endpoint from
@@ -144,6 +188,7 @@ export async function uploadDisputeEvidence(disputeId, file, token) {
   }
 
   const data = await res.json().catch(() => null);
+  rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     throw new Error(data?.error || `Evidence upload failed (${res.status})`);
@@ -181,6 +226,7 @@ export async function submitKyc(fields, documentFile, token) {
   }
 
   const data = await res.json().catch(() => null);
+  rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
     let errorMsg = data?.error;
@@ -188,6 +234,58 @@ export async function submitKyc(fields, documentFile, token) {
       errorMsg = errorMsg.message || JSON.stringify(errorMsg);
     }
     throw new Error(errorMsg || `KYC submission failed (${res.status})`);
+  }
+  return data;
+}
+
+/** Uploads one chat attachment — multipart, so it can't go through apiFetch
+ * (which always sets a JSON Content-Type). Same private-storage pattern as
+ * uploadDisputeEvidence: chat attachments are participant-only and are read
+ * back through fetchAuthedBlobUrl below, never as a bare <img src>. */
+export async function uploadChatAttachment(
+  conversationId,
+  file,
+  caption,
+  token,
+) {
+  const authToken = token ?? getAccessToken();
+  const path = `/api/chat/conversations/${conversationId}/attachments`;
+
+  // A fresh FormData per attempt — a consumed request body can't be
+  // replayed on the refresh retry below.
+  function buildBody() {
+    const form = new FormData();
+    form.append("file", file);
+    if (caption) form.append("caption", caption);
+    return form;
+  }
+
+  let res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    body: buildBody(),
+  });
+
+  if (res.status === 401 && authToken) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      res = await fetch(`${API_URL}${path}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${newToken}` },
+        body: buildBody(),
+      });
+    }
+  }
+
+  const data = await res.json().catch(() => null);
+  rejectSuspended(data);
+  if (!res.ok) {
+    if (res.status === 401) forceLogout();
+    let errorMsg = data?.error;
+    if (typeof errorMsg === "object" && errorMsg !== null) {
+      errorMsg = errorMsg.message || JSON.stringify(errorMsg);
+    }
+    throw new Error(errorMsg || `แนบไฟล์ไม่สำเร็จ (${res.status})`);
   }
   return data;
 }
@@ -212,6 +310,8 @@ export async function fetchAuthedBlobUrl(path, token) {
   }
 
   if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    rejectSuspended(data);
     if (res.status === 401) forceLogout();
     throw new Error(`Request failed (${res.status})`);
   }

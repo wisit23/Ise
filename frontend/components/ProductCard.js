@@ -110,6 +110,7 @@ export default function ProductCard({ product, showSeller = true }) {
   const meta = [
     ...new Set(
       [
+        product.brand || null,
         product.size === "-" ? null : product.size,
         product.category,
         product.location,
@@ -182,13 +183,17 @@ export default function ProductCard({ product, showSeller = true }) {
           </span>
           {product.status === "hidden" && (
             <span className="flex items-center gap-1 rounded-full bg-yellow-500/90 px-[.75em] py-[.32em] text-xs font-medium text-white shadow-1 backdrop-blur-[8px]">
-              <span className="material-symbols-outlined text-[14px]">visibility_off</span>
+              <span className="material-symbols-outlined text-[14px]">
+                visibility_off
+              </span>
               ซ่อนอยู่
             </span>
           )}
           {product.status === "sold" && (
             <span className="flex items-center gap-1 rounded-full bg-rose-600 px-[.75em] py-[.32em] text-xs font-bold text-white shadow-1 backdrop-blur-[8px]">
-              <span className="material-symbols-outlined text-[14px]">check_circle</span>
+              <span className="material-symbols-outlined text-[14px]">
+                check_circle
+              </span>
               ขายแล้ว
             </span>
           )}
@@ -206,7 +211,9 @@ export default function ProductCard({ product, showSeller = true }) {
             action, just the affordance a still photo lacks. */}
         <div className="pointer-events-none absolute inset-x-[.7rem] bottom-[.7rem] translate-y-2.5 opacity-0 transition-all duration-300 ease-ease group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 max-[560px]:translate-y-0 max-[560px]:opacity-100">
           <span className="flex items-center justify-center gap-1.5 rounded-sm bg-white/[.92] p-[.7em] text-sm font-semibold text-ink shadow-2 backdrop-blur-[10px]">
-            {product.status === "sold" ? "ดูรายละเอียด (ขายแล้ว)" : "ดูรายละเอียด"}
+            {product.status === "sold"
+              ? "ดูรายละเอียด (ขายแล้ว)"
+              : "ดูรายละเอียด"}
             <span
               className="material-symbols-outlined text-[16px] leading-none"
               aria-hidden="true"

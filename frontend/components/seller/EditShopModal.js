@@ -10,7 +10,6 @@ import { getAccessToken } from "../../lib/auth";
 export default function EditShopModal({
   open,
   onClose,
-  sellerId,
   currentShopName = "",
   onSuccess,
 }) {
@@ -64,7 +63,9 @@ export default function EditShopModal({
     setError("");
 
     if (!comment.trim()) {
-      setError("กรุณากรอกเหตุผลว่าต้องการเปลี่ยนอะไรและเพราะอะไร เพื่อให้แอดมินตรวจสอบ");
+      setError(
+        "กรุณากรอกเหตุผลว่าต้องการเปลี่ยนอะไรและเพราะอะไร เพื่อให้แอดมินตรวจสอบ",
+      );
       return;
     }
 
@@ -125,7 +126,8 @@ export default function EditShopModal({
             ส่งคำขอสำเร็จเรียบร้อย
           </h3>
           <p className="text-sm text-slate-500 max-w-sm mx-auto">
-            คำขอของคุณถูกส่งไปยังแอดมินแล้ว พร้อมความคิดเห็นประกอบการพิจารณา ระบบจะอัปเดตข้อมูลร้านทันทีที่ได้รับการอนุมัติ
+            คำขอของคุณถูกส่งไปยังแอดมินแล้ว พร้อมความคิดเห็นประกอบการพิจารณา
+            ระบบจะอัปเดตข้อมูลร้านทันทีที่ได้รับการอนุมัติ
           </p>
           <div className="pt-2">
             <Button onClick={handleClose} variant="primary">
@@ -142,10 +144,11 @@ export default function EditShopModal({
                   คุณมีคำขอแก้ไขข้อมูลที่อยู่ระหว่างรอการตรวจสอบจากแอดมิน
                 </p>
                 <p className="text-amber-800">
-                  ยื่นเมื่อ: {new Date(pendingRequest.createdAt).toLocaleString("th-TH")}
+                  ยื่นเมื่อ:{" "}
+                  {new Date(pendingRequest.createdAt).toLocaleString("th-TH")}
                 </p>
                 <p className="italic text-amber-700">
-                  เหตุผลที่ระบุ: "{pendingRequest.comment}"
+                  เหตุผลที่ระบุ: &quot;{pendingRequest.comment}&quot;
                 </p>
               </div>
             </Alert>
@@ -197,7 +200,8 @@ export default function EditShopModal({
 
           <div className="border-t border-slate-100 pt-3">
             <label className="block text-xs font-semibold text-slate-800 mb-1">
-              ความคิดเห็นถึงแอดมิน (เปลี่ยนอะไร เพราะอะไร) <span className="text-red-500">*</span>
+              ความคิดเห็นถึงแอดมิน (เปลี่ยนอะไร เพราะอะไร){" "}
+              <span className="text-red-500">*</span>
             </label>
             <textarea
               required
@@ -209,7 +213,8 @@ export default function EditShopModal({
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 resize-none"
             />
             <p className="mt-1 text-[11px] text-slate-500">
-              ทุกครั้งที่ขอเปลี่ยนข้อมูล แอดมินต้องตรวจสอบและอนุมัติก่อน ข้อมูลจึงจะเปลี่ยน
+              ทุกครั้งที่ขอเปลี่ยนข้อมูล แอดมินต้องตรวจสอบและอนุมัติก่อน
+              ข้อมูลจึงจะเปลี่ยน
             </p>
           </div>
 
@@ -225,7 +230,9 @@ export default function EditShopModal({
             <Button
               type="submit"
               variant="primary"
-              disabled={submitting || Boolean(pendingRequest) || !comment.trim()}
+              disabled={
+                submitting || Boolean(pendingRequest) || !comment.trim()
+              }
             >
               {submitting ? "กำลังส่งคำขอ..." : "ส่งให้แอดมินตรวจสอบ"}
             </Button>

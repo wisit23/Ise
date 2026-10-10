@@ -6,11 +6,13 @@ const {
   verifyRefreshToken,
   permissionsForRoles,
   ALL_ROLES,
+  isValidRoleCombination,
   badRequest,
   conflict,
   notFound,
 } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
+const { assertActive, revokedSession, lockUser } = require("./sessionService");
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches JWT_REFRESH_EXPIRES
 
@@ -30,11 +32,11 @@ function toPublicUser(user) {
  * `role` column — this is what makes existing Buyer/Seller accounts keep
  * working without a bulk backfill migration (ADM-001 Step 4).
  */
-async function getUserRoles(userId) {
-  const assigned = await prisma.userRole.findMany({ where: { userId } });
+async function getUserRoles(userId, db = prisma) {
+  const assigned = await db.userRole.findMany({ where: { userId } });
   if (assigned.length > 0) return assigned.map((r) => r.role);
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await db.user.findUnique({ where: { id: userId } });
   return user ? [user.role] : [];
 }
 
@@ -53,7 +55,13 @@ async function ensureRoleRowsMigrated(userId) {
 async function assignRole(userId, role) {
   if (!ALL_ROLES.includes(role)) throw badRequest("unknown role");
 
-  await ensureRoleRowsMigrated(userId);
+  const currentRoles = await ensureRoleRowsMigrated(userId);
+  const nextRoles = [...new Set([...currentRoles, role])];
+  if (!isValidRoleCombination(nextRoles)) {
+    throw conflict(
+      "customer roles (BUYER/SELLER) cannot be combined with a staff role, and a staff account can have only one staff role",
+    );
+  }
   await prisma.userRole.upsert({
     where: { userId_role: { userId, role } },
     update: {},
@@ -76,20 +84,20 @@ async function removeRole(userId, role) {
   return getUserRoles(userId);
 }
 
-async function buildAccessTokenClaims(user) {
+async function buildAccessTokenClaims(user, db = prisma) {
   const displayName = [user.firstName, user.lastName]
     .filter(Boolean)
     .join(" ")
     .trim();
 
-  const roles = await getUserRoles(user.id);
+  const roles = await getUserRoles(user.id, db);
   const permissions = permissionsForRoles(roles);
 
   // Queried fresh (not trusted from the caller's `user` object) so a
   // just-decided VERIFIED status shows up the next time this user's access
   // token is refreshed (every 15m), without requiring re-login — same
   // staleness window roles/permissions already accept.
-  const sellerProfile = await prisma.sellerProfile.findUnique({
+  const sellerProfile = await db.sellerProfile.findUnique({
     where: { userId: user.id },
     select: { kycStatus: true },
   });
@@ -107,34 +115,47 @@ async function buildAccessTokenClaims(user) {
   };
 }
 
-async function issueTokenPair(user) {
-  // jti guarantees uniqueness even if a user logs in twice within the same second
-  // (same sub+role+iat would otherwise sign to the identical JWT string).
-  const accessToken = signAccessToken(await buildAccessTokenClaims(user));
-  const refreshToken = signRefreshToken({
-    sub: user.id,
-    role: user.role,
-    jti: crypto.randomUUID(),
-  });
+async function issueTokenPair(user, loginContext = null) {
+  return prisma.$transaction(async (tx) => {
+    user = await lockUser(tx, user.id);
+    assertActive(user);
 
-  await prisma.refreshToken.create({
-    data: {
-      userId: user.id,
-      token: refreshToken,
-      expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
-    },
-  });
+    // jti guarantees uniqueness even if a user logs in twice within the same second
+    // (same sub+role+iat would otherwise sign to the identical JWT string).
+    const refreshToken = signRefreshToken({
+      sub: user.id,
+      role: user.role,
+      jti: crypto.randomUUID(),
+    });
+    const session = await tx.refreshToken.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId: user.id,
+        token: refreshToken,
+        expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+      },
+    });
 
-  return { accessToken, refreshToken };
+    if (loginContext) {
+      await tx.loginLog.create({
+        data: {
+          userId: user.id,
+          sessionId: session.id,
+          ipAddress: loginContext.ipAddress,
+          userAgent: loginContext.userAgent,
+        },
+      });
+    }
+
+    const accessToken = signAccessToken({
+      ...(await buildAccessTokenClaims(user, tx)),
+      sid: session.id,
+    });
+    return { accessToken, refreshToken };
+  });
 }
 
-async function register({
-  email,
-  password,
-  firstName,
-  lastName,
-  phone,
-}) {
+async function register({ email, password, firstName, lastName, phone }) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
   }
@@ -161,7 +182,7 @@ async function register({
   return { user: toPublicUser(user), ...tokens };
 }
 
-async function login({ email, password, ipAddress }) {
+async function login({ email, password, ipAddress, userAgent }) {
   if (!email || !password) throw badRequest("email and password are required");
 
   const user = await prisma.user.findUnique({ where: { email } });
@@ -169,10 +190,9 @@ async function login({ email, password, ipAddress }) {
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw badRequest("invalid email or password");
+  assertActive(user);
 
-  await prisma.loginLog.create({ data: { userId: user.id, ipAddress } });
-
-  const tokens = await issueTokenPair(user);
+  const tokens = await issueTokenPair(user, { ipAddress, userAgent });
   return { user: toPublicUser(user), ...tokens };
 }
 
@@ -186,31 +206,48 @@ async function refresh(refreshToken) {
     throw badRequest("invalid or expired refresh token");
   }
 
-  const stored = await prisma.refreshToken.findUnique({
-    where: { token: refreshToken },
-    include: { user: true },
-  });
-  if (
-    !stored ||
-    stored.userId !== payload.sub ||
-    stored.revokedAt ||
-    stored.expiresAt < new Date()
-  ) {
-    throw badRequest("refresh token is no longer valid");
-  }
+  return prisma.$transaction(async (tx) => {
+    const user = await lockUser(tx, payload.sub);
+    assertActive(user);
+    const stored = await tx.refreshToken.findUnique({
+      where: { token: refreshToken },
+    });
+    if (
+      !stored ||
+      stored.userId !== payload.sub ||
+      stored.revokedAt ||
+      stored.expiresAt < new Date()
+    ) {
+      throw revokedSession();
+    }
 
-  const accessToken = signAccessToken(
-    await buildAccessTokenClaims(stored.user),
-  );
-  return { accessToken };
+    const accessToken = signAccessToken({
+      ...(await buildAccessTokenClaims(user, tx)),
+      sid: stored.id,
+    });
+    return { accessToken };
+  });
 }
 
 async function logout(refreshToken) {
   if (!refreshToken) return;
-  await prisma.refreshToken.updateMany({
-    where: { token: refreshToken, revokedAt: null },
-    data: { revokedAt: new Date() },
+  const session = await prisma.refreshToken.findUnique({
+    where: { token: refreshToken },
+    select: { id: true },
   });
+  if (!session) return;
+
+  const loggedOutAt = new Date();
+  await prisma.$transaction([
+    prisma.refreshToken.updateMany({
+      where: { id: session.id, revokedAt: null },
+      data: { revokedAt: loggedOutAt },
+    }),
+    prisma.loginLog.updateMany({
+      where: { sessionId: session.id, logoutAt: null },
+      data: { logoutAt: loggedOutAt },
+    }),
+  ]);
 }
 
 async function getById(userId) {
@@ -233,6 +270,51 @@ async function updateProfile(userId, { firstName, lastName, phone }) {
 
   const user = await prisma.user.update({ where: { id: userId }, data: patch });
   return toPublicUser(user);
+}
+
+// A caller could otherwise hand over an unbounded id list and pull the whole
+// user table back in one request.
+const MAX_DISPLAY_NAME_IDS = 100;
+
+/**
+ * Display names for a batch of user ids — the ONLY way another service can
+ * turn a userId into something human-readable, and deliberately reachable
+ * only through /internal (x-internal-token, never proxied by the gateway).
+ *
+ * Returns a FIRST NAME, never the full legal name: a marketplace
+ * counterparty needs to tell one person from another, not to learn who they
+ * legally are. That's `NFR-SP-02`'s "ปกปิดข้อมูลส่วนบุคคลที่สำคัญในหน้าจอทั่วไป"
+ * applied to chat, and it matches how Grab/Airbnb/Shopee show a counterparty.
+ *
+ * Sellers resolve to their shop name instead — a shop name is a business
+ * identity that is already fully public on the storefront, and it's what a
+ * buyer actually recognises. Note this is driven by "does this account have
+ * a shop name", NOT by a role check: nothing here gates on BUYER vs SELLER.
+ *
+ * Unknown ids are simply absent from the result rather than throwing, so one
+ * deleted account can't break a whole conversation's rendering.
+ */
+async function getDisplayNames(userIds) {
+  if (!Array.isArray(userIds)) throw badRequest("userIds must be an array");
+  const unique = [...new Set(userIds.filter((id) => typeof id === "string"))];
+  if (unique.length === 0) return [];
+  if (unique.length > MAX_DISPLAY_NAME_IDS) {
+    throw badRequest(`userIds is limited to ${MAX_DISPLAY_NAME_IDS} per call`);
+  }
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: unique } },
+    select: {
+      id: true,
+      firstName: true,
+      sellerProfile: { select: { shopName: true } },
+    },
+  });
+
+  return users.map((user) => ({
+    userId: user.id,
+    displayName: user.sellerProfile?.shopName || user.firstName,
+  }));
 }
 
 /** Public store-front info for a seller — no email/phone, only what a buyer needs to see. */
@@ -268,10 +350,15 @@ async function getMyShopProfile(userId) {
 
 /** Seller submits a request to change their shop profile fields.
  *  At least one of shopName/address/bankAccount must be provided, plus a comment. */
-async function submitShopChangeRequest(sellerId, { shopName, address, bankAccount, comment }) {
+async function submitShopChangeRequest(
+  sellerId,
+  { shopName, address, bankAccount, comment },
+) {
   if (!comment || !comment.trim()) throw badRequest("comment is required");
   if (!shopName && !address && !bankAccount)
-    throw badRequest("at least one field (shopName, address, bankAccount) must be provided");
+    throw badRequest(
+      "at least one field (shopName, address, bankAccount) must be provided",
+    );
 
   // Block submission if the seller already has a PENDING request
   const existing = await prisma.shopChangeRequest.findFirst({
@@ -313,7 +400,9 @@ async function listPendingChangeRequests() {
           firstName: true,
           lastName: true,
           email: true,
-          sellerProfile: { select: { shopName: true, address: true, bankAccount: true } },
+          sellerProfile: {
+            select: { shopName: true, address: true, bankAccount: true },
+          },
         },
       },
     },
@@ -323,13 +412,20 @@ async function listPendingChangeRequests() {
 
 /** Admin approves or rejects a shop change request.
  *  If approved, applies the changed fields to the SellerProfile. */
-async function decideChangeRequest(adminId, requestId, { decision, adminNote }) {
+async function decideChangeRequest(
+  adminId,
+  requestId,
+  { decision, adminNote },
+) {
   if (!["APPROVED", "REJECTED"].includes(decision))
     throw badRequest("decision must be APPROVED or REJECTED");
 
-  const req = await prisma.shopChangeRequest.findUnique({ where: { id: requestId } });
+  const req = await prisma.shopChangeRequest.findUnique({
+    where: { id: requestId },
+  });
   if (!req) throw notFound("change request not found");
-  if (req.status !== "PENDING") throw conflict("request has already been decided");
+  if (req.status !== "PENDING")
+    throw conflict("request has already been decided");
 
   const updated = await prisma.$transaction(async (tx) => {
     // Mark the request
@@ -371,6 +467,7 @@ module.exports = {
   getById,
   updateProfile,
   getPublicSellerProfile,
+  getDisplayNames,
   getMyShopProfile,
   submitShopChangeRequest,
   listMyChangeRequests,

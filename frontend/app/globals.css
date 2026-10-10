@@ -98,6 +98,29 @@ h4 {
   .focus-ring {
     @apply outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-brand-500/60;
   }
+
+  /* Chat message bubble pop-and-expand entrance */
+  .animate-message-pop {
+    animation: message-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes message-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  85% {
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Respect the OS "reduce motion" setting. The app leans on entrance
@@ -111,4 +134,13 @@ h4 {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Prevent white focus outlines/flashes when clicking on video elements or swipe containers */
+video,
+video:focus,
+video:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }

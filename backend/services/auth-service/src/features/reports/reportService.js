@@ -1,6 +1,7 @@
 const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const productModerationClient = require("../../services/productModerationClient");
+const { lockUser } = require("../../services/sessionService");
 
 function toPublicUser(user) {
   return {
@@ -63,7 +64,8 @@ async function listReports({ page, limit, status }) {
   return { items, total };
 }
 
-async function reviewReport({ reportId, adminId }) {
+async function reviewReport({ reportId, adminId, staffId }) {
+  const actorId = staffId || adminId;
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) throw notFound("report not found");
   if (report.status !== "OPEN") {
@@ -72,7 +74,7 @@ async function reviewReport({ reportId, adminId }) {
 
   return prisma.report.update({
     where: { id: reportId },
-    data: { status: "REVIEWED", reviewedAt: new Date(), reviewedBy: adminId },
+    data: { status: "REVIEWED", reviewedAt: new Date(), reviewedBy: actorId },
   });
 }
 
@@ -91,14 +93,18 @@ const VALID_DECISIONS = [
 async function actionReport({
   reportId,
   adminId,
+  staffId,
   decision,
   reason,
   requestId,
 }) {
+  const actorId = staffId || adminId;
+  const trimmedReason = reason?.trim();
+
   if (!VALID_DECISIONS.includes(decision)) {
     throw badRequest(`decision must be one of ${VALID_DECISIONS.join(", ")}`);
   }
-  if (!reason) throw badRequest("reason is required");
+  if (!trimmedReason) throw badRequest("reason is required");
 
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) throw notFound("report not found");
@@ -112,20 +118,27 @@ async function actionReport({
     }
     await suspendUser({
       targetId: report.targetId,
-      adminId,
-      reason,
+      adminId: actorId,
+      staffId: actorId,
+      reason: trimmedReason,
       requestId,
     });
   } else if (decision === "WARN_USER") {
     if (!report.targetId) {
       throw badRequest("report has no target user to warn");
     }
-    await warnUser({ targetId: report.targetId, adminId, reason, requestId });
+    await warnUser({
+      targetId: report.targetId,
+      adminId: actorId,
+      staffId: actorId,
+      reason: trimmedReason,
+      requestId,
+    });
   } else if (decision === "REMOVE_PRODUCT") {
     if (!report.productId) {
       throw badRequest("report has no target product to remove");
     }
-    await productModerationClient.removeProduct(report.productId, reason);
+    await productModerationClient.removeProduct(report.productId, trimmedReason);
   }
 
   const updated = await prisma.report.update({
@@ -137,36 +150,47 @@ async function actionReport({
   });
 
   await recordAdminAction({
-    actorId: adminId,
+    actorId,
     action: `REPORT_${decision}`,
     targetId: reportId,
-    reason,
+    reason: trimmedReason,
     requestId,
   });
 
   return updated;
 }
 
-async function suspendUser({ targetId, adminId, reason, requestId }) {
-  if (!reason) throw badRequest("reason is required");
-  if (targetId === adminId) throw forbidden("admins cannot suspend themselves");
+async function suspendUser({ targetId, adminId, staffId, reason, requestId }) {
+  const actorId = staffId || adminId;
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) throw badRequest("reason is required");
+  if (targetId === actorId) throw forbidden("staff cannot suspend themselves");
 
-  const user = await prisma.user.findUnique({ where: { id: targetId } });
-  if (!user) throw notFound("user not found");
-  if (user.status === "SUSPENDED") throw conflict("user is already suspended");
+  return prisma.$transaction(async (tx) => {
+    const user = await lockUser(tx, targetId);
+    if (!user) throw notFound("user not found");
+    if (user.status === "SUSPENDED")
+      throw conflict("user is already suspended");
 
-  const updated = await prisma.user.update({
-    where: { id: targetId },
-    data: { status: "SUSPENDED" },
+    const updated = await tx.user.update({
+      where: { id: targetId },
+      data: { status: "SUSPENDED" },
+    });
+    await tx.refreshToken.updateMany({
+      where: { userId: targetId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await tx.adminAudit.create({
+      data: {
+        actorId,
+        action: "USER_SUSPENDED",
+        targetId,
+        reason: trimmedReason,
+        requestId,
+      },
+    });
+    return toPublicUser(updated);
   });
-  await recordAdminAction({
-    actorId: adminId,
-    action: "USER_SUSPENDED",
-    targetId,
-    reason,
-    requestId,
-  });
-  return toPublicUser(updated);
 }
 
 /**
@@ -176,49 +200,69 @@ async function suspendUser({ targetId, adminId, reason, requestId }) {
  * count the same way USER_SUSPENDED does — a repeat offender with three
  * warnings and no suspension is still visible as a repeat offender.
  */
-async function warnUser({ targetId, adminId, reason, requestId }) {
-  if (!reason) throw badRequest("reason is required");
-  if (targetId === adminId) throw forbidden("admins cannot warn themselves");
+async function warnUser({ targetId, adminId, staffId, reason, requestId }) {
+  const actorId = staffId || adminId;
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) throw badRequest("reason is required");
+  if (targetId === actorId) throw forbidden("staff cannot warn themselves");
 
   const user = await prisma.user.findUnique({ where: { id: targetId } });
   if (!user) throw notFound("user not found");
 
   await recordAdminAction({
-    actorId: adminId,
+    actorId,
     action: "USER_WARNED",
     targetId,
-    reason,
+    reason: trimmedReason,
     requestId,
   });
   return toPublicUser(user);
 }
 
-async function restoreUser({ targetId, adminId, reason, requestId }) {
-  if (!reason) throw badRequest("reason is required");
+async function restoreUser({ targetId, adminId, staffId, reason, requestId }) {
+  const actorId = staffId || adminId;
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) throw badRequest("reason is required");
 
-  const user = await prisma.user.findUnique({ where: { id: targetId } });
-  if (!user) throw notFound("user not found");
-  if (user.status !== "SUSPENDED") throw conflict("user is not suspended");
+  return prisma.$transaction(async (tx) => {
+    const user = await lockUser(tx, targetId);
+    if (!user) throw notFound("user not found");
+    if (user.status !== "SUSPENDED") throw conflict("user is not suspended");
 
-  const updated = await prisma.user.update({
-    where: { id: targetId },
-    data: { status: "ACTIVE" },
+    const updated = await tx.user.update({
+      where: { id: targetId },
+      data: { status: "ACTIVE" },
+    });
+    // Also invalidates sessions belonging to accounts suspended before rollout.
+    await tx.refreshToken.updateMany({
+      where: { userId: targetId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    await tx.adminAudit.create({
+      data: {
+        actorId,
+        action: "USER_RESTORED",
+        targetId,
+        reason: trimmedReason,
+        requestId,
+      },
+    });
+    return toPublicUser(updated);
   });
-  await recordAdminAction({
-    actorId: adminId,
-    action: "USER_RESTORED",
-    targetId,
-    reason,
-    requestId,
-  });
-  return toPublicUser(updated);
 }
 
 async function getUserSafetySummary(targetId) {
-  const [reportCount, priorActions] = await Promise.all([
-    prisma.report.count({ where: { targetId } }),
-    prisma.adminAudit.count({ where: { targetId } }),
-  ]);
+  const [reportCount, priorActions, suspensionCount, warningCount] =
+    await Promise.all([
+      prisma.report.count({ where: { targetId } }),
+      prisma.adminAudit.count({ where: { targetId } }),
+      prisma.adminAudit.count({
+        where: { targetId, action: "USER_SUSPENDED" },
+      }),
+      prisma.adminAudit.count({
+        where: { targetId, action: "USER_WARNED" },
+      }),
+    ]);
 
   return {
     // Cross-service completed-order count is out of ADM-003 scope (order-service
@@ -228,6 +272,60 @@ async function getUserSafetySummary(targetId) {
     completedOrdersAvailable: false,
     reportCount,
     priorActions,
+    suspensionCount,
+    warningCount,
+  };
+}
+
+async function getUserDetail(identifier) {
+  if (!identifier || !identifier.trim()) {
+    throw badRequest("user identifier is required");
+  }
+  const cleanId = identifier.trim();
+
+  const user = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { id: cleanId },
+        { email: cleanId },
+        { sellerProfile: { shopName: cleanId } },
+      ],
+    },
+    include: {
+      sellerProfile: true,
+      roles: true,
+    },
+  });
+
+  if (!user) throw notFound("user not found");
+
+  const safetySummary = await getUserSafetySummary(user.id);
+  const roles =
+    user.roles && user.roles.length > 0
+      ? user.roles.map((r) => r.role)
+      : [user.role];
+
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    phone: user.phone,
+    role: user.role,
+    status: user.status,
+    createdAt: user.createdAt,
+    roles,
+    sellerProfile: user.sellerProfile
+      ? {
+          shopName: user.sellerProfile.shopName,
+          idCardNumber: user.sellerProfile.idCardNumber,
+          address: user.sellerProfile.address,
+          bankAccount: user.sellerProfile.bankAccount,
+          kycStatus: user.sellerProfile.kycStatus,
+          verifiedAt: user.sellerProfile.verifiedAt,
+        }
+      : null,
+    safetySummary,
   };
 }
 
@@ -240,5 +338,6 @@ module.exports = {
   warnUser,
   restoreUser,
   getUserSafetySummary,
+  getUserDetail,
   recordAdminAction,
 };

@@ -10,7 +10,7 @@ process.env.INTERNAL_SERVICE_TOKEN ||= "reservation-integration-token";
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
 const {
-  cleanupExpired,
+  releaseExpiredReservations,
 } = require("../src/features/reservations/reservationService");
 
 const INTERNAL_HEADERS = {
@@ -30,7 +30,7 @@ async function databaseIsReachable() {
 
 function reserve(productId, buyerId) {
   return request(app)
-    .post(`/${productId}/reservations`)
+    .post(`/internal/products/${productId}/reservations`)
     .set(INTERNAL_HEADERS)
     .send({ buyerId });
 }
@@ -71,7 +71,7 @@ test("only one buyer wins an atomic PostgreSQL reservation", async (t) => {
       where: { id: product.id },
     });
     assert.equal(persisted.status, "reserved");
-    assert.equal(persisted.reservedBy, winner.body.reservedBy);
+    assert.ok(["buyer-a", "buyer-b"].includes(persisted.reservedBy));
     assert.equal(persisted.reservationId, winner.body.reservationId);
     assert.ok(persisted.reservationExpiresAt > new Date());
     const reservationWindowMs =
@@ -98,22 +98,32 @@ test("only one buyer wins an atomic PostgreSQL reservation", async (t) => {
     );
 
     const staleRelease = await request(app)
-      .delete(`/${product.id}/reservations/${winner.body.reservationId}`)
-      .set(INTERNAL_HEADERS)
-      .send({ buyerId: winner.body.reservedBy });
-    assert.equal(staleRelease.status, 409);
+      .delete(
+        `/internal/products/${product.id}/reservations/${winner.body.reservationId}`,
+      )
+      .set(INTERNAL_HEADERS);
+    assert.equal(staleRelease.status, 204);
+    const stillReserved = await prisma.product.findUnique({
+      where: { id: product.id },
+    });
+    assert.equal(stillReserved.status, "reserved");
+    assert.equal(
+      stillReserved.reservationId,
+      nextReservation.body.reservationId,
+    );
 
     const staleConfirm = await request(app)
-      .post(`/${product.id}/reservations/${winner.body.reservationId}/confirm`)
-      .set(INTERNAL_HEADERS)
-      .send({ buyerId: winner.body.reservedBy });
+      .patch(
+        `/internal/products/${product.id}/reservations/${winner.body.reservationId}/complete`,
+      )
+      .set(INTERNAL_HEADERS);
     assert.equal(staleConfirm.status, 409);
 
     await prisma.product.update({
       where: { id: product.id },
       data: { reservationExpiresAt: new Date(Date.now() - 1_000) },
     });
-    assert.equal(await cleanupExpired(), 1);
+    assert.equal(await releaseExpiredReservations(), 1);
 
     const released = await prisma.product.findUnique({
       where: { id: product.id },
@@ -126,11 +136,10 @@ test("only one buyer wins an atomic PostgreSQL reservation", async (t) => {
     const finalReservation = await reserve(product.id, "buyer-d");
     assert.equal(finalReservation.status, 201);
     const confirmed = await request(app)
-      .post(
-        `/${product.id}/reservations/${finalReservation.body.reservationId}/confirm`,
+      .patch(
+        `/internal/products/${product.id}/reservations/${finalReservation.body.reservationId}/complete`,
       )
-      .set(INTERNAL_HEADERS)
-      .send({ buyerId: "buyer-d" });
+      .set(INTERNAL_HEADERS);
     assert.equal(confirmed.status, 204);
 
     const sold = await prisma.product.findUnique({ where: { id: product.id } });

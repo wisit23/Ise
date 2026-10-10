@@ -11,7 +11,6 @@ import VerifyMethodPicker from "../../../components/seller/onboarding/VerifyMeth
 import ThaiIdQrStep from "../../../components/seller/onboarding/ThaiIdQrStep";
 import BankAccountStep from "../../../components/seller/onboarding/BankAccountStep";
 import { isCompleteIdCard } from "../../../components/seller/onboarding/IdCardField";
-import Button from "../../../components/ui/Button";
 import ErrorState from "../../../components/ui/ErrorState";
 import Skeleton from "../../../components/ui/Skeleton";
 import { apiFetch, submitKyc } from "../../../lib/api";

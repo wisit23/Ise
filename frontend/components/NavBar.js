@@ -2,16 +2,33 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { getStoredUser, clearSession, getAccessToken } from "../lib/auth";
+import {
+  getStoredUser,
+  clearSession,
+  getAccessToken,
+  getAccessTokenClaims,
+  getCurrentRoles,
+  isCustomerAccountRoles,
+  isValidRoleCombinationRoles,
+} from "../lib/auth";
 import { apiFetch } from "../lib/api";
 import Button from "./ui/Button";
 import Menu, { MenuItem, MenuLabel } from "./ui/Menu";
 import { fetchActiveCategories } from "../lib/catalog";
+import { getUnreadCount } from "../lib/chat";
+import { useChatSocket, useChatSocketEvent } from "./chat/ChatSocketProvider";
+
+// Only used while the shared socket is down — the badge's normal path is a
+// pushed "conversation:activity" event (see the effects below). 15s keeps
+// the degraded case feeling current without hammering the endpoint from
+// every open tab on every page.
+const UNREAD_POLL_INTERVAL_MS = 15000;
 
 const ROLE_LABEL = {
   BUYER: "ผู้ซื้อ",
   SELLER: "ผู้ขาย",
-  ADMIN: "แอดมิน",
+  ADMIN: "Trust and Safety",
+  TRUST_AND_SAFETY: "Trust and Safety",
   MARKETING: "การตลาด",
   CUSTOMER_SERVICE: "ฝ่ายบริการลูกค้า",
   EXECUTIVE: "ผู้บริหาร",
@@ -24,17 +41,96 @@ const ROLE_LABEL = {
    nothing here ever moves or hides. */
 const DISCOVERY_LINKS = [
   { href: "/swipe", label: "ปัดดู", icon: "swipe" },
+  { href: "/campaigns", label: "คูปอง", icon: "confirmation_number" },
   { href: "/auctions", label: "ประมูล", icon: "gavel" },
+  { href: "/articles", label: "บทความ", icon: "menu_book" },
 ];
+
+const WORK_MENU_ITEMS = [
+  {
+    href: "/workspace",
+    label: "Backoffice Workspace",
+    icon: "headset_mic",
+    roles: ["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"],
+  },
+  {
+    href: "/executive",
+    label: "แดชบอร์ดผู้บริหาร",
+    icon: "insights",
+    roles: ["EXECUTIVE"],
+  },
+  {
+    href: "/seller/dashboard",
+    label: "แดชบอร์ดผู้ขาย",
+    icon: "storefront",
+    roles: ["SELLER"],
+    requiresVerifiedSeller: true,
+  },
+  {
+    href: ({ userId }) => `/store/${userId}`,
+    label: "ร้านค้าของฉัน",
+    icon: "storefront",
+    roles: ["SELLER"],
+    requiresVerifiedSeller: true,
+  },
+  {
+    href: "/seller/videos/new",
+    label: "อัปโหลดคลิปรีวิว",
+    icon: "videocam",
+    roles: ["SELLER"],
+    requiresVerifiedSeller: true,
+  },
+  {
+    href: "/seller/auctions",
+    label: "ส่งสินค้าประมูล",
+    icon: "gavel",
+    roles: ["SELLER"],
+    requiresVerifiedSeller: true,
+  },
+  {
+    href: "/marketing",
+    label: "ศูนย์การตลาด",
+    icon: "campaign",
+    roles: ["MARKETING"],
+  },
+];
+
+const CUSTOMER_ACCOUNT_MENU_ITEMS = [
+  {
+    href: "/sell",
+    label: "ลงขายสินค้า",
+    icon: "add_circle",
+    accent: true,
+  },
+  { href: "/orders", label: "คำสั่งซื้อของฉัน", icon: "receipt_long" },
+  {
+    href: "/campaigns?tab=mine",
+    label: "คูปองส่วนลดของฉัน",
+    icon: "loyalty",
+  },
+  {
+    href: "/support/tickets",
+    label: "ตั๋วแจ้งปัญหาของฉัน",
+    icon: "confirmation_number",
+  },
+  { href: "/help", label: "ศูนย์ช่วยเหลือ", icon: "help" },
+  { href: "/profile", label: "ตั้งค่าโปรไฟล์", icon: "person" },
+];
+
+function resolveMenuHref(item, context) {
+  return typeof item.href === "function" ? item.href(context) : item.href;
+}
 
 export default function NavBar() {
   const [user, setUser] = useState(null);
   const [kycStatus, setKycStatus] = useState(null);
   const [cartCount, setCartCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [q, setQ] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   const menuRef = useRef(null);
+  const { connected: socketConnected } = useChatSocket();
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -42,17 +138,88 @@ export default function NavBar() {
 
     const token = getAccessToken();
     if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
-        setKycStatus(payload.kycStatus || null);
-      } catch (e) {}
+      const claims = getAccessTokenClaims();
+      setKycStatus(claims?.kycStatus || null);
 
-      apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
-        .then((data) => setCartCount(data.total))
-        .catch((err) =>
-          console.error("โหลดจำนวนสินค้าในตะกร้าไม่สำเร็จ:", err),
-        );
+      if (isCustomerAccountRoles(getCurrentRoles())) {
+        apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
+          .then((data) => setCartCount(data.total))
+          .catch((err) =>
+            console.error("โหลดจำนวนสินค้าในตะกร้าไม่สำเร็จ:", err),
+          );
+        getUnreadCount(token)
+          .then((data) => setUnreadCount(data.total))
+          .catch((err) =>
+            console.error("โหลดจำนวนข้อความที่ยังไม่อ่านไม่สำเร็จ:", err),
+          );
+      }
     }
+  }, []);
+
+  // Live path: the server nudges every participant's own socket room on any
+  // new message (broadcast.js's "conversation:activity"), so the badge
+  // updates on whatever page the user happens to be on — not just while a
+  // chat room is open. The nudge deliberately carries no count; the
+  // authoritative total is re-read here, because a server-computed number
+  // would race this user's own concurrent mark-read calls.
+  useChatSocketEvent("conversation:activity", () => {
+    const token = getAccessToken();
+    if (!token || !isCustomerAccountRoles(getCurrentRoles())) return;
+    getUnreadCount(token)
+      .then((data) => setUnreadCount(data.total))
+      .catch(() => {});
+  });
+
+  // Fallback path: only runs while the socket ISN'T connected (blocked by a
+  // strict network, dropped mid-session, still connecting). Without this
+  // gate the badge would be both pushed and polled at once, doubling the
+  // request rate for no benefit.
+  useEffect(() => {
+    if (socketConnected) return undefined;
+    const token = getAccessToken();
+    if (!token || !isCustomerAccountRoles(getCurrentRoles())) return undefined;
+
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      getUnreadCount(token)
+        .then((data) => setUnreadCount(data.total))
+        .catch(() => {
+          // A missed poll tick isn't worth surfacing — the next one retries.
+        });
+    }, UNREAD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [socketConnected]);
+
+  // A socket that just (re)connected missed everything that happened while
+  // it was down — reconnecting is precisely when a resync is mandatory, not
+  // optional. This is what stops the badge from sitting stale after a
+  // laptop wakes from sleep.
+  useEffect(() => {
+    if (!socketConnected) return;
+    const token = getAccessToken();
+    if (!token || !isCustomerAccountRoles(getCurrentRoles())) return;
+    getUnreadCount(token)
+      .then((data) => setUnreadCount(data.total))
+      .catch(() => {});
+  }, [socketConnected]);
+
+  // Local sync path: when a conversation is opened or marked read in this
+  // window, this local event fires so the badge refreshes immediately.
+  useEffect(() => {
+    function handleSync(e) {
+      if (typeof e?.detail?.total === "number") {
+        setUnreadCount(e.detail.total);
+      } else {
+        const token = getAccessToken();
+        if (token && isCustomerAccountRoles(getCurrentRoles())) {
+          getUnreadCount(token)
+            .then((data) => setUnreadCount(data.total))
+            .catch(() => {});
+        }
+      }
+    }
+    window.addEventListener("chat:unread-sync", handleSync);
+    return () => window.removeEventListener("chat:unread-sync", handleSync);
   }, []);
 
   useEffect(() => {
@@ -98,16 +265,21 @@ export default function NavBar() {
       : "/products";
   }
 
-  const isSeller = user?.role === "SELLER" && kycStatus === "VERIFIED";
-  const isExecutive = user?.role === "EXECUTIVE";
-  const isMarketing = user?.role === "MARKETING";
-  const isSupportAgent =
-    user?.role === "CUSTOMER_SERVICE" || user?.role === "ADMIN";
-  // Every one of these is a role someone can hold *in addition to* being a
-  // buyer on this same account — the header never assumes a visitor is only
-  // one thing, which is why these sit in their own labelled group instead of
-  // gating an entirely separate header.
-  const hasWorkLinks = isSupportAgent || isSeller || isExecutive || isMarketing;
+  const currentRoles = user ? getCurrentRoles() : [];
+  const hasValidRoleCombination = isValidRoleCombinationRoles(currentRoles);
+  const isCustomerAccount =
+    Boolean(user) && isCustomerAccountRoles(currentRoles);
+  const availableWorkItems = hasValidRoleCombination
+    ? WORK_MENU_ITEMS.filter(
+        (item) =>
+          item.roles.some((role) => currentRoles.includes(role)) &&
+          (!item.requiresVerifiedSeller || kycStatus === "VERIFIED"),
+      )
+    : [];
+  const displayRole = currentRoles.includes("SELLER")
+    ? "SELLER"
+    : currentRoles[0] || user?.role;
+  const canUseCart = isCustomerAccount;
 
   return (
     <header className="sticky top-0 z-nav border-b border-line bg-white/90 backdrop-blur">
@@ -209,7 +381,7 @@ export default function NavBar() {
           ))}
         </nav>
 
-        {user && (
+        {isCustomerAccount && (
           <Link
             href="/sell"
             className="focus-ring hidden shrink-0 items-center gap-[.35rem] rounded-full border-[1.5px] border-brand-600/40 px-[.85em] py-[.42em] text-sm font-medium text-brand-700 transition hover:border-brand-600 hover:bg-brand-50 md:flex"
@@ -224,7 +396,27 @@ export default function NavBar() {
           </Link>
         )}
 
-        {user && (
+        {canUseCart && (
+          <Link
+            href="/chat"
+            aria-label={`ข้อความ${unreadCount > 0 ? ` มี ${unreadCount} รายการที่ยังไม่อ่าน` : ""}`}
+            className="focus-ring relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-surface-panel hover:text-ink"
+          >
+            <span
+              className="material-symbols-outlined text-[21px] leading-none"
+              aria-hidden="true"
+            >
+              chat_bubble
+            </span>
+            {unreadCount > 0 && (
+              <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold leading-none text-white">
+                {unreadCount}
+              </span>
+            )}
+          </Link>
+        )}
+
+        {canUseCart && (
           <Link
             href="/cart"
             aria-label={`ตะกร้า${cartCount > 0 ? ` มี ${cartCount} รายการ` : ""}`}
@@ -254,7 +446,9 @@ export default function NavBar() {
                 aria-expanded={menuOpen}
                 className="focus-ring flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700 ring-2 ring-transparent transition hover:ring-brand-200"
               >
-                {user.firstName?.[0] || "?"}
+                {displayRole === "ADMIN" || displayRole === "TRUST_AND_SAFETY"
+                  ? "T"
+                  : user.firstName?.[0] || "?"}
               </button>
 
               {menuOpen && (
@@ -263,28 +457,33 @@ export default function NavBar() {
                   className="animate-dropdown-in absolute right-0 top-11 w-64 overflow-hidden rounded-lg border border-line bg-white py-2 shadow-lg"
                 >
                   <div className="border-b border-line px-4 py-3">
-                    <p className="truncate text-sm font-medium text-gray-900">
-                      {user.firstName} {user.lastName}
-                    </p>
-                    <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
-                      {ROLE_LABEL[user.role] || user.role}
-                    </span>
+                    {displayRole === "ADMIN" ||
+                    displayRole === "TRUST_AND_SAFETY" ? (
+                      <p className="truncate text-sm font-semibold text-gray-900">
+                        Trust and Safety
+                      </p>
+                    ) : (
+                      <>
+                        <p className="truncate text-sm font-medium text-gray-900">
+                          {user.firstName} {user.lastName}
+                        </p>
+                        <span className="mt-1 inline-block rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700">
+                          {ROLE_LABEL[displayRole] || displayRole}
+                        </span>
+                      </>
+                    )}
                   </div>
 
-                  {/* Work links live in their own labelled section rather
-                      than mixed in with "my stuff" — the twelve items this
-                      menu used to hold in one flat list were exactly this
-                      plus the buyer links below, undivided. Nothing here was
-                      removed, only grouped. */}
-                  {hasWorkLinks && (
+                  {availableWorkItems.length > 0 && (
                     <>
                       <p className="px-4 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
                         การทำงาน
                       </p>
 
-                      {isSupportAgent && (
+                      {availableWorkItems.map((item) => (
                         <Link
-                          href="/workspace"
+                          key={item.label}
+                          href={resolveMenuHref(item, { userId: user.id })}
                           onClick={() => setMenuOpen(false)}
                           className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                         >
@@ -292,192 +491,48 @@ export default function NavBar() {
                             className="material-symbols-outlined text-[18px] text-ink-subtle"
                             aria-hidden="true"
                           >
-                            headset_mic
+                            {item.icon}
                           </span>
-                          Backoffice Workspace
+                          {item.label}
                         </Link>
-                      )}
-
-                      {isExecutive && (
-                        <Link
-                          href="/executive"
-                          onClick={() => setMenuOpen(false)}
-                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <span
-                            className="material-symbols-outlined text-[18px] text-ink-subtle"
-                            aria-hidden="true"
-                          >
-                            insights
-                          </span>
-                          แดชบอร์ดผู้บริหาร
-                        </Link>
-                      )}
-
-                      {isSeller && (
-                        <Link
-                          href="/seller/dashboard"
-                          onClick={() => setMenuOpen(false)}
-                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <span
-                            className="material-symbols-outlined text-[18px] text-ink-subtle"
-                            aria-hidden="true"
-                          >
-                            storefront
-                          </span>
-                          แดชบอร์ดผู้ขาย
-                        </Link>
-                      )}
-
-                      {isSeller && (
-                        <Link
-                          href={`/store/${user.id}`}
-                          onClick={() => setMenuOpen(false)}
-                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <span
-                            className="material-symbols-outlined text-[18px] text-ink-subtle"
-                            aria-hidden="true"
-                          >
-                            storefront
-                          </span>
-                          ร้านค้าของฉัน
-                        </Link>
-                      )}
-
-                      {isSeller && (
-                        <Link
-                          href="/seller/videos/new"
-                          onClick={() => setMenuOpen(false)}
-                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <span
-                            className="material-symbols-outlined text-[18px] text-ink-subtle"
-                            aria-hidden="true"
-                          >
-                            videocam
-                          </span>
-                          อัปโหลดคลิปรีวิว
-                        </Link>
-                      )}
-
-                      {isSeller && (
-                        <Link
-                          href="/seller/auctions"
-                          onClick={() => setMenuOpen(false)}
-                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <span
-                            className="material-symbols-outlined text-[18px] text-ink-subtle"
-                            aria-hidden="true"
-                          >
-                            gavel
-                          </span>
-                          ส่งสินค้าประมูล
-                        </Link>
-                      )}
-
-                      {isMarketing && (
-                        <Link
-                          href="/marketing"
-                          onClick={() => setMenuOpen(false)}
-                          className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        >
-                          <span
-                            className="material-symbols-outlined text-[18px] text-ink-subtle"
-                            aria-hidden="true"
-                          >
-                            campaign
-                          </span>
-                          ศูนย์การตลาด
-                        </Link>
-                      )}
+                      ))}
 
                       <div className="my-1 border-t border-line" />
                     </>
                   )}
 
-                  <p className="px-4 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
-                    บัญชีของฉัน
-                  </p>
+                  {isCustomerAccount && (
+                    <>
+                      <p className="px-4 pt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
+                        บัญชีของฉัน
+                      </p>
 
-                  {/* Also a header pill at md+ (next to the cart icon), but
-                      that pill is hidden below md to leave room for the
-                      search field — this is the only path to /sell on a
-                      phone, so it has to exist here too, not just as a
-                      shortcut. */}
-                  <Link
-                    href="/sell"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50"
-                  >
-                    <span
-                      className="material-symbols-outlined text-[18px]"
-                      aria-hidden="true"
-                    >
-                      add_circle
-                    </span>
-                    ลงขายสินค้า
-                  </Link>
+                      {CUSTOMER_ACCOUNT_MENU_ITEMS.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setMenuOpen(false)}
+                          className={`flex items-center gap-2.5 px-4 py-2 text-sm hover:bg-gray-50 ${
+                            item.accent
+                              ? "font-medium text-brand-700 hover:bg-brand-50"
+                              : "text-gray-700"
+                          }`}
+                        >
+                          <span
+                            className={`material-symbols-outlined text-[18px] ${
+                              item.accent ? "" : "text-ink-subtle"
+                            }`}
+                            aria-hidden="true"
+                          >
+                            {item.icon}
+                          </span>
+                          {item.label}
+                        </Link>
+                      ))}
 
-                  <Link
-                    href="/orders"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <span
-                      className="material-symbols-outlined text-[18px] text-ink-subtle"
-                      aria-hidden="true"
-                    >
-                      receipt_long
-                    </span>
-                    คำสั่งซื้อของฉัน
-                  </Link>
-
-                  <Link
-                    href="/support/tickets"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <span
-                      className="material-symbols-outlined text-[18px] text-ink-subtle"
-                      aria-hidden="true"
-                    >
-                      confirmation_number
-                    </span>
-                    ตั๋วแจ้งปัญหาของฉัน
-                  </Link>
-
-                  <Link
-                    href="/help"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <span
-                      className="material-symbols-outlined text-[18px] text-ink-subtle"
-                      aria-hidden="true"
-                    >
-                      help
-                    </span>
-                    ศูนย์ช่วยเหลือ
-                  </Link>
-
-                  <Link
-                    href="/profile"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    <span
-                      className="material-symbols-outlined text-[18px] text-ink-subtle"
-                      aria-hidden="true"
-                    >
-                      person
-                    </span>
-                    ตั้งค่าโปรไฟล์
-                  </Link>
-
-                  <div className="my-1 border-t border-line" />
+                      <div className="my-1 border-t border-line" />
+                    </>
+                  )}
 
                   <button
                     onClick={handleLogout}

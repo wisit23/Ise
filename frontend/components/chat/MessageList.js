@@ -1,0 +1,357 @@
+"use client";
+
+import { Fragment, useRef, useState } from "react";
+import MessageAttachment from "./MessageAttachment";
+import { apiFetch } from "../../lib/api";
+import { getAccessToken } from "../../lib/auth";
+
+const QUICK_PROMPTS = [
+  "สินค้ายังอยู่ไหมครับ?",
+  "ลดราคาได้ไหมครับ?",
+  "ขอดูรูปเพิ่มเติมหน่อยครับ",
+  "สภาพสินค้าเป็นอย่างไรบ้างครับ?",
+];
+
+function dateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function formatDateLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "ไม่ทราบวันที่";
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return "วันนี้";
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "เมื่อวาน";
+  return date.toLocaleDateString("th-TH", {
+    day: "numeric",
+    month: "short",
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+}
+
+function DateDivider({ value }) {
+  const label = formatDateLabel(value);
+  return (
+    <li
+      role="separator"
+      aria-label={`วันที่ ${label}`}
+      className="my-4 flex items-center gap-3 text-[11px] font-medium text-slate-500"
+    >
+      <span className="h-px flex-1 bg-slate-200/80" />
+      <span className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 shadow-2xs">
+        {label}
+      </span>
+      <span className="h-px flex-1 bg-slate-200/80" />
+    </li>
+  );
+}
+
+/** Pure presentation — expects `messages` already sorted oldest-to-newest
+ * (callers reverse the backend's newest-first pages before passing them in;
+ * see lib/chat.js's listMessages doc comment). */
+export default function MessageList({
+  messages,
+  currentUserId,
+  currentUserRole,
+  otherName = "ผู้ใช้",
+  onPromptClick,
+  activeRoomId,
+}) {
+  const animatedIdsRef = useRef(new Set());
+  const initialIdsRef = useRef(null);
+  const prevRoomRef = useRef(activeRoomId);
+  const lastOptimisticRef = useRef({ body: null, time: 0 });
+  const oldestTimeRef = useRef(null);
+  const [completedOrderIds, setCompletedOrderIds] = useState(new Set());
+  const [confirmingOrderId, setConfirmingOrderId] = useState(null);
+
+  async function handleConfirmReceived(orderId) {
+    const token = getAccessToken();
+    if (!token || !orderId) return;
+    setConfirmingOrderId(orderId);
+    try {
+      await apiFetch(`/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        token,
+        body: { status: "completed" },
+      });
+      setCompletedOrderIds((prev) => new Set(prev).add(orderId));
+    } catch (err) {
+      alert(err.message || "ยืนยันการรับสินค้าไม่สำเร็จ");
+    } finally {
+      setConfirmingOrderId(null);
+    }
+  }
+
+  // When room changes, reset tracking
+  if (prevRoomRef.current !== activeRoomId) {
+    prevRoomRef.current = activeRoomId;
+    initialIdsRef.current = null;
+    animatedIdsRef.current = new Set();
+    oldestTimeRef.current = null;
+  }
+
+  // On first non-empty render of a room, mark historical messages as seen
+  // (leaving the latest message so it can animate on enter)
+  if (initialIdsRef.current === null && messages.length > 0) {
+    initialIdsRef.current = new Set(messages.map((m) => m.id));
+    messages.slice(0, -1).forEach((m) => animatedIdsRef.current.add(m.id));
+    const firstTime = new Date(messages[0].createdAt).getTime();
+    oldestTimeRef.current = Number.isNaN(firstTime) ? null : firstTime;
+  }
+
+  if (messages.length === 0) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center py-12 px-4 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 shadow-xs mb-3 animate-fade-in">
+          <span className="material-symbols-outlined text-[32px]">
+            chat_bubble
+          </span>
+        </div>
+        <p className="text-sm font-medium text-gray-700">
+          ยังไม่มีข้อความ เริ่มทักได้เลย
+        </p>
+        <p className="mt-1 text-xs text-gray-400">
+          ทักทาย สอบถามข้อมูลสินค้า หรือต่อรองราคากับคู่สนทนา
+        </p>
+
+        {onPromptClick && (
+          <div className="mt-6 flex max-w-md flex-wrap justify-center gap-2">
+            {QUICK_PROMPTS.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => onPromptClick(prompt)}
+                className="rounded-full border border-emerald-200/80 bg-white px-3.5 py-1.5 text-xs font-medium text-emerald-700 shadow-xs transition hover:border-emerald-400 hover:bg-emerald-50 active:scale-95"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <ul className="flex flex-col py-3 px-1">
+      {messages.map((m, index) => {
+        const showDate =
+          index === 0 ||
+          dateKey(m.createdAt) !== dateKey(messages[index - 1]?.createdAt);
+
+        if (m.type === "SYSTEM") {
+          const isOrderNotification =
+            Boolean(m.payload?.orderId) ||
+            m.body?.includes("หมายเลขคำสั่งซื้อ") ||
+            m.body?.includes("คำสั่งซื้อ");
+
+          const orderId =
+            m.payload?.orderId || m.body?.match(/#([a-f0-9\-]+)/i)?.[1];
+
+          const isShippedNotification =
+            m.payload?.event === "order.shipped" ||
+            m.payload?.status === "shipped" ||
+            m.body?.includes("ผู้ขายจัดส่งสินค้าแล้ว");
+
+          const isCompleted =
+            (orderId && completedOrderIds.has(orderId)) ||
+            m.payload?.event === "order.completed" ||
+            m.payload?.status === "completed" ||
+            m.body?.includes("เสร็จสมบูรณ์");
+
+          const isBuyer = currentUserRole === "BUYER" || (!currentUserRole && m.senderRole !== "BUYER");
+
+          return (
+            <Fragment key={m.id}>
+              {showDate && <DateDivider value={m.createdAt} />}
+              <li className="my-3 flex justify-center animate-fade-in px-2">
+                {isOrderNotification ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-teal-50/80 p-3 sm:px-4 sm:py-3 text-xs text-emerald-950 shadow-xs max-w-sm sm:max-w-lg w-full">
+                    <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                      <span className="material-symbols-outlined text-[20px] text-emerald-600 shrink-0 mt-0.5">
+                        {isShippedNotification ? "local_shipping" : isCompleted ? "check_circle" : "shopping_bag"}
+                      </span>
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="font-semibold text-emerald-900 leading-snug">
+                          {m.body}
+                        </p>
+                        {orderId && (
+                          <p className="mt-0.5 font-mono text-[11px] text-emerald-700/80">
+                            Order ID: #{orderId}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Receipt confirmation button: ONLY for BUYER when shipped */}
+                    {isCompleted ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 px-2.5 py-1 text-xs font-semibold">
+                        <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                        <span>สำเร็จ</span>
+                      </span>
+                    ) : isShippedNotification && isBuyer && orderId ? (
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmReceived(orderId)}
+                        disabled={confirmingOrderId === orderId}
+                        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 font-bold text-xs shadow-xs transition active:scale-95"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          check_circle
+                        </span>
+                        <span>
+                          {confirmingOrderId === orderId ? "กำลังยืนยัน..." : "ได้รับสินค้าแล้ว"}
+                        </span>
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <span className="rounded-full bg-gray-100/90 border border-gray-200/60 px-3.5 py-1 text-[11px] font-medium text-gray-500 shadow-2xs">
+                    {m.body}
+                  </span>
+                )}
+              </li>
+            </Fragment>
+          );
+        }
+
+        const own = m.senderId === currentUserId;
+        const prevMsg = messages[index - 1];
+        const nextMsg = messages[index + 1];
+
+        const isSameSenderPrev =
+          prevMsg &&
+          prevMsg.type !== "SYSTEM" &&
+          prevMsg.senderId === m.senderId &&
+          new Date(m.createdAt) - new Date(prevMsg.createdAt) < 2 * 60 * 1000;
+
+        const isSameSenderNext =
+          nextMsg &&
+          nextMsg.type !== "SYSTEM" &&
+          nextMsg.senderId === m.senderId &&
+          new Date(nextMsg.createdAt) - new Date(m.createdAt) < 2 * 60 * 1000;
+
+        const isLastInGroup = !isSameSenderNext;
+        const isFirstInGroup = !isSameSenderPrev;
+
+        const isOptimistic = String(m.id).startsWith("optimistic-");
+        const msgTime = new Date(m.createdAt).getTime();
+        const isOlderHistory =
+          oldestTimeRef.current !== null &&
+          !Number.isNaN(msgTime) &&
+          msgTime < oldestTimeRef.current;
+
+        const msgKey = m.clientId || m.id;
+        let shouldAnimate = false;
+
+        if (isOlderHistory) {
+          // Older history prepended at the top — do not animate
+          animatedIdsRef.current.add(msgKey);
+          animatedIdsRef.current.add(m.id);
+          oldestTimeRef.current = Math.min(oldestTimeRef.current, msgTime);
+        } else if (isOptimistic) {
+          if (!animatedIdsRef.current.has(msgKey)) {
+            animatedIdsRef.current.add(msgKey);
+            animatedIdsRef.current.add(m.id);
+            shouldAnimate = true;
+            lastOptimisticRef.current = { body: m.body, time: Date.now() };
+          }
+        } else if (
+          !animatedIdsRef.current.has(msgKey) &&
+          !animatedIdsRef.current.has(m.id)
+        ) {
+          animatedIdsRef.current.add(msgKey);
+          animatedIdsRef.current.add(m.id);
+          shouldAnimate = true;
+        }
+
+        return (
+          <Fragment key={m.clientId || m.id}>
+            {showDate && <DateDivider value={m.createdAt} />}
+            <li
+              className={`flex items-end gap-2 ${
+                own ? "justify-end" : "justify-start"
+              } ${isFirstInGroup ? "mt-3" : "mt-1"}`}
+            >
+              {/* Receiver Avatar on the left */}
+              {!own && (
+                <div className="w-7 shrink-0 mb-0.5">
+                  {isLastInGroup ? (
+                    <div
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-700 text-xs font-semibold shadow-2xs animate-fade-in"
+                      title={otherName}
+                    >
+                      {otherName?.[0] || "?"}
+                    </div>
+                  ) : (
+                    <div className="h-7 w-7" />
+                  )}
+                </div>
+              )}
+
+              {/* Bubble */}
+              <div
+                data-testid="message-bubble"
+                data-animate={shouldAnimate ? "pop" : "none"}
+                className={`relative max-w-[78%] sm:max-w-[70%] px-4 py-2.5 text-sm transition-all duration-150 ${
+                  shouldAnimate ? "animate-message-pop" : ""
+                } ${
+                  own
+                    ? "origin-bottom-right bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs " +
+                      (isLastInGroup
+                        ? "rounded-2xl rounded-br-xs"
+                        : "rounded-2xl rounded-r-md")
+                    : "origin-bottom-left bg-white border border-gray-150 text-gray-900 shadow-xs " +
+                      (isLastInGroup
+                        ? "rounded-2xl rounded-bl-xs"
+                        : "rounded-2xl rounded-l-md")
+                }`}
+              >
+                {(m.type === "IMAGE" || m.type === "FILE") && (
+                  <div className={m.body ? "mb-2" : ""}>
+                    <MessageAttachment message={m} own={own} />
+                  </div>
+                )}
+
+                {m.body && (
+                  <p className="whitespace-pre-line leading-relaxed selection:bg-emerald-200 selection:text-emerald-950">
+                    {m.body}
+                  </p>
+                )}
+
+                {/* Timestamp & Status */}
+                <div
+                  className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
+                    own ? "text-emerald-100/90" : "text-gray-400"
+                  }`}
+                >
+                  <span>
+                    {new Date(m.createdAt).toLocaleTimeString("th-TH", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+
+                  {own && (
+                    <span
+                      className="material-symbols-outlined text-[13px] leading-none"
+                      title={isOptimistic ? "กำลังส่ง..." : "ส่งแล้ว"}
+                      aria-hidden="true"
+                    >
+                      {isOptimistic ? "schedule" : "done_all"}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </li>
+          </Fragment>
+        );
+      })}
+    </ul>
+  );
+}

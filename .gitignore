@@ -1,12 +1,16 @@
 node_modules/
 .next/
 dist/
+# This repository uses the root npm-workspace lockfile.
+frontend/package-lock.json
 .env
 .env.local
 .env.*.local
 *.log
 backend/services/product-service/uploads/*
 !backend/services/product-service/uploads/.gitkeep
+backend/services/review-service/uploads/*
+!backend/services/review-service/uploads/.gitkeep
 backend/services/order-service/private-evidence/*
 !backend/services/order-service/private-evidence/.gitkeep
 .DS_Store
@@ -21,3 +25,5 @@ backend/services/*/src/generated/
 .github/agents/
 .github/hooks/
 .impeccable/
+backend/services/chat-service/private-attachments/*
+!backend/services/chat-service/private-attachments/.gitkeep

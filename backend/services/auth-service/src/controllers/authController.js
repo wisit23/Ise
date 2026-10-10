@@ -11,7 +11,11 @@ async function register(req, res, next) {
 
 async function login(req, res, next) {
   try {
-    const result = await authService.login({ ...req.body, ipAddress: req.ip });
+    const result = await authService.login({
+      ...req.body,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent") || null,
+    });
     res.json(result);
   } catch (err) {
     next(err);
@@ -74,7 +78,10 @@ async function getMyShopProfile(req, res, next) {
 
 async function submitShopChangeRequest(req, res, next) {
   try {
-    const result = await authService.submitShopChangeRequest(req.userId, req.body);
+    const result = await authService.submitShopChangeRequest(
+      req.userId,
+      req.body,
+    );
     res.status(201).json(result);
   } catch (err) {
     next(err);
@@ -104,7 +111,7 @@ async function decideChangeRequest(req, res, next) {
     const result = await authService.decideChangeRequest(
       req.userId,
       req.params.id,
-      req.body
+      req.body,
     );
     res.json(result);
   } catch (err) {

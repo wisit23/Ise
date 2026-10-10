@@ -11,6 +11,7 @@ function createAuctionRepository(prismaClient) {
   // always photos[0] — same convention productModel uses for listings.
   const WITH_PRODUCT = {
     product: { include: { photos: { orderBy: { position: "asc" } } } },
+    round: true,
   };
 
   function findProductOwner(productId) {
@@ -31,8 +32,11 @@ function createAuctionRepository(prismaClient) {
     });
   }
 
-  async function list({ status, skip, take }) {
-    const where = status ? { status } : {};
+  async function list({ status, skip, take, roundId }) {
+    const where = {
+      ...(status ? { status } : {}),
+      ...(roundId ? { roundId } : {}),
+    };
     const [items, total] = await Promise.all([
       prismaClient.auctionItem.findMany({
         where,
@@ -78,6 +82,85 @@ function createAuctionRepository(prismaClient) {
     });
   }
 
+  function setProductStatus(productId, status, tx = prismaClient) {
+    return tx.product.update({
+      where: { id: productId },
+      data: { status },
+    });
+  }
+
+  function withRoundLock(fn) {
+    return prismaClient.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(1001, 1)`;
+      return fn(tx);
+    });
+  }
+
+  function findConflictingRound({ subStart, aucEnd }, tx = prismaClient) {
+    return tx.auctionRound.findFirst({
+      where: {
+        submissionStartsAt: { lt: aucEnd },
+        auctionEndsAt: { gt: subStart },
+      },
+    });
+  }
+
+  function createRound(data, tx = prismaClient) {
+    return tx.auctionRound.create({ data });
+  }
+
+  function findActiveSubmissionRound(now = new Date()) {
+    return prismaClient.auctionRound.findFirst({
+      where: {
+        submissionStartsAt: { lte: now },
+        submissionEndsAt: { gt: now },
+      },
+      orderBy: [{ submissionStartsAt: "asc" }, { id: "asc" }],
+    });
+  }
+
+  async function findCurrentRound(now = new Date()) {
+    const active = await prismaClient.auctionRound.findFirst({
+      where: {
+        submissionStartsAt: { lte: now },
+        auctionEndsAt: { gt: now },
+      },
+      orderBy: [{ submissionStartsAt: "asc" }, { id: "asc" }],
+      include: {
+        _count: { select: { auctions: true } },
+      },
+    });
+    if (active) return active;
+
+    return prismaClient.auctionRound.findFirst({
+      where: {
+        submissionStartsAt: { gt: now },
+      },
+      orderBy: [{ submissionStartsAt: "asc" }, { id: "asc" }],
+      include: {
+        _count: { select: { auctions: true } },
+      },
+    });
+  }
+
+  function listRounds() {
+    return prismaClient.auctionRound.findMany({
+      orderBy: { submissionStartsAt: "desc" },
+      include: {
+        _count: { select: { auctions: true } },
+      },
+    });
+  }
+
+  function findRoundById(id) {
+    return prismaClient.auctionRound.findUnique({
+      where: { id },
+      include: {
+        auctions: { include: WITH_PRODUCT },
+      },
+    });
+  }
+
   return {
     findProductOwner,
     create,
@@ -87,6 +170,14 @@ function createAuctionRepository(prismaClient) {
     highestBid,
     createBid,
     withAuctionLock,
+    setProductStatus,
+    withRoundLock,
+    findConflictingRound,
+    createRound,
+    findActiveSubmissionRound,
+    findCurrentRound,
+    listRounds,
+    findRoundById,
   };
 }
 

@@ -21,6 +21,7 @@ async function getOne(req, res, next) {
       disputeId: req.params.id,
       userId: req.userId,
       role: req.userRole,
+      roles: req.userRoles,
     });
     res.json(dispute);
   } catch (err) {
@@ -34,6 +35,7 @@ async function getByOrderId(req, res, next) {
       orderId: req.params.orderId,
       userId: req.userId,
       role: req.userRole,
+      roles: req.userRoles,
     });
     res.json(dispute);
   } catch (err) {
@@ -46,6 +48,7 @@ async function queue(req, res, next) {
     const pagination = parsePagination(req.query, 20);
     const { items, total } = await disputeService.listQueue({
       role: req.userRole,
+      roles: req.userRoles,
       status: req.query.status,
       search: req.query.q,
       skip: pagination.skip,
@@ -65,6 +68,7 @@ const uploadEvidence = [
         disputeId: req.params.id,
         userId: req.userId,
         role: req.userRole,
+        roles: req.userRoles,
         file: req.file,
       });
       res.status(201).json(evidence);
@@ -81,9 +85,59 @@ async function viewEvidence(req, res, next) {
       evidenceId: req.params.evidenceId,
       userId: req.userId,
       role: req.userRole,
+      roles: req.userRoles,
     });
     res.setHeader("Content-Type", fileType);
     require("fs").createReadStream(filePath).pipe(res);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function claim(req, res, next) {
+  try {
+    const dispute = await disputeService.claim({
+      disputeId: req.params.id,
+      userId: req.userId,
+      role: req.userRole,
+      roles: req.userRoles,
+      version: req.body.version,
+    });
+    res.json(dispute);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function reassign(req, res, next) {
+  try {
+    const dispute = await disputeService.reassign({
+      disputeId: req.params.id,
+      userId: req.userId,
+      role: req.userRole,
+      roles: req.userRoles,
+      toUserId: req.body.toUserId,
+      reason: req.body.reason,
+      version: req.body.version,
+    });
+    res.json(dispute);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function escalate(req, res, next) {
+  try {
+    const dispute = await disputeService.escalate({
+      disputeId: req.params.id,
+      userId: req.userId,
+      role: req.userRole,
+      roles: req.userRoles,
+      reason: req.body.reason,
+      toUserId: req.body.toUserId,
+      version: req.body.version,
+    });
+    res.json(dispute);
   } catch (err) {
     next(err);
   }
@@ -95,8 +149,10 @@ async function decide(req, res, next) {
       disputeId: req.params.id,
       userId: req.userId,
       role: req.userRole,
+      roles: req.userRoles,
       decision: req.body.decision,
       reason: req.body.reason,
+      version: req.body.version,
     });
     res.json(dispute);
   } catch (err) {
@@ -111,5 +167,8 @@ module.exports = {
   queue,
   uploadEvidence,
   viewEvidence,
+  claim,
+  reassign,
+  escalate,
   decide,
 };

@@ -13,22 +13,37 @@ router.patch("/me", requireAuth, authController.updateMe);
 router.get("/users/:id/public", authController.publicProfile);
 
 // ── Shop change-request (seller: submit + view history) ────────────────────
-router.get("/shop/profile", requireAuth, authController.getMyShopProfile);
-router.post("/shop/change-request", requireAuth, authController.submitShopChangeRequest);
-router.get("/shop/change-requests", requireAuth, authController.getMyChangeRequests);
+router.get(
+  "/shop/profile",
+  requireAuth,
+  requireRole("SELLER"),
+  authController.getMyShopProfile,
+);
+router.post(
+  "/shop/change-request",
+  requireAuth,
+  requireRole("SELLER"),
+  authController.submitShopChangeRequest,
+);
+router.get(
+  "/shop/change-requests",
+  requireAuth,
+  requireRole("SELLER"),
+  authController.getMyChangeRequests,
+);
 
 // ── Shop change-request (admin: review queue + decide) ─────────────────────
 router.get(
   "/admin/shop/change-requests",
   requireAuth,
   requireRole("ADMIN"),
-  authController.getPendingChangeRequests
+  authController.getPendingChangeRequests,
 );
 router.patch(
   "/admin/shop/change-requests/:id/decide",
   requireAuth,
   requireRole("ADMIN"),
-  authController.decideChangeRequest
+  authController.decideChangeRequest,
 );
 
 module.exports = router;

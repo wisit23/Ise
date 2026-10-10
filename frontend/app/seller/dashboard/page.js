@@ -250,7 +250,9 @@ export default function SellerDashboardPage() {
               href="/sell"
               className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-emerald-600 transition-colors"
             >
-              <span className="material-symbols-outlined text-[16px]">add_circle</span>
+              <span className="material-symbols-outlined text-[16px]">
+                add_circle
+              </span>
               ลงขายสินค้าใหม่
             </Link>
             {user?.id && (
@@ -258,7 +260,9 @@ export default function SellerDashboardPage() {
                 href={`/store/${user.id}`}
                 className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-emerald-600 transition-colors"
               >
-                <span className="material-symbols-outlined text-[16px]">storefront</span>
+                <span className="material-symbols-outlined text-[16px]">
+                  storefront
+                </span>
                 หน้าร้านค้าของฉัน
               </Link>
             )}
@@ -287,7 +291,9 @@ export default function SellerDashboardPage() {
                   <span className="material-symbols-outlined text-[14px]">
                     warning
                   </span>
-                  {kycStatus === "PENDING" ? "รอยืนยัน KYC" : "ยังไม่ยืนยัน KYC"}
+                  {kycStatus === "PENDING"
+                    ? "รอยืนยัน KYC"
+                    : "ยังไม่ยืนยัน KYC"}
                 </span>
               )}
               {/* Mobile section switcher */}
@@ -360,6 +366,11 @@ export default function SellerDashboardPage() {
                 onClearHighlight={() => setHighlightOrderId(null)}
                 statusFilter={orderStatusFilter}
                 onStatusFilterChange={setOrderStatusFilter}
+                onOrderUpdated={(updated) => {
+                  setOrders((prev) =>
+                    prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)),
+                  );
+                }}
               />
             )}
 
@@ -367,8 +378,14 @@ export default function SellerDashboardPage() {
             {section === "products" && (
               <SellerProductList
                 products={products}
+                orders={orders}
                 statusFilter={productStatusFilter}
                 onStatusFilterChange={setProductStatusFilter}
+                onOrderUpdated={(updated) => {
+                  setOrders((prev) =>
+                    prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)),
+                  );
+                }}
               />
             )}
           </div>

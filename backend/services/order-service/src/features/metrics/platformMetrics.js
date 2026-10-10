@@ -3,7 +3,7 @@ const prisma = require("../../models/prismaClient");
 // Temporary working default per docs/featureplan/executive/teachme.md
 // ("platform revenue must have an explicit fee rule, not be guessed from
 // price") — swap for a real fee schedule once Finance confirms one.
-const PLATFORM_FEE_RATE = 0.1;
+const PLATFORM_FEE_RATE = 0.03;
 
 /**
  * GMV/revenue/completed-order count for orders placed in [from, to).

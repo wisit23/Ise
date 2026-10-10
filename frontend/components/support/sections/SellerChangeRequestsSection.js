@@ -3,12 +3,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 
-const STATUS_STYLE = {
-  PENDING: "bg-amber-50 text-amber-700",
-  APPROVED: "bg-emerald-50 text-emerald-700",
-  REJECTED: "bg-red-50 text-red-600",
-};
-
 // ─── Admin Section: Shop Change Requests ──────────────────────────────────────
 export default function SellerChangeRequestsSection({ token }) {
   const [requests, setRequests] = useState([]);
@@ -53,7 +47,9 @@ export default function SellerChangeRequestsSection({ token }) {
   return (
     <div className="animate-fade-in-up space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">คำขอแก้ไขข้อมูลร้านค้า</h1>
+        <h1 className="text-xl font-bold text-slate-900">
+          คำขอแก้ไขข้อมูลร้านค้า
+        </h1>
         <p className="mt-1 text-sm text-slate-500">
           รอตรวจสอบ {requests.length} รายการ — อนุมัติแล้วข้อมูลจะอัปเดตทันที
         </p>
@@ -140,19 +136,25 @@ export default function SellerChangeRequestsSection({ token }) {
                   <dl className="space-y-1.5">
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">ชื่อร้าน</dt>
-                      <dd className={`font-medium ${req.shopName ? "text-emerald-700" : "text-slate-300"}`}>
+                      <dd
+                        className={`font-medium ${req.shopName ? "text-emerald-700" : "text-slate-300"}`}
+                      >
                         {req.shopName || "ไม่เปลี่ยน"}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">ที่อยู่</dt>
-                      <dd className={`max-w-[55%] text-right font-medium whitespace-pre-line ${req.address ? "text-emerald-700" : "text-slate-300"}`}>
+                      <dd
+                        className={`max-w-[55%] text-right font-medium whitespace-pre-line ${req.address ? "text-emerald-700" : "text-slate-300"}`}
+                      >
                         {req.address || "ไม่เปลี่ยน"}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
                       <dt className="text-slate-500">บัญชีธนาคาร</dt>
-                      <dd className={`font-mono font-medium ${req.bankAccount ? "text-emerald-700" : "text-slate-300"}`}>
+                      <dd
+                        className={`font-mono font-medium ${req.bankAccount ? "text-emerald-700" : "text-slate-300"}`}
+                      >
                         {req.bankAccount || "ไม่เปลี่ยน"}
                       </dd>
                     </div>
@@ -173,7 +175,10 @@ export default function SellerChangeRequestsSection({ token }) {
                   placeholder="หมายเหตุถึงผู้ขาย (optional)"
                   value={noteById[req.id] || ""}
                   onChange={(e) =>
-                    setNoteById((prev) => ({ ...prev, [req.id]: e.target.value }))
+                    setNoteById((prev) => ({
+                      ...prev,
+                      [req.id]: e.target.value,
+                    }))
                   }
                   className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/40"
                 />
@@ -182,7 +187,9 @@ export default function SellerChangeRequestsSection({ token }) {
                   onClick={() => decide(req, "APPROVED")}
                   className="flex shrink-0 items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[16px]">check</span>
+                  <span className="material-symbols-outlined text-[16px]">
+                    check
+                  </span>
                   อนุมัติ
                 </button>
                 <button
@@ -190,7 +197,9 @@ export default function SellerChangeRequestsSection({ token }) {
                   onClick={() => decide(req, "REJECTED")}
                   className="flex shrink-0 items-center gap-1.5 rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
                 >
-                  <span className="material-symbols-outlined text-[16px]">close</span>
+                  <span className="material-symbols-outlined text-[16px]">
+                    close
+                  </span>
                   ปฏิเสธ
                 </button>
               </div>

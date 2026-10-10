@@ -9,7 +9,9 @@ import Reveal from "../../../components/ui/Reveal";
 import Pagination from "../../../components/Pagination";
 import { StarDisplay } from "../../../components/StarRating";
 import ReportModal from "../../../components/ReportModal";
+import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import EditShopModal from "../../../components/seller/EditShopModal";
+import ReviewMediaGallery from "../../../components/ReviewMediaGallery";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
@@ -72,9 +74,7 @@ export default function StorePage() {
       ? `/api/products/mine`
       : `/api/products/by-seller/${sellerId}`;
 
-    apiFetch(
-      `${endpoint}?page=${productPage}&limit=${PRODUCT_PAGE_SIZE}`,
-    )
+    apiFetch(`${endpoint}?page=${productPage}&limit=${PRODUCT_PAGE_SIZE}`)
       .then((data) => {
         let itemsToDisplay = data.items;
         // The 'mine' endpoint returns all statuses including sold and removed.
@@ -84,7 +84,7 @@ export default function StorePage() {
             (p) =>
               p.status === "available" ||
               p.status === "hidden" ||
-              p.status === "sold"
+              p.status === "sold",
           );
         }
         setItems(itemsToDisplay);
@@ -144,7 +144,7 @@ export default function StorePage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             {isOwner && (
               <button
                 type="button"
@@ -157,14 +157,27 @@ export default function StorePage() {
                 แก้ไขข้อมูลร้านค้า
               </button>
             )}
-            {/* user is undefined during SSR, preventing mismatch */}
             {user !== undefined && !isOwner && (
-              <button
-                onClick={() => setShowReport(true)}
-                className="shrink-0 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
-              >
-                รายงานร้านค้านี้
-              </button>
+              <>
+                {/* Chat is scoped to one PRODUCT conversation per pair this
+                  round (see chat-service's contextKey design) — there's no
+                  "message this seller in general" endpoint yet, so this
+                  opens/reopens the conversation about their first listed
+                  item. Hidden entirely for a store with no products, since
+                  there's nothing to anchor a conversation to. */}
+                {items.length > 0 && (
+                  <ContactSellerButton
+                    productId={items[0].id}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3 py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                )}
+                <button
+                  onClick={() => setShowReport(true)}
+                  className="text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
+                >
+                  รายงานร้านค้านี้
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -182,7 +195,9 @@ export default function StorePage() {
                   คำขอแก้ไขข้อมูลร้านค้าของคุณอยู่ระหว่างรอแอดมินตรวจสอบ
                 </p>
                 <p className="text-xs text-amber-700 mt-0.5">
-                  ยื่นเมื่อ {new Date(pendingRequest.createdAt).toLocaleString("th-TH")} · เหตุผล: "{pendingRequest.comment}"
+                  ยื่นเมื่อ{" "}
+                  {new Date(pendingRequest.createdAt).toLocaleString("th-TH")} ·
+                  เหตุผล: &quot;{pendingRequest.comment}&quot;
                 </p>
               </div>
             </div>
@@ -237,6 +252,9 @@ export default function StorePage() {
                 {r.comment && (
                   <p className="mt-1.5 text-sm text-gray-700">{r.comment}</p>
                 )}
+                {r.media && r.media.length > 0 && (
+                  <ReviewMediaGallery media={r.media} />
+                )}
               </li>
             ))}
           </ul>
@@ -259,7 +277,6 @@ export default function StorePage() {
         <EditShopModal
           open={showEditModal}
           onClose={() => setShowEditModal(false)}
-          sellerId={sellerId}
           currentShopName={seller?.shopName || ""}
           onSuccess={() => {
             loadPendingRequest();

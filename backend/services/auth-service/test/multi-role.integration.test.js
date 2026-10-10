@@ -27,7 +27,7 @@ async function databaseIsReachable() {
   }
 }
 
-test("multi-role permissions are issued, migrated and stay fresh after removal", async (t) => {
+test("customer multi-role is allowed while staff/customer mixing is rejected", async (t) => {
   if (!(await databaseIsReachable())) {
     const message =
       "DATABASE_URL not set or database unreachable — set it to a disposable test database " +
@@ -47,57 +47,50 @@ test("multi-role permissions are issued, migrated and stay fresh after removal",
       email,
       password,
       firstName: "Test",
-      lastName: "Seller",
-      role: "SELLER",
-      shopName: "Test Shop",
+      lastName: "Customer",
     });
     assert.equal(registerRes.status, 201);
 
     // No explicit UserRole rows exist yet — legacy `role` column must still
     // resolve to the correct functional permission set (Step 4: migrated Buyer/Seller).
     const initialClaims = verifyAccessToken(registerRes.body.accessToken);
-    assert.deepEqual(initialClaims.roles, ["SELLER"]);
-    assert.equal(hasPermission(initialClaims.roles, "product:write"), true);
+    assert.deepEqual(initialClaims.roles, ["BUYER"]);
+    assert.equal(hasPermission(initialClaims.roles, "order:purchase"), true);
     assert.equal(hasPermission(initialClaims.roles, "admin:user:ban"), false);
 
     const userId = registerRes.body.user.id;
 
-    // Promote to Customer Service in addition to Seller.
-    await authService.assignRole(userId, "CUSTOMER_SERVICE");
+    // A customer may be both buyer and seller.
+    await authService.assignRole(userId, "SELLER");
 
     const loginRes = await request(app)
       .post("/login")
       .send({ email, password });
-    const promotedClaims = verifyAccessToken(loginRes.body.accessToken);
-    assert.ok(promotedClaims.roles.includes("SELLER"));
-    assert.ok(promotedClaims.roles.includes("CUSTOMER_SERVICE"));
-    assert.equal(
-      hasPermission(promotedClaims.roles, "support:case:read"),
-      true,
-    );
-    assert.equal(hasPermission(promotedClaims.roles, "admin:user:ban"), false);
+    const customerClaims = verifyAccessToken(loginRes.body.accessToken);
+    assert.deepEqual([...customerClaims.roles].sort(), ["BUYER", "SELLER"]);
+    assert.equal(hasPermission(customerClaims.roles, "order:purchase"), true);
 
-    // Removing SELLER must be reflected on the very next issued token (freshness).
+    // A staff role may never be added to a customer account.
+    await assert.rejects(
+      () => authService.assignRole(userId, "CUSTOMER_SERVICE"),
+      /cannot be combined with a staff role/,
+    );
+
+    // Removing SELLER leaves a valid BUYER account and is reflected immediately.
     await authService.removeRole(userId, "SELLER");
     const refreshRes = await request(app)
       .post("/refresh")
       .send({ refreshToken: loginRes.body.refreshToken });
     const afterRemovalClaims = verifyAccessToken(refreshRes.body.accessToken);
-    assert.deepEqual(afterRemovalClaims.roles, ["CUSTOMER_SERVICE"]);
+    assert.deepEqual(afterRemovalClaims.roles, ["BUYER"]);
     assert.equal(
       hasPermission(afterRemovalClaims.roles, "product:write"),
       false,
     );
 
-    // Staff denial: CUSTOMER_SERVICE alone must never grant Admin actions.
-    assert.equal(
-      hasPermission(afterRemovalClaims.roles, "admin:user:ban"),
-      false,
-    );
-
     // A user must always keep at least one role.
     await assert.rejects(
-      () => authService.removeRole(userId, "CUSTOMER_SERVICE"),
+      () => authService.removeRole(userId, "BUYER"),
       /at least one role/,
     );
   } finally {

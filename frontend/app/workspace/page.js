@@ -8,7 +8,9 @@ import RadioSelect from "../../components/ui/RadioSelect";
 import Link from "next/link";
 
 import DashboardSection from "../../components/support/sections/DashboardSection";
-import TicketsSection from "../../components/support/sections/TicketsSection";
+import TicketsSection, {
+  TicketViewControl,
+} from "../../components/support/sections/TicketsSection";
 import DisputesSection from "../../components/support/sections/DisputesSection";
 import OrdersSection from "../../components/support/sections/OrdersSection";
 import FaqSection from "../../components/support/sections/FaqSection";
@@ -16,14 +18,13 @@ import KycSection from "../../components/support/sections/KycSection";
 import AuditSection from "../../components/support/sections/AuditSection";
 import AdminInboxSection from "../../components/support/sections/AdminInboxSection";
 import ProductsSection from "../../components/support/sections/ProductsSection";
-import AuctionApprovalsSection from "../../components/support/sections/AuctionApprovalsSection";
 import SellerChangeRequestsSection from "../../components/support/sections/SellerChangeRequestsSection";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "tickets", label: "Tickets", icon: "confirmation_number" },
   { key: "disputes", label: "Disputes", icon: "gavel" },
-  { key: "orders", label: "ค้นหาออเดอร์", icon: "search" },
+  { key: "orders", label: "ค้นหา", icon: "manage_search" },
   { key: "faq", label: "จัดการ FAQ", icon: "menu_book" },
 ];
 
@@ -32,12 +33,14 @@ const SECTIONS = [
 // anywhere in the CS agent's own tabs (see TicketsSection's dropped
 // ESCALATED filter option).
 const ADMIN_SECTIONS = [
-  { key: "admin_inbox", label: "เคสระดับแอดมิน", icon: "assignment_late" },
+  { key: "admin_inbox", label: "เคส Trust & Safety", icon: "assignment_late" },
   { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
-  { key: "auction_approvals", label: "อนุมัติประมูล", icon: "sell" },
   { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
-  { key: "shop_changes", label: "ตรวจข้อมูลร้านค้า", icon: "storefront" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
+];
+
+const ADMIN_ONLY_SECTIONS = [
+  { key: "shop_changes", label: "ตรวจข้อมูลร้านค้า", icon: "storefront" },
 ];
 
 export default function SupportPanelPage() {
@@ -45,6 +48,7 @@ export default function SupportPanelPage() {
   const [user, setUser] = useState(undefined);
   const [section, setSection] = useState("dashboard");
   const [ticketsFilter, setTicketsFilter] = useState("");
+  const [ticketViewMode, setTicketViewMode] = useState("workspace");
   const [disputesFilter, setDisputesFilter] = useState("");
 
   function navigateTo(tab, filter) {
@@ -72,7 +76,11 @@ export default function SupportPanelPage() {
       </main>
     );
   }
-  if (user?.role !== "CUSTOMER_SERVICE" && user?.role !== "ADMIN") {
+  if (
+    user?.role !== "CUSTOMER_SERVICE" &&
+    user?.role !== "ADMIN" &&
+    user?.role !== "TRUST_AND_SAFETY"
+  ) {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
@@ -84,17 +92,24 @@ export default function SupportPanelPage() {
   }
 
   const token = getAccessToken();
-  const visibleSections =
-    user?.role === "ADMIN" ? [...SECTIONS, ...ADMIN_SECTIONS] : SECTIONS;
+  const isAdminOrSafety =
+    user?.role === "ADMIN" || user?.role === "TRUST_AND_SAFETY";
+  const visibleSections = isAdminOrSafety
+    ? [
+        ...SECTIONS,
+        ...ADMIN_SECTIONS,
+        ...(user?.role === "ADMIN" ? ADMIN_ONLY_SECTIONS : []),
+      ]
+    : SECTIONS;
   const activeSection = visibleSections.find((s) => s.key === section);
 
   return (
     // Toasts are mounted at the panel root so every section beneath it can
     // report the outcome of an action without a blocking alert().
     <ToastProvider>
-      <div className="flex min-h-screen flex-col bg-slate-50/50">
+      <div className="flex h-dvh flex-col overflow-hidden bg-slate-50/50">
         <NavBar />
-        <div className="flex flex-1">
+        <div className="flex min-h-0 flex-1">
           {/* ── Sidebar ── */}
           <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
             {/* Brand */}
@@ -110,7 +125,7 @@ export default function SupportPanelPage() {
                     Re-loop panel
                   </span>
                   <span className="text-[10px] font-semibold tracking-wider text-emerald-600 uppercase">
-                    {user?.role === "ADMIN" ? "Administrator" : "Support Agent"}
+                    {isAdminOrSafety ? "Trust and Safety" : "Support Agent"}
                   </span>
                 </div>
               </div>
@@ -132,7 +147,9 @@ export default function SupportPanelPage() {
                   >
                     <span
                       className={`material-symbols-outlined text-[20px] shrink-0 w-5 text-center ${
-                        active ? "text-white" : "text-slate-500 group-hover:text-slate-700"
+                        active
+                          ? "text-white"
+                          : "text-slate-500 group-hover:text-slate-700"
                       }`}
                     >
                       {s.icon}
@@ -158,9 +175,13 @@ export default function SupportPanelPage() {
           </aside>
 
           {/* ── Main Content ── */}
-          <main className="min-w-0 flex-1 overflow-y-auto">
+          <main
+            className={`min-h-0 min-w-0 flex-1 flex flex-col ${
+              section === "tickets" ? "overflow-hidden" : "overflow-y-auto"
+            }`}
+          >
             {/* Top bar */}
-            <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+            <div className="sticky top-0 z-30 flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-3 py-2 sm:px-6 lg:px-8 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                   <span className="material-symbols-outlined text-[18px]">
@@ -172,60 +193,73 @@ export default function SupportPanelPage() {
                 </h1>
               </div>
               {/* Mobile section switcher */}
-              <div className="flex items-center gap-3 sm:hidden">
-                <RadioSelect
-                  value={section}
-                  onChange={setSection}
-                  options={visibleSections.map((s) => ({
-                    value: s.key,
-                    label: s.label,
-                    icon: s.icon,
-                  }))}
-                  size="sm"
-                  variant="panel"
-                  align="right"
-                />
+              <div className="ml-auto flex items-center gap-2">
+                {section === "tickets" && (
+                  <TicketViewControl
+                    value={ticketViewMode}
+                    onChange={setTicketViewMode}
+                  />
+                )}
+                <div className="flex items-center gap-3 sm:hidden">
+                  <RadioSelect
+                    value={section}
+                    onChange={setSection}
+                    options={visibleSections.map((s) => ({
+                      value: s.key,
+                      label: s.label,
+                      icon: s.icon,
+                    }))}
+                    size="sm"
+                    variant="panel"
+                    align="right"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-8 max-w-7xl mx-auto">
-              {section === "dashboard" && (
-                <DashboardSection
-                  token={token}
-                  userRole={user?.role}
-                  onNavigate={navigateTo}
-                />
-              )}
-              {section === "tickets" && (
+            {section === "tickets" ? (
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 <TicketsSection
+                  viewMode={ticketViewMode}
+                  setViewMode={setTicketViewMode}
                   token={token}
                   userId={user?.id}
                   statusFilter={ticketsFilter}
                   setStatusFilter={setTicketsFilter}
                 />
-              )}
-              {section === "admin_inbox" && <AdminInboxSection token={token} />}
-              {section === "disputes" && (
-                <DisputesSection
-                  token={token}
-                  userRole={user?.role}
-                  status={disputesFilter}
-                  setStatus={setDisputesFilter}
-                />
-              )}
-              {section === "orders" && <OrdersSection token={token} />}
-              {section === "faq" && <FaqSection token={token} />}
-              {section === "kyc" && <KycSection token={token} />}
-              {section === "audit" && <AuditSection token={token} />}
-              {section === "products" && <ProductsSection token={token} />}
-              {section === "auction_approvals" && (
-                <AuctionApprovalsSection token={token} />
-              )}
-              {section === "shop_changes" && (
-                <SellerChangeRequestsSection token={token} />
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="p-8 max-w-7xl mx-auto w-full">
+                {section === "dashboard" && (
+                  <DashboardSection
+                    token={token}
+                    userRole={user?.role}
+                    onNavigate={navigateTo}
+                  />
+                )}
+                {section === "admin_inbox" && (
+                  <AdminInboxSection token={token} />
+                )}
+                {section === "disputes" && (
+                  <DisputesSection
+                    token={token}
+                    userRole={user?.role}
+                    currentUser={user}
+                    status={disputesFilter}
+                    setStatus={setDisputesFilter}
+                  />
+                )}
+                {section === "orders" && <OrdersSection token={token} />}
+                {section === "faq" && <FaqSection token={token} />}
+                {section === "kyc" && <KycSection token={token} />}
+                {section === "audit" && <AuditSection token={token} />}
+                {section === "products" && <ProductsSection token={token} />}
+                {section === "shop_changes" && (
+                  <SellerChangeRequestsSection token={token} />
+                )}
+              </div>
+            )}
           </main>
         </div>
       </div>

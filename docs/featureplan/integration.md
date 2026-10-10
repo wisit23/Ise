@@ -97,6 +97,55 @@ Order states:
 
 Campaign states: `draft → pending_approval → approved → published → ended` หรือ `rejected`
 
+### Chat contract — implemented, `CHAT-001`–`CHAT-005` (pending integration review)
+
+`chat-service` เป็น Owner เดียวของข้อความทุกชนิดในระบบ เก็บใน **MongoDB** (ไม่ใช่ PostgreSQL —
+ดูเหตุผลใน [`chat/decision.md`](chat/decision.md)) รายละเอียดเต็มอยู่ที่
+[`chat/plan.md`](chat/plan.md); นี่คือสรุป Contract สำหรับ Feature อื่นที่จะต่อเข้ามา
+
+**Public API** (ผ่าน Gateway `/api/chat`, ต้องมี Bearer JWT — เฉพาะ `contextType: "PRODUCT"`
+สร้างได้ผ่านทางนี้):
+
+```
+POST   /api/chat/conversations                 create-or-open (PRODUCT เท่านั้น)
+GET    /api/chat/conversations                  inbox ของฉัน
+GET    /api/chat/conversations/:id              รายละเอียดห้อง (403 ถ้าไม่ใช่คู่สนทนา)
+GET    /api/chat/conversations/:id/messages     ?before=<messageId>&limit=  (cursor, ไม่ใช่ offset)
+POST   /api/chat/conversations/:id/messages     ส่งข้อความ TEXT — {body}
+POST   /api/chat/conversations/:id/read         mark read
+GET    /api/chat/unread-count                   {total}
+```
+
+**Internal API** (ตรงไปที่ `CHAT_SERVICE_URL`, ต้องมี `x-internal-token` — ไม่ผ่าน Gateway,
+ยิงจาก Backend service เท่านั้น ไม่ใช่จาก Frontend):
+
+```
+POST   /internal/conversations                        create-or-open — contextType "ORDER"|"SUPPORT"
+                                                        เท่านั้น (PRODUCT/DIRECT ยังไม่รองรับทางนี้)
+                                                        body: {contextType, contextId, participants:[{userId,role}], createdBy}
+                                                        → 201 ห้องใหม่ / 200 ห้องเดิม (ไม่ error ซ้ำ)
+GET    /internal/conversations/by-context/:type/:id   ค้นห้องจาก orderId/ticketId
+POST   /internal/conversations/:id/messages           ส่งข้อความใด ๆ (ปกติใช้ type:"SYSTEM")
+                                                        ไม่เช็ค participant/LOCKED — Caller ถูกเชื่อถือ
+                                                        body: {senderId, senderRole, type, body, payload}
+POST   /internal/conversations/:id/participants       เพิ่มคู่สนทนา (เช่น CS agent) — idempotent
+PATCH  /internal/conversations/:id/status             ACTIVE | ARCHIVED | LOCKED
+GET    /internal/conversations/:id/transcript         ประวัติเต็มไม่ pagination — สำหรับหลักฐาน
+```
+
+ตัวอย่าง Consumer จริงตัวแรก: `order-service/src/services/chatClient.js` — ทุกครั้งที่ Order
+เปลี่ยนสถานะเป็น `confirmed`/`shipped`/`completed`/`cancelled`, `orderController.updateStatus`
+เรียก `chatClient.notifyOrderStatusChanged(order, status)` แบบ best-effort (กลืน error เอง
+ไม่มีทางทำให้ Order update ล้มเพราะ chat-service ล่ม) เปิด/เปิดซ้ำห้อง `ORDER:<orderId>` แล้วส่ง
+SYSTEM message เข้าไป
+
+Event ที่ประกาศไว้ใน `shared/src/events.js` (**ยังไม่ publish จริง — รอ `CHAT-006`** ต่อ Redis
+adapter): `CHAT_CONVERSATION_OPENED`, `CHAT_MESSAGE_CREATED`
+
+**สิ่งที่ยังไม่ทำ (นอกขอบเขต `CHAT-001`–`CHAT-006`):** ไฟล์แนบ, Rate limit, Admin moderation/
+`chat:read:any` permission (`CHAT-007`); ย้าย Support Ticket message มารวม (`CHAT-008`) —
+`support-service`'s `TicketMessage` ยังเป็น Ticket Communication หลักของ CS จนกว่าจะทำ `CHAT-008`
+
 ### Event envelope
 
 ```js
@@ -146,15 +195,15 @@ Owner เปิด PR ขนาดเล็กสำหรับ contract/schema
 
 ## Provider/consumer ownership
 
-| Provider              | Consumer                                   | Reviewer ที่ต้องร่วม |
-| --------------------- | ------------------------------------------ | -------------------- |
-| Seller/Product        | Buyer, Marketing, Admin                    | Buyer + Admin        |
-| Seller/ProductVideo   | Buyer Swipe, Marketing `UR-11`             | Buyer + Marketing    |
-| Buyer/Order           | Seller, Customer Service, Admin, Executive | Seller + CS          |
-| Admin/Auth-RBAC       | ทุก Feature                                | ตัวแทนทุก Role       |
-| Customer Service/Chat | Buyer, Seller, Admin                       | Buyer + Admin        |
-| Marketing/Campaign    | Buyer, Executive                           | Buyer + Executive    |
-| Executive/Analytics   | ไม่มี write consumer                       | Marketing            |
+| Provider              | Consumer                                      | Reviewer ที่ต้องร่วม |
+| --------------------- | --------------------------------------------- | -------------------- |
+| Seller/Product        | Buyer, Marketing, Admin                       | Buyer + Admin        |
+| Seller/ProductVideo   | Buyer Swipe, Marketing `UR-11`                | Buyer + Marketing    |
+| Buyer/Order           | Seller, Customer Service, Admin, Executive    | Seller + CS          |
+| Admin/Auth-RBAC       | ทุก Feature                                   | ตัวแทนทุก Role       |
+| Chat (`chat-service`) | Buyer, Seller, Customer Service, Admin, Order | Buyer + Admin        |
+| Marketing/Campaign    | Buyer, Executive                              | Buyer + Executive    |
+| Executive/Analytics   | ไม่มี write consumer                          | Marketing            |
 
 ## Merge gates
 

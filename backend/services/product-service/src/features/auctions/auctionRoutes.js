@@ -1,8 +1,13 @@
 const { Router } = require("express");
-const { requireAuth } = require("@reloop/shared");
+const { requireAuth, requireCustomerAccount } = require("@reloop/shared");
 const auctionController = require("./auctionController");
 
 const router = Router();
+
+// Auction Rounds (Marketing owns creation, Public can view current round status)
+router.get("/rounds/current", auctionController.getCurrentRound);
+router.get("/rounds", requireAuth, auctionController.listRounds);
+router.post("/rounds", requireAuth, auctionController.createRound);
 
 // Public browsing — gateway lets these through without a bearer token, same
 // as the product feed.
@@ -21,6 +26,11 @@ router.patch("/:id/schedule", requireAuth, auctionController.schedule);
 router.patch("/:id/cancel", requireAuth, auctionController.cancel);
 
 // Buyer bidding.
-router.post("/:id/bids", requireAuth, auctionController.bid);
+router.post(
+  "/:id/bids",
+  requireAuth,
+  requireCustomerAccount,
+  auctionController.bid,
+);
 
 module.exports = router;
