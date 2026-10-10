@@ -119,6 +119,7 @@ export default function CheckoutPage() {
         token: getAccessToken(),
         body: {
           orderIds: orders.map((order) => order.id),
+          addressId: selectedAddress.id,
           shippingAddress: selectedAddress,
         },
       });

@@ -100,6 +100,7 @@ test("creates a checkout session before opening the QR page", async () => {
         token: "buyer-token",
         body: expect.objectContaining({
           orderIds: ["order-1"],
+          addressId: ADDRESS.id,
           shippingAddress: ADDRESS,
         }),
       }),

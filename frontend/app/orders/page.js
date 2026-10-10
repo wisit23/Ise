@@ -117,6 +117,7 @@ function ReviewForm({ order, onSubmitted }) {
  * that endpoint needs a disputeId, which only exists once open() succeeds. */
 function DisputeForm({ order, onOpened }) {
   const [reason, setReason] = useState("");
+  const [disputeType, setDisputeType] = useState("");
   const [files, setFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -130,7 +131,7 @@ function DisputeForm({ order, onOpened }) {
       const dispute = await apiFetch(`/api/orders/${order.id}/disputes`, {
         method: "POST",
         token,
-        body: { reason },
+        body: { reason, disputeType },
       });
       for (const file of files) {
         await uploadDisputeEvidence(dispute.id, file, token);
@@ -152,6 +153,12 @@ function DisputeForm({ order, onOpened }) {
         อธิบายปัญหาให้ละเอียด (เช่น สินค้าชำรุด ไม่ตรงตามที่ตกลง)
         แนบรูปภาพ/วิดีโอประกอบเพื่อให้เจ้าหน้าที่พิจารณาได้เร็วขึ้น
       </p>
+      <label className="text-sm text-ink-muted">ประเภทปัญหา
+        <input required aria-label="ประเภทปัญหา" value={disputeType}
+          onChange={(event) => setDisputeType(event.target.value)}
+          placeholder="เช่น สินค้าชำรุด หรือสินค้าไม่ตรงตามที่ตกลง"
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" />
+      </label>
       <textarea
         required
         value={reason}

@@ -8,6 +8,7 @@ import { getAccessToken } from "../../lib/auth";
 
 export default function OrderDisputeForm({ order, onSubmitted }) {
   const [reason, setReason] = useState("");
+  const [disputeType, setDisputeType] = useState("");
   const [files, setFiles] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -21,7 +22,7 @@ export default function OrderDisputeForm({ order, onSubmitted }) {
       const dispute = await apiFetch(`/api/orders/${order.id}/disputes`, {
         method: "POST",
         token,
-        body: { reason },
+        body: { reason, disputeType },
       });
       for (const file of files) {
         await uploadDisputeEvidence(dispute.id, file, token);
@@ -40,6 +41,12 @@ export default function OrderDisputeForm({ order, onSubmitted }) {
         อธิบายปัญหา เช่น สินค้าชำรุดหรือไม่ตรงตามที่ตกลง
         และแนบหลักฐานเพื่อให้เจ้าหน้าที่ตรวจสอบ
       </p>
+      <label className="text-sm text-ink-muted">ประเภทปัญหา
+        <input required aria-label="ประเภทปัญหา" value={disputeType}
+          onChange={(event) => setDisputeType(event.target.value)}
+          placeholder="เช่น สินค้าชำรุด หรือสินค้าไม่ตรงตามที่ตกลง"
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" />
+      </label>
       <textarea
         required
         value={reason}
