@@ -231,8 +231,7 @@ test("a new period labels the previous chart accurately while it refreshes", asy
     finish = resolve;
   });
   apiFetch.mockImplementation(() => pending);
-  fireEvent.click(screen.getByRole("button", { name: "ช่วงย้อนหลัง" }));
-  fireEvent.click(screen.getByRole("radio", { name: "30 วัน" }));
+  fireEvent.click(screen.getByRole("button", { name: "30 วัน" }));
   expect(screen.getByText("รับงานรายวัน · 14 วัน")).toBeInTheDocument();
   await act(async () => {
     finish(ticket);
@@ -365,9 +364,8 @@ test("empty groups let the agent choose a table and cancel without navigation", 
 });
 test("period changes still request both historical sources", async () => {
   view();
-  await screen.findByLabelText("ช่วงย้อนหลัง");
-  fireEvent.click(screen.getByRole("button", { name: "ช่วงย้อนหลัง" }));
-  fireEvent.click(screen.getByRole("radio", { name: "30 วัน" }));
+  await screen.findByRole("group", { name: "ช่วงย้อนหลัง" });
+  fireEvent.click(screen.getByRole("button", { name: "30 วัน" }));
   await waitFor(() =>
     expect(apiFetch).toHaveBeenCalledWith(
       "/api/orders/disputes/agent-dashboard?focus=mine&page=1&days=30",

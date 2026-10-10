@@ -8,7 +8,6 @@ import { navigateWorkspaceSection } from "../workspace/useCaseWorkspace";
 
 import PersonalPriorityDonut from "./PersonalPriorityDonut";
 
-import RadioSelect from "../../ui/RadioSelect";
 import defaults from "../../../lib/customerServiceConfig";
 import useCustomerServiceConfig from "../hooks/useCustomerServiceConfig";
 
@@ -495,22 +494,32 @@ export default function AgentDashboard({ token, currentUserId }) {
               title={`รับงานรายวัน · ${displayDays} วัน`}
               className={styles.trendPanel}
               action={
-                <div className="inline-flex items-center gap-2 text-sm">
-                  <RadioSelect
-                    id="dashboard-days"
-                    ariaLabel="ช่วงย้อนหลัง"
-                    value={days}
-                    options={config.dashboard.dayRanges.map((value) => ({
-                      value,
-                      label: value + " วัน",
-                    }))}
-                    onChange={(value) => setDays(Number(value))}
-                    hoverToOpen={false}
-                    size="sm"
-                    align="right"
-                    className="w-28"
-                    buttonClassName="!min-h-11 !rounded-lg !px-3 !text-sm"
+                <div
+                  className={styles.periodControl}
+                  role="group"
+                  aria-label="ช่วงย้อนหลัง"
+                  style={{
+                    gridTemplateColumns: `repeat(${config.dashboard.dayRanges.length}, minmax(0,1fr))`,
+                  }}
+                >
+                  <span
+                    className={styles.periodIndicator}
+                    aria-hidden="true"
+                    style={{
+                      width: `calc((100% - 8px) / ${config.dashboard.dayRanges.length})`,
+                      transform: `translateX(${Math.max(0, config.dashboard.dayRanges.indexOf(days)) * 100}%)`,
+                    }}
                   />
+                  {config.dashboard.dayRanges.map((value) => (
+                    <button
+                      type="button"
+                      key={value}
+                      aria-pressed={days === value}
+                      onClick={() => setDays(value)}
+                    >
+                      {value} วัน
+                    </button>
+                  ))}
                 </div>
               }
             >

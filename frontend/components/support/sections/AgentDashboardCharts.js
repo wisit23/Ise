@@ -22,7 +22,7 @@ function useCompactChart() {
 const fmt = (value) => Number(value).toLocaleString("th-TH");
 
 function SeriesSwatch({ series, visible = true }) {
-  const color = visible ? series.color : "#b4c1bb";
+  const color = visible ? series.color : "rgb(var(--color-line-strong))";
   return (
     <svg
       width="30"
@@ -81,9 +81,28 @@ export function ChartLegend({
             key={series.key}
             type="button"
             aria-pressed={visible[series.key]}
+            title={`${visible[series.key] ? "ซ่อน" : "แสดง"}เส้น ${series.label}`}
             onClick={() => onToggle(series.key)}
             className={`flex min-h-11 items-center gap-2 rounded-lg border px-3 text-xs focus-visible:ring-2 focus-visible:ring-emerald-600 ${visible[series.key] ? "border-slate-200 text-slate-700" : "border-transparent text-slate-400"}`}
           >
+            <span
+              className="agent-series-check"
+              data-checked={visible[series.key]}
+              aria-hidden="true"
+            >
+              {visible[series.key] && (
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                  <path
+                    d="m2.5 6 2.2 2.2 4.8-4.8"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </span>
             <SeriesSwatch series={series} visible={visible[series.key]} />
             {series.label}
             <strong>
@@ -145,6 +164,8 @@ export function ComparisonChart({
   const compact = useCompactChart();
   const descriptionId = useId();
   const svgRef = useRef(null);
+  const chartRef = useRef(null);
+  const tooltipId = useId();
   const [size, setSize] = useState({ width: 640, height: 185 });
   useEffect(() => {
     if (!svgRef.current || typeof ResizeObserver === "undefined") return;
@@ -180,6 +201,23 @@ export function ComparisonChart({
   const y = (value) => height - 30 - (value / top) * Math.max(15, height - 55);
   const seriesPath = (series) =>
     smoothLinePath(rows.map((row, i) => ({ x: x(i), y: y(row[series.key]) })));
+  const hoverIndex = rows.findIndex((row) => row.label === hover?.label);
+  const hovered = hoverIndex >= 0 && shown.length ? rows[hoverIndex] : null;
+  const svgBox = svgRef.current?.getBoundingClientRect();
+  const chartBox = chartRef.current?.getBoundingClientRect();
+  const hoverY = hovered
+    ? Math.min(...shown.map((series) => y(hovered[series.key])))
+    : 0;
+  const below = hoverY < 100;
+  const tooltipLeft =
+    Math.max(86, Math.min(width - 86, x(hoverIndex))) *
+      ((svgBox?.width || width) / width) +
+    ((svgBox?.left || 0) - (chartBox?.left || 0));
+  const tooltipTop =
+    hoverY * ((svgBox?.height || height) / height) +
+    ((svgBox?.top || 0) - (chartBox?.top || 0)) +
+    (below ? 14 : -14);
+  const hitStep = (width - 65) / Math.max(1, rows.length - 1);
   const barMax = Math.max(2, Math.ceil(maximum / 2) * 2);
   const plotStart = kind === "bar" ? Math.min(140, width * 0.43) : 42;
   const plotWidth =
@@ -190,26 +228,19 @@ export function ComparisonChart({
   );
   const barThickness = Math.min(9, Math.max(3, (rowHeight - 4) / 2));
   return (
-    <div className="agent-chart">
+    <div className="agent-chart" ref={chartRef}>
       {!hideLegend && (
         <ChartLegend rows={rows} visible={visible} onToggle={onToggle} />
       )}
       <svg
         ref={svgRef}
+        onPointerLeave={() => setHover(null)}
         role="img"
         aria-describedby={descriptionId}
         aria-label={`${kind === "line" ? "แนวโน้มรับงาน" : "เปรียบเทียบเคส"} ${shown.map((series) => series.label).join(" และ ")}`}
         viewBox={`0 0 ${width} ${height}`}
         className="agent-chart-plot"
       >
-        <title>
-          {rows
-            .map(
-              (row) =>
-                `${row.label}: Ticket ${row.tickets}, Dispute ${row.disputes}`,
-            )
-            .join("; ")}
-        </title>
         <desc id={descriptionId}>
           {rows
             .map(
@@ -250,7 +281,7 @@ export function ComparisonChart({
                   x2={width - 23}
                   y1={y(i * steps)}
                   y2={y(i * steps)}
-                  stroke="#e2e8f0"
+                  stroke="rgb(var(--color-line))"
                   strokeDasharray="3 4"
                 />
                 <text
@@ -258,13 +289,18 @@ export function ComparisonChart({
                   y={y(i * steps) + 4}
                   textAnchor="end"
                   fontSize="12"
-                  fill="#64748b"
+                  fill="rgb(var(--color-ink-subtle))"
                 >
                   {i * steps}
                 </text>
               </g>
             ))}
-            <text x="42" y="15" fontSize="12" fill="#64748b">
+            <text
+              x="42"
+              y="15"
+              fontSize="12"
+              fill="rgb(var(--color-ink-subtle))"
+            >
               เคส / วัน
             </text>
             {shown.map((series) => (
@@ -316,11 +352,7 @@ export function ComparisonChart({
                       fill="white"
                       stroke={series.color}
                       strokeWidth="1.8"
-                    >
-                      <title>
-                        {row.label}: Ticket {row.tickets}
-                      </title>
-                    </circle>
+                    ></circle>
                   ) : (
                     <path
                       key={row.label}
@@ -329,15 +361,34 @@ export function ComparisonChart({
                       fill={series.color}
                       stroke={series.outline}
                       strokeWidth="1.2"
-                    >
-                      <title>
-                        {row.label}: Dispute {row.disputes}
-                      </title>
-                    </path>
+                    ></path>
                   ),
                 )}
               </g>
             ))}
+            {hovered && (
+              <g aria-hidden="true" pointerEvents="none">
+                <line
+                  x1={x(hoverIndex)}
+                  x2={x(hoverIndex)}
+                  y1="25"
+                  y2={height - 30}
+                  stroke="rgb(var(--color-brand-300))"
+                  strokeDasharray="3 5"
+                />
+                {shown.map((series) => (
+                  <circle
+                    key={series.key}
+                    cx={x(hoverIndex)}
+                    cy={y(hovered[series.key])}
+                    r="6"
+                    fill="white"
+                    stroke={series.outline || series.color}
+                    strokeWidth="2.5"
+                  />
+                ))}
+              </g>
+            )}
             {rows.map((row, i) => (
               <g key={row.label}>
                 {(i % Math.ceil(rows.length / (compact ? 3 : 6)) === 0 ||
@@ -347,7 +398,7 @@ export function ComparisonChart({
                     y={height - 8}
                     textAnchor="middle"
                     fontSize="12"
-                    fill="#64748b"
+                    fill="rgb(var(--color-ink-subtle))"
                   >
                     {dayLabel(row.label)}
                   </text>
@@ -355,15 +406,25 @@ export function ComparisonChart({
                 <rect
                   tabIndex="0"
                   aria-label={`${dayLabel(row.label)} Ticket ${row.tickets}, Dispute ${row.disputes}`}
-                  x={x(i) - 7}
+                  aria-describedby={
+                    hovered?.label === row.label ? tooltipId : undefined
+                  }
+                  x={Math.max(42, x(i) - hitStep / 2)}
                   y="25"
-                  width="14"
+                  width={Math.max(
+                    1,
+                    Math.min(width - 23, x(i) + hitStep / 2) -
+                      Math.max(42, x(i) - hitStep / 2),
+                  )}
                   height={Math.max(20, height - 48)}
                   fill="transparent"
                   onFocus={() => setHover(row)}
                   onBlur={() => setHover(null)}
                   onPointerEnter={() => setHover(row)}
-                  onPointerLeave={() => setHover(null)}
+                  onClick={() => setHover(row)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setHover(null);
+                  }}
                 />
               </g>
             ))}
@@ -372,7 +433,12 @@ export function ComparisonChart({
           <>
             {stackedRows && (
               <>
-                <text x={plotStart} y="13" fontSize="12" fill="#64748b">
+                <text
+                  x={plotStart}
+                  y="13"
+                  fontSize="12"
+                  fill="rgb(var(--color-ink-subtle))"
+                >
                   รวมเคส
                 </text>
                 <text
@@ -402,7 +468,7 @@ export function ComparisonChart({
                   x2={plotStart + r * plotWidth}
                   y1={stackedRows ? 23 : 3}
                   y2={height - 28}
-                  stroke="#e2e8f0"
+                  stroke="rgb(var(--color-line))"
                   strokeDasharray="3 4"
                 />
                 <text
@@ -410,7 +476,7 @@ export function ComparisonChart({
                   y={height - 8}
                   fontSize="12"
                   textAnchor="middle"
-                  fill="#64748b"
+                  fill="rgb(var(--color-ink-subtle))"
                 >
                   {fmt(barMax * r)}
                 </text>
@@ -423,7 +489,7 @@ export function ComparisonChart({
                   y={(stackedRows ? 22 : 8) + i * rowHeight + rowHeight / 2 + 4}
                   textAnchor="end"
                   fontSize={stackedRows ? 13 : 12}
-                  fill="#475569"
+                  fill="rgb(var(--color-ink-muted))"
                 >
                   <title>{row.label}</title>
                   {row.label.length > Math.floor((plotStart - 15) / 6)
@@ -444,7 +510,7 @@ export function ComparisonChart({
                       width={plotWidth}
                       height={Math.min(16, rowHeight - 5)}
                       rx="4"
-                      fill="#f1f5f9"
+                      fill="rgb(var(--color-surface-subtle))"
                     />
                     <rect
                       x={plotStart}
@@ -480,7 +546,11 @@ export function ComparisonChart({
                       textAnchor="middle"
                       fontSize="14"
                       fontWeight="600"
-                      fill={row.tickets ? CASE_TEXT_COLORS.tickets : "#64748b"}
+                      fill={
+                        row.tickets
+                          ? CASE_TEXT_COLORS.tickets
+                          : "rgb(var(--color-ink-subtle))"
+                      }
                     >
                       {fmt(row.tickets)}
                     </text>
@@ -491,7 +561,9 @@ export function ComparisonChart({
                       fontSize="14"
                       fontWeight="600"
                       fill={
-                        row.disputes ? CASE_TEXT_COLORS.disputes : "#64748b"
+                        row.disputes
+                          ? CASE_TEXT_COLORS.disputes
+                          : "rgb(var(--color-ink-subtle))"
                       }
                     >
                       {fmt(row.disputes)}
@@ -544,7 +616,7 @@ export function ComparisonChart({
                         <tspan fill={CASE_TEXT_COLORS.tickets}>
                           {fmt(row.tickets)}
                         </tspan>
-                        <tspan fill="#64748b"> / </tspan>
+                        <tspan fill="rgb(var(--color-ink-subtle))"> / </tspan>
                         <tspan fill={CASE_TEXT_COLORS.disputes}>
                           {fmt(row.disputes)}
                         </tspan>
@@ -573,12 +645,30 @@ export function ComparisonChart({
             ยังไม่มีการรับงานในช่วงนี้
           </div>
         )}
-      {kind === "line" && hover && shown.length > 0 && (
-        <div className="agent-chart-tooltip" role="status">
-          {dayLabel(hover.label)} ·{" "}
-          {shown
-            .map((series) => `${series.label} ${fmt(hover[series.key])} เคส`)
-            .join(" · ")}
+      {kind === "line" && hovered && (
+        <div
+          id={tooltipId}
+          className="agent-chart-tooltip"
+          role="tooltip"
+          data-placement={below ? "below" : "above"}
+          style={{
+            left: tooltipLeft,
+            top: tooltipTop,
+            transform: below ? "translate(-50%,0)" : "translate(-50%,-100%)",
+          }}
+        >
+          <strong className="agent-tooltip-date">
+            {dayLabel(hovered.label)}
+          </strong>
+          {shown.map((series) => (
+            <div className="agent-tooltip-row" key={series.key}>
+              <span>{series.label}</span>
+              <strong>
+                {fmt(hovered[series.key])}
+                <small> เคส</small>
+              </strong>
+            </div>
+          ))}
         </div>
       )}
       {kind === "line" && (

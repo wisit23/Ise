@@ -1,15 +1,22 @@
 "use client";
+import { useId, useState } from "react";
 import styles from "./AgentOverview.module.css";
 const GROUPS = [
-  { code: "URGENT", label: "ด่วนที่สุด", color: "#be123c" },
-  { code: "HIGH", label: "สูง", color: "#bd8034" },
-  { code: "NORMAL", label: "ปานกลาง", color: "#047857" },
-  { code: "LOW", label: "ต่ำ", color: "#a0aca7" },
+  { code: "URGENT", label: "ด่วนที่สุด", color: "rgb(var(--color-danger))" },
+  { code: "HIGH", label: "สูง", color: "rgb(var(--color-warning))" },
+  { code: "NORMAL", label: "ปานกลาง", color: "rgb(var(--color-brand-600))" },
+  { code: "LOW", label: "ต่ำ", color: "rgb(var(--color-ink-subtle))" },
 ];
 export default function PersonalPriorityDonut({ rows, onSelect }) {
+  const [hoverCode, setHoverCode] = useState(null);
+  const tooltipId = useId();
   const groups = [...GROUPS];
   if (rows.some((row) => row.label === "CRITICAL" && row.value > 0))
-    groups.unshift({ code: "CRITICAL", label: "วิกฤต", color: "#881337" });
+    groups.unshift({
+      code: "CRITICAL",
+      label: "วิกฤต",
+      color: "rgb(var(--color-danger))",
+    });
   const values = groups.map((group) =>
     rows
       .filter((row) => row.label === group.code)
@@ -19,6 +26,12 @@ export default function PersonalPriorityDonut({ rows, onSelect }) {
   const active = groups
     .map((group, index) => ({ ...group, value: values[index] }))
     .filter((group) => group.value > 0);
+  const hovered = groups.find((group) => group.code === hoverCode);
+  const hoverValue = hovered ? values[groups.indexOf(hovered)] : 0;
+  const hoverHandlers = (code) => ({
+    onPointerEnter: () => setHoverCode(code),
+    onPointerLeave: () => setHoverCode(null),
+  });
   let angle = 0;
   const segments = active.map((group) => {
     const span = (group.value / total) * 360;
@@ -67,11 +80,13 @@ export default function PersonalPriorityDonut({ rows, onSelect }) {
             cy="60"
             r="50"
             fill="none"
-            stroke="#e9eeea"
+            stroke="rgb(var(--color-line))"
             strokeWidth="10"
           />
           {active.length === 1 ? (
             <circle
+              {...hoverHandlers(active[0].code)}
+              data-priority={active[0].code}
               cx="60"
               cy="60"
               r="50"
@@ -83,6 +98,8 @@ export default function PersonalPriorityDonut({ rows, onSelect }) {
             segments.map((segment) => (
               <path
                 key={segment.code}
+                {...hoverHandlers(segment.code)}
+                data-priority={segment.code}
                 d={segment.path}
                 fill="none"
                 stroke={segment.color}
@@ -97,12 +114,32 @@ export default function PersonalPriorityDonut({ rows, onSelect }) {
           <span>เคสของฉัน</span>
         </div>
       </div>
+      <div className={styles.donutTooltipSlot}>
+        {hovered && (
+          <div id={tooltipId} role="tooltip" className={styles.donutTooltip}>
+            <strong>{hovered.label}</strong>
+            <span>
+              {hoverValue} เคส{" "}
+              <small>
+                · {total ? Math.round((hoverValue / total) * 100) : 0}%
+              </small>
+            </span>
+          </div>
+        )}
+      </div>
       <div className={styles.slaDonutLegend}>
         {groups.map((group, index) => (
           <button
             type="button"
             key={group.code}
             className={styles.slaDonutGroup}
+            {...hoverHandlers(group.code)}
+            onFocus={() => setHoverCode(group.code)}
+            onBlur={() => setHoverCode(null)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setHoverCode(null);
+            }}
+            aria-describedby={hoverCode === group.code ? tooltipId : undefined}
             onClick={() => onSelect(group.code)}
             aria-label={group.label + " " + values[index] + " เคส ดูรายการ"}
           >
@@ -116,6 +153,9 @@ export default function PersonalPriorityDonut({ rows, onSelect }) {
               {values[index]}
               <small> เคส</small>
             </strong>
+            <span className={styles.priorityArrow} aria-hidden="true">
+              ↗
+            </span>
           </button>
         ))}
       </div>
