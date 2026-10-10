@@ -95,33 +95,37 @@ export default function OrderLine({
 
   return (
     <div
-      className={`grid grid-cols-[auto_1fr_auto] items-start gap-x-4 gap-y-3 p-4 transition-colors sm:gap-x-5 ${
+      className={`grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto] items-start gap-x-3 sm:gap-x-5 gap-y-3 p-3.5 sm:p-4 transition-colors ${
         highlight ? "bg-amber-50/40" : ""
       }`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
         {lead}
         <Link
           href={`/products/${order.productId}`}
-          className="focus-ring rounded-md"
+          className="focus-ring rounded-md shrink-0"
           aria-label={`ดูสินค้า ${order.productTitle}`}
         >
-          <ProductThumb product={product} title={order.productTitle} />
+          <ProductThumb
+            product={product}
+            size={72}
+            title={order.productTitle}
+          />
         </Link>
       </div>
 
       <div className="min-w-0">
         <Link
           href={`/products/${order.productId}`}
-          className="focus-ring line-clamp-2 rounded font-medium text-ink hover:text-brand-700"
+          className="focus-ring line-clamp-2 rounded font-medium text-ink hover:text-brand-700 text-sm sm:text-base"
         >
           {order.productTitle}
         </Link>
 
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
           {conditionLabel && (
             <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
                 CONDITION_TONE[product.condition] || "bg-gray-100 text-gray-600"
               }`}
             >
@@ -142,10 +146,10 @@ export default function OrderLine({
           )}
         </div>
 
-        {note && <div className="mt-2 text-sm">{note}</div>}
+        {note && <div className="mt-1.5 text-xs sm:text-sm">{note}</div>}
       </div>
 
-      <div className="flex flex-col items-end gap-2 text-right">
+      <div className="col-span-2 sm:col-span-1 flex flex-wrap sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 text-right border-t sm:border-t-0 border-line/60 pt-2 sm:pt-0">
         {order.campaignCode ? (
           <div>
             <div className="flex items-center justify-end gap-1.5">
@@ -173,8 +177,10 @@ export default function OrderLine({
             ฿{order.price.toLocaleString("th-TH")}
           </span>
         )}
-        {status}
-        {actions}
+        <div className="flex items-center gap-2">
+          {status}
+          {actions}
+        </div>
       </div>
     </div>
   );

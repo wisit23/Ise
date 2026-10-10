@@ -52,7 +52,7 @@ function buildCatalogWhere(filters, { PrismaClient } = {}) {
     clauses.push(PrismaClient.sql`TRUE`);
   } else {
     clauses.push(
-      PrismaClient.sql`status NOT IN ('removed', 'hidden') AND moderated_at IS NULL`,
+      PrismaClient.sql`status NOT IN ('removed', 'hidden', 'auction_action_required') AND moderated_at IS NULL`,
     );
   }
   for (const field of FILTER_FIELDS) {

@@ -59,7 +59,12 @@ function LockedInfoRow({ icon, label, value }) {
  *   onNext       — callback เมื่อกดปุ่ม "ถัดไป" หลังสแกนแล้ว
  *   onBack       — callback เมื่อกดปุ่ม "ย้อนกลับ"
  */
-export default function ThaiIdQrStep({ thaiIdData, onScanned, onNext, onBack }) {
+export default function ThaiIdQrStep({
+  thaiIdData,
+  onScanned,
+  onNext,
+  onBack,
+}) {
   const [scanning, setScanning] = useState(false);
 
   function handleMockScan() {
@@ -193,7 +198,13 @@ export default function ThaiIdQrStep({ thaiIdData, onScanned, onNext, onBack }) 
             <rect x="112" y="102" width="5" height="5" fill="#111827" />
             <rect x="130" y="102" width="5" height="5" fill="#111827" />
             {/* Session text watermark */}
-            <text x="80" y="156" textAnchor="middle" fontSize="6" fill="#9CA3AF">
+            <text
+              x="80"
+              y="156"
+              textAnchor="middle"
+              fontSize="6"
+              fill="#9CA3AF"
+            >
               {MOCK_QR_SESSION}
             </text>
           </svg>
@@ -201,7 +212,9 @@ export default function ThaiIdQrStep({ thaiIdData, onScanned, onNext, onBack }) 
 
         {scanned ? (
           <div className="mt-4 flex items-center gap-2 text-brand-600">
-            <span className="material-symbols-outlined text-[20px]">check_circle</span>
+            <span className="material-symbols-outlined text-[20px]">
+              check_circle
+            </span>
             <p className="text-sm font-semibold">สแกนสำเร็จแล้ว!</p>
           </div>
         ) : (
@@ -220,7 +233,9 @@ export default function ThaiIdQrStep({ thaiIdData, onScanned, onNext, onBack }) 
           >
             {scanning ? (
               <span className="flex items-center gap-1.5">
-                <span className="material-symbols-outlined animate-spin text-[14px]">progress_activity</span>
+                <span className="material-symbols-outlined animate-spin text-[14px]">
+                  progress_activity
+                </span>
                 กำลังรับข้อมูล...
               </span>
             ) : (
@@ -234,15 +249,33 @@ export default function ThaiIdQrStep({ thaiIdData, onScanned, onNext, onBack }) 
       {scanned && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[16px] text-brand-500">verified_user</span>
+            <span className="material-symbols-outlined text-[16px] text-brand-500">
+              verified_user
+            </span>
             <p className="text-xs font-semibold text-brand-700 uppercase tracking-wide">
               ข้อมูลที่ได้รับจาก Thai ID (ล็อค)
             </p>
           </div>
-          <LockedInfoRow icon="person" label="ชื่อ-นามสกุล" value={thaiIdData.fullName} />
-          <LockedInfoRow icon="badge" label="เลขประจำตัวประชาชน" value={thaiIdData.idNumber} />
-          <LockedInfoRow icon="call" label="เบอร์โทรศัพท์" value={thaiIdData.phone} />
-          <LockedInfoRow icon="home" label="ที่อยู่" value={thaiIdData.address} />
+          <LockedInfoRow
+            icon="person"
+            label="ชื่อ-นามสกุล"
+            value={thaiIdData.fullName}
+          />
+          <LockedInfoRow
+            icon="badge"
+            label="เลขประจำตัวประชาชน"
+            value={thaiIdData.idNumber}
+          />
+          <LockedInfoRow
+            icon="call"
+            label="เบอร์โทรศัพท์"
+            value={thaiIdData.phone}
+          />
+          <LockedInfoRow
+            icon="home"
+            label="ที่อยู่"
+            value={thaiIdData.address}
+          />
           <Alert tone="info" title="ข้อมูลถูกล็อคโดยอัตโนมัติ">
             ข้อมูลที่แสดงได้รับจาก Thai ID โดยตรง ไม่สามารถแก้ไขได้
             เพื่อความถูกต้องและน่าเชื่อถือ
@@ -252,7 +285,12 @@ export default function ThaiIdQrStep({ thaiIdData, onScanned, onNext, onBack }) 
 
       {/* Actions */}
       <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
-        <Button type="button" variant="secondary" icon="arrow_back" onClick={onBack}>
+        <Button
+          type="button"
+          variant="secondary"
+          icon="arrow_back"
+          onClick={onBack}
+        >
           ย้อนกลับ
         </Button>
         {scanned && (

@@ -18,10 +18,22 @@ const CATEGORY_OPTIONS = [
 ];
 
 const CATEGORY_MAP = {
-  care: { label: "การดูแลเสื้อผ้า", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  styling: { label: "เคล็ดลับการแต่งตัว", color: "bg-purple-50 text-purple-700 border-purple-200" },
-  sustainability: { label: "แฟชั่นยั่งยืน", color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  general: { label: "สาระน่ารู้", color: "bg-amber-50 text-amber-700 border-amber-200" },
+  care: {
+    label: "การดูแลเสื้อผ้า",
+    color: "bg-blue-50 text-blue-700 border-blue-200",
+  },
+  styling: {
+    label: "เคล็ดลับการแต่งตัว",
+    color: "bg-purple-50 text-purple-700 border-purple-200",
+  },
+  sustainability: {
+    label: "แฟชั่นยั่งยืน",
+    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
+  general: {
+    label: "สาระน่ารู้",
+    color: "bg-amber-50 text-amber-700 border-amber-200",
+  },
 };
 
 export default function ArticlesSection({ token }) {
@@ -68,7 +80,10 @@ export default function ArticlesSection({ token }) {
       if (q.trim()) params.set("q", q.trim());
       params.set("limit", 50);
 
-      const data = await apiFetch(`/api/products/articles/marketing/all?${params}`, { token });
+      const data = await apiFetch(
+        `/api/products/articles/marketing/all?${params}`,
+        { token },
+      );
       setArticles(data.items || []);
     } catch (err) {
       console.error("Failed to load marketing articles:", err);
@@ -202,46 +217,58 @@ export default function ArticlesSection({ token }) {
 
   // Stats calculation
   const totalCount = articles.length;
-  const publishedCount = articles.filter((a) => a.status === "published").length;
+  const publishedCount = articles.filter(
+    (a) => a.status === "published",
+  ).length;
   const draftCount = articles.filter((a) => a.status === "draft").length;
 
   return (
     <div className="space-y-6">
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-xs font-semibold animate-in fade-in slide-in-from-bottom-2">
-          <span className="material-symbols-outlined text-[18px] text-emerald-400">check_circle</span>
-          {toastMessage}
+        <div className="fixed bottom-6 left-4 right-4 sm:left-auto sm:right-6 max-w-[calc(100vw-2rem)] sm:max-w-md z-50 flex items-center gap-2 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-xs font-semibold animate-in fade-in slide-in-from-bottom-2">
+          <span className="material-symbols-outlined text-[18px] text-emerald-400 shrink-0">
+            check_circle
+          </span>
+          <span className="truncate">{toastMessage}</span>
         </div>
       )}
 
       {/* Top Header & Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/80 shadow-sm">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <span className="material-symbols-outlined text-[18px]">menu_book</span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shrink-0">
+              <span className="material-symbols-outlined text-[18px]">
+                menu_book
+              </span>
             </span>
-            <h2 className="text-lg font-bold text-slate-900">จัดการบทความ & คอนเทนต์ความรู้</h2>
+            <h2 className="text-base sm:text-lg font-bold text-slate-900">
+              จัดการบทความ & คอนเทนต์ความรู้
+            </h2>
           </div>
           <p className="text-xs text-slate-500">
-            สร้างและเผยแพร่บทความให้ความรู้ เคล็ดลับการแต่งตัว และสาระแฟชั่นยั่งยืนสำหรับชุมชน RE-LOOP (ST-MKT-05)
+            สร้างและเผยแพร่บทความให้ความรู้ เคล็ดลับการแต่งตัว
+            และสาระแฟชั่นยั่งยืนสำหรับชุมชน RE-LOOP (ST-MKT-05)
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto shrink-0">
           <Link
             href="/articles"
             target="_blank"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200/80 transition-colors"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200/80 transition-colors text-center"
           >
-            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+            <span className="material-symbols-outlined text-[16px]">
+              open_in_new
+            </span>
             ดูหน้าบทความสาธารณะ
           </Link>
           <Button
             variant="primary"
             onClick={openCreateModal}
             icon="add"
+            className="w-full sm:w-auto justify-center"
           >
             เขียนบทความใหม่
           </Button>
@@ -252,38 +279,56 @@ export default function ArticlesSection({ token }) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs text-slate-500 font-medium">บทความทั้งหมด</div>
-            <div className="text-2xl font-black text-slate-900 mt-1">{totalCount}</div>
+            <div className="text-xs text-slate-500 font-medium">
+              บทความทั้งหมด
+            </div>
+            <div className="text-2xl font-black text-slate-900 mt-1">
+              {totalCount}
+            </div>
           </div>
-          <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
-            <span className="material-symbols-outlined text-[20px]">article</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-          <div>
-            <div className="text-xs text-emerald-600 font-medium">เผยแพร่แล้ว (Published)</div>
-            <div className="text-2xl font-black text-emerald-700 mt-1">{publishedCount}</div>
-          </div>
-          <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <span className="material-symbols-outlined text-[20px]">check_circle</span>
+          <div className="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 shrink-0">
+            <span className="material-symbols-outlined text-[20px]">
+              article
+            </span>
           </div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs text-amber-600 font-medium">ฉบับร่าง (Draft)</div>
-            <div className="text-2xl font-black text-amber-700 mt-1">{draftCount}</div>
+            <div className="text-xs text-emerald-600 font-medium">
+              เผยแพร่แล้ว (Published)
+            </div>
+            <div className="text-2xl font-black text-emerald-700 mt-1">
+              {publishedCount}
+            </div>
           </div>
-          <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-            <span className="material-symbols-outlined text-[20px]">edit_note</span>
+          <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+            <span className="material-symbols-outlined text-[20px]">
+              check_circle
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+          <div>
+            <div className="text-xs text-amber-600 font-medium">
+              ฉบับร่าง (Draft)
+            </div>
+            <div className="text-2xl font-black text-amber-700 mt-1">
+              {draftCount}
+            </div>
+          </div>
+          <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+            <span className="material-symbols-outlined text-[20px]">
+              edit_note
+            </span>
           </div>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-80">
+      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+        <form onSubmit={handleSearchSubmit} className="relative w-full md:w-80">
           <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]">
             search
           </span>
@@ -303,16 +348,18 @@ export default function ArticlesSection({ token }) {
               }}
               className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
             >
-              <span className="material-symbols-outlined text-[16px]">close</span>
+              <span className="material-symbols-outlined text-[16px]">
+                close
+              </span>
             </button>
           )}
         </form>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="text-xs px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 focus:bg-white focus:outline-none"
+            className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 focus:bg-white focus:outline-none"
           >
             <option value="">ทุกหมวดหมู่</option>
             {CATEGORY_OPTIONS.map((opt) => (
@@ -325,14 +372,20 @@ export default function ArticlesSection({ token }) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 focus:bg-white focus:outline-none"
+            className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 focus:bg-white focus:outline-none"
           >
             <option value="">ทุกสถานะ</option>
             <option value="published">เผยแพร่แล้ว</option>
             <option value="draft">ฉบับร่าง</option>
           </select>
 
-          <Button variant="secondary" size="sm" onClick={loadArticles} icon="refresh">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={loadArticles}
+            icon="refresh"
+            className="w-full sm:w-auto justify-center"
+          >
             รีเฟรช
           </Button>
         </div>
@@ -369,8 +422,8 @@ export default function ArticlesSection({ token }) {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full min-w-[700px] text-left text-xs text-slate-600">
               <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200/80 uppercase text-[11px] tracking-wider">
                 <tr>
                   <th className="px-5 py-3.5">บทความ</th>
@@ -390,7 +443,10 @@ export default function ArticlesSection({ token }) {
                   const isPublished = article.status === "published";
 
                   return (
-                    <tr key={article.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr
+                      key={article.id}
+                      className="hover:bg-slate-50/70 transition-colors"
+                    >
                       {/* Image & Title */}
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3.5">
@@ -453,11 +509,14 @@ export default function ArticlesSection({ token }) {
 
                       {/* Date */}
                       <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">
-                        {new Date(article.createdAt).toLocaleDateString("th-TH", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {new Date(article.createdAt).toLocaleDateString(
+                          "th-TH",
+                          {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          },
+                        )}
                       </td>
 
                       {/* Actions */}
@@ -516,7 +575,9 @@ export default function ArticlesSection({ token }) {
         <form onSubmit={handleSave} className="space-y-4 pt-2">
           {formError && (
             <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px]">error</span>
+              <span className="material-symbols-outlined text-[18px]">
+                error
+              </span>
               {formError}
             </div>
           )}
@@ -527,7 +588,7 @@ export default function ArticlesSection({ token }) {
               รูปภาพหน้าปกบทความ (Cover Image)
             </label>
             <div className="flex flex-col sm:flex-row gap-4 items-start">
-              <div className="relative h-32 w-48 rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 overflow-hidden flex items-center justify-center shrink-0">
+              <div className="relative h-32 w-full sm:w-48 max-w-xs rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 overflow-hidden flex items-center justify-center shrink-0">
                 {coverImage ? (
                   <>
                     <img
@@ -540,13 +601,19 @@ export default function ArticlesSection({ token }) {
                       onClick={() => setCoverImage("")}
                       className="absolute top-1 right-1 p-1 rounded-full bg-slate-900/70 text-white hover:bg-slate-900"
                     >
-                      <span className="material-symbols-outlined text-[14px]">close</span>
+                      <span className="material-symbols-outlined text-[14px]">
+                        close
+                      </span>
                     </button>
                   </>
                 ) : (
                   <div className="text-center p-2 text-slate-400">
-                    <span className="material-symbols-outlined text-[28px]">add_photo_alternate</span>
-                    <span className="block text-[11px] mt-1">ยังไม่มีรูปภาพ</span>
+                    <span className="material-symbols-outlined text-[28px]">
+                      add_photo_alternate
+                    </span>
+                    <span className="block text-[11px] mt-1">
+                      ยังไม่มีรูปภาพ
+                    </span>
                   </div>
                 )}
               </div>
@@ -568,10 +635,14 @@ export default function ArticlesSection({ token }) {
                     onClick={() => fileInputRef.current?.click()}
                     icon="upload"
                   >
-                    {uploadingImage ? "กำลังอัปโหลด..." : "เลือกรูปภาพจากเครื่อง"}
+                    {uploadingImage
+                      ? "กำลังอัปโหลด..."
+                      : "เลือกรูปภาพจากเครื่อง"}
                   </Button>
                 </div>
-                <div className="text-[11px] text-slate-500">หรือวาง URL ของรูปภาพโดยตรง:</div>
+                <div className="text-[11px] text-slate-500">
+                  หรือวาง URL ของรูปภาพโดยตรง:
+                </div>
                 <input
                   type="text"
                   value={coverImage}
@@ -648,9 +719,10 @@ export default function ArticlesSection({ token }) {
 
           {/* Content Body */}
           <div>
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
               <label className="text-xs font-semibold text-slate-800">
-                เนื้อหาบทความแบบละเอียด (Content) <span className="text-red-500">*</span>
+                เนื้อหาบทความแบบละเอียด (Content){" "}
+                <span className="text-red-500">*</span>
               </label>
               <span className="text-[11px] text-slate-400">
                 รองรับหัวข้อย่อย (###), รายการ (*), ตัวหนา (**ข้อความ**)
@@ -667,12 +739,13 @@ export default function ArticlesSection({ token }) {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100">
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-4 border-t border-slate-100">
             <Button
               type="button"
               variant="secondary"
               onClick={() => setModalOpen(false)}
               disabled={saving}
+              className="w-full sm:w-auto justify-center"
             >
               ยกเลิก
             </Button>
@@ -681,6 +754,7 @@ export default function ArticlesSection({ token }) {
               variant="primary"
               loading={saving}
               icon="check"
+              className="w-full sm:w-auto justify-center"
             >
               {editingArticle ? "บันทึกการแก้ไข" : "บันทึกบทความ"}
             </Button>

@@ -42,6 +42,7 @@ model Checkout {
 }
 
 model Order {
+  attributionOutboxEvent AttributionOutboxEvent?
   id               String                  @id @default(uuid()) @map("order_id")
   checkoutId       String?                 @map("checkout_id")
   basketId         String?                 @unique @map("basket_id")
@@ -247,4 +248,27 @@ model SafetyLog {
 
   @@index([safetyId, createdAt])
   @@map("safety_log")
+}
+
+
+model AttributionOutboxEvent {
+  id             String    @id @default(uuid())
+  orderId        String    @unique @map("order_id")
+  campaignId     String    @map("campaign_id")
+  grossAmount    Decimal       @map("gross_amount") @db.Decimal(12, 2)
+  discountAmount Decimal       @map("discount_amount") @db.Decimal(12, 2)
+  netAmount      Decimal       @map("net_amount") @db.Decimal(12, 2)
+  completedAt    DateTime  @map("completed_at")
+  attempts       Int       @default(0)
+  lastError      String?   @map("last_error")
+  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
+  processedAt    DateTime? @map("processed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([processedAt, nextAttemptAt])
+  @@index([orderId, processedAt])
+  @@map("attribution_outbox_events")
 }

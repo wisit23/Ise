@@ -2,14 +2,18 @@
 // mock in-memory version and a future real one behave identically to callers.
 const { AppError } = require("@reloop/shared");
 
-const PRODUCT_SERVICE_URL =
-  process.env.PRODUCT_SERVICE_URL || "http://product-service:3002";
-const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
+function getProductServiceUrl() {
+  return process.env.PRODUCT_SERVICE_URL || "http://product-service:3002";
+}
+
+function getInternalToken() {
+  return process.env.INTERNAL_SERVICE_TOKEN || "";
+}
 
 async function getProduct(productId) {
   let res;
   try {
-    res = await fetch(`${PRODUCT_SERVICE_URL}/${productId}`);
+    res = await fetch(`${getProductServiceUrl()}/${productId}`);
   } catch {
     throw new AppError(502, "product-service is unreachable");
   }
@@ -21,11 +25,11 @@ async function getProduct(productId) {
 async function reservationRequest(path, options, fallbackMessage) {
   let res;
   try {
-    res = await fetch(`${PRODUCT_SERVICE_URL}${path}`, {
+    res = await fetch(`${getProductServiceUrl()}${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
-        "x-internal-token": INTERNAL_TOKEN,
+        "x-internal-token": getInternalToken(),
         ...options.headers,
       },
     });
@@ -81,14 +85,17 @@ function completeProductReservation(productId, reservationId) {
 async function setProductStatus(productId, status) {
   let res;
   try {
-    res = await fetch(`${PRODUCT_SERVICE_URL}/${productId}/internal-status`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "x-internal-token": INTERNAL_TOKEN,
+    res = await fetch(
+      `${getProductServiceUrl()}/${productId}/internal-status`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-token": getInternalToken(),
+        },
+        body: JSON.stringify({ status }),
       },
-      body: JSON.stringify({ status }),
-    });
+    );
   } catch {
     throw new AppError(502, "product-service is unreachable");
   }

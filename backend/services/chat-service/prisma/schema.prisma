@@ -60,6 +60,7 @@ model Message {
   // table. Deliberately schemaless: this is the field that lets a new
   // message type ship without a migration.
   payload        Json?
+  idempotencyKey String    @unique @default(uuid())
   visibility     String    @default("ALL") // ALL | INTERNAL (CS-only note, CHAT-007)
   editedAt       DateTime?
   // Soft delete only — messages are dispute evidence, never hard-deleted.

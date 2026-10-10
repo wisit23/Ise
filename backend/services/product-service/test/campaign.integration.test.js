@@ -185,7 +185,7 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
           discountValue: 15,
           minOrderPrice: 200,
           maxDiscount: 150,
-          startsAt: new Date(Date.now() - 3600000).toISOString(), // started 1h ago
+          startsAt: new Date().toISOString(),
           endsAt: new Date(Date.now() + 86400000).toISOString(), // ends in 24h
         });
       assert.equal(createRes.status, 201);
@@ -320,7 +320,7 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
           minOrderPrice: 300,
           maxDiscount: 200,
           applicableCategory: "Denim",
-          startsAt: new Date(Date.now() - 3600000).toISOString(),
+          startsAt: new Date().toISOString(),
           endsAt: new Date(Date.now() + 86400000).toISOString(),
         });
       const denimCampId = denimCampRes.body.id;
@@ -348,7 +348,7 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
           discountType: "FIXED",
           discountValue: 50,
           minOrderPrice: 100,
-          startsAt: new Date(Date.now() - 3600000).toISOString(),
+          startsAt: new Date().toISOString(),
           endsAt: new Date(Date.now() + 86400000).toISOString(),
         });
       const flatCampId = flatCampRes.body.id;
@@ -481,7 +481,7 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
           maxDiscount: 200,
           minOrderPrice: 300,
           applicableCategory: "Denim",
-          startsAt: new Date(Date.now() - 3600000).toISOString(),
+          startsAt: new Date().toISOString(),
           endsAt: new Date(Date.now() + 86400000).toISOString(),
         });
       assert.equal(valCampRes.status, 201);
@@ -806,7 +806,7 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
           discountType: "PERCENT",
           discountValue: 20,
           usageLimit: 1, // Only 1 claim allowed
-          startsAt: new Date(Date.now() - 3600000).toISOString(),
+          startsAt: new Date().toISOString(),
           endsAt: new Date(Date.now() + 86400000).toISOString(),
         });
       assert.equal(campRes.status, 201);

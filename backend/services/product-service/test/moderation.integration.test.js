@@ -368,7 +368,7 @@ test("product moderation removes, hides and restores a listing", async (t) => {
         price: 900,
         category: "misc",
         status: "reserved",
-        auction: {
+        auctions: {
           create: {
             sellerId: "int-test-seller",
             status: "closed",

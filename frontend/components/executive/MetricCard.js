@@ -14,7 +14,9 @@ export default function MetricCard({
     <div className="rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs transition-shadow hover:shadow-md">
       <p className="text-xs font-medium text-slate-500">{label}</p>
       {unavailable ? (
-        <p className="mt-2 text-sm font-medium text-slate-400">ไม่พร้อมใช้งาน</p>
+        <p className="mt-2 text-sm font-medium text-slate-400">
+          ไม่พร้อมใช้งาน
+        </p>
       ) : (
         <>
           <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">

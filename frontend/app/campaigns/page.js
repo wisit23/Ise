@@ -232,22 +232,23 @@ function CampaignsContent() {
 
           {/* Navigation Tabs */}
           <div className="mt-8 flex justify-center">
-            <div className="inline-flex rounded-2xl bg-slate-200/70 p-1 shadow-inner">
+            <div className="grid grid-cols-2 sm:inline-flex w-full sm:w-auto max-w-md sm:max-w-none rounded-2xl bg-slate-200/70 p-1 shadow-inner">
               <button
                 type="button"
                 onClick={() => setTab("available")}
-                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-xs font-bold transition ${
+                aria-label="คูปองที่เก็บได้"
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-2.5 sm:px-5 py-2 text-xs font-bold transition ${
                   tab === "available"
                     ? "bg-white text-slate-900 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <span className="material-symbols-outlined text-base">
+                <span className="material-symbols-outlined text-base shrink-0">
                   loyalty
                 </span>
-                คูปองที่เก็บได้
+                <span className="truncate">คูปองที่เก็บได้</span>
                 {availableCampaigns.length > 0 && (
-                  <span className="rounded-full bg-brand-100 text-brand-700 px-2 py-0.5 text-[10px] font-semibold">
+                  <span className="rounded-full bg-brand-100 text-brand-700 px-1.5 sm:px-2 py-0.5 text-[10px] font-semibold shrink-0">
                     {availableCampaigns.length}
                   </span>
                 )}
@@ -256,18 +257,22 @@ function CampaignsContent() {
               <button
                 type="button"
                 onClick={() => setTab("mine")}
-                className={`flex items-center gap-2 rounded-xl px-5 py-2 text-xs font-bold transition ${
+                aria-label="คูปองของฉัน (กระเป๋าคูปอง)"
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-2.5 sm:px-5 py-2 text-xs font-bold transition ${
                   tab === "mine"
                     ? "bg-white text-slate-900 shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                <span className="material-symbols-outlined text-base">
+                <span className="material-symbols-outlined text-base shrink-0">
                   account_balance_wallet
                 </span>
-                คูปองของฉัน (กระเป๋าคูปอง)
+                <span className="truncate">
+                  คูปองของฉัน
+                  <span className="hidden sm:inline"> (กระเป๋าคูปอง)</span>
+                </span>
                 {activeVouchers.length > 0 && (
-                  <span className="rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-semibold">
+                  <span className="rounded-full bg-emerald-100 text-emerald-800 px-1.5 sm:px-2 py-0.5 text-[10px] font-semibold shrink-0">
                     {activeVouchers.length}
                   </span>
                 )}

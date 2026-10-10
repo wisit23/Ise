@@ -180,7 +180,7 @@ export default function PaymentPage() {
           </section>
         ) : session ? (
           <div className="grid items-start gap-5 md:grid-cols-[1fr_300px]">
-            <section className="rounded-2xl border border-line bg-white p-6 text-center shadow-2 sm:p-8">
+            <section className="rounded-2xl border border-line bg-white p-4 text-center shadow-2 sm:p-8">
               <p className="text-sm font-medium text-brand-700">QR PAYMENT</p>
               <h1 className="mt-1 text-2xl font-bold text-gray-900">
                 สแกน QR Code เพื่อชำระเงิน
@@ -189,15 +189,15 @@ export default function PaymentPage() {
                 เปิดแอปธนาคารแล้วสแกน QR Code ด้านล่าง
               </p>
 
-              <div className="mx-auto mt-5 w-fit rounded-2xl border-4 border-brand-100 bg-white p-3 shadow-1">
+              <div className="mx-auto mt-5 w-fit max-w-full rounded-2xl border-4 border-brand-100 bg-white p-2 sm:p-3 shadow-1">
                 {qrDataUrl ? (
                   <img
                     src={qrDataUrl}
                     alt="QR Code สำหรับชำระเงิน"
-                    className="h-64 w-64"
+                    className="h-48 w-48 sm:h-64 sm:w-64 max-w-full"
                   />
                 ) : (
-                  <Skeleton className="h-64 w-64" />
+                  <Skeleton className="h-48 w-48 sm:h-64 sm:w-64 max-w-full" />
                 )}
               </div>
 

@@ -61,8 +61,9 @@ async function restoreCommerceState(tx, product, now = new Date()) {
       : product.status;
   const data = {};
   const auction = ["reserved", "auction"].includes(status)
-    ? await tx.auctionItem.findUnique({
+    ? await tx.auctionItem.findFirst({
         where: { productId: product.id },
+        orderBy:{createdAt:"desc"},
         select: { status: true, winningOrderId: true },
       })
     : null;
@@ -161,8 +162,9 @@ async function removeProduct(productId, reason, idempotencyKey) {
       }
       let commerceStatus = product.status;
       if (product.status === "auction") {
-        const auction = await tx.auctionItem.findUnique({
+        const auction = await tx.auctionItem.findFirst({
           where: { productId },
+          orderBy:{createdAt:"desc"},
           select: { winningOrderId: true },
         });
         await tx.auctionItem.updateMany({

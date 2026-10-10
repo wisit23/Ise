@@ -167,7 +167,7 @@ async function list({
         : includeModerated
           ? {}
           : {
-              status: { notIn: ["removed", "hidden"] },
+              status: { notIn: ["removed", "hidden", "auction_action_required"] },
               moderatedAt: null,
             }),
     ...(category ? { category } : {}),
@@ -213,32 +213,34 @@ async function listBySeller(
   return { items: items.map(toApiShape), total };
 }
 
-async function findById(id) {
-  const product = await prisma.product.findUnique({
+async function findById(id, tx = prisma) {
+  const client = tx?.product ? tx : prisma;
+  const product = await client.product.findUnique({
     where: { id },
     include: WITH_MEDIA,
   });
   return toApiShape(product);
 }
 
-async function create(data) {
+async function create(data, tx = prisma) {
+  const client = tx || prisma;
   const { media, ...fields } = data;
-  const product = await prisma.product.create({
+  const product = await client.product.create({
     data: { ...fields, ...mediaToNestedCreate(media) },
     include: WITH_MEDIA,
   });
   return toApiShape(product);
 }
 
-async function update(id, patch) {
+async function update(id, patch, tx = null) {
   const { media, ...fields } = patch;
   try {
-    const product = await prisma.$transaction(async (tx) => {
+    const run = async (client) => {
       if (media !== undefined) {
-        await tx.photo.deleteMany({ where: { productId: id } });
-        await tx.video.deleteMany({ where: { productId: id } });
+        await client.photo.deleteMany({ where: { productId: id } });
+        await client.video.deleteMany({ where: { productId: id } });
       }
-      return tx.product.update({
+      return client.product.update({
         where: { id },
         data: {
           ...fields,
@@ -246,7 +248,10 @@ async function update(id, patch) {
         },
         include: WITH_MEDIA,
       });
-    });
+    };
+    const product = tx?.product
+      ? await run(tx)
+      : await prisma.$transaction(run);
     return toApiShape(product);
   } catch (err) {
     if (err.code === "P2025") return null;

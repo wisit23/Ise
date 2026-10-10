@@ -58,14 +58,20 @@ function StepIndicator({ step }) {
                 }`}
               >
                 {done ? (
-                  <span className="material-symbols-outlined text-[14px]">check</span>
+                  <span className="material-symbols-outlined text-[14px]">
+                    check
+                  </span>
                 ) : (
                   idx + 1
                 )}
               </span>
               <span
                 className={`text-xs font-medium ${
-                  active ? "text-brand-700" : done ? "text-gray-600" : "text-gray-400"
+                  active
+                    ? "text-brand-700"
+                    : done
+                      ? "text-gray-600"
+                      : "text-gray-400"
                 }`}
               >
                 {label}
@@ -119,11 +125,7 @@ export default function SellerOnboardingPage() {
 
   // currentStep ใช้สำหรับ StepIndicator
   const currentStep =
-    verifyMethod === "thai_id"
-      ? thaiIdStep === "qr"
-        ? "qr"
-        : "bank"
-      : "pick";
+    verifyMethod === "thai_id" ? (thaiIdStep === "qr" ? "qr" : "bank") : "pick";
 
   const load = useCallback(() => {
     const token = getAccessToken();

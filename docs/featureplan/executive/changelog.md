@@ -113,6 +113,7 @@
 - Test: `frontend/lib/executive.test.js` ใหม่ (day/month label formatters, `growthPct`),
   `platform-metrics-series.integration.test.js`, `user-metrics-series.integration.test.js` ใหม่
   → backend 51 ผ่าน (รวมทุก suite เดิม) / frontend 28 ผ่าน / eslint สะอาด
+
 ## 2026-08-26 — Consolidate into a Panel (Same as CS/Admin), Reconnect Complaints to Real Data
 
 ผู้ใช้ขอให้ Executive กับ Marketing ใช้ Layout แบบเดียวกับ CS/Admin Workspace (Sidebar + Section

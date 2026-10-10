@@ -1,36 +1,39 @@
-const { badRequest } = require("@reloop/shared");
+const { badRequest, conflict } = require("@reloop/shared");
 const defaultPrisma = require("../../models/prismaClient");
+const { recordAudit } = require("../audit/marketingAuditRepository");
 
-function createCampaignMetricsService(prismaClient = defaultPrisma) {
-  // In-memory store fallback for unit tests and local runs without DB
+function createCampaignMetricsService(
+  prismaClient = defaultPrisma,
+  options = {},
+) {
+  // In-memory storage is strictly reserved for explicitly injected unit-test adapters:
+  // requires options.isTestAdapter === true or options.inMemory === true (or prismaClient explicitly flagged).
+  // Neither defaultPrisma nor custom clients automatically fall back to memory based on client identity.
+  const isExplicitTestAdapter =
+    options.isTestAdapter === true ||
+    options.inMemory === true ||
+    Boolean(
+      prismaClient &&
+      (prismaClient.isTestAdapter || prismaClient._isTestAdapter),
+    );
+  const isProductionPath = !isExplicitTestAdapter;
+
   const memoryAttributions = new Map();
-  let tableEnsured = false;
 
-  async function ensureTable() {
-    if (tableEnsured) return;
-    if (!prismaClient || typeof prismaClient.$executeRawUnsafe !== "function") {
-      tableEnsured = true;
-      return;
-    }
-    try {
-      await prismaClient.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS campaign_attributions (
-          event_id VARCHAR(64) PRIMARY KEY,
-          order_id VARCHAR(64) UNIQUE NOT NULL,
-          campaign_id VARCHAR(64) NOT NULL,
-          gross_amount INT NOT NULL,
-          discount_amount INT NOT NULL,
-          net_amount INT NOT NULL,
-          completed_at TIMESTAMP WITH TIME ZONE NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        );
-        CREATE INDEX IF NOT EXISTS idx_campaign_attr_camp ON campaign_attributions(campaign_id);
-        CREATE INDEX IF NOT EXISTS idx_campaign_attr_date ON campaign_attributions(completed_at);
-      `);
-      tableEnsured = true;
-    } catch {
-      // Ignore if table already exists or DB mock
-      tableEnsured = true;
+  function hasPrismaAttributionModel(client) {
+    return Boolean(
+      client &&
+      client.campaignAttribution &&
+      typeof client.campaignAttribution.findFirst === "function" &&
+      typeof client.campaignAttribution.create === "function",
+    );
+  }
+
+  function assertProductionPrismaModel() {
+    if (isProductionPath && !hasPrismaAttributionModel(prismaClient)) {
+      throw new Error(
+        "campaignAttribution model is required on Prisma client in production path",
+      );
     }
   }
 
@@ -58,66 +61,248 @@ function createCampaignMetricsService(prismaClient = defaultPrisma) {
   }
 
   async function recordOrderCompletedEvent(event) {
-    if (!event || !event.eventId || !event.orderId) {
+    if (!event) {
+      throw badRequest("event is required");
+    }
+
+    assertProductionPrismaModel();
+
+    // Support both flattened payload and standard envelope ({ eventId, eventType, payload: { ... } })
+    const payload = event.payload || event;
+    const eventId = event.eventId || payload.eventId;
+    const orderId = payload.orderId || event.aggregateId || event.orderId;
+    const campaignId =
+      payload.campaignId !== undefined ? payload.campaignId : event.campaignId;
+
+    if (!eventId || !orderId) {
       throw badRequest("eventId and orderId are required");
     }
 
     // If no campaign attached to this completed order, it is not an attribution fact
-    if (!event.campaignId) {
+    if (!campaignId) {
       return { recorded: false, reason: "no_campaign" };
     }
 
-    await ensureTable();
+    function amount(value,label){
+      if(value===undefined || value===null || !/^\d+(?:\.\d{1,2})?$/.test(String(value)))throw badRequest(label+" must be a non-negative baht amount with at most two decimal places");
+      const n=Number(value);if(!Number.isFinite(n)||n>9999999999.99)throw badRequest(label+" exceeds supported money range");return n;
+    }
+    const grossAmount=amount(payload.grossAmount ?? event.grossAmount,"grossAmount");
+    const discountAmount=amount(payload.discountAmount ?? event.discountAmount ?? 0,"discountAmount");
+    const netAmount=amount(payload.netAmount ?? event.netAmount ?? (Math.round(grossAmount*100)-Math.round(discountAmount*100))/100,"netAmount");
+    function assertBalances(){if(Math.round(discountAmount*100)>Math.round(grossAmount*100) || Math.round(netAmount*100)!==Math.round(grossAmount*100)-Math.round(discountAmount*100))throw badRequest("campaign attribution amounts do not reconcile");}
 
-    const grossAmount = parseInt(event.grossAmount, 10) || 0;
-    const discountAmount = parseInt(event.discountAmount, 10) || 0;
-    const netAmount =
-      event.netAmount !== undefined && event.netAmount !== null
-        ? parseInt(event.netAmount, 10)
-        : Math.max(0, grossAmount - discountAmount);
-    const completedAt = event.completedAt
-      ? new Date(event.completedAt)
-      : new Date();
+    const rawCompletedAt =
+      payload.completedAt || event.occurredAt || event.completedAt;
+    const hasExplicitCompletedAt = Boolean(rawCompletedAt);
+    const completedAt = rawCompletedAt ? new Date(rawCompletedAt) : new Date();
 
-    // 1. In-memory check (for idempotent deduplication in tests)
-    for (const item of memoryAttributions.values()) {
-      if (item.eventId === event.eventId || item.orderId === event.orderId) {
-        return { recorded: true, deduplicated: true, fact: item };
+    function assertMatchingAttribution(existing, incoming) {
+      // 1. Identity conflict: Reusing existing eventId with different orderId is 409
+      // even when all monetary fields match.
+      if (
+        existing.eventId === incoming.eventId &&
+        existing.orderId !== incoming.orderId
+      ) {
+        throw conflict(
+          `Campaign attribution conflict: eventId "${incoming.eventId}" is already associated with orderId "${existing.orderId}", cannot reuse with orderId "${incoming.orderId}"`,
+        );
+      }
+
+      // 2. Monetary & immutable attribution attributes check
+      const isMatch =
+        existing.campaignId === incoming.campaignId &&
+        Number(existing.grossAmount) === Number(incoming.grossAmount) &&
+        Number(existing.discountAmount) === Number(incoming.discountAmount) &&
+        Number(existing.netAmount) === Number(incoming.netAmount) &&
+        (!hasExplicitCompletedAt ||
+          !existing.completedAt ||
+          new Date(existing.completedAt).getTime() ===
+            new Date(incoming.completedAt).getTime());
+
+      if (!isMatch) {
+        throw conflict(
+          `Campaign attribution conflict for order "${incoming.orderId}" or event "${incoming.eventId}": incoming attribution fields do not match existing immutable attribution`,
+        );
       }
     }
 
-    const factRecord = {
-      eventId: event.eventId,
-      orderId: event.orderId,
-      campaignId: event.campaignId,
+    const incomingAttributes = {
+      orderId,
+      eventId,
+      campaignId,
       grossAmount,
       discountAmount,
       netAmount,
       completedAt,
     };
-    memoryAttributions.set(event.eventId, factRecord);
 
-    // 2. Persist in PostgreSQL
-    if (prismaClient && typeof prismaClient.$executeRawUnsafe === "function") {
+    // 1. Persistent PostgreSQL Path (Production & Integration Tests)
+    if (hasPrismaAttributionModel(prismaClient)) {
+      // Check existing by eventId or orderId for idempotent deduplication before transaction
+      const existing = await prismaClient.campaignAttribution.findFirst({
+        where: {
+          OR: [{ eventId }, { orderId }],
+        },
+      });
+      if (existing) {
+        assertMatchingAttribution(existing, incomingAttributes);
+        return { recorded: true, deduplicated: true, fact: existing };
+      }
+
+      assertBalances();
+      const runTx =
+        typeof prismaClient.$transaction === "function"
+          ? (fn) => prismaClient.$transaction(fn)
+          : (fn) => fn(prismaClient);
+
       try {
-        await prismaClient.$executeRawUnsafe(
-          `INSERT INTO campaign_attributions
-           (event_id, order_id, campaign_id, gross_amount, discount_amount, net_amount, completed_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (event_id) DO NOTHING;`,
-          event.eventId,
-          event.orderId,
-          event.campaignId,
-          grossAmount,
-          discountAmount,
-          netAmount,
-          completedAt,
-        );
+        const txResult = await runTx(async (tx) => {
+          // Re-check existing in tx for race safety
+          const inTxExisting = await tx.campaignAttribution.findFirst({
+            where: {
+              OR: [{ eventId }, { orderId }],
+            },
+          });
+          if (inTxExisting) {
+            assertMatchingAttribution(inTxExisting, incomingAttributes);
+            return { recorded: true, deduplicated: true, fact: inTxExisting };
+          }
+
+          const fact = await tx.campaignAttribution.create({
+            data: {
+              eventId,
+              orderId,
+              campaignId,
+              grossAmount,
+              discountAmount,
+              netAmount,
+              completedAt,
+            },
+          });
+
+          // Atomic budget increment and threshold check
+          if (campaignId && tx.campaign) {
+            const camp = await tx.campaign.findUnique({
+              where: { id: campaignId },
+            });
+            if (camp) {
+              const updated = await tx.campaign.update({
+                where: { id: campaignId },
+                data: {
+                  spentBudget: { increment: discountAmount },
+                },
+              });
+
+              // Check if budget reached
+              if (
+                updated.budget !== null &&
+                updated.budget !== undefined &&
+                updated.spentBudget >= updated.budget &&
+                updated.status !== "ended"
+              ) {
+                const endedCampaign = await tx.campaign.update({
+                  where: { id: campaignId },
+                  data: { status: "ended" },
+                });
+
+                if (tx.userVoucher) {
+                  await tx.userVoucher.updateMany({
+                    where: {
+                      campaignId,
+                      status: "CLAIMED",
+                    },
+                    data: { status: "EXPIRED" },
+                  });
+                }
+
+                await recordAudit(
+                  {
+                    actorId: "SYSTEM",
+                    actorRole: "SYSTEM",
+                    action: "CAMPAIGN_END",
+                    entityType: "CAMPAIGN",
+                    entityId: campaignId,
+                    previousState: updated,
+                    newState: endedCampaign,
+                    metadata: { reason: "BUDGET_REACHED" },
+                    idempotencyKey: `CAMPAIGN_END_BUDGET:${campaignId}`,
+                  },
+                  { tx },
+                );
+              }
+            }
+          }
+
+          return { recorded: true, fact };
+        });
+
+        return txResult;
       } catch (err) {
-        console.warn(
-          "[campaignMetrics] failed to persist attribution fact:",
-          err.message,
-        );
+        if (err.code === "P2002") {
+          // Unique constraint race: retrieve the existing fact
+          const raceExisting = await prismaClient.campaignAttribution.findFirst(
+            {
+              where: {
+                OR: [{ eventId }, { orderId }],
+              },
+            },
+          );
+          if (raceExisting) {
+            assertMatchingAttribution(raceExisting, incomingAttributes);
+            return { recorded: true, deduplicated: true, fact: raceExisting };
+          }
+        }
+        // Do NOT swallow DB errors in live DB mode: propagate so caller/outbox retries
+        throw err;
+      }
+    }
+
+    // 2. In-memory store fallback (only for explicitly injected test adapters)
+    for (const item of memoryAttributions.values()) {
+      if (item.eventId === eventId || item.orderId === orderId) {
+        assertMatchingAttribution(item, incomingAttributes);
+        return { recorded: true, deduplicated: true, fact: item };
+      }
+    }
+
+    assertBalances();
+    const factRecord = {
+      eventId,
+      orderId,
+      campaignId,
+      grossAmount,
+      discountAmount,
+      netAmount,
+      completedAt,
+    };
+    memoryAttributions.set(eventId, factRecord);
+
+    if (campaignId && prismaClient && prismaClient.campaign) {
+      if (typeof prismaClient.campaign.findUnique === "function") {
+        const camp = await prismaClient.campaign.findUnique({
+          where: { id: campaignId },
+        });
+        if (camp) {
+          camp.spentBudget = (camp.spentBudget || 0) + discountAmount;
+          if (
+            camp.budget !== null &&
+            camp.budget !== undefined &&
+            camp.spentBudget >= camp.budget &&
+            camp.status !== "ended"
+          ) {
+            camp.status = "ended";
+            if (
+              prismaClient.userVoucher &&
+              typeof prismaClient.userVoucher.updateMany === "function"
+            ) {
+              await prismaClient.userVoucher.updateMany({
+                where: { campaignId, status: "CLAIMED" },
+                data: { status: "EXPIRED" },
+              });
+            }
+          }
+        }
       }
     }
 
@@ -129,46 +314,23 @@ function createCampaignMetricsService(prismaClient = defaultPrisma) {
     fromDate = null,
     toDate = null,
   } = {}) {
-    await ensureTable();
-
-    if (prismaClient && typeof prismaClient.$queryRawUnsafe === "function") {
-      try {
-        const conditions = [];
-        const params = [];
-        let pIndex = 1;
-
-        if (campaignId) {
-          conditions.push(`campaign_id = $${pIndex++}`);
-          params.push(campaignId);
-        }
-        if (fromDate) {
-          conditions.push(`completed_at >= $${pIndex++}`);
-          params.push(fromDate);
-        }
-        if (toDate) {
-          conditions.push(`completed_at <= $${pIndex++}`);
-          params.push(toDate);
-        }
-
-        const whereClause =
-          conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-        const rows = await prismaClient.$queryRawUnsafe(
-          `SELECT event_id AS "eventId", order_id AS "orderId", campaign_id AS "campaignId",
-                  gross_amount AS "grossAmount", discount_amount AS "discountAmount", net_amount AS "netAmount",
-                  completed_at AS "completedAt"
-           FROM campaign_attributions ${whereClause}
-           ORDER BY completed_at ASC;`,
-          ...params,
-        );
-        if (Array.isArray(rows) && rows.length > 0) {
-          return rows;
-        }
-      } catch {
-        // Fall back to memory
+    if (hasPrismaAttributionModel(prismaClient)) {
+      const where = {};
+      if (campaignId) where.campaignId = campaignId;
+      if (fromDate || toDate) {
+        where.completedAt = {};
+        if (fromDate) where.completedAt.gte = fromDate;
+        if (toDate) where.completedAt.lte = toDate;
       }
+      return prismaClient.campaignAttribution.findMany({
+        where,
+        orderBy: { completedAt: "asc" },
+      });
     }
 
-    // In-memory query fallback
+    assertProductionPrismaModel();
+
+    // In-memory query fallback (only for explicitly injected test adapters)
     let facts = Array.from(memoryAttributions.values());
     if (campaignId) {
       facts = facts.filter((f) => f.campaignId === campaignId);
@@ -207,9 +369,9 @@ function createCampaignMetricsService(prismaClient = defaultPrisma) {
     });
 
     const completedOrders = facts.length;
-    const grossRevenue = facts.reduce((sum, f) => sum + f.grossAmount, 0);
-    const totalDiscount = facts.reduce((sum, f) => sum + f.discountAmount, 0);
-    const netRevenue = facts.reduce((sum, f) => sum + f.netAmount, 0);
+    const grossRevenue = facts.reduce((sum, f) => sum + Math.round(Number(f.grossAmount)*100), 0)/100;
+    const totalDiscount = facts.reduce((sum, f) => sum + Math.round(Number(f.discountAmount)*100), 0)/100;
+    const netRevenue = facts.reduce((sum, f) => sum + Math.round(Number(f.netAmount)*100), 0)/100;
 
     const claimedCount = camp?.usedCount ?? (camp?._count?.vouchers || 0);
     const redeemedCount = completedOrders;
@@ -255,9 +417,9 @@ function createCampaignMetricsService(prismaClient = defaultPrisma) {
     }
 
     const completedOrders = facts.length;
-    const grossRevenue = facts.reduce((sum, f) => sum + f.grossAmount, 0);
-    const totalDiscount = facts.reduce((sum, f) => sum + f.discountAmount, 0);
-    const netRevenue = facts.reduce((sum, f) => sum + f.netAmount, 0);
+    const grossRevenue = facts.reduce((sum, f) => sum + Math.round(Number(f.grossAmount)*100), 0)/100;
+    const totalDiscount = facts.reduce((sum, f) => sum + Math.round(Number(f.discountAmount)*100), 0)/100;
+    const netRevenue = facts.reduce((sum, f) => sum + Math.round(Number(f.netAmount)*100), 0)/100;
     const totalRedeemed = completedOrders;
 
     const overallConversionRate =
@@ -295,9 +457,9 @@ function createCampaignMetricsService(prismaClient = defaultPrisma) {
         netRevenue: 0,
       };
       existing.completedOrders += 1;
-      existing.grossRevenue += fact.grossAmount;
-      existing.totalDiscount += fact.discountAmount;
-      existing.netRevenue += fact.netAmount;
+      existing.grossRevenue = (Math.round(existing.grossRevenue*100)+Math.round(Number(fact.grossAmount)*100))/100;
+      existing.totalDiscount = (Math.round(existing.totalDiscount*100)+Math.round(Number(fact.discountAmount)*100))/100;
+      existing.netRevenue = (Math.round(existing.netRevenue*100)+Math.round(Number(fact.netAmount)*100))/100;
       dayMap.set(dateKey, existing);
     }
 
@@ -358,7 +520,7 @@ function createCampaignMetricsService(prismaClient = defaultPrisma) {
   }
 
   return {
-    ensureTable,
+    ensureTable: async () => {},
     validateDateRange,
     recordOrderCompletedEvent,
     getAttributionFacts,

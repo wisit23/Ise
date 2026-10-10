@@ -224,7 +224,7 @@ export default function SellerDashboardCharts({
               <li key={o.id}>
                 <button
                   onClick={() => onNavigateOrders?.(o.id)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-3 text-left transition-colors hover:bg-emerald-50/40 group"
+                  className="flex w-full items-center justify-between gap-2.5 sm:gap-4 px-3.5 sm:px-5 py-3 text-left transition-colors hover:bg-emerald-50/40 group"
                 >
                   {/* Product info */}
                   <div className="min-w-0 flex-1">
@@ -259,7 +259,7 @@ export default function SellerDashboardCharts({
                   </span>
 
                   {/* Arrow hint */}
-                  <span className="material-symbols-outlined shrink-0 text-[16px] text-slate-300 group-hover:text-emerald-500 transition-colors">
+                  <span className="hidden sm:inline-block material-symbols-outlined shrink-0 text-[16px] text-slate-300 group-hover:text-emerald-500 transition-colors">
                     arrow_forward_ios
                   </span>
                 </button>

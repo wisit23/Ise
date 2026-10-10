@@ -569,6 +569,9 @@
 
 ## 2026-09-19 — Feature: Auction Round Overlap Protection, Concurrency Serialization & Deterministic Selection (MKT-DEC-020)
 
+> [!NOTE]
+> **Historical Record:** ข้อกำหนดเรื่อง Overlap Protection และการคืน 409 Conflict ในหัวข้อนี้ถูกแทนที่แล้วโดย MKT-DEC-025 เพื่อรองรับการเปิดรอบคู่ขนาน โดยฟังก์ชัน `findConflictingRound`, `withRoundLock`, `findActiveSubmissionRound` และ `findCurrentRound` ถูกลบออกจาก Production Code แล้วใน MKT-DEC-025
+
 - **Problem:**
   - เดิมตาราง `AuctionRound` อนุญาตให้สร้างหลายรอบได้ แต่ `createRound` ขาดการตรวจสอบช่วงเวลาที่ซ้อนทับกัน (Overlap)
   - `findCurrentRound` เลือกจากแถวที่สร้างล่าสุด (`createdAt: "desc"`) แทนที่จะเลือกตามเวลาจริง (`now`)
@@ -607,3 +610,453 @@
   - **Frontend Jest Tests:** `frontend/components/marketing/sections/AuctionScheduleSection.test.js` ผ่าน 7/7 tests ครอบคลุมการทดสอบ `RoundManagementSection` named export (Current round, Upcoming round, All-rounds table, Empty state, 409 Conflict banner, Refresh after creation) และ Parent `AuctionScheduleSection` component พร้อม mock API ครบถ้วน
   - **Auction Integration Tests (Real DB & Redis):** `backend/services/product-service/test/auction.integration.test.js` เพิ่ม Step 10: ผ่านครบ 11/11 tests across 10 steps บน PostgreSQL และ Redis จริง 100%
   - ผลรวม Unit Tests ของ Product-Service ทั้งหมด 77/77 tests ผ่าน 100%
+
+## 2026-10-03 — Feature: Marketing Task 1 — Durable Campaign Attribution Engine, Outbox Pattern & PostgreSQL Persistence Hardening (MKT-003, MKT-007, UR-09, UR-12)
+
+- **Problem & Requirements:**
+  - เดิม Campaign Attribution (`MKT-003`, `MKT-007`) ขาดการบันทึกสถานะลงฐานข้อมูลแบบถาวร โดยอาศัย Dynamic SQL `CREATE TABLE` ชั่วคราว และไม่มีการรับประกันความน่าเชื่อถือหาก Product Service ขัดข้องขณะ Order เสร็จสิ้น
+  - การส่ง Event `order.completed` เป็นแบบ Fire-and-forget ขาด Retry Mechanism และ Exponential Backoff หากเกิด Network Failure ข้อมูล Attribution จะสูญหายทันที
+  - ขาดการทดสอบ Integration Test ครอบคลุมการทำงานร่วมกับ PostgreSQL จริงทั้งสองฐานข้อมูล (`reloop_order` และ `reloop_product`) โดยแยกเขตความรับผิดชอบ (Service Boundary) อย่างเคร่งครัด
+- **Architectural Solutions & Implementation:**
+  - **Reloop Order Schema & Transactional Outbox Pattern (`order-service`):**
+    - เพิ่มโมเดล `AttributionOutboxEvent` ใน `backend/services/order-service/prisma/schema.prisma` (`id`, `orderId` @unique, `campaignId`, `grossAmount`, `discountAmount`, `netAmount`, `completedAt`, `attempts`, `nextAttemptAt`, `processedAt`, `lastError`)
+    - สร้างแถว Outbox ใน Transaction เดียวกันกับ `Order.status = "completed"` อย่าง Atomic ใน `orderModel.transitionStatusWithProductSync`
+    - กำจัด Silent Feature-detection: ปรับปรุง `orderModel.js` และ `attributionOutboxService.js` ให้ fail loudly หาก Prisma model ขาดหาย เพื่อป้องกันไม่ให้ออเดอร์ที่มี campaign สำเร็จได้โดยปราศจาก outbox durability record
+    - สร้าง `attributionOutboxService.js`: รองรับการส่ง Event พร้อม Payload มาตรฐานและ Flat compatibility fields, บันทึกสถานะ `processedAt` เมื่อสำเร็จ หรือบันทึกข้อผิดพลาดและคำนวณ `nextAttemptAt` ด้วย Exponential Backoff เมื่อล้มเหลว
+    - ระบบ Batch Worker (`processPendingEvents`, `startWorker`) กวาดส่งงานที่ค้างอย่างสม่ำเสมอ
+    - ปรับปรุง `productClient.js` ให้ประเมิน `PRODUCT_SERVICE_URL` และ `INTERNAL_SERVICE_TOKEN` แบบ Dynamic ต่อ Request เพื่อรองรับทั้ง Live Stack และ Isolated Integration Testing
+  - **Reloop Product Schema & Campaign Attribution Fact Model (`product-service`):**
+    - เพิ่มโมเดล `CampaignAttribution` ใน `backend/services/product-service/prisma/schema.prisma` (`eventId` @id, `orderId` @unique, `campaignId` index, `completedAt` index, `grossAmount`, `discountAmount`, `netAmount`)
+    - Refactor `campaignMetrics.js`: ลบ Dynamic raw SQL ออกอย่างสิ้นเชิง และใช้ Prisma Client บันทึกลงในตาราง `campaign_attributions`
+    - กำจัด Silent In-memory Fallback ใน Production: บังคับให้ `campaignMetrics.js` ในเส้นทาง Production ทำการ Fail loudly (`throw new Error(...)`) หาก Prisma client ขาดโมเดล `campaignAttribution` โดยสงวน In-memory store ไว้เฉพาะ Unit Test Adapter ที่ถูก Inject เข้ามาอย่างชัดเจนเท่านั้น
+    - เสริมความปลอดภัย Idempotency และ Identity Conflict:
+      - การใช้ `eventId` เดิมซ้ำกับ `orderId` ใหม่ที่มีข้อมูลตรงกันทั้งหมดจะถูกปฏิเสธด้วย HTTP 409 Conflict ทันที เพื่อป้องกัน Identity Spoofing / Event ID reuse
+      - คำสั่งซื้อเดิม (`orderId` เดิม) ที่ส่งมาด้วย `eventId` ใหม่พร้อมข้อมูลที่ตรงกันทั้งหมด จะถือเป็น Valid Deduplicated Retry และคืนสถานะสำเร็จแบบ deduplicated (HTTP 200)
+      - ครอบคลุมทั้งขั้นตอน Pre-check ก่อนบันทึก และขั้นตอนฟื้นฟู `P2002` Unique Constraint Race Recovery
+    - ส่งต่อ Error ในโหมด DB จริง ไม่ swallow error เพื่อเปิดทางให้ Outbox Retry
+  - **Strict Cross-Service Boundary & Reproducible Testing:**
+    - ไม่มีการ Query ข้าม Database ใน Production Code: Order Service จัดการเฉพาะ `reloop_order` และ Product Service จัดการเฉพาะ `reloop_product`
+    - การส่งผ่านข้อมูลกระทำผ่าน REST Contract `POST /internal/campaigns/events/order-completed` พร้อม Header `x-internal-token` (ป้องกันด้วย 403 Forbidden เมื่อ Token ไม่ถูกต้อง)
+    - รัน Cross-service integration test ได้อย่าง Reproducible จาก Repository Test Environment โดยใช้ Generated Prisma Client ทั้งสองตัวจากโปรเจกต์ (`backend/services/order-service/src/generated/prisma-client` และ `backend/services/product-service/src/generated/prisma-client`) ปราศจากการพึ่งพาการก็อปปี้ไฟล์ไปยัง Production Container และเมื่อ Fallback รัน Express app ในเครื่องจะผูกกับ `DATABASE_URL_PRODUCT` แยกจาก Order DB อย่างถูกต้อง
+- **Automated Verification Evidence:**
+  - **Genuine Cross-Service PostgreSQL Integration Suite (`order-service/test/cross-service-attribution.integration.test.js`):** ผ่านครบ 9/9 subtests (10/10 tests passing 100%) บน Repository Test Environment ด้วย `REQUIRE_INTEGRATION=1` ทดสอบ Full Lifecycle ข้าม 2 Database จริง:
+    1. Order completion ใน `reloop_order` สร้าง `AttributionOutboxEvent` แบบ Atomic
+    2. ส่งผ่าน HTTP ไปยัง Product Service และอัปเดต `processedAt` ใน `reloop_order`
+    3. ตรวจสอบใน `reloop_product`: บันทึก `CampaignAttribution` ลงตารางจริง
+    4. Idempotent Retry: ส่งซ้ำได้ผล deduplicated และไม่สร้างแถวซ้ำ
+    5. Conflicting Payload: ข้อมูลตัวเลขขัดแย้งคืน 409 Conflict
+    6. Identity Conflict: นำ `eventId` เดิมไปใช้กับ `orderId` อื่นคืน 409 Conflict แม้ตัวเลขจะตรงกันทั้งหมด
+    7. Failure Backoff: ปลายทางล้มเหลว (503) บันทึก `lastError` และ `nextAttemptAt` ใน `reloop_order` โดยคง `processedAt = null`
+    8. Worker Sweep: `processPendingEvents` กวาดส่งงานที่ค้างผ่าน HTTP ไปบันทึกใน `reloop_product` สำเร็จ
+    9. Non-campaign Orders: คำสั่งซื้อที่ไม่มีแคมเปญไม่สร้าง Outbox event ใน `reloop_order`
+  - **Product Service PostgreSQL Integration Suite (`product-service/test/campaign-attribution.integration.test.js`):** ผ่านครบ 12/12 subtests (13/13 tests passing 100%) บน PostgreSQL `reloop_product` จริงด้วย `REQUIRE_INTEGRATION=1` (ทดสอบความปลอดภัย 403, การบันทึกลงตารางจริง, Idempotency ซ้ำ, 409 Conflict on payload mismatch, 409 Conflict on eventId reuse, No-campaign bypass, และการคำนวณ KPIs: Gross/Net Revenue, Discounts, Conversion Rate, Trends, และ Date Range Validation)
+  - **Order Service Outbox PostgreSQL Integration Suite (`order-service/test/campaign-attribution.integration.test.js`):** ผ่านครบ 6/6 subtests (7/7 tests passing 100%) บน PostgreSQL `reloop_order` จริงด้วย `REQUIRE_INTEGRATION=1` (ทดสอบ Atomic Outbox row creation, No-campaign bypass, Outbox delivery พร้อม `x-internal-token`, Retry backoff on failure 503, Sweep recovery of pending events, และ Idempotent acknowledgment)
+  - **Unit Tests:**
+    - `product-service/test/campaignMetrics.test.js`: ผ่านครบ Campaign Metrics 13 test cases โดยไม่รวม parent suite ของ node:test (passing 100% ครอบคลุม Fail-loud in production path, Identity Conflict, และ `P2002` Race Recovery)
+    - `order-service/src/services/attributionOutboxService.test.js`: ผ่านครบ 7/7 subtests (8/8 tests passing 100% ครอบคลุม Fail-loud durability)
+    - `order-service` Unit Tests รวมทั้งหมด: ผ่านครบ 53/53 tests 100% ปราศจาก Regression
+    - รวม Marketing Unit Tests ทั้งหมด: 84 total tests passing 100% (Auction Service 48 + Campaign Validation 12 + Segment Rule 7 + Campaign Metrics 13 + Product Payload 4 = 84; historical baseline: 71 tests)
+
+## 2026-10-04 — Feature: UR-11 Swipe-to-Choose Hardening (Buyer Authorization, Persistence, User Isolation & Identity Spoof Prevention)
+
+- **Problem & Requirements:**
+  - เดิม `UR-11` (Swipe-to-Choose) ขาดการตรวจสอบสิทธิ์เฉพาะผู้ซื้อ (Buyer-only Authorization) โดยเปิดให้บทบาทอื่นเรียก API choose/unchoose ได้
+  - ฟีดสินค้าสาธารณะ (`GET /api/products/videos/feed`) ไม่ได้เชื่อมโยงกับสถานะ `chosen` ของผู้ซื้อในฐานข้อมูล ทำให้สถานะการ Bookmark หายไปเมื่อ Refresh หรือเปลี่ยนอุปกรณ์
+  - การพึ่งพา Header `x-user-id` บน Public Endpoint โดยไม่มี Bearer Token เปิดช่องโหว่ Identity Spoofing ทำให้ผู้ไม่หวังดีสามารถส่ง `x-user-id` ของผู้ใช้อื่นมาเพื่อแอบดู Bookmark ได้
+  - ชุดทดสอบเดิมขาดการครอบคลุมกรณี Unchoose รายการที่ไม่ได้เลือก, การป้องกัน N+1 query, และการ Rollback สถานะฝั่งฟรอนต์เอนด์เมื่อเกิด Network Failure
+- **Implementation & Security Hardening:**
+  - **Buyer-Only Authorization:**
+    - กำหนด Route Middleware `requireBuyerRole` บน `POST /:id/choose`, `DELETE /:id/choose`, และ `POST /:id/unchoose` ตรวจสอบทั้ง `req.userRole === "BUYER"` และ `req.userRoles.includes("BUYER")` หากเป็นบทบาทอื่น (`SELLER`, `MARKETING`, `ADMIN`) จะถูกปฏิเสธด้วย HTTP `403 Forbidden` และหากไม่มี Token จะถูกปฏิเสธด้วย HTTP `401 Unauthorized`
+    - เพิ่มการตรวจสอบระดับ Service Layer ใน `productVideoService.js` (`isBuyer(user)`) เพื่อป้องกันการเรียกใช้งานฟังก์ชันข้ามช่องทาง
+  - **Server-Side Persistence & Batch Query (No N+1):**
+    - ปรับปรุง `productVideoRepository.listAvailable` ให้รับ `userId` และใช้ Prisma relation include `choices: { where: { userId }, select: { id: true } }` ดึงข้อมูลสถานะการเลือกของผู้ใช้ใน Query เดียว
+    - แมปฟิลด์ `chosen: Boolean(...)` และตัดความสัมพันธ์ `choices` ออกจาก Response สาธารณะทั้งหมด เพื่อรักษาความเป็นส่วนตัวของข้อมูล
+  - **User Isolation & Guest Handling:**
+    - แยกสถานะ `chosen` เด็ดขาดระหว่างผู้ซื้อแต่ละคน (การเลือกของ Buyer A ไม่ปรากฏเป็น true ในฟีดของ Buyer B)
+    - สำหรับผู้ใช้งานทั่วไป (Guest) ฟีดจะส่งคืน `chosen: false` เสมอทุกรายการ
+  - **Anti-Spoofing & Optional Authentication:**
+    - ปรับปรุง `optionalAuth` ใน `productVideoRoutes.js`: หากไม่มี `Authorization: Bearer` Token จะกำหนด `userId = null` เสมอ โดยไม่เชื่อถือ Header `x-user-id` หรือ `x-user-role` ที่ส่งมากับ Request สาธารณะ
+    - หากมี Bearer Token จะส่งต่อให้ Trusted Auth Middleware (`requireAuth`) ตรวจสอบ JWT Signature และความถูกต้องของ Session
+    - ปรับปรุง API Gateway (`backend/gateway/src/app.js`): ลบ Header ที่ขึ้นต้นด้วย `x-user-` ทั้งหมดจาก Inbound Client ก่อนเริ่ม Route Request เพื่อให้มั่นใจว่า Trusted Identity Headers จะถูกสร้างขึ้นโดย Gateway หลังตรวจ Token สำเร็จเท่านั้น (ผ่านการตรวจสอบ Implementation review และ Lint แล้ว โดยยังไม่มี Dedicated automated test สำหรับ Gateway header stripping)
+  - **Idempotency & Safe Unchoose:**
+    - `productVideoRepository.upsertChoice`: ใช้ Prisma `upsert` บน Composite Unique `@@unique([productVideoId, userId])` รับประกันการเลือกซ้ำไม่สร้างแถวซ้ำใน `swipe_choices`
+    - `productVideoRepository.deleteChoice`: ใช้ Prisma `deleteMany` จัดการการยกเลิกเลือกรายการที่ยังไม่ได้เลือกอย่างปลอดภัย ส่งคืน `{ chosen: false }` โดยไม่เกิดข้อผิดพลาด HTTP 500
+  - **Frontend Persistence & Optimistic Rollback:**
+    - `SwipeVideoCard.js`: กำหนดค่าเริ่มต้นจาก `video.chosen` และเพิ่ม `useEffect` ซิงค์สถานะเมื่อ `video.chosen` อัปเดตหลัง Refetch
+    - ดำเนินการ Optimistic Update ทันทีเมื่อผู้ใช้คลิก และหาก API ปลายทางล้มเหลว (Network Error / 403 / 500) จะทำการ Rollback กลับสู่สถานะก่อนหน้าทันที
+  - **Requirement Boundary:** ยืนยันตาม `MKT-DEC-006` และ `MKT-DEC-021` ว่า `SwipeChoice` ทำหน้าที่เป็นเพียง Bookmark ความสนใจของผู้ซื้อเท่านั้น ไม่มีความสัมพันธ์กับการประมูลสินค้า (Auction) และไม่ใช่การเสนอราคา (Bid)
+- **Automated Verification Evidence:**
+  - **Backend & Gateway Targeted Tests:** ผ่านครบ 29/29 tests 100%
+    - Gateway App Tests (`backend/gateway/src/app.test.js`): ผ่าน 5/5 tests (ครอบคลุม Gateway auth routing และ Public routes; สำหรับ header stripping ผ่าน implementation review/lint แต่ยังไม่มี dedicated automated test)
+    - Product Service App Tests (`backend/services/product-service/src/app.test.js`): ผ่าน 10/10 tests
+    - Product Video Repository Tests (`backend/services/product-service/src/features/product-videos/productVideoRepository.test.js`): ผ่าน 2/2 tests (ครอบคลุม Guest chosen: false, User-specific chosen, และยืนยันไม่รั่วไหล choices relation)
+    - Product Video Service Tests (`backend/services/product-service/src/features/product-videos/productVideoService.test.js`): ผ่าน 12/12 tests (ครอบคลุม 403 ทุก Role ที่ไม่ใช่ BUYER, Multi-role BUYER, และ Pagination forwarding)
+    - รวม Backend & Gateway Targeted Tests: 5 + 10 + 2 + 12 = 29 tests
+  - **Frontend Swipe Component Tests:** ผ่านครบ 3/3 suites (42/42 tests passing 100%)
+    - `frontend/components/swipe/SwipeVideoCard.test.js`: ผ่านครบ 28/28 tests (รวมการทดสอบ Initial render จาก `video.chosen`, Refetch sync, และ Rollback เมื่อเกิดข้อผิดพลาดทั้งฝั่ง Choose และ Unchoose)
+    - `frontend/components/swipe/SwipeFeedViewer.test.js`: ผ่านครบ 8/8 tests (ครอบคลุมการเลื่อนดูคลิป, Touch swipe, Desktop controls, และ Query synchronization)
+    - `frontend/app/swipe/page.test.js`: ผ่านครบ 6/6 tests
+  - **PostgreSQL Integration Test (`REQUIRE_INTEGRATION=1`):**
+    - `backend/services/product-service/test/swipe-choose.integration.test.js`: ผ่าน 1/1 suite (10 verification assertions) บน PostgreSQL `reloop_product` จริง ปราศจากการ Skip:
+      1. 401 Unauthorized บน `POST /choose`, `DELETE /choose`, `POST /unchoose` เมื่อไม่มี Token
+      2. 403 Forbidden สำหรับ `SELLER`, `MARKETING`, `ADMIN` ทุกคำสั่ง
+      3. 200 OK และบันทึกลงตาราง `swipe_choices` จริงสำหรับ `BUYER`
+      4. Idempotency: การเลือกซ้ำไม่สร้างแถวซ้ำในฐานข้อมูล (`count === 1`)
+      5. Guest Feed: ทุกรายการได้รับ `chosen: false`
+      6. Buyer A Feed: รายการที่เลือกได้รับ `chosen: true`
+      7. User Isolation: Buyer B เห็นรายการที่ Buyer A เลือกเป็น `chosen: false`
+      8. Identity Anti-Spoofing: ส่ง Header `x-user-id: ur11-buyer-a` โดยไม่มี Bearer Token ได้รับ `chosen: false` ไม่สามารถอ่านข้อมูลผู้อื่นได้
+      9. Safe Unchoose: Unchoose รายการที่ไม่ได้เลือกไม่เกิด HTTP 500
+      10. Unchoose สำเร็จ: ลบแถวออกจากฐานข้อมูลและฟีดอัปเดตเป็น `chosen: false`
+  - **Quality Gates & Formatting:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style!)
+    - `git diff --check`: ผ่าน 100% (ไม่มีข้อผิดพลาด whitespace)
+- **Pending Acceptance Note:** ชุดทดสอบอัตโนมัติระดับ Backend, Frontend Component, และ PostgreSQL Integration ผ่านการตรวจสอบครบถ้วนแล้ว แต่ Browser E2E / Responsive UI verification บนเบราว์เซอร์จริงยังไม่ได้ดำเนินการและคงสถานะเป็น Final Acceptance ที่รอดำเนินการต่อไป
+
+## 2026-10-05 — Feature: UR-08 Marketing User & Peak-Usage Analytics Dashboard (Code Review Resolved)
+
+- **Problem & Requirements:**
+  - Marketing Dashboard (`/marketing`) ต้องการแสดงผลข้อมูลจริงเกี่ยวกับสถิติผู้ใช้งานและช่วงเวลาการใช้งานสูงสุด (Peak Usage Hour) ตามช่วงวันที่เลือก เพื่อใช้ประกอบการวางแผนแคมเปญ
+  - ตัวชี้วัดสำคัญ 4 รายการ: Active Users, New Users, Hourly Usage Aggregation, และ Peak Usage Hour พร้อม Date-range filtering
+  - ต้องรักษา Service Boundary: ข้อมูลผู้ใช้และกิจกรรมเป็นของ Auth Service ห้าม Product Service หรือบริการอื่น Query ข้ามฐานข้อมูลโดยตรง
+  - Response ต้องเป็น Aggregate เท่านั้น ปราศจาก PII (ไม่มี email, phone, displayName, userId หรือ payload กิจกรรมส่วนบุคคล)
+  - ห้ามใช้ In-memory fallback ใน Production และ Database Error ต้องไม่ถูกกลืนเป็นเลขศูนย์
+- **Code Review Resolutions:**
+  - **1. Timezone & Date Range:**
+    - กำหนด Business Timezone ของ UR-08 เป็น `Asia/Bangkok` (+07:00) อย่างเคร่งครัด
+    - ปฏิเสธ Timezone อื่นด้วย HTTP 400 Bad Request
+    - แปลง UTC `timestamp without time zone` ของ Prisma ผ่าน `(activity_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Bangkok'` ใน SQL ก่อนทำ `date_trunc('hour', ...)` เพื่อให้ได้ชั่วโมงและ Peak Hour ตามเวลาไทยที่ถูกต้อง
+    - ตัวแปลงวันที่ใน Frontend (`convertThaiDateFilterToRange`) กำหนดให้ `from` เป็น 00:00:00+07:00 และ `to` เป็น 00:00:00+07:00 ของวันถัดไป (`[from, to)` exclusive boundary) รองรับขอบเขตสิ้นเดือน สิ้นปี และ Leap Year อย่างถูกต้อง
+    - ป้องกันการส่ง Partial request ระหว่างผู้ใช้กรอกวันที่
+    - ลบข้อความ "UTC" ทั้งหมดออกจาก UI Dashboard
+  - **2. Gateway Cross-Service Integration Test:**
+    - ปรับปรุง `backend/gateway/src/marketing-analytics.cross-service.test.js` ไม่ยอมรับ HTTP 500 เป็นผลสำเร็จ
+    - Success path ทำงานร่วมกับ PostgreSQL จริงผ่าน Gateway -> Auth Service -> PostgreSQL ได้รับ HTTP 200 OK
+    - ตรวจสอบ `activeUsers`, `newUsers`, `peakHour`, `hourlyUsage` (24 buckets พร้อมรูปแบบ `+07:00`), `range.timezone = "Asia/Bangkok"`, และยืนยันว่าไม่มี PII
+    - แยก Test "DB error propagates" เป็นอีก Subtest หนึ่งที่ยืนยันว่า HTTP 500 ส่งต่อออกมาอย่างถูกต้อง
+    - Fail loud เมื่อ `REQUIRE_INTEGRATION=1` และ DB ไม่พร้อม (ไม่มีการ skip)
+  - **3. Dashboard Honest Error State:**
+    - ปรับปรุง `frontend/components/marketing/sections/DashboardSection.js`
+    - เมื่อ API ล้มเหลว แสดง Error Banner พร้อมปุ่ม Retry, การ์ด KPI แสดง `—` และ `ไม่พร้อมใช้งาน` (ห้ามแสดง 0 หลอก), และกราฟไม่แสดง Empty State
+    - เมื่อกด Retry สำเร็จ สามารถล้าง Error และกลับมาแสดงข้อมูลจริงได้
+    - เมื่อข้อมูลว่างจริง (Empty State) ยังคงแสดงเลข 0 และ Empty State Banner ได้ตามปกติ
+- **Automated Verification Evidence:**
+  - **Backend Unit Tests:** `backend/services/auth-service/src/features/metrics/activityMetrics.test.js` ผ่าน 7/7 tests 100%
+  - **Gateway Cross-Service Tests:** `backend/gateway/src/marketing-analytics.cross-service.test.js` ผ่าน 2/2 tests 100% บน PostgreSQL จริงด้วย `$env:REQUIRE_INTEGRATION="1"`
+  - **PostgreSQL Integration Test:** `backend/services/auth-service/test/user-analytics.integration.test.js` ผ่าน 1/1 suite 100% (0 skips) บน PostgreSQL จริง
+  - **Frontend Client & UI Tests:** ผ่าน 30/30 tests 100% (`DashboardSection.test.js` 20/20 tests, `api.test.js` 10/10 tests)
+  - **Quality Gates:** `npm run lint` ผ่าน (0 errors, 0 warnings), `npm run format:check` ผ่าน (All matched files use Prettier code style!), `git diff --check` ผ่าน (ไม่มีข้อผิดพลาด whitespace)
+
+## 2026-10-05 — Feature: Marketing Audit Trail (Append-Only Audit Log for Campaigns, Auctions, and Articles — Code Review Resolved)
+
+- **Problem & Requirements:**
+  - ฝ่ายการตลาดต้องการระบบบันทึกประวัติการดำเนินงาน (Marketing Audit Trail) ที่โปร่งใสและตรวจสอบย้อนหลังได้ สำหรับการเปลี่ยนแปลงสถานะและการจัดการแคมเปญการตลาด, สินค้าและรอบประมูล, และบทความให้ความรู้
+  - ต้องเป็นระบบ Append-Only อย่างแท้จริง: ห้ามเปิด Client Write/Update/Delete API และไม่มี Business API ให้ผู้ใช้แก้ไขหรือลบบันทึกได้
+  - ต้องผูกการบันทึก Audit Log เข้ากับ Business Mutations ใน Database Transaction เดียวกัน (Atomic Transaction): หาก Audit บันทึกล้มเหลว Business Mutation ต้องถูก Rollback ทั้งหมด; หาก Business Mutation ล้มเหลว จะต้องไม่มี Audit Log ถูกบันทึก
+  - สำหรับเหตุการณ์อัตโนมัติ (Automatic Actions เช่น Auto-expiry, Worker Auction Close) ต้องใช้ Actor `SYSTEM` (`actorId: "SYSTEM"`, `actorRole: "SYSTEM"`) และมี `idempotencyKey` แบบ Deterministic เพื่อป้องกันการบันทึก Audit Log ซ้ำซ้อนกรณีเกิด Worker Retry
+  - ข้อมูล `metadata`, `previousState`, และ `newState` ต้องผ่านการ Sanitize ตัดข้อมูลละเอียดอ่อน (Passwords, Tokens, Secrets, Cookies, API Keys, Credentials) ทั้งหมดอย่างปลอดภัย
+  - ฝั่งฟรอนต์เอนด์ต้องมีแท็บ "ประวัติการดำเนินงาน" ในแดชบอร์ด `/marketing` พร้อมการกรอง, การแบ่งหน้า, การแสดงรายละเอียด, และสถานะการโหลด/ข้อผิดพลาดที่ชัดเจน
+- **Code Review Resolutions:**
+  - **1. Marketing-only Authorization & Admin Decoupling:**
+    - กำหนดสิทธิ์การอ่าน Audit Log (`GET /marketing/audit-logs` และ `/api/products/marketing/audit-logs`) ให้จำกัดเฉพาะบทบาท `MARKETING` เท่านั้น (`requireMarketingAccess`)
+    - บทบาท `BUYER`, `SELLER` และ `ADMIN` ได้รับ HTTP `403 Forbidden` ตามหลักการ Least Privilege และ `MKT-DEC-014`
+    - ป้องกันการ Bypass: Permission `analytics:read:marketing` หรือ `audit:read:marketing` ไม่สามารถทำให้ผู้ใช้บทบาทอื่นเข้าถึงได้
+    - ป้องกัน Identity Spoofing: ผู้ใช้ที่ไม่ผ่านการล็อกอินได้รับ HTTP 401 Unauthorized และการส่ง header `x-user-role` ปลอมแปลงโดยไม่มี Token ได้รับ 403
+    - อัปเดตเอกสารทั้งหมดจาก Marketing/Admin เป็น Marketing-only
+  - **2. SYSTEM Idempotency in PostgreSQL Transactions (No 25P02 Transaction Abort):**
+    - แก้ไขปัญหาการดักจับ Prisma Error `P2002` ภายใน Transaction บล็อก ซึ่งทำให้ PostgreSQL abort transaction ทั้งหมด (`25P02: current transaction is aborted, commands ignored until end of transaction block`) จนไม่สามารถสั่ง `findUnique` ต่อใน Transaction เดิมได้
+    - โซลูชัน: ใช้ `createMany({ data: [{ id: crypto.randomUUID(), ...data }], skipDuplicates: true })` ซึ่งแปลงเป็น SQL `INSERT ... ON CONFLICT DO NOTHING` บน PostgreSQL ทำให้ Transaction ไม่ถูก Abort และสามารถเรียก `findUnique` ดึงเรคอร์ดเดิมกลับมาได้อย่างปลอดภัย 100%
+    - การบันทึก Audit ปกติที่ไม่มี `idempotencyKey` ยังคงใช้ `create` และ Fail Loud ตามปกติ
+  - **3. Bangkok Date Filter & Boundary Contract:**
+    - กำหนด Business Timezone สำหรับ Audit Trail เป็น `Asia/Bangkok` (+07:00)
+    - ฟรอนต์เอนด์ (`convertAuditDateFilter`) แปลงวันที่จากช่องเลือกแบบ inclusive ให้กลายเป็น Half-Open Interval `[from, to)` ในเวลาไทย: `from` คือ 00:00:00+07:00 และ `to` คือ 00:00:00+07:00 ของวันถัดไป (เช่น วันที่เดียวกันครอบคลุม 24 ชม. เต็มวัน)
+    - ฝั่ง Backend ตรวจสอบช่วงวันที่ `from <= to` หากไม่ถูกต้องคืนค่า HTTP 400 Bad Request
+    - คิวรีฐานข้อมูลใช้ `createdAt >= fromDate` และ `createdAt < toDate` (`lt: toDate`) ตรงตามหลัก Half-Open Interval
+  - **4. Duplicate Declarations Removal & Lint Cleanup:**
+    - ลบฟังก์ชันซ้ำซ้อน `deleteCampaign` ใน `campaignRepository.js` และ `getById` ใน `articleModel.js` โดยคงการทำงานเวอร์ชันที่รองรับ `{ tx }` ไว้
+    - แทนที่ตัวแปร Token ให้ถูกต้องในชุดทดสอบ และผ่านการตรวจ `npm run lint` 0 errors, 0 warnings
+  - **5. Integration Test Isolation & Full Lifecycle Coverage:**
+    - กำจัด Fixed +500 days offset ในการสร้าง Test Fixture โดยใช้ `Math.max(Date.now(), maxExistingRoundEnd) + 1h` ป้องกันการชนกับรอบประมูลที่มีอยู่เดิมเมื่อรันซ้ำ
+    - ครอบคลุมการทดสอบครบทุก Domain Action: `CAMPAIGN_REJECT`, automatic `CAMPAIGN_END` by `SYSTEM`, `AUCTION_ITEM_REJECT`, `AUCTION_ITEM_SCHEDULE`, `AUCTION_ITEM_CLOSE`, Atomic Rollback on Audit Failure, Zero Audit on Failed Mutation, Concurrent Retry Deduplication via `Promise.all`, และ Marketing-only RBAC
+- **Automated Verification Evidence:**
+  - **Node.js Environment:** Host Node version `v22.16.0` (รายงานตามสภาพแวดล้อมจริง)
+  - **Audit Unit Tests:** `backend/services/product-service/src/features/audit/marketingAuditService.test.js` ผ่าน 6/6 tests 100% (createMany skipDuplicates idempotency, same-day Bangkok parsing, month boundary, invalid range, pagination bounds, secret sanitizer)
+  - **Audit PostgreSQL Integration Suite:** `backend/services/product-service/test/marketing-audit.integration.test.js` ผ่าน 11/11 tests (1 parent suite + 10 subtests) 100% บน PostgreSQL จริง (`reloop_product`) ด้วย `$env:REQUIRE_INTEGRATION="1"` ปราศจากการ Skip:
+    1. RBAC: Marketing-only authorization, 401 unauth, 403 for Buyer, Seller, Admin, permission bypass prevention, anti-spoofing
+    2. Read-only contract: Client write/update/delete endpoints do not exist (404/405)
+    3. Campaign lifecycle: Atomic mutations for CREATE, UPDATE, SUBMIT, APPROVE, REJECT, PUBLISH, END
+    4. Automatic SYSTEM actions: CAMPAIGN_END and AUCTION_ITEM_CLOSE with deterministic idempotencyKey
+    5. Concurrent retry deduplication: Promise.all creates no duplicate audit and zero 25P02 error
+    6. Transaction atomicity: Audit failure rolls back business mutation, failed mutation creates no audit
+    7. Auction lifecycle: AUCTION_ROUND_CREATE, ITEM_APPROVE, ITEM_REJECT, ITEM_SCHEDULE, ITEM_CANCEL, ITEM_CLOSE
+    8. Article lifecycle: CREATE, UPDATE, PUBLISH, ARCHIVE, DELETE audit
+    9. API Filtering and date range semantics: [from, to) interval, same-day, month boundary, invalid range, pagination
+    10. Sanitizer verification: No secrets present in audit logs or API output
+  - **Regression Integration Tests:**
+    - Campaign Suite (`campaign.integration.test.js`): ผ่าน 11/11 tests 100%
+    - Auction Suite (`auction.integration.test.js`): ผ่าน 11/11 tests 100%
+    - Article Suite (`article.integration.test.js`): ผ่าน 1/1 test 100%
+  - **Frontend UI & Component Tests:**
+    - `frontend/components/marketing/sections/AuditTrailSection.test.js`: ผ่าน 13/13 tests 100% (Render audit log rows, Action badge styles, Filter submissions, Details modal view, Empty state, Error state with retry, Accessible form labels, `convertAuditDateFilter` same-day and multi-day, Date validation error)
+    - `frontend/app/marketing/page.test.js`: ผ่าน 6/6 tests 100%
+    - รวม Frontend Tests: ผ่าน 19/19 tests 100%
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style!)
+    - `git diff --check`: ผ่าน 100% (ไม่มีข้อผิดพลาด whitespace)
+
+## 2026-10-08 — Feature: Campaign Date Validation and Budget Tracking with Auto-End (MKT-DEC-023)
+
+- **Problem & Requirements:**
+  - เดิมแคมเปญสามารถตั้งวันเวลาเริ่มต้นและสิ้นสุดย้อนหลังในอดีตได้ทั้งตอนสร้าง Draft และแก้ไข Draft ทำให้เกิดแคมเปญที่หมดอายุตั้งแต่ยังไม่ได้เผยแพร่ หรือเผยแพร่แคมเปญที่หมดอายุแล้วได้
+  - งบประมาณแคมเปญ (Budget) ไม่มีการนับและควบคุมการใช้งานจริง ทำให้ยอดส่วนลดสะสมเกินเพดานงบประมาณโดยไม่มีการปิดแคมเปญอัตโนมัติ
+  - เมื่อแคมเปญสิ้นสุดลง โค้ดส่วนลดยังคงถูก Claim หรือนำไปใช้งานในคำสั่งซื้อได้ และคูปองสถานะ `CLAIMED` ที่ค้างอยู่ไม่ได้ถูกยกเลิกสิทธิ์
+  - ข้อความแจ้งเตือนทางฝั่งฟรอนต์เอนด์และแบ็กเอนด์ไม่ชัดเจน ขาดการตรวจสอบ min attribute บนช่องเลือกวันเวลา
+- **Implementation Details (MKT-DEC-023):**
+  - **1. Server-Side Date Boundary Validation:**
+    - ตรวจสอบ `endsAt <= now`: ปฏิเสธด้วยข้อความ "ไม่สามารถกำหนดช่วงเวลาที่สิ้นสุดไปแล้วได้ วันเวลาสิ้นสุดต้องอยู่ในอนาคต"
+    - ตรวจสอบ `startsAt < now - 60s`: ปฏิเสธด้วยข้อความ "ไม่สามารถกำหนดวันเวลาเริ่มต้นย้อนหลังในอดีตได้" (อนุญาต clock skew เล็กน้อย 60 วินาที)
+    - ตรวจสอบ `endsAt <= startsAt`: ปฏิเสธด้วยข้อความ "วันเวลาสิ้นสุดต้องอยู่หลังวันเวลาเริ่มต้น"
+    - ใน `updateDraft`: ตรวจสอบการเปลี่ยนวันเวลารวมถึงค่าเดิมและค่าใหม่ โดยตรวจ `endsAt <= now` ก่อน `endsAt <= startsAt` เพื่อแจ้งเตือนการหมดอายุในอดีตอย่างถูกต้อง
+    - ใน `publishCampaign`: ปฏิเสธแคมเปญที่ `endsAt <= now` ด้วยข้อความ "ไม่สามารถเผยแพร่แคมเปญได้เนื่องจากแคมเปญหมดอายุแล้ว" และปฏิเสธหากงบประมาณเต็มแล้ว หาก `startsAt <= now < endsAt` อนุญาตให้แคมเปญมีผลใช้งานได้ทันทีตาม Workflow ที่ Reviewer ยืนยัน (`draft → pending_approval → approved → published → ended/rejected`) โดยไม่เพิ่มสถานะ Scheduled หรือ Live
+  - **2. Budget Tracking from Outbox & Auto-End after Completed Attribution Processing:**
+    - เพิ่มคอลัมน์ `spent_budget` (`spentBudget Int @default(0)`) ใน Prisma Schema สำหรับโมเดล `Campaign`
+    - นิยาม Budget: งบประมาณถูกนับเมื่อ Product Service ประมวลผล completed attribution event (`order.completed.v1`) จาก Transactional Outbox ของ Order Service (ขอบเขตความเป็นจริง: เป็นการ auto-end after completed attribution processing ไม่ใช่ strict real-time hard cap หรือป้องกันยอดเกินงบ 100% เพราะคำสั่งซื้อสุดท้ายอาจดันให้ยอดรวม `spentBudget` เกิน `budget` ได้เล็กน้อยก่อนปิดแคมเปญ)
+    - ใน `recordOrderCompletedEvent`: ดำเนินการภายใน Database Transaction เดียวกันอย่างเป็น Atomic:
+      1. ตรวจสอบ Idempotency ของ Attribution Event ผ่าน Unique Constraint (ไม่นับงบซ้ำเมื่อเกิด Event Retry)
+      2. บันทึก Attribution และเพิ่มยอด `spentBudget` ผ่าน `{ increment: discountAmount }`
+      3. ตรวจสอบเงื่อนไขเพดานงบประมาณ: หาก `spentBudget >= budget` สั่ง auto-end after completed attribution processing เปลี่ยนสถานะ Campaign เป็น `ended` ทันที
+      4. ยกเลิกสิทธิ์ Voucher ค้างใช้: ปรับสถานะ Voucher ที่เป็น `CLAIMED` ทั้งหมดของแคมเปญให้กลายเป็น `EXPIRED`
+      5. บันทึก SYSTEM Audit Log สำหรับการปิดแคมเปญอัตโนมัติ (`action: "CAMPAIGN_END"`, `metadata: { reason: "BUDGET_REACHED" }`) พร้อม Deterministic `idempotencyKey` เพื่อความปลอดภัย
+    - ป้องกันการใช้งานหลัง Budget เต็มหรือแคมเปญ Ended: ปฏิเสธ `claimVoucher` (409), `getApplicableVouchers` (คืน []), `validateDiscount` (400) และ `quoteAndHold` (400) ทันที
+  - **3. Frontend Date & Budget Experience:**
+    - เพิ่ม `min` attribute บนช่องระบุ `startsAt` (เวลาปัจจุบัน) และ `endsAt` (เวลาเริ่มต้นหรือเวลาปัจจุบัน)
+    - เพิ่ม Accessible labels (`aria-label="วันเวลาเริ่มต้น"`, `aria-label="วันเวลาสิ้นสุด"`)
+    - Client-side validation ก่อนส่งข้อมูล พร้อมแสดง Error Alert ภาษาไทยที่ชัดเจน
+    - แสดงสถานะการใช้งบประมาณในแดชบอร์ดแคมเปญ: "ใช้แล้ว ฿{spentBudget} / ฿{budget}" พร้อม Progress Bar แสดงสัดส่วนการใช้งบ
+- **Automated Verification Evidence:**
+  - **Campaign Validation & Budget Unit Tests:** `node --test backend/services/product-service/test/campaignValidation.test.js` ผ่าน 23/23 tests 100%
+  - **Attribution & Budget Metrics Tests:** `node --test backend/services/product-service/test/campaignMetrics.test.js` ผ่าน 14/14 tests 100% (รวม idempotency, retry deduplication, budget exceeded threshold, atomic counter)
+  - **PostgreSQL Integration Tests (`REQUIRE_INTEGRATION=1`):**
+    - `campaign-budget.integration.test.js`: ผ่าน 6/6 tests (1 suite + 5 subtests) 100% (0 skips)
+    - `campaign.integration.test.js`: ผ่าน 11/11 tests 100% (0 skips)
+    - `campaign-attribution.integration.test.js` (product-service): ผ่าน 13/13 tests 100% (0 skips)
+    - `campaign-attribution.integration.test.js` (order-service): ผ่าน 7/7 tests 100% (0 skips)
+  - **Auction Regression Tests:**
+    - `auctionService.test.js`: ผ่าน 53/53 tests 100%
+    - `AuctionScheduleSection.test.js`: ผ่าน 8/8 tests 100%
+  - **Frontend UI Tests:**
+    - `frontend/components/marketing/sections/CampaignsSection.test.js`: ผ่าน 16/16 tests 100% (รวม date min attributes, client-side validation alerts, budget progress rendering)
+  - **Environment & Quality Gates:**
+    - Node.js Runtime: `v22.16.0` (Host)
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `git diff --check`: ผ่าน 100%
+  - **Schema/ER Status:** เพิ่มคอลัมน์ `spent_budget` ในตาราง `campaigns` เรียบร้อยแล้ว แต่ **ER Diagram update pending** (รออัปเดตไฟล์ภาพ/เอกสารสถาปัตยกรรมระดับภาพรวม `docs/erdatabase.png` / `docs/S2G5_RE-LOOP_ISE.md`) ห้ามถือว่าปิดเอกสารครบ 100% จนกว่าจะอัปเดตแผนภาพ ER
+
+## 2026-10-09 — Feature: Auction Round Categories & Atomic Product/AuctionItem Creation (MKT-DEC-024 Code Review Resolved)
+
+- **Problem & Requirements:**
+  - เดิมตาราง `AuctionRound` เปิดรับสินค้าทุกประเภทโดยไม่สามารถจำกัดหมวดหมู่ที่เหมาะสมกับรอบการตลาดแต่ละรอบได้
+  - หน้าส่งสินค้าประมูลของผู้ขาย (`/seller/auctions`) ขาดการตรวจสอบหมวดหมู่ ราคาเริ่มต้น ราคาเสนอเพิ่ม และสิทธิ์ KYC ล่วงหน้าก่อนสร้างสินค้า
+  - Flow การลงสินค้าใหม่เข้าประมูลสร้าง `Product` แยกต่างหากจาก `AuctionItem` ทำให้เกิดความเสี่ยงที่ `Product` สถานะ `auction` จะตกค้างในฐานข้อมูลหากขั้นตอนถัดไปล้มเหลว
+  - ขาดการตรวจสอบความสอดคล้องระหว่างหมวดหมู่ของสินค้าที่มีอยู่เดิมกับหมวดหมู่ที่รอบเปิดรับ
+  - ความเสี่ยงของการหมดเวลาระหว่างการตรวจสอบก่อนทำรายการ (Pre-validation) กับขั้นตอนเขียนฐานข้อมูล
+- **Implementation Details (MKT-DEC-024):**
+  - **1. Auction Round Category Configuration:**
+    - เพิ่มคอลัมน์ `categories String[] @default([])` ในโมเดล `AuctionRound` (`reloop_product`) และรัน `prisma db push`
+    - ฝ่ายการตลาดเลือกได้ว่าจะรับ "ทุกหมวดหมู่" (`categories: []`) หรือ "เลือกเฉพาะบางหมวดหมู่" (`categories: [...]`)
+    - โหลดรายการหมวดหมู่แบบ Dynamic จาก `Category` table เดิมของ Product Service (`GET /api/products/categories`) ห้าม Hardcode และห้ามสร้างตาราง Category ซ้ำ
+    - Backend ตรวจสอบหมวดหมู่ที่ส่งมาว่ามีอยู่ในตาราง `Category` จริงทุกตัวก่อนบันทึก
+    - ข้อมูลรอบประมูลเดิมที่ไม่มีค่าหมวดหมู่ ตีความเป็น "ทุกหมวดหมู่" เสมอ (Backward Compatible 100%)
+    - แสดงหมวดหมู่ที่เปิดรับในการ์ดรอบปัจจุบันและตารางประวัติรอบทั้งหมด
+  - **2. Pre-creation Validation & Shared Validation Service (Flow B):**
+    - ย้ายตรรกะการตรวจสอบสินค้า (`requireSellerRole`, `requireVerifiedSeller`, `validateCreateRequest`, `requireValidMediaCount`, `requireKnownCondition`) ไปยังโมดูลกลาง `backend/services/product-service/src/services/productValidation.js` เพื่อกำจัด Dependency ย้อนทิศทาง (Controller -> Service -> Repository)
+    - ปรับ Flow ผู้ขายให้ส่ง Request เดียวแบบ Atomic ไปยัง `POST /api/products/auctions`
+    - Backend ตรวจสอบก่อนสร้าง Product:
+      1. ตรวจสอบสิทธิ์ผู้ขายและ KYC (`requireVerifiedSeller`)
+      2. ตรวจสอบว่ามีรอบประมูลที่กำลังเปิดรับสินค้า (`findActiveSubmissionRound`)
+      3. ตรวจสอบหมวดหมู่ที่ผู้ขายเลือกมีอยู่จริงในตาราง `Category`
+      4. ตรวจสอบรอบประมูลเปิดรับหมวดหมู่นี้ (`isCategoryAllowedInRound`)
+      5. ตรวจสอบราคาเริ่มต้น (`startingPrice`) และราคาเสนอเพิ่มขั้นต่ำ (`bidIncrement`) เป็นจำนวนเต็มบวก
+      6. ตรวจสอบข้อมูลสินค้าพื้นฐาน (`validateCreateRequest`)
+      7. ตรวจสอบเงื่อนไขสภาพสินค้า (`requireKnownCondition`)
+      8. ตรวจสอบจำนวนรูปภาพสื่อ 4-8 รูป (`requireValidMediaCount`)
+    - หากข้อใดไม่ผ่าน ปฏิเสธทันทีด้วย HTTP 400/403 พร้อม Error ภาษาไทยที่อ่านเข้าใจง่าย โดยไม่สร้าง Product และไม่สร้าง AuctionItem
+  - **3. Atomic Database Transaction & In-Transaction Re-check:**
+    - สร้าง `Product` (`status: "auction"`) และ `AuctionItem` (`status: "pending_approval"`, เชื่อมโยง `product.id`, `round.id`, และ `sellerId`) ภายใน PostgreSQL `$transaction` เดียวกัน
+    - โหลด `AuctionRound` ซ้ำผ่าน Transaction Client (`tx`) ภายใน Database Transaction เพื่อตรวจซ้ำว่ารอบยังไม่หมดเวลาและยังเปิดรับหมวดหมู่สินค้าในขณะที่ Commit
+    - หากขั้นตอนใดล้มเหลว Rollback ทั้งหมดทันที ป้องกันข้อมูลสำเร็จครึ่งเดียวค้างในฐานข้อมูล
+  - **4. Flow A (Existing Product Backward Compatibility):**
+    - รักษา Endpoint และ Backward Compatibility สำหรับการส่งสินค้าเดิมด้วย `productId`
+    - ตรวจสอบสิทธิ์ความเป็นเจ้าของและสถานะสินค้า (`available`/`auction`)
+    - ตรวจสอบ `product.category` จากฐานข้อมูลจริงเทียบกับหมวดหมู่ที่รอบเปิดรับ (เพิกเฉยต่อ Category ที่ Client ส่งมา)
+    - ตรวจสอบรอบซ้ำภายใน Transaction เช่นเดียวกัน
+  - **5. Test Fixture Isolation & Safe Cleanup:**
+    - Integration Tests จัดการเฉพาะ Fixture ที่ Test Suite ตัวเองสร้างขึ้น (`createdBidIds`, `createdAuctionIds`, `createdProductIds`, `createdRoundIds`) โดยไม่ใช้ `updateMany` กับรอบของระบบภายนอก
+    - ตรวจสอบความสะอาดหลังการทดสอบ (Cleanup Verification Assertions) ให้คงเหลือ 0 รายการ
+- **Automated Verification Evidence:**
+  - **Host Node.js Version:** `v22.16.0`
+  - **Auction Service Unit Tests:** `backend/services/product-service/src/features/auctions/auctionService.test.js` ผ่านครบ 68/68 tests 100%
+  - **PostgreSQL Integration Tests (`REQUIRE_INTEGRATION=1`):**
+    - `auction.integration.test.js`: ผ่านครบ 17/17 tests (1 suite + 16 subtests รวม Step 11-16: Atomic creation, Atomic rollback, Category/KYC pre-validation, Flow A DB category check, Backward compatibility, และ In-Transaction Round Expiration Rollback) บน PostgreSQL และ Redis จริง 100% ปราศจากการ Skip
+  - **Frontend UI & Component Tests:**
+    - `AuctionScheduleSection.test.js`: ผ่านครบ 11/11 tests 100%
+    - `app/seller/auctions/page.test.js`: ผ่านครบ 5/5 tests 100%
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `git diff --check`: ผ่าน 100%
+    - `npm run secret-scan`: ผ่าน 100% (0 potential secrets)
+  - **Schema/ER Status:** เพิ่มคอลัมน์ `categories` ในตาราง `auction_rounds` เรียบร้อยแล้ว แต่ **ER Diagram update pending** (รออัปเดตไฟล์ภาพ/เอกสารสถาปัตยกรรมระดับภาพรวม `docs/erdatabase.png` / `docs/S2G5_RE-LOOP_ISE.md`)
+
+## 2026-10-09 — UX Improvement: Marketing Auction Review Modal & Easy Return Navigation
+
+- **Requirement & Problem:**
+  - ฝ่ายการตลาดต้องการตรวจสอบรายละเอียดและรูปภาพสินค้าก่อนกดอนุมัติเข้าประมูล (`pending_approval`) โดยเดิมมีเพียงปุ่มอนุมัติและปฏิเสธทันที และลิงก์ชื่อสินค้าพาผู้ใช้ออกจากหน้า Marketing ไปยัง `/products/[id]` ซึ่งไม่มีทางกลับมายัง Section ประมูลของ Marketing โดยตรง ทำให้หลุด Flow และสูญเสียตัวกรองสถานะ (`statusFilter`)
+  - RE-LOOP ใช้งานผ่าน Web Browser บนคอมพิวเตอร์เท่านั้น (Laptop 1024×768, Laptop 1366×768, Desktop 1440×900, Large Desktop 1920×1080) ไม่รองรับ Mobile หรือ Tablet ต่ำกว่า 1024px
+- **UX & Frontend Implementation:**
+  - สร้างคอมโพเนนต์ `frontend/components/marketing/sections/AuctionReviewModal.js`
+  - เพิ่มปุ่ม "ตรวจสอบสินค้า" ในรายการประมูลสถานะ `pending_approval` บนหน้า `AuctionScheduleSection.js`
+  - เมื่อคลิก จะเปิด Modal ภายในหน้า Marketing เดิมโดยไม่เปลี่ยน URL route และไม่ reload หน้าเว็บ
+  - Modal แสดงข้อมูลจริงจาก Auction list response:
+    - รูปสินค้าทั้งหมด เรียงตาม `position` พร้อม Main Image (สัดส่วน `object-contain` ไม่บิดเบี้ยว) และ Thumbnails ให้คลิกสลับดูรูปได้
+    - หากไม่มีรูป แสดงกล่อง Placeholder "ไม่มีรูปสินค้า"
+    - ชื่อสินค้า, รายละเอียดสินค้า, หมวดหมู่, แบรนด์, สภาพสินค้า, ขนาด, ราคาเริ่มต้น, ราคาเสนอเพิ่มขั้นต่ำ, ชื่อรอบประมูล, สถานะรายการประมูล
+    - หากข้อมูลฟิลด์ใดเป็น null/undefined แสดง "ไม่ระบุ" ป้องกันข้อผิดพลาดของ UI
+  - การปิด Modal: ปิดได้ผ่านปุ่มปิดมุมขวาบน, ปุ่ม "กลับไปหน้ารายการประมูล", และปุ่ม Escape โดยคืนสถานะเดิมและรักษา `statusFilter` 100%
+  - Action Controls: ปุ่ม "อนุมัติสินค้าเข้าประมูล" และ "ปฏิเสธ" ภายใน Modal เรียก Handler กลางชุดเดียวกับปุ่มในรายการเดิม (`apiFetch` PATCH approve/reject)
+  - Submitting & Error Handling: ปิดการกดซ้ำ (Disable buttons), แสดงสถานะ "กำลังอนุมัติ..." หรือ "กำลังปฏิเสธ...", ห้ามปิด Modal ขณะส่งคำขอ, และหาก API ล้มเหลว Modal ยังเปิดอยู่พร้อมแสดงข้อความแจ้งเตือนภาษาไทยที่เข้าใจง่าย ไม่ leak stack trace หรือ technical terms
+  - Layout & Accessibility: จัด Layout 2 คอลัมน์บนหน้าจอ Desktop, มีระยะห่างที่เหมาะสม, ออกแบบ Layout เพื่อไม่ให้เกิด Horizontal Scroll ตั้งแต่ 1024px ขึ้นไป, รองรับ Scroll แนวตั้งภายใน Modal, ใช้ `role="dialog"`, `aria-modal="true"`, accessible name, และคืน Focus สู่ปุ่มเปิดเมื่อปิด Modal
+  - Clean Code & Presentation Sharing: แยก Presentation Constants และ Formatter ที่ใช้ร่วมกันเป็นโมดูลขนาดเล็ก `auctionPresentation.js` (`STATUS_LABEL`, `STATUS_STYLE`, `baht`) ลดความซ้ำซ้อนระหว่าง `AuctionScheduleSection.js` และ `AuctionReviewModal.js`
+- **Automated Verification Evidence:**
+  - **Frontend Component Tests:**
+    - `AuctionScheduleSection.test.js`: เพิ่มชุดทดสอบใหม่ 18 รายการ รวมเป็นผ่านครบ **29/29 tests 100%** (ครอบคลุมปุ่มตรวจสอบ, การเปิด-ปิด Modal, Gallery รูปภาพ, การเลือก Thumbnail, การปิดด้วย Escape/ปุ่มกลับ/ปุ่มปิด, การคง Status Filter, การอนุมัติ/ปฏิเสธจาก Modal, การ Disable ปุ่มขณะส่งคำขอ, Error ภาษาไทย, Fallback เมื่อไม่มีรูป, และ Regression ของปุ่มในรายการเดิม)
+    - Frontend Test Suite รวมทั้ง Monorepo: ผ่านครบ **50/50 suites (328/328 tests passing 100%)**
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npx prettier --check`: ผ่าน 100%
+    - `git diff --check`: ผ่าน 100%
+- **Scope & Device Constraints:**
+  - ระบบรองรับและออกแบบสำหรับ Web Browser บนคอมพิวเตอร์และ Laptop เท่านั้น (1024px ขึ้นไป) ไม่รองรับ Mobile หรือ Tablet ต่ำกว่า 1024px
+  - **Browser E2E / Responsive Verification:** ยืนยันผ่าน Automated Component Tests ครบถ้วน แต่ยังไม่ได้ยืนยันผ่าน Browser จริง หรือยืนยัน Responsive บนหน้าจอจริง เพราะ `localhost:8080` ไม่ได้รันในสภาพแวดล้อมนี้ และไม่ถือว่า Responsive/Browser E2E ผ่านจนกว่าจะเปิดตรวจบน Browser จริง
+  - ไม่มีการเปลี่ยนแปลง Backend, Database Schema หรือเพิ่ม API Endpoint ใหม่ (Frontend-only improvement)
+
+## 2026-10-09 — Concurrent Auction Rounds & Explicit Round Selection (MKT-DEC-025)
+
+- **Context & Requirement:**
+  - ยกเลิกข้อจำกัด Cross-round Overlap Protection ตามมติ MKT-DEC-025 เพื่อให้ฝ่ายการตลาดสามารถสร้างรอบประมูลที่คาบเกี่ยวหรือทับซ้อนเวลากันได้ทุกกรณี
+  - พัฒนาระบบการเลือกรอบแบบชัดแจ้ง (Explicit Round Selection) สำหรับผู้ขายและผู้ซื้อ โดยระบบต้องไม่ผูกรอบหรือเปลี่ยนหน้าอัตโนมัติ
+  - รองรับการแยกสินค้าในแต่ละรอบ (Round Item Isolation) อย่างสมบูรณ์
+- **Backend Implementation:**
+  - `backend/services/product-service/src/features/auctions/auctionRepository.js`:
+    - ปลด Cross-round overlap conflict check (`findConflictingRound`, `withRoundLock`, `findActiveSubmissionRound` และ `findCurrentRound` ถูกลบออกจาก Production Code แล้ว)
+    - เพิ่ม `findActiveSubmissionRounds(now)`, `findActiveAuctionRounds(now)`, `findUpcomingRounds(now)`
+    - เพิ่ม `findRoundWithItems(roundId)` (กรองเฉพาะสถานะ `open` และ `scheduled`)
+  - `backend/services/product-service/src/features/auctions/auctionService.js`:
+    - `createRound`: สร้างรอบและ `MarketingAuditLog` (`AUCTION_ROUND_CREATE`) ร่วมกันแบบ Atomic Transaction
+    - `getCurrentRound`: ส่งคืน `{ round, phase, isSubmissionOpen, isAuctionActive, activeSubmissionRounds, activeAuctionRounds, nextRound }`
+    - `submit`: บังคับ `input.roundId` (ขาดส่งตอบ 400 Bad Request `"กรุณาเลือกรอบประมูลก่อนส่งสินค้าเข้าร่วม"`), ตรวจสอบรอบมีอยู่จริง (400), ยังไม่เปิดรับ (400), หรือปิดรับแล้ว (400), พร้อม re-verify รอบใน Transaction Client (`tx`)
+    - เพิ่ม `browseRounds()`, `getRound(roundId)`, และ `listRoundItems(roundId)` (มี lifecycle reconciliation ผ่าน `maybeAdvance` และกรองเฉพาะ visible items)
+  - `backend/services/product-service/src/features/auctions/auctionController.js` & `auctionRoutes.js`:
+    - เพิ่ม Endpoints: `GET /rounds/browse`, `GET /rounds/:roundId`, `GET /rounds/:roundId/items`
+  - `backend/gateway/src/app.js`:
+    - อัปเดต `PUBLIC_PATHS` ให้ครอบคลุม `/^\/api\/products\/auctions(\/.*)?$/` เพื่อให้ Public สามารถ browse รอบและดูสินค้าในรอบได้
+- **Frontend Implementation (Desktop Web):**
+  - `frontend/app/seller/auctions/page.js`:
+    - แสดง Round Cards สำหรับทุกรอบใน `activeSubmissionRounds` พร้อมปุ่ม "เลือกรอบนี้" ชี้ไปที่ `/seller/auctions/submit?roundId=${round.id}`
+    - แสดง Empty State เมื่อไม่มีรอบเปิดรับพร้อมปุ่มโหลดใหม่ และแสดงประวัติสินค้าของผู้ขาย (`myAuctions`)
+  - `frontend/app/seller/auctions/submit/page.js`:
+    - ตรวจสอบ `roundId` จาก Query Parameter (ครอบด้วย `<Suspense>`)
+    - หากขาด `roundId` หรือรอบปิดรับ แสดงข้อความแจ้งเตือนและปุ่ม "เปลี่ยนรอบประมูล" และซ่อนแบบฟอร์มลงสินค้า
+    - หากเลือกรอบถูกต้อง แสดงแบนเนอร์ข้อมูลรอบที่เลือก พร้อมปุ่ม "เปลี่ยนรอบประมูล" และส่ง `roundId` ใน Request Payload
+  - `frontend/app/auctions/page.js`:
+    - หน้ารวมรอบประมูลสำหรับผู้ซื้อ แสดงรอบที่กำลังประมูลและรอบเร็วๆ นี้อย่างชัดเจน ห้าม Auto-navigate แม้มีรอบเดียว
+    - มี Empty State เมื่อไม่มีรอบประมูล
+  - `frontend/app/auctions/rounds/[roundId]/page.js`:
+    - แสดงข้อมูลรอบ, ปุ่มกลับหน้ารวมรอบ, ปุ่ม "เปลี่ยนรอบประมูล" (Round Switcher Popover พร้อมปุ่ม "ลองใหม่" เมื่อโหลดล้มเหลว และข้อความแจ้งเตือนเมื่อไม่มีรอบอื่น) รองรับ Escape key, และรายการสินค้าเฉพาะรอบนี้แยกกลุ่ม "กำลังประมูล" และ "เร็วๆ นี้"
+  - `frontend/app/auctions/[id]/page.js`:
+    - แสดงชื่อรอบที่สินค้าสังกัด และลิงก์ "← กลับไปดูสินค้าทั้งหมดในรอบนี้" ชี้ไปยัง `/auctions/rounds/${auction.roundId}`
+  - `frontend/components/marketing/sections/AuctionScheduleSection.js`:
+    - ปรับปรุงข้อความหัวเรื่องให้สอดคล้องกับ MKT-DEC-025 แสดงหลายรอบพร้อมกัน และรองรับการสร้างรอบที่ทับซ้อนเวลาได้
+- **Automated Verification Evidence:**
+  - **Host Node.js Version:** `v22.16.0` บนสภาพแวดล้อมจริง (ห้ามอ้างว่ารัน Final Regression บน Node 24)
+  - **Backend Unit Tests:** `backend/services/product-service/src/features/auctions/auctionService.test.js` ผ่านครบ **77/77 tests 100%**
+  - **PostgreSQL Integration Tests (`REQUIRE_INTEGRATION=1`):**
+    - `auction.integration.test.js`: ผ่านครบ **18/18 tests (1 suite + 17 subtests)** บน PostgreSQL และ Redis จริง 100% ปราศจากการ Skip ครอบคลุม Step 1-17 (รวมถึง Step 10 Overlap Allowed/Concurrent 201s, และ Step 17 Multi-Round Overlap, Explicit Selection, Item Isolation, และ Independent Bidding)
+  - **Frontend Component Tests:**
+    - `app/auctions/[id]/page.test.js` (4/4 passed)
+    - `app/auctions/page.test.js` (5/5 passed)
+    - `app/seller/auctions/page.test.js` (5/5 passed)
+    - `app/auctions/rounds/[roundId]/page.test.js` (7/7 passed)
+    - `app/seller/auctions/submit/page.test.js` (5/5 passed)
+    - `components/marketing/sections/AuctionScheduleSection.test.js` (26/26 passed)
+    - รวม Frontend Tests ที่เกี่ยวข้อง: **6 suites, 52/52 tests passed 100%**
+    - Frontend ทั้งหมดในระบบ: **54 suites, 346/346 tests passed 100%**
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npm run format:check`: ผ่าน 100%
+    - Production Build (`next build`): ผ่าน 100%
+    - `git diff --check`: ผ่าน 100%
+- **Scope & Device Constraints:**
+  - รองรับเฉพาะ Web Browser บนคอมพิวเตอร์และ Laptop เท่านั้น (ความกว้างตั้งแต่ 1024px ขึ้นไป ได้แก่ 1024×768, 1366×768, 1440×900, 1920×1080) ไม่ทำ Mobile UI หรือ Mobile Flow
+  - **Browser E2E / Responsive Verification:** ยืนยันผ่าน Automated Component Tests (JSDOM) และ Integration Tests ครบถ้วน แต่ยังไม่ได้ยืนยันผ่าน Browser จริง หรือยืนยัน Responsive บนหน้าจอจริง เพราะ `localhost:8080` ไม่ได้รันในสภาพแวดล้อมนี้
+  - MKT-DEC-025 ไม่มีการเพิ่ม Schema หรือ Migration ใหม่ (การเปลี่ยนแปลง Schema ใน Working Tree เป็นของงาน MKT-DEC-024 เดิม)
+
+## 2026-10-10 — MKT-DEC-026: Auction Item & Round Cancellation, Seller Recovery Lifecycle, Read-Only Chat Notification & Round Filter in Marketing Approval
+
+- **Decision ID:** MKT-DEC-026
+- **Status:** Complete & Verified
+- **Action Separation (3 Distinct Actions):**
+  - **Reject Auction Item (`ปฏิเสธสินค้า`)**: เฉพาะรายการ `pending_approval` เท่านั้น ใช้ปุ่ม `"ปฏิเสธสินค้า"` และ Flow ปฏิเสธเดิม
+  - **Cancel Auction Item (`ยกเลิกรายการประมูล` — `PATCH /api/products/auctions/:id/cancel`)**: สำหรับรายการที่อนุมัติแล้ว (`approved`, `scheduled`, `open`) ยกเลิกเฉพาะรายการที่เลือก รายการอื่นในรอบดำเนินต่อได้ตามปกติ ต้องกรอกเหตุผล (1–500 ตัวอักษร) ห้ามยกเลิกถ้ามี `winningOrderId` ปรับ `AuctionItem` เป็น `cancelled` และ `Product` เป็น `auction_action_required` บันทึก `MarketingAuditLog` (`AUCTION_ITEM_CANCEL`) และแจ้งเตือนผ่านห้องแชท `"ระบบฝ่ายการตลาด"`
+  - **Cancel Auction Round (`ยกเลิกรอบประมูล` — `PATCH /api/products/auctions/rounds/:roundId/cancel`)**: ยกเลิกรายการที่ยัง Active ทุกรายการในรอบ ปรับ `Product` เป็น `auction_action_required` บันทึก `MarketingAuditLog` (`AUCTION_ROUND_CANCEL`) และแจ้งเตือนผู้ขายทุกคนในรอบรวมถึงผู้ซื้อที่เคยประมูลเมื่อยกเลิกระหว่างกำลังประมูล
+- **Backend & Database Implementation:**
+  - `backend/services/product-service/prisma/schema.prisma` (ซิงก์ลง PostgreSQL `reloop_product` จริงผ่าน `prisma db push`):
+    - เพิ่มคอลัมน์ `cancellationReason String?`, `cancelledAt DateTime?`, `cancelledBy String?` ทั้งใน `AuctionRound` และ `AuctionItem`
+    - นำ `@unique` ออกจาก `AuctionItem.productId` เปลี่ยนเป็น `@@index([productId])` รองรับประวัติสินค้าหลายรอบ
+    - รองรับสถานะ `auction_action_required` ใน `ProductStatus`
+  - `backend/services/chat-service/prisma/schema.prisma` (ซิงก์ลง MongoDB `reloop_chat` จริงผ่าน `prisma db push`):
+    - เพิ่ม `@unique` บน `Message.idempotencyKey` เพื่อรับประกันความไม่ซ้ำของข้อความในระดับฐานข้อมูล
+  - `backend/services/product-service/src/features/auctions/auctionRepository.js` & `auctionService.js`:
+    - `withRoundMutationLock(roundId, fn, { productId })`: ใช้ lock key เดียวกับ `withRoundLock(roundId)` (`hashtext(roundId)`) สำหรับ `submit` ทั้ง Flow A (ล็อกตามลำดับ `Round Lock -> Product Lock` เสมอ) และ Flow B พร้อมอ่าน `AuctionRound` ใหม่ใน `tx` เพื่อป้องกันการสร้าง `Product` หรือ `AuctionItem` ในรอบที่เพิ่งถูกยกเลิก
+    - `withRoundLock(roundId)`: ล็อกระดับรอบประมูลและล็อก `AuctionItem` ทุกรายการในรอบเรียงตาม `id ASC` (`pg_advisory_xact_lock`) เพื่อป้องกัน Race Condition กับ `submit`, `placeBid`, `closeAuction`, และ `cancel` รายสินค้า
+    - `withAuctionLock(auctionId)`: ใช้ใน `cancel` (รายสินค้า), `placeBid`, และ `closeAuction` (ซึ่งอ่านสถานะ `AuctionItem` และ `AuctionRound` ซ้ำภายใน lock เพื่อป้องกันการสร้าง Winner Order บนรายการหรือรอบที่ถูกยกเลิกไปแล้ว)
+    - `withProductLock(productId)`: ใช้ใน `submit` (Flow A) และ `productController.relistAvailable` (Flow B) ป้องกันการส่งสินค้าซ้ำหรือกู้คืนซ้ำพร้อมกัน
+    - `browseRounds` & `findUpcomingRounds`: ส่ง `{ includeCancelled: true }` เพื่อให้รอบ Upcoming ที่ถูกยกเลิกยังคงแสดงจนถึง `auctionEndsAt` เดิม
+  - `backend/services/product-service/src/features/auctions/chatClient.js` & `backend/services/chat-service/`:
+    - ส่งแจ้งเตือนผ่าน `notifyItemCancelled` และ `notifyRoundCancelled` ด้วยผู้ส่ง `"system-marketing"` (`"ระบบฝ่ายการตลาด"`) ในห้อง 1-on-1 `AUCTION:${roundId}:${userId}` พร้อม `idempotencyKey`
+    - เรียก `messageModel.createAndTouch` โดยตรงและดักจับ Unique Conflict (`P2002`/`P2034`) คืนข้อความเดิม (`findByIdempotencyKey`, HTTP 200)
+    - รองรับการเรียก `cancel` และ `cancelRound` ซ้ำบนรายการ/รอบที่ยกเลิกแล้วแบบ Idempotent เพื่อส่งแจ้งเตือนแชทที่ค้างอยู่โดยไม่เปลี่ยนสถานะซ้ำและไม่สร้าง `MarketingAuditLog` ซ้ำ
+    - บังคับห้องแชท `AUCTION` เป็น Read-Only (`403 Forbidden` ใน `messageService.js` และ `attachmentService.js`)
+- **Frontend Implementation (Desktop Web):**
+  - `frontend/components/marketing/sections/AuctionScheduleSection.js` & `AuctionReviewModal.js`:
+    - เพิ่ม `roundFilter` DropdownFilter ค่าเริ่มต้น `"ทุกรอบประมูล"` พร้อมแสดงข้อความแจ้งเตือนภาษาไทยเมื่อโหลดรอบประมูลไม่สำเร็จ
+    - แยกปุ่ม `"ปฏิเสธสินค้า"` (`pending_approval`), `"ยกเลิกรายการประมูล"` (`approved`, `scheduled`, `open`), และ `"ยกเลิกรอบประมูล"` ออกจากกันชัดเจน
+    - เพิ่ม Confirmation Modal ทั้งสำหรับการยกเลิกรายสินค้าและการยกเลิกทั้งรอบ พร้อมตรวจสอบเหตุผลและป้องกัน Double Submit
+    - แสดงแบนเนอร์เตือนพร้อมปุ่ม `"ลองส่งแจ้งเตือนอีกครั้ง"` เมื่อเกิด `chatWarnings`
+  - `frontend/app/auctions/page.js`, `frontend/app/auctions/rounds/[roundId]/page.js`, `frontend/app/auctions/[id]/page.js`:
+    - แสดงรายการและรอบที่ถูกยกเลิก (ทั้ง Active และ Upcoming) จนถึง `auctionEndsAt` เดิม และซ่อนเมื่อพ้น `auctionEndsAt` พร้อมป้ายสถานะ `"ยกเลิกแล้ว"` / `"รอบประมูลถูกยกเลิก"`, แสดงเหตุผลการยกเลิก และซ่อน/ปิดปุ่มประมูล
+  - `frontend/app/seller/auctions/page.js` & `submit/page.js`:
+    - แสดงเหตุผลการยกเลิกและรองรับ Seller Recovery Lifecycle ทั้ง Flow A (ส่งเข้ารอบประมูลใหม่) และ Flow B (นำกลับไปขายแบบปกติด้วยราคาขายใหม่จำนวนเต็มบวก > 0)
+  - `frontend/lib/chat.js`, `frontend/components/chat/ConversationRow.js`, `frontend/app/chat/[id]/page.js`:
+    - แสดงชื่อห้อง `"ระบบฝ่ายการตลาด"`, ซ่อนช่องพิมพ์ข้อความและปุ่มแนบไฟล์ พร้อมแสดงแถบแจ้งเตือน `"ห้องสนทนานี้ใช้สำหรับรับการแจ้งเตือนจากระบบฝ่ายการตลาดเท่านั้น ไม่สามารถตอบกลับได้"`
+- **Automated Verification Evidence:**
+  - **Environment:** Node.js `v22.16.0` บน Windows
+  - **Backend Unit Tests (0 fail, 0 skip):**
+    - `backend/services/product-service/src/features/auctions/auctionService.test.js`: ผ่านครบ **102/102 tests 100%**
+    - `backend/services/product-service/src/controllers/productRelist.test.js`: ผ่านครบ **5/5 tests 100%**
+    - `backend/services/chat-service/src/features/conversations/contextKey.test.js`: ผ่านครบ **9/9 tests 100%**
+    - `backend/services/chat-service/src/features/internal/internalController.test.js`: ผ่านครบ **5/5 tests 100%**
+    - `backend/services/chat-service/src/features/messages/messageModel.test.js`: ผ่านครบ **4/4 tests 100%**
+    - `backend/services/chat-service/src/features/attachments/attachmentService.test.js`: ผ่านครบ **4/4 tests 100%**
+  - **PostgreSQL & Redis Integration Tests (`REQUIRE_INTEGRATION=1`):**
+    - `backend/services/product-service/test/auction.integration.test.js`: ผ่านครบ **22/22 tests (1 suite + 21 steps) 100% (0 fail, 0 skip)**
+  - **Chat MongoDB & Cross-Service Integration Tests (`REQUIRE_INTEGRATION=1`):**
+    - `backend/services/chat-service/test/internal-api.integration.test.js`: ผ่านครบ **17/17 tests (1 suite + 16 subtests) 100% (0 fail, 0 skip)**
+  - **Frontend Tests (Jest):**
+    - `npm --prefix frontend test -- --watchAll=false`: ผ่านครบ **54/54 suites, 359/359 tests 100% (0 fail, 0 skip)**
+  - **Quality Gates:**
+    - `npm run lint`: ผ่าน 100% (0 errors, 0 warnings)
+    - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style)
+    - Production Build (`next build`): ผ่าน 100%
+    - `git diff --check`: ผ่าน 100%

@@ -18,8 +18,18 @@ function optionalText(value, fieldName) {
   return value.trim();
 }
 
-function listFeed({ skip, take }) {
-  return productVideoRepository.listAvailable({ skip, take });
+function isBuyer(user) {
+  if (!user) return false;
+  const roles=[...new Set([user.role,...(user.roles || [])].filter(Boolean))];
+  return roles.length>0 && roles.every(role=>["BUYER","SELLER"].includes(role)) && !["SUSPENDED","RESTRICTED_BUYER","RESTRICTED_ALL_COMMERCE"].includes(user.status);
+}
+
+function listFeed({ skip, take, userId }) {
+  return productVideoRepository.listAvailable({
+    skip,
+    take,
+    ...(userId ? { userId } : {}),
+  });
 }
 
 /**
@@ -60,6 +70,10 @@ async function createClip({ user, input = {} }) {
  * same card again just confirms the existing choice instead of erroring.
  */
 async function chooseClip({ user, productVideoId }) {
+  if (!isBuyer(user)) {
+    throw forbidden("only buyer accounts can choose swipe cards");
+  }
+
   const clip = await productVideoRepository.findById(productVideoId);
   if (
     !clip ||
@@ -69,16 +83,25 @@ async function chooseClip({ user, productVideoId }) {
     throw notFound("swipe card not found");
   }
 
-  return productVideoRepository.upsertChoice({
+  const choice = await productVideoRepository.upsertChoice({
     productVideoId,
     userId: user.id,
   });
+
+  return {
+    ...choice,
+    chosen: true,
+  };
 }
 
 /**
  * Removes a buyer's "interested" bookmark on one clip (unlike/unchoose).
  */
 async function unchooseClip({ user, productVideoId }) {
+  if (!isBuyer(user)) {
+    throw forbidden("only buyer accounts can unchoose swipe cards");
+  }
+
   const clip = await productVideoRepository.findById(productVideoId);
   if (
     !clip ||

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  conversationDisplayName,
   hasUnread,
   otherParticipant,
   participantRoleLabel,
@@ -38,8 +39,11 @@ export default function ConversationRow({
   onSelect,
 }) {
   const other = otherParticipant(conversation, currentUserId);
-  const otherName = other?.displayName || "ผู้ใช้";
-  const roleLabel = participantRoleLabel(other?.role);
+  const otherName = conversationDisplayName(conversation, currentUserId);
+  const roleLabel = participantRoleLabel(
+    other?.role,
+    conversation?.contextType,
+  );
   const unread = !isActive && hasUnread(conversation, currentUserId);
 
   const timeFormatted = formatConversationTime(conversation.lastMessageAt);

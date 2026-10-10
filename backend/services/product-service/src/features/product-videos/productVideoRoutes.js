@@ -10,8 +10,22 @@ const productVideoController = require("./productVideoController");
 
 const router = Router();
 
+function optionalAuth(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) {
+    req.userId = null;
+    req.userRole = null;
+    req.userRoles = [];
+    return next();
+  }
+
+  // When Authorization is present, verify JWT and session via trusted auth middleware
+  return requireAuth(req, res, next);
+}
+
 // GET /videos/feed is public so guests can discover products.
-router.get("/feed", productVideoController.listFeed);
+router.get("/feed", optionalAuth, productVideoController.listFeed);
 
 // The clip file is written by product-service into its uploads directory.
 // Docker mounts that directory to the persistent product_uploads volume.

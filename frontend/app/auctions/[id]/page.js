@@ -30,7 +30,14 @@ function baht(v) {
 }
 
 function fmt(dt) {
-  return dt ? new Date(dt).toLocaleString("th-TH") : "—";
+  if (!dt) return "—";
+  const d = new Date(dt);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 export default function AuctionDetailPage() {
@@ -61,7 +68,12 @@ export default function AuctionDetailPage() {
   const load = useCallback(() => {
     apiFetch(`/api/products/auctions/${id}`)
       .then(setAuction)
-      .catch((err) => setError(err.message));
+      .catch((err) =>
+        setError(
+          err.message ||
+            "เกิดข้อผิดพลาดในการโหลดข้อมูลการประมูล กรุณาลองใหม่อีกครั้ง",
+        ),
+      );
   }, [id]);
 
   useEffect(load, [load]);
@@ -106,7 +118,7 @@ export default function AuctionDetailPage() {
     }
     const value = Number(amount);
     if (!Number.isInteger(value) || value <= 0) {
-      setError("กรุณาระบุจำนวนเงินให้ถูกต้อง");
+      setError("จำนวนเงินเสนอราคาต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
       return;
     }
     setBidding(true);
@@ -124,7 +136,9 @@ export default function AuctionDetailPage() {
       setAmount("");
       load();
     } catch (err) {
-      setError(err.message);
+      setError(
+        err.message || "เกิดข้อผิดพลาดในการเสนอราคา กรุณาลองใหม่อีกครั้ง",
+      );
     } finally {
       setBidding(false);
     }
@@ -145,7 +159,9 @@ export default function AuctionDetailPage() {
     return (
       <main className="min-h-screen bg-gray-50">
         <NavBar />
-        <p className="mx-auto max-w-4xl px-4 py-10 text-red-600">{error}</p>
+        <p className="mx-auto max-w-4xl px-4 py-10 text-red-600">
+          {error || "ไม่พบข้อมูลรายการประมูลที่ระบุ"}
+        </p>
       </main>
     );
   }
@@ -155,7 +171,9 @@ export default function AuctionDetailPage() {
   const minNext = highest
     ? highest.amount + auction.bidIncrement
     : auction.startingPrice;
-  const isOpen = auction.status === "open";
+  const isCancelled =
+    auction.status === "cancelled" || Boolean(auction.round?.cancelledAt);
+  const isOpen = auction.status === "open" && !isCancelled;
   const isOwnAuction = viewer.userId === auction.sellerId;
   const isWinner = Boolean(
     viewer.userId && highest && viewer.userId === highest.bidderId,
@@ -173,6 +191,30 @@ export default function AuctionDetailPage() {
     <main className="flex min-h-screen flex-col bg-gray-50">
       <NavBar />
       <section className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+        {/* Navigation Breadcrumb / Round Link */}
+        <div className="mb-4 flex items-center justify-between">
+          {auction.roundId || auction.round ? (
+            <Link
+              href={`/auctions/rounds/${auction.roundId || auction.round?.id}`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+            >
+              <span>← กลับไปดูสินค้าทั้งหมดในรอบนี้</span>
+              {auction.round?.title && (
+                <span className="text-gray-500 font-normal">
+                  ({auction.round.title})
+                </span>
+              )}
+            </Link>
+          ) : (
+            <Link
+              href="/auctions"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+            >
+              ← กลับหน้ารวมรอบประมูล
+            </Link>
+          )}
+        </div>
+
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="p-4 sm:p-6 bg-white border-b border-gray-100 max-w-md mx-auto">
             <MediaGallery
@@ -190,6 +232,11 @@ export default function AuctionDetailPage() {
                 >
                   {auction.product?.title || auction.productId}
                 </Link>
+                {auction.round?.title && (
+                  <p className="text-xs text-emerald-800 font-medium mt-0.5">
+                    รอบประมูล: {auction.round.title}
+                  </p>
+                )}
                 <p className="text-sm text-gray-500">
                   เปิด {fmt(auction.scheduledStartAt)} · ปิด{" "}
                   {fmt(auction.scheduledEndAt)}
@@ -203,8 +250,16 @@ export default function AuctionDetailPage() {
                   </p>
                 )}
               </div>
-              <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                {STATUS_LABEL[auction.status] || auction.status}
+              <span
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
+                  isCancelled
+                    ? "bg-rose-50 text-rose-700 border border-rose-200"
+                    : "bg-emerald-50 text-emerald-700"
+                }`}
+              >
+                {isCancelled
+                  ? "ยกเลิกแล้ว"
+                  : STATUS_LABEL[auction.status] || auction.status}
               </span>
             </div>
 
@@ -220,6 +275,22 @@ export default function AuctionDetailPage() {
                 ครั้ง
               </p>
             </div>
+
+            {isCancelled && (
+              <div className="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-sm">
+                <div className="flex items-center gap-2 text-rose-900 font-bold text-base">
+                  <span>🛑 การประมูลนี้ถูกยกเลิกแล้ว</span>
+                </div>
+                {(auction.cancellationReason ||
+                  auction.round?.cancellationReason) && (
+                  <p className="mt-1 text-xs text-rose-800">
+                    เหตุผลในการยกเลิก:{" "}
+                    {auction.cancellationReason ||
+                      auction.round?.cancellationReason}
+                  </p>
+                )}
+              </div>
+            )}
 
             {auction.status === "closed" && (
               <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 shadow-sm">
@@ -268,7 +339,10 @@ export default function AuctionDetailPage() {
                 บัญชีพนักงานสามารถดูรายละเอียดได้ แต่ไม่สามารถเสนอราคาได้
               </p>
             ) : isOpen ? (
-              <form onSubmit={handleBid} className="flex items-start gap-3">
+              <form
+                onSubmit={handleBid}
+                className="flex flex-col sm:flex-row items-stretch sm:items-start gap-3"
+              >
                 <div className="flex-1">
                   <div className="mb-1 flex items-center justify-between">
                     <label className="text-sm font-medium text-gray-700">
@@ -294,7 +368,7 @@ export default function AuctionDetailPage() {
                 <button
                   type="submit"
                   disabled={bidding}
-                  className="mt-6 rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 shadow-sm"
+                  className="sm:mt-6 rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 shadow-sm text-center"
                 >
                   {bidding ? "กำลังส่ง..." : "เสนอราคา"}
                 </button>

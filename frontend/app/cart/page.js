@@ -316,8 +316,8 @@ export default function CartPage() {
       </section>
 
       {items.length > 0 && (
-        <div className="sticky bottom-0 border-t border-gray-200 bg-white/95 backdrop-blur">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4">
+        <div className="sticky bottom-0 border-t border-gray-200 bg-white/95 backdrop-blur z-20">
+          <div className="mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 max-w-4xl px-4 py-3 sm:py-4">
             <div className="text-sm text-gray-600">
               เลือกแล้ว {selectedItems.length} รายการ ·{" "}
               {totalDiscount > 0 ? (
@@ -341,7 +341,7 @@ export default function CartPage() {
             <button
               onClick={handleCheckout}
               disabled={paying || selectedItems.length === 0}
-              className="rounded-md bg-emerald-600 px-6 py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+              className="w-full sm:w-auto rounded-md bg-emerald-600 px-6 py-2.5 sm:py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300 text-center"
             >
               {paying
                 ? "กำลังไปหน้ายืนยัน..."

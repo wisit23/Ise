@@ -17,6 +17,7 @@ generator client {
   provider        = "prisma-client-js"
   output          = "../src/generated/prisma-client"
   previewFeatures = ["postgresqlExtensions"]
+  binaryTargets   = ["native", "windows", "linux-musl-openssl-3.0.x"]
 }
 
 // ER: ties to docs/erdatabase.png's Product entity (Photo/Video are separate
@@ -73,7 +74,7 @@ model Product {
   photos             Photo[]
   videos             Video[]
   reviewClips        ProductVideo[]
-  auction            AuctionItem?
+  auctions           AuctionItem[]
   moderationCommands ProductModerationCommand[]
 
   @@index([sellerId])
@@ -211,7 +212,7 @@ enum AuctionStatus {
 
 model AuctionItem {
   id               String        @id @default(uuid())
-  productId        String        @unique @map("product_id")
+  productId        String        @map("product_id")
   sellerId         String        @map("seller_id")
   status           AuctionStatus @default(draft)
   // Seller-owned pricing (see MKT/marketing decision log: Seller sets these,
@@ -225,6 +226,9 @@ model AuctionItem {
   closedAt         DateTime?     @map("closed_at")
   approvedBy       String?       @map("approved_by")
   approvedAt       DateTime?     @map("approved_at")
+  cancellationReason String?       @map("cancellation_reason")
+  cancelledAt        DateTime?     @map("cancelled_at")
+  cancelledBy        String?       @map("cancelled_by")
   winningBidId     String?       @unique @map("winning_bid_id")
   // Order created in order-service once the auction closes with a winner —
   // read via provider contract, never a cross-service DB read.
@@ -237,6 +241,7 @@ model AuctionItem {
   product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   bids    Bid[]         @relation("AuctionBids")
 
+  @@index([productId])
   @@index([sellerId])
   @@index([status])
   @@index([roundId])
@@ -246,10 +251,14 @@ model AuctionItem {
 model AuctionRound {
   id                 String   @id @default(uuid())
   title              String
+  categories         String[] @default([])
   submissionStartsAt DateTime @map("submission_starts_at")
   submissionEndsAt   DateTime @map("submission_ends_at")
   auctionStartsAt    DateTime @map("auction_starts_at")
   auctionEndsAt      DateTime @map("auction_ends_at")
+  cancellationReason String?   @map("cancellation_reason")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancelledBy        String?   @map("cancelled_by")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
@@ -336,6 +345,7 @@ model Campaign {
   maxDiscount        Int?           @map("max_discount")
   applicableCategory String?        @map("applicable_category")
   budget             Int?
+  spentBudget        Decimal        @default(0) @map("spent_budget") @db.Decimal(12, 2)
   usageLimit         Int?           @map("usage_limit")
   usedCount          Int            @default(0) @map("used_count")
   status             CampaignStatus @default(draft)
@@ -420,4 +430,43 @@ model ReviewVideo {
 
   @@index([reviewId])
   @@map("review_videos")
+}
+
+// Marketing Campaign Attribution Facts (MKT-003 / MKT-007 / UR-09 / UR-12)
+// Persisted immutable record of an order completed with an applied campaign voucher.
+// Idempotency: eventId is primary key; orderId is unique.
+model CampaignAttribution {
+  eventId        String   @id @map("event_id")
+  orderId        String   @unique @map("order_id")
+  campaignId     String   @map("campaign_id")
+  grossAmount    Decimal      @map("gross_amount") @db.Decimal(12, 2)
+  discountAmount Decimal      @map("discount_amount") @db.Decimal(12, 2)
+  netAmount      Decimal      @map("net_amount") @db.Decimal(12, 2)
+  completedAt    DateTime @map("completed_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([campaignId])
+  @@index([completedAt])
+  @@map("campaign_attributions")
+}
+
+// Marketing Audit Log (append-only audit trail for Marketing operations)
+model MarketingAuditLog {
+  id             String   @id @default(uuid())
+  actorId        String   @map("actor_id")
+  actorRole      String   @map("actor_role")
+  action         String
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id")
+  previousState  Json?    @map("previous_state")
+  newState       Json?    @map("new_state")
+  metadata       Json?
+  idempotencyKey String?  @unique @map("idempotency_key")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([actorId])
+  @@map("marketing_audit_logs")
 }

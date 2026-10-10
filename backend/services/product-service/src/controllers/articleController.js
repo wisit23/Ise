@@ -5,6 +5,10 @@ const {
   parsePagination,
   paginatedResponse,
 } = require("@reloop/shared");
+const defaultPrisma = require("../models/prismaClient");
+const {
+  recordMarketingAudit,
+} = require("../features/audit/marketingAuditService");
 const articleModel = require("../models/articleModel");
 
 function getActor(req) {
@@ -88,15 +92,54 @@ async function create(req, res, next) {
       throw badRequest("กรุณาระบุเนื้อหาบทความ (content)");
     }
 
-    const article = await articleModel.create({
-      title: title.trim(),
-      summary: summary ? summary.trim() : null,
-      content: content.trim(),
-      coverImage: coverImage || null,
-      category: category || "general",
-      status: status || "draft",
-      authorId: actor.id,
-      authorName: actor.displayName || "ทีมการตลาด RE-LOOP",
+    const runTx = articleModel.transaction
+      ? (fn) => articleModel.transaction(fn)
+      : (fn) => defaultPrisma.$transaction(fn);
+
+    const article = await runTx(async (tx) => {
+      const created = await articleModel.create(
+        {
+          title: title.trim(),
+          summary: summary ? summary.trim() : null,
+          content: content.trim(),
+          coverImage: coverImage || null,
+          category: category || "general",
+          status: status || "draft",
+          authorId: actor.id,
+          authorName: actor.displayName || "ทีมการตลาด RE-LOOP",
+        },
+        { tx },
+      );
+
+      await recordMarketingAudit(
+        {
+          actorId: actor.id,
+          actorRole: actor.role,
+          action: "ARTICLE_CREATE",
+          entityType: "ARTICLE",
+          entityId: created.id,
+          previousState: null,
+          newState: created,
+        },
+        { tx },
+      );
+
+      if (created.status === "published") {
+        await recordMarketingAudit(
+          {
+            actorId: actor.id,
+            actorRole: actor.role,
+            action: "ARTICLE_PUBLISH",
+            entityType: "ARTICLE",
+            entityId: created.id,
+            previousState: null,
+            newState: created,
+          },
+          { tx },
+        );
+      }
+
+      return created;
     });
 
     return res.status(201).json({ article });
@@ -108,22 +151,109 @@ async function create(req, res, next) {
 async function update(req, res, next) {
   try {
     requireMarketingRole(req);
+    const actor = getActor(req);
     const { id } = req.params;
     const { title, summary, content, coverImage, category, status } = req.body;
 
-    const payload = {};
-    if (title !== undefined) payload.title = title.trim();
-    if (summary !== undefined)
-      payload.summary = summary ? summary.trim() : null;
-    if (content !== undefined) payload.content = content.trim();
-    if (coverImage !== undefined) payload.coverImage = coverImage || null;
-    if (category !== undefined) payload.category = category;
-    if (status !== undefined) payload.status = status;
-
-    const article = await articleModel.update(id, payload);
-    if (!article) {
+    const existing = await articleModel.getById(id, { allowDraft: true });
+    if (!existing) {
       throw notFound("ไม่พบบทความที่ต้องการแก้ไข");
     }
+
+    const payload = {};
+    let isContentChanged = false;
+
+    if (title !== undefined) {
+      const cleanTitle = title.trim();
+      payload.title = cleanTitle;
+      if (cleanTitle !== existing.title) isContentChanged = true;
+    }
+    if (summary !== undefined) {
+      const cleanSummary = summary ? summary.trim() : null;
+      payload.summary = cleanSummary;
+      if (cleanSummary !== existing.summary) isContentChanged = true;
+    }
+    if (content !== undefined) {
+      const cleanContent = content.trim();
+      payload.content = cleanContent;
+      if (cleanContent !== existing.content) isContentChanged = true;
+    }
+    if (coverImage !== undefined) {
+      const cleanCover = coverImage || null;
+      payload.coverImage = cleanCover;
+      if (cleanCover !== existing.coverImage) isContentChanged = true;
+    }
+    if (category !== undefined) {
+      payload.category = category;
+      if (category !== existing.category) isContentChanged = true;
+    }
+
+    const oldStatus = existing.status;
+    const newStatus = status !== undefined ? status : oldStatus;
+    const isStatusChanged = status !== undefined && status !== oldStatus;
+    if (status !== undefined) {
+      payload.status = status;
+    }
+
+    if (!isContentChanged && !isStatusChanged) {
+      isContentChanged = true;
+    }
+
+    const runTx = articleModel.transaction
+      ? (fn) => articleModel.transaction(fn)
+      : (fn) => defaultPrisma.$transaction(fn);
+
+    const article = await runTx(async (tx) => {
+      const updated = await articleModel.update(id, payload, { tx });
+
+      if (isContentChanged) {
+        await recordMarketingAudit(
+          {
+            actorId: actor.id,
+            actorRole: actor.role,
+            action: "ARTICLE_UPDATE",
+            entityType: "ARTICLE",
+            entityId: id,
+            previousState: existing,
+            newState: updated,
+          },
+          { tx },
+        );
+      }
+
+      if (isStatusChanged && newStatus === "published") {
+        await recordMarketingAudit(
+          {
+            actorId: actor.id,
+            actorRole: actor.role,
+            action: "ARTICLE_PUBLISH",
+            entityType: "ARTICLE",
+            entityId: id,
+            previousState: existing,
+            newState: updated,
+          },
+          { tx },
+        );
+      }
+
+      if (isStatusChanged && newStatus === "archived") {
+        await recordMarketingAudit(
+          {
+            actorId: actor.id,
+            actorRole: actor.role,
+            action: "ARTICLE_ARCHIVE",
+            entityType: "ARTICLE",
+            entityId: id,
+            previousState: existing,
+            newState: updated,
+          },
+          { tx },
+        );
+      }
+
+      return updated;
+    });
+
     return res.json({ article });
   } catch (err) {
     next(err);
@@ -133,8 +263,34 @@ async function update(req, res, next) {
 async function remove(req, res, next) {
   try {
     requireMarketingRole(req);
+    const actor = getActor(req);
     const { id } = req.params;
-    await articleModel.remove(id);
+
+    const existing = await articleModel.getById(id, { allowDraft: true });
+    if (!existing) {
+      throw notFound("ไม่พบบทความที่ต้องการลบ");
+    }
+
+    const runTx = articleModel.transaction
+      ? (fn) => articleModel.transaction(fn)
+      : (fn) => defaultPrisma.$transaction(fn);
+
+    await runTx(async (tx) => {
+      await articleModel.remove(id, { tx });
+      await recordMarketingAudit(
+        {
+          actorId: actor.id,
+          actorRole: actor.role,
+          action: "ARTICLE_DELETE",
+          entityType: "ARTICLE",
+          entityId: id,
+          previousState: existing,
+          newState: null,
+        },
+        { tx },
+      );
+    });
+
     return res.status(204).end();
   } catch (err) {
     next(err);

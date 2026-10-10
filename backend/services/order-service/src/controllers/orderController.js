@@ -1,3 +1,4 @@
+const attributionOutboxService = require("../services/attributionOutboxService");
 const crypto = require("crypto");
 const {
   badRequest,
@@ -47,30 +48,6 @@ async function respondAfterProductSync(res, order, event) {
     // The durable outbox worker will retry. A 202 tells the caller that the
     // local transition committed but the cross-service projection is pending.
     res.status(202).json({ ...order, productSyncPending: true });
-  }
-}
-
-async function dispatchOrderCompletedEvent(order) {
-  const event = {
-    eventId: crypto.randomUUID(),
-    orderId: order.id,
-    campaignId: order.campaignId || null,
-    grossAmount: order.price,
-    discountAmount: order.discountAmount || 0,
-    netAmount:
-      order.finalPrice !== null && order.finalPrice !== undefined
-        ? order.finalPrice
-        : Math.max(0, order.price - (order.discountAmount || 0)),
-    completedAt: new Date().toISOString(),
-  };
-
-  try {
-    await productClient.recordOrderCompleted(event);
-  } catch (err) {
-    console.warn(
-      "[order-service] failed to dispatch order.completed.v1 event:",
-      err.message,
-    );
   }
 }
 
@@ -187,7 +164,7 @@ async function updateStatus(req, res, next) {
     orderTransitionService.assertCanParticipantUpdateStatus(order);
 
     if (["cancelled", "completed"].includes(status)) {
-      const { order: updated, event } =
+      const { order: updated, event, attributionEvent } =
         await orderModel.transitionStatusWithProductSync({
           id: req.params.id,
           status,
@@ -206,7 +183,8 @@ async function updateStatus(req, res, next) {
         });
       }
       if (status === "completed") {
-        await dispatchOrderCompletedEvent(updated);
+        if(attributionEvent)attributionOutboxService.processEvent(attributionEvent.id).catch(err=>console.warn("attribution deferred to outbox worker:",err.message));
+        await buyerActivityClient.recordOrderActivity(updated,"ORDER_COMPLETED",{initiatedBy:req.userId});
       } else {
         await buyerActivityClient.recordOrderActivity(
           updated,

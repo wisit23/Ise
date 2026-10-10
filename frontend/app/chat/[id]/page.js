@@ -18,6 +18,8 @@ import {
   markRead,
   otherParticipant,
   participantRoleLabel,
+  conversationDisplayName,
+  isReadOnlyAuctionConversation,
   getCachedConversations,
   setCachedConversations,
 } from "../../../lib/chat";
@@ -128,8 +130,11 @@ export default function ChatRoomPage() {
   const otherUserIdRef = useRef(null);
   otherUserIdRef.current = otherUserId;
 
-  const otherRoleLabel = otherParticipantUser
-    ? participantRoleLabel(otherParticipantUser.role)
+  const otherRoleLabel = conversation
+    ? participantRoleLabel(
+        otherParticipantUser?.role,
+        conversation?.contextType,
+      )
     : null;
 
   const updateConversationReadLocally = useCallback(
@@ -159,8 +164,7 @@ export default function ChatRoomPage() {
         const conv = await getConversation(roomId, token);
         if (requestId !== roomRequestRef.current) return;
         setConversation(conv);
-        const other = otherParticipant(conv, currentUser.id);
-        const name = other?.displayName || "ผู้ใช้";
+        const name = conversationDisplayName(conv, currentUser.id);
         setOtherName(name);
 
         const page = await listMessages(roomId, { limit: PAGE_SIZE }, token);
@@ -260,10 +264,7 @@ export default function ChatRoomPage() {
         const currentUser = user || getStoredUser();
         const target = sidebarConversations.find((c) => c.id === newId);
         if (target && currentUser) {
-          const other = otherParticipant(target, currentUser.id);
-          if (other?.displayName) {
-            setOtherName(other.displayName);
-          }
+          setOtherName(conversationDisplayName(target, currentUser.id));
         }
       }
 
@@ -796,6 +797,14 @@ export default function ChatRoomPage() {
               {locked ? (
                 <div className="bg-gray-50/90 px-4 py-3 text-center text-xs text-gray-500">
                   การสนทนานี้ถูกล็อกไว้ ไม่สามารถส่งข้อความเพิ่มได้
+                </div>
+              ) : isReadOnlyAuctionConversation(conversation) ? (
+                <div
+                  data-testid="auction-readonly-banner"
+                  className="bg-slate-50 px-4 py-3 text-center text-xs font-medium text-slate-600"
+                >
+                  ห้องแจ้งเตือนจากระบบฝ่ายการตลาด (อ่านอย่างเดียว
+                  ไม่สามารถส่งข้อความตอบกลับได้)
                 </div>
               ) : (
                 <div className="mx-auto w-full max-w-4xl">

@@ -1,5 +1,7 @@
 const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const defaultRepository = require("./campaignRepository");
+const defaultPrisma = require("../../models/prismaClient");
+const { recordMarketingAudit } = require("../audit/marketingAuditService");
 const {
   validateSegmentRule,
   matchesSegment,
@@ -96,36 +98,38 @@ function validateCampaignInput(input, { isUpdate = false } = {}) {
     }
   }
 
-  if (input.startsAt !== undefined && input.endsAt !== undefined) {
-    const start = new Date(input.startsAt);
-    const end = new Date(input.endsAt);
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw badRequest("invalid startsAt or endsAt date format");
-    }
-    if (end <= start) {
-      throw badRequest("endsAt must be after startsAt");
-    }
-  } else if (!isUpdate) {
+  if (!isUpdate) {
     if (!input.startsAt || !input.endsAt) {
-      throw badRequest("both startsAt and endsAt dates are required");
+      throw badRequest("กรุณาระบุทั้งวันเวลาเริ่มต้นและสิ้นสุดของแคมเปญ");
     }
     const start = new Date(input.startsAt);
     const end = new Date(input.endsAt);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw badRequest("invalid startsAt or endsAt date format");
+      throw badRequest("รูปแบบวันเวลาเริ่มต้นหรือสิ้นสุดไม่ถูกต้อง");
     }
     if (end <= start) {
-      throw badRequest("endsAt must be after startsAt");
+      throw badRequest("วันเวลาสิ้นสุดต้องอยู่หลังวันเวลาเริ่มต้น");
+    }
+    const now = new Date();
+    // ตอนสร้าง Draft ห้ามกำหนดช่วงเวลาที่สิ้นสุดไปแล้ว
+    if (end.getTime() <= now.getTime()) {
+      throw badRequest(
+        "ไม่สามารถกำหนดช่วงเวลาที่สิ้นสุดไปแล้วได้ วันเวลาสิ้นสุดต้องอยู่ในอนาคต",
+      );
+    }
+    // ห้ามกำหนด startsAt ย้อนหลังโดยไม่มีเหตุผล (อนุญาต clock skew ไม่เกิน 60 วินาที)
+    if (start.getTime() < now.getTime() - 60000) {
+      throw badRequest("ไม่สามารถกำหนดวันเวลาเริ่มต้นย้อนหลังในอดีตได้");
     }
   } else {
     if (
       input.startsAt !== undefined &&
       isNaN(new Date(input.startsAt).getTime())
     ) {
-      throw badRequest("invalid startsAt date format");
+      throw badRequest("รูปแบบวันเวลาเริ่มต้นไม่ถูกต้อง");
     }
     if (input.endsAt !== undefined && isNaN(new Date(input.endsAt).getTime())) {
-      throw badRequest("invalid endsAt date format");
+      throw badRequest("รูปแบบวันเวลาสิ้นสุดไม่ถูกต้อง");
     }
   }
 
@@ -134,9 +138,19 @@ function validateCampaignInput(input, { isUpdate = false } = {}) {
   }
 }
 
-function createCampaignService(repository = defaultRepository) {
-  async function loadCampaign(id) {
-    const campaign = await repository.findById(id);
+function createCampaignService(
+  repository = defaultRepository,
+  prismaClient = defaultPrisma,
+) {
+  function runInTransaction(fn) {
+    if (repository.transaction) {
+      return repository.transaction(fn);
+    }
+    return prismaClient.$transaction(fn);
+  }
+
+  async function loadCampaign(id, { tx } = {}) {
+    const campaign = await repository.findById(id, { tx });
     if (!campaign) throw notFound("campaign not found");
     return campaign;
   }
@@ -181,7 +195,22 @@ function createCampaignService(repository = defaultRepository) {
       targetSegment: input.targetSegment || null,
     };
 
-    return repository.createCampaign(data);
+    return runInTransaction(async (tx) => {
+      const campaign = await repository.createCampaign(data, { tx });
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_CREATE",
+          entityType: "CAMPAIGN",
+          entityId: campaign.id,
+          previousState: null,
+          newState: campaign,
+        },
+        { tx },
+      );
+      return campaign;
+    });
   }
 
   async function updateDraft({ user, campaignId, input }) {
@@ -236,8 +265,20 @@ function createCampaignService(repository = defaultRepository) {
     const newEnd = data.endsAt
       ? new Date(data.endsAt)
       : new Date(campaign.endsAt);
+    const now = new Date();
+    if (newEnd.getTime() <= now.getTime()) {
+      throw badRequest(
+        "ไม่สามารถกำหนดช่วงเวลาที่สิ้นสุดไปแล้วได้ วันเวลาสิ้นสุดต้องอยู่ในอนาคต",
+      );
+    }
     if (newEnd <= newStart) {
-      throw badRequest("endsAt must be after startsAt");
+      throw badRequest("วันเวลาสิ้นสุดต้องอยู่หลังวันเวลาเริ่มต้น");
+    }
+    if (
+      input.startsAt !== undefined &&
+      newStart.getTime() < now.getTime() - 60000
+    ) {
+      throw badRequest("ไม่สามารถกำหนดวันเวลาเริ่มต้นย้อนหลังในอดีตได้");
     }
 
     // Validate effective discount combination
@@ -256,7 +297,22 @@ function createCampaignService(repository = defaultRepository) {
       throw badRequest("percent discountValue must be between 1 and 100");
     }
 
-    return repository.updateCampaign(campaignId, data);
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(campaignId, data, { tx });
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_UPDATE",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
+    });
   }
 
   async function deleteDraft({ user, campaignId }) {
@@ -277,8 +333,27 @@ function createCampaignService(repository = defaultRepository) {
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "pending_approval");
 
-    return repository.updateCampaign(campaignId, {
-      status: "pending_approval",
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "pending_approval",
+        },
+        { tx },
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_SUBMIT",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 
@@ -289,10 +364,29 @@ function createCampaignService(repository = defaultRepository) {
 
     // Option 2 (Approved in Plan): Self-approval allowed for demo/evaluation.
     // Record approvedById and approvedAt for audit traceability.
-    return repository.updateCampaign(campaignId, {
-      status: "approved",
-      approvedById: user.id,
-      approvedAt: new Date(),
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "approved",
+          approvedById: user.id,
+          approvedAt: new Date(),
+        },
+        { tx },
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_APPROVE",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 
@@ -301,11 +395,31 @@ function createCampaignService(repository = defaultRepository) {
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "rejected");
 
-    return repository.updateCampaign(campaignId, {
-      status: "rejected",
-      description: reason
-        ? `${campaign.description || ""}\n[REJECT REASON]: ${reason}`.trim()
-        : campaign.description,
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "rejected",
+          description: reason
+            ? `${campaign.description || ""}\n[REJECT REASON]: ${reason}`.trim()
+            : campaign.description,
+        },
+        { tx },
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_REJECT",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+          metadata: reason ? { reason } : null,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 
@@ -314,8 +428,41 @@ function createCampaignService(repository = defaultRepository) {
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "published");
 
-    return repository.updateCampaign(campaignId, {
-      status: "published",
+    const now = new Date();
+    if (new Date(campaign.endsAt) <= now) {
+      throw badRequest("ไม่สามารถเผยแพร่แคมเปญได้เนื่องจากแคมเปญหมดอายุแล้ว");
+    }
+    if (
+      campaign.budget !== null &&
+      campaign.budget !== undefined &&
+      (campaign.spentBudget || 0) >= campaign.budget
+    ) {
+      throw badRequest(
+        "ไม่สามารถเผยแพร่แคมเปญได้เนื่องจากงบประมาณถูกใช้เต็มจำนวนแล้ว",
+      );
+    }
+
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "published",
+        },
+        { tx },
+      );
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_PUBLISH",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 
@@ -324,8 +471,35 @@ function createCampaignService(repository = defaultRepository) {
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "ended");
 
-    return repository.updateCampaign(campaignId, {
-      status: "ended",
+    return runInTransaction(async (tx) => {
+      const updated = await repository.updateCampaign(
+        campaignId,
+        {
+          status: "ended",
+        },
+        { tx },
+      );
+      if (repository.expireClaimedVouchers) {
+        await repository.expireClaimedVouchers(campaignId, { tx });
+      } else if (tx && tx.userVoucher) {
+        await tx.userVoucher.updateMany({
+          where: { campaignId, status: "CLAIMED" },
+          data: { status: "EXPIRED" },
+        });
+      }
+      await recordMarketingAudit(
+        {
+          actorId: user.id,
+          actorRole: user.role,
+          action: "CAMPAIGN_END",
+          entityType: "CAMPAIGN",
+          entityId: campaignId,
+          previousState: campaign,
+          newState: updated,
+        },
+        { tx },
+      );
+      return updated;
     });
   }
 
@@ -376,6 +550,14 @@ function createCampaignService(repository = defaultRepository) {
     }
     if (now > new Date(campaign.endsAt)) {
       throw badRequest("campaign has expired");
+    }
+
+    if (
+      campaign.budget !== null &&
+      campaign.budget !== undefined &&
+      (campaign.spentBudget || 0) >= campaign.budget
+    ) {
+      throw conflict("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
     }
 
     const existing = await repository.findVoucher(user.id, campaignId);
@@ -451,6 +633,13 @@ function createCampaignService(repository = defaultRepository) {
       if (!camp) continue;
       if (camp.status !== "published") continue;
       if (camp.startsAt > now || camp.endsAt < now) continue;
+      if (
+        camp.budget !== null &&
+        camp.budget !== undefined &&
+        (camp.spentBudget || 0) >= camp.budget
+      ) {
+        continue;
+      }
       if (orderPrice < camp.minOrderPrice) continue;
       if (!matchesSegment(profile, camp.targetSegment)) continue;
 
@@ -540,6 +729,13 @@ function createCampaignService(repository = defaultRepository) {
     }
     if (now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) {
       throw badRequest("campaign is outside of its active date window");
+    }
+    if (
+      campaign.budget !== null &&
+      campaign.budget !== undefined &&
+      (campaign.spentBudget || 0) >= campaign.budget
+    ) {
+      throw badRequest("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
     }
 
     if (userId) {
@@ -645,6 +841,13 @@ function createCampaignService(repository = defaultRepository) {
     }
     if (now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) {
       throw badRequest("campaign is outside of its active date window");
+    }
+    if (
+      campaign.budget !== null &&
+      campaign.budget !== undefined &&
+      (campaign.spentBudget || 0) >= campaign.budget
+    ) {
+      throw badRequest("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
     }
     if (campaign.minOrderPrice && product.price < campaign.minOrderPrice) {
       throw badRequest(

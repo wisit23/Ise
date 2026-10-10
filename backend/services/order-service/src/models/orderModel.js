@@ -204,11 +204,16 @@ async function transitionStatusWithProductSync({
         to: status,
       }),
     });
+    let attributionEvent=null;
+    if(status === "completed" && before.campaignId){
+      attributionEvent=await tx.attributionOutboxEvent.upsert({where:{orderId:id},update:{},create:{orderId:id,campaignId:before.campaignId,grossAmount:before.originalAmount,discountAmount:money(before.originalAmount).minus(before.ordersAmount),netAmount:before.ordersAmount,completedAt:new Date()}});
+    }
     return {
       order: view(
         await tx.order.findUnique({ where: { id }, include: INCLUDE }),
       ),
       event,
+      attributionEvent,
     };
   });
 }

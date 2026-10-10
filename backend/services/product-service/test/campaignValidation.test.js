@@ -132,7 +132,7 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
         }),
       (err) => {
         assert.equal(err.status, 400);
-        assert.match(err.message, /endsAt must be after startsAt/i);
+        assert.match(err.message, /วันเวลาสิ้นสุดต้อง/i);
         return true;
       },
     );
@@ -217,8 +217,8 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
   await t.test(
     "Validation on Partial Update: rejects partial date update where new startsAt >= existing endsAt",
     async () => {
-      const existingStart = new Date("2026-06-01T00:00:00Z");
-      const existingEnd = new Date("2026-06-10T00:00:00Z");
+      const existingStart = new Date(Date.now()+86400000);
+      const existingEnd = new Date(Date.now()+10*86400000);
       const repo = createMockRepo({
         findById: async (id) => ({
           id,
@@ -239,12 +239,12 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
             user: marketingUser,
             campaignId: "date-camp",
             input: {
-              startsAt: "2026-06-15T00:00:00Z", // after existing endsAt
+              startsAt: new Date(Date.now()+15*86400000).toISOString(), // after existing endsAt
             },
           }),
         (err) => {
           assert.equal(err.status, 400);
-          assert.match(err.message, /endsAt must be after startsAt/i);
+          assert.match(err.message, /วันเวลาสิ้นสุดต้อง/i);
           return true;
         },
       );

@@ -95,7 +95,8 @@ export default function ChatSupportHeader({ ticketId }) {
   }
 
   const statusInfo = STATUS_CONFIG[ticket.status] || STATUS_CONFIG.NEW;
-  const priorityInfo = PRIORITY_CONFIG[ticket.priority] || PRIORITY_CONFIG.NORMAL;
+  const priorityInfo =
+    PRIORITY_CONFIG[ticket.priority] || PRIORITY_CONFIG.NORMAL;
 
   return (
     <div className="shrink-0 sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-4 py-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] backdrop-blur-md">
