@@ -6,17 +6,11 @@ import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import Pagination from "../../../components/Pagination";
-import Select from "../../../components/ui/Select";
+import SupportCategorySelect from "../../../components/support/SupportCategorySelect";
+import OrderPicker from "../../../components/support/OrderPicker";
+import config from "../../../lib/customerServiceConfig";
 import { apiFetch } from "../../../lib/api";
-import { getAccessToken, getStoredUser } from "../../../lib/auth";
-
-const CATEGORIES = [
-  { value: "ORDER", label: "คำสั่งซื้อ" },
-  { value: "PAYMENT", label: "การชำระเงิน" },
-  { value: "ACCOUNT", label: "บัญชีผู้ใช้" },
-  { value: "TECHNICAL", label: "ปัญหาการใช้งาน" },
-  { value: "OTHER", label: "อื่นๆ" },
-];
+import { getAccessToken } from "../../../lib/auth";
 
 const STATUS_LABEL = {
   NEW: "รอรับเรื่อง",
@@ -38,7 +32,7 @@ const STATUS_STYLE = {
   ESCALATED: "bg-red-50 text-red-700",
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = config.pagination.customerTickets;
 
 export default function MyTicketsPage() {
   const router = useRouter();
@@ -51,14 +45,14 @@ export default function MyTicketsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     subject: "",
-    category: "ORDER",
+    category: "",
     description: "",
     orderId: "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
-  const [myOrders, setMyOrders] = useState([]);
-  const [myId, setMyId] = useState(null);
+  const [token, setToken] = useState(null);
+  useEffect(() => setToken(getAccessToken()), []);
 
   function load() {
     const token = getAccessToken();
@@ -80,43 +74,13 @@ export default function MyTicketsPage() {
 
   useEffect(load, [page, router]);
 
-  // Lets the requester optionally tie the ticket to one of their own
-  // orders so Admin can identify a real counterparty later (see
-  // handleCreate) instead of only ever being able to act against whoever
-  // happened to file the ticket.
-  useEffect(() => {
-    if (!showForm) return;
-    const token = getAccessToken();
-    if (!token) return;
-    setMyId(getStoredUser()?.id || null);
-    Promise.all([
-      apiFetch("/api/orders/mine?limit=20", { token }).catch(() => ({
-        items: [],
-      })),
-      apiFetch("/api/orders/selling?limit=20", { token }).catch(() => ({
-        items: [],
-      })),
-    ]).then(([mine, selling]) => {
-      const seen = new Set();
-      const combined = [...(mine.items || []), ...(selling.items || [])].filter(
-        (o) => (seen.has(o.id) ? false : (seen.add(o.id), true)),
-      );
-      setMyOrders(combined);
-    });
-  }, [showForm]);
-
   async function handleCreate(e) {
     e.preventDefault();
     const token = getAccessToken();
     setSubmitting(true);
     setFormError("");
     try {
-      const relatedOrder = myOrders.find((o) => o.id === form.orderId);
-      const targetId = relatedOrder
-        ? relatedOrder.buyerId === myId
-          ? relatedOrder.sellerId
-          : relatedOrder.buyerId
-        : undefined;
+      if (!form.category) throw new Error("กรุณาเลือกหมวดหมู่");
       const ticket = await apiFetch("/api/support/tickets", {
         method: "POST",
         token,
@@ -125,7 +89,6 @@ export default function MyTicketsPage() {
           category: form.category,
           description: form.description,
           orderId: form.orderId || undefined,
-          targetId,
         },
       });
       router.push(`/support/tickets/${ticket.id}`);
@@ -184,37 +147,21 @@ export default function MyTicketsPage() {
               />
             </div>
             <div>
-              <Select
+              <SupportCategorySelect
+                token={token}
                 label="หมวดหมู่"
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
-                options={CATEGORIES}
                 required
               />
             </div>
-            {myOrders.length > 0 && (
-              <div>
-                <Select
-                  label="เกี่ยวข้องกับคำสั่งซื้อไหน (ถ้ามี)"
-                  value={form.orderId}
-                  onChange={(e) =>
-                    setForm({ ...form, orderId: e.target.value })
-                  }
-                  options={[
-                    { value: "", label: "— ไม่เกี่ยวข้องกับคำสั่งซื้อใด —" },
-                    ...myOrders.map((o) => ({
-                      value: o.id,
-                      label: `${o.productTitle} (${o.id.slice(0, 8)})`,
-                    })),
-                  ]}
-                  hint={
-                    form.orderId
-                      ? "ระบบจะแจ้งให้เจ้าหน้าที่ทราบว่าคำร้องนี้เกี่ยวข้องกับอีกฝ่ายในคำสั่งซื้อนี้ด้วย"
-                      : undefined
-                  }
-                />
-              </div>
-            )}
+            <OrderPicker
+              token={token}
+              value={form.orderId}
+              onChange={(orderId) =>
+                setForm((current) => ({ ...current, orderId }))
+              }
+            />
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 รายละเอียด <span className="text-danger">*</span>
@@ -238,7 +185,7 @@ export default function MyTicketsPage() {
             <div className="pt-2">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !form.category}
                 className="focus-ring inline-flex items-center gap-2 rounded-full bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-95 disabled:opacity-50"
               >
                 {submitting ? "กำลังส่ง..." : "ส่งตั๋ว"}

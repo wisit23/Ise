@@ -42,7 +42,23 @@ function toTicket(row) {
   const latest = (code) => statusHistory.find((h) => h.toStatus.code === code);
   return {
     ...core,
+    sla:
+      currentStatus?.code === "CLOSED" || currentStatus?.code === "RESOLVED"
+        ? { state: "complete", dueAt: null, metric: null }
+        : pending[0]
+          ? {
+              state: "active",
+              dueAt: pending[0].dueAt,
+              metric: pending[0].metricType,
+              cycle: pending[0].cycle,
+            }
+          : {
+              state: slaTargets.length ? "complete" : "none",
+              dueAt: null,
+              metric: null,
+            },
     category: category?.code,
+    categoryLabel: category?.nameTh || category?.nameEn || category?.code,
     priority: priority?.code,
     status: currentStatus?.code,
     assigneeId:

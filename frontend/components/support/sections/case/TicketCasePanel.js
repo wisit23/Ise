@@ -6,7 +6,6 @@ import Alert from "../../../ui/Alert";
 import Button from "../../../ui/Button";
 import CaseUserCard from "./CaseUserCard";
 import EmbeddedChat from "../../EmbeddedChat";
-import { AGENT_NEXT_STATUS } from "../../../../lib/supportConstants";
 
 const THAI_DATE = { year: "numeric", month: "long", day: "numeric" };
 
@@ -53,7 +52,7 @@ export default function TicketCasePanel({
   auditReadOnly = false,
 }) {
   const [manualTargetId, setManualTargetId] = useState("");
-  const nextStatuses = AGENT_NEXT_STATUS[ticket.status] || [];
+  const nextStatuses = ticket.capabilities?.allowedNextStatuses || [];
   const openedOn = new Date(ticket.createdAt).toLocaleDateString(
     "th-TH",
     THAI_DATE,
@@ -105,9 +104,13 @@ export default function TicketCasePanel({
           </div>
         </SectionCard>
 
-        {ticket.status === "ESCALATED" && <SectionCard icon="description" title="CS Memo">
-          <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">{ticket.escalationNote || "ยังไม่มีสรุปจาก CS"}</p>
-        </SectionCard>}
+        {ticket.status === "ESCALATED" && (
+          <SectionCard icon="description" title="CS Memo">
+            <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
+              {ticket.escalationNote || "ยังไม่มีสรุปจาก CS"}
+            </p>
+          </SectionCard>
+        )}
 
         {/* Counterparty is the primary focus of moderation when handling disputes/complaints.
             Rendered first so Trust & Safety officers act on the accused party by default. */}

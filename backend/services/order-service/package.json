@@ -6,7 +6,8 @@
   "type": "commonjs",
   "scripts": {
     "dev": "node src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "migrate:sla": "node prisma/applyServicePolicy.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

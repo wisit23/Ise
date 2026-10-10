@@ -1,9 +1,10 @@
+const { customerServiceRuntime } = require("@reloop/shared");
 const { AppError } = require("@reloop/shared");
 
 const CHAT_SERVICE_URL = () =>
   process.env.CHAT_SERVICE_URL || "http://chat-service:3004";
 const INTERNAL_TOKEN = () => process.env.INTERNAL_SERVICE_TOKEN || "";
-const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_TIMEOUT_MS = customerServiceRuntime.chatTimeoutMs;
 
 async function requestWithTimeout(
   path,
@@ -266,16 +267,30 @@ module.exports = {
 };
 
 function sendTicketMessage(conversationId, data) {
-  return internalPost(`/internal/conversations/${encodeURIComponent(conversationId)}/replies`, data);
+  return internalPost(
+    `/internal/conversations/${encodeURIComponent(conversationId)}/replies`,
+    data,
+  );
 }
 
-async function getTicketMessages(conversationId, { includeInternal = false, before, limit = 100 } = {}) {
-  const query = new URLSearchParams({ includeInternal: String(includeInternal), limit: String(limit) });
+async function getTicketMessages(
+  conversationId,
+  { includeInternal = false, before, limit = 100 } = {},
+) {
+  const query = new URLSearchParams({
+    includeInternal: String(includeInternal),
+    limit: String(limit),
+  });
   if (before) query.set("before", before);
-  const res = await requestWithTimeout(`/internal/conversations/${encodeURIComponent(conversationId)}/transcript?${query}`);
+  const res = await requestWithTimeout(
+    `/internal/conversations/${encodeURIComponent(conversationId)}/transcript?${query}`,
+  );
   return res.json();
 }
 
 function importTicketMessage(conversationId, data) {
-  return internalPost(`/internal/conversations/${encodeURIComponent(conversationId)}/import-support-message`, data);
+  return internalPost(
+    `/internal/conversations/${encodeURIComponent(conversationId)}/import-support-message`,
+    data,
+  );
 }

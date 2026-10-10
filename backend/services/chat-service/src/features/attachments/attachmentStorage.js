@@ -1,3 +1,6 @@
+const {
+  customerServiceClientConfig: { chat },
+} = require("@reloop/shared");
 // Private chat-attachment storage — deliberately NOT product-service's
 // uploads/ tree, which the gateway serves publicly at /uploads/ for guests
 // (see gateway/src/app.js PUBLIC_PATHS). A photo sent inside a private
@@ -29,10 +32,9 @@ fs.mkdirSync(STORAGE_DIR, { recursive: true });
 // narrow on purpose: an attachment is a photo of an item or a receipt, not
 // an arbitrary file drop, and every type here is one a browser can render
 // or download safely without being offered for execution.
-const ALLOWED_MIME =
-  /^image\/(jpeg|png|webp|gif)$|^video\/(mp4|quicktime)$|^application\/pdf$/;
+const ALLOWED_MIME = { test: (type) => chat.mimeTypes.includes(type) };
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILE_BYTES = chat.maxFileBytes;
 
 const storage = multer.diskStorage({
   destination: STORAGE_DIR,

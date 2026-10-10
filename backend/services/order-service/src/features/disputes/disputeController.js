@@ -236,19 +236,6 @@ async function setEvidenceDeadline(req, res, next) {
   }
 }
 module.exports = {
-  open,
-  getOne,
-  getByOrderId,
-  queue,
-  uploadEvidence,
-  viewEvidence,
-  claim,
-  reassign,
-  escalate,
-  decide,
-  setEvidenceDeadline,
-};
-module.exports = {
   setEvidenceDeadline,
   open,
   getOne,

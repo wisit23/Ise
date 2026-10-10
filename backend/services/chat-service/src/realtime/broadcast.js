@@ -115,6 +115,25 @@ async function broadcastCaseMessage(conversation, message) {
   }
 }
 
+// Case typing uses current authorized user rooms, never stale conversation rooms.
+async function broadcastCaseTyping(conversation, senderId, typing) {
+  if (!ioInstance) return;
+  const peers = (conversation.participants || []).filter(p => !p.leftAt && p.userId !== senderId);
+  const checked = await Promise.allSettled(peers.map(async participant => ({
+    participant, access: await getCaseAccess(conversation, participant.userId, participant.role),
+  })));
+  const seen = new Set();
+  for (const result of checked) {
+    if (result.status !== "fulfilled") continue;
+    const { participant, access } = result.value;
+    if (!access.allowed || seen.has(participant.userId)) continue;
+    seen.add(participant.userId);
+    ioInstance.to(userRoomName(participant.userId)).emit("typing", {
+      conversationId: conversation.id, userId: senderId, typing,
+    });
+  }
+}
+
 function broadcastActivity(userId, activity) {
   if (!ioInstance) return;
   ioInstance.to(userRoomName(userId)).emit("conversation:activity", activity);
@@ -157,5 +176,6 @@ module.exports = {
   userRoomName,
   broadcastMessage,
   broadcastActivity,
+  broadcastCaseTyping,
   broadcastStatusChange,
 };

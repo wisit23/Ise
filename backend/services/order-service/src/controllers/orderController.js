@@ -313,6 +313,8 @@ async function createFromAuction(req, res, next) {
       originalAmount: money(price),
       ordersAmount: money(price),
       orderType: "AUCTION",
+      auctionId: String(auctionId),
+      productTitle: req.body.productTitle || null,
       status: "pending_payment",
     });
 

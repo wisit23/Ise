@@ -44,9 +44,12 @@ function view(row) {
     checkoutSessionId: row.checkoutId,
     reservationId: row.basketId,
     reservationExpiresAt: row.basket?.unlockAt || null,
-    auctionId: row.orderType === "AUCTION" ? row.id : null,
+    auctionId: row.auctionId || (row.orderType === "AUCTION" ? row.id : null),
     dispute: disputeView(row.dispute),
     holds,
+    heldBy: active[0]?.holdBy || null,
+    heldAt: active[0]?.holdAt || null,
+    holdReason: active[0]?.holdReason || null,
     payoutHeld: active.length > 0,
     paymentSimulationStatus: active.length ? "ON_HOLD" : "RELEASE_PENDING",
   };

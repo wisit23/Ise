@@ -64,6 +64,7 @@ test("support ticket lifecycle against a real database", async (t) => {
   const chat = require("../src/services/chatClient");
   const model = require("../src/features/tickets/ticketModel");
   const messages = [];
+  const messagePrefix = require('node:crypto').randomBytes(8).toString('hex');
   t.mock.method(chat, "createSupportConversation", async (ticketId) => ({ id: "room-" + ticketId }));
   t.mock.method(chat, "addAgentToConversation", async () => ({}));
   t.mock.method(chat, "addParticipantToConversation", async () => ({}));
@@ -72,7 +73,7 @@ test("support ticket lifecycle against a real database", async (t) => {
   t.mock.method(chat, "getTicketMessages", async (_id, { includeInternal }) => ({ messages: messages.filter((m) => includeInternal || m.visibility !== "INTERNAL"), nextCursor: null }));
   t.mock.method(chat, "sendTicketMessage", async (conversationId, data) => {
     const ticketId = conversationId.slice(5);
-    const message = { id: String(messages.length + 1).padStart(24, "0"), senderId: data.senderId,
+    const message = { id: messagePrefix + String(messages.length + 1).padStart(8, "0"), senderId: data.senderId,
       senderRole: data.senderId === requesterId ? "BUYER" : "AGENT", body: data.body,
       visibility: data.visibility, createdAt: new Date() };
     messages.push(message);

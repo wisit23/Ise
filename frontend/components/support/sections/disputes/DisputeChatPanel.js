@@ -15,8 +15,12 @@ export default function DisputeChatPanel({
   closing,
   onClose,
 }) {
-  const partyId = side === "buyer" ? dispute.order?.buyerId ?? "" : dispute.order?.sellerId ?? "";
-  const initial = partyId.slice(0, 1).toUpperCase() || (side === "buyer" ? "B" : "S");
+  const partyId =
+    side === "buyer"
+      ? (dispute.order?.buyerId ?? "")
+      : (dispute.order?.sellerId ?? "");
+  const initial =
+    partyId.slice(0, 1).toUpperCase() || (side === "buyer" ? "B" : "S");
 
   return (
     <div
@@ -44,17 +48,35 @@ export default function DisputeChatPanel({
         </button>
       </div>
 
-      <div role="tablist" aria-label="เลือกคู่สนทนา" className="grid grid-cols-2 gap-2 border-b border-slate-100 p-3">
-        {[['buyer', '🟢 ผู้ซื้อ'], ['seller', '🔵 ผู้ขาย']].map(([value, label]) => (
-          <button key={value} type="button" role="tab" aria-selected={side === value}
-            disabled={switching} onClick={() => onSideChange(value)}
-            className={`rounded-lg px-2 py-2 text-xs font-bold transition ${side === value ? value === 'buyer' ? 'bg-emerald-600 text-white' : 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+      <div
+        role="tablist"
+        aria-label="เลือกคู่สนทนา"
+        className="grid grid-cols-2 gap-2 border-b border-slate-100 p-3"
+      >
+        {[
+          ["buyer", "🟢 ผู้ซื้อ"],
+          ["seller", "🔵 ผู้ขาย"],
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={side === value}
+            disabled={switching}
+            onClick={() => onSideChange(value)}
+            className={`rounded-lg px-2 py-2 text-xs font-bold transition ${side === value ? (value === "buyer" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white") : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          >
             {label}
           </button>
         ))}
       </div>
-      <p role="status" className={`px-4 py-2 text-xs font-semibold ${side === "buyer" ? "bg-emerald-50 text-emerald-900" : "bg-blue-50 text-blue-900"}`}>
-        {switching ? "กำลังเปลี่ยนห้องสนทนา..." : `ข้อความต่อไปจะส่งถึง${side === "buyer" ? "ผู้ซื้อ" : "ผู้ขาย"}เท่านั้น`}
+      <p
+        role="status"
+        className={`px-4 py-2 text-xs font-semibold ${side === "buyer" ? "bg-emerald-50 text-emerald-900" : "bg-blue-50 text-blue-900"}`}
+      >
+        {switching
+          ? "กำลังเปลี่ยนห้องสนทนา..."
+          : `ข้อความต่อไปจะส่งถึง${side === "buyer" ? "ผู้ซื้อ" : "ผู้ขาย"}เท่านั้น`}
       </p>
 
       <div className="border-b border-slate-100 bg-slate-50 px-5 py-3">
@@ -63,7 +85,9 @@ export default function DisputeChatPanel({
             {initial}
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-800">{side === "buyer" ? "ผู้ซื้อ" : "ผู้ขาย"}</p>
+            <p className="text-xs font-bold text-slate-800">
+              {side === "buyer" ? "ผู้ซื้อ" : "ผู้ขาย"}
+            </p>
             <p className="font-mono text-[10px] text-slate-500">
               {partyId.slice(0, 16)}
             </p>

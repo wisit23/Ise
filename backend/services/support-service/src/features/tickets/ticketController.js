@@ -38,9 +38,11 @@ async function queue(req, res, next) {
       role: effectiveStaffRole(req),
       userId: req.userId,
       scope: req.query.scope,
+      work: req.query.work,
       status: req.query.status,
       priority: req.query.priority,
       search: req.query.q,
+      sort: req.query.sort,
       skip: pagination.skip,
       take: pagination.take,
     });
@@ -84,6 +86,7 @@ async function reply(req, res, next) {
 async function assign(req, res, next) {
   try {
     const ticket = await ticketService.assignToSelf({
+      version: req.body?.version,
       ticketId: req.params.id,
       userId: req.userId,
       role: effectiveStaffRole(req),
@@ -97,6 +100,7 @@ async function assign(req, res, next) {
 async function changeStatus(req, res, next) {
   try {
     const ticket = await ticketService.changeStatus({
+      version: req.body?.version,
       ticketId: req.params.id,
       userId: req.userId,
       role: effectiveStaffRole(req),

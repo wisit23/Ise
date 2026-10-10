@@ -105,4 +105,22 @@ describe("MessageAttachment", () => {
     unmount();
     expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:image-bytes");
   });
+  it("opens an accessible enlarged image and downloads the authenticated bytes", async () => {
+    fetchAuthedBlobUrl.mockResolvedValue("blob:image-bytes");
+    render(<MessageAttachment message={IMAGE_MESSAGE} own={false} />);
+    await screen.findByAltText("item.png");
+    const trigger = screen.getByRole("button", { name: "ขยายรูป item.png" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByAltText("ภาพขยาย item.png")).toHaveAttribute("src", "blob:image-bytes");
+    const click = jest.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    fireEvent.click(screen.getAllByRole("button", { name: "ดาวน์โหลดรูป" }).at(-1));
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    expect(fetchAuthedBlobUrl).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    click.mockRestore();
+  });
 });

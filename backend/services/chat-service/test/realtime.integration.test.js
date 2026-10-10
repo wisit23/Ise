@@ -44,6 +44,11 @@ app.locals.validateAccessSession = async () => {};
 // request; without closing it the test process stays alive forever.
 const { closeRateLimitClient } = require("../src/middleware/rateLimit");
 const { createSocketServer } = require("../src/realtime/socketServer");
+// Directory availability is tested separately; realtime assertions exercise Mongo + Redis.
+const authDirectory = require("../src/services/authClient");
+const originalDisplayNames = authDirectory.getDisplayNames;
+authDirectory.getDisplayNames = async () => ({});
+after(() => {authDirectory.getDisplayNames = originalDisplayNames;});
 
 const buyerId = `int-test-rt-buyer-${Date.now()}`;
 const sellerId = `int-test-rt-seller-${Date.now()}`;

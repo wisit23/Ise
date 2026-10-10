@@ -6,6 +6,25 @@ const ticketModel = require("./ticketModel");
 const chatClient = require("../../services/chatClient");
 const auditLog = require("../audit/auditLog");
 
+test('CS cannot mutate unassigned tickets and closed tickets cannot be claimed', async (t) => {
+  t.mock.method(ticketModel,'findById',async()=>({id:'unassigned',requesterId:'buyer',assigneeId:null,status:'NEW',version:1}));
+  await assert.rejects(ticketService.reply({ticketId:'unassigned',userId:'cs',role:'CUSTOMER_SERVICE',body:'hello'}),{status:403});
+  await assert.rejects(ticketService.changeStatus({ticketId:'unassigned',userId:'cs',role:'CUSTOMER_SERVICE',status:'CLOSED'}),{status:403});
+  t.mock.method(ticketModel,'findById',async()=>({id:'closed',requesterId:'buyer',assigneeId:null,status:'CLOSED',version:1}));
+  await assert.rejects(ticketService.assignToSelf({ticketId:'closed',userId:'cs',role:'CUSTOMER_SERVICE'}),{status:400});
+});
+test('invalid ticket scope is rejected before it can remove owner filtering',async()=>{
+  await assert.rejects(ticketService.listQueue({role:'CUSTOMER_SERVICE',userId:'cs',scope:'anything'}),{status:400});
+});
+test('claim reports committed ownership when chat membership refresh fails',async(t)=>{
+  let assigned=false;
+  t.mock.method(ticketModel,'findById',async()=>({id:'claim',requesterId:'buyer',assigneeId:assigned?'cs':null,status:assigned?'ASSIGNED':'NEW',version:1,conversationId:'room'}));
+  t.mock.method(ticketModel,'assign',async()=>{assigned=true;return true;});
+  t.mock.method(chatClient,'addAgentToConversation',async()=>{throw new Error('chat unavailable');});
+  const result=await ticketService.assignToSelf({ticketId:'claim',userId:'cs',role:'CUSTOMER_SERVICE'});
+  assert.equal(result.assigneeId,'cs');assert.ok(result.chatJoinError);
+});
+
 test("Admin cannot send a customer-facing ticket reply", async () => {
   await assert.rejects(
     () => ticketService.reply({ ticketId: "ticket-1", userId: "admin-1", role: "ADMIN", body: "hello", isInternal: false }),

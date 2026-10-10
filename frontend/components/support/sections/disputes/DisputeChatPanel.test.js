@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import DisputeChatPanel from "./DisputeChatPanel";
 
-jest.mock("../../EmbeddedChat", () => ({ conversationId, readOnly }) => <div data-testid="single-chat">{conversationId}:{String(readOnly)}</div>);
+jest.mock("../../EmbeddedChat", () => function MockChat({ conversationId, readOnly }) { return <div data-testid="single-chat">{conversationId}:{String(readOnly)}</div>; });
 
 const dispute = { order: { buyerId: "buyer-1", sellerId: "seller-1" } };
 

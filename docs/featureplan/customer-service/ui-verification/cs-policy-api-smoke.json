@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-10-09T04:15:39.922Z",
+  "checks": [
+    {
+      "domain": "support/tickets",
+      "dashboardStatus": 200,
+      "queueStatus": 200,
+      "priorityFilters": "passed",
+      "eligibleOpenCases": 1
+    },
+    {
+      "domain": "orders/disputes",
+      "dashboardStatus": 200,
+      "queueStatus": 200,
+      "priorityFilters": "passed",
+      "eligibleOpenCases": 2
+    }
+  ]
+}

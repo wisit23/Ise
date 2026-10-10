@@ -24,6 +24,18 @@ beforeEach(() => {
 
 afterEach(() => jest.restoreAllMocks());
 
+test('HTTP conflict retains machine-readable status and code', async () => {
+  fetch.mockResolvedValue(response(409,{error:'Case changed',code:'CASE_CONFLICT'}));
+  await expect(apiFetch('/api/support/tickets/a')).rejects.toMatchObject({message:'Case changed',status:409,code:'CASE_CONFLICT'});
+});
+test('passes cancellation signal through a successful refresh retry', async () => {
+  const signal = new AbortController().signal;
+  fetch.mockResolvedValueOnce(response(401,{error:'expired'})).mockResolvedValueOnce(response(200,{accessToken:'new'})).mockResolvedValueOnce(response(200,{id:'a'}));
+  await expect(apiFetch('/api/support/tickets/a',{signal})).resolves.toEqual({id:'a'});
+  expect(fetch.mock.calls[0][1].signal).toBe(signal);
+  expect(fetch.mock.calls[2][1].signal).toBe(signal);
+});
+
 test.each([
   ["JSON", () => apiFetch("/api/orders/mine")],
   ["product upload", () => uploadFiles([])],

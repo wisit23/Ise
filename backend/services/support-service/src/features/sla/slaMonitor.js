@@ -1,3 +1,4 @@
+const { customerServiceRuntime } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const ticketModel = require("../tickets/ticketModel");
 
@@ -19,7 +20,7 @@ async function checkAndEscalate(now = new Date()) {
   return { checked: overdue.length, escalated };
 }
 let timer;
-function start(intervalMs = 60000) {
+function start(intervalMs = customerServiceRuntime.slaMonitorIntervalMs) {
   if (timer) return;
   timer = setInterval(
     () =>

@@ -1,7 +1,13 @@
-const { badRequest, forbidden, notFound } = require("@reloop/shared");
+const {
+  STAFF_ROLES,
+  badRequest,
+  forbidden,
+  notFound,
+} = require("@reloop/shared");
+
 const helpModel = require("./helpModel");
 
-const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
+const AGENT_ROLES = new Set(STAFF_ROLES);
 
 function slugify(title) {
   return (
@@ -70,4 +76,17 @@ async function publish({ role, id, version }) {
   return article;
 }
 
-module.exports = { searchPublic, listForAgent, createDraft, revise, publish };
+async function remove({ role, id }) {
+  if (!AGENT_ROLES.has(role))
+    throw forbidden("only support agents can delete help articles");
+  if (!(await helpModel.remove(id))) throw notFound("help article not found");
+}
+
+module.exports = {
+  searchPublic,
+  listForAgent,
+  createDraft,
+  revise,
+  publish,
+  remove,
+};

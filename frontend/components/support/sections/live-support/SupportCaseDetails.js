@@ -10,7 +10,6 @@ import {
   TICKET_STATUS_STYLE,
   PRIORITY_LABEL,
   PRIORITY_STYLE,
-  AGENT_NEXT_STATUS,
 } from "../../../../lib/supportConstants";
 
 export default function SupportCaseDetails({
@@ -38,7 +37,7 @@ export default function SupportCaseDetails({
 
   if (!ticket) return null;
 
-  const nextStatuses = AGENT_NEXT_STATUS[ticket.status] || [];
+  const nextStatuses = ticket.capabilities?.allowedNextStatuses || [];
   const internalNotes = (ticket.messages || []).filter((m) => m.isInternal);
 
   async function handleNoteSubmit(e) {

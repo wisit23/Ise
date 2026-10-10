@@ -1,21 +1,21 @@
+const {
+  serializableTransaction,
+  badRequest,
+  conflict,
+  notFound,
+  AppError,
+} = require("@reloop/shared");
+
 const { randomUUID } = require("node:crypto");
-const { badRequest, conflict, notFound, AppError } = require("@reloop/shared");
+
 const { Prisma } = require("../../generated/prisma-client");
 const prisma = require("../../models/prismaClient");
 const audit = require("../audit/auditLog");
 const { ticketInclude, toTicket } = require("./ticketShape");
 const { canTransition } = require("./ticketState");
 
-async function transaction(work, client = prisma) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await client.$transaction(work, {
-        isolationLevel: "Serializable",
-      });
-    } catch (error) {
-      if (error.code !== "P2034" || attempt >= 2) throw error;
-    }
-  }
+function transaction(work, client = prisma) {
+  return serializableTransaction(client, work);
 }
 
 async function setup(
@@ -156,6 +156,18 @@ async function create(data, client = prisma) {
       },
       db,
     );
+    if (data.classification)
+      await audit.record(
+        {
+          ticketId: ticket.id,
+          actorId: data.requesterId,
+          action: "CLASSIFY",
+          toValue: pri.code,
+          payload: { ...data.classification, slaPolicyId: policy.id },
+          createdAt: at,
+        },
+        db,
+      );
     return toTicket(
       await db.supportTicket.findUnique({
         where: { id: ticket.id },
@@ -196,8 +208,27 @@ function queueFilter({
   status,
   priority,
   search,
+  work,
+  replyIds,
+  now = new Date(),
 }) {
   const clauses = [];
+  if (work === "reply")
+    clauses.push(
+      Prisma.sql`t.id IN (${replyIds?.length ? Prisma.join(replyIds) : Prisma.sql`NULL`})`,
+    );
+  if (work) {
+    clauses.push(
+      Prisma.sql`s.code IN ('NEW','ASSIGNED','IN_PROGRESS','PENDING_USER')`,
+    );
+    const deadline = Prisma.sql`(SELECT min(due_at) FROM ticket_sla_targets WHERE ticket_id = t.id AND achieved_at IS NULL)`;
+    if (work === "overdue")
+      clauses.push(Prisma.sql`${deadline} <= ${now}::timestamptz`);
+    if (work === "soon")
+      clauses.push(
+        Prisma.sql`${deadline} > ${now}::timestamptz AND ${deadline} <= ${new Date(+now + require("@reloop/shared").customerServiceClientConfig.dashboard.warningMinutes * 60000)}::timestamptz`,
+      );
+  }
   if (scope === "unassigned") clauses.push(Prisma.sql`a.assignment_id IS NULL`);
   else if (scope === "mine")
     clauses.push(Prisma.sql`a.assignee_id = ${assigneeId}`);
@@ -225,6 +256,14 @@ function queueFilter({
 async function listQueue(options = {}) {
   if (options.role === "CUSTOMER_SERVICE" && options.status === "ESCALATED")
     return { items: [], total: 0 };
+  if (!["sla", "newest", "oldest", "priority"].includes(options.sort || "sla"))
+    throw require("@reloop/shared").badRequest("invalid sort");
+  const ordering = {
+    sla: Prisma.sql`sla.due_at ASC NULLS LAST, t.priority_score DESC, t.id ASC`,
+    newest: Prisma.sql`t.created_at DESC, t.id ASC`,
+    oldest: Prisma.sql`t.created_at ASC, t.id ASC`,
+    priority: Prisma.sql`p.rank DESC, sla.due_at ASC NULLS LAST, t.priority_score DESC, t.id ASC`,
+  }[options.sort || "sla"];
   const filter = queueFilter(options);
   const from = Prisma.sql`FROM support_tickets t
     JOIN ticket_statuses s ON s.ticket_status_id = t.current_status_id
@@ -235,8 +274,8 @@ async function listQueue(options = {}) {
   const [ids, counts] = await Promise.all([
     prisma.$queryRaw`SELECT t.id ${from}
       LEFT JOIN LATERAL (SELECT min(due_at) AS due_at FROM ticket_sla_targets
-        WHERE ticket_id = t.id AND achieved_at IS NULL) sla ON true
-      ${filter} ORDER BY sla.due_at ASC NULLS LAST, t.priority_score DESC, t.id ASC
+        WHERE ticket_id = t.id AND achieved_at IS NULL AND s.code NOT IN ('CLOSED','RESOLVED')) sla ON true
+      ${filter} ORDER BY ${ordering}
       LIMIT ${options.take ?? 20} OFFSET ${options.skip ?? 0}`,
     prisma.$queryRaw`SELECT count(*)::int AS total ${from} ${filter}`,
   ]);
@@ -423,15 +462,18 @@ async function setConversationId(ticketId, conversationId, db = prisma) {
   }
 }
 
-async function recordChatMessage({
-  ticketId,
-  conversationId,
-  chatMessageId,
-  authorId,
-  authorRole,
-  isInternal = false,
-  createdAt,
-}, client = prisma) {
+async function recordChatMessage(
+  {
+    ticketId,
+    conversationId,
+    chatMessageId,
+    authorId,
+    authorRole,
+    isInternal = false,
+    createdAt,
+  },
+  client = prisma,
+) {
   if (typeof chatMessageId !== "string" || !chatMessageId.trim())
     throw badRequest("chatMessageId is required");
   const date = createdAt == null ? new Date() : new Date(createdAt);
@@ -478,20 +520,30 @@ async function recordChatMessage({
             ? "AGENT"
             : null;
     if (!resolvedRole) throw badRequest("Unknown chat author role");
-    const event = await audit.record({
-      ticketId: row.id,
-      actorId: authorId || "system",
-      action: "REPLY",
-      dedupeKey,
-      payload: { chatMessageId, conversationId: row.chatLink?.conversationId || conversationId,
-        authorRole: resolvedRole, isInternal: Boolean(isInternal) },
-      createdAt: date,
-    }, db);
+    const event = await audit.record(
+      {
+        ticketId: row.id,
+        actorId: authorId || "system",
+        action: "REPLY",
+        dedupeKey,
+        payload: {
+          chatMessageId,
+          conversationId: row.chatLink?.conversationId || conversationId,
+          authorRole: resolvedRole,
+          isInternal: Boolean(isInternal),
+        },
+        createdAt: date,
+      },
+      db,
+    );
     if (resolvedRole === "AGENT" && !isInternal) {
       // Deliveries may arrive out of order; retain the earliest public staff reply.
       await db.ticketSlaTarget.updateMany({
-        where: { ticketId: row.id, metricType: "FIRST_RESPONSE",
-          OR: [{ achievedAt: null }, { achievedAt: { gt: date } }] },
+        where: {
+          ticketId: row.id,
+          metricType: "FIRST_RESPONSE",
+          OR: [{ achievedAt: null }, { achievedAt: { gt: date } }],
+        },
         data: { achievedAt: date },
       });
     }

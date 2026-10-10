@@ -9,6 +9,8 @@ const ADDRESS = {
   postalCode: "10110",
 };
 async function createOrder(prisma, { data }) {
+  const {price,finalPrice,productTitle,campaignCode,discountAmount,payoutHeld,paymentSimulationStatus,disputedAt,holdReason,heldAt,heldBy,reservationId,reservationExpiresAt,auctionId,checkoutSessionId,...fields}=data;
+  data={...fields,originalAmount:fields.originalAmount ?? price,ordersAmount:fields.ordersAmount ?? finalPrice ?? price,orderType:fields.orderType || "BUY_NOW"};
   const pending = ["pending", "pending_payment"].includes(data.status);
   return prisma.order.create({
     data: {

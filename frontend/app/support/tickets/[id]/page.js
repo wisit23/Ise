@@ -20,17 +20,6 @@ const STATUS_LABEL = {
   ESCALATED: "ยกระดับความสำคัญ",
 };
 
-// Agent-only next steps offered from each status (see ticketState.js).
-const AGENT_NEXT_STATUS = {
-  NEW: ["ESCALATED", "CLOSED"],
-  ASSIGNED: ["IN_PROGRESS", "ESCALATED", "CLOSED"],
-  IN_PROGRESS: ["PENDING_USER", "RESOLVED", "ESCALATED"],
-  PENDING_USER: ["IN_PROGRESS", "RESOLVED", "CLOSED"],
-  RESOLVED: ["CLOSED", "IN_PROGRESS"],
-  ESCALATED: ["IN_PROGRESS", "RESOLVED", "CLOSED"],
-  CLOSED: [],
-};
-
 export default function TicketThreadPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -89,12 +78,24 @@ export default function TicketThreadPage() {
   async function loadOlderMessages() {
     setLoadingOlder(true);
     try {
-      const page = await apiFetch(`/api/support/tickets/${id}?before=${encodeURIComponent(ticket.messagesNextCursor)}`, { token: getAccessToken() });
+      const page = await apiFetch(
+        `/api/support/tickets/${id}?before=${encodeURIComponent(ticket.messagesNextCursor)}`,
+        { token: getAccessToken() },
+      );
       if (page.chatAvailable === false) return;
-      setTicket((current) => ({ ...current, messagesNextCursor: page.messagesNextCursor,
-        messages: [...page.messages, ...current.messages].filter((message, index, all) => all.findIndex((m) => m.id === message.id) === index) }));
-    } catch (err) { setError(err.message); }
-    finally { setLoadingOlder(false); }
+      setTicket((current) => ({
+        ...current,
+        messagesNextCursor: page.messagesNextCursor,
+        messages: [...page.messages, ...current.messages].filter(
+          (message, index, all) =>
+            all.findIndex((m) => m.id === message.id) === index,
+        ),
+      }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingOlder(false);
+    }
   }
 
   async function handleAssign() {
@@ -156,7 +157,9 @@ export default function TicketThreadPage() {
     );
   }
 
-  const nextStatuses = isAgent ? AGENT_NEXT_STATUS[ticket.status] || [] : [];
+  const nextStatuses = isAgent
+    ? ticket.capabilities?.allowedNextStatuses || []
+    : [];
   const visibleLogs = ticket.conversationId
     ? ticket.messages.filter((m) => m.isInternal || m.authorRole === "SYSTEM")
     : ticket.messages;
@@ -286,10 +289,17 @@ export default function TicketThreadPage() {
                 </span>
               </summary>
               {ticket.chatAvailable === false && (
-                <p role="status" className="px-4 py-2 text-xs text-amber-700">ประวัติข้อความไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่</p>
+                <p role="status" className="px-4 py-2 text-xs text-amber-700">
+                  ประวัติข้อความไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่
+                </p>
               )}
               {ticket.messagesNextCursor && (
-                <button type="button" onClick={loadOlderMessages} disabled={loadingOlder} className="w-full px-4 py-2 text-xs text-indigo-600">
+                <button
+                  type="button"
+                  onClick={loadOlderMessages}
+                  disabled={loadingOlder}
+                  className="w-full px-4 py-2 text-xs text-indigo-600"
+                >
                   {loadingOlder ? "กำลังโหลด..." : "โหลดบันทึกก่อนหน้า"}
                 </button>
               )}

@@ -39,9 +39,9 @@ test("dashboard PostgreSQL snapshot: all-row totals, SLA boundaries, ownership, 
         "CREATE TEMP TABLE ticket_priorities (ticket_priority_id int, code text) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_assignments (ticket_id text, assignee_id text, ended_at timestamptz, assigned_at timestamptz DEFAULT now()) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_sla_targets (ticket_id text, due_at timestamptz, achieved_at timestamptz) ON COMMIT DROP",
-        "CREATE TEMP TABLE dispute_cases (id text, order_id text, reason text, status text, priority text, priority_score int, created_at timestamp, assigned_to text, assigned_role text, sla_expires_at timestamp) ON COMMIT DROP",
+        "CREATE TEMP TABLE dispute_case (id text, order_id text, reason text, status text, priority text, priority_score int, created_at timestamp, assigned_to text, assigned_role text, sla_expires_at timestamp) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_status_history (ticket_id text, to_status_id int, changed_by_id text, created_at timestamptz) ON COMMIT DROP",
-        "CREATE TEMP TABLE dispute_audit_logs (dispute_id text, actor_id text, action text, created_at timestamp) ON COMMIT DROP",
+        "CREATE TEMP TABLE dispute_case_log (dispute_case_id text, actor_id text, action text, created_at timestamp) ON COMMIT DROP",
       ])
         await tx.$executeRawUnsafe(ddl);
       await tx.$executeRaw`INSERT INTO ticket_statuses VALUES (1,'NEW'),(2,'ASSIGNED'),(3,'PENDING_USER'),(4,'RESOLVED'),(5,'CLOSED'),(6,'ESCALATED'),(7,'IN_PROGRESS')`;
@@ -161,14 +161,14 @@ test("dashboard PostgreSQL snapshot: all-row totals, SLA boundaries, ownership, 
         (await read({ focus: "mine_no_deadline" })).items[0].id,
         "t-8",
       );
-      await tx.$executeRaw`INSERT INTO dispute_cases VALUES
+      await tx.$executeRaw`INSERT INTO dispute_case VALUES
       ('d-1','o-1','Reason','OPEN','NORMAL',0,'2026-10-06 05:00:00','agent-a','CUSTOMER_SERVICE','2026-10-09 05:00:00'),
       ('d-2','o-2','Reason','NEEDS_INFO','NORMAL',0,'2026-10-09 04:00:00',NULL,NULL,NULL),
       ('d-3','o-3','Reason','OPEN','NORMAL',0,'2026-10-09',NULL,'ADMIN',NULL),
       ('d-4','o-4','Reason','OPEN','NORMAL',0,'2026-10-09',NULL,'TRUST_AND_SAFETY',NULL),
       ('d-5','o-5','Reason','DECIDED','NORMAL',0,'2026-10-09','agent-a','CUSTOMER_SERVICE',NULL),
       ('d-6','o-6','Reason','OPEN','NORMAL',0,'2026-10-09','agent-b','CUSTOMER_SERVICE',NULL)`;
-      await tx.$executeRaw`INSERT INTO dispute_audit_logs VALUES
+      await tx.$executeRaw`INSERT INTO dispute_case_log VALUES
         ('d-1','agent-a','CLAIM','2026-10-09 03:00:00'),
         ('d-1','agent-a','ESCALATE','2026-10-09 04:00:00'),
         ('d-1','agent-a','ESCALATE','2026-10-09 04:01:00'),

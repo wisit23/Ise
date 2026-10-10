@@ -83,6 +83,7 @@ function createSocketServer(httpServer) {
     presence.setOnline(userId).catch(() => {});
 
     // Broadcast to conversation rooms and participant user rooms that this user is online
+    void (async () => {
     try {
       const userConvs = await conversationService.listInbox(userId);
       for (const c of userConvs) {
@@ -103,6 +104,7 @@ function createSocketServer(httpServer) {
     } catch {
       // ignore lookup failures
     }
+    })();
 
     // Re-checks participant membership against the database on every join —
     // exactly like conversationService.getForParticipant does for the REST
@@ -117,8 +119,9 @@ function createSocketServer(httpServer) {
         // authorized user rooms, so never retain a stale conversation-room join.
         if (!isCase) {
           socket.join(broadcast.roomName(conversationId));
-          joinedConversations.add(conversationId);
+
         }
+        joinedConversations.add(conversationId);
         await presence.setOnline(userId);
         if (!isCase) socket.to(broadcast.roomName(conversationId))
           .emit("presence", { userId, online: true });
@@ -165,21 +168,24 @@ function createSocketServer(httpServer) {
       await presence.clearTyping(conversationId, userId).catch(() => {});
     });
 
-    socket.on("typing:start", async (conversationId) => {
+    async function handleTyping(conversationId, typing) {
       if (!joinedConversations.has(conversationId)) return;
-      await presence.setTyping(conversationId, userId);
-      socket
-        .to(broadcast.roomName(conversationId))
-        .emit("typing", { userId, typing: true });
-    });
-
-    socket.on("typing:stop", async (conversationId) => {
-      if (!joinedConversations.has(conversationId)) return;
-      await presence.clearTyping(conversationId, userId);
-      socket
-        .to(broadcast.roomName(conversationId))
-        .emit("typing", { userId, typing: false });
-    });
+      try {
+        const conversation = await conversationService.getForParticipant(conversationId, userId, { write: true });
+        if (conversation.status === "LOCKED") return;
+        if (typing) await presence.setTyping(conversationId, userId);
+        else await presence.clearTyping(conversationId, userId);
+        if (["SUPPORT", "DISPUTE", "DISPUTE_BUYER", "DISPUTE_SELLER"].includes(conversation.contextType)) {
+          await broadcast.broadcastCaseTyping(conversation, userId, typing);
+        } else {
+          socket.to(broadcast.roomName(conversationId)).emit("typing", { conversationId, userId, typing });
+        }
+      } catch {
+        // Permission/outage fails closed; typing must never crash the socket.
+      }
+    }
+    socket.on("typing:start", conversationId => handleTyping(conversationId, true));
+    socket.on("typing:stop", conversationId => handleTyping(conversationId, false));
 
     socket.on("disconnect", async () => {
       let isStillOnline = false;

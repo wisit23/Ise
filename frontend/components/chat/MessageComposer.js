@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MAX_MESSAGE_LENGTH } from "../../lib/chat";
+import useCustomerServiceConfig from "../support/hooks/useCustomerServiceConfig";
 import { getFileTypeConfig } from "../../lib/fileIcons";
-import UploadProgressPill from "./UploadProgressPill";
-
-const TYPING_STOP_DELAY_MS = 2000;
-const COUNTER_VISIBLE_FROM = MAX_MESSAGE_LENGTH - 200;
+import {
+  readCaseDraft,
+  saveCaseDraft,
+  readDraftFile,
+  saveDraftFile,
+} from "../../lib/caseDrafts";
 
 function formatFileSize(bytes) {
   if (!bytes) return "";
@@ -17,13 +19,13 @@ function formatFileSize(bytes) {
 
 /** Enter sends, Shift+Enter inserts a newline.
  *
- * `onTyping` is optional and fires once per typing burst plus once when it
- * stops — not on every keystroke.
+ * `onTyping` starts each burst, refreshes it at most once per 1.5 seconds,
+ * and stops on idle, send or unmount.
  *
  * `onAttach` shows the paperclip button. When a file is picked:
  * - A preview thumbnail card appears with file name, size, and a remove button.
  * - The user can type a caption.
- * - Pressing Send (or Enter) uploads the file with an animated progress pill.
+ * - Pressing Send (or Enter) uploads the file with an indeterminate sending status.
  */
 export default function MessageComposer({
   onSend,
@@ -31,32 +33,64 @@ export default function MessageComposer({
   onTyping,
   onFocus,
   disabled,
+  draftKey,
+  onBusyChange,
 }) {
-  const [value, setValue] = useState("");
+  const config = useCustomerServiceConfig();
+  const MAX_MESSAGE_LENGTH = config.chat.maxMessageLength;
+  const COUNTER_VISIBLE_FROM = Math.max(0, MAX_MESSAGE_LENGTH - 200);
+  const TYPING_STOP_DELAY_MS = config.timing.typingStopMs;
+  const [attachmentError, setAttachmentError] = useState("");
+  const [value, setValue] = useState(() => readCaseDraft(draftKey));
   const [sending, setSending] = useState(false);
-  const [pendingFile, setPendingFile] = useState(null);
+  const [pendingFile, setPendingFile] = useState(() => readDraftFile(draftKey));
   const [previewUrl, setPreviewUrl] = useState(null);
-
-  // Upload Progress State (shown during file upload)
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
 
   const typingActiveRef = useRef(false);
   const typingTimeoutRef = useRef(null);
+  const typingHeartbeatRef = useRef(0);
+  const typingCallbackRef = useRef(onTyping);
+  typingCallbackRef.current = onTyping;
+  const restoreFocusRef = useRef(false);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
-  const progressIntervalRef = useRef(null);
+  const sendButtonRef = useRef(null);
 
+  useEffect(() => {
+    if (!sending && !disabled && restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      if (
+        [document.body, textareaRef.current, sendButtonRef.current].includes(
+          document.activeElement,
+        )
+      ) {
+        textareaRef.current?.focus({ preventScroll: true });
+      }
+    }
+  }, [sending, disabled]);
+  useEffect(
+    () => () => {
+      clearTimeout(typingTimeoutRef.current);
+      if (typingActiveRef.current) typingCallbackRef.current?.(false);
+    },
+    [],
+  );
   const remaining = MAX_MESSAGE_LENGTH - value.length;
+  useEffect(() => {
+    saveCaseDraft(draftKey, value);
+  }, [draftKey, value]);
+  useEffect(() => {
+    saveDraftFile(draftKey, pendingFile);
+  }, [draftKey, pendingFile]);
+  useEffect(() => {
+    onBusyChange?.(sending);
+  }, [sending, onBusyChange]);
 
   // Clean up object URL when component unmounts or pending file changes
   useEffect(() => {
     return () => {
       if (previewUrl && typeof URL.revokeObjectURL === "function") {
         URL.revokeObjectURL(previewUrl);
-      }
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
       }
     };
   }, [previewUrl]);
@@ -79,8 +113,12 @@ export default function MessageComposer({
     autoResizeTextarea();
 
     if (!onTyping) return;
-    if (!typingActiveRef.current) {
+    if (
+      !typingActiveRef.current ||
+      Date.now() - typingHeartbeatRef.current > config.timing.typingHeartbeatMs
+    ) {
       typingActiveRef.current = true;
+      typingHeartbeatRef.current = Date.now();
       onTyping(true);
     }
     clearTimeout(typingTimeoutRef.current);
@@ -110,44 +148,38 @@ export default function MessageComposer({
     if ((!trimmed && !pendingFile) || sending || disabled) return;
 
     stopTypingNow();
+    restoreFocusRef.current = true;
     setSending(true);
 
     if (pendingFile && onAttach) {
-      // Simulate/animate progress bar smoothly
-      setUploadProgress(15);
-      progressIntervalRef.current = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 90) return prev;
-          return prev + Math.floor(Math.random() * 15 + 10);
-        });
-      }, 150);
-
       try {
         await onAttach(pendingFile, trimmed);
-        setUploadProgress(100);
+        saveCaseDraft(draftKey, "");
+        saveDraftFile(draftKey, null);
         clearPendingFile();
         setValue("");
         if (textareaRef.current) textareaRef.current.style.height = "44px";
       } catch {
         // Keep file and caption on failure so user can retry
       } finally {
-        if (progressIntervalRef.current) {
-          clearInterval(progressIntervalRef.current);
-        }
         setSending(false);
-        setUploadProgress(0);
       }
     } else {
       // Regular text send
-      setValue("");
+      if (!draftKey) setValue("");
       if (textareaRef.current) {
         textareaRef.current.style.height = "44px";
         textareaRef.current.focus();
       }
       try {
         await onSend(trimmed);
+        if (draftKey) {
+          saveCaseDraft(draftKey, "");
+          setValue("");
+        }
       } catch {
-        setValue((draft) => (draft ? `${value}\n${draft}` : value));
+        if (!draftKey)
+          setValue((draft) => (draft ? `${value}\n${draft}` : value));
       } finally {
         setSending(false);
       }
@@ -155,7 +187,12 @@ export default function MessageComposer({
   }
 
   function handleKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (
+      e.key === "Enter" &&
+      !e.shiftKey &&
+      !e.nativeEvent.isComposing &&
+      e.keyCode !== 229
+    ) {
       e.preventDefault();
       submit();
     }
@@ -166,6 +203,16 @@ export default function MessageComposer({
     e.target.value = "";
     if (!file || !onAttach || sending || disabled) return;
 
+    if (
+      !config.chat.mimeTypes.includes(file.type) ||
+      file.size > config.chat.maxFileBytes
+    ) {
+      setAttachmentError(
+        `เลือกไฟล์ชนิดที่รองรับ ขนาดไม่เกิน ${Math.round(config.chat.maxFileBytes / (1024 * 1024))} MB`,
+      );
+      return;
+    }
+    setAttachmentError("");
     clearPendingFile();
     setPendingFile(file);
 
@@ -177,15 +224,6 @@ export default function MessageComposer({
     }
   }
 
-  function handleCancelUpload() {
-    if (progressIntervalRef.current) {
-      clearInterval(progressIntervalRef.current);
-    }
-    setSending(false);
-    setUploadProgress(0);
-    clearPendingFile();
-  }
-
   const canSend =
     !disabled && !sending && (value.trim().length > 0 || Boolean(pendingFile));
 
@@ -195,16 +233,20 @@ export default function MessageComposer({
 
   return (
     <div className="relative bg-white/95 backdrop-blur-sm p-3 transition-all duration-200">
+      {attachmentError && (
+        <p role="alert" className="px-3 text-xs text-red-700">
+          {attachmentError}
+        </p>
+      )}
       {/* Upload Progress Bar (when uploading an attachment) */}
       {sending && pendingFile && (
         <div className="mb-2 animate-fade-in">
-          <UploadProgressPill
-            progress={uploadProgress}
-            isPaused={isPaused}
-            fileName={pendingFile.name}
-            onPauseToggle={() => setIsPaused((p) => !p)}
-            onCancel={handleCancelUpload}
-          />
+          <p
+            role="status"
+            className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600"
+          >
+            กำลังส่งไฟล์ {pendingFile.name}… กรุณารอผลการส่ง
+          </p>
         </div>
       )}
 
@@ -283,7 +325,7 @@ export default function MessageComposer({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,application/pdf"
+              accept={config.chat.mimeTypes.join(",")}
               onChange={handleFileChange}
               className="hidden"
               aria-hidden="true"
@@ -313,7 +355,10 @@ export default function MessageComposer({
             onChange={handleChange}
             onKeyDown={handleKeyDown}
             onFocus={onFocus}
-            disabled={disabled || (sending && Boolean(pendingFile))}
+            disabled={
+              disabled ||
+              (sending && (Boolean(pendingFile) || Boolean(draftKey)))
+            }
             rows={1}
             placeholder={
               pendingFile ? "เพิ่มคำบรรยายรูปภาพ..." : "พิมพ์ข้อความ..."
@@ -328,6 +373,7 @@ export default function MessageComposer({
         <button
           type="button"
           onClick={submit}
+          ref={sendButtonRef}
           disabled={!canSend}
           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-xs transition-all active:scale-95 focus:outline-none disabled:cursor-not-allowed disabled:shadow-none ${
             canSend

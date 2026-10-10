@@ -55,6 +55,7 @@ export default function MessageList({
   messages,
   currentUserId,
   otherName = "ผู้ใช้",
+  resolveSenderName,
   onPromptClick,
   activeRoomId,
 }) {
@@ -198,9 +199,9 @@ export default function MessageList({
                   {isLastInGroup ? (
                     <div
                       className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-slate-700 text-xs font-semibold shadow-2xs animate-fade-in"
-                      title={otherName}
+                      title={resolveSenderName?.(m) || otherName}
                     >
-                      {otherName?.[0] || "?"}
+                      {(resolveSenderName?.(m) || otherName)?.[0] || "?"}
                     </div>
                   ) : (
                     <div className="h-7 w-7" />
@@ -226,6 +227,7 @@ export default function MessageList({
                         : "rounded-2xl rounded-l-md")
                 }`}
               >
+                {!own && resolveSenderName?.(m)?.startsWith('เจ้าหน้าที่') && <p className="mb-1 text-xs font-medium text-slate-500">{resolveSenderName(m)}</p>}
                 {(m.type === "IMAGE" || m.type === "FILE") && (
                   <div className={m.body ? "mb-2" : ""}>
                     <MessageAttachment message={m} own={own} />

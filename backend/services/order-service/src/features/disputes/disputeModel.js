@@ -400,7 +400,13 @@ async function openDispute({
       holdBy: openedBy,
     });
     await tx.disputeCaseLog.create({
-      data: caseLogData(dispute, dispute, openedBy, "OPEN", reason),
+      data: caseLogData(
+        dispute,
+        dispute,
+        openedBy,
+        "OPEN",
+        classification ? JSON.stringify(classification) : reason,
+      ),
     });
     return caseView({ ...dispute, evidence: [] });
   });
@@ -426,9 +432,23 @@ async function changeAssignment({
           { assignedRole: { notIn: ["TRUST_AND_SAFETY", "ADMIN"] } },
         ];
     }
+    if (action === "REQUEST_MORE_EVIDENCE") {
+      where.assignedTo = actorId;
+      where.assignedRole = "ADMIN";
+    }
+    const firstReview =
+      ["CLAIM", "REASSIGN", "ESCALATE"].includes(action) &&
+      before.slaPolicyVersion &&
+      !before.firstReviewedAt &&
+      before.decisionDueAt
+        ? {
+            firstReviewedAt: data.assignedAt || new Date(),
+            slaExpiresAt: before.decisionDueAt,
+          }
+        : {};
     const changed = await tx.disputeCase.updateMany({
       where,
-      data: { ...data, version: { increment: 1 } },
+      data: { ...data, ...firstReview, version: { increment: 1 } },
     });
     if (changed.count !== 1) return null;
     const after = await tx.disputeCase.findUnique({
@@ -442,7 +462,7 @@ async function changeAssignment({
   });
 }
 async function claim({ id, version, userId, role }) {
-  const result = await changeAssignment({
+  return changeAssignment({
     id,
     version,
     actorId: userId,
@@ -451,7 +471,6 @@ async function claim({ id, version, userId, role }) {
     claimRole: role,
     data: { assignedTo: userId, assignedRole: role, assignedAt: new Date() },
   });
-  return recordFirstReview(result);
 }
 function reassign({ id, version, actorId, toUserId, toRole, reason }) {
   return changeAssignment({
@@ -548,25 +567,6 @@ async function decide({
     });
     return caseView(after);
   });
-}
-async function recordFirstReview(dispute) {
-  if (
-    !dispute ||
-    !dispute.slaPolicyVersion ||
-    dispute.firstReviewedAt ||
-    !dispute.decisionDueAt
-  )
-    return dispute;
-  return caseView(
-    await prisma.disputeCase.update({
-      where: { id: dispute.id },
-      data: {
-        firstReviewedAt: new Date(),
-        slaExpiresAt: dispute.decisionDueAt,
-      },
-      include: INCLUDE,
-    }),
-  );
 }
 async function requestMoreEvidence({ id, version, actorId, reason }) {
   const before = await prisma.disputeCase.findUnique({ where: { id } });

@@ -1,26 +1,17 @@
-const categories = [
-  ["ORDER", "คำสั่งซื้อ"],
-  ["PAYMENT", "การชำระเงิน"],
-  ["ACCOUNT", "บัญชีผู้ใช้"],
-  ["TECHNICAL", "ปัญหาทางเทคนิค"],
-  ["OTHER", "อื่น ๆ"],
-];
-const priorities = [
-  ["LOW", 1, 4320],
-  ["NORMAL", 2, 1440],
-  ["HIGH", 3, 240],
-  ["URGENT", 4, 60],
-];
-const statuses = [
-  "NEW",
-  "ASSIGNED",
-  "IN_PROGRESS",
-  "PENDING_USER",
-  "ESCALATED",
-  "RESOLVED",
-  "CLOSED",
-];
+const {
+  SERVICE_POLICIES,
+  POLICY_VERSION,
+  serializableTransaction,
+} = require("@reloop/shared");
+const {
+  categories,
+  legacyPriorities: priorities,
+} = require("./reference-data.json");
+const { STATUSES: statuses } = require("../src/features/tickets/ticketState");
 async function seedReferenceData(db) {
+  return serializableTransaction(db, seedRecords);
+}
+async function seedRecords(db) {
   for (const [code, nameTh] of categories) {
     for (const delegate of [db.ticketCategory, db.helpCategory])
       await delegate.upsert({
@@ -35,8 +26,7 @@ async function seedReferenceData(db) {
       update: {},
       create: { code, name: code, rank },
     });
-    // Compatibility defaults: resolution uses the old deadline too. New policy versions
-    // can set separate targets after the business owner agrees their durations.
+    // Retain v1 for existing snapshots and historical imports.
     await db.slaPolicy.upsert({
       where: { id: "sla-default-" + code + "-v1" },
       update: {},
@@ -48,6 +38,29 @@ async function seedReferenceData(db) {
         effectiveFrom: new Date(0),
       },
     });
+    const policy = SERVICE_POLICIES[code];
+    if (priority.rank !== policy.rank)
+      throw new Error(
+        `Priority rank mismatch for ${code}; migrate ranks explicitly`,
+      );
+    const persisted = await db.slaPolicy.upsert({
+      where: { id: `sla-default-${code}-${POLICY_VERSION}` },
+      update: {},
+      create: {
+        id: `sla-default-${code}-${POLICY_VERSION}`,
+        priorityId: priority.id,
+        firstResponseMinutes: policy.firstResponseMinutes,
+        resolutionMinutes: policy.resolutionMinutes,
+        effectiveFrom: new Date(),
+      },
+    });
+    if (
+      persisted.firstResponseMinutes !== policy.firstResponseMinutes ||
+      persisted.resolutionMinutes !== policy.resolutionMinutes
+    )
+      throw new Error(
+        `SLA policy ${POLICY_VERSION} differs from stored ${code}; use a new policy version`,
+      );
   }
   for (const [index, code] of statuses.entries())
     await db.ticketStatus.upsert({

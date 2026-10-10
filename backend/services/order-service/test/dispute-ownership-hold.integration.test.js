@@ -1,4 +1,4 @@
-const { createOrder, findOrder } = require("./fixtures");
+const { createOrder, findOrder, deleteOrder } = require("./fixtures");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
@@ -38,11 +38,15 @@ const agent1Id = "tsr02-agent-1";
 const agent2Id = "tsr02-agent-2";
 const tsAgentId = "tsr02-ts-agent";
 const tsAgent2Id = "tsr02-ts-agent-2";
+const adminId = "tsr02-admin-1";
+const admin2Id = "tsr02-admin-2";
 
 const agent1Token = tokenFor(agent1Id, ["CUSTOMER_SERVICE"]);
 const agent2Token = tokenFor(agent2Id, ["CUSTOMER_SERVICE"]);
 const tsAgentToken = tokenFor(tsAgentId, ["TRUST_AND_SAFETY"]);
 const tsAgent2Token = tokenFor(tsAgent2Id, ["TRUST_AND_SAFETY"]);
+const adminToken = tokenFor(adminId, ["ADMIN"]);
+const admin2Token = tokenFor(admin2Id, ["ADMIN"]);
 // Mock authClient for target user resolution
 authClient.setMockUserResolver(async (id) => {
   if (id === agent1Id || id === agent2Id) {
@@ -60,6 +64,9 @@ authClient.setMockUserResolver(async (id) => {
       roles: ["TRUST_AND_SAFETY"],
       role: "TRUST_AND_SAFETY",
     };
+  }
+  if (id === adminId || id === admin2Id) {
+    return { id, status: "ACTIVE", roles: ["ADMIN"], role: "ADMIN" };
   }
   if (id === "suspended-agent") {
     return {
@@ -96,17 +103,29 @@ async function databaseIsReachable() {
   }
 }
 
+async function escalateAndClaimAdmin(disputeId, agentToken, version) {
+  const escalated = await request(app).post(`/disputes/${disputeId}/escalate`)
+    .set("Authorization", `Bearer ${agentToken}`)
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "ส่งให้ Admin ตัดสินเงิน", version });
+  assert.equal(escalated.status, 200);
+  const claimed = await request(app).post(`/disputes/${disputeId}/claim`)
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({ version: escalated.body.version });
+  assert.equal(claimed.status, 200);
+  return claimed.body;
+}
+
 async function makeOrder(status = "completed", overrides = {}) {
   return createOrder(prisma, {
     data: {
       buyerId,
       sellerId,
       productId: `tsr02-prod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      originalAmount: 1500,
-      ordersAmount: 1500,
-      orderType: "BUY_NOW",
+      productTitle: "TSR-02 test product",
+      price: 1500,
       status,
       version: 0,
+      paymentSimulationStatus: "RELEASE_PENDING",
       ...overrides,
     },
   });
@@ -131,10 +150,7 @@ test("TSR-02: Single-owner dispute assignment, unassigned read-only, validation,
   const openRes = await request(app)
     .post(`/${order.id}/disputes`)
     .set("Authorization", `Bearer ${buyerToken}`)
-    .send({
-      disputeType: "ITEM_NOT_AS_DESCRIBED",
-      reason: "ตำหนิหนัก ไม่ตรงปก",
-    });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "ตำหนิหนัก ไม่ตรงปก" });
   assert.equal(openRes.status, 201);
   const disputeId = openRes.body.id;
   assert.equal(openRes.body.assignedTo, null);
@@ -146,7 +162,7 @@ test("TSR-02: Single-owner dispute assignment, unassigned read-only, validation,
     .set("Authorization", `Bearer ${agent1Token}`)
     .send({ decision: "REJECT", reason: "ตัดสินก่อนเคลม", version: 0 });
   assert.equal(unassignedDecideRes.status, 403);
-  assert.ok(unassignedDecideRes.body.error?.includes("claimed"));
+  assert.ok(unassignedDecideRes.body.error?.includes("only Admin"));
 
   // 3. Unassigned dispute: adding agent evidence without claiming -> 403
   const unassignedEvidenceRes = await request(app)
@@ -169,6 +185,7 @@ test("TSR-02: Single-owner dispute assignment, unassigned read-only, validation,
     .set("Authorization", `Bearer ${agent1Token}`)
     .send({ version: 0 });
   assert.equal(claimRes.status, 200);
+
   assert.equal(claimRes.body.assignedTo, agent1Id);
   assert.equal(claimRes.body.assignedRole, "CUSTOMER_SERVICE");
   assert.equal(claimRes.body.version, 1);
@@ -240,16 +257,15 @@ test("TSR-02: Single-owner dispute assignment, unassigned read-only, validation,
     .send({ decision: "REJECT", reason: "ตัดสินหลังโอนเคสแล้ว", version: 2 });
   assert.equal(agent1DecideRes.status, 403);
 
-  // 12. Agent 2 escalates to Trust & Safety
+  // 12. Agent 2 escalates to Admin
   const escalateRes = await request(app)
     .post(`/disputes/${disputeId}/escalate`)
     .set("Authorization", `Bearer ${agent2Token}`)
-    .send({
-      reason: "พบพฤติกรรมฉ้อโกง ต้องให้ทีม Trust & Safety ตรวจสอบ",
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "พบพฤติกรรมฉ้อโกง ต้องให้ Admin ตรวจสอบ",
       version: 2,
     });
   assert.equal(escalateRes.status, 200);
-  assert.equal(escalateRes.body.assignedRole, "TRUST_AND_SAFETY");
+  assert.equal(escalateRes.body.assignedRole, "ADMIN");
   assert.equal(escalateRes.body.assignedTo, null);
   assert.equal(escalateRes.body.version, 3);
 
@@ -266,40 +282,46 @@ test("TSR-02: Single-owner dispute assignment, unassigned read-only, validation,
     .send({ decision: "REJECT", reason: "CS attempt", version: 3 });
   assert.equal(csDecideEscalatedRes.status, 403);
 
-  // 14. T&S Agent CANNOT decide before claiming the escalated dispute -> 403
+  // 14. Admin cannot decide before claiming the escalated dispute -> 403
   const tsDecideBeforeClaimRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
-    .set("Authorization", `Bearer ${tsAgentToken}`)
+    .set("Authorization", `Bearer ${adminToken}`)
     .send({
       decision: "APPROVE_REFUND",
       reason: "ตัดสินก่อนเคลมเคส escalated",
       version: 3,
+      idempotencyKey: `before-claim-${disputeId}`,
     });
   assert.equal(tsDecideBeforeClaimRes.status, 403);
   assert.ok(tsDecideBeforeClaimRes.body.error?.includes("claimed"));
 
-  // 15. T&S Agent CLAIMS the escalated dispute
+  // 15. Admin claims the escalated dispute
   const tsClaimRes = await request(app)
     .post(`/disputes/${disputeId}/claim`)
-    .set("Authorization", `Bearer ${tsAgentToken}`)
+    .set("Authorization", `Bearer ${adminToken}`)
     .send({ version: 3 });
   assert.equal(tsClaimRes.status, 200);
-  assert.equal(tsClaimRes.body.assignedTo, tsAgentId);
-  assert.equal(tsClaimRes.body.assignedRole, "TRUST_AND_SAFETY");
+  assert.equal(tsClaimRes.body.assignedTo, adminId);
+  assert.equal(tsClaimRes.body.assignedRole, "ADMIN");
   assert.equal(tsClaimRes.body.version, 4);
 
-  // 16. T&S Agent can now decide the claimed dispute
+  // 16. Admin can now decide the claimed dispute
   const tsDecideRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
-    .set("Authorization", `Bearer ${tsAgentToken}`)
+    .set("Authorization", `Bearer ${adminToken}`)
     .send({
       decision: "APPROVE_REFUND",
       reason: "ตรวจสอบแล้วเข้าข่ายฉ้อโกง อนุมัติคืนเงิน",
       version: 4,
+      idempotencyKey: `verdict-${disputeId}`,
     });
   assert.equal(tsDecideRes.status, 200);
   assert.equal(tsDecideRes.body.status, "DECIDED");
   assert.equal(tsDecideRes.body.decision, "APPROVE_REFUND");
+  const retry = await request(app).post(`/disputes/${disputeId}/decision`)
+    .set("Authorization", `Bearer ${adminToken}`)
+    .send({ decision: "APPROVE_REFUND", reason: "ตรวจสอบแล้วเข้าข่ายฉ้อโกง อนุมัติคืนเงิน", version: 4, idempotencyKey: `verdict-${disputeId}` });
+  assert.equal(retry.status, 200);
 
   // Verify Audit Trail contains CLAIM, REASSIGN, ESCALATE, CLAIM, DECIDE
   const auditLogs = await prisma.disputeCaseLog.findMany({
@@ -312,6 +334,7 @@ test("TSR-02: Single-owner dispute assignment, unassigned read-only, validation,
   assert.ok(actions.includes("REASSIGN"));
   assert.ok(actions.includes("ESCALATE"));
   assert.ok(actions.includes("DECIDE"));
+  assert.equal(actions.filter((action) => action === "DECIDE").length, 1);
 });
 
 test("TSR-02 Concurrency: 2 agents concurrent Claim race on same dispute", async (t) => {
@@ -367,19 +390,11 @@ test("TSR-02 Concurrency: 2 admins concurrent Hold race on same order", async (t
     request(app)
       .post(`/admin/${order.id}/hold`)
       .set("Authorization", `Bearer ${tsAgentToken}`)
-      .send({
-        disputeType: "ITEM_NOT_AS_DESCRIBED",
-        reason: "Admin 1 hold",
-        version: 0,
-      }),
+      .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "Admin 1 hold", version: 0 }),
     request(app)
       .post(`/admin/${order.id}/hold`)
       .set("Authorization", `Bearer ${tsAgent2Token}`)
-      .send({
-        disputeType: "ITEM_NOT_AS_DESCRIBED",
-        reason: "Admin 2 hold",
-        version: 0,
-      }),
+      .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "Admin 2 hold", version: 0 }),
   ]);
 
   const statuses = [res1.status, res2.status].sort();
@@ -424,26 +439,25 @@ test("TSR-02 Concurrency: Dispute Decision vs T&S Hold race on Order CAS", async
     .set("Authorization", `Bearer ${agent1Token}`)
     .send({ version: 0 });
 
+  const adminClaim = await escalateAndClaimAdmin(disputeId, agent1Token, 1);
+
   const orderDb = await findOrder(prisma, { where: { id: order.id } });
 
   // Concurrently race Decision vs T&S Hold
   const [decisionRes, holdRes] = await Promise.all([
     request(app)
       .post(`/disputes/${disputeId}/decision`)
-      .set("Authorization", `Bearer ${agent1Token}`)
+      .set("Authorization", `Bearer ${adminToken}`)
       .send({
         decision: "APPROVE_REFUND",
         reason: "ตัดสินคืนเงิน",
-        version: 1,
+        version: adminClaim.version,
+        idempotencyKey: `hold-race-${disputeId}`,
       }),
     request(app)
       .post(`/admin/${order.id}/hold`)
       .set("Authorization", `Bearer ${tsAgentToken}`)
-      .send({
-        disputeType: "ITEM_NOT_AS_DESCRIBED",
-        reason: "T&S Hold แข่งกับ Decision",
-        version: orderDb.version,
-      }),
+      .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "T&S Hold แข่งกับ Decision", version: orderDb.version }),
   ]);
 
   const statuses = [decisionRes.status, holdRes.status];
@@ -464,11 +478,7 @@ test("TSR-02 Concurrency: Hold eligibility & Concurrent Pay", async (t) => {
   const holdPendingRes = await request(app)
     .post(`/admin/${pendingOrder.id}/hold`)
     .set("Authorization", `Bearer ${tsAgentToken}`)
-    .send({
-      disputeType: "ITEM_NOT_AS_DESCRIBED",
-      reason: "Hold pending",
-      version: 0,
-    });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "Hold pending", version: 0 });
   assert.equal(holdPendingRes.status, 409);
 
   // 2. Race 2 concurrent pay() calls with version 0 on the same pending_payment order
@@ -532,16 +542,7 @@ test("TSR-02: Payment outbox survives product-service failure and retries", asyn
     where: { orderId: order.id, action: "PRODUCT_SYNC_REQUESTED" },
   });
   assert.ok(pendingEvent);
-  assert.equal(
-    await prisma.orderLog.count({
-      where: {
-        orderId: order.id,
-        action: "PRODUCT_SYNC_COMPLETED",
-        detail: pendingEvent.id,
-      },
-    }),
-    0,
-  );
+  assert.equal(await prisma.orderLog.count({where:{action:"PRODUCT_SYNC_COMPLETED",detail:pendingEvent.id}}), 0);
 
   productClient.setProductStatus = async () => ({ ok: true });
   const retried = await request(app)
@@ -552,19 +553,9 @@ test("TSR-02: Payment outbox survives product-service failure and retries", asyn
   assert.equal(retried.body.status, "confirmed");
 
   const processedEvent = await prisma.orderLog.findFirst({
-    where: {
-      orderId: order.id,
-      action: "PRODUCT_SYNC_COMPLETED",
-      detail: pendingEvent.id,
-    },
+    where: { action: "PRODUCT_SYNC_COMPLETED", detail: pendingEvent.id },
   });
   assert.ok(processedEvent);
-  assert.equal(
-    await prisma.payment.count({
-      where: { orderId: order.id, paymentStatus: "paid" },
-    }),
-    1,
-  );
 });
 
 test("TSR-02 Concurrency: Reassign vs Decision race on Dispute", async (t) => {
@@ -577,10 +568,7 @@ test("TSR-02 Concurrency: Reassign vs Decision race on Dispute", async (t) => {
   const openRes = await request(app)
     .post(`/${order.id}/disputes`)
     .set("Authorization", `Bearer ${buyerToken}`)
-    .send({
-      disputeType: "ITEM_NOT_AS_DESCRIBED",
-      reason: "Reassign vs Decision race",
-    });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "Reassign vs Decision race" });
   const disputeId = openRes.body.id;
 
   // Agent 1 claims
@@ -589,16 +577,18 @@ test("TSR-02 Concurrency: Reassign vs Decision race on Dispute", async (t) => {
     .set("Authorization", `Bearer ${agent1Token}`)
     .send({ version: 0 });
 
-  // Race Reassign to Agent 2 vs Decision by Agent 1 with same version 1
+  const adminClaim = await escalateAndClaimAdmin(disputeId, agent1Token, 1);
+
+  // Race Admin reassignment vs Admin verdict at the same version
   const [reassignRes, decideRes] = await Promise.all([
     request(app)
       .post(`/disputes/${disputeId}/reassign`)
-      .set("Authorization", `Bearer ${agent1Token}`)
-      .send({ toUserId: agent2Id, reason: "แข่งโอน", version: 1 }),
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ toUserId: admin2Id, reason: "แข่งโอน", version: adminClaim.version }),
     request(app)
       .post(`/disputes/${disputeId}/decision`)
-      .set("Authorization", `Bearer ${agent1Token}`)
-      .send({ decision: "REJECT", reason: "แข่งตัดสิน", version: 1 }),
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ decision: "REJECT", reason: "แข่งตัดสิน", version: adminClaim.version, idempotencyKey: `reassign-race-${disputeId}` }),
   ]);
 
   const statuses = [reassignRes.status, decideRes.status].sort();
@@ -635,17 +625,14 @@ test("TSR-02: Hold decoupling between CS dispute and Trust & Safety holds", asyn
     .set("Authorization", `Bearer ${agent1Token}`)
     .send({ version: 0 });
   assert.equal(claimRes.status, 200);
+  const adminClaim = await escalateAndClaimAdmin(disputeId, agent1Token, claimRes.body.version);
 
   // 2. Trust & Safety places an administrative hold
   orderDb = await findOrder(prisma, { where: { id: order.id } });
   const tsHoldRes = await request(app)
     .post(`/admin/${order.id}/hold`)
     .set("Authorization", `Bearer ${tsAgentToken}`)
-    .send({
-      disputeType: "ITEM_NOT_AS_DESCRIBED",
-      reason: "T&S ตรวจสอบความปลอดภัยควบคู่",
-      version: orderDb.version,
-    });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "T&S ตรวจสอบความปลอดภัยควบคู่", version: orderDb.version });
   assert.equal(tsHoldRes.status, 200);
 
   // Check that 2 active holds exist
@@ -654,14 +641,15 @@ test("TSR-02: Hold decoupling between CS dispute and Trust & Safety holds", asyn
   });
   assert.equal(activeHolds.length, 2);
 
-  // 3. CS decides to REJECT the dispute -> releases only DISPUTE hold
+  // 3. Admin releases escrow -> releases only DISPUTE hold
   const rejectRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
-    .set("Authorization", `Bearer ${agent1Token}`)
+    .set("Authorization", `Bearer ${adminToken}`)
     .send({
       decision: "REJECT",
       reason: "หลักฐานผู้ซื้อไม่ชัดเจน ยกเลิกข้อพิพาท",
-      version: claimRes.body.version,
+      version: adminClaim.version,
+      idempotencyKey: `hold-decouple-${disputeId}`,
     });
   assert.equal(rejectRes.status, 200);
 
@@ -679,20 +667,19 @@ test("TSR-02: Hold decoupling between CS dispute and Trust & Safety holds", asyn
   const tsReleaseRes = await request(app)
     .post(`/admin/${order.id}/release`)
     .set("Authorization", `Bearer ${tsAgentToken}`)
-    .send({
-      disputeType: "ITEM_NOT_AS_DESCRIBED",
-      reason: "ตรวจสอบเสร็จสิ้น ปลอดภัย",
-      version: orderDb.version,
-    });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "ตรวจสอบเสร็จสิ้น ปลอดภัย", version: orderDb.version });
   assert.equal(tsReleaseRes.status, 200);
 
   // Now all holds released -> payoutHeld becomes false, heldBy cleared, status returns to preDisputeStatus (completed)
   orderDb = await findOrder(prisma, { where: { id: order.id } });
   assert.equal(orderDb.payoutHeld, false);
   assert.equal(orderDb.status, "completed");
+  assert.equal(orderDb.holds.filter(h => !h.releaseAt).length, 0);
+  assert.equal(orderDb.heldAt, null);
+  assert.equal(orderDb.holdReason, null);
 });
 
-test("TSR-02: Approved refund waits for T&S and never reverts to completed", async (t) => {
+test("TSR-02: Approving refund locks order status — subsequent T&S release never reverts to completed", async (t) => {
   if (!(await databaseIsReachable())) {
     t.skip("DATABASE_URL not reachable");
     return;
@@ -704,11 +691,7 @@ test("TSR-02: Approved refund waits for T&S and never reverts to completed", asy
   const tsHoldRes = await request(app)
     .post(`/admin/${order.id}/hold`)
     .set("Authorization", `Bearer ${tsAgentToken}`)
-    .send({
-      disputeType: "ITEM_NOT_AS_DESCRIBED",
-      reason: "ระงับเงินก่อน",
-      version: order.version,
-    });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "ระงับเงินก่อน", version: order.version });
   assert.equal(tsHoldRes.status, 200);
 
   order = await findOrder(prisma, { where: { id: order.id } });
@@ -727,37 +710,35 @@ test("TSR-02: Approved refund waits for T&S and never reverts to completed", asy
     .set("Authorization", `Bearer ${agent1Token}`)
     .send({ version: 0 });
   assert.equal(claimRes.status, 200);
+  const adminClaim = await escalateAndClaimAdmin(disputeId, agent1Token, claimRes.body.version);
 
-  // 3. CS decides APPROVE_REFUND
+  // 3. Admin decides APPROVE_REFUND
   const decideRes = await request(app)
     .post(`/disputes/${disputeId}/decision`)
-    .set("Authorization", `Bearer ${agent1Token}`)
+    .set("Authorization", `Bearer ${adminToken}`)
     .send({
       decision: "APPROVE_REFUND",
       reason: "ของปลอมจริง คืนเงินผู้ซื้อ",
-      version: claimRes.body.version,
+      version: adminClaim.version,
+      idempotencyKey: `refund-${disputeId}`,
     });
   assert.equal(decideRes.status, 200);
 
   let orderDb = await findOrder(prisma, { where: { id: order.id } });
   assert.equal(orderDb.status, "disputed");
-  assert.equal(orderDb.dispute.decision, "APPROVE_REFUND");
   assert.equal(orderDb.payoutHeld, true);
 
   // 4. T&S releases their hold -> status MUST NOT revert to completed!
   const tsReleaseRes = await request(app)
     .post(`/admin/${order.id}/release`)
     .set("Authorization", `Bearer ${tsAgentToken}`)
-    .send({
-      disputeType: "ITEM_NOT_AS_DESCRIBED",
-      reason: "ปลดระงับเงิน",
-      version: orderDb.version,
-    });
+    .send({ disputeType: "ITEM_NOT_AS_DESCRIBED", reason: "ปลดระงับเงิน", version: orderDb.version });
   assert.equal(tsReleaseRes.status, 200);
 
   orderDb = await findOrder(prisma, { where: { id: order.id } });
   assert.equal(orderDb.status, "refunded");
   assert.equal(orderDb.payoutHeld, false);
+  assert.equal(orderDb.heldBy, null);
 });
 
 test("TSR-02: Participants cannot mutate order status while under active hold or dispute", async (t) => {

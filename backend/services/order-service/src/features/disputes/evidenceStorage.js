@@ -1,3 +1,6 @@
+const {
+  customerServiceClientConfig: { evidence },
+} = require("@reloop/shared");
 // Private dispute-evidence storage — deliberately NOT product-service's
 // uploads/ tree, which the gateway serves publicly at /uploads/ for guests
 // (see gateway/src/app.js PUBLIC_PATHS). Evidence for a dispute (photos of
@@ -14,7 +17,7 @@ const { badRequest } = require("@reloop/shared");
 const STORAGE_DIR = path.join(__dirname, "..", "..", "..", "private-evidence");
 fs.mkdirSync(STORAGE_DIR, { recursive: true });
 
-const ALLOWED_MIME = /^image\/(jpeg|png|webp|gif)$|^video\/(mp4|quicktime)$/;
+const ALLOWED_MIME = new Set(evidence.mimeTypes);
 
 const storage = multer.diskStorage({
   destination: STORAGE_DIR,
@@ -26,9 +29,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024, files: 5 },
+  limits: { fileSize: evidence.maxFileBytes, files: evidence.maxFiles },
   fileFilter(req, file, cb) {
-    if (!ALLOWED_MIME.test(file.mimetype)) {
+    if (!ALLOWED_MIME.has(file.mimetype)) {
       cb(badRequest(`unsupported file type: ${file.mimetype}`));
       return;
     }

@@ -1,3 +1,4 @@
+const { createOrder, findOrder, deleteOrder } = require("../../services/order-service/test/fixtures");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { randomUUID } = require("node:crypto");
@@ -39,8 +40,7 @@ test("persisted intake, separate clocks, handoffs, legacy preservation and prior
   const buyer = `${tag}-buyer`;
   t.after(async () => {
     await supportDb.supportTicket.deleteMany({ where: { requesterId: buyer } });
-    await orderDb.disputeCase.deleteMany({ where: { openedBy: buyer } });
-    await orderDb.order.deleteMany({ where: { buyerId: buyer } });
+    for(const row of await orderDb.order.findMany({where:{buyerId:buyer}})) await deleteOrder(orderDb,row.id);
     await Promise.all([supportDb.$disconnect(), orderDb.$disconnect()]);
   });
   await applyServicePolicy(orderDb);
@@ -51,7 +51,7 @@ test("persisted intake, separate clocks, handoffs, legacy preservation and prior
   });
   assert.equal(policies.length, 4);
   const makeOrder = (price) =>
-    orderDb.order.create({
+    createOrder(orderDb, {
       data: {
         buyerId: buyer,
         sellerId: `${tag}-seller`,
@@ -62,7 +62,7 @@ test("persisted intake, separate clocks, handoffs, legacy preservation and prior
       },
     });
   t.mock.method(orderClient, "getOrder", (id) =>
-    orderDb.order.findUnique({ where: { id } }),
+    findOrder(orderDb, { where: { id } }),
   );
   t.mock.method(riskClient, "getReportCount", async () => {
     throw new Error("test risk service unavailable");
@@ -160,7 +160,7 @@ test("persisted intake, separate clocks, handoffs, legacy preservation and prior
   assert.ok(queue.items.every((item) => item.priority === "HIGH"));
 
   const disputeOrder = await makeOrder(1500);
-  const dispute = await disputeService.open({
+  const dispute = await disputeService.open({disputeType:"ITEM_NOT_AS_DESCRIBED",
     orderId: disputeOrder.id,
     userId: buyer,
     reason: tag,
@@ -194,7 +194,7 @@ test("persisted intake, separate clocks, handoffs, legacy preservation and prior
   assert.equal(+adminClaim.slaExpiresAt, +dispute.decisionDueAt);
   const legacyOrder = await makeOrder(100);
   const originalDue = new Date("2026-01-01T00:00:00Z");
-  const legacyDispute = await disputeModel.openDispute({
+  const legacyDispute = await disputeModel.openDispute({disputeType:"ITEM_NOT_AS_DESCRIBED",
     orderId: legacyOrder.id,
     openedBy: buyer,
     reason: tag,
@@ -211,7 +211,7 @@ test("persisted intake, separate clocks, handoffs, legacy preservation and prior
   assert.equal(+legacyClaim.slaExpiresAt, +originalDue);
   assert.equal(legacyClaim.firstReviewedAt, null);
   const urgentOrder = await makeOrder(10000);
-  const urgent = await disputeService.open({
+  const urgent = await disputeService.open({disputeType:"ITEM_NOT_AS_DESCRIBED",
     orderId: urgentOrder.id,
     userId: buyer,
     reason: tag,

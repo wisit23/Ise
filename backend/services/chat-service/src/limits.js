@@ -1,3 +1,4 @@
+const { customerServiceClientConfig, envInteger } = require("@reloop/shared");
 /**
  * Chat's own usage limits, in one place so the enforcement points and the
  * tests can't drift from each other.
@@ -12,7 +13,7 @@
 /** Characters, not bytes: Thai text is 3 bytes per character in UTF-8, so a
  * byte limit would quietly give Thai users a third of the room English users
  * get. `String.length` is what the composer's counter shows too. */
-const MAX_MESSAGE_LENGTH = 4000;
+const MAX_MESSAGE_LENGTH = customerServiceClientConfig.chat.maxMessageLength;
 
 /**
  * Overridable per limit so a test that seeds a long history through the
@@ -22,8 +23,7 @@ const MAX_MESSAGE_LENGTH = 4000;
  * values; an operator has to set the variable deliberately to change one.
  */
 function budget(name, fallback) {
-  const raw = Number(process.env[`CHAT_RATE_LIMIT_${name}`]);
-  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+  return envInteger(`CHAT_RATE_LIMIT_${name}`, fallback);
 }
 
 /** Per-user request budgets. Fixed windows, keyed by userId (never IP —
@@ -32,18 +32,39 @@ function budget(name, fallback) {
 const RATE_LIMITS = {
   // A fast typist bursts a handful of short lines; 30 per 10s leaves that
   // untouched while stopping a scripted flood cold.
-  sendMessage: { limit: budget("SEND_MESSAGE", 30), windowSeconds: 10 },
+  sendMessage: {
+    limit: budget(
+      "SEND_MESSAGE",
+      customerServiceClientConfig.rateLimits.sendMessage.limit,
+    ),
+    windowSeconds: envInteger(
+      "CHAT_RATE_WINDOW_SEND_MESSAGE",
+      customerServiceClientConfig.rateLimits.sendMessage.windowSeconds,
+    ),
+  },
   // Each of these can be 10 MB of disk (attachmentStorage's cap), so this
   // one is about storage, not chattiness.
   uploadAttachment: {
-    limit: budget("UPLOAD_ATTACHMENT", 10),
-    windowSeconds: 60,
+    limit: budget(
+      "UPLOAD_ATTACHMENT",
+      customerServiceClientConfig.rateLimits.uploadAttachment.limit,
+    ),
+    windowSeconds: envInteger(
+      "CHAT_RATE_WINDOW_UPLOAD_ATTACHMENT",
+      customerServiceClientConfig.rateLimits.uploadAttachment.windowSeconds,
+    ),
   },
   // Opening rooms is create-or-open, so a repeat click is idempotent — this
   // only needs to stop a script walking every productId to spray new rooms.
   createConversation: {
-    limit: budget("CREATE_CONVERSATION", 20),
-    windowSeconds: 60,
+    limit: budget(
+      "CREATE_CONVERSATION",
+      customerServiceClientConfig.rateLimits.createConversation.limit,
+    ),
+    windowSeconds: envInteger(
+      "CHAT_RATE_WINDOW_CREATE_CONVERSATION",
+      customerServiceClientConfig.rateLimits.createConversation.windowSeconds,
+    ),
   },
 };
 

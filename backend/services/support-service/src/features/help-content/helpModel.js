@@ -1,4 +1,9 @@
-const { badRequest, conflict } = require("@reloop/shared");
+const {
+  serializableTransaction,
+  badRequest,
+  conflict,
+} = require("@reloop/shared");
+
 const { randomUUID } = require("node:crypto");
 const prisma = require("../../models/prismaClient");
 const { Prisma } = require("../../generated/prisma-client");
@@ -22,6 +27,7 @@ function toArticle(row, publicView = false) {
     title: revision?.title ?? "",
     body: revision?.body ?? "",
     category: revision?.category?.code ?? "",
+    categoryLabel: revision?.category?.nameTh || revision?.category?.code || "",
     version: revision?.version ?? 0,
     authorId: revision?.authorId ?? core.authorId,
     searchText: revision?.searchText ?? "",
@@ -29,16 +35,10 @@ function toArticle(row, publicView = false) {
       !publicView && revision?.version !== core.publishedVersion,
   };
 }
-async function transaction(work) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await prisma.$transaction(work, {
-        isolationLevel: "Serializable",
-      });
-    } catch (error) {
-      if (!["P2034", "P2002"].includes(error.code) || attempt >= 2) throw error;
-    }
-  }
+function transaction(work) {
+  return serializableTransaction(prisma, work, {
+    retryCodes: ["P2034", "P2002"],
+  });
 }
 async function categoryFor(db, code) {
   const category = await db.helpCategory.findUnique({ where: { code } });
@@ -78,7 +78,7 @@ async function search({ q, category, skip = 0, take = 20 }) {
   };
 }
 async function listAll({ status, skip = 0, take = 20 }) {
-  const where = status ? { status } : {};
+  const where = status ? { status } : { status: { not: "ARCHIVED" } };
   const [rows, total] = await Promise.all([
     prisma.helpArticle.findMany({
       where,
@@ -186,7 +186,15 @@ async function publish(id, version) {
     );
   });
 }
+async function remove(id) {
+  const result = await prisma.helpArticle.updateMany({
+    where: { id, status: { not: "ARCHIVED" } },
+    data: { status: "ARCHIVED", publishedVersion: null },
+  });
+  return result.count > 0;
+}
 module.exports = {
+  remove,
   search,
   listAll,
   findBySlug,

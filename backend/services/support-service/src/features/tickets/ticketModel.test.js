@@ -99,7 +99,10 @@ test("customer-facing reply satisfies FIRST_RESPONSE and audits in the same tran
   assert.deepEqual(records.achieved[0].where, {
     ticketId: "ticket-1",
     metricType: "FIRST_RESPONSE",
-    OR: [{ achievedAt: null }, { achievedAt: { gt: new Date(chatInput.createdAt) } }],
+    OR: [
+      { achievedAt: null },
+      { achievedAt: { gt: new Date(chatInput.createdAt) } },
+    ],
   });
   assert.equal(
     +records.achieved[0].data.achievedAt,
@@ -162,4 +165,25 @@ test("API projection derives current assignee, SLA and lifecycle without exposin
   assert.equal(+result.resolvedAt, 1000);
   assert.equal(result.conversationId, "conv-1");
   assert.equal("statusHistory" in result, false);
+});
+
+test("dashboard SLA filters exclude terminal work and compare the pending target before pagination", () => {
+  const now = new Date("2026-10-10T00:00:00Z");
+  const result = model.queueFilter({
+    role: "CUSTOMER_SERVICE",
+    scope: "mine",
+    assigneeId: "cs",
+    work: "soon",
+    now,
+  });
+  assert.match(result.sql, /achieved_at IS NULL/);
+  assert.match(result.sql, /NEW.*ASSIGNED.*IN_PROGRESS.*PENDING_USER/);
+  assert.ok(
+    result.values.some((value) => value instanceof Date && +value === +now),
+  );
+  assert.ok(
+    result.values.some(
+      (value) => value instanceof Date && +value === +now + 3600000,
+    ),
+  );
 });

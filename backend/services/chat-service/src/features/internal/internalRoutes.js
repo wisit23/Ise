@@ -9,6 +9,7 @@ const router = Router();
 // lock/unlock/sold endpoints for the same pattern) — this is how another
 // service opens a room or sends a SYSTEM message without a user's JWT.
 router.use(requireInternalToken);
+router.post("/awaiting-reply", require("./awaitingReply").awaitingReply);
 
 router.post("/conversations", internalController.createConversation);
 router.get(
@@ -17,7 +18,10 @@ router.get(
 );
 router.post("/conversations/:id/messages", internalController.sendMessage);
 router.post("/conversations/:id/replies", supportMessages.reply);
-router.post("/conversations/:id/import-support-message", supportMessages.importMessage);
+router.post(
+  "/conversations/:id/import-support-message",
+  supportMessages.importMessage,
+);
 router.post(
   "/conversations/:id/participants",
   internalController.addParticipant,

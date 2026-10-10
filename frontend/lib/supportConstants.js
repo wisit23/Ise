@@ -1,3 +1,4 @@
+import config from "./customerServiceConfig";
 export const TICKET_STATUS_LABEL = {
   NEW: "ตั๋วใหม่",
   ASSIGNED: "มอบหมายแล้ว",
@@ -32,17 +33,6 @@ export const PRIORITY_STYLE = {
   URGENT: "bg-red-600 text-white border border-red-600",
 };
 
-// Agent-only next steps offered from each status (see ticketState.js).
-export const AGENT_NEXT_STATUS = {
-  NEW: ["ESCALATED", "CLOSED"],
-  ASSIGNED: ["IN_PROGRESS", "ESCALATED", "CLOSED"],
-  IN_PROGRESS: ["PENDING_USER", "RESOLVED", "ESCALATED"],
-  PENDING_USER: ["IN_PROGRESS", "RESOLVED", "CLOSED"],
-  RESOLVED: ["CLOSED", "IN_PROGRESS"],
-  ESCALATED: ["IN_PROGRESS", "RESOLVED", "CLOSED"],
-  CLOSED: [],
-};
-
 export const DISPUTE_STATUS_LABEL = {
   OPEN: "รอตรวจสอบ",
   NEEDS_INFO: "รอข้อมูล",
@@ -65,14 +55,6 @@ export const ORDER_STATUS_LABEL = {
   refunded: "คืนเงินแล้ว",
 };
 
-export const HELP_CATEGORIES = [
-  { value: "ORDER", label: "คำสั่งซื้อ" },
-  { value: "PAYMENT", label: "การชำระเงิน" },
-  { value: "ACCOUNT", label: "บัญชีผู้ใช้" },
-  { value: "TECHNICAL", label: "ปัญหาการใช้งาน" },
-  { value: "OTHER", label: "อื่นๆ" },
-];
-
 // UI Bakery emerald palette
 export const DONUT_PRIORITY_COLORS = {
   LOW: "#80c4be",
@@ -87,4 +69,9 @@ export const DONUT_DISPUTE_COLORS = {
   DECIDED: "#1baf7a",
 };
 
-export const PAGE_SIZE = 15;
+export const PAGE_SIZE = config.pagination.articles;
+export const STAFF_ROLE_LABEL = {
+  CUSTOMER_SERVICE: "Customer Service",
+  TRUST_AND_SAFETY: "Trust & Safety",
+  ADMIN: "Admin",
+};

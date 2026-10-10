@@ -1,21 +1,25 @@
 const {
+  STAFF_ROLES,
   badRequest,
   forbidden,
   notFound,
   conflict,
   AppError,
   scoreCase,
+  enrichStaffRows,
 } = require("@reloop/shared");
+
 const prisma = require("../../models/prismaClient");
 const ticketModel = require("./ticketModel");
-const { canTransition } = require("./ticketState");
-const { calculatePriority, calculateSlaDueAt } = require("../sla/priority");
+const { canTransition, STATUSES } = require("./ticketState");
 const auditLog = require("../audit/auditLog");
 const chatClient = require("../../services/chatClient");
 const orderClient = require("../../services/orderClient");
 const riskClient = require("../../services/riskClient");
 
-const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
+const { ticketCapabilities } = require("./workspacePolicy");
+
+const AGENT_ROLES = new Set(STAFF_ROLES);
 
 function isAgent(role) {
   return AGENT_ROLES.has(role);
@@ -71,28 +75,23 @@ async function createTicket({
     targetId = counterpartyId;
   }
   let reportCount = 0;
+  let riskLookupAvailable = true;
   if (targetId) {
     try {
       reportCount = await riskClient.getReportCount(targetId);
     } catch (err) {
-      reportCount = 4;
+      riskLookupAvailable = false;
       console.error(`[ticketService] risk lookup unavailable: ${err.message}`);
     }
   }
   const amount = order?.finalPrice ?? order?.price ?? 0;
-  const priority = calculatePriority({
-    isDispute: Boolean(orderId) && category === "PAYMENT",
-    category,
-    orderAmount: amount,
-  });
-  const slaDueAt = calculateSlaDueAt(priority);
-  const { priorityScore } = scoreCase({
+  const classification = scoreCase({
     amount,
     reportCount,
+    category,
     reason: `${subject} ${description || ""}`,
-    isDispute: category === "PAYMENT",
-    slaExpiresAt: slaDueAt,
   });
+  const { priority, priorityScore } = classification;
 
   const ticket = await ticketModel.create({
     requesterId,
@@ -104,6 +103,7 @@ async function createTicket({
     priority,
     priorityScore,
     riskReportCount: reportCount,
+    classification: { ...classification, riskLookupAvailable },
   });
 
   // Best-effort: open a chat room for this support ticket so the requester
@@ -128,21 +128,44 @@ async function createTicket({
 }
 
 function toTicketMessage(message, ticketId) {
-  return { id: message.id, ticketId, chatMessageId: message.id,
+  return {
+    id: message.id,
+    ticketId,
+    chatMessageId: message.id,
     authorId: message.senderId,
-    authorRole: ["AGENT", "ADMIN", "TRUST_AND_SAFETY"].includes(message.senderRole) ? "AGENT" : message.senderRole === "SYSTEM" ? "SYSTEM" : "REQUESTER",
-    body: message.body, type: message.type, payload: message.payload,
-    isInternal: message.visibility === "INTERNAL", createdAt: message.createdAt };
+    authorRole: ["AGENT", "ADMIN", "TRUST_AND_SAFETY"].includes(
+      message.senderRole,
+    )
+      ? "AGENT"
+      : message.senderRole === "SYSTEM"
+        ? "SYSTEM"
+        : "REQUESTER",
+    body: message.body,
+    type: message.type,
+    payload: message.payload,
+    isInternal: message.visibility === "INTERNAL",
+    createdAt: message.createdAt,
+  };
 }
 
 async function getTicket({ ticketId, userId, role, before, limit }) {
   const ticket = await assertAccess({ ticketId, userId, role });
-  if (ticket.status === "ESCALATED" && role === "CUSTOMER_SERVICE" && ticket.requesterId !== userId)
-    throw forbidden("only admin or trust & safety can access an escalated ticket");
+  if (
+    ticket.status === "ESCALATED" &&
+    role === "CUSTOMER_SERVICE" &&
+    ticket.requesterId !== userId
+  )
+    throw forbidden(
+      "only admin or trust & safety can access an escalated ticket",
+    );
   const includeInternal = isAgent(role) && ticket.requesterId !== userId;
   try {
     const page = ticket.conversationId
-      ? await chatClient.getTicketMessages(ticket.conversationId, { includeInternal, before, limit })
+      ? await chatClient.getTicketMessages(ticket.conversationId, {
+          includeInternal,
+          before,
+          limit,
+        })
       : { messages: [], nextCursor: null };
     ticket.messages = page.messages.map((m) => toTicketMessage(m, ticket.id));
     ticket.messagesNextCursor = page.nextCursor;
@@ -154,7 +177,13 @@ async function getTicket({ ticketId, userId, role, before, limit }) {
     ticket.chatAvailable = false;
     ticket.chatError = "Message history is temporarily unavailable";
   }
-  return includeInternal ? ticket : toRequesterView(ticket);
+  if (includeInternal) {
+    ticket.capabilities = ticketCapabilities(ticket, userId, role);
+    return (
+      await enrichStaffRows([ticket], ["requesterId", "assigneeId", "targetId"])
+    )[0];
+  }
+  return toRequesterView(ticket);
 }
 
 async function listMine(requesterId, pagination) {
@@ -165,15 +194,38 @@ async function listQueue({
   role,
   userId,
   scope,
+  work,
   status,
   priority,
   search,
   ...pagination
 }) {
   if (!isAgent(role)) throw forbidden("only support agents can view the queue");
+  if (work && !["open", "overdue", "soon", "reply"].includes(work))
+    throw badRequest("invalid work filter");
+  if (scope && !["mine", "unassigned", "all"].includes(scope))
+    throw badRequest("invalid scope");
+  if (status && !STATUSES.includes(status)) throw badRequest("invalid status");
+  if (
+    priority &&
+    !Object.hasOwn(require("@reloop/shared").SERVICE_POLICIES, priority)
+  )
+    throw badRequest("invalid priority");
+  const replyIds =
+    work === "reply"
+      ? await require("@reloop/shared/src/awaitingReply").awaitingReplyIds(
+          require("../../models/prismaClient"),
+          require("../../generated/prisma-client").Prisma,
+          require("./agentDashboard").ticketDashboardBase(userId),
+          userId,
+          "tickets",
+        )
+      : undefined;
   const queue = await ticketModel.listQueue({
+    replyIds,
     role,
     scope,
+    work,
     assigneeId: userId,
     status,
     priority,
@@ -182,27 +234,30 @@ async function listQueue({
   });
   return {
     ...queue,
-    items: queue.items.map((ticket) => {
-      const score = scoreCase({
-        reportCount: ticket.riskReportCount,
-        reason: `${ticket.subject} ${ticket.description}`,
-        isDispute: ticket.category === "PAYMENT",
-        slaExpiresAt: ticket.slaDueAt,
-      });
-      return {
-        ...ticket,
-        priorityScore: score.priorityScore,
-        priority:
-          score.priority === "CRITICAL" || ticket.priority === "URGENT"
-            ? "URGENT"
-            : score.priority,
-      };
-    }),
+    items: await enrichStaffRows(
+      queue.items.map((ticket) => {
+        const score = scoreCase({
+          priority: ticket.priority,
+          reportCount: ticket.riskReportCount,
+          reason: `${ticket.subject} ${ticket.description}`,
+          isDispute: ticket.category === "PAYMENT",
+          slaExpiresAt: ticket.slaDueAt,
+        });
+        return {
+          ...ticket,
+          capabilities: ticketCapabilities(ticket, userId, role),
+          queuePriority: ticket.priority,
+          priorityScore: score.priorityScore,
+        };
+      }),
+      ["requesterId", "assigneeId", "targetId"],
+    ),
   };
 }
 
 async function reply({ ticketId, userId, role, body, isInternal, eventKey }) {
-  if (typeof body !== "string" || !body.trim()) throw badRequest("body is required");
+  if (typeof body !== "string" || !body.trim())
+    throw badRequest("body is required");
   if (role === "ADMIN" && !isInternal) {
     throw forbidden("Admin audit is read-only for customer conversations");
   }
@@ -212,13 +267,19 @@ async function reply({ ticketId, userId, role, body, isInternal, eventKey }) {
     throw badRequest("cannot reply to a closed ticket");
   }
 
+  if (role === "CUSTOMER_SERVICE" && ticket.assigneeId !== userId)
+    throw forbidden("claim this ticket before replying");
+
   // A non-agent's isInternal is ignored rather than rejected — only agents
   // can ever produce an internal-only message either way.
   const joined = await joinTicketChat({ ticketId, userId, role });
   const message = await chatClient.sendTicketMessage(joined.conversationId, {
     senderId: userId,
     body: body.trim(),
-    visibility: Boolean(isInternal) && isAgent(role) && ticket.requesterId !== userId ? "INTERNAL" : "ALL",
+    visibility:
+      Boolean(isInternal) && isAgent(role) && ticket.requesterId !== userId
+        ? "INTERNAL"
+        : "ALL",
     eventKey,
   });
   // Chat persists PENDING metadata delivery before acknowledging the message.
@@ -226,11 +287,15 @@ async function reply({ ticketId, userId, role, body, isInternal, eventKey }) {
   return toTicketMessage(message, ticketId);
 }
 
-async function assignToSelf({ ticketId, userId, role }) {
+async function assignToSelf({ ticketId, userId, role, version }) {
   if (!isAgent(role))
     throw forbidden("only support agents can pick up tickets");
   const ticket = await ticketModel.findById(ticketId);
   if (!ticket) throw notFound("ticket not found");
+  if (ticket.status === "CLOSED")
+    throw badRequest("cannot claim a closed ticket");
+  if (version !== undefined && version !== ticket.version)
+    throw conflict("ticket was modified, reload before claiming");
   if (ticket.assigneeId) throw conflict("ticket already has an assignee");
   if (ticket.status === "ESCALATED" && role === "CUSTOMER_SERVICE")
     throw forbidden(
@@ -247,16 +312,31 @@ async function assignToSelf({ ticketId, userId, role }) {
   // Best-effort: add the agent to the support chat room.
   const assigned = await ticketModel.findById(ticketId);
   if (assigned?.conversationId) {
-    await chatClient.addAgentToConversation(assigned.conversationId, userId);
+    try {
+      await chatClient.addAgentToConversation(assigned.conversationId, userId);
+    } catch {
+      assigned.chatJoinError = "Chat membership could not be refreshed";
+    }
   }
   return assigned;
 }
 
-async function changeStatus({ ticketId, userId, role, status, reason }) {
+async function changeStatus({
+  ticketId,
+  userId,
+  role,
+  status,
+  reason,
+  version,
+}) {
   if (!isAgent(role))
     throw forbidden("only support agents can change ticket status");
   const ticket = await assertAccess({ ticketId, userId, role });
 
+  if (role === "CUSTOMER_SERVICE" && ticket.assigneeId !== userId)
+    throw forbidden("claim this ticket before changing status");
+  if (version !== undefined && version !== ticket.version)
+    throw conflict("ticket was modified, reload before changing status");
   if (!canTransition(ticket.status, status)) {
     throw badRequest(`cannot transition from ${ticket.status} to ${status}`);
   }

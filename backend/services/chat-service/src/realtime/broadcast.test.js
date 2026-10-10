@@ -29,9 +29,17 @@ test("case messages and status reach current participants only", async (t) => {
     ],
   };
   broadcast.broadcastMessage(conversation, { id: "message-1", visibility: "PUBLIC" });
+  await broadcast.broadcastCaseTyping(conversation, "agent-now", true);
   broadcast.broadcastStatusChange(conversation, "LOCKED");
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(new Set(events.map((entry) => entry.room)), new Set(["user:buyer-1"]));
   assert.equal(events.filter((entry) => entry.event === "message:new").length, 1);
   assert.equal(events.filter((entry) => entry.event === "conversation:status").length, 1);
+  assert.deepEqual(events.find(entry => entry.event === "typing"), {
+    room: "user:buyer-1", event: "typing",
+    payload: { conversationId: "room-1", userId: "agent-now", typing: true },
+  });
+  const before = events.length;
+  await broadcast.broadcastCaseTyping(conversation, "buyer-1", false);
+  assert.equal(events.length, before); // sender excluded, stale agent denied
 });

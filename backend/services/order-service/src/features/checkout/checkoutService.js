@@ -108,6 +108,8 @@ async function reserveOrder(
       ordersAmount: verifiedFinalPrice,
       orderType: "BUY_NOW",
       campaignId: verifiedCampaignId,
+      campaignCode: verifiedCampaignCode,
+      productTitle: reservation.product.title,
       status: "pending_payment",
       basket: {
         create: {

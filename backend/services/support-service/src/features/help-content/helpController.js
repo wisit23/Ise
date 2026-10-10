@@ -76,4 +76,16 @@ async function revise(req, res, next) {
   }
 }
 
-module.exports = { search, manage, create, revise, publish };
+async function remove(req, res, next) {
+  try {
+    await helpService.remove({
+      role: effectiveStaffRole(req),
+      id: req.params.id,
+    });
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { search, manage, create, revise, publish, remove };

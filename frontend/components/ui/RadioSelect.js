@@ -40,12 +40,14 @@ export default function RadioSelect({
   className = "",
   buttonClassName = "",
   disabled = false,
+  ariaLabel,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [effectiveAlign, setEffectiveAlign] = useState(
     align === "right" ? "right" : "left",
   );
   const dropdownRef = useRef(null);
+  const triggerRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
   const generatedName = useId();
   const groupName = name || generatedName;
@@ -72,6 +74,7 @@ export default function RadioSelect({
     if (disabled) return;
     if (onChange) onChange(val);
     setIsOpen(false);
+    triggerRef.current?.focus();
   };
 
   const checkAlignment = () => {
@@ -132,6 +135,7 @@ export default function RadioSelect({
     function handleKeyDown(e) {
       if (e.key === "Escape" && isOpen) {
         setIsOpen(false);
+        triggerRef.current?.focus();
       }
     }
     document.addEventListener("keydown", handleKeyDown);
@@ -253,6 +257,16 @@ export default function RadioSelect({
       {/* Trigger Box (.selected) */}
       <button
         type="button"
+        aria-label={ariaLabel}
+        ref={triggerRef}
+        onKeyDown={event => {
+          if (!disabled && ["ArrowDown", "ArrowUp"].includes(event.key)) {
+            event.preventDefault();
+            checkAlignment();
+            setIsOpen(true);
+            requestAnimationFrame(() => dropdownRef.current?.querySelector('input[type="radio"]:checked')?.focus());
+          }
+        }}
         onClick={handleClick}
         disabled={disabled}
         aria-haspopup="listbox"

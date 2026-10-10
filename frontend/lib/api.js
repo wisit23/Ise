@@ -65,10 +65,11 @@ function rejectSuspended(data) {
   });
 }
 
-export async function apiFetch(path, { method = "GET", body, token } = {}) {
+export async function apiFetch(path, { method = "GET", body, token, signal } = {}) {
   const authToken = token ?? getAccessToken();
 
   let res = await fetch(`${API_URL}${path}`, {
+    signal,
     method,
     headers: {
       "Content-Type": "application/json",
@@ -81,6 +82,7 @@ export async function apiFetch(path, { method = "GET", body, token } = {}) {
     const newToken = await refreshAccessToken();
     if (newToken) {
       res = await fetch(`${API_URL}${path}`, {
+        signal,
         method,
         headers: {
           "Content-Type": "application/json",
@@ -99,7 +101,11 @@ export async function apiFetch(path, { method = "GET", body, token } = {}) {
     if (typeof errorMsg === "object" && errorMsg !== null) {
       errorMsg = errorMsg.message || JSON.stringify(errorMsg);
     }
-    throw new Error(errorMsg || `Request failed (${res.status})`);
+    throw Object.assign(new Error(errorMsg || `Request failed (${res.status})`), {
+      status: res.status,
+      code: data?.code || data?.error?.code,
+      details: data?.details,
+    });
   }
   return data;
 }
@@ -285,7 +291,7 @@ export async function uploadChatAttachment(
     if (typeof errorMsg === "object" && errorMsg !== null) {
       errorMsg = errorMsg.message || JSON.stringify(errorMsg);
     }
-    throw new Error(errorMsg || `แนบไฟล์ไม่สำเร็จ (${res.status})`);
+    throw Object.assign(new Error(errorMsg || `แนบไฟล์ไม่สำเร็จ (${res.status})`),{status:res.status,code:data?.code});
   }
   return data;
 }
