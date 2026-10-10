@@ -15,23 +15,38 @@ async function getDisputeView({ orderId, adminId }) {
     // The CS-owned case (if a buyer opened one) is the context Admin needs
     // before holding or releasing funds — without it Admin would be deciding
     // blind about a case another team is actively working.
-    include: { dispute: true },
+    include: { dispute: { include: { evidence: true } } },
   });
   if (!order) throw notFound("order not found");
 
-  const evidence = await prisma.adminDisputeEvidence.findMany({
+  const legacyEvidence = await prisma.adminDisputeEvidence.findMany({
     where: { orderId },
     orderBy: { submittedAt: "asc" },
   });
 
-  await recordAudit({
-    orderId,
-    actorId: adminId,
-    action: "EVIDENCE_VIEWED",
-    reason: null,
-  });
+  const disputeCase = order.dispute || null;
+  const evidence = [
+    ...(disputeCase?.evidence || []).map((item) => ({
+      id: item.id,
+      source: "DISPUTE_CASE",
+      disputeId: disputeCase.id,
+      fileType: item.fileType,
+      uploaderId: item.uploaderId,
+      createdAt: item.createdAt,
+    })),
+    ...legacyEvidence.map((item) => ({
+      id: item.id,
+      source: "LEGACY_REFERENCE",
+      reference: item.evidenceRef,
+      note: item.note,
+      submittedBy: item.submittedBy,
+      createdAt: item.submittedAt,
+      unavailableReason:
+        "Legacy reference has no private storage key and cannot be opened through the authorized evidence endpoint",
+    })),
+  ];
 
-  return { order, evidence, disputeCase: order.dispute || null };
+  return { order, evidence, disputeCase };
 }
 
 const ALLOWED_HOLD_STATUSES = ["confirmed", "shipped", "completed", "disputed"];

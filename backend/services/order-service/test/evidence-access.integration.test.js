@@ -8,7 +8,7 @@ if (process.env.DATABASE_URL_ORDER) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_ORDER;
 }
 
-const { signAccessToken } = require("@reloop/shared");
+const { signAccessToken, permissionsForRoles } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
 // This feature suite uses signed identity fixtures; live session enforcement
@@ -28,6 +28,13 @@ const strangerToken = signAccessToken({
 const agentToken = signAccessToken({
   sub: "int-test-evidence-agent",
   role: "CUSTOMER_SERVICE",
+});
+const safetyRoles = ["TRUST_AND_SAFETY"];
+const safetyToken = signAccessToken({
+  sub: "int-test-evidence-safety",
+  role: safetyRoles[0],
+  roles: safetyRoles,
+  permissions: permissionsForRoles(safetyRoles),
 });
 
 async function databaseIsReachable() {
@@ -115,10 +122,37 @@ test("dispute evidence: private storage, authz on view, audit trail", async (t) 
     .set("Authorization", `Bearer ${agentToken}`);
   assert.equal(agentViewRes.status, 200);
 
+  // The Hold/T&S view references the exact same DisputeEvidence row rather
+  // than duplicating the file into AdminDisputeEvidence.
+  const holdViewRes = await request(app)
+    .get(`/admin/${order.id}`)
+    .set("Authorization", `Bearer ${safetyToken}`);
+  assert.equal(holdViewRes.status, 200);
+  const holdEvidence = holdViewRes.body.evidence.find(
+    (item) => item.id === evidenceId,
+  );
+  assert.equal(holdEvidence.source, "DISPUTE_CASE");
+  assert.equal(holdEvidence.disputeId, disputeId);
+
+  const safetyViewRes = await request(app)
+    .get(`/disputes/${disputeId}/evidence/${evidenceId}`)
+    .set("Authorization", `Bearer ${safetyToken}`);
+  assert.equal(safetyViewRes.status, 200);
+
   // Every successful view is audit-logged (NFR-SP-03) — the stranger's
   // rejected attempt and the missing-token attempt are not.
   const viewLogs = await prisma.disputeAuditLog.findMany({
     where: { disputeId, action: "VIEW_EVIDENCE" },
   });
-  assert.equal(viewLogs.length, 2); // buyer's view + agent's view
+  assert.equal(viewLogs.length, 3); // buyer + agent + T&S
+
+  fs.unlinkSync(path.join(STORAGE_DIR, uploadRes.body.storageKey));
+  const missingFileRes = await request(app)
+    .get(`/disputes/${disputeId}/evidence/${evidenceId}`)
+    .set("Authorization", `Bearer ${safetyToken}`);
+  assert.equal(missingFileRes.status, 404);
+  const missingAudit = await prisma.disputeAuditLog.findFirst({
+    where: { disputeId, action: "EVIDENCE_MISSING", detail: evidenceId },
+  });
+  assert.ok(missingAudit);
 });

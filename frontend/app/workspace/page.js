@@ -19,6 +19,7 @@ import AuditSection from "../../components/support/sections/AuditSection";
 import AdminInboxSection from "../../components/support/sections/AdminInboxSection";
 import ProductsSection from "../../components/support/sections/ProductsSection";
 import SellerChangeRequestsSection from "../../components/support/sections/SellerChangeRequestsSection";
+import BulkActionsSection from "../../components/support/sections/BulkActionsSection";
 
 const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
@@ -37,6 +38,7 @@ const ADMIN_SECTIONS = [
   { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
   { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
+  { key: "bulk", label: "Bulk Actions", icon: "library_add_check" },
 ];
 
 const ADMIN_ONLY_SECTIONS = [
@@ -50,6 +52,10 @@ export default function SupportPanelPage() {
   const [ticketsFilter, setTicketsFilter] = useState("");
   const [ticketViewMode, setTicketViewMode] = useState("workspace");
   const [disputesFilter, setDisputesFilter] = useState("");
+  const [historyUserId, setHistoryUserId] = useState("");
+  const [initialReportId, setInitialReportId] = useState("");
+  const [initialOrderId, setInitialOrderId] = useState("");
+  const [initialTicketId, setInitialTicketId] = useState("");
 
   function navigateTo(tab, filter) {
     setSection(tab);
@@ -63,7 +69,27 @@ export default function SupportPanelPage() {
       router.push("/login");
       return;
     }
-    setUser(getStoredUser());
+    const storedUser = getStoredUser();
+    setUser(storedUser);
+    const params = new URLSearchParams(window.location.search);
+    const requestedTab = params.get("tab");
+    const allowedSections = [...SECTIONS];
+    if (
+      storedUser?.role === "ADMIN" ||
+      storedUser?.role === "TRUST_AND_SAFETY"
+    ) {
+      allowedSections.push(...ADMIN_SECTIONS);
+    }
+    if (storedUser?.role === "ADMIN") {
+      allowedSections.push(...ADMIN_ONLY_SECTIONS);
+    }
+    if (allowedSections.some((item) => item.key === requestedTab)) {
+      setSection(requestedTab);
+    }
+    setInitialReportId(params.get("reportId") || "");
+    setInitialOrderId(params.get("orderId") || "");
+    setHistoryUserId(params.get("userId") || "");
+    setInitialTicketId(params.get("ticketId") || "");
   }, [router]);
 
   if (user === undefined) {
@@ -225,8 +251,10 @@ export default function SupportPanelPage() {
                   setViewMode={setTicketViewMode}
                   token={token}
                   userId={user?.id}
+                  userRole={user?.role}
                   statusFilter={ticketsFilter}
                   setStatusFilter={setTicketsFilter}
+                  initialTicketId={initialTicketId}
                 />
               </div>
             ) : (
@@ -239,7 +267,16 @@ export default function SupportPanelPage() {
                   />
                 )}
                 {section === "admin_inbox" && (
-                  <AdminInboxSection token={token} />
+                  <AdminInboxSection
+                    token={token}
+                    userId={user?.id}
+                    userRole={user?.role}
+                    initialReportId={initialReportId}
+                    onOpenUserHistory={(userId) => {
+                      setHistoryUserId(userId);
+                      setSection("orders");
+                    }}
+                  />
                 )}
                 {section === "disputes" && (
                   <DisputesSection
@@ -250,10 +287,17 @@ export default function SupportPanelPage() {
                     setStatus={setDisputesFilter}
                   />
                 )}
-                {section === "orders" && <OrdersSection token={token} />}
+                {section === "orders" && (
+                  <OrdersSection
+                    token={token}
+                    initialUserId={historyUserId}
+                    initialOrderId={initialOrderId}
+                  />
+                )}
                 {section === "faq" && <FaqSection token={token} />}
                 {section === "kyc" && <KycSection token={token} />}
                 {section === "audit" && <AuditSection token={token} />}
+                {section === "bulk" && <BulkActionsSection token={token} />}
                 {section === "products" && <ProductsSection token={token} />}
                 {section === "shop_changes" && (
                   <SellerChangeRequestsSection token={token} />

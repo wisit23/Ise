@@ -13,11 +13,15 @@ import {
   PRIORITY_STYLE,
 } from "../../../../lib/supportConstants";
 
-const STATUS_OPTIONS = [
+export const REPORT_STATUS_OPTIONS = [
   { value: "OPEN", label: "รอดำเนินการ (OPEN)" },
   { value: "ACTIONED", label: "จัดการแล้ว (ACTIONED)" },
   { value: "DISMISSED", label: "ยกเลิกแล้ว (DISMISSED)" },
   { value: "", label: "ทั้งหมด (ALL)" },
+];
+
+export const TICKET_STATUS_OPTIONS = [
+  { value: "ESCALATED", label: "ส่งต่อแล้ว (ESCALATED)" },
 ];
 
 /* The queue view: search, status filter, the case table and its pager.
@@ -34,6 +38,9 @@ export default function AdminInboxTable({
   totalPages,
   onPageChange,
   onSelectTicket,
+  statusOptions = REPORT_STATUS_OPTIONS,
+  searchPlaceholder = "ค้นหาเคส...",
+  rowActionHint = "คลิกที่แถวเพื่อเปิดรายละเอียดล่าสุด",
 }) {
   const columns = [
     {
@@ -146,14 +153,14 @@ export default function AdminInboxTable({
             value={qInput}
             onChange={(e) => onQInputChange(e.target.value)}
             aria-label="ค้นหาเคส"
-            placeholder="ค้นหาเคส..."
+            placeholder={searchPlaceholder}
           />
         </form>
 
         <DropdownFilter
           value={statusFilter}
           onChange={onStatusFilterChange}
-          options={STATUS_OPTIONS}
+          options={statusOptions}
           align="right"
         />
       </div>
@@ -174,7 +181,7 @@ export default function AdminInboxTable({
       />
 
       <p className="mt-3 text-right text-xs font-medium text-slate-500">
-        คลิกที่แถวตั๋วเพื่อเปิดหน้าต่างแชท (Chat) เพื่อจัดการคำร้อง
+        {rowActionHint}
       </p>
       <Pagination page={page} totalPages={totalPages} onChange={onPageChange} />
     </>

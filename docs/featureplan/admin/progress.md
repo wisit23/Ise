@@ -349,3 +349,207 @@ WARN_USER Decision, Ticket Counterparty Targeting" ไม่กระทบส�
 - Frontend Tests: **45/45 suites passed (239/239 tests)** และ production build สร้าง static pages ครบ 27 หน้า
 - ESLint production scope: `npx eslint backend frontend scripts` ผ่าน 0 errors
 - Backfill Execution: `scripts/backfillHolds.js` → scanned 63 orders, 0 holds created, 0 ambiguous, 100% idempotent
+
+> Updated: 2026-10-05 — TSR-03 Duplicate/Concurrent Commands, Atomic Audit and Truthful UI
+
+**Status:** Implementation complete; targeted PostgreSQL/concurrency verification passed; runtime browser acceptance remains in TSR-15
+
+**Completed:**
+
+- KYC decisions now use `id + version + PENDING` CAS and update `KycApplication`, `SellerProfile`, and `AdminAudit` in one transaction. Two concurrent decisions produce one success, one 409, and one audit.
+- Report review/action now use version/state CAS. Same-database user actions and report/audit finalization are transactional, preventing two staff decisions from both succeeding.
+- Added durable `AdminOperation` records for cross-service product moderation. Auth stores operation intent before dispatch; Product stores `ProductModerationCommand` by idempotency key in the same transaction as its Product CAS update.
+- REMOVE/RESTORE retries return the stored result for the exact same request, while reuse of a key with a different payload returns 409. A simulated lost response after Product success was recovered by retry without a second Product side effect or duplicate report audit.
+- Bulk actions now claim `BulkActionRun` before side effects and bind actor/action/target IDs/reason through a canonical SHA-256 payload hash. Exact replay returns persisted results, concurrent processing conflicts, and per-item failures remain explicit.
+- Inbox Ban now calls the single-user suspend endpoint, requires a real reason, and guards double submission. Product restore also requires a reason; the UI keeps the same operation key across failed retry attempts.
+- Added Auth migration `20261005090000_tsr03_atomic_operations` and Product `ProductModerationCommand` schema. The complete Auth migration chain applied successfully on a disposable database.
+
+**Verification evidence:**
+
+- Auth TSR-03 integration: `admin-kyc`, `admin-reports`, and `bounded-bulk` **3/3 suites passed** on `tsr03_auth_test`; the report suite includes owner-success/client-timeout/retry recovery.
+- Auth/shared/gateway regression selection: **36/36 tests passed**, 0 failed, 0 skipped.
+- Product moderation integration: **1/1 suite passed** on `tsr03_product_test`, including replay, key/payload mismatch, reason enforcement, and concurrent different-key CAS.
+- Auth migration deployment: **6/6 migrations applied** on `tsr03_migration_test`.
+- Frontend: **45/45 suites, 238/238 tests passed**; production build completed with 27 static pages.
+- Source quality: targeted ESLint passed and `git -c core.whitespace=cr-at-eol diff --check` passed.
+
+**Next action:** Start TSR-04 product visibility/lifecycle remediation. Do not claim the urgent phase complete until removed products are hidden and non-purchasable through every public path and browser/runtime acceptance is captured under TSR-15.
+
+## 2026-10-07 — Auth ER alignment correction
+
+**Status:** Implementation and disposable-PostgreSQL verification complete; main-stack rollout pending.
+
+- Auth Prisma now resolves to exactly 16 tables from `ER_auth.drawio`.
+- Added the missing `role` and `shop_change_request_items` tables plus missing Buyer/Profile fields.
+- Removed Auth-only structures not present in the approved design: `admin_operations`, `reports.version`, and extra Bulk columns.
+- Refactored shop-change requests to normalized item rows while preserving the frontend response contract.
+- Added migration `20261007130000_align_auth_er_design` and updated role/demo seeds.
+- Auth container now runs the `prisma/migrate.js` deployment wrapper instead of lossy `db push`. It baselines a legacy db-push volume before `prisma migrate deploy`, preserving the shop-change data transformation.
+- Verification: all 6 migrations applied on `auth_er_design_test_20261007`; database-to-schema diff reported no difference and PostgreSQL contained exactly the 16 approved tables. The legacy db-push baseline path also applied successfully on a second disposable database.
+- Tests: targeted Auth tests 17 passed/0 failed/1 skipped; PostgreSQL integration 8/8 passed (`admin-kyc`, `admin-reports`, `bounded-bulk`, `executive-audit`); role/demo seed, targeted ESLint, formatting, and diff checks passed.
+- Remaining: apply to the main `reloop_auth` environment and complete browser acceptance with the main stack.
+
+## 2026-10-08 — TSR-04 Product Visibility and Lifecycle Remediation
+
+**Status:** Core implementation and targeted verification complete; main-stack browser acceptance remains in TSR-15
+
+**Completed:**
+
+- Product moderation is an independent overlay (`moderatedAt`) over the current commerce status. Public detail, feed, search, store, filter options, video feed and auction reads exclude moderated products even when reservation/order/auction transitions change the underlying status.
+- Added permission-gated staff detail/search routes. Sellers can still inspect their own moderated listing and reason, but seller update/delete/visibility and new video attachment are blocked with guarded writes.
+- Seller dashboard/edit/upload-video UI now treats moderated listings as read-only, displays the moderation reason and removes invalid edit/upload actions.
+- Reservation, campaign quote/hold, auction submit/bid and swipe-choice paths reject moderated products. Auction auto-open/close now uses expected-state plus unmoderated-product CAS so a stale lifecycle callback cannot overwrite a Trust & Safety cancellation.
+- Restore derives the result from the current reservation/auction/commerce state. An auction with a winning order stays `reserved` until Order service reports payment/cancellation; expired or released cart reservations restore as `available`.
+- No Prisma schema, migration or database-design file was changed as part of this TSR-04 continuation.
+
+**Verification evidence:**
+
+- Product moderation PostgreSQL integration: **1/1 passed**, covering public feed/detail/search/store/video, staff/owner access, seller mutation guards, reservation/checkout blocking, lifecycle overlay, replay/concurrency and state-aware restore.
+- Targeted Product unit suites: **82/82 passed** for auction, product video, reservation and campaign paths.
+- Product HTTP app tests: **10/10 passed**.
+- Product PostgreSQL regression: catalog, CRUD, reservation, campaign and auction steps 1–7/9–10 passed; the pre-existing real BullMQ delayed-worker step timed out waiting for Redis execution and is not a TSR-04 assertion failure.
+- Seller UI targeted Jest: **2/2 passed**. Full frontend run loaded **36 suites / 175 tests successfully**, while 10 suites could not load because installed `node_modules` is missing declared packages `socket.io-client` and `qrcode`.
+- Targeted ESLint passed.
+
+**Known boundary:** Existing media files remain directly reachable through public `/uploads/*` URLs when the URL is already known. Revoking direct media delivery requires a private-storage/signed-URL or CDN-purge policy outside the current Product visibility layer; no database schema change was attempted.
+
+**Next action:** Start TSR-05 Inbox search/pagination/error-state remediation. Main-stack browser click-through and the complete acceptance matrix remain in TSR-15.
+
+## 2026-10-08 — TSR-05 Inbox Contract and Detail (schema-frozen scope)
+
+**Status:** Inbox implementation complete within the fixed-schema boundary; Report category/evidence acceptance remains blocked
+
+- Split the Trust & Safety inbox into independent Report and escalated Ticket sub-tabs. Each preserves its own query, status, page and total instead of merging pages from two services.
+- Report list now accepts `page`, `limit`, `status` and `q`; search covers report/reporter/target/product IDs, reason, and reporter name/email. An explicit empty status means all, while omitted status remains backward-compatible as OPEN.
+- Service failures remain visible with source-specific retry. Opening a row fetches current detail rather than acting on a stale list snapshot.
+- Report detail includes reporter/counterparty identity and safety counts, a user-history shortcut, product detail through an authenticated internal Product owner API, and the persisted decision/reason/actor/time from AdminAudit.
+- Verification: frontend Inbox Jest **4/4**, Auth report-service unit **3/3**, Product moderation PostgreSQL integration **1/1**, targeted Prettier passed.
+- Auth PostgreSQL suite could not reach the TSR-05 assertions because the existing disposable DB and generated Prisma contract disagree on `User.role` (`ADMIN`). No schema push, migration, or regeneration was performed.
+- Fixed-schema limitation: `Report` has no category or evidence metadata/relation. Private evidence upload/download with authorization cannot be implemented durably without an approved persistence design; no data was packed into `reason` as a workaround.
+
+**Next action:** Decide whether to authorize a schema/storage contract for Report categories/evidence. Otherwise continue TSR-06 while keeping TSR-05 marked partial.
+
+## 2026-10-08 — TSR-06 KYC Storage, Atomic Submission and Document Audit (schema-frozen scope)
+
+**Status:** Implementation complete within the fixed-schema boundary; historical profile snapshot and runtime persistence acceptance remain open
+
+- KYC queue now distinguishes omitted status (legacy PENDING default) from explicit `status=ALL`; frontend sends ALL rather than encoding it as an empty query.
+- Auth KYC storage is configurable through `KYC_STORAGE_DIR` and mounted as `auth_private_kyc` in Compose. Current running-container inventory found 0 DB-backed documents and 0 files, so no existing file migration is required before this rollout.
+- Added `kyc:inventory`, a non-destructive DB/filesystem comparison with optional safe copy from a prior storage directory. Missing DB-backed files cause a non-zero result and orphan files are reported, not deleted.
+- Submission now keeps the bounded upload in memory through validation, persists it immediately before a user-serialized DB transaction, commits role/profile/application together, and removes the new file if DB work fails.
+- Authorized document reads verify that the file exists and append `KYC_DOCUMENT_VIEWED` to AdminAudit. Missing/legacy files render an unavailable state with seller-resubmission guidance.
+- Historical application rows explicitly label joined SellerProfile data as current data. True per-submission snapshots cannot be persisted because the fixed `KycApplication` schema has no snapshot fields.
+- Verification: KYC backend unit **5/5**, targeted Auth **22 passed / 0 failed / 1 DB-dependent skip**, frontend KYC/Inbox/API **15/15**, targeted ESLint/Prettier and `docker compose config` passed.
+- PostgreSQL KYC integration remains blocked before its assertions by the same existing `User.role` test DB/Prisma drift; no DB push, migration or client regeneration was performed.
+
+**Next action:** TSR-07 can proceed under the same schema boundary. Keep TSR-05 evidence and TSR-06 application snapshots explicitly partial unless persistence changes are authorized.
+
+## 2026-10-08 — TSR-07 Decision-Ready User History (schema-frozen scope)
+
+**Status:** Implementation complete within the fixed-schema boundary; Auth PostgreSQL and browser/runtime acceptance remain open
+
+- Order service now owns a paginated `/support/users/:id/history` contract for buyer, seller, or combined history. It returns authoritative totals, per-status counts, buyer/seller counts and `completedOrders` defined strictly as `Order.status=completed`.
+- The order history UI no longer merges two first pages or uses the displayed row count as the total. It separates loading, unavailable-with-retry and genuine empty states, and exposes previous/next page controls.
+- Missing shipping facts stay explicit: late-shipment and package-issue metrics are `null` with availability flags and the UI says they await TSR-10 rather than rendering zero.
+- Auth exposes paginated Report and Warning/Suspend/Restore histories. Request IDs correlate user sanctions back to their source Report audit, and the workspace deep link opens the current report detail in the Trust & Safety inbox.
+- General user lookup no longer selects or returns full ID card, bank account or address fields. Those remain confined to the KYC workflow.
+- Verification: Order PostgreSQL integration **1/1 passed** with two-page fixture, authoritative counts and `<2s` route assertion (the test body completed in 309.335 ms); Auth history/PII unit **2/2 passed**; frontend Orders/Inbox **7/7 passed**; targeted ESLint passed.
+- Auth PostgreSQL integration is still blocked before TSR-07 assertions by the existing disposable DB/generated-client drift on `User.role` (`ADMIN`). No schema push, migration, client regeneration or schema-file edit was performed.
+
+**Next action:** Start TSR-08 Audit search/export contract remediation. Keep production-like performance and browser click-through acceptance in TSR-15.
+
+## 2026-10-09 — TSR-08 Owner Audit Search and Traceability (schema-frozen scope)
+
+**Status:** Implementation complete within the fixed-schema boundary; durable operational-error correlation and browser/runtime acceptance remain open
+
+- Corrected the UI action catalog to real persisted events, including `USER_WARNED`, `KYC_VERIFIED`, `KYC_REJECTED`, `REMOVE_PRODUCT` and `RESTORE_PRODUCT`.
+- Auth audit now filters by actor, target, exact action, request ID and date range, and returns the shared source/event/actor/action/target/case/reason/time/reference shape.
+- Added permission-gated owner read contracts for Order Hold audits, Order Dispute audits and Support Ticket audits. Each source retains its own page and total; no cross-database join or merged-page pagination was introduced.
+- The Audit workspace has separate Auth, Hold, Dispute and Ticket sources, source-specific actions, loading/error/empty/retry states and deep links back to Report, user history, Order and Ticket records.
+- Evidence access remains distinguishable as `VIEW_EVIDENCE` or `EVIDENCE_VIEWED`; ordinary case opens are not mislabeled as file access.
+- Verification: backend contract unit **5/5 passed**; frontend Audit/Orders/Inbox **11/11 passed**; targeted ESLint passed. Read-only PostgreSQL checks returned Auth USER_WARNED=1, Order Hold=91, Order Dispute=390 and a valid empty Support STATUS_CHANGE query.
+- Fixed-schema boundary: Support exposes its existing `dedupeKey` as an operation reference when present, but Order audit rows have no request/operation ID and there is no durable owner table for provider/network operational errors. The UI shows unavailable for missing references; no values were hidden in reason or unrelated fields.
+- No Prisma schema, migration or database-design file was changed in TSR-08.
+
+**Next action:** Start TSR-09 Workspace Ticket/FAQ/Dashboard remediation. Keep browser/main-stack and production-like performance acceptance in TSR-15.
+
+## 2026-10-10 — TSR-09 Ticket, FAQ and Dashboard Workspace (schema-frozen scope)
+
+**Status:** Core workspace acceptance implemented; FAQ audit persistence and main-stack browser acceptance remain open
+
+- Ticket drawer now fetches current detail, renders the persisted thread, sends customer replies and clearly marked internal notes, and exposes every allowed lifecycle step: IN_PROGRESS, PENDING_USER, RESOLVED and CLOSED.
+- Status writes require the loaded ticket version and return conflict on stale data. Escalated tickets have a versioned T&S/Admin takeover route that preserves the old/new assignee in append-only HANDOFF audit history.
+- Requester reads continue to filter internal notes. Internal notes no longer count as the first customer-facing response.
+- Support now owns one exact dashboard aggregate for totals/status/priority and an 8-day zero-filled trend; the graph no longer derives from the first 50 queue rows.
+- Auth owns pending KYC/open Report summary and Order owns Dispute status/active T&S Hold summary. Dashboard keeps owner failures as Unavailable (not zero), links to each queue and supports retry.
+- FAQ supports edit, publish and unpublish with optimistic version checks using existing fields. No unrelated Ticket audit table was reused for FAQ events.
+- Remaining user-facing Admin escalation copy was changed to Trust & Safety.
+- Verification: Support PostgreSQL integration **3/3 passed**, including internal-note privacy, pending/resume/resolve/close, stale-version conflict, exact aggregate, T&S takeover audit and FAQ edit/publish/unpublish. Frontend support Jest **24/24 passed** and Next production build passed all 27 generated pages/routes.
+- No Prisma schema, migration, generated client or database-design file was changed in TSR-09.
+- Fixed-schema limitation: HelpArticle has version/status fields but no FAQ audit relation/table. Durable actor/action audit for FAQ edit/publish/unpublish cannot be added without an approved persistence contract; this extension remains partial. Chat-service was unavailable during integration, so Ticket database workflow passed while real-time conversation browser acceptance remains in TSR-15.
+
+**Next action:** Start TSR-10 evidence, buyer-seller Chat history and shipment facts. Do not treat Ticket replies as buyer-seller chat history.
+
+## 2026-10-10 — TSR-10 Dispute Evidence, ORDER Chat and Shipment Facts (schema-frozen scope)
+
+**Status:** Evidence and buyer-seller Chat acceptance implemented; carrier/tracking/receipt facts remain unavailable under the fixed Order schema
+
+- Hold detail now reuses the exact `DisputeEvidence` records from its linked `DisputeCase`. Legacy `AdminDisputeEvidence` remains clearly labeled as a reference and is not exposed as a raw trusted file URL.
+- Evidence is streamed only through the authorized Dispute endpoint. Successful opens append `VIEW_EVIDENCE`; a missing backing file returns 404 and appends `EVIDENCE_MISSING`. Opening the Hold page itself no longer pretends a file was viewed.
+- Chat internal contract now validates ORDER context, supports bounded cursor pagination and streams attachments through a scoped internal route. Order service verifies T&S/Admin case ownership and exact buyer/seller participants, removes storage keys from responses and records history/attachment access or provider failure in Dispute audit.
+- The Workspace Dispute drawer renders read-only buyer/seller history, older-page loading and authorized attachment opening. It distinguishes no ORDER conversation from an empty transcript.
+- Chat runtime now starts without `prisma db push`; future create-or-open calls use a deterministic Mongo `_id` derived from the context key so the existing `_id` uniqueness provides race safety without adding an index/schema change.
+- Shipping output is deliberately honest: it exposes persisted Order status and created/updated timestamps with `available=false`, null carrier/tracking number and a reason. It does not claim live carrier integration or infer shipped/received timestamps.
+- Verification: Order PostgreSQL integration **3/3 passed**; Chat Mongo integration **14/14 passed** after deterministic identity handling; targeted Chat unit **10/10 passed**; frontend Chat **2/2 passed**; Next production build compiled and generated all **27** pages. The combined Audit/Chat Jest run had Chat pass while one pre-existing Audit date-filter timing assertion failed; TSR-10 production build and targeted test remain green.
+- No Prisma schema, migration, generated client or database-design file was changed for TSR-10.
+- Fixed-schema limitations: Order has no carrier, tracking number, shippedAt or receivedAt, so real package tracking and a receipt-aware dispute window cannot be implemented safely. Legacy admin evidence lacks a private storage key. Existing historical duplicate Chat context rows are not deleted; deterministic IDs prevent new duplicates, while cleanup or a unique context-key index would be data/schema maintenance.
+- Browser click-through on the full main stack remains part of TSR-15.
+
+**Next action:** Start TSR-11 request-info/deadline flow. Preserve fixed-schema truthfulness and do not encode missing recipient/question/reply linkage into unrelated fields.
+
+## 2026-10-10 — TSR-14 Bulk Account Actions UI (schema-frozen scope)
+
+**Status:** UI implementation and frontend verification complete; current PostgreSQL/Audit acceptance blocked by Auth DB/generated-client drift
+
+- Added a Trust & Safety/Admin-only `Bulk Actions` Workspace section for the backend-supported `WARN_USER`, `SUSPEND_USER` and `RESTORE_USER` actions. No bulk auction control was added.
+- Accepts newline, whitespace or comma-separated account IDs, removes duplicates and blocks more than 100 accounts before an API request.
+- Requires a real reason and a current dry-run before confirmation. The preview explicitly warns that account state can change before execution and shows success/failure plus reason for every account.
+- A write receives a client-generated operation key that remains attached to the exact action/IDs/reason. An ambiguous network result is replayed with the same key and payload; a completed partial failure can retry only failed IDs with a new key prefixed by the original operation key.
+- Displays the operation ID, retry origin, aggregate counts and per-account persisted backend outcomes. Audit remains owner-generated by the existing Warn/Suspend/Restore handlers; the UI does not synthesize audit rows.
+- Verification: frontend Jest **3/3 passed** for cap/dry-run/partial result/failed-only retry/same-key replay; Next production build compiled and generated all **27** pages.
+- PostgreSQL integration was run with `REQUIRE_INTEGRATION=1`. The database was reachable, but fixture creation failed before bulk assertions because the existing generated client cannot decode test DB `User.role=ADMIN`. This is the previously documented Auth DB/client drift; no db push, migration, client regeneration or schema edit was used to bypass it.
+- No Prisma schema, migration, generated client or database-design file was changed for TSR-14.
+- Fixed-schema limitation: the retry relationship has no dedicated parent-operation column. It is durably represented inside the new idempotency key prefix and surfaced in the UI, but cannot be queried as a typed relation. Full Gateway/browser/Audit acceptance remains in TSR-15 after the Auth runtime contract is healthy.
+
+**Next action:** Keep TSR-11–13 pending as requested. Continue with TSR-15 only if the user chooses full-flow acceptance, without changing the database schema.
+
+## 2026-10-10 — TSR-15 Integrated Acceptance (schema-frozen, partial)
+
+**Status:** Partially Verified / Blocked; ไม่ปิดงานเป็น Done
+
+- แก้ test fixture ของ Ticket status ให้ส่ง `version: 1` ตาม optimistic-concurrency contract และแก้ Audit date filter ให้สร้าง UTC boundary ที่แน่นอน (`00:00:00.000Z` ถึง `23:59:59.999Z`) แทนการแปลงจาก local timezone
+- ผลทดสอบ: backend critical rules **64/64**, Workspace frontend **29/29**, Product PostgreSQL **3/3**, Order PostgreSQL **16/16**, Support PostgreSQL **4/4**, Chat Mongo/Redis **82/82** และ Next production build **27/27 pages/routes** ผ่าน
+- Gateway authorization ยืนยัน response ตาม role สำหรับ KYC, Report, Dispute, Hold, Ticket และ Bulk dry-run; browser desktop ยืนยัน T&S Dashboard/Bulk/Audit จาก Auth/Order/Support และยืนยันว่า CS ไม่เห็นเมนู KYC, T&S cases, Products, Audit หรือ Bulk
+- NFR-P-01 บน demo data ขนาดเล็กผ่านทุก sample: สูงสุด Report search 97 ms, Order history 46 ms, Auth dashboard 32 ms, Order dashboard 22 ms และ Support dashboard 53 ms จาก 5 ครั้งต่อ endpoint; ยังไม่ใช่ production-like benchmark
+- Auth PostgreSQL integration **0/5** ถูกบล็อกก่อน assertions ด้วย Prisma `P2032`: test DB มี legacy `User.role=ADMIN` แต่ generated client คาด current contract; ไม่ db push, migrate, regenerate client หรือแก้ schema เพื่อหลบปัญหา
+- Order/Support integration ใช้ฐาน dev พร้อม fixture ที่ self-clean เพราะไม่มีฐานทดสอบแยกของสอง service จึงเป็น partial isolation ไม่ใช่ full isolated acceptance
+- ไม่ recreate Product/Order/Support containers เพื่อพิสูจน์ persistence เพราะ Dockerfile ยังมี `prisma db push --accept-data-loss`; การทำเช่นนั้นขัด schema-frozen constraint
+- Mobile browser, Buyer/Seller click-through, multi-role browser fixture และ production-like load ถูกบันทึกเป็น Deferred/Blocked ไม่อ้างว่าผ่านจาก unit test หรือ API test แทน
+- ไม่มีการแก้ Prisma schema, migration, generated client หรือ database-design file ใน TSR-15; TSR-11–13 ไม่ถูกแก้ไข
+
+**Next action:** ต้องมี Auth test fixture/client contract ที่สอดคล้องกันโดยไม่ใช้ schema mutation, แยก Order/Support test DB, เปลี่ยน unsafe container startup contract และเตรียม mobile/multi-role/production-like fixtures ก่อนจึงปิด TSR-15 ได้
+
+## 2026-10-10 — TSR-13 Role-Scoped Commerce Restriction (schema-frozen, partial)
+
+**Status:** Current restriction/enforcement implemented; durable appeal workflow remains blocked
+
+- ใช้ค่า string ที่มีอยู่แล้วใน `User.status` เป็น current authoritative scope: `RESTRICTED_BUYER`, `RESTRICTED_SELLER` และ `RESTRICTED_ALL_COMMERCE`; ไม่แก้ Prisma schema หรือ migration
+- บัญชีที่ถูกจำกัดยัง login/refresh/read ได้ ขณะที่ live session validation ส่งสถานะล่าสุดผ่าน Gateway ไปทุก owner service จึงบล็อก token เก่าหลังคำสั่งมีผลได้
+- เพิ่ม staff API สำหรับเพิกถอนและคืนสิทธิ์ตาม role พร้อมเหตุผลและ Auth `AdminAudit`; เพิ่มปุ่มใน user lookup, action filter ใน Audit และ banner ให้ผู้ใช้เห็น scope/เหตุผล
+- บล็อก write path หลักของ Seller ใน shop/KYC, Product, video และ auction; บล็อก Buyer ใน bid, campaign claim, create/pay/checkout; auction auto-close ตรวจสถานะผู้ชนะและผู้ขายจาก Auth ก่อนสร้าง Order
+- คง read access, dispute/support access และการจัดการภาระผูกพันของออเดอร์เดิมไว้ ไม่ใช้การจำกัด commerce เป็น full account ban
+- กัน `SUSPENDED` ไม่ให้เขียนทับ `RESTRICTED_*` เพราะ schema เดิมเก็บสองสถานะพร้อมกันไม่ได้; เจ้าหน้าที่ต้องคืน restriction ก่อนใช้ emergency full suspension
+- Verification: backend policy/service/session/report/checkout/auction targeted **37/37 passed**, frontend Orders/Audit **6/6 passed**, targeted ESLint/Prettier ผ่าน และ Next build compile ผ่าน แต่ static generation หยุดด้วย environment heap OOM หลัง compile
+- Fixed-schema blocker: ไม่มี sanction/appeal relation จึงยังทำ sanction ID/case/evidence linkage, หลาย sanction พร้อมกัน, appeal submission/review/history, one-open-appeal constraint และ durable in-app notification ไม่ได้ โดยไม่ใช้ field ผิดประเภท
+
+**Next action:** หากคง schema เดิม ให้ตรวจ browser Buyer/Seller และยอมรับ TSR-13 เป็น partial เท่านั้น; หากต้องการ flow อุทธรณ์ครบ ต้องอนุมัติ owner persistence contract ก่อน

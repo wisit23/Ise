@@ -4,6 +4,7 @@
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
+const { seedRoleCatalog } = require("./roleCatalog");
 
 const prisma = new PrismaClient();
 
@@ -12,6 +13,7 @@ const TARGET_ID = "20000000-0000-0000-0000-000000000004";
 const REPORT_ID = "20000000-0000-0000-0000-000000000005";
 
 async function main() {
+  await seedRoleCatalog(prisma);
   await prisma.user.upsert({
     where: { id: REPORTER_ID },
     update: {},

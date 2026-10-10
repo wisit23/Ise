@@ -7,6 +7,7 @@ const router = Router();
 // "/mine" and "/queue" must come before "/:id" so Express doesn't read them as an id.
 router.get("/mine", requireAuth, ticketController.mine);
 router.get("/queue", requireAuth, ticketController.queue);
+router.get("/dashboard", requireAuth, ticketController.dashboard);
 
 router.post("/", requireAuth, ticketController.create);
 router.get("/:id", requireAuth, ticketController.getOne);
@@ -16,6 +17,7 @@ router.post("/:id/join", requireAuth, ticketController.joinChat);
 router.post("/:id/continue", requireAuth, ticketController.joinChat);
 router.post("/:id/messages", requireAuth, ticketController.reply);
 router.post("/:id/assign", requireAuth, ticketController.assign);
+router.post("/:id/takeover", requireAuth, ticketController.takeover);
 router.patch("/:id/status", requireAuth, ticketController.changeStatus);
 
 module.exports = router;

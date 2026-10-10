@@ -1,8 +1,11 @@
 const { Router } = require("express");
 const {
   requireAuth,
+  requirePermission,
   requireInternalToken,
   fromGatewayHeaders,
+  requireCommerceCapability,
+  CAPABILITY,
 } = require("@reloop/shared");
 const productController = require("../controllers/productController");
 const productVideoRoutes = require("../features/product-videos/productVideoRoutes");
@@ -25,7 +28,18 @@ router.use("/campaigns", campaignRoutes);
 
 // Seller's own listings — must come before "/:id" so these aren't read as an id.
 router.get("/mine", requireAuth, productController.mine);
-router.get("/admin/search", requireAuth, productController.adminSearch);
+router.get(
+  "/admin/search",
+  requireAuth,
+  requirePermission("admin:moderation:remove"),
+  productController.adminSearch,
+);
+router.get(
+  "/admin/:id",
+  requireAuth,
+  requirePermission("admin:moderation:remove"),
+  productController.getForModeration,
+);
 router.get(
   "/by-seller/:sellerId",
   fromGatewayHeaders,
@@ -36,14 +50,30 @@ router.get("/conditions", productController.listConditions);
 router.get("/filters", productController.listFilterOptions);
 
 router.get("/:id", fromGatewayHeaders, productController.getOne);
-router.post("/", requireAuth, productController.create);
+router.post(
+  "/",
+  requireAuth,
+  requireCommerceCapability(CAPABILITY.SELLER),
+  productController.create,
+);
 router.patch(
   "/:id/visibility",
   requireAuth,
+  requireCommerceCapability(CAPABILITY.SELLER),
   productController.toggleVisibility,
 );
-router.patch("/:id", requireAuth, productController.update);
-router.delete("/:id", requireAuth, productController.remove);
+router.patch(
+  "/:id",
+  requireAuth,
+  requireCommerceCapability(CAPABILITY.SELLER),
+  productController.update,
+);
+router.delete(
+  "/:id",
+  requireAuth,
+  requireCommerceCapability(CAPABILITY.SELLER),
+  productController.remove,
+);
 
 router.patch(
   "/:id/internal-status",

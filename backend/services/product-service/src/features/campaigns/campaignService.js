@@ -618,6 +618,9 @@ function createCampaignService(repository = defaultRepository) {
     if (!product) {
       throw badRequest("product not found");
     }
+    if (product.moderatedAt || product.status === "removed") {
+      throw badRequest("product is unavailable due to moderation");
+    }
     if (product.status !== "reserved") {
       throw badRequest(`product is not reserved (status: ${product.status})`);
     }

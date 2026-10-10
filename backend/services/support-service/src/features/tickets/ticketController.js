@@ -49,6 +49,19 @@ async function queue(req, res, next) {
   }
 }
 
+async function dashboard(req, res, next) {
+  try {
+    res.json(
+      await ticketService.getDashboardMetrics({
+        role: req.userRole,
+        days: req.query.days,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getOne(req, res, next) {
   try {
     const ticket = await ticketService.getTicket({
@@ -90,6 +103,21 @@ async function assign(req, res, next) {
   }
 }
 
+async function takeover(req, res, next) {
+  try {
+    const ticket = await ticketService.takeoverTicket({
+      ticketId: req.params.id,
+      userId: req.userId,
+      role: req.userRole,
+      version: req.body.version,
+      reason: req.body.reason,
+    });
+    res.json(ticket);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function changeStatus(req, res, next) {
   try {
     const ticket = await ticketService.changeStatus({
@@ -98,6 +126,7 @@ async function changeStatus(req, res, next) {
       role: req.userRole,
       status: req.body.status,
       reason: req.body.reason,
+      version: req.body.version,
     });
     res.json(ticket);
   } catch (err) {
@@ -135,9 +164,11 @@ module.exports = {
   create,
   mine,
   queue,
+  dashboard,
   getOne,
   reply,
   assign,
+  takeover,
   changeStatus,
   getConversation,
   joinChat,

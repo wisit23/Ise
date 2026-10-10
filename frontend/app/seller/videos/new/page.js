@@ -39,9 +39,15 @@ export default function UploadVideoPage() {
     }
     apiFetch("/api/products/mine?limit=50", { token: getAccessToken() })
       .then((data) => {
-        setProducts(data.items || []);
-        if (data.items?.length > 0) {
-          setForm((prev) => ({ ...prev, productId: data.items[0].id }));
+        const eligibleProducts = (data.items || []).filter(
+          (product) => product.status !== "removed",
+        );
+        setProducts(eligibleProducts);
+        if (eligibleProducts.length > 0) {
+          setForm((prev) => ({
+            ...prev,
+            productId: eligibleProducts[0].id,
+          }));
         }
       })
       .catch((err) => setError(err.message || "โหลดรายการสินค้าไม่สำเร็จ"))

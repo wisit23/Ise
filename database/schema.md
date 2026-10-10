@@ -1,10 +1,10 @@
 # RE-LOOP — Service-owned schema reference
 
-Generated from repository Prisma sources on 2026-09-09 / aad4092, not introspection of a running database. Service-owned files are authoritative; old database/*.prisma copies are legacy snapshots and not migration inputs.
+Updated from repository Prisma sources on 2026-10-07. This is not an introspection of a running database. Service-owned files are authoritative; old `database/*.prisma` copies are legacy snapshots and are not migration inputs.
 
 | Service         | Provider   | Models | Source                                                             |
 | --------------- | ---------- | ------ | ------------------------------------------------------------------ |
-| auth-service    | postgresql | 11     | [schema](../backend/services/auth-service/prisma/schema.prisma)    |
+| auth-service    | postgresql | 16     | [schema](../backend/services/auth-service/prisma/schema.prisma)    |
 | chat-service    | mongodb    | 2      | [schema](../backend/services/chat-service/prisma/schema.prisma)    |
 | order-service   | postgresql | 6      | [schema](../backend/services/order-service/prisma/schema.prisma)   |
 | product-service | postgresql | 11     | [schema](../backend/services/product-service/prisma/schema.prisma) |
@@ -13,7 +13,41 @@ Generated from repository Prisma sources on 2026-09-09 / aad4092, not introspect
 
 Cross-service user/product/order IDs are references, not foreign keys across databases. PostgreSQL runtime uses five databases; CI may use separate schemas in one isolated test database. Mongo requires replica set transactions.
 
-## auth-service
+## auth-service — current ER-aligned inventory (2026-10-07)
+
+Source design: `ER_auth.drawio`, page `QHJz9qzJK7pLv-PV6rBe`. The service-owned
+[Prisma schema](../backend/services/auth-service/prisma/schema.prisma) and migration
+`20261007130000_align_auth_er_design` implement these 16 tables.
+
+| Type        | Table                       | Columns in the approved design                                                                                                                                       |
+| ----------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Master      | `users`                     | `id`, `email`, `password_hash`, `f_name`, `l_name`, `phone`, `role`, `status`, `created_at`, `updated_at`                                                            |
+| Master      | `buyer_profiles`            | `user_id`, `favorite_category`, `style_preference`, `size_preference`, `brand_preference`, `updated_at`                                                              |
+| Master      | `seller_profiles`           | `user_id`, `shop_name`, `id_card_number`, `id_card_expiry`, `address`, `bank_account`, `kyc_status`, `kyc_storage_key`, `verified_at`, `last_active_at`              |
+| Master      | `user_addresses`            | `id`, `user_id`, `recipient_name`, `phone`, `address_line`, `subdistrict`, `district`, `province`, `postal_code`, `is_default`, `created_at`, `updated_at`           |
+| Setup       | `role`                      | `role_id`, `role_code`                                                                                                                                               |
+| Setup       | `user_roles`                | `id`, `user_id`, `role_code`, `created_at`                                                                                                                           |
+| Transaction | `kyc_applications`          | `id`, `user_id`, `storage_key`, `file_type`, `status`, `reason`, `version`, `submitted_at`, `decided_at`, `decided_by`                                               |
+| Transaction | `shop_change_requests`      | `requests_id`, `seller_id`, `status`, `admin_note`, `reviewed_by`, `reviewed_at`, `created_at`, `comment`                                                            |
+| Transaction | `shop_change_request_items` | `id`, `requests_id`, `field_name`, `old_value`, `new_value`, `created_at`                                                                                            |
+| Transaction | `reports`                   | `id`, `reporter_id`, `target_id`, `product_id`, `reason`, `status`, `reported_at`, `reviewed_at`, `reviewed_by`, `action_taken`                                      |
+| Transaction | `bulk_action_runs`          | `id`, `idempotency_key`, `actor_id`, `action`, `reason`, `requested_ids`, `results`, `created_at`                                                                    |
+| Transaction | `refresh_tokens`            | `id`, `user_id`, `token`, `expires_at`, `revoked_at`, `created_at`                                                                                                   |
+| Transaction | `login_logs`                | `id`, `user_id`, `session_id`, `login_at`, `logout_at`, `ip_address`, `user_agent`                                                                                   |
+| Transaction | `buyer_activity_logs`       | `id`, `buyer_id`, `action`, `source`, `target_type`, `target_id`, `metadata`, `request_id`, `ip_address`, `user_agent`, `occurred_at`, `created_at`                  |
+| Transaction | `admin_audits`              | `id`, `actor_id`, `action`, `target_id`, `reason`, `request_id`, `created_at`                                                                                        |
+| Transaction | `executive_audit_logs`      | `id`, `actor_id`, `actor_email`, `actor_role`, `action`, `category`, `target_type`, `target_id`, `description`, `metadata`, `ip_address`, `user_agent`, `created_at` |
+
+Implementation details that do not add tables or columns:
+
+- `ShopChangeRequest.id` maps to `shop_change_requests.requests_id`; item rows use the same `requests_id` FK exactly as drawn.
+- Role codes are seeded into `role`, and `user_roles.role_code` has a real FK to `role.role_code`.
+- The API still returns `shopName`, `address`, and `bankAccount` for frontend compatibility, but those values are reconstructed from `shop_change_request_items`.
+- Bulk-run processing state is stored inside the existing `results` JSON field. Product moderation idempotency is owned by `product-service`; auth-service does not create an extra operation table.
+
+## auth-service — superseded 2026-09-09 generated excerpt
+
+> Historical only. The excerpt below predates the 2026-10-07 ER alignment and must not be used as the current auth schema.
 
 ### enum Role
 

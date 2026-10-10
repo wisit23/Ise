@@ -49,10 +49,22 @@ test("executive audit log endpoints against real database", async (t) => {
     displayName: "Integration Buyer",
   });
 
+  await prisma.user.create({
+    data: {
+      id: actorId,
+      email: `ceo-${runId}@reloop.test`,
+      passwordHash: "integration-test-only",
+      firstName: "Integration",
+      lastName: "CEO",
+      role: "EXECUTIVE",
+    },
+  });
+
   t.after(async () => {
     await prisma.executiveAuditLog.deleteMany({
       where: { actorId },
     });
+    await prisma.user.deleteMany({ where: { id: actorId } });
     await prisma.$disconnect();
   });
 

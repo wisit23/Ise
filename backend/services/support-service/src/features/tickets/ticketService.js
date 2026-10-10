@@ -138,6 +138,18 @@ async function listQueue({
   });
 }
 
+async function getDashboardMetrics({ role, days }) {
+  if (!isAgent(role)) throw forbidden("only support agents can view dashboard metrics");
+  const parsedDays = Number(days || 8);
+  if (!Number.isInteger(parsedDays) || parsedDays < 1 || parsedDays > 31) {
+    throw badRequest("days must be an integer between 1 and 31");
+  }
+  return ticketModel.dashboardMetrics({
+    includeEscalated: role === "ADMIN" || role === "TRUST_AND_SAFETY",
+    days: parsedDays,
+  });
+}
+
 async function reply({ ticketId, userId, role, body, isInternal }) {
   if (!body?.trim()) throw badRequest("body is required");
   const ticket = await assertAccess({ ticketId, userId, role });
@@ -158,7 +170,7 @@ async function reply({ ticketId, userId, role, body, isInternal }) {
   });
 
   const extra = {};
-  if (!ticket.firstResponseAt && authorRole === "AGENT") {
+  if (!ticket.firstResponseAt && authorRole === "AGENT" && !isInternal) {
     extra.firstResponseAt = new Date();
   }
   if (Object.keys(extra).length > 0) {
@@ -209,10 +221,49 @@ async function assignToSelf({ ticketId, userId, role }) {
   return assigned;
 }
 
-async function changeStatus({ ticketId, userId, role, status, reason }) {
+async function takeoverTicket({ ticketId, userId, role, version, reason }) {
+  if (role !== "ADMIN" && role !== "TRUST_AND_SAFETY") {
+    throw forbidden("only trust & safety can take over an assigned ticket");
+  }
+  if (!Number.isInteger(version)) throw badRequest("version is required");
+  const ticket = await ticketModel.findById(ticketId);
+  if (!ticket) throw notFound("ticket not found");
+  if (ticket.status !== "ESCALATED") {
+    throw badRequest("only escalated tickets can be taken over");
+  }
+  if (ticket.assigneeId === userId) return ticket;
+
+  const ok = await ticketModel.reassign({
+    id: ticketId,
+    version,
+    assigneeId: userId,
+  });
+  if (!ok) throw conflict("ticket was modified concurrently, reload and retry");
+
+  await auditLog.record({
+    ticketId,
+    actorId: userId,
+    action: "HANDOFF",
+    fromValue: ticket.assigneeId || null,
+    toValue: userId,
+    reason: reason || "Trust & Safety takeover",
+  });
+  const updated = await ticketModel.findById(ticketId);
+  if (updated?.conversationId) {
+    await chatClient.addAgentToConversation(updated.conversationId, userId);
+  }
+  return updated;
+}
+
+async function changeStatus({ ticketId, userId, role, status, reason, version }) {
   if (!isAgent(role))
     throw forbidden("only support agents can change ticket status");
   const ticket = await assertAccess({ ticketId, userId, role });
+
+  if (!Number.isInteger(version)) throw badRequest("version is required");
+  if (version !== ticket.version) {
+    throw conflict("ticket was modified concurrently, reload and retry");
+  }
 
   if (!canTransition(ticket.status, status)) {
     throw badRequest(`cannot transition from ${ticket.status} to ${status}`);
@@ -224,7 +275,7 @@ async function changeStatus({ ticketId, userId, role, status, reason }) {
 
   const ok = await ticketModel.transitionStatus({
     id: ticketId,
-    version: ticket.version,
+    version,
     status,
     extra,
   });
@@ -461,8 +512,10 @@ module.exports = {
   getTicket,
   listMine,
   listQueue,
+  getDashboardMetrics,
   reply,
   assignToSelf,
+  takeoverTicket,
   changeStatus,
   joinTicketChat,
   getTicketConversation,

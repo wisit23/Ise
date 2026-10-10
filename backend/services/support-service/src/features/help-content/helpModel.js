@@ -71,20 +71,28 @@ function create(data) {
   return prisma.helpArticle.create({ data });
 }
 
-async function publish(id) {
-  try {
-    return await prisma.helpArticle.update({
-      where: { id },
-      data: {
-        status: "PUBLISHED",
-        publishedAt: new Date(),
-        version: { increment: 1 },
-      },
-    });
-  } catch (err) {
-    if (err.code === "P2025") return null;
-    throw err;
-  }
+async function update({ id, version, data }) {
+  const { count } = await prisma.helpArticle.updateMany({
+    where: { id, version },
+    data: { ...data, version: { increment: 1 } },
+  });
+  return count > 0 ? findById(id) : null;
 }
 
-module.exports = { search, listAll, findBySlug, findById, create, publish };
+async function publish(id, version) {
+  return update({
+    id,
+    version,
+    data: { status: "PUBLISHED", publishedAt: new Date() },
+  });
+}
+
+module.exports = {
+  search,
+  listAll,
+  findBySlug,
+  findById,
+  create,
+  update,
+  publish,
+};

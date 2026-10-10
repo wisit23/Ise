@@ -5,14 +5,14 @@ const orderTransitionService = require("../../services/orderTransitionService");
 function findByOrderId(orderId) {
   return prisma.disputeCase.findUnique({
     where: { orderId },
-    include: { evidence: true },
+    include: { evidence: true, order: true },
   });
 }
 
 function findById(id) {
   return prisma.disputeCase.findUnique({
     where: { id },
-    include: { evidence: true },
+    include: { evidence: true, order: true },
   });
 }
 
@@ -50,6 +50,18 @@ async function listQueue({ status, search, skip, take }) {
   ]);
 
   return { items, total };
+}
+
+async function dashboardMetrics() {
+  const rows = await prisma.disputeCase.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+  });
+  return {
+    disputesByStatus: Object.fromEntries(
+      rows.map((row) => [row.status, row._count._all]),
+    ),
+  };
 }
 
 function auditLog(data) {
@@ -325,4 +337,5 @@ module.exports = {
   escalate,
   decide,
   listQueue,
+  dashboardMetrics,
 };

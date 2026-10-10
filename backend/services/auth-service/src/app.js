@@ -22,6 +22,7 @@ const productModerationRoutes = require("./features/productModeration/productMod
 const sellerActivityRoutes = require("./features/sellerActivity/sellerActivityRoutes");
 const profileAddressRoutes = require("./features/profileAddresses/profileAddressRoutes");
 const buyerAuditRoutes = require("./features/buyerAudit/buyerAuditRoutes");
+const restrictionRoutes = require("./features/commerceRestrictions/restrictionRoutes");
 
 const prisma = require("./models/prismaClient");
 const authService = require("./services/authService");
@@ -41,8 +42,8 @@ app.post(
       return next(revokedSession());
     }
     try {
-      await validateAccessSession(payload);
-      res.json({ active: true });
+      const sessionState = await validateAccessSession(payload);
+      res.json({ active: true, ...sessionState });
     } catch (error) {
       next(
         error.code === "SESSION_REVOKED" || error.code === "ACCOUNT_SUSPENDED"
@@ -81,6 +82,7 @@ app.use("/executive", executiveAuditRoutes);
 app.use("/internal", internalRoutes);
 app.use("/me/addresses", profileAddressRoutes);
 app.use("/", buyerAuditRoutes);
+app.use("/", restrictionRoutes);
 app.use("/", authRoutes);
 app.use("/admin/kyc", adminKycRoutes);
 app.use("/kyc", kycRoutes);

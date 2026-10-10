@@ -44,6 +44,11 @@ test("support order lookup: role gate and bounded search", async (t) => {
     return;
   }
 
+  t.after(async () => {
+    await prisma.order.deleteMany({ where: { buyerId } });
+    await prisma.$disconnect();
+  });
+
   const order = await prisma.order.create({
     data: {
       buyerId,
@@ -52,6 +57,16 @@ test("support order lookup: role gate and bounded search", async (t) => {
       productTitle: "lookup test product",
       price: 500,
       status: "completed",
+    },
+  });
+  const secondOrder = await prisma.order.create({
+    data: {
+      buyerId,
+      sellerId: "int-test-lookup-seller-2",
+      productId: "int-test-lookup-product-2",
+      productTitle: "lookup pagination product",
+      price: 700,
+      status: "shipped",
     },
   });
 
@@ -82,4 +97,36 @@ test("support order lookup: role gate and bounded search", async (t) => {
     .query({ buyerId })
     .set("Authorization", `Bearer ${agentToken}`);
   assert.ok(byBuyerRes.body.items.some((o) => o.id === order.id));
+
+  // TSR-07: owner API provides a globally correct total/summary and allows
+  // every page to be opened instead of making the UI merge two first pages.
+  const historyPage1 = await request(app)
+    .get(`/support/users/${buyerId}/history`)
+    .query({ role: "buyer", page: 1, limit: 1 })
+    .set("Authorization", `Bearer ${agentToken}`);
+  assert.equal(historyPage1.status, 200);
+  assert.equal(historyPage1.body.total, 2);
+  assert.equal(historyPage1.body.totalPages, 2);
+  assert.equal(historyPage1.body.items.length, 1);
+  assert.equal(historyPage1.body.summary.buyerOrders, 2);
+  assert.equal(historyPage1.body.summary.completedOrders, 1);
+  assert.equal(
+    historyPage1.body.summary.completedOrdersMeaning,
+    "order_status_completed",
+  );
+  assert.equal(historyPage1.body.summary.lateShipments, null);
+  assert.ok(
+    historyPage1.body.durationMs < 2000,
+    `history query took ${historyPage1.body.durationMs}ms`,
+  );
+
+  const historyPage2 = await request(app)
+    .get(`/support/users/${buyerId}/history`)
+    .query({ role: "buyer", page: 2, limit: 1 })
+    .set("Authorization", `Bearer ${agentToken}`);
+  assert.equal(historyPage2.status, 200);
+  assert.equal(historyPage2.body.items.length, 1);
+  assert.notEqual(historyPage1.body.items[0].id, historyPage2.body.items[0].id);
+  assert.ok([order.id, secondOrder.id].includes(historyPage2.body.items[0].id));
+  assert.match(historyPage2.headers["server-timing"], /order-history;dur=/);
 });

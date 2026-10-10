@@ -66,10 +66,13 @@ export function TicketViewControl({ value, onChange }) {
    handlers, because those are Admin-only powers. */
 export default function TicketsSection({
   token,
+  userId,
+  userRole,
   statusFilter,
   setStatusFilter,
   viewMode,
   setViewMode,
+  initialTicketId = "",
 }) {
   const toast = useToast();
 
@@ -89,6 +92,14 @@ export default function TicketsSection({
   const [actionError, setActionError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [escalating, setEscalating] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+
+  useEffect(() => {
+    if (!initialTicketId) return;
+    setWorkspaceTicketId(initialTicketId);
+    setViewMode("workspace");
+  }, [initialTicketId, setViewMode]);
 
   function closeTicket() {
     setClosingTicket(true);
@@ -97,6 +108,21 @@ export default function TicketsSection({
       setClosingTicket(false);
       setActionError("");
     }, DRAWER_EXIT_MS);
+  }
+
+  async function openCase(row) {
+    setSelectedTicket(row);
+    setDetailLoading(true);
+    setDetailError("");
+    try {
+      setSelectedTicket(
+        await apiFetch(`/api/support/tickets/${row.id}`, { token }),
+      );
+    } catch (err) {
+      setDetailError(err.message);
+    } finally {
+      setDetailLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -167,9 +193,46 @@ export default function TicketsSection({
         apiFetch(`/api/support/tickets/${selectedTicket.id}/status`, {
           method: "PATCH",
           token,
-          body: { status, reason: reason || undefined },
+          body: {
+            status,
+            reason: reason || undefined,
+            version: selectedTicket.version,
+          },
         }),
-      status === "CLOSED" ? "ปิดงานเรียบร้อย" : "ส่งต่อให้ Admin เรียบร้อย",
+      status === "CLOSED"
+        ? "ปิดงานเรียบร้อย"
+        : status === "ESCALATED"
+          ? "ส่งต่อให้ Trust & Safety เรียบร้อย"
+          : "อัปเดตสถานะเรียบร้อย",
+    );
+  }
+
+  function handleReply(body, isInternal) {
+    if (!selectedTicket) return;
+    return runAction(
+      () =>
+        apiFetch(`/api/support/tickets/${selectedTicket.id}/messages`, {
+          method: "POST",
+          token,
+          body: { body, isInternal },
+        }),
+      isInternal ? "บันทึกโน้ตภายในแล้ว" : "ส่งข้อความแล้ว",
+    );
+  }
+
+  function handleTakeover() {
+    if (!selectedTicket) return;
+    return runAction(
+      () =>
+        apiFetch(`/api/support/tickets/${selectedTicket.id}/takeover`, {
+          method: "POST",
+          token,
+          body: {
+            version: selectedTicket.version,
+            reason: "Trust & Safety takeover from workspace",
+          },
+        }),
+      "รับช่วงเคสเรียบร้อย",
     );
   }
 
@@ -213,7 +276,7 @@ export default function TicketsSection({
               page={page}
               totalPages={totalPages}
               onPageChange={setPage}
-              onSelectTicket={setSelectedTicket}
+              onSelectTicket={openCase}
             />
           </div>
 
@@ -228,7 +291,17 @@ export default function TicketsSection({
                 actionBusy={actionBusy}
                 actionError={actionError}
                 onAssign={handleAssign}
+                onTakeover={handleTakeover}
+                canTakeover={
+                  (userRole === "TRUST_AND_SAFETY" || userRole === "ADMIN") &&
+                  selectedTicket.status === "ESCALATED" &&
+                  selectedTicket.assigneeId !== userId
+                }
                 onStatusChange={handleStatusChange}
+                onReply={handleReply}
+                detailLoading={detailLoading}
+                detailError={detailError}
+                onRetryDetail={() => openCase(selectedTicket)}
                 onOpenLiveChat={(tId) => {
                   closeTicket();
                   setWorkspaceTicketId(tId);
@@ -241,8 +314,8 @@ export default function TicketsSection({
           <ConfirmDialog
             open={escalating}
             busy={actionBusy}
-            title="ส่งต่อให้ Admin?"
-            description="ตั๋วจะออกจากคิวของคุณและไปอยู่ในคิวของ Admin"
+            title="ส่งต่อให้ Trust & Safety?"
+            description="ตั๋วจะออกจากคิว Customer Service และไปอยู่ในคิว Trust & Safety"
             confirmLabel="ส่งต่อ"
             tone="primary"
             reason="optional"

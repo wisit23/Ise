@@ -21,5 +21,9 @@ router.post(
 );
 router.patch("/conversations/:id/status", internalController.updateStatus);
 router.get("/conversations/:id/transcript", internalController.getTranscript);
+router.get(
+  "/conversations/:id/attachments/:messageId",
+  internalController.getAttachment,
+);
 
 module.exports = router;

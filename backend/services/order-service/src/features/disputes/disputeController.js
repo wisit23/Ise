@@ -60,6 +60,55 @@ async function queue(req, res, next) {
   }
 }
 
+async function dashboard(req, res, next) {
+  try {
+    res.json(
+      await disputeService.getDashboardMetrics({
+        role: req.userRole,
+        roles: req.userRoles,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function chatHistory(req, res, next) {
+  try {
+    res.json(
+      await disputeService.getChatHistory({
+        disputeId: req.params.id,
+        userId: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+        before: req.query.before,
+        limit: req.query.limit,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function chatAttachment(req, res, next) {
+  try {
+    const attachment = await disputeService.getChatAttachment({
+      disputeId: req.params.id,
+      messageId: req.params.messageId,
+      userId: req.userId,
+      role: req.userRole,
+      roles: req.userRoles,
+    });
+    res.setHeader("Content-Type", attachment.contentType);
+    if (attachment.contentDisposition) {
+      res.setHeader("Content-Disposition", attachment.contentDisposition);
+    }
+    res.send(attachment.bytes);
+  } catch (err) {
+    next(err);
+  }
+}
+
 const uploadEvidence = [
   upload.single("file"),
   async (req, res, next) => {
@@ -165,6 +214,9 @@ module.exports = {
   getOne,
   getByOrderId,
   queue,
+  dashboard,
+  chatHistory,
+  chatAttachment,
   uploadEvidence,
   viewEvidence,
   claim,

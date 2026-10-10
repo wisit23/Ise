@@ -115,14 +115,14 @@ test("support ticket lifecycle against a real database", async (t) => {
   const inProgressRes = await request(app)
     .patch(`/tickets/${id}/status`)
     .set("Authorization", `Bearer ${agentAToken}`)
-    .send({ status: "IN_PROGRESS" });
+    .send({ status: "IN_PROGRESS", version: assignRes.body.version });
   assert.equal(inProgressRes.status, 200);
 
   // Invalid transition (IN_PROGRESS -> ASSIGNED is not a valid edge).
   const invalidTransitionRes = await request(app)
     .patch(`/tickets/${id}/status`)
     .set("Authorization", `Bearer ${agentAToken}`)
-    .send({ status: "ASSIGNED" });
+    .send({ status: "ASSIGNED", version: inProgressRes.body.version });
   assert.equal(invalidTransitionRes.status, 400);
 
   // Agent A adds an internal note.
@@ -169,18 +169,36 @@ test("support ticket lifecycle against a real database", async (t) => {
     true,
   );
 
-  // Resolve, then close.
+  // Wait for customer input, resume, then resolve and close.
+  const pendingRes = await request(app)
+    .patch(`/tickets/${id}/status`)
+    .set("Authorization", `Bearer ${agentAToken}`)
+    .send({ status: "PENDING_USER", version: agentView.body.version });
+  assert.equal(pendingRes.status, 200);
+
+  const staleVersionRes = await request(app)
+    .patch(`/tickets/${id}/status`)
+    .set("Authorization", `Bearer ${agentAToken}`)
+    .send({ status: "RESOLVED", version: agentView.body.version });
+  assert.equal(staleVersionRes.status, 409);
+
+  const resumeRes = await request(app)
+    .patch(`/tickets/${id}/status`)
+    .set("Authorization", `Bearer ${agentAToken}`)
+    .send({ status: "IN_PROGRESS", version: pendingRes.body.version });
+  assert.equal(resumeRes.status, 200);
+
   const resolveRes = await request(app)
     .patch(`/tickets/${id}/status`)
     .set("Authorization", `Bearer ${agentAToken}`)
-    .send({ status: "RESOLVED" });
+    .send({ status: "RESOLVED", version: resumeRes.body.version });
   assert.equal(resolveRes.status, 200);
   assert.ok(resolveRes.body.resolvedAt);
 
   const closeRes = await request(app)
     .patch(`/tickets/${id}/status`)
     .set("Authorization", `Bearer ${agentAToken}`)
-    .send({ status: "CLOSED" });
+    .send({ status: "CLOSED", version: resolveRes.body.version });
   assert.equal(closeRes.status, 200);
   assert.ok(closeRes.body.closedAt);
 
@@ -213,4 +231,45 @@ test("support ticket lifecycle against a real database", async (t) => {
     .get("/tickets/queue")
     .set("Authorization", `Bearer ${requesterToken}`);
   assert.equal(buyerQueueRes.status, 403);
+
+  const dashboardRes = await request(app)
+    .get("/tickets/dashboard?days=8")
+    .set("Authorization", `Bearer ${safetyToken}`);
+  assert.equal(dashboardRes.status, 200);
+  assert.ok(dashboardRes.body.total >= 1);
+  assert.equal(dashboardRes.body.trend.length, 8);
+});
+
+test("Trust & Safety can take over an escalated ticket with versioned handoff audit", async (t) => {
+  if (!(await databaseIsReachable())) {
+    t.skip("database unreachable");
+    return;
+  }
+  const safetyId = `int-test-safety-${Date.now()}`;
+  const safetyToken = signAccessToken({ sub: safetyId, role: "TRUST_AND_SAFETY" });
+  const created = await request(app)
+    .post("/tickets")
+    .set("Authorization", `Bearer ${requesterToken}`)
+    .send({ subject: "เคสส่งต่อเพื่อทดสอบ takeover", category: "OTHER" });
+  const assigned = await request(app)
+    .post(`/tickets/${created.body.id}/assign`)
+    .set("Authorization", `Bearer ${agentAToken}`);
+  const escalated = await request(app)
+    .patch(`/tickets/${created.body.id}/status`)
+    .set("Authorization", `Bearer ${agentAToken}`)
+    .send({ status: "ESCALATED", version: assigned.body.version, reason: "safety review" });
+  assert.equal(escalated.status, 200);
+
+  const takeover = await request(app)
+    .post(`/tickets/${created.body.id}/takeover`)
+    .set("Authorization", `Bearer ${safetyToken}`)
+    .send({ version: escalated.body.version, reason: "accepted by T&S" });
+  assert.equal(takeover.status, 200);
+  assert.equal(takeover.body.assigneeId, safetyId);
+
+  const handoff = await prisma.ticketAuditLog.findFirst({
+    where: { ticketId: created.body.id, action: "HANDOFF", actorId: safetyId },
+  });
+  assert.equal(handoff.fromValue, agentAId);
+  assert.equal(handoff.toValue, safetyId);
 });

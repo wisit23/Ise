@@ -128,6 +128,7 @@ test("changeStatus does not falsely report chatLocked: true if chat locking fail
       role: "CUSTOMER_SERVICE",
       status: "CLOSED",
       reason: "Resolved customer inquiry",
+      version: 1,
     });
 
     assert.ok(updated);

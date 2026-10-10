@@ -3,9 +3,13 @@
 import { useEffect, useState } from "react";
 
 import Alert from "../../ui/Alert";
+import Button from "../../ui/Button";
 import ConfirmDialog from "../../ui/ConfirmDialog";
 import { useToast } from "../../ui/ToastProvider";
-import AdminInboxTable from "./admin-inbox/AdminInboxTable";
+import AdminInboxTable, {
+  REPORT_STATUS_OPTIONS,
+  TICKET_STATUS_OPTIONS,
+} from "./admin-inbox/AdminInboxTable";
 import CaseDrawer from "./case/CaseDrawer";
 import ReportCasePanel from "./admin-inbox/ReportCasePanel";
 import TicketCasePanel from "./case/TicketCasePanel";
@@ -14,26 +18,63 @@ import { apiFetch } from "../../../lib/api";
 
 const DRAWER_EXIT_MS = 280;
 
-/* Admin's escalation queue: escalated support tickets and user reports in one
-   list. This component owns the data and the actions; the queue table and the
-   report panel live in ./admin-inbox, while the drawer shell and the ticket
-   panel are shared with the CS Tickets tab in ./case. */
-export default function AdminInboxSection({ token }) {
+function mapReport(report) {
+  return {
+    id: report.id,
+    _type: "REPORT",
+    ticketNumber: `REP-${report.id.slice(0, 6).toUpperCase()}`,
+    subject: report.reason || "รายงาน",
+    requesterId: report.reporterId,
+    targetId: report.targetId,
+    priority: "URGENT",
+    status:
+      report.status === "OPEN"
+        ? "NEW"
+        : report.status === "REVIEWED"
+          ? "IN_PROGRESS"
+          : "RESOLVED",
+    createdAt: report.reportedAt,
+    rawReport: report,
+  };
+}
+
+/* Report and escalated-ticket queues deliberately keep separate query state.
+   They come from different services and cannot share a page number or total. */
+export default function AdminInboxSection({
+  token,
+  userId,
+  userRole,
+  onOpenUserHistory,
+  initialReportId = "",
+}) {
   const toast = useToast();
 
-  const [items, setItems] = useState([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [q, setQ] = useState("");
-  const [qInput, setQInput] = useState("");
-  const [statusFilter, setStatusFilter] = useState("OPEN");
+  const [activeQueue, setActiveQueue] = useState("reports");
+  const [reportItems, setReportItems] = useState([]);
+  const [reportPage, setReportPage] = useState(1);
+  const [reportTotalPages, setReportTotalPages] = useState(1);
+  const [reportLoading, setReportLoading] = useState(true);
+  const [reportError, setReportError] = useState("");
+  const [reportQ, setReportQ] = useState("");
+  const [reportQInput, setReportQInput] = useState("");
+  const [reportStatus, setReportStatus] = useState("OPEN");
+  const [reportRefreshKey, setReportRefreshKey] = useState(0);
+
+  const [ticketItems, setTicketItems] = useState([]);
+  const [ticketPage, setTicketPage] = useState(1);
+  const [ticketTotalPages, setTicketTotalPages] = useState(1);
+  const [ticketLoading, setTicketLoading] = useState(true);
+  const [ticketError, setTicketError] = useState("");
+  const [ticketQ, setTicketQ] = useState("");
+  const [ticketQInput, setTicketQInput] = useState("");
+  const [ticketRefreshKey, setTicketRefreshKey] = useState(0);
+
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [closingTicket, setClosingTicket] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const [reportReason, setReportReason] = useState("");
   const [reportDecision, setReportDecision] = useState("");
@@ -49,67 +90,92 @@ export default function AdminInboxSection({ token }) {
       setSelectedTicket(null);
       setClosingTicket(false);
       setActionError("");
+      setDetailError("");
     }, DRAWER_EXIT_MS);
   }
 
   useEffect(() => {
-    setLoading(true);
-
+    let cancelled = false;
+    setTicketLoading(true);
+    setTicketError("");
     const params = new URLSearchParams({
-      page,
+      page: ticketPage,
       limit: PAGE_SIZE,
       scope: "all",
       status: "ESCALATED",
     });
-    if (q) params.set("q", q);
-
-    const pTickets = apiFetch(`/api/support/tickets/queue?${params}`, {
-      token,
-    }).catch(() => ({ items: [], totalPages: 1 }));
-
-    const repParams = new URLSearchParams();
-    repParams.set("status", statusFilter || "OPEN");
-    const pReports = apiFetch(`/api/auth/admin/reports?${repParams}`, {
-      token,
-    }).catch(() => ({ items: [], totalPages: 1 }));
-
-    Promise.all([pTickets, pReports])
-      .then(([tData, rData]) => {
-        let merged = tData.items || [];
-        if (rData && rData.items) {
-          const mapped = rData.items.map((r) => ({
-            id: r.id,
-            _type: "REPORT",
-            ticketNumber: `REP-${r.id.slice(0, 6).toUpperCase()}`,
-            subject: r.reason || "รายงาน",
-            requesterId: r.reporterId,
-            targetId: r.targetId,
-            priority: "URGENT",
-            status:
-              r.status === "OPEN"
-                ? "NEW"
-                : r.status === "REVIEWED"
-                  ? "IN_PROGRESS"
-                  : "RESOLVED",
-            // Report rows use `reportedAt`, not `createdAt` (see the Report
-            // model) — using the wrong field here produced "Invalid Date" in
-            // the table and broke the merged sort (NaN comparisons).
-            createdAt: r.reportedAt,
-            rawReport: r,
-          }));
-          merged = [...merged, ...mapped].sort(
-            (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-          );
-        }
-        setItems(merged);
-        setTotalPages(Math.max(tData.totalPages || 1, rData.totalPages || 1));
+    if (ticketQ) params.set("q", ticketQ);
+    apiFetch(`/api/support/tickets/queue?${params}`, { token })
+      .then((data) => {
+        if (cancelled) return;
+        setTicketItems(data.items || []);
+        setTicketTotalPages(data.totalPages || 1);
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [page, q, statusFilter, token, refreshKey]);
+      .catch((err) => !cancelled && setTicketError(err.message))
+      .finally(() => !cancelled && setTicketLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [ticketPage, ticketQ, token, ticketRefreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReportLoading(true);
+    setReportError("");
+    const params = new URLSearchParams({
+      page: reportPage,
+      limit: PAGE_SIZE,
+      status: reportStatus,
+    });
+    if (reportQ) params.set("q", reportQ);
+    apiFetch(`/api/auth/admin/reports?${params}`, { token })
+      .then((data) => {
+        if (cancelled) return;
+        setReportItems((data.items || []).map(mapReport));
+        setReportTotalPages(data.totalPages || 1);
+      })
+      .catch((err) => !cancelled && setReportError(err.message))
+      .finally(() => !cancelled && setReportLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [reportPage, reportQ, reportStatus, token, reportRefreshKey]);
+
+  async function openCase(row) {
+    setSelectedTicket(row);
+    setDetailLoading(true);
+    setDetailError("");
+    setActionError("");
+    try {
+      if (row._type === "REPORT") {
+        const detail = await apiFetch(`/api/auth/admin/reports/${row.id}`, {
+          token,
+        });
+        setSelectedTicket(mapReport(detail));
+      } else {
+        setSelectedTicket(
+          await apiFetch(`/api/support/tickets/${row.id}`, { token }),
+        );
+      }
+    } catch (err) {
+      setDetailError(err.message);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!initialReportId) return;
+    setActiveQueue("reports");
+    openCase({ id: initialReportId, _type: "REPORT" });
+  }, [initialReportId, token]);
 
   function refreshAfterAction() {
-    setRefreshKey((k) => k + 1);
+    if (selectedTicket?._type === "REPORT") {
+      setReportRefreshKey((key) => key + 1);
+    } else {
+      setTicketRefreshKey((key) => key + 1);
+    }
     if (selectedTicket) {
       if (selectedTicket._type === "REPORT") {
         closeTicket();
@@ -169,13 +235,47 @@ export default function AdminInboxSection({ token }) {
       apiFetch(`/api/support/tickets/${selectedTicket.id}/status`, {
         method: "PATCH",
         token,
-        body: { status, reason: reason || undefined },
+        body: {
+          status,
+          reason: reason || undefined,
+          version: selectedTicket.version,
+        },
       }),
+    );
+  }
+
+  function handleReply(body, isInternal) {
+    if (!selectedTicket || selectedTicket._type === "REPORT") return;
+    return runAction(
+      () =>
+        apiFetch(`/api/support/tickets/${selectedTicket.id}/messages`, {
+          method: "POST",
+          token,
+          body: { body, isInternal },
+        }),
+      isInternal ? "บันทึกโน้ตภายในแล้ว" : "ส่งข้อความแล้ว",
+    );
+  }
+
+  function handleTakeover() {
+    if (!selectedTicket || selectedTicket._type === "REPORT") return;
+    return runAction(
+      () =>
+        apiFetch(`/api/support/tickets/${selectedTicket.id}/takeover`, {
+          method: "POST",
+          token,
+          body: {
+            version: selectedTicket.version,
+            reason: "Trust & Safety takeover from escalated inbox",
+          },
+        }),
+      "รับช่วงเคสเรียบร้อย",
     );
   }
 
   function handleReportAction(e) {
     e.preventDefault();
+    if (actionBusy) return;
     if (!selectedTicket || selectedTicket._type !== "REPORT") return;
     if (!reportDecision) {
       setActionError("กรุณาเลือกการตัดสินใจ");
@@ -219,16 +319,10 @@ export default function AdminInboxSection({ token }) {
     if (action.kind === "ban") {
       return runAction(
         () =>
-          apiFetch(`/api/auth/admin/bulk`, {
+          apiFetch(`/api/auth/admin/users/${action.userId}/suspend`, {
             method: "POST",
             token,
-            body: {
-              action: "SUSPEND_USER",
-              ids: [action.userId],
-              reason:
-                reason ||
-                `Banned ${action.roleLabel || "user"} from Admin Inbox (Ticket: ${selectedTicket?.ticketNumber})`,
-            },
+            body: { reason },
           }),
         `ระงับบัญชี${action.roleLabel || "ผู้ใช้"}สำเร็จ`,
       );
@@ -257,7 +351,7 @@ export default function AdminInboxSection({ token }) {
             description: `คุณกำลังจะระงับบัญชี (SUSPEND) ของ "${roleLabel}" (รหัส: ${targetUserId}) ซึ่งเป็นผู้ส่งคำร้องเข้ามา ไม่ใช่คู่กรณี บัญชีนี้จะไม่สามารถเข้าใช้งานระบบได้ทันที`,
             confirmLabel: "ยืนยันระงับบัญชีผู้แจ้ง",
             tone: "danger",
-            reason: "optional",
+            reason: "required",
             reasonLabel: "เหตุผลในการระงับผู้แจ้ง",
           }
         : {
@@ -265,7 +359,7 @@ export default function AdminInboxSection({ token }) {
             description: `ผู้ใช้เป้าหมาย/คู่กรณี (รหัส: ${targetUserId}) จะเข้าสู่ระบบไม่ได้ทันที (SUSPEND_USER) และจะถูกบันทึกใน Audit Log`,
             confirmLabel: "ระงับบัญชีคู่กรณี",
             tone: "danger",
-            reason: "optional",
+            reason: "required",
             reasonLabel: "เหตุผลในการระงับคู่กรณี",
           },
       warn: isRequester
@@ -295,29 +389,95 @@ export default function AdminInboxSection({ token }) {
       },
     }[pendingAction?.kind] ?? {};
 
+  const showingReports = activeQueue === "reports";
+  const queueError = showingReports ? reportError : ticketError;
+
   return (
     <>
       <div className="animate-fade-in-up flex min-h-full flex-col">
-        {error && <Alert className="mb-3">{error}</Alert>}
+        <div
+          className="mb-5 inline-flex w-fit rounded-lg border border-slate-200 bg-slate-100 p-1"
+          role="tablist"
+          aria-label="ประเภทเคส Trust and Safety"
+        >
+          {[
+            ["reports", "รายงาน"],
+            ["tickets", "เคสส่งต่อ"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={activeQueue === value}
+              onClick={() => setActiveQueue(value)}
+              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                activeQueue === value
+                  ? "bg-white text-emerald-700 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {queueError && (
+          <Alert
+            className="mb-3"
+            title={`โหลด${showingReports ? "รายงาน" : "เคสส่งต่อ"}ไม่สำเร็จ`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span>{queueError}</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() =>
+                  showingReports
+                    ? setReportRefreshKey((key) => key + 1)
+                    : setTicketRefreshKey((key) => key + 1)
+                }
+              >
+                ลองใหม่
+              </Button>
+            </div>
+          </Alert>
+        )}
 
         <AdminInboxTable
-          items={items}
-          loading={loading}
-          qInput={qInput}
-          onQInputChange={setQInput}
+          items={showingReports ? reportItems : ticketItems}
+          loading={showingReports ? reportLoading : ticketLoading}
+          qInput={showingReports ? reportQInput : ticketQInput}
+          onQInputChange={showingReports ? setReportQInput : setTicketQInput}
           onSearch={() => {
-            setQ(qInput);
-            setPage(1);
+            if (showingReports) {
+              setReportQ(reportQInput.trim());
+              setReportPage(1);
+            } else {
+              setTicketQ(ticketQInput.trim());
+              setTicketPage(1);
+            }
           }}
-          statusFilter={statusFilter}
+          statusFilter={showingReports ? reportStatus : "ESCALATED"}
           onStatusFilterChange={(v) => {
-            setStatusFilter(v);
-            setPage(1);
+            if (showingReports) {
+              setReportStatus(v);
+              setReportPage(1);
+            }
           }}
-          page={page}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          onSelectTicket={setSelectedTicket}
+          statusOptions={
+            showingReports ? REPORT_STATUS_OPTIONS : TICKET_STATUS_OPTIONS
+          }
+          searchPlaceholder={
+            showingReports
+              ? "ค้นหาด้วยเหตุผล ชื่อ อีเมล หรือรหัส..."
+              : "ค้นหาด้วยหัวข้อหรือ Ticket ID..."
+          }
+          rowActionHint="คลิกที่แถวเพื่อโหลดรายละเอียดล่าสุด"
+          page={showingReports ? reportPage : ticketPage}
+          totalPages={showingReports ? reportTotalPages : ticketTotalPages}
+          onPageChange={showingReports ? setReportPage : setTicketPage}
+          onSelectTicket={openCase}
         />
       </div>
 
@@ -337,6 +497,10 @@ export default function AdminInboxSection({ token }) {
               error={actionError}
               busy={actionBusy}
               onSubmit={handleReportAction}
+              detailLoading={detailLoading}
+              detailError={detailError}
+              onRetryDetail={() => openCase(selectedTicket)}
+              onOpenUserHistory={onOpenUserHistory}
             />
           ) : (
             <TicketCasePanel
@@ -344,7 +508,14 @@ export default function AdminInboxSection({ token }) {
               actionBusy={actionBusy}
               actionError={actionError}
               onAssign={handleAssign}
+              onTakeover={handleTakeover}
+              canTakeover={
+                (userRole === "TRUST_AND_SAFETY" || userRole === "ADMIN") &&
+                selectedTicket.status === "ESCALATED" &&
+                selectedTicket.assigneeId !== userId
+              }
               onStatusChange={handleStatusChange}
+              onReply={handleReply}
               onWarnUser={(userId, rLabel) =>
                 setPendingAction({
                   kind: "warn",
@@ -361,6 +532,9 @@ export default function AdminInboxSection({ token }) {
                   isRequester: rLabel?.includes("ผู้แจ้ง"),
                 })
               }
+              detailLoading={detailLoading}
+              detailError={detailError}
+              onRetryDetail={() => openCase(selectedTicket)}
             />
           ))}
       </CaseDrawer>

@@ -1,4 +1,4 @@
-const { badRequest, forbidden, notFound } = require("@reloop/shared");
+const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const helpModel = require("./helpModel");
 
 const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
@@ -45,13 +45,52 @@ async function createDraft({ role, authorId, title, body, category }) {
   });
 }
 
-async function publish({ role, id }) {
+async function publish({ role, id, version }) {
   if (!AGENT_ROLES.has(role)) {
     throw forbidden("only support agents can publish help articles");
   }
-  const article = await helpModel.publish(id);
-  if (!article) throw notFound("help article not found");
+  if (!Number.isInteger(version)) throw badRequest("version is required");
+  const article = await helpModel.publish(id, version);
+  if (!article) throw conflict("help article was modified concurrently");
   return article;
 }
 
-module.exports = { searchPublic, listForAgent, createDraft, publish };
+async function updateArticle({ role, id, version, title, body, category }) {
+  if (!AGENT_ROLES.has(role)) {
+    throw forbidden("only support agents can edit help articles");
+  }
+  if (!Number.isInteger(version)) throw badRequest("version is required");
+  if (!title?.trim() || !body?.trim() || !category?.trim()) {
+    throw badRequest("title, body and category are required");
+  }
+  const article = await helpModel.update({
+    id,
+    version,
+    data: { title: title.trim(), body: body.trim(), category: category.trim() },
+  });
+  if (!article) throw conflict("help article was modified concurrently");
+  return article;
+}
+
+async function unpublish({ role, id, version }) {
+  if (!AGENT_ROLES.has(role)) {
+    throw forbidden("only support agents can unpublish help articles");
+  }
+  if (!Number.isInteger(version)) throw badRequest("version is required");
+  const article = await helpModel.update({
+    id,
+    version,
+    data: { status: "DRAFT", publishedAt: null },
+  });
+  if (!article) throw conflict("help article was modified concurrently");
+  return article;
+}
+
+module.exports = {
+  searchPublic,
+  listForAgent,
+  createDraft,
+  updateArticle,
+  publish,
+  unpublish,
+};

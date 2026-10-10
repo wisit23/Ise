@@ -7,10 +7,12 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
+    "migrate:deploy": "node prisma/migrate.js",
     "seed:admin-demo": "node prisma/seed-admin-demo.js",
     "seed:kyc-demo": "node prisma/seed-kyc-demo.js",
     "seed:report-demo": "node prisma/seed-report-demo.js",
-    "seed:ban-demo": "node prisma/seed-ban-demo.js"
+    "seed:ban-demo": "node prisma/seed-ban-demo.js",
+    "kyc:inventory": "node scripts/inventoryKycDocuments.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

@@ -88,20 +88,22 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
       .send({ reason: "investigating", version: order.version });
     assert.equal(deniedRes.status, 403);
 
-    // Viewing evidence must record an access audit entry.
+    // Loading the case labels legacy references but does not mislabel a page
+    // view as opening a file.
     const viewRes = await request(app)
       .get(`/admin/${order.id}`)
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(viewRes.status, 200);
     assert.equal(viewRes.body.evidence.length, 1);
     assert.equal(
-      viewRes.body.evidence[0].evidenceRef,
+      viewRes.body.evidence[0].reference,
       "https://example.test/cs-case/1",
     );
+    assert.equal(viewRes.body.evidence[0].source, "LEGACY_REFERENCE");
     const viewAudits = await prisma.disputeAudit.findMany({
       where: { orderId: order.id, action: "EVIDENCE_VIEWED" },
     });
-    assert.equal(viewAudits.length, 1);
+    assert.equal(viewAudits.length, 0);
 
     // Stale version must be rejected as a conflict, not silently applied.
     const staleRes = await request(app)

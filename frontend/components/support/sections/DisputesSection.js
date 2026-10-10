@@ -303,7 +303,8 @@ export default function DisputesSection({
         >
           {(showDisputeChat || closingChat) && (
             <DisputeChatPanel
-              dispute={selectedDispute}
+              dispute={disputeDetails || selectedDispute}
+              token={token}
               closing={closingChat}
               onClose={closeDisputeChat}
             />
@@ -329,6 +330,7 @@ export default function DisputesSection({
             onEscalate={handleEscalate}
             escalating={escalating}
             onOpenChat={() => {
+              if (!disputeDetails) return;
               setShowDisputeChat(true);
               setClosingChat(false);
             }}

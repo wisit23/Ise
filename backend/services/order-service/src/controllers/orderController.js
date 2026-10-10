@@ -6,11 +6,14 @@ const {
   forbidden,
   parsePagination,
   paginatedResponse,
+  restrictionsForStatus,
+  CAPABILITY,
 } = require("@reloop/shared");
 const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
 const chatClient = require("../services/chatClient");
 const buyerActivityClient = require("../services/buyerActivityClient");
+const authClient = require("../services/authClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
 const orderTransitionService = require("../services/orderTransitionService");
 const productSyncService = require("../services/productSyncService");
@@ -69,11 +72,27 @@ async function dispatchOrderCompletedEvent(order) {
 
 async function create(req, res, next) {
   try {
-    const { order, created } = await reserveOrder({
-      buyerId: req.userId,
-      productId: req.body.productId,
-      campaignId: req.body.campaignId,
-    });
+    const { order, created } = await reserveOrder(
+      {
+        buyerId: req.userId,
+        productId: req.body.productId,
+        campaignId: req.body.campaignId,
+      },
+      {
+        authorizeReservation: async (reservation) => {
+          const seller = await authClient.getUser(reservation.product.sellerId);
+          if (!seller) throw badRequest("product seller account was not found");
+          if (
+            restrictionsForStatus(seller.status).includes(CAPABILITY.SELLER)
+          ) {
+            throw forbidden("product seller's selling rights are restricted");
+          }
+          if (seller.status !== "ACTIVE") {
+            throw forbidden("product seller account is not active");
+          }
+        },
+      },
+    );
     await buyerActivityClient.recordOrderActivity(order, "ORDER_PLACED", {
       reservationId: order.reservationId,
     });
@@ -332,6 +351,23 @@ async function createFromAuction(req, res, next) {
     const existing = await orderModel.findByAuctionId(auctionId);
     if (existing) {
       return res.status(200).json(existing);
+    }
+
+    const [buyer, seller] = await Promise.all([
+      authClient.getUser(buyerId),
+      authClient.getUser(sellerId),
+    ]);
+    if (!buyer || !seller) {
+      throw badRequest("auction buyer or seller account was not found");
+    }
+    if (restrictionsForStatus(buyer.status).includes(CAPABILITY.BUYER)) {
+      throw forbidden("auction winner's purchase rights are restricted");
+    }
+    if (restrictionsForStatus(seller.status).includes(CAPABILITY.SELLER)) {
+      throw forbidden("auction seller's selling rights are restricted");
+    }
+    if (buyer.status !== "ACTIVE" || seller.status !== "ACTIVE") {
+      throw forbidden("auction buyer and seller accounts must be active");
     }
 
     const order = await orderModel.create({

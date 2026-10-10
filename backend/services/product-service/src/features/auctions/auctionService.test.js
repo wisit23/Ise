@@ -84,6 +84,23 @@ test("submit rejects a product that is not available", async (t) => {
   );
 });
 
+test("submit rejects a product under Trust & Safety moderation", async (t) => {
+  t.mock.method(repository, "findProductOwner", async () => ({
+    id: "p1",
+    sellerId: "seller-1",
+    status: "available",
+    moderatedAt: new Date(),
+  }));
+
+  await assert.rejects(
+    service.submit({
+      user: { id: "seller-1", role: "SELLER" },
+      input: { productId: "p1", startingPrice: 100, bidIncrement: 10 },
+    }),
+    (err) => err.status === 403,
+  );
+});
+
 test("submit creates a pending_approval auction for the owning seller", async (t) => {
   t.mock.method(repository, "findProductOwner", async () => ({
     id: "p1",
@@ -245,6 +262,31 @@ test("placeBid rejects the seller bidding on their own auction", async (t) => {
       idempotencyKey: "k1",
     }),
     (err) => err.status === 403,
+  );
+});
+
+test("placeBid rejects an auction whose product is moderated", async (t) => {
+  const auction = {
+    id: "a1",
+    sellerId: "seller-1",
+    status: "open",
+    startingPrice: 100,
+    bidIncrement: 10,
+    scheduledEndAt: new Date(Date.now() + 60_000),
+    product: { status: "auction", moderatedAt: new Date() },
+  };
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(fakeTx({ auction })),
+  );
+
+  await assert.rejects(
+    service.placeBid({
+      user: { id: "buyer-1" },
+      auctionId: "a1",
+      amount: 100,
+      idempotencyKey: "moderated-bid",
+    }),
+    (err) => err.status === 409,
   );
 });
 
@@ -622,6 +664,56 @@ test("closing an auction with no bids never calls order-service", async (t) => {
   assert.equal(auction.status, "closed");
   assert.equal(auction.winningBidId, null);
   assert.equal(called, false);
+});
+
+test("automatic close has no side effects after Trust & Safety moderation", async (t) => {
+  const endedAt = new Date(Date.now() - 1000);
+  const moderatedAuction = {
+    id: "a-moderated",
+    productId: "p-moderated",
+    sellerId: "seller-1",
+    status: "open",
+    scheduledEndAt: endedAt,
+    product: {
+      id: "p-moderated",
+      title: "Moderated listing",
+      status: "auction",
+      moderatedAt: new Date(),
+    },
+  };
+  t.mock.method(repository, "findById", async () => moderatedAuction);
+  t.mock.method(repository, "highestBid", async () => {
+    throw new Error("must not inspect bids for a moderated auction");
+  });
+  t.mock.method(orderClient, "createOrderFromAuction", async () => {
+    throw new Error("must not create an order for a moderated auction");
+  });
+
+  const result = await service.maybeAdvance(moderatedAuction, new Date());
+
+  assert.equal(result, moderatedAuction);
+});
+
+test("scheduled auction opening uses a moderation-aware CAS", async (t) => {
+  const now = new Date();
+  const auction = {
+    id: "a-scheduled",
+    status: "scheduled",
+    scheduledStartAt: new Date(now.getTime() - 1000),
+    scheduledEndAt: new Date(now.getTime() + 60000),
+  };
+  let options;
+  t.mock.method(repository, "updateStatus", async (id, data, received) => {
+    options = received;
+    return { ...auction, ...data };
+  });
+
+  await service.maybeAdvance(auction, now);
+
+  assert.deepEqual(options, {
+    expectedStatus: "scheduled",
+    requireUnmoderatedProduct: true,
+  });
 });
 
 test("submit transitions available product to 'auction' status", async (t) => {

@@ -1,4 +1,4 @@
-> **Document status (2026-09-09): Historical plan / evidence baseline.** ข้อกำหนด/การสัมภาษณ์/หลักฐานเดิมเก็บไว้; ข้อความว่ายังไม่ทำหรือผลตรวจในเนื้อหาเดิมใช้เฉพาะช่วงเวลานั้น. สถานะ source aad4092 ดู [current state](../docs/current-state.md), [validation](../docs/validation.md), [known issues](../docs/known-issues.md). ไม่ถือ requirement, mockup หรือ checklist ว่า implemented/accepted โดยอัตโนมัติ.
+> **Document status (2026-10-07): Updated for the latest Auth ER.** The auth-service section below is aligned with `ER_auth.drawio` page `QHJz9qzJK7pLv-PV6rBe`. Older feature notes elsewhere in this file remain historical evidence.
 
 # RE-LOOP — Database change log (vs. `docs/erdatabase.png`)
 
@@ -16,15 +16,47 @@ Updated incrementally as each service's schema is built. Current status: `auth-s
 
 ## auth-service (`reloop_auth`)
 
-| ER entity     | Prisma model / table                        | Change + reason                                                                                                                                                                                                                                                                                                  |
-| ------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User          | `User` / `users`                            | Added `password_hash` (login requires it; ER has no auth field), `phone`. `f_name`/`l_name` kept as DB column names via `@map` to match the ER's `FName`/`LName`.                                                                                                                                                |
-| Role          | `User.role` enum (`BUYER`/`SELLER`/`ADMIN`) | Collapsed the separate `Role` table into an enum column. A user has exactly one role in this system (upgrades BUYER→SELLER in place); a join table added no value for that shape. Revisit if multi-role-per-user is ever needed.                                                                                 |
-| Buyer         | `BuyerProfile` / `buyer_profiles`           | Same fields as ER (style/size/brand preference). Not populated yet — filled by the Phase 2 style quiz.                                                                                                                                                                                                           |
-| Seller        | `SellerProfile` / `seller_profiles`         | Same fields as ER (shop_name, id_card_number, bank_account) **plus** `kyc_status`, `kyc_document_url`, `verified_at` — required by workflow WF-01 (KYC state machine) which the ER doesn't encode. Table exists; KYC upload/approve endpoints are not built yet (out of scope for this pass).                    |
-| Login_Log     | `LoginLog` / `login_logs`                   | As ER. Written on every successful login.                                                                                                                                                                                                                                                                        |
-| Reports       | `Report` / `reports`                        | As ER, kept per the no-cut-tables rule. `reporterId` has a real FK to `User`; `targetId`/`productId` are plain string columns (no FK — the reported entity may be a product living in another service's database, so no cross-database foreign key is possible). No report-submission endpoint yet — table only. |
-| _(not in ER)_ | `RefreshToken` / `refresh_tokens`           | New table. JWT refresh-token rotation/revocation needs somewhere to record issued tokens and their revoked/expiry state; the ER has no concept of sessions/tokens.                                                                                                                                               |
+| ER group    | Prisma model / table                                  | Alignment decision                                                                                                                                                |
+| ----------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Master      | `User` / `users`                                      | Exact table/column set from the latest ER. `role` remains for backward-compatible primary-role claims.                                                            |
+| Master      | `BuyerProfile` / `buyer_profiles`                     | Added the ER fields `favorite_category` and `updated_at`.                                                                                                         |
+| Master      | `SellerProfile` / `seller_profiles`                   | Uses the ER names, including `kyc_storage_key`; the old `kyc_document_url` migration column is renamed.                                                           |
+| Master      | `UserAddress` / `user_addresses`                      | Added to migrations with the ER columns and a real FK to `users`.                                                                                                 |
+| Setup       | `RoleDefinition` / `role`                             | Restored as a real setup table exactly as designed (`role_id`, `role_code`). Persisted codes are text so the table, not a duplicated Prisma enum, is the catalog. |
+| Setup       | `UserRole` / `user_roles`                             | Database column renamed from `role` to ER field `role_code`; it references `role.role_code`.                                                                      |
+| Transaction | `KycApplication` / `kyc_applications`                 | Uses `storage_key` and `file_type` from the ER; old `document_url` is migrated without discarding rows.                                                           |
+| Transaction | `ShopChangeRequest` / `shop_change_requests`          | Parent now contains only request-level fields from the ER. Prisma `id` maps to physical `requests_id`.                                                            |
+| Transaction | `ShopChangeRequestItem` / `shop_change_request_items` | Added exactly as designed. Existing direct shop/address/bank fields are migrated into item rows, then removed from the parent table.                              |
+| Transaction | `Report` / `reports`                                  | Removed the non-ER `version` column. State transitions now claim rows using `status`.                                                                             |
+| Transaction | `BulkActionRun` / `bulk_action_runs`                  | Removed non-ER `payload_hash`, `status`, `error`, and `updated_at`. Processing state uses the existing `results` JSON value.                                      |
+| Transaction | `RefreshToken` / `refresh_tokens`                     | Retained because it is present in the latest ER and supports refresh/revocation.                                                                                  |
+| Transaction | `LoginLog` / `login_logs`                             | Matches the latest ER including `session_id`, `logout_at`, and `user_agent`.                                                                                      |
+| Transaction | `BuyerActivityLog` / `buyer_activity_logs`            | Matches the latest ER and remains append-only through the service API.                                                                                            |
+| Transaction | `AdminAudit` / `admin_audits`                         | Matches the latest ER; `actor_id` references `users`.                                                                                                             |
+| Transaction | `ExecutiveAuditLog` / `executive_audit_logs`          | Added to migrations with all fields and the user relationship shown in the ER.                                                                                    |
+
+`admin_operations` is not part of the approved ER and is therefore not created. The alignment
+migration drops it if it came from a previous local db-push. Cross-service product command
+idempotency remains in the product owner service, while Auth keeps only the designed audit rows.
+
+### Practical notes while keeping the ER unchanged
+
+- `bulk_action_runs` has no separate processing-status column in the design, so the service writes
+  `{ "state": "PROCESSING" }` into `results` while a batch is running and replaces it with the final
+  summary afterward.
+- `role` is seeded with the seven role codes used by the application. Adding a new row alone does not
+  create permissions; `backend/shared/src/permissions.js` must also define the new role's behavior.
+- When migrating old `shop_change_requests`, pending rows can snapshot `old_value` from the current
+  seller profile. Already-decided legacy rows may have `old_value = null` because the former table did
+  not preserve the pre-change value.
+- Product remove/restore retries use the idempotency implementation in `product-service`, because the
+  approved Auth ER has no table for durable cross-service operation state.
+- Auth container startup runs `prisma/migrate.js`: an existing database created by the old `db push`
+  flow is baselined against the five known legacy migrations, then `prisma migrate deploy` applies the
+  ER-alignment migration. This transforms legacy shop-change rows before the old columns are removed.
+- Verified on 2026-10-07 with two disposable PostgreSQL databases: the full six-migration chain and
+  the legacy db-push baseline path both completed; database-to-schema diff reported no difference and
+  the resulting database contained exactly the 16 approved tables.
 
 ### Cross-service rule
 
@@ -57,11 +89,11 @@ Explicitly **not** built yet: `basket` (as its own table — cart state is curre
 
 ## review-service (`reloop_review`)
 
-| ER entity     | Prisma model / table | Change + reason                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| _(not in ER)_ | `Review` / `reviews`             | New table — the ER has no review/rating concept. Rates the **seller**, not the individual product: listings are one-off (a product sells exactly once and is gone), so the seller is the party the buyer keeps dealing with across purchases. `order_id` is unique — one review per completed order, and only after the order's status is `completed` (checked via a call to `order-service`). Added optional `product_id` for traceability back to the reviewed order's listing. |
-| _(not in ER)_ | `ReviewPhoto` / `review_photos` | New table — allows buyers to attach photos to their review. Matches `product-service`'s `Photo` pattern with `url` and `position`. Cascade-deleted with the parent review.                                                                                                                                                                                                            |
-| _(not in ER)_ | `ReviewVideo` / `review_videos` | New table — allows buyers to attach videos to their review. Matches `product-service`'s `Video` pattern with `url` and `position`. Cascade-deleted with the parent review.                                                                                                                                                                                                            |
+| ER entity     | Prisma model / table            | Change + reason                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(not in ER)_ | `Review` / `reviews`            | New table — the ER has no review/rating concept. Rates the **seller**, not the individual product: listings are one-off (a product sells exactly once and is gone), so the seller is the party the buyer keeps dealing with across purchases. `order_id` is unique — one review per completed order, and only after the order's status is `completed` (checked via a call to `order-service`). Added optional `product_id` for traceability back to the reviewed order's listing. |
+| _(not in ER)_ | `ReviewPhoto` / `review_photos` | New table — allows buyers to attach photos to their review. Matches `product-service`'s `Photo` pattern with `url` and `position`. Cascade-deleted with the parent review.                                                                                                                                                                                                                                                                                                        |
+| _(not in ER)_ | `ReviewVideo` / `review_videos` | New table — allows buyers to attach videos to their review. Matches `product-service`'s `Video` pattern with `url` and `position`. Cascade-deleted with the parent review.                                                                                                                                                                                                                                                                                                        |
 
 Explicitly **not** built yet: `seller_stats` (aggregates are computed on read via
 `reviewModel.summaryBySeller`/`listBySeller` instead of a materialized table), `notifications`,

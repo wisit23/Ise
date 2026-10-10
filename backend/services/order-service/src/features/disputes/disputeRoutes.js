@@ -9,7 +9,14 @@ const disputeController = require("./disputeController");
 const router = Router();
 
 router.get("/queue", requireAuth, disputeController.queue);
+router.get("/dashboard", requireAuth, disputeController.dashboard);
 router.get("/by-order/:orderId", requireAuth, disputeController.getByOrderId);
+router.get("/:id/chat-history", requireAuth, disputeController.chatHistory);
+router.get(
+  "/:id/chat-attachments/:messageId",
+  requireAuth,
+  disputeController.chatAttachment,
+);
 router.get("/:id", requireAuth, disputeController.getOne);
 router.post("/:id/evidence", requireAuth, disputeController.uploadEvidence);
 router.get(

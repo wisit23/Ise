@@ -159,14 +159,19 @@ test("catalog search applies all filters against PostgreSQL", async (t) => {
     assert.equal(pageOne.body.totalPages, 2);
     assert.equal(pageTwo.body.items.length, 1);
 
-    const adminToken = signAccessToken({ sub: "catalog-admin", role: "ADMIN" });
+    const adminToken = signAccessToken({
+      sub: "catalog-admin",
+      role: "TRUST_AND_SAFETY",
+      roles: ["TRUST_AND_SAFETY"],
+      permissions: ["admin:moderation:remove"],
+    });
     const adminAll = await request(app)
       .get("/admin/search")
       .query({ category: prefix })
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(adminAll.status, 200);
     assert.ok(adminAll.body.items.some((item) => item.id === rows[2].id));
-    assert.ok(!adminAll.body.items.some((item) => item.id === rows[6].id));
+    assert.ok(adminAll.body.items.some((item) => item.id === rows[6].id));
     const adminExplicit = await request(app)
       .get("/admin/search")
       .query({ category: prefix, status: "removed" })

@@ -2,6 +2,44 @@ const { badRequest } = require("@reloop/shared");
 const productModerationClient = require("../../services/productModerationClient");
 const reportService = require("../reports/reportService");
 
+async function executeModeration({
+  action,
+  productId,
+  actorId,
+  reason,
+  idempotencyKey,
+  requestId,
+}) {
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) throw badRequest("reason is required");
+  if (!idempotencyKey) throw badRequest("idempotencyKey is required");
+
+  // Product-service owns moderation idempotency. Auth-service records only the
+  // resulting admin audit because the approved ER has no operation table.
+  const product =
+    action === "REMOVE_PRODUCT"
+      ? await productModerationClient.removeProduct(
+          productId,
+          trimmedReason,
+          idempotencyKey,
+        )
+      : await productModerationClient.restoreProduct(
+          productId,
+          trimmedReason,
+          idempotencyKey,
+        );
+
+  await reportService.recordAdminAction({
+    actorId,
+    action:
+      action === "REMOVE_PRODUCT" ? "PRODUCT_REMOVED" : "PRODUCT_RESTORED",
+    targetId: productId,
+    reason: trimmedReason,
+    requestId: requestId || idempotencyKey,
+  });
+  return product;
+}
+
 /**
  * Direct product moderation (ADM-003 extension) — lets Admin remove/restore
  * any listing straight from a product search, not only when a Report
@@ -14,36 +52,37 @@ async function removeProduct({
   adminId,
   staffId,
   reason,
+  idempotencyKey,
   requestId,
 }) {
   const actorId = staffId || adminId;
-  const trimmedReason = reason?.trim();
-  if (!trimmedReason) throw badRequest("reason is required");
-  const product = await productModerationClient.removeProduct(
+  return executeModeration({
+    action: "REMOVE_PRODUCT",
     productId,
-    trimmedReason,
-  );
-  await reportService.recordAdminAction({
     actorId,
-    action: "PRODUCT_REMOVED",
-    targetId: productId,
-    reason: trimmedReason,
+    reason,
+    idempotencyKey,
     requestId,
   });
-  return product;
 }
 
-async function restoreProduct({ productId, adminId, staffId, requestId }) {
+async function restoreProduct({
+  productId,
+  adminId,
+  staffId,
+  reason,
+  idempotencyKey,
+  requestId,
+}) {
   const actorId = staffId || adminId;
-  const product = await productModerationClient.restoreProduct(productId);
-  await reportService.recordAdminAction({
+  return executeModeration({
+    action: "RESTORE_PRODUCT",
+    productId,
     actorId,
-    action: "PRODUCT_RESTORED",
-    targetId: productId,
-    reason: "restored via direct product moderation",
+    reason,
+    idempotencyKey,
     requestId,
   });
-  return product;
 }
 
 module.exports = { removeProduct, restoreProduct };

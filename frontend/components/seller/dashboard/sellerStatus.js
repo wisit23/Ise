@@ -6,6 +6,7 @@ export const PRODUCT_STATUS_LABEL = {
   sold: "ขายแล้ว",
   auction: "กำลังประมูล",
   hidden: "ซ่อนอยู่",
+  removed: "ถูกระงับโดย Trust & Safety",
 };
 
 export const PRODUCT_STATUS_STYLE = {
@@ -14,6 +15,7 @@ export const PRODUCT_STATUS_STYLE = {
   sold: "bg-gray-100 text-gray-600",
   auction: "bg-sky-50 text-sky-700",
   hidden: "bg-yellow-50 text-yellow-800",
+  removed: "bg-red-50 text-red-700",
 };
 
 export const ORDER_STATUS_LABEL = {

@@ -53,9 +53,11 @@ model Product {
   reservationId        String?                  @unique @map("reservation_id")
   reservedBy           String?                  @map("reserved_by")
   reservationExpiresAt DateTime?                @map("reservation_expires_at")
-  // ADM-003: set when Admin removes a listing via POST /internal/moderation/:id/remove.
-  // preRemovalStatus remembers what `status` was before removal so restore can
-  // put the listing back where it actually was (not force it to "available").
+  // ADM-003 / TSR-04: moderatedAt is the independent publication/purchase
+  // overlay. Commerce `status` may continue from reserved -> available/sold
+  // while moderated without making the listing public again. preRemovalStatus
+  // is retained as historical/legacy restore context, never as the sole source
+  // of truth for the current commerce state.
   moderatedAt          DateTime?                @map("moderated_at")
   moderationReason     String?                  @map("moderation_reason")
   preRemovalStatus     String?                  @map("pre_removal_status")
@@ -68,10 +70,11 @@ model Product {
   // STABLE, not IMMUTABLE). This is the one field search() matches against.
   searchText String @default("") @map("search_text")
 
-  photos      Photo[]
-  videos      Video[]
-  reviewClips ProductVideo[]
-  auction     AuctionItem?
+  photos             Photo[]
+  videos             Video[]
+  reviewClips        ProductVideo[]
+  auction            AuctionItem?
+  moderationCommands ProductModerationCommand[]
 
   @@index([sellerId])
   @@index([status, category])
@@ -79,6 +82,22 @@ model Product {
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([status, reservationExpiresAt])
   @@map("products")
+}
+
+// TSR-03: product-service owns the durable deduplication record for every
+// moderation command it accepts. Auth can safely replay an operation after a
+// timeout without removing/restoring the listing twice.
+model ProductModerationCommand {
+  idempotencyKey String   @id @map("idempotency_key")
+  action         String
+  productId      String   @map("product_id")
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  payloadHash    String   @map("payload_hash")
+  result         Json
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([productId, createdAt])
+  @@map("product_moderation_commands")
 }
 
 // ER: Photo { Photo_ID, URL, Product_ID }

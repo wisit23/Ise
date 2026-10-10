@@ -219,6 +219,36 @@ export default function EditProductPage() {
     );
   }
 
+  if (product.status === "removed") {
+    return (
+      <main className="flex min-h-screen flex-col bg-gray-50">
+        <NavBar />
+        <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-900">
+            <h1 className="text-lg font-bold">
+              สินค้านี้ถูกระงับโดย Trust & Safety
+            </h1>
+            <p className="mt-2">
+              คุณยังดูข้อมูลและเหตุผลได้ แต่ไม่สามารถแก้ไข ลบ
+              หรือเผยแพร่สินค้านี้ใหม่ได้จนกว่า Trust & Safety จะกู้คืนสินค้า
+            </p>
+            <p className="mt-3 rounded-md bg-white/70 px-3 py-2">
+              <span className="font-semibold">เหตุผล:</span>{" "}
+              {product.moderationReason || "อยู่ระหว่างการตรวจสอบ"}
+            </p>
+          </div>
+          <Link
+            href="/seller/dashboard"
+            className="mt-4 inline-block rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
+          >
+            กลับไปแดชบอร์ดผู้ขาย
+          </Link>
+        </section>
+        <Footer />
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen flex-col bg-gray-50">
       <NavBar />

@@ -4,6 +4,7 @@
 // through the app) — safe to run on every container start.
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
+const { seedRoleCatalog } = require("./roleCatalog");
 
 const prisma = new PrismaClient();
 
@@ -219,6 +220,7 @@ async function upsertUser({
 }
 
 async function main() {
+  await seedRoleCatalog(prisma);
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
   for (const seller of SELLERS) {

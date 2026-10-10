@@ -1,4 +1,4 @@
-const { badRequest, forbidden } = require("@reloop/shared");
+const { badRequest, conflict, forbidden } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const { getAction } = require("./actionRegistry");
 
@@ -30,17 +30,63 @@ async function executeBatch({
   }
   if (!trimmedReason) throw badRequest("reason is required");
 
-  // A retried call with the same key returns the original outcome instead of
-  // running the batch twice (e.g. a client that times out and retries).
-  if (idempotencyKey) {
+  const normalizedIds = ids.map(String);
+
+  function assertSameRequest(run) {
+    if (
+      run.actorId !== actorId ||
+      run.action !== action ||
+      run.reason !== trimmedReason ||
+      JSON.stringify(run.requestedIds) !== JSON.stringify(normalizedIds)
+    ) {
+      throw conflict(
+        "idempotency key was already used with a different request",
+      );
+    }
+  }
+
+  if (!dryRun && !idempotencyKey) {
+    throw badRequest("idempotencyKey is required for a bulk write");
+  }
+
+  // Claim the key before the first side effect. The old implementation wrote
+  // this row only after the batch, so two concurrent requests could both run.
+  if (!dryRun) {
     const existing = await prisma.bulkActionRun.findUnique({
       where: { idempotencyKey },
     });
-    if (existing) return existing.results;
+    if (existing) {
+      assertSameRequest(existing);
+      if (existing.results?.state === "PROCESSING") {
+        throw conflict("bulk operation is already processing");
+      }
+      return existing.results;
+    }
+
+    try {
+      await prisma.bulkActionRun.create({
+        data: {
+          idempotencyKey,
+          actorId,
+          action,
+          reason: trimmedReason,
+          requestedIds: normalizedIds,
+          results: { state: "PROCESSING" },
+        },
+      });
+    } catch (err) {
+      if (err.code !== "P2002") throw err;
+      const raced = await prisma.bulkActionRun.findUnique({
+        where: { idempotencyKey },
+      });
+      assertSameRequest(raced);
+      if (raced.results?.state !== "PROCESSING") return raced.results;
+      throw conflict("bulk operation is already processing");
+    }
   }
 
   const results = [];
-  for (const id of ids) {
+  for (const id of normalizedIds) {
     if (dryRun) {
       const preview = await handler.preview({
         id,
@@ -75,16 +121,10 @@ async function executeBatch({
     results,
   };
 
-  if (idempotencyKey && !dryRun) {
-    await prisma.bulkActionRun.create({
-      data: {
-        idempotencyKey,
-        actorId,
-        action,
-        reason: trimmedReason,
-        requestedIds: ids,
-        results: summary,
-      },
+  if (!dryRun) {
+    await prisma.bulkActionRun.update({
+      where: { idempotencyKey },
+      data: { results: summary },
     });
   }
 

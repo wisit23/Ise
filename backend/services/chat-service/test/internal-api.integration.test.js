@@ -232,17 +232,18 @@ test("Internal API against a real MongoDB replica set", async (t) => {
   );
 
   await t.test(
-    "transcript returns the full, unpaginated message history",
+    "transcript returns cursor-paginated message history",
     async () => {
       const res = await request(app)
         .get(`/internal/conversations/${conversationId}/transcript`)
         .set("x-internal-token", TOKEN);
       assert.equal(res.status, 200);
       assert.equal(res.body.conversation.id, conversationId);
-      // The two SYSTEM messages sent above.
-      assert.equal(res.body.messages.length, 2);
+      assert.equal(res.body.items.length, 2);
+      assert.equal(res.body.nextCursor, null);
+      assert.equal(res.body.messages.length, 2); // compatibility alias
       assert.equal(
-        res.body.messages[0].createdAt <= res.body.messages[1].createdAt,
+        res.body.items[0].createdAt >= res.body.items[1].createdAt,
         true,
       );
     },

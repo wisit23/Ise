@@ -78,12 +78,15 @@ function FaqSection({ token }) {
   const [form, setForm] = useState({ title: "", body: "", category: "OTHER" });
   const [submitting, setSubmitting] = useState(false);
   const [publishingId, setPublishingId] = useState(null);
+  const [editingArticle, setEditingArticle] = useState(null);
 
   function closeForm() {
     setClosingForm(true);
     setTimeout(() => {
       setShowForm(false);
       setClosingForm(false);
+      setEditingArticle(null);
+      setForm({ title: "", body: "", category: "OTHER" });
     }, 280);
   }
 
@@ -104,12 +107,19 @@ function FaqSection({ token }) {
     setSubmitting(true);
     setError("");
     try {
-      await apiFetch("/api/support/help", {
-        method: "POST",
+      await apiFetch(
+        editingArticle
+          ? `/api/support/help/${editingArticle.id}`
+          : "/api/support/help",
+        {
+        method: editingArticle ? "PATCH" : "POST",
         token,
-        body: form,
+        body: editingArticle
+          ? { ...form, version: editingArticle.version }
+          : form,
       });
       setForm({ title: "", body: "", category: "OTHER" });
+      setEditingArticle(null);
       setShowForm(false);
       load();
     } catch (err) {
@@ -119,12 +129,15 @@ function FaqSection({ token }) {
     }
   }
 
-  async function handlePublish(id) {
-    setPublishingId(id);
+  async function handlePublish(article, unpublish = false) {
+    setPublishingId(article.id);
     try {
-      await apiFetch(`/api/support/help/${id}/publish`, {
+      await apiFetch(
+        `/api/support/help/${article.id}/${unpublish ? "unpublish" : "publish"}`,
+        {
         method: "PATCH",
         token,
+        body: { version: article.version },
       });
       load();
     } catch (err) {
@@ -148,7 +161,11 @@ function FaqSection({ token }) {
             ]}
           />
           <button
-            onClick={() => setShowForm((v) => !v)}
+            onClick={() => {
+              setEditingArticle(null);
+              setForm({ title: "", body: "", category: "OTHER" });
+              setShowForm(true);
+            }}
             className="flex items-center gap-1 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
           >
             <span className="material-symbols-outlined text-[18px]">add</span>
@@ -188,9 +205,20 @@ function FaqSection({ token }) {
                   {a.status === "PUBLISHED" ? "เผยแพร่แล้ว" : "ฉบับร่าง"}
                 </span>
               </div>
-              {a.status !== "PUBLISHED" && (
+              <div className="mt-2 flex flex-wrap gap-3">
                 <button
-                  onClick={() => handlePublish(a.id)}
+                  onClick={() => {
+                    setEditingArticle(a);
+                    setForm({ title: a.title, body: a.body, category: a.category });
+                    setShowForm(true);
+                  }}
+                  className="text-sm font-medium text-slate-600 hover:underline"
+                >
+                  แก้ไข
+                </button>
+              {a.status !== "PUBLISHED" ? (
+                <button
+                  onClick={() => handlePublish(a)}
                   disabled={publishingId === a.id}
                   className="mt-2 text-sm font-medium text-emerald-600 hover:underline disabled:opacity-50"
                 >
@@ -198,7 +226,16 @@ function FaqSection({ token }) {
                     ? "กำลังเผยแพร่..."
                     : "เผยแพร่บทความนี้"}
                 </button>
+              ) : (
+                <button
+                  onClick={() => handlePublish(a, true)}
+                  disabled={publishingId === a.id}
+                  className="text-sm font-medium text-amber-700 hover:underline disabled:opacity-50"
+                >
+                  {publishingId === a.id ? "กำลังยกเลิก..." : "ยกเลิกเผยแพร่"}
+                </button>
               )}
+              </div>
             </li>
           ))}
         </ul>
@@ -214,7 +251,7 @@ function FaqSection({ token }) {
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <h2 className="text-lg font-bold text-slate-900">
-                เขียนบทความใหม่ (New FAQ)
+                {editingArticle ? "แก้ไขบทความ" : "เขียนบทความใหม่ (New FAQ)"}
               </h2>
               <button
                 onClick={closeForm}
@@ -318,7 +355,7 @@ function FaqSection({ token }) {
                       <span className="material-symbols-outlined text-[18px]">
                         save
                       </span>{" "}
-                      บันทึกเป็นฉบับร่าง
+                      {editingArticle ? "บันทึกการแก้ไข" : "บันทึกเป็นฉบับร่าง"}
                     </>
                   )}
                 </button>

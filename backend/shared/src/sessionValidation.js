@@ -29,7 +29,14 @@ async function validateRemoteSession(_payload, token) {
       signal: AbortSignal.timeout(3000),
     });
     const data = await response.json();
-    if (response.ok && data.active === true) return;
+    if (response.ok && data.active === true) {
+      return {
+        accountStatus: data.accountStatus || "ACTIVE",
+        commerceRestrictions: Array.isArray(data.commerceRestrictions)
+          ? data.commerceRestrictions
+          : [],
+      };
+    }
     if (
       (response.status === 401 && data.code === "SESSION_REVOKED") ||
       (response.status === 403 && data.code === "ACCOUNT_SUSPENDED")

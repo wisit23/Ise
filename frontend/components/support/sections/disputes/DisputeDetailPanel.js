@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Badge from "../../../panel/ui/Badge";
+import Alert from "../../../ui/Alert";
 import Button from "../../../ui/Button";
 import ConfirmDialog from "../../../ui/ConfirmDialog";
 import Input from "../../../ui/Input";
@@ -276,7 +277,11 @@ export default function DisputeDetailPanel({
           </div>
         </SectionCard>
 
-        <SectionCard icon="person" title="ช่องทางติดต่อผู้ซื้อ" tone="indigo">
+        <SectionCard
+          icon="forum"
+          title="ประวัติแชทผู้ซื้อ–ผู้ขาย"
+          tone="indigo"
+        >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 text-sm font-bold text-white shadow">
@@ -287,18 +292,25 @@ export default function DisputeDetailPanel({
                   ผู้ซื้อ #{(buyerId ?? "").slice(0, 12)}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  กดปุ่ม &quot;แชท&quot; เพื่อเปิดหน้าต่างสนทนา
+                  อ่านประวัติ ORDER conversation แบบ read-only เพื่อประกอบการพิจารณา
                 </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="secondary"
-              icon="chat"
-              onClick={onOpenChat}
-            >
-              แชท
-            </Button>
+            {userRole === "TRUST_AND_SAFETY" || userRole === "ADMIN" ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="history"
+                onClick={onOpenChat}
+              >
+                เปิดประวัติ
+              </Button>
+            ) : (
+              <Badge
+                text="เฉพาะ Trust & Safety"
+                style="bg-slate-100 text-slate-600"
+              />
+            )}
           </div>
         </SectionCard>
 
@@ -308,6 +320,37 @@ export default function DisputeDetailPanel({
           </div>
         ) : details ? (
           <>
+            <SectionCard icon="local_shipping" title="ข้อมูลการจัดส่งจาก Order">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-slate-500">สถานะที่บันทึก</p>
+                  <p className="font-semibold text-slate-800">
+                    {details.shipping?.status || details.order?.status || "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">อัปเดตล่าสุด</p>
+                  <p className="font-semibold text-slate-800">
+                    {details.shipping?.updatedAt
+                      ? new Date(details.shipping.updatedAt).toLocaleString(
+                          "th-TH",
+                        )
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+              {!details.shipping?.available && (
+                <Alert
+                  tone="info"
+                  className="mt-3"
+                  title="ยังไม่มีข้อมูลติดตามพัสดุ"
+                >
+                  Order schema ปัจจุบันไม่ได้บันทึกบริษัทขนส่ง เลขติดตาม
+                  เวลาส่ง และเวลารับสินค้า จึงไม่สร้างข้อมูลจำลองขึ้นมาแทน
+                </Alert>
+              )}
+            </SectionCard>
+
             <SectionCard
               icon="folder_open"
               title={`หลักฐานประกอบ (${details.evidence?.length || 0} ไฟล์)`}
@@ -438,8 +481,8 @@ export default function DisputeDetailPanel({
                   </div>
                   {userRole !== "ADMIN" && (
                     <p className="text-center text-xs font-medium text-slate-500">
-                      หากต้องการให้ Admin ช่วยระงับเงินไว้ก่อนตัดสิน แจ้งทีม
-                      Admin โดยตรง
+                      หากต้องการระงับเงินไว้ก่อนตัดสิน ให้ส่งต่อทีม Trust &
+                      Safety
                     </p>
                   )}
                 </div>

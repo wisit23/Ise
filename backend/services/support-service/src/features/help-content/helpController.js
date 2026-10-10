@@ -51,6 +51,7 @@ async function publish(req, res, next) {
     const article = await helpService.publish({
       role: req.userRole,
       id: req.params.id,
+      version: req.body.version,
     });
     res.json(article);
   } catch (err) {
@@ -58,4 +59,35 @@ async function publish(req, res, next) {
   }
 }
 
-module.exports = { search, manage, create, publish };
+async function update(req, res, next) {
+  try {
+    res.json(
+      await helpService.updateArticle({
+        role: req.userRole,
+        id: req.params.id,
+        version: req.body.version,
+        title: req.body.title,
+        body: req.body.body,
+        category: req.body.category,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function unpublish(req, res, next) {
+  try {
+    res.json(
+      await helpService.unpublish({
+        role: req.userRole,
+        id: req.params.id,
+        version: req.body.version,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { search, manage, create, update, publish, unpublish };

@@ -4,6 +4,7 @@
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
+const { seedRoleCatalog } = require("./roleCatalog");
 
 const prisma = new PrismaClient();
 
@@ -69,6 +70,7 @@ async function resetFixture(fixture) {
 }
 
 async function main() {
+  await seedRoleCatalog(prisma);
   console.log("[auth-service] Ban browser-QA accounts reset to ACTIVE:\n");
   for (const fixture of FIXTURES) {
     const user = await resetFixture(fixture);

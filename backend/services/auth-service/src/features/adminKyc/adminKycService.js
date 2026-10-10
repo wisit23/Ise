@@ -4,7 +4,11 @@ const prisma = require("../../models/prismaClient");
 const ALLOWED_DECISIONS = ["VERIFIED", "REJECTED"];
 
 async function listQueue({ page, limit, status }) {
-  const where = { status: status || "PENDING" };
+  const where = {};
+  if (status === undefined || status === null) where.status = "PENDING";
+  else if (status.trim() && status.trim() !== "ALL") {
+    where.status = status.trim();
+  }
   const [items, total] = await Promise.all([
     prisma.kycApplication.findMany({
       where,
@@ -32,7 +36,15 @@ async function listQueue({ page, limit, status }) {
     }),
     prisma.kycApplication.count({ where }),
   ]);
-  return { items, total };
+  return {
+    items: items.map((item) => ({
+      ...item,
+      // The fixed schema has no per-application shop-profile snapshot. Be
+      // explicit so historical rows are not mistaken for submitted values.
+      profileSnapshotAvailable: false,
+    })),
+    total,
+  };
 }
 
 /**
@@ -46,51 +58,64 @@ async function decideKyc({
   reason,
   version,
   adminId,
+  requestId,
 }) {
   if (!ALLOWED_DECISIONS.includes(decision)) {
     throw badRequest("decision must be VERIFIED or REJECTED");
   }
-  if (!reason) throw badRequest("reason is required");
+  const trimmedReason = reason?.trim();
+  if (!trimmedReason) throw badRequest("reason is required");
   if (typeof version !== "number") throw badRequest("version is required");
 
-  const application = await prisma.kycApplication.findUnique({
-    where: { id: applicationId },
-  });
-  if (!application) throw notFound("KYC application not found");
-  if (application.status !== "PENDING") {
-    throw conflict("KYC application has already been decided");
-  }
-  if (application.version !== version) {
-    throw conflict("KYC application was modified — reload and retry");
-  }
+  return prisma.$transaction(async (tx) => {
+    const application = await tx.kycApplication.findUnique({
+      where: { id: applicationId },
+    });
+    if (!application) throw notFound("KYC application not found");
 
-  const updatedApplication = await prisma.kycApplication.update({
-    where: { id: applicationId },
-    data: {
-      status: decision,
-      reason,
-      decidedAt: new Date(),
-      decidedBy: adminId,
-      version: { increment: 1 },
-    },
-  });
+    const claimed = await tx.kycApplication.updateMany({
+      where: { id: applicationId, status: "PENDING", version },
+      data: {
+        status: decision,
+        reason: trimmedReason,
+        decidedAt: new Date(),
+        decidedBy: adminId,
+        version: { increment: 1 },
+      },
+    });
+    if (claimed.count !== 1) {
+      throw conflict("KYC application was already decided or modified");
+    }
 
-  const sellerProfile = await prisma.sellerProfile.update({
-    where: { userId: application.userId },
-    data: {
-      kycStatus: decision,
-      verifiedAt: decision === "VERIFIED" ? new Date() : null,
-    },
-  });
+    const sellerProfile = await tx.sellerProfile.update({
+      where: { userId: application.userId },
+      data: {
+        kycStatus: decision,
+        verifiedAt: decision === "VERIFIED" ? new Date() : null,
+      },
+    });
+    await tx.adminAudit.create({
+      data: {
+        actorId: adminId,
+        action: `KYC_${decision}`,
+        targetId: applicationId,
+        reason: trimmedReason,
+        requestId,
+      },
+    });
+    const updatedApplication = await tx.kycApplication.findUnique({
+      where: { id: applicationId },
+    });
 
-  return {
-    application: updatedApplication,
-    sellerStatus: {
-      userId: sellerProfile.userId,
-      kycStatus: sellerProfile.kycStatus,
-      verifiedAt: sellerProfile.verifiedAt,
-    },
-  };
+    return {
+      application: updatedApplication,
+      sellerStatus: {
+        userId: sellerProfile.userId,
+        kycStatus: sellerProfile.kycStatus,
+        verifiedAt: sellerProfile.verifiedAt,
+      },
+    };
+  });
 }
 
 module.exports = { listQueue, decideKyc };

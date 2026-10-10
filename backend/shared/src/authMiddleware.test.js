@@ -73,6 +73,31 @@ test("requireAuth exposes the display name from a verified access token", async 
   assert.equal(req.userDisplayName, "Trusted Seller");
 });
 
+test("requireAuth prefers live commerce restrictions over stale token claims", async () => {
+  const token = signAccessToken({
+    sub: "buyer-1",
+    role: "BUYER",
+    accountStatus: "ACTIVE",
+    commerceRestrictions: [],
+  });
+  const req = {
+    headers: { authorization: `Bearer ${token}` },
+    app: {
+      locals: {
+        validateAccessSession: async () => ({
+          accountStatus: "RESTRICTED_BUYER",
+          commerceRestrictions: ["BUYER_COMMERCE"],
+        }),
+      },
+    },
+  };
+
+  await requireAuth(req, {}, () => {});
+
+  assert.equal(req.accountStatus, "RESTRICTED_BUYER");
+  assert.deepEqual(req.commerceRestrictions, ["BUYER_COMMERCE"]);
+});
+
 test("requireAuth uses null when an older access token has no display name", async () => {
   const token = signAccessToken({ sub: "seller-1", role: "SELLER" });
   const req = {

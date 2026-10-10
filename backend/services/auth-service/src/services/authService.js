@@ -7,14 +7,28 @@ const {
   permissionsForRoles,
   ALL_ROLES,
   isValidRoleCombination,
+  restrictionsForStatus,
   badRequest,
   conflict,
   notFound,
 } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
 const { assertActive, revokedSession, lockUser } = require("./sessionService");
+const shopChangeRequests = require("./shopChangeRequestService");
+const { ROLE_CATALOG } = require("../../prisma/roleCatalog");
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches JWT_REFRESH_EXPIRES
+const ROLE_ID_BY_CODE = new Map(ROLE_CATALOG.map(([id, code]) => [code, id]));
+
+async function ensureRoleCatalogEntry(db, role) {
+  const id = ROLE_ID_BY_CODE.get(role);
+  if (!id) throw badRequest("unknown role");
+  await db.roleDefinition.upsert({
+    where: { code: role },
+    update: {},
+    create: { id, code: role },
+  });
+}
 
 function toPublicUser(user) {
   return {
@@ -41,34 +55,36 @@ async function getUserRoles(userId, db = prisma) {
 }
 
 /** Materializes UserRole rows from the legacy `role` column on first write, if needed. */
-async function ensureRoleRowsMigrated(userId) {
-  const existing = await prisma.userRole.findMany({ where: { userId } });
+async function ensureRoleRowsMigrated(userId, db = prisma) {
+  const existing = await db.userRole.findMany({ where: { userId } });
   if (existing.length > 0) return existing.map((r) => r.role);
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) throw notFound("user not found");
 
-  await prisma.userRole.create({ data: { userId, role: user.role } });
+  await ensureRoleCatalogEntry(db, user.role);
+  await db.userRole.create({ data: { userId, role: user.role } });
   return [user.role];
 }
 
-async function assignRole(userId, role) {
+async function assignRole(userId, role, db = prisma) {
   if (!ALL_ROLES.includes(role)) throw badRequest("unknown role");
 
-  const currentRoles = await ensureRoleRowsMigrated(userId);
+  const currentRoles = await ensureRoleRowsMigrated(userId, db);
   const nextRoles = [...new Set([...currentRoles, role])];
   if (!isValidRoleCombination(nextRoles)) {
     throw conflict(
       "customer roles (BUYER/SELLER) cannot be combined with a staff role, and a staff account can have only one staff role",
     );
   }
-  await prisma.userRole.upsert({
+  await ensureRoleCatalogEntry(db, role);
+  await db.userRole.upsert({
     where: { userId_role: { userId, role } },
     update: {},
     create: { userId, role },
   });
 
-  return getUserRoles(userId);
+  return getUserRoles(userId, db);
 }
 
 async function removeRole(userId, role) {
@@ -112,6 +128,8 @@ async function buildAccessTokenClaims(user, db = prisma) {
     // INACTIVE_EXPIRED without a cross-service DB lookup on every request.
     kycStatus: sellerProfile?.kycStatus ?? null,
     displayName: displayName || undefined,
+    accountStatus: user.status,
+    commerceRestrictions: restrictionsForStatus(user.status),
   };
 }
 
@@ -350,113 +368,24 @@ async function getMyShopProfile(userId) {
 
 /** Seller submits a request to change their shop profile fields.
  *  At least one of shopName/address/bankAccount must be provided, plus a comment. */
-async function submitShopChangeRequest(
-  sellerId,
-  { shopName, address, bankAccount, comment },
-) {
-  if (!comment || !comment.trim()) throw badRequest("comment is required");
-  if (!shopName && !address && !bankAccount)
-    throw badRequest(
-      "at least one field (shopName, address, bankAccount) must be provided",
-    );
-
-  // Block submission if the seller already has a PENDING request
-  const existing = await prisma.shopChangeRequest.findFirst({
-    where: { sellerId, status: "PENDING" },
-  });
-  if (existing) throw conflict("you already have a pending change request");
-
-  const req = await prisma.shopChangeRequest.create({
-    data: {
-      sellerId,
-      shopName: shopName || null,
-      address: address || null,
-      bankAccount: bankAccount || null,
-      comment: comment.trim(),
-    },
-  });
-  return req;
+async function submitShopChangeRequest(sellerId, payload) {
+  return shopChangeRequests.submit(sellerId, payload);
 }
 
 /** Seller fetches their own change-request history. */
 async function listMyChangeRequests(sellerId) {
-  const items = await prisma.shopChangeRequest.findMany({
-    where: { sellerId },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
-  return { items };
+  return shopChangeRequests.listMine(sellerId);
 }
 
 /** Admin fetches all PENDING shop change requests (with seller info). */
 async function listPendingChangeRequests() {
-  const items = await prisma.shopChangeRequest.findMany({
-    where: { status: "PENDING" },
-    orderBy: { createdAt: "asc" },
-    include: {
-      seller: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          sellerProfile: {
-            select: { shopName: true, address: true, bankAccount: true },
-          },
-        },
-      },
-    },
-  });
-  return { items };
+  return shopChangeRequests.listPending();
 }
 
 /** Admin approves or rejects a shop change request.
  *  If approved, applies the changed fields to the SellerProfile. */
-async function decideChangeRequest(
-  adminId,
-  requestId,
-  { decision, adminNote },
-) {
-  if (!["APPROVED", "REJECTED"].includes(decision))
-    throw badRequest("decision must be APPROVED or REJECTED");
-
-  const req = await prisma.shopChangeRequest.findUnique({
-    where: { id: requestId },
-  });
-  if (!req) throw notFound("change request not found");
-  if (req.status !== "PENDING")
-    throw conflict("request has already been decided");
-
-  const updated = await prisma.$transaction(async (tx) => {
-    // Mark the request
-    const decided = await tx.shopChangeRequest.update({
-      where: { id: requestId },
-      data: {
-        status: decision,
-        adminNote: adminNote || null,
-        reviewedBy: adminId,
-        reviewedAt: new Date(),
-      },
-    });
-
-    // Apply changes to SellerProfile only on approval
-    if (decision === "APPROVED") {
-      const patch = {};
-      if (req.shopName) patch.shopName = req.shopName;
-      if (req.address) patch.address = req.address;
-      if (req.bankAccount) patch.bankAccount = req.bankAccount;
-      if (Object.keys(patch).length > 0) {
-        await tx.sellerProfile.update({
-          where: { userId: req.sellerId },
-          data: patch,
-        });
-      }
-    }
-
-    return decided;
-  });
-
-  return updated;
+async function decideChangeRequest(adminId, requestId, payload) {
+  return shopChangeRequests.decide(adminId, requestId, payload);
 }
 
 module.exports = {

@@ -1,5 +1,8 @@
 const { AppError, notFound, badRequest } = require("@reloop/shared");
-const { buildContextKey } = require("./contextKey");
+const {
+  buildContextKey,
+  conversationIdForContextKey,
+} = require("./contextKey");
 const conversationModel = require("./conversationModel");
 const productClient = require("../../services/productClient");
 const authClient = require("../../services/authClient");
@@ -31,8 +34,12 @@ async function createOrOpenProductConversation({ productId, buyerId }) {
   const contextKey = buildContextKey("PRODUCT", { productId, buyerId });
   const now = new Date();
 
+  const existing = await conversationModel.findByContextKey(contextKey);
+  if (existing) return existing;
+
   try {
     return await conversationModel.create({
+      id: conversationIdForContextKey(contextKey),
       contextType: "PRODUCT",
       contextId: productId,
       contextKey,

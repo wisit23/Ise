@@ -106,4 +106,24 @@ async function resolveForDownload({ conversationId, messageId, userId }) {
   };
 }
 
-module.exports = { attach, resolveForDownload, messageTypeFor, previewFor };
+async function resolveForInternalDownload({ conversationId, messageId }) {
+  const message = await prisma.message.findFirst({
+    where: { id: messageId, conversationId, deletedAt: null },
+  });
+  if (!message) throw notFound("Attachment not found");
+  const key = message.payload?.storageKey;
+  if (!key) throw badRequest("This message has no attachment");
+  return {
+    path: absolutePath(key),
+    mimeType: message.payload.mimeType || "application/octet-stream",
+    filename: message.payload.filename || key,
+  };
+}
+
+module.exports = {
+  attach,
+  resolveForDownload,
+  resolveForInternalDownload,
+  messageTypeFor,
+  previewFor,
+};

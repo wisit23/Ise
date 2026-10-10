@@ -51,6 +51,25 @@ test("createClip rejects a product owned by another seller", async (t) => {
   );
 });
 
+test("createClip rejects a product under Trust & Safety moderation", async (t) => {
+  t.mock.method(repository, "findProductOwner", async () => ({
+    id: "product-1",
+    sellerId: "seller-1",
+    status: "available",
+    moderatedAt: new Date(),
+  }));
+
+  await assert.rejects(
+    service.createClip({
+      user: { id: "seller-1", role: "SELLER" },
+      input: { videoUrl: "/uploads/a.mp4", productId: "product-1" },
+    }),
+    (err) =>
+      err.status === 403 &&
+      err.message === "cannot attach a video to a moderated product",
+  );
+});
+
 test("createClip stores the verified token name and ignores a body sellerName", async (t) => {
   t.mock.method(repository, "findProductOwner", async () => ({
     id: "product-1",
@@ -87,6 +106,21 @@ test("chooseClip rejects a non-existent card", async (t) => {
     service.chooseClip({
       user: { id: "user-1", role: "BUYER" },
       productVideoId: "missing-card",
+    }),
+    (err) => err.status === 404,
+  );
+});
+
+test("chooseClip hides a card whose product is moderated", async (t) => {
+  t.mock.method(repository, "findById", async () => ({
+    id: "video-1",
+    product: { status: "available", moderatedAt: new Date() },
+  }));
+
+  await assert.rejects(
+    service.chooseClip({
+      user: { id: "user-1", role: "BUYER" },
+      productVideoId: "video-1",
     }),
     (err) => err.status === 404,
   );

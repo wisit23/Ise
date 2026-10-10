@@ -1,6 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildContextKey } = require("./contextKey");
+const {
+  buildContextKey,
+  conversationIdForContextKey,
+} = require("./contextKey");
 
 test("PRODUCT context key is deterministic for the same productId+buyerId", () => {
   const a = buildContextKey("PRODUCT", { productId: "p1", buyerId: "b1" });
@@ -39,4 +42,12 @@ test("DIRECT context key is order-independent (A,B) === (B,A)", () => {
 
 test("unknown contextType throws", () => {
   assert.throws(() => buildContextKey("BOGUS", {}));
+});
+
+test("conversation id is a deterministic Mongo ObjectId for the context key", () => {
+  const a = conversationIdForContextKey("ORDER:o1");
+  const b = conversationIdForContextKey("ORDER:o1");
+  assert.equal(a, b);
+  assert.match(a, /^[a-f0-9]{24}$/);
+  assert.notEqual(a, conversationIdForContextKey("ORDER:o2"));
 });

@@ -13,6 +13,8 @@ backend/services/review-service/uploads/*
 !backend/services/review-service/uploads/.gitkeep
 backend/services/order-service/private-evidence/*
 !backend/services/order-service/private-evidence/.gitkeep
+backend/services/auth-service/private-kyc-documents/*
+!backend/services/auth-service/private-kyc-documents/.gitkeep
 .DS_Store
 coverage/
 backend/services/*/src/generated/

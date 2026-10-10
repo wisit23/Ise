@@ -29,6 +29,47 @@ async function internalPost(path, body) {
   return res.json();
 }
 
+async function internalGet(path) {
+  const res = await fetch(`${CHAT_SERVICE_URL}${path}`, {
+    headers: { "x-internal-token": INTERNAL_TOKEN },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`chat-service ${path} returned ${res.status}`);
+  return res.json();
+}
+
+async function getOrderTranscript(orderId, { before, limit = 30 } = {}) {
+  const conversation = await internalGet(
+    `/internal/conversations/by-context/ORDER/${encodeURIComponent(orderId)}`,
+  );
+  if (!conversation) return null;
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (before) params.set("before", before);
+  const transcript = await internalGet(
+    `/internal/conversations/${conversation.id}/transcript?${params}`,
+  );
+  return transcript ? { ...transcript, conversation } : null;
+}
+
+async function getOrderAttachment(orderId, messageId) {
+  const conversation = await internalGet(
+    `/internal/conversations/by-context/ORDER/${encodeURIComponent(orderId)}`,
+  );
+  if (!conversation) return null;
+  const res = await fetch(
+    `${CHAT_SERVICE_URL}/internal/conversations/${conversation.id}/attachments/${encodeURIComponent(messageId)}`,
+    { headers: { "x-internal-token": INTERNAL_TOKEN } },
+  );
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`chat-service attachment returned ${res.status}`);
+  return {
+    conversation,
+    bytes: Buffer.from(await res.arrayBuffer()),
+    contentType: res.headers.get("content-type") || "application/octet-stream",
+    contentDisposition: res.headers.get("content-disposition") || null,
+  };
+}
+
 /**
  * Opens (or reopens) the ORDER-context conversation and drops a SYSTEM
  * message into it for a status this app considers chat-worthy. Called from
@@ -65,4 +106,8 @@ async function notifyOrderStatusChanged(order, status) {
   }
 }
 
-module.exports = { notifyOrderStatusChanged };
+module.exports = {
+  notifyOrderStatusChanged,
+  getOrderTranscript,
+  getOrderAttachment,
+};

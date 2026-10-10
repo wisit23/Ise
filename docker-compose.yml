@@ -113,6 +113,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL_AUTH}
+      KYC_STORAGE_DIR: /app/services/auth-service/private-kyc-documents
+    volumes:
+      - auth_private_kyc:/app/services/auth-service/private-kyc-documents
     depends_on:
       postgres:
         condition: service_healthy
@@ -270,3 +273,4 @@ volumes:
   product_uploads:
   review_uploads:
   order_private_evidence:
+  auth_private_kyc:

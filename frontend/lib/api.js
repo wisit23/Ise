@@ -313,7 +313,11 @@ export async function fetchAuthedBlobUrl(path, token) {
     const data = await res.json().catch(() => null);
     rejectSuspended(data);
     if (res.status === 401) forceLogout();
-    throw new Error(`Request failed (${res.status})`);
+    let message = data?.error;
+    if (typeof message === "object" && message !== null) {
+      message = message.message || JSON.stringify(message);
+    }
+    throw new Error(message || `Request failed (${res.status})`);
   }
   const blob = await res.blob();
   return URL.createObjectURL(blob);

@@ -107,6 +107,63 @@ async function assign({ id, version, assigneeId }) {
   return count > 0;
 }
 
+/** T&S/Admin takeover keeps the previous owner in the append-only audit log. */
+async function reassign({ id, version, assigneeId }) {
+  const { count } = await prisma.supportTicket.updateMany({
+    where: { id, version },
+    data: { assigneeId, version: { increment: 1 } },
+  });
+  return count > 0;
+}
+
+async function dashboardMetrics({ includeEscalated, days }) {
+  const visibility = includeEscalated ? {} : { status: { not: "ESCALATED" } };
+  const since = new Date();
+  since.setUTCHours(0, 0, 0, 0);
+  since.setUTCDate(since.getUTCDate() - (days - 1));
+
+  const [total, byStatus, byPriority, created] = await Promise.all([
+    prisma.supportTicket.count({ where: visibility }),
+    prisma.supportTicket.groupBy({
+      by: ["status"],
+      where: visibility,
+      _count: { _all: true },
+    }),
+    prisma.supportTicket.groupBy({
+      by: ["priority"],
+      where: visibility,
+      _count: { _all: true },
+    }),
+    prisma.supportTicket.findMany({
+      where: { ...visibility, createdAt: { gte: since } },
+      select: { createdAt: true },
+    }),
+  ]);
+
+  const status = Object.fromEntries(
+    byStatus.map((row) => [row.status, row._count._all]),
+  );
+  const priority = Object.fromEntries(
+    byPriority.map((row) => [row.priority, row._count._all]),
+  );
+  const buckets = new Map();
+  for (let offset = 0; offset < days; offset += 1) {
+    const day = new Date(since);
+    day.setUTCDate(day.getUTCDate() + offset);
+    buckets.set(day.toISOString().slice(0, 10), 0);
+  }
+  created.forEach(({ createdAt }) => {
+    const key = new Date(createdAt).toISOString().slice(0, 10);
+    if (buckets.has(key)) buckets.set(key, buckets.get(key) + 1);
+  });
+  return {
+    total,
+    status,
+    priority,
+    trend: [...buckets].map(([date, count]) => ({ date, count })),
+  };
+}
+
 /** Optimistic-lock status transition. */
 async function transitionStatus({ id, version, status, extra = {} }) {
   const { count } = await prisma.supportTicket.updateMany({
@@ -296,6 +353,8 @@ module.exports = {
   listQueue,
   addMessage,
   assign,
+  reassign,
+  dashboardMetrics,
   transitionStatus,
   setConversationId,
   recordChatMessage,

@@ -1,14 +1,27 @@
 # Admin Feature Handoff
 
-> อัปเดตล่าสุด: 2026-08-25
+> อัปเดตล่าสุด: 2026-10-10
+>
+> หมายเหตุ: รายละเอียด ADM-001–ADM-005 ด้านล่างเป็นหลักฐาน handoff เดิม ณ 2026-08-25; สถานะ remediation ปัจจุบันให้ยึดหัวข้อถัดไปและ `remediation-plan.md`/`progress.md`
+
+## Current remediation handoff
+
+- Current status: **TSR-01–TSR-10 and TSR-14 implemented within fixed-schema scope; TSR-11–13 intentionally skipped; TSR-15 Partially Verified / Blocked**
+- Latest scope: integrated unit/API/PostgreSQL/Gateway/desktop-browser acceptance plus Audit timezone and Ticket test-fixture corrections
+- Schema boundary: ไม่แก้ Prisma schema/migration; TSR-05 Report evidence/category, TSR-06 per-application shop snapshot, TSR-09 FAQ action audit และ TSR-10 carrier/tracking/shipping timestamps ยังไม่มี persistence ที่ถูกประเภท
+- Evidence: backend critical 64/64, Workspace frontend 29/29, Product PostgreSQL 3/3, Order 16/16, Support 4/4, Chat Mongo/Redis 82/82, Gateway role matrix, T&S/CS desktop browser และ Next production build 27 pages ผ่าน
+- Verification boundary: Auth PostgreSQL 0/5 ติด Prisma P2032 จาก legacy `User.role=ADMIN`; Order/Support ยังไม่มี test DB แยก; mobile, Buyer/Seller และ multi-role browser fixture ยัง Deferred
+- Runtime boundary: ยังไม่ใช่ production rollout; production-like benchmark และ recreate persistence ยังไม่ผ่าน โดย Product/Order/Support startup ยังใช้ `prisma db push --accept-data-loss`
+- External boundary: direct media URL ใต้ public `/uploads/*` ยัง revoke ไม่ได้จนกว่าจะมี private-storage/signed-URL หรือ CDN-purge policy
+- Working tree: ยังไม่ได้ commit; โฟลเดอร์ untracked `output/` มีอยู่ก่อนและไม่ได้แก้ไขในงานนี้
+- Next action: คง `TSR-11–13` ไว้ตามคำสั่ง; ปิด TSR-15 ต่อเมื่อแก้ fixture/runtime contract โดยไม่เปลี่ยน schema และมี mobile/multi-role/production-like acceptance
 
 ## Ownership
 
 - Owner: สิรดนัย กันหา
 - Reviewer: อชิรวินท์ จรูญกีรติโรจน์
 - Requirement scope: `UR-22`–`UR-26`
-- Current status: **ADM-001–ADM-005 implemented, awaiting Reviewer sign-off** — ห้ามเริ่ม
-  Deferred Security Phase ก่อน Reviewer ตรวจรอบนี้ผ่าน (ตาม `decision.md` ADM-DEC-004)
+- Current status: ADM-001–ADM-005 เป็น historical delivery; remediation ปัจจุบันถึง TSR-08 แบบ fixed-schema partial ตามหัวข้อด้านบน
 
 ## Scope to hand off
 

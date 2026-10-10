@@ -9,6 +9,16 @@ const WITH_MEDIA = { photos: true, videos: true };
 function toApiShape(product) {
   if (!product) return product;
   const { photos, videos, ...rest } = product;
+  const moderationActive = Boolean(
+    rest.moderatedAt || rest.status === "removed",
+  );
+  if (moderationActive) {
+    rest.commerceStatus =
+      rest.status === "removed"
+        ? rest.preRemovalStatus || "available"
+        : rest.status;
+    rest.status = "removed";
+  }
   // searchText is an internal trigger-maintained field (see schema.prisma);
   // it just duplicates title/description/tags/etc. concatenated, so it's
   // dropped here rather than leaking through every product API response.
@@ -114,12 +124,16 @@ async function list({
   minPrice,
   maxPrice,
   status,
+  includeModerated = false,
+  moderatedOnly = false,
   skip,
   take,
 } = {}) {
   // Public catalog always uses the same PostgreSQL query builder, including when q is absent.
   if (
     status === "available" ||
+    moderatedOnly ||
+    includeModerated ||
     q ||
     brand ||
     style ||
@@ -138,13 +152,24 @@ async function list({
       minPrice,
       maxPrice,
       status,
+      includeModerated,
+      moderatedOnly,
       skip,
       take,
     });
   }
 
   const where = {
-    ...(status ? { status } : { status: { notIn: ["removed", "hidden"] } }),
+    ...(moderatedOnly
+      ? { OR: [{ moderatedAt: { not: null } }, { status: "removed" }] }
+      : status
+        ? { status, moderatedAt: null }
+        : includeModerated
+          ? {}
+          : {
+              status: { notIn: ["removed", "hidden"] },
+              moderatedAt: null,
+            }),
     ...(category ? { category } : {}),
   };
   const [items, total] = await Promise.all([
@@ -160,7 +185,10 @@ async function list({
   return { items: items.map(toApiShape), total };
 }
 
-async function listBySeller(sellerId, { status, skip, take } = {}) {
+async function listBySeller(
+  sellerId,
+  { status, includeModerated = false, skip, take } = {},
+) {
   let statusFilter = {};
   if (Array.isArray(status)) {
     statusFilter = { status: { in: status } };
@@ -168,6 +196,10 @@ async function listBySeller(sellerId, { status, skip, take } = {}) {
     statusFilter = { status };
   }
   const where = { sellerId, ...statusFilter };
+  if (!includeModerated) {
+    where.moderatedAt = null;
+    if (!status) where.status = { not: "removed" };
+  }
   const [items, total] = await Promise.all([
     prisma.product.findMany({
       where,
@@ -222,6 +254,34 @@ async function update(id, patch) {
   }
 }
 
+async function updateBySeller(id, patch) {
+  const { media, ...fields } = patch;
+  return prisma.$transaction(async (tx) => {
+    const claimed = await tx.product.updateMany({
+      where: {
+        id,
+        moderatedAt: null,
+        status: { not: "removed" },
+      },
+      data: { ...fields, updatedAt: new Date() },
+    });
+    if (claimed.count !== 1) return null;
+
+    if (media !== undefined) {
+      await tx.photo.deleteMany({ where: { productId: id } });
+      await tx.video.deleteMany({ where: { productId: id } });
+      await tx.product.update({
+        where: { id },
+        data: mediaToNestedCreate(media),
+      });
+    }
+
+    return toApiShape(
+      await tx.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+    );
+  });
+}
+
 async function remove(id) {
   try {
     await prisma.product.delete({ where: { id } });
@@ -230,6 +290,17 @@ async function remove(id) {
     if (err.code === "P2025") return false;
     throw err;
   }
+}
+
+async function removeBySeller(id) {
+  const removed = await prisma.product.deleteMany({
+    where: {
+      id,
+      moderatedAt: null,
+      status: { not: "removed" },
+    },
+  });
+  return removed.count === 1;
 }
 
 /**
@@ -244,29 +315,38 @@ async function setVisibility(id, visible) {
     // Restore to whatever status it had before hiding (default: available).
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return null;
+    if (product.moderatedAt || product.status === "removed") {
+      return toApiShape(
+        await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+      );
+    }
     const restored = product.preRemovalStatus || "available";
+    await prisma.product.updateMany({
+      where: { id, status: product.status, moderatedAt: null },
+      data: { status: restored, preRemovalStatus: null },
+    });
     return toApiShape(
-      await prisma.product.update({
-        where: { id },
-        data: { status: restored, preRemovalStatus: null },
-        include: WITH_MEDIA,
-      }),
+      await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
     );
   } else {
     // Only hide if currently browsable (available or reserved).
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return null;
-    if (product.status === "hidden" || product.status === "removed") {
+    if (
+      product.moderatedAt ||
+      product.status === "hidden" ||
+      product.status === "removed"
+    ) {
       return toApiShape(
         await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
       );
     }
+    await prisma.product.updateMany({
+      where: { id, status: product.status, moderatedAt: null },
+      data: { status: "hidden", preRemovalStatus: product.status },
+    });
     return toApiShape(
-      await prisma.product.update({
-        where: { id },
-        data: { status: "hidden", preRemovalStatus: product.status },
-        include: WITH_MEDIA,
-      }),
+      await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
     );
   }
 }
@@ -293,14 +373,18 @@ async function listFilterOptions() {
   try {
     const [brands, styles, sizes] = await Promise.all([
       prisma.product.findMany({
-        where: { status: "available", brand: { not: "" } },
+        where: {
+          status: "available",
+          moderatedAt: null,
+          brand: { not: "" },
+        },
         distinct: ["brand"],
         select: { brand: true },
         orderBy: { brand: "asc" },
       }),
-      prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS value FROM products WHERE status = 'available' ORDER BY value`,
+      prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS value FROM products WHERE status = 'available' AND moderated_at IS NULL ORDER BY value`,
       prisma.product.findMany({
-        where: { status: "available" },
+        where: { status: "available", moderatedAt: null },
         distinct: ["size"],
         select: { size: true },
         orderBy: { size: "asc" },
@@ -323,7 +407,9 @@ module.exports = {
   findById,
   create,
   update,
+  updateBySeller,
   remove,
+  removeBySeller,
   setVisibility,
   listCategories,
   ensureCategory,

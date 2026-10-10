@@ -3,8 +3,12 @@ const prisma = require("../../models/prismaClient");
 const conversationModel = require("../conversations/conversationModel");
 const messageModel = require("../messages/messageModel");
 const { contextKeyForInternalContextId } = require("./internalContext");
+const { conversationIdForContextKey } = require("../conversations/contextKey");
 const broadcast = require("../../realtime/broadcast");
 const { syncSupportMessage } = require("../sync/supportSyncWorker");
+const { isValidCursor } = require("../messages/cursor");
+const attachmentService = require("../attachments/attachmentService");
+const fs = require("fs");
 
 const DUPLICATE_KEY_ERROR = "P2002";
 const VALID_STATUSES = ["ACTIVE", "ARCHIVED", "LOCKED"];
@@ -31,8 +35,12 @@ async function createConversation(req, res, next) {
     const contextKey = contextKeyForInternalContextId(contextType, contextId);
     const now = new Date();
 
+    const existing = await conversationModel.findByContextKey(contextKey);
+    if (existing) return res.status(200).json(existing);
+
     try {
       const conversation = await conversationModel.create({
+        id: conversationIdForContextKey(contextKey),
         contextType,
         contextId,
         contextKey,
@@ -171,28 +179,47 @@ async function updateStatus(req, res, next) {
   }
 }
 
-/** Full, unpaginated message history for one conversation — evidence
- * gathering (a dispute, a report review), not for driving a chat UI, which
- * is why this deliberately skips the public cursor-pagination contract. */
+/** Evidence transcript for trusted services. Cursor pagination prevents a
+ * long-running order conversation from becoming one unbounded response. */
 async function getTranscript(req, res, next) {
   try {
     const conversation = await conversationModel.findById(req.params.id);
     if (!conversation) throw notFound("Conversation not found");
 
     const includeInternal = req.query.includeInternal === "true";
-    const where = {
-      conversationId: conversation.id,
-      deletedAt: null,
-    };
-    if (!includeInternal) {
-      where.visibility = { not: "INTERNAL" };
+    const before = req.query.before;
+    if (before !== undefined && !isValidCursor(before)) {
+      throw badRequest("before must be a valid message id");
     }
+    const rawLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(rawLimit)
+      ? Math.min(Math.max(rawLimit, 1), 100)
+      : 30;
+    const page = await messageModel.listPage(
+      conversation.id,
+      before,
+      limit,
+      { includeInternal },
+    );
+    res.json({ conversation, ...page, messages: page.items });
+  } catch (err) {
+    next(err);
+  }
+}
 
-    const messages = await prisma.message.findMany({
-      where,
-      orderBy: { createdAt: "asc" },
+async function getAttachment(req, res, next) {
+  try {
+    const attachment = await attachmentService.resolveForInternalDownload({
+      conversationId: req.params.id,
+      messageId: req.params.messageId,
     });
-    res.json({ conversation, messages });
+    if (!fs.existsSync(attachment.path)) throw notFound("Attachment file unavailable");
+    res.setHeader("Content-Type", attachment.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(attachment.filename)}"`,
+    );
+    fs.createReadStream(attachment.path).pipe(res);
   } catch (err) {
     next(err);
   }
@@ -205,4 +232,5 @@ module.exports = {
   addParticipant,
   updateStatus,
   getTranscript,
+  getAttachment,
 };

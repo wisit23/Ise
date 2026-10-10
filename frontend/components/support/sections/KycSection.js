@@ -12,7 +12,7 @@ const STATUS_OPTIONS = [
   { value: "PENDING", label: "รอตรวจสอบ (PENDING)" },
   { value: "VERIFIED", label: "อนุมัติแล้ว (VERIFIED)" },
   { value: "REJECTED", label: "ปฏิเสธแล้ว (REJECTED)" },
-  { value: "", label: "ทั้งหมด (ALL)" },
+  { value: "ALL", label: "ทั้งหมด (ALL)" },
 ];
 
 const STATUS_BADGE = {
@@ -46,6 +46,7 @@ export default function KycSection({ token }) {
   const [reasonById, setReasonById] = useState({});
   const [decidingId, setDecidingId] = useState(null);
   const [documentUrlById, setDocumentUrlById] = useState({});
+  const [documentErrorById, setDocumentErrorById] = useState({});
   const [pendingDecision, setPendingDecision] = useState(null);
 
   const documentUrlByIdRef = useRef({});
@@ -58,9 +59,7 @@ export default function KycSection({ token }) {
       page: String(page),
       limit: String(PAGE_SIZE),
     });
-    if (statusFilter) {
-      params.set("status", statusFilter);
-    }
+    params.set("status", statusFilter);
     apiFetch(`/api/auth/admin/kyc?${params}`, { token })
       .then((data) => {
         setApplications(data.items || []);
@@ -88,6 +87,7 @@ export default function KycSection({ token }) {
 
   async function loadDocument(applicationId) {
     if (documentUrlById[applicationId]) return;
+    setDocumentErrorById((prev) => ({ ...prev, [applicationId]: "" }));
     try {
       const url = await fetchAuthedBlobUrl(
         `/api/auth/kyc/${applicationId}/document`,
@@ -95,7 +95,10 @@ export default function KycSection({ token }) {
       );
       setDocumentUrlById((prev) => ({ ...prev, [applicationId]: url }));
     } catch (err) {
-      setError(err.message);
+      setDocumentErrorById((prev) => ({
+        ...prev,
+        [applicationId]: err.message,
+      }));
       toast.error(`เปิดเอกสารไม่สำเร็จ: ${err.message}`);
     }
   }
@@ -110,11 +113,7 @@ export default function KycSection({ token }) {
   async function confirmDecision(reason) {
     if (!pendingDecision) return;
     const { application, decision } = pendingDecision;
-    const finalReason = (
-      reason ||
-      reasonById[application.id] ||
-      ""
-    ).trim();
+    const finalReason = (reason || reasonById[application.id] || "").trim();
 
     if (!finalReason) {
       toast.error("กรุณาระบุเหตุผลในการตัดสินใจ");
@@ -208,7 +207,9 @@ export default function KycSection({ token }) {
 
       {loading ? (
         <div className="flex h-48 items-center justify-center rounded-xl border border-slate-200 bg-white">
-          <p className="text-sm font-medium text-slate-500">กำลังโหลดรายการ...</p>
+          <p className="text-sm font-medium text-slate-500">
+            กำลังโหลดรายการ...
+          </p>
         </div>
       ) : applications.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center">
@@ -221,7 +222,7 @@ export default function KycSection({ token }) {
               : "ไม่พบใบสมัคร KYC ในสถานะที่เลือก"}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            {statusFilter !== "" && "ลองเปลี่ยนตัวกรองสถานะเป็น 'ทั้งหมด'"}
+            {statusFilter !== "ALL" && "ลองเปลี่ยนตัวกรองสถานะเป็น 'ทั้งหมด'"}
           </p>
         </div>
       ) : (
@@ -251,10 +252,10 @@ export default function KycSection({ token }) {
                     <p className="mt-1 text-xs font-medium text-slate-500">
                       ยื่นคำขอเมื่อ:{" "}
                       {new Date(app.submittedAt).toLocaleString("th-TH")}
-                      {app.reviewedAt && (
+                      {app.decidedAt && (
                         <span className="ml-2 text-slate-400">
                           · ตรวจแล้วเมื่อ:{" "}
-                          {new Date(app.reviewedAt).toLocaleString("th-TH")}
+                          {new Date(app.decidedAt).toLocaleString("th-TH")}
                         </span>
                       )}
                     </p>
@@ -265,8 +266,14 @@ export default function KycSection({ token }) {
                 <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="rounded-lg bg-slate-50 p-4 text-xs text-slate-700">
                     <dl className="flex flex-col gap-2">
+                      <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+                        ข้อมูลด้านล่างเป็นโปรไฟล์ร้านค้าปัจจุบัน ไม่ใช่ snapshot
+                        ณ วันที่ยื่นคำขอนี้
+                      </div>
                       <div className="flex justify-between gap-2 border-b border-slate-200/60 pb-1.5">
-                        <dt className="font-medium text-slate-500">ชื่อร้านค้า</dt>
+                        <dt className="font-medium text-slate-500">
+                          ชื่อร้านค้า
+                        </dt>
                         <dd className="font-bold text-slate-900">
                           {app.user?.sellerProfile?.shopName ?? "—"}
                         </dd>
@@ -286,7 +293,9 @@ export default function KycSection({ token }) {
                         </dd>
                       </div>
                       <div className="flex justify-between gap-2">
-                        <dt className="font-medium text-slate-500">บัญชีธนาคาร</dt>
+                        <dt className="font-medium text-slate-500">
+                          บัญชีธนาคาร
+                        </dt>
                         <dd className="font-mono text-slate-800">
                           {app.user?.sellerProfile?.bankAccount ?? "—"}
                         </dd>
@@ -295,12 +304,37 @@ export default function KycSection({ token }) {
                   </div>
 
                   <div className="flex flex-col items-center justify-center rounded-lg border border-slate-200/80 bg-slate-50/50 p-4">
-                    {documentUrlById[app.id] ? (
+                    {app.storageKey === "THAI_ID_METHOD" ? (
+                      <div className="text-center text-xs text-slate-600">
+                        <span className="material-symbols-outlined mb-1 block text-3xl text-emerald-600">
+                          verified_user
+                        </span>
+                        ยืนยันผ่าน Thai ID ไม่มีไฟล์เอกสาร
+                      </div>
+                    ) : documentUrlById[app.id] ? (
                       <img
                         src={documentUrlById[app.id]}
                         alt="รูปถ่ายบัตรประชาชน"
                         className="max-h-48 rounded-lg border border-slate-200 bg-white object-contain shadow-sm"
                       />
+                    ) : documentErrorById[app.id] ? (
+                      <div
+                        role="alert"
+                        className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"
+                      >
+                        <p className="font-bold">ไฟล์เอกสารไม่พร้อมใช้งาน</p>
+                        <p className="mt-1">{documentErrorById[app.id]}</p>
+                        <p className="mt-1">
+                          กรุณาให้ผู้ขายส่งคำขอและไฟล์ใหม่อีกครั้ง
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => loadDocument(app.id)}
+                          className="mt-2 font-bold underline"
+                        >
+                          ลองเปิดอีกครั้ง
+                        </button>
+                      </div>
                     ) : (
                       <button
                         type="button"
@@ -354,10 +388,10 @@ export default function KycSection({ token }) {
                     </div>
                   </div>
                 ) : (
-                  app.rejectionReason && (
+                  app.reason && (
                     <div className="mt-3 rounded-lg border border-red-100 bg-red-50/50 px-4 py-2 text-xs text-red-700">
                       <span className="font-bold">เหตุผลที่ปฏิเสธ:</span>{" "}
-                      {app.rejectionReason}
+                      {app.reason}
                     </div>
                   )
                 )}

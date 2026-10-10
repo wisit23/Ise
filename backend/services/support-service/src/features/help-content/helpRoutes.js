@@ -12,6 +12,8 @@ router.get("/", helpController.search);
 router.get("/manage", requireAuth, helpController.manage);
 
 router.post("/", requireAuth, helpController.create);
+router.patch("/:id", requireAuth, helpController.update);
 router.patch("/:id/publish", requireAuth, helpController.publish);
+router.patch("/:id/unpublish", requireAuth, helpController.unpublish);
 
 module.exports = router;

@@ -16,6 +16,7 @@ async function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: "Missing bearer token" });
 
   let payload;
+  let liveSession;
   try {
     payload = verifyAccessToken(token);
   } catch {
@@ -25,7 +26,7 @@ async function requireAuth(req, res, next) {
   try {
     const validate =
       req.app?.locals?.validateAccessSession || validateRemoteSession;
-    await validate(payload, token);
+    liveSession = await validate(payload, token);
   } catch (error) {
     const err = ["SESSION_REVOKED", "ACCOUNT_SUSPENDED"].includes(error.code)
       ? error
@@ -50,6 +51,10 @@ async function requireAuth(req, res, next) {
   req.kycVerified = Boolean(payload.kycVerified);
   req.kycStatus = payload.kycStatus ?? null;
   req.userDisplayName = payload.displayName || null;
+  req.accountStatus =
+    liveSession?.accountStatus || payload.accountStatus || "ACTIVE";
+  req.commerceRestrictions =
+    liveSession?.commerceRestrictions || payload.commerceRestrictions || [];
   next();
 }
 
@@ -99,6 +104,10 @@ function fromGatewayHeaders(req, res, next) {
       : [];
   req.permissions = req.headers["x-user-permissions"]
     ? req.headers["x-user-permissions"].split(",")
+    : [];
+  req.accountStatus = req.headers["x-user-account-status"] || "ACTIVE";
+  req.commerceRestrictions = req.headers["x-user-commerce-restrictions"]
+    ? req.headers["x-user-commerce-restrictions"].split(",").filter(Boolean)
     : [];
   // Gateway URL-encodes this header (raw HTTP headers are Latin-1 only, and
   // display names can contain non-ASCII text) — decode it back here.

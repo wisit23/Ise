@@ -7,13 +7,17 @@ test("listAvailable queries clips for available products only", async () => {
   const prisma = {
     productVideo: {
       findMany: async (query) => {
-        assert.deepEqual(query.where, { product: { status: "available" } });
+        assert.deepEqual(query.where, {
+          product: { status: "available", moderatedAt: null },
+        });
         assert.equal(query.skip, 20);
         assert.equal(query.take, 10);
         return [{ id: "video-1" }];
       },
       count: async (query) => {
-        assert.deepEqual(query.where, { product: { status: "available" } });
+        assert.deepEqual(query.where, {
+          product: { status: "available", moderatedAt: null },
+        });
         return 1;
       },
     },

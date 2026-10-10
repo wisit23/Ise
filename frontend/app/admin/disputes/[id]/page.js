@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import NavBar from "../../../../components/NavBar";
 import Footer from "../../../../components/Footer";
 import ConfirmDialog from "../../../../components/ui/ConfirmDialog";
-import { apiFetch } from "../../../../lib/api";
+import { apiFetch, fetchAuthedBlobUrl } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 
 function baht(v) {
@@ -24,6 +24,7 @@ export default function AdminDisputeDetailPage() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
+  const [openingEvidenceId, setOpeningEvidenceId] = useState(null);
 
   function load(token) {
     setLoading(true);
@@ -81,6 +82,24 @@ export default function AdminDisputeDetailPage() {
       setError(err.message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function openEvidence(item) {
+    if (item.source !== "DISPUTE_CASE") return;
+    const token = getAccessToken();
+    setOpeningEvidenceId(item.id);
+    setError("");
+    try {
+      const objectUrl = await fetchAuthedBlobUrl(
+        `/api/orders/disputes/${item.disputeId}/evidence/${item.id}`,
+        token,
+      );
+      window.open(objectUrl, "_blank", "noreferrer");
+    } catch (err) {
+      setError(`เปิดหลักฐานไม่สำเร็จ: ${err.message}`);
+    } finally {
+      setOpeningEvidenceId(null);
     }
   }
 
@@ -194,15 +213,37 @@ export default function AdminDisputeDetailPage() {
             <ul className="flex flex-col divide-y divide-gray-100">
               {evidence.map((e) => (
                 <li key={e.id} className="py-2.5 text-sm">
-                  <a
-                    href={e.evidenceRef}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-emerald-700 hover:underline"
-                  >
-                    {e.evidenceRef}
-                  </a>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {e.source === "DISPUTE_CASE"
+                          ? `หลักฐานจาก DisputeCase · ${e.fileType}`
+                          : "Legacy evidence reference"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-500">
+                        แหล่งข้อมูล: {e.source}
+                      </p>
+                    </div>
+                    {e.source === "DISPUTE_CASE" && (
+                      <button
+                        type="button"
+                        onClick={() => openEvidence(e)}
+                        disabled={openingEvidenceId === e.id}
+                        className="rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 disabled:opacity-50"
+                      >
+                        {openingEvidenceId === e.id
+                          ? "กำลังเปิด..."
+                          : "เปิดแบบตรวจสิทธิ์"}
+                      </button>
+                    )}
+                  </div>
                   {e.note && <p className="mt-1 text-gray-600">{e.note}</p>}
+                  {e.source === "LEGACY_REFERENCE" && (
+                    <p className="mt-1 break-all text-xs text-amber-700">
+                      Reference: {e.reference} — เปิดตรงไม่ได้ เพราะไม่มี private
+                      storage key สำหรับตรวจสิทธิ์
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

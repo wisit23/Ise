@@ -1,8 +1,16 @@
-const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
+const {
+  badRequest,
+  forbidden,
+  notFound,
+  conflict,
+  AppError,
+} = require("@reloop/shared");
+const fs = require("fs");
 const orderModel = require("../../models/orderModel");
 const disputeModel = require("./disputeModel");
 const authClient = require("../../services/authClient");
 const { absolutePath } = require("./evidenceStorage");
+const chatClient = require("../../services/chatClient");
 
 const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
 const DECISIONS = ["APPROVE_REFUND", "REJECT"];
@@ -80,7 +88,8 @@ async function open({ orderId, userId, reason }) {
 async function getById({ disputeId, userId, role, roles }) {
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
-  return assertAccess({ dispute, userId, role, roles });
+  await assertAccess({ dispute, userId, role, roles });
+  return withShippingFacts(dispute);
 }
 
 /** Convenience lookup for the frontend: a CSS-002 order-search result only
@@ -89,7 +98,181 @@ async function getById({ disputeId, userId, role, roles }) {
 async function getByOrderId({ orderId, userId, role, roles }) {
   const dispute = await disputeModel.findByOrderId(orderId);
   if (!dispute) throw notFound("this order has no dispute");
-  return assertAccess({ dispute, userId, role, roles });
+  await assertAccess({ dispute, userId, role, roles });
+  return withShippingFacts(dispute);
+}
+
+function withShippingFacts(dispute) {
+  const order = dispute.order;
+  if (!order) return dispute;
+  return {
+    ...dispute,
+    shipping: {
+      available: false,
+      status: order.status,
+      carrier: null,
+      trackingNumber: null,
+      source: "ORDER",
+      updatedAt: order.updatedAt,
+      timeline: [
+        { event: "ORDER_CREATED", at: order.createdAt, source: "ORDER.createdAt" },
+        { event: `ORDER_STATUS_${String(order.status).toUpperCase()}`, at: order.updatedAt, source: "ORDER.updatedAt" },
+      ],
+      unavailableReason:
+        "Order schema does not persist carrier, tracking number, shippedAt or receivedAt",
+    },
+  };
+}
+
+async function getAuthorizedSafetyDispute({ disputeId, userId, role, roles }) {
+  const isTrustAndSafety =
+    hasRole(role, roles, "TRUST_AND_SAFETY") || hasRole(role, roles, "ADMIN");
+  if (!isTrustAndSafety) {
+    throw forbidden("only Trust & Safety can view buyer-seller chat history");
+  }
+  const dispute = await disputeModel.findById(disputeId);
+  if (!dispute) throw notFound("dispute not found");
+  if (
+    dispute.assignedRole === "TRUST_AND_SAFETY" &&
+    dispute.assignedTo &&
+    dispute.assignedTo !== userId &&
+    !hasRole(role, roles, "ADMIN")
+  ) {
+    throw forbidden("this escalated dispute is assigned to another officer");
+  }
+  return dispute;
+}
+
+async function getChatHistory({ disputeId, userId, role, roles, before, limit }) {
+  const dispute = await getAuthorizedSafetyDispute({
+    disputeId,
+    userId,
+    role,
+    roles,
+  });
+  const parsedLimit = limit === undefined ? 30 : Number(limit);
+  if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+    throw badRequest("limit must be an integer between 1 and 100");
+  }
+
+  let transcript;
+  try {
+    transcript = await chatClient.getOrderTranscript(dispute.orderId, {
+      before,
+      limit: parsedLimit,
+    });
+  } catch (err) {
+    await disputeModel.auditLog({
+      disputeId,
+      actorId: userId,
+      action: "CHAT_HISTORY_UNAVAILABLE",
+      detail: err.message,
+    });
+    throw new AppError(503, `chat history is unavailable: ${err.message}`);
+  }
+
+  if (!transcript) {
+    await disputeModel.auditLog({
+      disputeId,
+      actorId: userId,
+      action: "VIEW_CHAT_HISTORY",
+      detail: "ORDER conversation not found",
+    });
+    return {
+      available: false,
+      conversation: null,
+      items: [],
+      nextCursor: null,
+      reason: "No ORDER conversation has been persisted for this order",
+    };
+  }
+
+  const activeParticipants = new Set(
+    (transcript.conversation.participants || [])
+      .filter((participant) => !participant.leftAt)
+      .map((participant) => participant.userId),
+  );
+  if (
+    !activeParticipants.has(dispute.order.buyerId) ||
+    !activeParticipants.has(dispute.order.sellerId)
+  ) {
+    throw conflict("ORDER conversation participants do not match this order");
+  }
+
+  await disputeModel.auditLog({
+    disputeId,
+    actorId: userId,
+    action: "VIEW_CHAT_HISTORY",
+    detail: `conversation=${transcript.conversation.id};before=${before || "latest"};limit=${parsedLimit}`,
+  });
+  return {
+    available: true,
+    conversation: {
+      id: transcript.conversation.id,
+      status: transcript.conversation.status,
+      contextType: transcript.conversation.contextType,
+      contextId: transcript.conversation.contextId,
+    },
+    items: (transcript.items || transcript.messages || []).map((message) => ({
+      ...message,
+      payload: message.payload
+        ? {
+            filename: message.payload.filename || null,
+            mimeType: message.payload.mimeType || null,
+            size: message.payload.size || null,
+          }
+        : null,
+    })),
+    nextCursor: transcript.nextCursor || null,
+  };
+}
+
+async function getChatAttachment({
+  disputeId,
+  messageId,
+  userId,
+  role,
+  roles,
+}) {
+  if (!messageId) throw badRequest("messageId is required");
+  const dispute = await getAuthorizedSafetyDispute({
+    disputeId,
+    userId,
+    role,
+    roles,
+  });
+  let attachment;
+  try {
+    attachment = await chatClient.getOrderAttachment(dispute.orderId, messageId);
+  } catch (err) {
+    await disputeModel.auditLog({
+      disputeId,
+      actorId: userId,
+      action: "CHAT_ATTACHMENT_UNAVAILABLE",
+      detail: `${messageId}: ${err.message}`,
+    });
+    throw new AppError(503, `chat attachment is unavailable: ${err.message}`);
+  }
+  if (!attachment) throw notFound("chat attachment not found");
+
+  const activeParticipants = new Set(
+    (attachment.conversation.participants || [])
+      .filter((participant) => !participant.leftAt)
+      .map((participant) => participant.userId),
+  );
+  if (
+    !activeParticipants.has(dispute.order.buyerId) ||
+    !activeParticipants.has(dispute.order.sellerId)
+  ) {
+    throw conflict("ORDER conversation participants do not match this order");
+  }
+  await disputeModel.auditLog({
+    disputeId,
+    actorId: userId,
+    action: "VIEW_CHAT_ATTACHMENT",
+    detail: messageId,
+  });
+  return attachment;
 }
 
 async function listQueue({ role, roles, status, search, skip, take }) {
@@ -97,6 +280,13 @@ async function listQueue({ role, roles, status, search, skip, take }) {
     throw forbidden("only support agents can view the dispute queue");
   }
   return disputeModel.listQueue({ status, search, skip, take });
+}
+
+async function getDashboardMetrics({ role, roles }) {
+  if (!isAgent(role, roles)) {
+    throw forbidden("only support agents can view dispute metrics");
+  }
+  return disputeModel.dashboardMetrics();
 }
 
 async function addEvidence({ disputeId, userId, role, roles, file }) {
@@ -143,9 +333,37 @@ async function viewEvidence({ disputeId, evidenceId, userId, role, roles }) {
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
   await assertAccess({ dispute, userId, role, roles });
+  if (isAgent(role, roles)) {
+    const hasSafetyOversight =
+      hasRole(role, roles, "TRUST_AND_SAFETY") || hasRole(role, roles, "ADMIN");
+    if (
+      dispute.assignedRole === "TRUST_AND_SAFETY" &&
+      !hasSafetyOversight
+    ) {
+      throw forbidden("only Trust & Safety can view evidence for this escalated dispute");
+    }
+    if (
+      dispute.assignedTo &&
+      dispute.assignedTo !== userId &&
+      !hasSafetyOversight
+    ) {
+      throw forbidden("only the assigned officer can view this evidence");
+    }
+  }
 
   const evidence = await disputeModel.findEvidence(disputeId, evidenceId);
   if (!evidence) throw notFound("evidence not found");
+
+  const filePath = absolutePath(evidence.storageKey);
+  if (!fs.existsSync(filePath)) {
+    await disputeModel.auditLog({
+      disputeId,
+      actorId: userId,
+      action: "EVIDENCE_MISSING",
+      detail: evidenceId,
+    });
+    throw notFound("evidence file is unavailable");
+  }
 
   await disputeModel.auditLog({
     disputeId,
@@ -155,7 +373,7 @@ async function viewEvidence({ disputeId, evidenceId, userId, role, roles }) {
   });
 
   return {
-    path: absolutePath(evidence.storageKey),
+    path: filePath,
     fileType: evidence.fileType,
   };
 }
@@ -424,4 +642,7 @@ module.exports = {
   escalate,
   decide,
   listQueue,
+  getDashboardMetrics,
+  getChatHistory,
+  getChatAttachment,
 };

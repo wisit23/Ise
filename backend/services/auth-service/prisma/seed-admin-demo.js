@@ -6,6 +6,7 @@
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
+const { seedRoleCatalog } = require("./roleCatalog");
 
 const prisma = new PrismaClient();
 
@@ -13,6 +14,7 @@ const ADMIN_EMAIL = "admin@test.local";
 const ADMIN_PASSWORD = "AdminPass123!";
 
 async function main() {
+  await seedRoleCatalog(prisma);
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
 
   const user = await prisma.user.upsert({

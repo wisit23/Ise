@@ -6,8 +6,33 @@ const {
   paginatedResponse,
 } = require("@reloop/shared");
 const reportService = require("./reportService");
+const prisma = require("../../models/prismaClient");
 
 const router = Router();
+
+router.get(
+  "/admin/dashboard-summary",
+  requireAuth,
+  requirePermission("admin:report:read"),
+  async (req, res, next) => {
+    try {
+      const [pendingKyc, openReports, reportsByStatus] = await Promise.all([
+        prisma.kycApplication.count({ where: { status: "PENDING" } }),
+        prisma.report.count({ where: { status: { in: ["OPEN", "REVIEWED"] } } }),
+        prisma.report.groupBy({ by: ["status"], _count: { _all: true } }),
+      ]);
+      res.json({
+        pendingKyc,
+        openReports,
+        reportsByStatus: Object.fromEntries(
+          reportsByStatus.map((row) => [row.status, row._count._all]),
+        ),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 router.post(
   "/reports",
@@ -38,8 +63,22 @@ router.get(
       const { items, total } = await reportService.listReports({
         ...pagination,
         status: req.query.status,
+        search: req.query.q,
       });
       res.json(paginatedResponse(items, total, pagination));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.get(
+  "/admin/reports/:id",
+  requireAuth,
+  requirePermission("admin:report:read"),
+  async (req, res, next) => {
+    try {
+      res.json(await reportService.getReportDetail(req.params.id));
     } catch (err) {
       next(err);
     }
@@ -78,6 +117,7 @@ router.post(
         decision: req.body.decision,
         reason: req.body.reason,
         requestId: req.id,
+        idempotencyKey: req.body.idempotencyKey,
       });
       res.json(report);
     } catch (err) {
@@ -154,6 +194,26 @@ router.get(
     try {
       const summary = await reportService.getUserSafetySummary(req.params.id);
       res.json(summary);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.get(
+  "/admin/users/:id/history",
+  requireAuth,
+  requirePermission("admin:report:read"),
+  async (req, res, next) => {
+    try {
+      const pagination = parsePagination(req.query, 10);
+      const { items, total } = await reportService.listUserHistory({
+        targetId: req.params.id,
+        kind: req.query.kind || "reports",
+        page: pagination.page,
+        limit: pagination.limit,
+      });
+      res.json(paginatedResponse(items, total, pagination));
     } catch (err) {
       next(err);
     }
