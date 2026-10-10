@@ -53,7 +53,7 @@ function userRoomName(userId) {
 function broadcastMessage(conversation, message) {
   if (!ioInstance) return;
 
-  if (conversation.contextType === "SUPPORT" || conversation.contextType === "DISPUTE") {
+  if (["SUPPORT", "DISPUTE", "DISPUTE_BUYER", "DISPUTE_SELLER"].includes(conversation.contextType)) {
     broadcastCaseMessage(conversation, message).catch((err) => {
       console.error(`[chat-service] case broadcast failed: ${err.message}`);
     });
@@ -115,6 +115,25 @@ async function broadcastCaseMessage(conversation, message) {
   }
 }
 
+// Case typing uses current authorized user rooms, never stale conversation rooms.
+async function broadcastCaseTyping(conversation, senderId, typing) {
+  if (!ioInstance) return;
+  const peers = (conversation.participants || []).filter(p => !p.leftAt && p.userId !== senderId);
+  const checked = await Promise.allSettled(peers.map(async participant => ({
+    participant, access: await getCaseAccess(conversation, participant.userId, participant.role),
+  })));
+  const seen = new Set();
+  for (const result of checked) {
+    if (result.status !== "fulfilled") continue;
+    const { participant, access } = result.value;
+    if (!access.allowed || seen.has(participant.userId)) continue;
+    seen.add(participant.userId);
+    ioInstance.to(userRoomName(participant.userId)).emit("typing", {
+      conversationId: conversation.id, userId: senderId, typing,
+    });
+  }
+}
+
 function broadcastActivity(userId, activity) {
   if (!ioInstance) return;
   ioInstance.to(userRoomName(userId)).emit("conversation:activity", activity);
@@ -125,7 +144,7 @@ function broadcastActivity(userId, activity) {
  * show the locked banner without needing a full page refresh. */
 function broadcastStatusChange(conversation, newStatus) {
   if (!ioInstance) return;
-  if (conversation.contextType === "SUPPORT" || conversation.contextType === "DISPUTE") {
+  if (["SUPPORT", "DISPUTE", "DISPUTE_BUYER", "DISPUTE_SELLER"].includes(conversation.contextType)) {
     const participants = (conversation.participants || []).filter((p) => !p.leftAt);
     Promise.allSettled(participants.map(async (p) => ({
       participant: p,
@@ -157,5 +176,6 @@ module.exports = {
   userRoomName,
   broadcastMessage,
   broadcastActivity,
+  broadcastCaseTyping,
   broadcastStatusChange,
 };

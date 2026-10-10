@@ -1,21 +1,16 @@
 "use client";
+import config from "../../lib/customerServiceConfig";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import MessageList from "../chat/MessageList";
 import MessageComposer from "../chat/MessageComposer";
-import {
-  useChatSocket,
-  useChatSocketEvent,
-} from "../chat/ChatSocketProvider";
-import {
-  listMessages,
-  sendMessage,
-  markRead,
-} from "../../lib/chat";
+import TypingIndicator from "../chat/TypingIndicator";
+import { useChatSocket, useChatSocketEvent } from "../chat/ChatSocketProvider";
+import { listMessages, sendMessage, markRead } from "../../lib/chat";
 import { uploadChatAttachment } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = config.pagination.messages;
 
 function mergeById(existing, incoming) {
   const byId = new Map(existing.map((m) => [m.id, m]));
@@ -35,7 +30,19 @@ function mergeById(existing, incoming) {
  *  - conversationId: The chat-service conversation ID to display.
  *  - maxHeight: CSS max-height for the chat container (default "400px").
  */
-export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
+export default function EmbeddedChat({
+  conversationId,
+  maxHeight = "400px",
+  readOnly = false,
+  draftKey,
+  onBusyChange,
+  hideInternal = false,
+  onAccessDenied,
+  recipientId,
+  otherName = "ผู้ใช้",
+  onCommitted,
+  recipientLabel,
+}) {
   const [user] = useState(() => getStoredUser());
   const [messages, setMessages] = useState([]);
   const [olderCursor, setOlderCursor] = useState(null);
@@ -43,13 +50,30 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
   const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState(false);
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const [peerOnline, setPeerOnline] = useState(null);
+  const [peerTyping, setPeerTyping] = useState(false);
+  const typingTimer = useRef(null);
 
   const scrollRef = useRef(null);
   const endRef = useRef(null);
   const tokenRef = useRef(getAccessToken());
   const roomJoinedRef = useRef(null);
+  const activeRoom = useRef(conversationId);
+  activeRoom.current = conversationId;
+  useEffect(() => {
+    activeRoom.current = conversationId;
+    return () => {
+      activeRoom.current = null;
+    };
+  }, [conversationId]);
 
   const { socket, connected } = useChatSocket();
+  useEffect(() => {
+    setPeerOnline(null);
+    setPeerTyping(false);
+    return () => clearTimeout(typingTimer.current);
+  }, [conversationId, recipientId]);
 
   // ── Scroll to bottom helper ──
   const scrollToBottom = useCallback((smooth = true) => {
@@ -64,14 +88,24 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     });
   }, []);
 
+  useEffect(() => {
+    if (peerTyping) scrollToBottom(true);
+  }, [peerTyping, scrollToBottom]);
+
   // ── Load messages on mount / conversationId change ──
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId) {
+      setMessages([]);
+      setOlderCursor(null);
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     setMessages([]);
     setOlderCursor(null);
     setError("");
+    setLocked(false);
     roomJoinedRef.current = null;
 
     const token = getAccessToken();
@@ -80,7 +114,13 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     listMessages(conversationId, { limit: PAGE_SIZE }, token)
       .then((page) => {
         if (cancelled) return;
-        setMessages([...page.items].reverse());
+        setMessages(
+          [...page.items]
+            .filter(
+              (message) => !hideInternal || message.visibility !== "INTERNAL",
+            )
+            .reverse(),
+        );
         setOlderCursor(page.nextCursor);
         setLoading(false);
         scrollToBottom(false);
@@ -88,6 +128,10 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
       })
       .catch((err) => {
         if (!cancelled) {
+          if ([403, 409].includes(err.status)) {
+            setLocked(true);
+            onAccessDenied?.();
+          }
           setError(err.message);
           setLoading(false);
         }
@@ -96,38 +140,67 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
     return () => {
       cancelled = true;
     };
-  }, [conversationId, scrollToBottom]);
+  }, [conversationId, scrollToBottom, retry, hideInternal]);
 
   // ── Socket room join / leave ──
   useEffect(() => {
     if (!socket || !connected || !conversationId) return;
     if (roomJoinedRef.current === conversationId) return;
 
-    socket.emit("join", { conversationId }, (ack) => {
-      if (ack?.ok) roomJoinedRef.current = conversationId;
+    let active = true;
+    socket.emit("join", conversationId, (ack) => {
+      if (active && ack?.ok) {
+        roomJoinedRef.current = conversationId;
+        if (typeof ack.onlineUsers?.[recipientId] === "boolean")
+          setPeerOnline(ack.onlineUsers[recipientId]);
+      }
     });
 
     return () => {
-      if (roomJoinedRef.current === conversationId) {
-        socket.emit("leave", { conversationId });
+      active = false;
+      clearTimeout(typingTimer.current);
+      socket.emit("typing:stop", conversationId);
+      // Leave even if the join acknowledgement is still in flight.
+      socket.emit("leave", conversationId);
+      if (roomJoinedRef.current === conversationId)
         roomJoinedRef.current = null;
-      }
+      setPeerTyping(false);
     };
-  }, [socket, connected, conversationId]);
+  }, [socket, connected, conversationId, recipientId]);
+  useChatSocketEvent("presence", (data) => {
+    if (data.userId === recipientId) {
+      setPeerOnline(Boolean(data.online));
+      if (!data.online) setPeerTyping(false);
+    }
+  });
+  useChatSocketEvent("typing", (data) => {
+    if (
+      data.userId === user?.id ||
+      (recipientId && data.userId !== recipientId) ||
+      (data.conversationId && data.conversationId !== conversationId)
+    )
+      return;
+    clearTimeout(typingTimer.current);
+    setPeerTyping(Boolean(data.typing));
+    if (data.typing)
+      typingTimer.current = setTimeout(
+        () => setPeerTyping(false),
+        config.timing.typingExpiryMs,
+      );
+  });
 
   // ── Realtime: new messages ──
   useChatSocketEvent("message:new", (msg) => {
     if (msg.conversationId !== conversationId) return;
+    if (hideInternal && msg.visibility === "INTERNAL") return;
     setMessages((prev) => {
       // Deduplicate optimistic messages by matching clientId or body+sender
       const isDuplicate = prev.some(
-        (m) =>
-          m.id === msg.id ||
-          (m.clientId && m.clientId === msg.clientId),
+        (m) => m.id === msg.id || (m.clientId && m.clientId === msg.clientId),
       );
       if (isDuplicate) {
         return prev.map((m) =>
-          (m.clientId && m.clientId === msg.clientId) ? msg : m,
+          m.clientId && m.clientId === msg.clientId ? msg : m,
         );
       }
       return [...prev, msg];
@@ -145,7 +218,8 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
 
   // ── Send message ──
   async function handleSend(text) {
-    if (!text?.trim() || !conversationId) return;
+    if (!text?.trim() || !conversationId || readOnly || locked)
+      throw new Error("ไม่สามารถส่งข้อความในห้องนี้ได้");
     const token = tokenRef.current || getAccessToken();
     const optimisticId = `optimistic-${Date.now()}`;
     const optimistic = {
@@ -163,24 +237,50 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
 
     try {
       const saved = await sendMessage(conversationId, text, token);
+      if (activeRoom.current !== conversationId) return;
+      onCommitted?.();
       setMessages((prev) =>
-        prev.map((m) => (m.id === optimisticId ? { ...saved, clientId: optimisticId } : m)),
+        mergeById(
+          prev.filter((m) => m.id !== optimisticId),
+          [saved],
+        ),
       );
-    } catch {
+    } catch (err) {
+      if (activeRoom.current !== conversationId) throw err;
+      if ([403, 409].includes(err.status)) {
+        setLocked(true);
+        onAccessDenied?.();
+      }
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      setError(`ส่งข้อความไม่สำเร็จ: ${err.message}`);
+      throw err;
     }
   }
 
   // ── Attach file ──
   async function handleAttach(file, caption) {
-    if (!file || !conversationId) return;
+    if (!file || !conversationId || readOnly || locked)
+      throw new Error("ไม่สามารถส่งไฟล์ในห้องนี้ได้");
     const token = tokenRef.current || getAccessToken();
     try {
-      const saved = await uploadChatAttachment(conversationId, file, caption, token);
+      const saved = await uploadChatAttachment(
+        conversationId,
+        file,
+        caption,
+        token,
+      );
+      if (activeRoom.current !== conversationId) return;
+      onCommitted?.();
       setMessages((prev) => mergeById(prev, [saved]));
       scrollToBottom(true);
-    } catch {
-      setError("ส่งไฟล์ไม่สำเร็จ กรุณาลองใหม่");
+    } catch (err) {
+      if (activeRoom.current !== conversationId) throw err;
+      if ([403, 409].includes(err.status)) {
+        setLocked(true);
+        onAccessDenied?.();
+      }
+      setError(`ส่งไฟล์ไม่สำเร็จ: ${err.message}`);
+      throw err;
     }
   }
 
@@ -194,19 +294,27 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
         { before: olderCursor, limit: PAGE_SIZE },
         tokenRef.current,
       );
-      setMessages((prev) => [...[...page.items].reverse(), ...prev]);
+      if (activeRoom.current !== conversationId) return;
+      setMessages((prev) => [
+        ...[...page.items]
+          .filter(
+            (message) => !hideInternal || message.visibility !== "INTERNAL",
+          )
+          .reverse(),
+        ...prev,
+      ]);
       setOlderCursor(page.nextCursor);
     } catch (err) {
-      setError(err.message);
+      if (activeRoom.current === conversationId) setError(err.message);
     } finally {
-      setLoadingOlder(false);
+      if (activeRoom.current === conversationId) setLoadingOlder(false);
     }
   }
 
   // ── Typing indicator ──
   function handleTyping(isTyping) {
-    if (!socket || !conversationId) return;
-    socket.emit(isTyping ? "typing:start" : "typing:stop", { conversationId });
+    if (!socket || !connected || !conversationId || readOnly || locked) return;
+    socket.emit(isTyping ? "typing:start" : "typing:stop", conversationId);
   }
 
   if (!conversationId) {
@@ -225,13 +333,25 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
 
   return (
     <div
-      className="flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50/30"
       style={{ maxHeight }}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50/30"
     >
+      {recipientId && peerOnline !== null && connected && (
+        <p className="border-b bg-white px-3 py-2 text-xs text-slate-500">
+          {otherName} · {peerOnline ? "ออนไลน์" : "ออฟไลน์"}
+        </p>
+      )}
       {/* Error */}
       {error && (
         <div className="border-b border-red-100 bg-red-50 px-3 py-1.5 text-[11px] font-medium text-red-600">
           {error}
+          <button
+            type="button"
+            onClick={() => setRetry((value) => value + 1)}
+            className="ml-3 min-h-11 underline"
+          >
+            ลองโหลดประวัติอีกครั้ง
+          </button>
         </div>
       )}
 
@@ -265,9 +385,22 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
             <MessageList
               messages={messages}
               currentUserId={user?.id}
-              otherName="ผู้ใช้"
+              otherName={otherName}
+              resolveSenderName={
+                recipientId
+                  ? (message) =>
+                      message.senderId === recipientId
+                        ? otherName
+                        : ["AGENT", "ADMIN", "TRUST_AND_SAFETY"].includes(
+                              message.senderRole,
+                            )
+                          ? `เจ้าหน้าที่ #${message.senderId?.slice(0, 8) || "ไม่ระบุ"}`
+                          : otherName
+                  : undefined
+              }
               activeRoomId={conversationId}
             />
+            <TypingIndicator typing={peerTyping && !locked} name={otherName} />
             <div ref={endRef} className="h-2 shrink-0" aria-hidden="true" />
           </>
         )}
@@ -275,12 +408,26 @@ export default function EmbeddedChat({ conversationId, maxHeight = "400px" }) {
 
       {/* Composer / Locked */}
       <div className="shrink-0 border-t border-slate-200 bg-white">
-        {locked ? (
+        {recipientLabel && (
+          <p
+            role="status"
+            className="truncate px-4 pt-2 text-[11px] font-medium text-slate-600"
+            title={recipientLabel}
+          >
+            {recipientLabel}
+          </p>
+        )}
+        {locked || readOnly ? (
           <div className="px-3 py-2 text-center text-[11px] font-medium text-slate-400">
-            การสนทนานี้ถูกปิดแล้ว
+            {locked
+              ? "การสนทนานี้ถูกปิดแล้ว คุณดูประวัติได้ แต่ส่งข้อความไม่ได้"
+              : "ดูประวัติแบบอ่านอย่างเดียว"}
           </div>
         ) : (
           <MessageComposer
+            key={draftKey || conversationId}
+            draftKey={draftKey}
+            onBusyChange={onBusyChange}
             onSend={handleSend}
             onAttach={handleAttach}
             onTyping={handleTyping}

@@ -1,0 +1,103 @@
+{
+  "version": "cs-24x7-v2",
+  "clock": "CALENDAR_24X7",
+  "evidenceResponseMinutes": 2880,
+  "priorities": {
+    "LOW": {
+      "rank": 1,
+      "firstResponseMinutes": 1440,
+      "resolutionMinutes": 10080,
+      "disputeReviewMinutes": 1440,
+      "disputeDecisionMinutes": 20160
+    },
+    "NORMAL": {
+      "rank": 2,
+      "firstResponseMinutes": 480,
+      "resolutionMinutes": 4320,
+      "disputeReviewMinutes": 480,
+      "disputeDecisionMinutes": 14400
+    },
+    "HIGH": {
+      "rank": 3,
+      "firstResponseMinutes": 120,
+      "resolutionMinutes": 1440,
+      "disputeReviewMinutes": 120,
+      "disputeDecisionMinutes": 10080
+    },
+    "URGENT": {
+      "rank": 4,
+      "firstResponseMinutes": 30,
+      "resolutionMinutes": 720,
+      "disputeReviewMinutes": 30,
+      "disputeDecisionMinutes": 5760
+    }
+  },
+  "classification": {
+    "defaultPriority": "NORMAL",
+    "fallbackReason": "STANDARD_SUPPORT",
+    "rules": [
+      {
+        "code": "GENERAL_INFORMATION",
+        "priority": "LOW",
+        "category": "OTHER",
+        "isDispute": false,
+        "mode": "set"
+      },
+      {
+        "code": "COSMETIC_ISSUE",
+        "priority": "LOW",
+        "category": "TECHNICAL",
+        "pattern": "cosmetic|typo|สีปุ่ม|ตัวสะกด|คำผิด|จัดหน้า",
+        "mode": "set"
+      },
+      { "code": "FUNDS_HELD_DISPUTE", "priority": "HIGH", "isDispute": true },
+      {
+        "code": "ORDER_PAYMENT_AT_RISK",
+        "priority": "HIGH",
+        "category": "PAYMENT",
+        "amountGreaterThan": 0
+      },
+      {
+        "code": "ACCOUNT_ACCESS_BLOCKED",
+        "priority": "HIGH",
+        "category": "ACCOUNT",
+        "pattern": "cannot log.?in|locked out|เข้าไม่ได้|เข้าสู่ระบบไม่ได้|บัญชีถูกล็อก"
+      },
+      {
+        "code": "DELIVERY_FAILURE",
+        "priority": "HIGH",
+        "category": "ORDER",
+        "pattern": "not received|never arrived|ไม่ได้รับสินค้า|สินค้าไม่ถึง|ผู้ขายไม่ส่ง"
+      },
+      {
+        "code": "REPORTED_FRAUD_OR_COUNTERFEIT",
+        "priority": "HIGH",
+        "pattern": "fraud|scam|counterfeit|สินค้าปลอม|ของปลอม|ถูกโกง|ถูกหลอก",
+        "excludePattern": "not (?:a )?(?:fraud|scam|counterfeit)|ไม่ใช่(?:สินค้า|ของ)?ปลอม|ไม่ได้ถูกโกง"
+      },
+      {
+        "code": "HIGH_VALUE_FINANCIAL_EXPOSURE",
+        "priority": "URGENT",
+        "financialOnly": true,
+        "minimumAmount": 10000
+      },
+      {
+        "code": "REPORTED_ACTIVE_FINANCIAL_OR_ACCOUNT_LOSS",
+        "priority": "URGENT",
+        "pattern": "unauthori[sz]ed (?:payment|charge|transaction)|double.?charg|charged twice|account (?:hacked|taken over)|ถูกแฮ็ก|บัญชีถูกยึด|ชำระเงินซ้ำ|หักเงินซ้ำ|เงินถูกหักโดยไม่ได้|ธุรกรรมที่ไม่ได้ทำ"
+      }
+    ]
+  },
+  "scoring": {
+    "rankWeight": 100,
+    "amountDivisor": 1000,
+    "maximumAmountScore": 10,
+    "reportWeight": 2,
+    "maximumReportScore": 10,
+    "overdueScore": 30,
+    "urgency": [
+      { "remainingMinutes": 60, "score": 20 },
+      { "remainingMinutes": 240, "score": 10 }
+    ]
+  }
+}

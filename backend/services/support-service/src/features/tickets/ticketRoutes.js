@@ -3,6 +3,17 @@ const { requireAuth } = require("@reloop/shared");
 const ticketController = require("./ticketController");
 
 const router = Router();
+router.get(
+  "/categories",
+  requireAuth,
+  require("../reference/referenceController").ticketCategories,
+);
+router.get("/trend", requireAuth, require("./ticketTrend").trend);
+router.get(
+  "/agent-dashboard",
+  requireAuth,
+  require("./agentDashboard").agentDashboard,
+);
 
 // "/mine" and "/queue" must come before "/:id" so Express doesn't read them as an id.
 router.get("/mine", requireAuth, ticketController.mine);

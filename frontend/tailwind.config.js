@@ -3,6 +3,9 @@ module.exports = {
   content: ["./app/**/*.{js,jsx}", "./components/**/*.{js,jsx}"],
   theme: {
     extend: {
+      spacing: {
+        4.5: "1.125rem",
+      },
       // Tokens live in app/globals.css as channel triplets; `<alpha-value>`
       // keeps opacity modifiers (bg-brand-600/10) working.
       colors: {

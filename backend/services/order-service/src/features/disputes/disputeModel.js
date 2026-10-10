@@ -1,6 +1,30 @@
-const { conflict, notFound } = require("@reloop/shared");
+const {
+  customerServicePolicy,
+  addMinutes,
+  conflict,
+  notFound,
+} = require("@reloop/shared");
+
 const prisma = require("../../models/prismaClient");
 const orderTransitionService = require("../../services/orderTransitionService");
+
+async function recordFirstReview(tx, dispute, at = new Date()) {
+  if (
+    !dispute.slaPolicyVersion ||
+    dispute.firstReviewedAt ||
+    !dispute.decisionDueAt
+  )
+    return dispute;
+  // Explicit staff claim or routing acknowledges triage. Never restart decision.
+  return tx.disputeCase.update({
+    where: { id: dispute.id },
+    data: {
+      firstReviewedAt: at,
+      slaExpiresAt: dispute.decisionDueAt,
+    },
+    include: { evidence: true },
+  });
+}
 
 function findByOrderId(orderId) {
   return prisma.disputeCase.findUnique({
@@ -26,8 +50,59 @@ function addEvidence(data) {
   return prisma.disputeEvidence.create({ data });
 }
 
-async function listQueue({ status, search, skip, take }) {
+async function listQueue(
+  {
+    status,
+    assignedRole,
+    search,
+    skip,
+    take,
+    scope,
+    work,
+    replyIds,
+    now = new Date(),
+    userId,
+    restricted,
+    priority,
+    sort = "sla",
+  },
+  db = prisma,
+) {
   const where = {};
+  const filters = [];
+  if (work === "reply") filters.push({ id: { in: replyIds || [] } });
+  if (work) {
+    if (restricted)
+      filters.push({
+        OR: [{ assignedRole: null }, { assignedRole: "CUSTOMER_SERVICE" }],
+      });
+    filters.push({ status: { in: ["OPEN", "NEEDS_INFO"] } });
+    if (work === "overdue") filters.push({ slaExpiresAt: { lte: now } });
+    if (work === "soon")
+      filters.push({
+        slaExpiresAt: {
+          gt: now,
+          lte: new Date(
+            +now +
+              require("@reloop/shared").customerServiceClientConfig.dashboard
+                .warningMinutes *
+                60000,
+          ),
+        },
+      });
+  }
+  if (restricted)
+    filters.push(
+      { OR: [{ assignedRole: null }, { assignedRole: { not: "ADMIN" } }] },
+      { OR: [{ assignedTo: null }, { assignedTo: userId }] },
+    );
+  if (scope === "mine") filters.push({ assignedTo: userId });
+  if (scope === "unassigned") filters.push({ assignedTo: null });
+  if (scope && scope !== "all" && !status)
+    filters.push({ status: { not: "DECIDED" } });
+  if (filters.length) where.AND = filters;
+  if (priority) where.priority = priority;
+  if (assignedRole) where.assignedRole = assignedRole;
   if (status) {
     where.status = status;
   }
@@ -35,18 +110,99 @@ async function listQueue({ status, search, skip, take }) {
     where.OR = [
       { reason: { contains: search, mode: "insensitive" } },
       { orderId: { contains: search, mode: "insensitive" } },
+      { id: { contains: search, mode: "insensitive" } },
     ];
   }
 
+  const sorts = {
+    sla: [
+      { slaExpiresAt: { sort: "asc", nulls: "last" } },
+      { priorityScore: "desc" },
+      { id: "asc" },
+    ],
+    newest: [{ createdAt: "desc" }, { id: "asc" }],
+    oldest: [{ createdAt: "asc" }, { id: "asc" }],
+    priority: [{ priorityScore: "desc" }, { id: "asc" }],
+  };
+  if (sort === "priority") {
+    // Rank persisted labels across legacy and v2 scores before pagination.
+    const groups = [
+      { in: ["URGENT", "CRITICAL"] },
+      "HIGH",
+      "NORMAL",
+      "LOW",
+      { notIn: ["URGENT", "CRITICAL", "HIGH", "NORMAL", "LOW"] },
+    ];
+    const predicates = groups.map((priority) => ({
+      ...where,
+      AND: [...(where.AND || []), { priority }],
+    }));
+    const counts = await Promise.all(
+      predicates.map((where) => db.disputeCase.count({ where })),
+    );
+    const items = [];
+    let offset = skip || 0;
+    const limit = take ?? 20;
+    for (let i = 0; i < predicates.length && items.length < limit; i++) {
+      if (offset >= counts[i]) {
+        offset -= counts[i];
+        continue;
+      }
+      items.push(
+        ...(await db.disputeCase.findMany({
+          where: predicates[i],
+          orderBy: sorts.sla,
+          skip: offset,
+          take: limit - items.length,
+          include: { order: true },
+        })),
+      );
+      offset = 0;
+    }
+    return { items, total: counts.reduce((sum, count) => sum + count, 0) };
+  }
+  if (sort === "sla") {
+    // Completed cases have no active deadline. Paginate the ordered active
+    // partition first, then terminal history; never sort only a loaded page.
+    const activeWhere = {
+      ...where,
+      AND: [...(where.AND || []), { status: { not: "DECIDED" } }],
+    };
+    const [activeTotal, total] = await Promise.all([
+      db.disputeCase.count({ where: activeWhere }),
+      db.disputeCase.count({ where }),
+    ]);
+    const activeItems = await db.disputeCase.findMany({
+      where: activeWhere,
+      orderBy: sorts.sla,
+      skip,
+      take,
+      include: { order: true },
+    });
+    const terminalItems =
+      activeItems.length < take
+        ? await db.disputeCase.findMany({
+            where: {
+              ...where,
+              AND: [...(where.AND || []), { status: "DECIDED" }],
+            },
+            orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+            skip: Math.max(0, skip - activeTotal),
+            take: take - activeItems.length,
+            include: { order: true },
+          })
+        : [];
+    return { items: [...activeItems, ...terminalItems], total };
+  }
   const [items, total] = await Promise.all([
-    prisma.disputeCase.findMany({
+    db.disputeCase.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: sorts[sort],
       skip,
       take,
       include: { order: true },
     }),
-    prisma.disputeCase.count({ where }),
+    db.disputeCase.count({ where }),
   ]);
 
   return { items, total };
@@ -57,7 +213,21 @@ function auditLog(data) {
 }
 
 /** Opens a dispute and puts the order into `disputed` + payout-held, atomically. */
-function openDispute({ orderId, openedBy, reason, expectedVersion }) {
+function openDispute({
+  orderId,
+  openedBy,
+  reason,
+  expectedVersion,
+  priority,
+  priorityScore,
+  riskReportCount,
+  slaExpiresAt,
+  slaPolicyVersion,
+  firstReviewDueAt,
+  decisionDueAt,
+  createdAt,
+  classification,
+}) {
   return prisma.$transaction(async (tx) => {
     const existingOrder = await tx.order.findUnique({ where: { id: orderId } });
     if (!existingOrder) throw notFound("order not found");
@@ -97,7 +267,19 @@ function openDispute({ orderId, openedBy, reason, expectedVersion }) {
     }
 
     const dispute = await tx.disputeCase.create({
-      data: { orderId, openedBy, reason },
+      data: {
+        orderId,
+        openedBy,
+        reason,
+        priority,
+        priorityScore,
+        riskReportCount,
+        slaExpiresAt,
+        slaPolicyVersion,
+        firstReviewDueAt,
+        decisionDueAt,
+        createdAt,
+      },
     });
 
     await orderTransitionService.addHold(tx, {
@@ -108,7 +290,12 @@ function openDispute({ orderId, openedBy, reason, expectedVersion }) {
       heldBy: openedBy,
     });
     await tx.disputeAuditLog.create({
-      data: { disputeId: dispute.id, actorId: openedBy, action: "OPEN" },
+      data: {
+        disputeId: dispute.id,
+        actorId: openedBy,
+        action: "OPEN",
+        ...(classification ? { detail: JSON.stringify(classification) } : {}),
+      },
     });
     return dispute;
   });
@@ -123,10 +310,10 @@ async function claim({ id, version, userId, role }) {
       assignedTo: null,
       status: { in: ["OPEN", "NEEDS_INFO"] },
     };
-    if (role !== "TRUST_AND_SAFETY") {
+    if (role !== "TRUST_AND_SAFETY" && role !== "ADMIN") {
       where.OR = [
         { assignedRole: null },
-        { assignedRole: { not: "TRUST_AND_SAFETY" } },
+        { assignedRole: { notIn: ["TRUST_AND_SAFETY", "ADMIN"] } },
       ];
     }
 
@@ -155,7 +342,7 @@ async function claim({ id, version, userId, role }) {
       },
     });
 
-    return dispute;
+    return recordFirstReview(tx, dispute, dispute.claimedAt);
   });
 }
 
@@ -191,11 +378,11 @@ async function reassign({ id, version, actorId, toUserId, toRole, reason }) {
       },
     });
 
-    return dispute;
+    return recordFirstReview(tx, dispute, dispute.claimedAt);
   });
 }
 
-/** Escalate dispute: transfers ownership to TRUST_AND_SAFETY role. */
+/** Escalate dispute: transfers ownership to Admin verdict queue. */
 async function escalate({ id, version, actorId, toUserId, reason }) {
   return prisma.$transaction(async (tx) => {
     const { count } = await tx.disputeCase.updateMany({
@@ -206,7 +393,9 @@ async function escalate({ id, version, actorId, toUserId, reason }) {
       },
       data: {
         assignedTo: toUserId || null,
-        assignedRole: "TRUST_AND_SAFETY",
+        assignedRole: "ADMIN",
+        escalationNote: reason,
+        escalatedBy: actorId,
         claimedAt: toUserId ? new Date() : null,
         version: { increment: 1 },
       },
@@ -223,11 +412,11 @@ async function escalate({ id, version, actorId, toUserId, reason }) {
         disputeId: id,
         actorId,
         action: "ESCALATE",
-        detail: `escalated to TRUST_AND_SAFETY: ${reason}`,
+        detail: `escalated to ADMIN: ${reason}`,
       },
     });
 
-    return dispute;
+    return recordFirstReview(tx, dispute, dispute.claimedAt || new Date());
   });
 }
 
@@ -241,6 +430,7 @@ async function decide({
   decision,
   decisionReason,
   decidedBy,
+  verdictKey,
 }) {
   return prisma.$transaction(async (tx) => {
     const { count } = await tx.disputeCase.updateMany({
@@ -250,6 +440,7 @@ async function decide({
         decision,
         decisionReason,
         decidedBy,
+        verdictKey,
         decidedAt: new Date(),
         version: { increment: 1 },
       },
@@ -313,6 +504,47 @@ async function decide({
   });
 }
 
+async function requestMoreEvidence({ id, version, actorId, reason }) {
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.disputeCase.findUnique({ where: { id } });
+    if (!current || current.status === "DECIDED") return null;
+    const { count } = await tx.disputeCase.updateMany({
+      where: {
+        id,
+        version,
+        status: { in: ["OPEN", "NEEDS_INFO"] },
+        assignedTo: actorId,
+        assignedRole: "ADMIN",
+      },
+      data: {
+        status: "NEEDS_INFO",
+        assignedTo: current.escalatedBy,
+        assignedRole: "CUSTOMER_SERVICE",
+        claimedAt: current.escalatedBy ? new Date() : null,
+        evidenceDeadline: addMinutes(
+          new Date(),
+          customerServicePolicy.evidenceResponseMinutes,
+        ),
+        escalationNote: reason,
+        version: { increment: 1 },
+      },
+    });
+    if (!count) return null;
+    await tx.disputeAuditLog.create({
+      data: {
+        disputeId: id,
+        actorId,
+        action: "REQUEST_MORE_EVIDENCE",
+        detail: reason,
+      },
+    });
+    return tx.disputeCase.findUnique({
+      where: { id },
+      include: { evidence: true },
+    });
+  });
+}
+
 module.exports = {
   findByOrderId,
   findById,
@@ -324,5 +556,6 @@ module.exports = {
   reassign,
   escalate,
   decide,
+  requestMoreEvidence,
   listQueue,
 };

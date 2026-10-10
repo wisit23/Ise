@@ -12,4 +12,4 @@ WORKDIR /app/services/support-service
 RUN npm install
 RUN npx prisma generate
 
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && npx prisma db seed && node src/server.js"]
+CMD ["sh", "-c", "node prisma/migrate.js && node prisma/seed.js && node src/server.js"]

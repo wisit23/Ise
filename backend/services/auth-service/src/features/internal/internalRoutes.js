@@ -13,5 +13,6 @@ const router = Router();
 router.use(requireInternalToken);
 
 router.post("/users/display-names", internalController.displayNames);
+router.post('/staff/search', internalController.eligibleStaff);
 
 module.exports = router;

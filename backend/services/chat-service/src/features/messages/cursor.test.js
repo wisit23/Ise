@@ -24,8 +24,14 @@ test("buildPageQuery with no cursor has no id filter and takes limit+1", () => {
     deletedAt: null,
     visibility: { not: "INTERNAL" },
   });
-  assert.deepEqual(q.orderBy, { id: "desc" });
+  assert.deepEqual(q.orderBy, [{ createdAt: "desc" }, { id: "desc" }]);
   assert.equal(q.take, 31);
+});
+
+test("historical and deterministic IDs paginate by actual timestamp with an ID tie-breaker", () => {
+  const at = new Date("2026-01-01T00:00:00Z");
+  const q = buildPageQuery({ conversationId: "c1", beforeMessage: { id: "hash-id", createdAt: at }, limit: 10 });
+  assert.deepEqual(q.where.OR, [{ createdAt: { lt: at } }, { createdAt: at, id: { lt: "hash-id" } }]);
 });
 
 test("buildPageQuery with a cursor filters id < cursor", () => {

@@ -86,9 +86,9 @@ services:
       AUTH_SERVICE_URL: http://auth-service:3001
       PRODUCT_SERVICE_URL: http://product-service:3002
       ORDER_SERVICE_URL: http://order-service:3003
+      SUPPORT_SERVICE_URL: http://support-service:3006
       CHAT_SERVICE_URL: http://chat-service:3004
       REVIEW_SERVICE_URL: http://review-service:3005
-      SUPPORT_SERVICE_URL: http://support-service:3006
       FRONTEND_SERVICE_URL: http://frontend:3000
     ports:
       - "${GATEWAY_PORT}:8080"
@@ -154,6 +154,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL_ORDER}
       PRODUCT_SERVICE_URL: http://product-service:3002
+      AUTH_SERVICE_URL: http://auth-service:3001
     volumes:
       - order_private_evidence:/app/services/order-service/private-evidence
     depends_on:
@@ -177,6 +178,8 @@ services:
       DATABASE_URL: ${DATABASE_URL_CHAT}
       REDIS_URL: ${REDIS_URL}
       PRODUCT_SERVICE_URL: http://product-service:3002
+      ORDER_SERVICE_URL: http://order-service:3003
+      SUPPORT_SERVICE_URL: http://support-service:3006
       # Chat resolves participant userIds into display names through
       # auth-service's /internal API (see src/services/authClient.js).
       AUTH_SERVICE_URL: http://auth-service:3001
@@ -229,6 +232,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL_SUPPORT}
       CHAT_SERVICE_URL: http://chat-service:3004
+      AUTH_SERVICE_URL: http://auth-service:3001
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
     depends_on:
       postgres:

@@ -5,6 +5,14 @@ const OWNERS = {
     url: process.env.ORDER_SERVICE_URL || "http://order-service:3003",
     path: (id, userId) => `/internal/disputes/${encodeURIComponent(id)}/chat-access/${encodeURIComponent(userId)}`,
   },
+  DISPUTE_BUYER: {
+    url: process.env.ORDER_SERVICE_URL || "http://order-service:3003",
+    path: (id, userId) => `/internal/disputes/${encodeURIComponent(id)}/chat-access/${encodeURIComponent(userId)}`,
+  },
+  DISPUTE_SELLER: {
+    url: process.env.ORDER_SERVICE_URL || "http://order-service:3003",
+    path: (id, userId) => `/internal/disputes/${encodeURIComponent(id)}/chat-access/${encodeURIComponent(userId)}`,
+  },
   SUPPORT: {
     url: process.env.SUPPORT_SERVICE_URL || "http://support-service:3006",
     path: (id, userId) => `/internal/tickets/${encodeURIComponent(id)}/chat-access/${encodeURIComponent(userId)}`,
@@ -16,7 +24,7 @@ async function getCaseAccess(conversation, userId, role) {
   if (!owner) return { allowed: true, writable: true };
   if (!conversation.contextId) throw new AppError(503, "case chat has no context ID");
   try {
-    const url = `${owner.url}${owner.path(conversation.contextId, userId)}?role=${encodeURIComponent(role)}`;
+    const url = `${owner.url}${owner.path(conversation.contextId, userId)}?role=${encodeURIComponent(role)}&channel=${encodeURIComponent(conversation.contextType)}`;
     const response = await fetch(url, {
       headers: { "x-internal-token": process.env.INTERNAL_SERVICE_TOKEN || "" },
       signal: AbortSignal.timeout(2000),

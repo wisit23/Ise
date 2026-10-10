@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { fetchAuthedBlobUrl } from "../../lib/api";
 import { attachmentUrl } from "../../lib/chat";
 import { getFileTypeConfig } from "../../lib/fileIcons";
+import Modal from "../ui/Modal";
+import Button from "../ui/Button";
 
 function formatSize(bytes) {
   if (!bytes) return "";
@@ -25,6 +27,9 @@ export default function MessageAttachment({ message, own }) {
   const [blobUrl, setBlobUrl] = useState(null);
   const [failed, setFailed] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [downloadError, setDownloadError] = useState(false);
+  const [retry, setRetry] = useState(0);
   const isImage = type === "IMAGE";
 
   useEffect(() => {
@@ -35,6 +40,9 @@ export default function MessageAttachment({ message, own }) {
 
     let cancelled = false;
     let created = null;
+    setBlobUrl(null);
+    setFailed(false);
+    setExpanded(false);
     fetchAuthedBlobUrl(attachmentUrl(conversationId, id))
       .then((url) => {
         if (cancelled) {
@@ -52,22 +60,25 @@ export default function MessageAttachment({ message, own }) {
       cancelled = true;
       if (created) URL.revokeObjectURL(created);
     };
-  }, [conversationId, id, isImage]);
+  }, [conversationId, id, isImage, retry]);
 
   async function handleDownload() {
     if (downloading) return;
     setDownloading(true);
+    setDownloadError(false);
     try {
-      const url = await fetchAuthedBlobUrl(attachmentUrl(conversationId, id));
+      const url =
+        blobUrl ||
+        (await fetchAuthedBlobUrl(attachmentUrl(conversationId, id)));
       const a = document.createElement("a");
       a.href = url;
       a.download = payload?.filename || "attachment";
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      if (!blobUrl) setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
-      setFailed(true);
+      setDownloadError(true);
     } finally {
       setDownloading(false);
     }
@@ -75,7 +86,18 @@ export default function MessageAttachment({ message, own }) {
 
   if (isImage) {
     if (failed) {
-      return <p className="text-xs italic opacity-70">โหลดรูปภาพไม่สำเร็จ</p>;
+      return (
+        <div>
+          <p className="text-xs italic opacity-70">โหลดรูปภาพไม่สำเร็จ</p>
+          <button
+            type="button"
+            onClick={() => setRetry((value) => value + 1)}
+            className="min-h-11 text-xs underline"
+          >
+            ลองโหลดรูปอีกครั้ง
+          </button>
+        </div>
+      );
     }
     if (!blobUrl) {
       return (
@@ -91,11 +113,89 @@ export default function MessageAttachment({ message, own }) {
       // MediaGallery) rather than next/image — next/image can't load a
       // blob: URL, and these bytes only exist client-side after an
       // authenticated fetch (see this file's header comment).
-      <img
-        src={blobUrl}
-        alt={payload?.filename || "รูปภาพที่แนบมา"}
-        className="max-h-64 max-w-full rounded-lg object-contain"
-      />
+      <>
+        <div className="w-72 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800">
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            aria-label={`ขยายรูป ${payload?.filename || "รูปภาพ"}`}
+            className="group relative flex w-full items-center justify-center bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600"
+          >
+            <img
+              src={blobUrl}
+              alt={payload?.filename || "รูปภาพที่แนบมา"}
+              className="max-h-56 w-full object-contain"
+            />
+            <span
+              aria-hidden="true"
+              className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/45 text-white transition-colors group-hover:bg-black/65"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                open_in_full
+              </span>
+            </span>
+          </button>
+          <div className="flex items-center gap-2 border-t border-slate-100 py-1 pl-3 pr-1">
+            <div className="min-w-0 flex-1">
+              <p
+                className="truncate text-xs font-medium"
+                title={payload?.filename}
+              >
+                {payload?.filename || "รูปภาพ"}
+              </p>
+              <p className="text-[11px] text-slate-500">
+                {formatSize(payload?.size)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={downloading}
+              aria-label="ดาวน์โหลดรูป"
+              title="ดาวน์โหลดรูป"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-600 disabled:opacity-60"
+            >
+              <span
+                aria-hidden="true"
+                className={`material-symbols-outlined text-[20px] ${downloading ? "animate-spin" : ""}`}
+              >
+                {downloading ? "progress_activity" : "download"}
+              </span>
+            </button>
+          </div>
+        </div>
+        {downloadError && (
+          <p role="alert" className="text-xs">
+            ดาวน์โหลดไม่สำเร็จ กรุณาลองอีกครั้ง
+          </p>
+        )}
+        <Modal
+          open={expanded}
+          onClose={() => setExpanded(false)}
+          title={payload?.filename || "รูปภาพที่แนบมา"}
+          size="xl"
+          footer={
+            <Button
+              onClick={handleDownload}
+              loading={downloading}
+              icon="download"
+            >
+              ดาวน์โหลดรูป
+            </Button>
+          }
+        >
+          <img
+            src={blobUrl}
+            alt={`ภาพขยาย ${payload?.filename || "รูปภาพ"}`}
+            className="mx-auto max-h-[65vh] max-w-full object-contain"
+          />
+          {downloadError && (
+            <p role="alert" className="mt-2 text-sm text-red-700">
+              ดาวน์โหลดไม่สำเร็จ กรุณาลองอีกครั้ง
+            </p>
+          )}
+        </Modal>
+      </>
     );
   }
 
@@ -105,6 +205,7 @@ export default function MessageAttachment({ message, own }) {
     <button
       type="button"
       onClick={handleDownload}
+      disabled={downloading}
       className={`group flex w-full min-w-[220px] max-w-xs items-center gap-3 rounded-2xl p-2.5 text-left transition-all duration-200 ${
         own
           ? "border border-emerald-100/80 bg-white text-gray-900 shadow-sm hover:bg-slate-50 hover:shadow-md"
@@ -116,7 +217,7 @@ export default function MessageAttachment({ message, own }) {
         className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${fileConfig.gradient} text-white shadow-2xs transition-transform group-hover:scale-105`}
       >
         <span className="material-symbols-outlined text-[24px]">
-          {failed ? "error" : fileConfig.icon}
+          {downloadError ? "error" : fileConfig.icon}
         </span>
       </div>
 
@@ -127,7 +228,9 @@ export default function MessageAttachment({ message, own }) {
         </span>
         <div className="mt-0.5 flex items-center gap-1.5">
           <span className="text-[11px] font-medium text-gray-500">
-            {failed ? "ดาวน์โหลดไม่สำเร็จ" : formatSize(payload?.size)}
+            {downloadError
+              ? "ดาวน์โหลดไม่สำเร็จ · กดเพื่อลองใหม่"
+              : formatSize(payload?.size)}
           </span>
           {!failed && (
             <>

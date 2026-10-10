@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const { requireInternalToken } = require("@reloop/shared");
 const internalController = require("./internalController");
+const supportMessages = require("./supportMessages");
 
 const router = Router();
 
@@ -8,6 +9,7 @@ const router = Router();
 // lock/unlock/sold endpoints for the same pattern) — this is how another
 // service opens a room or sends a SYSTEM message without a user's JWT.
 router.use(requireInternalToken);
+router.post("/awaiting-reply", require("./awaitingReply").awaitingReply);
 
 router.post("/conversations", internalController.createConversation);
 router.get(
@@ -15,6 +17,11 @@ router.get(
   internalController.getByContext,
 );
 router.post("/conversations/:id/messages", internalController.sendMessage);
+router.post("/conversations/:id/replies", supportMessages.reply);
+router.post(
+  "/conversations/:id/import-support-message",
+  supportMessages.importMessage,
+);
 router.post(
   "/conversations/:id/participants",
   internalController.addParticipant,

@@ -1,27 +1,17 @@
+const { customerServiceRuntime } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 
 const SUPPORT_SERVICE_URL = () =>
   process.env.SUPPORT_SERVICE_URL || "http://support-service:3006";
 const INTERNAL_TOKEN = () => process.env.INTERNAL_SERVICE_TOKEN || "";
 
-const INITIAL_BACKOFF_MS = 1_000;
-const MAX_BACKOFF_MS = 60_000;
-const REQUEST_TIMEOUT_MS = 5_000;
+const INITIAL_BACKOFF_MS = customerServiceRuntime.syncInitialBackoffMs;
+const MAX_BACKOFF_MS = customerServiceRuntime.syncMaxBackoffMs;
+const REQUEST_TIMEOUT_MS = customerServiceRuntime.chatTimeoutMs;
 
 function calculateBackoffMs(attempts) {
   const exponent = Math.max(0, Math.min(attempts - 1, 16));
   return Math.min(INITIAL_BACKOFF_MS * 2 ** exponent, MAX_BACKOFF_MS);
-}
-
-function resolveBodyText(message) {
-  if (typeof message.body === "string" && message.body.trim()) {
-    return message.body.trim();
-  }
-  if (message.payload?.filename) {
-    return `[ไฟล์แนบ: ${message.payload.filename}]`;
-  }
-  if (message.type === "IMAGE") return "📷 รูปภาพ";
-  return `[${message.type || "MESSAGE"}]`;
 }
 
 async function deliverMessage(
@@ -50,8 +40,6 @@ async function deliverMessage(
           authorId: message.senderId,
           authorRole: message.senderRole,
           type: message.type,
-          body: resolveBodyText(message),
-          payload: message.payload,
           isInternal: message.visibility === "INTERNAL",
           createdAt: message.createdAt,
         }),
@@ -136,7 +124,9 @@ let workerTimer = null;
 let workerEnabled = false;
 let pollInProgress = false;
 
-function startSupportSyncWorker(intervalMs = 5_000) {
+function startSupportSyncWorker(
+  intervalMs = customerServiceRuntime.syncPollIntervalMs,
+) {
   if (workerTimer) return;
   workerEnabled = true;
   const runCycle = async () => {

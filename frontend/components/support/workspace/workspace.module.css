@@ -1,0 +1,78 @@
+.layout {
+  container-type: inline-size;
+}
+.filterReveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 220ms ease,
+    opacity 180ms ease;
+}
+.filterOpen {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.filterFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 16px 12px;
+}
+.filterFields > div:nth-child(3) {
+  grid-column: 1 / -1;
+}
+.filterFieldsWide {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.filterFieldsWide > div:nth-child(3) {
+  grid-column: auto;
+}
+.filterFieldsToolbar {
+  padding: 12px 0 0;
+  max-width: 560px;
+}
+.surfaceEnter {
+  animation: surface-enter 180ms ease-out;
+}
+@keyframes surface-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .filterReveal {
+    transition: none;
+  }
+  .surfaceEnter {
+    animation: none;
+  }
+}
+.back {
+  display: none;
+}
+@container (max-width: 740px) {
+  .filterFieldsWide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .filterFieldsWide > div:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+  .queueSelected {
+    display: none;
+  }
+  .queue {
+    width: 100%;
+  }
+  .mainEmpty {
+    display: none;
+  }
+  .back {
+    display: inline-flex;
+  }
+}

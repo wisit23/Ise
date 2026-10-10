@@ -185,8 +185,19 @@ model DisputeCase {
   openedBy         String    @map("opened_by")
   reason           String
   status           String    @default("OPEN") // OPEN|NEEDS_INFO|DECIDED
-  decision         String? // APPROVE_REFUND|REJECT
+  decision         String? // APPROVE_REFUND|RELEASE_ESCROW|REJECT (legacy)
   decisionReason   String?   @map("decision_reason")
+  verdictKey       String?   @unique @map("verdict_key")
+  escalationNote   String?   @map("escalation_note")
+  escalatedBy      String?   @map("escalated_by")
+  priority         String    @default("NORMAL")
+  priorityScore    Int       @default(0) @map("priority_score")
+  riskReportCount  Int       @default(0) @map("risk_report_count")
+  slaExpiresAt     DateTime? @map("sla_expires_at")
+  slaPolicyVersion String?   @map("sla_policy_version")
+  firstReviewDueAt  DateTime? @map("first_review_due_at")
+  firstReviewedAt   DateTime? @map("first_reviewed_at")
+  decisionDueAt     DateTime? @map("decision_due_at")
   decidedBy        String?   @map("decided_by")
   decidedAt        DateTime? @map("decided_at")
   evidenceDeadline DateTime? @map("evidence_deadline") // WF-08 step 6: 48h to respond to an info request

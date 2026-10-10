@@ -1,125 +1,249 @@
-// pg_trgm powers HelpArticle.searchText's GIN index — same rationale as
-// product-service's search_text (see productModel.js): Postgres full-text
-// search has no Thai word-break config, trigram matching works regardless.
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
   extensions = [pg_trgm]
 }
 
-// Custom output path — see the comment in product-service/prisma/schema.prisma:
-// this npm workspace hoists @prisma/client to one shared location, so every
-// service that generates a client there fights over the same physical folder.
 generator client {
   provider        = "prisma-client-js"
   output          = "../src/generated/prisma-client"
   previewFeatures = ["postgresqlExtensions"]
 }
 
-// WF-10 backbone (CSS-005). Ticket is the primary CS communication channel —
-// async thread, not live chat (CSS-001 is deferred; see plan.md's Scope
-// Revision). ticketNumber is a short human-readable reference for agents to
-// quote back to a user ("#CS-000123"), separate from the opaque uuid `id`.
+model TicketCategory {
+  id        Int             @id @default(autoincrement()) @map("ticket_category_id") @db.SmallInt
+  code      String          @unique @db.VarChar(30)
+  nameTh    String          @map("name_th") @db.VarChar(100)
+  nameEn    String?         @map("name_en") @db.VarChar(100)
+  isActive  Boolean         @default(true) @map("is_active")
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tickets   SupportTicket[]
+  policies  SlaPolicy[]
+
+  @@map("ticket_categories")
+}
+
+model TicketPriority {
+  id        Int             @id @default(autoincrement()) @map("ticket_priority_id") @db.SmallInt
+  code      String          @unique @db.VarChar(20)
+  name      String          @db.VarChar(100)
+  rank      Int             @unique @db.SmallInt
+  isActive  Boolean         @default(true) @map("is_active")
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tickets   SupportTicket[]
+  policies  SlaPolicy[]
+
+  @@map("ticket_priorities")
+}
+
+model TicketStatus {
+  id              Int                   @id @default(autoincrement()) @map("ticket_status_id") @db.SmallInt
+  code            String                @unique @db.VarChar(30)
+  name            String                @db.VarChar(100)
+  isTerminal      Boolean               @default(false) @map("is_terminal")
+  sortOrder       Int                   @map("sort_order") @db.SmallInt
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tickets         SupportTicket[]
+  transitionsFrom TicketStatusHistory[] @relation("FromStatus")
+  transitionsTo   TicketStatusHistory[] @relation("ToStatus")
+
+  @@map("ticket_statuses")
+}
+
+model SlaPolicy {
+  id                   String            @id @default(uuid()) @map("sla_policy_id")
+  categoryId           Int?              @map("ticket_category_id") @db.SmallInt
+  priorityId           Int               @map("ticket_priority_id") @db.SmallInt
+  firstResponseMinutes Int               @map("first_response_minutes")
+  resolutionMinutes    Int               @map("resolution_minutes")
+  effectiveFrom        DateTime          @map("effective_from") @db.Timestamptz(3)
+  effectiveTo          DateTime?         @map("effective_to") @db.Timestamptz(3)
+  createdAt            DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  category             TicketCategory?   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  priority             TicketPriority    @relation(fields: [priorityId], references: [id], onDelete: Restrict)
+  targets              TicketSlaTarget[]
+
+  @@index([categoryId, priorityId, effectiveFrom])
+  @@index([priorityId])
+  @@map("sla_policies")
+}
+
 model SupportTicket {
-  id              String    @id @default(uuid())
-  ticketNumber    String    @unique @map("ticket_number")
-  requesterId     String    @map("requester_id")
+  // Keep existing TEXT IDs, including non-UUID fixtures.
+  id              String                @id @default(uuid())
+  ticketNumber    String                @unique @default(dbgenerated("next_support_ticket_number()")) @map("ticket_number")
+  requesterId     String                @map("requester_id")
   subject         String
-  description     String    @default("")
-  category        String // ORDER|PAYMENT|ACCOUNT|TECHNICAL|OTHER
-  status          String    @default("NEW") // see ticketState.js for the transition graph
-  priority        String    @default("NORMAL") // LOW|NORMAL|HIGH|URGENT — see sla/priority.js
-  assigneeId      String?   @map("assignee_id")
-  orderId         String?   @map("order_id") // soft reference to order-service — not a DB-level FK, different service owns it
-  // Optional counterparty — the other party in the order this complaint is
-  // about (e.g. buyer reporting a seller who never shipped). Distinct from
-  // requesterId: a ticket's requester is not necessarily who's at fault, and
-  // Admin needs to be able to act against the accused party, not just
-  // whoever happened to file the ticket. Soft reference, same as orderId.
-  targetId        String?   @map("target_id")
-  slaDueAt        DateTime? @map("sla_due_at")
-  firstResponseAt DateTime? @map("first_response_at")
-  resolvedAt      DateTime? @map("resolved_at")
-  closedAt        DateTime? @map("closed_at")
-  conversationId  String?   @map("conversation_id")
-  escalatedAt     DateTime? @map("escalated_at")
-  // Optimistic lock: guards against two agents assigning/transitioning the
-  // same ticket at once (see ticketService.js assign()).
-  version         Int       @default(0)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  description     String                @default("")
+  categoryId      Int                   @map("ticket_category_id") @db.SmallInt
+  priorityId      Int                   @map("ticket_priority_id") @db.SmallInt
+  currentStatusId Int                   @map("current_status_id") @db.SmallInt
+  orderId         String?               @map("order_id")
+  targetId        String?               @map("target_id")
+  priorityScore   Int                   @default(0) @map("priority_score")
+  riskReportCount Int                   @default(0) @map("risk_report_count")
+  version         Int                   @default(0) @map("lock_version")
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  category        TicketCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  priority        TicketPriority        @relation(fields: [priorityId], references: [id], onDelete: Restrict)
+  currentStatus   TicketStatus          @relation(fields: [currentStatusId], references: [id], onDelete: Restrict)
+  assignments     TicketAssignment[]
+  statusHistory   TicketStatusHistory[]
+  slaTargets      TicketSlaTarget[]
+  chatLink        TicketChatLink?
+  messages        TicketMessage[]
+  auditLog        TicketAuditLog[]
 
-  messages TicketMessage[]
-  auditLog TicketAuditLog[]
-
-  @@index([status, priority, slaDueAt])
+  @@index([currentStatusId, priorityId, createdAt])
   @@index([requesterId, createdAt])
-  @@index([assigneeId, status])
-  @@index([conversationId])
+  @@index([categoryId])
+  @@index([priorityId])
   @@map("support_tickets")
 }
 
-model TicketMessage {
-  id            String   @id @default(uuid())
-  ticketId      String   @map("ticket_id")
-  authorId      String   @map("author_id")
-  authorRole    String   @map("author_role") // REQUESTER|AGENT|SYSTEM
-  body          String
-  // Internal team note — never returned to the requester's own view of the
-  // ticket (see ticketService.js's requester-facing projection).
-  isInternal    Boolean  @default(false) @map("is_internal")
-  chatMessageId String?  @unique @map("chat_message_id")
-  createdAt     DateTime @default(now()) @map("created_at")
+model TicketAssignment {
+  id           String        @id @default(uuid()) @map("assignment_id")
+  ticketId     String        @map("ticket_id")
+  assigneeId   String        @map("assignee_id")
+  assignedById String        @map("assigned_by_id")
+  assignedAt   DateTime      @default(now()) @map("assigned_at") @db.Timestamptz(3)
+  endedAt      DateTime?     @map("ended_at") @db.Timestamptz(3)
+  endReason    String?       @map("end_reason")
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
-  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  // A partial UNIQUE index enforces one active assignee in the SQL migration.
+  @@index([ticketId, assignedAt])
+  @@index([assigneeId, endedAt])
+  @@map("ticket_assignments")
+}
+
+model TicketStatusHistory {
+  id           String        @id @default(uuid()) @map("status_history_id")
+  ticketId     String        @map("ticket_id")
+  fromStatusId Int?          @map("from_status_id") @db.SmallInt
+  toStatusId   Int           @map("to_status_id") @db.SmallInt
+  changedById  String        @map("changed_by_id")
+  reason       String?
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromStatus   TicketStatus? @relation("FromStatus", fields: [fromStatusId], references: [id], onDelete: Restrict)
+  toStatus     TicketStatus  @relation("ToStatus", fields: [toStatusId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt])
+  @@index([fromStatusId])
+  @@index([toStatusId])
+  @@map("ticket_status_history")
+}
+
+model TicketSlaTarget {
+  id         String        @id @default(uuid()) @map("sla_target_id")
+  ticketId   String        @map("ticket_id")
+  policyId   String        @map("sla_policy_id")
+  metricType String        @map("metric_type") @db.VarChar(30)
+  cycle      Int           @default(1)
+  dueAt      DateTime      @map("due_at") @db.Timestamptz(3)
+  achievedAt DateTime?     @map("achieved_at") @db.Timestamptz(3)
+  breachedAt DateTime?     @map("breached_at") @db.Timestamptz(3)
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  policy     SlaPolicy     @relation(fields: [policyId], references: [id], onDelete: Restrict)
+
+  @@unique([ticketId, metricType, cycle])
+  @@index([policyId])
+  @@index([metricType, dueAt])
+  @@map("ticket_sla_targets")
+}
+
+model TicketChatLink {
+  ticketId       String        @id @map("ticket_id")
+  conversationId String        @unique @map("conversation_id")
+  linkedAt       DateTime      @default(now()) @map("linked_at") @db.Timestamptz(3)
+  ticket         SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_chat_links")
+}
+
+// Legacy archive only: no runtime reads/writes. Retained until verified Chat migration
+// and a separately approved contract migration; not an active CS domain table.
+model TicketMessage {
+  id            String        @id @default(uuid())
+  ticketId      String        @map("ticket_id")
+  authorId      String        @map("author_id")
+  authorRole    String        @map("author_role")
+  body          String
+  isInternal    Boolean       @default(false) @map("is_internal")
+  chatMessageId String?       @unique @map("chat_message_id")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId, createdAt])
   @@map("ticket_messages")
 }
 
-// NFR-SP-03: every privileged action on a ticket must be attributable and
-// timestamped to the second for later audit.
+// Retain the delegate name for callers; SQL now stores structured audit events.
 model TicketAuditLog {
-  id        String   @id @default(uuid())
-  ticketId  String   @map("ticket_id")
-  actorId   String   @map("actor_id")
-  action    String // ASSIGN|STATUS_CHANGE|REPLY|ESCALATE
-  fromValue String?  @map("from_value")
-  toValue   String?  @map("to_value")
-  reason    String?
-  // Used only for operations that must be idempotent (for example, joining
-  // the same chat room repeatedly). NULL keeps ordinary append-only audit
-  // events unrestricted in PostgreSQL.
-  dedupeKey String?  @unique @map("dedupe_key")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  id        String        @id @default(uuid())
+  ticketId  String        @map("ticket_id")
+  actorId   String        @map("actor_id")
+  action    String        @map("event_type")
+  dedupeKey String?       @unique @map("dedupe_key")
+  payload   Json          @default("{}")
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId, createdAt])
-  @@map("ticket_audit_logs")
+  @@map("ticket_audit_events")
 }
 
-// CSS-004 / UR-19: self-service FAQ, published-revision model so a draft
-// edit never appears to end users until explicitly published.
+model HelpCategory {
+  id        Int                   @id @default(autoincrement()) @map("help_category_id") @db.SmallInt
+  code      String                @unique
+  nameTh    String                @map("name_th")
+  nameEn    String?               @map("name_en")
+  isActive  Boolean               @default(true) @map("is_active")
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  revisions HelpArticleRevision[]
+
+  @@map("help_categories")
+}
+
 model HelpArticle {
-  id          String    @id @default(uuid())
-  slug        String    @unique
-  title       String
-  body        String
-  category    String
-  status      String    @default("DRAFT") // DRAFT|PUBLISHED|ARCHIVED
-  version     Int       @default(1)
-  authorId    String    @map("author_id")
-  publishedAt DateTime? @map("published_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id                String                @id @default(uuid())
+  slug              String                @unique
+  status            String                @default("DRAFT")
+  publishedVersion  Int?                  @map("published_version")
+  authorId          String                @map("created_by_id")
+  publishedAt       DateTime?             @map("published_at") @db.Timestamptz(3)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  revisions         HelpArticleRevision[] @relation("ArticleRevisions")
+  publishedRevision HelpArticleRevision?  @relation("PublishedRevision", fields: [id, publishedVersion], references: [articleId, version], onDelete: NoAction, onUpdate: NoAction)
 
-  // Trigger-maintained concat of title/body/category — see
-  // ensureSearchTextTrigger() in prisma/seed.js and MOCK-TRADE-011's
-  // productModel.js for the same pattern.
-  searchText String @default("") @map("search_text")
-
-  @@index([status, category])
-  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([status])
   @@map("help_articles")
+}
+
+model HelpArticleRevision {
+  articleId    String        @map("article_id")
+  version      Int
+  categoryId   Int           @map("help_category_id") @db.SmallInt
+  title        String
+  body         String
+  authorId     String        @map("author_id")
+  searchText   String        @default("") @map("search_text")
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  article      HelpArticle   @relation("ArticleRevisions", fields: [articleId], references: [id], onDelete: Cascade)
+  category     HelpCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  publishedFor HelpArticle[] @relation("PublishedRevision")
+
+  @@id([articleId, version])
+  @@index([categoryId])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("help_article_revisions")
 }

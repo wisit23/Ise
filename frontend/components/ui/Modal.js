@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useId, useState } from "react";
+import { createPortal } from "react-dom";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -23,11 +24,17 @@ export default function Modal({
   size = "md",
   footer,
   children,
+  placement = "center",
 }) {
   const panelRef = useRef(null);
   const previouslyFocused = useRef(null);
-  const titleId = "modal-title";
-  const descId = "modal-desc";
+  const titleId = useId();
+  const descId = useId();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleKeyDown = useCallback(
     (e) => {
@@ -62,11 +69,29 @@ export default function Modal({
   );
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !mounted) return;
 
     previouslyFocused.current = document.activeElement;
+    const inertSiblings = [];
+    let ancestor = panelRef.current?.parentElement;
+    while (ancestor && ancestor !== document.body) {
+      for (const sibling of ancestor.parentElement?.children || []) {
+        if (sibling !== ancestor && !sibling.inert) {
+          sibling.inert = true;
+          inertSiblings.push(sibling);
+        }
+      }
+      ancestor = ancestor.parentElement;
+    }
     const { overflow } = document.body.style;
+    const root = document.documentElement;
+    const rootOverflow = root.style.overflow;
+    const rootGutter = root.style.scrollbarGutter;
     document.body.style.overflow = "hidden";
+    // The site's stable scrollbar gutter leaves an uncovered strip even with
+    // a fixed backdrop. Release it while the dialog owns the viewport.
+    root.style.overflow = "hidden";
+    root.style.scrollbarGutter = "auto";
 
     // Move focus into the dialog so a keyboard user isn't left behind on the
     // page underneath.
@@ -76,15 +101,22 @@ export default function Modal({
 
     return () => {
       document.body.style.overflow = overflow;
+      root.style.overflow = rootOverflow;
+      root.style.scrollbarGutter = rootGutter;
+      inertSiblings.forEach((sibling) => {
+        sibling.inert = false;
+      });
       previouslyFocused.current?.focus?.();
     };
-  }, [open]);
+  }, [open, mounted]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  // Animated/transformed workspace ancestors create a containing block for
+  // fixed children. Mount at body so the backdrop and panel use the viewport.
+  return createPortal(
     <div
-      className="animate-fade-in fixed inset-0 z-modal flex items-center justify-center bg-gray-900/50 p-4"
+      className={`animate-fade-in fixed inset-0 z-modal flex w-screen bg-gray-900/50 ${placement === "drawer" ? "items-stretch justify-end" : "items-center justify-center p-4"}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose?.();
       }}
@@ -97,7 +129,11 @@ export default function Modal({
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={description ? descId : undefined}
         tabIndex={-1}
-        className={`animate-dropdown-in flex max-h-[90vh] w-full ${SIZES[size] ?? SIZES.md} flex-col overflow-hidden rounded-xl bg-white shadow-xl`}
+        className={
+          placement === "drawer"
+            ? "animate-slide-in-right flex h-full w-full max-w-[420px] flex-col overflow-hidden bg-white shadow-xl"
+            : `animate-dropdown-in flex max-h-[90vh] w-full ${SIZES[size] ?? SIZES.md} flex-col overflow-hidden rounded-xl bg-white shadow-xl`
+        }
       >
         {title && (
           <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
@@ -135,6 +171,7 @@ export default function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

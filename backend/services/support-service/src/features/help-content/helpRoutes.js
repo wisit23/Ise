@@ -3,6 +3,9 @@ const { requireAuth } = require("@reloop/shared");
 const helpController = require("./helpController");
 
 const router = Router();
+const reference = require("../reference/referenceController");
+router.get("/config", reference.clientConfig);
+router.get("/categories", reference.helpCategories);
 
 // Public — FAQ deflection (WF-10 step 2) must work for guests too.
 router.get("/", helpController.search);
@@ -13,5 +16,7 @@ router.get("/manage", requireAuth, helpController.manage);
 
 router.post("/", requireAuth, helpController.create);
 router.patch("/:id/publish", requireAuth, helpController.publish);
+router.post("/:id/revisions", requireAuth, helpController.revise);
+router.delete("/:id", requireAuth, helpController.remove);
 
 module.exports = router;

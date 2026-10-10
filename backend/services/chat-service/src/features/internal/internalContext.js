@@ -16,6 +16,9 @@ function contextKeyForInternalContextId(contextType, contextId) {
       return buildContextKey("ORDER", { orderId: contextId });
     case "DISPUTE":
       return buildContextKey("DISPUTE", { disputeId: contextId });
+    case "DISPUTE_BUYER":
+    case "DISPUTE_SELLER":
+      return buildContextKey(contextType, { disputeId: contextId });
     case "SUPPORT":
       return buildContextKey("SUPPORT", { ticketId: contextId });
     default:

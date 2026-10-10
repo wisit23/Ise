@@ -6,6 +6,7 @@ import NavBar from "../../../../components/NavBar";
 import Footer from "../../../../components/Footer";
 import { apiFetch, fetchAuthedBlobUrl } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
+import EmbeddedChat from "../../../../components/support/EmbeddedChat";
 
 // `id` in this route is the order id (see disputeService.getByOrderId) —
 // the CSS-002 search page only has order ids, not dispute ids, to link from.
@@ -18,6 +19,9 @@ export default function DisputeCasePage() {
   const [decisionReason, setDecisionReason] = useState("");
   const [deciding, setDeciding] = useState(false);
   const [openingEvidenceId, setOpeningEvidenceId] = useState(null);
+  const [chatRoom, setChatRoom] = useState(null);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
 
   const isAgent =
     user?.role === "CUSTOMER_SERVICE" ||
@@ -37,6 +41,8 @@ export default function DisputeCasePage() {
 
   useEffect(() => {
     setUser(getStoredUser());
+    setChatRoom(null);
+    setChatError("");
     load();
   }, [orderId, router]);
 
@@ -52,6 +58,27 @@ export default function DisputeCasePage() {
       setError(err.message);
     } finally {
       setOpeningEvidenceId(null);
+    }
+  }
+
+  async function openChat() {
+    if (!dispute?.id || chatLoading) return;
+    setChatLoading(true);
+    setChatError("");
+    try {
+      const room = await apiFetch(
+        `/api/orders/disputes/${dispute.id}/conversation`,
+        {
+          method: "POST",
+          token: getAccessToken(),
+        },
+      );
+      if (!room?.conversationId) throw new Error("ไม่พบห้องสนทนาของข้อพิพาท");
+      setChatRoom(room);
+    } catch (err) {
+      setChatError(err.message);
+    } finally {
+      setChatLoading(false);
     }
   }
 
@@ -171,6 +198,38 @@ export default function DisputeCasePage() {
             ))}
           </div>
         </div>
+
+        <section
+          className="mb-4 rounded-lg border border-gray-200 bg-white p-4"
+          aria-label="แชทข้อพิพาท"
+        >
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-gray-900">
+              บทสนทนาข้อพิพาท
+            </h2>
+            {!chatRoom && (
+              <button
+                type="button"
+                onClick={openChat}
+                disabled={chatLoading}
+                className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+              >
+                {chatLoading ? "กำลังเปิดแชท..." : "เปิดแชท"}
+              </button>
+            )}
+          </div>
+          {chatError && (
+            <p role="alert" className="mb-3 text-sm text-red-600">
+              {chatError}
+            </p>
+          )}
+          {chatRoom && (
+            <EmbeddedChat
+              conversationId={chatRoom.conversationId}
+              readOnly={chatRoom.readOnly || dispute.status === "DECIDED"}
+            />
+          )}
+        </section>
 
         {dispute.status === "DECIDED" ? (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">

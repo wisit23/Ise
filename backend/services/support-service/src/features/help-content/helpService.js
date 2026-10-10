@@ -1,7 +1,13 @@
-const { badRequest, forbidden, notFound } = require("@reloop/shared");
+const {
+  STAFF_ROLES,
+  badRequest,
+  forbidden,
+  notFound,
+} = require("@reloop/shared");
+
 const helpModel = require("./helpModel");
 
-const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"]);
+const AGENT_ROLES = new Set(STAFF_ROLES);
 
 function slugify(title) {
   return (
@@ -45,13 +51,42 @@ async function createDraft({ role, authorId, title, body, category }) {
   });
 }
 
-async function publish({ role, id }) {
-  if (!AGENT_ROLES.has(role)) {
-    throw forbidden("only support agents can publish help articles");
-  }
-  const article = await helpModel.publish(id);
+async function revise({ role, id, authorId, title, body, category }) {
+  if (!AGENT_ROLES.has(role))
+    throw forbidden("only support agents can write help articles");
+  if (!title?.trim() || !body?.trim() || !category?.trim())
+    throw badRequest("title, body and category are required");
+  const article = await helpModel.revise({
+    id,
+    authorId,
+    title: title.trim(),
+    body: body.trim(),
+    category: category.trim(),
+  });
   if (!article) throw notFound("help article not found");
   return article;
 }
 
-module.exports = { searchPublic, listForAgent, createDraft, publish };
+async function publish({ role, id, version }) {
+  if (!AGENT_ROLES.has(role)) {
+    throw forbidden("only support agents can publish help articles");
+  }
+  const article = await helpModel.publish(id, version);
+  if (!article) throw notFound("help article not found");
+  return article;
+}
+
+async function remove({ role, id }) {
+  if (!AGENT_ROLES.has(role))
+    throw forbidden("only support agents can delete help articles");
+  if (!(await helpModel.remove(id))) throw notFound("help article not found");
+}
+
+module.exports = {
+  searchPublic,
+  listForAgent,
+  createDraft,
+  revise,
+  publish,
+  remove,
+};

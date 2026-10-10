@@ -1,4 +1,5 @@
 const { badRequest, notFound } = require("@reloop/shared");
+const { createHash } = require("node:crypto");
 const prisma = require("../../models/prismaClient");
 const conversationModel = require("../conversations/conversationModel");
 const messageModel = require("../messages/messageModel");
@@ -90,13 +91,20 @@ async function sendMessage(req, res, next) {
     const conversation = await conversationModel.findById(req.params.id);
     if (!conversation) throw notFound("Conversation not found");
 
-    const { senderId, senderRole, type, body, payload, visibility } = req.body;
+    const { senderId, senderRole, type, body, payload, visibility, eventKey } = req.body;
     if (!senderId || !senderRole) {
       throw badRequest("senderId and senderRole are required");
     }
 
     const isSupport = conversation.contextType === "SUPPORT";
-    const message = await messageModel.createAndTouch({
+    if (eventKey && (typeof eventKey !== "string" || eventKey.length > 128)) {
+      throw badRequest("eventKey must be a string of at most 128 characters");
+    }
+    const messageId = eventKey ? createHash("sha256").update(`${conversation.id}:${eventKey}`).digest("hex").slice(0, 24) : null;
+    let message;
+    try {
+      message = await messageModel.createAndTouch({
+      messageId,
       conversationId: conversation.id,
       senderId,
       senderRole,
@@ -105,7 +113,14 @@ async function sendMessage(req, res, next) {
       payload,
       visibility: visibility || "ALL",
       syncStatus: isSupport ? "PENDING" : null,
-    });
+      });
+    } catch (err) {
+      if (messageId && err.code === "P2002") {
+        const existing = await prisma.message.findUnique({ where: { id: messageId } });
+        if (existing?.conversationId === conversation.id) return res.status(200).json(existing);
+      }
+      throw err;
+    }
 
     if (isSupport) {
       syncSupportMessage(conversation, message);
@@ -191,9 +206,13 @@ async function getTranscript(req, res, next) {
       throw badRequest("limit must be a positive integer");
     }
     const limit = Math.min(100, requestedLimit);
+    const beforeMessage = before ? await prisma.message.findUnique({ where: { id: before } }) : undefined;
+    if (before && (!beforeMessage || beforeMessage.conversationId !== conversation.id ||
+      (req.query.includeInternal !== "true" && beforeMessage.visibility === "INTERNAL"))) throw badRequest("invalid transcript cursor");
     const query = buildPageQuery({
       conversationId: conversation.id,
       before,
+      beforeMessage,
       limit,
       includeInternal: req.query.includeInternal === "true",
     });

@@ -5,7 +5,7 @@ import { useState } from "react";
 import Alert from "../../../ui/Alert";
 import Button from "../../../ui/Button";
 import CaseUserCard from "./CaseUserCard";
-import { AGENT_NEXT_STATUS } from "../../../../lib/supportConstants";
+import EmbeddedChat from "../../EmbeddedChat";
 
 const THAI_DATE = { year: "numeric", month: "long", day: "numeric" };
 
@@ -40,15 +40,19 @@ function InfoCell({ label, children }) {
 
 export default function TicketCasePanel({
   ticket,
+  conversationId,
+  chatLoading,
   actionBusy,
   actionError,
   onAssign,
   onStatusChange,
   onWarnUser,
   onBanUser,
+  onOpenLiveChat,
+  auditReadOnly = false,
 }) {
   const [manualTargetId, setManualTargetId] = useState("");
-  const nextStatuses = AGENT_NEXT_STATUS[ticket.status] || [];
+  const nextStatuses = ticket.capabilities?.allowedNextStatuses || [];
   const openedOn = new Date(ticket.createdAt).toLocaleDateString(
     "th-TH",
     THAI_DATE,
@@ -100,6 +104,14 @@ export default function TicketCasePanel({
           </div>
         </SectionCard>
 
+        {ticket.status === "ESCALATED" && (
+          <SectionCard icon="description" title="CS Memo">
+            <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
+              {ticket.escalationNote || "ยังไม่มีสรุปจาก CS"}
+            </p>
+          </SectionCard>
+        )}
+
         {/* Counterparty is the primary focus of moderation when handling disputes/complaints.
             Rendered first so Trust & Safety officers act on the accused party by default. */}
         {ticket.targetId ? (
@@ -142,9 +154,7 @@ export default function TicketCasePanel({
                     variant="ghost"
                     icon="warning"
                     disabled={actionBusy || !manualTargetId.trim()}
-                    onClick={() =>
-                      onWarnUser(manualTargetId.trim(), "คู่กรณี")
-                    }
+                    onClick={() => onWarnUser(manualTargetId.trim(), "คู่กรณี")}
                     className="bg-amber-100 font-bold text-amber-800 hover:bg-amber-200"
                   >
                     ตักเตือนคู่กรณี
@@ -156,9 +166,7 @@ export default function TicketCasePanel({
                     variant="ghost"
                     icon="block"
                     disabled={actionBusy || !manualTargetId.trim()}
-                    onClick={() =>
-                      onBanUser(manualTargetId.trim(), "คู่กรณี")
-                    }
+                    onClick={() => onBanUser(manualTargetId.trim(), "คู่กรณี")}
                     className="bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
                   >
                     แบนคู่กรณี
@@ -180,9 +188,7 @@ export default function TicketCasePanel({
           busy={actionBusy}
           warnLabel="ตักเตือนผู้แจ้ง"
           banLabel="แบนผู้แจ้ง (ระวัง)"
-          onWarn={
-            onWarnUser ? (uid) => onWarnUser(uid, "ผู้แจ้ง") : undefined
-          }
+          onWarn={onWarnUser ? (uid) => onWarnUser(uid, "ผู้แจ้ง") : undefined}
           onBan={onBanUser ? (uid) => onBanUser(uid, "ผู้แจ้ง") : undefined}
         />
 
@@ -224,12 +230,36 @@ export default function TicketCasePanel({
               <p className="text-sm font-bold text-slate-800">
                 ผู้ใช้: #{ticket.requesterId?.slice(0, 12)}
               </p>
-              <p className="mt-0.5 text-xs text-slate-500">กำลังพัฒนาระบบแชท</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                ประวัติการสนทนาของคำร้อง
+              </p>
             </div>
-            <Button size="sm" variant="secondary" icon="chat" disabled>
-              แชท (Soon)
-            </Button>
           </div>
+          {onOpenLiveChat && (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon="chat"
+              onClick={() => onOpenLiveChat(ticket.id)}
+              className="mt-3"
+            >
+              เปิดในหน้าแชท
+            </Button>
+          )}
+          {chatLoading ? (
+            <p className="mt-3 text-xs text-slate-500">กำลังโหลดบทสนทนา...</p>
+          ) : conversationId ? (
+            <div className="mt-3">
+              <EmbeddedChat
+                conversationId={conversationId}
+                readOnly={auditReadOnly || ticket.status === "CLOSED"}
+              />
+            </div>
+          ) : !onOpenLiveChat ? (
+            <p className="mt-3 text-xs text-slate-500">
+              ยังเปิดบทสนทนาไม่ได้ กรุณาลองเปิดเคสอีกครั้ง
+            </p>
+          ) : null}
         </SectionCard>
 
         <SectionCard icon="build" title="จัดการคำร้อง (Actions)">

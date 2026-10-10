@@ -1,3 +1,4 @@
+import config from "./customerServiceConfig";
 import { io } from "socket.io-client";
 import { apiFetch } from "./api";
 import { getAccessToken } from "./auth";
@@ -14,13 +15,7 @@ export function setCachedConversations(items) {
   conversationCache = items;
 }
 
-/** Mirrors chat-service's MAX_MESSAGE_LENGTH (backend/services/chat-service/
- * src/limits.js), which is the ACTUAL gate — this copy only drives the
- * composer's counter and its `maxLength`. Client-side limits stop honest
- * typos, never a crafted request, so the two are allowed to be separate
- * constants: if this one ever drifts low the user is merely stopped early,
- * and if it drifts high the server still refuses with a readable message. */
-export const MAX_MESSAGE_LENGTH = 4000;
+export const MAX_MESSAGE_LENGTH = config.chat.maxMessageLength;
 
 /** create-or-open — server resolves sellerId itself from productId, this
  * never sends sellerId (see backend chat-service's conversationService.js:

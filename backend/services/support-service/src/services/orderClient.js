@@ -1,10 +1,14 @@
+const { customerServiceRuntime } = require("@reloop/shared");
 const ORDER_SERVICE_URL =
   process.env.ORDER_SERVICE_URL || "http://order-service:3003";
 const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 
 async function getOrder(orderId) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3_000);
+  const timer = setTimeout(
+    () => controller.abort(),
+    customerServiceRuntime.dependencyTimeoutMs,
+  );
   try {
     const res = await fetch(
       `${ORDER_SERVICE_URL}/${encodeURIComponent(orderId)}/internal`,

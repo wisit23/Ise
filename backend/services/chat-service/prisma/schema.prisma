@@ -21,7 +21,7 @@ generator client {
 // check-then-create, which is not actually atomic. See contextKey.js.
 model Conversation {
   id                 String        @id @default(auto()) @map("_id") @db.ObjectId
-  contextType        String // PRODUCT | ORDER | DISPUTE | SUPPORT | DIRECT
+  contextType        String // PRODUCT | ORDER | DISPUTE (legacy read-only) | DISPUTE_BUYER | DISPUTE_SELLER | SUPPORT | DIRECT
   contextId          String? // productId / orderId / ticketId — soft reference, no FK
   contextKey         String        @unique
   participants       Participant[]
@@ -76,5 +76,6 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@index([conversationId, deletedAt, createdAt])
+  @@index([conversationId, deletedAt, createdAt, id])
   @@index([syncStatus, nextRetryAt])
 }

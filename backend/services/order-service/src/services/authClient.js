@@ -32,6 +32,13 @@ async function getUser(userId) {
 }
 
 module.exports = {
+  async searchStaff(query) {
+    let response;
+    try { response = await fetch(`${AUTH_SERVICE_URL}/internal/staff/search`, { method:'POST', headers:{'Content-Type':'application/json','x-internal-token':INTERNAL_TOKEN}, body:JSON.stringify(query), signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS) }); }
+    catch { throw new AppError(502,'Staff directory unavailable'); }
+    if(!response.ok) throw new AppError(502,'Staff directory unavailable');
+    return response.json();
+  },
   getUser,
   setMockUserResolver,
 };

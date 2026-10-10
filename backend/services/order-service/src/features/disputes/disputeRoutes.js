@@ -7,10 +7,20 @@ const { requireAuth } = require("@reloop/shared");
 const disputeController = require("./disputeController");
 
 const router = Router();
+router.get('/agent-dashboard', requireAuth, require('./agentDashboard').agentDashboard);
 
 router.get("/queue", requireAuth, disputeController.queue);
 router.get("/by-order/:orderId", requireAuth, disputeController.getByOrderId);
 router.get("/:id", requireAuth, disputeController.getOne);
+router.get('/:id/eligible-staff', requireAuth, async (req,res,next) => {
+  try { res.json(await require('./disputeService').eligibleStaff({disputeId:req.params.id,userId:req.userId,role:req.userRole,roles:req.userRoles,q:req.query.q,page:req.query.page,limit:req.query.limit})); }
+  catch(err) { next(err); }
+});
+router.post(
+  "/:id/conversation",
+  requireAuth,
+  disputeController.joinConversation,
+);
 router.post("/:id/evidence", requireAuth, disputeController.uploadEvidence);
 router.get(
   "/:id/evidence/:evidenceId",
@@ -21,5 +31,7 @@ router.post("/:id/claim", requireAuth, disputeController.claim);
 router.post("/:id/reassign", requireAuth, disputeController.reassign);
 router.post("/:id/escalate", requireAuth, disputeController.escalate);
 router.post("/:id/decision", requireAuth, disputeController.decide);
+router.post("/:id/request-evidence", requireAuth, disputeController.requestMoreEvidence);
+router.get("/:id/audit-transcript", requireAuth, disputeController.auditTranscript);
 
 module.exports = router;

@@ -73,3 +73,24 @@ test("renders nothing while closed", () => {
   render(<Harness />);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+
+test("escapes transformed scrolling content and makes the background inert", () => {
+  const { container } = render(
+    <div style={{ transform: "translateY(0)", overflow: "auto", height: 200 }}>
+      <Harness />
+    </div>,
+  );
+  fireEvent.click(screen.getByText("เปิด"));
+  const overlay = screen.getByRole("dialog").parentElement;
+  expect(overlay.parentElement).toBe(document.body);
+  expect(container.contains(overlay)).toBe(false);
+  expect(container.inert).toBe(true);
+  expect(document.body.style.overflow).toBe("hidden");
+  expect(document.documentElement.style.overflow).toBe("hidden");
+  expect(document.documentElement.style.scrollbarGutter).toBe("auto");
+  fireEvent.keyDown(overlay, { key: "Escape" });
+  expect(container.inert).toBe(false);
+  expect(document.body.style.overflow).not.toBe("hidden");
+  expect(document.documentElement.style.overflow).not.toBe("hidden");
+  expect(document.documentElement.style.scrollbarGutter).toBe("");
+});

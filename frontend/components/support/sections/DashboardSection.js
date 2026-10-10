@@ -1,34 +1,29 @@
-/* eslint-disable no-unused-vars */
 "use client";
-import { useState, useEffect, useRef } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import DonutChart from "../../charts/DonutChart";
 import TrendBarChart from "../../charts/TrendBarChart";
 
-import Badge from "../../panel/ui/Badge";
 import KpiCard from "../../panel/ui/KpiCard";
 import ChartCard from "../../panel/ui/ChartCard";
-import DropdownFilter from "../../panel/ui/DropdownFilter";
 import {
-  TICKET_STATUS_LABEL,
-  TICKET_STATUS_STYLE,
-  PRIORITY_LABEL,
-  PRIORITY_STYLE,
-  AGENT_NEXT_STATUS,
-  DISPUTE_STATUS_LABEL,
-  DISPUTE_STATUS_STYLE,
-  ORDER_STATUS_LABEL,
-  HELP_CATEGORIES,
   DONUT_PRIORITY_COLORS,
   DONUT_DISPUTE_COLORS,
-  PAGE_SIZE,
 } from "../../../lib/supportConstants";
-import { apiFetch, fetchAuthedBlobUrl } from "../../../lib/api";
+import { apiFetch } from "../../../lib/api";
+import config from "../../../lib/customerServiceConfig";
+import AgentDashboard from "./AgentDashboard";
 
-export default // ─── Dashboard Section ────────────────────────────────────────────────────────
+export default function DashboardSection(props) {
+  return props.userRole === "CUSTOMER_SERVICE" ? (
+    <AgentDashboard token={props.token} currentUserId={props.currentUserId} />
+  ) : (
+    <LegacyDashboardSection {...props} />
+  );
+}
 
-function DashboardSection({ token, userRole, onNavigate }) {
+function LegacyDashboardSection({ token, userRole, onNavigate }) {
   const isAdmin = userRole === "ADMIN";
+  const [error, setError] = useState("");
   const [stats, setStats] = useState({
     total: null,
     resolved: null,
@@ -46,7 +41,10 @@ function DashboardSection({ token, userRole, onNavigate }) {
     const fc = (params) =>
       apiFetch(`/api/support/tickets/queue?${params}&limit=1`, { token })
         .then((d) => d.total)
-        .catch(() => null);
+        .catch((err) => {
+          setError(err.message);
+          return null;
+        });
 
     // KPI counts
     fc("scope=all").then((v) => setStats((s) => ({ ...s, total: v })));
@@ -79,16 +77,16 @@ function DashboardSection({ token, userRole, onNavigate }) {
       fc("scope=all&priority=URGENT"),
     ]).then(([low, normal, high, urgent]) => {
       setPriorityData([
-        { label: "Low", value: low || 0, color: DONUT_PRIORITY_COLORS.LOW },
+        { label: "Low", value: low, color: DONUT_PRIORITY_COLORS.LOW },
         {
           label: "Medium",
-          value: normal || 0,
+          value: normal,
           color: DONUT_PRIORITY_COLORS.NORMAL,
         },
-        { label: "High", value: high || 0, color: DONUT_PRIORITY_COLORS.HIGH },
+        { label: "High", value: high, color: DONUT_PRIORITY_COLORS.HIGH },
         {
           label: "Urgent",
-          value: urgent || 0,
+          value: urgent,
           color: DONUT_PRIORITY_COLORS.URGENT,
         },
       ]);
@@ -103,11 +101,11 @@ function DashboardSection({ token, userRole, onNavigate }) {
       fc("scope=all&status=CLOSED"),
     ]).then(([n, ip, pu, r, c]) => {
       setStatusData([
-        { label: "New", value: n || 0 },
-        { label: "In Prog.", value: ip || 0 },
-        { label: "Waiting", value: pu || 0 },
-        { label: "Resolved", value: r || 0 },
-        { label: "Closed", value: c || 0 },
+        { label: "New", value: n },
+        { label: "In Prog.", value: ip },
+        { label: "Waiting", value: pu },
+        { label: "Resolved", value: r },
+        { label: "Closed", value: c },
       ]);
     });
 
@@ -115,7 +113,10 @@ function DashboardSection({ token, userRole, onNavigate }) {
     const fd = (params) =>
       apiFetch(`/api/orders/disputes/queue?${params}&limit=1`, { token })
         .then((d) => d.total)
-        .catch(() => null);
+        .catch((err) => {
+          setError(err.message);
+          return null;
+        });
     Promise.all([
       fd("status=OPEN"),
       fd("status=NEEDS_INFO"),
@@ -124,45 +125,47 @@ function DashboardSection({ token, userRole, onNavigate }) {
       setDisputeData([
         {
           label: "รอตรวจสอบ",
-          value: op || 0,
+          value: op,
           color: DONUT_DISPUTE_COLORS.OPEN,
         },
         {
           label: "รอข้อมูล",
-          value: ni || 0,
+          value: ni,
           color: DONUT_DISPUTE_COLORS.NEEDS_INFO,
         },
         {
           label: "ตัดสินแล้ว",
-          value: de || 0,
+          value: de,
           color: DONUT_DISPUTE_COLORS.DECIDED,
         },
       ]);
     });
 
-    // Ticket trend — fetch top page and map last 8 tickets by date
-    apiFetch("/api/support/tickets/queue?scope=all&limit=50", { token })
-      .then((d) => {
-        const items = d.items || [];
-        // Count by date (last 7 unique dates)
-        const counts = {};
-        items.forEach((t) => {
-          const day = new Date(t.createdAt).toLocaleDateString("th-TH", {
-            day: "2-digit",
-            month: "short",
-          });
-          counts[day] = (counts[day] || 0) + 1;
-        });
-        const trend = Object.entries(counts)
-          .slice(-8)
-          .map(([label, value]) => ({ label, value }));
-        setTicketTrend(trend);
-      })
-      .catch((err) => console.error("โหลดแนวโน้มตั๋วไม่สำเร็จ:", err));
+    apiFetch(
+      `/api/support/tickets/trend?days=${config.dashboard.defaultDays}`,
+      { token },
+    )
+      .then((data) =>
+        setTicketTrend(
+          data.items.map((row) => ({
+            label: new Date(`${row.date}T00:00:00Z`).toLocaleDateString(
+              "th-TH",
+              { day: "2-digit", month: "short", timeZone: data.timeZone },
+            ),
+            value: row.value,
+          })),
+        ),
+      )
+      .catch((err) => setError(err.message));
   }, [token]);
 
   return (
     <div className="animate-fade-in-up">
+      {error && (
+        <p role="alert" className="mb-3 text-sm text-red-700">
+          โหลดข้อมูล dashboard ไม่ครบ: {error}
+        </p>
+      )}
       {/* KPI Row */}
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <KpiCard
@@ -213,7 +216,11 @@ function DashboardSection({ token, userRole, onNavigate }) {
       {/* Charts Row 1 */}
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <ChartCard title="Tickets by Priority" icon="bar_chart">
-          <DonutChart data={priorityData} size={170} strokeWidth={38} />
+          <DonutChart
+            data={priorityData.filter((row) => row.value !== null)}
+            size={170}
+            strokeWidth={38}
+          />
         </ChartCard>
 
         <ChartCard title="Tickets by Status" icon="schedule">
@@ -224,7 +231,11 @@ function DashboardSection({ token, userRole, onNavigate }) {
         </ChartCard>
 
         <ChartCard title="Disputes by Status" icon="gavel">
-          <DonutChart data={disputeData} size={170} strokeWidth={38} />
+          <DonutChart
+            data={disputeData.filter((row) => row.value !== null)}
+            size={170}
+            strokeWidth={38}
+          />
         </ChartCard>
       </div>
 

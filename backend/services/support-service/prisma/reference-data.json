@@ -1,0 +1,15 @@
+{
+  "categories": [
+    ["ORDER", "คำสั่งซื้อ"],
+    ["PAYMENT", "การชำระเงิน"],
+    ["ACCOUNT", "บัญชีผู้ใช้"],
+    ["TECHNICAL", "ปัญหาทางเทคนิค"],
+    ["OTHER", "อื่น ๆ"]
+  ],
+  "legacyPriorities": [
+    ["LOW", 1, 4320],
+    ["NORMAL", 2, 1440],
+    ["HIGH", 3, 240],
+    ["URGENT", 4, 60]
+  ]
+}

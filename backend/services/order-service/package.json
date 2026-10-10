@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "seed:dispute-demo": "node prisma/seed-dispute-demo.js"
+    "migrate:sla": "node prisma/applyServicePolicy.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

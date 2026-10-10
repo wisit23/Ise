@@ -8,21 +8,29 @@ import EmbeddedChat from "../../EmbeddedChat";
 export default function DisputeChatPanel({
   dispute,
   conversationId,
+  readOnly,
+  side = "buyer",
+  onSideChange,
+  switching,
   closing,
   onClose,
 }) {
-  const buyerId = dispute.order?.buyerId ?? "";
-  const initial = buyerId.slice(0, 1).toUpperCase() || "B";
+  const partyId =
+    side === "buyer"
+      ? (dispute.order?.buyerId ?? "")
+      : (dispute.order?.sellerId ?? "");
+  const initial =
+    partyId.slice(0, 1).toUpperCase() || (side === "buyer" ? "B" : "S");
 
   return (
     <div
-      className={`flex w-full max-w-sm flex-col border-r border-slate-200 bg-white shadow-xl ${
+      className={`flex w-full max-w-md flex-col border-r-4 bg-white shadow-xl ${side === "buyer" ? "border-emerald-500" : "border-blue-500"} ${
         closing ? "animate-slide-out-left" : "animate-slide-in-left"
       }`}
     >
       <div className="flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
         <div>
-          <h3 className="text-sm font-bold text-slate-900">แชทกับผู้ซื้อ</h3>
+          <h3 className="text-sm font-bold text-slate-900">แชทข้อพิพาท</h3>
           {!conversationId && (
             <p className="text-xs font-medium text-slate-400">
               ยังไม่มีห้องแชท
@@ -40,15 +48,48 @@ export default function DisputeChatPanel({
         </button>
       </div>
 
+      <div
+        role="tablist"
+        aria-label="เลือกคู่สนทนา"
+        className="grid grid-cols-2 gap-2 border-b border-slate-100 p-3"
+      >
+        {[
+          ["buyer", "🟢 ผู้ซื้อ"],
+          ["seller", "🔵 ผู้ขาย"],
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={side === value}
+            disabled={switching}
+            onClick={() => onSideChange(value)}
+            className={`rounded-lg px-2 py-2 text-xs font-bold transition ${side === value ? (value === "buyer" ? "bg-emerald-600 text-white" : "bg-blue-600 text-white") : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p
+        role="status"
+        className={`px-4 py-2 text-xs font-semibold ${side === "buyer" ? "bg-emerald-50 text-emerald-900" : "bg-blue-50 text-blue-900"}`}
+      >
+        {switching
+          ? "กำลังเปลี่ยนห้องสนทนา..."
+          : `ข้อความต่อไปจะส่งถึง${side === "buyer" ? "ผู้ซื้อ" : "ผู้ขาย"}เท่านั้น`}
+      </p>
+
       <div className="border-b border-slate-100 bg-slate-50 px-5 py-3">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 text-xs font-bold text-white">
             {initial}
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-800">ผู้ซื้อ</p>
+            <p className="text-xs font-bold text-slate-800">
+              {side === "buyer" ? "ผู้ซื้อ" : "ผู้ขาย"}
+            </p>
             <p className="font-mono text-[10px] text-slate-500">
-              {buyerId.slice(0, 16)}
+              {partyId.slice(0, 16)}
             </p>
           </div>
         </div>
@@ -56,7 +97,9 @@ export default function DisputeChatPanel({
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <EmbeddedChat
+          key={conversationId}
           conversationId={conversationId}
+          readOnly={Boolean(readOnly || switching)}
           maxHeight="100%"
         />
       </div>

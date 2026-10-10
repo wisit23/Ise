@@ -51,11 +51,11 @@ async function createReport({ reporterId, targetId, productId, reason }) {
 }
 
 async function listReports({ page, limit, status }) {
-  const where = { status: status || "OPEN" };
+  const where = status === "ALL" ? {} : { status: status || "OPEN" };
   const [items, total] = await Promise.all([
     prisma.report.findMany({
       where,
-      orderBy: { reportedAt: "asc" },
+      orderBy: [{ reportedAt: "asc" }, { id: "asc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),
@@ -138,7 +138,10 @@ async function actionReport({
     if (!report.productId) {
       throw badRequest("report has no target product to remove");
     }
-    await productModerationClient.removeProduct(report.productId, trimmedReason);
+    await productModerationClient.removeProduct(
+      report.productId,
+      trimmedReason,
+    );
   }
 
   const updated = await prisma.report.update({
