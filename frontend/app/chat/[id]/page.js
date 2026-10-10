@@ -747,6 +747,11 @@ export default function ChatRoomPage() {
                     <MessageList
                       messages={messages}
                       currentUserId={user?.id}
+                      currentUserRole={
+                        conversation?.participants?.find(
+                          (p) => p.userId === user?.id,
+                        )?.role
+                      }
                       otherName={otherName}
                       onPromptClick={handleSend}
                       activeRoomId={activeRoomId}

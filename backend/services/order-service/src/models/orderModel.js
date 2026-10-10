@@ -17,7 +17,15 @@ function create(data) {
 }
 
 function findById(id) {
-  return prisma.order.findUnique({ where: { id } });
+  return prisma.order.findUnique({
+    where: { id },
+    include: {
+      checkoutSession: {
+        select: { shippingAddress: true, paidAt: true, status: true },
+      },
+      dispute: { select: { id: true, status: true } },
+    },
+  });
 }
 
 function findByReservationId(reservationId) {
@@ -53,6 +61,9 @@ async function listByBuyer(buyerId, { status, skip, take } = {}) {
     prisma.order.findMany({
       where,
       include: {
+        checkoutSession: {
+          select: { shippingAddress: true, paidAt: true, status: true },
+        },
         dispute: { select: { id: true, status: true } },
       },
       orderBy: { createdAt: "desc" },
@@ -73,6 +84,9 @@ async function listBySeller(sellerId, { status, skip, take } = {}) {
     prisma.order.findMany({
       where,
       include: {
+        checkoutSession: {
+          select: { shippingAddress: true, paidAt: true, status: true },
+        },
         dispute: { select: { id: true, status: true } },
       },
       orderBy: { createdAt: "desc" },

@@ -2,6 +2,7 @@ const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const productClient = require("../../services/productClient");
 const buyerActivityClient = require("../../services/buyerActivityClient");
+const chatClient = require("../../services/chatClient");
 
 const PAYMENT_TTL_MS = 10 * 60 * 1000;
 const EXPIRY_SWEEP_INTERVAL_MS = 5 * 1000;
@@ -341,6 +342,11 @@ function createCheckoutSessionService(
       });
     });
     await recordPaymentActivities(paidSession);
+    await Promise.all(
+      paidSession.orders.map((order) =>
+        chatClient.notifyOrderPaid(order).catch(() => {}),
+      ),
+    );
     return paidSession;
   }
 

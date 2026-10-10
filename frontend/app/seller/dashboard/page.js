@@ -366,6 +366,11 @@ export default function SellerDashboardPage() {
                 onClearHighlight={() => setHighlightOrderId(null)}
                 statusFilter={orderStatusFilter}
                 onStatusFilterChange={setOrderStatusFilter}
+                onOrderUpdated={(updated) => {
+                  setOrders((prev) =>
+                    prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)),
+                  );
+                }}
               />
             )}
 
@@ -373,8 +378,14 @@ export default function SellerDashboardPage() {
             {section === "products" && (
               <SellerProductList
                 products={products}
+                orders={orders}
                 statusFilter={productStatusFilter}
                 onStatusFilterChange={setProductStatusFilter}
+                onOrderUpdated={(updated) => {
+                  setOrders((prev) =>
+                    prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)),
+                  );
+                }}
               />
             )}
           </div>

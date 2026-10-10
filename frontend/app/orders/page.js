@@ -47,6 +47,7 @@ const TABS = [
     label: "รอชำระเงิน",
     status: "pending_payment",
   },
+  { key: "shipped", label: "จัดส่งแล้ว", status: "shipped" },
   { key: "completed", label: "สำเร็จ", status: "completed" },
   { key: "cancelled", label: "ยกเลิก", status: "cancelled" },
 ];
@@ -191,6 +192,29 @@ export default function OrdersPage() {
   const [openReviewFor, setOpenReviewFor] = useState(null);
   const [openDisputeFor, setOpenDisputeFor] = useState(null);
   const [justDisputedIds, setJustDisputedIds] = useState(new Set());
+  const [confirmingOrderId, setConfirmingOrderId] = useState(null);
+
+  async function handleConfirmReceived(orderId) {
+    const token = getAccessToken();
+    if (!token || !orderId) return;
+    setConfirmingOrderId(orderId);
+    try {
+      await apiFetch(`/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        token,
+        body: { status: "completed" },
+      });
+      setItems((prev) =>
+        prev.map((o) =>
+          o.id === orderId ? { ...o, status: "completed" } : o,
+        ),
+      );
+    } catch (err) {
+      alert(err.message || "ยืนยันการรับสินค้าไม่สำเร็จ");
+    } finally {
+      setConfirmingOrderId(null);
+    }
+  }
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -320,6 +344,21 @@ export default function OrdersPage() {
                           </span>
                           ไปชำระเงิน
                         </Link>
+                      )}
+                      {o.status === "shipped" && (
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmReceived(o.id)}
+                          disabled={confirmingOrderId === o.id}
+                          className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 active:scale-95 shadow-xs"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">
+                            check_circle
+                          </span>
+                          {confirmingOrderId === o.id
+                            ? "กำลังยืนยัน..."
+                            : "ได้รับสินค้าแล้ว"}
+                        </button>
                       )}
                     </div>
                   }

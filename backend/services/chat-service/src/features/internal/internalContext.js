@@ -9,9 +9,19 @@ const { buildContextKey } = require("../conversations/contextKey");
  * user ids) don't fit a single `contextId` and aren't created through the
  * Internal API this round; PRODUCT stays public-only (conversationService.js).
  */
-function contextKeyForInternalContextId(contextType, contextId) {
+function contextKeyForInternalContextId(contextType, contextId, participants = []) {
   if (!contextId) throw badRequest("contextId is required");
   switch (contextType) {
+    case "PRODUCT": {
+      const buyer = participants.find((p) => p.role === "BUYER");
+      if (!buyer || !buyer.userId) {
+        throw badRequest("PRODUCT context requires a participant with role BUYER");
+      }
+      return buildContextKey("PRODUCT", {
+        productId: contextId,
+        buyerId: buyer.userId,
+      });
+    }
     case "ORDER":
       return buildContextKey("ORDER", { orderId: contextId });
     case "SUPPORT":

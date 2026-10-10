@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import EmptyState from "../../ui/EmptyState";
+import OrderShippingModal from "../../orders/OrderShippingModal";
 import {
   ORDER_STATUS_LABEL,
   ORDER_STATUS_STYLE,
@@ -13,8 +15,8 @@ const ALL_STATUSES = [
   { value: "", label: "ทั้งหมด" },
   { value: "pending", label: "รอชำระเงิน" },
   { value: "pending_payment", label: "รอชำระเงิน (PP)" },
-  { value: "confirmed", label: "ยืนยันแล้ว" },
-  { value: "shipped", label: "จัดส่งแล้ว" },
+  { value: "confirmed", label: "รอขนส่ง" },
+  { value: "shipped", label: "อยู่ระหว่างการขนส่ง" },
   { value: "completed", label: "ขายสำเร็จ" },
   { value: "cancelled", label: "ยกเลิกแล้ว" },
 ];
@@ -26,8 +28,11 @@ export default function SellerOrderTracker({
   onClearHighlight,
   statusFilter: propStatusFilter,
   onStatusFilterChange,
+  onOrderUpdated,
 }) {
   const [localStatusFilter, setLocalStatusFilter] = useState("");
+  const [selectedOrderForShipping, setSelectedOrderForShipping] = useState(null);
+  const [shippingModalOpen, setShippingModalOpen] = useState(false);
   const statusFilter =
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
@@ -144,6 +149,7 @@ export default function SellerOrderTracker({
                 <th className="px-4 py-3 text-right">ราคา</th>
                 <th className="px-4 py-3">วันที่</th>
                 <th className="px-4 py-3 text-center">สถานะ</th>
+                <th className="px-4 py-3 text-right">การกระทำ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -180,12 +186,67 @@ export default function SellerOrderTracker({
                       style={ORDER_STATUS_STYLE[o.status]}
                     />
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      {o.status === "confirmed" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedOrderForShipping(o);
+                            setShippingModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-700 transition"
+                          title="ดูที่อยู่และดำเนินการจัดส่ง"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">
+                            local_shipping
+                          </span>
+                          <span>จัดส่งสินค้า</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedOrderForShipping(o);
+                          setShippingModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:border-emerald-500 hover:text-emerald-700 transition"
+                        title="ดูที่อยู่ผู้ซื้อ"
+                      >
+                        <span className="material-symbols-outlined text-[15px] text-slate-500">
+                          location_on
+                        </span>
+                        <span>ที่อยู่</span>
+                      </button>
+                      <Link
+                        href="/chat"
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-700 transition"
+                        title="เปิดหน้าต่างแชท"
+                      >
+                        <span className="material-symbols-outlined text-[15px] text-emerald-600">
+                          chat
+                        </span>
+                        <span>แชท</span>
+                      </Link>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Shipping Address & Fulfillment Modal */}
+      <OrderShippingModal
+        orderId={selectedOrderForShipping?.id}
+        initialOrder={selectedOrderForShipping}
+        isOpen={shippingModalOpen}
+        onClose={() => setShippingModalOpen(false)}
+        onShipped={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+      />
     </div>
   );
 }

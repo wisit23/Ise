@@ -19,8 +19,8 @@ export const PRODUCT_STATUS_STYLE = {
 export const ORDER_STATUS_LABEL = {
   pending: "รอลูกค้าชำระเงิน",
   pending_payment: "รอลูกค้าชำระเงิน",
-  confirmed: "ยืนยันแล้ว",
-  shipped: "จัดส่งแล้ว",
+  confirmed: "รอขนส่ง",
+  shipped: "อยู่ระหว่างการขนส่ง",
   completed: "ขายสำเร็จ",
   cancelled: "ยกเลิกแล้ว",
 };

@@ -28,7 +28,11 @@ async function createConversation(req, res, next) {
       }
     }
 
-    const contextKey = contextKeyForInternalContextId(contextType, contextId);
+    const contextKey = contextKeyForInternalContextId(
+      contextType,
+      contextId,
+      participants,
+    );
     const now = new Date();
 
     try {

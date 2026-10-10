@@ -77,6 +77,9 @@ async function create(req, res, next) {
     await buyerActivityClient.recordOrderActivity(order, "ORDER_PLACED", {
       reservationId: order.reservationId,
     });
+    if (created) {
+      await chatClient.notifyOrderPlaced(order);
+    }
     res.status(created ? 201 : 200).json(order);
   } catch (err) {
     next(err);
@@ -305,6 +308,7 @@ async function pay(req, res, next) {
       });
     }
     await buyerActivityClient.recordOrderActivity(updated, "PAYMENT_COMPLETED");
+    await chatClient.notifyOrderPaid(updated);
 
     await respondAfterProductSync(res, updated, event);
   } catch (err) {
@@ -344,6 +348,7 @@ async function createFromAuction(req, res, next) {
     });
 
     await productClient.setProductStatus(productId, "reserved");
+    await chatClient.notifyOrderPlaced(order);
 
     res.status(201).json(order);
   } catch (err) {

@@ -1,7 +1,9 @@
 "use client";
 
-import { Fragment, useRef } from "react";
+import { Fragment, useRef, useState } from "react";
 import MessageAttachment from "./MessageAttachment";
+import { apiFetch } from "../../lib/api";
+import { getAccessToken } from "../../lib/auth";
 
 const QUICK_PROMPTS = [
   "สินค้ายังอยู่ไหมครับ?",
@@ -54,6 +56,7 @@ function DateDivider({ value }) {
 export default function MessageList({
   messages,
   currentUserId,
+  currentUserRole,
   otherName = "ผู้ใช้",
   onPromptClick,
   activeRoomId,
@@ -63,6 +66,26 @@ export default function MessageList({
   const prevRoomRef = useRef(activeRoomId);
   const lastOptimisticRef = useRef({ body: null, time: 0 });
   const oldestTimeRef = useRef(null);
+  const [completedOrderIds, setCompletedOrderIds] = useState(new Set());
+  const [confirmingOrderId, setConfirmingOrderId] = useState(null);
+
+  async function handleConfirmReceived(orderId) {
+    const token = getAccessToken();
+    if (!token || !orderId) return;
+    setConfirmingOrderId(orderId);
+    try {
+      await apiFetch(`/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        token,
+        body: { status: "completed" },
+      });
+      setCompletedOrderIds((prev) => new Set(prev).add(orderId));
+    } catch (err) {
+      alert(err.message || "ยืนยันการรับสินค้าไม่สำเร็จ");
+    } finally {
+      setConfirmingOrderId(null);
+    }
+  }
 
   // When room changes, reset tracking
   if (prevRoomRef.current !== activeRoomId) {
@@ -122,13 +145,76 @@ export default function MessageList({
           dateKey(m.createdAt) !== dateKey(messages[index - 1]?.createdAt);
 
         if (m.type === "SYSTEM") {
+          const isOrderNotification =
+            Boolean(m.payload?.orderId) ||
+            m.body?.includes("หมายเลขคำสั่งซื้อ") ||
+            m.body?.includes("คำสั่งซื้อ");
+
+          const orderId =
+            m.payload?.orderId || m.body?.match(/#([a-f0-9\-]+)/i)?.[1];
+
+          const isShippedNotification =
+            m.payload?.event === "order.shipped" ||
+            m.payload?.status === "shipped" ||
+            m.body?.includes("ผู้ขายจัดส่งสินค้าแล้ว");
+
+          const isCompleted =
+            (orderId && completedOrderIds.has(orderId)) ||
+            m.payload?.event === "order.completed" ||
+            m.payload?.status === "completed" ||
+            m.body?.includes("เสร็จสมบูรณ์");
+
+          const isBuyer = currentUserRole === "BUYER" || (!currentUserRole && m.senderRole !== "BUYER");
+
           return (
             <Fragment key={m.id}>
               {showDate && <DateDivider value={m.createdAt} />}
-              <li className="my-2.5 text-center animate-fade-in">
-                <span className="rounded-full bg-gray-100/90 border border-gray-200/60 px-3.5 py-1 text-[11px] font-medium text-gray-500 shadow-2xs">
-                  {m.body}
-                </span>
+              <li className="my-3 flex justify-center animate-fade-in px-2">
+                {isOrderNotification ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-teal-50/80 p-3 sm:px-4 sm:py-3 text-xs text-emerald-950 shadow-xs max-w-sm sm:max-w-lg w-full">
+                    <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                      <span className="material-symbols-outlined text-[20px] text-emerald-600 shrink-0 mt-0.5">
+                        {isShippedNotification ? "local_shipping" : isCompleted ? "check_circle" : "shopping_bag"}
+                      </span>
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="font-semibold text-emerald-900 leading-snug">
+                          {m.body}
+                        </p>
+                        {orderId && (
+                          <p className="mt-0.5 font-mono text-[11px] text-emerald-700/80">
+                            Order ID: #{orderId}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Receipt confirmation button: ONLY for BUYER when shipped */}
+                    {isCompleted ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 px-2.5 py-1 text-xs font-semibold">
+                        <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                        <span>สำเร็จ</span>
+                      </span>
+                    ) : isShippedNotification && isBuyer && orderId ? (
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmReceived(orderId)}
+                        disabled={confirmingOrderId === orderId}
+                        className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 font-bold text-xs shadow-xs transition active:scale-95"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          check_circle
+                        </span>
+                        <span>
+                          {confirmingOrderId === orderId ? "กำลังยืนยัน..." : "ได้รับสินค้าแล้ว"}
+                        </span>
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <span className="rounded-full bg-gray-100/90 border border-gray-200/60 px-3.5 py-1 text-[11px] font-medium text-gray-500 shadow-2xs">
+                    {m.body}
+                  </span>
+                )}
               </li>
             </Fragment>
           );

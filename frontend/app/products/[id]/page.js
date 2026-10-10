@@ -13,6 +13,7 @@ import ReportModal from "../../../components/ReportModal";
 import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import Alert from "../../../components/ui/Alert";
 import Modal from "../../../components/ui/Modal";
+import OrderShippingModal from "../../../components/orders/OrderShippingModal";
 import { apiFetch } from "../../../lib/api";
 import {
   getAccessToken,
@@ -78,6 +79,8 @@ export default function ProductDetailPage() {
   const [availableCampaigns, setAvailableCampaigns] = useState([]);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
+  const [sellerActiveOrder, setSellerActiveOrder] = useState(null);
+  const [shippingModalOpen, setShippingModalOpen] = useState(false);
   const [viewer, setViewer] = useState({
     ready: false,
     isAuthenticated: false,
@@ -212,6 +215,25 @@ export default function ProductDetailPage() {
       .catch((err) => console.error("โหลดรีวิวของร้านไม่สำเร็จ:", err))
       .finally(() => setReviewsLoading(false));
   }, [product?.sellerId, reviewPage]);
+
+  useEffect(() => {
+    if (!viewer.isAuthenticated || !product || viewer.userId !== product.sellerId) {
+      setSellerActiveOrder(null);
+      return;
+    }
+    const token = getAccessToken();
+    if (!token) return;
+    apiFetch("/api/orders/selling?limit=50", { token })
+      .then((data) => {
+        const orderForThisProduct = (data.items || []).find(
+          (o) =>
+            o.productId === product.id &&
+            ["confirmed", "shipped"].includes(o.status),
+        );
+        setSellerActiveOrder(orderForThisProduct || null);
+      })
+      .catch(() => {});
+  }, [viewer, product]);
 
   async function addToCart() {
     const token = getAccessToken();
@@ -526,12 +548,14 @@ export default function ProductDetailPage() {
           </div>
 
           {isOwnProduct ? (
-            <Link
-              href={`/products/${product.id}/edit`}
-              className="mt-3 inline-block text-xs font-medium text-gray-500 hover:text-emerald-600 hover:underline"
-            >
-              แก้ไขสินค้านี้
-            </Link>
+            <div className="flex items-center gap-3 mt-3">
+              <Link
+                href={`/products/${product.id}/edit`}
+                className="inline-block text-xs font-medium text-gray-500 hover:text-emerald-600 hover:underline"
+              >
+                แก้ไขสินค้านี้
+              </Link>
+            </div>
           ) : (
             <button
               onClick={() => setShowReport(true)}
@@ -539,6 +563,40 @@ export default function ProductDetailPage() {
             >
               รายงานสินค้า/ผู้ขายรายนี้
             </button>
+          )}
+
+          {isOwnProduct && sellerActiveOrder && (
+            <div className="mt-4 animate-slide-up rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-emerald-600 text-[24px] shrink-0">
+                  local_shipping
+                </span>
+                <div>
+                  <p className="font-bold">
+                    {sellerActiveOrder.status === "confirmed"
+                      ? "📦 สินค้านี้มีคำสั่งซื้อรอจัดส่ง!"
+                      : "🚚 สินค้านี้อยู่ระหว่างการขนส่ง"}
+                  </p>
+                  <p className="text-xs text-emerald-700 font-mono mt-0.5">
+                    Order ID: #{sellerActiveOrder.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShippingModalOpen(true)}
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold text-xs shadow-sm transition active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  local_shipping
+                </span>
+                <span>
+                  {sellerActiveOrder.status === "confirmed"
+                    ? "จัดส่งสินค้า"
+                    : "ดูรายละเอียดการจัดส่ง"}
+                </span>
+              </button>
+            </div>
           )}
 
           {notice && (
@@ -848,6 +906,16 @@ export default function ProductDetailPage() {
           })}
         </div>
       </Modal>
+
+      <OrderShippingModal
+        orderId={sellerActiveOrder?.id}
+        initialOrder={sellerActiveOrder}
+        isOpen={shippingModalOpen}
+        onClose={() => setShippingModalOpen(false)}
+        onShipped={(updated) => {
+          setSellerActiveOrder(updated);
+        }}
+      />
 
       <ReportModal
         open={showReport}
