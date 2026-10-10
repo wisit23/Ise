@@ -11,6 +11,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
+const { createOrder, deleteOrder } = require("./fixtures");
 
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
@@ -24,8 +25,6 @@ const app = require("../src/app");
 // is covered separately by account-suspension.integration.test.js.
 app.locals.validateAccessSession = async () => {};
 const { signAccessToken, permissionsForRoles } = require("@reloop/shared");
-
-const TEST_TITLE_PREFIX = "adm-004-integration-test ";
 
 async function databaseIsReachable() {
   if (!process.env.DATABASE_URL) return false;
@@ -58,22 +57,42 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
     return;
   }
 
-  const order = await prisma.order.create({
+  const order = await createOrder(prisma, {
     data: {
       buyerId: "int-test-buyer",
       sellerId: "int-test-seller",
       productId: "int-test-product",
-      productTitle: `${TEST_TITLE_PREFIX}disputed item`,
-      price: 1200,
+      originalAmount: 1200,
+      ordersAmount: 1200,
+      orderType: "BUY_NOW",
       status: "shipped",
     },
   });
-  await prisma.adminDisputeEvidence.create({
+  const dispute = await prisma.disputeCase.create({
     data: {
       orderId: order.id,
-      evidenceRef: "https://example.test/cs-case/1",
-      note: "buyer claims item never arrived",
-      submittedBy: "cs-agent-1",
+      createdBy: order.buyerId,
+      reason: "Test complaint",
+      disputeType: "ITEM_NOT_AS_DESCRIBED",
+      decision: "REJECT",
+      decidedBy: "cs-agent-1",
+      decidedAt: new Date(),
+    },
+  });
+  const evidence = await prisma.disputeEvidence.create({
+    data: {
+      disputeCaseId: dispute.id,
+      uploaderId: order.buyerId,
+      evidencePath: "test-evidence.jpg",
+      fileType: "image/jpeg",
+      status: "SUBMITTED",
+    },
+  });
+  await prisma.safetyDisputeEvidence.create({
+    data: {
+      orderId: order.id,
+      evidenceId: evidence.id,
+      status: "PENDING",
     },
   });
 
@@ -94,12 +113,9 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
       .set("Authorization", `Bearer ${adminToken}`);
     assert.equal(viewRes.status, 200);
     assert.equal(viewRes.body.evidence.length, 1);
-    assert.equal(
-      viewRes.body.evidence[0].evidenceRef,
-      "https://example.test/cs-case/1",
-    );
-    const viewAudits = await prisma.disputeAudit.findMany({
-      where: { orderId: order.id, action: "EVIDENCE_VIEWED" },
+    assert.equal(viewRes.body.evidence[0].evidenceId, evidence.id);
+    const viewAudits = await prisma.orderLog.findMany({
+      where: { orderId: order.id, action: "ADMIN_EVIDENCE_VIEWED" },
     });
     assert.equal(viewAudits.length, 1);
 
@@ -147,16 +163,15 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
     assert.equal(releaseRes.body.status, "shipped");
     assert.equal(releaseRes.body.preDisputeStatus, null);
 
-    const holdAudits = await prisma.disputeAudit.findMany({
-      where: { orderId: order.id, action: { in: ["HOLD", "RELEASE"] } },
+    const holdAudits = await prisma.orderLog.findMany({
+      where: {
+        orderId: order.id,
+        action: { in: ["HOLD_PLACED", "HOLD_RELEASED"] },
+      },
     });
     assert.equal(holdAudits.length, 2);
   } finally {
-    await prisma.disputeAudit.deleteMany({ where: { orderId: order.id } });
-    await prisma.adminDisputeEvidence.deleteMany({
-      where: { orderId: order.id },
-    });
-    await prisma.order.delete({ where: { id: order.id } });
+    await deleteOrder(prisma, order.id);
     await prisma.$disconnect();
   }
 });

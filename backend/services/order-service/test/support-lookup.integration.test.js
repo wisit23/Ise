@@ -1,3 +1,4 @@
+const { createOrder } = require("./fixtures");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
@@ -44,13 +45,14 @@ test("support order lookup: role gate and bounded search", async (t) => {
     return;
   }
 
-  const order = await prisma.order.create({
+  const order = await createOrder(prisma, {
     data: {
       buyerId,
       sellerId: "int-test-lookup-seller",
       productId: "int-test-lookup-product",
-      productTitle: "lookup test product",
-      price: 500,
+      originalAmount: 500,
+      ordersAmount: 500,
+      orderType: "BUY_NOW",
       status: "completed",
     },
   });

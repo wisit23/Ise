@@ -42,7 +42,6 @@ jobs:
       DATABASE_URL_AUTH: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=auth
       DATABASE_URL_PRODUCT: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=product
       DATABASE_URL_ORDER: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=order
-      DATABASE_URL_REVIEW: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=review
       DATABASE_URL_SUPPORT: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=support
       # No `services:` entry for Mongo (unlike Postgres above) because GitHub
       # Actions service containers can't run a post-start command, and a
@@ -136,11 +135,6 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL_ORDER }}
         run: node backend/services/order-service/prisma/seed.js
-
-      - name: Push review test schema
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL_REVIEW }}
-        run: npx prisma db push --schema backend/services/review-service/prisma/schema.prisma --skip-generate
 
       - name: Push support test schema
         env:

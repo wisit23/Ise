@@ -61,4 +61,25 @@ router.post(
   },
 );
 
+router.patch(
+  "/admin/:id/evidence/:evidenceId/verify",
+  requireAuth,
+  requirePermission("admin:dispute:hold"),
+  async (req, res, next) => {
+    try {
+      res.json(
+        await adminDisputeService.verifyEvidence({
+          orderId: req.params.id,
+          evidenceId: req.params.evidenceId,
+          actorId: req.userId,
+          status: req.body.status,
+          detail: req.body.detail,
+          version: req.body.version,
+        }),
+      );
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 module.exports = router;

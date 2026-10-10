@@ -128,7 +128,15 @@ export default function EditProductPage() {
     }
   }
 
+  const deletionBlocked =
+    product?.status === "reserved" ||
+    (product?.status === "hidden" && product?.preRemovalStatus === "reserved");
+
   async function handleDelete() {
+    if (deletionBlocked) {
+      setError("ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+      return;
+    }
     if (
       !confirm(
         "คุณต้องการลบสินค้านี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้",
@@ -374,10 +382,15 @@ export default function EditProductPage() {
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
+          {deletionBlocked && (
+            <p className="text-sm text-amber-700">
+              ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้
+            </p>
+          )}
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              disabled={loading}
+              disabled={loading || deletionBlocked}
               onClick={handleDelete}
               className="rounded-md border border-red-200 bg-red-50 px-4 py-2.5 text-center font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
             >

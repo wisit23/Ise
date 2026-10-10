@@ -1,4 +1,4 @@
-const prisma = require("./prismaClient");
+const prisma = require("../../../models/prismaClient");
 
 const WITH_MEDIA = { photos: true, videos: true };
 

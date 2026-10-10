@@ -87,7 +87,6 @@ services:
       PRODUCT_SERVICE_URL: http://product-service:3002
       ORDER_SERVICE_URL: http://order-service:3003
       CHAT_SERVICE_URL: http://chat-service:3004
-      REVIEW_SERVICE_URL: http://review-service:3005
       SUPPORT_SERVICE_URL: http://support-service:3006
       FRONTEND_SERVICE_URL: http://frontend:3000
     ports:
@@ -97,7 +96,6 @@ services:
       - product-service
       - order-service
       - chat-service
-      - review-service
       - support-service
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
@@ -132,8 +130,11 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL_PRODUCT}
+      ORDER_SERVICE_URL: http://order-service:3003
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
     volumes:
       - product_uploads:/app/services/product-service/uploads
+      - review_uploads:/app/services/product-service/review-uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -195,27 +196,6 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3004/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  review-service:
-    init: true
-    build:
-      context: .
-      dockerfile: backend/services/review-service/Dockerfile
-    env_file: .env
-    environment:
-      DATABASE_URL: ${DATABASE_URL_REVIEW}
-    volumes:
-      - review_uploads:/app/services/review-service/uploads
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3005/health"]
       interval: 5s
       timeout: 5s
       retries: 10

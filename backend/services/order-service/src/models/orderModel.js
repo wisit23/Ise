@@ -1,6 +1,7 @@
 const { conflict } = require("@reloop/shared");
 const prisma = require("./prismaClient");
-
+const { money } = require("./money");
+const { assertCanCancelOrder } = require("../services/orderTransitionService");
 const VALID_STATUSES = [
   "pending",
   "pending_payment",
@@ -11,216 +12,239 @@ const VALID_STATUSES = [
   "disputed",
   "refunded",
 ];
-
-function create(data) {
-  return prisma.order.create({ data });
+const INCLUDE = {
+  basket: true,
+  checkout: true,
+  shipping: true,
+  dispute: { include: { evidence: true } },
+  payments: { include: { holds: true } },
+};
+function disputeView(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    openedBy: row.createdBy,
+    claimedAt: row.assignedAt,
+    status: row.decision
+      ? "DECIDED"
+      : row.evidence?.some((e) => e.status === "NEEDS_INFO")
+        ? "NEEDS_INFO"
+        : "OPEN",
+  };
 }
-
-function findById(id) {
-  return prisma.order.findUnique({ where: { id } });
+function view(row) {
+  if (!row) return null;
+  const holds = (row.payments || []).flatMap((p) => p.holds || []);
+  const active = holds.filter((h) => !h.releaseAt);
+  return {
+    ...row,
+    price: Number(row.originalAmount),
+    finalPrice: Number(row.ordersAmount),
+    discountAmount: Number(money(row.originalAmount).minus(row.ordersAmount)),
+    checkoutSessionId: row.checkoutId,
+    reservationId: row.basketId,
+    reservationExpiresAt: row.basket?.unlockAt || null,
+    auctionId: row.orderType === "AUCTION" ? row.id : null,
+    dispute: disputeView(row.dispute),
+    holds,
+    payoutHeld: active.length > 0,
+    paymentSimulationStatus: active.length ? "ON_HOLD" : "RELEASE_PENDING",
+  };
 }
-
-function findByReservationId(reservationId) {
-  return prisma.order.findUnique({ where: { reservationId } });
+async function create(data) {
+  return view(await prisma.order.create({ data, include: INCLUDE }));
 }
-
-function findByAuctionId(auctionId) {
-  return prisma.order.findFirst({ where: { auctionId } });
+async function findById(id) {
+  return view(
+    await prisma.order.findUnique({ where: { id }, include: INCLUDE }),
+  );
 }
-
+async function findByReservationId(basketId) {
+  return view(
+    await prisma.order.findUnique({ where: { basketId }, include: INCLUDE }),
+  );
+}
+async function list(where, { skip, take } = {}) {
+  const [items, total] = await Promise.all([
+    prisma.order.findMany({
+      where,
+      include: INCLUDE,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+    }),
+    prisma.order.count({ where }),
+  ]);
+  return { items: items.map(view), total };
+}
 function statusFilter(status) {
-  if (status === "pending_payment") {
-    return { in: ["pending", "pending_payment"] };
-  }
-  return status;
+  return status === "pending_payment"
+    ? { in: ["pending", "pending_payment"] }
+    : status;
 }
-
-async function listByBuyer(buyerId, { status, skip, take } = {}) {
-  const where = {
-    buyerId,
-    ...(status ? { status: statusFilter(status) } : {}),
-    ...(status === "pending_payment"
-      ? {
-          OR: [
-            { reservationExpiresAt: { gt: new Date() } },
-            { auctionId: { not: null } },
-            { reservationExpiresAt: null },
-          ],
-        }
-      : {}),
+function listByBuyer(buyerId, options = {}) {
+  const { status } = options;
+  return list(
+    {
+      buyerId,
+      ...(status ? { status: statusFilter(status) } : {}),
+      ...(status === "pending_payment"
+        ? {
+            OR: [
+              { basketId: null },
+              { basket: { unlockAt: { gt: new Date() } } },
+            ],
+          }
+        : {}),
+    },
+    options,
+  );
+}
+function listBySeller(sellerId, options = {}) {
+  return list(
+    {
+      sellerId,
+      ...(options.status ? { status: statusFilter(options.status) } : {}),
+    },
+    options,
+  );
+}
+function logData(order, actorId, action, detail) {
+  return {
+    orderId: order.id,
+    buyerId: order.buyerId,
+    sellerId: order.sellerId,
+    actorId,
+    action,
+    detail: typeof detail === "string" ? detail : JSON.stringify(detail),
   };
-  const [items, total] = await Promise.all([
-    prisma.order.findMany({
-      where,
-      include: {
-        dispute: { select: { id: true, status: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take,
-    }),
-    prisma.order.count({ where }),
-  ]);
-  return { items, total };
 }
-
-async function listBySeller(sellerId, { status, skip, take } = {}) {
-  const where = {
-    sellerId,
-    ...(status ? { status: statusFilter(status) } : {}),
-  };
-  const [items, total] = await Promise.all([
-    prisma.order.findMany({
-      where,
-      include: {
-        dispute: { select: { id: true, status: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take,
-    }),
-    prisma.order.count({ where }),
-  ]);
-  return { items, total };
-}
-
-async function updateStatus(id, status, expectedVersion) {
-  try {
-    const where = { id };
-    if (typeof expectedVersion === "number") {
-      where.version = expectedVersion;
-    }
-    const { count } = await prisma.order.updateMany({
-      where,
-      data: {
-        status,
-        version: { increment: 1 },
-      },
+async function updateStatus(id, status, expectedVersion, actorId) {
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({ where: { id } });
+    if (!order) return null;
+    const claimed = await tx.order.updateMany({
+      where: { id, version: expectedVersion ?? order.version },
+      data: { status, version: { increment: 1 } },
     });
-    if (count === 0) {
-      if (typeof expectedVersion === "number") {
-        throw conflict("order was modified concurrently — reload and retry");
-      }
-      return null;
-    }
-    return prisma.order.findUnique({ where: { id } });
-  } catch (err) {
-    if (err.code === "P2025") return null;
-    throw err;
-  }
+    if (claimed.count !== 1)
+      throw conflict("order was modified concurrently — reload and retry");
+    await tx.orderLog.create({
+      data: logData(order, actorId || order.buyerId, "STATUS_CHANGED", {
+        from: order.status,
+        to: status,
+      }),
+    });
+    return view(await tx.order.findUnique({ where: { id }, include: INCLUDE }));
+  });
 }
-
-async function updateCampaign(
-  id,
-  { campaignId, campaignCode, discountAmount, finalPrice },
-) {
-  try {
-    return await prisma.order.update({
+async function updateCampaign(id, { campaignId, finalPrice }) {
+  return view(
+    await prisma.order.update({
       where: { id },
-      data: {
-        campaignId,
-        campaignCode,
-        discountAmount,
-        finalPrice,
-      },
-    });
-  } catch (err) {
-    if (err.code === "P2025") return null;
-    throw err;
-  }
+      data: { campaignId, ordersAmount: money(finalPrice) },
+      include: INCLUDE,
+    }),
+  );
 }
-
-async function cleanExpiredOrders(productClient) {
-  try {
-    const expired = await prisma.order.findMany({
-      where: {
-        status: { in: ["pending", "pending_payment"] },
-        reservationExpiresAt: { lte: new Date() },
-      },
-    });
-
-    for (const order of expired) {
-      try {
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { status: "cancelled" },
-        });
-        if (order.campaignId && productClient) {
-          await productClient.releaseVoucher(order.campaignId, {
-            userId: order.buyerId,
-            orderId: order.id,
-          });
-        }
-        if (order.productId && order.reservationId && productClient) {
-          await productClient.releaseProductReservation(
-            order.productId,
-            order.reservationId,
-          );
-        }
-      } catch (err) {
-        console.warn(
-          `[order-service] cleanExpiredOrder error ${order.id}:`,
-          err.message,
-        );
-      }
-    }
-    return expired.length;
-  } catch (err) {
-    console.warn(
-      "[order-service] cleanExpiredOrders query failed:",
-      err.message,
-    );
-    return 0;
-  }
-}
-
-/**
- * Commits an Order status transition and its product-service side effect as a
- * single local transaction. Delivery is handled by productSyncService, so a
- * temporary product-service failure cannot lose the required state change.
- */
 async function transitionStatusWithProductSync({
   id,
   status,
   expectedVersion,
   expectedStatuses,
   productSync,
+  actorId,
 }) {
   return prisma.$transaction(async (tx) => {
-    const where = { id, version: expectedVersion };
-    if (expectedStatuses) where.status = { in: expectedStatuses };
-
-    const { count } = await tx.order.updateMany({
-      where,
-      data: {
-        status,
-        version: { increment: 1 },
-      },
+    const before = await tx.order.findUnique({
+      where: { id },
+      include: INCLUDE,
     });
-    if (count === 0) {
+    if (!before) return { order: null, event: null };
+    if (status === "cancelled") assertCanCancelOrder(before);
+    const claimed = await tx.order.updateMany({
+      where: {
+        id,
+        version: expectedVersion,
+        ...(expectedStatuses ? { status: { in: expectedStatuses } } : {}),
+      },
+      data: { status, version: { increment: 1 } },
+    });
+    if (claimed.count !== 1)
       throw conflict("order was modified concurrently — reload and retry");
-    }
-
-    const event = await tx.productSyncEvent.create({
-      data: {
-        orderId: id,
-        dedupeKey: productSync.dedupeKey,
-        action: productSync.action,
-        productId: productSync.productId,
-        reservationId: productSync.reservationId || null,
-        targetStatus: productSync.targetStatus || null,
-      },
+    if (status === "confirmed")
+      await tx.payment.create({
+        data: {
+          orderId: id,
+          paymentType: "SIMULATED",
+          paymentStatus: "paid",
+          paymentAmount: before.ordersAmount,
+          paidAt: new Date(),
+        },
+      });
+    const event = await tx.orderLog.create({
+      data: logData(
+        before,
+        actorId || before.buyerId,
+        "PRODUCT_SYNC_REQUESTED",
+        productSync,
+      ),
     });
-    const order = await tx.order.findUnique({ where: { id } });
-    return { order, event };
+    if (status === "cancelled" && before.basketId)
+      await tx.basket.update({
+        where: { id: before.basketId },
+        data: { status: "cancelled" },
+      });
+    await tx.orderLog.create({
+      data: logData(before, actorId || before.buyerId, "STATUS_CHANGED", {
+        from: before.status,
+        to: status,
+      }),
+    });
+    return {
+      order: view(
+        await tx.order.findUnique({ where: { id }, include: INCLUDE }),
+      ),
+      event,
+    };
   });
 }
-
+async function cleanExpiredOrders(productClient) {
+  const expired = await prisma.order.findMany({
+    where: {
+      status: { in: ["pending", "pending_payment"] },
+      basket: { unlockAt: { lte: new Date() } },
+    },
+    include: INCLUDE,
+  });
+  let cleaned = 0;
+  for (const row of expired) {
+    const order = view(row);
+    const { event } = await transitionStatusWithProductSync({
+      id: order.id,
+      status: "cancelled",
+      expectedVersion: order.version,
+      expectedStatuses: ["pending", "pending_payment"],
+      productSync: {
+        action: "RELEASE_RESERVATION",
+        productId: order.productId,
+        reservationId: order.basketId,
+      },
+    });
+    if (order.campaignId)
+      await productClient.releaseVoucher(order.campaignId, {
+        userId: order.buyerId,
+        orderId: order.id,
+      });
+    await require("../services/productSyncService").processEvent(event.id);
+    cleaned++;
+  }
+  return cleaned;
+}
 module.exports = {
   create,
   findById,
   findByReservationId,
-  findByAuctionId,
   listByBuyer,
   listBySeller,
   updateStatus,
@@ -228,4 +252,8 @@ module.exports = {
   cleanExpiredOrders,
   transitionStatusWithProductSync,
   VALID_STATUSES,
+  INCLUDE,
+  view,
+  disputeView,
+  logData,
 };

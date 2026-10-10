@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+data:
+  init-databases.sql: |
+    CREATE DATABASE reloop_auth;
+    CREATE DATABASE reloop_product;
+    CREATE DATABASE reloop_order;
+    CREATE DATABASE reloop_support;

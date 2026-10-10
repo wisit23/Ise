@@ -41,13 +41,14 @@ async function search({
   const [items, total] = await Promise.all([
     prisma.order.findMany({
       where,
+      include: require("../../models/orderModel").INCLUDE,
       orderBy: { createdAt: "desc" },
       skip,
       take,
     }),
     prisma.order.count({ where }),
   ]);
-  return { items, total };
+  return { items: items.map(require("../../models/orderModel").view), total };
 }
 
 module.exports = { search };

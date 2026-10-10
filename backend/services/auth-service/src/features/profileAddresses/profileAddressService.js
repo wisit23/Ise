@@ -16,10 +16,17 @@ function normalizeAddressInput(input = {}, { partial = false } = {}) {
 
   for (const field of REQUIRED_FIELDS) {
     if (input[field] === undefined && partial) continue;
-    if (typeof input[field] !== "string" || !input[field].trim()) {
-      throw badRequest(`${field} is required`);
+    const value = typeof input[field] === "string" ? input[field].trim() : "";
+    if (field === "recipientName" && !value)
+      throw badRequest("กรุณากรอกชื่อผู้รับ");
+    if (field === "phone" && !/^[0-9]{10}$/.test(value)) {
+      throw badRequest("เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก");
     }
-    data[field] = input[field].trim();
+    if (field === "postalCode" && !/^[0-9]{5}$/.test(value)) {
+      throw badRequest("รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก");
+    }
+    if (!value) throw badRequest(`${field} is required`);
+    data[field] = value;
   }
 
   if (input.isDefault !== undefined) {

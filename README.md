@@ -76,13 +76,16 @@ missing, instead of failing later with a confusing runtime error.
 | `product-service` | ✅ CRUD listings, feed/search, categories/conditions, media upload, seller video clips (swipe feed) — reservation/lock hardening still pending                   |
 | `order-service`   | ✅ create/pay/cancel order, buyer/seller order lists, mock checkout — real cart table, disputes, outbox not built yet                                            |
 | `chat-service`    | 🔲 skeleton only (`/health`) — no routes, no Socket.IO, no schema                                                                                                |
-| `review-service`  | ✅ one review per completed order, seller rating summary/list — moderation & seller replies not built yet                                                        |
 | `frontend`        | ✅ home, login/register, product feed/detail, cart, orders, profile, sell, seller dashboard + video upload, seller storefront, swipe feed — Admin UI not started |
 
-`product-service`, `order-service`, and `review-service` are implemented well beyond a health
+`product-service` (including reviews) and `order-service` are implemented well beyond a health
 check — see the API tables below for the current surface of each. `chat-service` is the only
 backend service still unstarted. See `log/phase-*.md` for what was actually done in each phase,
 including bugs found and fixed.
+
+Existing installations must copy review rows from `reloop_review` into
+`reloop_product` before switching traffic. See
+[the review migration steps](backend/services/product-service/REVIEW_MIGRATION.md).
 
 ## Project structure
 
@@ -100,7 +103,7 @@ ise/
 │   │   ├── product-service/    port 3002, db: reloop_product
 │   │   ├── order-service/      port 3003, db: reloop_order
 │   │   ├── chat-service/       port 3004, db: reloop_chat
-│   │   └── review-service/     port 3005, db: reloop_review
+│   │   └── support-service/    port 3006, db: reloop_support
 │   └── shared/              JWT helpers, auth middleware, error handling, event names
 └── frontend/           Next.js app (port 3000)
 ```
@@ -150,15 +153,15 @@ Not built yet: explicit reservation-expiry job, listing moderation/reports.
 
 ## Order API (implemented)
 
-| Method | Path                       | Auth                   | Notes                                                            |
-| ------ | -------------------------- | ---------------------- | ---------------------------------------------------------------- |
-| POST   | `/api/orders`              | Bearer                 | lock a listing (`pending`), rejects self-purchase                |
-| GET    | `/api/orders/mine`         | Bearer                 | paginated orders as buyer, optional `status`                     |
-| GET    | `/api/orders/selling`      | Bearer                 | paginated orders as seller, optional `status`                    |
-| GET    | `/api/orders/:id`          | Bearer, buyer/seller   | single order                                                     |
-| GET    | `/api/orders/:id/internal` | internal service token | called by `review-service` to check order eligibility for review |
-| PATCH  | `/api/orders/:id/status`   | Bearer, buyer/seller   | `pending → completed \| cancelled`; releases/sells the product   |
-| PATCH  | `/api/orders/:id/pay`      | Bearer, buyer          | mock checkout: `pending → completed`, marks product `sold`       |
+| Method | Path                       | Auth                   | Notes                                                                        |
+| ------ | -------------------------- | ---------------------- | ---------------------------------------------------------------------------- |
+| POST   | `/api/orders`              | Bearer                 | lock a listing (`pending`), rejects self-purchase                            |
+| GET    | `/api/orders/mine`         | Bearer                 | paginated orders as buyer, optional `status`                                 |
+| GET    | `/api/orders/selling`      | Bearer                 | paginated orders as seller, optional `status`                                |
+| GET    | `/api/orders/:id`          | Bearer, buyer/seller   | single order                                                                 |
+| GET    | `/api/orders/:id/internal` | internal service token | called by the review feature in `product-service` to check order eligibility |
+| PATCH  | `/api/orders/:id/status`   | Bearer, buyer/seller   | `pending → completed \| cancelled`; releases/sells the product               |
+| PATCH  | `/api/orders/:id/pay`      | Bearer, buyer          | mock checkout: `pending → completed`, marks product `sold`                   |
 
 No real cart table yet — a "cart" is `orders` rows with `status='pending'`. No real payment
 provider, dispute flow, or transactional outbox.

@@ -19,12 +19,14 @@ async function getPlatformMetrics({ from, to }) {
   };
 
   const [aggregate, completedOrders] = await Promise.all([
-    prisma.order.aggregate({ where, _sum: { price: true } }),
+    prisma.order.aggregate({ where, _sum: { originalAmount: true } }),
     prisma.order.count({ where }),
   ]);
 
-  const gmv = aggregate._sum.price || 0;
-  const platformRevenue = Math.round(gmv * PLATFORM_FEE_RATE);
+  const { money } = require("../../models/money");
+  const amount = money(aggregate._sum.originalAmount || 0);
+  const gmv = Number(amount);
+  const platformRevenue = Number(amount.times(PLATFORM_FEE_RATE).toFixed(2));
 
   return { gmv, platformRevenue, completedOrders };
 }
@@ -40,7 +42,7 @@ async function getPlatformMetrics({ from, to }) {
 async function getPlatformMetricsSeries({ from, to, granularity }) {
   const rows = await prisma.$queryRaw`
     SELECT date_trunc(${granularity}, created_at) AS period,
-           COALESCE(SUM(price) FILTER (WHERE status = 'completed'), 0)::int AS gmv,
+           COALESCE(SUM(original_amount) FILTER (WHERE status = 'completed'), 0) AS gmv,
            COUNT(*) FILTER (WHERE status = 'completed')::int AS "completedOrders"
     FROM orders
     WHERE created_at >= ${from} AND created_at < ${to}
@@ -50,8 +52,13 @@ async function getPlatformMetricsSeries({ from, to, granularity }) {
 
   return rows.map((row) => ({
     period: row.period,
-    gmv: row.gmv,
-    platformRevenue: Math.round(row.gmv * PLATFORM_FEE_RATE),
+    gmv: Number(row.gmv),
+    platformRevenue: Number(
+      require("../../models/money")
+        .money(row.gmv)
+        .times(PLATFORM_FEE_RATE)
+        .toFixed(2),
+    ),
     completedOrders: row.completedOrders,
   }));
 }

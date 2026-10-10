@@ -1,215 +1,177 @@
 const { badRequest, conflict, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
-const orderTransitionService = require("../../services/orderTransitionService");
-
-/** Append-only — never updated or deleted (ADM-DEC-003: evidence must persist). */
-async function recordAudit({ orderId, actorId, action, reason }) {
-  return prisma.disputeAudit.create({
-    data: { orderId, actorId, action, reason },
-  });
-}
+const transitions = require("../../services/orderTransitionService");
+const orderModel = require("../../models/orderModel");
 
 async function getDisputeView({ orderId, adminId }) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    // The CS-owned case (if a buyer opened one) is the context Admin needs
-    // before holding or releasing funds — without it Admin would be deciding
-    // blind about a case another team is actively working.
-    include: { dispute: true },
-  });
+  const order = await orderModel.findById(orderId);
   if (!order) throw notFound("order not found");
-
-  const evidence = await prisma.adminDisputeEvidence.findMany({
+  const evidence = await prisma.safetyDisputeEvidence.findMany({
     where: { orderId },
-    orderBy: { submittedAt: "asc" },
+    include: { evidence: true },
+    orderBy: { verifyAt: "asc" },
   });
-
-  await recordAudit({
-    orderId,
-    actorId: adminId,
-    action: "EVIDENCE_VIEWED",
-    reason: null,
+  await prisma.orderLog.create({
+    data: orderModel.logData(order, adminId, "ADMIN_EVIDENCE_VIEWED", {
+      evidenceIds: evidence.map((e) => e.id),
+    }),
   });
-
-  return { order, evidence, disputeCase: order.dispute || null };
+  return { order, evidence, disputeCase: order.dispute };
 }
-
-const ALLOWED_HOLD_STATUSES = ["confirmed", "shipped", "completed", "disputed"];
-
-/**
- * `version` is the optimistic-lock value the caller last saw — a mismatch
- * means the hold state changed since (e.g. someone already released it, or
- * a concurrent CS decision moved it), so the write is rejected instead of
- * silently clobbering whatever happened in between.
- */
-async function holdSimulatedFunds({
-  orderId,
-  reason,
-  version,
-  adminId,
-  staffId,
-}) {
+async function changeHold(
+  { orderId, reason, version, adminId, staffId },
+  release,
+) {
   const actorId = staffId || adminId;
-  const trimmedReason = reason?.trim();
-  if (!trimmedReason) throw badRequest("reason is required");
-  if (typeof version !== "number") throw badRequest("version is required");
-
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) throw notFound("order not found");
-  if (!ALLOWED_HOLD_STATUSES.includes(order.status)) {
-    throw badRequest(`order status '${order.status}' cannot be placed on hold`);
-  }
-  if (order.paymentSimulationStatus !== "RELEASE_PENDING") {
-    throw conflict("order funds are already on hold");
-  }
-  if (order.version !== version) {
-    throw conflict("order dispute state was modified — reload and retry");
-  }
-
-  const [updated] = await prisma.$transaction(async (tx) => {
-    await orderTransitionService.addHold(tx, {
-      orderId,
-      source: "TRUST_AND_SAFETY",
-      referenceId: "admin-hold",
-      reason: trimmedReason,
-      heldBy: actorId,
+  if (typeof reason !== "string" || !reason.trim())
+    throw badRequest("reason is required");
+  if (!Number.isInteger(version)) throw badRequest("version is required");
+  return prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({ where: { id: orderId } });
+    if (!order) throw notFound("order not found");
+    if (
+      !["confirmed", "shipped", "completed", "disputed"].includes(order.status)
+    )
+      throw conflict("order cannot be placed on hold");
+    const changed = await tx.order.updateMany({
+      where: { id: orderId, version },
+      data: { version: { increment: 1 } },
     });
-
-    const preDispute =
-      order.preDisputeStatus && order.preDisputeStatus !== "disputed"
-        ? order.preDisputeStatus
-        : order.status === "disputed"
-          ? "completed"
-          : order.status;
-
-    const { count } = await tx.order.updateMany({
-      where: {
-        id: orderId,
-        version,
-        paymentSimulationStatus: "RELEASE_PENDING",
-        status: { in: ALLOWED_HOLD_STATUSES },
-      },
-      data: {
-        paymentSimulationStatus: "ON_HOLD",
-        version: { increment: 1 },
-        holdReason: trimmedReason,
-        heldAt: new Date(),
-        heldBy: actorId,
-        preDisputeStatus: preDispute,
-        status: "disputed",
-        payoutHeld: true,
-        disputedAt: order.disputedAt || new Date(),
-      },
-    });
-    if (count === 0) {
+    if (changed.count !== 1)
       throw conflict(
         "order state was modified concurrently — reload and retry",
       );
-    }
-
-    const orderUpdated = await tx.order.findUnique({ where: { id: orderId } });
-
-    await tx.disputeAudit.create({
-      data: {
+    const existing = await tx.hold.findFirst({
+      where: {
+        payment: { orderId },
+        source: "TRUST_AND_SAFETY",
+        referenceId: orderId,
+        releaseAt: null,
+      },
+    });
+    if (release) {
+      if (!existing)
+        throw conflict(
+          "order funds are not currently on this administrative hold",
+        );
+      await transitions.releaseHold(tx, {
         orderId,
+        source: "TRUST_AND_SAFETY",
+        referenceId: orderId,
+        releasedBy: actorId,
+      });
+    } else {
+      if (existing)
+        throw conflict("order funds are already on this administrative hold");
+      await transitions.addHold(tx, {
+        orderId,
+        source: "TRUST_AND_SAFETY",
+        referenceId: orderId,
+        reason: reason.trim(),
+        holdBy: actorId,
+      });
+      if (order.status !== "disputed")
+        await tx.order.update({
+          where: { id: orderId },
+          data: { preDisputeStatus: order.status },
+        });
+    }
+    const state = await transitions.resolveHoldState(tx, orderId);
+    await tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: state.nextStatus,
+        ...(state.nextStatus !== "disputed" ? { preDisputeStatus: null } : {}),
+      },
+    });
+    await tx.orderLog.create({
+      data: orderModel.logData(
+        order,
         actorId,
-        action: "HOLD",
-        reason: trimmedReason,
-      },
+        release ? "HOLD_RELEASED" : "HOLD_PLACED",
+        {
+          source: "TRUST_AND_SAFETY",
+          referenceId: orderId,
+          reason: reason.trim(),
+        },
+      ),
     });
-
-    return [orderUpdated];
-  });
-
-  return updated;
-}
-
-async function releaseSimulatedFunds({
-  orderId,
-  reason,
-  version,
-  adminId,
-  staffId,
-}) {
-  const actorId = staffId || adminId;
-  const trimmedReason = reason?.trim();
-  if (!trimmedReason) throw badRequest("reason is required");
-  if (typeof version !== "number") throw badRequest("version is required");
-
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { dispute: true },
-  });
-  if (!order) throw notFound("order not found");
-  if (order.paymentSimulationStatus !== "ON_HOLD") {
-    throw conflict("order funds are not currently on hold");
-  }
-  if (order.version !== version) {
-    throw conflict("order dispute state was modified — reload and retry");
-  }
-
-  const [updated] = await prisma.$transaction(async (tx) => {
-    // Release only this specific administrative hold
-    await orderTransitionService.releaseHold(tx, {
-      orderId,
-      source: "TRUST_AND_SAFETY",
-      referenceId: "admin-hold",
-      reason: trimmedReason,
-      releasedBy: actorId,
-    });
-
-    // Recalculate hold state from all remaining active holds (including dispute, account sanction, etc.)
-    const holdState = await orderTransitionService.resolveHoldState(
-      tx,
-      orderId,
-      {
-        releasingTsHold: true,
-      },
+    return orderModel.view(
+      await tx.order.findUnique({
+        where: { id: orderId },
+        include: orderModel.INCLUDE,
+      }),
     );
-
-    const { count } = await tx.order.updateMany({
-      where: {
-        id: orderId,
-        version,
-        paymentSimulationStatus: "ON_HOLD",
-      },
-      data: {
-        paymentSimulationStatus: "RELEASE_PENDING",
-        version: { increment: 1 },
-        holdReason: null,
-        heldAt: null,
-        heldBy: null,
-        preDisputeStatus:
-          holdState.nextStatus === "disputed"
-            ? order.preDisputeStatus && order.preDisputeStatus !== "disputed"
-              ? order.preDisputeStatus
-              : "completed"
-            : null,
-        status: holdState.nextStatus,
-        payoutHeld: holdState.isPayoutHeld,
-      },
-    });
-    if (count === 0) {
-      throw conflict(
-        "order state was modified concurrently — reload and retry",
-      );
-    }
-
-    const orderUpdated = await tx.order.findUnique({ where: { id: orderId } });
-
-    await tx.disputeAudit.create({
-      data: {
-        orderId,
-        actorId,
-        action: "RELEASE",
-        reason: trimmedReason,
-      },
-    });
-
-    return [orderUpdated];
   });
-
-  return updated;
 }
-
-module.exports = { getDisputeView, holdSimulatedFunds, releaseSimulatedFunds };
+function holdSimulatedFunds(input) {
+  return changeHold(input, false);
+}
+function releaseSimulatedFunds(input) {
+  return changeHold(input, true);
+}
+async function verifyEvidence({
+  orderId,
+  evidenceId,
+  actorId,
+  status,
+  detail,
+  version,
+}) {
+  if (
+    typeof status !== "string" ||
+    !status.trim() ||
+    typeof detail !== "string" ||
+    !detail.trim()
+  )
+    throw badRequest("status and detail are required");
+  if (!Number.isInteger(version))
+    throw badRequest("evidence version is required");
+  return prisma.$transaction(async (tx) => {
+    const evidence = await tx.disputeEvidence.findFirst({
+      where: { id: evidenceId, dispute: { orderId } },
+    });
+    if (!evidence) throw notFound("evidence not found for this order");
+    const claimed = await tx.disputeEvidence.updateMany({
+      where: { id: evidenceId, version },
+      data: { version: { increment: 1 } },
+    });
+    if (claimed.count !== 1)
+      throw conflict("evidence changed — reload and retry");
+    const data = {
+      orderId,
+      detail: detail.trim(),
+      status: status.trim(),
+      verifyBy: actorId,
+      verifyAt: new Date(),
+    };
+    const review = await tx.safetyDisputeEvidence.upsert({
+      where: { evidenceId },
+      create: { ...data, evidenceId },
+      update: data,
+    });
+    await tx.safetyLog.create({
+      data: {
+        safetyId: review.id,
+        actorId,
+        action: "VERIFY",
+        detail: detail.trim(),
+      },
+    });
+    await tx.disputeAuditLog.create({
+      data: {
+        disputeEvidenceId: evidenceId,
+        actorId,
+        action: "SAFETY_VERIFY",
+        detail: detail.trim(),
+      },
+    });
+    return review;
+  });
+}
+module.exports = {
+  getDisputeView,
+  holdSimulatedFunds,
+  releaseSimulatedFunds,
+  verifyEvidence,
+};

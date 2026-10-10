@@ -15,6 +15,7 @@ import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import OrderReviewForm from "../../components/orders/OrderReviewForm";
 import OrderDisputeForm from "../../components/orders/OrderDisputeForm";
 import { apiFetch } from "../../lib/api";
+import { validateAddressContact } from "../../lib/addressValidation";
 import {
   getAccessToken,
   getRefreshToken,
@@ -150,6 +151,7 @@ export default function ProfilePage() {
   const [addresses, setAddresses] = useState([]);
   const [addressLoading, setAddressLoading] = useState(false);
   const [addressError, setAddressError] = useState("");
+  const [addressFieldErrors, setAddressFieldErrors] = useState({});
   const [addressModalOpen, setAddressModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
   const [addressFormData, setAddressFormData] = useState(BLANK_ADDRESS);
@@ -272,6 +274,7 @@ export default function ProfilePage() {
     setEditingAddress(null);
     setAddressFormData(BLANK_ADDRESS);
     setAddressError("");
+    setAddressFieldErrors({});
     setAddressModalOpen(true);
   }
 
@@ -279,13 +282,17 @@ export default function ProfilePage() {
     setEditingAddress(addr);
     setAddressFormData({ ...addr });
     setAddressError("");
+    setAddressFieldErrors({});
     setAddressModalOpen(true);
   }
 
   async function handleSaveAddress(e) {
     e.preventDefault();
-    setAddressLoading(true);
     setAddressError("");
+    const fieldErrors = validateAddressContact(addressFormData);
+    setAddressFieldErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length) return;
+    setAddressLoading(true);
 
     const body = {
       recipientName: addressFormData.recipientName,
@@ -1144,11 +1151,12 @@ export default function ProfilePage() {
           </>
         }
       >
-        <form onSubmit={handleSaveAddress} className="space-y-4">
+        <form noValidate onSubmit={handleSaveAddress} className="space-y-4">
           {addressError && <Alert tone="error">{addressError}</Alert>}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Input
               label="ชื่อ-นามสกุล ผู้รับ"
+              error={addressFieldErrors.recipientName}
               required
               value={addressFormData.recipientName}
               onChange={(e) =>
@@ -1161,6 +1169,8 @@ export default function ProfilePage() {
             />
             <Input
               label="เบอร์โทรศัพท์"
+              error={addressFieldErrors.phone}
+              inputMode="numeric"
               required
               value={addressFormData.phone}
               onChange={(e) =>
@@ -1229,6 +1239,8 @@ export default function ProfilePage() {
             />
             <Input
               label="รหัสไปรษณีย์"
+              error={addressFieldErrors.postalCode}
+              inputMode="numeric"
               required
               value={addressFormData.postalCode}
               onChange={(e) =>

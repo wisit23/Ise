@@ -156,7 +156,7 @@ export async function uploadProductClip(file, token) {
   return uploaded;
 }
 
-// Review images and videos are written to review-service's separate storage.
+// Review images and videos are written to product-service's review storage.
 export function uploadReviewFiles(files, token) {
   return uploadMediaTo("/api/reviews/uploads", files, token);
 }

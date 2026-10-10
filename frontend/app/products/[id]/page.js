@@ -510,12 +510,13 @@ export default function ProductDetailPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {getStoredUser()?.id !== product.sellerId && (
-                <ContactSellerButton
-                  productId={product.id}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3.5 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                />
-              )}
+              {product.status !== "sold" &&
+                getStoredUser()?.id !== product.sellerId && (
+                  <ContactSellerButton
+                    productId={product.id}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 px-3.5 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                )}
               <Link
                 href={`/store/${product.sellerId}`}
                 className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"

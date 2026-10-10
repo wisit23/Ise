@@ -222,14 +222,22 @@ async function update(id, patch) {
   }
 }
 
-async function remove(id) {
-  try {
-    await prisma.product.delete({ where: { id } });
-    return true;
-  } catch (err) {
-    if (err.code === "P2025") return false;
-    throw err;
-  }
+async function remove(id, sellerId) {
+  // The state guard belongs in the DELETE itself so a concurrent reservation
+  // cannot be erased after the controller's ownership/status check.
+  const result = await prisma.product.deleteMany({
+    where: {
+      id,
+      sellerId,
+      status: { notIn: ["reserved", "auction"] },
+      OR: [
+        { status: { not: "hidden" } },
+        { preRemovalStatus: null },
+        { preRemovalStatus: { not: "reserved" } },
+      ],
+    },
+  });
+  return result.count === 1;
 }
 
 /**

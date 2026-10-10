@@ -75,12 +75,11 @@ test("Ban blocks login, refresh and existing sessions through gateway and every 
     const product = require("../../product-service/src/app");
     const order = require("../../order-service/src/app");
     const support = require("../../support-service/src/app");
-    const review = require("../../review-service/src/app");
     const directRoutes = [
       [product, "post", "/", 403], // buyer lacks seller permission
       [order, "post", "/", 400], // authenticated, missing productId
       [support, "get", "/tickets/queue", 403], // buyer is not an agent
-      [review, "post", "/", 400], // authenticated, missing orderId
+      [product, "post", "/reviews", 400], // authenticated, missing orderId
     ];
 
     await t.test(

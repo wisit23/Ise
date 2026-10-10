@@ -1,4 +1,10 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import ProfilePage from "./page";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
@@ -215,6 +221,49 @@ describe("ProfilePage", () => {
     fireEvent.click(addBtn);
 
     expect(screen.getByText("เพิ่มที่อยู่จัดส่งใหม่")).toBeInTheDocument();
+  });
+
+  it("TC05: shows field-specific errors, blocks invalid addresses, and allows a corrected retry", async () => {
+    render(<ProfilePage />);
+    fireEvent.click(screen.getByRole("button", { name: /ที่อยู่จัดส่ง/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /เพิ่มที่อยู่ใหม่/i }),
+    );
+    const dialog = within(screen.getByRole("dialog"));
+    fireEvent.click(dialog.getByRole("button", { name: "บันทึกที่อยู่" }));
+    expect(dialog.getByText("กรุณากรอกชื่อผู้รับ")).toBeInTheDocument();
+    expect(
+      dialog.getByText("เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก"),
+    ).toBeInTheDocument();
+    expect(
+      dialog.getByText("รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก"),
+    ).toBeInTheDocument();
+    const change = (label, value) =>
+      fireEvent.change(dialog.getByLabelText(label), { target: { value } });
+    change(/ชื่อ-นามสกุล ผู้รับ/, "ผู้รับทดสอบ");
+    change(/เบอร์โทรศัพท์/, "12345");
+    change(/รหัสไปรษณีย์/, "ABCDE");
+    fireEvent.click(dialog.getByRole("button", { name: "บันทึกที่อยู่" }));
+    expect(
+      apiFetch.mock.calls.filter(([, options]) => options?.method === "POST"),
+    ).toHaveLength(0);
+    expect(dialog.getByLabelText(/เบอร์โทรศัพท์/)).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    change(/เบอร์โทรศัพท์/, "0812345678");
+    change(/รหัสไปรษณีย์/, "10110");
+    change(/ที่อยู่ \(บ้านเลขที่/, "99 Main Road");
+    change(/แขวง \/ ตำบล/, "คลองเตย");
+    change(/เขต \/ อำเภอ/, "คลองเตย");
+    change(/จังหวัด/, "กรุงเทพมหานคร");
+    fireEvent.click(dialog.getByRole("button", { name: "บันทึกที่อยู่" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(
+      apiFetch.mock.calls.filter(([, options]) => options?.method === "POST"),
+    ).toHaveLength(1);
   });
 
   it("shows vouchers loaded from the Marketing campaign API", async () => {

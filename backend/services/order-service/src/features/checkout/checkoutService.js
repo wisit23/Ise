@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const { badRequest } = require("@reloop/shared");
 const defaultOrderModel = require("../../models/orderModel");
 const defaultProductClient = require("../../services/productClient");
+const { money } = require("../../models/money");
 
 async function reserveOrder(
   { buyerId, productId, campaignId },
@@ -26,8 +27,24 @@ async function reserveOrder(
   // 3. Server-side Voucher Validation & Discount Calculation via quoteAndHold
   let verifiedCampaignId = null;
   let verifiedCampaignCode = null;
-  let verifiedDiscountAmount = 0;
-  let verifiedFinalPrice = reservation.product.price;
+  let verifiedDiscountAmount = money(0);
+  let originalAmount;
+  try {
+    originalAmount = money(reservation.product.price, "product.price");
+  } catch (error) {
+    if (reservation.created) {
+      try {
+        await productClient.releaseProductReservation(
+          productId,
+          reservation.reservationId,
+        );
+      } catch (compensationError) {
+        error.compensationError = compensationError;
+      }
+    }
+    throw error;
+  }
+  let verifiedFinalPrice = originalAmount;
 
   if (campaignId) {
     try {
@@ -39,13 +56,33 @@ async function reserveOrder(
       if (quote) {
         verifiedCampaignId = quote.campaignId;
         verifiedCampaignCode = quote.campaignCode;
-        verifiedDiscountAmount = Number(quote.discountAmount) || 0;
-        verifiedFinalPrice =
-          Number(quote.finalPrice) >= 0
-            ? Number(quote.finalPrice)
-            : Math.max(0, reservation.product.price - verifiedDiscountAmount);
+        verifiedDiscountAmount = money(
+          quote.discountAmount ?? 0,
+          "discountAmount",
+        );
+        verifiedFinalPrice = money(
+          quote.finalPrice ?? originalAmount.minus(verifiedDiscountAmount),
+          "finalPrice",
+        );
+        if (
+          !verifiedFinalPrice.equals(
+            originalAmount.minus(verifiedDiscountAmount),
+          )
+        ) {
+          throw badRequest("voucher quote has inconsistent prices");
+        }
       }
     } catch (valErr) {
+      if (verifiedCampaignId) {
+        try {
+          await productClient.releaseVoucher(verifiedCampaignId, {
+            userId: buyerId,
+            orderId,
+          });
+        } catch (compensationError) {
+          valErr.voucherCompensationError = compensationError;
+        }
+      }
       if (reservation.created) {
         try {
           await productClient.releaseProductReservation(
@@ -67,17 +104,35 @@ async function reserveOrder(
       buyerId,
       sellerId: reservation.product.sellerId,
       productId: reservation.product.id,
-      productTitle: reservation.product.title,
-      price: reservation.product.price,
+      originalAmount,
+      ordersAmount: verifiedFinalPrice,
+      orderType: "BUY_NOW",
       campaignId: verifiedCampaignId,
-      campaignCode: verifiedCampaignCode,
-      discountAmount: verifiedDiscountAmount,
-      finalPrice: verifiedFinalPrice,
       status: "pending_payment",
-      reservationId: reservation.reservationId,
-      reservationExpiresAt: new Date(reservation.expiresAt),
+      basket: {
+        create: {
+          id: reservation.reservationId,
+          buyerId,
+          productId: reservation.product.id,
+          status: "locked",
+          lockAt: new Date(),
+          unlockAt: new Date(reservation.expiresAt),
+        },
+      },
     });
-    return { order, created: true };
+    return {
+      order: {
+        ...order,
+        productTitle: reservation.product.title,
+        price: Number(originalAmount),
+        finalPrice: Number(verifiedFinalPrice),
+        discountAmount: Number(verifiedDiscountAmount),
+        campaignCode: verifiedCampaignCode,
+        reservationId: reservation.reservationId,
+        reservationExpiresAt: new Date(reservation.expiresAt),
+      },
+      created: true,
+    };
   } catch (error) {
     if (error.code === "P2002") {
       const retriedOrder = await orderModel.findByReservationId(

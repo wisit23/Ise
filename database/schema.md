@@ -1,6 +1,6 @@
 # RE-LOOP — Service-owned schema reference
 
-Generated from repository Prisma sources on 2026-09-09 / aad4092, not introspection of a running database. Service-owned files are authoritative; old database/*.prisma copies are legacy snapshots and not migration inputs.
+Historical snapshot generated on 2026-09-09 / aad4092, not introspection of a running database. The current service-owned Prisma files are authoritative. Review models now live in product-service's schema; the review-service section below records the former layout.
 
 | Service         | Provider   | Models | Source                                                             |
 | --------------- | ---------- | ------ | ------------------------------------------------------------------ |
@@ -8,7 +8,6 @@ Generated from repository Prisma sources on 2026-09-09 / aad4092, not introspect
 | chat-service    | mongodb    | 2      | [schema](../backend/services/chat-service/prisma/schema.prisma)    |
 | order-service   | postgresql | 6      | [schema](../backend/services/order-service/prisma/schema.prisma)   |
 | product-service | postgresql | 11     | [schema](../backend/services/product-service/prisma/schema.prisma) |
-| review-service  | postgresql | 1      | [schema](../backend/services/review-service/prisma/schema.prisma)  |
 | support-service | postgresql | 4      | [schema](../backend/services/support-service/prisma/schema.prisma) |
 
 Cross-service user/product/order IDs are references, not foreign keys across databases. PostgreSQL runtime uses five databases; CI may use separate schemas in one isolated test database. Mongo requires replica set transactions.
@@ -770,7 +769,7 @@ enum ArticleStatus {
 }
 ```
 
-## review-service
+## Former review-service (historical snapshot; models now in product-service)
 
 ### model Review
 

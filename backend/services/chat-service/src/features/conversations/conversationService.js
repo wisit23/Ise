@@ -29,6 +29,11 @@ async function createOrOpenProductConversation({ productId, buyerId }) {
   }
 
   const contextKey = buildContextKey("PRODUCT", { productId, buyerId });
+  const existing = await conversationModel.findByContextKey(contextKey);
+  if (existing) return existing;
+  if (product.status === "sold") {
+    throw badRequest("ไม่สามารถเริ่มแชทใหม่สำหรับสินค้าที่ขายแล้ว");
+  }
   const now = new Date();
 
   try {
@@ -111,7 +116,10 @@ async function getForParticipant(conversationId, userId) {
 }
 
 async function listInbox(userId, filter = {}) {
-  const conversations = await conversationModel.listForParticipant(userId, filter);
+  const conversations = await conversationModel.listForParticipant(
+    userId,
+    filter,
+  );
   return withDisplayNames(conversations);
 }
 

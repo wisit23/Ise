@@ -6,7 +6,7 @@ const request = require("supertest");
 // proxy layer fails fast (connection refused) instead of hanging on a DNS
 // lookup for a Docker-only hostname like "auth-service".
 process.env.AUTH_SERVICE_URL = "http://127.0.0.1:1";
-process.env.REVIEW_SERVICE_URL = "http://127.0.0.1:1";
+process.env.PRODUCT_SERVICE_URL = "http://127.0.0.1:1";
 
 const app = require("./app");
 

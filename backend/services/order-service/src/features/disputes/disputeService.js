@@ -39,8 +39,10 @@ async function assertAccess({ dispute, userId, role, roles }) {
 }
 
 /** WF-08 step 1-2: buyer opens a dispute on a completed order. */
-async function open({ orderId, userId, reason }) {
+async function open({ orderId, userId, reason, disputeType }) {
   if (!reason?.trim()) throw badRequest("reason is required");
+  if (typeof disputeType !== "string" || !disputeType.trim())
+    throw badRequest("disputeType is required");
 
   const order = await orderModel.findById(orderId);
   if (!order) throw notFound("order not found");
@@ -68,6 +70,7 @@ async function open({ orderId, userId, reason }) {
       orderId,
       openedBy: userId,
       reason: reason.trim(),
+      disputeType: disputeType.trim(),
       expectedVersion: order.version,
     });
   } catch (err) {
@@ -134,6 +137,8 @@ async function addEvidence({ disputeId, userId, role, roles, file }) {
     uploaderId: userId,
     storageKey: file.filename,
     fileType: file.mimetype,
+    caseVersion: dispute.version,
+    assignedTo: isAgent(role, roles) ? userId : undefined,
   });
 }
 
@@ -148,7 +153,7 @@ async function viewEvidence({ disputeId, evidenceId, userId, role, roles }) {
   if (!evidence) throw notFound("evidence not found");
 
   await disputeModel.auditLog({
-    disputeId,
+    disputeEvidenceId: evidenceId,
     actorId: userId,
     action: "VIEW_EVIDENCE",
     detail: evidenceId,
@@ -158,6 +163,42 @@ async function viewEvidence({ disputeId, evidenceId, userId, role, roles }) {
     path: absolutePath(evidence.storageKey),
     fileType: evidence.fileType,
   };
+}
+
+async function setEvidenceDeadline({
+  disputeId,
+  evidenceId,
+  userId,
+  role,
+  roles,
+  deadline,
+  version,
+}) {
+  if (!isAgent(role, roles))
+    throw forbidden("only support agents can set evidence deadlines");
+  const dispute = await getById({ disputeId, userId, role, roles });
+  if (dispute.decision || dispute.status === "DECIDED")
+    throw conflict("case is already decided");
+  if (dispute.assignedTo !== userId)
+    throw forbidden("only the assigned agent can set evidence deadlines");
+  if (
+    dispute.assignedRole === "TRUST_AND_SAFETY" &&
+    !hasRole(role, roles, "TRUST_AND_SAFETY")
+  )
+    throw forbidden("only Trust & Safety staff can update escalated evidence");
+  if (!Number.isInteger(version) || version < 0)
+    throw badRequest("evidence version is required");
+  const date = typeof deadline === "string" ? new Date(deadline) : null;
+  if (!date || !Number.isFinite(date.getTime()) || date <= new Date())
+    throw badRequest("deadline must be a future date");
+  return disputeModel.setEvidenceDeadline({
+    disputeId,
+    evidenceId,
+    actorId: userId,
+    deadline: date,
+    version,
+    caseVersion: dispute.version,
+  });
 }
 
 /** TSR-02 / ADM-DEC-025: Claim an unassigned dispute */
@@ -424,4 +465,5 @@ module.exports = {
   escalate,
   decide,
   listQueue,
+  setEvidenceDeadline,
 };
