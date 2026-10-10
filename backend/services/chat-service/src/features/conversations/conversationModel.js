@@ -9,6 +9,7 @@ function findById(id) {
 }
 
 function create({
+  id,
   contextType,
   contextId,
   contextKey,
@@ -17,6 +18,7 @@ function create({
 }) {
   return prisma.conversation.create({
     data: {
+      ...(id ? { id } : {}),
       contextType,
       contextId,
       contextKey,

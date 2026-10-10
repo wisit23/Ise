@@ -340,3 +340,40 @@
 - Escalation: การส่งต่อจาก CS ไป T&S เป็นการโอน ownership ไม่ใช่ให้สองฝ่ายตัดสินเคสเดียวกันพร้อมกัน เจ้าของเดิมต้องเขียนต่อไม่ได้ทันทีหลังโอน
 - Hold boundary: ownership ของเคสกับเหตุพักเงินเป็นคนละแนวคิด ออเดอร์หนึ่งรายการอาจมี Hold จาก dispute และ fraud/account review พร้อมกันได้ แต่แต่ละคำสั่งปล่อยได้เฉพาะ Hold source/reference ของตน และ `payoutHeld` เป็นผลรวมของ active holds
 - Reason: ป้องกันเจ้าหน้าที่ตัดสินเคสซ้ำหรือเขียนทับกัน พร้อมป้องกันการปิด dispute จากการปล่อย Hold ที่ T&S หรือระบบอื่นยังต้องใช้
+
+### ADM-DEC-025 — Implementation addendum (2026-09-20)
+
+- สถานะเดิม “ยังไม่เริ่ม implementation” ถูกแทนที่แล้ว: TSR-02 ทำ Claim/Reassign/Escalate, single-owner write guard, version CAS และ source-scoped holds พร้อมผล PostgreSQL concurrency verification ตาม `progress.md`
+
+## ADM-DEC-026 — Durable moderation operation และ request-bound idempotency
+
+- Date: 2026-10-05
+- Status: Accepted and implemented for TSR-03
+- Decision: คำสั่ง privileged ที่มี side effect ต้องกันการแข่งขันด้วย state/version CAS และเขียน Audit ใน transaction เดียวกับ state เมื่ออยู่ฐานเดียวกัน
+- Cross-service boundary: Auth บันทึก `AdminOperation` ก่อนเรียก Product; Product บันทึก `ProductModerationCommand` ใน transaction เดียวกับ Product CAS การสำเร็จของ Product จึง replay ได้แม้ response แรกสูญหาย และ Auth สามารถ finalize operation/report ภายหลัง
+- Idempotency contract: key ผูกกับ actor, action, target และ canonical payload hash; exact replay คืนผลที่บันทึกไว้ แต่ key เดิมกับ request ต่างกันตอบ 409 ไม่คืนผลเก่าที่ไม่ตรงคำสั่ง
+- Report key policy: REMOVE_PRODUCT จาก Report ใช้ key ที่อนุมานซ้ำได้ `report:<reportId>:REMOVE_PRODUCT`; direct Product moderation และ Bulk รับ key จาก client โดย UI ต้องเก็บ key เดิมไว้จนคำสั่งสำเร็จ
+- Bulk boundary: `BulkActionRun` ต้องถูก claim ก่อน side effect และเก็บผลรายรายการ การ replay หลังจบคืนผลเดิม ส่วน request ที่กำลังประมวลผลพร้อมกันตอบ 409
+- Reason policy: Suspend/Restore/Remove และคำสั่งที่ต้องตรวจย้อนหลังต้องมีเหตุผลจริง ห้ามสร้าง default reason เงียบ ๆ ใน UI
+- Verification boundary: targeted PostgreSQL/concurrency, timeout/retry, frontend regression และ build ผ่านแล้ว; browser/runtime full-flow ยังคงเป็น TSR-15
+
+## ADM-DEC-027 — Auth database ต้องตรงกับ ER_auth.drawio ล่าสุด
+
+- Date: 2026-10-07
+- Status: Accepted and implemented in source; database execution pending
+- Supersedes: เฉพาะส่วน Auth schema/storage ของ `ADM-DEC-026`; หลักฐาน TSR-03 เดิมยังเป็น historical evidence
+- Decision: Auth ต้องมี 16 ตารางตาม `ER_auth.drawio` page `QHJz9qzJK7pLv-PV6rBe` เท่านั้น จึงเพิ่ม `role` และ `shop_change_request_items` และถอด `admin_operations`, `reports.version`, `bulk_action_runs.payload_hash/status/error/updated_at`
+- Code adaptation: Bulk ใช้ `results` JSON สำหรับ processing marker; Product owner service รับผิดชอบ moderation idempotency; Auth เก็บเฉพาะ `admin_audits` ตาม ER
+- Migration: ใช้ `20261007130000_align_auth_er_design`; ย้ายข้อมูล shop-change เดิมไป item rows และลบคอลัมน์ request-level ที่ไม่อยู่ในแบบ
+- Constraint: การเพิ่ม role ใหม่ต้องเพิ่ม permission behavior ใน `backend/shared/src/permissions.js` ด้วย การเพิ่ม row ใน `role` อย่างเดียวไม่สร้างสิทธิ์
+- Verification boundary: Prisma validation/schema diff/unit/API/lint ผ่าน แต่ยังไม่รัน PostgreSQL migration/integration เพราะ Docker daemon ไม่พร้อม
+
+## ADM-DEC-028 — Bulk UI รักษา operation identity ข้าม timeout และ partial retry
+
+- Date: 2026-10-10
+- Status: Accepted and implemented for TSR-14 under the fixed-schema boundary
+- Decision: UI ต้อง dry-run action/IDs/reason ชุดปัจจุบันก่อนเปิดปุ่มยืนยัน และสร้าง idempotency key ก่อนส่งคำสั่งจริง; ถ้าผลไม่แน่ชัดให้ replay payload เดิมด้วย key เดิม ห้ามสร้าง operation ใหม่
+- Partial retry: หลังได้ผลสุดท้ายแล้ว retry ได้เฉพาะ IDs ที่ `ok=false` ด้วย key ใหม่รูปแบบ `<original-key>:retry:<uuid>` ทำให้ trace กลับ operation ต้นฉบับได้โดยใช้ field ที่มีอยู่
+- Truthfulness: preview เป็น snapshot ไม่ใช่คำรับประกันผลจริง; UI แสดงผลและเหตุผลรายบัญชีจาก backend โดยตรง และไม่สร้าง Audit เอง
+- Scope: รองรับเฉพาะ `WARN_USER`, `SUSPEND_USER`, `RESTORE_USER` ที่ action registry มีอยู่ ไม่เพิ่ม bulk auction
+- Fixed-schema consequence: ไม่มี parent-operation column จึงยัง query ความสัมพันธ์ retry แบบ typed relation ไม่ได้; ห้ามซ่อนค่าไว้ใน reason หรือ Audit detail

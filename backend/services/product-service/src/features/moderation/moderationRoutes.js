@@ -9,12 +9,23 @@ const router = Router();
 // (ADM-DEC-001: owner-service command only).
 router.use(requireInternalToken);
 
+router.get("/:id", async (req, res, next) => {
+  try {
+    res.json(await moderationService.getProduct(req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/:id/remove", async (req, res, next) => {
   try {
     if (!req.body.reason) throw badRequest("reason is required");
+    const idempotencyKey = req.get("x-idempotency-key");
+    if (!idempotencyKey) throw badRequest("x-idempotency-key is required");
     const product = await moderationService.removeProduct(
       req.params.id,
       req.body.reason,
+      idempotencyKey,
     );
     res.json(product);
   } catch (err) {
@@ -24,7 +35,14 @@ router.post("/:id/remove", async (req, res, next) => {
 
 router.post("/:id/restore", async (req, res, next) => {
   try {
-    const product = await moderationService.restoreProduct(req.params.id);
+    if (!req.body.reason) throw badRequest("reason is required");
+    const idempotencyKey = req.get("x-idempotency-key");
+    if (!idempotencyKey) throw badRequest("x-idempotency-key is required");
+    const product = await moderationService.restoreProduct(
+      req.params.id,
+      req.body.reason,
+      idempotencyKey,
+    );
     res.json(product);
   } catch (err) {
     next(err);

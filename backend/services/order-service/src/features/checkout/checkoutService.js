@@ -6,7 +6,11 @@ const { money } = require("../../models/money");
 
 async function reserveOrder(
   { buyerId, productId, campaignId },
-  { orderModel = defaultOrderModel, productClient = defaultProductClient } = {},
+  {
+    orderModel = defaultOrderModel,
+    productClient = defaultProductClient,
+    authorizeReservation = async () => {},
+  } = {},
 ) {
   if (!productId) throw badRequest("productId is required");
 
@@ -19,6 +23,22 @@ async function reserveOrder(
   );
   if (existing) {
     return { order: existing, created: false };
+  }
+
+  try {
+    await authorizeReservation(reservation);
+  } catch (error) {
+    if (reservation.created) {
+      try {
+        await productClient.releaseProductReservation(
+          productId,
+          reservation.reservationId,
+        );
+      } catch (compensationError) {
+        error.compensationError = compensationError;
+      }
+    }
+    throw error;
   }
 
   // 2. Pre-generate orderId

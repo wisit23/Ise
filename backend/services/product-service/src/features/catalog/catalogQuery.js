@@ -39,11 +39,22 @@ function buildCatalogWhere(filters, { PrismaClient } = {}) {
     // Kept lazy so validation/contract tests do not require generated Prisma files.
     ({ Prisma: PrismaClient } = require("../../generated/prisma-client"));
   }
-  const clauses = [
-    filters.status
-      ? PrismaClient.sql`status = ${filters.status}`
-      : PrismaClient.sql`status NOT IN ('removed', 'hidden')`,
-  ];
+  const clauses = [];
+  if (filters.moderatedOnly) {
+    clauses.push(
+      PrismaClient.sql`(moderated_at IS NOT NULL OR status = 'removed')`,
+    );
+  } else if (filters.status) {
+    clauses.push(
+      PrismaClient.sql`status = ${filters.status} AND moderated_at IS NULL`,
+    );
+  } else if (filters.includeModerated) {
+    clauses.push(PrismaClient.sql`TRUE`);
+  } else {
+    clauses.push(
+      PrismaClient.sql`status NOT IN ('removed', 'hidden') AND moderated_at IS NULL`,
+    );
+  }
   for (const field of FILTER_FIELDS) {
     if (filters[field])
       clauses.push(

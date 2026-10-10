@@ -1,3 +1,5 @@
+const attachmentService = require("../attachments/attachmentService");
+const fs = require("fs");
 const { badRequest, notFound } = require("@reloop/shared");
 const { createHash } = require("node:crypto");
 const prisma = require("../../models/prismaClient");
@@ -219,7 +221,8 @@ async function getTranscript(req, res, next) {
     const page = paginate(await prisma.message.findMany(query), limit);
     res.json({
       conversation,
-      messages: page.items.reverse(),
+      items: [...page.items],
+      messages: [...page.items].reverse(),
       nextCursor: page.nextCursor,
     });
   } catch (err) {
@@ -227,7 +230,26 @@ async function getTranscript(req, res, next) {
   }
 }
 
+async function getAttachment(req, res, next) {
+  try {
+    const attachment = await attachmentService.resolveForInternalDownload({
+      conversationId: req.params.id,
+      messageId: req.params.messageId,
+    });
+    if (!fs.existsSync(attachment.path)) throw notFound("Attachment file unavailable");
+    res.setHeader("Content-Type", attachment.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(attachment.filename)}"`,
+    );
+    fs.createReadStream(attachment.path).pipe(res);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  getAttachment,
   createConversation,
   getByContext,
   sendMessage,

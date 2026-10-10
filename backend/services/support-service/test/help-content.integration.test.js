@@ -60,6 +60,18 @@ test("help article draft -> publish flow and search visibility", async (t) => {
   assert.equal(createRes.body.status, "DRAFT");
   const id = createRes.body.id;
 
+  const editRes = await request(app)
+    .patch(`/help/${id}`)
+    .set("Authorization", `Bearer ${agentToken}`)
+    .send({
+      version: createRes.body.version,
+      title: `บทความทดสอบแก้ไข ${uniqueWord}`,
+      body: "เนื้อหาหลังแก้ไข",
+      category: "TECHNICAL",
+    });
+  assert.equal(editRes.status, 200);
+  assert.equal(editRes.body.body, "เนื้อหาหลังแก้ไข");
+
   // A draft must not appear in public search yet.
   const searchBeforePublish = await request(app)
     .get("/help")
@@ -77,7 +89,8 @@ test("help article draft -> publish flow and search visibility", async (t) => {
 
   const publishRes = await request(app)
     .patch(`/help/${id}/publish`)
-    .set("Authorization", `Bearer ${agentToken}`);
+    .set("Authorization", `Bearer ${agentToken}`)
+    .send({ version: editRes.body.version });
   assert.equal(publishRes.status, 200);
   assert.equal(publishRes.body.status, "PUBLISHED");
 
@@ -89,5 +102,20 @@ test("help article draft -> publish flow and search visibility", async (t) => {
   assert.equal(
     searchAfterPublish.body.items.some((a) => a.id === id),
     true,
+  );
+
+  const unpublishRes = await request(app)
+    .patch(`/help/${id}/unpublish`)
+    .set("Authorization", `Bearer ${agentToken}`)
+    .send({ version: publishRes.body.version });
+  assert.equal(unpublishRes.status, 200);
+  assert.equal(unpublishRes.body.status, "DRAFT");
+
+  const searchAfterUnpublish = await request(app)
+    .get("/help")
+    .query({ q: uniqueWord });
+  assert.equal(
+    searchAfterUnpublish.body.items.some((a) => a.id === id),
+    false,
   );
 });

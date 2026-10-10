@@ -1,29 +1,33 @@
+/* eslint-disable no-unused-vars */
 "use client";
-import { useState, useEffect } from "react";
+import AgentDashboard from "./AgentDashboard";
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import DonutChart from "../../charts/DonutChart";
 import TrendBarChart from "../../charts/TrendBarChart";
 
+import Badge from "../../panel/ui/Badge";
 import KpiCard from "../../panel/ui/KpiCard";
 import ChartCard from "../../panel/ui/ChartCard";
+import DropdownFilter from "../../panel/ui/DropdownFilter";
 import {
+  TICKET_STATUS_LABEL,
+  TICKET_STATUS_STYLE,
+  PRIORITY_LABEL,
+  PRIORITY_STYLE,
+  AGENT_NEXT_STATUS,
+  DISPUTE_STATUS_LABEL,
+  DISPUTE_STATUS_STYLE,
+  ORDER_STATUS_LABEL,
+  HELP_CATEGORIES,
   DONUT_PRIORITY_COLORS,
   DONUT_DISPUTE_COLORS,
+  PAGE_SIZE,
 } from "../../../lib/supportConstants";
-import { apiFetch } from "../../../lib/api";
-import config from "../../../lib/customerServiceConfig";
-import AgentDashboard from "./AgentDashboard";
+import { apiFetch, fetchAuthedBlobUrl } from "../../../lib/api";
 
-export default function DashboardSection(props) {
-  return props.userRole === "CUSTOMER_SERVICE" ? (
-    <AgentDashboard token={props.token} currentUserId={props.currentUserId} />
-  ) : (
-    <LegacyDashboardSection {...props} />
-  );
-}
-
-function LegacyDashboardSection({ token, userRole, onNavigate }) {
-  const isAdmin = userRole === "ADMIN";
-  const [error, setError] = useState("");
+function SafetyDashboardSection({ token, userRole, onNavigate }) {
+  const isSafety = userRole === "ADMIN" || userRole === "TRUST_AND_SAFETY";
   const [stats, setStats] = useState({
     total: null,
     resolved: null,
@@ -36,136 +40,113 @@ function LegacyDashboardSection({ token, userRole, onNavigate }) {
   const [statusData, setStatusData] = useState([]);
   const [disputeData, setDisputeData] = useState([]);
   const [ticketTrend, setTicketTrend] = useState([]);
+  const [ownerStats, setOwnerStats] = useState({
+    pendingKyc: null,
+    openReports: null,
+    activeTrustSafetyHolds: null,
+  });
+  const [sourceErrors, setSourceErrors] = useState({});
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    const fc = (params) =>
-      apiFetch(`/api/support/tickets/queue?${params}&limit=1`, { token })
-        .then((d) => d.total)
-        .catch((err) => {
-          setError(err.message);
-          return null;
+    let active = true;
+    setSourceErrors({});
+    apiFetch("/api/support/tickets/dashboard?days=8", { token })
+      .then((data) => {
+        if (!active) return;
+        const status = data.status || {};
+        const priority = data.priority || {};
+        setStats({
+          total: data.total,
+          resolved: status.RESOLVED || 0,
+          pending: status.NEW || 0,
+          urgent: priority.URGENT || 0,
+          escalated: status.ESCALATED || 0,
+          open: status.IN_PROGRESS || 0,
         });
-
-    // KPI counts
-    fc("scope=all").then((v) => setStats((s) => ({ ...s, total: v })));
-    fc("scope=all&status=RESOLVED").then((v) =>
-      setStats((s) => ({ ...s, resolved: v })),
-    );
-    fc("scope=all&status=NEW").then((v) =>
-      setStats((s) => ({ ...s, pending: v })),
-    );
-    // CS agents can never see ESCALATED tickets (they're handed off to Admin
-    // — see ticketModel.listQueue's role check), so the backend always
-    // returns 0 for this query under that role; skip the wasted request.
-    if (isAdmin) {
-      fc("scope=all&status=ESCALATED").then((v) =>
-        setStats((s) => ({ ...s, escalated: v })),
-      );
-    }
-    fc("scope=all&priority=URGENT").then((v) =>
-      setStats((s) => ({ ...s, urgent: v })),
-    );
-    fc("scope=all&status=IN_PROGRESS").then((v) =>
-      setStats((s) => ({ ...s, open: v })),
-    );
-
-    // Priority donut
-    Promise.all([
-      fc("scope=all&priority=LOW"),
-      fc("scope=all&priority=NORMAL"),
-      fc("scope=all&priority=HIGH"),
-      fc("scope=all&priority=URGENT"),
-    ]).then(([low, normal, high, urgent]) => {
       setPriorityData([
-        { label: "Low", value: low, color: DONUT_PRIORITY_COLORS.LOW },
+          { label: "Low", value: priority.LOW || 0, color: DONUT_PRIORITY_COLORS.LOW },
         {
           label: "Medium",
-          value: normal,
+            value: priority.NORMAL || 0,
           color: DONUT_PRIORITY_COLORS.NORMAL,
         },
-        { label: "High", value: high, color: DONUT_PRIORITY_COLORS.HIGH },
+          { label: "High", value: priority.HIGH || 0, color: DONUT_PRIORITY_COLORS.HIGH },
         {
           label: "Urgent",
-          value: urgent,
+            value: priority.URGENT || 0,
           color: DONUT_PRIORITY_COLORS.URGENT,
         },
       ]);
-    });
-
-    // Status bar chart
-    Promise.all([
-      fc("scope=all&status=NEW"),
-      fc("scope=all&status=IN_PROGRESS"),
-      fc("scope=all&status=PENDING_USER"),
-      fc("scope=all&status=RESOLVED"),
-      fc("scope=all&status=CLOSED"),
-    ]).then(([n, ip, pu, r, c]) => {
       setStatusData([
-        { label: "New", value: n },
-        { label: "In Prog.", value: ip },
-        { label: "Waiting", value: pu },
-        { label: "Resolved", value: r },
-        { label: "Closed", value: c },
+          { label: "New", value: status.NEW || 0 },
+          { label: "In Prog.", value: status.IN_PROGRESS || 0 },
+          { label: "Waiting", value: status.PENDING_USER || 0 },
+          { label: "Resolved", value: status.RESOLVED || 0 },
+          { label: "Closed", value: status.CLOSED || 0 },
       ]);
-    });
-
-    // Disputes donut
-    const fd = (params) =>
-      apiFetch(`/api/orders/disputes/queue?${params}&limit=1`, { token })
-        .then((d) => d.total)
-        .catch((err) => {
-          setError(err.message);
-          return null;
-        });
-    Promise.all([
-      fd("status=OPEN"),
-      fd("status=NEEDS_INFO"),
-      fd("status=DECIDED"),
-    ]).then(([op, ni, de]) => {
-      setDisputeData([
-        {
-          label: "รอตรวจสอบ",
-          value: op,
-          color: DONUT_DISPUTE_COLORS.OPEN,
-        },
-        {
-          label: "รอข้อมูล",
-          value: ni,
-          color: DONUT_DISPUTE_COLORS.NEEDS_INFO,
-        },
-        {
-          label: "ตัดสินแล้ว",
-          value: de,
-          color: DONUT_DISPUTE_COLORS.DECIDED,
-        },
-      ]);
-    });
-
-    apiFetch(
-      `/api/support/tickets/trend?days=${config.dashboard.defaultDays}`,
-      { token },
-    )
-      .then((data) =>
         setTicketTrend(
-          data.items.map((row) => ({
-            label: new Date(`${row.date}T00:00:00Z`).toLocaleDateString(
-              "th-TH",
-              { day: "2-digit", month: "short", timeZone: data.timeZone },
-            ),
-            value: row.value,
+          (data.trend || []).map(({ date, count }) => ({
+            label: new Date(`${date}T00:00:00Z`).toLocaleDateString("th-TH", {
+              day: "2-digit",
+              month: "short",
+              timeZone: "UTC",
+            }),
+            value: count,
           })),
-        ),
-      )
-      .catch((err) => setError(err.message));
-  }, [token]);
+        );
+      })
+      .catch((err) => {
+        if (active) setSourceErrors((current) => ({ ...current, support: err.message }));
+      });
+
+    apiFetch("/api/orders/disputes/dashboard", { token })
+      .then((data) => {
+        if (!active) return;
+        const dispute = data.disputesByStatus || {};
+        setDisputeData([
+          { label: "รอตรวจสอบ", value: dispute.OPEN || 0, color: DONUT_DISPUTE_COLORS.OPEN },
+          { label: "รอข้อมูล", value: dispute.NEEDS_INFO || 0, color: DONUT_DISPUTE_COLORS.NEEDS_INFO },
+          { label: "ตัดสินแล้ว", value: dispute.DECIDED || 0, color: DONUT_DISPUTE_COLORS.DECIDED },
+        ]);
+      })
+      .catch((err) => {
+        if (active) setSourceErrors((current) => ({ ...current, dispute: err.message }));
+      });
+
+    if (isSafety) {
+      apiFetch("/api/orders/admin/dashboard-summary", { token })
+        .then((data) => {
+          if (!active) return;
+          setOwnerStats((current) => ({
+            ...current,
+            activeTrustSafetyHolds: data.activeTrustSafetyHolds,
+          }));
+        })
+        .catch((err) => {
+          if (active) setSourceErrors((current) => ({ ...current, order: err.message }));
+        });
+
+      apiFetch("/api/auth/admin/dashboard-summary", { token })
+        .then((data) => {
+          if (!active) return;
+          setOwnerStats((current) => ({
+            ...current,
+            pendingKyc: data.pendingKyc,
+            openReports: data.openReports,
+          }));
+        })
+        .catch((err) => {
+          if (active) setSourceErrors((current) => ({ ...current, auth: err.message }));
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [token, isSafety, refreshKey]);
 
   return (
     <div className="animate-fade-in-up">
-      {error && (
-        <p role="alert" className="mb-3 text-sm text-red-700">
-          โหลดข้อมูล dashboard ไม่ครบ: {error}
-        </p>
-      )}
       {/* KPI Row */}
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <KpiCard
@@ -192,14 +173,14 @@ function LegacyDashboardSection({ token, userRole, onNavigate }) {
           onClick={() => onNavigate("tickets", "NEW")}
           sub="รอรับเรื่อง"
         />
-        {isAdmin ? (
+        {isSafety ? (
           <KpiCard
             label="Escalated Tickets"
             value={stats.escalated}
             icon="priority_high"
             color="red"
             onClick={() => onNavigate("admin_inbox", "")}
-            sub="ดูที่เคสระดับแอดมิน"
+            sub="ดูที่คิว Trust & Safety"
           />
         ) : (
           <KpiCard
@@ -213,14 +194,48 @@ function LegacyDashboardSection({ token, userRole, onNavigate }) {
         )}
       </div>
 
+      {isSafety && (
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <KpiCard
+            label="Pending KYC"
+            value={sourceErrors.auth ? "Unavailable" : ownerStats.pendingKyc}
+            icon="how_to_reg"
+            color="amber"
+            onClick={() => onNavigate("kyc", "")}
+            sub={sourceErrors.auth ? "Auth API ไม่พร้อมใช้งาน" : "รอตรวจสอบ"}
+          />
+          <KpiCard
+            label="Open Reports"
+            value={sourceErrors.auth ? "Unavailable" : ownerStats.openReports}
+            icon="report"
+            color="red"
+            onClick={() => onNavigate("admin_inbox", "")}
+            sub={sourceErrors.auth ? "Auth API ไม่พร้อมใช้งาน" : "เปิดอยู่หรือกำลังตรวจ"}
+          />
+          <KpiCard
+            label="Active T&S Holds"
+            value={sourceErrors.order ? "Unavailable" : ownerStats.activeTrustSafetyHolds}
+            icon="lock"
+            color="violet"
+            onClick={() => onNavigate("disputes", "")}
+            sub={sourceErrors.order ? "Order API ไม่พร้อมใช้งาน" : "สถานะพักเงินที่ยัง active"}
+          />
+        </div>
+      )}
+
+      {Object.keys(sourceErrors).length > 0 && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+          <span>ข้อมูลบางส่วนไม่พร้อมใช้งาน แยกจากค่า 0 เพื่อไม่ให้ตีความผิด</span>
+          <button type="button" className="font-bold underline" onClick={() => setRefreshKey((key) => key + 1)}>
+            ลองใหม่
+          </button>
+        </div>
+      )}
+
       {/* Charts Row 1 */}
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         <ChartCard title="Tickets by Priority" icon="bar_chart">
-          <DonutChart
-            data={priorityData.filter((row) => row.value !== null)}
-            size={170}
-            strokeWidth={38}
-          />
+          <DonutChart data={priorityData} size={170} strokeWidth={38} />
         </ChartCard>
 
         <ChartCard title="Tickets by Status" icon="schedule">
@@ -231,11 +246,7 @@ function LegacyDashboardSection({ token, userRole, onNavigate }) {
         </ChartCard>
 
         <ChartCard title="Disputes by Status" icon="gavel">
-          <DonutChart
-            data={disputeData.filter((row) => row.value !== null)}
-            size={170}
-            strokeWidth={38}
-          />
+          <DonutChart data={disputeData} size={170} strokeWidth={38} />
         </ChartCard>
       </div>
 
@@ -279,3 +290,5 @@ function LegacyDashboardSection({ token, userRole, onNavigate }) {
     </div>
   );
 }
+
+export default function DashboardSection(props){return props.userRole === "CUSTOMER_SERVICE" ? <AgentDashboard token={props.token} currentUserId={props.currentUserId}/> : <SafetyDashboardSection {...props}/>;}

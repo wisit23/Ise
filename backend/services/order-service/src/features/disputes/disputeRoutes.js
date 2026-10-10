@@ -13,8 +13,18 @@ router.get(
   require("./agentDashboard").agentDashboard,
 );
 
+router.get("/dashboard", requireAuth, disputeController.dashboard);
+router.get("/:id/chat-history", requireAuth, disputeController.chatHistory);
+router.get("/:id/chat-attachments/:messageId", requireAuth, disputeController.chatAttachment);
 router.get("/queue", requireAuth, disputeController.queue);
+router.get("/dashboard", requireAuth, disputeController.dashboard);
 router.get("/by-order/:orderId", requireAuth, disputeController.getByOrderId);
+router.get("/:id/chat-history", requireAuth, disputeController.chatHistory);
+router.get(
+  "/:id/chat-attachments/:messageId",
+  requireAuth,
+  disputeController.chatAttachment,
+);
 router.get("/:id", requireAuth, disputeController.getOne);
 router.get("/:id/eligible-staff", requireAuth, async (req, res, next) => {
   try {

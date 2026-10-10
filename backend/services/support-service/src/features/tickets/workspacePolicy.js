@@ -2,18 +2,20 @@ const { TRANSITIONS } = require("./ticketState");
 function ticketCapabilities(ticket, userId, role) {
   const closed = ticket.status === "CLOSED";
   const owner = ticket.assigneeId === userId;
+  const responder = role === "CUSTOMER_SERVICE" && ticket.chatResponderId === userId;
   const elevated = ["ADMIN", "TRUST_AND_SAFETY"].includes(role);
   const accessible =
-    elevated ||
+    elevated || responder ||
     (role === "CUSTOMER_SERVICE" &&
       ticket.status !== "ESCALATED" &&
       (!ticket.assigneeId || owner));
-  const mutable = accessible && !closed && (owner || elevated);
+  const mutable = accessible && !closed && (owner || elevated) && !(role === "CUSTOMER_SERVICE" && ticket.status === "ESCALATED");
   return {
     canViewDetail: accessible,
     canClaim: accessible && !closed && !ticket.assigneeId,
-    canReply: mutable && owner && role === "CUSTOMER_SERVICE",
-    canAddNote: mutable,
+    canTakeover: elevated && !closed && ticket.status === "ESCALATED" && Boolean(ticket.assigneeId) && !owner,
+    canReply: !closed && role === "CUSTOMER_SERVICE" && (responder || (mutable && owner)),
+    canAddNote: mutable || (!closed && responder),
     canChangeStatus: mutable,
     allowedNextStatuses: mutable
       ? (TRANSITIONS[ticket.status] || []).filter((s) => s !== "ASSIGNED")
@@ -24,7 +26,7 @@ function ticketCapabilities(ticket, userId, role) {
       ? "เคสนี้ปิดแล้ว"
       : !accessible
         ? "คุณไม่มีสิทธิ์เปิดเคสนี้"
-        : !owner
+        : !owner && !responder
           ? "รับเคสก่อนเริ่มตอบลูกค้า"
           : null,
   };

@@ -2,14 +2,22 @@
 // the gateway). Admin's review side lives separately at adminKycRoutes.js
 // ("/admin/kyc"), reusing the same KycApplication/SellerProfile rows.
 const { Router } = require("express");
-const { requireAuth } = require("@reloop/shared");
+const {
+  requireAuth,
+  requireCommerceCapability,
+  CAPABILITY,
+} = require("@reloop/shared");
 const kycController = require("./kycController");
 
 const router = Router();
 
 router.use(requireAuth);
 
-router.post("/", kycController.submit);
+router.post(
+  "/",
+  requireCommerceCapability(CAPABILITY.SELLER),
+  kycController.submit,
+);
 router.get("/mine", kycController.mine);
 router.get("/:applicationId/document", kycController.viewDocument);
 

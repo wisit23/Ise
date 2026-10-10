@@ -7,7 +7,32 @@ const PRODUCT_SERVICE_URL =
   process.env.PRODUCT_SERVICE_URL || "http://product-service:3002";
 const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 
-async function removeProduct(productId, reason) {
+function moderationRequestSignal() {
+  const configured = Number(process.env.PRODUCT_MODERATION_TIMEOUT_MS || 5000);
+  const timeoutMs =
+    Number.isFinite(configured) && configured > 0 ? configured : 5000;
+  return AbortSignal.timeout(timeoutMs);
+}
+
+async function getProduct(productId) {
+  let res;
+  try {
+    res = await fetch(
+      `${PRODUCT_SERVICE_URL}/internal/moderation/${productId}`,
+      {
+        headers: { "x-internal-token": INTERNAL_TOKEN },
+        signal: moderationRequestSignal(),
+      },
+    );
+  } catch {
+    throw new AppError(502, "product-service is unreachable");
+  }
+  if (res.status === 404) throw new AppError(404, "product not found");
+  if (!res.ok) throw new AppError(502, "failed to load product");
+  return res.json();
+}
+
+async function removeProduct(productId, reason, idempotencyKey) {
   let res;
   try {
     res = await fetch(
@@ -17,8 +42,10 @@ async function removeProduct(productId, reason) {
         headers: {
           "Content-Type": "application/json",
           "x-internal-token": INTERNAL_TOKEN,
+          "x-idempotency-key": idempotencyKey,
         },
         body: JSON.stringify({ reason }),
+        signal: moderationRequestSignal(),
       },
     );
   } catch {
@@ -30,14 +57,20 @@ async function removeProduct(productId, reason) {
   return res.json();
 }
 
-async function restoreProduct(productId) {
+async function restoreProduct(productId, reason, idempotencyKey) {
   let res;
   try {
     res = await fetch(
       `${PRODUCT_SERVICE_URL}/internal/moderation/${productId}/restore`,
       {
         method: "POST",
-        headers: { "x-internal-token": INTERNAL_TOKEN },
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-token": INTERNAL_TOKEN,
+          "x-idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify({ reason }),
+        signal: moderationRequestSignal(),
       },
     );
   } catch {
@@ -49,4 +82,4 @@ async function restoreProduct(productId) {
   return res.json();
 }
 
-module.exports = { removeProduct, restoreProduct };
+module.exports = { getProduct, removeProduct, restoreProduct };

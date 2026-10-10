@@ -20,7 +20,11 @@ router.get(
         ...pagination,
         actorId: req.query.actorId,
         action: req.query.action,
+        actionPrefix: req.query.actionPrefix,
         targetId: req.query.targetId,
+        requestId: req.query.requestId,
+        from: req.query.from,
+        to: req.query.to,
       });
       res.json(paginatedResponse(items, total, pagination));
     } catch (err) {

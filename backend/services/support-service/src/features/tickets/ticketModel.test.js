@@ -15,7 +15,7 @@ test("admin queue includes closed/escalated while CS sees only own or unassigned
   });
   assert.match(staff.sql, /assignment_id IS NULL OR a.assignee_id/);
   assert.match(staff.sql, /s.code <> 'ESCALATED'/);
-  assert.deepEqual(staff.values, ["agent-1", "%ref\\%und%", "%ref\\%und%"]);
+  assert.deepEqual(staff.values, ["agent-1", "agent-1", "agent-1", "%ref\\%und%", "%ref\\%und%"]);
 });
 test("conversation repair accepts the same link but never replaces another room", async () => {
   const db = {

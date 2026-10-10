@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import Pagination from "../../Pagination";
 import Badge from "../../panel/ui/Badge";
@@ -27,6 +27,8 @@ const STATUS_STYLE = {
 export default function ProductsSection({ token }) {
   const toast = useToast();
   const [pendingRemoval, setPendingRemoval] = useState(null);
+  const [pendingRestore, setPendingRestore] = useState(null);
+  const operationKeys = useRef(new Map());
   const [query, setQuery] = useState("");
   const [includeRemoved, setIncludeRemoved] = useState(false);
   const [items, setItems] = useState([]);
@@ -38,7 +40,11 @@ export default function ProductsSection({ token }) {
   const [busyId, setBusyId] = useState(null);
   const [reasonById, setReasonById] = useState({});
 
-  async function searchProducts(targetPage = 1, searchQuery = query, removedOnly = includeRemoved) {
+  async function searchProducts(
+    targetPage = 1,
+    searchQuery = query,
+    removedOnly = includeRemoved,
+  ) {
     if (!searchQuery.trim()) return;
     setLoading(true);
     setError("");
@@ -78,6 +84,18 @@ export default function ProductsSection({ token }) {
     setPendingRemoval(product);
   }
 
+  function operationKey(action, productId) {
+    const mapKey = `${action}:${productId}`;
+    if (!operationKeys.current.has(mapKey)) {
+      operationKeys.current.set(mapKey, crypto.randomUUID());
+    }
+    return operationKeys.current.get(mapKey);
+  }
+
+  function clearOperationKey(action, productId) {
+    operationKeys.current.delete(`${action}:${productId}`);
+  }
+
   async function confirmRemove() {
     const product = pendingRemoval;
     const reason = (reasonById[product.id] || "").trim();
@@ -88,8 +106,12 @@ export default function ProductsSection({ token }) {
       await apiFetch(`/api/auth/admin/products/${product.id}/remove`, {
         method: "POST",
         token,
-        body: { reason },
+        body: {
+          reason,
+          idempotencyKey: operationKey("REMOVE_PRODUCT", product.id),
+        },
       });
+      clearOperationKey("REMOVE_PRODUCT", product.id);
       setItems((prev) =>
         prev.map((p) =>
           p.id === product.id ? { ...p, status: "removed" } : p,
@@ -104,14 +126,34 @@ export default function ProductsSection({ token }) {
     }
   }
 
-  async function handleRestore(product) {
+  function handleRestore(product) {
+    const reason = (reasonById[product.id] || "").trim();
+    if (!reason) {
+      setError("กรุณาระบุเหตุผลก่อนกู้คืนสินค้า");
+      return;
+    }
+    setPendingRestore(product);
+  }
+
+  async function confirmRestore() {
+    const product = pendingRestore;
+    const reason = (reasonById[product.id] || "").trim();
+    setPendingRestore(null);
     setBusyId(product.id);
     setError("");
     try {
       const updated = await apiFetch(
         `/api/auth/admin/products/${product.id}/restore`,
-        { method: "POST", token },
+        {
+          method: "POST",
+          token,
+          body: {
+            reason,
+            idempotencyKey: operationKey("RESTORE_PRODUCT", product.id),
+          },
+        },
       );
+      clearOperationKey("RESTORE_PRODUCT", product.id);
       setItems((prev) =>
         prev.map((p) =>
           p.id === product.id ? { ...p, status: updated.status } : p,
@@ -222,13 +264,23 @@ export default function ProductsSection({ token }) {
 
               <div className="mt-4 border-t border-slate-100 pt-3">
                 {p.status === "removed" ? (
-                  <button
-                    onClick={() => handleRestore(p)}
-                    disabled={busyId === p.id}
-                    className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    กู้คืนสินค้า
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      value={reasonById[p.id] || ""}
+                      onChange={(e) =>
+                        setReasonById((r) => ({ ...r, [p.id]: e.target.value }))
+                      }
+                      placeholder="เหตุผลในการกู้คืน..."
+                      className="min-w-[200px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      onClick={() => handleRestore(p)}
+                      disabled={busyId === p.id}
+                      className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      กู้คืนสินค้า
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
                     <input
@@ -258,7 +310,9 @@ export default function ProductsSection({ token }) {
             <Pagination
               page={page}
               totalPages={totalPages}
-              onChange={(newPage) => searchProducts(newPage, query, includeRemoved)}
+              onChange={(newPage) =>
+                searchProducts(newPage, query, includeRemoved)
+              }
             />
           </div>
         )}
@@ -277,6 +331,19 @@ export default function ProductsSection({ token }) {
         tone="danger"
         onCancel={() => setPendingRemoval(null)}
         onConfirm={confirmRemove}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingRestore)}
+        title="ยืนยันการกู้คืนสินค้า"
+        description={
+          pendingRestore
+            ? `สินค้า “${pendingRestore.title}” จะกลับไปยังสถานะที่ระบบตรวจสอบแล้วว่ากู้คืนได้`
+            : ""
+        }
+        confirmLabel="ยืนยันกู้คืน"
+        tone="primary"
+        onCancel={() => setPendingRestore(null)}
+        onConfirm={confirmRestore}
       />
     </>
   );

@@ -111,6 +111,11 @@ export default function FaqSection({ token }) {
     }
   }
 
+  async function unpublish(article){
+    setPublishingId(article.id);setActionError("");
+    try {await apiFetch(`/api/support/help/${article.id}/unpublish`,{method:"PATCH",token,body:{version:article.publishedVersion}});setRevision(v=>v+1);}
+    catch(error){setActionError(error.message);}finally{setPublishingId(null);}
+  }
   async function remove() {
     setSubmitting(true);
     setActionError("");
@@ -178,6 +183,7 @@ export default function FaqSection({ token }) {
             article={article}
             publishing={publishingId === article.id}
             onPublish={publish}
+            onUnpublish={unpublish}
             onEdit={(article) => {
               setEditingArticle(article);
               setActionError("");

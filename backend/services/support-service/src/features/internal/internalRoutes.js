@@ -18,14 +18,14 @@ router.get("/tickets/:id/chat-access/:userId", async (req, res, next) => {
     const isAdmin = role === "ADMIN";
     const isAgent =
       role === "AGENT" &&
-      ticket.status !== "ESCALATED" &&
-      (ticket.assigneeId === null || ticket.assigneeId === userId);
+      (ticket.chatResponderId === userId || (ticket.status !== "ESCALATED" &&
+      (ticket.assigneeId === null || ticket.assigneeId === userId)));
     const allowed = isRequester || isAdmin || isAgent;
     const writable =
       allowed &&
       !isAdmin &&
       ticket.status !== "CLOSED" &&
-      (!isAgent || ticket.assigneeId === userId);
+      (!isAgent || ticket.assigneeId === userId || ticket.chatResponderId === userId);
     res.json({ allowed, writable });
   } catch (err) {
     next(err);

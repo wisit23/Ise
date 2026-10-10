@@ -4,6 +4,7 @@
 // Conversation.contextKey's unique index instead of on an application-level
 // check-then-create (which is not actually atomic — see conversationService.js).
 const CONTEXT_TYPES = ["PRODUCT", "ORDER", "DISPUTE", "DISPUTE_BUYER", "DISPUTE_SELLER", "SUPPORT", "DIRECT"];
+const crypto = require("crypto");
 
 function buildContextKey(contextType, params = {}) {
   switch (contextType) {
@@ -51,4 +52,15 @@ function buildContextKey(contextType, params = {}) {
   }
 }
 
-module.exports = { buildContextKey, CONTEXT_TYPES };
+// Mongo's _id index always exists even when a runtime database was created
+// before the contextKey unique index. A stable 24-hex ObjectId therefore
+// preserves create-or-open atomically without requiring db push/index repair.
+function conversationIdForContextKey(contextKey) {
+  return crypto.createHash("sha256").update(contextKey).digest("hex").slice(0, 24);
+}
+
+module.exports = {
+  buildContextKey,
+  conversationIdForContextKey,
+  CONTEXT_TYPES,
+};

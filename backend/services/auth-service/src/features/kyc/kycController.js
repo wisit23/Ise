@@ -38,6 +38,7 @@ async function viewDocument(req, res, next) {
       applicationId: req.params.applicationId,
       userId: req.userId,
       permissions: req.permissions,
+      requestId: req.id,
     });
     res.setHeader("Content-Type", fileType);
     require("fs").createReadStream(filePath).pipe(res);

@@ -12,4 +12,7 @@ WORKDIR /app/services/chat-service
 RUN npm install
 RUN npx prisma generate
 
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && node src/server.js"]
+# Runtime startup must never mutate production schema/indexes. Schema rollout
+# is an explicit deployment step; application-level deterministic IDs keep
+# create-or-open safe even for an older Mongo database missing contextKey index.
+CMD ["node", "src/server.js"]

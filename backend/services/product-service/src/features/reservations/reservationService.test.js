@@ -50,6 +50,52 @@ test("a seller cannot reserve their own product", async (t) => {
   assert.equal(updateManyCalls, 0);
 });
 
+test("a moderated product cannot be reserved", async (t) => {
+  const delegate = prisma.product;
+  const originalFindUnique = Object.getOwnPropertyDescriptor(
+    delegate,
+    "findUnique",
+  );
+  const originalUpdateMany = Object.getOwnPropertyDescriptor(
+    delegate,
+    "updateMany",
+  );
+  let updateManyCalls = 0;
+  Object.defineProperty(delegate, "findUnique", {
+    configurable: true,
+    value: async () => ({
+      id: "product-moderated",
+      sellerId: "seller-a",
+      title: "Moderated product",
+      price: 500,
+      status: "available",
+      moderatedAt: new Date(),
+      reservationId: null,
+      reservedBy: null,
+      reservationExpiresAt: null,
+    }),
+  });
+  Object.defineProperty(delegate, "updateMany", {
+    configurable: true,
+    value: async () => {
+      updateManyCalls += 1;
+      throw new Error("must not be called");
+    },
+  });
+  t.after(() => {
+    Object.defineProperty(delegate, "findUnique", originalFindUnique);
+    Object.defineProperty(delegate, "updateMany", originalUpdateMany);
+  });
+
+  await assert.rejects(
+    () => reserveProduct("product-moderated", "buyer-a"),
+    (error) =>
+      error.status === 409 &&
+      error.message === "product is unavailable due to moderation",
+  );
+  assert.equal(updateManyCalls, 0);
+});
+
 test("completeProductReservation treats an already-sold product as an idempotent retry", async (t) => {
   const originalUpdateMany = prisma.product.updateMany;
   const originalFindUnique = prisma.product.findUnique;

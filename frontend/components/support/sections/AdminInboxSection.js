@@ -19,9 +19,10 @@ const DRAWER_EXIT_MS = 280;
    list. This component owns the data and the actions; the queue table and the
    report panel live in ./admin-inbox, while the drawer shell and the ticket
    panel are shared with the CS Tickets tab in ./case. */
-export default function AdminInboxSection({ token, currentUserId }) {
+export default function AdminInboxSection({ token, currentUserId, initialReportId = "" }) {
   const toast = useToast();
 
+  const savedPages = useRef({all:1,tickets:1,reports:1,disputes:1});
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -31,7 +32,7 @@ export default function AdminInboxSection({ token, currentUserId }) {
   const [qInput, setQInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("OPEN");
   const [ticketStatus, setTicketStatus] = useState("ESCALATED");
-  const [source, setSource] = useState("all");
+  const [source, setSource] = useState(initialReportId ? "reports" : "all");
   const [selectedDispute, setSelectedDispute] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [conversationId, setConversationId] = useState(null);
@@ -72,7 +73,13 @@ export default function AdminInboxSection({ token, currentUserId }) {
     setActionError("");
     setReportReason("");
     setReportDecision("");
-    if (item._type === "REPORT") return;
+    if (item._type === "REPORT") {
+      try {
+        const report=await apiFetch(`/api/auth/admin/reports/${item.id}`,{token});
+        if(request===selectionRequest.current)setSelectedTicket({...item,rawReport:report});
+      } catch(err){if(request===selectionRequest.current)setActionError(err.message);}
+      return;
+    }
     setChatLoading(true);
     try {
       const detail = await apiFetch(`/api/support/tickets/${item.id}`, {
@@ -94,6 +101,9 @@ export default function AdminInboxSection({ token, currentUserId }) {
     }
   }
 
+  useEffect(()=>{
+    if(initialReportId)selectCase({id:initialReportId,_type:"REPORT"});
+  },[initialReportId,token]);
   useEffect(() => {
     setLoading(true);
 
@@ -110,6 +120,7 @@ export default function AdminInboxSection({ token, currentUserId }) {
       limit: PAGE_SIZE,
       status: statusFilter || "ALL",
     });
+    if(q) repParams.set("q",q);
     const disputeParams = new URLSearchParams({ page, limit: PAGE_SIZE, status: "OPEN", assignedRole: "ADMIN" });
     if (q) disputeParams.set("q", q);
     const request = source === "all"
@@ -225,6 +236,10 @@ export default function AdminInboxSection({ token, currentUserId }) {
     );
   }
 
+  function handleTakeover(){
+    if(!selectedTicket)return;
+    return runAction(()=>apiFetch(`/api/support/tickets/${selectedTicket.id}/takeover`,{method:"POST",token,body:{version:selectedTicket.version,reason:"รับผิดชอบการตรวจสอบเคสที่ส่งต่อ"}}));
+  }
   function handleStatusChange(status, reason) {
     if (!selectedTicket) return;
     // Escalation is the one transition that wants a note, so it goes through
@@ -237,14 +252,14 @@ export default function AdminInboxSection({ token, currentUserId }) {
       apiFetch(`/api/support/tickets/${selectedTicket.id}/status`, {
         method: "PATCH",
         token,
-        body: { status, reason: reason || undefined },
+        body: { status, version:selectedTicket.version, reason: reason || undefined },
       }),
     );
   }
 
   function handleReportAction(e) {
     e.preventDefault();
-    if (!selectedTicket || selectedTicket._type !== "REPORT") return;
+    if (!selectedTicket || selectedTicket._type !== "REPORT" || !selectedTicket.rawReport) return;
     if (!reportDecision) {
       setActionError("กรุณาเลือกการตัดสินใจ");
       return;
@@ -387,8 +402,9 @@ export default function AdminInboxSection({ token, currentUserId }) {
                 setSelectedTicket(null);
                 setSelectedDispute(null);
                 setConversationId(null);
+                savedPages.current[source]=page;
                 setSource(key);
-                setPage(1);
+                setPage(savedPages.current[key] || 1);
                 setItems([]);
               }}
               className={`rounded-lg px-4 py-2 text-sm font-semibold ${source === key ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700"}`}
@@ -397,7 +413,7 @@ export default function AdminInboxSection({ token, currentUserId }) {
             </button>
           ))}
         </div>
-        {error && <Alert className="mb-3">{error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setRefreshKey((k) => k + 1)}>ลองใหม่</button></Alert>}
+        {error && <Alert className="mb-3">{source === "reports" && <span>โหลดรายงานไม่สำเร็จ</span>} {error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setRefreshKey((k) => k + 1)}>ลองใหม่</button></Alert>}
 
         {(source === "all" || source === "disputes") ? <div className="space-y-2">
           <form onSubmit={(e) => { e.preventDefault(); setQ(qInput.trim()); setPage(1); setItems([]); }} className="mb-3 flex gap-2"><input value={qInput} onChange={(e) => setQInput(e.target.value)} aria-label="ค้นหาเคส Admin" placeholder="ค้นหาเลขออเดอร์หรือเหตุผล" className="min-w-0 flex-1 rounded-lg border bg-white px-3 py-2 text-sm" /><button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">ค้นหา</button></form>
@@ -448,7 +464,10 @@ export default function AdminInboxSection({ token, currentUserId }) {
         {selectedTicket &&
           (selectedTicket._type === "REPORT" ? (
             <ReportCasePanel
-              report={selectedTicket.rawReport}
+              report={selectedTicket.rawReport || {status:"OPEN"}}
+              detailLoading={!selectedTicket.rawReport}
+              detailError={actionError}
+              onRetryDetail={()=>selectCase(selectedTicket)}
               decision={reportDecision}
               onDecisionChange={setReportDecision}
               reason={reportReason}
@@ -466,6 +485,7 @@ export default function AdminInboxSection({ token, currentUserId }) {
               actionBusy={actionBusy}
               actionError={actionError}
               onAssign={handleAssign}
+              onTakeover={handleTakeover}
               onStatusChange={handleStatusChange}
               onWarnUser={(userId, rLabel) =>
                 setPendingAction({

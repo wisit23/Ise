@@ -69,7 +69,7 @@ async function cancel(req, res, next) {
 
 async function getOne(req, res, next) {
   try {
-    const auction = await auctionService.get(req.params.id);
+    const auction = await auctionService.getPublic(req.params.id);
     res.json(auction);
   } catch (err) {
     next(err);

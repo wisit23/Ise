@@ -167,12 +167,12 @@ export default function AdminInboxTable({
         )}
 
         {source === "reports" && (
-          <DropdownFilter
+          <><form onSubmit={e=>{e.preventDefault();onSearch();}} className="flex-1"><Input icon="search" value={qInput} onChange={e=>onQInputChange(e.target.value)} aria-label="ค้นหาเคส" placeholder="ค้นหารายงาน..." /></form><DropdownFilter
             value={statusFilter}
             onChange={onStatusFilterChange}
             options={STATUS_OPTIONS}
             align="right"
-          />
+          /></>
         )}
       </div>
 

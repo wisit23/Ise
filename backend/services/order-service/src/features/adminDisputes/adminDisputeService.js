@@ -6,11 +6,12 @@ const orderModel = require("../../models/orderModel");
 async function getDisputeView({ orderId, adminId }) {
   const order = await orderModel.findById(orderId);
   if (!order) throw notFound("order not found");
-  const evidence = await prisma.safetyDisputeEvidence.findMany({
+  const reviews = await prisma.safetyDisputeEvidence.findMany({
     where: { orderId },
     include: { evidence: true },
     orderBy: { verifyAt: "asc" },
   });
+  const evidence = (order.dispute?.evidence || []).map(item=>({id:item.id,evidenceId:item.id,source:"DISPUTE_CASE",disputeId:order.dispute.id,fileType:item.fileType,uploaderId:item.uploaderId,createdAt:item.createdAt,status:reviews.find(r=>r.evidenceId===item.id)?.status || item.status,safetyReviewId:reviews.find(r=>r.evidenceId===item.id)?.id || null}));
   await prisma.orderLog.create({
     data: orderModel.logData(order, adminId, "ADMIN_EVIDENCE_VIEWED", {
       evidenceIds: evidence.map((e) => e.id),

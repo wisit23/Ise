@@ -17,6 +17,7 @@ const STATUS_FILTERS = [
   { value: "hidden", label: "ซ่อนอยู่" },
   { value: "sold", label: "ขายแล้ว" },
   { value: "reserved", label: "ในตะกร้า" },
+  { value: "removed", label: "ถูกระงับ" },
 ];
 
 export default function SellerProductList({
@@ -157,6 +158,13 @@ export default function SellerProductList({
                         ))}
                       </div>
                     )}
+                    {p.status === "removed" && (
+                      <p className="mt-2 text-xs text-red-700">
+                        เหตุผล:{" "}
+                        {p.moderationReason ||
+                          "อยู่ระหว่างการตรวจสอบโดย Trust & Safety"}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-700">
                     {baht(p.price)}
@@ -168,7 +176,7 @@ export default function SellerProductList({
                     />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {p.status !== "sold" ? (
+                    {!["sold", "removed"].includes(p.status) ? (
                       <Link
                         href={`/products/${p.id}/edit`}
                         className="focus-ring rounded text-xs font-medium text-slate-500 hover:text-emerald-700 hover:underline"
@@ -176,7 +184,9 @@ export default function SellerProductList({
                         แก้ไข
                       </Link>
                     ) : (
-                      <span className="text-xs text-slate-300">—</span>
+                      <span className="text-xs text-slate-400">
+                        {p.status === "removed" ? "ดูได้อย่างเดียว" : "—"}
+                      </span>
                     )}
                   </td>
                 </tr>

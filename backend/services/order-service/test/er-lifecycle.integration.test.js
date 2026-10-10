@@ -276,6 +276,7 @@ test("ER evidence API: buyer uploads before claim, staff chooses deadline, audit
   );
 });
 test("auction callback retries create one pending order and no basket", async (t) => {
+  t.mock.method(require("../src/services/authClient"), "getUser", async id => ({id,status:"ACTIVE"}));
   if (!(await available(t))) return;
   const body = {
     auctionId: id + "-auction",

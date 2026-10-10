@@ -10,10 +10,12 @@ process.env.DATABASE_URL ||=
 const { signAccessToken } = require("@reloop/shared");
 const orderModel = require("./models/orderModel");
 const productClient = require("./services/productClient");
+const authClient = require("./services/authClient");
 const app = require("./app");
 // This feature suite uses signed identity fixtures; live session enforcement
 // is covered separately by account-suspension.integration.test.js.
 app.locals.validateAccessSession = async () => {};
+authClient.setMockUserResolver(async (id) => ({ id, status: "ACTIVE" }));
 
 const buyerToken = signAccessToken({ sub: "buyer-a", role: "BUYER" });
 const sellerToken = signAccessToken({ sub: "seller-b", role: "SELLER" });
@@ -124,6 +126,55 @@ test("a seller account may buy another seller's product", async (t) => {
 
   assert.equal(response.status, 201);
   assert.equal(response.body.buyerId, "seller-b");
+});
+
+test("checkout rejects a restricted product seller and releases the reservation", async (t) => {
+  authClient.setMockUserResolver(async (id) => ({
+    id,
+    status: id === "seller-restricted" ? "RESTRICTED_SELLER" : "ACTIVE",
+  }));
+  t.after(() => {
+    authClient.setMockUserResolver(async (id) => ({ id, status: "ACTIVE" }));
+  });
+
+  t.mock.method(productClient, "reserveProduct", async () => ({
+    created: true,
+    reservationId: "reservation-restricted-seller",
+    expiresAt,
+    product: {
+      id: "product-restricted-seller",
+      sellerId: "seller-restricted",
+      title: "Restricted seller product",
+      price: 900,
+    },
+  }));
+  t.mock.method(orderModel, "findByReservationId", async () => null);
+  const create = t.mock.method(orderModel, "create", async () => ({
+    id: "must-not-exist",
+  }));
+  const releases = [];
+  t.mock.method(
+    productClient,
+    "releaseProductReservation",
+    async (productId, reservationId) => {
+      releases.push({ productId, reservationId });
+    },
+  );
+
+  const response = await request(app)
+    .post("/")
+    .set("Authorization", `Bearer ${buyerToken}`)
+    .send({ productId: "product-restricted-seller" });
+
+  assert.equal(response.status, 403);
+  assert.match(response.body.error, /selling rights are restricted/);
+  assert.equal(create.mock.callCount(), 0);
+  assert.deepEqual(releases, [
+    {
+      productId: "product-restricted-seller",
+      reservationId: "reservation-restricted-seller",
+    },
+  ]);
 });
 
 test("a staff account is denied before product-service is called", async (t) => {

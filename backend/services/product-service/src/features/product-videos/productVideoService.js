@@ -38,6 +38,9 @@ async function createClip({ user, input = {} }) {
 
   const product = await productVideoRepository.findProductOwner(productId);
   if (!product) throw notFound("product not found");
+  if (product.moderatedAt || product.status === "removed") {
+    throw forbidden("cannot attach a video to a moderated product");
+  }
   if (product.sellerId !== user.id) {
     throw forbidden("you can only attach video clips to your own products");
   }
@@ -58,7 +61,13 @@ async function createClip({ user, input = {} }) {
  */
 async function chooseClip({ user, productVideoId }) {
   const clip = await productVideoRepository.findById(productVideoId);
-  if (!clip) throw notFound("swipe card not found");
+  if (
+    !clip ||
+    clip.product?.moderatedAt ||
+    clip.product?.status === "removed"
+  ) {
+    throw notFound("swipe card not found");
+  }
 
   return productVideoRepository.upsertChoice({
     productVideoId,
@@ -71,7 +80,13 @@ async function chooseClip({ user, productVideoId }) {
  */
 async function unchooseClip({ user, productVideoId }) {
   const clip = await productVideoRepository.findById(productVideoId);
-  if (!clip) throw notFound("swipe card not found");
+  if (
+    !clip ||
+    clip.product?.moderatedAt ||
+    clip.product?.status === "removed"
+  ) {
+    throw notFound("swipe card not found");
+  }
 
   await productVideoRepository.deleteChoice({
     productVideoId,

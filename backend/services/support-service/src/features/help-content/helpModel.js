@@ -186,6 +186,15 @@ async function publish(id, version) {
     );
   });
 }
+async function unpublish(id,version){
+  if(!Number.isInteger(version) || version<1)throw badRequest("A valid published version is required");
+  return transaction(async db=>{
+    const article=await db.helpArticle.findUnique({where:{id}});if(!article)return null;
+    const result=await db.helpArticle.updateMany({where:{id,status:"PUBLISHED",publishedVersion:version},data:{status:"DRAFT",publishedVersion:null,publishedAt:null}});
+    if(!result.count)throw conflict("Article publication changed; reload before unpublishing");
+    return toArticle(await db.helpArticle.findUnique({where:{id},include:managementInclude}));
+  });
+}
 async function remove(id) {
   const result = await prisma.helpArticle.updateMany({
     where: { id, status: { not: "ARCHIVED" } },
@@ -194,6 +203,7 @@ async function remove(id) {
   return result.count > 0;
 }
 module.exports = {
+  unpublish,
   remove,
   search,
   listAll,

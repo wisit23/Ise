@@ -126,9 +126,6 @@ async function search(req, res, next) {
 // restore them — so status is optional and passed through as-is.
 async function adminSearch(req, res, next) {
   try {
-    if (req.userRole !== "ADMIN") {
-      throw forbidden("only admin accounts can use this search");
-    }
     let filters;
     try {
       filters = parseCatalogFilters(req.query);
@@ -142,7 +139,9 @@ async function adminSearch(req, res, next) {
     const pagination = parsePagination(req.query);
     const { items, total } = await productModel.list({
       ...filters,
-      status,
+      status: status === "removed" ? undefined : status,
+      moderatedOnly: status === "removed",
+      includeModerated: status === undefined,
       skip: pagination.skip,
       take: pagination.take,
     });
@@ -156,12 +155,11 @@ async function getOne(req, res, next) {
   try {
     const product = await productModel.findById(req.params.id);
     if (!product) throw notFound("product not found");
-    // Hidden products are invisible to buyers; the owner and admins can still
-    // load them (so the edit page works) but the status is exposed so the
-    // frontend can show a "currently hidden" badge.
-    if (product.status === "hidden") {
+    // Hidden or moderated products are invisible to buyers. The owner can
+    // still load the read-only evidence/reason; staff use /admin/:id.
+    if (product.status === "hidden" || product.status === "removed") {
       const requesterId = req.userId; // set by requireAuth; undefined for guests
-      if (requesterId !== product.sellerId && req.userRole !== "ADMIN") {
+      if (requesterId !== product.sellerId) {
         throw notFound("product not found");
       }
     }
@@ -171,9 +169,25 @@ async function getOne(req, res, next) {
   }
 }
 
+async function getForModeration(req, res, next) {
+  try {
+    const product = await productModel.findById(req.params.id);
+    if (!product) throw notFound("product not found");
+    res.json(product);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function toggleVisibility(req, res, next) {
   try {
     await requireProductOwner(req.params.id, req.userId, "hide/show");
+    const current = await productModel.findById(req.params.id);
+    if (current.status === "removed") {
+      throw forbidden(
+        "a moderated listing can only be restored by Trust & Safety",
+      );
+    }
     const { visible } = req.body;
     if (typeof visible !== "boolean") {
       throw badRequest("visible (boolean) is required");
@@ -196,7 +210,12 @@ async function bySeller(req, res, next) {
       : ["available", "sold"];
     const { items, total } = await productModel.listBySeller(
       req.params.sellerId,
-      { status: allowedStatuses, skip: pagination.skip, take: pagination.take },
+      {
+        status: allowedStatuses,
+        includeModerated: isOwner,
+        skip: pagination.skip,
+        take: pagination.take,
+      },
     );
     res.json(paginatedResponse(items, total, pagination));
   } catch (err) {
@@ -263,16 +282,23 @@ async function update(req, res, next) {
     if (product.status === "auction") {
       throw forbidden("cannot edit a product that is currently in an auction");
     }
+    if (product.status === "reserved" || (product.status === "hidden" && product.preRemovalStatus === "reserved")) throw conflict("ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+    if (product.status === "removed") {
+      throw forbidden("cannot edit a listing removed by Trust & Safety");
+    }
     await requireKnownCondition(req.body.condition);
     if (req.body.media !== undefined) requireValidMediaCount(req.body.media);
     if (req.body.category !== undefined) {
       await productModel.ensureCategory(req.body.category);
     }
 
-    const updated = await productModel.update(
+    const updated = await productModel.updateBySeller(
       req.params.id,
       buildProductPatch(req.body),
     );
+    if (!updated) {
+      throw forbidden("listing changed or was removed by Trust & Safety");
+    }
     // Fire-and-forget: refreshes lastActiveAt so the inactivity job doesn't
     // flag an active seller who edits rather than creates listings.
     sellerActivityClient.recordActivity(req.userId);
@@ -289,22 +315,18 @@ async function remove(req, res, next) {
       req.userId,
       "remove",
     );
+    if (product.status === "reserved" || (product.status === "hidden" && product.preRemovalStatus === "reserved")) throw conflict("ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
     if (product.status === "auction") {
       throw forbidden(
         "cannot remove a product that is currently in an auction",
       );
     }
-    if (
-      product.status === "reserved" ||
-      (product.status === "hidden" && product.preRemovalStatus === "reserved")
-    ) {
-      throw conflict("ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+    if (product.status === "removed") {
+      throw forbidden("cannot delete a listing removed by Trust & Safety");
     }
-    const removed = await productModel.remove(req.params.id, req.userId);
+    const removed = await productModel.removeBySeller(req.params.id, req.userId);
     if (!removed) {
-      throw conflict(
-        "สถานะสินค้าเปลี่ยนแล้ว กรุณาโหลดใหม่ ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้",
-      );
+      throw conflict("listing changed, was reserved or was moderated; reload before deleting");
     }
     res.status(204).send();
   } catch (err) {
@@ -316,6 +338,7 @@ async function mine(req, res, next) {
   try {
     const pagination = parsePagination(req.query);
     const { items, total } = await productModel.listBySeller(req.userId, {
+      includeModerated: true,
       skip: pagination.skip,
       take: pagination.take,
     });
@@ -347,6 +370,7 @@ module.exports = {
   search,
   adminSearch,
   getOne,
+  getForModeration,
   bySeller,
   listCategories,
   listConditions,

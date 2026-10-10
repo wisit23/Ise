@@ -17,7 +17,12 @@ function createAuctionRepository(prismaClient) {
   function findProductOwner(productId) {
     return prismaClient.product.findUnique({
       where: { id: productId },
-      select: { id: true, sellerId: true, status: true },
+      select: {
+        id: true,
+        sellerId: true,
+        status: true,
+        moderatedAt: true,
+      },
     });
   }
 
@@ -32,10 +37,21 @@ function createAuctionRepository(prismaClient) {
     });
   }
 
+  function findPublicById(id) {
+    return prismaClient.auctionItem.findFirst({
+      where: {
+        id,
+        product: { moderatedAt: null, status: { not: "removed" } },
+      },
+      include: { ...WITH_PRODUCT, bids: { orderBy: { amount: "desc" } } },
+    });
+  }
+
   async function list({ status, skip, take, roundId }) {
     const where = {
       ...(status ? { status } : {}),
       ...(roundId ? { roundId } : {}),
+      product: { moderatedAt: null, status: { not: "removed" } },
     };
     const [items, total] = await Promise.all([
       prismaClient.auctionItem.findMany({
@@ -50,12 +66,30 @@ function createAuctionRepository(prismaClient) {
     return { items, total };
   }
 
-  function updateStatus(id, data) {
-    return prismaClient.auctionItem.update({
-      where: { id },
+  async function updateStatus(
+    id,
+    data,
+    { expectedStatus, requireUnmoderatedProduct = false } = {},
+  ) {
+    if (!expectedStatus && !requireUnmoderatedProduct) {
+      return prismaClient.auctionItem.update({
+        where: { id },
+        data,
+        include: WITH_PRODUCT,
+      });
+    }
+
+    await prismaClient.auctionItem.updateMany({
+      where: {
+        id,
+        ...(expectedStatus ? { status: expectedStatus } : {}),
+        ...(requireUnmoderatedProduct
+          ? { product: { moderatedAt: null, status: { not: "removed" } } }
+          : {}),
+      },
       data,
-      include: WITH_PRODUCT,
     });
+    return findById(id);
   }
 
   function highestBid(auctionId, tx = prismaClient) {
@@ -165,6 +199,7 @@ function createAuctionRepository(prismaClient) {
     findProductOwner,
     create,
     findById,
+    findPublicById,
     list,
     updateStatus,
     highestBid,

@@ -1,9 +1,10 @@
 const { sessionError } = require("@reloop/shared");
+const { restrictionsForStatus, isRestrictedStatus } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
 
 function assertActive(user) {
   if (!user) throw revokedSession();
-  if (user.status !== "ACTIVE") {
+  if (user.status !== "ACTIVE" && !isRestrictedStatus(user.status)) {
     throw sessionError(
       403,
       "ACCOUNT_SUSPENDED",
@@ -32,6 +33,10 @@ async function validateAccessSession(payload) {
   assertActive(session.user);
   if (session.revokedAt || session.expiresAt <= new Date())
     throw revokedSession();
+  return {
+    accountStatus: session.user.status,
+    commerceRestrictions: restrictionsForStatus(session.user.status),
+  };
 }
 
 // Used by session issuance and suspension/restoration so an in-flight login

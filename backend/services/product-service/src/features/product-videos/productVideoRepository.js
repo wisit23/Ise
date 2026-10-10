@@ -8,7 +8,9 @@ const prisma = require("../../models/prismaClient");
  */
 function createProductVideoRepository(prismaClient) {
   async function listAvailable({ skip, take }) {
-    const where = { product: { status: "available" } };
+    const where = {
+      product: { status: "available", moderatedAt: null },
+    };
 
     const [items, total] = await Promise.all([
       prismaClient.productVideo.findMany({
@@ -27,12 +29,17 @@ function createProductVideoRepository(prismaClient) {
   function findProductOwner(productId) {
     return prismaClient.product.findUnique({
       where: { id: productId },
-      select: { id: true, sellerId: true },
+      select: { id: true, sellerId: true, status: true, moderatedAt: true },
     });
   }
 
   function findById(id) {
-    return prismaClient.productVideo.findUnique({ where: { id } });
+    return prismaClient.productVideo.findUnique({
+      where: { id },
+      include: {
+        product: { select: { status: true, moderatedAt: true } },
+      },
+    });
   }
 
   function create(data) {

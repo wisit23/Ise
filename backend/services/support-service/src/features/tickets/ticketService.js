@@ -41,6 +41,7 @@ async function assertAccess({ ticketId, userId, role }) {
   // Trust & Safety / Admin is the escalation and safety authority; they can inspect
   // and moderate any ticket in the system without assignee-lockout.
   if (role === "ADMIN" || role === "TRUST_AND_SAFETY") return ticket;
+  if (role === "CUSTOMER_SERVICE" && ticket.chatResponderId === userId) return ticket;
   if (isAgent(role) && ticket.assigneeId === userId) return ticket;
   if (isAgent(role) && ticket.assigneeId === null) return ticket; // unassigned: any agent may pick it up / view it
   throw forbidden("you do not have access to this ticket");
@@ -153,7 +154,7 @@ async function getTicket({ ticketId, userId, role, before, limit }) {
   if (
     ticket.status === "ESCALATED" &&
     role === "CUSTOMER_SERVICE" &&
-    ticket.requesterId !== userId
+    ticket.requesterId !== userId && ticket.chatResponderId !== userId
   )
     throw forbidden(
       "only admin or trust & safety can access an escalated ticket",
@@ -258,7 +259,7 @@ async function listQueue({
 async function reply({ ticketId, userId, role, body, isInternal, eventKey }) {
   if (typeof body !== "string" || !body.trim())
     throw badRequest("body is required");
-  if (role === "ADMIN" && !isInternal) {
+  if (["ADMIN","TRUST_AND_SAFETY"].includes(role) && !isInternal) {
     throw forbidden("Admin audit is read-only for customer conversations");
   }
   const ticket = await assertAccess({ ticketId, userId, role });
@@ -267,7 +268,7 @@ async function reply({ ticketId, userId, role, body, isInternal, eventKey }) {
     throw badRequest("cannot reply to a closed ticket");
   }
 
-  if (role === "CUSTOMER_SERVICE" && ticket.assigneeId !== userId)
+  if (role === "CUSTOMER_SERVICE" && ticket.assigneeId !== userId && ticket.chatResponderId !== userId)
     throw forbidden("claim this ticket before replying");
 
   // A non-agent's isInternal is ignored rather than rejected — only agents
@@ -306,6 +307,7 @@ async function assignToSelf({ ticketId, userId, role, version }) {
     id: ticketId,
     version: ticket.version,
     assigneeId: userId,
+    ...(role === "CUSTOMER_SERVICE" ? {chatResponderId:userId} : {}),
   });
   if (!ok) throw conflict("ticket was already taken or modified");
 
@@ -333,8 +335,8 @@ async function changeStatus({
     throw forbidden("only support agents can change ticket status");
   const ticket = await assertAccess({ ticketId, userId, role });
 
-  if (role === "CUSTOMER_SERVICE" && ticket.assigneeId !== userId)
-    throw forbidden("claim this ticket before changing status");
+  if (role === "CUSTOMER_SERVICE" && (ticket.assigneeId !== userId || ticket.status === "ESCALATED"))
+    throw forbidden("only the case owner can change this ticket status");
   if (version !== undefined && version !== ticket.version)
     throw conflict("ticket was modified, reload before changing status");
   if (!canTransition(ticket.status, status)) {
@@ -356,6 +358,7 @@ async function changeStatus({
     version: ticket.version,
     status,
     actorId: userId,
+    ...(status === "ESCALATED" && role === "CUSTOMER_SERVICE" ? {chatResponderId:userId} : {}),
     reason: reason?.trim() || null,
   });
   if (!ok) throw conflict("ticket was modified concurrently, reload and retry");
@@ -439,7 +442,8 @@ async function joinTicketChat({ ticketId, userId, role }) {
     if (
       ticket.requesterId !== userId &&
       role !== "ADMIN" &&
-      role !== "TRUST_AND_SAFETY"
+      role !== "TRUST_AND_SAFETY" &&
+      !(role === "CUSTOMER_SERVICE" && ticket.chatResponderId === userId)
     ) {
       throw forbidden(
         "only admin or trust & safety can access an escalated ticket",
@@ -451,7 +455,7 @@ async function joinTicketChat({ ticketId, userId, role }) {
         // Admin and T&S have system-wide oversight
       } else if (isAgent(role)) {
         // CUSTOMER_SERVICE: permitted if unassigned or if they are the current assignee
-        if (ticket.assigneeId !== null && ticket.assigneeId !== userId) {
+        if (ticket.assigneeId !== null && ticket.assigneeId !== userId && ticket.chatResponderId !== userId) {
           throw forbidden("you do not have access to this ticket");
         }
       } else {
@@ -551,7 +555,7 @@ async function joinTicketChat({ ticketId, userId, role }) {
 
 async function getTicketConversation({ ticketId, userId, role }) {
   const ticket = await assertAccess({ ticketId, userId, role });
-  if (ticket.status === "ESCALATED" && role === "CUSTOMER_SERVICE") {
+  if (ticket.status === "ESCALATED" && role === "CUSTOMER_SERVICE" && ticket.chatResponderId !== userId) {
     throw forbidden(
       "only admin or trust & safety can access an escalated ticket",
     );
@@ -582,7 +586,22 @@ async function recordChatMessage(payload) {
   return ticketModel.recordChatMessage(payload);
 }
 
+async function getDashboardMetrics({role,days}) {
+ if(!isAgent(role))throw forbidden("only support agents can view dashboard metrics");
+ const count=Number(days || 8);if(!Number.isInteger(count)||count<1||count>31)throw badRequest("days must be an integer between 1 and 31");
+ return ticketModel.dashboardMetrics({includeEscalated:["ADMIN","TRUST_AND_SAFETY"].includes(role),days:count});
+}
+async function takeoverTicket({ticketId,userId,role,version,reason}) {
+ if(!["ADMIN","TRUST_AND_SAFETY"].includes(role))throw forbidden("only trust & safety can take over an assigned ticket");
+ if(!Number.isInteger(version))throw badRequest("version is required");
+ const ticket=await ticketModel.findById(ticketId);if(!ticket)throw notFound("ticket not found");
+ if(ticket.status!=="ESCALATED")throw badRequest("only escalated tickets can be taken over");
+ if(ticket.assigneeId===userId)return getTicket({ticketId,userId,role});
+ if(!await ticketModel.reassign({id:ticketId,version,assigneeId:userId,assignedById:userId,reason:reason || "Trust & Safety takeover"}))throw conflict("ticket was modified concurrently, reload and retry");
+ return getTicket({ticketId,userId,role});
+}
 module.exports = {
+ getDashboardMetrics,takeoverTicket,
   createTicket,
   getTicket,
   listMine,

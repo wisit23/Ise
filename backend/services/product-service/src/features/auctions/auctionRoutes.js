@@ -1,5 +1,10 @@
 const { Router } = require("express");
-const { requireAuth, requireCustomerAccount } = require("@reloop/shared");
+const {
+  requireAuth,
+  requireCustomerAccount,
+  requireCommerceCapability,
+  CAPABILITY,
+} = require("@reloop/shared");
 const auctionController = require("./auctionController");
 
 const router = Router();
@@ -15,7 +20,12 @@ router.get("/", auctionController.list);
 router.get("/:id", auctionController.getOne);
 
 // Seller submits their own product; role/ownership rules live in the service.
-router.post("/", requireAuth, auctionController.submit);
+router.post(
+  "/",
+  requireAuth,
+  requireCommerceCapability(CAPABILITY.SELLER),
+  auctionController.submit,
+);
 
 // Admin approval gate — must pass before Marketing can schedule it.
 router.patch("/:id/approve", requireAuth, auctionController.approve);
@@ -30,6 +40,7 @@ router.post(
   "/:id/bids",
   requireAuth,
   requireCustomerAccount,
+  requireCommerceCapability(CAPABILITY.BUYER),
   auctionController.bid,
 );
 

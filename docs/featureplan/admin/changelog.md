@@ -629,3 +629,61 @@ Refactor ปรับปรุงประสบการณ์ใช้งา�
 - เพิ่ม timeout 5 วินาทีให้ internal Auth lookup และลบ `toRole` ที่ไม่ใช้จาก request contract
 - ทำ `REQUIRE_INTEGRATION=1` ให้ fail จริงเมื่อ DB เข้าไม่ได้ และแก้ชื่อ scenario เป็น Hold eligibility + Concurrent Pay ให้ตรงสิ่งที่ทดสอบ
 - ผลยืนยันหลังรวมทุก branch: primary PostgreSQL integration 10/10, targeted conflict unit 27/27, full backend 469 passed/0 failed/1 skipped (cross-service case ยืนยันผ่าน live Gateway แทน), frontend 45 suites/239 tests, production build 27 static pages และ ESLint ทั้ง repository ผ่าน
+
+## 2026-10-05 — TSR-03 Atomic Commands, Durable Idempotency and UI Retry Safety
+
+- เพิ่ม optimistic concurrency (`version` + state CAS) ให้ KYC และ Report พร้อมย้าย business state/Audit ที่อยู่ฐานเดียวกันเข้า transaction เดียว
+- เพิ่ม `AdminOperation` ใน Auth และ `ProductModerationCommand` ใน Product สำหรับ REMOVE/RESTORE_PRODUCT แบบ durable idempotency; exact replay คืนผลเดิม, key เดิมต่าง payload ตอบ 409 และ Product state ใช้ CAS ป้องกันคำสั่งพร้อมกัน
+- เพิ่ม timeout 5 วินาทีสำหรับ Auth→Product moderation client และยืนยันกรณี Product สำเร็จแต่ response สูญหายว่า retry finalize รายงานได้โดยไม่เกิด side effect/Audit ซ้ำ
+- ปรับ Bulk ให้ claim key ก่อน side effect และผูก actor/action/payload hash; concurrent request ไม่รันซ้ำและ partial failure คงผลรายรายการ
+- ปรับ Inbox Ban ให้ใช้ single-user endpoint พร้อม reason/double-submit guard และปรับ Product Restore ให้บังคับ reason พร้อมเก็บ operation key เดิมข้าม retry
+- เพิ่ม Auth migration `20261005090000_tsr03_atomic_operations`; ตรวจ migration chain ครบ 6 migration บนฐานแยก
+- ผลตรวจรับ: Auth TSR-03 3/3 suites, regression selection 36/36 tests, Product moderation 1/1 suite, Frontend 45/45 suites (238/238 tests), production build 27 pages และ whitespace/lint checks ผ่าน
+- ยังไม่อ้าง browser/runtime rollout หรือ full-flow acceptance; งานนั้นอยู่ TSR-15 งานถัดไปตาม remediation plan คือ TSR-04
+
+## 2026-10-07 — Auth ER Design Alignment
+
+- ปรับ Auth Prisma schema ให้เหลือ 16 ตารางตรงกับ `ER_auth.drawio` ล่าสุด
+- เพิ่ม `role`, `shop_change_request_items`, `buyer_profiles.favorite_category` และ `buyer_profiles.updated_at`
+- เปลี่ยน physical columns เป็น `user_roles.role_code`, `shop_change_requests.requests_id` และ `shop_change_request_items.requests_id` ตามแบบ
+- ย้าย shop profile changes ไปเป็น item rows ที่เก็บ `field_name`, `old_value`, `new_value` พร้อมคง response เดิมให้ frontend ใช้งานต่อได้
+- ถอด Auth `admin_operations`, `reports.version` และ operational columns ที่เกินแบบออก; ปรับ Bulk ให้ใช้ `results` JSON และให้ Product owner service ดูแล moderation idempotency
+- เพิ่ม migration `20261007130000_align_auth_er_design`, role seed catalog, unit tests และอัปเดต `database/schema.md`/`database/ER-changes.md`
+- เปลี่ยน Auth container startup จาก `prisma db push --accept-data-loss` เป็น `prisma/migrate.js`; wrapper จะ baseline ฐานเดิมที่สร้างด้วย db-push ก่อนเรียก `prisma migrate deploy` เพื่อให้ data migration ของ shop-change ทำงานจริง
+- ผลตรวจ: migration chain 6 ตัวผ่านบน PostgreSQL แยก, database-to-schema diff ไม่พบ drift, ตารางจริงครบ 16 ตาราง, db-push baseline/upgrade path ผ่าน, targeted Auth 17 passed/0 failed/1 skipped, PostgreSQL integration 8/8 และ ESLint/Prettier ผ่าน
+
+## 2026-10-08 — TSR-04 Product Visibility/Lifecycle Remediation
+
+- แยก moderation overlay ออกจาก commerce status เพื่อให้ public detail/feed/search/store/video/auction ไม่แสดงสินค้าที่ถูกระงับ แม้ reservation/order/auction จะเปลี่ยนสถานะภายใน
+- เพิ่ม staff-only product detail/search และคง owner evidence view แบบ read-only พร้อม reason; บล็อก seller update/delete/visibility/video attachment ด้วย guarded write
+- ปรับ Seller dashboard, edit page และ video upload ให้ไม่เสนอ action ที่ Backend จะปฏิเสธ และแสดงเหตุผลการระงับอย่างชัดเจน
+- ป้องกัน checkout/campaign/auction/bid/swipe ของสินค้าที่ถูกระงับ และเพิ่ม moderation-aware CAS ให้ auction auto-open/close ไม่เขียนทับการยกเลิกของ Trust & Safety
+- Restore ใช้ commerce state ปัจจุบัน ไม่คืน stale `preRemovalStatus`; reservation ที่หมด/ถูกปล่อยคืนเป็น `available` ส่วน auction ที่มี winning order คง `reserved` จนกว่า Order service จะยืนยันการชำระหรือยกเลิก
+- ไม่มีการแก้ Prisma schema, migration หรือแบบฐานข้อมูลในงาน TSR-04 รอบนี้
+- ผลตรวจ: Product moderation PostgreSQL 1/1, targeted Product unit 82/82, HTTP app 10/10, Seller UI 2/2 และ targeted ESLint ผ่าน; Product regression ผ่านทุกส่วนยกเว้น BullMQ delayed-worker timeout ซึ่งเป็น dependency/runtime boundary เดิม
+- ข้อจำกัด: public `/uploads/*` ยังไม่สามารถ revoke URL เดิมได้จาก visibility layer; ต้องกำหนด private storage/signed URL หรือ CDN purge policy แยก
+
+## 2026-10-08 — TSR-05 Inbox Pagination/Search/Detail (Fixed Schema)
+
+- แยก Inbox เป็น “รายงาน” และ “เคสส่งต่อ” โดยแต่ละแหล่งมี search/filter/page/total ของตัวเอง
+- เพิ่ม Report query `q` พร้อม pagination/status จริง และรองรับ ALL โดยไม่บังคับกลับเป็น OPEN
+- ไม่กลืน service error เป็นรายการว่าง; เพิ่มข้อความระบุแหล่งที่ล้มและปุ่ม retry
+- เปิด Report/Ticket แล้วอ่าน detail ใหม่; Report แสดงผู้แจ้ง คู่กรณี safety summary สินค้าจาก Product owner API และผลตัดสินจาก AdminAudit
+- เพิ่มทางลัดจากบุคคลใน Report ไปหน้าค้นหาประวัติผู้ใช้
+- ผลทดสอบ: Inbox UI 4/4, Auth report service 3/3, Product PostgreSQL integration 1/1; Auth PostgreSQL ถูกบล็อกด้วย test DB/Prisma drift ที่ `User.role` และไม่ได้แก้ schema ตามข้อกำหนด
+- ยังทำ Report category/evidence ไม่ได้ เพราะ schema ปัจจุบันไม่มี field/relation/storage key ที่จำเป็น; ไม่ใช้ `reason` เป็นช่องซ่อนข้อมูลแทน
+
+## 2026-10-08 — TSR-06 KYC Persistence and Audit (Fixed Schema)
+
+- เพิ่ม `status=ALL` contract โดยคง omitted status เป็น PENDING สำหรับ client เดิม
+- เพิ่ม `KYC_STORAGE_DIR`, named volume `auth_private_kyc`, `.gitignore` และคำสั่ง `kyc:inventory` สำหรับเทียบ DB keys กับไฟล์/ย้ายไฟล์เดิมแบบไม่ overwrite
+- เปลี่ยน upload เป็น bounded memory ก่อน persist และรวม role, legacy role, SellerProfile, KycApplication ใน transaction ที่ล็อก user; DB failure ลบไฟล์ใหม่ชดเชย
+- ตรวจไฟล์ก่อน stream และบันทึก `KYC_DOCUMENT_VIEWED` หลังผ่าน owner/reviewer authorization
+- หน้า KYC แสดง missing file พร้อมแนวทาง resubmit, แยก Thai ID no-file case และใช้ `reason` จริงสำหรับผลปฏิเสธ
+- ระบุข้อมูล SellerProfile ของใบสมัครเก่าว่าเป็นข้อมูลปัจจุบัน เพราะ schema คงที่ไม่มี application snapshot
+- ผลตรวจ: backend KYC 5/5, Auth targeted 22/0/1 skip, frontend targeted 15/15, lint/format/compose config ผ่าน; PostgreSQL Auth ยังถูกบล็อกด้วย `User.role` DB/client drift และไม่ได้แก้ฐาน
+- 2026-10-10 — TSR-09: เปิด Ticket workflow ใน drawer ตั้งแต่ detail/thread/reply/internal note ถึง pending/resume/resolve/close พร้อม version conflict และ T&S takeover audit; เปลี่ยน Dashboard เป็น owner aggregates จริง เพิ่ม KYC/Report/T&S Hold unavailable-aware KPI และเพิ่ม FAQ edit/publish/unpublish แบบ versioned โดยไม่แก้ schema. Support PostgreSQL 3/3, frontend support 24/24 และ Next build ผ่าน; FAQ action audit ยังรอ persistence contract.
+- 2026-10-10 — TSR-10: ให้ Hold ใช้ DisputeEvidence ชุดเดียวกับหน้า Dispute, เพิ่ม authorized/audited evidence และ ORDER buyer-seller Chat history/attachment proxy แบบ cursor pagination, และแสดง shipping availability จากข้อมูล Order จริงโดยไม่แต่ง tracking/carrier. Order PostgreSQL 3/3, Chat Mongo 14/14, Chat unit 10/10, frontend Chat 2/2 และ Next build 27 pages ผ่าน; carrier/tracking/shippedAt/receivedAt ยังทำไม่ได้ภายใต้ schema คงที่.
+- 2026-10-10 — TSR-14: เพิ่ม Workspace Bulk Actions สำหรับ Warn/Suspend/Restore สูงสุด 100 บัญชี มี dry-run, ผลรายบัญชี, same-key replay หลัง timeout และ failed-only retry ที่อ้าง operation ต้นฉบับ. Frontend 3/3 และ Next build 27 pages ผ่าน; PostgreSQL acceptance ถูกบล็อกก่อน assertions ด้วย Auth test DB/generated-client drift ที่ `User.role=ADMIN` และไม่ได้แก้ schema.
+- 2026-10-10 — TSR-15 (partial acceptance): แก้ Ticket test fixture ให้ส่ง version และแก้ Audit date filter เป็น UTC boundary ที่แน่นอน; critical backend 64/64, Workspace frontend 29/29, Product PostgreSQL 3/3, Order 16/16, Support 4/4, Chat Mongo/Redis 82/82, Gateway role matrix และ desktop browser T&S/CS ผ่าน พร้อม Next build 27 pages. ยังไม่ปิดงานเพราะ Auth PostgreSQL 0/5 ติด P2032 จาก DB/client drift, container recreate ขัด unsafe db-push startup, และ mobile/multi-role/production-like acceptance ยัง Deferred. ไม่มี schema/migration change และไม่แตะ TSR-11–13.
+- 2026-10-10 — TSR-13 (partial, schema-frozen): เพิ่ม current restriction scope ใน `User.status`, live session propagation, staff restrict/revoke API พร้อม Audit, owner-side Buyer/Seller write gates, normal checkout/auction auto-order seller recheck พร้อม reservation compensation, user banner และ admin controls โดยยัง login/read/เคสเดิมได้. Backend targeted 37/37, frontend Orders/Audit 6/6 และ lint/format ผ่าน; durable sanction/appeal/notification ยังทำไม่ได้เพราะไม่มี owner persistence relation และไม่มี schema change.

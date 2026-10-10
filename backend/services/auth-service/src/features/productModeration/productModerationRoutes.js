@@ -15,6 +15,7 @@ router.post(
         adminId: req.userId,
         staffId: req.userId,
         reason: req.body.reason,
+        idempotencyKey: req.body.idempotencyKey,
         requestId: req.id,
       });
       res.json(product);
@@ -34,6 +35,8 @@ router.post(
         productId: req.params.id,
         adminId: req.userId,
         staffId: req.userId,
+        reason: req.body.reason,
+        idempotencyKey: req.body.idempotencyKey,
         requestId: req.id,
       });
       res.json(product);

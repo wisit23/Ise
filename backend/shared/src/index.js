@@ -13,5 +13,6 @@ module.exports = {
   ...require("./executiveMetrics"),
   ...require("./casePriority"),
   ...require("./servicePolicy"),
+  ...require("./commerceRestrictions"),
   events: require("./events").EVENTS,
 };

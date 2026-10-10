@@ -80,6 +80,10 @@ app.use((req, res, next) => {
     req.headers["x-user-display-name"] = encodeURIComponent(
       req.userDisplayName || "",
     );
+    req.headers["x-user-account-status"] = req.accountStatus || "ACTIVE";
+    req.headers["x-user-commerce-restrictions"] = (
+      req.commerceRestrictions || []
+    ).join(",");
     next();
   });
 });

@@ -14,6 +14,7 @@ const RESERVATION_SELECT = {
   reservationId: true,
   reservedBy: true,
   reservationExpiresAt: true,
+  moderatedAt: true,
 };
 
 function isActiveReservation(product, buyerId, now) {
@@ -52,6 +53,9 @@ async function reserveProduct(
     select: RESERVATION_SELECT,
   });
   if (!product) throw notFound("product not found");
+  if (product.moderatedAt || product.status === "removed") {
+    throw conflict("product is unavailable due to moderation");
+  }
   if (product.sellerId === buyerId) {
     throw badRequest("you cannot buy your own listing");
   }
@@ -63,6 +67,7 @@ async function reserveProduct(
   const claimed = await prisma.product.updateMany({
     where: {
       id: productId,
+      moderatedAt: null,
       OR: [
         { status: "available" },
         {
@@ -125,6 +130,7 @@ async function extendProductReservation(
       status: "reserved",
       reservationId,
       reservationExpiresAt: { gt: now },
+      moderatedAt: null,
     },
     data: { reservationExpiresAt: expiresAt },
   });
@@ -145,6 +151,7 @@ async function completeProductReservation(
       status: "reserved",
       reservationId,
       reservationExpiresAt: { gt: now },
+      moderatedAt: null,
     },
     data: {
       status: "sold",

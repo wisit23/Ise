@@ -456,4 +456,38 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
       assert.equal(resMatch.length, 2);
     },
   );
+
+  await t.test(
+    "Checkout quote rejects a product under Trust & Safety moderation",
+    async () => {
+      const repo = createMockRepo({
+        findVoucher: async () => ({
+          id: "voucher-1",
+          status: "CLAIMED",
+          usedOrderId: null,
+        }),
+        findProduct: async () => ({
+          id: "product-1",
+          status: "reserved",
+          moderatedAt: new Date(),
+          reservedBy: buyerUser.id,
+          reservationExpiresAt: new Date(Date.now() + 60000),
+        }),
+      });
+      const service = createCampaignService(repo);
+
+      await assert.rejects(
+        () =>
+          service.quoteAndHold({
+            campaignId: "camp-1",
+            userId: buyerUser.id,
+            orderId: "order-1",
+            productId: "product-1",
+          }),
+        (err) =>
+          err.status === 400 &&
+          err.message === "product is unavailable due to moderation",
+      );
+    },
+  );
 });

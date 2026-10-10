@@ -4,6 +4,8 @@ const {
   requireRole,
   fromGatewayHeaders,
   verifyAccessToken,
+  requireCommerceCapability,
+  CAPABILITY,
 } = require("@reloop/shared");
 const campaignController = require("./campaignController");
 
@@ -47,7 +49,12 @@ router.post(
 );
 
 // Buyer claiming (hold/release/complete are internal only)
-router.post("/:id/claim", requireAuth, campaignController.claim);
+router.post(
+  "/:id/claim",
+  requireAuth,
+  requireCommerceCapability(CAPABILITY.BUYER),
+  campaignController.claim,
+);
 
 // Lifecycle actions (supporting both POST and PATCH for flexibility)
 router.post(

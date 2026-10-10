@@ -58,6 +58,7 @@ async function stopChild(child) {
 }
 
 test("only one of two buyers reserves a product and expiry cannot unlock a newer reservation", async (t) => {
+  t.mock.method(require("../src/services/authClient"), "getUser", async id=>({id,status:"ACTIVE"}));
   if (!(await databasesAreReachable())) {
     const message =
       "DATABASE_URL_PRODUCT/DATABASE_URL_ORDER not set or databases unreachable";

@@ -42,6 +42,52 @@ test("releases a newly-created product reservation when the Order write fails", 
   ]);
 });
 
+test("authorization failure releases a newly-created reservation before Order write", async () => {
+  const released = [];
+  let createCalled = false;
+  const productClient = {
+    reserveProduct: async () => ({
+      created: true,
+      reservationId: "reservation-restricted-seller",
+      expiresAt: "2026-08-10T12:10:00.000Z",
+      product: PRODUCT,
+    }),
+    releaseProductReservation: async (productId, reservationId) => {
+      released.push({ productId, reservationId });
+    },
+  };
+  const orderModel = {
+    findByReservationId: async () => null,
+    create: async () => {
+      createCalled = true;
+    },
+  };
+
+  await assert.rejects(
+    reserveOrder(
+      { buyerId: "buyer-1", productId: PRODUCT.id },
+      {
+        productClient,
+        orderModel,
+        authorizeReservation: async () => {
+          const error = new Error("seller commerce is restricted");
+          error.status = 403;
+          throw error;
+        },
+      },
+    ),
+    /seller commerce is restricted/,
+  );
+
+  assert.equal(createCalled, false);
+  assert.deepEqual(released, [
+    {
+      productId: PRODUCT.id,
+      reservationId: "reservation-restricted-seller",
+    },
+  ]);
+});
+
 test("Order write failure with voucher releases BOTH voucher hold and product reservation", async () => {
   const releasedProducts = [];
   const releasedVouchers = [];

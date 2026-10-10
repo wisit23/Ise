@@ -4,6 +4,7 @@ export default function FaqArticleCard({
   article,
   publishing,
   onPublish,
+  onUnpublish,
   onEdit,
   onDelete,
 }) {
@@ -46,6 +47,7 @@ export default function FaqArticleCard({
         >
           ลบ
         </Button>
+        {published && <Button type="button" variant="secondary" disabled={publishing} onClick={()=>onUnpublish(article)}>หยุดเผยแพร่</Button>}
         {(!published || article.hasUnpublishedChanges) && (
           <Button
             type="button"

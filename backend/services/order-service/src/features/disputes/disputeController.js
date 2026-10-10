@@ -111,7 +111,7 @@ async function viewEvidence(req, res, next) {
       roles: req.userRoles,
     });
     res.setHeader("Content-Type", fileType);
-    require("fs").createReadStream(filePath).pipe(res);
+    res.sendFile(filePath, err => { if(err) next(err); });
   } catch (err) {
     next(err);
   }
@@ -235,7 +235,59 @@ async function setEvidenceDeadline(req, res, next) {
     next(err);
   }
 }
+async function dashboard(req, res, next) {
+  try {
+    res.json(
+      await disputeService.getDashboardMetrics({
+        role: req.userRole,
+        roles: req.userRoles,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function chatHistory(req, res, next) {
+  try {
+    res.json(
+      await disputeService.getChatHistory({
+        disputeId: req.params.id,
+        userId: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+        before: req.query.before,
+        limit: req.query.limit,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function chatAttachment(req, res, next) {
+  try {
+    const attachment = await disputeService.getChatAttachment({
+      disputeId: req.params.id,
+      messageId: req.params.messageId,
+      userId: req.userId,
+      role: req.userRole,
+      roles: req.userRoles,
+    });
+    res.setHeader("Content-Type", attachment.contentType);
+    if (attachment.contentDisposition) {
+      res.setHeader("Content-Disposition", attachment.contentDisposition);
+    }
+    res.send(attachment.bytes);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  chatAttachment,
+  chatHistory,
+  dashboard,
   setEvidenceDeadline,
   open,
   getOne,

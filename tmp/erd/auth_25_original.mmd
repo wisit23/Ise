@@ -1,0 +1,277 @@
+erDiagram
+    users ||--|| user_profiles : has
+    users ||--o{ auth_identities : authenticates_with
+    users ||--o{ user_addresses : owns
+    users ||--o{ user_roles : assigned
+    roles ||--o{ user_roles : grants
+    roles ||--o{ role_permissions : contains
+    permissions ||--o{ role_permissions : included_in
+
+    users ||--o{ sessions : opens
+    sessions ||--o{ refresh_tokens : rotates
+    users o|--o{ auth_events : generates
+    sessions o|--o{ auth_events : records
+    users ||--o{ one_time_tokens : requests
+    users ||--o{ mfa_factors : secures
+    users ||--o{ account_status_events : changes_status
+
+    users ||--o| seller_profiles : becomes
+    seller_profiles ||--o{ kyc_applications : submits
+    kyc_applications ||--o{ kyc_documents : contains
+    kyc_applications ||--o{ kyc_decisions : receives
+    users ||--o{ kyc_decisions : reviews
+    seller_profiles ||--o{ seller_verifications : receives
+    kyc_applications ||--o| seller_verifications : produces
+
+    seller_profiles ||--o{ shop_change_requests : requests
+    shop_change_requests ||--|{ shop_change_request_items : contains
+
+    users o|--o{ audit_events : acts
+    users ||--o{ bulk_action_runs : starts
+    bulk_action_runs ||--|{ bulk_action_items : contains
+
+    users {
+        uuid id PK
+        string status
+        datetime created_at
+        datetime updated_at
+        datetime deleted_at
+    }
+
+    user_profiles {
+        uuid user_id PK,FK
+        string first_name
+        string last_name
+        string phone
+        datetime updated_at
+    }
+
+    auth_identities {
+        uuid id PK
+        uuid user_id FK
+        string provider
+        string identifier
+        string credential_hash
+        datetime verified_at
+        datetime created_at
+    }
+
+    user_addresses {
+        uuid id PK
+        uuid user_id FK
+        string label
+        string recipient_name
+        string phone
+        string address_line
+        string subdistrict
+        string district
+        string province
+        string postal_code
+        boolean is_default
+        datetime deleted_at
+    }
+
+    roles {
+        uuid id PK
+        string code UK
+        string display_name
+        boolean is_system
+        boolean is_active
+    }
+
+    permissions {
+        uuid id PK
+        string code UK
+        string description
+    }
+
+    user_roles {
+        uuid id PK
+        uuid user_id FK
+        uuid role_id FK
+        uuid granted_by FK
+        datetime granted_at
+        datetime expires_at
+        datetime revoked_at
+    }
+
+    role_permissions {
+        uuid role_id PK,FK
+        uuid permission_id PK,FK
+    }
+
+    sessions {
+        uuid id PK
+        uuid user_id FK
+        string status
+        string ip_address
+        string user_agent
+        datetime created_at
+        datetime last_seen_at
+        datetime expires_at
+        datetime revoked_at
+    }
+
+    refresh_tokens {
+        uuid id PK
+        uuid session_id FK
+        string token_hash UK
+        uuid parent_token_id
+        datetime expires_at
+        datetime used_at
+        datetime revoked_at
+    }
+
+    auth_events {
+        uuid id PK
+        uuid user_id FK
+        uuid session_id FK
+        string event_type
+        string result
+        string request_id
+        string ip_address
+        string user_agent
+        datetime occurred_at
+    }
+
+    one_time_tokens {
+        uuid id PK
+        uuid user_id FK
+        string type
+        string token_hash UK
+        datetime expires_at
+        datetime consumed_at
+    }
+
+    mfa_factors {
+        uuid id PK
+        uuid user_id FK
+        string type
+        string credential_ref
+        datetime verified_at
+        datetime revoked_at
+    }
+
+    account_status_events {
+        uuid id PK
+        uuid user_id FK
+        string previous_status
+        string new_status
+        uuid changed_by FK
+        string reason
+        datetime created_at
+    }
+
+    seller_profiles {
+        uuid user_id PK,FK
+        string shop_name
+        string address
+        string payout_account_ref
+        datetime last_active_at
+        datetime created_at
+        datetime updated_at
+    }
+
+    kyc_applications {
+        uuid id PK
+        uuid seller_id FK
+        string status
+        int version
+        datetime submitted_at
+        datetime closed_at
+    }
+
+    kyc_documents {
+        uuid id PK
+        uuid application_id FK
+        string document_type
+        string storage_key
+        string mime_type
+        string checksum
+        datetime expires_at
+        datetime deleted_at
+    }
+
+    kyc_decisions {
+        uuid id PK
+        uuid application_id FK
+        uuid reviewer_id FK
+        string decision
+        string reason
+        datetime decided_at
+    }
+
+    seller_verifications {
+        uuid id PK
+        uuid seller_id FK
+        uuid application_id FK
+        string status
+        datetime valid_from
+        datetime valid_until
+        datetime revoked_at
+        string revoked_reason
+    }
+
+    shop_change_requests {
+        uuid id PK
+        uuid seller_id FK
+        string status
+        string comment
+        uuid reviewed_by FK
+        string review_note
+        datetime created_at
+        datetime reviewed_at
+    }
+
+    shop_change_request_items {
+        uuid id PK
+        uuid request_id FK
+        string field_name
+        json old_value
+        json new_value
+    }
+
+    audit_events {
+        uuid id PK
+        uuid actor_user_id FK
+        string actor_type
+        string category
+        string action
+        string target_type
+        string target_id
+        string reason
+        string request_id UK
+        json metadata
+        datetime created_at
+    }
+
+    bulk_action_runs {
+        uuid id PK
+        uuid actor_user_id FK
+        string action
+        string status
+        string reason
+        string idempotency_key UK
+        datetime created_at
+        datetime completed_at
+    }
+
+    bulk_action_items {
+        uuid id PK
+        uuid run_id FK
+        string target_type
+        string target_id
+        string status
+        json result
+        string error_code
+    }
+
+    outbox_events {
+        uuid id PK
+        string aggregate_type
+        string aggregate_id
+        string event_type
+        json payload
+        datetime occurred_at
+        datetime published_at
+    }

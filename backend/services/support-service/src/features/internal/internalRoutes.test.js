@@ -14,7 +14,8 @@ test("ticket owner preserves requester history and revokes escalated CS", async 
   });
   process.env.INTERNAL_SERVICE_TOKEN = "unit-internal-token";
   let status = "ESCALATED";
-  ticketModel.findById = async () => ({ requesterId: "buyer-1", assigneeId: "old-agent", status });
+  let chatResponderId = null;
+  ticketModel.findById = async () => ({ requesterId: "buyer-1", assigneeId: "old-agent", chatResponderId, status });
   const app = express().use("/internal", router);
   const call = (id, role) => request(app)
     .get(`/internal/tickets/ticket-1/chat-access/${id}?role=${role}`)
@@ -22,6 +23,10 @@ test("ticket owner preserves requester history and revokes escalated CS", async 
   assert.deepEqual((await call("buyer-1", "BUYER")).body, { allowed: true, writable: true });
   assert.deepEqual((await call("old-agent", "AGENT")).body, { allowed: false, writable: false });
   assert.deepEqual((await call("admin-1", "ADMIN")).body, { allowed: true, writable: false });
+  chatResponderId="cs-responder";
+  assert.deepEqual((await call("cs-responder", "AGENT")).body,{allowed:true,writable:true});
+  assert.deepEqual((await call("other-cs", "AGENT")).body,{allowed:false,writable:false});
+  assert.deepEqual((await call("admin-1", "ADMIN")).body,{allowed:true,writable:false});
   status = "CLOSED";
   assert.deepEqual((await call("buyer-1", "BUYER")).body, { allowed: true, writable: false });
 });

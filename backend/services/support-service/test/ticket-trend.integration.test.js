@@ -15,14 +15,14 @@ test("PostgreSQL trend counts beyond 50, fills empty dates, and keeps CS ownersh
   try {
     await db.$transaction(async (tx) => {
       for (const sql of [
-        "CREATE TEMP TABLE support_tickets (id text, created_at timestamptz, current_status_id int, ticket_priority_id int) ON COMMIT DROP",
+        "CREATE TEMP TABLE support_tickets (id text, created_at timestamptz, current_status_id int, ticket_priority_id int, chat_responder_id text) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_statuses (ticket_status_id int, code text) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_priorities (ticket_priority_id int, code text) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_assignments (assignment_id text, ticket_id text, assignee_id text, assigned_at timestamptz, ended_at timestamptz) ON COMMIT DROP",
         "INSERT INTO ticket_statuses VALUES (1,'NEW'),(2,'ESCALATED')",
         "INSERT INTO ticket_priorities VALUES (1,'NORMAL')",
-        "INSERT INTO support_tickets SELECT n::text, '2026-10-08T20:00:00Z'::timestamptz, 1, 1 FROM generate_series(1,75) n",
-        "INSERT INTO support_tickets VALUES ('private','2026-10-08T20:00:00Z',1,1), ('escalated','2026-10-08T20:00:00Z',2,1)",
+        "INSERT INTO support_tickets SELECT n::text, '2026-10-08T20:00:00Z'::timestamptz, 1, 1, NULL FROM generate_series(1,75) n",
+        "INSERT INTO support_tickets VALUES ('private','2026-10-08T20:00:00Z',1,1,NULL), ('escalated','2026-10-08T20:00:00Z',2,1,NULL)",
         "INSERT INTO ticket_assignments VALUES ('a','private','other','2026-10-08T20:00:00Z',NULL)",
       ])
         await tx.$executeRawUnsafe(sql);

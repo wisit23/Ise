@@ -258,7 +258,7 @@ export default function SupportPanelPage() {
                   />
                 )}
                 {section === "admin_inbox" && (
-                  <AdminInboxSection token={token} currentUserId={user?.id} />
+                  <AdminInboxSection token={token} currentUserId={user?.id} initialReportId={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("reportId") || "" : ""} />
                 )}
                 {section === "orders" && <OrdersSection token={token} />}
                 {section === "faq" && <FaqSection token={token} />}

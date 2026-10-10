@@ -56,10 +56,21 @@ test("bounded batch enforces cap, dry-run, permission-per-action and idempotency
   const marketingToken = tokenFor(`adm-005-marketing+${Date.now()}`, [
     "MARKETING",
   ]);
+  let admin;
   let userA;
   let userB;
 
   try {
+    admin = await prisma.user.create({
+      data: {
+        id: adminId,
+        email: `${TEST_EMAIL_PREFIX}admin+${Date.now()}@example.test`,
+        passwordHash: await bcrypt.hash("irrelevant", 10),
+        firstName: "Admin",
+        lastName: "User",
+        role: "ADMIN",
+      },
+    });
     userA = await prisma.user.create({
       data: {
         email: `${TEST_EMAIL_PREFIX}a+${Date.now()}@example.test`,
@@ -163,6 +174,53 @@ test("bounded batch enforces cap, dry-run, permission-per-action and idempotency
     assert.equal(replayRes.status, 200);
     assert.deepEqual(replayRes.body, runRes.body);
 
+    const mismatchedReplayRes = await request(app)
+      .post("/admin/bulk")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        action: "SUSPEND_USER",
+        ids: [userB.id],
+        reason: "different payload",
+        idempotencyKey: `bulk-test-${userA.id}`,
+      });
+    assert.equal(mismatchedReplayRes.status, 409);
+
+    const concurrentKey = `bulk-concurrent-${userB.id}`;
+    const concurrentResponses = await Promise.all([
+      request(app)
+        .post("/admin/bulk")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          action: "SUSPEND_USER",
+          ids: [userB.id],
+          reason: "concurrent claim",
+          idempotencyKey: concurrentKey,
+        }),
+      request(app)
+        .post("/admin/bulk")
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          action: "SUSPEND_USER",
+          ids: [userB.id],
+          reason: "concurrent claim",
+          idempotencyKey: concurrentKey,
+        }),
+    ]);
+    assert.ok(concurrentResponses.some((res) => res.status === 200));
+    assert.ok(
+      concurrentResponses.every((res) => [200, 409].includes(res.status)),
+    );
+    assert.equal(
+      await prisma.adminAudit.count({
+        where: {
+          actorId: adminId,
+          targetId: userB.id,
+          action: "USER_SUSPENDED",
+        },
+      }),
+      1,
+    );
+
     // Audit query: wrong permission denied, correct permission returns rows.
     const auditDeniedRes = await request(app)
       .get("/admin/audit")
@@ -176,9 +234,14 @@ test("bounded batch enforces cap, dry-run, permission-per-action and idempotency
     assert.ok(auditRes.body.items.some((a) => a.action === "USER_SUSPENDED"));
   } finally {
     await prisma.bulkActionRun.deleteMany({
-      where: { idempotencyKey: `bulk-test-${userA?.id}` },
+      where: {
+        idempotencyKey: {
+          in: [`bulk-test-${userA?.id}`, `bulk-concurrent-${userB?.id}`],
+        },
+      },
     });
     await prisma.adminAudit.deleteMany({ where: { actorId: adminId } });
+    if (admin) await prisma.user.deleteMany({ where: { id: admin.id } });
     if (userA) await prisma.user.deleteMany({ where: { id: userA.id } });
     if (userB) await prisma.user.deleteMany({ where: { id: userB.id } });
     await prisma.$disconnect();

@@ -76,6 +76,10 @@ async function publish({ role, id, version }) {
   return article;
 }
 
+async function unpublish({role,id,version}){
+  if(!AGENT_ROLES.has(role))throw forbidden("only support agents can unpublish help articles");
+  const article=await helpModel.unpublish(id,version);if(!article)throw notFound("help article not found");return article;
+}
 async function remove({ role, id }) {
   if (!AGENT_ROLES.has(role))
     throw forbidden("only support agents can delete help articles");
@@ -83,6 +87,7 @@ async function remove({ role, id }) {
 }
 
 module.exports = {
+  unpublish,
   searchPublic,
   listForAgent,
   createDraft,

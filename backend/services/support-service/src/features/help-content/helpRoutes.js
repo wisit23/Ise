@@ -15,7 +15,9 @@ router.get("/", helpController.search);
 router.get("/manage", requireAuth, helpController.manage);
 
 router.post("/", requireAuth, helpController.create);
+router.patch("/:id/unpublish", requireAuth, helpController.unpublish);
 router.patch("/:id/publish", requireAuth, helpController.publish);
+router.patch("/:id", requireAuth, helpController.revise);
 router.post("/:id/revisions", requireAuth, helpController.revise);
 router.delete("/:id", requireAuth, helpController.remove);
 

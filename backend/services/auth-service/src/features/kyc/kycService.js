@@ -1,7 +1,12 @@
 const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const { assignRole } = require("../../services/authService");
-const { absolutePath } = require("./kycStorage");
+const { lockUser } = require("../../services/sessionService");
+const {
+  persistDocument,
+  removeDocument,
+  assertDocumentExists,
+} = require("./kycStorage");
 
 /** Seller-facing submission — creates the seller_profiles row on first
  * submission (a seller can register without ever filling this in), and
@@ -47,60 +52,68 @@ async function submitKyc({
     }
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { sellerProfile: true },
-  });
-  if (!user) throw notFound("user not found");
+  const storageKey = file ? await persistDocument(file) : "THAI_ID_METHOD";
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // Serialize submissions for one account. A second request waits, then
+      // observes PENDING and rolls back instead of creating two applications.
+      const user = await lockUser(tx, userId);
+      if (!user) throw notFound("user not found");
+      const sellerProfile = await tx.sellerProfile.findUnique({
+        where: { userId },
+      });
+      const currentStatus = sellerProfile?.kycStatus;
+      if (currentStatus === "VERIFIED") {
+        throw conflict("this account is already verified");
+      }
+      if (currentStatus === "PENDING") {
+        throw conflict("a verification application is already pending review");
+      }
 
-  // Add SELLER to the customer account on first KYC submission. The shared
-  // role policy rejects staff accounts, while BUYER + SELLER remains valid.
-  await assignRole(userId, "SELLER");
-  if (user.role !== "SELLER") {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { role: "SELLER" },
+      // Role, legacy role, latest profile and immutable application history
+      // commit together. A failure leaves none of these partially updated.
+      await assignRole(userId, "SELLER", tx);
+      if (user.role !== "SELLER") {
+        await tx.user.update({
+          where: { id: userId },
+          data: { role: "SELLER" },
+        });
+      }
+
+      const profileFields = {
+        shopName: shopName.trim(),
+        idCardNumber: cleanedIdCard,
+        idCardExpiry: parsedExpiry,
+        address: address.trim(),
+        bankAccount: bankAccount?.trim() || null,
+        kycStatus: "PENDING",
+        kycStorageKey: storageKey,
+      };
+      await tx.sellerProfile.upsert({
+        where: { userId },
+        create: { userId, ...profileFields },
+        update: profileFields,
+      });
+      const application = await tx.kycApplication.create({
+        data: {
+          userId,
+          storageKey,
+          fileType: file ? file.mimetype : "application/json",
+          status: "PENDING",
+        },
+      });
+      return { kycStatus: "PENDING", applicationId: application.id };
     });
+  } catch (error) {
+    try {
+      await removeDocument(storageKey);
+    } catch (cleanupError) {
+      console.error(
+        `[kyc] failed to remove orphan document ${storageKey}: ${cleanupError.message}`,
+      );
+    }
+    throw error;
   }
-
-  const currentStatus = user.sellerProfile?.kycStatus;
-
-  // VERIFIED with no re-verification trigger — nothing to do.
-  if (currentStatus === "VERIFIED") {
-    throw conflict("this account is already verified");
-  }
-  // A pending application is still awaiting admin review.
-  if (currentStatus === "PENDING") {
-    throw conflict("a verification application is already pending review");
-  }
-  // All other statuses (NONE, REJECTED, EXPIRED, INACTIVE_EXPIRED) are allowed to submit/resubmit.
-
-  const profileFields = {
-    shopName: shopName.trim(),
-    idCardNumber: cleanedIdCard,
-    idCardExpiry: parsedExpiry,
-    address: address.trim(),
-    bankAccount: bankAccount?.trim() || null,
-    kycStatus: "PENDING",
-    kycStorageKey: file ? file.filename : "THAI_ID_METHOD",
-  };
-
-  await prisma.sellerProfile.upsert({
-    where: { userId },
-    create: { userId, ...profileFields },
-    update: profileFields,
-  });
-
-  const application = await prisma.kycApplication.create({
-    data: {
-      userId,
-      storageKey: file ? file.filename : "THAI_ID_METHOD",
-      fileType: file ? file.mimetype : "application/json",
-      status: "PENDING",
-    },
-  });
-
-  return { kycStatus: "PENDING", applicationId: application.id };
 }
 
 async function getMine(userId) {
@@ -141,7 +154,7 @@ async function getMine(userId) {
 
 /** Owner can view their own document; an Admin/CS reviewer with
  * `admin:kyc:decide` can view any — same two-way gate as dispute evidence. */
-async function viewDocument({ applicationId, userId, permissions }) {
+async function viewDocument({ applicationId, userId, permissions, requestId }) {
   const application = await prisma.kycApplication.findUnique({
     where: { id: applicationId },
   });
@@ -157,8 +170,21 @@ async function viewDocument({ applicationId, userId, permissions }) {
     throw notFound("No document file (verified via Thai ID QR)");
   }
 
+  const filePath = await assertDocumentExists(application.storageKey);
+  await prisma.adminAudit.create({
+    data: {
+      actorId: userId,
+      action: "KYC_DOCUMENT_VIEWED",
+      targetId: applicationId,
+      reason: isOwner
+        ? "owner viewed KYC document"
+        : "reviewer viewed KYC document",
+      requestId,
+    },
+  });
+
   return {
-    path: absolutePath(application.storageKey),
+    path: filePath,
     fileType: application.fileType,
   };
 }

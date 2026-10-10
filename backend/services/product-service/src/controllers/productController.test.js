@@ -74,7 +74,8 @@ test("TC18: deletion is guarded atomically if a reservation wins the race", asyn
   assert.deepEqual(deletions[0].where, {
     id: "p",
     sellerId: "seller",
-    status: { notIn: ["reserved", "auction"] },
+    moderatedAt: null,
+    status: { notIn: ["removed", "reserved", "auction"] },
     OR: [
       { status: { not: "hidden" } },
       { preRemovalStatus: null },

@@ -3,6 +3,8 @@ const {
   requireAuth,
   requireInternalToken,
   requireCustomerAccount,
+  requireCommerceCapability,
+  CAPABILITY,
 } = require("@reloop/shared");
 const orderController = require("../controllers/orderController");
 const disputeController = require("../features/disputes/disputeController");
@@ -19,7 +21,13 @@ router.use("/support", supportRoutes);
 router.use("/checkout-sessions", checkoutSessionRoutes);
 router.use("/checkouts", checkoutSessionRoutes);
 
-router.post("/", requireAuth, requireCustomerAccount, orderController.create);
+router.post(
+  "/",
+  requireAuth,
+  requireCustomerAccount,
+  requireCommerceCapability(CAPABILITY.BUYER),
+  orderController.create,
+);
 router.get("/mine", requireAuth, orderController.mine);
 router.get("/selling", requireAuth, orderController.selling);
 router.get(
@@ -44,6 +52,7 @@ router.patch(
   "/:id/pay",
   requireAuth,
   requireCustomerAccount,
+  requireCommerceCapability(CAPABILITY.BUYER),
   orderController.pay,
 );
 router.post("/:id/disputes", requireAuth, disputeController.open);

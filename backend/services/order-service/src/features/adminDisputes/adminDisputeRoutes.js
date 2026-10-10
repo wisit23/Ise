@@ -1,8 +1,36 @@
 const { Router } = require("express");
 const { requireAuth, requirePermission } = require("@reloop/shared");
 const adminDisputeService = require("./adminDisputeService");
+const prisma = require("../../models/prismaClient");
 
 const router = Router();
+
+router.get(
+  "/admin/dashboard-summary",
+  requireAuth,
+  requirePermission("admin:dispute:hold"),
+  async (req, res, next) => {
+    try {
+      const [disputes, activeTrustSafetyHolds] = await Promise.all([
+        prisma.disputeCase.groupBy({
+          by: ["status"],
+          _count: { _all: true },
+        }),
+        prisma.orderHold.count({
+          where: { source: "TRUST_AND_SAFETY", releasedAt: null },
+        }),
+      ]);
+      res.json({
+        disputesByStatus: Object.fromEntries(
+          disputes.map((row) => [row.status, row._count._all]),
+        ),
+        activeTrustSafetyHolds,
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 router.get(
   "/admin/:id",

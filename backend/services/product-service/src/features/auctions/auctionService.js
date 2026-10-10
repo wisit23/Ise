@@ -44,10 +44,17 @@ async function loadAuction(id) {
  */
 async function maybeAdvance(auction, now = new Date()) {
   if (auction.status === "scheduled" && auction.scheduledStartAt <= now) {
-    auction = await auctionRepository.updateStatus(auction.id, {
-      status: "open",
-      openedAt: now,
-    });
+    auction = await auctionRepository.updateStatus(
+      auction.id,
+      {
+        status: "open",
+        openedAt: now,
+      },
+      {
+        expectedStatus: "scheduled",
+        requireUnmoderatedProduct: true,
+      },
+    );
   }
   if (auction.status === "open" && auction.scheduledEndAt <= now) {
     auction = await closeAuction(auction, now);
@@ -58,7 +65,12 @@ async function maybeAdvance(auction, now = new Date()) {
 async function closeAuction(auction, now) {
   // Re-fetch to avoid race conditions if already closed concurrently (e.g. BullMQ worker vs page read)
   const fresh = await auctionRepository.findById(auction.id);
-  if (!fresh || fresh.status === "closed") {
+  if (
+    !fresh ||
+    fresh.status !== "open" ||
+    fresh.product?.moderatedAt ||
+    fresh.product?.status === "removed"
+  ) {
     return fresh || auction;
   }
   auction = fresh;
@@ -81,12 +93,16 @@ async function closeAuction(auction, now) {
     await auctionRepository.setProductStatus(auction.productId, "available");
   }
 
-  return auctionRepository.updateStatus(auction.id, {
-    status: "closed",
-    closedAt: now,
-    winningBidId: winningBid ? winningBid.id : null,
-    winningOrderId,
-  });
+  return auctionRepository.updateStatus(
+    auction.id,
+    {
+      status: "closed",
+      closedAt: now,
+      winningBidId: winningBid ? winningBid.id : null,
+      winningOrderId,
+    },
+    { expectedStatus: "open", requireUnmoderatedProduct: true },
+  );
 }
 
 /** Seller submits one of their own available products for auction. */
@@ -109,6 +125,9 @@ async function submit({ user, input = {} }) {
 
   const product = await auctionRepository.findProductOwner(productId);
   if (!product) throw notFound("product not found");
+  if (product.moderatedAt || product.status === "removed") {
+    throw forbidden("a moderated product cannot enter an auction");
+  }
   if (product.sellerId !== user.id) {
     throw forbidden("you can only auction your own products");
   }
@@ -364,6 +383,12 @@ async function get(auctionId) {
   return maybeAdvance(auction);
 }
 
+async function getPublic(auctionId) {
+  const auction = await auctionRepository.findPublicById(auctionId);
+  if (!auction) throw notFound("auction not found");
+  return maybeAdvance(auction);
+}
+
 async function list({ status, skip, take, roundId }) {
   return auctionRepository.list({ status, skip, take, roundId });
 }
@@ -396,8 +421,14 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
   return auctionRepository.withAuctionLock(auctionId, async (tx) => {
     const auction = await tx.auctionItem.findUnique({
       where: { id: auctionId },
+      include: {
+        product: { select: { status: true, moderatedAt: true } },
+      },
     });
     if (!auction) throw notFound("auction not found");
+    if (auction.product?.moderatedAt || auction.product?.status === "removed") {
+      throw conflict("auction product is unavailable due to moderation");
+    }
     if (auction.sellerId === user.id) {
       throw forbidden("you cannot bid on your own auction");
     }
@@ -486,6 +517,7 @@ module.exports = {
   schedule,
   cancel,
   get,
+  getPublic,
   list,
   placeBid,
   maybeAdvance,

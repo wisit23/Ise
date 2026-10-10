@@ -1,5 +1,10 @@
 const { Router } = require("express");
-const { requireAuth, requireRole } = require("@reloop/shared");
+const {
+  requireAuth,
+  requireRole,
+  requireCommerceCapability,
+  CAPABILITY,
+} = require("@reloop/shared");
 const authController = require("../controllers/authController");
 
 const router = Router();
@@ -23,6 +28,7 @@ router.post(
   "/shop/change-request",
   requireAuth,
   requireRole("SELLER"),
+  requireCommerceCapability(CAPABILITY.SELLER),
   authController.submitShopChangeRequest,
 );
 router.get(

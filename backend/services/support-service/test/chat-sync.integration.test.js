@@ -104,4 +104,16 @@ test("SUPPORT chat message updates ticket first-response and audit exactly once"
     ).length,
     1,
   );
+
+  const supervisor=await login("admin@example.com");
+  const escalation=await request(app).patch(`/tickets/${create.body.id}/status`).set("Authorization",`Bearer ${agentToken}`).send({status:"ESCALATED",version:synced.version,reason:"Live oversight takeover"});
+  assert.equal(escalation.status,200);
+  const takeover=await request(app).post(`/tickets/${create.body.id}/takeover`).set("Authorization",`Bearer ${supervisor.accessToken}`).send({version:escalation.body.version,reason:"Supervisor owns metadata"});
+  assert.equal(takeover.status,200);assert.equal(takeover.body.chatResponderId,agentId);
+  const join=await request(app).post(`/tickets/${create.body.id}/join`).set("Authorization",`Bearer ${supervisor.accessToken}`);assert.equal(join.status,200);
+  const sendChat=(token,body)=>fetch(`${CHAT_SERVICE_URL}/conversations/${create.body.conversationId}/messages`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({body})});
+  assert.equal((await sendChat(agentToken,"CS responds after oversight takeover")).status,201);
+  assert.equal((await sendChat(supervisor.accessToken,"Oversight public reply blocked")).status,403);
+  const anotherAgent=await login("cs.beam@example.com");
+  assert.equal((await sendChat(anotherAgent.accessToken,"Unrelated CS denied")).status,403);
 });

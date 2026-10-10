@@ -7,32 +7,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Legacy single-role column on User. Kept in sync with RoleCode below —
-// CUSTOMER_SERVICE is the one name for support staff across every service
-// (support-service's AGENT_ROLES, permissions.js, and the seeds all agree).
-enum Role {
-  BUYER
-  SELLER
-  ADMIN
-  TRUST_AND_SAFETY
-  MARKETING
-  CUSTOMER_SERVICE
-  EXECUTIVE
-}
-
-// Functional multi-role catalog (ADM-001). `Role` above stays as the legacy
-// single-role column on User for backward compatibility; UserRole is the
-// source of truth once a user has any row here — see authService.getUserRoles.
-enum RoleCode {
-  BUYER
-  SELLER
-  CUSTOMER_SERVICE
-  ADMIN
-  TRUST_AND_SAFETY
-  MARKETING
-  EXECUTIVE
-}
-
 enum KycStatus {
   NONE
   PENDING
@@ -58,7 +32,9 @@ model User {
   firstName    String   @map("f_name")
   lastName     String   @map("l_name")
   phone        String?
-  role         Role     @default(BUYER)
+  // Legacy primary-role value kept for backward-compatible JWTs. UserRole is
+  // the multi-role source of truth once explicit grants exist.
+  role         String   @default("BUYER")
   status       String   @default("ACTIVE")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -73,6 +49,9 @@ model User {
   kycApplications    KycApplication[]
   addresses          UserAddress[]
   shopChangeRequests ShopChangeRequest[]
+  adminAudits        AdminAudit[]        @relation("AdminAuditActor")
+  bulkActionRuns     BulkActionRun[]     @relation("BulkActionActor")
+  executiveAuditLogs ExecutiveAuditLog[] @relation("ExecutiveAuditActor")
 
   @@map("users")
 }
@@ -102,11 +81,13 @@ model UserAddress {
 
 // ER: Buyer — style/size/brand preference, filled in during the Phase 2 style quiz.
 model BuyerProfile {
-  userId          String  @id @map("user_id")
-  user            User    @relation(fields: [userId], references: [id])
-  stylePreference String? @map("style_preference")
-  sizePreference  String? @map("size_preference")
-  brandPreference String? @map("brand_preference")
+  userId           String   @id @map("user_id")
+  user             User     @relation(fields: [userId], references: [id])
+  favoriteCategory String?  @map("favorite_category")
+  stylePreference  String?  @map("style_preference")
+  sizePreference   String?  @map("size_preference")
+  brandPreference  String?  @map("brand_preference")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("buyer_profiles")
 }
@@ -175,7 +156,7 @@ model BuyerActivityLog {
   @@map("buyer_activity_logs")
 }
 
-// Not in the ER diagram — required to support JWT refresh/revoke (see database/ER-changes.md).
+// ER: refresh-token sessions used for JWT refresh/revoke.
 model RefreshToken {
   id        String    @id @default(uuid())
   userId    String    @map("user_id")
@@ -220,6 +201,8 @@ model AdminAudit {
   requestId String?  @map("request_id")
   createdAt DateTime @default(now()) @map("created_at")
 
+  actor User @relation("AdminAuditActor", fields: [actorId], references: [id])
+
   @@index([targetId])
   @@map("admin_audits")
 }
@@ -238,20 +221,37 @@ model BulkActionRun {
   results        Json
   createdAt      DateTime @default(now()) @map("created_at")
 
+  actor User @relation("BulkActionActor", fields: [actorId], references: [id])
+
   @@map("bulk_action_runs")
 }
 
 // ADM-001: explicit role grants. A user with zero rows here still resolves
 // functionally via the legacy `role` column (see authService.getUserRoles) —
 // rows only start existing once an admin assigns/removes a role for that user.
-model UserRole {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id])
-  role      RoleCode
-  createdAt DateTime @default(now()) @map("created_at")
+// ER setup catalog. Permission behavior remains implemented in the shared
+// permission map; this table constrains persisted role codes and supplies a
+// stable setup/master record for each role.
+model RoleDefinition {
+  id   String @id @default(uuid()) @map("role_id")
+  code String @unique @map("role_code")
 
-  @@unique([userId, role])
+  userRoles UserRole[]
+
+  @@map("role")
+}
+
+model UserRole {
+  id        String         @id @default(uuid())
+  userId    String         @map("user_id")
+  user      User           @relation(fields: [userId], references: [id])
+  role      String         @map("role_code")
+  roleEntry RoleDefinition @relation(fields: [role], references: [code])
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  // Keep the historical physical index name while the DB column is renamed
+  // from `role` to the ER's `role_code`.
+  @@unique([userId, role], map: "user_roles_user_id_role_key")
   @@map("user_roles")
 }
 
@@ -295,6 +295,8 @@ model ExecutiveAuditLog {
   userAgent   String?  @map("user_agent")
   createdAt   DateTime @default(now()) @map("created_at")
 
+  actor User @relation("ExecutiveAuditActor", fields: [actorId], references: [id])
+
   @@index([actorId])
   @@index([action])
   @@index([category])
@@ -306,23 +308,36 @@ model ExecutiveAuditLog {
 // Admin must approve before the SellerProfile is updated — keeps an
 // audit trail of every change request and its outcome.
 model ShopChangeRequest {
-  id          String    @id @default(uuid())
-  sellerId    String    @map("seller_id")
-  seller      User      @relation(fields: [sellerId], references: [id])
-  // Fields the seller wants to change (null = no change requested for that field)
-  shopName    String?   @map("shop_name")
-  address     String?
-  bankAccount String?   @map("bank_account")
+  id         String                  @id @default(uuid()) @map("requests_id")
+  sellerId   String                  @map("seller_id")
+  seller     User                    @relation(fields: [sellerId], references: [id])
   // Required: seller must explain what changed and why
-  comment     String
+  comment    String
   // PENDING | APPROVED | REJECTED
-  status      String    @default("PENDING")
-  adminNote   String?   @map("admin_note")
-  reviewedBy  String?   @map("reviewed_by")
-  reviewedAt  DateTime? @map("reviewed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  status     String                  @default("PENDING")
+  adminNote  String?                 @map("admin_note")
+  reviewedBy String?                 @map("reviewed_by")
+  reviewedAt DateTime?               @map("reviewed_at")
+  createdAt  DateTime                @default(now()) @map("created_at")
+  items      ShopChangeRequestItem[]
 
   @@index([sellerId])
   @@index([status])
   @@map("shop_change_requests")
+}
+
+// One row per changed field. Keeping old/new snapshots makes an approved or
+// rejected request auditable even after SellerProfile changes again later.
+model ShopChangeRequestItem {
+  id        String            @id @default(uuid())
+  requestId String            @map("requests_id")
+  request   ShopChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fieldName String            @map("field_name")
+  oldValue  String?           @map("old_value")
+  newValue  String            @map("new_value")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@unique([requestId, fieldName])
+  @@index([requestId])
+  @@map("shop_change_request_items")
 }

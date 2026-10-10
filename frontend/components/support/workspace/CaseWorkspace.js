@@ -1,4 +1,6 @@
 "use client";
+import SafetyOrderChatPanel from "../sections/disputes/SafetyOrderChatPanel";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
@@ -50,6 +52,7 @@ export default function CaseWorkspace({
   setViewMode,
   statusFilter,
 }) {
+  const [safetyChat,setSafetyChat] = useState(null);
   const user = currentUser || getStoredUser() || {};
   const dispute = domain === "disputes";
   const w = useCaseWorkspace(domain, token, user.id);
@@ -739,7 +742,8 @@ export default function CaseWorkspace({
                         : "ยังเปิดห้องสนทนาไม่ได้ คุณตรวจสอบข้อมูลบริบทได้"}
                     </div>
                   )}
-                  {caps.canClaim && (
+                  {!dispute && caps.canTakeover && <Button onClick={()=>run("takeover",{version:selected.version,reason:"รับผิดชอบการตรวจสอบเคสที่ส่งต่อ"})} disabled={busy}>รับผิดชอบเคสที่ส่งต่อ</Button>}
+                      {caps.canClaim && (
                     <div className="flex items-center justify-between gap-3 border-t bg-amber-50 p-4">
                       <span className="text-sm text-amber-800">
                         รับเคสก่อนเริ่มตอบลูกค้า
@@ -865,7 +869,7 @@ export default function CaseWorkspace({
                     </section>
                   )}
                   {dispute ? (
-                    <EvidenceInspector key={selected.id} dispute={selected} />
+                    <><EvidenceInspector key={selected.id} dispute={selected} />{["ADMIN","TRUST_AND_SAFETY"].includes(user.role) && <Button variant="secondary" onClick={()=>setSafetyChat(selected)}>ประวัติผู้ซื้อกับร้านค้า</Button>}</>
                   ) : (
                     <section>
                       <h3 className="font-semibold">โน้ตภายใน</h3>
@@ -1076,6 +1080,7 @@ export default function CaseWorkspace({
           </CaseContextPanel>
         </div>
       )}
+      <Modal open={Boolean(safetyChat)} onClose={()=>setSafetyChat(null)} title="ประวัติผู้ซื้อกับร้านค้า" size="lg">{safetyChat && <SafetyOrderChatPanel dispute={safetyChat} token={token} onClose={()=>setSafetyChat(null)}/>}</Modal>
       <EscalationMemoDialog
         key={selected?.id || "empty"}
         open={memo}

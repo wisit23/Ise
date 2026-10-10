@@ -45,6 +45,7 @@ export default function TicketCasePanel({
   actionBusy,
   actionError,
   onAssign,
+  onTakeover,
   onStatusChange,
   onWarnUser,
   onBanUser,
@@ -265,6 +266,7 @@ export default function TicketCasePanel({
         <SectionCard icon="build" title="จัดการคำร้อง (Actions)">
           {actionError && <Alert className="mb-3">{actionError}</Alert>}
           <div className="flex gap-2">
+            {ticket.capabilities?.canTakeover && onTakeover && <Button onClick={onTakeover} disabled={actionBusy}>รับผิดชอบเคสที่ส่งต่อ</Button>}
             {!ticket.assigneeId && (
               <Button
                 onClick={onAssign}

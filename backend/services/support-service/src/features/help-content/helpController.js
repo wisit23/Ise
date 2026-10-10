@@ -60,6 +60,9 @@ async function publish(req, res, next) {
   }
 }
 
+async function unpublish(req,res,next){
+  try {res.json(await helpService.unpublish({role:effectiveStaffRole(req),id:req.params.id,version:req.body?.version}));}catch(err){next(err);}
+}
 async function revise(req, res, next) {
   try {
     const article = await helpService.revise({
@@ -70,7 +73,7 @@ async function revise(req, res, next) {
       body: req.body.body,
       category: req.body.category,
     });
-    res.status(201).json(article);
+    res.status(req.method === "PATCH" ? 200 : 201).json(article);
   } catch (err) {
     next(err);
   }
@@ -88,4 +91,4 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { search, manage, create, revise, publish, remove };
+module.exports = { unpublish, search, manage, create, revise, publish, remove };

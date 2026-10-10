@@ -2,7 +2,7 @@ const { conflict, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const orderModel = require("../../models/orderModel");
 const transitions = require("../../services/orderTransitionService");
-const INCLUDE = { evidence: true, caseLog: { orderBy: { createdAt: "asc" } } };
+const INCLUDE = { evidence: true, order: {include:orderModel.INCLUDE}, caseLog: { orderBy: { createdAt: "asc" } } };
 function evidenceView(row) {
   return (
     row && {
@@ -586,7 +586,20 @@ async function requestMoreEvidence({ id, version, actorId, reason }) {
     },
   });
 }
+async function dashboardMetrics() {
+  const rows = await prisma.disputeCase.groupBy({
+    by: ["status"],
+    _count: { _all: true },
+  });
+  return {
+    disputesByStatus: Object.fromEntries(
+      rows.map((row) => [row.status, row._count._all]),
+    ),
+  };
+}
+
 module.exports = {
+  dashboardMetrics,
   requestMoreEvidence,
   findByOrderId,
   findById,

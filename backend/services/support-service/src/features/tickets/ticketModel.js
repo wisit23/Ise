@@ -231,16 +231,16 @@ function queueFilter({
   }
   if (scope === "unassigned") clauses.push(Prisma.sql`a.assignment_id IS NULL`);
   else if (scope === "mine")
-    clauses.push(Prisma.sql`a.assignee_id = ${assigneeId}`);
+    clauses.push(Prisma.sql`(a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`);
   else if (scope === "all" && role === "CUSTOMER_SERVICE")
     clauses.push(
-      Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId})`,
+      Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
     );
   if (status) clauses.push(Prisma.sql`s.code = ${status}`);
   else if (scope !== "all")
-    clauses.push(Prisma.sql`s.code NOT IN ('CLOSED', 'ESCALATED')`);
+    clauses.push(Prisma.sql`(s.code NOT IN ('CLOSED', 'ESCALATED') OR (s.code='ESCALATED' AND t.chat_responder_id=${assigneeId}))`);
   else if (!["ADMIN", "TRUST_AND_SAFETY"].includes(role))
-    clauses.push(Prisma.sql`s.code <> 'ESCALATED'`);
+    clauses.push(Prisma.sql`(s.code <> 'ESCALATED' OR t.chat_responder_id=${assigneeId})`);
   if (priority) clauses.push(Prisma.sql`p.code = ${priority}`);
   if (search) {
     const pattern = "%" + search.replace(/[\\%_]/g, "\\$&") + "%";
@@ -298,7 +298,7 @@ async function markAchieved(db, ticketId, metricType, at) {
   });
 }
 
-async function assign({ id, version, assigneeId, assignedById = assigneeId }) {
+async function assign({ id, version, assigneeId, assignedById = assigneeId, chatResponderId }) {
   try {
     return await transaction(async (db) => {
       const ticket = await db.supportTicket.findUnique({
@@ -317,7 +317,7 @@ async function assign({ id, version, assigneeId, assignedById = assigneeId }) {
           : ticket.currentStatus;
       const { count } = await db.supportTicket.updateMany({
         where: { id, version, assignments: { none: { endedAt: null } } },
-        data: { currentStatusId: status.id, version: { increment: 1 } },
+        data: { currentStatusId: status.id, version: { increment: 1 }, ...(chatResponderId ? {chatResponderId} : {}) },
       });
       if (!count) return false;
       const now = new Date();
@@ -363,6 +363,7 @@ async function transitionTx(
     reason = null,
     at = new Date(),
     systemEscalation = false,
+    chatResponderId,
   },
 ) {
   const current = await db.supportTicket.findUnique({
@@ -376,7 +377,7 @@ async function transitionTx(
   if (!next) throw badRequest("Unknown ticket status");
   const { count } = await db.supportTicket.updateMany({
     where: { id, version },
-    data: { currentStatusId: next.id, version: { increment: 1 } },
+    data: { currentStatusId: next.id, version: { increment: 1 }, ...(chatResponderId ? {chatResponderId} : {}) },
   });
   if (!count) return false;
   await db.ticketStatusHistory.create({
@@ -608,7 +609,32 @@ async function escalateOverdue(ticketId, now) {
     return changed;
   });
 }
+async function reassign({id,version,assigneeId,assignedById=assigneeId,reason}) {
+  return transaction(async db=>{
+    const before=await db.supportTicket.findUnique({where:{id},include:ticketInclude});
+    if(!before || before.currentStatus.code !== "ESCALATED") return false;
+    const changed=await db.supportTicket.updateMany({where:{id,version},data:{version:{increment:1}}});
+    if(!changed.count)return false;
+    const now=new Date();
+    const previous=before.assignments.find(a=>!a.endedAt)?.assigneeId || null;
+    await db.ticketAssignment.updateMany({where:{ticketId:id,endedAt:null},data:{endedAt:now,endReason:"TAKEOVER"}});
+    await db.ticketAssignment.create({data:{ticketId:id,assigneeId,assignedById,assignedAt:now}});
+    await audit.record({ticketId:id,actorId:assignedById,action:"HANDOFF",fromValue:previous,toValue:assigneeId,reason,createdAt:now},db);
+    return true;
+  });
+}
+async function dashboardMetrics({includeEscalated,days}) {
+  const where=includeEscalated?{}:{currentStatus:{code:{not:"ESCALATED"}}};
+  const since=new Date();since.setUTCHours(0,0,0,0);since.setUTCDate(since.getUTCDate()-(days-1));
+  const [total,statusRows,priorityRows,statuses,priorities,created]=await Promise.all([
+    prisma.supportTicket.count({where}),prisma.supportTicket.groupBy({by:["currentStatusId"],where,_count:{_all:true}}),prisma.supportTicket.groupBy({by:["priorityId"],where,_count:{_all:true}}),prisma.ticketStatus.findMany(),prisma.ticketPriority.findMany(),prisma.supportTicket.findMany({where:{...where,createdAt:{gte:since}},select:{createdAt:true}})
+  ]);
+  const buckets=new Map(Array.from({length:days},(_,i)=>{const d=new Date(since);d.setUTCDate(d.getUTCDate()+i);return [d.toISOString().slice(0,10),0];}));
+  for(const r of created){const key=r.createdAt.toISOString().slice(0,10);if(buckets.has(key))buckets.set(key,buckets.get(key)+1);}
+  return {total,status:Object.fromEntries(statusRows.map(r=>[statuses.find(s=>s.id===r.currentStatusId)?.code,r._count._all])),priority:Object.fromEntries(priorityRows.map(r=>[priorities.find(p=>p.id===r.priorityId)?.code,r._count._all])),trend:[...buckets].map(([date,count])=>({date,count}))};
+}
 module.exports = {
+  reassign,dashboardMetrics,
   create,
   findById,
   listByRequester,

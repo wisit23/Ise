@@ -82,6 +82,7 @@ model SupportTicket {
   priorityId      Int                   @map("ticket_priority_id") @db.SmallInt
   currentStatusId Int                   @map("current_status_id") @db.SmallInt
   orderId         String?               @map("order_id")
+  chatResponderId String?               @map("chat_responder_id")
   targetId        String?               @map("target_id")
   priorityScore   Int                   @default(0) @map("priority_score")
   riskReportCount Int                   @default(0) @map("risk_report_count")
@@ -99,6 +100,7 @@ model SupportTicket {
   auditLog        TicketAuditLog[]
 
   @@index([currentStatusId, priorityId, createdAt])
+  @@index([chatResponderId], map: "support_tickets_chat_responder_idx")
   @@index([requesterId, createdAt])
   @@index([categoryId])
   @@index([priorityId])
