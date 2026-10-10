@@ -1,0 +1,16 @@
+# Development: docker compose up --build
+# Production: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.prod
+      args:
+        NEXT_PUBLIC_REPORT_TIMEZONE: ${NEXT_PUBLIC_REPORT_TIMEZONE:-Asia/Bangkok}
+        NEXT_PUBLIC_REPORT_SEARCH_DEBOUNCE_MS: ${NEXT_PUBLIC_REPORT_SEARCH_DEBOUNCE_MS:-300}
+        NEXT_PUBLIC_REPORT_REQUEST_TIMEOUT_MS: ${NEXT_PUBLIC_REPORT_REQUEST_TIMEOUT_MS:-10000}
+    environment:
+      NODE_ENV: production
+      WATCHPACK_POLLING: null
+      CHOKIDAR_USEPOLLING: null
+    volumes: !reset []

@@ -1,6 +1,7 @@
 import { apiFetch } from "./api";
 
-export const TIMEZONE = "Asia/Bangkok";
+export const TIMEZONE =
+  process.env.NEXT_PUBLIC_REPORT_TIMEZONE || "Asia/Bangkok";
 
 /** Platform fee assumption. There is no payment system yet, so revenue is
  * modelled as a flat 10% of GMV — the same rate order-service applies when it

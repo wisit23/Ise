@@ -1,15 +1,13 @@
 "use client";
-import { useEffect, useState } from "react";
-import { apiFetch } from "../../../lib/api";
+import useExecutiveComplaints from "../../../lib/useExecutiveComplaints";
 import KpiCard from "../../panel/ui/KpiCard";
 import RadioSelect from "../../ui/RadioSelect";
-
-const STATUS_LABEL = {
-  OPEN: "ยังไม่ตรวจสอบ",
-  REVIEWED: "กำลังตรวจสอบ",
-  ACTIONED: "ดำเนินการแล้ว",
-  DISMISSED: "ยกคำร้อง",
-};
+import ComplaintDetailsModal from "./ComplaintDetailsModal";
+import ComplaintRow from "./ComplaintRow";
+import Button from "../../ui/Button";
+import ErrorState from "../../ui/ErrorState";
+import Pagination from "../../Pagination";
+import { REPORT_STATUS_LABELS } from "../../../lib/executiveComplaints";
 
 const STATUS_FILTERS = [
   { value: "", label: "ที่ยังเปิดอยู่" },
@@ -17,6 +15,7 @@ const STATUS_FILTERS = [
   { value: "REVIEWED", label: "กำลังตรวจสอบ" },
   { value: "ACTIONED", label: "ดำเนินการแล้ว" },
   { value: "DISMISSED", label: "ยกคำร้อง" },
+  { value: "ALL", label: "ทั้งหมด" },
 ];
 
 const SORT_OPTIONS = [
@@ -25,59 +24,46 @@ const SORT_OPTIONS = [
   { value: "most_reported", label: "เป้าหมายที่โดน report มากที่สุด" },
 ];
 
-// ─── Complaints Section ─────────────────────────────────────────────────
+// Complaints Section
 // Reads the `reports` table in auth-service — displays complaints with
 // status filtering and sorting (newest, oldest, most_reported).
 export default function ComplaintsSection({ token }) {
-  const [status, setStatus] = useState("");
-  const [sortBy, setSortBy] = useState("newest");
-  const [selectedTargetId, setSelectedTargetId] = useState("");
-  const [selectedTarget, setSelectedTarget] = useState(null);
-  const [data, setData] = useState({
-    items: [],
-    statusCounts: {},
-    totalOpen: 0,
-    anomalySummary: { detected: false, highRiskTargets: [], threshold: 3 },
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    setLoading(true);
-    setError("");
-    const params = new URLSearchParams({ limit: 50 });
-    if (status) params.set("status", status);
-    if (sortBy) params.set("sortBy", sortBy);
-    if (selectedTargetId) params.set("targetId", selectedTargetId);
-
-    apiFetch(`/api/auth/executive/reports?${params}`, { token })
-      .then((res) => setData(res.data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [status, sortBy, selectedTargetId, token]);
-
-  const highRiskTargets = data.anomalySummary?.highRiskTargets || [];
-
-  const selectedTargetShopName =
-    selectedTarget?.shopName ||
-    data.items.find((r) => r.targetId === selectedTargetId)?.targetShopName ||
-    highRiskTargets.find((t) => t.targetId === selectedTargetId)?.targetShopName;
-
-  const selectedTargetOwnerName =
-    selectedTarget?.name ||
-    data.items.find((r) => r.targetId === selectedTargetId)?.targetName ||
-    highRiskTargets.find((t) => t.targetId === selectedTargetId)?.targetName;
-
-  const handleSelectTarget = (targetId, shopName, name, forceSort = false) => {
-    setSelectedTargetId(targetId);
-    setSelectedTarget({ id: targetId, shopName, name });
-    if (forceSort) setSortBy("most_reported");
-  };
-
-  const handleClearTarget = () => {
-    setSelectedTargetId("");
-    setSelectedTarget(null);
-  };
+  const {
+    status,
+    setStatus,
+    sortBy,
+    setSortBy,
+    selectedTargetId,
+    selectedReport,
+    setSelectedReport,
+    searchInput,
+    setSearchInput,
+    search,
+    setIsComposing,
+    page,
+    setPage,
+    data,
+    loading,
+    error,
+    selectedTargetShopName,
+    selectedTargetOwnerName,
+    highRiskTargets,
+    handleSelectTarget,
+    handleClearTarget,
+    handleSearch,
+    clearSearch,
+    retry,
+  } = useExecutiveComplaints(token);
+  if (error && !data) {
+    return <ErrorState detail={error} onRetry={retry} />;
+  }
+  if (!data) {
+    return (
+      <p role="status" className="text-sm text-slate-500">
+        กำลังโหลดข้อร้องเรียน...
+      </p>
+    );
+  }
 
   return (
     <div className="animate-fade-in-up">
@@ -93,7 +79,7 @@ export default function ComplaintsSection({ token }) {
               </span>
               <div>
                 <h3 className="text-sm font-bold text-red-900">
-                  ตรวจพบเป้าหมายที่มีข้อร้องเรียนสูงผิดปกติ (ความเสี่ยงทางธุรกิจ)
+                  ตรวจพบเป้าหมายที่มีข้อร้องเรียนสูงผิดปกติ
                 </h3>
                 <p className="mt-0.5 text-xs text-red-700 leading-relaxed">
                   มีร้านค้า/เป้าหมายที่ถูกรายงานสะสมตั้งแต่{" "}
@@ -115,7 +101,9 @@ export default function ComplaintsSection({ token }) {
                       className="inline-flex items-center gap-1.5 rounded-lg bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800 hover:bg-red-200 transition-colors"
                     >
                       <span>
-                        {t.targetShopName || t.targetName || t.targetId.slice(0, 8)}
+                        {t.targetShopName ||
+                          t.targetName ||
+                          t.targetId.slice(0, 8)}
                       </span>
                       <span className="rounded-full bg-red-600 px-1.5 py-0.2 text-[10px] text-white">
                         {t.count} ครั้ง
@@ -149,7 +137,7 @@ export default function ComplaintsSection({ token }) {
         {["OPEN", "REVIEWED", "ACTIONED"].map((key) => (
           <KpiCard
             key={key}
-            label={STATUS_LABEL[key]}
+            label={REPORT_STATUS_LABELS[key]}
             value={data.statusCounts[key] || 0}
             icon={
               key === "OPEN"
@@ -177,7 +165,10 @@ export default function ComplaintsSection({ token }) {
               <button
                 key={f.value || "open"}
                 type="button"
-                onClick={() => setStatus(f.value)}
+                onClick={() => {
+                  setStatus(f.value);
+                  setPage(1);
+                }}
                 aria-pressed={status === f.value}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   status === f.value
@@ -201,7 +192,10 @@ export default function ComplaintsSection({ token }) {
             <RadioSelect
               id="complaint-sort"
               value={sortBy}
-              onChange={setSortBy}
+              onChange={(value) => {
+                setSortBy(value);
+                setPage(1);
+              }}
               options={SORT_OPTIONS}
               size="sm"
               variant="panel"
@@ -221,13 +215,17 @@ export default function ComplaintsSection({ token }) {
               {selectedTargetShopName && (
                 <span className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 font-bold text-slate-900 border border-indigo-200 shadow-2xs">
                   <span>ชื่อร้าน:</span>
-                  <span className="text-indigo-950">{selectedTargetShopName}</span>
+                  <span className="text-indigo-950">
+                    {selectedTargetShopName}
+                  </span>
                 </span>
               )}
               {selectedTargetOwnerName && (
                 <span className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 font-medium text-slate-800 border border-indigo-200 shadow-2xs">
                   <span>เจ้าของร้าน:</span>
-                  <span className="font-semibold text-slate-900">{selectedTargetOwnerName}</span>
+                  <span className="font-semibold text-slate-900">
+                    {selectedTargetOwnerName}
+                  </span>
                 </span>
               )}
               <span className="font-mono text-[11px] text-slate-500">
@@ -245,129 +243,93 @@ export default function ComplaintsSection({ token }) {
         )}
       </div>
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
-
       {/* ── 3. Complaints List ── */}
       <div className="rounded-xl border border-slate-200/60 bg-white shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
           <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
             <span>รายการข้อร้องเรียน</span>
-            {!loading && (
+            {!loading && !error && (
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                {data.items.length} รายการ
+                {data.total ?? data.items.length} รายการ
               </span>
             )}
           </h2>
-          {sortBy === "most_reported" && (
-            <span className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200/60 rounded-md px-2 py-0.5">
-              เรียงตามเป้าหมายที่โดน report มากที่สุด
-            </span>
-          )}
+          <form
+            onSubmit={handleSearch}
+            className="ml-auto flex w-full items-center gap-2 sm:w-auto"
+          >
+            <label htmlFor="complaint-target-search" className="sr-only">
+              ค้นหาเป้าหมายหรือชื่อร้านค้า
+            </label>
+            <input
+              id="complaint-target-search"
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
+              maxLength={100}
+              placeholder="ค้นหาเป้าหมายหรือชื่อร้านค้า"
+              className="focus-ring min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 sm:w-64"
+            />
+            <Button type="submit" variant="secondary" size="sm" icon="search">
+              ค้นหา
+            </Button>
+            {(search || searchInput) && (
+              <Button variant="ghost" size="sm" onClick={clearSearch}>
+                ล้าง
+              </Button>
+            )}
+          </form>
         </div>
+        {search && (
+          <p className="border-b border-slate-100 px-5 py-2 text-xs text-slate-600">
+            ผลการค้นหา: <strong>{search}</strong> ตามสถานะที่เลือก
+          </p>
+        )}
+        {sortBy === "most_reported" && (
+          <span className="text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200/60 rounded-md px-2 py-0.5">
+            เรียงตามเป้าหมายที่โดน report มากที่สุด
+          </span>
+        )}
 
-        {loading ? (
-          <p className="px-5 py-8 text-sm text-slate-500">กำลังโหลด...</p>
+        {error ? (
+          <ErrorState detail={error} onRetry={retry} />
+        ) : loading ? (
+          <p role="status" className="px-5 py-8 text-sm text-slate-500">
+            กำลังค้นหาข้อร้องเรียน...
+          </p>
         ) : data.items.length === 0 ? (
           <p className="px-5 py-8 text-sm text-slate-500">
-            ไม่มีข้อร้องเรียนในหมวดนี้
+            {search
+              ? "ไม่พบข้อร้องเรียนของเป้าหมายหรือร้านค้านี้ตามสถานะที่เลือก"
+              : "ไม่มีข้อร้องเรียนในหมวดนี้"}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
             {data.items.map((r) => (
-              <li
+              <ComplaintRow
                 key={r.id}
-                className="px-5 py-4 transition-colors hover:bg-slate-50/50"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    {/* Report Reason */}
-                    <p className="text-sm font-semibold text-slate-900 leading-snug">
-                      {r.reason}
-                    </p>
-
-                    {/* Meta information */}
-                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                      <span>
-                        โดย:{" "}
-                        <strong className="text-slate-700 font-medium">
-                          {r.reporterName || "ไม่ทราบชื่อ"}
-                        </strong>
-                      </span>
-                      <span>
-                        วันที่แจ้ง:{" "}
-                        <strong className="text-slate-700 font-medium">
-                          {new Date(r.reportedAt).toLocaleDateString("th-TH", {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </strong>
-                      </span>
-                      {r.targetId && (
-                        <span className="flex items-center gap-1">
-                          เป้าหมาย:{" "}
-                          <span className="font-semibold text-slate-800">
-                            {r.targetShopName
-                              ? `${r.targetShopName}`
-                              : r.targetName
-                                ? `${r.targetName}`
-                                : r.targetId.slice(0, 8)}
-                          </span>
-                          {r.targetReportCount > 1 && (
-                            <span className="text-[11px] text-slate-500 font-normal">
-                              (โดนรายงานรวม {r.targetReportCount} ครั้ง)
-                            </span>
-                          )}
-                        </span>
-                      )}
-                      {r.productId && (
-                        <span className="font-mono text-slate-400">
-                          รหัสสินค้า: {r.productId.slice(0, 8)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Status Badge & Target Filter */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        r.status === "OPEN"
-                          ? "bg-amber-100 text-amber-800"
-                          : r.status === "REVIEWED"
-                            ? "bg-sky-100 text-sky-800"
-                            : r.status === "ACTIONED"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {STATUS_LABEL[r.status] || r.status}
-                    </span>
-                    {r.targetId && !selectedTargetId && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleSelectTarget(
-                            r.targetId,
-                            r.targetShopName,
-                            r.targetName,
-                          )
-                        }
-                        className="text-[11px] text-indigo-600 hover:text-indigo-800 hover:underline font-medium"
-                      >
-                        กรองดูเป้าหมายนี้
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </li>
+                report={r}
+                targetFiltered={Boolean(selectedTargetId)}
+                onDetails={setSelectedReport}
+                onSelectTarget={handleSelectTarget}
+              />
             ))}
           </ul>
         )}
       </div>
+      {!loading && !error && data.totalPages > 1 && (
+        <Pagination
+          page={page}
+          totalPages={data.totalPages}
+          onChange={setPage}
+        />
+      )}
+      <ComplaintDetailsModal
+        report={selectedReport}
+        onClose={() => setSelectedReport(null)}
+      />
     </div>
   );
 }
-
