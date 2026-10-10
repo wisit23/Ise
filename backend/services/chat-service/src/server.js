@@ -21,3 +21,4 @@ const { startSupportSyncWorker } = require("./features/sync/supportSyncWorker");
 startSupportSyncWorker();
 
 server.listen(PORT, () => console.log(`[chat-service] listening on ${PORT}`));
+

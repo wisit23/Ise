@@ -95,11 +95,24 @@ export async function apiFetch(path, { method = "GET", body, token } = {}) {
   rejectSuspended(data);
   if (!res.ok) {
     if (res.status === 401) forceLogout();
-    let errorMsg = data?.error;
+    let errorMsg =
+      data?.error ??
+      data?.message ??
+      (Array.isArray(data?.errors)
+        ? data.errors.map((e) => (typeof e === "object" ? e?.message || JSON.stringify(e) : e)).join(", ")
+        : null);
+
     if (typeof errorMsg === "object" && errorMsg !== null) {
       errorMsg = errorMsg.message || JSON.stringify(errorMsg);
     }
-    throw new Error(errorMsg || `Request failed (${res.status})`);
+
+    const finalMessage = errorMsg || `Request failed (${res.status})`;
+    console.error(`[apiFetch] ${method} ${path} failed (${res.status}):`, finalMessage, data);
+
+    const error = new Error(finalMessage);
+    error.status = res.status;
+    error.data = data;
+    throw error;
   }
   return data;
 }

@@ -16,7 +16,8 @@ export function fetchSellerSummary(sellerId) {
       sellerId,
       apiFetch(`/api/auth/users/${sellerId}/public`).catch((err) => {
         summaryPromises.delete(sellerId);
-        throw err;
+        console.warn(`โหลดข้อมูลผู้ขาย ${sellerId} ไม่สำเร็จ:`, err.message);
+        return null;
       }),
     );
   }
@@ -31,7 +32,8 @@ export function fetchSellerRating(sellerId) {
       sellerId,
       apiFetch(`/api/reviews/by-seller/${sellerId}/summary`).catch((err) => {
         ratingPromises.delete(sellerId);
-        throw err;
+        console.warn(`โหลดคะแนนผู้ขาย ${sellerId} ไม่สำเร็จ:`, err.message);
+        return { total: 0, averageRating: 0 };
       }),
     );
   }
