@@ -11,6 +11,14 @@ beforeEach(() => {
   fetchAuthedBlobUrl.mockResolvedValue("blob:private");
   URL.revokeObjectURL = jest.fn();
 });
+test("Thai file button opens a hidden input without displaying the native English control", () => {
+  render(<EvidenceUpload disputeId="case-1" onUploaded={() => {}} />);
+  const input = screen.getByLabelText("เลือกหลักฐานเพิ่มเติม");
+  expect(input).toHaveAttribute("hidden");
+  const click = jest.spyOn(input, "click").mockImplementation(() => {});
+  fireEvent.click(screen.getByRole("button", { name: "เลือกไฟล์จากอุปกรณ์" }));
+  expect(click).toHaveBeenCalledTimes(1);
+});
 test("partial evidence failure preserves pending files and refreshes successful evidence", async () => {
   const refresh = jest.fn().mockResolvedValue();
   uploadDisputeEvidence

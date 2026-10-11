@@ -407,7 +407,6 @@
   padding: 22px 16px;
   gap: 8px;
   color: #47675a;
-  cursor: pointer;
 }
 .filePicker > strong {
   font-size: 14px;
@@ -416,14 +415,6 @@
 .filePicker > span:last-of-type {
   font-size: 12px;
 }
-.filePicker input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
 .chooseFile {
   border: 1px solid #b8d2c1;
   padding: 8px 14px;
@@ -431,6 +422,11 @@
   background: #fff;
   font-weight: 600;
   margin-top: 4px;
+  min-height: 44px;
+}
+.upload .uploadFeedback {
+  width: 100%;
+  border-radius: 12px;
 }
 .filePicker:focus-within {
   outline: 2px solid #247b4c;

@@ -154,7 +154,7 @@ export function EvidenceUpload({ disputeId, onUploaded, disabled = false }) {
   }
   return (
     <form onSubmit={upload} className={styles.upload}>
-      <label className={styles.filePicker}>
+      <div className={styles.filePicker}>
         <span className="material-symbols-outlined" aria-hidden="true">
           add_photo_alternate
         </span>
@@ -163,17 +163,26 @@ export function EvidenceUpload({ disputeId, onUploaded, disabled = false }) {
           ครั้งละไม่เกิน {config.evidence.maxFiles} ไฟล์ · ไฟล์ละ{" "}
           {config.evidence.maxFileBytes / 1024 / 1024} MB
         </span>
-        <span className={styles.chooseFile}>เลือกไฟล์จากอุปกรณ์</span>
+        <Button
+          variant="secondary"
+          disabled={busy || disabled}
+          onClick={() => input.current?.click()}
+          className={styles.chooseFile}
+          icon="attach_file"
+        >
+          เลือกไฟล์จากอุปกรณ์
+        </Button>
         <input
           ref={input}
           aria-label="เลือกหลักฐานเพิ่มเติม"
           type="file"
+          hidden
           multiple
           accept={config.evidence.mimeTypes.join(",")}
           disabled={busy || disabled}
           onChange={choose}
         />
-      </label>
+      </div>
       {files.length > 0 && (
         <ul className={styles.fileQueue}>
           {files.map((file, index) => (
@@ -193,8 +202,16 @@ export function EvidenceUpload({ disputeId, onUploaded, disabled = false }) {
           ))}
         </ul>
       )}
-      {error && <Alert tone="error">{error}</Alert>}
-      {notice && <Alert tone="success">{notice}</Alert>}
+      {error && (
+        <Alert tone="error" className={styles.uploadFeedback}>
+          {error}
+        </Alert>
+      )}
+      {notice && (
+        <Alert tone="success" className={styles.uploadFeedback}>
+          {notice}
+        </Alert>
+      )}
       {files.length > 0 && (
         <Button type="submit" loading={busy} disabled={disabled} icon="upload">
           {progress || `ส่งหลักฐาน ${files.length} ไฟล์`}
@@ -263,8 +280,8 @@ export default function DisputeEvidence({ dispute, userId, onUploaded }) {
       ) : (
         <>
           <p className={styles.deadlineHelp}>
-            กำหนดส่งหลักฐานจะระบุเมื่อเจ้าหน้าที่กำหนดให้ หากยังไม่ระบุ
-            คุณส่งข้อมูลเพิ่มเติมได้
+            คุณเพิ่มหลักฐานได้จนกว่าจะพิจารณาเสร็จ หากเจ้าหน้าที่กำหนดเวลา
+            จะแสดงไว้ที่หลักฐานแต่ละรายการ
           </p>
           <EvidenceUpload disputeId={dispute.id} onUploaded={onUploaded} />
         </>
