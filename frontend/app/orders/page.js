@@ -21,7 +21,7 @@ import { getAccessToken } from "../../lib/auth";
 const STATUS_LABEL = {
   pending: "อยู่ในตะกร้า",
   pending_payment: "อยู่ในตะกร้า",
-  confirmed: "รอยืนยัน",
+  confirmed: "ชำระแล้ว รอจัดส่ง",
   shipped: "จัดส่งแล้ว",
   completed: "สำเร็จ",
   cancelled: "ยกเลิกแล้ว",

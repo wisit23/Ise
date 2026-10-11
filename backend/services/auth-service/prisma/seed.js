@@ -1,7 +1,7 @@
 // Idempotent demo sellers: fixed UUIDs so product-service's own seed can
 // reference the same sellerId literally, without a cross-service lookup at
-// seed time. These are dedicated demo accounts; startup restores their roles,
-// names and local demo password.
+// seed time. Explicit bootstrap creates missing accounts; existing workflow
+// state is preserved unless RELOOP_RESEED_DEMO=1 is deliberately requested.
 const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
 const { seedRoleCatalog } = require("./roleCatalog");
@@ -118,6 +118,8 @@ async function upsertUser({
   passwordHash,
 }) {
   const existingByEmail = await prisma.user.findUnique({ where: { email } });
+  // Bootstrap missing demo accounts; preserve changes made through real workflows.
+  if (existingByEmail && process.env.RELOOP_RESEED_DEMO !== "1") return;
   if (existingByEmail) {
     await prisma.user.update({
       where: { email },
@@ -159,6 +161,11 @@ async function upsertUser({
   }
 
   const existingById = await prisma.user.findUnique({ where: { id } });
+  if (existingById && process.env.RELOOP_RESEED_DEMO !== "1") {
+    throw new Error(
+      `Demo id ${id} already belongs to another email; refusing to overwrite it`,
+    );
+  }
   if (existingById) {
     await prisma.user.update({
       where: { id },

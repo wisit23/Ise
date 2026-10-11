@@ -460,13 +460,14 @@ async function main() {
     const { photos: photoSet, ...fields } = productWithBrand;
     await prisma.product.upsert({
       where: { id: product.id },
-      // A reseed used to be a no-op for existing rows (`update: {}`), so
-      // corrected demo data never reached a database that had already been
-      // seeded once. Photos are replaced wholesale rather than merged.
-      update: {
-        ...fields,
-        photos: { deleteMany: {}, create: photoSet.create },
-      },
+      // An explicit reset may refresh catalog fixtures; normal bootstrap preserves sales.
+      update:
+        process.env.RELOOP_RESEED_DEMO === "1"
+          ? {
+              ...fields,
+              photos: { deleteMany: {}, create: photoSet.create },
+            }
+          : {},
       create: productWithBrand,
     });
   }
@@ -492,10 +493,13 @@ async function main() {
       `${article.title} ${article.summary || ""} ${article.content} ${article.category} ${article.authorName}`.trim();
     await prisma.article.upsert({
       where: { id: article.id },
-      update: {
-        ...article,
-        searchText,
-      },
+      update:
+        process.env.RELOOP_RESEED_DEMO === "1"
+          ? {
+              ...article,
+              searchText,
+            }
+          : {},
       create: {
         ...article,
         searchText,

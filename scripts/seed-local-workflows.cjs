@@ -152,4 +152,5 @@ async function main() {
   fs.writeFileSync(checkpoint, JSON.stringify(state, null, 2));
   console.log('Support, safety, reports, FAQ, auctions and executive scenarios complete');
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+module.exports = { main, step, request, state, env, label, output, inspectionImage };
+if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });
