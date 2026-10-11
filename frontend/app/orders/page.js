@@ -12,10 +12,11 @@ import Button from "../../components/ui/Button";
 import EmptyState from "../../components/ui/EmptyState";
 import Skeleton from "../../components/ui/Skeleton";
 import OrderLine from "../../components/OrderLine";
+import OrderDisputeForm from "../../components/orders/OrderDisputeForm";
 import ContactSellerButton from "../../components/chat/ContactSellerButton";
 import ReviewMediaUploader from "../../components/ReviewMediaUploader";
 import ReviewMediaGallery from "../../components/ReviewMediaGallery";
-import { apiFetch, uploadDisputeEvidence } from "../../lib/api";
+import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
 const STATUS_LABEL = {
@@ -113,80 +114,6 @@ function ReviewForm({ order, onSubmitted }) {
   );
 }
 
-/** WF-08: buyer opens a dispute + attaches evidence in one step. Files
- * upload one at a time to /disputes/:id/evidence after the dispute exists —
- * that endpoint needs a disputeId, which only exists once open() succeeds. */
-function DisputeForm({ order, onOpened }) {
-  const [reason, setReason] = useState("");
-  const [disputeType, setDisputeType] = useState("");
-  const [files, setFiles] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    const token = getAccessToken();
-    setSubmitting(true);
-    setError("");
-    try {
-      const dispute = await apiFetch(`/api/orders/${order.id}/disputes`, {
-        method: "POST",
-        token,
-        body: { reason, disputeType },
-      });
-      for (const file of files) {
-        await uploadDisputeEvidence(dispute.id, file, token);
-      }
-      onOpened(dispute);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="mt-3 flex flex-col gap-2 rounded-md border border-red-200 bg-red-50 p-3"
-    >
-      <p className="text-xs text-gray-600">
-        อธิบายปัญหาให้ละเอียด (เช่น สินค้าชำรุด ไม่ตรงตามที่ตกลง)
-        แนบรูปภาพ/วิดีโอประกอบเพื่อให้เจ้าหน้าที่พิจารณาได้เร็วขึ้น
-      </p>
-      <label className="text-sm text-ink-muted">ประเภทปัญหา
-        <input required aria-label="ประเภทปัญหา" value={disputeType}
-          onChange={(event) => setDisputeType(event.target.value)}
-          placeholder="เช่น สินค้าชำรุด หรือสินค้าไม่ตรงตามที่ตกลง"
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" />
-      </label>
-      <textarea
-        required
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        rows={3}
-        placeholder="เหตุผลที่ขอคืนเงิน/คืนสินค้า"
-        className="rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-emerald-500"
-      />
-      <input
-        type="file"
-        multiple
-        accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime"
-        onChange={(e) => setFiles(Array.from(e.target.files || []))}
-        className="text-xs text-gray-600"
-      />
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={submitting}
-        className="self-start rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-      >
-        {submitting ? "กำลังส่ง..." : "ส่งคำร้องขอคืนเงิน/คืนสินค้า"}
-      </button>
-    </form>
-  );
-}
-
 export default function OrdersPage() {
   const router = useRouter();
   const [items, setItems] = useState([]);
@@ -212,9 +139,7 @@ export default function OrdersPage() {
         body: { status: "completed" },
       });
       setItems((prev) =>
-        prev.map((o) =>
-          o.id === orderId ? { ...o, status: "completed" } : o,
-        ),
+        prev.map((o) => (o.id === orderId ? { ...o, status: "completed" } : o)),
       );
     } catch (err) {
       alert(err.message || "ยืนยันการรับสินค้าไม่สำเร็จ");
@@ -320,9 +245,7 @@ export default function OrdersPage() {
         <ul className="flex flex-col gap-3">
           {items.map((o) => {
             const review = reviewedByOrderId[o.id];
-            const disputed =
-              Boolean(o.dispute) ||
-              justDisputedIds.has(o.id);
+            const disputed = Boolean(o.dispute) || justDisputedIds.has(o.id);
             const safetyHold = o.status === "disputed" && !disputed;
             return (
               <li
@@ -436,11 +359,18 @@ export default function OrdersPage() {
                       ))}
 
                     {o.status === "completed" &&
-                      !justDisputedIds.has(o.id) &&
+                      !disputed &&
                       (openDisputeFor === o.id ? (
-                        <DisputeForm
+                        <OrderDisputeForm
                           order={o}
-                          onOpened={() => {
+                          onSubmitted={(dispute) => {
+                            setItems((items) =>
+                              items.map((item) =>
+                                item.id === o.id
+                                  ? { ...item, status: "disputed", dispute }
+                                  : item,
+                              ),
+                            );
                             setJustDisputedIds((prev) =>
                               new Set(prev).add(o.id),
                             );

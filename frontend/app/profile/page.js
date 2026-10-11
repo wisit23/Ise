@@ -818,12 +818,12 @@ export default function ProfilePage() {
                             </Button>
                           )}
                           <Button
-                            href="/orders"
+                            href={ord.dispute ? `/support/cases/${ord.id}` : "/orders"}
                             variant="secondary"
                             size="sm"
                             icon="open_in_new"
                           >
-                            ดูรายละเอียด
+                            {ord.dispute ? "ติดตามข้อพิพาท" : "ดูรายละเอียด"}
                           </Button>
                         </div>
                       </div>

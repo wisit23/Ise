@@ -79,12 +79,26 @@ async function main() {
       assert.ok(row.checkout.paidAt);
     }
     if (row.dispute) {
-      assert.ok(row.dispute.evidence.length > 0);
+      // Customers may open a case first and attach evidence later.
+      // Checkpointed uploads are verified below; do not fabricate missing files.
       for (const evidence of row.dispute.evidence)
         assert.ok([row.buyerId, row.sellerId].includes(evidence.uploaderId));
       assert.ok(
         row.payments[0].holds.some((hold) => hold.source === "DISPUTE"),
       );
+    }
+  }
+  for (const [key, evidence] of Object.entries(state)) {
+    if (
+      (key.endsWith("-evidence") || key.startsWith("customer-ui-evidence-")) &&
+      evidence?.id &&
+      evidence?.uploaderId
+    ) {
+      const persisted = await order.disputeEvidence.findUnique({
+        where: { id: evidence.id },
+      });
+      assert.ok(persisted, "Seeded evidence must remain available: " + key);
+      assert.equal(persisted.uploaderId, evidence.uploaderId);
     }
   }
   for (const scenario of state.orderSummary) {
@@ -162,7 +176,9 @@ async function main() {
     where: { orderId: state["completed-order"].id },
   });
   assert.equal(Number(attribution.netAmount), 801);
-  assert.equal(Number(campaign.spentBudget), 89);
+  // This is an interactive demo: other real checkouts may also use the campaign.
+  assert.ok(Number(campaign.spentBudget) >= 89);
+  assert.ok(Number(campaign.spentBudget) <= Number(campaign.budget));
   const summary = {
     verifiedAt: new Date().toISOString(),
     label,
