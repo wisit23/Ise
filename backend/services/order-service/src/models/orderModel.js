@@ -42,6 +42,8 @@ function view(row) {
     finalPrice: Number(row.ordersAmount),
     discountAmount: Number(money(row.originalAmount).minus(row.ordersAmount)),
     checkoutSessionId: row.checkoutId,
+    checkoutSession: row.checkout ? {...row.checkout,shippingAddress:row.shipping?.addressSnapshot || row.checkout.addressSnapshot} : null,
+    shippingAddress:row.shipping?.addressSnapshot || row.checkout?.addressSnapshot || null,
     reservationId: row.basketId,
     reservationExpiresAt: row.basket?.unlockAt || null,
     auctionId: row.auctionId || (row.orderType === "AUCTION" ? row.id : null),

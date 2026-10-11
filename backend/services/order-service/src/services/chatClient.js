@@ -1,3 +1,10 @@
+async function resolveTradingConversation(orderId,{productId,buyerId,source="CURRENT"}={}){
+  if(!["CURRENT","ORDER"].includes(source))throw new AppError(400,"invalid chat source");
+  if(source!=="ORDER" && productId && buyerId){
+    const room=await internalGet(`/internal/conversations/by-context/PRODUCT/${encodeURIComponent(productId)}?buyerId=${encodeURIComponent(buyerId)}`,{allowMissing:true});if(room)return room;
+  }
+  return internalGet(`/internal/conversations/by-context/ORDER/${encodeURIComponent(orderId)}`,{allowMissing:true});
+}
 // Thin service-to-service client toward chat-service's Internal API
 // (CHAT-005) — order status notifications are best-effort, while opening a
 // dispute room reports a service error to the caller so the UI can retry.
@@ -124,40 +131,8 @@ async function sendDisputeNotice(dispute, order, eventKey, body) {
  * orderController.updateStatus — see the comment there on why it's awaited
  * rather than fire-and-forget despite being best-effort.
  */
-async function notifyOrderStatusChanged(order, status) {
-  const messageBody = STATUS_MESSAGE_TH[status];
-  if (!messageBody) return;
-
-  try {
-    const conversation = await internalPost("/internal/conversations", {
-      contextType: "ORDER",
-      contextId: order.id,
-      createdBy: "system",
-      participants: [
-        { userId: order.buyerId, role: "BUYER" },
-        { userId: order.sellerId, role: "SELLER" },
-      ],
-    });
-
-    await internalPost(`/internal/conversations/${conversation.id}/messages`, {
-      senderId: "system",
-      senderRole: "SYSTEM",
-      type: "SYSTEM",
-      body: messageBody,
-      payload: { event: `order.${status}`, orderId: order.id },
-    });
-  } catch (err) {
-    console.error(
-      `[order-service] chat notification failed for order ${order.id} (${status}):`,
-      err.message,
-    );
-  }
-}
-
-async function getOrderTranscript(orderId, { before, limit = 30 } = {}) {
-  const conversation = await internalGet(
-    `/internal/conversations/by-context/ORDER/${encodeURIComponent(orderId)}`,
-  );
+async function getOrderTranscript(orderId, { before, limit = 30, productId,buyerId,source } = {}) {
+  const conversation = await resolveTradingConversation(orderId,{productId,buyerId,source});
   if (!conversation) return null;
   const params = new URLSearchParams({ limit: String(limit) });
   if (before) params.set("before", before);
@@ -167,10 +142,8 @@ async function getOrderTranscript(orderId, { before, limit = 30 } = {}) {
   return transcript ? { ...transcript, conversation } : null;
 }
 
-async function getOrderAttachment(orderId, messageId) {
-  const conversation = await internalGet(
-    `/internal/conversations/by-context/ORDER/${encodeURIComponent(orderId)}`,
-  );
+async function getOrderAttachment(orderId, messageId, options = {}) {
+  const conversation = await resolveTradingConversation(orderId,options);
   if (!conversation) return null;
   const res = await fetch(
     `${CHAT_SERVICE_URL}/internal/conversations/${conversation.id}/attachments/${encodeURIComponent(messageId)}`,
@@ -194,6 +167,7 @@ async function getOrderAttachment(orderId, messageId) {
  */
 
 module.exports = {
+  notifyOrderPlaced,notifyOrderPaid,
   getOrderTranscript, getOrderAttachment,
   notifyOrderStatusChanged,
   joinDisputeConversation,
@@ -201,3 +175,96 @@ module.exports = {
   getDisputeTranscript,
   sendDisputeNotice,
 };
+
+async function postToProductRoom({ order, body, payload }) {
+  if (!order.productId) return;
+  try {
+    const conversation = await internalPost("/internal/conversations", {
+      contextType: "PRODUCT",
+      contextId: order.productId,
+      createdBy: "system",
+      participants: [
+        { userId: order.buyerId, role: "BUYER" },
+        { userId: order.sellerId, role: "SELLER" },
+      ],
+    });
+
+    await internalPost(`/internal/conversations/${conversation.id}/messages`, {
+      senderId: "system",
+      senderRole: "SYSTEM",
+      type: "SYSTEM",
+      body,
+      payload,
+      idempotencyKey:`${payload.event}:${order.id}:${order.version || 0}`,
+    });
+  } catch (err) {
+    console.error(
+      `[order-service] chat notification failed for PRODUCT:${order.productId} (order ${order.id}):`,
+      err.message,
+    );
+  }
+}
+
+/**
+ * Notifies the seller in the PRODUCT chat room when a new order is placed.
+ */
+async function notifyOrderPlaced(order) {
+  if (!order || !order.id || !order.buyerId || !order.sellerId || !order.productId) return;
+
+  const title = order.productTitle || "สินค้า";
+  await postToProductRoom({
+    order,
+    body: `🛒 มีการสั่งซื้อสินค้า '${title}' | หมายเลขคำสั่งซื้อ: #${order.id}`,
+    payload: {
+      event: "order.placed",
+      orderId: order.id,
+      productId: order.productId,
+      productTitle: order.productTitle,
+      price: order.price,
+      status: order.status || "pending_payment",
+    },
+  });
+}
+
+/**
+ * Notifies the seller in the PRODUCT chat room when payment is completed.
+ */
+async function notifyOrderPaid(order) {
+  if (!order || !order.id || !order.buyerId || !order.sellerId || !order.productId) return;
+
+  const title = order.productTitle || "สินค้า";
+  await postToProductRoom({
+    order,
+    body: `🛒 ผู้ซื้อทำการซื้อสินค้า '${title}' และชำระเงินเรียบร้อยแล้ว | หมายเลขคำสั่งซื้อ: #${order.id}`,
+    payload: {
+      event: "order.paid",
+      orderId: order.id,
+      productId: order.productId,
+      status: "confirmed",
+    },
+  });
+}
+
+/**
+ * Notifies parties in the PRODUCT chat room when order status changes.
+ */
+async function notifyOrderStatusChanged(order, status) {
+  const statusLabel = STATUS_MESSAGE_TH[status];
+  if (!statusLabel || !order || !order.id || !order.productId) return;
+
+  const body =
+    status === "shipped"
+      ? `📦 ผู้ขายจัดส่งสินค้าแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า | หมายเลขคำสั่งซื้อ: #${order.id}`
+      : `คำสั่งซื้อ #${order.id}: ${statusLabel}`;
+
+  await postToProductRoom({
+    order,
+    body,
+    payload: {
+      event: `order.${status}`,
+      orderId: order.id,
+      productId: order.productId,
+      status,
+    },
+  });
+}

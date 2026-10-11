@@ -36,7 +36,11 @@ async function createConversation(req, res, next) {
       }
     }
 
-    const contextKey = contextKeyForInternalContextId(contextType, contextId);
+    const contextKey = contextKeyForInternalContextId(
+      contextType,
+      contextId,
+      participants,
+    );
     const now = new Date();
 
     try {
@@ -73,6 +77,7 @@ async function getByContext(req, res, next) {
     const contextKey = contextKeyForInternalContextId(
       req.params.type,
       req.params.id,
+      req.query.buyerId ? [{userId:req.query.buyerId,role:"BUYER"}] : [],
     );
     const conversation = await conversationModel.findByContextKey(contextKey);
     if (!conversation) throw notFound("Conversation not found");

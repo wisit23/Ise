@@ -6,6 +6,7 @@ import Button from "../../../ui/Button";
 import { apiFetch, fetchAuthedBlobUrl } from "../../../../lib/api";
 
 export default function DisputeChatPanel({ dispute, token, closing, onClose }) {
+  const [source,setSource]=useState("CURRENT");
   const [items, setItems] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +20,7 @@ export default function DisputeChatPanel({ dispute, token, closing, onClose }) {
     setError("");
     try {
       const objectUrl = await fetchAuthedBlobUrl(
-        `/api/orders/disputes/${dispute.id}/chat-attachments/${message.id}`,
+        `/api/orders/disputes/${dispute.id}/chat-attachments/${message.id}?source=${source}`,
         token,
       );
       window.open(objectUrl, "_blank", "noreferrer");
@@ -34,7 +35,7 @@ export default function DisputeChatPanel({ dispute, token, closing, onClose }) {
     before ? setLoadingOlder(true) : setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ limit: "30" });
+      const params = new URLSearchParams({ limit: "30",source });
       if (before) params.set("before", before);
       const data = await apiFetch(
         `/api/orders/disputes/${dispute.id}/chat-history?${params}`,
@@ -63,7 +64,7 @@ export default function DisputeChatPanel({ dispute, token, closing, onClose }) {
     setNextCursor(null);
     setUnavailableReason("");
     load();
-  }, [dispute.id, token]);
+  }, [dispute.id, token, source]);
 
   return (
     <div
@@ -96,7 +97,8 @@ export default function DisputeChatPanel({ dispute, token, closing, onClose }) {
             </div>
           </Alert>
         )}
-        {loading && (
+        <label className="px-4 py-2 text-sm">ประวัติสนทนา <select value={source} onChange={e=>setSource(e.target.value)}><option value="CURRENT">การซื้อขายสินค้า</option><option value="ORDER">แชทออเดอร์เดิม</option></select></label>
+      {loading && (
           <p className="text-center text-sm text-slate-500">กำลังโหลด...</p>
         )}
         {!loading && unavailableReason && (

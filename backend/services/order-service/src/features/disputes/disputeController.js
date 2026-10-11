@@ -253,6 +253,7 @@ async function chatHistory(req, res, next) {
     res.json(
       await disputeService.getChatHistory({
         disputeId: req.params.id,
+      source:req.query.source,
         userId: req.userId,
         role: req.userRole,
         roles: req.userRoles,
@@ -270,6 +271,7 @@ async function chatAttachment(req, res, next) {
     const attachment = await disputeService.getChatAttachment({
       disputeId: req.params.id,
       messageId: req.params.messageId,
+      source:req.query.source,
       userId: req.userId,
       role: req.userRole,
       roles: req.userRoles,

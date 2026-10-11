@@ -9,7 +9,7 @@ jest.mock("../../lib/api", () => ({
 
 jest.mock("../../lib/auth", () => ({
   ...jest.requireActual("../../lib/auth"),
-  getStoredUser: jest.fn(()=>({id:"buyer-test",role:"BUYER"})), 
+  getStoredUser: jest.fn(()=>({id:"buyer-test",role:"BUYER"})),
   getAccessToken: jest.fn(() => "test-token"),
 }));
 

@@ -868,13 +868,14 @@ async function getAuthorizedSafetyDispute({ disputeId, userId, role, roles }) {
   return dispute;
 }
 
-async function getChatHistory({ disputeId, userId, role, roles, before, limit }) {
+async function getChatHistory({ disputeId, userId, role, roles, before, limit, source }) {
   const dispute = await getAuthorizedSafetyDispute({
     disputeId,
     userId,
     role,
     roles,
   });
+  if(source && !["CURRENT","ORDER"].includes(source))throw badRequest("invalid chat source");
   const parsedLimit = limit === undefined ? 30 : Number(limit);
   if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
     throw badRequest("limit must be an integer between 1 and 100");
@@ -885,6 +886,7 @@ async function getChatHistory({ disputeId, userId, role, roles, before, limit })
     transcript = await chatClient.getOrderTranscript(dispute.orderId, {
       before,
       limit: parsedLimit,
+      productId:dispute.order.productId,buyerId:dispute.order.buyerId,source,
     });
   } catch (err) {
     await disputeModel.auditLog({
@@ -955,6 +957,7 @@ async function getChatHistory({ disputeId, userId, role, roles, before, limit })
 async function getChatAttachment({
   disputeId,
   messageId,
+  source,
   userId,
   role,
   roles,
@@ -968,7 +971,7 @@ async function getChatAttachment({
   });
   let attachment;
   try {
-    attachment = await chatClient.getOrderAttachment(dispute.orderId, messageId);
+    attachment = await chatClient.getOrderAttachment(dispute.orderId, messageId,{productId:dispute.order.productId,buyerId:dispute.order.buyerId,source});
   } catch (err) {
     await disputeModel.auditLog({
       disputeId,

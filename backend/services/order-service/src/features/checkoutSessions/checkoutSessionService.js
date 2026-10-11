@@ -1,3 +1,4 @@
+const chatClient = require("../../services/chatClient");
 const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const productClient = require("../../services/productClient");
@@ -337,6 +338,7 @@ function createCheckoutSessionService(
         ),
       ),
     );
+    await Promise.all(paid.orders.map(order=>chatClient.notifyOrderPaid(orderModel.view(order)).catch(()=>{})));
     return sessionView(paid);
   }
   async function updateAddress({

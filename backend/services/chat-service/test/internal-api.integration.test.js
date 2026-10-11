@@ -270,7 +270,7 @@ test("Internal API against a real MongoDB replica set", async (t) => {
   });
 
   await t.test(
-    "PRODUCT context is rejected — not supported via the Internal API's single-contextId creation",
+    "PRODUCT internal context resolves the exact buyer/product room",
     async () => {
       const res = await request(app)
         .post("/internal/conversations")
@@ -280,7 +280,8 @@ test("Internal API against a real MongoDB replica set", async (t) => {
           contextId: "some-product",
           participants: [{ userId: buyerId, role: "BUYER" }],
         });
-      assert.equal(res.status, 400);
+      assert.equal(res.status,201);
+      assert.equal(res.body.contextKey,"PRODUCT:some-product:"+buyerId);
     },
   );
 
