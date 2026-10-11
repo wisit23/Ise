@@ -1,5 +1,26 @@
 # Executive Feature Handoff
 
+## 2026-10-10 — Complaint feature handoff / pre-Git recheck
+
+- Scope: complaint details with Report/Audit/User action data, full-page modal,
+  realtime target/shop search, status ALL, pagination, validation and error/retry.
+  Trust & Safety write commands and database schemas are unchanged.
+- Frontend source includes the new ComplaintDetailsModal, ComplaintRow,
+  executiveComplaints validator and useExecutiveComplaints hook. Backend source
+  includes reportConfig/reportSearch and new query/persistence tests. Include
+  all new files in the commit; committing tracked diffs alone is insufficient.
+- Optional config keys are documented in root .env.example. NEXT_PUBLIC_REPORT_*
+  values are embedded at frontend build time; production Compose forwards them
+  as build args. Real .env files stay local and ignored by Git.
+- Recheck fixes: recover to the last valid page when reports leave a selected
+  status; use Map for target/actor lookup to avoid inherited object properties.
+- Latest focused evidence: frontend 41/41; isolated PostgreSQL/query/config checks
+  3/3; scoped lint, Prettier and strict API-validator type check passed; tracked
+  plus nine new files passed secret scans. New browser QA was not performed.
+- Previously recorded whole-role acceptance remains separate from this change.
+- Final build evidence: frontend production build succeeded on an isolated copy;
+  auth-service Docker build succeeded. Temporary test schemas/runners were removed.
+
 > อัปเดตล่าสุด: 2026-08-26
 
 ## Ownership

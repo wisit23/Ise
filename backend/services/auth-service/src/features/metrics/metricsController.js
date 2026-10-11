@@ -8,9 +8,9 @@ const {
 } = require("@reloop/shared");
 const userMetrics = require("./userMetrics");
 const executiveReports = require("./executiveReports");
+const { DEFAULT_REPORT_LIMIT, MAX_REPORT_LIMIT } = require("./reportConfig");
 
-const REPORT_STATUSES = ["OPEN", "REVIEWED", "ACTIONED", "DISMISSED"];
-const MAX_REPORT_LIMIT = 100;
+const REPORT_STATUSES = ["OPEN", "REVIEWED", "ACTIONED", "DISMISSED", "ALL"];
 
 async function getMetrics(req, res, next) {
   try {
@@ -47,7 +47,42 @@ const VALID_REASON_CATEGORIES = ["FRAUD", "COUNTERFEIT", "MISMATCH", "OTHER"];
 
 async function getReports(req, res, next) {
   try {
-    const { status, sortBy, reasonCategory, targetId } = req.query;
+    const { status, sortBy, reasonCategory, targetId, search } = req.query;
+    for (const name of [
+      "status",
+      "sortBy",
+      "reasonCategory",
+      "targetId",
+      "limit",
+      "search",
+      "page",
+    ]) {
+      if (
+        req.query[name] !== undefined &&
+        typeof req.query[name] !== "string"
+      ) {
+        throw badRequest(`${name} must be a single string value`);
+      }
+    }
+    if (search !== undefined && search.length > 100) {
+      throw badRequest("search must not exceed 100 characters");
+    }
+    const page = req.query.page === undefined ? 1 : Number(req.query.page);
+    if (req.query.page !== undefined && !/^\d+$/.test(req.query.page)) {
+      throw badRequest("page must be a positive integer");
+    }
+    if (
+      !Number.isSafeInteger(page) ||
+      page < 1 ||
+      !Number.isSafeInteger((page - 1) * MAX_REPORT_LIMIT)
+    ) {
+      throw badRequest("page must be a valid positive integer");
+    }
+    if (targetId !== undefined && (!targetId.trim() || targetId.length > 200)) {
+      throw badRequest(
+        "targetId must be a non-empty identifier of at most 200 characters",
+      );
+    }
     if (status && !REPORT_STATUSES.includes(status)) {
       throw badRequest(`status must be one of ${REPORT_STATUSES.join(", ")}`);
     }
@@ -62,7 +97,13 @@ async function getReports(req, res, next) {
       );
     }
 
-    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    if (req.query.limit !== undefined && !/^\d+$/.test(req.query.limit)) {
+      throw badRequest("limit must be a positive integer");
+    }
+    const limit =
+      req.query.limit !== undefined
+        ? Number(req.query.limit)
+        : DEFAULT_REPORT_LIMIT;
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_REPORT_LIMIT) {
       throw badRequest(
         `limit must be an integer between 1 and ${MAX_REPORT_LIMIT}`,
@@ -74,7 +115,9 @@ async function getReports(req, res, next) {
       limit,
       sortBy: sortBy || "newest",
       reasonCategory,
-      targetId,
+      targetId: targetId?.trim(),
+      search: search?.trim(),
+      page,
     });
 
     // Complaints are a live queue, not a windowed aggregate, so there is no

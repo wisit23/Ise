@@ -1,5 +1,44 @@
 # Executive Feature Progress
 
+## 2026-10-10 — Pre-Git recheck
+
+แก้ last-page recovery และ safe target/actor lookup พร้อม regression checks.
+Frontend 41/41, isolated backend 3/3, scoped lint/format/static types/Compose config
+และ secret scan ผ่าน. จุดส่งมอบล่าสุดอยู่ใน handoff.md; whole-role/browser acceptance
+ยังคงแยกจากชุดตรวจนี้
+
+## 2026-10-10 — Complaint quality review
+
+Refactor hook/row + runtime and static types for API boundary + timeout/retry + consistent query/count snapshot complete. Frontend 40/40, isolated backend checks 3/3, scoped lint, strict API-module type check, production build และ Compose config ผ่าน. ข้อมูลจริงอ่าน Database/API; config รองรับ Environment Variables พร้อมค่า default. ไม่เปลี่ยน whole-role acceptance หรือ Trust & Safety workflow
+
+## 2026-10-09 — All status filter
+
+ตัวกรองทั้งหมด implemented หลังยกคำร้อง; คงตัวกรองที่ยังเปิดอยู่เดิมแยกกัน. Focused frontend 18/18 และ PostgreSQL isolated schema 1/1 ผ่าน
+
+## 2026-10-09 — Realtime search input
+
+Search as you type พร้อม debounce/IME handling และ input focus preservation implemented; ใช้ API Search เดิม. Focused tests 17/17 ผ่าน
+
+## 2026-10-09 — Search target/shop
+
+ช่อง Search ด้านขวาของรายการ + backend search/status filtering + pagination implemented. ค้นหาข้อมูล Database จริงก่อน limit; การเปลี่ยนคำค้น/สถานะ/เป้าหมายคืนหน้า 1. Isolated PostgreSQL checks 3/3 และ focused frontend 26/26 ผ่าน. ไม่แก้ schema หรือ Trust & Safety workflow
+
+## 2026-10-09 — Complaint overlay layout fix
+
+Modal portal ครอบทั้งหน้าและล็อก body/panel scroll จนกว่าจะปิด โดยคืนค่า overflow เดิม. Focused regression tests 18/18 ผ่าน; browser visual QA ยังไม่ได้ตรวจ
+
+## 2026-10-09 — Complaint quality checks
+
+Runtime API validation + JSDoc สำหรับข้อมูลคำร้อง/Action, retry และ stale-response guard implemented. Modal แยกเป็น component; runtime data ไม่มี mock fallback. Configuration รองรับ environment และมี validation. Focused frontend 30/30, backend query/config 2/2 และ scoped ESLint ผ่าน; ยังไม่ใช่ whole-system หรือ browser acceptance
+
+## 2026-10-09 — Complaint decision details
+
+Implemented: ชื่อ Trust & Safety ผู้ดำเนินการ, Action และเหตุผลจาก Report/Audit/User ใน Modal เดิม. PostgreSQL isolated-schema test 1/1 และ focused frontend tests 15/15 ผ่าน. ไม่มี schema change; whole-role acceptance เดิมไม่เปลี่ยน
+
+## 2026-10-09 — Complaint details popup
+
+Implemented: แต่ละคำร้องมีปุ่มรายละเอียดและ Modal แสดงเหตุผล ผู้ส่ง วันเวลาที่แจ้ง (Asia/Bangkok) เป้าหมาย และสถานะ โดยใช้ข้อมูลจาก API เดิม. Existing complaint/Modal regression tests: 8/8 passed; browser interaction ยังไม่ได้ตรวจ. ไม่เปลี่ยนสถานะการรับรอง `CEO-004`/`CEO-005`
+
 > Owner: อัสนัย เมืองรอด · Reviewer: ศิวกร วรวัฒน์อมรชัย · Updated: 2026-08-26
 
 **Status:** `CEO-001`, `CEO-002`, `CEO-003` implemented and verified against PostgreSQL;

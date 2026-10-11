@@ -1,5 +1,65 @@
 # Executive Feature Changelog
 
+## 2026-10-10 — Pre-Git recheck
+
+- แก้ pagination เมื่อหน้าสุดท้ายหายหลังคำร้องเปลี่ยนสถานะ ให้กลับหน้าที่มีผลลัพธ์ได้ และไม่ submit Search ขณะ IME กำลังประกอบข้อความ
+- เปลี่ยน target/actor lookup เป็น Map เพื่อไม่อ่าน inherited object properties กรณีรหัสเป้าหมายพิเศษ; เพิ่ม regression cases constructor/__proto__
+- Focused frontend 41/41, isolated PostgreSQL checks 3/3, scoped lint/Prettier/static API-module type check/Compose config/diff checks ผ่าน. Secret scan tracked 619 files และ new files 9 files ไม่พบ secrets. Handoff ระบุให้รวมไฟล์ใหม่ใน commit
+
+## 2026-10-10 — Complaint quality review and refactor
+
+- แยก useExecutiveComplaints (fetch/search/state/timeout) และ ComplaintRow จากหน้า section; คง ComplaintDetailsModal และ shared UI เดิม
+- โมดูลรับข้อมูลเปิด @ts-check พร้อม JSDoc types และ normalized payload จริง; runtime ตรวจโครงสร้าง/วันที่/ตัวเลข/Action และความสอดคล้อง total-page-limit-totalPages. ไม่ใช้ runtime mock fallback
+- Request timeout รองรับ NEXT_PUBLIC_REPORT_REQUEST_TIMEOUT_MS และ retry โดยคงช่องค้นหาไว้; ยกเลิก timer เมื่อเปลี่ยนคำขอ/unmount. Domain labels เป็น UI translations ไม่ใช่ข้อมูลคำร้องจำลอง
+- Report page/count/detail อ่าน RepeatableRead snapshot เดียวกัน และสร้าง report-count join เฉพาะ most_reported. ไม่เปลี่ยน schema หรือคำสั่ง moderation
+- เพิ่ม production build args เฉพาะ Executive public config ใน Dockerfile.prod/Compose override เพราะ Next.js ฝังค่าขณะ build
+- Verification: strict TypeScript check ของ executiveComplaints.js ผ่าน; scoped ESLint ผ่าน; frontend 4 suites/40 tests ผ่าน; isolated PostgreSQL query/config/actions/search 3/3 ผ่าน; frontend production build บนสำเนาชั่วคราวผ่าน; production Compose config และ diff check ผ่าน. ไม่มี browser QA ใหม่ในรอบนี้
+
+## 2026-10-09 — All report statuses
+
+- เพิ่มปุ่ม “ทั้งหมด” ต่อจาก “ยกคำร้อง”, ส่ง status=ALL เพื่อยกเงื่อนไขสถานะใน API; search/target/pagination คงทำงานร่วมกันได้
+- Focused frontend 18/18 และ isolated PostgreSQL integration 1/1 ผ่าน; ALL fixture ยืนยัน OPEN/REVIEWED/ACTIONED/DISMISSED ครบ
+
+## 2026-10-09 — Search as you type
+
+- ค้นหาอัตโนมัติหลังหยุดพิมพ์ 300ms (NEXT_PUBLIC_REPORT_SEARCH_DEBOUNCE_MS รองรับ override ที่ validate แล้ว), ยกเลิก timer เดิม และรอ IME composition จบก่อนค้น
+- คง input/controls ขณะ API โหลดหรือผิดพลาดหลังโหลดครั้งแรก เพื่อไม่เสีย focus; คง stale-response guard, reset page 1 และสถานะเดิม
+- Focused complaint regression tests 17/17 ผ่าน รวม auto-search, focus ขณะ request ค้าง และ IME. ไม่แก้ Backend/API contract
+
+## 2026-10-09 — Target/shop complaint search
+
+- เพิ่ม Search ชิดขวาของหัวข้อรายการ ค้นหาจากชื่อร้าน ชื่อผู้ใช้เป้าหมาย หรือ target ID ผ่าน API โดยคงสถานะที่เลือก; มีล้างคำค้นและ empty state เฉพาะการค้นหา
+- API รองรับ search/page พร้อม validation; SQL parameterized ค้นหาก่อนแบ่งหน้าและใช้ predicate เดียวกับ total count. ส่ง total/page/limit/totalPages ให้ pagination เพื่อเข้าถึงผลลัพธ์ครบเกิน limit เดิม
+- ย้าย most_reported ordering ไปฐานข้อมูลก่อนแบ่งหน้า พร้อม id tie-break ป้องกันรายการข้าม/ซ้ำเมื่อ reportedAt เท่ากัน; ไม่เปลี่ยน KPI summary หรือ moderation commands
+- Verification: PostgreSQL schema แยก 3/3 checks ผ่าน (query/config + persisted actions/search) ครอบคลุม partial case-insensitive shop search, owner name/ID, status, multi-page, no match, literal SQL-like input และ global ranking. Focused frontend 26/26 ผ่าน; schema/runner ทดสอบลบหลังตรวจ
+
+## 2026-10-09 — Full-page complaint overlay and background scroll lock
+
+- ComplaintDetailsModal ใช้ React portal ไปยัง body เพื่อออกจาก transformed animation ของ section และครอบ Navbar/Sidebar/Content ทั้งหน้า
+- ล็อก scrollable panel ancestors ขณะเปิดและคืนค่า overflow เดิมเมื่อปิด/unmount; shared Modal คง body lock, focus trap, Esc/backdrop behavior และ scroll ภายในรายละเอียด
+- แก้เฉพาะ component ข้อร้องเรียน CEO; ไม่แก้ shared Modal หรือ layout ของทีมอื่น
+- Regression checks: complaint/Modal 18/18 ผ่าน รวม portal อยู่ใต้ body, panel/body scroll lock และคืนค่าเมื่อปิดด้วย Esc. ยังไม่ได้ตรวจ browser จริง
+
+## 2026-10-09 — Complaint validation, error handling and component cleanup
+
+- แยก `ComplaintDetailsModal` และโมดูล `executiveComplaints` สำหรับ runtime payload validation/JSDoc types/ข้อความแสดงผล; ข้อมูลรายการและการตัดสินอ่านจาก API จริง ไม่มี runtime mock fallback
+- ลบค่า KPI/threshold จำลองระหว่างโหลด; payload ผิดรูปแบบหรือ API ล้มเหลวแสดง ErrorState พร้อม retry และไม่ใช้ผลตอบกลับเก่าทับคำขอล่าสุด
+- Backend ตรวจ query เป็น scalar string, limit เป็น integer และ targetId ไม่ว่าง. Config limit/threshold อ่านจาก EXECUTIVE_REPORT_* โดยตรวจค่าตอนเริ่ม; timezone อ่าน NEXT_PUBLIC_REPORT_TIMEZONE. ตัวอย่างอยู่ `.env.example`
+- Verification: focused frontend 4 suites / 30 tests ผ่าน, backend query/config tests 2/2 ผ่าน, ESLint scope ที่แก้ผ่าน. Auth image build สำเร็จ
+
+## 2026-10-09 — Trust & Safety decision in complaint details
+
+- Executive API ส่ง `actionTaken` และ `actionDetails` (actor ID/name, decision reason) สำหรับคำร้องที่ ACTIONED/DISMISSED โดยจับคู่ Report.id กับ AdminAudit.targetId และ REPORT_<actionTaken>; lookup ชื่อเจ้าหน้าที่จาก Users แบบ batch
+- ป๊อปอัปแสดงผู้ดำเนินการ Action และเหตุผลแยกจากเหตุผลผู้ร้อง; คำร้องที่ยังไม่เสร็จหรือไม่มีข้อมูลแสดง `-`. SUSPEND_USER แสดงระงับบัญชีผู้ใช้ตามพฤติกรรมจริง
+- Verification: PostgreSQL integration ใน schema ชั่วคราวแยกผ่าน 1/1 (ไม่ skip) ครอบคลุมผู้ตรวจคนละคนกับผู้ตัดสิน, unrelated audit, ทั้งสี่ Action, pending และ missing audit; ลบ schema หลังตรวจ. Frontend complaint/Modal tests ผ่าน 15/15
+
+## 2026-10-09 — Complaint details popup
+
+- เพิ่มปุ่ม “รายละเอียด” แต่ละคำร้อง เปิด shared `Modal` แสดงเหตุผล ผู้ส่ง วันเวลาไทย เป้าหมาย และสถานะจากข้อมูล API ที่โหลดแล้ว
+- แสดงชื่อร้าน/ชื่อผู้ใช้และรหัสเต็มเมื่อมีข้อมูล; คำร้องที่ระบุเฉพาะสินค้าแสดงรหัสสินค้า
+- ใช้ Modal กลางสำหรับ Esc, backdrop close, focus trap และคืน focus; ไม่เพิ่ม API หรือเปลี่ยนสถานะคำร้อง
+- Verification: existing `ComplaintsSection.test.js` + `Modal.test.js` ผ่าน 2 suites / 8 tests ใน frontend container; `git diff --check` ผ่าน. ยังไม่ได้ตรวจคลิกจริงผ่าน browser
+
 ## 2026-07-30 — Planning Round 0
 
 - Trace `UR-27`–`UR-31`

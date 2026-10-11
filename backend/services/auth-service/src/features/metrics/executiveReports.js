@@ -1,7 +1,9 @@
 const prisma = require("../../models/prismaClient");
+const { DEFAULT_REPORT_LIMIT, ANOMALY_THRESHOLD } = require("./reportConfig");
+const { findReportPage } = require("./reportSearch");
 
 const OPEN_STATUSES = ["OPEN", "REVIEWED"];
-const DEFAULT_ANOMALY_THRESHOLD = 3;
+const DEFAULT_ANOMALY_THRESHOLD = ANOMALY_THRESHOLD;
 
 const CATEGORY_KEYWORDS = {
   FRAUD: [
@@ -28,13 +30,17 @@ function categorizeReason(reason = "") {
   return "OTHER";
 }
 
-function toItem(report, targetMap = {}) {
-  const targetInfo = targetMap[report.targetId] || {};
+function toItem(report, targetMap = new Map(), actionMap = {}) {
+  const targetInfo = targetMap.get(report.targetId) || {};
   return {
     id: report.id,
     reason: report.reason,
     category: categorizeReason(report.reason),
     status: report.status,
+    actionTaken: ["ACTIONED", "DISMISSED"].includes(report.status)
+      ? report.actionTaken
+      : null,
+    actionDetails: actionMap[report.id] || null,
     reportedAt: report.reportedAt.toISOString(),
     targetId: report.targetId,
     targetName: targetInfo.name || null,
@@ -47,11 +53,56 @@ function toItem(report, targetMap = {}) {
   };
 }
 
+async function enrichReportActions(reports) {
+  const completed = reports.filter(
+    (report) =>
+      ["ACTIONED", "DISMISSED"].includes(report.status) && report.actionTaken,
+  );
+  if (completed.length === 0) return {};
+
+  // Report audit entries target the report ID; USER_* entries target a user.
+  // Match the final decision too, so another action on the same user (or an
+  // unrelated audit entry) cannot become this report's decision reason.
+  const audits = await prisma.adminAudit.findMany({
+    where: {
+      OR: completed.map((report) => ({
+        targetId: report.id,
+        action: `REPORT_${report.actionTaken}`,
+      })),
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    distinct: ["targetId"],
+    select: { targetId: true, actorId: true, reason: true },
+  });
+  if (audits.length === 0) return {};
+
+  const actors = await prisma.user.findMany({
+    where: { id: { in: [...new Set(audits.map((audit) => audit.actorId))] } },
+    select: { id: true, firstName: true, lastName: true },
+  });
+  const names = new Map(
+    actors.map((actor) => [
+      actor.id,
+      `${actor.firstName} ${actor.lastName}`.trim(),
+    ]),
+  );
+  return Object.fromEntries(
+    audits.map((audit) => [
+      audit.targetId,
+      {
+        actorId: audit.actorId,
+        actorName: names.get(audit.actorId) || null,
+        reason: audit.reason,
+      },
+    ]),
+  );
+}
+
 /**
  * Fetch and enrich target details (name, shopName, and report counts) for an array of target IDs.
  */
 async function enrichTargets(allTargetIds = []) {
-  if (allTargetIds.length === 0) return {};
+  if (allTargetIds.length === 0) return new Map();
 
   const [targetUsers, allReportCounts] = await Promise.all([
     prisma.user.findMany({
@@ -70,29 +121,29 @@ async function enrichTargets(allTargetIds = []) {
     }),
   ]);
 
-  const countMap = Object.fromEntries(
+  const countMap = new Map(
     allReportCounts.map((c) => [c.targetId, c._count._all]),
   );
 
-  const targetMap = Object.fromEntries(
+  const targetMap = new Map(
     targetUsers.map((u) => [
       u.id,
       {
         name: `${u.firstName} ${u.lastName}`.trim(),
         shopName: u.sellerProfile?.shopName || null,
-        reportCount: countMap[u.id] || 1,
+        reportCount: countMap.get(u.id) || 1,
       },
     ]),
   );
 
   // Fill in entries for any target IDs without a matching user record
   for (const tId of allTargetIds) {
-    if (!targetMap[tId]) {
-      targetMap[tId] = {
+    if (!targetMap.has(tId)) {
+      targetMap.set(tId, {
         name: null,
         shopName: null,
-        reportCount: countMap[tId] || 1,
-      };
+        reportCount: countMap.get(tId) || 1,
+      });
     }
   }
 
@@ -111,38 +162,19 @@ async function enrichTargets(allTargetIds = []) {
  */
 async function getReportOverview({
   status,
-  limit = 50,
+  limit = DEFAULT_REPORT_LIMIT,
   sortBy = "newest",
   reasonCategory,
   targetId,
+  search,
+  page = 1,
 } = {}) {
-  const where = {};
-
-  if (status) {
-    where.status = status;
-  } else {
-    where.status = { in: OPEN_STATUSES };
-  }
-
-  if (targetId) {
-    where.targetId = targetId;
-  }
-
-  if (reasonCategory && CATEGORY_KEYWORDS[reasonCategory]) {
-    where.OR = CATEGORY_KEYWORDS[reasonCategory].map((kw) => ({
-      reason: { contains: kw, mode: "insensitive" },
-    }));
-  }
-
-  const [reports, statusGroups, targetGroups] = await Promise.all([
-    prisma.report.findMany({
-      where,
-      orderBy: { reportedAt: sortBy === "oldest" ? "asc" : "desc" },
-      take: limit,
-      include: {
-        reporter: { select: { firstName: true, lastName: true } },
-      },
-    }),
+  const [{ reports, total }, statusGroups, targetGroups] = await Promise.all([
+    findReportPage(
+      prisma,
+      { status, targetId, search, page, limit, sortBy, reasonCategory },
+      { openStatuses: OPEN_STATUSES, categoryKeywords: CATEGORY_KEYWORDS },
+    ),
     prisma.report.groupBy({ by: ["status"], _count: { _all: true } }),
     prisma.report.groupBy({
       by: ["targetId"],
@@ -161,29 +193,24 @@ async function getReportOverview({
     ]),
   ];
 
-  const targetMap = await enrichTargets(allTargetIds);
+  const [targetMap, actionMap] = await Promise.all([
+    enrichTargets(allTargetIds),
+    enrichReportActions(reports),
+  ]);
 
   const statusCounts = Object.fromEntries(
     statusGroups.map((g) => [g.status, g._count._all]),
   );
 
-  let items = reports.map((r) => toItem(r, targetMap));
-
-  if (sortBy === "most_reported") {
-    items.sort(
-      (a, b) =>
-        b.targetReportCount - a.targetReportCount ||
-        new Date(b.reportedAt) - new Date(a.reportedAt),
-    );
-  }
+  const items = reports.map((r) => toItem(r, targetMap, actionMap));
 
   const topReported = targetGroups
     .filter((g) => g._count._all > 1)
     .map((g) => ({
       targetId: g.targetId,
       count: g._count._all,
-      targetName: targetMap[g.targetId]?.name || null,
-      targetShopName: targetMap[g.targetId]?.shopName || null,
+      targetName: targetMap.get(g.targetId)?.name || null,
+      targetShopName: targetMap.get(g.targetId)?.shopName || null,
     }));
 
   const highRiskTargets = topReported.filter(
@@ -192,6 +219,10 @@ async function getReportOverview({
 
   return {
     items,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
     statusCounts,
     totalOpen: (statusCounts.OPEN || 0) + (statusCounts.REVIEWED || 0),
     topReported,
