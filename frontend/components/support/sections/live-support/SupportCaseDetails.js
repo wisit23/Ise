@@ -25,7 +25,11 @@ export default function SupportCaseDetails({
   const [internalNote, setInternalNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [showEscalate, setShowEscalate] = useState(false);
-  const [memo, setMemo] = useState({ problem: "", authority: "", recommendation: "" });
+  const [memo, setMemo] = useState({
+    problem: "",
+    authority: "",
+    recommendation: "",
+  });
 
   useEffect(() => {
     function closeOnEscape(event) {
@@ -329,12 +333,47 @@ export default function SupportCaseDetails({
         open={showEscalate}
         title="ส่งเรื่องต่อให้ Admin"
         onClose={() => setShowEscalate(false)}
-        footer={<div className="flex justify-end gap-2"><Button variant="secondary" onClick={() => setShowEscalate(false)}>ยกเลิก</Button><Button disabled={actionBusy || Object.values(memo).some((v) => !v.trim())} onClick={() => {
-          onStatusChange("ESCALATED", `ปัญหา: ${memo.problem.trim()}\nขาดอำนาจ: ${memo.authority.trim()}\nข้อเสนอแนะ: ${memo.recommendation.trim()}`);
-          setShowEscalate(false);
-        }}>ส่งเรื่องต่อ</Button></div>}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowEscalate(false)}>
+              ยกเลิก
+            </Button>
+            <Button
+              disabled={
+                actionBusy || Object.values(memo).some((v) => !v.trim())
+              }
+              onClick={() => {
+                onStatusChange(
+                  "ESCALATED",
+                  `ปัญหา: ${memo.problem.trim()}\nขาดอำนาจ: ${memo.authority.trim()}\nข้อเสนอแนะ: ${memo.recommendation.trim()}`,
+                );
+                setShowEscalate(false);
+              }}
+            >
+              ส่งเรื่องต่อ
+            </Button>
+          </div>
+        }
       >
-        <div className="space-y-3">{[["problem", "ปัญหาคืออะไร"], ["authority", "ขาดอำนาจอะไร"], ["recommendation", "CS เสนอแนะอะไร"]].map(([key, label]) => <label key={key} className="block text-sm font-bold text-slate-700">{label}<textarea rows={2} value={memo[key]} onChange={(e) => setMemo((old) => ({ ...old, [key]: e.target.value }))} className="mt-1 w-full rounded-lg border p-2 font-normal" /></label>)}</div>
+        <div className="space-y-3">
+          {[
+            ["problem", "ปัญหาคืออะไร"],
+            ["authority", "ขาดอำนาจอะไร"],
+            ["recommendation", "CS เสนอแนะอะไร"],
+          ].map(([key, label]) => (
+            <label key={key} className="block text-sm font-bold text-slate-700">
+              {label}
+              <textarea
+                rows={2}
+                value={memo[key]}
+                onChange={(e) =>
+                  setMemo((old) => ({ ...old, [key]: e.target.value }))
+                }
+                className="mt-1 w-full rounded-lg border p-2 font-normal"
+              />
+            </label>
+          ))}
+        </div>
       </Modal>
     </aside>
   );

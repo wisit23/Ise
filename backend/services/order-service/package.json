@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "migrate:sla": "node prisma/applyServicePolicy.js"
+    "migrate:sla": "node prisma/applyServicePolicy.js",
+    "migrate:deploy": "node prisma/migrate.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

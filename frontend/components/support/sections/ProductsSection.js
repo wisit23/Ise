@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import config from "../../../lib/customerServiceConfig";
 import { apiFetch } from "../../../lib/api";
 import Pagination from "../../Pagination";
 import Badge from "../../panel/ui/Badge";
@@ -52,7 +53,7 @@ export default function ProductsSection({ token }) {
     try {
       const params = new URLSearchParams({
         q: searchQuery.trim(),
-        limit: "15",
+        limit: String(config.pagination.products),
         page: String(targetPage),
       });
       if (removedOnly) params.set("status", "removed");

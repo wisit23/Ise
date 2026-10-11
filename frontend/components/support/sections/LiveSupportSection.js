@@ -1,4 +1,6 @@
 "use client";
+import config from "../../../lib/customerServiceConfig";
+import Pagination from "../../Pagination";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "../../../lib/api";
@@ -41,6 +43,8 @@ export default function LiveSupportSection({
     [],
   );
 
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [scope, setScope] = useState("mine");
   const [search, setSearch] = useState("");
   const [tickets, setTickets] = useState([]);
@@ -73,7 +77,8 @@ export default function LiveSupportSection({
         const params = new URLSearchParams();
         if (currentScope) params.set("scope", currentScope);
         if (currentSearch?.trim()) params.set("q", currentSearch.trim());
-        params.set("take", "50");
+        params.set("limit", String(config.pagination.queue));
+        params.set("page", String(page));
 
         const data = await apiFetch(`/api/support/tickets/queue?${params}`, {
           token,
@@ -81,6 +86,11 @@ export default function LiveSupportSection({
         if (request !== queueRequest.current) return;
         const items = data.items || [];
         setTickets(items);
+        setTotalPages(data.totalPages || 1);
+        if (data.totalPages && page > data.totalPages) {
+          setPage(data.totalPages);
+          return;
+        }
 
         setSelectedTicketId((prev) => {
           if (prev === initialTicketId) return prev;
@@ -96,11 +106,14 @@ export default function LiveSupportSection({
         if (request === queueRequest.current) setLoadingQueue(false);
       }
     },
-    [scope, search, token, toast, initialTicketId],
+    [scope, search, token, toast, initialTicketId, page],
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => fetchQueue(scope, search), 300);
+    const timer = window.setTimeout(
+      () => fetchQueue(scope, search),
+      config.timing.searchDebounceMs,
+    );
     return () => {
       window.clearTimeout(timer);
       queueRequest.current++;
@@ -178,6 +191,7 @@ export default function LiveSupportSection({
       queueRequest.current++;
       setSearch("");
       setScope("mine");
+      setPage(1);
       setShowDetails(false);
       setSelectedTicketId(ticketId);
       toast.success("รับงานเรียบร้อยแล้ว เปิดงานในคิวของคุณ");
@@ -262,10 +276,23 @@ export default function LiveSupportSection({
           setLoadingQueue(true);
           setShowDetails(false);
           setScope(newScope);
+          setPage(1);
           setSelectedTicketId(null);
         }}
         search={search}
-        onSearchChange={setSearch}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setPage(1);
+        }}
+        pagination={
+          !loadingQueue && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onChange={setPage}
+            />
+          )
+        }
         loading={loadingQueue}
         error={queueError}
         onRefresh={() => fetchQueue(scope, search)}

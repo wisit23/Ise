@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import Badge from "../../panel/ui/Badge";
+import Pagination from "../../Pagination";
+import config from "../../../lib/customerServiceConfig";
 
 function baht(v) {
   return `฿${v.toLocaleString("th-TH")}`;
@@ -14,6 +16,8 @@ function baht(v) {
 // auctions sat stuck in pending_approval forever.
 
 export default function AuctionApprovalsSection({ token }) {
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -22,18 +26,20 @@ export default function AuctionApprovalsSection({ token }) {
 
   useEffect(() => {
     setLoading(true);
-    apiFetch("/api/products/auctions?status=pending_approval&limit=50", {
-      token,
-    })
-      .then((data) => setItems(data.items || []))
-      .catch((err) =>
-        setError(
-          err.message ||
-            "เกิดข้อผิดพลาดในการโหลดคำขอเปิดประมูล กรุณาลองใหม่อีกครั้ง",
-        ),
-      )
+    apiFetch(
+      `/api/products/auctions?${new URLSearchParams({ status: "pending_approval", page, limit: config.pagination.approvals })}`,
+      {
+        token,
+      },
+    )
+      .then((data) => {
+        setItems(data.items || []);
+        setTotalPages(data.totalPages || 1);
+        if (data.totalPages && page > data.totalPages) setPage(data.totalPages);
+      })
+      .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [token, refreshKey]);
+  }, [token, refreshKey, page]);
 
   async function handleDecision(id, action) {
     setBusyId(id);
@@ -119,6 +125,9 @@ export default function AuctionApprovalsSection({ token }) {
             </li>
           ))}
         </ul>
+      )}
+      {!loading && (
+        <Pagination page={page} totalPages={totalPages} onChange={setPage} />
       )}
     </div>
   );

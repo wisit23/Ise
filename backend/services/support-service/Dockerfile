@@ -12,4 +12,4 @@ WORKDIR /app/services/support-service
 RUN npm install
 RUN npx prisma generate
 
-CMD ["sh", "-c", "node prisma/migrate.js && node prisma/seed.js && node src/server.js"]
+CMD ["node", "src/server.js"]

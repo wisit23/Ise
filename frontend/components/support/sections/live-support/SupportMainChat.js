@@ -1,9 +1,11 @@
 "use client";
+import config from "../../../../lib/customerServiceConfig";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import MessageList from "../../../chat/MessageList";
 import MessageComposer from "../../../chat/MessageComposer";
+import TypingIndicator from "../../../chat/TypingIndicator";
 import {
   useChatSocket,
   useChatSocketEvent,
@@ -17,7 +19,7 @@ import {
 } from "../../../../lib/supportConstants";
 import Badge from "../../../panel/ui/Badge";
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = config.pagination.messages;
 
 function mergeById(existing, incoming) {
   const byId = new Map(existing.map((m) => [m.id, m]));
@@ -166,12 +168,18 @@ export default function SupportMainChat({
     markRead(conversationId, tokenRef.current).catch(() => {});
   });
 
-  useChatSocketEvent("typing", ({ userId, typing }) => {
-    if (userId === ticket?.requesterId) {
-      setOtherTyping(typing);
-      if (typing) scrollToBottom(true);
-    }
-  });
+  useChatSocketEvent(
+    "typing",
+    ({ userId, typing, conversationId: typingRoom }) => {
+      if (
+        (!typingRoom || typingRoom === conversationId) &&
+        userId === ticket?.requesterId
+      ) {
+        setOtherTyping(typing);
+        if (typing) scrollToBottom(true);
+      }
+    },
+  );
 
   useChatSocketEvent("conversation:status", (data) => {
     if (data.conversationId !== conversationId) return;
@@ -291,7 +299,8 @@ export default function SupportMainChat({
     );
   }
 
-  const isAssigned = Boolean(ticket.assigneeId);
+  const isAssigned =
+    ticket.assigneeId === user?.id && ticket.capabilities?.canReply !== false;
 
   return (
     <section className="flex min-w-0 flex-1 flex-col h-full overflow-hidden bg-white">
@@ -351,7 +360,7 @@ export default function SupportMainChat({
             className="hidden min-h-10 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 lg:flex"
             title="เปิดหน้ารายละเอียดตั๋วแบบเต็มในแท็บใหม่"
           >
-            <span>ดูตั๋วเต็ม</span>
+            <span>เปิดหน้าเคส</span>
             <span className="material-symbols-outlined text-[15px]">
               open_in_new
             </span>
@@ -443,16 +452,7 @@ export default function SupportMainChat({
               activeRoomId={conversationId}
             />
 
-            {/* Typing Indicator */}
-            {otherTyping && (
-              <div className="flex items-center gap-2 px-2 py-1 text-xs text-slate-500 animate-fade-in">
-                <span className="material-symbols-outlined text-[16px] text-emerald-500 animate-pulse">
-                  edit
-                </span>
-                <span>ลูกค้ากำลังพิมพ์ข้อความ...</span>
-              </div>
-            )}
-
+            <TypingIndicator typing={otherTyping && !locked} name="ลูกค้า" />
             <div ref={endRef} className="h-4 shrink-0" aria-hidden="true" />
           </>
         )}
@@ -462,7 +462,7 @@ export default function SupportMainChat({
       <div className="shrink-0 border-t border-slate-200 bg-white">
         {locked ? (
           <div className="bg-slate-50/90 px-4 py-3.5 text-center text-xs font-medium text-slate-500">
-            🔒 การสนทนานี้ถูกปิดแล้ว (ตั๋วสถานะ: {ticket.status})
+            🔒 เคสนี้ปิดแล้ว คุณดูประวัติได้ แต่ส่งข้อความไม่ได้
           </div>
         ) : !isAssigned ? (
           <div className="flex flex-col items-stretch gap-3 border-t border-amber-200 bg-amber-50/90 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">

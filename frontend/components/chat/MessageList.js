@@ -152,7 +152,7 @@ export default function MessageList({
             m.body?.includes("คำสั่งซื้อ");
 
           const orderId =
-            m.payload?.orderId || m.body?.match(/#([a-f0-9\-]+)/i)?.[1];
+            m.payload?.orderId || m.body?.match(/#([a-f0-9-]+)/i)?.[1];
 
           const isShippedNotification =
             m.payload?.event === "order.shipped" ||

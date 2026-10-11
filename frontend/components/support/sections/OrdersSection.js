@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import Modal from "../../ui/Modal";
+import SupportOrderDetails, { orderAmount } from "./orders/SupportOrderDetails";
 import Badge from "../../panel/ui/Badge";
 import RadioSelect from "../../ui/RadioSelect";
 import ConfirmDialog from "../../ui/ConfirmDialog";
@@ -79,6 +80,59 @@ export default function OrdersSection({
     reports: "",
     actions: "",
   });
+  const [previousSearch, setPreviousSearch] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const searchRequest = useRef(0);
+
+  async function withPartyNames(orders) {
+    const ids = [
+      ...new Set(
+        orders
+          .flatMap((order) => [order.buyerId, order.sellerId])
+          .filter(Boolean),
+      ),
+    ];
+    const users = new Map(
+      await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const user = await apiFetch(
+              `/api/auth/admin/users/${encodeURIComponent(id)}`,
+              { token },
+            );
+            return [
+              id,
+              {
+                name:
+                  [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+                  user.email ||
+                  id,
+              },
+            ];
+          } catch {
+            return [id, { name: "โหลดชื่อไม่สำเร็จ" }];
+          }
+        }),
+      ),
+    );
+    return orders.map((order) => ({
+      ...order,
+      buyer: users.get(order.buyerId),
+      seller: users.get(order.sellerId),
+    }));
+  }
+
+  function restoreSearch() {
+    searchRequest.current += 1;
+    setSearchType(previousSearch.searchType);
+    setQuery(previousSearch.query);
+    setOrderResults(previousSearch.orderResults);
+    setUserResult(previousSearch.userResult);
+    setUserOrders(previousSearch.userOrders);
+    setError("");
+    setLoading(false);
+    setPreviousSearch(null);
+  }
 
   // Moderation Dialog State
   const [pendingAction, setPendingAction] = useState(null);
@@ -98,7 +152,7 @@ export default function OrdersSection({
         `/api/orders/support/users/${encodeURIComponent(userId)}/history?${params}`,
         { token },
       );
-      setUserOrders(data.items || []);
+      setUserOrders(await withPartyNames(data.items || []));
       setOrderHistory({
         page: data.page || page,
         total: data.total || 0,
@@ -148,6 +202,7 @@ export default function OrdersSection({
     const q = (queryToSearch ?? query).trim();
     const type = typeToSearch ?? searchType;
     if (!q) return;
+    const requestId = ++searchRequest.current;
 
     setLoading(true);
     setError("");
@@ -164,13 +219,16 @@ export default function OrdersSection({
         const data = await apiFetch(`/api/orders/support/search?${params}`, {
           token,
         });
-        setOrderResults(data.items || []);
+        const orders = await withPartyNames(data.items || []);
+        if (requestId !== searchRequest.current) return;
+        setOrderResults(orders);
       } else {
         // User/Buyer/Seller lookup
         const user = await apiFetch(
           `/api/auth/admin/users/${encodeURIComponent(q)}`,
           { token },
         );
+        if (requestId !== searchRequest.current) return;
         setUserResult(user);
         const relationRole =
           type === "buyerId" ? "buyer" : type === "sellerId" ? "seller" : "all";
@@ -182,13 +240,14 @@ export default function OrdersSection({
         ]);
       }
     } catch (err) {
+      if (requestId !== searchRequest.current) return;
       setError(
         err.message?.includes("not found") || err.message?.includes("404")
           ? "ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา"
           : err.message || "เกิดข้อผิดพลาดในการค้นหา",
       );
     } finally {
-      setLoading(false);
+      if (requestId === searchRequest.current) setLoading(false);
     }
   }
 
@@ -208,12 +267,20 @@ export default function OrdersSection({
 
   function handleFormSubmit(e) {
     e.preventDefault();
+    setPreviousSearch(null);
     executeSearch();
   }
 
   // Quick jump from order card to user lookup
   function handleQuickUserSearch(type, id) {
     if (!id) return;
+    setPreviousSearch({
+      searchType,
+      query,
+      orderResults,
+      userResult,
+      userOrders,
+    });
     setSearchType(type);
     setQuery(id);
     executeSearch(type, id);
@@ -357,6 +424,15 @@ export default function OrdersSection({
       }`}
     >
       {/* Hero Welcome Banner */}
+      {previousSearch && (
+        <button
+          type="button"
+          onClick={restoreSearch}
+          className="mb-4 self-start rounded-lg border px-3 py-2 text-sm font-medium text-emerald-700"
+        >
+          ← กลับไปผลการค้นหาเดิม
+        </button>
+      )}
       {!searched && (
         <div className="mb-8 animate-in zoom-in-95 duration-500">
           <span className="material-symbols-outlined text-[64px] text-emerald-600 mb-2 drop-shadow-sm">
@@ -881,12 +957,12 @@ export default function OrdersSection({
                                 </p>
                               </div>
                               {reportId && (
-                                <Link
+                                <a
                                   href={`/workspace?section=admin_inbox&reportId=${encodeURIComponent(reportId)}`}
                                   className="shrink-0 font-bold text-emerald-700 hover:underline"
                                 >
                                   เปิดเคสต้นทาง
-                                </Link>
+                                </a>
                               )}
                             </div>
                           </div>
@@ -1019,23 +1095,18 @@ export default function OrdersSection({
 
                     <div className="flex items-center justify-between sm:justify-end gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       <span className="text-sm font-extrabold text-slate-900">
-                        ฿
-                        {Number(
-                          order.finalPrice ??
-                            order.price ??
-                            order.totalAmount ??
-                            0,
-                        ).toLocaleString()}
+                        ฿{Number(orderAmount(order)).toLocaleString()}
                       </span>
-                      <Link
-                        href={`/orders?id=${order.id}`}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedOrder(order)}
                         className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                       >
                         ดูรายละเอียด
                         <span className="material-symbols-outlined text-[15px]">
                           chevron_right
                         </span>
-                      </Link>
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1116,23 +1187,18 @@ export default function OrdersSection({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-extrabold text-slate-900">
-                      ฿
-                      {Number(
-                        order.finalPrice ??
-                          order.price ??
-                          order.totalAmount ??
-                          0,
-                      ).toLocaleString()}
+                      ฿{Number(orderAmount(order)).toLocaleString()}
                     </span>
-                    <Link
-                      href={`/orders?id=${order.id}`}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOrder(order)}
                       className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                     >
                       ดูรายละเอียดคำสั่งซื้อ
                       <span className="material-symbols-outlined text-[16px]">
                         chevron_right
                       </span>
-                    </Link>
+                    </button>
                   </div>
                 </div>
 
@@ -1199,6 +1265,14 @@ export default function OrdersSection({
       )}
 
       {/* Moderation Confirmation Dialog */}
+      <Modal
+        open={Boolean(selectedOrder)}
+        title="รายละเอียดคำสั่งซื้อ"
+        size="lg"
+        onClose={() => setSelectedOrder(null)}
+      >
+        {selectedOrder && <SupportOrderDetails order={selectedOrder} />}
+      </Modal>
       <ConfirmDialog
         open={Boolean(pendingAction)}
         busy={actionBusy}

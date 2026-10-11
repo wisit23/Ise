@@ -24,19 +24,6 @@
   transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
 }
-.list {
-  animation: queue-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@keyframes queue-in {
-  from {
-    opacity: 0.4;
-    transform: translateX(var(--queue-from, 18px));
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
 .drawer {
   animation: drawer-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -81,7 +68,6 @@
   .indicator {
     transition: none;
   }
-  .list,
   .drawer,
   .drawerClosing,
   .backdrop,

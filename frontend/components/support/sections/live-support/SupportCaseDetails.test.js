@@ -12,7 +12,8 @@ const ticket = {
   category: "ORDER",
   createdAt: "2026-09-13T08:00:00.000Z",
   messages: [],
-  capabilities: { allowedNextStatuses: ["IN_PROGRESS", "ESCALATED"] },
+  assigneeId: "cs-agent",
+  capabilities: { canAddNote: true, canChangeStatus: true, canEscalate: true, allowedNextStatuses: ["IN_PROGRESS", "ESCALATED", "CLOSED"] },
 };
 
 describe("SupportCaseDetails", () => {

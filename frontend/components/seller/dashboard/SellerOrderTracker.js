@@ -19,6 +19,8 @@ const ALL_STATUSES = [
   { value: "shipped", label: "อยู่ระหว่างการขนส่ง" },
   { value: "completed", label: "ขายสำเร็จ" },
   { value: "cancelled", label: "ยกเลิกแล้ว" },
+  { value: "disputed", label: "ข้อพิพาท" },
+  { value: "refunded", label: "คืนเงินแล้ว" },
 ];
 
 // ─── Section 2: Order Tracking ────────────────────────────────────────────────
@@ -150,6 +152,7 @@ export default function SellerOrderTracker({
                 <th className="px-4 py-3">วันที่</th>
                 <th className="px-4 py-3 text-center">สถานะ</th>
                 <th className="px-4 py-3 text-right">การกระทำ</th>
+                <th className="px-4 py-3 text-center">เคส</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -229,6 +232,14 @@ export default function SellerOrderTracker({
                         <span>แชท</span>
                       </Link>
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {o.dispute ? (
+                      <Link href={`/support/cases/${o.id}`}
+                        className="font-semibold text-emerald-700 underline underline-offset-2">
+                        ดูข้อพิพาท / แชท
+                      </Link>
+                    ) : "—"}
                   </td>
                 </tr>
               ))}

@@ -1,4 +1,5 @@
 "use client";
+import config from "../../../lib/customerServiceConfig";
 
 import { useEffect, useRef, useState } from "react";
 import { apiFetch, fetchAuthedBlobUrl } from "../../../lib/api";
@@ -30,7 +31,7 @@ const STATUS_BADGE = {
   },
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = config.pagination.kyc;
 
 export default function KycSection({ token }) {
   const toast = useToast();

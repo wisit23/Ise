@@ -328,17 +328,13 @@ async function resetFixtures(
         },
       }),
       disputes: await order.disputeCase.findMany({
-        include: { evidence: true, auditLog: true },
+        include: { evidence: { include: { auditLog: true } }, caseLog: true },
       }),
       orders: await order.order.findMany({
         where: { id: { in: orderIds } },
-        include: {
-          adminEvidence: true,
-          holds: true,
-          productSyncEvents: true,
-        },
+        include: { shipping: true, payments: { include: { holds: true } }, logs: true },
       }),
-      disputeAudit: await order.disputeAudit.findMany(),
+      disputeAudit: await order.disputeAuditLog.findMany(),
       reports: await auth.report.findMany(),
       adminAudit: await auth.adminAudit.findMany(),
       conversations: rooms,
@@ -366,14 +362,20 @@ async function resetFixtures(
     });
   }
   await support.supportTicket.deleteMany({ where: { id: { in: ticketIds } } });
-  await order.adminDisputeEvidence.deleteMany({
-    where: fullReset ? {} : { orderId: { in: orderIds } },
-  });
-  await order.disputeAudit.deleteMany({
-    where: fullReset ? {} : { orderId: { in: orderIds } },
-  });
-  await order.disputeCase.deleteMany({ where: { id: { in: disputeIds } } });
-  await order.order.deleteMany({ where: { id: { in: orderIds } } });
+  const existingOrders=await order.order.findMany({where:{id:{in:orderIds}},select:{id:true}});
+  for(const row of existingOrders){
+    await order.safetyLog.deleteMany({where:{safety:{orderId:row.id}}});
+    await order.safetyDisputeEvidence.deleteMany({where:{orderId:row.id}});
+    await order.disputeAuditLog.deleteMany({where:{evidence:{dispute:{orderId:row.id}}}});
+    await order.disputeEvidence.deleteMany({where:{dispute:{orderId:row.id}}});
+    await order.disputeCaseLog.deleteMany({where:{dispute:{orderId:row.id}}});
+    await order.disputeCase.deleteMany({where:{orderId:row.id}});
+    await order.hold.deleteMany({where:{payment:{orderId:row.id}}});
+    await order.payment.deleteMany({where:{orderId:row.id}});
+    await order.shipping.deleteMany({where:{orderId:row.id}});
+    await order.orderLog.deleteMany({where:{orderId:row.id}});
+    await order.order.delete({where:{id:row.id}});
+  }
   await auth.adminAudit.deleteMany({
     where: fullReset ? {} : { targetId: { in: reportIds } },
   });
@@ -386,6 +388,8 @@ async function seedFixtures({ auth, order, support, chat }) {
     seedReferenceData,
   } = require("../backend/services/support-service/prisma/seedReferenceData");
   await seedReferenceData(support);
+  await require("../backend/services/auth-service/prisma/roleCatalog").seedRoleCatalog(auth);
+  await require("../backend/services/auth-service/prisma/roleCatalog").seedRoleCatalog(auth);
   const bcrypt = require("bcryptjs");
   const passwordHash = await bcrypt.hash("password123", 10);
   for (const [id, email, role, firstName, lastName] of USERS) {
@@ -474,11 +478,11 @@ async function seedFixtures({ auth, order, support, chat }) {
         productId,
         productTitle,
         status,
-        payoutHeld,
-        price,
-        disputedAt: daysAgo(3),
+        originalAmount: price,
+        ordersAmount: price,
+        orderType: "BUY_NOW",
         preDisputeStatus: payoutHeld ? "completed" : null,
-        paymentSimulationStatus: "RELEASE_PENDING",
+        payments: {create:{paymentType:"DEMO",paymentStatus:"paid",paymentAmount:price,paidAt:daysAgo(4)}},
       },
     });
   }
@@ -486,12 +490,13 @@ async function seedFixtures({ auth, order, support, chat }) {
     await order.disputeCase.create({
       data: {
         ...dispute,
-        openedBy: ID.buyer,
+        createdBy: ID.buyer,
+        disputeType: "ITEM_NOT_AS_DESCRIBED",
         createdAt: daysAgo(3 - index),
         assignedRole:
           dispute.assignedRole ??
           (dispute.assignedTo ? "CUSTOMER_SERVICE" : null),
-        claimedAt: dispute.assignedTo ? daysAgo(2) : null,
+        assignedAt: dispute.assignedTo ? daysAgo(2) : null,
         priority: "HIGH",
         priorityScore: 55,
         slaExpiresAt: daysAgo(-1),
@@ -506,19 +511,23 @@ async function seedFixtures({ auth, order, support, chat }) {
           : {}),
       },
     });
-    await order.orderHold.create({
+    const payment=await order.payment.findFirstOrThrow({where:{orderId:dispute.orderId}});
+    await order.hold.create({
       data: {
-        orderId: dispute.orderId,
+        paymentId: payment.id,
+        holdAmount: payment.paymentAmount,
+        holdStatus: dispute.status === "DECIDED" ? "RELEASED" : "ON_HOLD",
         source: "DISPUTE",
         referenceId: dispute.id,
-        reason: dispute.reason,
-        heldBy: ID.buyer,
-        heldAt: daysAgo(3),
+        holdReason: dispute.reason,
+        holdBy: ID.buyer,
+        holdAt: daysAgo(3),
         ...(dispute.status === "DECIDED"
           ? {
-              releasedAt: daysAgo(1),
+              releaseAt: daysAgo(1),
+              releaseAmount: payment.paymentAmount,
               releasedBy: ID.admin,
-              releaseReason: "Admin อนุมัติคืนเงิน",
+
             }
           : {}),
       },
@@ -541,6 +550,7 @@ async function seedFixtures({ auth, order, support, chat }) {
       },
       support,
     );
+    if(ticket.assigneeId)await support.supportTicket.update({where:{id:ticket.id},data:{chatResponderId:ticket.assigneeId}});
   }
 
   const reports = [
@@ -854,4 +864,4 @@ if (require.main === module)
     process.exitCode = 1;
   });
 
-module.exports = { ID, LEGACY, TICKETS, DISPUTES, localComposeUrl };
+module.exports = { ID, LEGACY, TICKETS, DISPUTES, localComposeUrl, seedFixtures, resetFixtures, verifyFixtures };

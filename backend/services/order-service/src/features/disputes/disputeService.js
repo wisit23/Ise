@@ -969,6 +969,7 @@ async function getChatAttachment({
     role,
     roles,
   });
+  if(source && !["CURRENT","ORDER"].includes(source))throw badRequest("invalid chat source");
   let attachment;
   try {
     attachment = await chatClient.getOrderAttachment(dispute.orderId, messageId,{productId:dispute.order.productId,buyerId:dispute.order.buyerId,source});

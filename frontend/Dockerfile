@@ -4,6 +4,7 @@ WORKDIR /app/frontend
 COPY frontend/package.json ./
 RUN npm install
 
+COPY backend/shared/config /app/backend/shared/config
 COPY frontend ./
 
 EXPOSE 3000

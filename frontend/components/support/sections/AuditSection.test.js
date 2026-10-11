@@ -43,7 +43,7 @@ it("uses the real USER_WARNED action and links back to user history", async () =
   expect(await screen.findByText("USER_WARNED")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
     "href",
-    "/workspace?tab=orders&userId=user-1",
+    "/workspace?section=orders&userId=user-1",
   );
 
   fireEvent.change(screen.getByLabelText("ตัวกรอง Action"), {
@@ -159,13 +159,13 @@ it("links Order and Support audit rows back to their owner records", async () =>
   expect(await screen.findByText("HOLD")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
     "href",
-    "/workspace?tab=orders&orderId=order-1",
+    "/workspace?section=orders&orderId=order-1",
   );
 
   fireEvent.click(screen.getByRole("tab", { name: "สถานะ Ticket" }));
   expect(await screen.findByText("STATUS_CHANGE")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
     "href",
-    "/workspace?tab=tickets&ticketId=ticket-1",
+    "/workspace?section=tickets&case=ticket-1",
   );
 });

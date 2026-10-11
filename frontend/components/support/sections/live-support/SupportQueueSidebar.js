@@ -2,6 +2,7 @@
 
 import Badge from "../../../panel/ui/Badge";
 import QueueIcon from "./QueueIcon";
+import SlaIndicator from "../../workspace/SlaIndicator";
 import motion from "../supportMotion.module.css";
 import {
   TICKET_STATUS_LABEL,
@@ -23,13 +24,19 @@ export default function SupportQueueSidebar({
   onRefresh,
   className = "",
   toolbar,
-  direction = 1,
+  domain = "tickets",
+  filters,
+  pagination,
 }) {
+  const statusLabels =
+    domain === "disputes"
+      ? { OPEN: "รอตรวจสอบ", NEEDS_INFO: "รอข้อมูล", DECIDED: "ตัดสินแล้ว" }
+      : TICKET_STATUS_LABEL;
   return (
     <aside
       className={`h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-200 bg-white md:w-80 lg:w-[22rem] ${className}`}
     >
-      <div className="shrink-0 border-b border-slate-200 bg-white px-4 pb-4 pt-3">
+      <div className="shrink-0 border-b border-slate-200 bg-white px-3 pb-3 pt-2">
         <div className="flex min-h-11 items-center justify-between gap-3">
           <h2 className="text-base font-semibold tracking-tight text-slate-900">
             กล่องงาน
@@ -61,7 +68,7 @@ export default function SupportQueueSidebar({
               className={`min-h-11 flex-1 border-b-2 px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 ${
                 scope === item.value
                   ? "border-transparent font-semibold text-emerald-800"
-                  : "border-transparent font-medium text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                  : "border-transparent font-medium text-slate-600 hover:text-slate-900"
               }`}
             >
               {item.label}
@@ -70,7 +77,7 @@ export default function SupportQueueSidebar({
         </div>
 
         {/* Search Bar */}
-        <div className="relative mt-4">
+        <div className="relative mt-2">
           <QueueIcon
             name="search"
             className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-500"
@@ -79,8 +86,12 @@ export default function SupportQueueSidebar({
             type="text"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="ค้นหาเลข Ticket หรือหัวข้อ"
-            aria-label="ค้นหาตั๋ว"
+            placeholder={
+              domain === "disputes"
+                ? "ค้นหาเลขเคส ออเดอร์ หรือเหตุผล"
+                : "ค้นหาเลข Ticket หรือหัวข้อ"
+            }
+            aria-label={domain === "disputes" ? "ค้นหาข้อพิพาท" : "ค้นหาตั๋ว"}
             className="min-h-11 w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-11 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           />
           {search && (
@@ -95,6 +106,8 @@ export default function SupportQueueSidebar({
           )}
         </div>
       </div>
+
+      {filters}
 
       <div className="flex shrink-0 items-center justify-between px-4 py-1 text-xs text-slate-600">
         <span role="status" aria-live="polite">
@@ -137,10 +150,8 @@ export default function SupportQueueSidebar({
       )}
 
       <div
-        key={`${scope}-${loading && tickets.length === 0 ? "loading" : "results"}`}
-        style={{ "--queue-from": `${direction * 18}px` }}
-        className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain divide-y divide-slate-100 ${motion.list}`}
-        aria-label="รายการ Ticket"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain divide-y divide-slate-100"
+        aria-label={domain === "disputes" ? "รายการข้อพิพาท" : "รายการ Ticket"}
         aria-busy={loading}
       >
         {error && tickets.length === 0 ? (
@@ -159,7 +170,7 @@ export default function SupportQueueSidebar({
             </button>
           </div>
         ) : loading && tickets.length === 0 ? (
-          <div className="p-4 space-y-3 animate-pulse">
+          <div className="p-4 space-y-3">
             {[1, 2, 3, 4].map((n) => (
               <div
                 key={n}
@@ -250,7 +261,7 @@ export default function SupportQueueSidebar({
                 </p>
                 <div className="mt-1 flex w-full flex-wrap items-center gap-1.5">
                   <Badge
-                    text={TICKET_STATUS_LABEL[t.status] || t.status}
+                    text={statusLabels[t.status] || t.status}
                     style={statusStyle}
                   />
                   {t.status !== "CLOSED" &&
@@ -262,14 +273,18 @@ export default function SupportQueueSidebar({
                       />
                     )}
                   <span className="ml-auto text-xs text-slate-500">
-                    {isSelected ? "กำลังเปิด" : ""}
+                    {isSelected ? "เลือกอยู่" : ""}
                   </span>
                 </div>
+                <SlaIndicator sla={t.sla} />
               </button>
             );
           })
         )}
       </div>
+      {pagination && (
+        <div className="shrink-0 border-t px-3 pb-3">{pagination}</div>
+      )}
     </aside>
   );
 }

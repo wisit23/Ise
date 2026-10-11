@@ -260,7 +260,7 @@ export default function SupportPanelPage() {
                 {section === "admin_inbox" && (
                   <AdminInboxSection token={token} currentUserId={user?.id} initialReportId={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("reportId") || "" : ""} />
                 )}
-                {section === "orders" && <OrdersSection token={token} />}
+                {section === "orders" && <OrdersSection token={token} initialUserId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("userId") || "" : ""} initialOrderId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("orderId") || "" : ""} />}
                 {section === "faq" && <FaqSection token={token} />}
                 {section === "kyc" && <KycSection token={token} />}
                 {section === "audit" && <AuditSection token={token} />}

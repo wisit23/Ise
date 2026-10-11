@@ -4,7 +4,7 @@ const path = require("node:path");
 const prisma = require("../src/models/prismaClient");
 async function applyServicePolicy(db = prisma) {
   const sql = fs.readFileSync(
-    path.join(__dirname, "migrations/20261009_cs_service_policy/migration.sql"),
+    path.join(__dirname, "legacy-migrations/20261009_cs_service_policy/migration.sql"),
     "utf8",
   );
   await db.$executeRawUnsafe(sql);

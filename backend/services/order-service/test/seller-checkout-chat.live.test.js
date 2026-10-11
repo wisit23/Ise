@@ -1,5 +1,5 @@
 const test=require("node:test"),assert=require("node:assert/strict");
-const productDb=require("../../product-service/src/models/prismaClient"),orderDb=require("../src/models/prismaClient"),chatDb=require("../../chat-service/src/models/prismaClient");const {deleteOrder,ADDRESS}=require("./fixtures");
+const productDb=new (require("../../product-service/src/generated/prisma-client").PrismaClient)({datasources:{db:{url:process.env.DATABASE_URL_PRODUCT}}}),orderDb=new (require("../src/generated/prisma-client").PrismaClient)({datasources:{db:{url:process.env.DATABASE_URL_ORDER}}}),chatDb=new (require("../../chat-service/src/generated/prisma-client").PrismaClient)({datasources:{db:{url:process.env.DATABASE_URL_CHAT}}});const {deleteOrder,ADDRESS}=require("./fixtures");
 async function call(base,route,token,body,method=body?"POST":"GET"){const response=await fetch(base+route,{method,headers:{"Content-Type":"application/json",...(token?{Authorization:"Bearer "+token}:{})},...(body?{body:JSON.stringify(body)}:{})});const text=await response.text();const data=text?JSON.parse(text):null;assert.ok(response.ok,JSON.stringify({route,status:response.status,data}));return data;}
 test("Seller checkout, paid notification, shipping and T&S trading transcript share persisted facts",async t=>{
  if(!process.env.CHAT_SERVICE_URL || !process.env.AUTH_PUBLIC_URL){t.skip("live Auth/Product/Order/Chat required");return;}
@@ -15,7 +15,8 @@ test("Seller checkout, paid notification, shipping and T&S trading transcript sh
   const messages=await chatDb.message.findMany({where:{conversationId:room.id},select:{payload:true}});assert.equal(messages.filter(message=>message.payload?.event==="order.paid").length,1);
   const current=await call(orderBase,"/"+orderId,seller.accessToken);assert.equal(current.shipping.addressSnapshot.recipientName,ADDRESS.recipientName);
   const shipped=await call(orderBase,"/"+orderId+"/status",seller.accessToken,{status:"shipped",company:"Kerry",trackingNumber:"LIVE123",version:current.version},"PATCH");assert.equal(shipped.shipping.trackingNumber,"LIVE123");
-  const dispute=await call(orderBase,"/disputes",buyer.accessToken,{orderId,reason:"Live safety transcript verification",disputeType:"ITEM_NOT_AS_DESCRIBED"});disputeId=dispute.id;
+  await call(orderBase,"/"+orderId+"/status",buyer.accessToken,{status:"completed",version:shipped.version},"PATCH");
+  const dispute=await call(orderBase,"/"+orderId+"/disputes",buyer.accessToken,{orderId,reason:"Live safety transcript verification",disputeType:"ITEM_NOT_AS_DESCRIBED"});disputeId=dispute.id;
   const transcript=await call(orderBase,"/disputes/"+disputeId+"/chat-history",admin.accessToken);assert.equal(transcript.conversation.id,room.id);assert.equal(transcript.conversation.contextType,"PRODUCT");assert.ok(transcript.items.length>=2);
   const legacy=await call(orderBase,"/disputes/"+disputeId+"/chat-history?source=ORDER",admin.accessToken);assert.equal(legacy.available,false);
  }finally{

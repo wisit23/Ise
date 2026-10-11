@@ -13,6 +13,7 @@ ARG NEXT_PUBLIC_REPORT_SEARCH_DEBOUNCE_MS=300
 ARG NEXT_PUBLIC_REPORT_REQUEST_TIMEOUT_MS=10000
 
 COPY --from=deps /app/frontend/node_modules ./node_modules
+COPY backend/shared/config /app/backend/shared/config
 COPY frontend ./
 RUN npm run build && npm prune --omit=dev
 

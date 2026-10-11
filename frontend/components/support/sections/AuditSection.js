@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import config from "../../../lib/customerServiceConfig";
 import { apiFetch } from "../../../lib/api";
 import Pagination from "../../Pagination";
 import Badge from "../../panel/ui/Badge";
@@ -92,7 +92,7 @@ const ACTION_STYLE = {
   STATUS_CHANGE: "bg-sky-50 text-sky-700 border border-sky-200",
 };
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = config.pagination.audit;
 
 function endpointFor(source) {
   if (source === "auth") return "/api/auth/admin/audit";
@@ -102,16 +102,16 @@ function endpointFor(source) {
 
 function caseLink(log) {
   if (log.source === "AUTH" && log.targetType === "REPORT") {
-    return `/workspace?tab=admin_inbox&reportId=${encodeURIComponent(log.caseId)}`;
+    return `/workspace?section=admin_inbox&reportId=${encodeURIComponent(log.caseId)}`;
   }
   if (log.source === "AUTH" && log.targetType === "USER") {
-    return `/workspace?tab=orders&userId=${encodeURIComponent(log.targetId)}`;
+    return `/workspace?section=orders&userId=${encodeURIComponent(log.targetId)}`;
   }
   if (log.source?.startsWith("ORDER")) {
-    return `/workspace?tab=orders&orderId=${encodeURIComponent(log.targetId)}`;
+    return `/workspace?section=orders&orderId=${encodeURIComponent(log.targetId)}`;
   }
   if (log.source === "SUPPORT") {
-    return `/workspace?tab=tickets&ticketId=${encodeURIComponent(log.caseId)}`;
+    return `/workspace?section=tickets&case=${encodeURIComponent(log.caseId)}`;
   }
   return null;
 }
@@ -399,12 +399,12 @@ export default function AuditSection({ token }) {
                     </td>
                     <td className="p-3.5">
                       {link ? (
-                        <Link
+                        <a
                           href={link}
                           className="font-bold text-emerald-700 hover:underline"
                         >
                           เปิดต้นทาง
-                        </Link>
+                        </a>
                       ) : (
                         <span className="text-slate-400">unavailable</span>
                       )}

@@ -39,6 +39,31 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
+it("can reach queue tickets beyond page one", async () => {
+  apiFetch.mockImplementation((url) => {
+    if (url.includes("/queue?")) {
+      const page = Number(
+        new URL(url, "http://local").searchParams.get("page"),
+      );
+      return Promise.resolve({ items: [tickets[page - 1]], totalPages: 2 });
+    }
+    return Promise.resolve(tickets[0]);
+  });
+  render(<LiveSupportSection token="staff-token" />);
+  await act(async () => {
+    jest.advanceTimersByTime(300);
+  });
+  expect(screen.getByText("Ticket A")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "ถัดไป" }));
+  await act(async () => {
+    jest.advanceTimersByTime(300);
+  });
+  expect(screen.getByText("Ticket B")).toBeInTheDocument();
+  expect(apiFetch.mock.calls.some(([path]) => path.includes("page=2"))).toBe(
+    true,
+  );
+});
+
 it("ignores an old ticket response after a faster second selection", async () => {
   let resolveA;
   apiFetch.mockImplementation((url) => {
@@ -81,13 +106,16 @@ it("opens a claimed ticket in the mine queue without losing the selection", asyn
   apiFetch.mockImplementation((url) => {
     if (url.includes("/queue?")) {
       const scope = new URL(`http://localhost${url}`).searchParams.get("scope");
-      return Promise.resolve({ items: scope === "mine" && !assigned ? [] : [tickets[0]] });
+      return Promise.resolve({
+        items: scope === "mine" && !assigned ? [] : [tickets[0]],
+      });
     }
     if (url.endsWith("/a/assign")) {
       assigned = true;
       return Promise.resolve({});
     }
-    if (url.endsWith("/a/join")) return Promise.resolve({ conversationId: "room-a" });
+    if (url.endsWith("/a/join"))
+      return Promise.resolve({ conversationId: "room-a" });
     return Promise.resolve(tickets[0]);
   });
 
@@ -101,10 +129,16 @@ it("opens a claimed ticket in the mine queue without losing the selection", asyn
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Assign" }));
   });
-  expect(screen.getByRole("button", { name: "งานของฉัน" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "งานของฉัน" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await act(async () => {
     jest.advanceTimersByTime(300);
   });
   expect(screen.getByTestId("ticket")).toHaveTextContent("Ticket A");
-  expect(screen.getByRole("button", { name: /Ticket A/ })).toHaveAttribute("aria-current", "true");
+  expect(screen.getByRole("button", { name: /Ticket A/ })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
 });

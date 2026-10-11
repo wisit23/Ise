@@ -25,6 +25,8 @@ export const ORDER_STATUS_LABEL = {
   shipped: "อยู่ระหว่างการขนส่ง",
   completed: "ขายสำเร็จ",
   cancelled: "ยกเลิกแล้ว",
+  disputed: "อยู่ระหว่างข้อพิพาท",
+  refunded: "คืนเงินแล้ว",
 };
 
 export const ORDER_STATUS_STYLE = {
@@ -34,6 +36,8 @@ export const ORDER_STATUS_STYLE = {
   shipped: "bg-sky-50 text-sky-700",
   completed: "bg-emerald-50 text-emerald-700",
   cancelled: "bg-gray-100 text-gray-600",
+  disputed: "bg-red-50 text-red-700",
+  refunded: "bg-indigo-50 text-indigo-700",
 };
 
 export function baht(v) {

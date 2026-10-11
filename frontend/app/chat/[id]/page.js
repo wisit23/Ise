@@ -7,6 +7,7 @@ import NavBar from "../../../components/NavBar";
 import Alert from "../../../components/ui/Alert";
 import MessageList from "../../../components/chat/MessageList";
 import MessageComposer from "../../../components/chat/MessageComposer";
+import TypingIndicator from "../../../components/chat/TypingIndicator";
 import ChatSidebar from "../../../components/chat/ChatSidebar";
 import ChatProductHeader from "../../../components/chat/ChatProductHeader";
 import ChatSupportHeader from "../../../components/chat/ChatSupportHeader";
@@ -60,6 +61,12 @@ export default function ChatRoomPage() {
   const [error, setError] = useState("");
   const [realtime, setRealtime] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
+  const typingExpiryRef = useRef(null);
+  useEffect(() => {
+    setOtherTyping(false);
+    clearTimeout(typingExpiryRef.current);
+    return () => clearTimeout(typingExpiryRef.current);
+  }, [activeRoomId]);
   const [otherOnline, setOtherOnline] = useState(false);
   const { socket, connected: socketConnected } = useChatSocket();
 
@@ -430,10 +437,12 @@ export default function ChatRoomPage() {
     }
   });
 
-  useChatSocketEvent("typing", ({ userId, typing }) => {
-    if (!user || userId === user.id) return;
+  useChatSocketEvent("typing", ({ userId, typing, conversationId }) => {
+    if (!user || userId === user.id || (conversationId && conversationId !== activeRoomId)) return;
+    clearTimeout(typingExpiryRef.current);
     setOtherTyping(typing);
     if (typing) {
+      typingExpiryRef.current = setTimeout(() => setOtherTyping(false), 6000);
       scrollToBottom(true);
     }
   });
@@ -758,35 +767,7 @@ export default function ChatRoomPage() {
                       activeRoomId={activeRoomId}
                     />
 
-                    {/* Typing Indicator */}
-                    <div
-                      data-testid="typing-indicator-wrapper"
-                      className={`overflow-hidden transition-all duration-300 ease-out ${
-                        otherTyping
-                          ? "max-h-16 opacity-100 translate-y-0 py-2"
-                          : "max-h-0 opacity-0 -translate-y-1 py-0 pointer-events-none"
-                      }`}
-                      aria-hidden={!otherTyping}
-                    >
-                      <div
-                        className="flex items-center gap-2 px-1"
-                        role="status"
-                        aria-label="กำลังพิมพ์"
-                      >
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
-                          {otherName[0] || "?"}
-                        </div>
-                        <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-xs border border-gray-150 bg-white px-3.5 py-2 shadow-2xs">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-dot" />
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-dot [animation-delay:200ms]" />
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-dot [animation-delay:400ms]" />
-                          <span className="ml-1 text-xs font-medium text-gray-500">
-                            กำลังพิมพ์...
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
+                    <TypingIndicator typing={otherTyping && !locked} name={otherName} />
                     <div
                       ref={messagesEndRef}
                       className="h-6 shrink-0"
