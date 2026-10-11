@@ -321,10 +321,9 @@ export default function OrdersPage() {
           {items.map((o) => {
             const review = reviewedByOrderId[o.id];
             const disputed =
-              o.status === "disputed" ||
-              o.status === "refunded" ||
               Boolean(o.dispute) ||
               justDisputedIds.has(o.id);
+            const safetyHold = o.status === "disputed" && !disputed;
             return (
               <li
                 key={o.id}
@@ -383,7 +382,9 @@ export default function OrdersPage() {
                       {o.auctionId &&
                       ["pending", "pending_payment"].includes(o.status)
                         ? "ชนะประมูล · รอชำระเงิน"
-                        : STATUS_LABEL[o.status] || o.status}
+                        : safetyHold
+                          ? "พักเงินเพื่อตรวจสอบ"
+                          : STATUS_LABEL[o.status] || o.status}
                     </span>
                   }
                   note={

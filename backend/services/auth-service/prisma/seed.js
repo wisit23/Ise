@@ -58,6 +58,13 @@ const EXECUTIVE = {
 //   3xxx…  demo buyer                 4xxx…  marketing / other staff
 const STAFF = [
   {
+    id: "40000000-0000-0000-0000-000000000003",
+    email: "trust.demo@example.com",
+    firstName: "ทีม",
+    lastName: "ความปลอดภัย",
+    role: "TRUST_AND_SAFETY",
+  },
+  {
     id: "40000000-0000-0000-0000-000000000001",
     email: "marketing@example.com",
     firstName: "พิมพ์ชนก",

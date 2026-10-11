@@ -338,6 +338,7 @@ export async function fetchAuthedBlobUrl(path, token) {
 
 export function mediaUrl(url) {
   if (!url) return url;
+  if (url.startsWith("/demo/")) return url;
   return url.startsWith("http") ? url : `${API_URL}${url}`;
 }
 
