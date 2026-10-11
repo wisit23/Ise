@@ -164,7 +164,7 @@ export function EvidenceUpload({ disputeId, onUploaded, disabled = false }) {
           {config.evidence.maxFileBytes / 1024 / 1024} MB
         </span>
         <Button
-          variant="secondary"
+          variant="primary"
           disabled={busy || disabled}
           onClick={() => input.current?.click()}
           className={styles.chooseFile}
