@@ -1,6 +1,7 @@
 const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const auctionRepository = require("./auctionRepository");
 const defaultPrisma = require("../../models/prismaClient");
+const { hydrateRound, hydrateItem, writeRound, saveFields } = require("./auctionAuditState");
 const { recordMarketingAudit } = require("../audit/marketingAuditService");
 const orderClient = require("./orderClient");
 const auctionCloseQueue = require("../../jobs/auctionCloseQueue");
@@ -24,7 +25,7 @@ function isCategoryAllowedInRound(round, category) {
   if (!Array.isArray(cats) || cats.length === 0) {
     return true;
   }
-  return cats.includes(category);
+  return (Array.isArray(category) ? category : [category]).some((name) => cats.includes(name));
 }
 
 function runInTransaction(fn) {
@@ -146,13 +147,13 @@ async function closeAuction(auction, now = new Date()) {
       typeof tx?.$executeRaw === "function" &&
       typeof tx?.auctionItem?.findUnique === "function"
     ) {
-      current = await tx.auctionItem.findUnique({
+      current = await hydrateItem(tx, await tx.auctionItem.findUnique({
         where: { id: auctionId },
         include: {
           product: { include: { photos: { orderBy: { position: "asc" } } } },
           round: true,
         },
-      });
+      }));
     } else {
       current = await auctionRepository.findById(auctionId, tx);
     }
@@ -306,8 +307,8 @@ async function submit({ user, input = {} }) {
         // Must check product.category from database against round's allowed categories
         // Ignore any category passed by client in input!
         if (
-          !isCategoryAllowedInRound(chosenRound, product.category) ||
-          !isCategoryAllowedInRound(liveRound, product.category)
+          !isCategoryAllowedInRound(chosenRound, product.categories || product.category) ||
+          !isCategoryAllowedInRound(liveRound, product.categories || product.category)
         ) {
           throw badRequest(
             `รอบประมูลนี้ไม่เปิดรับสินค้าหมวดหมู่ ‘${product.category}’ กรุณาเลือกรอบอื่นหรือเปลี่ยนหมวดหมู่สินค้า`,
@@ -358,12 +359,16 @@ async function submit({ user, input = {} }) {
     throw badRequest("กรุณาระบุหมวดหมู่สินค้า");
   }
 
-  const knownCategory = await auctionRepository.findCategory(category);
-  if (!knownCategory) {
-    throw badRequest(`หมวดหมู่ "${category}" ไม่มีอยู่ในระบบ`);
+  const productData = buildCreateProductData(user.id, {
+    ...input, category, price: startingPrice, status: "auction",
+  });
+  const productCategories = productData.categories || [category];
+  for (const name of productCategories) {
+    if (!(await auctionRepository.findCategory(name))) {
+      throw badRequest(`หมวดหมู่ "${name}" ไม่มีอยู่ในระบบ`);
+    }
   }
-
-  if (!isCategoryAllowedInRound(chosenRound, category)) {
+  if (!isCategoryAllowedInRound(chosenRound, productCategories)) {
     throw badRequest(
       `รอบประมูลนี้ไม่เปิดรับสินค้าหมวดหมู่ ‘${category}’ กรุณาเลือกรอบอื่นหรือเปลี่ยนหมวดหมู่สินค้า`,
     );
@@ -399,18 +404,12 @@ async function submit({ user, input = {} }) {
     if (txNow >= new Date(liveRound.submissionEndsAt)) {
       throw badRequest("รอบประมูลนี้ปิดรับสินค้าแล้ว กรุณาเลือกรอบอื่น");
     }
-    if (!isCategoryAllowedInRound(liveRound, category)) {
+    if (!isCategoryAllowedInRound(liveRound, productCategories)) {
       throw badRequest(
         `รอบประมูลนี้ไม่เปิดรับสินค้าหมวดหมู่ ‘${category}’ กรุณาเลือกรอบอื่นหรือเปลี่ยนหมวดหมู่สินค้า`,
       );
     }
 
-    const productData = buildCreateProductData(user.id, {
-      ...input,
-      category,
-      price: startingPrice,
-      status: "auction",
-    });
     const product = await productModel.create(productData, tx);
 
     const auctionItem = await auctionRepository.create(
@@ -895,14 +894,14 @@ async function cancel({ user, auctionId, reason, cancellationReason }) {
         typeof tx?.$executeRaw === "function" &&
         typeof tx?.auctionItem?.findUnique === "function"
       ) {
-        auction = await tx.auctionItem.findUnique({
+        auction = await hydrateItem(tx, await tx.auctionItem.findUnique({
           where: { id: auctionId },
           include: {
             product: true,
             round: true,
             bids: { select: { bidderId: true } },
           },
-        });
+        }));
       } else {
         auction = await auctionRepository.findById(auctionId, tx);
       }
@@ -1066,10 +1065,10 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
   }
 
   return auctionRepository.withAuctionLock(auctionId, async (tx) => {
-    const auction = await tx.auctionItem.findUnique({
+    const auction = await hydrateItem(tx, await tx.auctionItem.findUnique({
       where: { id: auctionId },
       include: { round: true, product:{select:{status:true,moderatedAt:true}} },
-    });
+    }));
     if (!auction) throw notFound("ไม่พบข้อมูลรายการประมูลที่ระบุ");
     if(auction.product?.moderatedAt || auction.product?.status === "removed")throw conflict("auction product is unavailable due to moderation");
     if (auction.status === "cancelled" || auction.round?.cancelledAt) {
@@ -1186,17 +1185,12 @@ async function cancelRound({ user, roundId, reason }) {
     bidderIds,
     idempotentRetry,
   } = await auctionRepository.withRoundLock(roundId, async (tx) => {
-    const round = await tx.auctionRound.findUnique({
+    const round = await hydrateRound(tx, await tx.auctionRound.findUnique({
       where: { id: roundId },
       include: {
-        auctions: {
-          include: {
-            product: true,
-            bids: true,
-          },
-        },
+        auctions: { include: { product: true, bids: true } },
       },
-    });
+    }));
 
     if (!round) {
       throw notFound("ไม่พบรอบการประมูลที่ระบุ");
@@ -1255,7 +1249,7 @@ async function cancelRound({ user, roundId, reason }) {
       );
     }
 
-    const cancelledRoundRecord = await tx.auctionRound.update({
+    const cancelledRoundRecord = await writeRound(tx, "update", {
       where: { id: roundId },
       data: {
         cancelledAt: now,
@@ -1274,13 +1268,13 @@ async function cancelRound({ user, roundId, reason }) {
       const activeIds = activeList.map((a) => a.id);
       await tx.auctionItem.updateMany({
         where: { id: { in: activeIds } },
-        data: {
-          status: "cancelled",
-          cancellationReason: trimmedReason,
-          cancelledAt: now,
-          cancelledBy: user.id,
-        },
+        data: { status: "cancelled" },
       });
+      for (const id of activeIds) {
+        await saveFields(tx, "AUCTION_ITEM", id, {
+          cancellationReason: trimmedReason, cancelledAt: now, cancelledBy: user.id,
+        });
+      }
 
       const productIds = [
         ...new Set(activeList.map((a) => a.productId).filter(Boolean)),

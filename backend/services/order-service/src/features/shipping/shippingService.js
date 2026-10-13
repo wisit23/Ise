@@ -1,4 +1,4 @@
-const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
+const { AppError, badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 
 const ADDRESS_FIELDS = [
   "recipientName",
@@ -32,18 +32,37 @@ function normalizeAddress(address) {
   );
 }
 
-function createShippingService(db) {
+// Existing Auth address-list API validates the buyer's bearer identity. Never
+// substitute a default address or trust a shippingAddress supplied by a client.
+async function resolveSelectedAddress({ buyerId, addressId, authorization }) {
+  if (!authorization) throw forbidden("buyer authorization is required to select an address");
+  let response;
+  try {
+    response = await fetch(`${process.env.AUTH_SERVICE_URL || "http://auth-service:3001"}/me/addresses`, {
+      headers: { authorization }, signal: AbortSignal.timeout(5000),
+    });
+  } catch { throw new AppError(502, "address service is unavailable"); }
+  if (response.status === 401 || response.status === 403) throw forbidden("address access denied");
+  if (!response.ok) throw new AppError(502, "address service returned an error");
+  const rows = await response.json();
+  const selected = rows.find((row) => row.id === addressId && row.userId === buyerId);
+  if (!selected) throw notFound("selected address does not belong to this buyer");
+  return normalizeAddress(selected);
+}
+
+function createShippingService(db, addresses = resolveSelectedAddress) {
   async function updateAddress({
     orderId,
     buyerId,
     addressId,
     shippingAddress,
+    authorization,
     version,
   }) {
     if (typeof addressId !== "string" || !addressId.trim()) {
       throw badRequest("addressId is required");
     }
-    const addressSnapshot = normalizeAddress(shippingAddress);
+    const addressSnapshot = await addresses({ buyerId, addressId: addressId.trim(), authorization });
     return db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
@@ -166,4 +185,4 @@ function createShippingService(db) {
   return { updateAddress, markShipped };
 }
 
-module.exports = { createShippingService, normalizeAddress };
+module.exports = { createShippingService, normalizeAddress, resolveSelectedAddress };

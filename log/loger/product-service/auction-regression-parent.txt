@@ -1,0 +1,267 @@
+[product-service] chat notification failed for round round-retry-1: chat-service /internal/conversations/conv-round-retry-1:buyer-2/messages returned 503
+✔ canTransition allows only the documented lifecycle edges (7.9267ms)
+✔ submit rejects a buyer before querying the database (0.7215ms)
+✔ submit rejects a non-positive starting price (0.3237ms)
+✔ submit rejects a product owned by another seller (0.367ms)
+✔ submit rejects a product that is not available (0.3135ms)
+✔ submit rejects a product under Trust & Safety moderation (0.249ms)
+✔ submit creates a pending_approval auction for the owning seller (7.3459ms)
+✔ approve rejects a non-Marketing/Admin caller (0.3756ms)
+✔ approve allows a Marketing caller and transitions to scheduled if round dates exist (1.164ms)
+✔ approve rejects moving out of a non-pending_approval state (0.3325ms)
+✔ approve rejects non-Marketing callers (including ADMIN) (0.2186ms)
+✔ schedule rejects a non-Marketing caller (0.3482ms)
+✔ schedule rejects endsAt before startsAt (0.2121ms)
+✔ schedule accepts a valid window for an approved auction (0.2842ms)
+✔ placeBid rejects the seller bidding on their own auction (0.56ms)
+✔ placeBid rejects an auction whose product is moderated (0.3573ms)
+✔ placeBid rejects a bid below startingPrice with no existing bids (3.8122ms)
+✔ placeBid rejects a bid under the current highest + increment (0.6004ms)
+✔ placeBid rejects bidding on a closed auction window (0.228ms)
+✔ placeBid accepts a valid raise and returns the created bid (0.2405ms)
+✔ placeBid returns existing bid on exact retry with matching parameters (0.258ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different amount (0.2476ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different bidderId (0.1912ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different auctionId (0.297ms)
+✔ placeBid returns existing bid on retry even if auction status has changed to closed (0.1625ms)
+✖ placeBid P2002 race recovery validates existing bid and returns on match (0.4676ms)
+✖ placeBid P2002 race recovery throws 409 Conflict if race-created bid has different parameters (0.6038ms)
+✔ closing an auction with no bids never calls order-service (0.7193ms)
+✔ automatic close has no side effects after Trust & Safety moderation (0.1723ms)
+✔ scheduled auction opening uses a moderation-aware CAS (0.2015ms)
+✔ submit transitions available product to 'auction' status (0.5524ms)
+✔ submit accepts a product already created with 'auction' status without re-setting (0.4811ms)
+✔ reject resets product status back to 'available' (0.3268ms)
+✔ reject rejects non-Marketing callers (including ADMIN) (0.3116ms)
+✔ cancel transitions item to 'cancelled' and product status to 'auction_action_required' (0.8745ms)
+✔ closing an auction with no bids transitions product status to 'auction_action_required' (0.3348ms)
+✔ submit rejects when roundId is missing (0.2206ms)
+✔ submit rejects when selected roundId is not found (0.1894ms)
+✔ submit rejects when selected round has not started accepting submissions (0.1728ms)
+✔ submit rejects when selected round has expired submission window (0.1618ms)
+✔ createRound rejects non-Marketing/Admin callers (0.2645ms)
+✔ createRound rejects invalid or inverted dates (0.4496ms)
+✔ createRound creates round for Marketing user (0.3787ms)
+✔ getCurrentRound correctly returns flags when active (0.4375ms)
+✖ placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and reschedules close job (0.2663ms)
+✖ placeBid outside the last 5 minutes does NOT extend scheduledEndAt (0.2786ms)
+✔ deriveRoundPhase correctly identifies all 5 half-open phases (0.1469ms)
+✔ createRound rejects non-Marketing user with 403 Forbidden (0.1339ms)
+✔ createRound validates input dates and boundaries (0.2849ms)
+✔ createRound succeeds when overlapping round exists (MKT-DEC-025 overlap permitted) (0.194ms)
+✔ createRound succeeds and passes tx when no conflict exists (0.2381ms)
+✔ getCurrentRound returns active round containing now with derived phase (0.1645ms)
+✔ getCurrentRound supports simultaneous active submission and auction rounds (0.1716ms)
+✔ getCurrentRound returns nearest upcoming round when none active (0.1323ms)
+✔ getCurrentRound returns null when all rounds ended or none exist (0.1204ms)
+✔ listRounds attaches derived phase to each round (3.312ms)
+✔ auction error messages do not leak internal status or English technical terms (0.2607ms)
+✔ schedule rejects past startsAt with friendly Thai message (0.2287ms)
+✔ schedule rejects endsAt before startsAt with friendly Thai message (0.1625ms)
+✔ placeBid validates missing idempotencyKey with clear Thai message (0.2005ms)
+✔ placeBid validates non-positive amount with clear Thai message (0.1707ms)
+✔ createRound accepts empty categories array or omitted as all categories (0.3431ms)
+✔ createRound accepts one valid category (0.2669ms)
+✔ createRound accepts multiple valid categories (0.1976ms)
+✔ createRound rejects invalid categories format (0.1808ms)
+✔ createRound rejects non-existent category in database (0.1558ms)
+✔ isCategoryAllowedInRound treats empty or missing categories as all categories (0.1128ms)
+✔ submit new product creates Product and AuctionItem atomically in same transaction (1.2441ms)
+✔ submit new product rejects when category is not allowed by active round (0.5986ms)
+✔ submit new product rejects when category is not found in database (0.4489ms)
+✔ submit new product rolls back if product creation fails (0.5363ms)
+✔ submit new product rolls back if auction creation fails (0.5228ms)
+✔ submit existing product validates product.category from DB and ignores client category (1.0956ms)
+✔ submit rejects sellers with expired or unverified KYC and allows ADMIN (3.4503ms)
+✔ submit rejects and rolls back when round expires between validation and transaction (0.4886ms)
+✔ submit existing product rejects and does not update status when round expires in transaction (0.3218ms)
+✔ browseRounds returns active and upcoming rounds with derived phases (0.4271ms)
+✔ getRound returns round with phase and rejects invalid roundId (0.2912ms)
+✔ listRoundItems returns round and items filtered by roundId (0.2881ms)
+✔ listRoundItems reconciles scheduled items to open and filters out expired/closed items (0.4629ms)
+✔ createRound supports concurrent round creation with overlapping times and creates audit log for each (0.392ms)
+✔ deriveRoundPhase returns 'cancelled' when round.cancelledAt is set (0.1019ms)
+✔ cancelRound rejects non-Marketing user with 403 Forbidden (0.2927ms)
+✔ cancelRound validates cancellation reason (0.1809ms)
+✔ cancelRound rejects non-existent round with 404 (0.347ms)
+✖ cancelRound on already cancelled round performs idempotent notification retry without mutating state or creating duplicate audit logs (0.4216ms)
+✖ cancelRound rejects ended round with 400 (0.3686ms)
+✖ cancelRound rejects round with winning order with 400 (0.3268ms)
+✖ cancelRound atomically transitions items and products, logs audit, and notifies chat (0.5272ms)
+✖ cancelRound returns warnings if chat notification encounters failures (0.382ms)
+✔ submit rejects submission to a cancelled round (0.2127ms)
+✖ submit allows product with auction_action_required status into a new round (0.5989ms)
+✔ approve rejects item in a cancelled round (0.2179ms)
+✖ placeBid rejects bid when round or item is cancelled (0.3411ms)
+✖ closeAuction transitions product to auction_action_required when there are 0 bids (0.392ms)
+✔ cancel rejects non-Marketing callers with 403 (0.1457ms)
+✔ cancel validates cancellation reason (non-empty and <= 500 chars) (0.1695ms)
+✔ cancel rejects item in pending_approval (must use reject instead) (0.1667ms)
+✔ cancel rejects item when winningOrderId already exists (0.141ms)
+✔ cancel on open item with bids logs AUCTION_ITEM_CANCEL, cancels close job, and notifies seller and bidders (0.5164ms)
+✔ chatClient.notifyItemCancelled notifies only seller before open, and notifies seller + bidders with isolated 1-on-1 rooms and idempotency keys when open (1.0834ms)
+✔ cancel still succeeds and returns warning when chat-service fails (0.5459ms)
+✔ cancel on already cancelled item performs idempotent notification retry without mutating state or creating duplicate audit logs (0.9669ms)
+✔ submit re-reads round inside withRoundMutationLock and rejects without creating Product or AuctionItem if round was cancelled concurrently (0.5648ms)
+✔ browseRounds includes cancelled upcoming round until auctionEndsAt and hides it after auctionEndsAt (0.2238ms)
+✔ chatClient.notifyRoundCancelled partial failure followed by retry delivers missing recipient and deduplicates already-delivered recipients (1.1937ms)
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller admin-1: getaddrinfo ENOTFOUND auth-service
+ℹ tests 106
+ℹ suites 0
+ℹ pass 94
+ℹ fail 12
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8483.542
+
+✖ failing tests:
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:602:1
+✖ placeBid P2002 race recovery validates existing bid and returns on match (0.4676ms)
+  TypeError: Cannot read properties of undefined (reading 'findFirst')
+      at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+      at hydrateItem (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:55:24)
+      at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1068:27
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:648:1
+✖ placeBid P2002 race recovery throws 409 Conflict if race-created bid has different parameters (0.6038ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: Cannot read properties of undefined (reading 'findFirst')
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.test.js:685:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: Cannot read properties of undefined (reading 'findFirst')
+        at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+        at hydrateItem (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:55:24)
+        at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1068:27,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:1093:1
+✖ placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and reschedules close job (0.2663ms)
+  TypeError: Cannot read properties of undefined (reading 'findFirst')
+      at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+      at hydrateItem (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:55:24)
+      at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1068:27
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:1148:1
+✖ placeBid outside the last 5 minutes does NOT extend scheduledEndAt (0.2786ms)
+  TypeError: Cannot read properties of undefined (reading 'findFirst')
+      at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+      at hydrateItem (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:55:24)
+      at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1068:27
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:2651:1
+✖ cancelRound on already cancelled round performs idempotent notification retry without mutating state or creating duplicate audit logs (0.4216ms)
+  TypeError: client.marketingAuditLog.findFirst is not a function
+      at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+      at hydrateRound (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:47:25)
+      at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1188:25
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:2714:1
+✖ cancelRound rejects ended round with 400 (0.3686ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: Cannot read properties of undefined (reading 'findFirst')
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.test.js:2732:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: Cannot read properties of undefined (reading 'findFirst')
+        at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+        at hydrateRound (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:47:25)
+        at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1188:25,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:2738:1
+✖ cancelRound rejects round with winning order with 400 (0.3268ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: Cannot read properties of undefined (reading 'findFirst')
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.test.js:2758:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: Cannot read properties of undefined (reading 'findFirst')
+        at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+        at hydrateRound (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:47:25)
+        at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1188:25,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:2764:1
+✖ cancelRound atomically transitions items and products, logs audit, and notifies chat (0.5272ms)
+  TypeError: client.marketingAuditLog.findFirst is not a function
+      at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+      at hydrateRound (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:47:25)
+      at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1188:25
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:2873:1
+✖ cancelRound returns warnings if chat notification encounters failures (0.382ms)
+  TypeError: client.marketingAuditLog.findFirst is not a function
+      at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+      at hydrateRound (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:47:25)
+      at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1188:25
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:2943:1
+✖ submit allows product with auction_action_required status into a new round (0.5989ms)
+  TypeError: Cannot read properties of undefined (reading 'findFirst')
+      at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+      at hydrateItem (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:55:24)
+      at writeItem (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:73:10)
+      at async runWithRoundMutationLock.productId (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:329:29)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.test.js:2977:18)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7)
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:3010:1
+✖ placeBid rejects bid when round or item is cancelled (0.3411ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: Cannot read properties of undefined (reading 'findFirst')
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.test.js:3026:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: Cannot read properties of undefined (reading 'findFirst')
+        at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+        at hydrateItem (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:55:24)
+        at C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:1068:27,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:3061:1
+✖ closeAuction transitions product to auction_action_required when there are 0 bids (0.392ms)
+  TypeError: client.marketingAuditLog.findFirst is not a function
+      at readFields (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:14:46)
+      at hydrateItem (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:55:24)
+      at writeItem (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionAuditState.js:73:10)
+      at async C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.js:192:21
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.test.js:3099:18)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7)

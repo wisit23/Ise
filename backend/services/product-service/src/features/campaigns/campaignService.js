@@ -856,8 +856,8 @@ function createCampaignService(
     }
     if (campaign.applicableCategory && product.category) {
       if (
-        campaign.applicableCategory.trim().toLowerCase() !==
-        product.category.trim().toLowerCase()
+        !(product.categories || [product.category]).some((name) =>
+          name.trim().toLowerCase() === campaign.applicableCategory.trim().toLowerCase())
       ) {
         throw badRequest(
           `voucher is only applicable for category: ${campaign.applicableCategory}`,

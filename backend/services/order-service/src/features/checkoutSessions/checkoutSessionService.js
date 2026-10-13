@@ -5,7 +5,7 @@ const productClient = require("../../services/productClient");
 const buyerActivityClient = require("../../services/buyerActivityClient");
 const orderModel = require("../../models/orderModel");
 const { calculateOrderTotals, money } = require("../../models/money");
-const { normalizeAddress } = require("../shipping/shippingService");
+const { resolveSelectedAddress } = require("../shipping/shippingService");
 const PAYMENT_TTL_MS = 10 * 60 * 1000;
 const INCLUDE = {
   orders: { include: orderModel.INCLUDE, orderBy: { createdAt: "asc" } },
@@ -13,13 +13,15 @@ const INCLUDE = {
 
 function sessionView(row) {
   if (!row) return null;
+  const totals = calculateOrderTotals(row.orders || []);
   return {
     ...row,
+    ...totals,
     shippingAddress: row.addressSnapshot,
     expiresAt: row.cancelAt,
-    subtotal: Number(row.originalAmount),
-    total: Number(row.ordersAmount),
-    discount: Number(money(row.originalAmount).minus(row.ordersAmount)),
+    subtotal: Number(totals.originalAmount),
+    total: Number(totals.ordersAmount),
+    discount: Number(totals.originalAmount.minus(totals.ordersAmount)),
     couponCode: null,
     orders: (row.orders || []).map(orderModel.view),
   };
@@ -28,6 +30,7 @@ function createCheckoutSessionService(
   db,
   products,
   activities = { recordOrderActivity: async () => false },
+  addresses = resolveSelectedAddress,
 ) {
   async function findOwnedSession(id, buyerId, tx = db) {
     const row = await tx.checkout.findUnique({
@@ -44,6 +47,7 @@ function createCheckoutSessionService(
     orderIds,
     addressId,
     shippingAddress,
+    authorization,
     couponCode,
     now = new Date(),
   }) {
@@ -59,7 +63,7 @@ function createCheckoutSessionService(
       throw badRequest("addressId is required");
     if (couponCode)
       throw badRequest("apply voucher codes per order, not per checkout");
-    const addressSnapshot = normalizeAddress(shippingAddress);
+    const addressSnapshot = await addresses({ buyerId, addressId: addressId.trim(), authorization });
     const orders = await db.order.findMany({
       where: { id: { in: ids }, buyerId },
       include: orderModel.INCLUDE,
@@ -90,7 +94,7 @@ function createCheckoutSessionService(
       if (order.basket && order.basket.unlockAt <= now)
         throw conflict("reservation has expired");
     }
-    const totals = calculateOrderTotals(orders);
+    calculateOrderTotals(orders); // Validate exact money before reservation side effects.
     const cancelAt = new Date(now.getTime() + PAYMENT_TTL_MS);
     await Promise.all(
       orders
@@ -105,8 +109,6 @@ function createCheckoutSessionService(
           data: {
             buyerId,
             addressId: addressId.trim(),
-            addressSnapshot,
-            ...totals,
             status: "pending",
             cancelAt,
           },
@@ -143,6 +145,8 @@ function createCheckoutSessionService(
             }),
           });
         }
+        // Address history is attached only after orders have checkout_id.
+        await tx.checkout.update({ where: { id: checkout.id }, data: { addressSnapshot } });
         return tx.checkout.findUnique({
           where: { id: checkout.id },
           include: INCLUDE,
@@ -346,10 +350,11 @@ function createCheckoutSessionService(
     sessionId,
     addressId,
     shippingAddress,
+    authorization,
   }) {
     if (typeof addressId !== "string" || !addressId.trim())
       throw badRequest("addressId is required");
-    const addressSnapshot = normalizeAddress(shippingAddress);
+    const addressSnapshot = await addresses({ buyerId, addressId: addressId.trim(), authorization });
     return sessionView(
       await db.$transaction(async (tx) => {
         const checkout = await findOwnedSession(sessionId, buyerId, tx);

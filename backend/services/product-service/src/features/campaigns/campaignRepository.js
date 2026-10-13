@@ -1,5 +1,6 @@
 const prisma = require("../../models/prismaClient");
 const { recordAudit } = require("../audit/marketingAuditRepository");
+const { lockCampaign, withSpentBudget, withVoucherBudget } = require("./campaignBudget");
 
 /**
  * Database access for the Campaign and Voucher Wallet feature.
@@ -16,7 +17,7 @@ function createCampaignRepository(prismaClient) {
       data,
     });
     return {
-      ...campaign,
+      ...(await withSpentBudget(client, campaign)),
       claimedCount: campaign.usedCount ?? 0,
       redeemedCount: 0,
     };
@@ -47,25 +48,20 @@ function createCampaignRepository(prismaClient) {
     }
 
     return {
-      ...campaign,
+      ...(await withSpentBudget(client, campaign)),
       claimedCount: campaign.usedCount ?? (campaign._count?.vouchers || 0),
       redeemedCount,
     };
   }
 
-  function findByCode(code, { tx } = {}) {
+  async function findByCode(code, { tx } = {}) {
     const client = tx || prismaClient;
-    return client.campaign.findUnique({
-      where: { code },
-    });
+    return withSpentBudget(client, await client.campaign.findUnique({ where: { code } }));
   }
 
-  function updateCampaign(id, data, { tx } = {}) {
+  async function updateCampaign(id, data, { tx } = {}) {
     const client = tx || prismaClient;
-    return client.campaign.update({
-      where: { id },
-      data,
-    });
+    return withSpentBudget(client, await client.campaign.update({ where: { id }, data }));
   }
 
   async function deleteCampaign(id, { tx } = {}) {
@@ -172,11 +168,11 @@ function createCampaignRepository(prismaClient) {
       }
     }
 
-    const items = rawItems.map((c) => ({
-      ...c,
+    const items = await Promise.all(rawItems.map(async (c) => ({
+      ...(await withSpentBudget(prismaClient, c)),
       claimedCount: c.usedCount ?? (c._count?.vouchers || 0),
       redeemedCount: redeemedMap.get(c.id) || 0,
-    }));
+    })));
 
     return { items, total };
   }
@@ -184,14 +180,11 @@ function createCampaignRepository(prismaClient) {
   async function listAvailableCampaigns(now = new Date()) {
     await autoExpireCampaigns(now);
 
-    return prismaClient.campaign.findMany({
-      where: {
-        status: "published",
-        startsAt: { lte: now },
-        endsAt: { gte: now },
-      },
+    const campaigns = await prismaClient.campaign.findMany({
+      where: { status: "published", startsAt: { lte: now }, endsAt: { gte: now } },
       orderBy: { createdAt: "desc" },
     });
+    return Promise.all(campaigns.map((c) => withSpentBudget(prismaClient, c)));
   }
 
   function createVoucher({ campaignId, userId }) {
@@ -207,23 +200,16 @@ function createCampaignRepository(prismaClient) {
     });
   }
 
-  function findVoucher(userId, campaignId) {
-    return prismaClient.userVoucher.findUnique({
-      where: {
-        userId_campaignId: {
-          userId,
-          campaignId,
-        },
-      },
-      include: {
-        campaign: true,
-      },
-    });
+  async function findVoucher(userId, campaignId) {
+    return withVoucherBudget(prismaClient, await prismaClient.userVoucher.findUnique({
+      where: { userId_campaignId: { userId, campaignId } },
+      include: { campaign: true },
+    }));
   }
 
   async function listUserVouchers(userId, { status } = {}) {
     await autoExpireCampaigns();
-    return prismaClient.userVoucher.findMany({
+    const vouchers = await prismaClient.userVoucher.findMany({
       where: {
         userId,
         ...(status ? { status } : {}),
@@ -233,6 +219,7 @@ function createCampaignRepository(prismaClient) {
       },
       orderBy: { claimedAt: "desc" },
     });
+    return Promise.all(vouchers.map((v) => withVoucherBudget(prismaClient, v)));
   }
 
   function incrementUsedCount(campaignId) {
@@ -305,10 +292,14 @@ function createCampaignRepository(prismaClient) {
     });
   }
 
-  function findProduct(productId) {
-    return prismaClient.product.findUnique({
+  async function findProduct(productId) {
+    const product = await prismaClient.product.findUnique({
       where: { id: productId },
+      include: { categoryLinks: { include: { category: true } } },
     });
+    if (!product) return product;
+    const { categoryLinks, ...fields } = product;
+    return { ...fields, categories: categoryLinks.map((link) => link.category.name) };
   }
 
   async function holdVoucherWithLock({ userId, campaignId, orderId }) {
@@ -328,6 +319,7 @@ function createCampaignRepository(prismaClient) {
 
   async function claimVoucherAtomic({ userId, campaignId, usageLimit }) {
     return prismaClient.$transaction(async (tx) => {
+      await lockCampaign(tx, campaignId);
       const existing = await tx.userVoucher.findUnique({
         where: {
           userId_campaignId: { userId, campaignId },
@@ -339,9 +331,9 @@ function createCampaignRepository(prismaClient) {
         throw err;
       }
 
-      const camp = await tx.campaign.findUnique({
+      const camp = await withSpentBudget(tx, await tx.campaign.findUnique({
         where: { id: campaignId },
-      });
+      }));
       if (!camp || camp.status !== "published") {
         const err = new Error("แคมเปญไม่ได้เปิดใช้งานอยู่");
         err.statusCode = 409;
@@ -375,16 +367,10 @@ function createCampaignRepository(prismaClient) {
         throw err;
       }
 
-      return tx.userVoucher.create({
-        data: {
-          campaignId,
-          userId,
-          status: "CLAIMED",
-        },
-        include: {
-          campaign: true,
-        },
-      });
+      return withVoucherBudget(tx, await tx.userVoucher.create({
+        data: { campaignId, userId, status: "CLAIMED" },
+        include: { campaign: true },
+      }));
     });
   }
 
@@ -412,15 +398,15 @@ function createCampaignRepository(prismaClient) {
     listAvailableCampaigns,
     autoExpireCampaigns,
     expireClaimedVouchers,
-    createVoucher,
+    createVoucher: async (input) => withVoucherBudget(prismaClient, await createVoucher(input)),
     findVoucher,
     listUserVouchers,
     incrementUsedCount,
     claimVoucherAtomic,
-    holdVoucher,
+    holdVoucher: async (input) => withVoucherBudget(prismaClient, await holdVoucher(input)),
     holdVoucherWithLock,
-    releaseVoucher,
-    completeVoucher,
+    releaseVoucher: async (input) => withVoucherBudget(prismaClient, await releaseVoucher(input)),
+    completeVoucher: async (input) => withVoucherBudget(prismaClient, await completeVoucher(input)),
     findProduct,
   };
 }

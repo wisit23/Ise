@@ -1,0 +1,249 @@
+✔ articles API permissions, search, and CRUD (4427.5189ms)
+▶ Auction Core, Concurrency, Soft Close & BullMQ Integration Suite
+  ✔ Step 1: Seller submits product to active round -> persists in PostgreSQL with status 'auction' (189.1406ms)
+  ✔ Step 2: Admin Decoupling & Marketing Approval -> direct to 'scheduled' and BullMQ booked (185.524ms)
+  ✔ Step 3: Bidding rules & PostgreSQL persistence (366.2617ms)
+  ✔ Step 4: Idempotency Key DB constraint prevents duplicate bids on retry (306.0592ms)
+  ✔ Step 5: Concurrent bidding serialized by pg_advisory_xact_lock (187.429ms)
+  ✔ Step 6: Anti-Sniping Soft Close extends scheduledEndAt by +5m in PostgreSQL (130.5078ms)
+  ✔ Step 7: Auction Close with Winner -> calls Order Client once and records winningOrderId (156.3761ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 8: Real BullMQ delayed worker execution & idempotent re-close prevents duplicate orders (1428.6525ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 9: No-bid Auction close transitions product status to 'auction_action_required' (MKT-DEC-026) (313.5327ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 10: Concurrent Auction Rounds Creation & Deterministic Selection (MKT-DEC-025) (2551.2562ms)
+  ✔ Step 11: Atomic Product & AuctionItem Creation (Flow B) in PostgreSQL single transaction (262.5414ms)
+  ✔ Step 12: Atomic Rollback & Pre-creation Validation -> Rejects before creating Product in DB (151.9585ms)
+  ✔ Step 13: Category & KYC Pre-validation -> Rejection before database writes (85.535ms)
+  ✔ Step 14: Flow A (Existing Product) Enforces DB Category & Ignores Client Category (319.4252ms)
+  ✔ Step 15: Backward Compatibility - Round with empty categories accepts any valid category (122.6146ms)
+  ✔ Step 16: Transaction Rollback when round expires between pre-validation and transaction (78.2838ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 17: Multi-Round Concurrent Overlap, Explicit Selection, Item Isolation & Independent Bidding (MKT-DEC-025) (3439.3177ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 18: Single-Item Cancellation vs Other Items in Same Round & Audit Log (MKT-DEC-026) (770.3288ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 19: Race Conditions across Cancel Item, Cancel Round, PlaceBid, and CloseAuction (MKT-DEC-026) (921.5941ms)
+  ✔ Step 20: Seller Recovery Concurrency Protection - Concurrent Resubmit & Resubmit vs Relist (MKT-DEC-026) (481.1811ms)
+  ✔ Step 21: Submit vs CancelRound Serialization under Round Mutation Lock (MKT-DEC-026) (807.4448ms)
+✔ Auction Core, Concurrency, Soft Close & BullMQ Integration Suite (17630.2785ms)
+▶ Product Service Campaign Attribution & Metrics PostgreSQL Integration Suite (MKT-003, MKT-007, UR-09, UR-12)
+  ✔ Security: POST /internal/campaigns/events/order-completed rejects requests without x-internal-token (61.0955ms)
+  ✔ Ingestion: records order.completed.v1 event into real PostgreSQL campaign_attributions (51.5501ms)
+  ✔ Idempotency: duplicate event delivery does not duplicate attribution fact in PostgreSQL (14.6112ms)
+  ✔ Idempotency: re-sending same orderId under different eventId is deduplicated (15.8507ms)
+  ✔ Idempotency conflict: returns 409 Conflict when incoming event has conflicting attribution attributes in PostgreSQL (13.5351ms)
+  ✔ Idempotency conflict: reusing existing eventId with different orderId returns 409 in PostgreSQL (11.7304ms)
+  ✔ No-campaign orders are ignored gracefully without recording attribution (6.0718ms)
+  ✔ Metrics: GET /api/products/campaigns/:id/metrics computes accurate KPIs from PostgreSQL (UR-09, UR-12) (97.3358ms)
+  ✔ Metrics: GET /api/products/campaigns/metrics/overview aggregates across campaigns (21.4696ms)
+  ✔ Metrics: GET /api/products/campaigns/metrics/trends returns daily series (14.1043ms)
+  ✔ Metrics: enforces date range validation (from > to returns 400 Bad Request per MKT-DEC-019) (7.7732ms)
+  ✔ RBAC: non-marketing roles are forbidden from accessing metrics (5.1852ms)
+✔ Product Service Campaign Attribution & Metrics PostgreSQL Integration Suite (MKT-003, MKT-007, UR-09, UR-12) (2424.0876ms)
+▶ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite
+  ✔ 1. Ingestion below budget: increments spentBudget and campaign remains published (185.0087ms)
+  ✔ 2. Idempotency: duplicate event delivery does NOT increment spentBudget again (33.4085ms)
+  ✔ 3. Budget threshold reached: transitions campaign to ended, expires CLAIMED vouchers, and writes SYSTEM audit log (101.7467ms)
+  ✔ 4. Post-ended gating: Claim, Applicable, and Quote-and-Hold are strictly rejected (117.5962ms)
+PrismaClientKnownRequestError: Transaction API error: Unable to start a transaction in the given time.
+    at _r.transaction (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:111:12319)
+    at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:7924)
+    at async Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:26)
+    at async recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignController.js:287:20) {
+  code: 'P2028',
+  clientVersion: '5.22.0',
+  meta: { error: 'Unable to start a transaction in the given time.' }
+}
+PrismaClientKnownRequestError: Transaction API error: Unable to start a transaction in the given time.
+    at _r.transaction (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:111:12319)
+    at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:7924)
+    at async Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:26)
+    at async recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignController.js:287:20) {
+  code: 'P2028',
+  clientVersion: '5.22.0',
+  meta: { error: 'Unable to start a transaction in the given time.' }
+}
+  ✖ 5. Real PostgreSQL Concurrency: concurrent completed events perform atomic increment of spentBudget (2430.1892ms)
+✖ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite (5034.0721ms)
+▶ Campaign Domain, State Machine & Voucher Wallet Integration Suite
+  ✔ Guest access: can browse available campaigns, cannot create (66.2785ms)
+  ✔ RBAC: BUYER and SELLER forbidden from campaign management (11.9043ms)
+  ✔ Validation: rejects invalid inputs (discount, dates, missing fields) (18.1313ms)
+  ✔ Lifecycle: draft -> pending_approval -> approved -> published -> ended (244.293ms)
+  ✔ Lifecycle Rejection: draft -> pending_approval -> rejected (50.721ms)
+  ✔ Voucher Wallet: Claim, 1-per-user uniqueness, and Smart Filter (2527.1844ms)
+  ✔ Internal quote-and-hold endpoint, Concurrency, and Security Hardening (699.0936ms)
+  ✔ Validation: code normalization and partial update bounds (142.6247ms)
+  ✔ Gating: draft campaigns hidden from guest/buyer, visible to marketing (118.0986ms)
+  ✔ Claim Concurrency: quota full and duplicate claims return 409 Conflict (507.7625ms)
+✔ Campaign Domain, State Machine & Voucher Wallet Integration Suite (6487.8369ms)
+▶ Campaign Metrics, Attribution & Conversion Suite
+  ✔ recordOrderCompletedEvent: ignores orders without campaign (8.8021ms)
+  ✔ recordOrderCompletedEvent: records attribution and deduplicates retries (idempotency) (0.8814ms)
+  ✔ validateDateRange: rejects invalid date and from > to (0.5431ms)
+  ✔ getCampaignMetrics: calculates conversion rate (redeemedCount / claimedCount * 100) (0.3237ms)
+  ✔ getCampaignMetrics: returns 0 values for campaign with no orders (no error) (0.2587ms)
+  ✔ getOverviewMetrics: aggregates revenue and orders across all campaigns (0.3791ms)
+  ✔ getSalesTrends: groups metrics by daily series (0.9371ms)
+  ✔ Prisma model persistence: records attribution, handles envelope, and deduplicates retries (0.6425ms)
+  ✔ Prisma model persistence: propagates DB errors instead of swallowing (0.3956ms)
+  ✔ Idempotency conflict: returns 409 Conflict when pre-check finds conflicting attribution fields (0.444ms)
+  ✔ Idempotency conflict & deduplication on P2002 race recovery (0.2295ms)
+  ✔ production path: fails loudly if Prisma client lacks campaignAttribution model (0.229ms)
+  ✔ identity conflict: reusing eventId with different orderId returns 409 even when monetary fields match (0.3479ms)
+✔ Campaign Metrics, Attribution & Conversion Suite (16.5701ms)
+▶ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite
+  ✔ Code Normalization: trims and converts code to UPPERCASE (8.9712ms)
+  ✔ Validation on Create: rejects percent discount > 100 (0.8362ms)
+  ✔ Validation on Create: rejects startsAt >= endsAt (0.2484ms)
+  ✔ Validation on Partial Update: rejects changing discountValue > 100 when existing is PERCENT (0.3582ms)
+  ✔ Validation on Partial Update: rejects changing discountType to PERCENT when existing value > 100 (0.1989ms)
+  ✔ Validation on Partial Update: rejects partial date update where new startsAt >= existing endsAt (0.2574ms)
+  ✔ Gating non-published campaigns: hides draft/pending/rejected/ended from Guest and Buyer (0.352ms)
+  ✔ Gating published campaigns: allows Guest and Buyer if active (0.188ms)
+  ✔ Claim Concurrency & Usage Limit: returns 409 Conflict when usageLimit reached (0.4173ms)
+  ✔ Claim Concurrency: returns 409 Conflict when user already claimed (0.3581ms)
+  ✔ Segmentation Validation: rejects invalid segment rule on createDraft (0.4137ms)
+  ✔ Segmentation Filtering: listAvailablePublicCampaigns matches targeted profile (0.2823ms)
+  ✔ Date Validation on Create: rejects endsAt in the past (0.2657ms)
+  ✔ Date Validation on Create: rejects startsAt in the past without reason (0.1796ms)
+  ✔ Date Validation on Update: rejects changing endsAt to the past (0.246ms)
+  ✔ Date Validation on Publish: rejects campaign whose endsAt is expired (0.249ms)
+  ✔ Publish after startsAt but before endsAt: starts using immediately (0.2609ms)
+  ✔ Budget Enforcement: claim succeeds when spentBudget is below budget ceiling (0.191ms)
+  ✔ Budget Enforcement: claim, applicable, and quote-and-hold fail when spentBudget reaches budget ceiling (0.4792ms)
+  ✔ Budget Enforcement: claim fails when spentBudget exceeds budget ceiling (0.1421ms)
+  ✔ Idempotency: duplicate attribution event does not increment spentBudget twice (1.6358ms)
+  ✔ Concurrency & Budget Reached: transitions campaign to ended when cumulative discount reaches ceiling (0.3513ms)
+✔ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite (19.3575ms)
+▶ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite
+  ✔ Code Normalization: trims and converts code to UPPERCASE (2104.5989ms)
+  ✔ Validation on Create: rejects percent discount > 100 (1.0169ms)
+  ✔ Validation on Create: rejects startsAt >= endsAt (0.2897ms)
+  ✔ Validation on Partial Update: rejects changing discountValue > 100 when existing is PERCENT (0.414ms)
+  ✔ Validation on Partial Update: rejects changing discountType to PERCENT when existing value > 100 (0.2777ms)
+  ✔ Validation on Partial Update: rejects partial date update where new startsAt >= existing endsAt (0.351ms)
+  ✔ Gating non-published campaigns: hides draft/pending/rejected/ended from Guest and Buyer (0.3884ms)
+  ✔ Gating published campaigns: allows Guest and Buyer if active (0.1855ms)
+  ✔ Claim Concurrency & Usage Limit: returns 409 Conflict when usageLimit reached (0.6625ms)
+  ✔ Claim Concurrency: returns 409 Conflict when user already claimed (0.7684ms)
+  ✔ Segmentation Validation: rejects invalid segment rule on createDraft (0.3089ms)
+  ✔ Segmentation Filtering: listAvailablePublicCampaigns matches targeted profile (0.2211ms)
+  ✔ Checkout quote rejects a product under Trust & Safety moderation (0.2583ms)
+✔ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite (2112.0623ms)
+✔ executive catalog metrics against a real database (4261.4042ms)
+✔ catalog search applies all filters against PostgreSQL (4599.4466ms)
+▶ approved Product ER through actual HTTP consumers and PostgreSQL
+  ✔ M:N category create, filter secondary, edit, composite key and condition FK (2520.5587ms)
+PrismaClientUnknownRequestError: 
+Invalid `tx.marketingAuditLog.create()` invocation in
+C:\ise\Ise\backend\services\product-service\src\features\moderation\moderationService.js:141:32
+
+  138 if (!product) throw notFound("product not found");
+  139 const updated = await mutate(tx, product);
+  140 const result = jsonResult(updated);
+→ 141 await tx.marketingAuditLog.create(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "P0001", message: "injected audit failure", severity: "ERROR", detail: None, column: None, hint: None }), transient: false })
+    at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:7505)
+    at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+    at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+    at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+    at async C:\ise\Ise\backend\services\product-service\src\features\moderation\moderationService.js:141:5
+    at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:8000)
+    at async C:\ise\Ise\backend\services\product-service\src\features\moderation\moderationRoutes.js:41:21 {
+  clientVersion: '5.22.0'
+}
+  ✔ moderation same-key concurrency, conflict, atomic audit rollback/retry and marketing isolation (213.5032ms)
+PrismaClientUnknownRequestError: 
+Invalid `client.marketingAuditLog.createMany()` invocation in
+C:\ise\Ise\backend\services\product-service\src\features\audit\marketingAuditRepository.js:71:38
+
+  68 // For automatic/retryable actions with idempotencyKey, use createMany with skipDuplicates: true.
+  69 // In PostgreSQL, this issues "INSERT INTO ... ON CONFLICT DO NOTHING" which does NOT abort
+  70 // the surrounding transaction block on duplicate collision (avoiding PostgreSQL 25P02 error).
+→ 71 await client.marketingAuditLog.createMany(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "P0001", message: "injected audit failure", severity: "ERROR", detail: None, column: None, hint: None }), transient: false })
+    at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:7505)
+    at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+    at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+    at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+    at async recordAudit (C:\ise\Ise\backend\services\product-service\src\features\audit\marketingAuditRepository.js:71:7)
+    at async C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:218:17
+    at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:8000)
+    at async Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:26)
+    at async recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignController.js:287:20) {
+  clientVersion: '5.22.0'
+}
+[sellerActivityClient] failed to record activity for seller er-seller: getaddrinfo ENOTFOUND auth-service
+  ✔ attribution threshold audit failure rolls back fact/status/vouchers; retry and exact decimal SUM (204.6361ms)
+[sellerActivityClient] failed to record activity for seller er-seller: getaddrinfo ENOTFOUND auth-service
+  ✔ auction metadata and cancellation are projected from atomic audit state, including concurrent retry (2451.4638ms)
+  ✔ review POST/read preserves ordered image/video media (Order provider stub) (35.1227ms)
+✔ approved Product ER through actual HTTP consumers and PostgreSQL (7597.9448ms)
+▶ Marketing Audit Trail Integration Suite (PostgreSQL)
+  ✔ RBAC: Marketing-only authorization, 401 unauthenticated, 403 for Buyer, Seller, Admin, permission bypass prevention, and anti-spoofing (2188.0477ms)
+  ✔ Read-only contract: Client write/update/delete endpoints do not exist (39.8898ms)
+  ✔ Campaign lifecycle: Atomic mutations for CREATE, UPDATE, SUBMIT, APPROVE, REJECT, PUBLISH, END (263.6263ms)
+  ✔ Automatic SYSTEM actions: CAMPAIGN_END and AUCTION_ITEM_CLOSE with deterministic idempotencyKey (192.9363ms)
+  ✖ Concurrent retry deduplication: Promise.all creates no duplicate audit and no 25P02 error (2010.8888ms)
+  ✔ Transaction atomicity: Audit failure rolls back business mutation, failed mutation creates no audit (24.1387ms)
+[product-service] chat notification failed for item 5c1e859d-7341-486c-813e-6e66d7ccfb4d: fetch failed
+  ✔ Auction lifecycle: AUCTION_ROUND_CREATE, ITEM_APPROVE, ITEM_REJECT, ITEM_SCHEDULE, ITEM_CANCEL, ITEM_CLOSE (2981.8472ms)
+  ✔ Article lifecycle: CREATE, UPDATE, PUBLISH, ARCHIVE, DELETE audit (143.6562ms)
+  ✔ API Filtering and date range semantics: [from, to) interval, same-day, month boundary, invalid range, pagination (72.9464ms)
+  ✔ Sanitizer verification: No secrets present in audit logs or API output (14.9281ms)
+✖ Marketing Audit Trail Integration Suite (PostgreSQL) (10116.3325ms)
+✔ migration refuses an existing database without the canonical baseline, including a legacy ledger (11.4481ms)
+✔ product moderation removes, hides and restores a listing (5136.9005ms)
+✔ product CRUD against a real database (4508.5633ms)
+✔ only one buyer wins an atomic PostgreSQL reservation (4311.4662ms)
+✔ UR-11 Swipe-to-Choose Hardening: Buyer authorization, idempotency, feed state, and isolation (4470.4909ms)
+✔ executive catalog rankings against a real database (4230.1699ms)
+ℹ tests 129
+ℹ suites 0
+ℹ pass 125
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 96644.0277
+
+✖ failing tests:
+
+test at test\campaign-budget.integration.test.js:335:11
+✖ 5. Real PostgreSQL Concurrency: concurrent completed events perform atomic increment of spentBudget (2430.1892ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  500 !== 200
+  
+      at TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaign-budget.integration.test.js:381:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaign-budget.integration.test.js:335:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\marketing-audit.integration.test.js:520:11
+✖ Concurrent retry deduplication: Promise.all creates no duplicate audit and no 25P02 error (2010.8888ms)
+  PrismaClientKnownRequestError: Transaction API error: Unable to start a transaction in the given time.
+      at _r.transaction (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:111:12319)
+      at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:7924)
+      at async Promise.all (index 2)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\marketing-audit.integration.test.js:543:27)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\marketing-audit.integration.test.js:520:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

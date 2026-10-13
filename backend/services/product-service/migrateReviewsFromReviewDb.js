@@ -1,42 +1,64 @@
-// Run once after product-service's new Prisma schema has been pushed.
+// Run after product-service's preserving migration chain has been deployed.
 // Idempotent: existing reviews with the same order and id are left untouched.
-require("dotenv").config();
+//
+// The legacy Review DB still has the pre-ER shape (`reviews`, `review_photos`,
+// `review_videos`), which the current Prisma client no longer models, so the
+// source is read with raw SQL. The target is written through the unified
+// `review_media` table using the same `image:` / `video:` id prefixes as
+// prisma/migrations/20261014000000_approved_er_review_media.
 const { PrismaClient } = require("./src/generated/prisma-client");
 
-const sourceUrl = process.env.DATABASE_URL_REVIEW;
-const targetUrl = process.env.DATABASE_URL_PRODUCT;
-if (!sourceUrl || !targetUrl || sourceUrl === targetUrl) {
-  throw new Error(
-    "Set distinct DATABASE_URL_REVIEW and DATABASE_URL_PRODUCT values",
-  );
+const BATCH = 100;
+
+async function readBatch(source, cursor) {
+  const reviews = await source.$queryRaw`
+    SELECT id, order_id AS "orderId", buyer_id AS "buyerId", seller_id AS "sellerId",
+           product_id AS "productId", rating, comment, created_at AS "createdAt"
+    FROM reviews WHERE id > ${cursor} ORDER BY id ASC LIMIT ${BATCH}`;
+  if (reviews.length === 0) return reviews;
+  const ids = reviews.map((review) => review.id);
+  const [photos, videos] = await Promise.all([
+    source.$queryRaw`
+      SELECT id, review_id AS "reviewId", url, position, created_at AS "createdAt"
+      FROM review_photos WHERE review_id = ANY(${ids}::text[])`,
+    source.$queryRaw`
+      SELECT id, review_id AS "reviewId", url, position, created_at AS "createdAt"
+      FROM review_videos WHERE review_id = ANY(${ids}::text[])`,
+  ]);
+  return reviews.map((review) => ({
+    ...review,
+    media: [
+      ...photos.filter((m) => m.reviewId === review.id).map((m) => ({ ...m, id: `image:${m.id}`, mediaType: "IMAGE" })),
+      ...videos.filter((m) => m.reviewId === review.id).map((m) => ({ ...m, id: `video:${m.id}`, mediaType: "VIDEO" })),
+    ],
+  }));
 }
 
-const source = new PrismaClient({ datasources: { db: { url: sourceUrl } } });
-const target = new PrismaClient({ datasources: { db: { url: targetUrl } } });
-
-async function main() {
-  const sourceTotal = await source.review.count();
-  let cursor;
+async function migrateReviews(source, target) {
+  const [{ count }] = await source.$queryRaw`SELECT count(*)::int AS count FROM reviews`;
+  const sourceTotal = count;
+  let cursor = "";
   let migrated = 0;
   let existingCount = 0;
   while (true) {
-    const batch = await source.review.findMany({
-      orderBy: { id: "asc" },
-      take: 100,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: { photos: true, videos: true },
-    });
+    const batch = await readBatch(source, cursor);
     if (batch.length === 0) break;
     for (const review of batch) {
       const current = await target.review.findUnique({
         where: { orderId: review.orderId },
-        include: { photos: true, videos: true },
+        include: { mediaEntries: true },
       });
       if (current) {
+        const currentMedia = new Map(current.mediaEntries.map((media) => [media.id, media]));
+        const sameReview = ["id", "orderId", "buyerId", "sellerId", "productId", "rating", "comment"]
+          .every((key) => current[key] === review[key]) && +current.createdAt === +review.createdAt;
+        const sameMedia = currentMedia.size === review.media.length && review.media.every((media) => {
+          const stored = currentMedia.get(media.id);
+          return stored && stored.mediaType === media.mediaType && stored.url === media.url &&
+            stored.position === media.position && +stored.createdAt === +media.createdAt;
+        });
         if (
-          current.id !== review.id ||
-          current.photos.length !== review.photos.length ||
-          current.videos.length !== review.videos.length
+          !sameReview || !sameMedia
         ) {
           throw new Error(`Conflicting review for order ${review.orderId}`);
         }
@@ -53,17 +75,10 @@ async function main() {
           rating: review.rating,
           comment: review.comment,
           createdAt: review.createdAt,
-          photos: {
-            create: review.photos.map(({ id, url, position, createdAt }) => ({
+          mediaEntries: {
+            create: review.media.map(({ id, mediaType, url, position, createdAt }) => ({
               id,
-              url,
-              position,
-              createdAt,
-            })),
-          },
-          videos: {
-            create: review.videos.map(({ id, url, position, createdAt }) => ({
-              id,
+              mediaType,
               url,
               position,
               createdAt,
@@ -80,17 +95,36 @@ async function main() {
       "Source review count changed during migration; stop review writes and retry",
     );
   }
-  console.log(
-    `Source reviews: ${sourceTotal}; migrated: ${migrated}; already present: ${existingCount}`,
-  );
+  return { sourceTotal, migrated, existingCount };
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
+async function main() {
+  require("dotenv").config();
+  const sourceUrl = process.env.DATABASE_URL_REVIEW;
+  const targetUrl = process.env.DATABASE_URL_PRODUCT;
+  if (!sourceUrl || !targetUrl || sourceUrl === targetUrl) {
+    throw new Error(
+      "Set distinct DATABASE_URL_REVIEW and DATABASE_URL_PRODUCT values",
+    );
+  }
+  const source = new PrismaClient({ datasources: { db: { url: sourceUrl } } });
+  const target = new PrismaClient({ datasources: { db: { url: targetUrl } } });
+  try {
+    const { sourceTotal, migrated, existingCount } = await migrateReviews(source, target);
+    console.log(
+      `Source reviews: ${sourceTotal}; migrated: ${migrated}; already present: ${existingCount}`,
+    );
+  } finally {
     await source.$disconnect();
     await target.$disconnect();
+  }
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
   });
+}
+
+module.exports = { migrateReviews };

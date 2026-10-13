@@ -362,6 +362,7 @@ async function updateShippingAddress(req, res, next) {
         buyerId: req.userId,
         addressId: req.body.addressId,
         shippingAddress: req.body.shippingAddress,
+        authorization: req.headers.authorization,
         version: req.body.version,
       }),
     );

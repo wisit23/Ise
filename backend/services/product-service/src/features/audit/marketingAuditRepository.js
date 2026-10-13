@@ -6,6 +6,10 @@ const { sanitizeAuditData } = require("./marketingAuditSanitizer");
  * Repository for Marketing Audit Trail.
  * Layering: route -> controller -> service -> repository -> Prisma PostgreSQL.
  */
+// Internal state-projection rows (auction round/item ER fields) share the table
+// but are not Marketing-visible audit history.
+const INTERNAL_AUDIT_ACTIONS = ["ER_STATE_IMPORT", "ER_STATE_SNAPSHOT"];
+
 function createMarketingAuditRepository(prismaClient = defaultPrisma) {
   /**
    * Persist an append-only audit entry.
@@ -107,9 +111,13 @@ function createMarketingAuditRepository(prismaClient = defaultPrisma) {
   ) {
     const client = tx || prismaClient;
 
-    const where = {};
+    // Marketing's read API must never expose internal moderation state/results.
+    const where = {
+      entityType: { not: "PRODUCT_MODERATION" },
+      NOT: { action: { in: INTERNAL_AUDIT_ACTIONS } },
+    };
     if (action) where.action = action;
-    if (entityType) where.entityType = entityType;
+    if (entityType) where.AND = [{ entityType }];
     if (entityId) where.entityId = entityId;
     if (actorId) where.actorId = actorId;
     if (actorRole) where.actorRole = actorRole;
@@ -135,7 +143,13 @@ function createMarketingAuditRepository(prismaClient = defaultPrisma) {
 
   async function findById(id, { tx } = {}) {
     const client = tx || prismaClient;
-    return client.marketingAuditLog.findUnique({ where: { id } });
+    return client.marketingAuditLog.findFirst({
+      where: {
+        id,
+        entityType: { not: "PRODUCT_MODERATION" },
+        NOT: { action: { in: INTERNAL_AUDIT_ACTIONS } },
+      },
+    });
   }
 
   return {

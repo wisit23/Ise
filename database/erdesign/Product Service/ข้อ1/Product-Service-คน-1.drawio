@@ -1332,7 +1332,7 @@
         <mxCell id="17ALRlZXJw6gpSFkRTBB-101" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontColor=default;labelBorderColor=none;labelBackgroundColor=default;" value="buyer_id" vertex="1">
           <mxGeometry height="40" width="80" x="-500" y="110" as="geometry" />
         </mxCell>
-        <mxCell id="17ALRlZXJw6gpSFkRTBB-102" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontColor=default;labelBorderColor=none;labelBackgroundColor=default;" value="product_id(FK)" vertex="1">
+        <mxCell id="17ALRlZXJw6gpSFkRTBB-102" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontColor=default;labelBorderColor=none;labelBackgroundColor=default;" value="product_id (logical)" vertex="1">
           <mxGeometry height="40" width="100" x="-500" y="170" as="geometry" />
         </mxCell>
         <mxCell id="17ALRlZXJw6gpSFkRTBB-103" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontColor=default;labelBorderColor=none;labelBackgroundColor=default;" value="comment" vertex="1">
@@ -1350,7 +1350,7 @@
         <mxCell id="17ALRlZXJw6gpSFkRTBB-106" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontColor=default;labelBorderColor=none;labelBackgroundColor=default;" value="rating" vertex="1">
           <mxGeometry height="40" width="80" x="-215" y="120" as="geometry" />
         </mxCell>
-        <mxCell id="17ALRlZXJw6gpSFkRTBB-107" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontColor=default;labelBorderColor=none;labelBackgroundColor=default;" value="date" vertex="1">
+        <mxCell id="17ALRlZXJw6gpSFkRTBB-107" parent="1" style="ellipse;whiteSpace=wrap;html=1;shapeInside=1;fontColor=default;labelBorderColor=none;labelBackgroundColor=default;" value="created_at" vertex="1">
           <mxGeometry height="40" width="80" x="-240" y="180" as="geometry" />
         </mxCell>
         <mxCell id="17ALRlZXJw6gpSFkRTBB-111" edge="1" parent="1" source="17ALRlZXJw6gpSFkRTBB-104" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.191;entryY=0.035;entryDx=0;entryDy=0;entryPerimeter=0;endArrow=none;endFill=0;fontColor=default;labelBorderColor=none;labelBackgroundColor=default;" target="17ALRlZXJw6gpSFkRTBB-96">

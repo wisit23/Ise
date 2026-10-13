@@ -1,6 +1,7 @@
 const { conflict } = require("@reloop/shared");
 const prisma = require("./prismaClient");
 const { money } = require("./money");
+const evidenceModel = require("../features/disputes/evidenceView");
 const { assertCanCancelOrder } = require("../services/orderTransitionService");
 const VALID_STATUSES = [
   "pending",
@@ -16,13 +17,14 @@ const INCLUDE = {
   basket: true,
   checkout: true,
   shipping: true,
-  dispute: { include: { evidence: true } },
+  dispute: { include: { evidence: { include: evidenceModel.INCLUDE } } },
   payments: { include: { holds: true } },
 };
 function disputeView(row) {
   if (!row) return null;
   return {
     ...row,
+    ...(row.evidence ? { evidence: row.evidence.map(evidenceModel.view) } : {}),
     openedBy: row.createdBy,
     claimedAt: row.assignedAt,
     status: row.decision
@@ -208,7 +210,16 @@ async function transitionStatusWithProductSync({
     });
     let attributionEvent=null;
     if(status === "completed" && before.campaignId){
-      attributionEvent=await tx.attributionOutboxEvent.upsert({where:{orderId:id},update:{},create:{orderId:id,campaignId:before.campaignId,grossAmount:before.originalAmount,discountAmount:money(before.originalAmount).minus(before.ordersAmount),netAmount:before.ordersAmount,completedAt:new Date()}});
+      attributionEvent = await tx.attributionJob.findUnique({ where: { orderId: id } });
+      if (!attributionEvent) {
+        const job = await tx.orderLog.create({ data: logData(before, actorId || before.buyerId, "ATTRIBUTION_REQUESTED", {
+          schema_version: 1, campaignId: before.campaignId,
+          grossAmount: before.originalAmount.toString(),
+          discountAmount: money(before.originalAmount).minus(before.ordersAmount).toString(),
+          netAmount: before.ordersAmount.toString(), completedAt: new Date(),
+        }) });
+        attributionEvent = await tx.attributionJob.findUnique({ where: { id: job.id } });
+      }
     }
     return {
       order: view(

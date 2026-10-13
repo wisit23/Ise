@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { normalizeAddress } = require("../shipping/shippingService");
 const {
   createCheckoutSessionService,
   PAYMENT_TTL_MS,
@@ -90,6 +91,7 @@ function fixture(extra = {}) {
         };
         return state.checkout;
       },
+      update: async ({ data }) => { apply(state.checkout, data); return checkoutView(); },
       findUnique: async () => checkoutView(),
       findMany: async ({ where }) =>
         state.checkout && matches(state.checkout, where)
@@ -171,7 +173,7 @@ function fixture(extra = {}) {
     releaseVoucher: async (...args) => calls.released.push(args),
     completeVoucher: async (...args) => calls.vouchers.push(args),
   };
-  const service = createCheckoutSessionService(db, products);
+  const service = createCheckoutSessionService(db, products, undefined, async () => normalizeAddress(ADDRESS));
   const create = (overrides) =>
     service.create({
       buyerId: "b1",

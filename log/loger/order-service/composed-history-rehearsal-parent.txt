@@ -1,0 +1,19 @@
+▶ approved order history: fresh install, actual checkout/payment/restart, and populated upgrade
+  ✔ verified title/code, selected address ownership, exact totals, immutable historical snapshots (2807.0296ms)
+[order-service] chat notification failed for PRODUCT:p2 (order e783c016-b435-4d49-9de7-a321bad4f04a): fetch failed
+[order-service] chat notification failed for PRODUCT:p1 (order 88e25a96-f55a-49dd-a16a-aefe4f3cee22): fetch failed
+  ✔ payment failure/restart resumes downstream work, charges once, and freezes checkout address (7418.6467ms)
+  ✔ history wrapper composes in tx, preserves arbitrary nested creates/selects, rolls back and restores pre-dispute state (376.612ms)
+  ✔ cancelled/expired checkout totals and snapshots stay derived from linked orders, and approved FKs reject orphans (296.8521ms)
+  ✔ completion job is atomic; retry/restart + crash before ACK use stable ID and real Product deduplicates (10060.5107ms)
+  ✔ populated baseline upgrade retains differing checkout/shipping snapshots, metadata and processed/pending jobs (12538.0484ms)
+  ✔ unrepresentable upgrades and unknown legacy baselines stop without data loss or bypassing the helper (22641.6121ms)
+✔ approved order history: fresh install, actual checkout/payment/restart, and populated upgrade (66400.7844ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 66907.7934

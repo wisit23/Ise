@@ -190,7 +190,7 @@ async function run() {
   }
   const { PrismaClient: AuthClient } = require("@prisma/client");
   const {
-    PrismaClient: OrderClient,
+    PrismaClient: RawOrderClient,
   } = require("../backend/services/order-service/src/generated/prisma-client");
   const {
     PrismaClient: SupportClient,
@@ -205,13 +205,14 @@ async function run() {
       },
     },
   });
-  const order = new OrderClient({
+  const rawOrder = new RawOrderClient({
     datasources: {
       db: {
         url: localComposeUrl(process.env.DATABASE_URL_ORDER, "reloop_order"),
       },
     },
   });
+  const order = require("../backend/services/order-service/src/models/erClient").wrapClient(rawOrder);
   const support = new SupportClient({
     datasources: {
       db: {
@@ -229,7 +230,7 @@ async function run() {
       },
     },
   });
-  const clients = [auth, order, support, chat];
+  const clients = [auth, rawOrder, support, chat];
   try {
     await Promise.all(clients.map((client) => client.$connect()));
     await resetFixtures({ auth, order, support, chat }, { fullReset });
@@ -316,7 +317,6 @@ async function resetFixtures(
       scope: "local-cs-admin",
       tickets: await support.supportTicket.findMany({
         include: {
-          messages: true,
           auditLog: true,
           assignments: true,
           statusHistory: true,
@@ -538,19 +538,50 @@ async function seedFixtures({ auth, order, support, chat }) {
     await ticketModel.create(
       {
         ...ticket,
+        assigneeId: null,
+        status: "NEW",
+        chatResponderId: ticket.assigneeId,
         slaDueAt: daysAgo(index === 2 ? 1 : -1),
         createdAt: daysAgo(4 - index),
         firstResponseAt: index ? daysAgo(3.5 - index) : null,
-        escalatedAt: index === 2 ? daysAgo(1) : null,
         escalationNote:
           index === 2
             ? "ปัญหา: ผู้ขายขอให้โอนเงินนอกระบบ\nขาดอำนาจ: ต้องให้ Admin ตรวจสอบและอนุมัติมาตรการ\nข้อเสนอแนะ: ตรวจประวัติผู้ขายและแชทย้อนหลัง"
             : null,
-        closedAt: index === 3 ? daysAgo(0.5) : null,
       },
       support,
     );
-    if(ticket.assigneeId)await support.supportTicket.update({where:{id:ticket.id},data:{chatResponderId:ticket.assigneeId}});
+    // Back-dated fixtures keep assignment between creation and the later status change.
+    const createdDays = 4 - index;
+    const statusDays = ticket.status === "CLOSED" ? 0.5 : 1;
+    if (ticket.assigneeId) {
+      const assigned = await ticketModel.assign(
+        {
+          id: ticket.id,
+          version: 0,
+          assigneeId: ticket.assigneeId,
+          assignedById: ticket.assigneeId,
+          assignedAt: daysAgo((createdDays + statusDays) / 2),
+        },
+        support,
+      );
+      if (!assigned) throw new Error(`Could not assign demo ticket ${ticket.id}`);
+    }
+    if (ticket.status !== (ticket.assigneeId ? "ASSIGNED" : "NEW")) {
+      const transitioned = await ticketModel.transitionStatus(
+        {
+          id: ticket.id,
+          version: ticket.assigneeId ? 1 : 0,
+          status: ticket.status,
+          actorId: ticket.assigneeId ?? ID.admin,
+          reason: ticket.escalationNote ?? "Demo fixture status",
+          at: daysAgo(statusDays),
+          systemEscalation: ticket.status === "ESCALATED",
+        },
+        support,
+      );
+      if (!transitioned) throw new Error(`Could not set demo ticket status ${ticket.id}`);
+    }
   }
 
   const reports = [
@@ -798,7 +829,7 @@ async function verifyFixtures(
     auth.user.count({ where: { id: { in: USERS.map(([id]) => id) } } }),
     support.supportTicket.findMany({
       where: { id: { in: ID.tickets } },
-      include: { chatLink: true },
+      include: { chatLink: true, currentStatus: true },
     }),
     order.order.count({ where: { id: { in: ID.orders } } }),
     order.disputeCase.count({ where: { id: { in: ID.disputes } } }),
@@ -849,6 +880,7 @@ async function verifyFixtures(
     oldReports ||
     audit !== 1 ||
     tickets.some((ticket) => !ticket.chatLink?.conversationId) ||
+    tickets.some((ticket) => ticket.currentStatus?.code !== TICKETS.find((fixture) => fixture.id === ticket.id)?.status) ||
     (totals && totals.some((count, index) => count !== [4, 4, 3, 12][index]))
   ) {
     throw new Error("Fixture verification failed; rerun --apply");

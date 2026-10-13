@@ -83,7 +83,7 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
     data: {
       disputeCaseId: dispute.id,
       uploaderId: order.buyerId,
-      evidencePath: "test-evidence.jpg",
+      files: { create: { refPath: "test-evidence.jpg" } },
       fileType: "image/jpeg",
       status: "SUBMITTED",
     },

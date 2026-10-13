@@ -1,0 +1,1190 @@
+
+> reloop@0.1.0 pretest
+> node scripts/ensurePrismaClients.js && node -e "require('fs').mkdirSync('coverage',{recursive:true})"
+
+[prisma] generating auth-service
+Environment variables loaded from .env
+Prisma schema loaded from backend\services\auth-service\prisma\schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to .\node_modules\@prisma\client in 98ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Easily identify and fix slow SQL queries in your app. Optimize helps you enhance your visibility: https://pris.ly/--optimize
+
+[prisma] generating product-service
+Environment variables loaded from .env
+Prisma schema loaded from backend\services\product-service\prisma\schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to .\backend\services\product-service\src\generated\prisma-client in 178ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+
+┌─────────────────────────────────────────────────────────┐
+│  Update available 5.22.0 -> 8.0.0-rc.22                 │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+[prisma] generating order-service
+Environment variables loaded from .env
+Prisma schema loaded from backend\services\order-service\prisma\schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to .\backend\services\order-service\src\generated\prisma-client in 129ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Easily identify and fix slow SQL queries in your app. Optimize helps you enhance your visibility: https://pris.ly/--optimize
+
+[prisma] generating chat-service
+Environment variables loaded from .env
+Prisma schema loaded from backend\services\chat-service\prisma\schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to .\backend\services\chat-service\src\generated\prisma-client in 61ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+[prisma] generating support-service
+Environment variables loaded from .env
+Prisma schema loaded from backend\services\support-service\prisma\schema.prisma
+
+✔ Generated Prisma Client (v5.22.0) to .\backend\services\support-service\src\generated\prisma-client in 119ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to react to database changes in your app as they happen? Discover how with Pulse: https://pris.ly/tip-1-pulse
+
+
+> reloop@0.1.0 test
+> node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info "backend/**/*.test.js" "scripts/*.test.js"
+
+✔ GET /health returns 200 ok without needing auth (26.3836ms)
+(node:5284) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ public review media is not blocked by the auth check (8.8838ms)
+✔ review media upload remains protected (3.8363ms)
+✔ a protected route with no bearer token is rejected with 401 (3.5482ms)
+✔ a public auth route is not blocked by the auth check (8.1311ms)
+﹣ Gateway to Auth-Service to PostgreSQL success path for UR-08 Marketing Analytics (4162.4299ms) # DATABASE_URL not set or PostgreSQL unreachable — test requires a real database
+(node:23656) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ Gateway to Auth-Service propagates HTTP 500 when database query fails (233.5736ms)
+(node:23764) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ review API and existing media URLs reach product-service (3921.2279ms)
+✔ GET /health returns 200 ok without needing a database (105.1336ms)
+✔ GET /me with no bearer token is rejected with 401 (11.7834ms)
+✔ GET /me/addresses with no bearer token is rejected with 401 (15.8078ms)
+✔ buyer audit self-service routes require authentication (275.3046ms)
+✔ buyer activity ingestion requires the internal service token (8.8269ms)
+✔ POST /internal/users/display-names without the internal token is rejected (425.1314ms)
+✔ a browser's bearer token is NOT accepted as an internal token (10.7383ms)
+✔ a non-array userIds is a 400, not a 500 (21.4635ms)
+✔ an empty batch short-circuits without touching the database (15.3777ms)
+✔ more than 100 ids in one call is refused (10.8458ms)
+﹣ getDisplayNames against a real database (0.9364ms) # DATABASE_URL not set or Postgres unreachable
+✔ activityMetrics unit tests - range validation (5.6221ms)
+✔ activityMetrics unit tests - buildHourlyPeriods in Asia/Bangkok (9.6197ms)
+✔ activityMetrics unit tests - findPeakHour with deterministic tie handling (0.6527ms)
+✔ activityMetrics unit tests - serializeUserAnalytics excludes all PII and preserves boundary minutes/seconds (0.7933ms)
+✔ activityMetrics unit tests - getUserUsageAnalytics with DB queries & gap filling (0.9663ms)
+✔ activityMetrics unit tests - database error is not swallowed (0.8928ms)
+✔ marketing analytics endpoint authorization (159.4023ms)
+✔ invalid report query types fail before a database query (18.4287ms)
+✔ report environment config accepts overrides and fails on invalid values (261.3602ms)
+✔ TC05: invalid recipientName is rejected before the address transaction (19.0629ms)
+✔ TC05: invalid phone is rejected before the address transaction (0.6903ms)
+✔ TC05: invalid phone is rejected before the address transaction (0.2953ms)
+✔ TC05: invalid phone is rejected before the address transaction (0.2103ms)
+✔ TC05: invalid postalCode is rejected before the address transaction (0.4487ms)
+✔ TC05: invalid postalCode is rejected before the address transaction (0.3713ms)
+✔ TC05: partial address updates validate supplied phone and postal code (1.2965ms)
+✔ the first saved address becomes the default and belongs to the user (0.8703ms)
+✔ setting a default address clears the previous default (0.8249ms)
+✔ an address owned by another user cannot be updated (0.4971ms)
+✔ deleting the default address promotes the oldest remaining address (1.5955ms)
+✔ serializes normalized request items into the existing API shape (4.8878ms)
+✔ submit stores one item per changed field with old and new values (11.6365ms)
+✔ approve applies item values and atomically claims the pending request (1.3254ms)
+﹣ Ban blocks login, refresh and existing sessions through gateway and every direct service (4ms) # requires a disposable Auth PostgreSQL database
+✔ KYC queue defaults to PENDING for legacy clients (2.3532ms)
+✔ KYC queue explicitly supports ALL without a status predicate (0.3459ms)
+﹣ KYC decisions enforce permission, version and single-decision rules (20.7002ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/auth-service) to run this test
+﹣ report lifecycle enforces review-before-action and dispatches owner commands (4.34ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/auth-service) to run this test
+✔ Auth audit uses the real action catalog and returns the normalized contract (7.9242ms)
+✔ Auth report actions link to their source report (0.3307ms)
+﹣ bounded batch enforces cap, dry-run, permission-per-action and idempotency (11.0012ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/auth-service) to run this test
+﹣ buyer login history, activity ingestion and admin audit access (7.7759ms) # DATABASE_URL not set or database unreachable — use a disposable auth test database
+✔ restrict persists buyer-only scope without invalidating login (1.7259ms)
+✔ seller scope can be added without losing an existing buyer scope (0.3388ms)
+✔ revoke one scope preserves the other scope (0.4078ms)
+✔ restriction rejects a scope the target role does not own (1.2441ms)
+﹣ executive audit log endpoints against real database (10.0198ms) # DATABASE_URL not set or database unreachable
+﹣ executive report decisions resolve the matching audit and actual actor (17.0598ms) # requires an isolated Auth PostgreSQL schema
+﹣ executive complaint feed against a real database (9.8334ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/auth-service) to run this test
+✔ KYC submission commits role, profile and application in one transaction (1.7049ms)
+✔ KYC submission removes the newly persisted file when DB work fails (0.641ms)
+✔ authorized document reads create an audit record (0.2842ms)
+﹣ customer multi-role is allowed while staff/customer mixing is rejected (14.1426ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/auth-service) to run this test
+﹣ register then login against a real database (9.3352ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/auth-service) to run this test
+✔ listReports applies independent page and search contract (2.6801ms)
+✔ an explicit empty status lists all reports (0.5956ms)
+✔ getReportDetail returns people, product and the persisted decision (5.123ms)
+✔ full suspension cannot overwrite a scoped commerce restriction (4.0687ms)
+✔ user safety history paginates reports and links moderation actions to source reports (16.5394ms)
+✔ general user lookup selects and returns no full KYC identifiers (5.2969ms)
+﹣ marketing user analytics against a real database (UR-08) (4089.3732ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/auth-service) to run this test
+﹣ executive user metrics series against a real database (8.3893ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/auth-service) to run this test
+﹣ executive user metrics against a real database (9.9061ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/auth-service) to run this test
+✔ images are typed IMAGE so the client renders them inline (2.9576ms)
+✔ everything else is typed FILE so the client offers a download (11.9778ms)
+✔ an image preview reads as a photo, not a raw type tag (0.6746ms)
+✔ a file preview names the file so the inbox row is meaningful (0.2513ms)
+✔ allows the image/video/pdf types the composer offers (1.9894ms)
+✔ rejects executable and script types outright (0.5711ms)
+✔ the size cap is 10 MB (0.2461ms)
+✔ absolutePath resolves a normal key inside the storage directory (0.2799ms)
+✔ absolutePath refuses to escape the storage directory (0.9109ms)
+✔ PRODUCT context key is deterministic for the same productId+buyerId (2.1895ms)
+✔ PRODUCT context key differs for a different buyer on the same product (0.5498ms)
+✔ PRODUCT context key requires both productId and buyerId (1.0692ms)
+✔ ORDER context key is deterministic for the same orderId (0.2772ms)
+✔ SUPPORT context key is deterministic for the same ticketId (0.2288ms)
+✔ DISPUTE context key is stable and requires a dispute ID (2.4936ms)
+✔ DIRECT context key is order-independent (A,B) === (B,A) (0.354ms)
+✔ AUCTION context key is deterministic for the same roundId+userId (0.182ms)
+✔ AUCTION context key requires both roundId and userId (0.2461ms)
+✔ unknown contextType throws (0.1572ms)
+✔ conversation id is a deterministic Mongo ObjectId for the context key (1.6595ms)
+✔ a former case participant cannot read or send after owner revokes access (22.3112ms)
+✔ TC19: a sold product cannot create a new conversation (13.056ms)
+✔ TC19: the buyer can reopen their existing conversation after the product is sold (0.9531ms)
+✔ available product still allows a new conversation (1.8675ms)
+✔ a concurrent duplicate conversation still reopens the winning room (0.9387ms)
+✔ reply summary excludes internal/system/deleted messages and deduplicates parties (24.2206ms)
+✔ invalid summary inputs fail before querying (0.92ms)
+✔ internal dispute context is deterministic and rejects missing ID (2.8083ms)
+✔ getTranscript excludes internal notes from public transcript by default (15.5201ms)
+✔ getTranscript includes internal notes when includeInternal is true (0.8951ms)
+✔ sendMessage deduplicates retry and concurrent requests via atomic DB idempotencyKey uniqueness (2.6346ms)
+✔ conversationService.withDisplayNames resolves 'ระบบฝ่ายการตลาด' for AUCTION system participant (1.2491ms)
+✔ messageService.sendMessage rejects user replies in read-only AUCTION conversations with 403 (31.464ms)
+✔ getTranscript excludes internal notes from public transcript by default (15.1474ms)
+✔ getTranscript includes internal notes when includeInternal is true (1.0398ms)
+✔ getTranscript bounds history and exposes an older cursor (0.567ms)
+✔ support reply derives sender role, persists in Chat and schedules metadata delivery (22.9945ms)
+✔ buyers cannot create internal notes and locked rooms reject new replies (1.8219ms)
+✔ Admin may add internal notes but never public replies (4.2828ms)
+✔ same idempotency key returns existing message; changed content rejects (2.9934ms)
+✔ legacy import preserves time/visibility, validates context and never fabricates missing mirrors (3.5011ms)
+✔ CS event delivery contains no message body or attachment payload (2.084ms)
+✔ isValidCursor accepts a 24-char hex ObjectId string (6.8669ms)
+✔ isValidCursor rejects garbage (0.4801ms)
+✔ buildPageQuery with no cursor has no id filter and takes limit+1 (1.8822ms)
+✔ historical and deterministic IDs paginate by actual timestamp with an ID tie-breaker (0.461ms)
+✔ buildPageQuery with a cursor filters id < cursor (0.352ms)
+✔ buildPageQuery with includeInternal: true omits visibility filter (0.2245ms)
+✔ paginate returns nextCursor=null when there is no extra row (0.29ms)
+✔ paginate drops the overflow probe row and derives nextCursor from the last kept row (0.2935ms)
+✔ paginate with exactly limit rows (no overflow) does not treat the last one as a probe (0.234ms)
+✔ createAndTouch updates preview and lastMessageAt for public messages (14.9579ms)
+✔ createAndTouch does NOT update lastMessagePreview or lastMessageAt for INTERNAL messages (0.9365ms)
+✔ createAndTouch with INTERNAL visibility updates participants without touching lastMessagePreview (1.6054ms)
+✔ countUnread excludes INTERNAL messages by default to prevent leaking activity to requester (1.1722ms)
+[chat-service] rate limit check failed (t): ECONNREFUSED
+✔ allows requests under the limit and rejects the one over it (2.0174ms)
+✔ counts per user, so one noisy account can't lock out everyone (0.3467ms)
+✔ keys include the window, so the budget resets as time moves on (0.2625ms)
+✔ fails OPEN when Redis is unreachable — chat must not go down with it (1.0545ms)
+✔ an unauthenticated request has no key to count and is passed through (0.7168ms)
+✔ case messages and status reach current participants only (13.7848ms)
+✔ handshake with no token is rejected (4.3449ms)
+✔ handshake with an empty-string token is rejected (0.4404ms)
+✔ handshake with a malformed/tampered token is rejected (1.1079ms)
+✔ handshake with an expired token is rejected (8.6685ms)
+✔ handshake with a valid token succeeds and attaches userId/role (1.5391ms)
+✔ a token signed with the wrong secret is rejected (1.0175ms)
+[chat-service] display-name lookup failed: ECONNREFUSED
+[chat-service] display-name lookup failed: auth-service returned 500
+✔ maps the internal API's response into a userId -> name Map (72.3324ms)
+✔ sends the internal token and de-duplicates ids (3.2906ms)
+✔ an auth-service outage degrades to an empty Map instead of throwing (3.5643ms)
+✔ a non-2xx response degrades the same way (1.5832ms)
+✔ an empty id list makes no request at all (0.6842ms)
+✔ case access uses the owning service and fails closed on outage (8.7993ms)
+﹣ chat attachments against a real MongoDB replica set + real disk (18.2811ms) # DATABASE_URL_CHAT not set or MongoDB unreachable — see docs/featureplan/chat/plan.md CHAT-001
+﹣ conversation create-or-open against a real MongoDB replica set (15.2132ms) # DATABASE_URL_CHAT not set or MongoDB unreachable — set it to a disposable replica-set database (see docs/featureplan/chat/plan.md CHAT-001) to run this test
+﹣ GET /health reports db:ok against a real Mongo replica set (11.6597ms) # DATABASE_URL_CHAT not set or MongoDB unreachable — set it to a disposable replica-set database (see docs/featureplan/chat/plan.md CHAT-001) to run this test
+✔ GET /health returns 503 with db:unreachable when Mongo is unreachable (618.9354ms)
+﹣ Internal API against a real MongoDB replica set (14.1556ms) # DATABASE_URL_CHAT not set or MongoDB unreachable — set it to a disposable replica-set database (see docs/featureplan/chat/plan.md CHAT-001) to run this test
+﹣ message length limit against a real MongoDB replica set (14.3023ms) # DATABASE_URL_CHAT not set or MongoDB unreachable
+﹣ send rate limit against a real Redis (3.9944ms) # MongoDB or Redis unreachable
+﹣ message send/read against a real MongoDB replica set (10.146ms) # DATABASE_URL_CHAT not set or MongoDB unreachable — set it to a disposable replica-set database (see docs/featureplan/chat/plan.md CHAT-001) to run this test
+﹣ Socket.IO realtime layer against a real MongoDB replica set + Redis (12.3875ms) # DATABASE_URL_CHAT not set or MongoDB unreachable — see docs/featureplan/chat/plan.md CHAT-001
+▶ supportSyncWorker exponential backoff and bounded lifecycle
+  ✔ calculateBackoffMs produces exponential backoff with upper bound (2.7261ms)
+  ✔ startSupportSyncWorker and stopSupportSyncWorker are bounded and cleanly stop (3.6078ms)
+✔ supportSyncWorker exponential backoff and bounded lifecycle (15.3717ms)
+▶ Chat-to-ticket sync handles outages without losing persisted messages
+  ✔ service outage records retry backoff without losing message (2.1755ms)
+  ✔ successful delivery marks syncStatus: SYNCED (0.6806ms)
+✔ Chat-to-ticket sync handles outages without losing persisted messages (6.0446ms)
+▶ Internal notes privacy and query boundaries
+  ✔ buildPageQuery excludes internal notes by default (0.5216ms)
+  ✔ buildPageQuery allows internal notes when includeInternal is true (0.2918ms)
+  ✔ broadcastMessage does not emit internal notes to public conversation room (0.7137ms)
+✔ Internal notes privacy and query boundaries (2.3483ms)
+✔ GET /health returns 200 ok without needing a database (97.148ms)
+✔ GET /mine with no bearer token is rejected with 401 (15.1171ms)
+✔ POST / with no bearer token is rejected with 401 (37.1585ms)
+✔ GET /selling with no bearer token is rejected with 401 (21.2717ms)
+✔ PATCH /:id/pay with no bearer token is rejected with 401 (12.1723ms)
+✔ POST /checkout-sessions with no bearer token is rejected with 401 (14.6489ms)
+✔ automatic auction order is blocked for a restricted buyer (15.8666ms)
+✔ automatic auction order is blocked for a restricted seller (0.6757ms)
+✔ automatic auction order is blocked for a fully suspended participant (0.6594ms)
+[buyerActivityClient] failed to record ORDER_PLACED da038826-7fdd-473e-a529-0edf01b75143: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:product-a (order da038826-7fdd-473e-a529-0edf01b75143): fetch failed
+✔ checkout persists the reservation identity returned by product-service (3868.8886ms)
+✔ checkout releases the exact reservation when Order creation fails (6.3397ms)
+[buyerActivityClient] failed to record ORDER_PLACED 5e8e742d-0347-42c2-b3a0-f2fef1681db7: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:product-other-shop (order 5e8e742d-0347-42c2-b3a0-f2fef1681db7): fetch failed
+✔ a seller account may buy another seller's product (3718.7905ms)
+✔ checkout rejects a restricted product seller and releases the reservation (14.5486ms)
+✔ a staff account is denied before product-service is called (14.4736ms)
+✔ TC10: direct cancellation of confirmed is rejected before any side effect (111.5657ms)
+✔ TC10: direct cancellation of shipped is rejected before any side effect (13.2711ms)
+✔ TC10: direct cancellation of completed is rejected before any side effect (10.396ms)
+✔ TC10: direct cancellation of refunded is rejected before any side effect (15.4052ms)
+✔ TC10: a successful payment also blocks cancellation if status was reverted (8.8837ms)
+✔ TC10: processing checkout blocks cancellation before local payment records are read (6.7123ms)
+✔ TC10: paid checkout blocks cancellation before local payment records are read (6.7634ms)
+✔ unpaid pending cancellation still succeeds (5.9582ms)
+✔ unpaid pending_payment cancellation still succeeds (8.0054ms)
+✔ multi-seller checkout sums baht exactly; vouchers remain per order; auction has no basket (21.0285ms)
+✔ repeat creation returns the same checkout (1.4857ms)
+✔ checkout cannot accept a code shared across orders (2.6305ms)
+✔ creation requires address ID and rejects expired basket (3.0918ms)
+✔ concurrent order change rolls back checkout and shipping creation (1.2876ms)
+[order-service] chat notification failed for PRODUCT:p1 (order o1): fetch failed
+[order-service] chat notification failed for PRODUCT:p2 (order o2): fetch failed
+✔ payment retry after external failure does not charge or confirm orders twice (2841.6629ms)
+✔ foreign buyer cannot read or confirm checkout (0.8397ms)
+✔ expiry cancels orders and durably requests release without marking payment paid (1.0062ms)
+✔ payment CAS conflict rolls back every local payment (0.5576ms)
+✔ releases a newly-created product reservation when the Order write fails (29.5247ms)
+✔ authorization failure releases a newly-created reservation before Order write (1.0572ms)
+✔ Order write failure with voucher releases BOTH voucher hold and product reservation (1.7336ms)
+✔ reuses the Order for an existing reservation instead of creating a duplicate and does NOT update price (0.7635ms)
+✔ P2002 retry returns existing order without creating duplicate (0.6381ms)
+✔ calculates discount and finalPrice from backend quoteAndHold, ignoring client tampering (0.968ms)
+✔ rejects order and releases reservation if voucher quoteAndHold fails (expired / wrong category / 409) (1.2ms)
+✔ dispute chat reuses the case room and authorizes the assigned agent (18.8399ms)
+✔ dispute owner denies stale agents and allows case parties (176.9439ms)
+✔ disputeService.claim enforces role, unassigned check, and optimistic concurrency (18.4467ms)
+✔ disputeService.reassign allows current assignee or Trust & Safety supervisor (2.7608ms)
+✔ disputeService.escalate transfers dispute to Trust & Safety (1.1903ms)
+✔ disputeService.decide and addEvidence enforce single ownership (2.014ms)
+✔ disputeService requires numeric version on claim, reassign, escalate, and decide (2.7825ms)
+✔ disputeService prevents non-assignee from escalating and prevents CS from claiming/deciding escalated case (1.696ms)
+✔ CS queue cannot remove access restrictions using scope or team filters (24.2212ms)
+✔ queue and count use the same access/filter predicate before pagination (3.5912ms)
+✔ SLA pagination reaches terminal history only after active cases (5.6447ms)
+✔ dashboard SLA filter uses the same bounded deadline predicate for rows and totals (11.9298ms)
+✔ only assigned Admin decides; oversight chat stays read-only (3.0537ms)
+✔ unassigned requires claim; multiple roles preserve read-only (0.5349ms)
+✔ TC05: invalid shipping phone is rejected without writes (8.0305ms)
+✔ TC05: invalid shipping postalCode is rejected without writes (0.6904ms)
+✔ buyer changes only this order's address and records both address snapshots (1.0072ms)
+✔ another buyer cannot change the order's delivery address (0.3835ms)
+✔ shipped orders cannot change address even if shipping has not caught up (0.4031ms)
+✔ shipped parcels cannot change address even if Order still says confirmed (0.3551ms)
+✔ a concurrent shipment prevents the address write and its audit log (0.5216ms)
+✔ stale client version and incomplete addresses are rejected before writes (1.454ms)
+✔ checkout totals preserve satang across sellers and per-order discounts (5.8844ms)
+✔ money rejects missing, fractional-satang, negative and non-finite amounts (1.8584ms)
+✔ money preserves large exact decimal input and rejects database overflow (6.8707ms)
+✔ checkout rejects discounts that increase an order's price (0.6085ms)
+✔ checkout rejects aggregate overflow even when individual orders fit (3.9395ms)
+✔ TC10: cancellation rechecks the current paid status inside its transaction (16.1514ms)
+✔ TC10: successful payment history also blocks the transactional cancellation (0.6418ms)
+✔ an unpaid cancellation still records the product sync and audit together (1.7363ms)
+✔ a concurrent payment/version change prevents cancellation and event creation (0.5382ms)
+▶ Attribution Outbox Service Suite
+  ✔ retryDelayMs: scales exponentially with attempts and caps at 60s (30.1469ms)
+  ✔ deliver: sends correct event envelope and flat compatibility fields (1.6372ms)
+  ✔ processEvent: marks event processed upon successful delivery (1.6709ms)
+  ✔ processEvent: records error and schedules exponential backoff on delivery failure (1.7741ms)
+  ✔ processPendingEvents: processes batch of pending events (1.1943ms)
+  ✔ startWorker & stopWorker: starts and cleanly shuts down worker timer (0.9715ms)
+  ✔ durability: fails loudly when db or attributionOutboxEvent model is unavailable (1.0861ms)
+✔ Attribution Outbox Service Suite (43.8346ms)
+✔ authClient applies a timeout signal to internal user lookups (2.7848ms)
+✔ sends an idempotent order activity to auth-service (63.1894ms)
+✔ an auth-service outage does not fail the purchase flow (2.1395ms)
+✔ dry run reports missing dispute holds without writing or inventing payment data (12.4021ms)
+✔ refund with another active reason is valid and must remain frozen (0.4495ms)
+✔ backfill does not resurrect a case decided after initial scan (0.6293ms)
+✔ one payment has overlapping hold reasons; releasing dispute leaves T&S active (5.4014ms)
+✔ refund waits for the final active reason (0.6467ms)
+✔ same reason is idempotent and another reference is not released (0.6015ms)
+✔ unpaid orders cannot create holds (1.2978ms)
+✔ open case stays frozen even if its hold is missing (0.3884ms)
+✔ participants cannot mutate disputed or held orders (0.6217ms)
+✔ failed delivery leaves durable request available for retry (27.3497ms)
+✔ acknowledged delivery is skipped on retry (1.2735ms)
+﹣ dispute hold/release enforce permission, version and single-hold rules (2750.7295ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/order-service) to run this test
+✖ Buyer satang survive atomic completion, Product attribution, audit and duplicate delivery (2778.297ms)
+﹣ Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12, MKT-003, MKT-007) (2749.9875ms) # PostgreSQL database not reachable, skipping integration test
+﹣ Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Suite (UR-09, UR-12, MKT-003, MKT-007) (2832.3088ms) # PostgreSQL databases not reachable, skipping cross-service suite
+﹣ T&S reads paginated ORDER chat through the dispute with access audit (2799.8073ms) # order database unreachable
+﹣ dispute lifecycle: hold payout, one-way decision, RBAC (2779.4474ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/order-service) to run this test
+﹣ RELEASE_ESCROW verdict unholds payout and returns the order to completed (2705.7011ms) # covered by the previous test's database-availability check
+﹣ TSR-02: Single-owner dispute assignment, unassigned read-only, validation, reassign & escalate (2761.8164ms) # DATABASE_URL not reachable
+﹣ TSR-02 Concurrency: 2 agents concurrent Claim race on same dispute (2709.9159ms) # DATABASE_URL not reachable
+﹣ TSR-02 Concurrency: 2 admins concurrent Hold race on same order (2709.9633ms) # DATABASE_URL not reachable
+﹣ TSR-02 Concurrency: Dispute Decision vs T&S Hold race on Order CAS (2703.8206ms) # DATABASE_URL not reachable
+﹣ TSR-02 Concurrency: Hold eligibility & Concurrent Pay (2708.2354ms) # DATABASE_URL not reachable
+﹣ TSR-02: Payment outbox survives product-service failure and retries (2712.0758ms) # DATABASE_URL not reachable
+﹣ TSR-02 Concurrency: Reassign vs Decision race on Dispute (2700.9303ms) # DATABASE_URL not reachable
+﹣ TSR-02: Hold decoupling between CS dispute and Trust & Safety holds (2712.4111ms) # DATABASE_URL not reachable
+﹣ TSR-02: Approving refund locks order status — subsequent T&S release never reverts to completed (2705.754ms) # DATABASE_URL not reachable
+﹣ TSR-02: Participants cannot mutate order status while under active hold or dispute (2713.9208ms) # DATABASE_URL not reachable
+﹣ access-aware dispute queue paginates more than 50 cases with terminal SLA last (6.1152ms) # Set DATABASE_URL_ORDER to a dedicated reloop_ui_* test database
+﹣ ER checkout API: multiple sellers, exact totals, immutable paidAt, address snapshots and shipment guards (2727.16ms) # disposable PostgreSQL required
+﹣ ER evidence API: buyer uploads before claim, staff chooses deadline, audits isolate evidence and safety review stays unique (2721.4144ms) # disposable PostgreSQL required
+﹣ auction callback retries create one pending order and no basket (2699.7002ms) # disposable PostgreSQL required
+﹣ dispute evidence: private storage, authz on view, audit trail (2719.2017ms) # DATABASE_URL_ORDER not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/order-service) to run this test
+✔ migration refuses an existing database without the canonical baseline, including a legacy ledger (7.9611ms)
+﹣ executive platform metrics series against a real database (4.4564ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/order-service) to run this test
+﹣ executive platform metrics against a real database (3.7384ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/order-service) to run this test
+﹣ only one of two buyers reserves a product and expiry cannot unlock a newer reservation (2753.8862ms) # DATABASE_URL_PRODUCT/DATABASE_URL_ORDER not set or databases unreachable
+﹣ Seller checkout, paid notification, shipping and T&S trading transcript share persisted facts (1.8277ms) # live Auth/Product/Order/Chat required
+✔ hold audit keeps the public action contract while querying payment-linked OrderLog (9.2251ms)
+✔ case and evidence audit use bound filters and one pagination/count contract (1.2629ms)
+✔ invalid audit kinds and date ranges fail before querying (1.1237ms)
+﹣ support order lookup: role gate and bounded search (2733.8776ms) # DATABASE_URL_ORDER not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/order-service) to run this test
+✔ GET /health returns 200 ok without needing a database (72.5064ms)
+✔ POST / with no bearer token is rejected with 401 (45.9834ms)
+✔ POST / from a BUYER account is rejected with 403 before touching the database (14.0219ms)
+✔ POST /videos with no bearer token is rejected with 401 (12.2223ms)
+✔ POST /videos from a BUYER account is rejected with 403 before touching the database (15.7848ms)
+✔ POST /auctions/:id/bids from a staff account is rejected before touching the database (12.1973ms)
+✔ POST /uploads with no bearer token is rejected with 401 (9.9714ms)
+✔ POST /uploads allows SELLER to upload PNG images (25.4943ms)
+✔ POST /videos/upload rejects non-video files (10.9371ms)
+✔ POST /videos/upload stores a swipe clip in product-service uploads (10.2239ms)
+✔ TC18: reserved reserved listing cannot be deleted through the API (54.5889ms)
+✔ TC18: hidden reserved listing cannot be deleted through the API (9.7268ms)
+✔ TC18: deletion is guarded atomically if a reservation wins the race (5.2629ms)
+✔ seller can still delete an available listing (5.7076ms)
+✔ non-owner still cannot delete a listing (6.7489ms)
+✔ auction deletion remains forbidden (5.8937ms)
+✔ buildCreateProductData applies defaults and normalizes client arrays (3.7627ms)
+✔ buildProductPatch includes only submitted fields (0.5583ms)
+✔ buildProductPatch preserves scalar values but ignores reservation status (0.3098ms)
+✔ buildCreateProductData preserves status 'auction' if submitted (0.1689ms)
+✔ relistAvailable rejects non-owner seller (14.0732ms)
+✔ relistAvailable rejects products not in auction_action_required status (0.3929ms)
+✔ relistAvailable rejects when an active auction item exists for the product (0.3847ms)
+✔ relistAvailable validates positive integer price (0.8728ms)
+✔ relistAvailable updates product to available and refreshes seller activity (0.8185ms)
+✔ public auction detail uses the lifecycle-aware service and propagates errors (11.1729ms)
+[product-service] chat notification failed for round round-retry-1: chat-service /internal/conversations/conv-round-retry-1:buyer-2/messages returned 503
+✔ canTransition allows only the documented lifecycle edges (11.959ms)
+✔ submit rejects a buyer before querying the database (1.6029ms)
+✔ submit rejects a non-positive starting price (1.0176ms)
+✔ submit rejects a product owned by another seller (1.3612ms)
+✔ submit rejects a product that is not available (0.6653ms)
+✔ submit rejects a product under Trust & Safety moderation (1.8633ms)
+✔ submit creates a pending_approval auction for the owning seller (13.0021ms)
+✔ approve rejects a non-Marketing/Admin caller (0.9491ms)
+✔ approve allows a Marketing caller and transitions to scheduled if round dates exist (2.7718ms)
+✔ approve rejects moving out of a non-pending_approval state (0.7375ms)
+✔ approve rejects non-Marketing callers (including ADMIN) (0.3788ms)
+✔ schedule rejects a non-Marketing caller (0.495ms)
+✔ schedule rejects endsAt before startsAt (0.3193ms)
+✔ schedule accepts a valid window for an approved auction (0.3397ms)
+✔ placeBid rejects the seller bidding on their own auction (0.7624ms)
+✔ placeBid rejects an auction whose product is moderated (0.4298ms)
+✔ placeBid rejects a bid below startingPrice with no existing bids (4.3449ms)
+✔ placeBid rejects a bid under the current highest + increment (1.11ms)
+✔ placeBid rejects bidding on a closed auction window (0.5466ms)
+✔ placeBid accepts a valid raise and returns the created bid (0.4504ms)
+✔ placeBid returns existing bid on exact retry with matching parameters (0.3536ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different amount (0.4802ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different bidderId (0.5088ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different auctionId (0.4117ms)
+✔ placeBid returns existing bid on retry even if auction status has changed to closed (0.2427ms)
+✔ placeBid P2002 race recovery validates existing bid and returns on match (0.3405ms)
+✔ placeBid P2002 race recovery throws 409 Conflict if race-created bid has different parameters (0.5112ms)
+✔ closing an auction with no bids never calls order-service (1.3202ms)
+✔ automatic close has no side effects after Trust & Safety moderation (0.2493ms)
+✔ scheduled auction opening uses a moderation-aware CAS (0.3492ms)
+✔ submit transitions available product to 'auction' status (0.6348ms)
+✔ submit accepts a product already created with 'auction' status without re-setting (1.0107ms)
+✔ reject resets product status back to 'available' (0.7408ms)
+✔ reject rejects non-Marketing callers (including ADMIN) (1.0077ms)
+✔ cancel transitions item to 'cancelled' and product status to 'auction_action_required' (3.1835ms)
+✔ closing an auction with no bids transitions product status to 'auction_action_required' (0.8102ms)
+✔ submit rejects when roundId is missing (0.3862ms)
+✔ submit rejects when selected roundId is not found (0.4475ms)
+✔ submit rejects when selected round has not started accepting submissions (0.4436ms)
+✔ submit rejects when selected round has expired submission window (0.3884ms)
+✔ createRound rejects non-Marketing/Admin callers (0.4651ms)
+✔ createRound rejects invalid or inverted dates (0.3326ms)
+✔ createRound creates round for Marketing user (0.4311ms)
+✔ getCurrentRound correctly returns flags when active (0.4985ms)
+✔ placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and reschedules close job (0.511ms)
+✔ placeBid outside the last 5 minutes does NOT extend scheduledEndAt (0.3345ms)
+✔ deriveRoundPhase correctly identifies all 5 half-open phases (0.2149ms)
+✔ createRound rejects non-Marketing user with 403 Forbidden (0.237ms)
+✔ createRound validates input dates and boundaries (0.4383ms)
+✔ createRound succeeds when overlapping round exists (MKT-DEC-025 overlap permitted) (0.3987ms)
+✔ createRound succeeds and passes tx when no conflict exists (0.3187ms)
+✔ getCurrentRound returns active round containing now with derived phase (0.3582ms)
+✔ getCurrentRound supports simultaneous active submission and auction rounds (0.3615ms)
+✔ getCurrentRound returns nearest upcoming round when none active (4.7958ms)
+✔ getCurrentRound returns null when all rounds ended or none exist (0.4337ms)
+✔ listRounds attaches derived phase to each round (0.4138ms)
+✔ auction error messages do not leak internal status or English technical terms (0.2682ms)
+✔ schedule rejects past startsAt with friendly Thai message (0.2641ms)
+✔ schedule rejects endsAt before startsAt with friendly Thai message (0.215ms)
+✔ placeBid validates missing idempotencyKey with clear Thai message (0.2064ms)
+✔ placeBid validates non-positive amount with clear Thai message (0.2179ms)
+✔ createRound accepts empty categories array or omitted as all categories (0.9642ms)
+✔ createRound accepts one valid category (3.7744ms)
+✔ createRound accepts multiple valid categories (0.6345ms)
+✔ createRound rejects invalid categories format (0.3116ms)
+✔ createRound rejects non-existent category in database (0.2414ms)
+✔ isCategoryAllowedInRound treats empty or missing categories as all categories (0.1326ms)
+✔ submit new product creates Product and AuctionItem atomically in same transaction (1.2066ms)
+✔ submit new product rejects when category is not allowed by active round (0.5573ms)
+✔ submit new product rejects when category is not found in database (0.2473ms)
+✔ submit new product rolls back if product creation fails (0.6184ms)
+✔ submit new product rolls back if auction creation fails (0.3643ms)
+✔ submit existing product validates product.category from DB and ignores client category (0.6654ms)
+✔ submit rejects sellers with expired or unverified KYC and allows ADMIN (0.6792ms)
+✔ submit rejects and rolls back when round expires between validation and transaction (0.4198ms)
+✔ submit existing product rejects and does not update status when round expires in transaction (0.2793ms)
+✔ browseRounds returns active and upcoming rounds with derived phases (0.4482ms)
+✔ getRound returns round with phase and rejects invalid roundId (0.6267ms)
+✔ listRoundItems returns round and items filtered by roundId (0.5577ms)
+✔ listRoundItems reconciles scheduled items to open and filters out expired/closed items (0.7721ms)
+✔ createRound supports concurrent round creation with overlapping times and creates audit log for each (0.6154ms)
+✔ deriveRoundPhase returns 'cancelled' when round.cancelledAt is set (0.1917ms)
+✔ cancelRound rejects non-Marketing user with 403 Forbidden (0.5923ms)
+✔ cancelRound validates cancellation reason (0.3405ms)
+✔ cancelRound rejects non-existent round with 404 (0.5289ms)
+✔ cancelRound on already cancelled round performs idempotent notification retry without mutating state or creating duplicate audit logs (0.3968ms)
+✔ cancelRound rejects ended round with 400 (0.2415ms)
+✔ cancelRound rejects round with winning order with 400 (0.2066ms)
+✔ cancelRound atomically transitions items and products, logs audit, and notifies chat (0.6558ms)
+✔ cancelRound returns warnings if chat notification encounters failures (0.3656ms)
+✔ submit rejects submission to a cancelled round (0.197ms)
+✔ submit allows product with auction_action_required status into a new round (0.6344ms)
+✔ approve rejects item in a cancelled round (0.2723ms)
+✔ placeBid rejects bid when round or item is cancelled (0.4418ms)
+✔ closeAuction transitions product to auction_action_required when there are 0 bids (0.5336ms)
+✔ cancel rejects non-Marketing callers with 403 (0.3171ms)
+✔ cancel validates cancellation reason (non-empty and <= 500 chars) (0.2692ms)
+✔ cancel rejects item in pending_approval (must use reject instead) (0.219ms)
+✔ cancel rejects item when winningOrderId already exists (0.1857ms)
+✔ cancel on open item with bids logs AUCTION_ITEM_CANCEL, cancels close job, and notifies seller and bidders (0.5793ms)
+✔ chatClient.notifyItemCancelled notifies only seller before open, and notifies seller + bidders with isolated 1-on-1 rooms and idempotency keys when open (0.9363ms)
+✔ cancel still succeeds and returns warning when chat-service fails (0.3858ms)
+✔ cancel on already cancelled item performs idempotent notification retry without mutating state or creating duplicate audit logs (0.8017ms)
+✔ submit re-reads round inside withRoundMutationLock and rejects without creating Product or AuctionItem if round was cancelled concurrently (0.627ms)
+✔ browseRounds includes cancelled upcoming round until auctionEndsAt and hides it after auctionEndsAt (0.3124ms)
+✔ chatClient.notifyRoundCancelled partial failure followed by retry delivers missing recipient and deduplicates already-delivered recipients (1.7524ms)
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller admin-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+✔ marketingAuditSanitizer - key sensitivity detection (2.4357ms)
+✔ marketingAuditSanitizer - data sanitization and redacting (8.2615ms)
+✔ marketingAuditSanitizer - circular reference handling (0.357ms)
+✔ marketingAuditService - recordMarketingAudit validation (1.9737ms)
+✔ marketingAuditService - getAuditLogs query validation and pagination (1.3836ms)
+✔ marketingAuditRepository - handles idempotencyKey collision via createMany skipDuplicates (0.8902ms)
+✔ catalog filters combine and preserve style as persisted tags (2.6359ms)
+✔ catalog trims strings and treats whitespace-only values as absent (0.2952ms)
+✔ catalog rejects invalid, negative, and reversed prices consistently (1.8813ms)
+✔ listAvailable queries clips for available products only and sets chosen: false for guest (11.554ms)
+✔ listAvailable attaches chosen flag for authenticated userId and does not leak choices relation (0.3307ms)
+✔ listFeed delegates pagination to the available-product query (5.9008ms)
+✔ createClip rejects a buyer before querying the database (3.8152ms)
+✔ createClip reports missing required fields as a bad request (0.2805ms)
+✔ createClip rejects a product owned by another seller (0.2193ms)
+✔ createClip rejects a product under Trust & Safety moderation (0.1791ms)
+✔ createClip stores the verified token name and ignores a body sellerName (0.1814ms)
+✔ chooseClip rejects a non-existent card (0.4806ms)
+✔ chooseClip hides a card whose product is moderated (0.2094ms)
+✔ chooseClip upserts a choice for the user (0.2305ms)
+✔ chooseClip rejects non-buyer roles (MARKETING, ADMIN) with 403 (0.1756ms)
+✔ chooseClip accepts user when roles array contains BUYER (0.2178ms)
+✔ unchooseClip rejects non-buyer roles (MARKETING, ADMIN) with 403 (0.2564ms)
+✔ unchooseClip deletes the choice and returns chosen: false (0.2605ms)
+✔ listFeed passes userId to repository when provided (0.1594ms)
+✔ a seller cannot reserve their own product (14.4548ms)
+✔ a moderated product cannot be reserved (0.5598ms)
+✔ completeProductReservation treats an already-sold product as an idempotent retry (0.7757ms)
+✔ completeProductReservation still rejects an invalid active state (0.5544ms)
+✔ completeProductReservation rejects a sold product from another reservation (0.3985ms)
+✔ TC17: prohibited comment "ไอ้เหี้ย" is rejected without saving (40.0327ms)
+✔ TC17: prohibited comment "สัส" is rejected without saving (4.8548ms)
+✔ TC17: prohibited comment "ควย" is rejected without saving (3.4465ms)
+✔ TC17: prohibited comment "เย็ด" is rejected without saving (4.1609ms)
+✔ TC17: prohibited comment "เห​ี้ย" is rejected without saving (3.8853ms)
+✔ TC17: prohibited comment "เห⁠ี้ย" is rejected without saving (3.8904ms)
+✔ TC17: prohibited comment "ีดีดีดีเหี้ย" is rejected without saving (3.0059ms)
+✔ a polite comment is saved unchanged with its review media (3.8473ms)
+✔ TC17: editing a rejected comment to a polite comment allows retry (7.2006ms)
+✔ duplicate review rejection is preserved (3.4597ms)
+﹣ review aggregation against a real database (20.6911ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/product-service) to run this test
+✔ mediaToNestedCreate splits media into photos and videos with positions (3.5772ms)
+✔ mediaToNestedCreate handles empty or null media (6.7183ms)
+✔ toApiShape sorts and combines photos and videos into unified media array (0.3671ms)
+✔ toApiShape handles null or reviews without photos/videos (0.135ms)
+✔ POST /reviews/uploads rejects unauthenticated review media uploads (75.6738ms)
+✔ review media is stored and served by product-service (62.0387ms)
+▶ Buyer Segmentation Rule Engine Suite
+  ✔ validateSegmentRule: accepts empty or null targetSegment (0.9124ms)
+  ✔ validateSegmentRule: rejects invalid field or operator (0.8389ms)
+  ✔ matchesSegment: universal campaigns match everyone (0.2505ms)
+  ✔ matchesSegment: targeted campaigns require profile (0.1936ms)
+  ✔ matchesSegment: eq matches case-insensitively (0.1346ms)
+  ✔ matchesSegment: supports preferredSize and sizePreference aliases (0.1478ms)
+  ✔ matchesSegment: in and nin operators evaluate correctly (0.2152ms)
+✔ Buyer Segmentation Rule Engine Suite (4.5709ms)
+﹣ articles API permissions, search, and CRUD (9.064ms) # DATABASE_URL not set or database unreachable
+[ioredis] Unhandled error event: AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1426:18)
+    at afterConnectMultiple (node:net:2095:7)
+﹣ Auction Core, Concurrency, Soft Close & BullMQ Integration Suite (4150.8754ms) # Integration dependencies unreachable: PostgreSQL, Redis (redis://localhost:6379)
+﹣ Product Service Campaign Attribution & Metrics PostgreSQL Integration Suite (MKT-003, MKT-007, UR-09, UR-12) (7.1131ms) # PostgreSQL database not reachable, skipping suite
+✖ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite (4100.1223ms)
+﹣ Campaign Domain, State Machine & Voucher Wallet Integration Suite (6.0847ms) # DATABASE_URL not set or database unreachable
+▶ Campaign Metrics, Attribution & Conversion Suite
+  ✔ recordOrderCompletedEvent: ignores orders without campaign (12.5485ms)
+  ✔ recordOrderCompletedEvent: records attribution and deduplicates retries (idempotency) (1.6065ms)
+  ✔ validateDateRange: rejects invalid date and from > to (0.8045ms)
+  ✔ getCampaignMetrics: calculates conversion rate (redeemedCount / claimedCount * 100) (0.3875ms)
+  ✔ getCampaignMetrics: returns 0 values for campaign with no orders (no error) (0.3876ms)
+  ✔ getOverviewMetrics: aggregates revenue and orders across all campaigns (0.9696ms)
+  ✔ getSalesTrends: groups metrics by daily series (1.6567ms)
+  ✔ Prisma model persistence: records attribution, handles envelope, and deduplicates retries (1.1852ms)
+  ✔ Prisma model persistence: propagates DB errors instead of swallowing (0.5841ms)
+  ✔ Idempotency conflict: returns 409 Conflict when pre-check finds conflicting attribution fields (0.8315ms)
+  ✔ Idempotency conflict & deduplication on P2002 race recovery (0.3699ms)
+  ✔ production path: fails loudly if Prisma client lacks campaignAttribution model (0.6533ms)
+  ✔ identity conflict: reusing eventId with different orderId returns 409 even when monetary fields match (0.9618ms)
+✔ Campaign Metrics, Attribution & Conversion Suite (26.653ms)
+▶ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite
+  ✔ Code Normalization: trims and converts code to UPPERCASE (12.8665ms)
+  ✔ Validation on Create: rejects percent discount > 100 (1.5758ms)
+  ✔ Validation on Create: rejects startsAt >= endsAt (0.8117ms)
+  ✔ Validation on Partial Update: rejects changing discountValue > 100 when existing is PERCENT (1.1526ms)
+  ✔ Validation on Partial Update: rejects changing discountType to PERCENT when existing value > 100 (0.397ms)
+  ✔ Validation on Partial Update: rejects partial date update where new startsAt >= existing endsAt (0.4644ms)
+  ✔ Gating non-published campaigns: hides draft/pending/rejected/ended from Guest and Buyer (0.5012ms)
+  ✔ Gating published campaigns: allows Guest and Buyer if active (0.4252ms)
+  ✔ Claim Concurrency & Usage Limit: returns 409 Conflict when usageLimit reached (0.987ms)
+  ✔ Claim Concurrency: returns 409 Conflict when user already claimed (0.7423ms)
+  ✔ Segmentation Validation: rejects invalid segment rule on createDraft (1.5466ms)
+  ✔ Segmentation Filtering: listAvailablePublicCampaigns matches targeted profile (1.1613ms)
+  ✔ Date Validation on Create: rejects endsAt in the past (0.7806ms)
+  ✔ Date Validation on Create: rejects startsAt in the past without reason (0.6604ms)
+  ✔ Date Validation on Update: rejects changing endsAt to the past (0.4255ms)
+  ✔ Date Validation on Publish: rejects campaign whose endsAt is expired (0.5429ms)
+  ✔ Publish after startsAt but before endsAt: starts using immediately (0.4602ms)
+  ✔ Budget Enforcement: claim succeeds when spentBudget is below budget ceiling (0.3927ms)
+  ✔ Budget Enforcement: claim, applicable, and quote-and-hold fail when spentBudget reaches budget ceiling (0.9984ms)
+  ✔ Budget Enforcement: claim fails when spentBudget exceeds budget ceiling (0.4994ms)
+  ✔ Idempotency: duplicate attribution event does not increment spentBudget twice (3.2711ms)
+  ✔ Concurrency & Budget Reached: transitions campaign to ended when cumulative discount reaches ceiling (0.6764ms)
+✔ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite (37.7602ms)
+▶ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite
+  ✖ Code Normalization: trims and converts code to UPPERCASE (2726.1924ms)
+  ✔ Validation on Create: rejects percent discount > 100 (4.27ms)
+  ✔ Validation on Create: rejects startsAt >= endsAt (0.6532ms)
+  ✔ Validation on Partial Update: rejects changing discountValue > 100 when existing is PERCENT (1.5503ms)
+  ✔ Validation on Partial Update: rejects changing discountType to PERCENT when existing value > 100 (0.8426ms)
+  ✔ Validation on Partial Update: rejects partial date update where new startsAt >= existing endsAt (0.7492ms)
+  ✔ Gating non-published campaigns: hides draft/pending/rejected/ended from Guest and Buyer (0.6409ms)
+  ✔ Gating published campaigns: allows Guest and Buyer if active (0.4151ms)
+  ✔ Claim Concurrency & Usage Limit: returns 409 Conflict when usageLimit reached (1.4139ms)
+  ✔ Claim Concurrency: returns 409 Conflict when user already claimed (1.084ms)
+  ✔ Segmentation Validation: rejects invalid segment rule on createDraft (1.1887ms)
+  ✔ Segmentation Filtering: listAvailablePublicCampaigns matches targeted profile (0.7563ms)
+  ✔ Checkout quote rejects a product under Trust & Safety moderation (0.924ms)
+✖ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite (2746.5975ms)
+﹣ executive catalog metrics against a real database (4.897ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/product-service) to run this test
+﹣ catalog search applies all filters against PostgreSQL (2714.6275ms) # PostgreSQL unavailable
+﹣ Marketing Audit Trail Integration Suite (PostgreSQL) (4.6505ms) # DATABASE_URL not set or database unreachable
+✔ migration refuses an existing database without the canonical baseline, including a legacy ledger (11.6226ms)
+﹣ product moderation removes, hides and restores a listing (5.0022ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/product-service) to run this test
+﹣ product CRUD against a real database (6.8612ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/product-service) to run this test
+﹣ only one buyer wins an atomic PostgreSQL reservation (4.3228ms) # DATABASE_URL not set or database unreachable — push the product Prisma schema first
+﹣ UR-11 Swipe-to-Choose Hardening: Buyer authorization, idempotency, feed state, and isolation (2707.9744ms) # DATABASE_URL not set or database unreachable
+﹣ executive catalog rankings against a real database (4.0283ms) # DATABASE_URL not set or database unreachable — set it to a disposable test database (after running `npx prisma db push` against it from backend/services/product-service) to run this test
+✔ only staff can delete FAQ and missing articles return 404 (39.4369ms)
+✔ deleted FAQ is archived and excluded from the default management list (1.6375ms)
+✔ ticket owner preserves requester history and revokes escalated CS (59.6787ms)
+✔ categories come from active database rows and may contain new codes (8.4425ms)
+✔ client config contains only presentation/limits, not server credentials or policy rules (0.3362ms)
+✔ impact determines priority, rather than category name, order size alone, or elapsed waiting (1.4469ms)
+✔ response and resolution have separate 24x7 targets, including weekends (0.6885ms)
+✔ staff role may be secondary in the verified token (1.2679ms)
+✔ ticket replies write to Chat only and preserve legacy API shape (10.9913ms)
+✔ requester history is fetched without internal notes and double-filtered (0.4225ms)
+✔ Chat outage leaves ticket available with explicit unavailable-history flag (0.283ms)
+✔ migration dry-run writes nothing; apply verifies every source without deleting archive (0.7626ms)
+✔ admin queue includes closed/escalated while CS sees only own or unassigned cases (4.2757ms)
+✔ conversation repair accepts the same link but never replaces another room (12.3566ms)
+✔ duplicate chat delivery does not create another message/audit (2.0779ms)
+✔ duplicate delivery still validates ticket/conversation correlation (1.0884ms)
+✔ customer-facing reply satisfies FIRST_RESPONSE and audits in the same transaction (1.0616ms)
+✔ internal notes and requester messages never satisfy FIRST_RESPONSE (0.5763ms)
+✔ invalid chat dates/IDs are rejected before database work (0.4214ms)
+✔ API projection derives current assignee, SLA and lifecycle without exposing history (0.8141ms)
+✔ dashboard SLA filters exclude terminal work and compare the pending target before pagination (0.8588ms)
+[ticketService] failed to lock conversation conv-close-1: chat-service network timeout
+✔ CS cannot mutate unassigned tickets and closed tickets cannot be claimed (10.2854ms)
+✔ invalid ticket scope is rejected before it can remove owner filtering (0.461ms)
+✔ claim reports committed ownership when chat membership refresh fails (0.4711ms)
+✔ Admin cannot send a customer-facing ticket reply (0.1976ms)
+✔ joinTicketChat is idempotent on repeated calls and writes audit log exactly once (1.3684ms)
+✔ joinTicketChat forbids normal CS agent on ESCALATED ticket (0.2507ms)
+✔ requester retains access to their escalated ticket conversation (0.7786ms)
+✔ changeStatus does not falsely report chatLocked: true if chat locking failed (0.9845ms)
+✔ NEW can move to ASSIGNED, ESCALATED or CLOSED (1.3061ms)
+✔ CLOSED is terminal (0.2778ms)
+✔ RESOLVED can bounce back to IN_PROGRESS (WF-10 step 7: user says not fixed) (1.1311ms)
+✔ unknown status has no valid transitions (0.1972ms)
+✔ trend aggregates the complete permitted queue, ordered by calendar date without a page limit (12.294ms)
+✔ trend rejects customer roles and invalid ranges before querying (0.6278ms)
+✔ CS claims before reply; other owner and closed never writable (1.366ms)
+✔ Admin has audit and status powers without customer reply (0.3039ms)
+✔ createSupportConversation sends greeting on 201 (new room) (2.9118ms)
+✔ createSupportConversation does NOT send greeting on 200 (existing deterministic room) (0.6049ms)
+✔ lockConversation propagates error and throws on lock failure (1.4028ms)
+✔ requestWithTimeout extracts actionable error and retains HTTP status (1.2324ms)
+✔ Support audit exposes ticket transitions with pagination and source case (17.8016ms)
+▶ Internal chat events endpoint security and validation
+  ✔ rejects request without internal token with 403 (108.6839ms)
+  ✔ rejects request with invalid internal token with 403 (15.3733ms)
+  ✔ rejects request with missing chatMessageId with 400 (10.879ms)
+✔ Internal chat events endpoint security and validation (138.5062ms)
+▶ ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
+  ✔ rejects correlation mismatch between ticket and conversation (3.7042ms)
+  ✔ first delivery creates only one metadata REPLY audit event (1.3804ms)
+  ✔ second delivery with same chatMessageId is idempotent (no duplicate message or audit) (0.7016ms)
+  ✔ requester message does not update firstResponseAt (0.7669ms)
+✔ ticketModel.recordChatMessage idempotency, correlation and firstResponseAt (11.2732ms)
+▶ Ticket Chat Join/Continue Authorization, Same-Room Continuation and Privacy
+  ✔ normal CS agent cannot access or join an ESCALATED ticket (19.4172ms)
+  ✔ normal CS agent cannot join a ticket assigned to another agent (18.1974ms)
+  ✔ random buyer stranger gets 403 on join (19.2942ms)
+  ✔ ADMIN can continue an ESCALATED ticket in the existing room without replacing it (2736.5448ms)
+  ✔ TRUST_AND_SAFETY can continue an ESCALATED ticket (2698.5459ms)
+  ✔ CS agent can join an unassigned ticket and missing conversation is repaired idempotently (2702.4018ms)
+  ✔ internal notes are never exposed in requester-facing ticket view (2725.5122ms)
+✔ Ticket Chat Join/Continue Authorization, Same-Room Continuation and Privacy (10922.7428ms)
+﹣ SUPPORT chat message updates ticket first-response and audit exactly once (4.0961ms) # CHAT_SERVICE_URL and AUTH_PUBLIC_URL are required for the cross-service test
+✔ GET /health returns 200 ok without needing a database (79.314ms)
+✔ GET /tickets/mine with no bearer token is rejected with 401 (13.6236ms)
+✔ GET /tickets/queue with no bearer token is rejected with 401 (10.6068ms)
+✔ POST /tickets with no bearer token is rejected with 401 (28.3988ms)
+PrismaClientInitializationError: 
+Invalid `prisma.$queryRaw()` invocation:
+
+
+Can't reach database server at `postgres:5432`
+
+Please make sure your database server is running at `postgres:5432`.
+    at $n.handleRequestError (C:\ise\Ise\backend\services\support-service\src\generated\prisma-client\runtime\library.js:121:7615)
+    at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\support-service\src\generated\prisma-client\runtime\library.js:121:6623)
+    at $n.request (C:\ise\Ise\backend\services\support-service\src\generated\prisma-client\runtime\library.js:121:6307)
+    at async l (C:\ise\Ise\backend\services\support-service\src\generated\prisma-client\runtime\library.js:130:9633)
+    at async Promise.all (index 0)
+    at async Object.search (C:\ise\Ise\backend\services\support-service\src\features\help-content\helpModel.js:63:25)
+    at async search (C:\ise\Ise\backend\services\support-service\src\features\help-content\helpController.js:8:30) {
+  clientVersion: '5.22.0',
+  errorCode: undefined
+}
+✔ GET /help works for guests (FAQ deflection must not require login) (2768.7845ms)
+✔ POST /help with a BUYER token is rejected with 403 before touching the database (5.9342ms)
+﹣ help article draft -> publish flow and search visibility (10.1718ms) # DATABASE_URL_SUPPORT not set or database unreachable — set it to a disposable test database (after running `node prisma/migrate.js` and `node prisma/seed.js` from backend/services/support-service) to run this test
+﹣ normalized ticket claim, history and message SLA survive the existing API shape (7.9729ms) # Run migrations and seed on a disposable DATABASE_URL_SUPPORT
+﹣ reopened case receives a new resolution SLA cycle without deleting the previous result (4.1416ms) # Run migrations and seed on a disposable DATABASE_URL_SUPPORT
+﹣ chat link and metadata-event uniqueness reject cross-ticket correlation (0.647ms) # Run migrations and seed on a disposable DATABASE_URL_SUPPORT
+﹣ draft revision never changes the published FAQ until that revision is published (0.5364ms) # Run migrations and seed on a disposable DATABASE_URL_SUPPORT
+﹣ category-specific SLA takes precedence and tickets retain their policy snapshot (0.3588ms) # Run migrations and seed on a disposable DATABASE_URL_SUPPORT
+﹣ failed history write rolls back the status snapshot and version (0.4129ms) # Run migrations and seed on a disposable DATABASE_URL_SUPPORT
+﹣ concurrent FAQ edits create distinct immutable revision numbers (0.9131ms) # Run migrations and seed on a disposable DATABASE_URL_SUPPORT
+﹣ sla monitor escalates overdue tickets exactly once, even run twice (18.6395ms) # DATABASE_URL_SUPPORT not set or database unreachable — set it to a disposable test database (after running `node prisma/migrate.js` and `node prisma/seed.js` from backend/services/support-service) to run this test
+﹣ support ticket lifecycle against a real database (5.753ms) # DATABASE_URL_SUPPORT not set or database unreachable — set it to a disposable test database (after running `node prisma/migrate.js` and `node prisma/seed.js` from backend/services/support-service) to run this test
+﹣ Trust & Safety can take over an escalated ticket with versioned handoff audit (2.6992ms) # database unreachable
+﹣ PostgreSQL trend counts beyond 50, fills empty dates, and keeps CS ownership filtering (1.4009ms) # Set disposable DATABASE_URL_DASHBOARD
+﹣ dashboard PostgreSQL snapshot: all-row totals, SLA boundaries, ownership, terminal cases and pagination (2.8968ms) # Set DATABASE_URL_DASHBOARD to a disposable PostgreSQL database
+✔ support dashboard authenticates, validates and binds identity before querying (121.1077ms)
+✔ order dashboard authenticates, validates and binds identity before querying (40.6511ms)
+✔ agent dashboard rejects non-CS identities and client supplied identity does not override session (1.8143ms)
+✔ dashboard validates focus and bounded positive integer pagination (0.6297ms)
+✔ requireAuth never attaches identity or calls next for a denied session (12.4361ms)
+✔ requireAuth exposes the display name from a verified access token (1.7244ms)
+✔ requireAuth prefers live commerce restrictions over stale token claims (2.0096ms)
+✔ requireAuth uses null when an older access token has no display name (1.0553ms)
+✔ requireAuth falls back to a single-item roles array for a legacy token (0.6749ms)
+✔ requireAuth reads multi-role claims when present (0.6007ms)
+✔ requireAuth rejects mixed staff/customer claims (0.8386ms)
+✔ requirePermission allows a matching permission through (0.2465ms)
+✔ requirePermission returns a structured 403 for a missing permission (0.3302ms)
+✔ requireCustomerAccount allows customer-only roles (0.3163ms)
+✔ requireCustomerAccount denies staff and mixed staff/customer roles (0.396ms)
+✔ reply summary batches owned cases and never accepts unrelated IDs (8.2873ms)
+✔ chat failure is an error rather than zero pending replies (1.6139ms)
+✔ higher escrow amount and report history raise score (2.8713ms)
+✔ reported counterfeit requires high-priority investigation; SLA urgency keeps priority stable (0.7084ms)
+✔ persisted priority is stable even when overdue and report history is high (0.4832ms)
+✔ maps durable user statuses to buyer and seller capabilities (4.6816ms)
+✔ commerce capability middleware blocks only its matching live scope (0.6711ms)
+✔ combines and removes role-scoped restrictions without losing the other scope (2.8717ms)
+✔ configuration rejects unsafe scoring, unsupported clocks and contradictory deadlines (3.8712ms)
+✔ invalid runtime environment values fail rather than silently falling back (0.7105ms)
+✔ versioned external policy changes classification, scoring and evidence windows together (269.4146ms)
+✔ signAccessToken produces a token verifyAccessToken can read back (8.7914ms)
+✔ signRefreshToken produces a token verifyRefreshToken can read back (1.2755ms)
+✔ verifyAccessToken rejects a token signed with a different secret (1.4622ms)
+✔ hasPermission grants role-scoped actions (2.5449ms)
+✔ permissionsForRoles unions permissions across multiple roles (0.5821ms)
+✔ unknown or missing roles grant no permissions (1.8141ms)
+✔ catalog covers every contract role from integration.md (0.5299ms)
+✔ customer accounts may combine BUYER and SELLER and may purchase (0.4496ms)
+✔ staff accounts allow exactly one staff role and never purchase (0.2827ms)
+✔ serialization retries are bounded and unrelated failures are never retried (3.2716ms)
+✔ successful retry returns the committed result and always uses serializable isolation (0.7379ms)
+﹣ persisted intake, separate clocks, handoffs, legacy preservation and priority filters (1.7764ms) # Set dedicated DATABASE_URL_SUPPORT and DATABASE_URL_ORDER
+✔ classification covers practical intake scenarios and records reasons (3.0574ms)
+✔ all policies allow review and the existing 48h evidence window before final decision (0.433ms)
+✔ dispute active SLA moves from first review to original decision deadline and legacy stays intact (0.4838ms)
+✔ session validation checks Auth again after a successful request (7.992ms)
+✔ network, timeout, invalid responses and missing configuration fail closed (2.1016ms)
+✔ CS/Admin demo has distinct, linked case scenarios (3.6973ms)
+✔ demo seed refuses unexpected hosts and database names (0.5819ms)
+✔ flags a fake private key header (3.4764ms)
+✔ flags a fake AWS access key ID (2.228ms)
+✔ flags a fake GitHub token (0.6017ms)
+✔ does not flag a placeholder value in .env.example style content (0.4422ms)
+✔ does not flag ordinary source code with no secret-shaped content (0.2998ms)
+✔ still flags a real-looking secret even if the line also contains the word 'test' (0.3283ms)
+✔ flags a real-looking secret even when the keyword is a suffix, matching this repo's own env var names (0.3195ms)
+✔ flags POSTGRES_PASSWORD the same way it flags PASSWORD (0.2586ms)
+ℹ tests 671
+ℹ suites 0
+ℹ pass 590
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 77
+ℹ todo 0
+ℹ duration_ms 41010.9736
+ℹ start of coverage report
+ℹ -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ file                                 | line % | branch % | funcs % | uncovered lines
+ℹ -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ backend                              |        |          |         | 
+ℹ  gateway                             |        |          |         | 
+ℹ   src                                |        |          |         | 
+ℹ    app.js                            |  98.85 |    80.95 |   88.89 | 61-62
+ℹ  services                            |        |          |         | 
+ℹ   auth-service                       |        |          |         | 
+ℹ    prisma                            |        |          |         | 
+ℹ     roleCatalog.js                   |  52.17 |   100.00 |    0.00 | 11-21
+ℹ    src                               |        |          |         | 
+ℹ     app.js                           |  65.71 |   100.00 |   33.33 | 39-54 59-78
+ℹ     controllers                      |        |          |         | 
+ℹ      authController.js               |  20.74 |   100.00 |    0.00 | 3-10 12-23 25-32 34-41 43-50 52-59 61-68 70-77 79-89 91-98 100-107 109-120
+ℹ     features                         |        |          |         | 
+ℹ      adminKyc                        |        |          |         | 
+ℹ       adminKycRoutes.js              |  46.51 |   100.00 |    0.00 | 15-24 28-40
+ℹ       adminKycService.js             |  44.63 |    83.33 |   66.67 | 10-11 55-119
+ℹ      audit                           |        |          |         | 
+ℹ       auditQuery.js                  |  94.25 |    63.64 |  100.00 | 15-16 19 55-56
+ℹ       auditRoutes.js                 |  55.56 |   100.00 |    0.00 | 17-32
+ℹ      bulkActions                     |        |          |         | 
+ℹ       actionRegistry.js              |  41.84 |   100.00 |    0.00 | 20-36 39-46 52-58 61-68 74-79 82-89 94-96
+ℹ       bulkActionRoutes.js            |  44.83 |   100.00 |    0.00 | 11-26
+ℹ       bulkActionService.js           |   5.97 |   100.00 |    0.00 | 7-132
+ℹ      buyerAudit                      |        |          |         | 
+ℹ       buyerAuditController.js        |  18.18 |   100.00 |    0.00 | 4-9 11-22 24-34 36-49 51-64 66-77 79-90
+ℹ       buyerAuditRoutes.js            | 100.00 |   100.00 |  100.00 | 
+ℹ       buyerAuditService.js           |  21.46 |   100.00 |    0.00 | 33-42 44-59 61-69 71-81 83-89 91-140 142-152 154-163 165-170 172-203 205-225
+ℹ      commerceRestrictions            |        |          |         | 
+ℹ       restrictionRoutes.js           |  45.61 |   100.00 |    0.00 | 8-12 20-32 41-53
+ℹ       restrictionService.js          |  83.03 |    48.65 |   90.00 | 27-28 44-47 52-53 88-91 127-128 150-163
+ℹ      executiveAudit                  |        |          |         | 
+ℹ       executiveAuditController.js    |  30.49 |   100.00 |    0.00 | 10-22 28-48 54-76
+ℹ       executiveAuditRoutes.js        | 100.00 |   100.00 |  100.00 | 
+ℹ       executiveAuditService.js       |  33.08 |   100.00 |    0.00 | 29-63 68-83 88-125
+ℹ      internal                        |        |          |         | 
+ℹ       internalController.js          |  44.44 |   100.00 |   50.00 | 12-26
+ℹ       internalRoutes.js              | 100.00 |   100.00 |  100.00 | 
+ℹ      kyc                             |        |          |         | 
+ℹ       kycController.js               |  24.00 |   100.00 |    0.00 | 7-23 27-33 35-48
+ℹ       kycRoutes.js                   | 100.00 |   100.00 |  100.00 | 
+ℹ       kycService.js                  |  71.35 |    21.74 |   75.00 | 33-34 40-41 48-49 51-52 67-68 70-71 111-114 119-153 166-167 170-171
+ℹ       kycStorage.js                  |  49.38 |   100.00 |    0.00 | 26-30 34-40 42-50 52-59 61-72
+ℹ      metrics                         |        |          |         | 
+ℹ       activityMetrics.js             | 100.00 |    82.46 |  100.00 | 
+ℹ       executiveReports.js            |  20.08 |   100.00 |    0.00 | 24-31 33-54 56-99 104-151 163-235
+ℹ       marketingMetricsController.js  |  92.86 |    66.67 |  100.00 | 6
+ℹ       marketingMetricsRoutes.js      | 100.00 |    80.00 |  100.00 | 
+ℹ       metricsController.js           |  63.43 |    68.29 |   33.33 | 15-24 26-43 87-88 90-93 95-98 112-115 122-128
+ℹ       metricsRoutes.js               | 100.00 |   100.00 |  100.00 | 
+ℹ       reportConfig.js                | 100.00 |   100.00 |  100.00 | 
+ℹ       reportSearch.js                |   6.98 |   100.00 |    0.00 | 4-41 43-84
+ℹ       userMetrics.js                 |  37.21 |   100.00 |    0.00 | 9-20 27-41
+ℹ      productModeration               |        |          |         | 
+ℹ       productModerationRoutes.js     |  46.94 |   100.00 |    0.00 | 12-24 33-45
+ℹ       productModerationService.js    |  17.05 |   100.00 |    0.00 | 5-41 50-67 69-86
+ℹ      profileAddresses                |        |          |         | 
+ℹ       profileAddressController.js    |  14.81 |   100.00 |    0.00 | 3-9 11-18 20-31 33-43 45-52
+ℹ       profileAddressRoutes.js        | 100.00 |   100.00 |  100.00 | 
+ℹ       profileAddressService.js       |  90.14 |    81.58 |   90.91 | 34-35 44-48 78-79 83-87
+ℹ      reports                         |        |          |         | 
+ℹ       reportRoutes.js                |  44.53 |   100.00 |    0.00 | 18-33 42-52 61-71 80-84 93-103 112-125 134-145 154-165 174-185 194-199 208-219 227-235 238-243
+ℹ       reportService.js               |  57.34 |    45.45 |   54.17 | 13-22 25-36 44-60 191-217 231-319 321-369 381-397 400-413 438-452 454-484 557-558 601-602
+ℹ      sellerActivity                  |        |          |         | 
+ℹ       sellerActivityRoutes.js        |  75.00 |   100.00 |    0.00 | 15-20
+ℹ       sellerActivityService.js       |  57.89 |   100.00 |    0.00 | 10-17
+ℹ     models                           |        |          |         | 
+ℹ      prismaClient.js                 | 100.00 |   100.00 |  100.00 | 
+ℹ     routes                           |        |          |         | 
+ℹ      authRoutes.js                   | 100.00 |   100.00 |  100.00 | 
+ℹ     services                         |        |          |         | 
+ℹ      authService.js                  |  25.74 |    87.50 |   12.50 | 23-31 33-42 49-55 58-68 70-88 90-101 103-134 136-174 176-201 203-215 217-248 250-269 271-275 277-291 322-335 339-354 357-367 371-373 376-378 381-383 387-389
+ℹ      productModerationClient.js      |  16.47 |    50.00 |    0.00 | 10-15 17-33 35-58 60-83
+ℹ      sessionService.js               |  37.04 |   100.00 |   25.00 | 5-14 16-22 24-40
+ℹ      shopChangeRequestService.js     |  75.32 |    47.06 |   81.82 | 28-29 41-42 56-59 101-102 117-123 127-134 137-156 160-161 170-171 184-185 187-190 213-214
+ℹ   chat-service                       |        |          |         | 
+ℹ    src                               |        |          |         | 
+ℹ     app.js                           |  97.56 |    66.67 |  100.00 | 20
+ℹ     features                         |        |          |         | 
+ℹ      attachments                     |        |          |         | 
+ℹ       attachmentController.js        |  32.94 |   100.00 |    0.00 | 15-25 30-33 39-54 58-83
+ℹ       attachmentRoutes.js            | 100.00 |   100.00 |  100.00 | 
+ℹ       attachmentService.js           |  36.76 |   100.00 |   40.00 | 34-89 98-114 116-128
+ℹ       attachmentStorage.js           |  87.34 |   100.00 |   50.00 | 42-46 54-58
+ℹ      conversations                   |        |          |         | 
+ℹ       contextKey.js                  |  94.52 |    88.89 |  100.00 | 30-33
+ℹ       conversationController.js      |  11.67 |   100.00 |    0.00 | 4-24 26-40 42-58
+ℹ       conversationModel.js           |  26.53 |   100.00 |   25.00 | 3-5 11-30 35-47
+ℹ       conversationRoutes.js          | 100.00 |   100.00 |  100.00 | 
+ℹ       conversationService.js         |  88.96 |    70.27 |   91.67 | 29-30 32-33 77-78 136-137 146-155
+ℹ      internal                        |        |          |         | 
+ℹ       awaitingReply.js               | 100.00 |   100.00 |  100.00 | 
+ℹ       internalContext.js             |  52.94 |    36.36 |   50.00 | 16-24 26 31 33 35-43 45-47
+ℹ       internalController.js          |  51.83 |    20.00 |   25.00 | 27-73 75-88 112-113 149-150 169-173 175-177 182-213 218-236 250-251 271-272 275-291
+ℹ       internalRoutes.js              | 100.00 |   100.00 |  100.00 | 
+ℹ       supportMessages.js             |  84.31 |    79.66 |   85.71 | 47-52 76-79 92-97
+ℹ      messages                        |        |          |         | 
+ℹ       cursor.js                      | 100.00 |   100.00 |  100.00 | 
+ℹ       messageController.js           |  18.46 |   100.00 |    0.00 | 7-11 13-27 29-41 43-54 56-63
+ℹ       messageModel.js                |  71.26 |    50.00 |   50.00 | 7-25 58-61 118-142
+ℹ       messageRoutes.js               | 100.00 |   100.00 |  100.00 | 
+ℹ       messageService.js              |  39.57 |    28.57 |   16.67 | 28-29 37-38 45-60 63-71 74-95 97-115 124-137
+ℹ      sync                            |        |          |         | 
+ℹ       supportSyncWorker.js           |  72.84 |    66.67 |   63.64 | 49-50 86-91 94-100 102-121 133-141
+ℹ     generated                        |        |          |         | 
+ℹ      prisma-client                   |        |          |         | 
+ℹ       index.js                       |  94.69 |    33.33 |    0.00 | 192-203
+ℹ       runtime                        |        |          |         | 
+ℹ        library.js                    |  38.46 |    55.54 |   25.14 | 7-8 11-17 19 22 32 34 36 38-41 44 46-51 53-56 58-63 65 67-109 115-120 127-129
+ℹ     limits.js                        | 100.00 |   100.00 |  100.00 | 
+ℹ     middleware                       |        |          |         | 
+ℹ      rateLimit.js                    |  91.95 |    84.62 |   75.00 | 15-18 82-84
+ℹ     models                           |        |          |         | 
+ℹ      prismaClient.js                 | 100.00 |   100.00 |  100.00 | 
+ℹ     realtime                         |        |          |         | 
+ℹ      broadcast.js                    |  85.64 |    62.22 |   76.47 | 19-21 58 75-83 85-89 137-140 167-170
+ℹ      presence.js                     |  51.28 |    50.00 |    0.00 | 18-21 23-25 27-29 31-33 35-37 39-43 45-52 54-56 62-67
+ℹ      socketAuth.js                   | 100.00 |   100.00 |  100.00 | 
+ℹ      socketServer.js                 |   7.69 |   100.00 |    0.00 | 17-232
+ℹ     services                         |        |          |         | 
+ℹ      authClient.js                   | 100.00 |    90.91 |  100.00 | 
+ℹ      caseAccessClient.js             |  95.35 |    60.00 |   40.00 | 35-36
+ℹ      productClient.js                |  47.62 |   100.00 |    0.00 | 9-19
+ℹ   order-service                      |        |          |         | 
+ℹ    prisma                            |        |          |         | 
+ℹ     applyServicePolicy.js            |  31.82 |    50.00 |    0.00 | 5-11 14-21
+ℹ     migrate.js                       |  82.35 |    57.14 |   50.00 | 12-14
+ℹ    src                               |        |          |         | 
+ℹ     app.js                           | 100.00 |   100.00 |  100.00 | 
+ℹ     controllers                      |        |          |         | 
+ℹ      orderController.js              |  46.86 |    45.95 |   46.15 | 28-34 48-51 72-73 87-108 110-128 130-141 152-153 157-160 179-185 187-188 200-225 233-241 244-281 292-295 303-304 311-312 322-331 335-339 342-352 357-371
+ℹ     features                         |        |          |         | 
+ℹ      adminDisputes                   |        |          |         | 
+ℹ       adminDisputeRoutes.js          |  41.59 |   100.00 |    0.00 | 13-31 40-48 57-68 77-88 97-110
+ℹ       adminDisputeService.js         |   6.18 |   100.00 |    0.00 | 6-172
+ℹ      checkout                        |        |          |         | 
+ℹ       checkoutService.js             |  91.67 |    83.33 |  100.00 | 38-39 55-66 185-186
+ℹ      checkoutSessions                |        |          |         | 
+ℹ       checkoutSessionController.js   |  10.71 |   100.00 |    0.00 | 3-16 18-28 30-40 42-55
+ℹ       checkoutSessionRoutes.js       | 100.00 |   100.00 |  100.00 | 
+ℹ       checkoutSessionService.js      |  80.54 |    82.02 |   83.33 | 161-163 220-224 231-233 345-404 415-429
+ℹ      disputes                        |        |          |         | 
+ℹ       agentDashboard.js              |  96.55 |    87.50 |  100.00 | 41-42
+ℹ       disputeChatAccessRoutes.js     |  94.44 |    81.82 |  100.00 | 32-33
+ℹ       disputeController.js           |  14.33 |   100.00 |    0.00 | 5-17 19-31 33-45 47-61 63-84 89-100 104-118 120-133 135-150 152-167 169-185 187-202 204-219 221-249 251-267 269-287
+ℹ       disputeModel.js                |  26.58 |    59.09 |    9.09 | 6-14 21-22 27-167 222-223 243-285 344-599
+ℹ       disputeRoutes.js               |  80.52 |   100.00 |    0.00 | 30-44
+ℹ       disputeService.js              |  46.46 |    55.73 |   55.17 | 44-45 63-122 164 170-207 216-219 221-224 229 235-236 275-276 285 295-300 318-321 328-339 351-381 388-414 429-430 442 444-447 460-461 476-477 488-489 501-504 506-507 510-511 516-517 524-525 530 532-533 545-548 550-551 562-563 578-579 589-590 601-602 606-616 626-627 648-649 660-661 663-674 682-683 685-688 691-692 707-716 734-740 744-786 788-809 811-845 852-869 871-955 957-1005 1008-1013 1020-1029
+ℹ       evidenceStorage.js             |  69.23 |   100.00 |    0.00 | 25-26 34-38 42-50
+ℹ       workspacePolicy.js             | 100.00 |    97.62 |  100.00 | 
+ℹ      metrics                         |        |          |         | 
+ℹ       metricsController.js           |  25.58 |   100.00 |    0.00 | 9-18 20-41
+ℹ       metricsRoutes.js               | 100.00 |   100.00 |  100.00 | 
+ℹ       platformMetrics.js             |  41.43 |   100.00 |    0.00 | 15-32 42-64
+ℹ      shipping                        |        |          |         | 
+ℹ       shippingService.js             |  61.54 |    78.13 |   83.33 | 15-16 44-45 105-165
+ℹ      support                         |        |          |         | 
+ℹ       auditService.js                |  95.33 |    78.57 |  100.00 | 20-24
+ℹ       supportRoutes.js               |  34.62 |   100.00 |    0.00 | 14-27 31-50 58-74
+ℹ       supportService.js              |  23.97 |   100.00 |    0.00 | 20-52 56-60 66-119
+ℹ     generated                        |        |          |         | 
+ℹ      prisma-client                   |        |          |         | 
+ℹ       index.js                       |  97.12 |    33.33 |    0.00 | 383-394
+ℹ       runtime                        |        |          |         | 
+ℹ        library.js                    |  38.46 |    58.56 |   27.20 | 7-8 11-17 19 22 32 34 36 38-41 44 46-51 53-56 58-63 65 67-109 115-120 127-129
+ℹ     models                           |        |          |         | 
+ℹ      money.js                        |  96.36 |    95.83 |  100.00 | 22-23
+ℹ      orderModel.js                   |  51.30 |    47.50 |   33.33 | 59-116 127-154 182-189 200-202 211-212 222-253
+ℹ      prismaClient.js                 | 100.00 |    33.33 |  100.00 | 
+ℹ     routes                           |        |          |         | 
+ℹ      orderRoutes.js                  | 100.00 |   100.00 |  100.00 | 
+ℹ     services                         |        |          |         | 
+ℹ      attributionOutboxService.js     |  96.77 |    82.14 |  100.00 | 108-111 129
+ℹ      authClient.js                   |  84.09 |    50.00 |   66.67 | 27-28 36-40
+ℹ      buyerActivityClient.js          |  92.96 |    83.33 |  100.00 | 40-44
+ℹ      chatClient.js                   |  47.04 |    38.46 |   28.57 | 1-7 35-36 39-51 55-84 86-93 95-103 105-112 114-126 134-143 145-160 191-197 251-270
+ℹ      holdBackfillService.js          |  67.74 |    75.76 |   62.50 | 33-35 65-72 75-84 89-107
+ℹ      orderTransitionService.js       | 100.00 |    83.33 |  100.00 | 
+ℹ      productClient.js                |  18.23 |   100.00 |    0.00 | 5-7 9-11 13-23 25-48 50-56 58-64 66-75 77-83 85-104 106-116 118-128 130-137 139-146 148-155 157-166
+ℹ      productSyncService.js           |  80.00 |    85.71 |   75.00 | 30 71-88
+ℹ   product-service                    |        |          |         | 
+ℹ    prisma                            |        |          |         | 
+ℹ     migrate.js                       |  82.35 |    57.14 |   50.00 | 12-14
+ℹ    src                               |        |          |         | 
+ℹ     app.js                           | 100.00 |   100.00 |  100.00 | 
+ℹ     controllers                      |        |          |         | 
+ℹ      articleController.js            |   9.45 |   100.00 |    0.00 | 14-20 22-29 31-45 47-62 64-80 82-149 151-261 263-298
+ℹ      productController.js            |  40.73 |    87.50 |   30.00 | 34-48 50-69 74-99 101-117 119-127 129-148 150-171 173-180 182-191 193-199 208-216 222-256 272-273 284-297 302-314
+ℹ      productPayload.js               | 100.00 |   100.00 |  100.00 | 
+ℹ      uploadController.js             |  83.33 |    50.00 |  100.00 | 6-7 20-21
+ℹ     features                         |        |          |         | 
+ℹ      auctions                        |        |          |         | 
+ℹ       auctionController.js           |  21.57 |   100.00 |    6.25 | 4-11 13-23 25-35 37-47 49-61 63-75 86-100 102-114 116-123 125-132 134-141 143-150 152-162 164-173 175-186
+ℹ       auctionRepository.js           |  40.64 |    53.85 |   24.00 | 18-23 31-36 39-54 60-62 82-86 93-97 100-104 107-109 112-127 130-161 164-195 198-204 207-214 217-221 224-236 239-240 243-244 247-248 262-269 278-296 303-310
+ℹ       auctionRoutes.js               | 100.00 |   100.00 |  100.00 | 
+ℹ       auctionService.js              |  91.60 |    81.33 |   95.45 | 34 41 44-49 56-58 147 149-155 166-167 173-181 256-257 269-270 277-280 320-323 358-359 387-388 395-398 403-406 481-502 600-603 647-650 801-804 825-826 896 898-905 930-931 943-946 1033-1035 1093-1096 1098-1101 1137-1138
+ℹ       chatClient.js                  |  97.51 |    55.26 |   91.67 | 55-56 99-100 182-183
+ℹ       orderClient.js                 |  27.91 |    50.00 |    0.00 | 11-41
+ℹ      audit                           |        |          |         | 
+ℹ       marketingAuditController.js    |  55.56 |   100.00 |    0.00 | 7-14
+ℹ       marketingAuditRepository.js    |  71.14 |   100.00 |   50.00 | 95-134 137-139
+ℹ       marketingAuditRoutes.js        |  51.52 |   100.00 |    0.00 | 7-22
+ℹ       marketingAuditSanitizer.js     |  97.56 |    88.89 |  100.00 | 41-42
+ℹ       marketingAuditService.js       | 100.00 |    98.15 |  100.00 | 
+ℹ      campaigns                       |        |          |         | 
+ℹ       campaignController.js          |  14.44 |   100.00 |    0.00 | 5-11 13-23 25-36 38-48 50-60 62-73 75-85 87-97 99-109 111-125 127-155 157-167 169-179 181-193 195-205 207-221 223-237 239-253 255-267 269-283 285-303 305-316 318-328 330-341 343-354
+ℹ       campaignMetrics.js             |  80.41 |    79.67 |   82.76 | 65-66 78-79 186-235 321-324 339-340 342-343 361-362 414-416 479-516
+ℹ       campaignRepository.js          |  17.25 |   100.00 |    4.76 | 10-11 14-23 26-54 57-61 64-69 72-76 79-124 127-182 185-195 198-208 211-222 225-236 239-245 248-262 265-287 290-306 309-312 315-327 330-389 392-402
+ℹ       campaignRoutes.js              |  88.55 |   100.00 |    0.00 | 14-32
+ℹ       campaignService.js             |  48.46 |    54.39 |   56.25 | 25-26 31-32 38-39 42-45 50-51 59-60 65-66 74-78 81-85 88-92 95-99 103-104 108-109 129-130 132-133 165-166 221-222 228-236 248 255 279 281-282 299-315 319-329 332-358 361-391 394-424 438 440-443 470-504 528-530 539-540 544-545 549-550 552-553 584-600 604-608 612-613 615-616 620-621 643-671 680-692 695-698 701-707 710-792 806-807 809-810 815-816 820-829 831-841 843-846 848 850-851 853-856 858-899 903-912
+ℹ       internalCampaignRoutes.js      | 100.00 |   100.00 |  100.00 | 
+ℹ      catalog                         |        |          |         | 
+ℹ       catalogQuery.js                |  49.35 |   100.00 |   50.00 | 37-75
+ℹ      metrics                         |        |          |         | 
+ℹ       catalogMetrics.js              |  50.00 |   100.00 |    0.00 | 10-20
+ℹ       metricsController.js           |  31.71 |   100.00 |    0.00 | 11-20 22-39
+ℹ       metricsRoutes.js               | 100.00 |   100.00 |  100.00 | 
+ℹ       topCatalog.js                  |  29.33 |   100.00 |    0.00 | 18-25 27-43 45-64 66-73
+ℹ      moderation                      |        |          |         | 
+ℹ       moderationRoutes.js            |  40.38 |   100.00 |    0.00 | 13-17 21-33 37-49
+ℹ       moderationService.js           |   8.03 |   100.00 |    0.00 | 5-9 11-13 15-17 19-30 32-55 57-102 104-151 153-208 210-241
+ℹ      product-videos                  |        |          |         | 
+ℹ       productVideoController.js      |  48.45 |    50.00 |   40.00 | 8-21 36-37 50-51 57-72 74-89
+ℹ       productVideoRepository.js      |  71.28 |   100.00 |   37.50 | 47-51 54-60 63-67 70-75 78-81
+ℹ       productVideoRoutes.js          |  81.69 |   100.00 |    0.00 | 13-25
+ℹ       productVideoService.js         |  96.83 |    82.61 |  100.00 | 16-17 111-112
+ℹ      reservations                    |        |          |         | 
+ℹ       reservationRoutes.js           |  48.61 |   100.00 |    0.00 | 11-19 27-35 43-52 60-68
+ℹ       reservationService.js          |  41.67 |    66.67 |   25.00 | 20-28 30-42 62-96 99-114 116-141 177 180-194 196-206
+ℹ      reviews                         |        |          |         | 
+ℹ       controllers                    |        |          |         | 
+ℹ        reviewController.js           |  52.85 |    55.56 |   33.33 | 24-25 30-31 33-36 39-40 43-46 55-56 58-59 79-90 92-99 101-108 110-121
+ℹ        uploadController.js           |  81.82 |    50.00 |  100.00 | 6-7 18-19
+ℹ       middleware                     |        |          |         | 
+ℹ        upload.js                     |  93.33 |    60.00 |  100.00 | 38-40
+ℹ       models                         |        |          |         | 
+ℹ        reviewModel.js                |  42.99 |    90.48 |   58.33 | 32-42 44-50 52-70 73-82 84-97
+ℹ       routes                         |        |          |         | 
+ℹ        reviewRoutes.js               | 100.00 |   100.00 |  100.00 | 
+ℹ        uploadRoutes.js               | 100.00 |   100.00 |  100.00 | 
+ℹ       services                       |        |          |         | 
+ℹ        orderClient.js                |  43.48 |    50.00 |    0.00 | 9-21
+ℹ        reviewCommentPolicy.js        | 100.00 |    80.00 |  100.00 | 
+ℹ      segments                        |        |          |         | 
+ℹ       segmentRule.js                 |  86.90 |    85.71 |  100.00 | 21 28-33 36-37 47-48 66-73
+ℹ     generated                        |        |          |         | 
+ℹ      prisma-client                   |        |          |         | 
+ℹ       index.js                       |  97.68 |    33.33 |    0.00 | 480-491
+ℹ       runtime                        |        |          |         | 
+ℹ        library.js                    |  39.16 |    57.18 |   29.23 | 7-8 11-17 19 32 34 36 38-41 44 46-51 53-56 58-63 65 67-109 115-120 127-129
+ℹ     jobs                             |        |          |         | 
+ℹ      auctionCloseQueue.js            |  42.42 |    50.00 |    0.00 | 17-24 31-36 39-43 51-60 62-76 78-90
+ℹ     middleware                       |        |          |         | 
+ℹ      upload.js                       |  94.44 |    66.67 |  100.00 | 32-34
+ℹ     models                           |        |          |         | 
+ℹ      articleModel.js                 |  10.81 |   100.00 |    0.00 | 9-64 66-130 132-140 142-176 178-201 203-208 210-212
+ℹ      prismaClient.js                 |  85.71 |    25.00 |  100.00 | 5-6
+ℹ      productModel.js                 |  18.40 |   100.00 |    6.25 | 9-39 43-54 73-115 117-186 188-214 216-223 225-233 235-260 262-288 290-298 319-358 360-362 366-372 374-376 378-408
+ℹ     routes                           |        |          |         | 
+ℹ      articleRoutes.js                | 100.00 |   100.00 |  100.00 | 
+ℹ      productRoutes.js                | 100.00 |   100.00 |  100.00 | 
+ℹ      uploadRoutes.js                 | 100.00 |   100.00 |  100.00 | 
+ℹ     services                         |        |          |         | 
+ℹ      productValidation.js            |  87.01 |    71.43 |  100.00 | 39-40 42-43 54-57 65-66
+ℹ      sellerActivityClient.js         |  78.57 |    50.00 |   66.67 | 31-37 49-53
+ℹ   support-service                    |        |          |         | 
+ℹ    prisma                            |        |          |         | 
+ℹ     migrateMessagesToChat.js         |  80.00 |    81.82 |   25.00 | 19-22 40-44
+ℹ     seedReferenceData.js             |  14.29 |   100.00 |    0.00 | 11-76
+ℹ    src                               |        |          |         | 
+ℹ     app.js                           | 100.00 |   100.00 |  100.00 | 
+ℹ     features                         |        |          |         | 
+ℹ      audit                           |        |          |         | 
+ℹ       auditLog.js                    |  79.07 |    71.43 |  100.00 | 33-41
+ℹ       auditQuery.js                  |  86.30 |    28.57 |  100.00 | 6-8 24-25 33-37
+ℹ       auditRoutes.js                 |  55.56 |   100.00 |    0.00 | 17-32
+ℹ      help-content                    |        |          |         | 
+ℹ       helpController.js              |  39.36 |    60.00 |   28.57 | 14 20-33 44 50-61 63-80 82-92
+ℹ       helpModel.js                   |  35.65 |    44.44 |   18.75 | 19-48 68-72 94-197
+ℹ       helpRoutes.js                  | 100.00 |   100.00 |  100.00 | 
+ℹ       helpService.js                 |  42.27 |    63.64 |   37.50 | 12-23 29-34 41-51 54-68 70-77 79-82
+ℹ      internal                        |        |          |         | 
+ℹ       internalController.js          |  68.25 |    15.38 |  100.00 | 8-9 36-37 39-40 42-43 45-56
+ℹ       internalRoutes.js              |  94.29 |    80.00 |  100.00 | 31-32
+ℹ      reference                       |        |          |         | 
+ℹ       referenceController.js         |  83.78 |    71.43 |   80.00 | 11-16
+ℹ      sla                             |        |          |         | 
+ℹ       priority.js                    | 100.00 |   100.00 |  100.00 | 
+ℹ       slaMonitor.js                  |  14.63 |   100.00 |    0.00 | 5-21 23-40
+ℹ      staffRole.js                    | 100.00 |   100.00 |  100.00 | 
+ℹ      tickets                         |        |          |         | 
+ℹ       agentDashboard.js              |  96.97 |    87.50 |  100.00 | 49-50
+ℹ       ticketController.js            |  21.98 |   100.00 |    9.09 | 5-19 21-32 34-53 55-66 68-81 83-97 99-111 113-126 128-142 144-155
+ℹ       ticketModel.js                 |  31.33 |    66.67 |   33.33 | 21-59 61-178 180-187 189-202 218-219 256-292 294-299 301-354 356-433 450-454 457-463 491-492 494 562-635
+ℹ       ticketRoutes.js                | 100.00 |   100.00 |  100.00 | 
+ℹ       ticketService.js               |  63.90 |    61.76 |   63.16 | 47 50-129 160-161 182-186 190-192 210-212 215-223 236-256 268-269 303-304 343-344 346-347 351 353-354 374 387-422 424 455 510-512 556-583 585-587 589-602
+ℹ       ticketShape.js                 |  87.18 |    38.10 |   87.50 | 49-58
+ℹ       ticketState.js                 | 100.00 |   100.00 |  100.00 | 
+ℹ       ticketTrend.js                 |  89.06 |    62.50 |  100.00 | 52-58
+ℹ       workspacePolicy.js             | 100.00 |    88.89 |  100.00 | 
+ℹ     generated                        |        |          |         | 
+ℹ      prisma-client                   |        |          |         | 
+ℹ       index.js                       |  96.85 |    33.33 |    0.00 | 347-358
+ℹ       runtime                        |        |          |         | 
+ℹ        library.js                    |  39.16 |    58.40 |   29.61 | 7-8 11-17 19 32 34 36 38-41 44 46-51 53-56 58-63 65 67-109 115-120 127-129
+ℹ     models                           |        |          |         | 
+ℹ      prismaClient.js                 | 100.00 |    50.00 |  100.00 | 
+ℹ     services                         |        |          |         | 
+ℹ      chatClient.js                   |  59.46 |    59.26 |   60.00 | 35-36 47-51 79 122-125 131-162 180-206 208-225 236-253 269-274 288 291-296
+ℹ      orderClient.js                  |  25.00 |    50.00 |    0.00 | 6-26
+ℹ      riskClient.js                   |  31.58 |   100.00 |    0.00 | 5-17
+ℹ  shared                              |        |          |         | 
+ℹ   config                             |        |          |         | 
+ℹ    validate-client.js                | 100.00 |    85.71 |  100.00 | 
+ℹ   src                                |        |          |         | 
+ℹ    agentDashboard.js                 |  98.84 |    73.08 |  100.00 | 39-40
+ℹ    authMiddleware.js                 |  80.43 |    93.02 |   87.50 | 23-24 64-65 97-119
+ℹ    awaitingReply.js                  | 100.00 |    86.67 |  100.00 | 
+ℹ    casePriority.js                   | 100.00 |    88.89 |  100.00 | 
+ℹ    commerceRestrictions.js           |  94.32 |    61.76 |  100.00 | 40 50-51 57 59
+ℹ    customerServiceConfig.js          |  97.83 |    84.38 |  100.00 | 30-31 174-175
+ℹ    env.js                            |  20.00 |   100.00 |    0.00 | 1-8
+ℹ    errors.js                         | 100.00 |    81.82 |  100.00 | 
+ℹ    events.js                         | 100.00 |   100.00 |  100.00 | 
+ℹ    executiveMetrics.js               |  38.60 |   100.00 |    0.00 | 8-13 21-34 36-43 55-86 94-103
+ℹ    index.js                          | 100.00 |   100.00 |  100.00 | 
+ℹ    jwt.js                            | 100.00 |   100.00 |  100.00 | 
+ℹ    pagination.js                     |  62.50 |   100.00 |   50.00 | 14-22
+ℹ    permissions.js                    |  98.29 |    94.12 |  100.00 | 76-77
+ℹ    serializableTransaction.js        | 100.00 |    75.00 |  100.00 | 
+ℹ    servicePolicy.js                  | 100.00 |    98.25 |  100.00 | 
+ℹ    sessionValidation.js              | 100.00 |    89.47 |  100.00 | 
+ℹ    staffDisplay.js                   |  15.38 |    66.67 |   20.00 | 3-20 25-50
+ℹ    staffRoles.js                     | 100.00 |    87.50 |  100.00 | 
+ℹ scripts                              |        |          |         | 
+ℹ  demo-cs-admin.js                    |  21.45 |    82.35 |   56.25 | 178-244 246-383 385-722 724-779 781-859 863-865
+ℹ  secretScan.js                       |  70.00 |    85.71 |   85.71 | 106-150
+ℹ -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ all files                            |  57.77 |    66.03 |   32.55 | 
+ℹ -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ℹ end of coverage report
+
+✖ failing tests:
+
+test at backend\services\order-service\test\attribution-satang.integration.test.js:5:1
+✖ Buyer satang survive atomic completion, Product attribution, audit and duplicate delivery (2778.297ms)
+  PrismaClientInitializationError: 
+  Invalid `productDb.campaign.create()` invocation in
+  C:\ise\Ise\backend\services\order-service\test\attribution-satang.integration.test.js:7:42
+  
+    4 const outbox=require("../src/services/attributionOutboxService");const metrics=require("../../product-service/src/features/campaigns/campaignMetrics");
+    5 test("Buyer satang survive atomic completion, Product attribution, audit and duplicate delivery",async t=>{
+    6  if(!process.env.DATABASE_URL_ORDER || !process.env.DATABASE_URL_PRODUCT){if(process.env.REQUIRE_INTEGRATION==="1")throw Error("test databases required");t.skip("test databases required");return;}
+  → 7  const campaign=await productDb.campaign.create(
+  Can't reach database server at `postgres:5432`
+  
+  Please make sure your database server is running at `postgres:5432`.
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:7615)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\test\attribution-satang.integration.test.js:7:17)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at backend\services\product-service\test\campaign-budget.integration.test.js:54:1
+✖ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite (4100.1223ms)
+  Error: REQUIRE_INTEGRATION=1 set, but PostgreSQL database is not reachable. Skipping is disallowed.
+      at TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaign-budget.integration.test.js:57:11)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at backend\services\product-service\test\campaignValidation.test.js:59:11
+✖ Code Normalization: trims and converts code to UPPERCASE (2726.1924ms)
+  PrismaClientInitializationError: Can't reach database server at `postgres:5432`
+  
+  Please make sure your database server is running at `postgres:5432`.
+      at t (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:112:2488)
+      at async _r.transaction (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:111:11891)
+      at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:7924)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignValidation.test.js:71:7)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignValidation.test.js:59:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

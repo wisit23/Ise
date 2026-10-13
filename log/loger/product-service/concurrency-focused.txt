@@ -1,0 +1,71 @@
+▶ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite
+  ✔ 1. Ingestion below budget: increments spentBudget and campaign remains published (148.6647ms)
+  ✔ 2. Idempotency: duplicate event delivery does NOT increment spentBudget again (19.2877ms)
+  ✔ 3. Budget threshold reached: transitions campaign to ended, expires CLAIMED vouchers, and writes SYSTEM audit log (50.8519ms)
+  ✔ 4. Post-ended gating: Claim, Applicable, and Quote-and-Hold are strictly rejected (59.7634ms)
+PrismaClientKnownRequestError: Transaction API error: Unable to start a transaction in the given time.
+    at _r.transaction (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:111:12319)
+    at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:7924)
+    at async Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:26)
+    at async recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignController.js:287:20) {
+  code: 'P2028',
+  clientVersion: '5.22.0',
+  meta: { error: 'Unable to start a transaction in the given time.' }
+}
+  ✖ 5. Real PostgreSQL Concurrency: concurrent completed events perform atomic increment of spentBudget (2144.2759ms)
+✖ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite (4621.2262ms)
+▶ Marketing Audit Trail Integration Suite (PostgreSQL)
+  ✔ RBAC: Marketing-only authorization, 401 unauthenticated, 403 for Buyer, Seller, Admin, permission bypass prevention, and anti-spoofing (2137.9028ms)
+  ✔ Read-only contract: Client write/update/delete endpoints do not exist (16.6434ms)
+  ✔ Campaign lifecycle: Atomic mutations for CREATE, UPDATE, SUBMIT, APPROVE, REJECT, PUBLISH, END (267.6956ms)
+  ✔ Automatic SYSTEM actions: CAMPAIGN_END and AUCTION_ITEM_CLOSE with deterministic idempotencyKey (194.1676ms)
+  ✖ Concurrent retry deduplication: Promise.all creates no duplicate audit and no 25P02 error (2014.0997ms)
+  ✔ Transaction atomicity: Audit failure rolls back business mutation, failed mutation creates no audit (27.6499ms)
+[product-service] chat notification failed for item 77166e63-f8b1-454a-b0d2-4fcb3ae70088: fetch failed
+  ✔ Auction lifecycle: AUCTION_ROUND_CREATE, ITEM_APPROVE, ITEM_REJECT, ITEM_SCHEDULE, ITEM_CANCEL, ITEM_CLOSE (3001.2045ms)
+  ✔ Article lifecycle: CREATE, UPDATE, PUBLISH, ARCHIVE, DELETE audit (99.5692ms)
+  ✔ API Filtering and date range semantics: [from, to) interval, same-day, month boundary, invalid range, pagination (45.8365ms)
+  ✔ Sanitizer verification: No secrets present in audit logs or API output (9.859ms)
+✖ Marketing Audit Trail Integration Suite (PostgreSQL) (9953.3963ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 13
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10694.4272
+
+✖ failing tests:
+
+test at test\campaign-budget.integration.test.js:335:11
+✖ 5. Real PostgreSQL Concurrency: concurrent completed events perform atomic increment of spentBudget (2144.2759ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  500 !== 200
+  
+      at TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaign-budget.integration.test.js:381:16)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaign-budget.integration.test.js:335:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 500,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\marketing-audit.integration.test.js:520:11
+✖ Concurrent retry deduplication: Promise.all creates no duplicate audit and no 25P02 error (2014.0997ms)
+  PrismaClientKnownRequestError: Transaction API error: Unable to start a transaction in the given time.
+      at _r.transaction (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:111:12319)
+      at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:7924)
+      at async Promise.all (index 3)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\marketing-audit.integration.test.js:543:27)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\marketing-audit.integration.test.js:520:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

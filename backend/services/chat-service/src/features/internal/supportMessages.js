@@ -72,9 +72,13 @@ async function importMessage(req, res, next) {
     if (data.chatMessageId && !/^[a-f\d]{24}$/i.test(data.chatMessageId)) throw badRequest("Invalid chatMessageId");
     const id = data.chatMessageId || keyedId(conversation.id, `legacy-support:${data.sourceId}`);
     const visibility = data.isInternal ? "INTERNAL" : "ALL";
+    const senderRole = data.authorRole === "REQUESTER" ? "BUYER" : data.authorRole;
     const verify = (message) => {
+      // Legacy Support collapsed ADMIN/T&S into AGENT; keep the richer original Chat role.
+      const roleMatches = message.senderRole === senderRole || (data.chatMessageId &&
+        ["AGENT", "REQUESTER"].includes(data.authorRole) && ["AGENT", "ADMIN", "TRUST_AND_SAFETY", "CUSTOMER_SERVICE"].includes(message.senderRole));
       if (message.conversationId !== conversation.id || message.senderId !== data.authorId ||
-        message.visibility !== visibility || (!data.chatMessageId && (message.body !== data.body || +new Date(message.createdAt) !== +at)))
+        !roleMatches || message.visibility !== visibility || (!data.chatMessageId && (message.body !== data.body || +new Date(message.createdAt) !== +at)))
         throw new AppError(409, "Imported message differs from Chat record");
       return res.status(200).json(message);
     };
@@ -85,9 +89,9 @@ async function importMessage(req, res, next) {
     let message;
     try {
       message = await prisma.message.create({ data: { id, conversationId: conversation.id,
-        senderId: data.authorId, senderRole: data.authorRole === "REQUESTER" ? "BUYER" : data.authorRole,
+        senderId: data.authorId, senderRole,
         type: "TEXT", body: data.body, visibility, createdAt: at, deletedAt: null,
-        payload: { legacySupportMessageId: data.sourceId }, syncStatus: "PENDING", syncAttempts: 0 } });
+        payload: { legacySupportMessageId: data.sourceId }, syncStatus: "SYNCED", syncedAt: new Date(), syncAttempts: 0 } });
     } catch (error) {
       if (error.code === "P2002") {
         const duplicate = await prisma.message.findUnique({ where: { id } });

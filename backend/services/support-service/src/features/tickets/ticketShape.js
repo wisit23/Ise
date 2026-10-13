@@ -1,4 +1,5 @@
 // Normalize persistence rows into the API shape used by the existing UI.
+const events = require("./ticketEvents");
 const ticketInclude = {
   category: true,
   priority: true,
@@ -16,6 +17,7 @@ const ticketInclude = {
     orderBy: { createdAt: "desc" },
   },
   slaTargets: true,
+  auditLog: { where: { action: { in: events.STATE_EVENTS } } },
   chatLink: true,
 };
 
@@ -29,19 +31,19 @@ function toTicket(row) {
     statusHistory = [],
     slaTargets = [],
     chatLink,
+    auditLog = [],
     ...core
   } = row;
-  const latestTargets = [...slaTargets].sort(
-    (a, b) => (b.cycle ?? 1) - (a.cycle ?? 1),
-  );
+  const latestTargets = events.effectiveTargets(slaTargets, auditLog);
   const response = latestTargets.find((t) => t.metricType === "FIRST_RESPONSE");
   const resolution = latestTargets.find((t) => t.metricType === "RESOLUTION");
-  const pending = slaTargets
+  const pending = latestTargets
     .filter((t) => !t.achievedAt)
     .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
   const latest = (code) => statusHistory.find((h) => h.toStatus.code === code);
   return {
     ...core,
+    ...events.state(auditLog),
     sla:
       currentStatus?.code === "CLOSED" || currentStatus?.code === "RESOLVED"
         ? { state: "complete", dueAt: null, metric: null }

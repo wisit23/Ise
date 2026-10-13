@@ -1,0 +1,39 @@
+▶ Auction Core, Concurrency, Soft Close & BullMQ Integration Suite
+  ✔ Step 1: Seller submits product to active round -> persists in PostgreSQL with status 'auction' (360.3439ms)
+  ✔ Step 2: Admin Decoupling & Marketing Approval -> direct to 'scheduled' and BullMQ booked (315.3685ms)
+  ✔ Step 3: Bidding rules & PostgreSQL persistence (505.1669ms)
+  ✔ Step 4: Idempotency Key DB constraint prevents duplicate bids on retry (523.5431ms)
+  ✔ Step 5: Concurrent bidding serialized by pg_advisory_xact_lock (249.2802ms)
+  ✔ Step 6: Anti-Sniping Soft Close extends scheduledEndAt by +5m in PostgreSQL (237.9418ms)
+  ✔ Step 7: Auction Close with Winner -> calls Order Client once and records winningOrderId (262.016ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 8: Real BullMQ delayed worker execution & idempotent re-close prevents duplicate orders (1665.5301ms)
+  ✔ Step 9: No-bid Auction close transitions product status to 'auction_action_required' (MKT-DEC-026) (289.7642ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 10: Concurrent Auction Rounds Creation & Deterministic Selection (MKT-DEC-025) (2443.3726ms)
+  ✔ Step 11: Atomic Product & AuctionItem Creation (Flow B) in PostgreSQL single transaction (147.5092ms)
+  ✔ Step 12: Atomic Rollback & Pre-creation Validation -> Rejects before creating Product in DB (149.5761ms)
+  ✔ Step 13: Category & KYC Pre-validation -> Rejection before database writes (133.7432ms)
+  ✔ Step 14: Flow A (Existing Product) Enforces DB Category & Ignores Client Category (410.2786ms)
+  ✔ Step 15: Backward Compatibility - Round with empty categories accepts any valid category (106.0021ms)
+  ✔ Step 16: Transaction Rollback when round expires between pre-validation and transaction (76.0376ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 17: Multi-Round Concurrent Overlap, Explicit Selection, Item Isolation & Independent Bidding (MKT-DEC-025) (3009.7086ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 18: Single-Item Cancellation vs Other Items in Same Round & Audit Log (MKT-DEC-026) (619.6208ms)
+  ✔ Step 19: Race Conditions across Cancel Item, Cancel Round, PlaceBid, and CloseAuction (MKT-DEC-026) (764.0879ms)
+  ✔ Step 20: Seller Recovery Concurrency Protection - Concurrent Resubmit & Resubmit vs Relist (MKT-DEC-026) (398.8805ms)
+  ✔ Step 21: Submit vs CancelRound Serialization under Round Mutation Lock (MKT-DEC-026) (776.3998ms)
+✔ Auction Core, Concurrency, Soft Close & BullMQ Integration Suite (17878.2986ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19054.1696

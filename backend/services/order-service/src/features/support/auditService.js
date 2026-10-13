@@ -1,6 +1,7 @@
 const { Prisma } = require("../../generated/prisma-client");
 const { badRequest } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
+const { decodeLog } = require("../../models/disputeWorkflowClient");
 
 function parseDate(value, label) {
   if (!value) return null;
@@ -36,7 +37,20 @@ async function queryHoldAudit({
 }) {
   const where = {
     ...(actorId ? { actorId } : {}),
-    ...(action ? { action: ({HOLD:"HOLD_PLACED",RELEASE:"HOLD_RELEASED",EVIDENCE_VIEWED:"ADMIN_EVIDENCE_VIEWED"})[action] || action } : {action:{in:["HOLD_PLACED","HOLD_RELEASED","ADMIN_EVIDENCE_VIEWED"]}}),
+    ...(action
+      ? {
+          action:
+            {
+              HOLD: "HOLD_PLACED",
+              RELEASE: "HOLD_RELEASED",
+              EVIDENCE_VIEWED: "ADMIN_EVIDENCE_VIEWED",
+            }[action] || action,
+        }
+      : {
+          action: {
+            in: ["HOLD_PLACED", "HOLD_RELEASED", "ADMIN_EVIDENCE_VIEWED"],
+          },
+        }),
     ...(targetId ? { orderId: targetId } : {}),
     ...dateWhere(from, to),
   };
@@ -64,7 +78,12 @@ async function queryHoldAudit({
       eventId: row.id,
       id: row.id,
       actorId: row.actorId,
-      action: ({HOLD_PLACED:"HOLD",HOLD_RELEASED:"RELEASE",ADMIN_EVIDENCE_VIEWED:"EVIDENCE_VIEWED"})[row.action] || row.action,
+      action:
+        {
+          HOLD_PLACED: "HOLD",
+          HOLD_RELEASED: "RELEASE",
+          ADMIN_EVIDENCE_VIEWED: "EVIDENCE_VIEWED",
+        }[row.action] || row.action,
       targetType: "ORDER",
       targetId: row.orderId,
       caseId: caseByOrder.get(row.orderId) || null,
@@ -77,25 +96,52 @@ async function queryHoldAudit({
   };
 }
 
-async function queryDisputeAudit({page,limit,actorId,action,targetId,caseId,from,to}) {
-  const dates=dateWhere(from,to).createdAt || {};
-  const clauses=[Prisma.sql`true`];
-  if(actorId)clauses.push(Prisma.sql`actor_id=${actorId}`);
-  if(action)clauses.push(Prisma.sql`action=${action}`);
-  if(targetId)clauses.push(Prisma.sql`order_id=${targetId}`);
-  if(caseId)clauses.push(Prisma.sql`case_id=${caseId}`);
-  if(dates.gte)clauses.push(Prisma.sql`created_at >= ${dates.gte}`);
-  if(dates.lte)clauses.push(Prisma.sql`created_at <= ${dates.lte}`);
-  const base=Prisma.sql`SELECT l.id,l.dispute_case_id AS case_id,l.actor_id,l.action,l.detail,l.created_at,d.order_id
-    FROM dispute_case_log l JOIN dispute_case d ON d.id=l.dispute_case_id
+async function queryDisputeAudit({
+  page,
+  limit,
+  actorId,
+  action,
+  targetId,
+  caseId,
+  from,
+  to,
+}) {
+  const dates = dateWhere(from, to).createdAt || {};
+  const clauses = [Prisma.sql`true`];
+  if (actorId) clauses.push(Prisma.sql`actor_id=${actorId}`);
+  if (action) clauses.push(Prisma.sql`action=${action}`);
+  if (targetId) clauses.push(Prisma.sql`order_id=${targetId}`);
+  if (caseId) clauses.push(Prisma.sql`case_id=${caseId}`);
+  if (dates.gte) clauses.push(Prisma.sql`created_at >= ${dates.gte}`);
+  if (dates.lte) clauses.push(Prisma.sql`created_at <= ${dates.lte}`);
+  const base = Prisma.sql`SELECT l.dispute_case_log_id AS id,l.dispute_case_id AS case_id,l.actor_id,l.action,l.detail,l.created_at,d.order_id
+    FROM dispute_case_log l JOIN dispute_case d ON d.dispute_case_id=l.dispute_case_id
+    WHERE l.action <> 'WORKFLOW_STATE'
     UNION ALL SELECT l.dispute_audit_log_id AS id,e.dispute_case_id AS case_id,l.actor_id,l.action,l.detail,l.created_at,d.order_id
-    FROM dispute_audit_log l JOIN dispute_evidence e ON e.dispute_evidence_id=l.dispute_evidence_id JOIN dispute_case d ON d.id=e.dispute_case_id`;
-  const filter=Prisma.join(clauses,' AND ');
-  const [rows,counts]=await Promise.all([
-    prisma.$queryRaw`SELECT * FROM (${base}) events WHERE ${filter} ORDER BY created_at DESC,id DESC LIMIT ${limit} OFFSET ${(page-1)*limit}`,
-    prisma.$queryRaw`SELECT count(*)::int AS total FROM (${base}) events WHERE ${filter}`
+    FROM dispute_audit_log l JOIN dispute_evidence e ON e.dispute_evidence_id=l.dispute_id JOIN dispute_case d ON d.dispute_case_id=e.dispute_case_id`;
+  const filter = Prisma.join(clauses, " AND ");
+  const [rows, counts] = await Promise.all([
+    prisma.$queryRaw`SELECT * FROM (${base}) events WHERE ${filter} ORDER BY created_at DESC,id DESC LIMIT ${limit} OFFSET ${(page - 1) * limit}`,
+    prisma.$queryRaw`SELECT count(*)::int AS total FROM (${base}) events WHERE ${filter}`,
   ]);
-  return {total:counts[0].total,items:rows.map(row=>({source:"ORDER_DISPUTE",eventId:row.id,id:row.id,actorId:row.actor_id,action:row.action,targetType:"ORDER",targetId:row.order_id,caseId:row.case_id,reason:row.detail,occurredAt:row.created_at,createdAt:row.created_at,requestId:null,operationId:null}))};
+  return {
+    total: counts[0].total,
+    items: rows.map((row) => ({
+      source: "ORDER_DISPUTE",
+      eventId: row.id,
+      id: row.id,
+      actorId: row.actor_id,
+      action: row.action,
+      targetType: "ORDER",
+      targetId: row.order_id,
+      caseId: row.case_id,
+      reason: decodeLog(row).detail,
+      occurredAt: row.created_at,
+      createdAt: row.created_at,
+      requestId: null,
+      operationId: null,
+    })),
+  };
 }
 
 async function queryAudit({ kind, ...filters }) {

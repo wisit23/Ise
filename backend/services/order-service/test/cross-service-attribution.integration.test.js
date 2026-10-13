@@ -105,14 +105,6 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
 
     // Clean up order-service outbox and orders in reloop_order
     try {
-      await orderPrisma.attributionOutboxEvent.deleteMany({
-        where: { campaignId: { startsWith: TEST_PREFIX } },
-      });
-    } catch (err) {
-      // Best-effort cleanup of test outbox events in reloop_order
-      cleanupErrors.push(err);
-    }
-    try {
       await orderPrisma.orderLog.deleteMany({
         where: { order: { buyerId: { startsWith: TEST_PREFIX } } },
       });
@@ -247,7 +239,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
       outboxEvent = transitionResult.attributionEvent;
 
       // Query reloop_order directly: outbox event must exist with processedAt = null
-      const outboxInDb = await orderPrisma.attributionOutboxEvent.findUnique({
+      const outboxInDb = await orderPrisma.attributionJob.findUnique({
         where: { orderId: campaignOrder.id },
       });
       assert.ok(outboxInDb);
@@ -282,7 +274,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
       assert.equal(delivered.lastError, null);
 
       // Query reloop_order PostgreSQL database directly to verify state change
-      const outboxRow = await orderPrisma.attributionOutboxEvent.findUnique({
+      const outboxRow = await orderPrisma.attributionJob.findUnique({
         where: { id: outboxEvent.id },
       });
       assert.ok(outboxRow.processedAt);
@@ -454,7 +446,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
       );
 
       // Verify in reloop_order PostgreSQL: attempts incremented, lastError persisted, processedAt remains null
-      const rowInDb = await orderPrisma.attributionOutboxEvent.findUnique({
+      const rowInDb = await orderPrisma.attributionJob.findUnique({
         where: { id: outbox2.id },
       });
       assert.equal(rowInDb.processedAt, null);
@@ -467,23 +459,20 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
   await t.test(
     "Step 8: Worker Sweep: processPendingEvents recovers and sweeps backed-off events over real HTTP to reloop_product",
     async () => {
-      // Find the backed-off event from Step 7 and reset nextAttemptAt to the past
-      const pendingEvent = await orderPrisma.attributionOutboxEvent.findFirst({
-        where: { order: { buyerId: `${TEST_BUYER_ID}-2` }, processedAt: null },
+      // Advance the clock rather than mutate append-only retry history.
+      const pendingOrder = await orderPrisma.order.findFirst({ where: { buyerId: `${TEST_BUYER_ID}-2` } });
+      const pendingEvent = await orderPrisma.attributionJob.findFirst({
+        where: { orderId: pendingOrder.id, processedAt: null },
       });
       assert.ok(pendingEvent);
-
-      await orderPrisma.attributionOutboxEvent.update({
-        where: { id: pendingEvent.id },
-        data: { nextAttemptAt: new Date(Date.now() - 5000) },
-      });
 
       // Execute worker sweep with genuine productClient over real HTTP
       const processedResults =
         await attributionOutboxService.processPendingEvents({
           db: orderPrisma,
           client: productClient,
-          limit: 10,
+          take: 10,
+          now: new Date(pendingEvent.nextAttemptAt.getTime() + 1),
         });
 
       const matchingResult = processedResults.find(
@@ -494,7 +483,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
       assert.equal(matchingResult.value.lastError, null);
 
       // Verify reloop_order PostgreSQL state
-      const updatedOutbox = await orderPrisma.attributionOutboxEvent.findUnique(
+      const updatedOutbox = await orderPrisma.attributionJob.findUnique(
         {
           where: { id: pendingEvent.id },
         },
@@ -546,7 +535,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
       assert.equal(transition.attributionEvent, null);
 
       // Direct PostgreSQL query in reloop_order: ensure no outbox row exists
-      const outboxRow = await orderPrisma.attributionOutboxEvent.findUnique({
+      const outboxRow = await orderPrisma.attributionJob.findUnique({
         where: { orderId: noCampOrder.id },
       });
       assert.equal(outboxRow, null);

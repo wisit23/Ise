@@ -22,6 +22,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL_PRODUCT;
 
 const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
+const campaignRepository = require("../src/features/campaigns/campaignRepository");
 const app = require("../src/app");
 app.locals.validateAccessSession = async () => {};
 
@@ -121,7 +122,6 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
         discountValue: 100,
         minOrderPrice: 200,
         budget: 500,
-        spentBudget: 0,
         status: "published",
         startsAt: new Date(Date.now() - 3600_000),
         endsAt: new Date(Date.now() + 86400_000),
@@ -198,10 +198,8 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
       assert.equal(res.body.success, true);
       assert.equal(res.body.recorded, true);
 
-      // Verify in PostgreSQL: spentBudget incremented to 200, status still published
-      const campaign = await prisma.campaign.findUnique({
-        where: { id: TEST_CAMPAIGN_ID },
-      });
+      // Verify the public repository projection derives the real database SUM.
+      const campaign = await campaignRepository.findById(TEST_CAMPAIGN_ID);
       assert.ok(campaign);
       assert.equal(Number(campaign.spentBudget), 200);
       assert.equal(campaign.status, "published");
@@ -226,10 +224,8 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
       assert.equal(res.body.success, true);
       assert.equal(res.body.deduplicated, true);
 
-      // Verify spentBudget remains 200 (not 400)
-      const campaign = await prisma.campaign.findUnique({
-        where: { id: TEST_CAMPAIGN_ID },
-      });
+      // Duplicate delivery leaves the SUM unchanged.
+      const campaign = await campaignRepository.findById(TEST_CAMPAIGN_ID);
       assert.equal(Number(campaign.spentBudget), 200);
       assert.equal(campaign.status, "published");
     },
@@ -263,10 +259,8 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
       assert.equal(res.body.success, true);
       assert.equal(res.body.recorded, true);
 
-      // Verify campaign status updated to ended and spentBudget is 500
-      const campaign = await prisma.campaign.findUnique({
-        where: { id: TEST_CAMPAIGN_ID },
-      });
+      // Threshold transitions remain atomic with the attribution SUM.
+      const campaign = await campaignRepository.findById(TEST_CAMPAIGN_ID);
       assert.equal(Number(campaign.spentBudget), 500);
       assert.equal(campaign.status, "ended");
 
@@ -351,7 +345,6 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
           discountValue: 100,
           minOrderPrice: 200,
           budget: 10000,
-          spentBudget: 0,
           status: "published",
           startsAt: new Date(Date.now() - 3600_000),
           endsAt: new Date(Date.now() + 86400_000),
@@ -389,10 +382,8 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
         assert.equal(res.body.success, true);
       }
 
-      // Verify in PostgreSQL: spentBudget must be exactly 5 * 150 = 750
-      const campaign = await prisma.campaign.findUnique({
-        where: { id: CONCURRENT_CAMPAIGN_ID },
-      });
+      // Concurrent completed events must sum to exactly 5 * 150 = 750.
+      const campaign = await campaignRepository.findById(CONCURRENT_CAMPAIGN_ID);
       assert.equal(Number(campaign.spentBudget), 750);
 
       // Verify all 5 attribution facts are persisted

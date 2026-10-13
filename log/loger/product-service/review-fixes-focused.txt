@@ -1,0 +1,58 @@
+▶ approved Product ER through actual HTTP consumers and PostgreSQL
+  ✔ M:N category create, filter secondary, edit, composite key and condition FK (2457.8631ms)
+PrismaClientUnknownRequestError: 
+Invalid `tx.marketingAuditLog.create()` invocation in
+C:\ise\Ise\backend\services\product-service\src\features\moderation\moderationService.js:141:32
+
+  138 if (!product) throw notFound("product not found");
+  139 const updated = await mutate(tx, product);
+  140 const result = jsonResult(updated);
+→ 141 await tx.marketingAuditLog.create(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "P0001", message: "injected audit failure", severity: "ERROR", detail: None, column: None, hint: None }), transient: false })
+    at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:7505)
+    at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+    at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+    at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+    at async C:\ise\Ise\backend\services\product-service\src\features\moderation\moderationService.js:141:5
+    at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:8000)
+    at async C:\ise\Ise\backend\services\product-service\src\features\moderation\moderationRoutes.js:41:21 {
+  clientVersion: '5.22.0'
+}
+  ✔ moderation same-key concurrency, conflict, atomic audit rollback/retry and marketing isolation (186.0355ms)
+PrismaClientUnknownRequestError: 
+Invalid `client.marketingAuditLog.createMany()` invocation in
+C:\ise\Ise\backend\services\product-service\src\features\audit\marketingAuditRepository.js:75:38
+
+  72 // For automatic/retryable actions with idempotencyKey, use createMany with skipDuplicates: true.
+  73 // In PostgreSQL, this issues "INSERT INTO ... ON CONFLICT DO NOTHING" which does NOT abort
+  74 // the surrounding transaction block on duplicate collision (avoiding PostgreSQL 25P02 error).
+→ 75 await client.marketingAuditLog.createMany(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "P0001", message: "injected audit failure", severity: "ERROR", detail: None, column: None, hint: None }), transient: false })
+    at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:7505)
+    at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+    at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+    at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+    at async recordAudit (C:\ise\Ise\backend\services\product-service\src\features\audit\marketingAuditRepository.js:75:7)
+    at async C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:218:17
+    at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:8000)
+    at async Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:26)
+    at async recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignController.js:287:20) {
+  clientVersion: '5.22.0'
+}
+[sellerActivityClient] failed to record activity for seller er-seller: getaddrinfo ENOTFOUND auth-service
+  ✔ attribution threshold audit failure rolls back fact/status/vouchers; retry and exact decimal SUM (150.0561ms)
+[sellerActivityClient] failed to record activity for seller er-seller: getaddrinfo ENOTFOUND auth-service
+  ✔ auction metadata and cancellation are projected from atomic audit state, including concurrent retry (2392.7085ms)
+  ✔ review POST/read preserves ordered image/video media (Order provider stub) (28.8144ms)
+✔ approved Product ER through actual HTTP consumers and PostgreSQL (7347.7015ms)
+✔ legacy Review DB (photos/videos tables) migrates into review_media idempotently (6759.0937ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 17446.8611

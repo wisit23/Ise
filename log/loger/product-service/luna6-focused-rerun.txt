@@ -1,0 +1,175 @@
+▶ Auction Core, Concurrency, Soft Close & BullMQ Integration Suite
+  ✔ Step 1: Seller submits product to active round -> persists in PostgreSQL with status 'auction' (220.5569ms)
+  ✔ Step 2: Admin Decoupling & Marketing Approval -> direct to 'scheduled' and BullMQ booked (205.6279ms)
+  ✔ Step 3: Bidding rules & PostgreSQL persistence (389.3666ms)
+  ✔ Step 4: Idempotency Key DB constraint prevents duplicate bids on retry (365.6426ms)
+  ✔ Step 5: Concurrent bidding serialized by pg_advisory_xact_lock (332.955ms)
+  ✔ Step 6: Anti-Sniping Soft Close extends scheduledEndAt by +5m in PostgreSQL (156.5886ms)
+  ✔ Step 7: Auction Close with Winner -> calls Order Client once and records winningOrderId (209.3135ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 8: Real BullMQ delayed worker execution & idempotent re-close prevents duplicate orders (1571.8234ms)
+  ✔ Step 9: No-bid Auction close transitions product status to 'auction_action_required' (MKT-DEC-026) (248.081ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 10: Concurrent Auction Rounds Creation & Deterministic Selection (MKT-DEC-025) (2247.2725ms)
+  ✔ Step 11: Atomic Product & AuctionItem Creation (Flow B) in PostgreSQL single transaction (199.1029ms)
+  ✔ Step 12: Atomic Rollback & Pre-creation Validation -> Rejects before creating Product in DB (156.4403ms)
+  ✔ Step 13: Category & KYC Pre-validation -> Rejection before database writes (52.4746ms)
+  ✖ Step 14: Flow A (Existing Product) Enforces DB Category & Ignores Client Category (174.7482ms)
+  ✔ Step 15: Backward Compatibility - Round with empty categories accepts any valid category (322.5931ms)
+  ✔ Step 16: Transaction Rollback when round expires between pre-validation and transaction (124.1603ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 17: Multi-Round Concurrent Overlap, Explicit Selection, Item Isolation & Independent Bidding (MKT-DEC-025) (2980.0138ms)
+  ✔ Step 18: Single-Item Cancellation vs Other Items in Same Round & Audit Log (MKT-DEC-026) (546.7298ms)
+  ✔ Step 19: Race Conditions across Cancel Item, Cancel Round, PlaceBid, and CloseAuction (MKT-DEC-026) (498.6822ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✖ Step 20: Seller Recovery Concurrency Protection - Concurrent Resubmit & Resubmit vs Relist (MKT-DEC-026) (43.9469ms)
+[sellerActivityClient] failed to record activity for seller seller-auction-test-01: getaddrinfo ENOTFOUND auth-service
+  ✔ Step 21: Submit vs CancelRound Serialization under Round Mutation Lock (MKT-DEC-026) (810.6479ms)
+✖ Auction Core, Concurrency, Soft Close & BullMQ Integration Suite (16224.3381ms)
+▶ Campaign Metrics, Attribution & Conversion Suite
+  ✔ recordOrderCompletedEvent: ignores orders without campaign (17.5811ms)
+  ✔ recordOrderCompletedEvent: records attribution and deduplicates retries (idempotency) (2.9309ms)
+  ✔ validateDateRange: rejects invalid date and from > to (1.4939ms)
+  ✔ getCampaignMetrics: calculates conversion rate (redeemedCount / claimedCount * 100) (1.4746ms)
+  ✔ getCampaignMetrics: returns 0 values for campaign with no orders (no error) (2.1709ms)
+  ✔ getOverviewMetrics: aggregates revenue and orders across all campaigns (0.7614ms)
+  ✔ getSalesTrends: groups metrics by daily series (2.1091ms)
+  ✔ Prisma model persistence: records attribution, handles envelope, and deduplicates retries (1.3631ms)
+  ✔ Prisma model persistence: propagates DB errors instead of swallowing (0.9086ms)
+  ✔ Idempotency conflict: returns 409 Conflict when pre-check finds conflicting attribution fields (1.4852ms)
+  ✔ Idempotency conflict & deduplication on P2002 race recovery (0.8466ms)
+  ✔ production path: fails loudly if Prisma client lacks campaignAttribution model (0.8615ms)
+  ✔ identity conflict: reusing eventId with different orderId returns 409 even when monetary fields match (1.3133ms)
+✔ Campaign Metrics, Attribution & Conversion Suite (40.6114ms)
+▶ approved Product ER through actual HTTP consumers and PostgreSQL
+  ✔ M:N category create, filter secondary, edit, composite key and condition FK (2404.1777ms)
+PrismaClientUnknownRequestError: 
+Invalid `tx.marketingAuditLog.create()` invocation in
+C:\ise\Ise\backend\services\product-service\src\features\moderation\moderationService.js:141:32
+
+  138 if (!product) throw notFound("product not found");
+  139 const updated = await mutate(tx, product);
+  140 const result = jsonResult(updated);
+→ 141 await tx.marketingAuditLog.create(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "P0001", message: "injected audit failure", severity: "ERROR", detail: None, column: None, hint: None }), transient: false })
+    at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:7505)
+    at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+    at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+    at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+    at async C:\ise\Ise\backend\services\product-service\src\features\moderation\moderationService.js:141:5
+    at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:8000)
+    at async C:\ise\Ise\backend\services\product-service\src\features\moderation\moderationRoutes.js:41:21 {
+  clientVersion: '5.22.0'
+}
+  ✔ moderation same-key concurrency, conflict, atomic audit rollback/retry and marketing isolation (191.6281ms)
+PrismaClientUnknownRequestError: 
+Invalid `client.marketingAuditLog.createMany()` invocation in
+C:\ise\Ise\backend\services\product-service\src\features\audit\marketingAuditRepository.js:71:38
+
+  68 // For automatic/retryable actions with idempotencyKey, use createMany with skipDuplicates: true.
+  69 // In PostgreSQL, this issues "INSERT INTO ... ON CONFLICT DO NOTHING" which does NOT abort
+  70 // the surrounding transaction block on duplicate collision (avoiding PostgreSQL 25P02 error).
+→ 71 await client.marketingAuditLog.createMany(
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "P0001", message: "injected audit failure", severity: "ERROR", detail: None, column: None, hint: None }), transient: false })
+    at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:7505)
+    at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+    at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+    at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+    at async recordAudit (C:\ise\Ise\backend\services\product-service\src\features\audit\marketingAuditRepository.js:71:7)
+    at async C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:218:17
+    at async Proxy._transactionWithCallback (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:8000)
+    at async Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:26)
+    at async recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignController.js:287:20) {
+  clientVersion: '5.22.0'
+}
+[sellerActivityClient] failed to record activity for seller er-seller: getaddrinfo ENOTFOUND auth-service
+  ✔ attribution threshold audit failure rolls back fact/status/vouchers; retry and exact decimal SUM (230.9465ms)
+[sellerActivityClient] failed to record activity for seller er-seller: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller er-seller: getaddrinfo ENOTFOUND auth-service
+  ✔ auction metadata and cancellation are projected from atomic audit state, including concurrent retry (6711.4134ms)
+  ✔ review POST/read preserves ordered image/video media (Order provider stub) (64.0817ms)
+✔ approved Product ER through actual HTTP consumers and PostgreSQL (11857.3581ms)
+✔ product CRUD against a real database (4544.0837ms)
+ℹ tests 43
+ℹ suites 0
+ℹ pass 40
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18967.8714
+
+✖ failing tests:
+
+test at test\auction.integration.test.js:1456:11
+✖ Step 14: Flow A (Existing Product) Enforces DB Category & Ignores Client Category (174.7482ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  400 !== 201
+  
+      at TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1525:14)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1456:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 400,
+    expected: 201,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at test\auction.integration.test.js:2288:11
+✖ Step 20: Seller Recovery Concurrency Protection - Concurrent Resubmit & Resubmit vs Relist (MKT-DEC-026) (43.9469ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionItem.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:2311:55
+  
+    2308   "Seller Recovery Product",
+    2309   "auction_action_required",
+    2310 );
+  → 2311 const historicalItem = await prisma.auctionItem.create({
+           data: {
+             productId: "8ca72a70-81af-423f-b264-982c33f64655",
+             sellerId: "seller-auction-test-01",
+             roundId: "79caaed5-1275-4f52-b9b1-24a6d15c2463",
+             startingPrice: 500,
+             bidIncrement: 50,
+             status: "cancelled",
+             cancellationReason: "ยกเลิกรอบเก่า",
+             ~~~~~~~~~~~~~~~~~~
+             cancelledAt: new Date("2026-10-13T10:51:36.104Z"),
+             cancelledBy: "marketing-auction-lead-01",
+         ?   id?: String,
+         ?   scheduledStartAt?: DateTime | Null,
+         ?   scheduledEndAt?: DateTime | Null,
+         ?   openedAt?: DateTime | Null,
+         ?   closedAt?: DateTime | Null,
+         ?   approvedBy?: String | Null,
+         ?   approvedAt?: DateTime | Null,
+         ?   winningBidId?: String | Null,
+         ?   winningOrderId?: String | Null,
+         ?   createdAt?: DateTime,
+         ?   updatedAt?: DateTime,
+         ?   bids?: BidUncheckedCreateNestedManyWithoutAuctionInput
+           }
+         })
+  
+  Unknown argument `cancellationReason`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:2311:30)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:2288:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

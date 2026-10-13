@@ -5,4 +5,4 @@ const prisma = new PrismaClient({
   ...(databaseUrl ? { datasources: { db: { url: databaseUrl } } } : {}),
 });
 
-module.exports = prisma;
+module.exports = require("./erClient").wrapClient(prisma);

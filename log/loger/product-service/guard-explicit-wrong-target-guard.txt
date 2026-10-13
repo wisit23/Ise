@@ -1,0 +1,30 @@
+C:\ise\Ise\backend\services\product-service\test\er-alignment.integration.test.js:13
+  if (process.env.PRODUCT_ER_REHEARSAL === '1') throw new Error('Isolated Product rehearsal database on 127.0.0.1:55439 required');
+                                                ^
+
+Error: Isolated Product rehearsal database on 127.0.0.1:55439 required
+    at Object.<anonymous> (C:\ise\Ise\backend\services\product-service\test\er-alignment.integration.test.js:13:55)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+
+Node.js v24.20.0
+✖ backend\services\product-service\test\er-alignment.integration.test.js (211.5306ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 218.9697
+
+✖ failing tests:
+
+test at backend\services\product-service\test\er-alignment.integration.test.js:1:1
+✖ backend\services\product-service\test\er-alignment.integration.test.js (211.5306ms)
+  'test failed'

@@ -114,20 +114,21 @@ async function executeCommand({
     // Same-key commands serialize even when two Auth retries arrive together.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${idempotencyKey}))`;
 
-    const existing = await tx.productModerationCommand.findUnique({
+    const existing = await tx.marketingAuditLog.findUnique({
       where: { idempotencyKey },
     });
     if (existing) {
       if (
         existing.action !== action ||
-        existing.productId !== productId ||
-        existing.payloadHash !== payloadHash
+        existing.entityType !== "PRODUCT_MODERATION" ||
+        existing.entityId !== productId ||
+        existing.metadata?.payloadHash !== payloadHash
       ) {
         throw conflict(
           "idempotency key was already used with a different moderation command",
         );
       }
-      return existing.result;
+      return existing.metadata.result;
     }
 
     // Different moderation keys for the same product must also serialize.
@@ -137,13 +138,18 @@ async function executeCommand({
     if (!product) throw notFound("product not found");
     const updated = await mutate(tx, product);
     const result = jsonResult(updated);
-    await tx.productModerationCommand.create({
+    await tx.marketingAuditLog.create({
       data: {
         idempotencyKey,
         action,
-        productId,
-        payloadHash,
-        result,
+        entityType: "PRODUCT_MODERATION",
+        entityId: productId,
+        // The caller contract supplies no human actor ID. Do not invent one.
+        actorId: "AUTH_SERVICE",
+        actorRole: "INTERNAL_SERVICE",
+        previousState: jsonResult(product),
+        newState: result,
+        metadata: { payloadHash, result, reason: reason.trim() },
       },
     });
     return result;

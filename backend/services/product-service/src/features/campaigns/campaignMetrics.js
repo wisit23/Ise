@@ -1,6 +1,7 @@
 const { badRequest, conflict } = require("@reloop/shared");
 const defaultPrisma = require("../../models/prismaClient");
 const { recordAudit } = require("../audit/marketingAuditRepository");
+const { lockCampaign, withSpentBudget } = require("./campaignBudget");
 
 function createCampaignMetricsService(
   prismaClient = defaultPrisma,
@@ -153,11 +154,14 @@ function createCampaignMetricsService(
       assertBalances();
       const runTx =
         typeof prismaClient.$transaction === "function"
-          ? (fn) => prismaClient.$transaction(fn)
+          ? (fn) => prismaClient.$transaction(fn, { maxWait: 10_000 })
           : (fn) => fn(prismaClient);
 
       try {
         const txResult = await runTx(async (tx) => {
+          // Serialize completed events for this campaign before inserting/summing.
+          // Counting still happens at completed-order attribution, never voucher claim.
+          await lockCampaign(tx, campaignId);
           // Re-check existing in tx for race safety
           const inTxExisting = await tx.campaignAttribution.findFirst({
             where: {
@@ -187,12 +191,7 @@ function createCampaignMetricsService(
               where: { id: campaignId },
             });
             if (camp) {
-              const updated = await tx.campaign.update({
-                where: { id: campaignId },
-                data: {
-                  spentBudget: { increment: discountAmount },
-                },
-              });
+              const updated = await withSpentBudget(tx, camp);
 
               // Check if budget reached
               if (
@@ -224,7 +223,7 @@ function createCampaignMetricsService(
                     entityType: "CAMPAIGN",
                     entityId: campaignId,
                     previousState: updated,
-                    newState: endedCampaign,
+                    newState: { ...endedCampaign, spentBudget: updated.spentBudget },
                     metadata: { reason: "BUDGET_REACHED" },
                     idempotencyKey: `CAMPAIGN_END_BUDGET:${campaignId}`,
                   },
@@ -284,7 +283,9 @@ function createCampaignMetricsService(
           where: { id: campaignId },
         });
         if (camp) {
-          camp.spentBudget = (camp.spentBudget || 0) + discountAmount;
+          camp.spentBudget = Array.from(memoryAttributions.values())
+            .filter((fact) => fact.campaignId === campaignId)
+            .reduce((sum, fact) => sum + Math.round(Number(fact.discountAmount) * 100), 0) / 100;
           if (
             camp.budget !== null &&
             camp.budget !== undefined &&

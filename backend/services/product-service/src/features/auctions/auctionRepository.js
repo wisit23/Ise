@@ -1,4 +1,5 @@
 const prisma = require("../../models/prismaClient");
+const { hydrateRound, hydrateItem, splitFields, saveFields, writeRound, writeItem } = require("./auctionAuditState");
 
 /**
  * Database access for the Auction feature.
@@ -14,25 +15,29 @@ function createAuctionRepository(prismaClient) {
     round: true,
   };
 
-  function findProductOwner(productId, tx = prismaClient) {
+  async function findProductOwner(productId, tx = prismaClient) {
     const client = tx || prismaClient;
-    return client.product.findUnique({
+    const product = await client.product.findUnique({
       where: { id: productId },
-      select: { id: true, sellerId: true, status: true, category: true, moderatedAt:true },
+      select: { id: true, sellerId: true, status: true, category: true, moderatedAt: true,
+        categoryLinks: { include: { category: true } } },
     });
+    if (!product) return product;
+    const { categoryLinks, ...fields } = product;
+    return { ...fields, categories: categoryLinks.map((link) => link.category.name) };
   }
 
   function create(data, tx = prismaClient) {
-    const client = tx || prismaClient;
-    return client.auctionItem.create({ data, include: WITH_PRODUCT });
+    const run = (client) => writeItem(client, "create", { data, include: WITH_PRODUCT });
+    return tx === prismaClient ? prismaClient.$transaction(run) : run(tx);
   }
 
-  function findById(id, tx = prismaClient) {
+  async function findById(id, tx = prismaClient) {
     const client = tx || prismaClient;
-    return client.auctionItem.findUnique({
+    return hydrateItem(client, await client.auctionItem.findUnique({
       where: { id },
       include: { ...WITH_PRODUCT, bids: { orderBy: { amount: "desc" } } },
-    });
+    }));
   }
 
   async function list({ status, skip, take, roundId }) {
@@ -50,17 +55,26 @@ function createAuctionRepository(prismaClient) {
       }),
       prismaClient.auctionItem.count({ where }),
     ]);
-    return { items, total };
+    return { items: await Promise.all(items.map((item) => hydrateItem(prismaClient, item))), total };
   }
 
-  async function updateStatus(id,data,txOrOptions=prismaClient){
-    const client=txOrOptions?.auctionItem ? txOrOptions : prismaClient;
-    const options=txOrOptions?.auctionItem ? {} : txOrOptions || {};
-    if(options.expectedStatus || options.requireUnmoderatedProduct){
-      const changed=await client.auctionItem.updateMany({where:{id,...(options.expectedStatus?{status:options.expectedStatus}:{}),...(options.requireUnmoderatedProduct?{product:{moderatedAt:null,status:{not:"removed"}}}:{})},data});
-      return findById(id,client);
-    }
-    return client.auctionItem.update({where:{id},data,include:WITH_PRODUCT});
+  async function updateStatus(id, data, txOrOptions = prismaClient) {
+    const tx = txOrOptions?.auctionItem ? txOrOptions : null;
+    const options = tx ? {} : txOrOptions || {};
+    const run = async (client) => {
+      if (options.expectedStatus || options.requireUnmoderatedProduct) {
+        const { columns, erFields } = splitFields(data, "AUCTION_ITEM");
+        const changed = await client.auctionItem.updateMany({
+          where: { id, ...(options.expectedStatus ? { status: options.expectedStatus } : {}),
+            ...(options.requireUnmoderatedProduct ? { product: { moderatedAt: null, status: { not: "removed" } } } : {}) },
+          data: columns,
+        });
+        if (changed.count) await saveFields(client, "AUCTION_ITEM", id, erFields);
+        return findById(id, client);
+      }
+      return writeItem(client, "update", { where: { id }, data, include: WITH_PRODUCT });
+    };
+    return tx && tx !== prismaClient ? run(tx) : prismaClient.$transaction(run);
   }
 
   function highestBid(auctionId, tx = prismaClient) {
@@ -104,14 +118,13 @@ function createAuctionRepository(prismaClient) {
   }
 
   function createRound(data, tx = prismaClient) {
-    const client = tx || prismaClient;
-    return client.auctionRound.create({ data });
+    const run = (client) => writeRound(client, "create", { data });
+    return tx === prismaClient ? prismaClient.$transaction(run) : run(tx);
   }
 
-  function findActiveSubmissionRounds(now = new Date()) {
-    return prismaClient.auctionRound.findMany({
+  async function findActiveSubmissionRounds(now = new Date()) {
+    const rows = await prismaClient.auctionRound.findMany({
       where: {
-        cancelledAt: null,
         submissionStartsAt: { lte: now },
         submissionEndsAt: { gt: now },
       },
@@ -124,15 +137,16 @@ function createAuctionRepository(prismaClient) {
         _count: { select: { auctions: true } },
       },
     });
+    const rounds = await Promise.all(rows.map((r) => hydrateRound(prismaClient, r)));
+    return rounds.filter((r) => !r.cancelledAt);
   }
 
-  function findActiveAuctionRounds(
+  async function findActiveAuctionRounds(
     now = new Date(),
     { includeCancelled = false } = {},
   ) {
-    return prismaClient.auctionRound.findMany({
+    const rows = await prismaClient.auctionRound.findMany({
       where: {
-        ...(includeCancelled ? {} : { cancelledAt: null }),
         auctionStartsAt: { lte: now },
         auctionEndsAt: { gt: now },
       },
@@ -158,15 +172,16 @@ function createAuctionRepository(prismaClient) {
         },
       },
     });
+    const rounds = await Promise.all(rows.map((r) => hydrateRound(prismaClient, r)));
+    return rounds.filter((r) => includeCancelled || !r.cancelledAt);
   }
 
-  function findUpcomingRounds(
+  async function findUpcomingRounds(
     now = new Date(),
     { includeCancelled = false } = {},
   ) {
-    return prismaClient.auctionRound.findMany({
+    const rows = await prismaClient.auctionRound.findMany({
       where: {
-        ...(includeCancelled ? {} : { cancelledAt: null }),
         auctionStartsAt: { gt: now },
         auctionEndsAt: { gt: now },
       },
@@ -192,36 +207,35 @@ function createAuctionRepository(prismaClient) {
         },
       },
     });
+    const rounds = await Promise.all(rows.map((r) => hydrateRound(prismaClient, r)));
+    return rounds.filter((r) => includeCancelled || !r.cancelledAt);
   }
 
-  function listRounds() {
-    return prismaClient.auctionRound.findMany({
+  async function listRounds() {
+    const rows = await prismaClient.auctionRound.findMany({
       orderBy: { submissionStartsAt: "desc" },
       include: {
         _count: { select: { auctions: true } },
       },
     });
+    return Promise.all(rows.map((r) => hydrateRound(prismaClient, r)));
   }
 
-  function findRoundById(id, tx = prismaClient) {
+  async function findRoundById(id, tx = prismaClient) {
     const client = tx || prismaClient;
-    return client.auctionRound.findUnique({
+    return hydrateRound(client, await client.auctionRound.findUnique({
       where: { id },
-      include: {
-        auctions: { include: WITH_PRODUCT },
-      },
-    });
+      include: { auctions: { include: WITH_PRODUCT } },
+    }));
   }
 
-  function findRoundForSubmission(id, tx = prismaClient) {
+  async function findRoundForSubmission(id, tx = prismaClient) {
     const client = tx || prismaClient;
-    return client.auctionRound.findUnique({
-      where: { id },
-    });
+    return hydrateRound(client, await client.auctionRound.findUnique({ where: { id } }));
   }
 
-  function findRoundWithItems(id) {
-    return prismaClient.auctionRound.findUnique({
+  async function findRoundWithItems(id) {
+    return hydrateRound(prismaClient, await prismaClient.auctionRound.findUnique({
       where: { id },
       include: {
         auctions: {
@@ -232,7 +246,7 @@ function createAuctionRepository(prismaClient) {
           orderBy: [{ scheduledEndAt: "asc" }, { createdAt: "desc" }],
         },
       },
-    });
+    }));
   }
 
   function findCategory(name) {

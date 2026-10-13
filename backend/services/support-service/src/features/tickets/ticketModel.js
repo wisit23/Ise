@@ -13,6 +13,7 @@ const prisma = require("../../models/prismaClient");
 const audit = require("../audit/auditLog");
 const { ticketInclude, toTicket } = require("./ticketShape");
 const { canTransition } = require("./ticketState");
+const events = require("./ticketEvents");
 
 function transaction(work, client = prisma) {
   return serializableTransaction(client, work);
@@ -59,7 +60,10 @@ async function setup(
 }
 
 async function create(data, client = prisma) {
-  return transaction(async (db) => {
+  // Initial rows have no shared read-check-write state: unique keys and the sequence
+  // arbitrate concurrent creates. READ COMMITTED keeps the snapshot atomic without
+  // false SSI conflicts between unrelated new ticket/audit index entries.
+  return client.$transaction(async (db) => {
     const at = data.createdAt ?? new Date();
     const { cat, pri, state, policy } = await setup(db, { ...data, at });
     const ticket = await db.supportTicket.create({
@@ -74,12 +78,10 @@ async function create(data, client = prisma) {
         currentStatusId: state.id,
         orderId: data.orderId ?? null,
         targetId: data.targetId ?? null,
-        priorityScore: data.priorityScore ?? 0,
-        riskReportCount: data.riskReportCount ?? 0,
         createdAt: at,
       },
     });
-    await db.ticketStatusHistory.create({
+    const opened = await db.ticketStatusHistory.create({
       data: {
         ticketId: ticket.id,
         toStatusId: state.id,
@@ -87,9 +89,9 @@ async function create(data, client = prisma) {
         createdAt: at,
       },
     });
-    await db.ticketSlaTarget.createMany({
-      data: [
+    const targets = [
         {
+          id: randomUUID(),
           ticketId: ticket.id,
           policyId: policy.id,
           metricType: "FIRST_RESPONSE",
@@ -99,6 +101,7 @@ async function create(data, client = prisma) {
           achievedAt: data.firstResponseAt ?? null,
         },
         {
+          id: randomUUID(),
           ticketId: ticket.id,
           policyId: policy.id,
           metricType: "RESOLUTION",
@@ -106,10 +109,22 @@ async function create(data, client = prisma) {
             data.slaDueAt ?? new Date(+at + policy.resolutionMinutes * 60000),
           achievedAt: data.resolvedAt ?? data.closedAt ?? null,
         },
-      ],
-    });
+      ];
+    await db.ticketSlaTarget.createMany({ data: targets });
+    const auditLog = [];
+    auditLog.push(await events.recordRound(db, { ticketId: ticket.id, actorId: data.requesterId,
+      at, cycle: 1, targets, policy, sourceHistoryId: opened.id }));
+    auditLog.push(await audit.record({ ticketId: ticket.id, actorId: data.requesterId,
+      action: "QUEUE_CLASSIFIED", createdAt: at,
+      payload: { schemaVersion: 1, ticketVersion: 0, priorityScore: data.priorityScore ?? 0,
+        riskReportCount: data.riskReportCount ?? 0, classification: data.classification ?? null,
+        slaPolicyId: policy.id, source: data.classification ? "scoreCase" : "import" } }, db));
+    if (data.chatResponderId !== undefined)
+      auditLog.push(await events.recordResponder(db, { ticketId: ticket.id, actorId: data.requesterId,
+        responderId: data.chatResponderId, at, ticketVersion: 0 }));
+    const assignments = [];
     if (data.assigneeId) {
-      await db.ticketAssignment.create({
+      assignments.push(await db.ticketAssignment.create({
         data: {
           ticketId: ticket.id,
           assigneeId: data.assigneeId,
@@ -118,7 +133,7 @@ async function create(data, client = prisma) {
           endedAt: data.status === "CLOSED" ? (data.closedAt ?? at) : null,
           endReason: data.status === "CLOSED" ? "Imported closed ticket" : null,
         },
-      });
+      }));
     }
     if (data.conversationId)
       await db.ticketChatLink.create({
@@ -127,6 +142,7 @@ async function create(data, client = prisma) {
           conversationId: data.conversationId,
         },
       });
+    const statusHistory = [ { ...opened, toStatus: state } ];
     // Explicit timestamps are accepted for fixtures/imports, never exposed as public create input.
     for (const [code, date] of [
       ["RESOLVED", data.resolvedAt],
@@ -135,7 +151,7 @@ async function create(data, client = prisma) {
     ]) {
       if (!date) continue;
       const status = await db.ticketStatus.findUnique({ where: { code } });
-      await db.ticketStatusHistory.create({
+      const history = await db.ticketStatusHistory.create({
         data: {
           ticketId: ticket.id,
           toStatusId: status.id,
@@ -144,6 +160,7 @@ async function create(data, client = prisma) {
           reason: code === "ESCALATED" ? (data.escalationNote ?? null) : null,
         },
       });
+      statusHistory.push({ ...history, toStatus: status });
     }
     await audit.record(
       {
@@ -168,13 +185,15 @@ async function create(data, client = prisma) {
         },
         db,
       );
-    return toTicket(
-      await db.supportTicket.findUnique({
-        where: { id: ticket.id },
-        include: ticketInclude,
-      }),
-    );
-  }, client);
+    // Project rows already created by this transaction. Re-reading empty child relations
+    // causes relation-wide SSI predicate locks on small databases and conflicts between
+    // independent ticket creates; no read-back is needed for these known persisted values.
+    return toTicket({ ...ticket, category: cat, priority: pri, currentStatus: state,
+      assignments, statusHistory: statusHistory.sort((a,b) => +b.createdAt - +a.createdAt),
+      slaTargets: targets, auditLog,
+      chatLink: data.conversationId ? { conversationId: data.conversationId } : null,
+    });
+  }, { isolationLevel: "ReadCommitted" });
 }
 
 async function findById(id, db = prisma) {
@@ -215,13 +234,13 @@ function queueFilter({
   const clauses = [];
   if (work === "reply")
     clauses.push(
-      Prisma.sql`t.id IN (${replyIds?.length ? Prisma.join(replyIds) : Prisma.sql`NULL`})`,
+      Prisma.sql`t.ticket_id IN (${replyIds?.length ? Prisma.join(replyIds) : Prisma.sql`NULL`})`,
     );
   if (work) {
     clauses.push(
       Prisma.sql`s.code IN ('NEW','ASSIGNED','IN_PROGRESS','PENDING_USER')`,
     );
-    const deadline = Prisma.sql`(SELECT min(due_at) FROM ticket_sla_targets WHERE ticket_id = t.id AND achieved_at IS NULL)`;
+    const deadline = Prisma.sql`(SELECT min(st.due_at) FROM ticket_sla_targets st WHERE st.ticket_id = t.ticket_id AND st.achieved_at IS NULL AND ${events.activeTarget})`;
     if (work === "overdue")
       clauses.push(Prisma.sql`${deadline} <= ${now}::timestamptz`);
     if (work === "soon")
@@ -231,16 +250,16 @@ function queueFilter({
   }
   if (scope === "unassigned") clauses.push(Prisma.sql`a.assignment_id IS NULL`);
   else if (scope === "mine")
-    clauses.push(Prisma.sql`(a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`);
+    clauses.push(Prisma.sql`(a.assignee_id = ${assigneeId} OR cr.responder_id = ${assigneeId})`);
   else if (scope === "all" && role === "CUSTOMER_SERVICE")
     clauses.push(
-      Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
+      Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId} OR cr.responder_id = ${assigneeId})`,
     );
   if (status) clauses.push(Prisma.sql`s.code = ${status}`);
   else if (scope !== "all")
-    clauses.push(Prisma.sql`(s.code NOT IN ('CLOSED', 'ESCALATED') OR (s.code='ESCALATED' AND t.chat_responder_id=${assigneeId}))`);
+    clauses.push(Prisma.sql`(s.code NOT IN ('CLOSED', 'ESCALATED') OR (s.code='ESCALATED' AND cr.responder_id=${assigneeId}))`);
   else if (!["ADMIN", "TRUST_AND_SAFETY"].includes(role))
-    clauses.push(Prisma.sql`(s.code <> 'ESCALATED' OR t.chat_responder_id=${assigneeId})`);
+    clauses.push(Prisma.sql`(s.code <> 'ESCALATED' OR cr.responder_id=${assigneeId})`);
   if (priority) clauses.push(Prisma.sql`p.code = ${priority}`);
   if (search) {
     const pattern = "%" + search.replace(/[\\%_]/g, "\\$&") + "%";
@@ -259,22 +278,23 @@ async function listQueue(options = {}) {
   if (!["sla", "newest", "oldest", "priority"].includes(options.sort || "sla"))
     throw require("@reloop/shared").badRequest("invalid sort");
   const ordering = {
-    sla: Prisma.sql`sla.due_at ASC NULLS LAST, t.priority_score DESC, t.id ASC`,
-    newest: Prisma.sql`t.created_at DESC, t.id ASC`,
-    oldest: Prisma.sql`t.created_at ASC, t.id ASC`,
-    priority: Prisma.sql`p.rank DESC, sla.due_at ASC NULLS LAST, t.priority_score DESC, t.id ASC`,
+    sla: Prisma.sql`sla.due_at ASC NULLS LAST, COALESCE((q.payload->>'priorityScore')::int,0) DESC, t.ticket_id ASC`,
+    newest: Prisma.sql`t.created_at DESC, t.ticket_id ASC`,
+    oldest: Prisma.sql`t.created_at ASC, t.ticket_id ASC`,
+    priority: Prisma.sql`p.rank DESC, sla.due_at ASC NULLS LAST, COALESCE((q.payload->>'priorityScore')::int,0) DESC, t.ticket_id ASC`,
   }[options.sort || "sla"];
   const filter = queueFilter(options);
   const from = Prisma.sql`FROM support_tickets t
     JOIN ticket_statuses s ON s.ticket_status_id = t.current_status_id
     JOIN ticket_priorities p ON p.ticket_priority_id = t.ticket_priority_id
     LEFT JOIN LATERAL (SELECT assignment_id,assignee_id FROM ticket_assignments
-      WHERE ticket_id=t.id AND (ended_at IS NULL OR s.code='CLOSED')
-      ORDER BY assigned_at DESC LIMIT 1) a ON true`;
+      WHERE ticket_id=t.ticket_id AND (ended_at IS NULL OR s.code='CLOSED')
+      ORDER BY assigned_at DESC LIMIT 1) a ON true
+    ${events.stateJoins}`;
   const [ids, counts] = await Promise.all([
-    prisma.$queryRaw`SELECT t.id ${from}
-      LEFT JOIN LATERAL (SELECT min(due_at) AS due_at FROM ticket_sla_targets
-        WHERE ticket_id = t.id AND achieved_at IS NULL AND s.code NOT IN ('CLOSED','RESOLVED')) sla ON true
+    prisma.$queryRaw`SELECT t.ticket_id AS id ${from}
+      LEFT JOIN LATERAL (SELECT min(st.due_at) AS due_at FROM ticket_sla_targets st
+        WHERE st.ticket_id = t.ticket_id AND st.achieved_at IS NULL AND ${events.activeTarget} AND s.code NOT IN ('CLOSED','RESOLVED')) sla ON true
       ${filter} ORDER BY ${ordering}
       LIMIT ${options.take ?? 20} OFFSET ${options.skip ?? 0}`,
     prisma.$queryRaw`SELECT count(*)::int AS total ${from} ${filter}`,
@@ -292,13 +312,20 @@ async function listQueue(options = {}) {
 }
 
 async function markAchieved(db, ticketId, metricType, at) {
+  const row = await db.supportTicket.findUnique({ where: { id: ticketId }, include: ticketInclude });
+  const target = events.effectiveTargets(row.slaTargets, row.auditLog).find(t => t.metricType === metricType);
+  if (!target) return;
   await db.ticketSlaTarget.updateMany({
-    where: { ticketId, metricType, achievedAt: null },
+    where: { id: target.id, achievedAt: null },
     data: { achievedAt: at },
   });
 }
 
-async function assign({ id, version, assigneeId, assignedById = assigneeId, chatResponderId }) {
+// `assignedAt` is for fixtures/imports so a back-dated history stays ordered; callers omit it.
+async function assign(
+  { id, version, assigneeId, assignedById = assigneeId, chatResponderId, assignedAt },
+  client = prisma,
+) {
   try {
     return await transaction(async (db) => {
       const ticket = await db.supportTicket.findUnique({
@@ -317,10 +344,13 @@ async function assign({ id, version, assigneeId, assignedById = assigneeId, chat
           : ticket.currentStatus;
       const { count } = await db.supportTicket.updateMany({
         where: { id, version, assignments: { none: { endedAt: null } } },
-        data: { currentStatusId: status.id, version: { increment: 1 }, ...(chatResponderId ? {chatResponderId} : {}) },
+        data: { currentStatusId: status.id, version: { increment: 1 } },
       });
       if (!count) return false;
-      const now = new Date();
+      const now = assignedAt ?? new Date();
+      if (chatResponderId !== undefined)
+        await events.recordResponder(db, { ticketId: id, actorId: assignedById,
+          responderId: chatResponderId, at: now, ticketVersion: version + 1 });
       await db.ticketAssignment.create({
         data: { ticketId: id, assigneeId, assignedById, assignedAt: now },
       });
@@ -346,7 +376,7 @@ async function assign({ id, version, assigneeId, assignedById = assigneeId, chat
         db,
       );
       return true;
-    });
+    }, client);
   } catch (error) {
     if (error.code === "P2002") return false;
     throw error;
@@ -368,7 +398,7 @@ async function transitionTx(
 ) {
   const current = await db.supportTicket.findUnique({
     where: { id },
-    include: { currentStatus: true },
+    include: ticketInclude,
   });
   if (!current || current.version !== version) return false;
   if (!canTransition(current.currentStatus.code, status) && !systemEscalation)
@@ -377,10 +407,12 @@ async function transitionTx(
   if (!next) throw badRequest("Unknown ticket status");
   const { count } = await db.supportTicket.updateMany({
     where: { id, version },
-    data: { currentStatusId: next.id, version: { increment: 1 }, ...(chatResponderId ? {chatResponderId} : {}) },
+    data: { currentStatusId: next.id, version: { increment: 1 } },
   });
   if (!count) return false;
-  await db.ticketStatusHistory.create({
+  if (chatResponderId !== undefined)
+    await events.recordResponder(db, { ticketId: id, actorId, responderId: chatResponderId, at, ticketVersion: version + 1 });
+  const history = await db.ticketStatusHistory.create({
     data: {
       ticketId: id,
       fromStatusId: current.currentStatusId,
@@ -391,21 +423,17 @@ async function transitionTx(
     },
   });
   if (current.currentStatus.code === "RESOLVED" && status === "IN_PROGRESS") {
-    const previous = await db.ticketSlaTarget.findFirst({
-      where: { ticketId: id, metricType: "RESOLUTION" },
-      orderBy: { cycle: "desc" },
-      include: { policy: true },
-    });
-    if (previous)
-      await db.ticketSlaTarget.create({
-        data: {
-          ticketId: id,
-          policyId: previous.policyId,
-          metricType: "RESOLUTION",
-          cycle: previous.cycle + 1,
-          dueAt: new Date(+at + previous.policy.resolutionMinutes * 60000),
-        },
-      });
+    const previous = events.effectiveTargets(current.slaTargets, current.auditLog)
+      .find(t => t.metricType === "RESOLUTION");
+    if (!previous) throw new AppError(503, "Ticket SLA round is missing; repair history before reopening");
+    const policy = previous.round.targets.find(t => t.id === previous.id).policy;
+    const target = await db.ticketSlaTarget.create({ data: {
+      ticketId: id, policyId: previous.policyId, metricType: "RESOLUTION",
+      dueAt: new Date(+at + policy.resolutionMinutes * 60000),
+    } });
+    await events.recordRound(db, { ticketId: id, actorId, at,
+      cycle: events.rounds(current.auditLog)[0].cycle + 1, targets: [target],
+      policy, sourceHistoryId: history.id });
   }
   if (["RESOLVED", "CLOSED"].includes(status))
     await markAchieved(db, id, "RESOLUTION", at);
@@ -428,8 +456,8 @@ async function transitionTx(
   );
   return true;
 }
-function transitionStatus(args) {
-  return transaction((db) => transitionTx(db, args));
+function transitionStatus(args, client = prisma) {
+  return transaction((db) => transitionTx(db, args), client);
 }
 
 async function setConversationId(ticketId, conversationId, db = prisma) {
@@ -539,10 +567,11 @@ async function recordChatMessage(
     );
     if (resolvedRole === "AGENT" && !isInternal) {
       // Deliveries may arrive out of order; retain the earliest public staff reply.
-      await db.ticketSlaTarget.updateMany({
+      const snapshot = await db.supportTicket.findUnique({ where: { id: row.id }, include: ticketInclude });
+      const response = events.effectiveTargets(snapshot.slaTargets, snapshot.auditLog).find(t => t.metricType === "FIRST_RESPONSE");
+      if (response && date >= new Date(response.round.startedAt)) await db.ticketSlaTarget.updateMany({
         where: {
-          ticketId: row.id,
-          metricType: "FIRST_RESPONSE",
+          id: response.id,
           OR: [{ achievedAt: null }, { achievedAt: { gt: date } }],
         },
         data: { achievedAt: date },
@@ -563,18 +592,12 @@ async function escalateOverdue(ticketId, now) {
   return transaction(async (db) => {
     const ticket = await db.supportTicket.findUnique({
       where: { id: ticketId },
-      include: { currentStatus: true },
+      include: ticketInclude,
     });
     if (!ticket || ["CLOSED", "RESOLVED"].includes(ticket.currentStatus.code))
       return false;
-    const overdue = await db.ticketSlaTarget.findMany({
-      where: {
-        ticketId,
-        achievedAt: null,
-        breachedAt: null,
-        dueAt: { lte: now },
-      },
-    });
+    const overdue = events.effectiveTargets(ticket.slaTargets, ticket.auditLog)
+      .filter(t => !t.achievedAt && !t.breachedAt && t.dueAt <= now);
     if (!overdue.length) return false;
     await db.ticketSlaTarget.updateMany({
       where: {

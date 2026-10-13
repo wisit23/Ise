@@ -161,13 +161,10 @@ async function getTicket({ ticketId, userId, role, before, limit }) {
     );
   const includeInternal = isAgent(role) && ticket.requesterId !== userId;
   try {
-    const page = ticket.conversationId
-      ? await chatClient.getTicketMessages(ticket.conversationId, {
-          includeInternal,
-          before,
-          limit,
-        })
-      : { messages: [], nextCursor: null };
+    if (!ticket.conversationId) throw new AppError(503, "Ticket conversation is not ready");
+    const page = await chatClient.getTicketMessages(ticket.conversationId, {
+      includeInternal, before, limit,
+    });
     ticket.messages = page.messages.map((m) => toTicketMessage(m, ticket.id));
     ticket.messagesNextCursor = page.nextCursor;
     ticket.chatAvailable = true;

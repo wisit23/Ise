@@ -50,6 +50,11 @@ test("product CRUD against a real database", async (t) => {
   }
 
   const title = `${TEST_TITLE_PREFIX}${Date.now()}`;
+  await prisma.condition.upsert({
+    where: { value: "Like New" },
+    update: {},
+    create: { value: "Like New", label: "Like New" },
+  });
 
   try {
     const createRes = await request(app)

@@ -1,0 +1,16 @@
+[order-service] chat notification failed for PRODUCT:er-test-1791888738182-p2 (order 62cc7504-dccc-41e3-8c42-b9ba0fb31eb6): fetch failed
+[order-service] chat notification failed for PRODUCT:er-test-1791888738182-p1 (order 9f64db89-3147-4680-88a1-676fcc03264d): fetch failed
+✔ ER checkout API: multiple sellers, exact totals, immutable paidAt, address snapshots and shipment guards (3751.8034ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+✔ ER evidence API: buyer uploads before claim, staff chooses deadline, audits isolate evidence and safety review stays unique (3656.7381ms)
+[order-service] chat notification failed for PRODUCT:er-test-1791888738182-auction-product (order auction-4a77e51722e5375f4209af9eaeae1a7f61b11d0040d66d79df8fa9a82b7e1fdb): fetch failed
+✔ auction callback retries create one pending order and no basket (2810.1828ms)
+﹣ Seller checkout, paid notification, shipping and T&S trading transcript share persisted facts (1.399ms) # live Auth/Product/Order/Chat and isolated database URLs required
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 10783.2545
