@@ -72,14 +72,14 @@ beforeEach(() => {
 test("renders accessible controls for the catalog filters", async () => {
   render(<ProductsPage />);
   await waitFor(() =>
-    expect(screen.getByRole("option", { name: "Nike" })).toBeInTheDocument(),
+    expect(
+      screen.getByRole("option", { name: "Nike", hidden: true }),
+    ).toBeInTheDocument(),
   );
-  expect(screen.getByRole("combobox", { name: "สไตล์" })).toBeInTheDocument();
-  expect(screen.getByRole("combobox", { name: "แบรนด์" })).toBeInTheDocument();
-  expect(screen.getByRole("combobox", { name: "ขนาด" })).toBeInTheDocument();
-  expect(
-    screen.getByRole("combobox", { name: "สภาพสินค้า" }),
-  ).toBeInTheDocument();
+  expect(screen.getByLabelText("สไตล์")).toBeInTheDocument();
+  expect(screen.getByLabelText("แบรนด์")).toBeInTheDocument();
+  expect(screen.getByLabelText("ขนาด")).toBeInTheDocument();
+  expect(screen.getByLabelText("สภาพสินค้า")).toBeInTheDocument();
   expect(
     screen.getByRole("spinbutton", { name: "ราคาต่ำสุด" }),
   ).toBeInTheDocument();
@@ -91,22 +91,21 @@ test("renders accessible controls for the catalog filters", async () => {
 test("requests combined filters, retains them on page two, and clear resets the feed", async () => {
   render(<ProductsPage />);
   await waitFor(() =>
-    expect(screen.getByRole("option", { name: "Nike" })).toBeInTheDocument(),
+    expect(
+      screen.getByRole("option", { name: "Nike", hidden: true }),
+    ).toBeInTheDocument(),
   );
   const change = (name, value) =>
     fireEvent.change(
-      screen.getByRole(
-        name === "min" || name === "max" ? "spinbutton" : "combobox",
+      screen.getByLabelText(
         {
-          name: {
-            style: "สไตล์",
-            brand: "แบรนด์",
-            size: "ขนาด",
-            condition: "สภาพสินค้า",
-            min: "ราคาต่ำสุด",
-            max: "ราคาสูงสุด",
-          }[name],
-        },
+          style: "สไตล์",
+          brand: "แบรนด์",
+          size: "ขนาด",
+          condition: "สภาพสินค้า",
+          min: "ราคาต่ำสุด",
+          max: "ราคาสูงสุด",
+        }[name],
       ),
       { target: { value } },
     );
@@ -160,7 +159,7 @@ test("requests combined filters, retains them on page two, and clear resets the 
   await waitFor(() =>
     expect(apiFetch.mock.calls.at(-1)[0]).toContain("/api/products/feed"),
   );
-  expect(screen.getByRole("combobox", { name: "แบรนด์" })).toHaveValue("");
+  expect(screen.getByLabelText("แบรนด์")).toHaveValue("");
   expect(screen.getByRole("spinbutton", { name: "ราคาต่ำสุด" })).toHaveValue(
     null,
   );

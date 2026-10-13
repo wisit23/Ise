@@ -7,7 +7,7 @@ import Footer from "../components/Footer";
 import ProductCard from "../components/ProductCard";
 import ErrorState from "../components/ui/ErrorState";
 import Skeleton from "../components/ui/Skeleton";
-import Reveal from "../components/ui/Reveal";
+import useHomeEntrance from "../components/home/useHomeEntrance";
 import FannedHeroCards from "../components/home/FannedHeroCards";
 import { apiFetch } from "../lib/api";
 import { fetchActiveCategories } from "../lib/catalog";
@@ -56,11 +56,21 @@ function SectionHead({ eyebrow, title, lead, action }) {
   return (
     <div className="mb-9 flex flex-wrap items-end justify-between gap-8">
       <div>
-        <span className="text-xs font-semibold uppercase tracking-[.14em] text-brand-600">
+        <span
+          data-home-text="0"
+          className="inline-block text-xs font-semibold uppercase tracking-[.14em] text-brand-600"
+        >
           {eyebrow}
         </span>
-        <h2 className="mb-1 mt-1.5 text-xl">{title}</h2>
-        <p className="max-w-[46ch] text-sm text-ink-subtle">{lead}</p>
+        <h2 data-home-text="90" className="mb-1 mt-1.5 text-xl">
+          {title}
+        </h2>
+        <p
+          data-home-text="170"
+          className="max-w-[46ch] text-sm text-ink-subtle"
+        >
+          {lead}
+        </p>
       </div>
       {action}
     </div>
@@ -92,6 +102,8 @@ export default function HomePage() {
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const railRef = useRef(null);
+  const entranceRef = useRef(null);
+  useHomeEntrance(entranceRef);
 
   /* This used to be `.catch(() => {})`, which meant a backend outage rendered
      the landing page as a hero over empty space with nothing to click and no
@@ -127,7 +139,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col bg-white">
+    <main ref={entranceRef} className="flex min-h-screen flex-col bg-white">
       <NavBar />
 
       {/* ── Hero ──────────────────────────────────────────────── */}
@@ -143,7 +155,7 @@ export default function HomePage() {
         <div className="relative mx-auto grid w-[min(100%-2.5rem,1280px)] items-center gap-8 lg:gap-10 lg:grid-cols-[1.05fr_.95fr]">
           <div className="flex flex-col justify-center">
             {/* Eyebrow Chip */}
-            <div className="mb-3.5">
+            <div data-home-drop="70" className="mb-3.5">
               <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3.5 py-1 text-xs font-semibold text-brand-700 shadow-sm">
                 <span
                   aria-hidden="true"
@@ -154,7 +166,10 @@ export default function HomePage() {
             </div>
 
             {/* Main Heading */}
-            <h1 className="text-hero font-extrabold leading-[1.18] tracking-tight text-slate-900">
+            <h1
+              data-home-text="100"
+              className="text-hero font-extrabold leading-[1.18] tracking-tight text-slate-900"
+            >
               ให้ของที่คุณรัก
               <br />
               ได้มี
@@ -168,13 +183,19 @@ export default function HomePage() {
             </h1>
 
             {/* Subheading */}
-            <p className="mt-4 max-w-[50ch] text-base font-normal leading-relaxed text-slate-600">
+            <p
+              data-home-text="200"
+              className="mt-4 max-w-[50ch] text-base font-normal leading-relaxed text-slate-600"
+            >
               ตลาดแฟชั่นมือสองที่ให้คุณดูรีวิวร้าน เช็กสภาพสินค้า
               และจองของไว้ก่อนจ่ายเงิน — ซื้อสบายใจ ขายได้จริง
             </p>
 
             {/* Action Buttons */}
-            <div className="my-7 flex flex-wrap items-center gap-3.5">
+            <div
+              data-home-drop="310"
+              className="my-7 flex flex-wrap items-center gap-3.5"
+            >
               <Link
                 href="/products"
                 className="focus-ring inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-7 py-3 text-sm font-semibold text-white shadow-brand transition duration-200 hover:-translate-y-0.5 hover:bg-brand-700 active:scale-95"
@@ -257,7 +278,11 @@ export default function HomePage() {
           </div>
 
           {/* 3-Card Fanned Arc Deck Showcase */}
-          <div className="relative mx-auto hidden w-full max-w-[580px] lg:block">
+          <div
+            data-home-drop="390"
+            data-home-card
+            className="relative mx-auto hidden w-full max-w-[580px] lg:block"
+          >
             <FannedHeroCards items={items} loading={loading} />
           </div>
         </div>
@@ -274,8 +299,9 @@ export default function HomePage() {
       ) : (
         <>
           {/* ── Categories ─────────────────────────────────────── */}
-          <Reveal
-            as="section"
+          <section
+            data-home-drop="80"
+            data-home-block
             className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]"
           >
             <SectionHead
@@ -311,9 +337,11 @@ export default function HomePage() {
                         className="h-[150px] w-[150px] shrink-0 rounded-md"
                       />
                     ))
-                  : categories.map((c) => (
+                  : categories.map((c, index) => (
                       <Link
                         key={c.name}
+                        data-home-card
+                        data-home-drop={Math.min(index, 5) * 50}
                         href={`/products?category=${encodeURIComponent(c.name)}`}
                         className="focus-ring group/cat w-[150px] shrink-0 snap-start rounded-md border border-line bg-white px-4 py-[1.35rem] text-center transition-all duration-200 ease-out hover:border-brand-400 hover:shadow-2"
                       >
@@ -349,11 +377,12 @@ export default function HomePage() {
                 </span>
               </button>
             </div>
-          </Reveal>
+          </section>
 
           {/* ── New arrivals ───────────────────────────────────── */}
-          <Reveal
-            as="section"
+          <section
+            data-home-drop="80"
+            data-home-block
             className="mx-auto w-[min(100%-2.5rem,1280px)] pb-[clamp(3.5rem,7vw,6rem)]"
           >
             <SectionHead
@@ -376,16 +405,23 @@ export default function HomePage() {
               </p>
             ) : (
               <div className="grid grid-cols-[repeat(auto-fill,minmax(238px,1fr))] gap-[clamp(1rem,2vw,1.6rem)] max-[560px]:grid-cols-2 max-[560px]:gap-[.9rem]">
-                {items.map((p) => (
-                  <ProductCard key={p.id} product={p} />
+                {items.map((p, index) => (
+                  <div
+                    key={p.id}
+                    data-home-card
+                    data-home-drop={Math.min(index, 7) * 50}
+                  >
+                    <ProductCard product={p} />
+                  </div>
                 ))}
               </div>
             )}
-          </Reveal>
+          </section>
 
           {/* ── How it works ───────────────────────────────────── */}
-          <Reveal
-            as="section"
+          <section
+            data-home-drop="80"
+            data-home-block
             className="border-y border-line bg-surface-subtle"
           >
             <div className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]">
@@ -399,6 +435,8 @@ export default function HomePage() {
                 {HOW_IT_WORKS.map((step, i) => (
                   <li
                     key={step.title}
+                    data-home-card
+                    data-home-drop={i * 70}
                     className="relative overflow-hidden rounded-lg border border-line bg-white px-[1.6rem] py-[1.9rem] transition duration-300 ease-ease hover:-translate-y-1 hover:shadow-2"
                   >
                     <span
@@ -415,17 +453,28 @@ export default function HomePage() {
                         {step.icon}
                       </span>
                     </span>
-                    <h3 className="mb-1.5 text-[1.075rem]">{step.title}</h3>
-                    <p className="text-sm text-ink-subtle">{step.body}</p>
+                    <h3
+                      data-home-text={i * 80}
+                      className="mb-1.5 text-[1.075rem]"
+                    >
+                      {step.title}
+                    </h3>
+                    <p
+                      data-home-text={120 + i * 80}
+                      className="text-sm text-ink-subtle"
+                    >
+                      {step.body}
+                    </p>
                   </li>
                 ))}
               </ol>
             </div>
-          </Reveal>
+          </section>
 
           {/* ── Sell CTA ────────────────────────────────────────── */}
-          <Reveal
-            as="section"
+          <section
+            data-home-drop="80"
+            data-home-block
             className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]"
           >
             <div className="relative overflow-hidden rounded-xl bg-[linear-gradient(135deg,theme(colors.brand.700),theme(colors.brand.500)_55%,theme(colors.brand.300))] px-[clamp(1.5rem,4vw,3.5rem)] py-[clamp(2.5rem,5vw,4.25rem)] text-center text-white">
@@ -439,10 +488,22 @@ export default function HomePage() {
               />
 
               <div className="relative">
-                <h2 className="mb-2.5 text-xl">มีของที่ไม่ได้ใช้แล้วใช่ไหม</h2>
-                <p className="mx-auto mb-[1.9rem] max-w-[52ch] text-sm opacity-90">
-                  ลงขายฟรี ไม่มีค่าธรรมเนียมแรกเข้า ถ่ายรูป ตั้งราคา กดลง —
-                  ใช้เวลาไม่ถึง 2 นาที
+                <h2
+                  data-home-text="0"
+                  className="mx-auto mb-4 max-w-[24ch] text-2xl font-semibold leading-[1.4] sm:text-3xl [text-wrap:balance]"
+                >
+                  มีของที่ไม่ได้ใช้แล้วใช่ไหม
+                </h2>
+                <p
+                  data-home-text="120"
+                  className="mx-auto mb-7 max-w-xl text-sm leading-7 text-white/95 sm:text-base [text-wrap:balance]"
+                >
+                  <span className="block">
+                    ลงขายฟรี ไม่มีค่าธรรมเนียมแรกเข้า
+                  </span>
+                  <span className="block">
+                    แค่ถ่ายรูป ใส่รายละเอียด แล้วตั้งราคาที่คุณต้องการ
+                  </span>
                 </p>
                 {/* Written out rather than <Button>: its variants set their
                     own background and text colour, and two Tailwind class
@@ -455,7 +516,7 @@ export default function HomePage() {
                 </Link>
               </div>
             </div>
-          </Reveal>
+          </section>
         </>
       )}
 

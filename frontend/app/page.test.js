@@ -1,6 +1,10 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import HomePage from "./page";
 
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: jest.fn() }),
+}));
+
 describe("HomePage", () => {
   it("renders the marketplace headline", async () => {
     render(<HomePage />);

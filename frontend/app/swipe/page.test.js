@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import SwipePage from "./page";
 import { apiFetch } from "../../lib/api";
+jest.mock("next/navigation", () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 
 jest.mock("../../lib/api", () => ({
   apiFetch: jest.fn(),
