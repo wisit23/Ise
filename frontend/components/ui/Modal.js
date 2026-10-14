@@ -154,11 +154,20 @@ export default function Modal({
               type="button"
               onClick={onClose}
               aria-label="ปิดหน้าต่าง"
-              className="focus-ring -mr-1 -mt-1 rounded-md p-1 text-ink-subtle transition hover:bg-gray-100 hover:text-gray-700"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-ink-subtle outline-none transition-colors hover:bg-gray-100 hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/60"
             >
-              <span className="material-symbols-outlined text-[20px] leading-none">
-                close
-              </span>
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
             </button>
           </div>
         )}

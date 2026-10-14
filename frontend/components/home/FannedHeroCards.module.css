@@ -1,0 +1,19 @@
+.card {
+  will-change: transform;
+  box-shadow: 0 12px 28px -10px rgb(15 23 42 / 16%);
+}
+
+/* The deck owns elevation. A second hover transform on ProductCard exposes
+   the wrapper underneath and makes the pointer target move twice. */
+.card > article,
+.card > article:hover {
+  transform: none;
+  box-shadow: none;
+  transition: border-color 240ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    will-change: auto;
+  }
+}

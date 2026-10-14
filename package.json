@@ -14,7 +14,7 @@
     "frontend"
   ],
   "scripts": {
-    "dev": "docker compose up --build",
+    "dev": "node scripts/dev.cjs",
     "demo:cs-admin": "node scripts/demo-cs-admin.js",
     "smoke:cs-admin": "node scripts/smoke-cs-admin-demo.js",
     "smoke:cs-admin-verdict": "node scripts/smoke-cs-admin-verdict.js",

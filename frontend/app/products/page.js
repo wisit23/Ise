@@ -8,6 +8,8 @@ import ProductCard from "../../components/ProductCard";
 import Reveal from "../../components/ui/Reveal";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/ui/Button";
+import Select from "../../components/ui/Select";
+import Input from "../../components/ui/Input";
 import EmptyState from "../../components/ui/EmptyState";
 import ErrorState from "../../components/ui/ErrorState";
 import Skeleton from "../../components/ui/Skeleton";
@@ -247,76 +249,102 @@ function ProductsPageInner() {
         </aside>
 
         <div>
-          <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-line bg-white p-3 sm:grid-cols-3 lg:grid-cols-6">
-            {[
-              ["style", style, setStyle, "สไตล์"],
-              ["brand", brand, setBrand, "แบรนด์"],
-              ["size", size, setSize, "ขนาด"],
-            ].map(([key, value, setter, label]) => (
-              <select
-                key={key}
-                aria-label={label}
-                value={value}
-                onChange={(e) => {
-                  setter(e.target.value);
+          <div className="mb-6 rounded-2xl border border-line bg-white shadow-sm">
+            <div className="flex items-center gap-2 border-b border-line px-4 py-3 sm:px-5">
+              <span
+                className="material-symbols-outlined text-[20px] text-brand-600"
+                aria-hidden="true"
+              >
+                tune
+              </span>
+              <h2 className="text-sm font-semibold text-ink">ตัวกรองสินค้า</h2>
+              <span className="ml-auto hidden text-xs text-ink-subtle sm:block">
+                เลือกสไตล์และช่วงราคาที่ต้องการ
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 p-4 sm:p-5 lg:grid-cols-4">
+              {[
+                ["style", style, setStyle, "สไตล์"],
+                ["brand", brand, setBrand, "แบรนด์"],
+                ["size", size, setSize, "ขนาด"],
+              ].map(([key, value, setter, label]) => (
+                <Select
+                  key={key}
+                  label={label}
+                  name={key}
+                  searchable={key === "style" || key === "brand"}
+                  searchPlaceholder={`ค้นหา${label}...`}
+                  value={value}
+                  size="lg"
+                  onChange={(event) => {
+                    setter(event.target.value);
+                    setPage(1);
+                  }}
+                  options={[
+                    { value: "", label: "ทั้งหมด" },
+                    ...(
+                      options[key === "style" ? "styles" : key + "s"] || []
+                    ).map((item) => ({ value: item, label: item })),
+                  ]}
+                />
+              ))}
+              <Select
+                label="สภาพสินค้า"
+                name="condition"
+                value={condition}
+                size="lg"
+                onChange={(event) => {
+                  setCondition(event.target.value);
                   setPage(1);
                 }}
-                className="rounded-md border border-line-strong px-2 py-2 text-sm"
-              >
-                <option value="">{label}: ทั้งหมด</option>
-                {(options[key === "style" ? "styles" : `${key}s`] || []).map(
-                  (item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ),
+                options={[{ value: "", label: "ทั้งหมด" }, ...conditions]}
+              />
+            </div>
+            <div className="flex flex-col gap-4 rounded-b-2xl border-t border-line bg-surface-subtle/60 p-4 sm:p-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="grid min-w-0 grid-cols-2 gap-3 lg:max-w-[360px] lg:flex-1">
+                <Input
+                  label="ราคาต่ำสุด"
+                  inputMode="numeric"
+                  type="number"
+                  min="0"
+                  placeholder="0 ฿"
+                  value={minPrice}
+                  onChange={(event) => setMinPrice(event.target.value)}
+                  className="min-h-11"
+                />
+                <Input
+                  label="ราคาสูงสุด"
+                  inputMode="numeric"
+                  type="number"
+                  min="0"
+                  placeholder="ไม่จำกัด"
+                  value={maxPrice}
+                  onChange={(event) => setMaxPrice(event.target.value)}
+                  className="min-h-11"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={applyFilters}
+                  icon="filter_alt"
+                  className="min-h-11 flex-1 sm:flex-none"
+                >
+                  ใช้ตัวกรอง
+                </Button>
+                {hasActiveFilters && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={clearFilters}
+                    icon="restart_alt"
+                    className="min-h-11"
+                  >
+                    ล้างตัวกรอง
+                  </Button>
                 )}
-              </select>
-            ))}
-            <select
-              aria-label="สภาพสินค้า"
-              value={condition}
-              onChange={(e) => {
-                setCondition(e.target.value);
-                setPage(1);
-              }}
-              className="rounded-md border border-line-strong px-2 py-2 text-sm"
-            >
-              <option value="">สภาพ: ทั้งหมด</option>
-              {conditions.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-            <input
-              aria-label="ราคาต่ำสุด"
-              inputMode="numeric"
-              type="number"
-              min="0"
-              placeholder="ราคาต่ำสุด"
-              value={minPrice}
-              onChange={(e) => setMinPrice(e.target.value)}
-              className="rounded-md border border-line-strong px-2 py-2 text-sm"
-            />
-            <input
-              aria-label="ราคาสูงสุด"
-              inputMode="numeric"
-              type="number"
-              min="0"
-              placeholder="ราคาสูงสุด"
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(e.target.value)}
-              className="rounded-md border border-line-strong px-2 py-2 text-sm"
-            />
-            <Button type="button" variant="secondary" onClick={applyFilters}>
-              ใช้ตัวกรอง
-            </Button>
-            {hasActiveFilters && (
-              <Button type="button" variant="secondary" onClick={clearFilters}>
-                ล้างตัวกรอง
-              </Button>
-            )}
+              </div>
+            </div>
           </div>
 
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

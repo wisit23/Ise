@@ -166,6 +166,10 @@ app.use(
   createProxyMiddleware({
     target: SERVICES.frontend,
     changeOrigin: true,
+    // ws: true installs a server-wide upgrade listener after the first UI
+    // request. Express's mount path does not restrict that listener, so
+    // exclude chat upgrades already owned by server.js's raw TCP proxy.
+    pathFilter: (path) => !/^\/api\/chat(?:\/|$)/.test(path),
     ws: true,
   }),
 );

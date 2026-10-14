@@ -10,6 +10,10 @@ jest.mock(
     },
 );
 
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: jest.fn() }),
+}));
+
 describe("HomePage", () => {
   it("renders the marketplace headline", async () => {
     render(<HomePage />);

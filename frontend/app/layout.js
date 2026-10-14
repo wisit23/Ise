@@ -2,6 +2,7 @@ import { Anuphan, Noto_Sans_Thai } from "next/font/google";
 import "./globals.css";
 import ChatSocketProvider from "../components/chat/ChatSocketProvider";
 import CommerceRestrictionBanner from "../components/CommerceRestrictionBanner";
+import AuthArrival from "../components/auth/AuthArrival";
 
 /* Self-hosted by next/font at build time — no runtime request to Google, no
    FOUT, and Thai text renders identically on every OS instead of falling back
@@ -54,7 +55,7 @@ export default function RootLayout({ children }) {
       <body className="font-sans">
         <ChatSocketProvider>
           <CommerceRestrictionBanner />
-          {children}
+          <AuthArrival>{children}</AuthArrival>
         </ChatSocketProvider>
       </body>
     </html>

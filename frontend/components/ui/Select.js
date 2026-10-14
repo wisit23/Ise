@@ -25,6 +25,9 @@ export default function Select({
   onChange,
   name,
   disabled = false,
+  hoverToOpen = false,
+  searchable = false,
+  searchPlaceholder = "ค้นหารายการ...",
   variant = "form",
   size = "md",
   className = "",
@@ -82,6 +85,9 @@ export default function Select({
         variant={variant}
         size={size}
         disabled={disabled}
+        hoverToOpen={hoverToOpen}
+        searchable={searchable}
+        searchPlaceholder={searchPlaceholder}
         className={`w-full block ${className}`}
         buttonClassName={`w-full text-left justify-between ${
           error ? "border-danger ring-1 ring-danger/30" : ""

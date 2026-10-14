@@ -1,13 +1,18 @@
 "use client";
 import { useId, useState } from "react";
 import styles from "./AgentOverview.module.css";
+import AnimatedNumber from "./AnimatedNumber";
 const GROUPS = [
   { code: "URGENT", label: "ด่วนที่สุด", color: "rgb(var(--color-danger))" },
   { code: "HIGH", label: "สูง", color: "rgb(var(--color-warning))" },
   { code: "NORMAL", label: "ปานกลาง", color: "rgb(var(--color-brand-600))" },
   { code: "LOW", label: "ต่ำ", color: "rgb(var(--color-ink-subtle))" },
 ];
-export default function PersonalPriorityDonut({ rows, onSelect }) {
+export default function PersonalPriorityDonut({
+  rows,
+  onSelect,
+  animate = false,
+}) {
   const [hoverCode, setHoverCode] = useState(null);
   const tooltipId = useId();
   const groups = [...GROUPS];
@@ -87,6 +92,7 @@ export default function PersonalPriorityDonut({ rows, onSelect }) {
             <circle
               {...hoverHandlers(active[0].code)}
               data-priority={active[0].code}
+              pathLength="1"
               cx="60"
               cy="60"
               r="50"
@@ -100,6 +106,7 @@ export default function PersonalPriorityDonut({ rows, onSelect }) {
                 key={segment.code}
                 {...hoverHandlers(segment.code)}
                 data-priority={segment.code}
+                pathLength="1"
                 d={segment.path}
                 fill="none"
                 stroke={segment.color}
@@ -110,7 +117,9 @@ export default function PersonalPriorityDonut({ rows, onSelect }) {
           )}
         </svg>
         <div className={styles.slaDonutCenter} aria-hidden="true">
-          <strong>{total}</strong>
+          <strong>
+            <AnimatedNumber value={total} animate={animate} />
+          </strong>
           <span>เคสของฉัน</span>
         </div>
       </div>

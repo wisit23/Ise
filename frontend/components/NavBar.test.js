@@ -15,6 +15,10 @@ import {
   clearSession,
 } from "../lib/auth";
 import { apiFetch } from "../lib/api";
+const mockReplace = jest.fn();
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: mockReplace }),
+}));
 
 jest.mock("../lib/api", () => ({
   apiFetch: jest.fn().mockResolvedValue({ total: 0 }),
@@ -141,8 +145,8 @@ describe("NavBar role permissions", () => {
     render(<NavBar />);
 
     expect(
-      await screen.findByRole("link", { name: /^ลงขาย$/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole("link", { name: /^ลงขาย$/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^ตะกร้า/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^ข้อความ/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "เมนูโปรไฟล์" }));
@@ -296,15 +300,15 @@ describe("NavBar responsive navigation and dropdowns", () => {
     mockBuyer();
   });
 
-  it("applies responsive breakpoint classes for desktop discovery nav and mobile toggle", () => {
+  it("keeps discovery links inside one compact menu on all screen sizes", () => {
     render(<NavBar />);
 
-    const desktopNav = screen.getByRole("navigation", { name: "สำรวจสินค้า" });
-    expect(desktopNav).toHaveClass("hidden");
-    expect(desktopNav).toHaveClass("xl:flex");
-
     const hamburger = screen.getByRole("button", { name: "เมนูหลัก" });
-    expect(hamburger).toHaveClass("xl:hidden");
+    expect(hamburger).not.toHaveClass("xl:hidden");
+    expect(
+      screen.queryByRole("link", { name: "ปัดดู" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(hamburger);
 
     expect(screen.getByRole("link", { name: "ปัดดู" })).toHaveAttribute(
       "href",
@@ -406,8 +410,8 @@ describe("NavBar responsive navigation and dropdowns", () => {
   });
 
   it("handles logout properly from profile dropdown", () => {
-    delete window.location;
-    window.location = new URL("http://localhost/");
+    window.history.replaceState({}, "", "/");
+    mockReplace.mockClear();
 
     render(<NavBar />);
 
@@ -416,5 +420,21 @@ describe("NavBar responsive navigation and dropdowns", () => {
     fireEvent.click(logoutBtn);
 
     expect(clearSession).toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "เมนูโปรไฟล์" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "เข้าสู่ระบบ" }),
+    ).toBeInTheDocument();
+  });
+  it("uses client navigation when logging out away from home", () => {
+    window.history.replaceState({}, "", "/seller/dashboard");
+    mockReplace.mockClear();
+    render(<NavBar />);
+    fireEvent.click(screen.getByRole("button", { name: "เมนูโปรไฟล์" }));
+    fireEvent.click(screen.getByRole("button", { name: "ออกจากระบบ" }));
+    expect(mockReplace).toHaveBeenCalledWith("/");
+    window.history.replaceState({}, "", "/");
   });
 });
