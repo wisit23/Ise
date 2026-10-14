@@ -17,7 +17,7 @@ jest.mock("./admin-inbox/ReportCasePanel", () => ({
 }));
 jest.mock("./case/TicketCasePanel", () => ({
   __esModule: true,
-  default: () => <div>ticket detail</div>,
+  default: ({ ticket }) => <div>ticket detail: {ticket.requesterName || ticket.requesterId} / {ticket.assigneeName || ticket.assigneeId}</div>,
 }));
 
 function report(id, reason) {
@@ -154,4 +154,27 @@ it("opens a source report directly from user-history deep links", async () => {
     ),
   );
   expect(await screen.findByText("report detail")).toBeInTheDocument();
+});
+
+it("shows account names on an escalated ticket instead of only IDs", async () => {
+  const ticket = {
+    id: "ticket-1", _type: "TICKET", ticketNumber: "TKT-1",
+    subject: "Escalated case", status: "ESCALATED",
+    requesterId: "buyer-1", assigneeId: "staff-1",
+  };
+  apiFetch.mockImplementation((url) => {
+    if (url.includes("/api/support/tickets/queue?")) return Promise.resolve({ items: [ticket], totalPages: 1 });
+    if (url === "/api/support/tickets/ticket-1") return Promise.resolve(ticket);
+    if (url === "/api/support/tickets/ticket-1/join") return Promise.resolve({ conversationId: "chat-1" });
+    if (url === "/api/auth/admin/users/buyer-1") return Promise.resolve({ firstName: "สมชาย", lastName: "ใจดี" });
+    if (url === "/api/auth/admin/users/staff-1") return Promise.resolve({ firstName: "มาลี", lastName: "ผู้ดูแล" });
+    return Promise.resolve({ items: [], totalPages: 1 });
+  });
+
+  render(<AdminInboxSection token="token" />);
+  fireEvent.click(await screen.findByText("Escalated case"));
+
+  expect(await screen.findByText("ticket detail: สมชาย ใจดี / มาลี ผู้ดูแล")).toBeInTheDocument();
+  expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/users/buyer-1", { token: "token" });
+  expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/users/staff-1", { token: "token" });
 });

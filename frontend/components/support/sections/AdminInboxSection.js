@@ -23,6 +23,27 @@ const REPORT_ACTION_LABEL = {
   DISMISS: "ยกเลิกรายงาน",
 };
 
+async function ticketPartyNames(ticket, token) {
+  const parties = [
+    ["requesterName", ticket.requesterId],
+    ["assigneeName", ticket.assigneeId],
+    ["targetName", ticket.targetId],
+  ].filter(([field, id]) => id && !ticket[field]);
+  const users = new Map(await Promise.all(
+    [...new Set(parties.map(([, id]) => id))].map(async (id) => {
+      try {
+        const user = await apiFetch(`/api/auth/admin/users/${encodeURIComponent(id)}`, { token });
+        return [id, [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email || ""];
+      } catch {
+        return [id, ""];
+      }
+    }),
+  ));
+  return Object.fromEntries(parties
+    .map(([field, id]) => [field, users.get(id)])
+    .filter(([, name]) => name));
+}
+
 /* Admin's escalation queue: escalated support tickets and user reports in one
    list. This component owns the data and the actions; the queue table and the
    report panel live in ./admin-inbox, while the drawer shell and the ticket
@@ -61,6 +82,16 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
   const [pendingAction, setPendingAction] = useState(null);
   const [pendingReportDecision, setPendingReportDecision] = useState(false);
 
+  function showTicketDetail(detail, request = selectionRequest.current) {
+    setSelectedTicket(detail);
+    ticketPartyNames(detail, token).then((names) => {
+      if (request !== selectionRequest.current) return;
+      setSelectedTicket((current) => current?.id === detail.id
+        ? { ...current, ...names }
+        : current);
+    });
+  }
+
   function closeTicket() {
     setPendingReportDecision(false);
     selectionRequest.current += 1;
@@ -98,7 +129,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
         token,
       });
       if (request !== selectionRequest.current) return;
-      setSelectedTicket(detail);
+      showTicketDetail(detail, request);
       const room = await apiFetch(`/api/support/tickets/${item.id}/join`, {
         method: "POST",
         token,
@@ -216,7 +247,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
         closeTicket();
       } else {
         apiFetch(`/api/support/tickets/${selectedTicket.id}`, { token })
-          .then(setSelectedTicket)
+          .then((detail) => showTicketDetail(detail))
           // A failed *refresh* is not a failed action. Admin can act on a
           // ticket from this inbox but cannot always re-read its detail
           // (the queue returns it, GET /tickets/:id can still 403), which
