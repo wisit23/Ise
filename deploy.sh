@@ -35,7 +35,7 @@ on_error() {
   trap - ERR
   echo "Deploy FAILED during $stage (exit $rc). No database reset or automatic schema rollback was performed." >&2
   [[ -z $run_dir ]] || echo "Logs, previous commit/images, and any backups: $run_dir" >&2
-  if [[ $stage == migration* ]]; then
+  if [[ $stage == migration-stop || $stage == migration-backup || $stage == migration-apply || $stage == migration-verify ]]; then
     echo 'Application services may be stopped. Inspect migration logs before restarting; partial schema changes need manual recovery.' >&2
   fi
   exit "$rc"
@@ -90,6 +90,21 @@ done
 stage=build
 echo 'Building production images; current containers continue serving.'
 dc build "${apps[@]}" 2>&1 | tee "$run_dir/build.log"
+# Query the actual databases using the newly built migration files, including
+# on the first run or when somebody has already pulled main manually.
+check_migrations() {
+  local service failed=0
+  for service in auth-service product-service order-service support-service; do
+    if ! dc run --rm --no-deps "$service" npx prisma migrate status 2>&1 | tee "$run_dir/$service.migration-status.log"; then
+      failed=1
+    fi
+  done
+  return "$failed"
+}
+stage=migration-preflight
+if [[ $MIGRATE == 0 ]] && ! check_migrations; then
+  die "Database migration status is not ready. Services were not replaced. Inspect $run_dir/*.migration-status.log, review migrations, then use bash deploy.sh --migrate. Connection/history errors also block deployment."
+fi
 if [[ $MIGRATE == 1 ]]; then
   # A coordinated maintenance window keeps the PostgreSQL/Mongo backups consistent
   # with respect to application writes. No seeds or destructive db-push flags.
@@ -104,6 +119,8 @@ if [[ $MIGRATE == 1 ]]; then
     dc run --rm --no-deps "$service" node prisma/migrate.js 2>&1 | tee "$run_dir/$service.migration.log"
   done
   dc run --rm --no-deps chat-service npx prisma db push --skip-generate 2>&1 | tee "$run_dir/chat.migration.log"
+  stage=migration-verify
+  check_migrations
 fi
 stage=start
 # Explicit application targets do not start the optional pgAdmin interface.
@@ -128,6 +145,10 @@ while :; do
   fi
   sleep 5
 done
+stage=product-smoke
+# A healthy process can still fail real Prisma queries. Exercise the public feed
+# through the gateway; an empty catalog is valid, an error or wrong shape is not.
+dc exec -T gateway node -e 'fetch("http://127.0.0.1:8080/api/products/feed?limit=1",{signal:AbortSignal.timeout(10000)}).then(async r=>{if(!r.ok)throw new Error("Product feed HTTP "+r.status);const body=await r.json();if(!Array.isArray(body.items))throw new Error("Invalid product feed response");console.log("Product feed smoke passed");}).catch(e=>{console.error(e.message);process.exit(1)})' 2>&1 | tee "$run_dir/product-smoke.log"
 printf '%s\n' "$after" >"$STATE/last-success-commit"
 dc ps
 echo "Deploy OK: $after (production). Logs and rollback references: $run_dir"

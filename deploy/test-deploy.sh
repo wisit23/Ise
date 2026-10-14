@@ -44,11 +44,17 @@ case "${1:-}" in
   build) [[ $CASE != build-fail ]] || exit 8 ;;
   ps) [[ $* != *-q* ]] || echo fixture-container ;;
   exec)
+    if [[ $* == *'/api/products/feed'* && $CASE == smoke-fail ]]; then exit 11; fi
     if [[ $* == *pg_dumpall* ]]; then
       [[ $CASE != backup-fail ]] || exit 9
       echo 'database backup'
     elif [[ $* == *mongodump* ]]; then echo 'mongo backup'; fi ;;
-  run) [[ $CASE != migration-fail ]] || exit 10 ;;
+  run)
+    if [[ $* == *'migrate status'* ]]; then
+      case "$CASE" in pending|db-offline) echo 'Database status blocked'; exit 12 ;; esac
+    else
+      [[ $CASE != migration-fail ]] || exit 10
+    fi ;;
 esac
 MOCK
 chmod +x "$temp/bin/git" "$temp/bin/docker"
@@ -57,23 +63,26 @@ chmod +x "$temp/bin/flock"
 export PATH="$temp/bin:$PATH"
 export CALLS="$temp/calls"
 export DEPLOY_STATE_DIR="$temp/state"
-for CASE in happy dirty build-fail schema backup-fail migration-fail; do
+for CASE in happy dirty build-fail schema backup-fail migration-fail pending db-offline smoke-fail migrate-success; do
   export CASE
   rm -rf "$DEPLOY_STATE_DIR"
   : >"$CALLS"
   args=()
-  case "$CASE" in backup-fail|migration-fail) args=(--migrate) ;; esac
+  case "$CASE" in backup-fail|migration-fail|migrate-success) args=(--migrate) ;; esac
   if bash "$temp/repo/deploy.sh" "${args[@]}" >"$temp/output" 2>&1; then rc=0; else rc=$?; fi
-  if [[ $CASE == happy ]]; then
+  if [[ $CASE == happy || $CASE == migrate-success ]]; then
     [[ $rc == 0 ]]
     grep -q 'Deploy OK:' "$temp/output"
     grep -q 'up -d auth-service' "$CALLS"
-    ! grep -q 'pg_dumpall' "$CALLS"
-    ! grep -q 'run --rm' "$CALLS"
+    grep -q 'migrate status' "$CALLS"
+    grep -q '/api/products/feed' "$CALLS"
+    [[ -f $DEPLOY_STATE_DIR/last-success-commit ]]
+    if [[ $CASE == happy ]]; then ! grep -q 'pg_dumpall' "$CALLS"; else grep -q 'pg_dumpall' "$CALLS"; fi
     ! grep -q 'up -d pgadmin' "$CALLS"
   else
     [[ $rc != 0 ]]
-    ! grep -q 'up -d' "$CALLS"
+    if [[ $CASE != smoke-fail ]]; then ! grep -q 'up -d' "$CALLS"; fi
+    ! grep -q 'Deploy OK:' "$temp/output"
     ! grep -q 'last-success' "$temp/output"
     case "$CASE" in
       dirty) ! grep -q 'build ' "$CALLS" ;;
@@ -84,6 +93,13 @@ for CASE in happy dirty build-fail schema backup-fail migration-fail; do
         if bash "$temp/repo/deploy.sh" >"$temp/rerun" 2>&1; then exit 1; fi ;;
       backup-fail) ! grep -q 'run --rm' "$CALLS" ;;
       migration-fail) grep -q 'pg_dumpall' "$CALLS"; grep -q 'mongodump' "$CALLS" ;;
+      pending|db-offline)
+        grep -q 'migrate status' "$CALLS"
+        ! grep -q 'stop auth-service' "$CALLS"
+        # Same Git commit and no prior deployment: database status must gate
+        # both the initial run and repeated attempts after a manual pull.
+        if bash "$temp/repo/deploy.sh" >"$temp/rerun" 2>&1; then exit 1; fi ;;
+      smoke-fail) grep -q 'up -d' "$CALLS"; grep -q '/api/products/feed' "$CALLS" ;;
     esac
   fi
   echo "PASS $CASE"

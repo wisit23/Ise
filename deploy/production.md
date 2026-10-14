@@ -3,6 +3,7 @@
 From the repository root, run `bash deploy.sh`. It updates **main**, builds images
 before replacing containers, starts the seven application services with production
 Compose settings, and checks Docker health plus frontend/gateway HTTP responses.
+It also requires a successful public product-feed query through the gateway.
 Frontend uses `next build` and `next start`. The optional pgAdmin is not started.
 
 Requirements: Git, Docker Compose supporting `!reset`, `flock`, an existing running
@@ -23,7 +24,16 @@ then runs the repository's guarded migrations and Mongo schema push **without**
 `--accept-data-loss`. Incompatible legacy Product/Order databases will still be
 blocked. A backup does not make an incompatible migration safe. On an initial run,
 the operator must verify that the existing databases match the current checkout;
-Git cannot infer which version an existing image/schema was built from.
+Git cannot infer which version an existing image/schema was built from. After
+building, every ordinary run also queries `prisma migrate status` against the
+actual Auth/Product/Order/Support databases using the new images. Pending or
+failed migrations, incompatible history, and connection errors block replacement
+even on the first run or after a manual pull. Inspect the per-service status logs;
+`--migrate` requires a successful status check after migrations before startup.
+This checks migration history, not arbitrary manual schema drift. MongoDB does
+not have Prisma migration history; its schema changes still require review and
+`--migrate`. A product-feed HTTP error or invalid JSON shape prevents success from
+being recorded; an empty catalog is valid.
 
 ## Logs and recovery
 
