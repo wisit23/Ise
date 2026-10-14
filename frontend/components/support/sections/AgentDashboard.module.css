@@ -742,15 +742,6 @@
     font-size: 11px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .skeletonMetrics > div,
-  .skeletonChart {
-    animation: none;
-  }
-  .metric {
-    transition: none;
-  }
-}
 
 .widget .historyNote {
   font-size: 10px;

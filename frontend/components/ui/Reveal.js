@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 /* Reveals its children once they scroll into view.
  *
  * One component rather than a class sprinkled per section, because the
- * observer, the unobserve-after-firing, and the reduced-motion escape hatch
+ * observer and the unobserve-after-firing cleanup
  * all have to be got right in exactly the same way every time.
  *
  * `delay` staggers siblings — pass the index when mapping a list so cards
@@ -31,15 +31,6 @@ export default function Reveal({
     const el = ref.current;
     if (!el) return;
 
-    // Honour the OS setting rather than animating and relying on the global
-    // duration override to blunt it.
-    // jsdom, and some embedded webviews, have no matchMedia at all — an
-    // animation helper must never be the thing that throws.
-    if (
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    )
-      return;
     if (typeof IntersectionObserver === "undefined") return;
 
     // Anything already on screen at mount stays put — reveals are for
@@ -65,7 +56,7 @@ export default function Reveal({
   return (
     <Tag
       ref={ref}
-      className={`transition-[opacity,transform] duration-700 ease-ease motion-reduce:transition-none ${
+      className={`transition-[opacity,transform] duration-700 ease-ease ${
         shown ? "translate-y-0 opacity-100" : "opacity-0"
       } ${className}`}
       style={{

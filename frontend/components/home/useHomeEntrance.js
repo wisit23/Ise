@@ -20,8 +20,6 @@ export default function useHomeEntrance(root) {
     const page = root.current;
     if (!page || !window.IntersectionObserver || !Element.prototype.animate)
       return;
-    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (preference.matches) return;
     const seen = new WeakSet();
     const observed = new WeakSet();
     const active = new Map();
@@ -154,9 +152,6 @@ export default function useHomeEntrance(root) {
       waiting.current.clear();
       active.clear();
     };
-    const onPreference = () => {
-      if (preference.matches) stop();
-    };
     const onFocus = (event) => {
       active.forEach((animation, element) => {
         if (element.contains(event.target)) {
@@ -166,11 +161,9 @@ export default function useHomeEntrance(root) {
         }
       });
     };
-    preference.addEventListener("change", onPreference);
     page.addEventListener("focusin", onFocus);
     return () => {
       stop();
-      preference.removeEventListener("change", onPreference);
       page.removeEventListener("focusin", onFocus);
     };
   }, [root]);

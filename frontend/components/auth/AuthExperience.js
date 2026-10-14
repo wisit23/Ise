@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthTransition } from "./AuthArrival";
 import AuthLayout from "./AuthLayout";
+import { AUTH_DEPARTURE_MS } from "./authMotion";
 import { LoginPage, RegisterPage } from "./AuthForms";
 
 export default function AuthExperience({ initialMode }) {
@@ -17,12 +18,9 @@ export default function AuthExperience({ initialMode }) {
     if (departing) return;
     setDeparting(true);
     router.prefetch?.(destination);
-    const reduced = window.matchMedia?.(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    if (!reduced) begin(destination);
+    begin(destination);
     await new Promise((resolve) => {
-      timer.current = setTimeout(resolve, reduced ? 0 : 1050);
+      timer.current = setTimeout(resolve, AUTH_DEPARTURE_MS);
     });
     router.push(destination);
   }

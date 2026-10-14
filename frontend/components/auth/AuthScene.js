@@ -10,7 +10,6 @@ export default function AuthScene({ departing = false }) {
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 901px)");
@@ -23,13 +22,6 @@ export default function AuthScene({ departing = false }) {
   useEffect(() => {
     if (!desktop) return;
     let cancelled = false;
-    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const syncMotion = () => {
-      setReduced(motion.matches);
-      engine.current?.setReducedMotion(motion.matches);
-    };
-    syncMotion();
-    motion.addEventListener("change", syncMotion);
     setFailed(false);
     setReady(false);
 
@@ -38,7 +30,7 @@ export default function AuthScene({ departing = false }) {
       .then(({ createAuthScene }) => {
         if (cancelled || !host.current) return;
         engine.current = createAuthScene(host.current, {
-          reducedMotion: motion.matches,
+          reducedMotion: false,
           onContextLost: () => {
             if (!cancelled) {
               setFailed(true);
@@ -54,7 +46,6 @@ export default function AuthScene({ departing = false }) {
 
     return () => {
       cancelled = true;
-      motion.removeEventListener("change", syncMotion);
       engine.current?.dispose();
       engine.current = null;
     };
@@ -65,8 +56,8 @@ export default function AuthScene({ departing = false }) {
   }, [paused, ready]);
 
   useEffect(() => {
-    if (departing && !reduced && !paused) engine.current?.depart?.();
-  }, [departing, ready, reduced, paused]);
+    if (departing && !paused) engine.current?.depart?.();
+  }, [departing, ready, paused]);
 
   return (
     <>
@@ -81,7 +72,7 @@ export default function AuthScene({ departing = false }) {
           <span>∞</span>
         </div>
       )}
-      {desktop && ready && !failed && !reduced && (
+      {desktop && ready && !failed && (
         <button
           type="button"
           className={styles.motionControl}
