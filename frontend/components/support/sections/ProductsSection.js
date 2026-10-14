@@ -33,6 +33,7 @@ export default function ProductsSection({ token }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedSeller, setSelectedSeller] = useState(null);
   const operationKeys = useRef(new Map());
+  const searchRequest = useRef(0);
   const [query, setQuery] = useState("");
   const [includeRemoved, setIncludeRemoved] = useState(false);
   const [items, setItems] = useState([]);
@@ -61,6 +62,7 @@ export default function ProductsSection({ token }) {
     removedOnly = includeRemoved,
   ) {
     if (!searchQuery.trim() && !removedOnly) return;
+    const request = ++searchRequest.current;
     setLoading(true);
     setError("");
     setSearched(true);
@@ -74,20 +76,39 @@ export default function ProductsSection({ token }) {
       const data = await apiFetch(`/api/products/admin/search?${params}`, {
         token,
       });
+      if (request !== searchRequest.current) return;
       setItems(data.items || []);
       setTotalPages(data.totalPages || 1);
       setPage(targetPage);
     } catch (err) {
+      if (request !== searchRequest.current) return;
       setError(err.message);
       setItems([]);
     } finally {
-      setLoading(false);
+      if (request === searchRequest.current) setLoading(false);
     }
   }
 
   function handleSearch(e) {
     e.preventDefault();
     searchProducts(1, query, includeRemoved);
+  }
+
+  function showRemovedProducts() {
+    setIncludeRemoved(true);
+    setQuery("");
+    searchProducts(1, "", true);
+  }
+
+  function showProductSearch() {
+    searchRequest.current += 1;
+    setIncludeRemoved(false);
+    setQuery("");
+    setItems([]);
+    setSearched(false);
+    setLoading(false);
+    setPage(1);
+    setError("");
   }
 
   function handleRemove(product) {
@@ -169,11 +190,9 @@ export default function ProductsSection({ token }) {
         },
       );
       clearOperationKey("RESTORE_PRODUCT", product.id);
-      setItems((prev) =>
-        prev.map((p) =>
-          p.id === product.id ? { ...p, status: updated.status } : p,
-        ),
-      );
+      setItems((prev) => includeRemoved
+        ? prev.filter((p) => p.id !== product.id)
+        : prev.map((p) => p.id === product.id ? { ...p, status: updated.status } : p));
       toast.success(`กู้คืนสินค้า "${product.title}" สำเร็จ`);
     } catch (err) {
       setError(err.message);
@@ -216,7 +235,7 @@ export default function ProductsSection({ token }) {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="ค้นหาชื่อสินค้า, แท็ก, หมวดหมู่..."
+                placeholder={includeRemoved ? "ค้นหาในสินค้าที่ถูกลบ..." : "ค้นหาชื่อสินค้า, แท็ก, หมวดหมู่..."}
                 className="w-full border-0 bg-transparent py-2.5 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-500 focus:ring-0"
               />
             </div>
@@ -228,21 +247,22 @@ export default function ProductsSection({ token }) {
               {loading ? "กำลังค้นหา..." : "ค้นหา"}
             </button>
           </form>
-          <label className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
-            <input
-              type="checkbox"
-              checked={includeRemoved}
-              onChange={(e) => {
-                const removedOnly = e.target.checked;
-                setIncludeRemoved(removedOnly);
-                if (searched && (query.trim() || removedOnly)) {
-                  searchProducts(1, query, removedOnly);
-                }
-              }}
-              className="h-3.5 w-3.5 rounded border-slate-300"
-            />
-            ค้นหาเฉพาะสินค้าที่ถูกลบไปแล้ว (เพื่อกู้คืน)
-          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={showRemovedProducts}
+              aria-pressed={includeRemoved}
+              disabled={loading && includeRemoved}
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${includeRemoved ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-white text-slate-700 hover:border-red-300 hover:text-red-700"}`}
+            >
+              ดูรายการที่ลบแล้ว
+            </button>
+            {includeRemoved && (
+              <button type="button" onClick={showProductSearch} className="text-sm font-semibold text-emerald-700 hover:underline">
+                กลับไปค้นหาสินค้า
+              </button>
+            )}
+          </div>
         </div>
 
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
