@@ -394,8 +394,8 @@ export default function TicketThreadPage() {
       <ConfirmDialog
         open={escalating}
         busy={busyAction}
-        title="ส่งต่อให้ Admin?"
-        description="ตั๋วจะออกจากคิวของคุณและไปอยู่ในคิวของ Admin"
+        title="ส่งต่อให้ Trust and Safety?"
+        description="ตั๋วจะออกจากคิวของคุณและไปอยู่ในคิว Trust and Safety"
         confirmLabel="ส่งต่อ"
         tone="primary"
         reason="optional"

@@ -133,9 +133,9 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
         </section>
         <section className="rounded-xl border bg-white p-4"><h3 className="font-bold">Verdict Console</h3>
           {detail?.status === "DECIDED" ? <p className="mt-2 text-sm">{detail.decision === "APPROVE_REFUND" ? "คืนเงินผู้ซื้อ" : "ปล่อยเงินให้ผู้ขาย"}: {detail.decisionReason}</p>
-          : detail?.assignedRole !== "ADMIN" ? <p className="mt-2 text-sm text-amber-700">รอ CS ส่งต่อเคสให้ Admin</p>
+          : detail?.assignedRole !== "ADMIN" ? <p className="mt-2 text-sm text-amber-700">รอ CS ส่งต่อเคสให้ Trust and Safety</p>
           : !detail?.assignedTo ? <button type="button" disabled={busy} onClick={claim} className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white">รับเคสเพื่อพิจารณา</button>
-          : detail.assignedTo !== currentUserId ? <p className="mt-2 text-sm text-slate-600">Admin คนอื่นกำลังรับผิดชอบเคสนี้ ({detail.assignedTo})</p>
+          : detail.assignedTo !== currentUserId ? <p className="mt-2 text-sm text-slate-600">เจ้าหน้าที่ Trust and Safety คนอื่นกำลังรับผิดชอบเคสนี้ ({detail.assignedTo})</p>
           : <><textarea aria-label="เหตุผลการตัดสิน" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="ระบุเหตุผลการตัดสินหรือหลักฐานที่ต้องการเพิ่ม" className="mt-3 w-full rounded-lg border p-3 text-sm" />
             <div className="mt-2 flex flex-wrap gap-2">{[["APPROVE_REFUND", "คืนเงินผู้ซื้อ"], ["RELEASE_ESCROW", "ปล่อยเงินให้ผู้ขาย"], ["MORE", "ตีกลับขอหลักฐานเพิ่ม"]].map(([value, label]) => <button key={value} type="button" disabled={busy || !reason.trim()} onClick={() => setPendingAction(value)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{label}</button>)}</div>
           </>}

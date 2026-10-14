@@ -90,7 +90,7 @@ test("ticket actions are visible beside the chat with the required close step", 
   );
   fireEvent.click(await screen.findByRole("button", { name: /Ticket A/ }));
 
-  expect(await screen.findByRole("button", { name: "ส่งต่อให้ Admin" })).toBeEnabled();
+  expect(await screen.findByRole("button", { name: "ส่งต่อให้ Trust and Safety" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "จบงาน" })).toBeDisabled();
   expect(screen.getByText("แจ้งว่าแก้ไขแล้วก่อนจึงจะจบงานได้")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "แจ้งว่าแก้ไขแล้ว" }));

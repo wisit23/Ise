@@ -431,7 +431,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
         <div
           className="mb-4 flex gap-2"
           role="tablist"
-          aria-label="ประเภทเคส Admin"
+          aria-label="ประเภทเคส Trust and Safety"
         >
           {[
             ["all", "ทั้งหมด"],
@@ -469,7 +469,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
         {error && <Alert className="mb-3">{source === "reports" && <span>โหลดรายงานไม่สำเร็จ</span>} {error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setRefreshKey((k) => k + 1)}>ลองใหม่</button></Alert>}
 
         {(source === "all" || source === "disputes") ? <div className="space-y-2">
-          <form onSubmit={(e) => { e.preventDefault(); setQ(qInput.trim()); setPage(1); setItems([]); }} className="mb-3 flex gap-2"><input value={qInput} onChange={(e) => setQInput(e.target.value)} aria-label="ค้นหาเคส Admin" placeholder="ค้นหาเลขออเดอร์หรือเหตุผล" className="min-w-0 flex-1 rounded-lg border bg-white px-3 py-2 text-sm" /><button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">ค้นหา</button></form>
+          <form onSubmit={(e) => { e.preventDefault(); setQ(qInput.trim()); setPage(1); setItems([]); }} className="mb-3 flex gap-2"><input value={qInput} onChange={(e) => setQInput(e.target.value)} aria-label="ค้นหาเคส Trust and Safety" placeholder="ค้นหาเลขออเดอร์หรือเหตุผล" className="min-w-0 flex-1 rounded-lg border bg-white px-3 py-2 text-sm" /><button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">ค้นหา</button></form>
           {loading && <p className="text-sm text-slate-500">กำลังโหลดคิวงาน...</p>}
           {!loading && items.length === 0 && <p className="rounded-xl border bg-white p-6 text-sm text-slate-500">ไม่มีเคสที่รอทีม Trust &amp; Safety</p>}
           {items.map((item) => {

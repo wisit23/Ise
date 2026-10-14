@@ -20,7 +20,7 @@ test("a failed escalation preserves all fields and keeps dialog open", async () 
   });
   await act(async () =>
     fireEvent.click(
-      screen.getByRole("button", { name: "ส่งต่อให้ Admin", exact: true }),
+      screen.getByRole("button", { name: "ส่งต่อให้ Trust and Safety", exact: true }),
     ),
   );
   expect(onClose).not.toHaveBeenCalled();

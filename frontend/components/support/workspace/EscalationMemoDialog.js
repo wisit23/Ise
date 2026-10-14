@@ -32,8 +32,8 @@ export default function EscalationMemoDialog({ open, onClose, onSubmit }) {
     <Modal
       open={open}
       onClose={busy ? undefined : onClose}
-      title="ส่งต่อให้ Admin"
-      description="เคสจะส่งเข้า Admin Inbox พร้อมสรุปข้อมูลสำหรับเจ้าหน้าที่รับช่วงต่อ"
+      title="ส่งต่อให้ Trust and Safety"
+      description="เคสจะส่งเข้าคิว Trust and Safety พร้อมสรุปข้อมูลสำหรับเจ้าหน้าที่รับช่วงต่อ"
       footer={
         <>
           <Button variant="secondary" disabled={busy} onClick={onClose}>
@@ -44,7 +44,7 @@ export default function EscalationMemoDialog({ open, onClose, onSubmit }) {
             disabled={busy || Object.values(memo).some((v) => !v.trim())}
             onClick={submit}
           >
-            ส่งต่อให้ Admin
+            ส่งต่อให้ Trust and Safety
           </Button>
         </>
       }

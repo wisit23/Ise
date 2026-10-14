@@ -324,7 +324,7 @@ export default function SellerDashboardPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span>
                     {kycStatus === "PENDING"
-                      ? "บัญชีนี้อยู่ระหว่างการตรวจสอบยืนยันตัวตนโดยแอดมิน"
+                      ? "บัญชีนี้อยู่ระหว่างการตรวจสอบยืนยันตัวตนโดย Trust and Safety"
                       : "บัญชีนี้ยังไม่ได้ยืนยันตัวตนผู้ขาย — ต้องยืนยันก่อนจึงจะลงขายสินค้าได้"}
                   </span>
                   {kycStatus !== "PENDING" && (

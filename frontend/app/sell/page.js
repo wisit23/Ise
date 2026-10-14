@@ -152,7 +152,7 @@ export default function SellPage() {
           <h1 className="mb-4 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
           <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             {kycStatus === "PENDING"
-              ? "บัญชีนี้อยู่ระหว่างการตรวจสอบยืนยันตัวตนโดยแอดมิน กรุณารอผลก่อนจึงจะลงขายสินค้าได้"
+              ? "บัญชีนี้อยู่ระหว่างการตรวจสอบยืนยันตัวตนโดย Trust and Safety กรุณารอผลก่อนจึงจะลงขายสินค้าได้"
               : "บัญชีนี้ยังไม่ได้ยืนยันตัวตนผู้ขาย ต้องยืนยันตัวตนก่อนจึงจะลงขายสินค้าได้"}
           </div>
           <Link

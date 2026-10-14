@@ -301,7 +301,7 @@ export default function TicketCasePanel({
                 disabled={actionBusy}
                 className="flex-1 bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
               >
-                ส่งต่อ Admin
+                ส่งต่อ Trust and Safety
               </Button>
             )}
             {nextStatuses.length === 0 && ticket.assigneeId && (

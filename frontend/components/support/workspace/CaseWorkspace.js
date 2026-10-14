@@ -195,7 +195,7 @@ export default function CaseWorkspace({
     else
       toast.success(
         action === "escalate" || body?.status === "ESCALATED"
-          ? "ส่งต่อให้ Admin แล้ว"
+          ? "ส่งต่อให้ Trust and Safety แล้ว"
           : "บันทึกเรียบร้อย",
       );
     if (
@@ -648,7 +648,7 @@ export default function CaseWorkspace({
                           disabled={busy || chatBusy}
                           onClick={() => setMemo(true)}
                         >
-                          ส่งต่อให้ Admin
+                          ส่งต่อให้ Trust and Safety
                         </Button>
                       )}
                       {!(caps.allowedNextStatuses || []).includes("CLOSED") && (
@@ -1027,7 +1027,7 @@ export default function CaseWorkspace({
                         disabled={busy || chatBusy}
                         onClick={() => setMemo(true)}
                       >
-                        ส่งต่อให้ Admin
+                        ส่งต่อให้ Trust and Safety
                       </Button>
                     )}
                     {caps.canReassign && (

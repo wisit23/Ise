@@ -145,7 +145,7 @@ export default function DisputeDetailPanel({
               <span className="material-symbols-outlined text-[14px]">
                 admin_panel_settings
               </span>
-              จัดการการระงับเงิน (Admin)
+              จัดการการระงับเงิน (Trust and Safety)
             </Link>
           )}
         </div>
@@ -284,7 +284,7 @@ export default function DisputeDetailPanel({
               <div>
                 <p className="text-sm font-bold text-slate-700">
                   {details?.assignedRole === "ADMIN"
-                    ? "เคสส่งต่อให้ Admin"
+                    ? "เคสส่งต่อให้ Trust and Safety"
                     : details?.assignedRole === "TRUST_AND_SAFETY"
                       ? "เคสส่งต่อให้ Trust & Safety"
                       : "เคสนี้ยังไม่มีผู้รับผิดชอบ"}
@@ -487,7 +487,7 @@ export default function DisputeDetailPanel({
                   ส่วนการตัดสินเป็นแบบอ่านอย่างเดียว (Read-only)
                 </h4>
                 <p className="mt-1 text-xs text-slate-500">
-                  เฉพาะ Admin ที่รับเคส ({details.assignedTo})
+                  เฉพาะเจ้าหน้าที่ Trust and Safety ที่รับเคส ({details.assignedTo})
                   เท่านั้นที่สามารถบันทึกคำตัดสินได้
                 </p>
               </div>
@@ -535,8 +535,8 @@ export default function DisputeDetailPanel({
       {/* Escalate Confirm Dialog */}
       <Modal
         open={showEscalateDialog}
-        title="ส่งต่อเคสให้ Admin (Escalate)"
-        description="สรุปปัญหา อำนาจที่ต้องใช้ และข้อเสนอแนะ ก่อนส่งเข้า Admin Inbox"
+        title="ส่งต่อเคสให้ Trust and Safety (Escalate)"
+        description="สรุปปัญหา อำนาจที่ต้องใช้ และข้อเสนอแนะ ก่อนส่งเข้าคิว Trust and Safety"
         onClose={() => setShowEscalateDialog(false)}
         footer={
           <div className="flex justify-end gap-2">

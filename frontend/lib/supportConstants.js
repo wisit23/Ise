@@ -72,6 +72,6 @@ export const DONUT_DISPUTE_COLORS = {
 export const PAGE_SIZE = config.pagination.articles;
 export const STAFF_ROLE_LABEL = {
   CUSTOMER_SERVICE: "Customer Service",
-  TRUST_AND_SAFETY: "Trust & Safety",
-  ADMIN: "Admin",
+  TRUST_AND_SAFETY: "Trust and Safety",
+  ADMIN: "Trust and Safety",
 };
