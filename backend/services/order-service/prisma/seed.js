@@ -1,6 +1,6 @@
 // Idempotent demo fixtures for the approved ER; never rewrites existing records.
-const { PrismaClient } = require("../src/generated/prisma-client");
-const prisma = new PrismaClient();
+// The service client stores order history and dispute workflow fields in logs.
+const prisma = require("../src/models/prismaClient");
 const BUYER = "30000000-0000-0000-0000-000000000001";
 const CS = "20000000-0000-0000-0000-000000000001";
 async function main() {
@@ -38,30 +38,35 @@ async function main() {
     });
     if (i === 2) continue;
     const caseId = "e0000000-0000-0000-0000-00000000000" + (i + 1);
-    await prisma.disputeCase.upsert({
-      where: { id: caseId },
-      update: {},
-      create: {
-        id: caseId,
-        orderId: id,
-        createdBy: BUYER,
-        reason: i === 0 ? "สินค้าเสียหาย" : "ขนาดสินค้าไม่ตรง",
-        disputeType: "ITEM_NOT_AS_DESCRIBED",
-        ...(i === 1
-          ? {
-              decision: "APPROVE_REFUND",
-              decidedBy: CS,
-              decidedAt: new Date(),
-              assignedTo: CS,
-              assignedRole: "CUSTOMER_SERVICE",
-              assignedAt: new Date(),
-            }
-          : {}),
-        caseLog: {
-          create: { actorId: BUYER, action: "OPEN", detail: "Demo complaint" },
+    // An empty workflow update still appends a state log and increments version.
+    if (!(await prisma.disputeCase.findUnique({ where: { id: caseId } })))
+      await prisma.disputeCase.create({
+        data: {
+          id: caseId,
+          orderId: id,
+          createdBy: BUYER,
+          reason: i === 0 ? "สินค้าเสียหาย" : "ขนาดสินค้าไม่ตรง",
+          disputeType: "ITEM_NOT_AS_DESCRIBED",
+          ...(i === 1
+            ? {
+                status: "DECIDED",
+                decision: "APPROVE_REFUND",
+                decidedBy: CS,
+                decidedAt: new Date(),
+                assignedTo: CS,
+                assignedRole: "CUSTOMER_SERVICE",
+                assignedAt: new Date(),
+              }
+            : {}),
+          caseLog: {
+            create: {
+              actorId: BUYER,
+              action: "OPEN",
+              detail: "Demo complaint",
+            },
+          },
         },
-      },
-    });
+      });
     if (i === 0)
       await prisma.hold.upsert({
         where: { id: caseId + "-hold" },

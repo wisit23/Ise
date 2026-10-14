@@ -1507,6 +1507,64 @@ chat-service **123/123** (ใหม่ 16 ตัว กับ MongoDB + Redis �
 ปิดฟีเจอร์แล้วดูว่า fail จริง; ตรวจผ่าน gateway: 4,001 ตัว → `400`, ยิงรัว 40 ครั้ง → บล็อก 13
 พร้อม `Retry-After`; บนเบราว์เซอร์: paste 10,000 ตัวถูกตัดเหลือ 4,000 พอดี
 
+## Task `CHAT-009` — Realtime บน Production เมื่อ Reverse Proxy บล็อก WebSocket (Long-Polling Fallback)
+
+> วันที่ทำ: 2026-10-14
+>
+> สถานะตามหลักฐาน: **โค้ดและ Test เสร็จ ยังไม่ได้ Deploy/ยืนยันบน Server จริง** — สถานะนี้ไม่ใช่
+> การยืนยันว่าแชทบน Production กลับมา Realtime แล้ว
+
+### ปัญหาและสาเหตุ
+
+บน Server จริง (VM `re-loop` บน init.d) ต้องรีเฟรชถึงเห็นข้อความอีกฝั่ง ทั้งแชท Buyer–Seller และ
+Customer Service ขณะที่ Local ปกติ หลักฐานจาก tcpdump ที่ค้างอยู่บน Console ของ VM: Request เข้า
+Gateway `:8080` มาจาก Reverse Proxy `192.168.100.225` และเป็น **HTTP/1.0** ทุกตัว WebSocket Upgrade
+ต้องใช้ HTTP/1.1 + Header `Upgrade`/`Connection` จึงไปไม่ถึง Gateway เลย ฝั่ง Client ตั้ง
+`transports: ["websocket"]` อย่างเดียว Socket จึงต่อไม่ติดตลอด หน้า `/chat/[id]` ยังพอได้เพราะมี REST
+Polling สำรอง แต่ `EmbeddedChat`/`SupportMainChat` ไม่มี จึงต้องรีเฟรช
+
+### งานที่ทำ
+
+1. `frontend/lib/chat.js` — `connectSocket()` เลิกบังคับ `transports: ["websocket"]` ใช้ค่า Default
+   (Long-Polling ก่อน แล้ว Upgrade เป็น WebSocket เองเมื่อเส้นทางรองรับ)
+2. `backend/gateway/src/app.js` — เพิ่ม `/api/chat/socket.io` ใน `PUBLIC_PATHS` (Polling ไม่มี
+   Bearer Header; `socketAuth.js` ของ chat-service ตรวจ Token ใน Handshake เหมือนเส้น WebSocket)
+   และ Proxy เฉพาะ Path นี้ที่คืน Prefix ให้ เพราะ Mount `/api/chat` ตัด Prefix ทิ้งแล้ว Socket.IO
+   ของ chat-service ฟังที่ Path เต็ม
+3. `frontend/components/chat/messageSync.js` (ใหม่) — `useSocketResync` Poll ทุก
+   `timing.socketFallbackPollMs` ขณะ Socket ไม่ Live และ Resync หนึ่งครั้งตอนกลับมา (Socket.IO ไม่
+   Replay Event ช่วงที่หลุด) + `mergeMessages` เรียงตาม `createdAt` แล้ว `id` แบบเดียวกับ Server
+4. ใช้ Hook ใน `/chat/[id]` (แทน Polling เดิม), `EmbeddedChat`, `SupportMainChat`
+5. `backend/shared/config/customer-service-client.json` — เพิ่ม `timing.socketFallbackPollMs: 4000`
+
+### ผลการตรวจที่ทำแล้ว
+
+| การตรวจ | ผลจริง |
+|---|---|
+| `chatPollingProxy.test.js` (ใหม่): Client แบบ Polling อย่างเดียวผ่าน Gateway — ส่ง/รับ Event ได้ | ผ่าน 2/2 |
+| Request Handshake แบบ HTTP/1.0 (จำลอง Proxy ของ init.d) ผ่าน Gateway | ได้ `200` + Engine.IO Open Packet |
+| ถอย `app.js` กลับของเดิมแล้วรัน Test ใหม่ | Fail 2/2 (Test ไม่กลวง) |
+| `chatWebSocketProxy.test.js` เดิม | ยังผ่าน |
+| Frontend Chat/Support/NavBar | ผ่าน 101 Suites / 566 Tests (ก่อนแก้ 99 / 558) |
+| `EmbeddedChat.fallback.test.js` บนโค้ด `EmbeddedChat` เดิม | Fail 1 ตัว (Test ไม่กลวง) |
+| ESLint ไฟล์ที่แก้ | ผ่าน |
+| `backend/shared` 4 ไฟล์ Test | Fail ทั้งก่อนและหลังแก้ (ไม่มี Generated Prisma Client) — ไม่เกี่ยวกับงานนี้ |
+
+### ผลลัพธ์ปัจจุบัน
+
+- แชททั้งระบบควรทำงาน Realtime ผ่าน Long-Polling บน Proxy ที่ส่ง HTTP/1.0 และ Upgrade เป็น
+  WebSocket อัตโนมัติถ้า init.d เปิดให้ภายหลัง
+- **ยังไม่ได้ทำ**: Deploy ขึ้น Server, ทดสอบผ่าน Domain จริง/Proxy จริงของ init.d (รวมถึง Timeout
+  ของ Proxy กับ Request ที่ค้าง ~25 วินาที), ทดสอบบนเบราว์เซอร์สองบัญชี, Next.js Production Build;
+  Long-Polling ต้องใช้ Sticky Session หากเพิ่ม chat-service เกิน 1 Instance
+
+### ไฟล์หลักที่เป็นหลักฐาน
+
+- `backend/gateway/src/app.js`, `backend/gateway/src/chatPollingProxy.test.js`
+- `frontend/lib/chat.js`, `frontend/components/chat/messageSync.js` (+ `.test.js`)
+- `frontend/components/support/EmbeddedChat.js` (+ `EmbeddedChat.fallback.test.js`)
+- `frontend/components/support/sections/live-support/SupportMainChat.js`, `frontend/app/chat/[id]/page.js`
+
 ## อัปเดตล่าสุด
 
-2026-09-04 (Asia/Bangkok)
+2026-10-14 (Asia/Bangkok)

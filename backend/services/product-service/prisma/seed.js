@@ -60,6 +60,217 @@ function photos(id) {
   };
 }
 
+// Each added listing has its own reviewed Unsplash photograph. Keep the original
+// group photoId only to recognize and upgrade the earlier shared demo photos.
+const EXTRA_PRODUCT_GROUPS = [
+  {
+    category: "เสื้อผ้า",
+    sellerId: SELLER.vintage,
+    photoId: "1556821840-3a63f95609a7",
+    photoIds: [
+      "1620799140188-3b2a02fd9a77", // unsplash.com/photos/kJXGTOY1wLQ
+      "1680292783974-a9a336c10366", // unsplash.com/photos/SXpun7pdECU
+      "1601063476271-a159c71ab0b3", // unsplash.com/photos/QWlXPidIgI8
+      "1564557287817-3785e38ec1f5", // unsplash.com/photos/ZCoqcrWp9GY
+      "1579572331145-5e53b299c64e", // unsplash.com/photos/REOoETloFqE
+      "1685354218016-3899c9ef79ad", // unsplash.com/photos/ggcJKGpx3pI
+    ],
+    tags: ["hoodie", "casual"],
+    description: "เสื้อฮู้ดผ้านุ่ม มีหมวกและกระเป๋าหน้า เหมาะกับใส่ลำลอง",
+    variants: [
+      ["เสื้อฮู้ดลำลอง ทรงพอดีตัว", 250, "S", "Good"],
+      ["เสื้อฮู้ดผ้าหนา ไซส์ M", 320, "M", "Like New"],
+      ["เสื้อฮู้ดโอเวอร์ไซส์ ไซส์ XL", 390, "XL", "Good"],
+      ["เสื้อฮู้ดมือสอง สำหรับวันพักผ่อน", 180, "L", "Fair"],
+      ["เสื้อฮู้ดผ้านุ่ม ป้ายยังอยู่", 490, "M", "New"],
+      ["เสื้อฮู้ดทรงหลวม ไซส์ XXL", 350, "XXL", "Like New"],
+    ],
+  },
+  {
+    category: "เสื้อยืด",
+    sellerId: SELLER.denim,
+    photoId: "1576566588028-4147f3842f27",
+    photoIds: [
+      "1581655353564-df123a1eb820", // unsplash.com/photos/acn5ERAeSb4
+      "1583743814966-8936f5b7be1a", // unsplash.com/photos/Wr0TpKqf26s
+      "1521572163474-6864f9cf17ab", // unsplash.com/photos/WWesmHEgXDs
+      "1618354691373-d851c5c3a990", // unsplash.com/photos/6Nub980bI3I
+      "1651761179569-4ba2aa054997", // unsplash.com/photos/4rUYuwJ2vGw
+      "1622445275463-afa2ab738c34", // unsplash.com/photos/ogmenj2NGho
+    ],
+    tags: ["tshirt", "casual"],
+    description: "เสื้อยืดคอกลม ผ้าใส่สบาย จับคู่กับยีนส์หรือกางเกงขาสั้นได้",
+    variants: [
+      ["เสื้อยืดคอกลม ไซส์ S", 120, "S", "Good"],
+      ["เสื้อยืดลำลอง ไซส์ M", 150, "M", "Like New"],
+      ["เสื้อยืดทรงหลวม ไซส์ L", 180, "L", "Good"],
+      ["เสื้อยืดโอเวอร์ไซส์ ไซส์ XL", 220, "XL", "Like New"],
+      ["เสื้อยืดคอกลม ยังไม่ผ่านการใช้งาน", 290, "M", "New"],
+      ["เสื้อยืดมือสอง ใส่อยู่บ้าน", 80, "L", "Fair"],
+    ],
+  },
+  {
+    category: "แจ็คเก็ต",
+    sellerId: SELLER.denim,
+    photoId: "1543163521-1bf539c55dd2",
+    photoIds: [
+      "1611312449408-fcece27cdbb7", // unsplash.com/photos/QRN47la37gw
+      "1537465978529-d23b17165b3b", // unsplash.com/photos/KKZmUQjTO2E
+      "1543076447-215ad9ba6923", // unsplash.com/photos/_BDBEP0ePQc
+      "1495105787522-5334e3ffa0ef", // unsplash.com/photos/TnNo84AJJ5A
+      "1614699745279-2c61bd9d46b5", // unsplash.com/photos/sN9BqTtWJIE
+      "1555583743-991174c11425", // unsplash.com/photos/1QOsJGbNIgk
+    ],
+    tags: ["denim", "jacket", "vintage"],
+    description: "แจ็คเก็ตยีนส์ติดกระดุม มีกระเป๋าหน้า ใส่คลุมเสื้อยืดได้",
+    variants: [
+      ["แจ็คเก็ตยีนส์ทรงสั้น ไซส์ S", 590, "S", "Good"],
+      ["แจ็คเก็ตยีนส์คลาสสิก ไซส์ M", 750, "M", "Like New"],
+      ["แจ็คเก็ตยีนส์ทรงหลวม ไซส์ L", 690, "L", "Good"],
+      ["แจ็คเก็ตยีนส์โอเวอร์ไซส์ ไซส์ XL", 850, "XL", "Like New"],
+      ["แจ็คเก็ตยีนส์มือสอง ลุควินเทจ", 390, "M", "Fair"],
+      ["แจ็คเก็ตยีนส์ตัวใหม่ พร้อมส่งต่อ", 990, "L", "New"],
+    ],
+  },
+  {
+    category: "กางเกง",
+    sellerId: SELLER.denim,
+    photoId: "1542272604-787c3835535d",
+    photoIds: [
+      "1582552938357-32b906df40cb", // unsplash.com/photos/Zy6oNZRdcjc
+      "1602293589930-45aad59ba3ab", // unsplash.com/photos/EtOMMg1nSR8
+      "1714729382668-7bc3bb261662", // unsplash.com/photos/2QSK4kFoVZE
+      "1598554747436-c9293d6a588f", // unsplash.com/photos/2s3GhhJz2uY
+      "1637069585336-827b298fe84a", // unsplash.com/photos/aWLTXw6kbDw
+      "1604176354204-9268737828e4", // unsplash.com/photos/EDSTj4kCUcw
+    ],
+    tags: ["denim", "jeans"],
+    description: "กางเกงยีนส์ขายาวทรงตรง ผ้าไม่ยืด ใส่ได้หลายโอกาส",
+    variants: [
+      ["กางเกงยีนส์ทรงตรง เอว 26", 350, "26", "Good"],
+      ["กางเกงยีนส์ลำลอง เอว 28", 450, "28", "Like New"],
+      ["กางเกงยีนส์ทรงคลาสสิก เอว 30", 490, "30", "Good"],
+      ["กางเกงยีนส์ขายาว เอว 32", 550, "32", "Like New"],
+      ["กางเกงยีนส์มือสอง เอว 34", 250, "34", "Fair"],
+      ["กางเกงยีนส์ยังไม่เคยใส่ เอว 36", 790, "36", "New"],
+    ],
+  },
+  {
+    category: "เดรส",
+    sellerId: SELLER.vintage,
+    photoId: "1572804013309-59a88b7e92f1",
+    photoIds: [
+      "1496747611176-843222e1e57c", // unsplash.com/photos/68csPWTnafo
+      "1542295669297-4d352b042bca", // unsplash.com/photos/sg_gRhbYXhc
+      "1715852700550-6436320162e6", // unsplash.com/photos/SoKWaOT_Imw
+      "1511130558090-00af810c21b1", // unsplash.com/photos/lSLq_xQdFNI
+      "1762154057377-cc9d3dd6900c", // unsplash.com/photos/cRpcTf0VfuE
+      "1602010069450-0a62034f235c", // unsplash.com/photos/2ZXVU3BJzN4
+    ],
+    tags: ["dress", "floral", "vintage"],
+    description: "เดรสลายดอกไม้ ผ้าเบา ใส่เที่ยวหรือใส่ลำลองได้",
+    variants: [
+      ["เดรสลายดอกไม้ ไซส์ XS", 290, "XS", "Good"],
+      ["เดรสลายดอกไม้ สำหรับวันหยุด", 390, "S", "Like New"],
+      ["เดรสวินเทจลายดอก ไซส์ M", 450, "M", "Good"],
+      ["เดรสลายดอกไม้ ไซส์ L", 490, "L", "Like New"],
+      ["เดรสลายดอกมือสอง ราคาประหยัด", 190, "M", "Fair"],
+      ["เดรสลายดอกไม้ตัวใหม่ ไซส์ XL", 690, "XL", "New"],
+    ],
+  },
+  {
+    category: "รองเท้า",
+    sellerId: SELLER.sneaker,
+    photoId: "1560769629-975ec94e6a86",
+    photoIds: [
+      "1542291026-7eec264c27ff", // unsplash.com/photos/164_6wVEHfI
+      "1606107557195-0e29a4b5b4aa", // unsplash.com/photos/kP6knT7tjn4
+      "1595950653106-6c9ebd614d3a", // unsplash.com/photos/jvoZ-Aux9aw
+      "1600269452121-4f2416e55c28", // unsplash.com/photos/SD9Jyl1xNQ4
+      "1525966222134-fcfa99b8ae77", // unsplash.com/photos/a-QH9MAAVNI
+      "1608231387042-66d1773070a5", // unsplash.com/photos/NUoPWImmjCU
+    ],
+    tags: ["sneakers", "sport", "casual"],
+    description: "รองเท้าผ้าใบผูกเชือก เหมาะกับใส่เดินและใส่ลำลอง",
+    variants: [
+      ["รองเท้าผ้าใบลำลอง ไซส์ 37", 490, "37", "Good"],
+      ["รองเท้าผ้าใบใส่เดิน ไซส์ 38", 690, "38", "Like New"],
+      ["รองเท้าผ้าใบทรงสปอร์ต ไซส์ 39", 590, "39", "Good"],
+      ["รองเท้าผ้าใบลำลอง ไซส์ 40", 790, "40", "Like New"],
+      ["รองเท้าผ้าใบมือสอง ไซส์ 41", 350, "41", "Fair"],
+      ["รองเท้าผ้าใบคู่ใหม่ ไซส์ 43", 1190, "43", "New"],
+    ],
+  },
+  {
+    category: "กระเป๋า",
+    sellerId: SELLER.bag,
+    photoId: "1553062407-98eeb64c6a62",
+    photoIds: [
+      "1547949003-9792a18a2601", // unsplash.com/photos/BmH09wAkJa8
+      "1622560480654-d96214fdc887", // unsplash.com/photos/SwWCo1k92M4
+      "1622560480605-d83c853bc5c3", // unsplash.com/photos/3o-X8WJOP5E
+      "1509762774605-f07235a08f1f", // unsplash.com/photos/8sjBzL1IyMo
+      "1581605405669-fcdf81165afa", // unsplash.com/photos/8TSqJoI-NVs
+      "1622260614153-03223fb72052", // unsplash.com/photos/MzTTVl_trFw
+    ],
+    tags: ["bag", "backpack"],
+    description: "กระเป๋าเป้สะพายหลัง มีช่องเก็บของ เหมาะกับใช้งานประจำวัน",
+    variants: [
+      ["กระเป๋าเป้ลำลอง สำหรับวันทำงาน", 350, "Free size", "Good"],
+      ["กระเป๋าเป้สะพายหลัง ใช้งานน้อย", 490, "Free size", "Like New"],
+      ["กระเป๋าเป้สำหรับวันหยุด", 390, "Free size", "Good"],
+      ["กระเป๋าเป้มือสอง ราคาประหยัด", 190, "Free size", "Fair"],
+      ["กระเป๋าเป้ใบใหม่ พร้อมใช้งาน", 690, "Free size", "New"],
+      ["กระเป๋าเป้สะพายหลัง สำหรับนักเรียน", 450, "Free size", "Like New"],
+    ],
+  },
+  {
+    category: "เครื่องประดับ",
+    sellerId: SELLER.bag,
+    photoId: "1523170335258-f5ed11844a49",
+    photoIds: [
+      "1522312346375-d1a52e2b99b3", // unsplash.com/photos/VRERJ5Mjp4c
+      "1620625515032-6ed0c1790c75", // unsplash.com/photos/LWPPpkn6NEQ
+      "1524805444758-089113d48a6d", // unsplash.com/photos/12V36G17IbQ
+      "1542496658-e33a6d0d50f6", // unsplash.com/photos/4R_WEmhx8og
+      "1547996160-81dfa63595aa", // unsplash.com/photos/p2WUEFGrAdA
+      "1622434641406-a158123450f9", // unsplash.com/photos/lz6z9GZu8hk
+    ],
+    tags: ["watch", "accessories", "vintage"],
+    description: "นาฬิกาข้อมือแบบเข็ม เหมาะกับใส่ลำลองหรือใส่ไปทำงาน",
+    variants: [
+      ["นาฬิกาข้อมือ ลุคคลาสสิก", 590, "Free size", "Good"],
+      ["นาฬิกาข้อมือสภาพเหมือนใหม่", 890, "Free size", "Like New"],
+      ["นาฬิกาข้อมือ สำหรับวันทำงาน", 750, "Free size", "Good"],
+      ["นาฬิกาข้อมือมือสอง มีรอยใช้งาน", 350, "Free size", "Fair"],
+      ["นาฬิกาข้อมือเรือนใหม่ พร้อมส่งต่อ", 1290, "Free size", "New"],
+      ["นาฬิกาข้อมือ สไตล์วินเทจ", 990, "Free size", "Like New"],
+    ],
+  },
+];
+
+const EXTRA_PRODUCTS = EXTRA_PRODUCT_GROUPS.flatMap((group, groupIndex) =>
+  group.variants.map(([title, price, size, condition], variantIndex) => ({
+    id: `p${17 + groupIndex * 6 + variantIndex}`,
+    sellerId: group.sellerId,
+    title,
+    description: `${group.description} ไซส์ ${size} สภาพ${CONDITIONS.find((item) => item.value === condition).label}`,
+    price,
+    category: group.category,
+    brand: "",
+    condition,
+    tags: group.tags,
+    location: [SELLER.sneaker, SELLER.bag].includes(group.sellerId)
+      ? "เชียงใหม่, เมือง"
+      : group.sellerId === SELLER.denim
+        ? "กรุงเทพฯ, จตุจักร"
+        : "กรุงเทพฯ, สยาม",
+    size,
+    photos: photos(group.photoIds[variantIndex]),
+    status: "available",
+  })),
+);
+
 const PRODUCTS = [
   {
     id: "p01",
@@ -293,6 +504,7 @@ const PRODUCTS = [
     photos: photos("1523170335258-f5ed11844a49"),
     status: "available",
   },
+  ...EXTRA_PRODUCTS,
 ];
 
 // Public-domain sample clips (Blender Foundation, CC-licensed) — just
@@ -471,6 +683,27 @@ async function main() {
       create: productWithBrand,
     });
   }
+  // Upgrade only the known shared demo URLs; retain custom photos and all
+  // listing fields, including sold/reserved status, on normal bootstrap.
+  for (const [index, product] of EXTRA_PRODUCTS.entries()) {
+    const legacyPhotos = photos(
+      EXTRA_PRODUCT_GROUPS[Math.floor(index / 6)].photoId,
+    );
+    for (const legacyPhoto of legacyPhotos.create) {
+      const replacement = product.photos.create.find(
+        (photo) => photo.position === legacyPhoto.position,
+      );
+      await prisma.photo.updateMany({
+        where: {
+          productId: product.id,
+          position: legacyPhoto.position,
+          url: legacyPhoto.url,
+        },
+        data: { url: replacement.url },
+      });
+    }
+  }
+
   // Articles search_text trigger (ST-MKT-05 / UR-14 / FR-5.2.3)
   await prisma.$executeRaw`
     CREATE OR REPLACE FUNCTION articles_set_search_text() RETURNS trigger AS $$

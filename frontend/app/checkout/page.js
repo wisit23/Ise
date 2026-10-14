@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
@@ -9,6 +8,8 @@ import OrderLine from "../../components/OrderLine";
 import Alert from "../../components/ui/Alert";
 import Button from "../../components/ui/Button";
 import Skeleton from "../../components/ui/Skeleton";
+import AddressManagerModal from "../../components/checkout/AddressManagerModal";
+import VoucherPickerModal from "../../components/checkout/VoucherPickerModal";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 import { formatCheckoutCountdown, remainingSeconds } from "../../lib/checkout";
@@ -29,6 +30,42 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [vouchers, setVouchers] = useState([]);
+  const [voucherError, setVoucherError] = useState("");
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
+  const [addressModalOpen, setAddressModalOpen] = useState(false);
+  const [addressBusy, setAddressBusy] = useState(false);
+  const [voucherOrderId, setVoucherOrderId] = useState(null);
+
+  async function loadVouchers() {
+    try {
+      setVouchers(
+        await apiFetch("/api/products/campaigns/my-vouchers?status=CLAIMED"),
+      );
+      setVoucherError("");
+    } catch {
+      setVoucherError("โหลดโค้ดส่วนลดไม่ได้ชั่วคราว กรุณาลองใหม่");
+    }
+  }
+
+  async function updateVoucher(order, campaignId) {
+    if (cartSeconds <= 0)
+      throw new Error("เวลาจองสินค้าหมดแล้ว กรุณากลับไปเลือกสินค้าใหม่");
+    setUpdatingOrderId(order.id);
+    setError("");
+    try {
+      const saved = await apiFetch(`/api/orders/${order.id}/voucher`, {
+        method: "PATCH",
+        body: { campaignId: campaignId || null },
+      });
+      setOrders((current) =>
+        current.map((item) => (item.id === saved.id ? saved : item)),
+      );
+      await loadVouchers();
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  }
 
   useEffect(() => {
     const token = getAccessToken();
@@ -36,6 +73,7 @@ export default function CheckoutPage() {
       router.push("/login");
       return;
     }
+    loadVouchers();
 
     const ids = new URLSearchParams(window.location.search)
       .get("orders")
@@ -94,14 +132,25 @@ export default function CheckoutPage() {
         : order.finalPrice),
     0,
   );
-  const appliedVouchers = orders.filter(
-    (order) => order.campaignId && order.campaignCode,
-  );
   const selectedAddress = addresses.find(
     (address) => address.id === selectedAddressId,
   );
+  const voucherOrder = orders.find((order) => order.id === voucherOrderId);
+
+  function addressesChanged(updated, selectedId) {
+    setAddresses(updated);
+    setSelectedAddressId((current) => {
+      const preferred = selectedId || current;
+      return updated.some((address) => address.id === preferred)
+        ? preferred
+        : (updated.find((address) => address.isDefault) || updated[0])?.id ||
+            "";
+    });
+  }
 
   async function handleConfirm() {
+    if (updatingOrderId || addressBusy || addressModalOpen || voucherOrderId)
+      return;
     if (!selectedAddress) {
       setError("กรุณาเลือกที่อยู่จัดส่ง");
       return;
@@ -188,12 +237,15 @@ export default function CheckoutPage() {
                       เลือกที่อยู่สำหรับรับสินค้า
                     </p>
                   </div>
-                  <Link
-                    href="/profile"
+                  <button
+                    type="button"
+                    onClick={() => setAddressModalOpen(true)}
+                    aria-haspopup="dialog"
+                    disabled={submitting}
                     className="text-sm font-medium text-brand-700 hover:underline"
                   >
                     จัดการที่อยู่
-                  </Link>
+                  </button>
                 </div>
                 {addresses.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-line p-5 text-center">
@@ -201,7 +253,7 @@ export default function CheckoutPage() {
                       ยังไม่มีที่อยู่จัดส่ง
                     </p>
                     <Button
-                      href="/profile"
+                      onClick={() => setAddressModalOpen(true)}
                       variant="secondary"
                       className="mt-3"
                     >
@@ -245,51 +297,78 @@ export default function CheckoutPage() {
                 )}
               </section>
 
-              <section className="rounded-xl border border-line bg-white p-5 shadow-1">
-                <h2 className="font-bold text-gray-900">
-                  Voucher จาก Marketing
-                </h2>
-                <p className="mb-4 text-sm text-ink-muted">
-                  Voucher ถูกตรวจสอบและล็อกไว้ตอนเพิ่มสินค้าแล้ว
-                </p>
-                {appliedVouchers.length === 0 ? (
-                  <p className="rounded-lg border border-line bg-gray-50 p-3 text-sm text-ink-muted">
-                    ไม่มี Voucher ที่ใช้กับรายการนี้
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {appliedVouchers.map((order) => (
-                      <div
-                        key={order.id}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-gray-900">
-                            {order.productTitle}
-                          </p>
-                          <p className="font-mono text-xs font-bold text-emerald-700">
-                            {order.campaignCode}
-                          </p>
-                        </div>
-                        <span className="shrink-0 text-sm font-semibold text-emerald-700">
-                          -฿
-                          {(order.discountAmount || 0).toLocaleString("th-TH")}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-
               <section className="overflow-hidden rounded-xl border border-line bg-white shadow-1">
                 <div className="border-b border-line px-5 py-4">
                   <h2 className="font-bold text-gray-900">
                     รายการสินค้า ({orders.length})
                   </h2>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    เลือกโค้ดส่วนลดได้ 1 โค้ดต่อสินค้า 1 ชิ้น
+                  </p>
+                  {voucherError && (
+                    <div className="mt-2 text-sm text-amber-700">
+                      {voucherError}{" "}
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={loadVouchers}
+                      >
+                        ลองโหลดโค้ดอีกครั้ง
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="divide-y divide-line">
                   {orders.map((order) => (
-                    <OrderLine key={order.id} order={order} />
+                    <div key={order.id}>
+                      <OrderLine order={order} />
+                      <div className="px-5 pb-4">
+                        <button
+                          type="button"
+                          className="focus-ring inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-700 transition hover:bg-brand-100 disabled:opacity-50"
+                          aria-haspopup="dialog"
+                          aria-label={`เลือกโค้ดส่วนลดสำหรับ ${order.productTitle}`}
+                          disabled={
+                            submitting ||
+                            Boolean(updatingOrderId) ||
+                            cartSeconds <= 0 ||
+                            Boolean(order.checkoutId) ||
+                            Boolean(order.auctionId)
+                          }
+                          onClick={() => {
+                            setVoucherOrderId(order.id);
+                            loadVouchers();
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="material-symbols-outlined text-[18px]"
+                          >
+                            confirmation_number
+                          </span>
+                          {order.campaignCode
+                            ? `โค้ด ${order.campaignCode} · เปลี่ยนโค้ด`
+                            : "เลือกโค้ดส่วนลด"}
+                        </button>
+                        {updatingOrderId === order.id ? (
+                          <p
+                            role="status"
+                            className="mt-2 text-xs text-ink-muted"
+                          >
+                            กำลังตรวจสอบโค้ดและคำนวณราคา…
+                          </p>
+                        ) : (
+                          order.campaignId && (
+                            <p className="mt-2 text-sm text-emerald-700">
+                              ส่วนลดสินค้าชิ้นนี้ -฿
+                              {(order.discountAmount || 0).toLocaleString(
+                                "th-TH",
+                              )}
+                            </p>
+                          )
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </section>
@@ -327,7 +406,13 @@ export default function CheckoutPage() {
                 icon="qr_code_2"
                 loading={submitting}
                 disabled={
-                  !selectedAddress || cartSeconds <= 0 || orders.length === 0
+                  !selectedAddress ||
+                  cartSeconds <= 0 ||
+                  orders.length === 0 ||
+                  Boolean(updatingOrderId) ||
+                  addressBusy ||
+                  addressModalOpen ||
+                  Boolean(voucherOrderId)
                 }
                 onClick={handleConfirm}
               >
@@ -344,6 +429,38 @@ export default function CheckoutPage() {
         )}
       </div>
       <Footer />
+      {addressModalOpen && (
+        <AddressManagerModal
+          addresses={addresses}
+          selectedId={selectedAddressId}
+          onChange={addressesChanged}
+          onSelect={setSelectedAddressId}
+          onBusyChange={setAddressBusy}
+          onClose={() => setAddressModalOpen(false)}
+        />
+      )}
+      {voucherOrder && (
+        <VoucherPickerModal
+          key={voucherOrder.id}
+          order={voucherOrder}
+          vouchers={vouchers.filter(
+            (voucher) =>
+              voucher.campaignId !== voucherOrder.campaignId &&
+              (!voucher.usedOrderId ||
+                voucher.usedOrderId === voucherOrder.id) &&
+              !orders.some(
+                (other) =>
+                  other.id !== voucherOrder.id &&
+                  other.campaignId === voucher.campaignId,
+              ),
+          )}
+          walletError={voucherError}
+          onRetry={loadVouchers}
+          busy={Boolean(updatingOrderId)}
+          onApply={(campaignId) => updateVoucher(voucherOrder, campaignId)}
+          onClose={() => setVoucherOrderId(null)}
+        />
+      )}
     </main>
   );
 }

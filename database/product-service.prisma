@@ -24,6 +24,16 @@ generator client {
 // category retains the legacy primary display value; membership is product_categories.
 // condition references the existing unique lookup value without adding an ER column.
 // Status lifecycle: available -> reserved (in a buyer's cart) -> sold, or removed by the seller.
+model RecommendationSearch {
+  userId String @map("user_id")
+  query String
+  searchedAt DateTime @default(now()) @map("searched_at")
+
+  @@id([userId, query])
+  @@index([userId, searchedAt])
+  @@map("recommendation_searches")
+}
+
 model Product {
   id                   String                   @id @default(uuid())
   sellerId             String                   @map("seller_id")

@@ -21,6 +21,7 @@ const executiveAuditRoutes = require("./features/executiveAudit/executiveAuditRo
 const productModerationRoutes = require("./features/productModeration/productModerationRoutes");
 const sellerActivityRoutes = require("./features/sellerActivity/sellerActivityRoutes");
 const profileAddressRoutes = require("./features/profileAddresses/profileAddressRoutes");
+const styleProfileRoutes = require("./features/styleProfile/styleProfileRoutes");
 const buyerAuditRoutes = require("./features/buyerAudit/buyerAuditRoutes");
 const restrictionRoutes = require("./features/commerceRestrictions/restrictionRoutes");
 const marketingMetricsRoutes = require("./features/metrics/marketingMetricsRoutes");
@@ -87,6 +88,7 @@ app.use("/executive", executiveAuditRoutes);
 app.use("/marketing", marketingMetricsRoutes);
 app.use("/internal", internalRoutes);
 app.use("/me/addresses", profileAddressRoutes);
+app.use("/me/style-profile", styleProfileRoutes);
 app.use("/", buyerAuditRoutes);
 app.use("/", restrictionRoutes);
 app.use("/", authRoutes);

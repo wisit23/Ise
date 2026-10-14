@@ -32,6 +32,8 @@
     "pretest": "node scripts/ensurePrismaClients.js && node -e \"require('fs').mkdirSync('coverage',{recursive:true})\"",
     "test": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"backend/**/*.test.js\" \"scripts/*.test.js\"",
     "test:frontend": "npm --workspace frontend run test",
+    "test:service": "node scripts/ci/service-tests.cjs",
+    "ci:prepare": "node scripts/ci/prepare-databases.cjs",
     "secret-scan": "node scripts/secretScan.js",
     "audit": "npm audit --audit-level=high"
   },

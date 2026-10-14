@@ -28,18 +28,14 @@ import {
   useChatSocket,
   useChatSocketEvent,
 } from "../../../components/chat/ChatSocketProvider";
+import {
+  mergeMessages,
+  useSocketResync,
+} from "../../../components/chat/messageSync";
 import { uploadChatAttachment } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
-// REST polling is now the FALLBACK, not the primary delivery path (CHAT-006)
-const POLL_INTERVAL_MS = 4000;
 const PAGE_SIZE = 30;
-
-function mergeById(existing, incoming) {
-  const byId = new Map(existing.map((m) => [m.id, m]));
-  for (const m of incoming) byId.set(m.id, m);
-  return [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
-}
 
 // In-memory room cache for 0ms instant room transitions
 const roomDataCache = new Map();
@@ -406,7 +402,7 @@ export default function ChatRoomPage() {
 
   useChatSocketEvent("message:new", (message) => {
     if (!user || message.conversationId !== activeRoomId) return;
-    setMessages((prev) => mergeById(prev, [message]));
+    setMessages((prev) => mergeMessages(prev, [message]));
     scrollToBottom(true);
     if (message.senderId !== user.id) {
       setOtherTyping(false);
@@ -492,33 +488,32 @@ export default function ChatRoomPage() {
     socket.emit(isTyping ? "typing:start" : "typing:stop", activeRoomId);
   }
 
-  // Polling fallback
-  useEffect(() => {
-    if (!user || !conversation || realtime || !activeRoomId) return undefined;
-    let cancelled = false;
-
-    async function tick() {
-      if (document.hidden || cancelled) return;
-      try {
-        const page = await listMessages(
-          activeRoomId,
-          { limit: PAGE_SIZE },
-          tokenRef.current,
-        );
-        if (cancelled) return;
-        setMessages((prev) => mergeById(prev, page.items));
-        markRead(activeRoomId, tokenRef.current).catch(() => {});
-      } catch {
-        // Suppress transient poll error
-      }
+  // REST is the fallback, not the primary delivery path (CHAT-006): poll
+  // while this room isn't joined live, and catch up once it is again, since
+  // nothing replays the events missed in between.
+  const activeRoomRef = useRef(activeRoomId);
+  activeRoomRef.current = activeRoomId;
+  const resyncLatest = useCallback(async () => {
+    const room = activeRoomRef.current;
+    if (!room) return;
+    try {
+      const page = await listMessages(
+        room,
+        { limit: PAGE_SIZE },
+        tokenRef.current,
+      );
+      if (activeRoomRef.current !== room) return;
+      setMessages((prev) => mergeMessages(prev, page.items));
+      markRead(room, tokenRef.current).catch(() => {});
+    } catch {
+      // Suppress transient poll error
     }
-
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [activeRoomId, user, conversation, realtime]);
+  }, []);
+  useSocketResync({
+    active: Boolean(user && conversation && activeRoomId),
+    live: realtime,
+    resync: resyncLatest,
+  });
 
   async function handleSend(body) {
     if (!activeRoomId) return;
@@ -538,7 +533,7 @@ export default function ChatRoomPage() {
       const saved = await sendMessage(currentRoom, body, tokenRef.current);
       const savedWithClient = { ...saved, clientId: optimisticId };
       setMessages((prev) =>
-        mergeById(
+        mergeMessages(
           prev.filter((m) => m.id !== optimisticId),
           [savedWithClient],
         ),
@@ -568,7 +563,7 @@ export default function ChatRoomPage() {
         caption,
         tokenRef.current,
       );
-      setMessages((prev) => mergeById(prev, [saved]));
+      setMessages((prev) => mergeMessages(prev, [saved]));
       scrollToBottom(true);
       updateConversationReadLocally(activeRoomId, user.id);
       if (tokenRef.current) {

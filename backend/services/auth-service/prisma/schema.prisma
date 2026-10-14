@@ -88,8 +88,22 @@ model BuyerProfile {
   sizePreference   String?  @map("size_preference")
   brandPreference  String?  @map("brand_preference")
   updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+  // Legacy scalar columns are retained; Style Profile reads normalized selections.
+  preferences      BuyerPreference[]
 
   @@map("buyer_profiles")
+}
+
+model BuyerPreference {
+  userId   String @map("user_id")
+  kind     String
+  // Empty for non-size preferences and legacy sizes whose category is unknown.
+  category String @default("")
+  value    String
+  profile  BuyerProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([userId, kind, category, value])
+  @@map("buyer_preferences")
 }
 
 // ER: Seller — shop info + KYC fields.

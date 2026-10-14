@@ -12,6 +12,7 @@ import Modal from "../../components/ui/Modal";
 import Alert from "../../components/ui/Alert";
 import EmptyState from "../../components/ui/EmptyState";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
+import StyleProfileForm from "../../components/profile/StyleProfileForm";
 import OrderReviewForm from "../../components/orders/OrderReviewForm";
 import OrderDisputeForm from "../../components/orders/OrderDisputeForm";
 import { apiFetch } from "../../lib/api";
@@ -644,6 +645,7 @@ export default function ProfilePage() {
                 </Button>
               </div>
             </form>
+            {["BUYER", "SELLER"].includes(form.role) && <StyleProfileForm />}
           </section>
         )}
 
