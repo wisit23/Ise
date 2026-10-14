@@ -16,6 +16,11 @@ const marketingAuditRoutes = require("../features/audit/marketingAuditRoutes");
 
 const router = Router();
 
+router.use(
+  "/recommendations",
+  require("../features/recommendations/recommendationRoutes"),
+);
+
 // Public browsing (gateway lets these through without a bearer token).
 router.get("/feed", productController.feed);
 router.get("/search", productController.search);

@@ -27,7 +27,7 @@ module.exports = [
   },
   js.configs.recommended,
   {
-    files: ["backend/**/*.js", "scripts/**/*.js", "*.js"],
+    files: ["backend/**/*.{js,cjs}", "scripts/**/*.{js,cjs}", "*.{js,cjs}"],
     languageOptions: {
       sourceType: "commonjs",
       globals: { ...globals.node },

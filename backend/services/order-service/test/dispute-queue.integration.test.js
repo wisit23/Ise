@@ -1,4 +1,3 @@
-const { createOrder, findOrder, deleteOrder } = require("./fixtures");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
@@ -12,11 +11,20 @@ app.locals.validateAccessSession = async () => {};
 test("access-aware dispute queue paginates more than 50 cases with terminal SLA last", async (t) => {
   if (
     !process.env.DATABASE_URL_ORDER ||
-    !new URL(process.env.DATABASE_URL_ORDER).pathname.startsWith("/reloop_ui_")
+    !(
+      ["127.0.0.1", "localhost"].includes(
+        new URL(process.env.DATABASE_URL_ORDER).hostname,
+      ) &&
+      /^\/reloop_(ui|ci)_[a-z0-9_]+$/.test(
+        new URL(process.env.DATABASE_URL_ORDER).pathname,
+      )
+    )
   ) {
     if (process.env.REQUIRE_INTEGRATION === "1")
-      throw new Error("This test requires a dedicated reloop_ui_* database");
-    t.skip("Set DATABASE_URL_ORDER to a dedicated reloop_ui_* test database");
+      throw new Error(
+        "This test requires a dedicated localhost reloop_ui_* or reloop_ci_* database",
+      );
+    t.skip("Set DATABASE_URL_ORDER to a dedicated localhost test database");
     return;
   }
   const tag = `ui-queue-${Date.now()}`;

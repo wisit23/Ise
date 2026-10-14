@@ -9,6 +9,7 @@ import ErrorState from "../components/ui/ErrorState";
 import Skeleton from "../components/ui/Skeleton";
 import useHomeEntrance from "../components/home/useHomeEntrance";
 import FannedHeroCards from "../components/home/FannedHeroCards";
+import RecommendedProducts from "../components/home/RecommendedProducts";
 import { apiFetch } from "../lib/api";
 import { fetchActiveCategories } from "../lib/catalog";
 
@@ -287,6 +288,8 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <RecommendedProducts />
 
       {error ? (
         <section className="mx-auto w-[min(100%-2.5rem,1280px)] py-[clamp(3.5rem,7vw,6rem)]">

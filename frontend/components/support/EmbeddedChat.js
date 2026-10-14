@@ -6,17 +6,12 @@ import MessageList from "../chat/MessageList";
 import MessageComposer from "../chat/MessageComposer";
 import TypingIndicator from "../chat/TypingIndicator";
 import { useChatSocket, useChatSocketEvent } from "../chat/ChatSocketProvider";
+import { mergeMessages, useSocketResync } from "../chat/messageSync";
 import { listMessages, sendMessage, markRead } from "../../lib/chat";
 import { uploadChatAttachment } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 
 const PAGE_SIZE = config.pagination.messages;
-
-function mergeById(existing, incoming) {
-  const byId = new Map(existing.map((m) => [m.id, m]));
-  for (const m of incoming) byId.set(m.id, m);
-  return [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
-}
 
 /** A compact, self-contained chat window meant to be embedded inside a
  * workspace panel (TicketCasePanel, DisputeChatPanel, etc.).
@@ -45,6 +40,8 @@ export default function EmbeddedChat({
 }) {
   const [user] = useState(() => getStoredUser());
   const [messages, setMessages] = useState([]);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const [olderCursor, setOlderCursor] = useState(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -167,6 +164,35 @@ export default function EmbeddedChat({
       setPeerTyping(false);
     };
   }, [socket, connected, conversationId, recipientId]);
+
+  // ── Fallback: poll while the socket is down, catch up when it returns ──
+  const resyncLatest = useCallback(() => {
+    const room = conversationId;
+    if (!room) return;
+    const token = tokenRef.current || getAccessToken();
+    listMessages(room, { limit: PAGE_SIZE }, token)
+      .then((page) => {
+        if (activeRoom.current !== room) return;
+        const fresh = page.items.filter(
+          (message) => !hideInternal || message.visibility !== "INTERNAL",
+        );
+        const known = new Set(messagesRef.current.map((m) => m.id));
+        if (!fresh.some((m) => !known.has(m.id))) return;
+        setMessages((prev) => mergeMessages(prev, fresh));
+        scrollToBottom(true);
+        markRead(room, token).catch(() => {});
+      })
+      .catch(() => {
+        // A failed poll is retried on the next tick; the initial load
+        // already surfaced any real access error.
+      });
+  }, [conversationId, hideInternal, scrollToBottom]);
+  useSocketResync({
+    active: Boolean(conversationId) && !loading,
+    live: connected,
+    resync: resyncLatest,
+  });
+
   useChatSocketEvent("presence", (data) => {
     if (data.userId === recipientId) {
       setPeerOnline(Boolean(data.online));
@@ -240,7 +266,7 @@ export default function EmbeddedChat({
       if (activeRoom.current !== conversationId) return;
       onCommitted?.();
       setMessages((prev) =>
-        mergeById(
+        mergeMessages(
           prev.filter((m) => m.id !== optimisticId),
           [saved],
         ),
@@ -271,7 +297,7 @@ export default function EmbeddedChat({
       );
       if (activeRoom.current !== conversationId) return;
       onCommitted?.();
-      setMessages((prev) => mergeById(prev, [saved]));
+      setMessages((prev) => mergeMessages(prev, [saved]));
       scrollToBottom(true);
     } catch (err) {
       if (activeRoom.current !== conversationId) throw err;

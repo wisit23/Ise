@@ -424,8 +424,9 @@ function listConditions() {
 }
 
 async function listFilterOptions() {
+  const { groupSizesByCategory } = require("../features/catalog/sizeOptions");
   try {
-    const [brands, styles, sizes] = await Promise.all([
+    const [brands, styles, sizes, sizedProducts] = await Promise.all([
       prisma.product.findMany({
         where: {
           status: "available",
@@ -443,19 +444,29 @@ async function listFilterOptions() {
         select: { size: true },
         orderBy: { size: "asc" },
       }),
+      prisma.product.findMany({
+        where: { status: "available", moderatedAt: null, size: { not: "" } },
+        select: {
+          size: true,
+          category: true,
+          categoryLinks: { select: { category: { select: { name: true } } } },
+        },
+      }),
     ]);
     return {
       brands: brands.map((x) => x.brand).filter(Boolean),
       styles: styles.map((x) => x.value).filter(Boolean),
       sizes: sizes.map((x) => x.size).filter(Boolean),
+      sizesByCategory: groupSizesByCategory(sizedProducts),
     };
   } catch (err) {
     console.warn("listFilterOptions fallback:", err.message);
-    return { brands: [], styles: [], sizes: [] };
+    return { brands: [], styles: [], sizes: [], sizesByCategory: [] };
   }
 }
 
 module.exports = {
+  toApiShape,
   list,
   listBySeller,
   findById,
