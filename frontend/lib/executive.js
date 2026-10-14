@@ -4,7 +4,7 @@ export const TIMEZONE =
   process.env.NEXT_PUBLIC_REPORT_TIMEZONE || "Asia/Bangkok";
 
 /** Platform fee assumption. There is no payment system yet, so revenue is
- * modelled as a flat 10% of GMV — the same rate order-service applies when it
+ * modelled as a flat 3% of GMV — the same rate order-service applies when it
  * computes `platformRevenue`, kept here only for labelling the report. */
 export const PLATFORM_FEE_RATE = 0.03;
 
@@ -27,40 +27,61 @@ export function baht(v) {
   return `฿${v.toLocaleString("th-TH")}`;
 }
 
-/** Calendar month [from, to) in UTC, plus a short display label. */
+/** Calendar year and month of `instant` in the report time zone — "this
+ * month" for a Bangkok executive changes at Bangkok midnight, not UTC's. */
+export function currentYearMonth(instant = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: TIMEZONE,
+      year: "numeric",
+      month: "numeric",
+    })
+      .formatToParts(instant)
+      .map(({ type, value }) => [type, value]),
+  );
+  return { year: Number(parts.year), monthIndex: Number(parts.month) - 1 };
+}
+
+/** "YYYY-MM-DD" for a calendar date; month/day overflow rolls like Date.UTC. */
+function isoDate(year, monthIndex, day) {
+  return new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
+}
+
+/** Calendar month [from, to) as local dates, plus a short display label.
+ * The backend reads date-only bounds as midnight in TIMEZONE. */
 export function monthWindow(year, monthIndex) {
-  const from = new Date(Date.UTC(year, monthIndex, 1));
-  const to = new Date(Date.UTC(year, monthIndex + 1, 1));
+  const start = new Date(Date.UTC(year, monthIndex, 1));
   return {
-    from,
-    to,
-    label: from.toLocaleDateString("th-TH", {
+    from: isoDate(year, monthIndex, 1),
+    to: isoDate(year, monthIndex + 1, 1),
+    // A calendar label, not an instant, so it is formatted in UTC on purpose.
+    label: start.toLocaleDateString("th-TH", {
       month: "short",
       year: "2-digit",
       timeZone: "UTC",
     }),
-    longLabel: `${MONTH_NAMES[((monthIndex % 12) + 12) % 12]} ${year + 543}`,
+    longLabel: `${MONTH_NAMES[start.getUTCMonth()]} ${start.getUTCFullYear() + 543}`,
   };
 }
 
 export function yearWindow(year) {
   return {
-    from: new Date(Date.UTC(year, 0, 1)),
-    to: new Date(Date.UTC(year + 1, 0, 1)),
+    from: isoDate(year, 0, 1),
+    to: isoDate(year + 1, 0, 1),
     label: String(year),
     longLabel: `ปี ${year + 543}`,
   };
 }
 
 /** N most recent windows ending with the current one, oldest first. */
-export function lastNWindows(granularity, n) {
-  const now = new Date();
+export function lastNWindows(granularity, n, instant = new Date()) {
+  const now = currentYearMonth(instant);
   const windows = [];
   for (let i = n - 1; i >= 0; i--) {
     windows.push(
       granularity === "year"
-        ? yearWindow(now.getUTCFullYear() - i)
-        : monthWindow(now.getUTCFullYear(), now.getUTCMonth() - i),
+        ? yearWindow(now.year - i)
+        : monthWindow(now.year, now.monthIndex - i),
     );
   }
   return windows;
@@ -68,8 +89,8 @@ export function lastNWindows(granularity, n) {
 
 export function buildPath(base, win) {
   const q = new URLSearchParams({
-    from: win.from.toISOString(),
-    to: win.to.toISOString(),
+    from: win.from,
+    to: win.to,
     timezone: TIMEZONE,
   });
   return `${base}?${q.toString()}`;
@@ -77,15 +98,16 @@ export function buildPath(base, win) {
 
 export function buildSeriesPath(base, win, granularity) {
   const q = new URLSearchParams({
-    from: win.from.toISOString(),
-    to: win.to.toISOString(),
+    from: win.from,
+    to: win.to,
     granularity,
     timezone: TIMEZONE,
   });
   return `${base}?${q.toString()}`;
 }
 
-/** "01/ส.ค./69" for one day-bucket ISO period.
+/** "01/ส.ค./69" for one day-bucket ISO period. Periods are the instants at
+ * which a TIMEZONE day begins, so they are read back in TIMEZONE.
  *
  * Month and year must be formatted in the same toLocaleDateString call: th-TH
  * spells out "พ.ศ. 69" when year is requested alone, but drops the era prefix
@@ -93,18 +115,21 @@ export function buildSeriesPath(base, win, granularity) {
  * year-only call here would silently produce "01/ส.ค./พ.ศ. 69". */
 export function dayLabel(isoPeriod) {
   const d = new Date(isoPeriod);
-  const day = String(d.getUTCDate()).padStart(2, "0");
+  const day = d.toLocaleDateString("en-US", {
+    day: "2-digit",
+    timeZone: TIMEZONE,
+  });
   const monthYear = d.toLocaleDateString("th-TH", {
     month: "short",
     year: "2-digit",
-    timeZone: "UTC",
+    timeZone: TIMEZONE,
   });
   return `${day}/${monthYear.replace(" ", "/")}`;
 }
 
 /** Full Thai month name for one month-bucket ISO period. */
 export function monthLabel(isoPeriod) {
-  return MONTH_NAMES[new Date(isoPeriod).getUTCMonth()];
+  return MONTH_NAMES[currentYearMonth(new Date(isoPeriod)).monthIndex];
 }
 
 /** Unwraps one Promise.allSettled entry; null means that provider failed and

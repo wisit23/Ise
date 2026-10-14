@@ -22,11 +22,13 @@ async function getUserMetrics({ from, to }) {
 /**
  * activeUsers bucketed by day or month instead of summed over [from, to) —
  * distinct-per-bucket, so a user who logs in every day of the month counts
- * once per day, not once for the whole month.
+ * once per day, not once for the whole month. Buckets are calendar days/months
+ * in `timezone`; `login_at` is a zone-less TIMESTAMP holding UTC.
  */
-async function getUserMetricsSeries({ from, to, granularity }) {
+async function getUserMetricsSeries({ from, to, granularity, timezone }) {
   const rows = await prisma.$queryRaw`
-    SELECT date_trunc(${granularity}, login_at) AS period,
+    SELECT date_trunc(${granularity}, (login_at AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})
+             AT TIME ZONE ${timezone} AS period,
            COUNT(DISTINCT user_id)::int AS "activeUsers"
     FROM login_logs
     WHERE login_at >= ${from} AND login_at < ${to}

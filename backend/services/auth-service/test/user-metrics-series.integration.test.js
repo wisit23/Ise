@@ -59,6 +59,8 @@ test("executive user metrics series against a real database", async (t) => {
 
   const day5 = new Date("2019-03-05T10:00:00.000Z");
   const day10 = new Date("2019-03-10T10:00:00.000Z");
+  // 02:00 Bangkok on 1 March, still 28 February in UTC.
+  const bangkokMarch1 = new Date("2019-02-28T19:00:00.000Z");
 
   const userA = await prisma.user.create({
     data: {
@@ -85,40 +87,52 @@ test("executive user metrics series against a real database", async (t) => {
         { userId: userA.id, loginAt: day5 },
         { userId: userB.id, loginAt: day5 },
         { userId: userA.id, loginAt: day10 },
+        { userId: userB.id, loginAt: bangkokMarch1 },
       ],
     });
 
     const res = await request(app)
       .get("/executive/metrics-series")
       .query({
-        from: "2019-03-01T00:00:00.000Z",
-        to: "2019-04-01T00:00:00.000Z",
+        from: "2019-03-01",
+        to: "2019-04-01",
         granularity: "day",
+        timezone: "Asia/Bangkok",
       })
       .set("Authorization", `Bearer ${executiveToken}`);
 
     assert.equal(res.status, 200);
     assert.equal(res.body.data.length, 31);
 
+    // Buckets are Bangkok calendar days, which start at 17:00 UTC.
+    assert.equal(res.body.data[0].period, "2019-02-28T17:00:00.000Z");
+
+    // Logged in on 28 Feb UTC but 1 March in Bangkok.
     const day1Row = res.body.data.find(
-      (r) => r.period === "2019-03-01T00:00:00.000Z",
+      (r) => r.period === "2019-02-28T17:00:00.000Z",
     );
     assert.deepEqual(day1Row, {
-      period: "2019-03-01T00:00:00.000Z",
-      activeUsers: 0,
+      period: "2019-02-28T17:00:00.000Z",
+      activeUsers: 1,
     });
 
+    const day2Row = res.body.data.find(
+      (r) => r.period === "2019-03-01T17:00:00.000Z",
+    );
+    assert.equal(day2Row.activeUsers, 0);
+
     const day5Row = res.body.data.find(
-      (r) => r.period === "2019-03-05T00:00:00.000Z",
+      (r) => r.period === "2019-03-04T17:00:00.000Z",
     );
     assert.equal(day5Row.activeUsers, 2, "distinct users, not login count");
 
     const day10Row = res.body.data.find(
-      (r) => r.period === "2019-03-10T00:00:00.000Z",
+      (r) => r.period === "2019-03-09T17:00:00.000Z",
     );
     assert.equal(day10Row.activeUsers, 1);
 
     assert.equal(res.body.meta.definitionVersion, "v1");
+    assert.equal(res.body.meta.timezone, "Asia/Bangkok");
 
     const badGranularityRes = await request(app)
       .get("/executive/metrics-series")

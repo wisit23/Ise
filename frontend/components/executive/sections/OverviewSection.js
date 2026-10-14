@@ -8,6 +8,7 @@ import { apiFetch } from "../../../lib/api";
 import {
   baht,
   buildPath,
+  currentYearMonth,
   fetchWindowMetrics,
   fulfilled,
   growthPct,
@@ -46,12 +47,9 @@ export default function OverviewSection({ token }) {
   const [trend, setTrend] = useState({ gmv: [], revenue: [] });
 
   useEffect(() => {
-    const now = new Date();
-    const currentWindow = monthWindow(now.getUTCFullYear(), now.getUTCMonth());
-    const previousWindow = monthWindow(
-      now.getUTCFullYear(),
-      now.getUTCMonth() - 1,
-    );
+    const now = currentYearMonth();
+    const currentWindow = monthWindow(now.year, now.monthIndex);
+    const previousWindow = monthWindow(now.year, now.monthIndex - 1);
 
     const recentWindows = lastNWindows("month", 6).map((win) => ({
       ...win,

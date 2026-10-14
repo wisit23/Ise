@@ -21,12 +21,13 @@ async function getMetricsSeries(req, res, next) {
   try {
     const { from, to, timezone } = resolveMetricRange(req.query);
     const granularity = req.query.granularity;
-    const periods = buildSeriesPeriods({ from, to, granularity });
+    const periods = buildSeriesPeriods({ from, to, granularity, timezone });
 
     const rows = await platformMetrics.getPlatformMetricsSeries({
       from,
       to,
       granularity,
+      timezone,
     });
     const data = fillSeriesGaps(periods, rows, {
       gmv: 0,

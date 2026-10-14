@@ -34,14 +34,19 @@ async function getPlatformMetrics({ from, to }) {
 /**
  * Same figures as `getPlatformMetrics`, bucketed by day or month instead of
  * summed over the whole [from, to) window — the "how did each day of August
- * sell" report view. `date_trunc`'s first argument takes a plain value
- * (unlike a column/table name), so parameterizing it is safe and Prisma's
- * tagged-template `$queryRaw` does that automatically — no string
- * concatenation into the query.
+ * sell" report view. `date_trunc`'s first argument and the zone name are
+ * plain values (unlike a column/table name), so parameterizing them is safe
+ * and Prisma's tagged-template `$queryRaw` does that automatically — no
+ * string concatenation into the query.
+ *
+ * `created_at` is a zone-less TIMESTAMP holding UTC, so it is read as UTC,
+ * truncated on the report zone's wall clock (a Bangkok day starts at 00:00
+ * Bangkok, not 00:00 UTC), and the bucket start converted back to an instant.
  */
-async function getPlatformMetricsSeries({ from, to, granularity }) {
+async function getPlatformMetricsSeries({ from, to, granularity, timezone }) {
   const rows = await prisma.$queryRaw`
-    SELECT date_trunc(${granularity}, created_at) AS period,
+    SELECT date_trunc(${granularity}, (created_at AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})
+             AT TIME ZONE ${timezone} AS period,
            COALESCE(SUM(original_amount) FILTER (WHERE status = 'completed'), 0) AS gmv,
            COUNT(*) FILTER (WHERE status = 'completed')::int AS "completedOrders"
     FROM orders

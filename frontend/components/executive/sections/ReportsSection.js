@@ -4,6 +4,7 @@ import { toCsv, downloadCsv } from "../../../lib/csv";
 import RadioSelect from "../../ui/RadioSelect";
 import {
   baht,
+  currentYearMonth,
   dayLabel,
   fetchMetricsSeries,
   monthLabel,
@@ -18,7 +19,7 @@ const FIRST_YEAR = 2024;
 const UNAVAILABLE = "ไม่พร้อมใช้งาน";
 
 function yearChoices() {
-  const thisYear = new Date().getUTCFullYear();
+  const thisYear = currentYearMonth().year;
   const years = [];
   for (let y = thisYear; y >= FIRST_YEAR; y--) years.push(y);
   return years;
@@ -55,10 +56,10 @@ function buildRows({ order, auth }, granularity) {
 // Month/year performance breakdown with CSV export.
 
 export default function ReportsSection({ token }) {
-  const now = new Date();
+  const now = currentYearMonth();
   const [granularity, setGranularity] = useState("month");
-  const [year, setYear] = useState(now.getUTCFullYear());
-  const [monthIndex, setMonthIndex] = useState(now.getUTCMonth());
+  const [year, setYear] = useState(now.year);
+  const [monthIndex, setMonthIndex] = useState(now.monthIndex);
   const [series, setSeries] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
