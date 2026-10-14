@@ -6,6 +6,7 @@ const prisma = {
   $queryRaw: async () => [],
   $transaction: async (callback) => callback(prisma),
   report: {
+    updateMany: async () => ({ count: 1 }),
     findMany: async (query) => {
       calls.findMany = query;
       return [{ id: "report-5" }];
@@ -14,7 +15,7 @@ const prisma = {
       calls.reportCount = query;
       return query?.where?.targetId ? 4 : 5;
     },
-    findUnique: async () => ({
+    findUnique: async () => calls.currentReport || ({
       id: "report-1",
       reporterId: "reporter-1",
       reporter: { id: "reporter-1", firstName: "Reporter" },
@@ -29,24 +30,36 @@ const prisma = {
       where.id === "restricted-1"
         ? { id: where.id, status: "RESTRICTED_BUYER" }
         : { id: where.id, firstName: where.id, status: "ACTIVE" },
-    update: async () => {
+    update: async ({ where, data }) => {
       calls.userUpdated = true;
-      return { id: "restricted-1", status: "SUSPENDED" };
+      calls.userUpdateData = data;
+      return { id: where.id, status: data.status };
     },
   },
+  userRole: { findMany: async () => [{ role: "BUYER" }] },
   refreshToken: {
     updateMany: async () => {
       calls.sessionsRevoked = true;
     },
   },
   adminAudit: {
+    create: async ({ data }) => {
+      calls.auditActions?.push(data.action);
+      return {};
+    },
     findFirst: async () => ({
       actorId: "admin-1",
       action: "REPORT_DISMISS",
       reason: "not a violation",
       createdAt: new Date("2026-10-08T01:00:00.000Z"),
     }),
-    count: async () => 2,
+    count: async ({ where }) => {
+      if (Array.isArray(where?.action?.in)) {
+        calls.restrictionCountQuery = where;
+        return 3;
+      }
+      return 2;
+    },
   },
 };
 
@@ -94,6 +107,48 @@ test("an explicit empty status lists all reports", async () => {
   assert.equal("status" in calls.findMany.where, false);
 });
 
+test("report queue separates claimed and unclaimed work", async () => {
+  await reportService.listReports({ page: 1, limit: 15, status: "PENDING", scope: "mine", staffId: "agent-1" });
+  assert.equal(calls.findMany.where.reviewedBy, "agent-1");
+  assert.deepEqual(calls.findMany.where.status, { in: ["OPEN", "REVIEWED"] });
+  await reportService.listReports({ page: 1, limit: 15, status: "PENDING", scope: "unassigned", staffId: "agent-1" });
+  assert.equal(calls.findMany.where.status, "OPEN");
+});
+
+test("a different staff member cannot decide a claimed report", async () => {
+  calls.currentReport = { id: "report-1", status: "REVIEWED", reviewedBy: "agent-1", targetId: "target-1" };
+  try {
+    await assert.rejects(
+      reportService.actionReport({ reportId: "report-1", staffId: "agent-2", decision: "WARN_USER", reason: "test" }),
+      (error) => error.status === 403,
+    );
+  } finally { calls.currentReport = null; }
+});
+
+test("a claimed report can revoke buyer commerce rights in the same decision", async () => {
+  calls.currentReport = { id: "report-1", status: "REVIEWED", reviewedBy: "admin-1", targetId: "target-1" };
+  calls.userUpdated = false;
+  try {
+    await reportService.actionReport({ reportId: "report-1", staffId: "admin-1", decision: "RESTRICT_BUYER", reason: "confirmed abuse" });
+    assert.equal(calls.userUpdated, true);
+    assert.equal(calls.userUpdateData.status, "RESTRICTED_BUYER");
+  } finally { calls.currentReport = null; }
+});
+
+test("report chat uses only a matching product conversation", async () => {
+  calls.currentReport = { id: "report-1", reporterId: "reporter-1", targetId: "target-1", productId: "product-1" };
+  const originalFetch = global.fetch;
+  global.fetch = async (url) => {
+    if (url.includes("by-context")) return new Response(JSON.stringify({ id: "chat-1", participants: [{ userId: "reporter-1" }, { userId: "target-1" }] }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(JSON.stringify({ messages: [{ id: "msg-1", senderId: "reporter-1", body: "before report", createdAt: "2026-10-14T00:00:00Z" }], nextCursor: null }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const chat = await reportService.getReportChat({ reportId: "report-1" });
+    assert.equal(chat.available, true);
+    assert.equal(chat.messages[0].body, "before report");
+  } finally { global.fetch = originalFetch; calls.currentReport = null; }
+});
+
 test("getReportDetail returns people, product and the persisted decision", async () => {
   const detail = await reportService.getReportDetail("report-1");
 
@@ -106,19 +161,41 @@ test("getReportDetail returns people, product and the persisted decision", async
   assert.equal(detail.decision.decidedBy.id, "admin-1");
 });
 
-test("full suspension cannot overwrite a scoped commerce restriction", async () => {
+test("full suspension ends a scoped restriction and records both actions", async () => {
   calls.userUpdated = false;
   calls.sessionsRevoked = false;
+  calls.auditActions = [];
 
-  await assert.rejects(
-    reportService.suspendUser({
-      targetId: "restricted-1",
-      adminId: "admin-1",
-      reason: "emergency suspension",
-    }),
-    (error) => error.status === 409 && /revoke/.test(error.message),
-  );
+  await reportService.suspendUser({
+    targetId: "restricted-1",
+    adminId: "admin-1",
+    reason: "emergency suspension",
+  });
 
-  assert.equal(calls.userUpdated, false);
-  assert.equal(calls.sessionsRevoked, false);
+  assert.equal(calls.userUpdateData.status, "SUSPENDED");
+  assert.equal(calls.sessionsRevoked, true);
+  assert.deepEqual(calls.auditActions, [
+    "COMMERCE_RESTRICTION_REVOKED",
+    "USER_SUSPENDED",
+  ]);
+});
+
+test("bulk suspension preview accepts an account with scoped restriction", async () => {
+  const { getAction } = require("../src/features/bulkActions/actionRegistry");
+  const preview = await getAction("SUSPEND_USER").preview({
+    id: "restricted-1",
+    staffId: "admin-1",
+  });
+  assert.deepEqual(preview, { ok: true });
+});
+
+test("safety summary counts historical commerce restrictions", async () => {
+  const summary = await reportService.getUserSafetySummary("restricted-1");
+  assert.equal(summary.commerceRestrictionCount, 3);
+  assert.equal(calls.restrictionCountQuery.targetId, "restricted-1");
+  assert.deepEqual(calls.restrictionCountQuery.action.in, [
+    "COMMERCE_RESTRICTED_BUYER",
+    "COMMERCE_RESTRICTED_SELLER",
+    "COMMERCE_RESTRICTED_ALL",
+  ]);
 });

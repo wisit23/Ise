@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { apiFetch } from "../lib/api";
+import { createReportWithEvidence } from "../lib/api";
 import { getAccessToken } from "../lib/auth";
 
 /** Buyer/Seller-facing "file a report" modal — reused wherever a report can
@@ -18,6 +18,7 @@ export default function ReportModal({
   productLabel,
 }) {
   const [reason, setReason] = useState("");
+  const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
@@ -35,14 +36,14 @@ export default function ReportModal({
       setError("กรุณาระบุเหตุผล");
       return;
     }
+    if (file && file.size > 10 * 1024 * 1024) {
+      setError("รูปภาพต้องมีขนาดไม่เกิน 10 MB");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await apiFetch("/api/auth/reports", {
-        method: "POST",
-        token,
-        body: { targetId, productId, reason: reason.trim() },
-      });
+      await createReportWithEvidence({ targetId, productId, reason: reason.trim(), file }, token);
       setDone(true);
     } catch (err) {
       console.error("Report error:", err);
@@ -54,6 +55,7 @@ export default function ReportModal({
 
   function handleClose() {
     setReason("");
+    setFile(null);
     setError("");
     setDone(false);
     onClose();
@@ -101,6 +103,11 @@ export default function ReportModal({
               placeholder="อธิบายปัญหาที่พบ..."
               className="mt-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
             />
+            <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-gray-300 px-3 py-2 text-xs text-gray-700 hover:border-emerald-500">
+              <span className="material-symbols-outlined text-[18px]">add_photo_alternate</span>
+              {file ? file.name : "แนบรูปหลักฐาน (ไม่เกิน 10 MB)"}
+              <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            </label>
             {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
             <div className="mt-4 flex gap-2">
               <button

@@ -49,6 +49,8 @@ export default function TicketCasePanel({
   onStatusChange,
   onWarnUser,
   onBanUser,
+  onRestrictBuyer,
+  onRestrictSeller,
   onOpenLiveChat,
   auditReadOnly = false,
 }) {
@@ -64,21 +66,21 @@ export default function TicketCasePanel({
       <div className="grid grid-cols-4 divide-x divide-slate-100 border-b border-slate-100 bg-slate-50/70">
         <InfoCell label="คู่กรณี (Target)">
           {ticket.targetId ? (
-            <span className="font-mono font-semibold text-orange-700">
-              {ticket.targetId.slice(0, 10)}...
+            <span className="font-semibold text-orange-700">
+              {ticket.targetName || `${ticket.targetId.slice(0, 10)}...`}
             </span>
           ) : (
             <span className="italic text-slate-400">ไม่ระบุ</span>
           )}
         </InfoCell>
         <InfoCell label="ผู้แจ้ง (Requester)">
-          <span className="font-mono">
-            {ticket.requesterId?.slice(0, 10) ?? "—"}
+          <span>
+            {ticket.requesterName || ticket.requesterId?.slice(0, 10) || "—"}
           </span>
         </InfoCell>
         <InfoCell label="ผู้รับผิดชอบ (Agent)">
           {ticket.assigneeId ? (
-            <span className="font-mono">{ticket.assigneeId.slice(0, 10)}</span>
+            <span>{ticket.assigneeName || ticket.assigneeId.slice(0, 10)}</span>
           ) : (
             <span className="italic text-slate-500">ยังไม่มอบหมาย</span>
           )}
@@ -118,6 +120,7 @@ export default function TicketCasePanel({
         {ticket.targetId ? (
           <CaseUserCard
             userId={ticket.targetId}
+            userName={ticket.targetName}
             heading="คู่กรณี (Target - ผู้ถูกร้องเรียน)"
             icon="gavel"
             tone="target"
@@ -128,6 +131,8 @@ export default function TicketCasePanel({
               onWarnUser ? (uid) => onWarnUser(uid, "คู่กรณี") : undefined
             }
             onBan={onBanUser ? (uid) => onBanUser(uid, "คู่กรณี") : undefined}
+            onRestrictBuyer={onRestrictBuyer ? (uid) => onRestrictBuyer(uid, "คู่กรณี") : undefined}
+            onRestrictSeller={onRestrictSeller ? (uid) => onRestrictSeller(uid, "คู่กรณี") : undefined}
           />
         ) : (
           <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-5 shadow-sm">
@@ -182,6 +187,7 @@ export default function TicketCasePanel({
             Rendered second with distinct labels and caution styling. */}
         <CaseUserCard
           userId={ticket.requesterId}
+          userName={ticket.requesterName}
           heading="ผู้แจ้ง (Requester - ผู้ส่งคำร้อง)"
           icon="person"
           tone="requester"
@@ -191,6 +197,8 @@ export default function TicketCasePanel({
           banLabel="แบนผู้แจ้ง (ระวัง)"
           onWarn={onWarnUser ? (uid) => onWarnUser(uid, "ผู้แจ้ง") : undefined}
           onBan={onBanUser ? (uid) => onBanUser(uid, "ผู้แจ้ง") : undefined}
+          onRestrictBuyer={onRestrictBuyer ? (uid) => onRestrictBuyer(uid, "ผู้แจ้ง") : undefined}
+          onRestrictSeller={onRestrictSeller ? (uid) => onRestrictSeller(uid, "ผู้แจ้ง") : undefined}
         />
 
         <SectionCard icon="support_agent" title="เจ้าหน้าที่รับผิดชอบ">
@@ -203,7 +211,7 @@ export default function TicketCasePanel({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-slate-800">
-                  รหัส: {ticket.assigneeId.slice(0, 16)}
+                  {ticket.assigneeName || `รหัส: ${ticket.assigneeId.slice(0, 16)}`}
                 </p>
                 <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
                   {ticket.assigneeId}
@@ -225,11 +233,11 @@ export default function TicketCasePanel({
         <SectionCard icon="chat" title="สนทนากับลูกค้า" tone="indigo">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 font-bold text-white shadow">
-              {ticket.requesterId?.slice(0, 1).toUpperCase() ?? "U"}
+              {(ticket.requesterName || ticket.requesterId || "U").slice(0, 1).toUpperCase()}
             </div>
             <div className="flex-1">
               <p className="text-sm font-bold text-slate-800">
-                ผู้ใช้: #{ticket.requesterId?.slice(0, 12)}
+                {ticket.requesterName || `ผู้ใช้: #${ticket.requesterId?.slice(0, 12)}`}
               </p>
               <p className="mt-0.5 text-xs text-slate-500">
                 ประวัติการสนทนาของคำร้อง

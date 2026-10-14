@@ -11,7 +11,6 @@
 //   execute({ id, reason, adminId }) — the real side effect for one id
 const reportService = require("../reports/reportService");
 const prisma = require("../../models/prismaClient");
-const { isRestrictedStatus } = require("@reloop/shared");
 
 const registry = {
   SUSPEND_USER: {
@@ -25,13 +24,6 @@ const registry = {
       }
       if (user.status === "SUSPENDED") {
         return { ok: false, reason: "user is already suspended" };
-      }
-      if (isRestrictedStatus(user.status)) {
-        return {
-          ok: false,
-          reason:
-            "revoke the commerce restriction before fully suspending this account",
-        };
       }
       return { ok: true };
     },

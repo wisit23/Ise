@@ -380,7 +380,7 @@ export default function OrdersSection({
     },
     suspend: {
       title: "ยืนยันการระงับบัญชีผู้ใช้งาน (Ban)",
-      description: `คุณกำลังจะระงับบัญชีของคุณ ${pendingAction?.userName || ""} ผู้ใช้จะไม่สามารถเข้าสู่ระบบได้ ใช้เฉพาะมาตรการฉุกเฉินที่ต้องตัดการเข้าถึงทั้งหมด`,
+      description: `คุณกำลังจะระงับบัญชีของคุณ ${pendingAction?.userName || ""} ผู้ใช้จะไม่สามารถเข้าสู่ระบบได้${hasCommerceRestriction ? " ข้อจำกัดสิทธิ์ซื้อขายเดิมจะสิ้นสุดและบันทึกไว้ในประวัติ เมื่อปลดแบนจะไม่กลับมาจำกัดสิทธิ์อัตโนมัติ" : ""}`,
       label: "ระงับบัญชีทันที",
       reasonLabel: "เหตุผลในการระงับบัญชี",
       tone: "danger",
@@ -716,7 +716,7 @@ export default function OrdersSection({
                   </button>
                 )}
 
-                {userResult.status === "ACTIVE" ? (
+                {userResult.status === "ACTIVE" || hasCommerceRestriction ? (
                   <button
                     type="button"
                     onClick={() =>
@@ -755,7 +755,7 @@ export default function OrdersSection({
             </div>
 
             {/* Safety Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-6">
               <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-500">
@@ -797,6 +797,29 @@ export default function OrdersSection({
                     }`}
                   >
                     {userResult.safetySummary?.warningCount ?? 0}
+                  </span>
+                  <span className="text-xs text-slate-500">ครั้ง</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-500">
+                    การเพิกถอนสิทธิ์ซื้อขาย
+                  </span>
+                  <span className="material-symbols-outlined text-[18px] text-amber-500">
+                    shopping_cart_off
+                  </span>
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span
+                    className={`text-2xl font-black ${
+                      (userResult.safetySummary?.commerceRestrictionCount || 0) > 0
+                        ? "text-amber-600"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {userResult.safetySummary?.commerceRestrictionCount ?? 0}
                   </span>
                   <span className="text-xs text-slate-500">ครั้ง</span>
                 </div>

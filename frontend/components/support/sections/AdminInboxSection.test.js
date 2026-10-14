@@ -81,7 +81,7 @@ it("sends report search to the report service", async () => {
     expect(apiFetch.mock.calls.map(([url]) => url)).toEqual(
       expect.arrayContaining([
         expect.stringMatching(
-          /\/api\/auth\/admin\/reports\?.*page=1.*limit=15.*status=OPEN.*q=counterfeit/,
+          /\/api\/auth\/admin\/reports\?.*page=1.*limit=15.*status=PENDING.*scope=all.*q=counterfeit/,
         ),
       ]),
     ),
@@ -93,7 +93,7 @@ it("shows a source-specific failure and retries only that source", async () => {
   apiFetch.mockImplementation((url) => {
     if (url.includes("/admin/reports?")) {
       reportCalls += 1;
-      if (reportCalls === 1) return Promise.reject(new Error("auth offline"));
+      if (reportCalls === 2) return Promise.reject(new Error("auth offline"));
       return Promise.resolve({ items: [], totalPages: 1 });
     }
     return Promise.resolve({ items: [], totalPages: 1 });
@@ -105,7 +105,7 @@ it("shows a source-specific failure and retries only that source", async () => {
   expect(screen.getByText("auth offline")).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "ลองใหม่" }));
-  await waitFor(() => expect(reportCalls).toBe(2));
+  await waitFor(() => expect(reportCalls).toBe(3));
   await waitFor(() =>
     expect(screen.queryByText("auth offline")).not.toBeInTheDocument(),
   );

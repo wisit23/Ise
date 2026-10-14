@@ -1,14 +1,18 @@
 const {
   badRequest,
+  AppError,
   conflict,
   forbidden,
   isRestrictedStatus,
   notFound,
   restrictionsForStatus,
+  combineRestrictionStatus,
 } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const productModerationClient = require("../../services/productModerationClient");
 const { lockUser } = require("../../services/sessionService");
+const authService = require("../../services/authService");
+const reportEvidenceStorage = require("./reportEvidenceStorage");
 
 function toPublicUser(user) {
   return {
@@ -41,7 +45,7 @@ async function recordAdminAction({
  * Everything downstream (review, decide, dismiss) is Admin's existing flow;
  * this is only the missing "file a report" entry point into it.
  */
-async function createReport({ reporterId, targetId, productId, reason }) {
+async function createReport({ reporterId, targetId, productId, reason, file }) {
   const trimmedReason = reason?.trim();
   if (!trimmedReason) throw badRequest("reason is required");
   if (!targetId && !productId) {
@@ -49,14 +53,22 @@ async function createReport({ reporterId, targetId, productId, reason }) {
   }
   if (targetId === reporterId) throw badRequest("cannot report yourself");
 
-  return prisma.report.create({
-    data: {
-      reporterId,
-      targetId: targetId || null,
-      productId: productId || null,
-      reason: trimmedReason,
-    },
-  });
+  let storageKey;
+  try {
+    if (file) storageKey = await reportEvidenceStorage.persist(file);
+    return await prisma.report.create({
+      data: {
+        reporterId,
+        targetId: targetId || null,
+        productId: productId || null,
+        reason: trimmedReason,
+        ...(file ? { evidence: { create: { storageKey, fileType: file.mimetype, originalName: file.originalname || "evidence" } } } : {}),
+      },
+    });
+  } catch (error) {
+    if (storageKey) await reportEvidenceStorage.remove(storageKey);
+    throw error;
+  }
 }
 
 function reportSearchWhere(search) {
@@ -84,11 +96,21 @@ function reportSearchWhere(search) {
   };
 }
 
-async function listReports({ page, limit, status, search }) {
+async function listReports({ page, limit, status, search, scope = "all", staffId }) {
   const searchWhere = reportSearchWhere(search);
   const where = {};
+  if (!["all", "mine", "unassigned"].includes(scope)) {
+    throw badRequest("invalid report scope");
+  }
+  if (scope === "mine") {
+    if (!staffId) throw badRequest("staffId is required for mine scope");
+    where.reviewedBy = staffId;
+  }
+  if (scope === "unassigned") where.status = "OPEN";
   if (status === undefined || status === null) where.status = "OPEN";
+  else if (status.trim() === "PENDING") where.status = { in: ["OPEN", "REVIEWED"] };
   else if (status.trim() && status.trim() !== "ALL") where.status = status.trim();
+  if (scope === "unassigned") where.status = "OPEN";
   Object.assign(where, searchWhere);
   const [items, total] = await Promise.all([
     prisma.report.findMany({
@@ -120,6 +142,7 @@ async function getReportDetail(reportId) {
           status: true,
         },
       },
+      evidence: { select: { id: true, fileType: true, originalName: true, uploadedAt: true } },
     },
   });
   if (!report) throw notFound("report not found");
@@ -188,6 +211,45 @@ async function getReportDetail(reportId) {
   };
 }
 
+async function viewReportEvidence({ reportId, evidenceId }) {
+  const evidence = await prisma.reportEvidence.findFirst({ where: { id: evidenceId, reportId } });
+  if (!evidence) throw notFound("report evidence not found");
+  return { path: await reportEvidenceStorage.readablePath(evidence.storageKey), fileType: evidence.fileType };
+}
+
+async function getReportChat({ reportId, before }) {
+  const report = await prisma.report.findUnique({ where: { id: reportId } });
+  if (!report) throw notFound("report not found");
+  if (!report.productId) return { available: false, messages: [], nextCursor: null };
+
+  const base = process.env.CHAT_SERVICE_URL || "http://chat-service:3004";
+  const headers = { "x-internal-token": process.env.INTERNAL_SERVICE_TOKEN || "" };
+  for (const buyerId of [report.reporterId, report.targetId].filter(Boolean)) {
+    let conversationResponse;
+    try {
+      conversationResponse = await fetch(`${base}/internal/conversations/by-context/PRODUCT/${encodeURIComponent(report.productId)}?buyerId=${encodeURIComponent(buyerId)}`, { headers, signal: AbortSignal.timeout(5000) });
+    } catch { throw new AppError(502, "chat history is temporarily unavailable"); }
+    if (conversationResponse.status === 404) continue;
+    if (!conversationResponse.ok) throw new AppError(502, "chat history is temporarily unavailable");
+    const conversation = await conversationResponse.json();
+    const participants = new Set((conversation.participants || []).map((person) => person.userId));
+    if (!participants.has(report.reporterId) || (report.targetId && !participants.has(report.targetId))) continue;
+    const query = new URLSearchParams({ limit: "50", ...(before ? { before } : {}) });
+    let transcriptResponse;
+    try {
+      transcriptResponse = await fetch(`${base}/internal/conversations/${encodeURIComponent(conversation.id)}/transcript?${query}`, { headers, signal: AbortSignal.timeout(5000) });
+    } catch { throw new AppError(502, "chat history is temporarily unavailable"); }
+    if (!transcriptResponse.ok) throw new AppError(502, "chat history is temporarily unavailable");
+    const page = await transcriptResponse.json();
+    return {
+      available: true,
+      messages: (page.messages || []).map((message) => ({ id: message.id, senderId: message.senderId, body: message.body, type: message.type, createdAt: message.createdAt })),
+      nextCursor: page.nextCursor || null,
+    };
+  }
+  return { available: false, messages: [], nextCursor: null };
+}
+
 async function reviewReport({ reportId, adminId, staffId, requestId }) {
   const actorId = staffId || adminId;
   return prisma.$transaction(async (tx) => {
@@ -219,6 +281,8 @@ async function reviewReport({ reportId, adminId, staffId, requestId }) {
 const VALID_DECISIONS = [
   "SUSPEND_USER",
   "WARN_USER",
+  "RESTRICT_BUYER",
+  "RESTRICT_SELLER",
   "REMOVE_PRODUCT",
   "DISMISS",
 ];
@@ -247,6 +311,9 @@ async function actionReport({
 
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) throw notFound("report not found");
+  if (report.status === "REVIEWED" && report.reviewedBy !== actorId) {
+    throw forbidden("only the staff member who claimed this report can decide it");
+  }
 
   if (decision === "REMOVE_PRODUCT") {
     if (!report.productId) {
@@ -303,6 +370,19 @@ async function actionReport({
         reason: trimmedReason,
         requestId,
       });
+    } else if (decision === "RESTRICT_BUYER" || decision === "RESTRICT_SELLER") {
+      if (!report.targetId) throw badRequest("report has no target user to restrict");
+      if (report.targetId === actorId) throw forbidden("staff cannot restrict themselves");
+      const scope = decision === "RESTRICT_BUYER" ? "BUYER" : "SELLER";
+      const user = await lockUser(tx, report.targetId);
+      if (!user) throw notFound("user not found");
+      if (user.status === "SUSPENDED") throw conflict("suspended user cannot be restricted");
+      const roles = await authService.getUserRoles(report.targetId, tx);
+      if (!roles.includes(scope)) throw conflict(`target account does not have the ${scope} role`);
+      const nextStatus = combineRestrictionStatus(user.status, scope);
+      if (!nextStatus || nextStatus === user.status) throw conflict("commerce scope is already restricted");
+      await tx.user.update({ where: { id: report.targetId }, data: { status: nextStatus } });
+      await recordAdminAction({ actorId, action: `COMMERCE_RESTRICTED_${scope}`, targetId: report.targetId, reason: trimmedReason, requestId, tx });
     }
 
     await recordAdminAction({
@@ -373,10 +453,17 @@ async function suspendUserInTx(tx, { targetId, actorId, reason, requestId }) {
   const user = await lockUser(tx, targetId);
   if (!user) throw notFound("user not found");
   if (user.status === "SUSPENDED") throw conflict("user is already suspended");
+  // Account status stores only one sanction. End the scoped restriction in the
+  // same transaction before the full suspension replaces it in that field.
   if (isRestrictedStatus(user.status)) {
-    throw conflict(
-      "revoke the commerce restriction before fully suspending this account",
-    );
+    await recordAdminAction({
+      actorId,
+      action: "COMMERCE_RESTRICTION_REVOKED",
+      targetId,
+      reason: `สิ้นสุดข้อจำกัดเดิมเมื่อระงับบัญชี: ${reason}`,
+      requestId,
+      tx,
+    });
   }
   const updated = await tx.user.update({
     where: { id: targetId },
@@ -489,6 +576,7 @@ async function getUserSafetySummary(targetId) {
     priorActions,
     suspensionCount,
     warningCount,
+    commerceRestrictionCount,
     restoreCount,
   ] = await Promise.all([
     prisma.report.count({ where: { targetId } }),
@@ -498,6 +586,18 @@ async function getUserSafetySummary(targetId) {
     }),
     prisma.adminAudit.count({
       where: { targetId, action: "USER_WARNED" },
+    }),
+    prisma.adminAudit.count({
+      where: {
+        targetId,
+        action: {
+          in: [
+            "COMMERCE_RESTRICTED_BUYER",
+            "COMMERCE_RESTRICTED_SELLER",
+            "COMMERCE_RESTRICTED_ALL",
+          ],
+        },
+      },
     }),
     prisma.adminAudit.count({
       where: { targetId, action: "USER_RESTORED" },
@@ -514,6 +614,7 @@ async function getUserSafetySummary(targetId) {
     priorActions,
     suspensionCount,
     warningCount,
+    commerceRestrictionCount,
     restoreCount,
   };
 }
@@ -656,6 +757,8 @@ module.exports = {
   createReport,
   listReports,
   getReportDetail,
+  viewReportEvidence,
+  getReportChat,
   reviewReport,
   actionReport,
   suspendUser,

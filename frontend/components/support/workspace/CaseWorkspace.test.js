@@ -80,6 +80,59 @@ beforeEach(() => {
   apiFetch.mockReset().mockImplementation(defaultApi);
 });
 
+test("ticket actions are visible beside the chat with the required close step", async () => {
+  render(
+    <CaseWorkspace
+      domain="tickets"
+      token="token"
+      currentUser={{ id: "cs", role: "CUSTOMER_SERVICE" }}
+    />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: /Ticket A/ }));
+
+  expect(await screen.findByRole("button", { name: "ส่งต่อให้ Admin" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "จบงาน" })).toBeDisabled();
+  expect(screen.getByText("แจ้งว่าแก้ไขแล้วก่อนจึงจะจบงานได้")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "แจ้งว่าแก้ไขแล้ว" }));
+  await waitFor(() =>
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/support/tickets/t-a/status",
+      expect.objectContaining({
+        method: "PATCH",
+        body: expect.objectContaining({ status: "RESOLVED" }),
+      }),
+    ),
+  );
+});
+
+test("a ticket ready to close shows the end-work confirmation", async () => {
+  const resolved = {
+    ...ticket,
+    status: "RESOLVED",
+    capabilities: {
+      ...caps,
+      canEscalate: false,
+      allowedNextStatuses: ["CLOSED", "IN_PROGRESS"],
+    },
+  };
+  apiFetch.mockImplementation((url, options) => {
+    if (url.includes("/queue?"))
+      return Promise.resolve({ items: [resolved], total: 1, totalPages: 1 });
+    if (url.endsWith("/join")) return defaultApi(url, options);
+    return Promise.resolve(resolved);
+  });
+  render(
+    <CaseWorkspace
+      domain="tickets"
+      token="token"
+      currentUser={{ id: "cs", role: "CUSTOMER_SERVICE" }}
+    />,
+  );
+  fireEvent.click(await screen.findByRole("button", { name: /Ticket A/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "จบงาน" }));
+  expect(screen.getByText("การปิดเคสจะปิดการตอบข้อความ กรุณาตรวจสอบว่าดำเนินการครบแล้ว")).toBeInTheDocument();
+});
+
 test("table and conversation share filters and open the exact same case", async () => {
   render(
     <CaseWorkspace

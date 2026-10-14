@@ -14,6 +14,7 @@ import {
 } from "../../../../lib/supportConstants";
 
 const STATUS_OPTIONS = [
+  { value: "PENDING", label: "รอดำเนินการ" },
   { value: "OPEN", label: "รอดำเนินการ (OPEN)" },
   { value: "REVIEWED", label: "ตรวจสอบแล้ว (REVIEWED)" },
   { value: "ACTIONED", label: "จัดการแล้ว (ACTIONED)" },
@@ -65,7 +66,7 @@ export default function AdminInboxTable({
               <span className="mr-1 text-[10px] font-bold uppercase text-orange-500">
                 คู่กรณี:
               </span>
-              <span className="font-mono">{t.targetId.slice(0, 8)}...</span>
+              <span>{t.targetName || `${t.targetId.slice(0, 8)}...`}</span>
             </span>
           ) : (
             <span className="text-[11px] italic text-slate-400">
@@ -76,8 +77,8 @@ export default function AdminInboxTable({
             <span className="mr-1 text-[10px] font-medium text-slate-400">
               ผู้แจ้ง:
             </span>
-            <span className="font-mono">
-              {t.requesterId ? `${t.requesterId.slice(0, 8)}...` : "—"}
+            <span>
+              {t.requesterName || (t.requesterId ? `${t.requesterId.slice(0, 8)}...` : "—")}
             </span>
           </span>
         </div>
@@ -126,7 +127,7 @@ export default function AdminInboxTable({
       className: "text-xs font-medium text-slate-500",
       render: (t) =>
         t.assigneeId ? (
-          t.assigneeId.slice(0, 12)
+          t.assigneeName || t.assigneeId.slice(0, 12)
         ) : (
           <span className="text-slate-500">—</span>
         ),

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { apiFetch } from "../../../lib/api";
 import OrdersSection from "./OrdersSection";
@@ -107,4 +107,26 @@ it("uses API totals, pages user history, and does not render sensitive KYC field
       ),
     ).toBe(true),
   );
+});
+
+it("shows Ban and the historical restriction count for a restricted user", async () => {
+  const restrictedUser = {
+    ...user,
+    role: "BUYER",
+    roles: ["BUYER"],
+    status: "RESTRICTED_BUYER",
+    commerceRestrictions: ["BUYER_COMMERCE"],
+    safetySummary: { ...user.safetySummary, commerceRestrictionCount: 2 },
+  };
+  apiFetch.mockImplementation((url) => {
+    if (url.includes("/history")) return Promise.resolve(emptySafetyHistory);
+    return Promise.resolve(restrictedUser);
+  });
+
+  render(<OrdersSection token="token" initialUserId="user-1" />);
+
+  expect(await screen.findByRole("button", { name: /ระงับบัญชี \(Ban\)/ })).toBeInTheDocument();
+  const countCard = screen.getByText("การเพิกถอนสิทธิ์ซื้อขาย").parentElement.parentElement;
+  expect(within(countCard).getByText("2")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /คืนสิทธิ์ซื้อขาย/ })).toBeInTheDocument();
 });

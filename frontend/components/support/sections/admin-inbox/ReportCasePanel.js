@@ -1,9 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { apiFetch, fetchAuthedBlobUrl } from "../../../../lib/api";
+
 import Alert from "../../../ui/Alert";
 import Button from "../../../ui/Button";
 import Select from "../../../ui/Select";
 import Textarea from "../../../ui/Textarea";
+import Modal from "../../../ui/Modal";
 
 function Row({ label, children, mono, danger }) {
   return (
@@ -78,12 +82,49 @@ export default function ReportCasePanel({
   error,
   busy,
   onSubmit,
+  onClaim,
+  currentUserId,
   detailLoading = false,
   detailError = "",
   onRetryDetail,
   onOpenUserHistory,
 }) {
+  const [evidenceError, setEvidenceError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatData, setChatData] = useState(null);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
   const settled = report.status === "ACTIONED" || report.status === "DISMISSED";
+
+  useEffect(() => {
+    setEvidenceError("");
+    setChatOpen(false);
+    setChatData(null);
+    setChatError("");
+    setPreviewUrl(null);
+  }, [report.id]);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  async function openEvidence(evidenceId) {
+    setEvidenceError("");
+    try {
+      const url = await fetchAuthedBlobUrl(`/api/auth/admin/reports/${report.id}/evidence/${evidenceId}`);
+      setPreviewUrl(url);
+    } catch (error) { setEvidenceError(error.message); }
+  }
+
+  async function loadChat(before) {
+    setChatLoading(true);
+    setChatError("");
+    try {
+      const query = before ? `?before=${encodeURIComponent(before)}` : "";
+      const page = await apiFetch(`/api/auth/admin/reports/${report.id}/chat${query}`);
+      setChatData((current) => before ? { ...page, messages: [...page.messages, ...(current?.messages || [])] } : page);
+    } catch (error) { setChatError(error.message); }
+    finally { setChatLoading(false); }
+  }
 
   const decisionOptions = [
     report.targetId && {
@@ -94,6 +135,8 @@ export default function ReportCasePanel({
       value: "WARN_USER",
       label: "ตักเตือนผู้ใช้ ไม่ระงับบัญชี (WARN_USER)",
     },
+    report.targetId && { value: "RESTRICT_BUYER", label: "เพิกถอนสิทธิ์ซื้อ" },
+    report.targetId && { value: "RESTRICT_SELLER", label: "เพิกถอนสิทธิ์ขาย" },
     report.productId && {
       value: "REMOVE_PRODUCT",
       label: "ลบสินค้า (REMOVE_PRODUCT)",
@@ -103,6 +146,9 @@ export default function ReportCasePanel({
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 p-7">
+      <Modal open={Boolean(previewUrl)} onClose={() => setPreviewUrl(null)} title="รูปหลักฐาน" size="lg">
+        {previewUrl && <img src={previewUrl} alt="รูปหลักฐานที่แนบกับรายงาน" className="max-h-[70vh] w-full object-contain p-4" />}
+      </Modal>
       {detailLoading && (
         <Alert tone="info" className="mb-4">
           กำลังโหลดรายละเอียดล่าสุด...
@@ -149,6 +195,32 @@ export default function ReportCasePanel({
             <Row label="รายละเอียด:">{report.reason}</Row>
           </div>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h4 className="font-bold text-slate-900">รูปหลักฐานจากผู้รายงาน</h4>
+        {report.evidence?.length ? report.evidence.map((item) => (
+          <button key={item.id} type="button" onClick={() => openEvidence(item.id)} className="mt-3 block rounded-lg border px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50">
+            เปิดรูป: {item.originalName}
+          </button>
+        )) : <p className="mt-2 text-sm text-slate-500">ผู้รายงานไม่ได้แนบรูปหลักฐาน</p>}
+        {evidenceError && <Alert className="mt-3">{evidenceError}</Alert>}
+      </div>
+
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <button type="button" onClick={() => { if (!chatOpen && !chatData) loadChat(); setChatOpen(!chatOpen); }} className="font-semibold text-indigo-700 hover:underline">
+          {chatOpen ? "ซ่อน" : "ดู"}บทสนทนาก่อนหน้า
+        </button>
+        {chatOpen && <div className="mt-3 space-y-2">
+          {chatLoading && <p className="text-sm text-slate-500">กำลังโหลดบทสนทนา...</p>}
+          {chatError && <Alert>{chatError}</Alert>}
+          {!chatLoading && chatData && !chatData.available && <p className="text-sm text-slate-500">ไม่มีบทสนทนาที่เชื่อมกับรายงานนี้</p>}
+          {chatData?.messages?.map((message) => <div key={message.id} className="rounded-lg border bg-slate-50 p-3 text-sm">
+            <p className="mb-1 text-xs text-slate-500">{message.senderId === report.reporterId ? "ผู้รายงาน" : "คู่สนทนา"} · {new Date(message.createdAt).toLocaleString("th-TH")}</p>
+            <p className="whitespace-pre-wrap">{message.body || `[${message.type}]`}</p>
+          </div>)}
+          {chatData?.nextCursor && <button type="button" disabled={chatLoading} onClick={() => loadChat(chatData.nextCursor)} className="text-sm font-semibold text-indigo-700 hover:underline">โหลดข้อความเก่ากว่า</button>}
+        </div>}
       </div>
 
       <div className="mb-6 grid gap-3 md:grid-cols-2">
@@ -216,6 +288,15 @@ export default function ReportCasePanel({
             </Alert>
           )}
         </div>
+      ) : report.status === "OPEN" ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h4 className="font-bold text-slate-900">รอเจ้าหน้าที่รับงาน</h4>
+          <p className="mt-2 text-sm text-slate-600">รับรายงานนี้ก่อน จึงจะตัดสินหรือใช้คำสั่งกับผู้ใช้ได้</p>
+          {error && <Alert className="mt-3">{error}</Alert>}
+          <Button type="button" onClick={onClaim} loading={busy} className="mt-4">รับงานนี้</Button>
+        </div>
+      ) : report.reviewedBy !== currentUserId ? (
+        <Alert tone="info">รายงานนี้มีเจ้าหน้าที่คนอื่นรับผิดชอบแล้ว</Alert>
       ) : (
         <form
           onSubmit={onSubmit}

@@ -1,10 +1,11 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import config from "../../../lib/customerServiceConfig";
 import { apiFetch } from "../../../lib/api";
 import Pagination from "../../Pagination";
 import Badge from "../../panel/ui/Badge";
 import ConfirmDialog from "../../ui/ConfirmDialog";
+import Modal from "../../ui/Modal";
 import { useToast } from "../../ui/ToastProvider";
 
 const STATUS_LABEL = {
@@ -29,6 +30,8 @@ export default function ProductsSection({ token }) {
   const toast = useToast();
   const [pendingRemoval, setPendingRemoval] = useState(null);
   const [pendingRestore, setPendingRestore] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedSeller, setSelectedSeller] = useState(null);
   const operationKeys = useRef(new Map());
   const [query, setQuery] = useState("");
   const [includeRemoved, setIncludeRemoved] = useState(false);
@@ -41,12 +44,23 @@ export default function ProductsSection({ token }) {
   const [busyId, setBusyId] = useState(null);
   const [reasonById, setReasonById] = useState({});
 
+  useEffect(() => {
+    const sellerId = selectedProduct?.sellerId;
+    if (!sellerId) return;
+    let cancelled = false;
+    setSelectedSeller(null);
+    apiFetch(`/api/auth/admin/users/${sellerId}`, { token })
+      .then((seller) => { if (!cancelled) setSelectedSeller(seller); })
+      .catch(() => { if (!cancelled) setSelectedSeller(null); });
+    return () => { cancelled = true; };
+  }, [selectedProduct?.sellerId, token]);
+
   async function searchProducts(
     targetPage = 1,
     searchQuery = query,
     removedOnly = includeRemoved,
   ) {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() && !removedOnly) return;
     setLoading(true);
     setError("");
     setSearched(true);
@@ -208,7 +222,7 @@ export default function ProductsSection({ token }) {
             </div>
             <button
               type="submit"
-              disabled={loading || !query.trim()}
+              disabled={loading || (!query.trim() && !includeRemoved)}
               className="flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold tracking-wide text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
             >
               {loading ? "กำลังค้นหา..." : "ค้นหา"}
@@ -218,7 +232,13 @@ export default function ProductsSection({ token }) {
             <input
               type="checkbox"
               checked={includeRemoved}
-              onChange={(e) => setIncludeRemoved(e.target.checked)}
+              onChange={(e) => {
+                const removedOnly = e.target.checked;
+                setIncludeRemoved(removedOnly);
+                if (searched && (query.trim() || removedOnly)) {
+                  searchProducts(1, query, removedOnly);
+                }
+              }}
               className="h-3.5 w-3.5 rounded border-slate-300"
             />
             ค้นหาเฉพาะสินค้าที่ถูกลบไปแล้ว (เพื่อกู้คืน)
@@ -245,9 +265,9 @@ export default function ProductsSection({ token }) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-slate-900">
+                  <button type="button" onClick={() => setSelectedProduct(p)} className="text-left font-semibold text-slate-900 underline-offset-2 hover:underline">
                     {p.title}
-                  </p>
+                  </button>
                   <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-medium text-slate-500">
                     <span>รหัส {p.id.slice(0, 8)}</span>
                     <span>฿{p.price?.toLocaleString("th-TH")}</span>
@@ -262,6 +282,10 @@ export default function ProductsSection({ token }) {
                   }
                 />
               </div>
+
+              <button type="button" onClick={() => setSelectedProduct(p)} className="mt-3 text-xs font-semibold text-emerald-700 hover:underline">
+                ดูรายละเอียดสินค้า
+              </button>
 
               <div className="mt-4 border-t border-slate-100 pt-3">
                 {p.status === "removed" ? (
@@ -319,6 +343,21 @@ export default function ProductsSection({ token }) {
         )}
       </div>
 
+      <Modal open={Boolean(selectedProduct)} onClose={() => setSelectedProduct(null)} title="รายละเอียดสินค้า" size="lg">
+        {selectedProduct && <div className="space-y-3 p-5 text-sm text-slate-700">
+          <p><strong>ชื่อ:</strong> {selectedProduct.title}</p>
+          <p className="break-all"><strong>รหัสสินค้า:</strong> {selectedProduct.id}</p>
+          <p><strong>เจ้าของสินค้า:</strong> {selectedSeller?.sellerProfile?.shopName || [selectedSeller?.firstName, selectedSeller?.lastName].filter(Boolean).join(" ") || selectedSeller?.email || selectedProduct.sellerId || "—"}</p>
+          <p className="break-all"><strong>รหัสผู้ขาย:</strong> {selectedProduct.sellerId || "—"}</p>
+          <p><strong>สถานะ:</strong> {STATUS_LABEL[selectedProduct.status] || selectedProduct.status}</p>
+          <p><strong>ราคา:</strong> ฿{selectedProduct.price?.toLocaleString("th-TH")}</p>
+          <p><strong>หมวดหมู่:</strong> {selectedProduct.category || "—"}</p>
+          <p className="whitespace-pre-wrap"><strong>รายละเอียด:</strong> {selectedProduct.description || "—"}</p>
+          {selectedProduct.media?.filter((media) => media.type === "image").length > 0 && <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {selectedProduct.media.filter((media) => media.type === "image").map((media, index) => <img key={`${media.url}-${index}`} src={media.url} alt={`รูปสินค้า ${index + 1}`} className="aspect-square w-full rounded-lg object-cover" />)}
+          </div>}
+        </div>}
+      </Modal>
       <ConfirmDialog
         open={Boolean(pendingRemoval)}
         busy={busyId === pendingRemoval?.id}

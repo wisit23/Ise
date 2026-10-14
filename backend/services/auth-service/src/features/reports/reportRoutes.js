@@ -7,6 +7,7 @@ const {
 } = require("@reloop/shared");
 const reportService = require("./reportService");
 const prisma = require("../../models/prismaClient");
+const { upload } = require("./reportEvidenceStorage");
 
 const router = Router();
 
@@ -38,6 +39,7 @@ router.post(
   "/reports",
   requireAuth,
   requirePermission("report:create"),
+  upload.single("file"),
   async (req, res, next) => {
     try {
       const report = await reportService.createReport({
@@ -45,11 +47,36 @@ router.post(
         targetId: req.body.targetId,
         productId: req.body.productId,
         reason: req.body.reason,
+        file: req.file,
       });
       res.status(201).json(report);
     } catch (err) {
       next(err);
     }
+  },
+);
+
+router.get(
+  "/admin/reports/:id/evidence/:evidenceId",
+  requireAuth,
+  requirePermission("admin:report:read"),
+  async (req, res, next) => {
+    try {
+      const evidence = await reportService.viewReportEvidence({ reportId: req.params.id, evidenceId: req.params.evidenceId });
+      res.setHeader("Content-Type", evidence.fileType);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.sendFile(evidence.path);
+    } catch (error) { next(error); }
+  },
+);
+
+router.get(
+  "/admin/reports/:id/chat",
+  requireAuth,
+  requirePermission("admin:report:read"),
+  async (req, res, next) => {
+    try { res.json(await reportService.getReportChat({ reportId: req.params.id, before: req.query.before })); }
+    catch (error) { next(error); }
   },
 );
 
@@ -64,6 +91,8 @@ router.get(
         ...pagination,
         status: req.query.status,
         search: req.query.q,
+        scope: req.query.scope,
+        staffId: req.userId,
       });
       res.json(paginatedResponse(items, total, pagination));
     } catch (err) {

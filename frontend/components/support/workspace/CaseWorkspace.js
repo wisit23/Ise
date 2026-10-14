@@ -219,6 +219,21 @@ export default function CaseWorkspace({
       toast.error(err.message);
     }
   }
+  async function changeTicketStatus(status) {
+    if (status === "CLOSED") {
+      setDecision({
+        ticketClose: true,
+        id: selected.id,
+        version: selected.version,
+      });
+      return;
+    }
+    try {
+      await run("status", { status }, "PATCH");
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
   const filter = (key, value) =>
     w.update(
       key === "resetFilters"
@@ -594,6 +609,55 @@ export default function CaseWorkspace({
                     </Button>
                   </div>
                 </header>
+                {!dispute &&
+                  (caps.canEscalate ||
+                    (caps.allowedNextStatuses || []).includes("RESOLVED") ||
+                    (caps.allowedNextStatuses || []).includes("CLOSED")) && (
+                    <div className="flex flex-wrap items-center gap-2 border-b bg-slate-50 px-3 py-2">
+                      <span className="mr-1 text-xs font-semibold text-slate-600">
+                        จัดการเคส
+                      </span>
+                      {(caps.allowedNextStatuses || []).includes("RESOLVED") && (
+                        <Button
+                          variant="secondary"
+                          disabled={busy || chatBusy}
+                          onClick={() => changeTicketStatus("RESOLVED")}
+                        >
+                          แจ้งว่าแก้ไขแล้ว
+                        </Button>
+                      )}
+                      <Button
+                        variant="secondary"
+                        disabled={
+                          busy ||
+                          chatBusy ||
+                          !(caps.allowedNextStatuses || []).includes("CLOSED")
+                        }
+                        onClick={() => changeTicketStatus("CLOSED")}
+                        title={
+                          (caps.allowedNextStatuses || []).includes("CLOSED")
+                            ? undefined
+                            : "แจ้งว่าแก้ไขแล้วก่อนจึงจะจบงานได้"
+                        }
+                      >
+                        จบงาน
+                      </Button>
+                      {caps.canEscalate && (
+                        <Button
+                          variant="secondary"
+                          disabled={busy || chatBusy}
+                          onClick={() => setMemo(true)}
+                        >
+                          ส่งต่อให้ Admin
+                        </Button>
+                      )}
+                      {!(caps.allowedNextStatuses || []).includes("CLOSED") && (
+                        <span className="text-xs text-slate-500">
+                          แจ้งว่าแก้ไขแล้วก่อนจึงจะจบงานได้
+                        </span>
+                      )}
+                    </div>
+                  )}
                 {!mapped.some((row) => row.id === selected.id) &&
                   !w.loading && (
                     <p className="border-b bg-amber-50 px-4 py-2 text-xs text-amber-800">
@@ -940,27 +1004,16 @@ export default function CaseWorkspace({
                     )}
                     {!dispute &&
                       (caps.allowedNextStatuses || [])
-                        .filter((status) => status !== "ESCALATED")
+                        .filter(
+                          (status) =>
+                            !["ESCALATED", "RESOLVED", "CLOSED"].includes(status),
+                        )
                         .map((status) => (
                           <Button
                             key={status}
                             variant="secondary"
                             disabled={busy || chatBusy}
-                            onClick={async () => {
-                              if (status === "CLOSED") {
-                                setDecision({
-                                  ticketClose: true,
-                                  id: selected.id,
-                                  version: selected.version,
-                                });
-                                return;
-                              }
-                              try {
-                                await run("status", { status }, "PATCH");
-                              } catch (err) {
-                                toast.error(err.message);
-                              }
-                            }}
+                            onClick={() => changeTicketStatus(status)}
                           >
                             {status === "IN_PROGRESS" &&
                             selected.status === "RESOLVED"
@@ -968,7 +1021,7 @@ export default function CaseWorkspace({
                               : ACTION_LABEL[status] || status}
                           </Button>
                         ))}
-                    {caps.canEscalate && (
+                    {dispute && caps.canEscalate && (
                       <Button
                         variant="secondary"
                         disabled={busy || chatBusy}
