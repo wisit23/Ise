@@ -154,7 +154,6 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
           value={stats.total}
           icon="confirmation_number"
           color="emerald"
-          onClick={() => onNavigate("tickets", "")}
           sub={stats.open !== null ? `${stats.open} กำลังดำเนินการ` : null}
         />
         <KpiCard
@@ -162,7 +161,6 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
           value={stats.resolved}
           icon="check_circle"
           color="emerald"
-          onClick={() => onNavigate("tickets", "RESOLVED")}
           sub="แก้ไขแล้ว"
         />
         <KpiCard
@@ -170,7 +168,6 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
           value={stats.pending}
           icon="pending"
           color="amber"
-          onClick={() => onNavigate("tickets", "NEW")}
           sub="รอรับเรื่อง"
         />
         {isSafety ? (
@@ -217,7 +214,7 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
             value={sourceErrors.order ? "Unavailable" : ownerStats.activeTrustSafetyHolds}
             icon="lock"
             color="violet"
-            onClick={() => onNavigate("disputes", "")}
+            onClick={() => onNavigate("admin_inbox", "")}
             sub={sourceErrors.order ? "Order API ไม่พร้อมใช้งาน" : "สถานะพักเงินที่ยัง active"}
           />
         </div>
