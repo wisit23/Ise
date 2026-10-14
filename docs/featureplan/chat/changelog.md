@@ -343,6 +343,23 @@
 - **ตรวจบนเบราว์เซอร์**: พิมพ์ 3,970 ตัวขึ้น "เหลือ 30 ตัวอักษร"; paste 10,000 ตัวถูกตัดเหลือ
   4,000 พอดีและตัวนับเปลี่ยนเป็นสีแดง "เหลือ 0 ตัวอักษร"
 
+## 2026-10-14 — `CHAT-009`: Realtime บน Production ผ่าน Long-Polling เมื่อ Proxy บล็อก WebSocket
+
+- **อาการ**: บน server จริง (VM `re-loop` ของ init.d) ต้องรีเฟรชถึงเห็นข้อความอีกฝั่ง ส่วน local ปกติ
+- **สาเหตุที่เห็นจากหลักฐาน**: tcpdump บน VM แสดงว่า Request เข้า `:8080` ผ่าน Reverse Proxy
+  `192.168.100.225` เป็น **HTTP/1.0** — WebSocket Upgrade ต้องใช้ HTTP/1.1 จึงไปไม่ถึง Gateway
+  ขณะที่ Client ตั้ง `transports: ["websocket"]` ไว้อย่างเดียว เลยไม่มีทางสำรอง
+- Client กลับไปใช้ Transport ค่า Default ของ Socket.IO (Long-Polling ก่อน แล้ว Upgrade เป็น
+  WebSocket เองเมื่อทำได้)
+- Gateway: เพิ่ม `/api/chat/socket.io` ใน `PUBLIC_PATHS` (Polling ไม่มี Bearer Header —
+  `socketAuth.js` ตรวจ Token ใน Handshake อยู่แล้ว) และ Proxy เฉพาะที่คืน Prefix ให้ เพราะ
+  Socket.IO ฟังที่ Path เต็ม
+- Frontend: hook `useSocketResync` (`components/chat/messageSync.js`) — Poll ทุก
+  `timing.socketFallbackPollMs` (4,000ms) ขณะ Socket หลุด และ Resync หนึ่งครั้งตอนกลับมา ใช้ใน
+  `/chat/[id]`, `EmbeddedChat`, `SupportMainChat` (เดิมสองตัวหลังไม่มี Fallback เลย)
+- `mergeMessages` เรียงตาม `createdAt` แล้ว `id` เหมือน Server แทนการเรียงตาม `id` อย่างเดียว
+- รายละเอียด + Evidence: [`docs/progress.md`](../../progress.md) Task `CHAT-009`
+
 ## Current reconciliation — 2026-09-09
 
 Baseline `aad4092`. Owner: ยังไม่มี owner/reviewer บุคคลแยกที่ยืนยันในทะเบียนหก role. Reviewer: ให้ทีมกำหนดก่อนรับรอง. Requirements: Cross-role Buyer/Seller/CS/Admin.

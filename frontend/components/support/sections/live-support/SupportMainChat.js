@@ -10,6 +10,7 @@ import {
   useChatSocket,
   useChatSocketEvent,
 } from "../../../chat/ChatSocketProvider";
+import { mergeMessages, useSocketResync } from "../../../chat/messageSync";
 import { listMessages, sendMessage, markRead } from "../../../../lib/chat";
 import { uploadChatAttachment } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
@@ -20,12 +21,6 @@ import {
 import Badge from "../../../panel/ui/Badge";
 
 const PAGE_SIZE = config.pagination.messages;
-
-function mergeById(existing, incoming) {
-  const byId = new Map(existing.map((m) => [m.id, m]));
-  for (const m of incoming) byId.set(m.id, m);
-  return [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
-}
 
 export default function SupportMainChat({
   ticket,
@@ -53,6 +48,10 @@ export default function SupportMainChat({
 
   const { socket, connected } = useChatSocket();
   const conversationId = ticket?.conversationId;
+  const activeRoom = useRef(conversationId);
+  activeRoom.current = conversationId;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   // ── Scroll to bottom helper ──
   const scrollToBottom = useCallback((smooth = true) => {
@@ -134,6 +133,30 @@ export default function SupportMainChat({
     };
   }, [socket, connected, conversationId, ticket?.requesterId]);
 
+  // ── Fallback: poll while the socket is down, catch up when it returns ──
+  const resyncLatest = useCallback(() => {
+    const room = conversationId;
+    if (!room) return;
+    const token = tokenRef.current || getAccessToken();
+    listMessages(room, { limit: PAGE_SIZE }, token)
+      .then((page) => {
+        if (activeRoom.current !== room) return;
+        const known = new Set(messagesRef.current.map((m) => m.id));
+        if (!page.items.some((m) => !known.has(m.id))) return;
+        setMessages((prev) => mergeMessages(prev, page.items));
+        scrollToBottom(true);
+        markRead(room, token).catch(() => {});
+      })
+      .catch(() => {
+        // Retried on the next tick; the initial load surfaces real errors.
+      });
+  }, [conversationId, scrollToBottom]);
+  useSocketResync({
+    active: Boolean(conversationId) && !loading,
+    live: connected,
+    resync: resyncLatest,
+  });
+
   // ── Presence query for requester ──
   useEffect(() => {
     if (!ticket?.requesterId || !socket || !connected) return;
@@ -208,7 +231,7 @@ export default function SupportMainChat({
     try {
       const saved = await sendMessage(conversationId, text, token);
       setMessages((prev) =>
-        mergeById(
+        mergeMessages(
           prev.filter((m) => m.id !== optimisticId),
           [saved],
         ),
@@ -231,7 +254,7 @@ export default function SupportMainChat({
         caption,
         token,
       );
-      setMessages((prev) => mergeById(prev, [saved]));
+      setMessages((prev) => mergeMessages(prev, [saved]));
       scrollToBottom(true);
     } catch (err) {
       setError("ส่งไฟล์ไม่สำเร็จ กรุณาลองใหม่");
