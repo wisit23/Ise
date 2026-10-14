@@ -9,13 +9,15 @@ function testDatabase() {
   const url = new URL(value);
   return (
     ["127.0.0.1", "localhost"].includes(url.hostname) &&
-    url.pathname.startsWith("/reloop_ui_")
+    /^\/reloop_(ui|ci)_[a-z0-9_]+$/.test(url.pathname)
   );
 }
 
 test("17 dispute workflow fields round-trip through logs, CAS and rollback", async (t) => {
   if (!testDatabase()) {
-    t.skip("Requires a disposable localhost reloop_ui_* DATABASE_URL_ORDER");
+    t.skip(
+      "Requires a disposable localhost reloop_ui_* or reloop_ci_* DATABASE_URL_ORDER",
+    );
     return;
   }
   const db = require("../src/models/prismaClient");

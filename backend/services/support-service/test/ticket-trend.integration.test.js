@@ -5,8 +5,13 @@ const { readTicketTrend } = require("../src/features/tickets/ticketTrend");
 
 test("PostgreSQL trend counts beyond 50, fills empty dates, and keeps CS ownership filtering", async (t) => {
   const url = process.env.DATABASE_URL_DASHBOARD;
-  const disposable = url && (new URL(url).pathname.startsWith("/reloop_ui_") ||
-    (new URL(url).hostname === "127.0.0.1" && new URL(url).port === "55439" && new URL(url).pathname === "/support_luna_er"));
+  const disposable =
+    url &&
+    ((["127.0.0.1", "localhost"].includes(new URL(url).hostname) &&
+      /^\/reloop_(ui|ci)_[a-z0-9_]+$/.test(new URL(url).pathname)) ||
+      (new URL(url).hostname === "127.0.0.1" &&
+        new URL(url).port === "55439" &&
+        new URL(url).pathname === "/support_luna_er"));
   if (!disposable) {
     if (process.env.REQUIRE_INTEGRATION === "1")
       throw new Error("Requires disposable DATABASE_URL_DASHBOARD");

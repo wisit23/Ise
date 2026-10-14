@@ -4,175 +4,234 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality-gate:
+    name: Quality checks
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Formatting
+        if: ${{ !cancelled() }}
+        run: npm run format:check
+      - name: Secret scan
+        if: ${{ !cancelled() }}
+        run: npm run secret-scan
+      - name: Dependency audit (existing advisory debt)
+        if: ${{ !cancelled() }}
+        run: npm run audit
+        continue-on-error: true
+      - name: Validate Compose configuration
+        if: ${{ !cancelled() }}
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
 
+  core-tests:
+    name: Tests / ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [shared, gateway, scripts]
+    env:
+      JWT_ACCESS_SECRET: ci-test-access-secret
+      JWT_REFRESH_SECRET: ci-test-refresh-secret
+      INTERNAL_SERVICE_TOKEN: ci-test-internal-token
+      # Client generation needs a datasource value; core tests do not connect.
+      DATABASE_URL: postgresql://reloop:reloop_test@127.0.0.1:5432/reloop_ci_auth?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Run component tests
+        run: npm run test:service -- ${{ matrix.component }}
+      - name: Upload component test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-${{ matrix.component }}
+          path: coverage/${{ matrix.component }}/
+          retention-days: 14
+          if-no-files-found: warn
+
+  service-tests:
+    name: Tests / ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          [
+            auth-service,
+            product-service,
+            order-service,
+            chat-service,
+            support-service,
+          ]
     services:
       postgres:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: reloop
           POSTGRES_PASSWORD: reloop_test
-          POSTGRES_DB: reloop_test
-        ports:
-          - 5432:5432
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U reloop"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-      # Needed for CHAT-006's @socket.io/redis-adapter integration test.
-      # Unlike Mongo below, Redis needs no post-start setup, so a plain
-      # `services:` entry works here.
+          --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:7-alpine
-        ports:
-          - 6379:6379
+        ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      DATABASE_URL: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=auth
-      DATABASE_URL_AUTH: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=auth
-      DATABASE_URL_PRODUCT: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=product
-      DATABASE_URL_ORDER: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=order
-      DATABASE_URL_SUPPORT: postgresql://reloop:reloop_test@localhost:5432/reloop_test?schema=support
-      # No `services:` entry for Mongo (unlike Postgres above) because GitHub
-      # Actions service containers can't run a post-start command, and a
-      # single-node Mongo replica set needs rs.initiate() run once after
-      # start — see the "Start MongoDB" step below instead.
-      DATABASE_URL_CHAT: mongodb://localhost:27017/reloop_test?replicaSet=rs0&directConnection=true
-      REDIS_URL: redis://localhost:6379
+      DATABASE_URL: postgresql://reloop:reloop_test@127.0.0.1:5432/reloop_ci_auth?schema=public
+      DATABASE_URL_AUTH: postgresql://reloop:reloop_test@127.0.0.1:5432/reloop_ci_auth?schema=public
+      DATABASE_URL_PRODUCT: postgresql://reloop:reloop_test@127.0.0.1:5432/reloop_ci_product?schema=public
+      DATABASE_URL_ORDER: postgresql://reloop:reloop_test@127.0.0.1:5432/reloop_ci_order?schema=public
+      DATABASE_URL_SUPPORT: postgresql://reloop:reloop_test@127.0.0.1:5432/reloop_ci_support?schema=public
+      DATABASE_URL_CHAT: mongodb://127.0.0.1:27017/reloop_ci_chat?replicaSet=rs0&directConnection=true
+      REDIS_URL: redis://127.0.0.1:6379
       INTERNAL_SERVICE_TOKEN: ci-test-internal-token
       JWT_ACCESS_SECRET: ci-test-access-secret
       JWT_REFRESH_SECRET: ci-test-refresh-secret
-      # Turns the integration test's "skip if no database" fallback (meant for
-      # a laptop with no Postgres running) into a hard failure in CI, so a
-      # broken service container reports a red build instead of a quietly
-      # skipped test and a false "tests passed".
       REQUIRE_INTEGRATION: "1"
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version-file: ".nvmrc"
-          cache: "npm"
-
-      - name: Install dependencies (all workspaces)
-        run: npm ci
-
-      # Runs as its own container (not a `services:` entry) because it needs
-      # rs.initiate() called once after start — see docs/featureplan/chat/plan.md
-      # CHAT-001 and infra/mongo/init-replica.sh, which this mirrors.
-      - name: Start MongoDB (single-node replica set)
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate
+      - name: Prepare isolated PostgreSQL databases with real migrations
+        run: npm run ci:prepare
+      - name: Start MongoDB replica set for Chat tests
+        if: matrix.service == 'chat-service'
         run: |
-          docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
-          echo "Waiting for mongod to accept connections..."
-          for i in $(seq 1 30); do
-            if docker exec mongo mongosh --quiet --eval "db.runCommand('ping').ok" >/dev/null 2>&1; then
+          set -euo pipefail
+          docker run -d --name ci-mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          ready=false
+          for _ in {1..60}; do
+            if docker exec ci-mongo mongosh --quiet --eval 'quit(db.runCommand({ping:1}).ok ? 0 : 1)' >/dev/null 2>&1; then
+              ready=true
               break
             fi
             sleep 1
           done
-          docker exec mongo mongosh --quiet --eval "
-            rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:27017'}]})
-          "
-          echo "Waiting for rs0 to elect a primary..."
-          for i in $(seq 1 30); do
-            if docker exec mongo mongosh --quiet --eval "rs.status().ok" | grep -q 1; then
+          test "$ready" = true
+          docker exec ci-mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"127.0.0.1:27017"}]})'
+          ready=false
+          for _ in {1..60}; do
+            if docker exec ci-mongo mongosh --quiet --eval 'quit(db.hello().isWritablePrimary ? 0 : 1)' >/dev/null 2>&1; then
+              ready=true
               break
             fi
             sleep 1
           done
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Format check
-        run: npm run format:check
-
-      - name: Secret scan
-        run: npm run secret-scan
-
-      - name: Dependency audit (known debt, does not fail the build — see docs/progress.md)
-        run: npm run audit
-        continue-on-error: true
-
-      - name: Generate Prisma clients (all services)
-        run: npm run prisma:generate
-
-      - name: Push auth test schema
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL_AUTH }}
-        run: npx prisma db push --schema backend/services/auth-service/prisma/schema.prisma --skip-generate
-
-      - name: Push product test schema
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL_PRODUCT }}
-        run: npx prisma db push --schema backend/services/product-service/prisma/schema.prisma --skip-generate
-
-      - name: Seed product test data
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL_PRODUCT }}
-        run: node backend/services/product-service/prisma/seed.js
-
-      - name: Push order test schema
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL_ORDER }}
-        run: npx prisma db push --schema backend/services/order-service/prisma/schema.prisma --skip-generate
-
-      - name: Seed order test data
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL_ORDER }}
-        run: node backend/services/order-service/prisma/seed.js
-
-      - name: Push support test schema
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL_SUPPORT }}
-        run: npx prisma db push --schema backend/services/support-service/prisma/schema.prisma --skip-generate
-
-      - name: Seed support test data
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL_SUPPORT }}
-        run: node backend/services/support-service/prisma/seed.js
-
-      - name: Push chat test schema (MongoDB)
+          test "$ready" = true
+      - name: Prepare Chat schema
+        if: matrix.service == 'chat-service'
         env:
           DATABASE_URL: ${{ env.DATABASE_URL_CHAT }}
         run: npx prisma db push --schema backend/services/chat-service/prisma/schema.prisma --skip-generate
-
-      - name: Backend unit + integration tests (with coverage)
-        run: npm test
-
-      - name: Frontend component tests (with coverage)
-        run: npm run test:frontend
-
-      - name: Frontend production build
-        run: npm --workspace frontend run build
-
-      - name: Upload coverage reports
+      - name: Run service unit and integration tests
+        run: npm run test:service -- ${{ matrix.service }}
+      - name: Upload service test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-reports
-          path: |
-            coverage/
-            frontend/coverage/
+          name: tests-${{ matrix.service }}
+          path: coverage/${{ matrix.service }}/
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Mongo diagnostics
+        if: failure() && matrix.service == 'chat-service'
+        run: docker logs ci-mongo || true
+
+  frontend:
+    name: Frontend tests and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm --workspace frontend run test -- --runInBand
+      - run: npm --workspace frontend run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tests-frontend
+          path: frontend/coverage/
           retention-days: 14
           if-no-files-found: warn
 
-      - name: Create local .env for Compose (dev placeholders only, see .env.example)
-        run: cp .env.example .env
+  docker-build:
+    name: Docker build / ${{ matrix.component }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: auth-service
+            dockerfile: backend/services/auth-service/Dockerfile
+          - component: product-service
+            dockerfile: backend/services/product-service/Dockerfile
+          - component: order-service
+            dockerfile: backend/services/order-service/Dockerfile
+          - component: chat-service
+            dockerfile: backend/services/chat-service/Dockerfile
+          - component: support-service
+            dockerfile: backend/services/support-service/Dockerfile
+          - component: gateway
+            dockerfile: backend/gateway/Dockerfile
+          - component: frontend
+            dockerfile: frontend/Dockerfile.prod
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image only (no publish or deployment)
+        env:
+          DOCKERFILE: ${{ matrix.dockerfile }}
+          COMPONENT: ${{ matrix.component }}
+        run: docker build --progress=plain --file "$DOCKERFILE" --tag "reloop-ci:$COMPONENT" .
 
-      - name: Verify Docker Compose config
-        run: docker compose config --quiet
+  ci-result:
+    name: CI result
+    needs: [quality-gate, core-tests, service-tests, frontend, docker-build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every stage to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          printf '%s\n' "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"' >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$RESULTS" | jq -e 'all(.[]; .result == "success")'

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
@@ -13,6 +13,13 @@ import ErrorState from "../../components/ui/ErrorState";
 import Skeleton from "../../components/ui/Skeleton";
 import { apiFetch } from "../../lib/api";
 import { fetchCategories, fetchConditions } from "../../lib/catalog";
+import {
+  getAccessToken,
+  getCurrentRoles,
+  isCustomerAccountRoles,
+} from "../../lib/auth";
+
+import { createFeedSeed } from "../../lib/recommendationFeed";
 
 const PAGE_SIZE = 12;
 
@@ -37,33 +44,63 @@ function ProductsPageInner() {
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [personalized, setPersonalized] = useState(false);
+  const requestRef = useRef(null);
+  const appliedRef = useRef(null);
+  const seedRef = useRef(null);
 
   async function load(
     query,
     cat,
     pageNum,
     active = { style, brand, size, condition, minPrice, maxPrice },
+    recordSearch = false,
   ) {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    appliedRef.current = { query, cat, active };
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
+      seedRef.current ||= createFeedSeed();
+      params.set("seed", seedRef.current);
       if (cat) params.set("category", cat);
       for (const [key, value] of Object.entries(active))
         if (value) params.set(key, value);
       params.set("page", pageNum);
       params.set("limit", PAGE_SIZE);
-      const path =
-        query || Object.values(active).some(Boolean) || cat
-          ? `/api/products/search${query ? `?q=${encodeURIComponent(query)}&` : "?"}${params}`
-          : `/api/products/feed?${params}`;
-      const data = await apiFetch(path);
+      if (query) params.set("q", query);
+      if (
+        recordSearch &&
+        query.trim() &&
+        getAccessToken() &&
+        isCustomerAccountRoles(getCurrentRoles())
+      ) {
+        // Record submitted searches, not typing or pagination. Ranking still
+        // works when history storage is temporarily unavailable.
+        await apiFetch("/api/products/recommendations/search-events", {
+          method: "POST",
+          body: { query },
+          signal: controller.signal,
+        }).catch((err) => {
+          if (!controller.signal.aborted)
+            console.error("บันทึกการค้นหาไม่สำเร็จ:", err);
+        });
+      }
+      if (controller.signal.aborted) return;
+      const data = await apiFetch(`/api/products/recommendations?${params}`, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       setItems(data.items);
       setTotalPages(data.totalPages);
+      setPersonalized(Boolean(data.personalized));
     } catch (err) {
-      setError(err.message);
+      if (!controller.signal.aborted) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }
 
@@ -71,8 +108,30 @@ function ProductsPageInner() {
     setQ(urlQuery);
     setCategory(urlCategory);
     setPage(1);
-    load(urlQuery, urlCategory, 1);
+    load(
+      urlQuery,
+      urlCategory,
+      1,
+      { style, brand, size, condition, minPrice, maxPrice },
+      true,
+    );
   }, [urlQuery, urlCategory]);
+
+  useEffect(() => {
+    const authChanged = () => {
+      seedRef.current = createFeedSeed();
+      setItems([]);
+      setPersonalized(false);
+      setPage(1);
+      const applied = appliedRef.current;
+      if (applied) load(applied.query, applied.cat, 1, applied.active);
+    };
+    window.addEventListener("reloop:auth", authChanged);
+    return () => {
+      window.removeEventListener("reloop:auth", authChanged);
+      requestRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     // A failed category fetch only costs the filter list, not the product
@@ -91,7 +150,7 @@ function ProductsPageInner() {
   function applyFilters() {
     const active = { style, brand, size, condition, minPrice, maxPrice };
     setPage(1);
-    load(q, category, 1, active);
+    load(q, category, 1, active, true);
   }
 
   function handleSearch(e) {
@@ -300,6 +359,13 @@ function ProductsPageInner() {
             ))}
           </div>
 
+          {!loading && personalized && (
+            <p className="mb-4 text-sm text-ink-subtle">
+              เรียงตามความสนใจ การค้นหา คลิปที่กดใจ และสินค้าที่คุณซื้อ
+              พร้อมสินค้าใหม่และสินค้าที่น่าลอง
+            </p>
+          )}
+
           {error ? (
             <ErrorState
               description="ไม่สามารถโหลดรายการสินค้าได้ในขณะนี้"
@@ -335,6 +401,11 @@ function ProductsPageInner() {
                 {items.map((p, i) => (
                   <Reveal key={p.id} delay={Math.min(i, 7) * 45}>
                     <ProductCard product={p} />
+                    {p.recommendation?.reasons?.length > 0 && (
+                      <p className="mt-2 text-xs leading-relaxed text-ink-subtle">
+                        {p.recommendation.reasons.join(" · ")}
+                      </p>
+                    )}
                   </Reveal>
                 ))}
               </div>
