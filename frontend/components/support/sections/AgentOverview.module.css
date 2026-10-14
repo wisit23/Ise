@@ -329,15 +329,16 @@
 }
 .priorityPanel {
   background: rgb(var(--color-surface)) !important;
+  min-height: min-content;
 }
 .slaDonutLayout {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 24px;
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: min-content;
 }
 .slaDonut {
   display: grid;

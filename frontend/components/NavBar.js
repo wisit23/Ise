@@ -135,7 +135,39 @@ export default function NavBar() {
   const menuRef = useRef(null);
   const discoveryRef = useRef(null);
   const discoveryTrigger = useRef(null);
+  const [discoveryPosition, setDiscoveryPosition] = useState(null);
   const { connected: socketConnected } = useChatSocket();
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const positionMenu = () => {
+      const trigger = discoveryTrigger.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(360, window.innerWidth - 24);
+      const left = Math.max(
+        12,
+        Math.min(rect.right - width, window.innerWidth - width - 12),
+      );
+      const top = rect.bottom + 10;
+      setDiscoveryPosition({
+        position: "fixed",
+        left,
+        right: "auto",
+        top,
+        width,
+        marginTop: 0,
+        maxHeight: Math.max(120, window.innerHeight - top - 12),
+      });
+    };
+    positionMenu();
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    return () => {
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -552,12 +584,13 @@ export default function NavBar() {
         </div>
       </div>
 
-      {/* Discovery panel anchored beneath the profile area. */}
+      {/* Anchor discovery to its own trigger, keeping it inside the viewport. */}
       {mobileMenuOpen && (
         <nav
           ref={discoveryRef}
           id="mobile-navigation"
           data-testid="mobile-nav-drawer"
+          style={discoveryPosition || { visibility: "hidden" }}
           aria-label="เมนูนำทางสำหรับอุปกรณ์พกพา"
           className="absolute top-full right-0 left-0 z-dropdown max-h-[calc(100dvh-90px)] overflow-y-auto border border-line bg-white px-4 py-4 shadow-lg sm:left-auto sm:right-4 sm:mt-2 sm:w-[360px] sm:rounded-2xl lg:right-8 animate-dropdown-in"
         >
