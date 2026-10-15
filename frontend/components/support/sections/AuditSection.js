@@ -276,24 +276,28 @@ export default function AuditSection({ token }) {
           }
           className="rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs disabled:bg-slate-100 disabled:text-slate-400"
         />
-        <input
-          aria-label="วันที่เริ่มต้น"
-          type="date"
-          value={draft.from}
-          onChange={(e) =>
-            setDraft((value) => ({ ...value, from: e.target.value }))
-          }
-          className="rounded-lg border border-slate-300 px-3 py-2 text-xs"
-        />
-        <input
-          aria-label="วันที่สิ้นสุด"
-          type="date"
-          value={draft.to}
-          onChange={(e) =>
-            setDraft((value) => ({ ...value, to: e.target.value }))
-          }
-          className="rounded-lg border border-slate-300 px-3 py-2 text-xs"
-        />
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600">
+          วันที่เริ่มต้น
+          <input
+            type="date"
+            value={draft.from}
+            onChange={(e) =>
+              setDraft((value) => ({ ...value, from: e.target.value }))
+            }
+            className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-xs"
+          />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600">
+          วันที่สิ้นสุด
+          <input
+            type="date"
+            value={draft.to}
+            onChange={(e) =>
+              setDraft((value) => ({ ...value, to: e.target.value }))
+            }
+            className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-xs"
+          />
+        </label>
         <button
           type="submit"
           className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white"
