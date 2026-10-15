@@ -6,6 +6,10 @@ const prisma = {
   $queryRaw: async () => [],
   $transaction: async (callback) => callback(prisma),
   report: {
+    create: async ({ data }) => {
+      calls.createdReport = data;
+      return { id: "new-report", ...data };
+    },
     updateMany: async () => ({ count: 1 }),
     findMany: async (query) => {
       calls.findMany = query;
@@ -82,6 +86,25 @@ require.cache[productClientPath] = {
 };
 
 const reportService = require("../src/features/reports/reportService");
+
+test("new seller reports store their category without a product target", async () => {
+  await reportService.createReport({
+    reporterId: "buyer-1", targetId: "seller-1", category: "FRAUD",
+    productId: "ignored-product", reason: "  ร้านหลอกลวง  ",
+  });
+  assert.equal(calls.createdReport.category, "FRAUD");
+  assert.equal(calls.createdReport.targetId, "seller-1");
+  assert.equal(calls.createdReport.reason, "ร้านหลอกลวง");
+  assert.equal("productId" in calls.createdReport, false);
+  await assert.rejects(
+    reportService.createReport({ reporterId: "buyer-1", targetId: "seller-1", reason: "test" }),
+    (error) => error.status === 400,
+  );
+  await assert.rejects(
+    reportService.createReport({ reporterId: "buyer-1", targetId: "seller-1", category: "UNKNOWN", reason: "test" }),
+    (error) => error.status === 400,
+  );
+});
 
 test("listReports applies independent page and search contract", async () => {
   const result = await reportService.listReports({

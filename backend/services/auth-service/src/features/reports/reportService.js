@@ -40,18 +40,22 @@ async function recordAdminAction({
 }
 
 /**
- * The consumer-facing half of the report flow — a Buyer/Seller flags a user
- * and/or a product (at least one of the two, never neither) with a reason.
- * Everything downstream (review, decide, dismiss) is Admin's existing flow;
- * this is only the missing "file a report" entry point into it.
+ * A Buyer/Seller reports another account with a reason and category.
+ * Product/order disputes use their own case flow.
  */
-async function createReport({ reporterId, targetId, productId, reason, file }) {
+async function createReport({ reporterId, targetId, category, reason, file }) {
   const trimmedReason = reason?.trim();
   if (!trimmedReason) throw badRequest("reason is required");
-  if (!targetId && !productId) {
-    throw badRequest("targetId or productId is required");
-  }
+  if (!targetId) throw badRequest("targetId is required");
   if (targetId === reporterId) throw badRequest("cannot report yourself");
+  if (!category) throw badRequest("category is required");
+  const allowedCategories = new Set([
+    "FRAUD", "COUNTERFEIT_IP", "INAPPROPRIATE_BEHAVIOR",
+    "MISLEADING_INFORMATION", "OTHER",
+  ]);
+  if (category && !allowedCategories.has(category)) {
+    throw badRequest("invalid report category");
+  }
 
   let storageKey;
   try {
@@ -59,8 +63,8 @@ async function createReport({ reporterId, targetId, productId, reason, file }) {
     return await prisma.report.create({
       data: {
         reporterId,
-        targetId: targetId || null,
-        productId: productId || null,
+        targetId,
+        category: category || null,
         reason: trimmedReason,
         ...(file ? { evidence: { create: { storageKey, fileType: file.mimetype, originalName: file.originalname || "evidence" } } } : {}),
       },

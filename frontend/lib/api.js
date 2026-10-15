@@ -117,10 +117,10 @@ export async function apiFetch(path, { method = "GET", body, token, signal } = {
   return data;
 }
 
-export async function createReportWithEvidence({ targetId, productId, reason, file }, token) {
+export async function createReportWithEvidence({ targetId, category, reason, file }, token) {
   const form = new FormData();
   if (targetId) form.append("targetId", targetId);
-  if (productId) form.append("productId", productId);
+  if (category) form.append("category", category);
   form.append("reason", reason);
   if (file) form.append("file", file);
   const path = "/api/auth/reports";

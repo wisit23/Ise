@@ -45,7 +45,7 @@ router.post(
       const report = await reportService.createReport({
         reporterId: req.userId,
         targetId: req.body.targetId,
-        productId: req.body.productId,
+        category: req.body.category,
         reason: req.body.reason,
         file: req.file,
       });

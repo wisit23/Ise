@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, fetchAuthedBlobUrl } from "../../../../lib/api";
+import { fetchAuthedBlobUrl } from "../../../../lib/api";
+import { reportCategoryLabel } from "../../../../lib/reportCategories";
 
 import Alert from "../../../ui/Alert";
 import Button from "../../../ui/Button";
@@ -91,17 +92,10 @@ export default function ReportCasePanel({
 }) {
   const [evidenceError, setEvidenceError] = useState("");
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatData, setChatData] = useState(null);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatError, setChatError] = useState("");
   const settled = report.status === "ACTIONED" || report.status === "DISMISSED";
 
   useEffect(() => {
     setEvidenceError("");
-    setChatOpen(false);
-    setChatData(null);
-    setChatError("");
     setPreviewUrl(null);
   }, [report.id]);
 
@@ -115,17 +109,6 @@ export default function ReportCasePanel({
     } catch (error) { setEvidenceError(error.message); }
   }
 
-  async function loadChat(before) {
-    setChatLoading(true);
-    setChatError("");
-    try {
-      const query = before ? `?before=${encodeURIComponent(before)}` : "";
-      const page = await apiFetch(`/api/auth/admin/reports/${report.id}/chat${query}`);
-      setChatData((current) => before ? { ...page, messages: [...page.messages, ...(current?.messages || [])] } : page);
-    } catch (error) { setChatError(error.message); }
-    finally { setChatLoading(false); }
-  }
-
   const decisionOptions = [
     report.targetId && {
       value: "SUSPEND_USER",
@@ -137,10 +120,6 @@ export default function ReportCasePanel({
     },
     report.targetId && { value: "RESTRICT_BUYER", label: "เพิกถอนสิทธิ์ซื้อ" },
     report.targetId && { value: "RESTRICT_SELLER", label: "เพิกถอนสิทธิ์ขาย" },
-    report.productId && {
-      value: "REMOVE_PRODUCT",
-      label: "ลบสินค้า (REMOVE_PRODUCT)",
-    },
     { value: "DISMISS", label: "ยกเลิกรายงาน / ไม่พบความผิด (DISMISS)" },
   ].filter(Boolean);
 
@@ -186,11 +165,7 @@ export default function ReportCasePanel({
               {report.targetId}
             </Row>
           )}
-          {report.productId && (
-            <Row label="สินค้าเป้าหมาย:" mono danger>
-              {report.productId}
-            </Row>
-          )}
+          <Row label="ประเภทปัญหา:">{reportCategoryLabel(report.category)}</Row>
           <div className="mt-3 border-t border-slate-100 pt-3">
             <Row label="รายละเอียด:">{report.reason}</Row>
           </div>
@@ -205,22 +180,6 @@ export default function ReportCasePanel({
           </button>
         )) : <p className="mt-2 text-sm text-slate-500">ผู้รายงานไม่ได้แนบรูปหลักฐาน</p>}
         {evidenceError && <Alert className="mt-3">{evidenceError}</Alert>}
-      </div>
-
-      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <button type="button" onClick={() => { if (!chatOpen && !chatData) loadChat(); setChatOpen(!chatOpen); }} className="font-semibold text-indigo-700 hover:underline">
-          {chatOpen ? "ซ่อน" : "ดู"}บทสนทนาก่อนหน้า
-        </button>
-        {chatOpen && <div className="mt-3 space-y-2">
-          {chatLoading && <p className="text-sm text-slate-500">กำลังโหลดบทสนทนา...</p>}
-          {chatError && <Alert>{chatError}</Alert>}
-          {!chatLoading && chatData && !chatData.available && <p className="text-sm text-slate-500">ไม่มีบทสนทนาที่เชื่อมกับรายงานนี้</p>}
-          {chatData?.messages?.map((message) => <div key={message.id} className="rounded-lg border bg-slate-50 p-3 text-sm">
-            <p className="mb-1 text-xs text-slate-500">{message.senderId === report.reporterId ? "ผู้รายงาน" : "คู่สนทนา"} · {new Date(message.createdAt).toLocaleString("th-TH")}</p>
-            <p className="whitespace-pre-wrap">{message.body || `[${message.type}]`}</p>
-          </div>)}
-          {chatData?.nextCursor && <button type="button" disabled={chatLoading} onClick={() => loadChat(chatData.nextCursor)} className="text-sm font-semibold text-indigo-700 hover:underline">โหลดข้อความเก่ากว่า</button>}
-        </div>}
       </div>
 
       <div className="mb-6 grid gap-3 md:grid-cols-2">
@@ -239,33 +198,6 @@ export default function ReportCasePanel({
           />
         )}
       </div>
-
-      {report.productId && (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h4 className="font-bold text-slate-900">รายละเอียดสินค้า</h4>
-          {report.productDetail?.available ? (
-            <div className="mt-3 space-y-2">
-              <Row label="ชื่อสินค้า:">
-                {report.productDetail.product.title}
-              </Row>
-              <Row label="ผู้ขาย:" mono>
-                {report.productDetail.product.sellerId}
-              </Row>
-              <Row label="สถานะ:">{report.productDetail.product.status}</Row>
-              <Row label="ราคา:">
-                {Number(report.productDetail.product.price || 0).toLocaleString(
-                  "th-TH",
-                )}{" "}
-                บาท
-              </Row>
-            </div>
-          ) : (
-            <Alert tone="warning" className="mt-3">
-              {report.productDetail?.error || "ยังโหลดข้อมูลสินค้าล่าสุดไม่ได้"}
-            </Alert>
-          )}
-        </div>
-      )}
 
       {settled ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">

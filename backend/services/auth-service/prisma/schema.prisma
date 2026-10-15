@@ -194,6 +194,7 @@ model Report {
   reporter    User         @relation(fields: [reporterId], references: [id])
   targetId    String?      @map("target_id")
   productId   String?      @map("product_id")
+  category    String?
   reason      String
   status      ReportStatus @default(OPEN)
   reportedAt  DateTime     @default(now()) @map("reported_at")
