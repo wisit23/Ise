@@ -9,11 +9,6 @@ export default function AnimatedNumber({ value, animate = true }) {
   useLayoutEffect(() => {
     const node = element.current;
     if (!node || value == null || !animate || played.current) return;
-    if (
-      !window.matchMedia ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    )
-      return;
     played.current = true;
     let frame;
     const start = performance.now();

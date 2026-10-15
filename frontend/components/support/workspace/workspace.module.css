@@ -45,14 +45,7 @@
     transform: translateY(0);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .filterReveal {
-    transition: none;
-  }
-  .surfaceEnter {
-    animation: none;
-  }
-}
+
 .back {
   display: none;
 }

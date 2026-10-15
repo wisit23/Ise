@@ -25,14 +25,11 @@ export default function LiveSupportSection({
   function closeDetails() {
     if (closingTimer.current) return;
     setDetailsClosing(true);
-    closingTimer.current = setTimeout(
-      () => {
-        setShowDetails(false);
-        setDetailsClosing(false);
-        closingTimer.current = null;
-      },
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 220,
-    );
+    closingTimer.current = setTimeout(() => {
+      setShowDetails(false);
+      setDetailsClosing(false);
+      closingTimer.current = null;
+    }, 220);
   }
   useEffect(
     () => () => {

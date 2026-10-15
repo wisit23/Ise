@@ -731,19 +731,6 @@
     font-size: 13px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .metric,
-  .slaDonutGroup {
-    transition: none;
-  }
-  .metric:hover {
-    transform: none;
-  }
-  .skeletonMetrics > div,
-  .skeletonChart {
-    animation: none;
-  }
-}
 
 @media (min-width: 1024px) {
   .slaDonutLayout:has(.slaDonutGroup:nth-child(5)) {
@@ -902,12 +889,6 @@
   }
   .periodControl button {
     font-size: 13px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .periodIndicator,
-  .periodControl button {
-    transition: none;
   }
 }
 
@@ -1194,18 +1175,73 @@
     stroke-dashoffset: 0;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .dashboard.entering .header h1,
-  .dashboard.entering .metricHeading,
-  .dashboard.entering .metricValue,
-  .dashboard.entering .metricSources,
-  .dashboard.entering .widgetHeader h2,
-  .dashboard.entering .slaDonutGroup,
-  .dashboard.entering .slaDonutCenter strong,
-  .dashboard.entering :global(.agent-chart-plot),
-  .dashboard.entering .donutSvg,
-  .dashboard.entering :global(.agent-line-series),
-  .dashboard.entering .donutSvg [data-priority] {
-    animation: none;
+
+/* Size the priority panel from the dashboard's remaining height, rather than
+   forcing the entire row to grow to the donut's intrinsic content height. */
+.priorityPanel {
+  min-height: 0;
+  min-width: 0;
+}
+.priorityLayout {
+  width: 100%;
+  min-width: 0;
+}
+.priorityDonut {
+  max-width: 100%;
+}
+@media (min-width: 1024px) and (min-height: 700px) {
+  .priorityPanel .priorityLayout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-items: center;
+    justify-items: center;
+    gap: 8px;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  .priorityPanel .priorityLayout:has(.slaDonutNote) {
+    grid-template-rows: minmax(0, 1fr) auto auto;
+  }
+  .priorityPanel .priorityDonut {
+    grid-area: 1 / 1;
+    width: auto;
+    height: 100%;
+    max-height: 200px;
+    min-height: 0;
+    aspect-ratio: 1;
+  }
+  .priorityPanel .slaDonutGroup {
+    min-height: 44px;
+    padding-block: 6px;
+  }
+  .priorityPanel .slaDonutNote {
+    margin: 0;
+  }
+  .priorityPanel .widgetHeader {
+    margin-bottom: 12px;
+  }
+}
+
+@media (min-width: 1024px) and (min-height: 700px) {
+  /* The hover tooltip shares the chart row instead of reserving blank space. */
+  .priorityPanel .donutTooltipSlot {
+    grid-area: 1 / 1;
+    align-self: end;
+    transform: translateY(50%);
+    z-index: 6;
+    pointer-events: none;
+  }
+  .priorityPanel .slaDonutLegend {
+    grid-row: 2;
+  }
+  .priorityPanel .slaDonutNote {
+    grid-row: 3;
+  }
+}
+
+@media (min-width: 1600px) and (min-height: 900px) {
+  .priorityPanel .priorityDonut {
+    max-height: 260px;
   }
 }

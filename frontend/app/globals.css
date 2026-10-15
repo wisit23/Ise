@@ -123,18 +123,7 @@ h4 {
   }
 }
 
-/* Respect the OS "reduce motion" setting. The app leans on entrance
-   animations (fade-in-up, slide-in-*) that can trigger vestibular symptoms. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-}
+/* Motion is consistent across devices, including OS Reduce Motion settings. */
 
 /* Prevent white focus outlines/flashes when clicking on video elements or swipe containers */
 video,
