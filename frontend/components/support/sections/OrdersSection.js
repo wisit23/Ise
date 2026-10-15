@@ -46,6 +46,34 @@ const KYC_STATUS_LABEL = {
   REJECTED: "ไม่อนุมัติ",
 };
 
+function CommerceRestrictionIcon({ kind = "buyer", className = "h-[18px] w-[18px]" }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`${className} shrink-0`}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      {kind === "seller" ? (
+        <>
+          <path d="M4 10h16l-1.2-5H5.2L4 10Z" />
+          <path d="M5 10v9h14v-9M9 19v-6h6v6" />
+        </>
+      ) : (
+        <>
+          <path d="M3 5h2l2 11h11l2-8H6" />
+          <path d="M9 20h.01M17 20h.01" strokeWidth="2.8" />
+        </>
+      )}
+      <path d="M3 21 21 3" strokeWidth="2.2" />
+    </svg>
+  );
+}
+
 export default function OrdersSection({
   token,
   initialUserId = "",
@@ -669,9 +697,7 @@ export default function OrdersSection({
                       }
                       className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100"
                     >
-                      <span className="material-symbols-outlined text-[16px]">
-                        shopping_cart_off
-                      </span>
+                      <CommerceRestrictionIcon />
                       เพิกถอนสิทธิ์ซื้อ
                     </button>
                   )}
@@ -690,9 +716,7 @@ export default function OrdersSection({
                       }
                       className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100"
                     >
-                      <span className="material-symbols-outlined text-[16px]">
-                        store_off
-                      </span>
+                      <CommerceRestrictionIcon kind="seller" />
                       เพิกถอนสิทธิ์ขาย
                     </button>
                   )}
@@ -807,9 +831,7 @@ export default function OrdersSection({
                   <span className="text-xs font-medium text-slate-500">
                     การเพิกถอนสิทธิ์ซื้อขาย
                   </span>
-                  <span className="material-symbols-outlined text-[18px] text-amber-500">
-                    shopping_cart_off
-                  </span>
+                  <CommerceRestrictionIcon className="h-[18px] w-[18px] text-amber-500" />
                 </div>
                 <div className="mt-2 flex items-baseline gap-2">
                   <span
