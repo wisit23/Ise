@@ -7,6 +7,7 @@ const {
   restrictionsForStatus,
 } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
+const { findSupportUser } = require("./supportUserLookup");
 const productModerationClient = require("../../services/productModerationClient");
 const { lockUser } = require("../../services/sessionService");
 
@@ -597,32 +598,7 @@ async function listUserHistory({ targetId, kind, page, limit }) {
 }
 
 async function getUserDetail(identifier) {
-  if (!identifier || !identifier.trim()) {
-    throw badRequest("user identifier is required");
-  }
-  const cleanId = identifier.trim();
-
-  const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { id: cleanId },
-        { email: cleanId },
-        { sellerProfile: { shopName: cleanId } },
-      ],
-    },
-    include: {
-      sellerProfile: {
-        select: {
-          shopName: true,
-          kycStatus: true,
-          verifiedAt: true,
-        },
-      },
-      roles: true,
-    },
-  });
-
-  if (!user) throw notFound("user not found");
+  const user = await findSupportUser(prisma, identifier);
 
   const safetySummary = await getUserSafetySummary(user.id);
   const roles =

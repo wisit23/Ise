@@ -73,6 +73,10 @@ model SlaPolicy {
 }
 
 model SupportTicket {
+  closedAt DateTime? @map("closed_at") @db.Timestamptz(3)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  retentionUntil DateTime? @map("retention_until") @db.Timestamptz(3)
   priorityScore Int @default(0) @map("priority_score")
   riskReportCount Int @default(0) @map("risk_report_count")
   chatResponderId String? @map("chat_responder_id")
@@ -109,6 +113,7 @@ model SupportTicket {
   @@index([categoryId])
   @@index([priorityId])
   @@map("support_tickets")
+  @@index([archivedAt, deletedAt, closedAt])
 }
 
 model TicketAssignment {

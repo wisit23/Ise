@@ -22,4 +22,7 @@ app.listen(PORT, () => {
   checkoutSessionService.startExpiryWorker();
   productSyncService.startWorker();
   attributionOutboxService.startWorker();
+  require("@reloop/shared/src/caseRetention").startCaseRetention(
+    require("./models/prismaClient"), require("./generated/prisma-client").Prisma, "disputes",
+  );
 });

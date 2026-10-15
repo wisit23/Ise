@@ -512,7 +512,7 @@ export default function AgentDashboard({ token, currentUserId }) {
           </div>
           <div className={`${styles.chartRow} ${styles.personalCharts}`}>
             <Panel
-              title={`รับงานรายวัน · ${displayDays} วัน`}
+              title={displayDays === 1 ? "รับงานรายชั่วโมง · วันนี้" : `รับงานรายวัน · ${displayDays} วัน`}
               className={styles.trendPanel}
               action={
                 <div
@@ -538,7 +538,7 @@ export default function AgentDashboard({ token, currentUserId }) {
                       aria-pressed={days === value}
                       onClick={() => setDays(value)}
                     >
-                      {value} วัน
+                      {value === 1 ? "วันนี้" : `${value} วัน`}
                     </button>
                   ))}
                 </div>
@@ -554,6 +554,7 @@ export default function AgentDashboard({ token, currentUserId }) {
               <ComparisonChart
                 rows={trend}
                 kind="line"
+                hourly={displayDays === 1}
                 hideLegend
                 visible={visible}
               />

@@ -1,6 +1,5 @@
 const {AppError} = require("@reloop/shared");
 const {
-  STAFF_ROLES,
   badRequest,
   forbidden,
   notFound,
@@ -18,7 +17,7 @@ const chatClient = require("../../services/chatClient");
 const { absolutePath } = require("./evidenceStorage");
 
 const { disputeCapabilities } = require("./workspacePolicy");
-const AGENT_ROLES = new Set(STAFF_ROLES);
+const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "TRUST_AND_SAFETY", "ADMIN"]);
 const DECISIONS = ["APPROVE_REFUND", "RELEASE_ESCROW", "REJECT"];
 
 function normalizedRoles(role, roles) {
@@ -46,11 +45,13 @@ function actingAgentRole(role, roles, requiredRole) {
 }
 
 async function assertAccess({ dispute, userId, role, roles }) {
+  if (dispute.deletedAt && !hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
+    throw notFound("dispute not found");
   if (hasRole(role, roles, "ADMIN") || hasRole(role, roles, "TRUST_AND_SAFETY"))
     return dispute;
   if (hasRole(role, roles, "CUSTOMER_SERVICE")) {
-    if (dispute.assignedRole === "ADMIN")
-      throw forbidden("this dispute is in the Admin queue");
+    if (["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole))
+      throw forbidden(`this dispute is in the ${dispute.assignedRole === "ADMIN" ? "Admin" : "Trust & Safety"} queue`);
     if (!dispute.assignedTo || dispute.assignedTo === userId) return dispute;
     throw forbidden("only the assigned agent can inspect this dispute");
   }
@@ -267,6 +268,7 @@ async function listQueue({
   take,
   scope,
   work,
+  retention,
   userId,
   priority,
   sort,
@@ -274,6 +276,8 @@ async function listQueue({
   if (!isAgent(role, roles)) {
     throw forbidden("only support agents can view the dispute queue");
   }
+  retention = require("@reloop/shared/src/caseRetention").retentionView(retention,
+    hasRole(role, roles, "ADMIN") ? "ADMIN" : hasRole(role, roles, "TRUST_AND_SAFETY") ? "TRUST_AND_SAFETY" : role);
   if (work && !["open", "overdue", "soon", "reply"].includes(work))
     throw badRequest("invalid work filter");
   if (scope && !["mine", "unassigned", "all"].includes(scope))
@@ -300,6 +304,7 @@ async function listQueue({
         )
       : undefined;
   const queue = await disputeModel.listQueue({
+    retention,
     replyIds,
     status,
     assignedRole,
@@ -431,7 +436,7 @@ async function claim({ disputeId, userId, role, roles, version }) {
   if (dispute.assignedTo) {
     throw conflict(`dispute is already claimed by ${dispute.assignedTo}`);
   }
-  if (hasRole(role, roles, "ADMIN") && dispute.assignedRole !== "ADMIN") {
+  if (hasRole(role, roles, "ADMIN") && !["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole)) {
     throw forbidden("Admin can claim only escalated disputes");
   }
   if (dispute.assignedRole === "ADMIN" && !hasRole(role, roles, "ADMIN")) {
@@ -439,7 +444,7 @@ async function claim({ disputeId, userId, role, roles, version }) {
   }
   if (
     dispute.assignedRole === "TRUST_AND_SAFETY" &&
-    !hasRole(role, roles, "TRUST_AND_SAFETY")
+    !hasRole(role, roles, "TRUST_AND_SAFETY") && !hasRole(role, roles, "ADMIN")
   ) {
     throw forbidden(
       "only Trust & Safety staff can claim this escalated dispute",
@@ -479,6 +484,7 @@ async function reassign({
     throw badRequest("version is required and must be a number");
   }
   if (!toUserId?.trim()) throw badRequest("toUserId is required");
+  if (toUserId.trim() === userId) throw badRequest("cannot reassign a dispute to yourself");
   if (!reason?.trim()) throw badRequest("reason is required");
 
   const dispute = await disputeModel.findById(disputeId);
@@ -487,6 +493,7 @@ async function reassign({
   if (dispute.status === "DECIDED") {
     throw badRequest("cannot reassign a decided dispute");
   }
+  if (toUserId.trim() === dispute.assignedTo) throw badRequest("target already owns this dispute");
 
   const isCurrentAssignee = dispute.assignedTo === userId;
   const isTrustAndSafety = hasRole(role, roles, "TRUST_AND_SAFETY");
@@ -497,7 +504,7 @@ async function reassign({
     );
   }
 
-  if (dispute.assignedRole === "TRUST_AND_SAFETY" && !isTrustAndSafety) {
+  if (dispute.assignedRole === "TRUST_AND_SAFETY" && !isTrustAndSafety && !isAdmin) {
     throw forbidden(
       "only Trust & Safety staff can reassign this escalated dispute",
     );
@@ -588,6 +595,8 @@ async function escalate({
   if (dispute.status === "DECIDED") {
     throw badRequest("cannot escalate a decided dispute");
   }
+  if (!disputeCapabilities(dispute, userId, role, roles).canEscalate)
+    throw forbidden("only the assigned CS agent can escalate this dispute");
 
   const isCurrentAssignee = dispute.assignedTo === userId;
   const isTrustAndSafety = hasRole(role, roles, "TRUST_AND_SAFETY");
@@ -609,8 +618,8 @@ async function escalate({
       throw badRequest("target user account is not active");
     }
     const targetRoles = targetUser.roles || [targetUser.role];
-    if (!targetRoles.includes("ADMIN")) {
-      throw badRequest("target user must be Admin staff");
+    if (!targetRoles.includes("TRUST_AND_SAFETY")) {
+      throw badRequest("target user must be Trust & Safety staff");
     }
     verifiedToUserId = targetUser.id;
   }
@@ -639,8 +648,8 @@ async function decide({
   version,
   idempotencyKey,
 }) {
-  if (!hasRole(role, roles, "ADMIN"))
-    throw forbidden("only Admin can decide a dispute");
+  if (!hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
+    throw forbidden("only Trust & Safety can decide a dispute");
   if (typeof version !== "number") {
     throw badRequest("version is required and must be a number");
   }
@@ -674,8 +683,9 @@ async function decide({
   }
 
   // TSR-02 / ADM-DEC-025: Escalated dispute can only be decided by Trust & Safety
-  if (dispute.assignedRole !== "ADMIN")
-    throw forbidden("dispute must be escalated to Admin before a verdict");
+  if (!["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) ||
+      (dispute.assignedRole === "ADMIN" && !hasRole(role, roles, "ADMIN")))
+    throw forbidden("dispute must be escalated to Trust & Safety before a verdict");
 
   // Must be claimed by current user before deciding
   if (!dispute.assignedTo) {
@@ -749,15 +759,16 @@ async function requestMoreEvidence({
   reason,
   version,
 }) {
-  if (!hasRole(role, roles, "ADMIN"))
-    throw forbidden("only Admin can request more evidence");
+  if (!hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
+    throw forbidden("only Trust & Safety can request more evidence");
   if (!reason?.trim()) throw badRequest("reason is required");
   if (typeof version !== "number") throw badRequest("version is required");
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
   if (dispute.status === "DECIDED") throw conflict("dispute already decided");
-  if (dispute.assignedRole !== "ADMIN" || dispute.assignedTo !== userId) {
-    throw forbidden("only the assigned Admin can return this dispute");
+  if (!["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) || dispute.assignedTo !== userId ||
+      (dispute.assignedRole === "ADMIN" && !hasRole(role, roles, "ADMIN"))) {
+    throw forbidden("only the assigned safety officer can return this dispute");
   }
   const updated = await disputeModel.requestMoreEvidence({
     id: disputeId,
@@ -773,7 +784,7 @@ async function requestMoreEvidence({
         updated,
         order,
         `request-evidence:${updated.version}`,
-        `Admin ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
+        `Trust & Safety ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
       );
     } catch (err) {
       console.error(
@@ -793,8 +804,8 @@ async function getAuditTranscript({
   side,
   before,
 }) {
-  if (!hasRole(role, roles, "ADMIN"))
-    throw forbidden("only Admin can read dispute audit logs");
+  if (!hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
+    throw forbidden("only Trust & Safety can read dispute audit logs");
   if (!["buyer", "seller", "legacy"].includes(side))
     throw badRequest("invalid transcript side");
   const dispute = await disputeModel.findById(disputeId);
@@ -1026,7 +1037,7 @@ module.exports = {
         : dispute.assignedRole === "TRUST_AND_SAFETY"
           ? ["TRUST_AND_SAFETY"]
           : ["CUSTOMER_SERVICE", "TRUST_AND_SAFETY"];
-    return authClient.searchStaff({ roles: targetRoles, q, page, limit });
+    return authClient.searchStaff({ roles: targetRoles, q, page, limit, excludeIds: [userId, dispute.assignedTo].filter(Boolean) });
   },
   open,
   getById,

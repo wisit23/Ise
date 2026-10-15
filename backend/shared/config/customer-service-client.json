@@ -4,7 +4,7 @@
     "previewLimit": 6,
     "warningMinutes": 60,
     "timeZone": "Asia/Bangkok",
-    "dayRanges": [7, 14, 30],
+    "dayRanges": [1, 7, 14, 30],
     "defaultDays": 14,
     "agingHours": [24, 72]
   },

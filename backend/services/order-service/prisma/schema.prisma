@@ -139,6 +139,9 @@ model OrderLog {
 }
 
 model DisputeCase {
+  archivedAt DateTime? @map("archived_at")
+  deletedAt DateTime? @map("deleted_at")
+  retentionUntil DateTime? @map("retention_until")
   id               String            @id @default(uuid()) @map("dispute_case_id")
   orderId          String            @unique @map("order_id")
   createdBy        String            @map("created_by")
@@ -172,6 +175,7 @@ model DisputeCase {
   @@index([status, assignedRole, slaExpiresAt])
 
   @@map("dispute_case")
+  @@index([archivedAt, deletedAt, decidedAt])
 }
 
 model DisputeCaseLog {

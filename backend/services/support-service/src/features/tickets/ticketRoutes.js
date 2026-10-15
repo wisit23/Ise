@@ -9,6 +9,7 @@ router.get(
   require("../reference/referenceController").ticketCategories,
 );
 router.get("/trend", requireAuth, require("./ticketTrend").trend);
+router.get("/unread-summary", requireAuth, require("./unreadSummary").unreadSummary);
 router.get(
   "/agent-dashboard",
   requireAuth,

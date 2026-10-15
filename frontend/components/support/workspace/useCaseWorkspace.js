@@ -12,6 +12,7 @@ const defaults = {
   status: "",
   priority: "",
   work: "",
+  retention: "active",
   sort: "sla",
   page: 1,
   selectedId: null,
@@ -27,6 +28,7 @@ function writeLocation(domain, state, replace = false) {
     "status",
     "priority",
     "work",
+    "retention",
     "page",
     "case",
     "q",
@@ -41,6 +43,7 @@ function writeLocation(domain, state, replace = false) {
       "status",
       "priority",
       "work",
+      "retention",
       "page",
     ].forEach((key) => {
       if (state[key]) params.set(key, String(state[key]));
@@ -60,13 +63,19 @@ export function navigateWorkspaceSection(
   status,
   overrides = {},
 ) {
-  const state = { ...defaults, ...snapshots.get(account + ":" + domain) };
+  const state = {
+    ...defaults,
+    ...snapshots.get(account + ":" + domain),
+    selectedId: null,
+    side: "buyer",
+  };
   if (status !== undefined) {
     state.status = status || "";
     state.work = "";
     state.page = 1;
     state.selectedId = null;
     state.scope = "all";
+    state.retention = "active";
   }
   Object.assign(state, overrides);
   snapshots.set(account + ":" + domain, state);
@@ -74,7 +83,13 @@ export function navigateWorkspaceSection(
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 function parseState(domain, account) {
-  let result = { ...defaults, ...snapshots.get(account + ":" + domain) };
+  // Restore queue preferences, but only an explicit case URL may open a chat.
+  let result = {
+    ...defaults,
+    ...snapshots.get(account + ":" + domain),
+    selectedId: null,
+    side: "buyer",
+  };
   if (typeof window === "undefined") return result;
   const params = new URLSearchParams(window.location.search);
   if (params.get("section") !== domain) return result;
@@ -84,6 +99,7 @@ function parseState(domain, account) {
     sort: ["sla", "newest", "oldest", "priority"],
     side: ["buyer", "seller"],
     work: ["", "open", "overdue", "soon", "reply"],
+    retention: ["active", "archived", "deleted", "all"],
   };
   Object.entries(enums).forEach(([key, values]) => {
     if (values.includes(params.get(key))) result[key] = params.get(key);
@@ -183,6 +199,7 @@ export default function useCaseWorkspace(domain, token, account) {
     if (state.status) params.set("status", state.status);
     if (state.priority) params.set("priority", state.priority);
     if (state.work) params.set("work", state.work);
+    params.set("retention", state.retention);
     apiFetch(`${base}/queue?${params}`, { token })
       .then((data) => {
         if (active) {
@@ -208,6 +225,7 @@ export default function useCaseWorkspace(domain, token, account) {
     state.status,
     state.priority,
     state.work,
+    state.retention,
     state.sort,
     query,
     revision,

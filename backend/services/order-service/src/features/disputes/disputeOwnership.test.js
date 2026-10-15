@@ -280,7 +280,7 @@ test("disputeService.decide and addEvidence enforce single ownership", async (t)
         version: 1,
       }),
     (err) =>
-      err.status === 403 && err.message.includes("only Admin"),
+      err.status === 403 && err.message.includes("only Trust & Safety"),
   );
 
   // Non-assigned agent cannot add evidence
@@ -444,7 +444,7 @@ test("disputeService prevents non-assignee from escalating and prevents CS from 
         reason: "CS cannot decide escalated case",
         version: 2,
       }),
-    (err) => err.status === 403 && err.message.includes("only Admin"),
+    (err) => err.status === 403 && err.message.includes("only Trust & Safety"),
   );
 
   // CS agent cannot add evidence to it

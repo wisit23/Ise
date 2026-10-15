@@ -19,7 +19,7 @@ const DRAWER_EXIT_MS = 280;
    list. This component owns the data and the actions; the queue table and the
    report panel live in ./admin-inbox, while the drawer shell and the ticket
    panel are shared with the CS Tickets tab in ./case. */
-export default function AdminInboxSection({ token, currentUserId, initialReportId = "" }) {
+export default function AdminInboxSection({ token, currentUserId, userRole = "ADMIN", initialReportId = "" }) {
   const toast = useToast();
 
   const savedPages = useRef({all:1,tickets:1,reports:1,disputes:1});
@@ -121,7 +121,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
       status: statusFilter || "ALL",
     });
     if(q) repParams.set("q",q);
-    const disputeParams = new URLSearchParams({ page, limit: PAGE_SIZE, status: "OPEN", assignedRole: "ADMIN" });
+    const disputeParams = new URLSearchParams({ page, limit: PAGE_SIZE, work: "open", assignedRole: userRole === "TRUST_AND_SAFETY" ? "TRUST_AND_SAFETY" : "SAFETY" });
     if (q) disputeParams.set("q", q);
     const request = source === "all"
       ? Promise.all([
@@ -183,7 +183,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
     return () => {
       cancelled = true;
     };
-  }, [page, q, statusFilter, ticketStatus, source, token, refreshKey]);
+  }, [page, q, statusFilter, ticketStatus, source, token, refreshKey, userRole]);
 
   function refreshAfterAction() {
     setPage(1);

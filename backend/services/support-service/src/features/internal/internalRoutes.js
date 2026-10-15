@@ -11,7 +11,7 @@ router.post("/chat-events", internalController.handleChatEvent);
 router.get("/tickets/:id/chat-access/:userId", async (req, res, next) => {
   try {
     const ticket = await ticketModel.findById(req.params.id);
-    if (!ticket) return res.json({ allowed: false, writable: false });
+    if (!ticket || (ticket.deletedAt && req.query.role !== "ADMIN")) return res.json({ allowed: false, writable: false });
     const { userId } = req.params;
     const role = req.query.role;
     const isRequester = role === "BUYER" && ticket.requesterId === userId;

@@ -73,7 +73,7 @@ function toTicket(row) {
     slaDueAt: pending[0]?.dueAt ?? resolution?.dueAt ?? response?.dueAt ?? null,
     firstResponseAt: response?.achievedAt ?? null,
     resolvedAt: latest("RESOLVED")?.createdAt ?? null,
-    closedAt: latest("CLOSED")?.createdAt ?? null,
+    closedAt: core.closedAt ?? latest("CLOSED")?.createdAt ?? null,
     escalatedAt: latest("ESCALATED")?.createdAt ?? null,
     escalationNote: latest("ESCALATED")?.reason ?? null,
   };

@@ -1,4 +1,4 @@
-const { createOrder, findOrder, deleteOrder } = require("./fixtures");
+const { createOrder, findOrder } = require("./fixtures");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
@@ -46,7 +46,6 @@ const agent2Token = tokenFor(agent2Id, ["CUSTOMER_SERVICE"]);
 const tsAgentToken = tokenFor(tsAgentId, ["TRUST_AND_SAFETY"]);
 const tsAgent2Token = tokenFor(tsAgent2Id, ["TRUST_AND_SAFETY"]);
 const adminToken = tokenFor(adminId, ["ADMIN"]);
-const admin2Token = tokenFor(admin2Id, ["ADMIN"]);
 // Mock authClient for target user resolution
 authClient.setMockUserResolver(async (id) => {
   if (id === agent1Id || id === agent2Id) {
@@ -162,7 +161,7 @@ test("TSR-02: Single-owner dispute assignment, unassigned read-only, validation,
     .set("Authorization", `Bearer ${agent1Token}`)
     .send({ decision: "REJECT", reason: "ตัดสินก่อนเคลม", version: 0 });
   assert.equal(unassignedDecideRes.status, 403);
-  assert.ok(unassignedDecideRes.body.error?.includes("only Admin"));
+  assert.ok(unassignedDecideRes.body.error?.includes("only Trust & Safety"));
 
   // 3. Unassigned dispute: adding agent evidence without claiming -> 403
   const unassignedEvidenceRes = await request(app)
@@ -265,7 +264,7 @@ test("TSR-02: Single-owner dispute assignment, unassigned read-only, validation,
       version: 2,
     });
   assert.equal(escalateRes.status, 200);
-  assert.equal(escalateRes.body.assignedRole, "ADMIN");
+  assert.equal(escalateRes.body.assignedRole, "TRUST_AND_SAFETY");
   assert.equal(escalateRes.body.assignedTo, null);
   assert.equal(escalateRes.body.version, 3);
 
@@ -542,7 +541,10 @@ test("TSR-02: Payment outbox survives product-service failure and retries", asyn
     where: { orderId: order.id, action: "PRODUCT_SYNC_REQUESTED" },
   });
   assert.ok(pendingEvent);
-  assert.equal(await prisma.orderLog.count({where:{action:"PRODUCT_SYNC_COMPLETED",detail:pendingEvent.id}}), 0);
+  // main persists the durable job separately from its request audit log.
+  const pendingJob = await prisma.productSyncJob.findFirst({ where: { orderId: order.id, processedAt: null } });
+  assert.ok(pendingJob);
+  assert.equal(await prisma.orderLog.count({where:{action:"PRODUCT_SYNC_COMPLETED",detail:pendingJob.id}}), 0);
 
   productClient.setProductStatus = async () => ({ ok: true });
   const retried = await request(app)
@@ -553,9 +555,10 @@ test("TSR-02: Payment outbox survives product-service failure and retries", asyn
   assert.equal(retried.body.status, "confirmed");
 
   const processedEvent = await prisma.orderLog.findFirst({
-    where: { action: "PRODUCT_SYNC_COMPLETED", detail: pendingEvent.id },
+    where: { action: "PRODUCT_SYNC_COMPLETED", detail: pendingJob.id },
   });
   assert.ok(processedEvent);
+  assert.ok((await prisma.productSyncJob.findUnique({ where: { id: pendingJob.id } })).processedAt);
 });
 
 test("TSR-02 Concurrency: Reassign vs Decision race on Dispute", async (t) => {

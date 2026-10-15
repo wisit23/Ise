@@ -17,8 +17,9 @@ test("dispute owner denies stale agents and allows case parties", async (t) => {
   });
   process.env.INTERNAL_SERVICE_TOKEN = "unit-internal-token";
   let status = "OPEN";
+  let deletedAt = null;
   disputeModel.findById = async () => ({
-    orderId: "order-1", assignedTo: "new-agent", assignedRole: "CUSTOMER_SERVICE", status,
+    orderId: "order-1", assignedTo: "new-agent", assignedRole: "CUSTOMER_SERVICE", status, deletedAt,
   });
   orderModel.findById = async () => ({ buyerId: "buyer-1", sellerId: "seller-1" });
   const app = express().use("/internal", router);
@@ -34,4 +35,8 @@ test("dispute owner denies stale agents and allows case parties", async (t) => {
   assert.deepEqual((await call("buyer-1", "BUYER", "DISPUTE")).body, { allowed: true, writable: false });
   status = "DECIDED";
   assert.deepEqual((await call("buyer-1", "BUYER")).body, { allowed: true, writable: false });
+  deletedAt = new Date();
+  assert.deepEqual((await call("buyer-1", "BUYER")).body, { allowed: false, writable: false });
+  assert.deepEqual((await call("new-agent", "AGENT")).body, { allowed: false, writable: false });
+  assert.deepEqual((await call("admin-1", "ADMIN")).body, { allowed: true, writable: false });
 });

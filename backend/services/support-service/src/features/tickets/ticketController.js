@@ -39,6 +39,7 @@ async function queue(req, res, next) {
       userId: req.userId,
       scope: req.query.scope,
       work: req.query.work,
+      retention: req.query.retention,
       status: req.query.status,
       priority: req.query.priority,
       search: req.query.q,

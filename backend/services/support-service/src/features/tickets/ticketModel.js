@@ -77,6 +77,7 @@ async function create(data, client = prisma) {
           categoryId: cat.id,
           priorityId: pri.id,
           currentStatusId: state.id,
+          closedAt: data.status === "CLOSED" ? (data.closedAt ?? at) : null,
           orderId: data.orderId ?? null,
           targetId: data.targetId ?? null,
           createdAt: at,
@@ -264,7 +265,7 @@ async function findById(id, db = prisma) {
 }
 
 async function listByRequester(requesterId, { skip = 0, take = 20 } = {}) {
-  const where = { requesterId };
+  const where = { requesterId, deletedAt: null };
   const [items, total] = await Promise.all([
     prisma.supportTicket.findMany({
       where,
@@ -287,9 +288,12 @@ function queueFilter({
   search,
   work,
   replyIds,
+  retention = "active",
   now = new Date(),
 }) {
-  const clauses = [];
+  const clauses = retention === "all" ? [] : retention === "deleted"
+    ? [Prisma.sql`t.deleted_at IS NOT NULL`]
+    : [Prisma.sql`t.deleted_at IS NULL`, retention === "archived" ? Prisma.sql`t.archived_at IS NOT NULL` : Prisma.sql`t.archived_at IS NULL`];
   if (work === "reply")
     clauses.push(
       Prisma.sql`t.ticket_id IN (${replyIds?.length ? Prisma.join(replyIds) : Prisma.sql`NULL`})`,
@@ -476,7 +480,9 @@ async function transitionTx(
   if (!next) throw badRequest("Unknown ticket status");
   const { count } = await db.supportTicket.updateMany({
     where: { id, version },
-    data: { currentStatusId: next.id, version: { increment: 1 } },
+    data: { currentStatusId: next.id, version: { increment: 1 },
+      ...(status === "CLOSED" ? { closedAt: at } : { closedAt: null, archivedAt: null, deletedAt: null, retentionUntil: null }),
+    },
   });
   if (!count) return false;
   if (chatResponderId !== undefined)

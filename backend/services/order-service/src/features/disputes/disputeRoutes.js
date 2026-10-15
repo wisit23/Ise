@@ -7,6 +7,7 @@ const { requireAuth } = require("@reloop/shared");
 const disputeController = require("./disputeController");
 
 const router = Router();
+router.get("/unread-summary", requireAuth, require("./unreadSummary").unreadSummary);
 router.get(
   "/agent-dashboard",
   requireAuth,

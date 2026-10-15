@@ -48,3 +48,17 @@ test("unassigned requires claim; multiple roles preserve read-only", () => {
     false,
   );
 });
+
+test("T&S owns final decisions while CS only investigates and escalates", () => {
+  const safety = { status: "OPEN", assignedRole: "TRUST_AND_SAFETY", assignedTo: "ts" };
+  const caps = disputeCapabilities(safety, "ts", "TRUST_AND_SAFETY");
+  assert.equal(caps.canDecide, true);
+  assert.equal(caps.canRequestEvidence, true);
+  assert.equal(caps.canReply, false);
+  assert.equal(caps.canEscalate, false);
+  assert.equal(disputeCapabilities(safety, "cs", "CUSTOMER_SERVICE").canViewDetail, false);
+  const own = disputeCapabilities({ ...safety, assignedRole: "CUSTOMER_SERVICE", assignedTo: "cs" }, "cs", "CUSTOMER_SERVICE");
+  assert.equal(own.canDecide, false);
+  assert.equal(own.canEscalate, true);
+  assert.equal(disputeCapabilities({ ...safety, status: "DECIDED" }, "ts", "TRUST_AND_SAFETY").canDecide, false);
+});

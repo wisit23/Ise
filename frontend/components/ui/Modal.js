@@ -25,6 +25,8 @@ export default function Modal({
   footer,
   children,
   placement = "center",
+  bodyClassName,
+  footerClassName,
 }) {
   const panelRef = useRef(null);
   const previouslyFocused = useRef(null);
@@ -172,10 +174,10 @@ export default function Modal({
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className={bodyClassName || "flex-1 overflow-y-auto px-5 py-4"}>{children}</div>
 
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-line bg-surface-subtle px-5 py-3">
+          <div className={footerClassName || "flex justify-end gap-2 border-t border-line bg-surface-subtle px-5 py-3"}>
             {footer}
           </div>
         )}

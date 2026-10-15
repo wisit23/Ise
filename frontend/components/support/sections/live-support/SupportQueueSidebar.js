@@ -4,6 +4,7 @@ import Badge from "../../../panel/ui/Badge";
 import QueueIcon from "./QueueIcon";
 import SlaIndicator from "../../workspace/SlaIndicator";
 import motion from "../supportMotion.module.css";
+import styles from "./SupportQueueSidebar.module.css";
 import {
   TICKET_STATUS_LABEL,
   TICKET_STATUS_STYLE,
@@ -27,14 +28,22 @@ export default function SupportQueueSidebar({
   domain = "tickets",
   filters,
   pagination,
+  unreadCounts,
+  unreadError = false,
 }) {
+  const unreadById = new Map((unreadCounts?.items || []).map(item => [item.id, item.count]));
+  const unreadBadge = (value, variant) => value > 0 ? (
+    <span aria-label={`ข้อความยังไม่อ่าน ${value} ข้อความ`} title={`ข้อความยังไม่อ่าน ${value} ข้อความ`} className={`${styles.unreadBadge} ${variant === "scope" ? styles.scopeBadge : styles.caseBadge}`}>
+      {value > 99 ? "99+" : value}
+    </span>
+  ) : null;
   const statusLabels =
     domain === "disputes"
       ? { OPEN: "รอตรวจสอบ", NEEDS_INFO: "รอข้อมูล", DECIDED: "ตัดสินแล้ว" }
       : TICKET_STATUS_LABEL;
   return (
     <aside
-      className={`h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-200 bg-white md:w-80 lg:w-[22rem] ${className}`}
+      className={`${styles.sidebar} h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-200 bg-white md:w-80 lg:w-[22rem] ${className}`}
     >
       <div className="shrink-0 border-b border-slate-200 bg-white px-3 pb-3 pt-2">
         <div className="flex min-h-11 items-center justify-between gap-3">
@@ -43,8 +52,9 @@ export default function SupportQueueSidebar({
           </h2>
           {toolbar}
         </div>
+        {unreadError && <p role="status" className="text-xs text-amber-700">อัปเดตจำนวนข้อความยังไม่อ่านไม่สำเร็จ</p>}
         <div
-          className="relative mt-2 flex border-b border-slate-200"
+          className={`${styles.scopeTabs} relative mt-2 border-b border-slate-200`}
           role="group"
           aria-label="เลือกคิวงาน"
         >
@@ -65,13 +75,14 @@ export default function SupportQueueSidebar({
               type="button"
               onClick={() => onScopeChange(item.value)}
               aria-pressed={scope === item.value}
-              className={`min-h-11 flex-1 border-b-2 px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 ${
+              className={`${styles.scopeTab} border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 ${
                 scope === item.value
                   ? "border-transparent font-semibold text-emerald-800"
                   : "border-transparent font-medium text-slate-600 hover:text-slate-900"
               }`}
             >
-              {item.label}
+              <span className={styles.scopeLabel}>{item.label}</span>
+              {unreadBadge(unreadCounts?.scopes?.[item.value], "scope")}
             </button>
           ))}
         </div>
@@ -150,7 +161,7 @@ export default function SupportQueueSidebar({
       )}
 
       <div
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain divide-y divide-slate-100"
+        className={`${styles.ticketList} min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain`}
         aria-label={domain === "disputes" ? "รายการข้อพิพาท" : "รายการ Ticket"}
         aria-busy={loading}
       >
@@ -239,10 +250,10 @@ export default function SupportQueueSidebar({
                 type="button"
                 onClick={() => onSelectTicket(t)}
                 aria-current={isSelected ? "true" : undefined}
-                className={`w-full min-h-[92px] text-left px-4 py-4 transition-colors flex flex-col gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 ${
+                className={`${styles.ticketCard} w-full min-h-[92px] text-left flex flex-col gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 ${
                   isSelected
-                    ? "bg-emerald-50/80 border-l-4 border-l-emerald-600 pl-3"
-                    : "hover:bg-slate-50/80 border-l-4 border-l-transparent"
+                    ? styles.selectedCard
+                    : ""
                 }`}
               >
                 <div className="flex w-full items-center justify-between gap-3 text-xs text-slate-500">
@@ -256,10 +267,13 @@ export default function SupportQueueSidebar({
                       : "—"}
                   </span>
                 </div>
-                <p className="line-clamp-2 break-words text-sm font-semibold leading-6 text-slate-900">
-                  {t.subject || "ไม่ระบุหัวข้อ"}
-                </p>
-                <div className="mt-1 flex w-full flex-wrap items-center gap-1.5">
+                <div className={styles.caseTitleRow}>
+                  <p className={`${styles.caseTitle} line-clamp-2 break-words text-sm font-semibold leading-6 text-slate-900`}>
+                    {t.subject || "ไม่ระบุหัวข้อ"}
+                  </p>
+                  {unreadBadge(unreadById.get(t.id), "case")}
+                </div>
+                <div className={`${styles.cardStatus} mt-1 flex w-full flex-wrap items-center gap-1.5`}>
                   <Badge
                     text={statusLabels[t.status] || t.status}
                     style={statusStyle}

@@ -6,7 +6,8 @@ const { toTicket } = require("./ticketShape");
 
 test("admin queue includes closed/escalated while CS sees only own or unassigned cases", () => {
   const admin = model.queueFilter({ role: "ADMIN", scope: "all" });
-  assert.equal(admin.sql, "");
+  assert.match(admin.sql, /deleted_at IS NULL/);
+  assert.match(admin.sql, /archived_at IS NULL/);
   const staff = model.queueFilter({
     role: "CUSTOMER_SERVICE",
     scope: "all",

@@ -203,6 +203,10 @@
 .form .passwordInput {
   padding-right: 50px;
 }
+/* Keep the custom toggle as the only password reveal control in Edge. */
+.passwordInput::-ms-reveal {
+  display: none;
+}
 .reveal {
   position: absolute;
   top: 26px;

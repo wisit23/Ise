@@ -8,7 +8,7 @@ function disputeCapabilities(dispute, userId, role, roles = []) {
   const accessible =
     admin ||
     ts ||
-    (cs && dispute.assignedRole !== "ADMIN" && (!dispute.assignedTo || owner));
+    (cs && !["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) && (!dispute.assignedTo || owner));
   const team = dispute.assignedRole;
   return {
     canViewDetail: accessible,
@@ -16,9 +16,9 @@ function disputeCapabilities(dispute, userId, role, roles = []) {
       accessible &&
       live &&
       !dispute.assignedTo &&
-      (!admin || team === "ADMIN") &&
+      (!admin || ["ADMIN", "TRUST_AND_SAFETY"].includes(team)) &&
       (team !== "ADMIN" || admin) &&
-      (team !== "TRUST_AND_SAFETY" || ts),
+      (team !== "TRUST_AND_SAFETY" || ts || admin),
     canReply:
       accessible &&
       live &&
@@ -27,15 +27,15 @@ function disputeCapabilities(dispute, userId, role, roles = []) {
       !admin &&
       !ts &&
       team !== "TRUST_AND_SAFETY",
-    canEscalate: accessible && live && team !== "ADMIN" && (owner || ts),
+    canEscalate: accessible && live && !["ADMIN", "TRUST_AND_SAFETY"].includes(team) && owner && cs && !ts && !admin,
     canReassign:
       accessible &&
       live &&
       (owner || ts || admin) &&
       (team !== "ADMIN" || admin) &&
-      (team !== "TRUST_AND_SAFETY" || ts),
-    canDecide: live && admin && team === "ADMIN" && owner,
-    canRequestEvidence: live && admin && team === "ADMIN" && owner,
+      (team !== "TRUST_AND_SAFETY" || ts || admin),
+    canDecide: live && owner && ((admin && team === "ADMIN") || ((ts || admin) && team === "TRUST_AND_SAFETY")),
+    canRequestEvidence: live && owner && ((admin && team === "ADMIN") || ((ts || admin) && team === "TRUST_AND_SAFETY")),
     readOnlyReason: !live
       ? "ข้อพิพาทนี้ตัดสินแล้ว"
       : admin || ts

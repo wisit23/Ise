@@ -7,6 +7,7 @@ import { ToastProvider } from "../../components/ui/ToastProvider";
 import RadioSelect from "../../components/ui/RadioSelect";
 import Link from "next/link";
 import motion from "./workspaceMotion.module.css";
+import WorkspaceUnreadBadge from "../../components/support/workspace/WorkspaceUnreadBadge";
 import { navigateWorkspaceSection } from '../../components/support/workspace/useCaseWorkspace';
 
 import DashboardSection from "../../components/support/sections/DashboardSection";
@@ -116,7 +117,7 @@ export default function SupportPanelPage() {
     // Toasts are mounted at the panel root so every section beneath it can
     // report the outcome of an action without a blocking alert().
     <ToastProvider>
-      <div className="flex h-dvh flex-col overflow-hidden bg-slate-50/50">
+      <div className={`${motion.shell} flex h-dvh flex-col overflow-hidden bg-slate-50/50`}>
         <NavBar />
         {/* Keep workspace sticky bars below the navbar and its profile menu. */}
         <div className="isolate flex min-h-0 flex-1">
@@ -163,7 +164,7 @@ export default function SupportPanelPage() {
                 return (
                   <button
                     key={s.key}
-                    aria-label={s.label}
+                    aria-label={["tickets", "disputes"].includes(s.key) ? undefined : s.label}
                     aria-current={active ? "page" : undefined}
                     title={sidebarCollapsed ? s.label : undefined}
                     onClick={() => navigateTo(s.key)}
@@ -183,6 +184,9 @@ export default function SupportPanelPage() {
                       {s.icon}
                     </span>
                     <span className={sidebarCollapsed ? "sr-only" : "truncate"}>{s.label}</span>
+                    {["tickets", "disputes"].includes(s.key) && (
+                      <WorkspaceUnreadBadge domain={s.key} token={token} account={user.id} active={active} collapsed={sidebarCollapsed} />
+                    )}
                   </button>
                 );
               })}
@@ -191,15 +195,15 @@ export default function SupportPanelPage() {
             {/* Footer */}
             <div className={`border-t border-slate-100 py-3 bg-slate-50/50 ${sidebarCollapsed ? "px-2" : "px-4"}`}>
               <Link
-                href="/support/tickets"
-                title={sidebarCollapsed ? "ตั๋วซัพพอร์ตทั่วไป" : undefined}
-                aria-label="ตั๋วซัพพอร์ตทั่วไป"
+                href="/help"
+                title={sidebarCollapsed ? "บทความ FAQ" : undefined}
+                aria-label="บทความ FAQ"
                 className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-emerald-600 transition-colors"
               >
                 <span className="material-symbols-outlined text-[16px]">
                   open_in_new
                 </span>
-                <span className={sidebarCollapsed ? "sr-only" : ""}>ตั๋วซัพพอร์ตทั่วไป</span>
+                <span className={sidebarCollapsed ? "sr-only" : ""}>บทความ FAQ</span>
               </Link>
             </div>
           </aside>
@@ -258,7 +262,7 @@ export default function SupportPanelPage() {
                   />
                 )}
                 {section === "admin_inbox" && (
-                  <AdminInboxSection token={token} currentUserId={user?.id} initialReportId={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("reportId") || "" : ""} />
+                  <AdminInboxSection token={token} currentUserId={user?.id} userRole={staffRole} initialReportId={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("reportId") || "" : ""} />
                 )}
                 {section === "orders" && <OrdersSection token={token} initialUserId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("userId") || "" : ""} initialOrderId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("orderId") || "" : ""} />}
                 {section === "faq" && <FaqSection token={token} />}

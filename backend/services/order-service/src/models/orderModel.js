@@ -49,7 +49,7 @@ function view(row) {
     reservationId: row.basketId,
     reservationExpiresAt: row.basket?.unlockAt || null,
     auctionId: row.auctionId || (row.orderType === "AUCTION" ? row.id : null),
-    dispute: disputeView(row.dispute),
+    dispute: row.dispute?.deletedAt ? null : disputeView(row.dispute),
     holds,
     heldBy: active[0]?.holdBy || null,
     heldAt: active[0]?.holdAt || null,

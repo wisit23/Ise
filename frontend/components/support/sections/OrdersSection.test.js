@@ -62,6 +62,7 @@ it("shows an order-service failure as unavailable rather than no history", async
   expect(
     screen.queryByText("ไม่พบประวัติคำสั่งซื้อของผู้ใช้งานรายนี้ในระบบ"),
   ).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /ตักเตือน|ระงับบัญชี|ปลดการระงับ|เพิกถอนสิทธิ์/ })).not.toBeInTheDocument();
 });
 
 it("uses API totals, pages user history, and does not render sensitive KYC fields", async () => {

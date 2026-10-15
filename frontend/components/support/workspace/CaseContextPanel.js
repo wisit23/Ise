@@ -2,8 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import Modal from "../../ui/Modal";
 import Button from "../../ui/Button";
+import styles from "./CaseContextPanel.module.css";
 
-export default function CaseContextPanel({ open, onClose, children }) {
+export default function CaseContextPanel({ open, onClose, children, footer }) {
   const host = useRef(null);
   const [docked, setDocked] = useState(false);
   useEffect(() => {
@@ -27,23 +28,27 @@ export default function CaseContextPanel({ open, onClose, children }) {
                 onClose();
               }
             }}
-            className="motion-safe:animate-slide-in-right flex h-full w-[380px] shrink-0 flex-col border-l border-slate-200 bg-white"
+            className={`${styles.docked} motion-safe:animate-slide-in-right flex h-full w-[380px] shrink-0 flex-col border-l border-slate-200 bg-white`}
           >
-            <header className="flex shrink-0 items-center justify-between border-b p-4">
-              <h2 className="font-semibold">ข้อมูลบริบท</h2>
+            <header className={styles.panelHeader}>
+              <div className={styles.panelTitle}><span className="material-symbols-outlined" aria-hidden="true">article</span><h2>ข้อมูลเคส</h2></div>
               <Button variant="ghost" onClick={onClose}>
                 ปิด
               </Button>
             </header>
-            {children}
+            <div className={styles.panelScroll}>{children}</div>
+            {footer && <div className={styles.actionFooter}>{footer}</div>}
           </div>
         ) : (
           <Modal
             open
             onClose={onClose}
-            title="ข้อมูลบริบท"
+            title="ข้อมูลเคส"
             size="lg"
             placement="drawer"
+            bodyClassName={styles.panelScroll}
+            footerClassName={styles.actionFooter}
+            footer={footer}
           >
             {children}
           </Modal>

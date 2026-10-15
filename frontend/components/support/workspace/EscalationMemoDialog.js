@@ -5,7 +5,8 @@ import Button from "../../ui/Button";
 import Textarea from "../../ui/Textarea";
 import Alert from "../../ui/Alert";
 
-export default function EscalationMemoDialog({ open, onClose, onSubmit }) {
+export default function EscalationMemoDialog({ open, onClose, onSubmit, dispute = false }) {
+  const target = dispute ? "Trust & Safety" : "Admin";
   const [memo, setMemo] = useState({
     problem: "",
     authority: "",
@@ -32,8 +33,8 @@ export default function EscalationMemoDialog({ open, onClose, onSubmit }) {
     <Modal
       open={open}
       onClose={busy ? undefined : onClose}
-      title="ส่งต่อให้ Admin"
-      description="เคสจะส่งเข้า Admin Inbox พร้อมสรุปข้อมูลสำหรับเจ้าหน้าที่รับช่วงต่อ"
+      title={`ส่งต่อให้ ${target}`}
+      description={`เคสจะส่งเข้าคิว ${target} พร้อมสรุปข้อมูลสำหรับเจ้าหน้าที่รับช่วงต่อ`}
       footer={
         <>
           <Button variant="secondary" disabled={busy} onClick={onClose}>
@@ -41,10 +42,10 @@ export default function EscalationMemoDialog({ open, onClose, onSubmit }) {
           </Button>
           <Button
             loading={busy}
-            disabled={busy || Object.values(memo).some((v) => !v.trim())}
+            disabled={busy || !memo.problem.trim() || !memo.authority.trim()}
             onClick={submit}
           >
-            ส่งต่อให้ Admin
+            ส่งต่อให้ {target}
           </Button>
         </>
       }
@@ -58,9 +59,9 @@ export default function EscalationMemoDialog({ open, onClose, onSubmit }) {
         ].map(([key, label]) => (
           <Textarea
             key={key}
-            label={label}
+            label={key === "recommendation" ? `${label} (ไม่บังคับ)` : label}
             rows={3}
-            required
+            required={key !== "recommendation"}
             value={memo[key]}
             onChange={(e) =>
               setMemo((old) => ({ ...old, [key]: e.target.value }))

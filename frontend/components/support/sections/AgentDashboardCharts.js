@@ -158,6 +158,7 @@ export function ComparisonChart({
   visible = { tickets: true, disputes: true },
   onToggle,
   hideLegend = false,
+  hourly = false,
   singleSeriesRows = false,
   stackedRows = false,
 }) {
@@ -301,7 +302,7 @@ export function ComparisonChart({
               fontSize="12"
               fill="rgb(var(--color-ink-subtle))"
             >
-              เคส / วัน
+              {hourly ? "เคส / ชั่วโมง" : "เคส / วัน"}
             </text>
             {shown.map((series) => (
               <g key={series.key} className="agent-line-series">
@@ -677,7 +678,7 @@ export function ComparisonChart({
             ? "เลือก Ticket หรือ Dispute เพื่อแสดงเส้น"
             : hover
               ? `${dayLabel(hover.label)} · Ticket ${hover.tickets} · Dispute ${hover.disputes}`
-              : "ชี้หรือกด Tab เพื่อดูรายวัน · วันนี้นับถึงเวลาอัปเดต"}
+              : hourly ? "ชี้หรือกด Tab เพื่อดูรายชั่วโมง · วันนี้นับถึงเวลาอัปเดต" : "ชี้หรือกด Tab เพื่อดูรายวัน · วันนี้นับถึงเวลาอัปเดต"}
         </p>
       )}
       {kind === "bar" && !rows.length && (
@@ -691,7 +692,7 @@ export function ComparisonChart({
 const dayLabel = (date) =>
   // A calendar date already belongs to the server's reporting timezone;
   // format it without converting it into a different calendar day.
-  new Date(`${date}T00:00:00Z`).toLocaleDateString("th-TH", {
+  date.includes("T") ? date.slice(11, 16) : new Date(`${date}T00:00:00Z`).toLocaleDateString("th-TH", {
     day: "numeric",
     month: "short",
     timeZone: "UTC",

@@ -34,12 +34,13 @@ test("dashboard PostgreSQL snapshot: all-row totals, SLA boundaries, ownership, 
     async (tx) => {
       // Session-local tables shadow real ones; nothing persists or touches real cases.
       for (const ddl of [
-        "CREATE TEMP TABLE support_tickets (id text, ticket_number text, subject text, current_status_id int, ticket_priority_id int, priority_score int, created_at timestamptz) ON COMMIT DROP",
+        "CREATE TEMP TABLE support_tickets (ticket_id text, ticket_number text, subject text, current_status_id int, ticket_priority_id int, priority_score int, created_at timestamptz) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_statuses (ticket_status_id int, code text) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_priorities (ticket_priority_id int, code text) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_assignments (ticket_id text, assignee_id text, ended_at timestamptz, assigned_at timestamptz DEFAULT now()) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_sla_targets (ticket_id text, due_at timestamptz, achieved_at timestamptz) ON COMMIT DROP",
-        "CREATE TEMP TABLE dispute_case (id text, order_id text, reason text, status text, priority text, priority_score int, created_at timestamp, assigned_to text, assigned_role text, sla_expires_at timestamp) ON COMMIT DROP",
+        "CREATE TEMP TABLE dispute_case (dispute_case_id text, order_id text, reason text, status text, priority text, priority_score int, created_at timestamp, assigned_to text, assigned_role text, sla_expires_at timestamp) ON COMMIT DROP",
+        "CREATE TEMP TABLE ticket_sla_rounds (sla_round_id text, ticket_id text, cycle int) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_status_history (ticket_id text, to_status_id int, changed_by_id text, created_at timestamptz) ON COMMIT DROP",
         "CREATE TEMP TABLE dispute_case_log (dispute_case_id text, actor_id text, action text, created_at timestamp) ON COMMIT DROP",
       ])
@@ -49,13 +50,16 @@ test("dashboard PostgreSQL snapshot: all-row totals, SLA boundaries, ownership, 
       await tx.$executeRaw`INSERT INTO support_tickets
       SELECT 't-' || n, 'CS-' || n, 'Example', 1, 1, 0, ${now}::timestamptz - interval '24 hours'
       FROM generate_series(1,60) n`;
-      await tx.$executeRaw`UPDATE support_tickets SET current_status_id=CASE id WHEN 't-1' THEN 4 WHEN 't-2' THEN 5 WHEN 't-3' THEN 6 WHEN 't-4' THEN 2 WHEN 't-6' THEN 3 ELSE 1 END`;
+      await tx.$executeRaw`UPDATE support_tickets SET current_status_id=CASE ticket_id WHEN 't-1' THEN 4 WHEN 't-2' THEN 5 WHEN 't-3' THEN 6 WHEN 't-4' THEN 2 WHEN 't-6' THEN 3 ELSE 1 END`;
       await tx.$executeRaw`INSERT INTO ticket_assignments (ticket_id, assignee_id, ended_at) VALUES ('t-4','agent-b',NULL),('t-5','agent-a',NULL),('t-6','agent-a',NULL),('t-7','agent-b',${now})`;
       await tx.$executeRaw`INSERT INTO ticket_sla_targets VALUES
       ('t-5',${now},NULL), ('t-5',${now}::timestamptz + interval '30 minutes',NULL),
       ('t-6',${now}::timestamptz + interval '60 minutes',NULL),
       ('t-7',${now}::timestamptz + interval '60 minutes 1 second',NULL),
       ('t-8',${now}::timestamptz - interval '1 hour',${now})`;
+      await tx.$executeRawUnsafe("ALTER TABLE ticket_sla_targets ADD COLUMN sla_round_id text, ADD COLUMN metric_type text DEFAULT 'RESOLUTION'");
+      await tx.$executeRaw`UPDATE ticket_sla_targets SET sla_round_id = 'round-' || ticket_id`;
+      await tx.$executeRaw`INSERT INTO ticket_sla_rounds SELECT DISTINCT sla_round_id, ticket_id, 1 FROM ticket_sla_targets`;
       await tx.$executeRaw`UPDATE ticket_assignments SET assigned_at = ${now}::timestamptz - interval '2 hours'`;
       await tx.$executeRaw`INSERT INTO ticket_status_history VALUES
         ('t-1',4,'agent-a','2026-10-08T17:00:00Z'),

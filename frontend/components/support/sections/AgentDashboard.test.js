@@ -97,6 +97,21 @@ afterEach(() => jest.useRealTimers());
 const view = () =>
   render(<AgentDashboard token="token-a" currentUserId="agent-a" />);
 
+test("today requests both domains with days=1 and displays hourly labels", async () => {
+  apiFetch.mockImplementation(path => {
+    const base = path.includes("/support/") ? ticket : dispute;
+    return Promise.resolve({ ...base, trend: [{ date: "2026-10-09T00:00:00", received: 2, completed: 0 }] });
+  });
+  view();
+  await screen.findByText("รับงานรายวัน · 14 วัน");
+  fireEvent.click(screen.getByRole("button", { name: "วันนี้", exact: true }));
+  await screen.findByText("รับงานรายชั่วโมง · วันนี้");
+  expect(apiFetch.mock.calls.some(([path]) => path.includes("/support/") && path.includes("days=1"))).toBe(true);
+  expect(apiFetch.mock.calls.some(([path]) => path.includes("/orders/") && path.includes("days=1"))).toBe(true);
+  expect(screen.getByText("เคส / ชั่วโมง")).toBeInTheDocument();
+  expect(screen.getAllByText("00:00").length).toBeGreaterThan(0);
+});
+
 test("priority donut summarizes own work and keeps the receipt line chart on the main overview", async () => {
   view();
   expect(

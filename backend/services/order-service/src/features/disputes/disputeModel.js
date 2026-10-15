@@ -179,6 +179,7 @@ async function listQueue(
     scope,
     work,
     replyIds,
+    retention = "active",
     now = new Date(),
     userId,
     restricted,
@@ -187,7 +188,7 @@ async function listQueue(
   },
   db = prisma,
 ) {
-  const where = {};
+  const where = require("@reloop/shared/src/caseRetention").retentionWhere(retention);
   const filters = [];
   if (work === "reply") filters.push({ id: { in: replyIds || [] } });
   if (work) {
@@ -212,7 +213,7 @@ async function listQueue(
   }
   if (restricted)
     filters.push(
-      { OR: [{ assignedRole: null }, { assignedRole: { not: "ADMIN" } }] },
+      { OR: [{ assignedRole: null }, { assignedRole: { notIn: ["ADMIN", "TRUST_AND_SAFETY"] } }] },
       { OR: [{ assignedTo: null }, { assignedTo: userId }] },
     );
   if (scope === "mine") filters.push({ assignedTo: userId });
@@ -221,7 +222,7 @@ async function listQueue(
     filters.push({ status: { not: "DECIDED" } });
   if (filters.length) where.AND = filters;
   if (priority) where.priority = priority;
-  if (assignedRole) where.assignedRole = assignedRole;
+  if (assignedRole) where.assignedRole = assignedRole === "SAFETY" ? { in: ["ADMIN", "TRUST_AND_SAFETY"] } : assignedRole;
   if (status) {
     where.status = status;
   }
@@ -438,7 +439,7 @@ async function changeAssignment({
     }
     if (action === "REQUEST_MORE_EVIDENCE") {
       where.assignedTo = actorId;
-      where.assignedRole = "ADMIN";
+      where.assignedRole = { in: ["ADMIN", "TRUST_AND_SAFETY"] };
     }
     const firstReview =
       ["CLAIM", "REASSIGN", "ESCALATE"].includes(action) &&
@@ -499,7 +500,7 @@ function escalate({ id, version, actorId, toUserId, reason }) {
     detail: reason,
     data: {
       assignedTo: toUserId || null,
-      assignedRole: "ADMIN",
+      assignedRole: "TRUST_AND_SAFETY",
       escalatedBy: actorId,
       escalationNote: reason,
       assignedAt: toUserId ? new Date() : null,
@@ -524,7 +525,7 @@ async function decide({
         version,
         decision: null,
         assignedTo: decidedBy,
-        assignedRole: "ADMIN",
+        assignedRole: { in: ["ADMIN", "TRUST_AND_SAFETY"] },
       },
       data: {
         decision,

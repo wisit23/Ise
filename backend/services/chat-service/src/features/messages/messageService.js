@@ -5,6 +5,7 @@ const conversationModel = require("../conversations/conversationModel");
 const messageModel = require("./messageModel");
 const { isValidCursor } = require("./cursor");
 const { syncSupportMessage } = require("../sync/supportSyncWorker");
+const { getCaseAccess } = require("../../services/caseAccessClient");
 
 const EPOCH = new Date(0);
 
@@ -126,8 +127,9 @@ async function unreadCount(userId) {
     excludeContextType: "SUPPORT",
   });
   const counts = await Promise.all(
-    conversations.map((c) => {
-      const participant = c.participants.find((p) => p.userId === userId);
+    conversations.map(async (c) => {
+      const participant = c.participants.find((p) => p.userId === userId && !p.leftAt);
+      if (!participant || !(await getCaseAccess(c, userId, participant.role)).allowed) return 0;
       const rawSince = participant?.lastReadAt || participant?.joinedAt;
       const since = rawSince ? new Date(rawSince) : EPOCH;
       return messageModel.countUnread({ conversationId: c.id, userId, since });

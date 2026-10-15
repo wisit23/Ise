@@ -28,6 +28,7 @@ const PAGE_SIZE = config.pagination.messages;
 export default function EmbeddedChat({
   conversationId,
   maxHeight = "400px",
+  framed = true,
   readOnly = false,
   draftKey,
   onBusyChange,
@@ -360,7 +361,7 @@ export default function EmbeddedChat({
   return (
     <div
       style={{ maxHeight }}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50/30"
+      className={`flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden bg-slate-50/30 ${framed ? "rounded-lg border border-slate-200" : "rounded-none"}`}
     >
       {recipientId && peerOnline !== null && connected && (
         <p className="border-b bg-white px-3 py-2 text-xs text-slate-500">
@@ -382,7 +383,7 @@ export default function EmbeddedChat({
       )}
 
       {/* Messages area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pt-2 pb-2">
+      <div ref={scrollRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pt-2 pb-2">
         {loading ? (
           <div className="flex flex-col justify-end space-y-3 py-6 animate-pulse">
             <div className="flex items-start gap-2">

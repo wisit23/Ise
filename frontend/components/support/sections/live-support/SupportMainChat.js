@@ -2,7 +2,6 @@
 import config from "../../../../lib/customerServiceConfig";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import MessageList from "../../../chat/MessageList";
 import MessageComposer from "../../../chat/MessageComposer";
 import TypingIndicator from "../../../chat/TypingIndicator";
@@ -377,18 +376,6 @@ export default function SupportMainChat({
 
         {/* Action icons */}
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Link
-            href={`/support/tickets/${ticket.id}`}
-            target="_blank"
-            className="hidden min-h-10 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 lg:flex"
-            title="เปิดหน้ารายละเอียดตั๋วแบบเต็มในแท็บใหม่"
-          >
-            <span>เปิดหน้าเคส</span>
-            <span className="material-symbols-outlined text-[15px]">
-              open_in_new
-            </span>
-          </Link>
-
           <button
             type="button"
             onClick={onToggleDetails}
@@ -405,7 +392,7 @@ export default function SupportMainChat({
             <span className="material-symbols-outlined text-[16px]">
               dock_to_left
             </span>
-            <span className="hidden sm:inline">ดูข้อมูลบริบท</span>
+            <span className="hidden sm:inline">ข้อมูลเคส</span>
           </button>
         </div>
       </div>

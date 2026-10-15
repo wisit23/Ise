@@ -27,3 +27,7 @@
     display: none;
   }
 }
+
+/* Workspace scrolls inside its panels, so no document scrollbar gutter is needed. */
+.shell { min-width: 0; }
+:global(html):has(.shell) { scrollbar-gutter: auto; }

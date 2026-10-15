@@ -5,8 +5,6 @@ import Modal from "../../ui/Modal";
 import SupportOrderDetails, { orderAmount } from "./orders/SupportOrderDetails";
 import Badge from "../../panel/ui/Badge";
 import RadioSelect from "../../ui/RadioSelect";
-import ConfirmDialog from "../../ui/ConfirmDialog";
-import { useToast } from "../../ui/ToastProvider";
 import { apiFetch } from "../../../lib/api";
 import { ORDER_STATUS_LABEL } from "../../../lib/supportConstants";
 
@@ -51,7 +49,6 @@ export default function OrdersSection({
   initialUserId = "",
   initialOrderId = "",
 }) {
-  const toast = useToast();
 
   const [searchType, setSearchType] = useState("orderId");
   const [query, setQuery] = useState("");
@@ -135,8 +132,6 @@ export default function OrdersSection({
   }
 
   // Moderation Dialog State
-  const [pendingAction, setPendingAction] = useState(null);
-  const [actionBusy, setActionBusy] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
   async function loadOrderHistory(userId, relationRole, page = 1) {
@@ -286,75 +281,6 @@ export default function OrdersSection({
     executeSearch(type, id);
   }
 
-  // Re-fetch user details after moderation action
-  async function refreshUserData(userId) {
-    try {
-      const refreshed = await apiFetch(
-        `/api/auth/admin/users/${encodeURIComponent(userId)}`,
-        { token },
-      );
-      setUserResult(refreshed);
-    } catch (err) {
-      console.error("Failed to refresh user data:", err);
-    }
-  }
-
-  // Execute Moderation Action (Warn, Suspend, Restore)
-  async function handleConfirmAction(reason) {
-    if (!pendingAction) return;
-    const { type, targetId, userName } = pendingAction;
-    setActionBusy(true);
-
-    try {
-      const restrictionScopes = {
-        restrictBuyer: "BUYER",
-        restrictSeller: "SELLER",
-      };
-      const isRestriction = Boolean(restrictionScopes[type]);
-      const isRestrictionRevoke = type === "restoreCommerce";
-      const path = isRestriction
-        ? `/api/auth/admin/users/${targetId}/commerce-restriction`
-        : isRestrictionRevoke
-          ? `/api/auth/admin/users/${targetId}/commerce-restriction/revoke`
-          : `/api/auth/admin/users/${targetId}/${type}`;
-      const body = isRestriction
-        ? { reason, scope: restrictionScopes[type] }
-        : isRestrictionRevoke
-          ? { reason, scope: "ALL_COMMERCE" }
-          : { reason };
-
-      await apiFetch(path, {
-        method: "POST",
-        token,
-        body,
-      });
-
-      const successMessages = {
-        warn: `บันทึกการตักเตือนคุณ ${userName} สำเร็จ`,
-        suspend: `ระงับการใช้งานบัญชีของคุณ ${userName} เรียบร้อยแล้ว`,
-        restore: `ปลดการระงับบัญชีของคุณ ${userName} เรียบร้อยแล้ว`,
-        restrictBuyer: `เพิกถอนสิทธิ์การซื้อของคุณ ${userName} แล้ว โดยผู้ใช้ยังเข้าสู่ระบบได้`,
-        restrictSeller: `เพิกถอนสิทธิ์การขายของคุณ ${userName} แล้ว โดยผู้ใช้ยังเข้าสู่ระบบได้`,
-        restoreCommerce: `คืนสิทธิ์การซื้อขายของคุณ ${userName} แล้ว`,
-      };
-
-      toast.success(
-        successMessages[type] || "ดำเนินการเสร็จสิ้น",
-        "Trust & Safety Action",
-      );
-      setPendingAction(null);
-      await refreshUserData(targetId);
-      await loadSafetyHistory(targetId, "actions", 1);
-    } catch (err) {
-      toast.error(
-        err.message || "ไม่สามารถทำรายการได้ กรุณาลองใหม่อีกครั้ง",
-        "เกิดข้อผิดพลาด",
-      );
-    } finally {
-      setActionBusy(false);
-    }
-  }
-
   function copyToClipboard(text) {
     if (!navigator.clipboard) return;
     navigator.clipboard.writeText(text);
@@ -368,52 +294,7 @@ export default function OrdersSection({
     : "";
   const userRoles =
     userResult?.roles || (userResult?.role ? [userResult.role] : []);
-  const commerceRestrictions = new Set(userResult?.commerceRestrictions || []);
-  const hasCommerceRestriction = commerceRestrictions.size > 0;
-  const actionCopy = {
-    warn: {
-      title: "ตักเตือนผู้ใช้งาน",
-      description: `ระบุเหตุผลในการตักเตือนคุณ ${pendingAction?.userName || ""} การตักเตือนนี้จะถูกบันทึกในประวัติความปลอดภัยของผู้ใช้`,
-      label: "ยืนยันการตักเตือน",
-      reasonLabel: "เหตุผลในการตักเตือน",
-      tone: "primary",
-    },
-    suspend: {
-      title: "ยืนยันการระงับบัญชีผู้ใช้งาน (Ban)",
-      description: `คุณกำลังจะระงับบัญชีของคุณ ${pendingAction?.userName || ""} ผู้ใช้จะไม่สามารถเข้าสู่ระบบได้ ใช้เฉพาะมาตรการฉุกเฉินที่ต้องตัดการเข้าถึงทั้งหมด`,
-      label: "ระงับบัญชีทันที",
-      reasonLabel: "เหตุผลในการระงับบัญชี",
-      tone: "danger",
-    },
-    restore: {
-      title: "ยืนยันการปลดการระงับบัญชี",
-      description: `คืนสิทธิ์เข้าสู่ระบบให้คุณ ${pendingAction?.userName || ""} โดยไม่เปลี่ยนข้อจำกัดจากเคสอื่น`,
-      label: "ปลดการระงับ",
-      reasonLabel: "เหตุผลในการปลดการระงับ",
-      tone: "primary",
-    },
-    restrictBuyer: {
-      title: "เพิกถอนสิทธิ์การซื้อ",
-      description: `คุณ ${pendingAction?.userName || ""} จะยังเข้าสู่ระบบและดูข้อมูลเดิมได้ แต่สร้างรายการซื้อ จอง ชำระเงิน ใช้คูปอง หรือประมูลใหม่ไม่ได้`,
-      label: "ยืนยันเพิกถอนสิทธิ์ซื้อ",
-      reasonLabel: "เหตุผลในการเพิกถอนสิทธิ์ซื้อ",
-      tone: "danger",
-    },
-    restrictSeller: {
-      title: "เพิกถอนสิทธิ์การขาย",
-      description: `คุณ ${pendingAction?.userName || ""} จะยังเข้าสู่ระบบและดูข้อมูลเดิมได้ แต่เปิดร้าน ลงหรือแก้สินค้า เพิ่มวิดีโอ และส่งประมูลใหม่ไม่ได้`,
-      label: "ยืนยันเพิกถอนสิทธิ์ขาย",
-      reasonLabel: "เหตุผลในการเพิกถอนสิทธิ์ขาย",
-      tone: "danger",
-    },
-    restoreCommerce: {
-      title: "คืนสิทธิ์การซื้อขาย",
-      description: `คืนเฉพาะสิทธิ์การซื้อขายของคุณ ${pendingAction?.userName || ""} โดยไม่ปลด Hold หรือ moderation จากเคสอื่น`,
-      label: "ยืนยันคืนสิทธิ์",
-      reasonLabel: "เหตุผลในการคืนสิทธิ์",
-      tone: "primary",
-    },
-  }[pendingAction?.type];
+
 
   return (
     <div
@@ -500,7 +381,7 @@ export default function OrdersSection({
           <button
             type="submit"
             disabled={loading || !query.trim()}
-            className="flex shrink-0 items-center gap-1 rounded-[8px] bg-emerald-600 px-5 py-2.5 text-xs font-bold tracking-wide text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
+            className="flex shrink-0 items-center gap-1 rounded-full bg-emerald-600 px-5 py-2.5 text-xs font-bold tracking-wide text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm"
           >
             {loading ? (
               <>
@@ -636,122 +517,6 @@ export default function OrdersSection({
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2 pt-2 md:pt-0">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPendingAction({
-                      type: "warn",
-                      targetId: userResult.id,
-                      userName: userDisplayName,
-                    })
-                  }
-                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/60 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors shadow-xs"
-                >
-                  <span className="material-symbols-outlined text-[16px] text-amber-600">
-                    warning
-                  </span>
-                  ตักเตือนผู้ใช้
-                </button>
-
-                {userRoles.includes("BUYER") &&
-                  !commerceRestrictions.has("BUYER_COMMERCE") &&
-                  userResult.status !== "SUSPENDED" && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPendingAction({
-                          type: "restrictBuyer",
-                          targetId: userResult.id,
-                          userName: userDisplayName,
-                        })
-                      }
-                      className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">
-                        shopping_cart_off
-                      </span>
-                      เพิกถอนสิทธิ์ซื้อ
-                    </button>
-                  )}
-
-                {userRoles.includes("SELLER") &&
-                  !commerceRestrictions.has("SELLER_COMMERCE") &&
-                  userResult.status !== "SUSPENDED" && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPendingAction({
-                          type: "restrictSeller",
-                          targetId: userResult.id,
-                          userName: userDisplayName,
-                        })
-                      }
-                      className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">
-                        store_off
-                      </span>
-                      เพิกถอนสิทธิ์ขาย
-                    </button>
-                  )}
-
-                {hasCommerceRestriction && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPendingAction({
-                        type: "restoreCommerce",
-                        targetId: userResult.id,
-                        userName: userDisplayName,
-                      })
-                    }
-                    className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">
-                      settings_backup_restore
-                    </span>
-                    คืนสิทธิ์ซื้อขาย
-                  </button>
-                )}
-
-                {userResult.status === "ACTIVE" ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPendingAction({
-                        type: "suspend",
-                        targetId: userResult.id,
-                        userName: userDisplayName,
-                      })
-                    }
-                    className="flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50/60 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-colors shadow-xs"
-                  >
-                    <span className="material-symbols-outlined text-[16px] text-rose-600">
-                      block
-                    </span>
-                    ระงับบัญชี (Ban)
-                  </button>
-                ) : userResult.status === "SUSPENDED" ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPendingAction({
-                        type: "restore",
-                        targetId: userResult.id,
-                        userName: userDisplayName,
-                      })
-                    }
-                    className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-colors shadow-xs"
-                  >
-                    <span className="material-symbols-outlined text-[16px] text-emerald-600">
-                      lock_open
-                    </span>
-                    ปลดการระงับ
-                  </button>
-                ) : null}
-              </div>
             </div>
 
             {/* Safety Metrics Grid */}
@@ -1273,19 +1038,7 @@ export default function OrdersSection({
       >
         {selectedOrder && <SupportOrderDetails order={selectedOrder} />}
       </Modal>
-      <ConfirmDialog
-        open={Boolean(pendingAction)}
-        busy={actionBusy}
-        onCancel={() => setPendingAction(null)}
-        onConfirm={handleConfirmAction}
-        title={actionCopy?.title || "ยืนยันการดำเนินการ"}
-        description={actionCopy?.description || ""}
-        confirmLabel={actionCopy?.label || "ยืนยัน"}
-        tone={actionCopy?.tone || "primary"}
-        reason="required"
-        reasonLabel={actionCopy?.reasonLabel || "เหตุผล"}
-        reasonHint="กรุณาระบุรายละเอียดเพื่อบันทึกลงใน Audit Log สำหรับการตรวจสอบย้อนหลัง"
-      />
+
     </div>
   );
 }

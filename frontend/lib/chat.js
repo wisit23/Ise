@@ -74,11 +74,13 @@ export function attachmentUrl(conversationId, messageId) {
   return `/api/chat/conversations/${conversationId}/attachments/${messageId}`;
 }
 
-export function markRead(conversationId, token) {
-  return apiFetch(`/api/chat/conversations/${conversationId}/read`, {
+export async function markRead(conversationId, token) {
+  const result = await apiFetch(`/api/chat/conversations/${conversationId}/read`, {
     method: "POST",
     token,
   });
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("case-chat:read"));
+  return result;
 }
 
 export function getUnreadCount(token) {
