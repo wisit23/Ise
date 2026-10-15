@@ -208,6 +208,9 @@ enum AuctionStatus {
 }
 
 model AuctionItem {
+  cancellationReason String? @map("cancellation_reason")
+  cancelledAt DateTime? @map("cancelled_at")
+  cancelledBy String? @map("cancelled_by")
   id               String        @id @default(uuid())
   productId        String        @map("product_id")
   sellerId         String        @map("seller_id")
@@ -243,6 +246,11 @@ model AuctionItem {
 }
 
 model AuctionRound {
+  title String @default("")
+  categories String[] @default([])
+  cancellationReason String? @map("cancellation_reason")
+  cancelledAt DateTime? @map("cancelled_at")
+  cancelledBy String? @map("cancelled_by")
   id                 String   @id @default(uuid())
   submissionStartsAt DateTime @map("submission_starts_at")
   submissionEndsAt   DateTime @map("submission_ends_at")
@@ -462,4 +470,16 @@ model MarketingAuditLog {
   @@index([action])
   @@index([actorId])
   @@map("marketing_audit_logs")
+}
+
+// Durable command results survive product deletion; productId is a historical reference.
+model ProductModerationCommand {
+  idempotencyKey String @id @map("idempotency_key")
+  action String
+  productId String @map("product_id")
+  payloadHash String @map("payload_hash")
+  result Json
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([productId, createdAt])
+  @@map("product_moderation_commands")
 }

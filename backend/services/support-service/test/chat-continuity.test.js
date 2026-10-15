@@ -81,12 +81,28 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
     conversationId: conversationId,
     chatLink: { conversationId },
     firstResponseAt: null,
-    slaTargets: [{ id: 'first-response', metricType: 'FIRST_RESPONSE' }],
-    auditLog: [{ id: 'opened', action: 'TICKET_OPENED', payload: { cycle: 1,
-      startedAt: '1970-01-01T00:00:00Z', targets: [{ id: 'first-response', metricType: 'FIRST_RESPONSE' }] } }],
+    slaTargets: [
+      {
+        id: "first-response",
+        metricType: "FIRST_RESPONSE",
+        round: { id: "round-1", cycle: 1, startedAt: "1970-01-01T00:00:00Z" },
+      },
+    ],
+    auditLog: [
+      {
+        id: "opened",
+        action: "TICKET_OPENED",
+        payload: {
+          cycle: 1,
+          startedAt: "1970-01-01T00:00:00Z",
+          targets: [{ id: "first-response", metricType: "FIRST_RESPONSE" }],
+        },
+      },
+    ],
   };
 
   const storedMessages = [];
+  const receipts = [];
   const storedAudits = [];
 
   const originalTicketFindUnique = prisma.supportTicket.findUnique;
@@ -114,7 +130,8 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
     storedAudits.push(audit);
     return audit;
   };
-  prisma.ticketAuditLog.findUnique = async ({ where }) => storedAudits.find((a) => a.dedupeKey === where.dedupeKey) || null;
+  prisma.ticketAuditLog.findUnique = async ({ where }) =>
+    storedAudits.find((a) => a.dedupeKey === where.dedupeKey) || null;
 
   prisma.$transaction = async (callback) => {
     return callback({
@@ -127,6 +144,14 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
             return { count: 1 };
           }
           return { count: 0 };
+        },
+      },
+      ticketChatMessageReceipt: {
+        findUnique: async ({ where }) =>
+          receipts.find((r) => r.messageId === where.messageId) || null,
+        create: async ({ data }) => {
+          receipts.push(data);
+          return data;
         },
       },
       ticketAuditLog: {
@@ -206,11 +231,7 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
 
       assert.equal(result2.alreadyRecorded, true);
       assert.equal(result2.event.payload.chatMessageId, chatMessageId);
-      assert.equal(
-        storedMessages.length,
-        0,
-        "Must never create TicketMessage",
-      );
+      assert.equal(storedMessages.length, 0, "Must never create TicketMessage");
       assert.equal(
         storedAudits.length,
         1,

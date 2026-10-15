@@ -75,19 +75,40 @@ export default function CheckoutPage() {
     }
     loadVouchers();
 
-    const ids = new URLSearchParams(window.location.search)
+    const params = new URLSearchParams(window.location.search);
+    const ids = params
       .get("orders")
       ?.split(",")
       .map((id) => id.trim())
       .filter(Boolean);
-    if (!ids?.length) {
+    const basketIds = params
+      .get("items")
+      ?.split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (!ids?.length && !basketIds?.length) {
       setError("ไม่พบรายการสินค้าที่ต้องการยืนยัน");
       setLoading(false);
       return;
     }
 
     Promise.all([
-      Promise.all(ids.map((id) => apiFetch(`/api/orders/${id}`, { token }))),
+      Promise.all([
+        basketIds?.length
+          ? apiFetch("/api/orders/cart/prepare", {
+              method: "POST",
+              token,
+              body: { basketIds },
+            }).then((data) => data.items)
+          : Promise.resolve([]),
+        Promise.all(
+          (ids || []).map((id) => apiFetch(`/api/orders/${id}`, { token })),
+        ),
+      ]).then(([prepared, existing]) => [
+        ...new Map(
+          [...prepared, ...existing].map((order) => [order.id, order]),
+        ).values(),
+      ]),
       apiFetch("/api/auth/me/addresses", { token }),
     ])
       .then(([savedOrders, savedAddresses]) => {

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ProductDetailPage from "./page";
 import { apiFetch } from "../../../lib/api";
 
@@ -102,4 +102,21 @@ test("available listing still offers contact seller", async () => {
       screen.getByRole("button", { name: "ติดต่อผู้ขาย" }),
     ).toBeInTheDocument(),
   );
+});
+
+test("adding a product reserves a cart item without creating an order", async () => {
+  setup("available");
+  fireEvent.click(await screen.findByRole("button", { name: "เพิ่มลงตะกร้า" }));
+  await waitFor(() =>
+    expect(apiFetch).toHaveBeenCalledWith("/api/orders/cart", {
+      method: "POST",
+      token: "token",
+      body: { productId: "p", campaignId: null },
+    }),
+  );
+  expect(
+    apiFetch.mock.calls.some(
+      ([path, options]) => path === "/api/orders" && options?.method === "POST",
+    ),
+  ).toBe(false);
 });

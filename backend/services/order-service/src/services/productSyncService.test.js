@@ -15,8 +15,21 @@ function fixture() {
       reservationId: "basket1",
     }),
   };
+  Object.assign(request, JSON.parse(request.detail), { processedAt: null });
   const logs = [request];
   const db = {
+    productSyncJob: {
+      findUnique: async () => request,
+      findMany: async () => (request.processedAt ? [] : [request]),
+      updateMany: async ({ data }) => {
+        if (request.processedAt) return { count: 0 };
+        Object.assign(request, data);
+        return { count: 1 };
+      },
+    },
+    order: {
+      findUnique: async () => ({ id: "o1", buyerId: "b1", sellerId: "s1" }),
+    },
     orderLog: {
       findUnique: async () => request,
       findFirst: async ({ where }) =>
@@ -31,6 +44,7 @@ function fixture() {
       },
     },
   };
+  db.$transaction = async (callback) => callback(db);
   return { db, logs, request };
 }
 test("failed delivery leaves durable request available for retry", async () => {

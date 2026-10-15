@@ -101,7 +101,7 @@ export default function ProductDetailPage() {
     });
 
     if (token && id && isCustomerAccountRoles(roles)) {
-      apiFetch("/api/orders/mine?status=pending_payment&limit=100", { token })
+      apiFetch("/api/orders/cart", { token })
         .then((data) => {
           const match = data.items?.find((o) => o.productId === id);
           if (match) setMyPendingOrder(match);
@@ -249,7 +249,7 @@ export default function ProductDetailPage() {
     setBusy(true);
     setNotice("");
     try {
-      await apiFetch("/api/orders", {
+      await apiFetch("/api/orders/cart", {
         method: "POST",
         token,
         body: {

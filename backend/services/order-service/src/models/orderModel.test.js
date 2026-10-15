@@ -20,6 +20,12 @@ function fixture(
   };
   const writes = [];
   const tx = {
+    productSyncJob: {
+      create: async ({ data }) => {
+        writes.push({ job: data });
+        return { id: "sync-1", ...data };
+      },
+    },
     order: {
       findUnique: async () => order,
       updateMany: async (args) => {
@@ -75,7 +81,8 @@ test("an unpaid cancellation still records the product sync and audit together",
   const { writes } = fixture(t);
   const result = await model.transitionStatusWithProductSync(cancellation);
   assert.equal(result.order.status, "cancelled");
-  assert.equal(writes.length, 3);
+  assert.equal(writes.length, 4);
+  assert.equal(writes[1].job.action, "SET_STATUS");
   assert.equal(writes[0].where.version, 1);
   assert.deepEqual(writes[0].where.status, { in: ["pending_payment"] });
 });

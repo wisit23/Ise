@@ -72,10 +72,7 @@ export default function CartPage() {
     }
     setLoading(true);
     try {
-      const data = await apiFetch(
-        "/api/orders/mine?status=pending_payment&limit=100",
-        { token },
-      );
+      const data = await apiFetch("/api/orders/cart", { token });
       setItems(data.items);
       setSelected(
         new Set(
@@ -140,11 +137,17 @@ export default function CartPage() {
     setBusyId(id);
     setNotice("");
     try {
-      await apiFetch(`/api/orders/${id}/status`, {
-        method: "PATCH",
-        token,
-        body: { status: "cancelled" },
-      });
+      const item = items.find((row) => row.id === id);
+      await apiFetch(
+        item?.orderId
+          ? `/api/orders/${item.orderId}/status`
+          : `/api/orders/cart/${id}`,
+        {
+          method: item?.orderId ? "PATCH" : "DELETE",
+          token,
+          ...(item?.orderId ? { body: { status: "cancelled" } } : {}),
+        },
+      );
       setItems((prev) => prev.filter((o) => o.id !== id));
       setSelected((prev) => {
         const next = new Set(prev);
@@ -161,8 +164,16 @@ export default function CartPage() {
   function handleCheckout() {
     if (selectedItems.length === 0) return;
     setPaying(true);
-    const orderIds = selectedItems.map((order) => order.id).join(",");
-    router.push(`/checkout?orders=${encodeURIComponent(orderIds)}`);
+    const params = new URLSearchParams();
+    const basketIds = selectedItems
+      .filter((item) => item.basketId)
+      .map((item) => item.basketId);
+    const orderIds = selectedItems
+      .filter((item) => !item.basketId)
+      .map((item) => item.orderId || item.id);
+    if (basketIds.length) params.set("items", basketIds.join(","));
+    if (orderIds.length) params.set("orders", orderIds.join(","));
+    router.push(`/checkout?${params.toString()}`);
   }
 
   const activeItems = items.filter(

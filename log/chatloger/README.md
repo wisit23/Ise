@@ -1,5 +1,11 @@
 # บันทึกการตรวจ ER และข้อตกลงแยก service
 
+โฟลเดอร์ `log/loger` ใช้บันทึกสิ่งที่เราคุย ข้อเสนอที่เลือก การตัดสินใจ และข้อตกลงล่าสุด ตามที่ผู้ใช้ชี้แจงเมื่อ 2026-10-15 ส่วนรายงาน implementation, ผล test และหลักฐานการรันแยกไว้ใน [log/evidence](../evidence/README.md)
+
+## ข้อตกลงใหม่: แยก operational storage ออกจาก audit log
+
+ผู้ใช้อนุมัติแบบใหม่ใน thread ปัจจุบันแล้ว โดยใช้ `shipping_address_snapshots` แยกจาก Shipping ตามข้อเสนอแรก ดู [ข้อตกลงล่าสุด](operational-storage.md) และ [หลักฐานการลงมือ](../evidence/operational-storage.md) ข้อตกลงใหม่นี้แทนแนวทางเก็บสถานะหลักใน log ของ Order/Product/Support ที่บันทึกด้านล่าง ส่วนบันทึกต้นทางยังเก็บไว้เป็นประวัติ ไม่ได้ลบหรือแก้คำอนุมัติย้อนหลัง
+
 ต้นทาง: [ตรวจ Database เทียบ ER Design ข้อ 1](t3-thread://v1/191c4986-dbe8-41ca-93bf-a26fa649b30a)
 
 ครอบคลุมข้อความ M01–M46 ระหว่าง `2026-10-12T11:49:18.241Z` ถึง `2026-10-13T05:44:20.599Z` (UTC) บันทึกจากข้อความที่เก็บใน T3 local database แบบ read-only ไม่รวม tool calls และ attachment
@@ -18,12 +24,12 @@ Mxx ในแต่ละไฟล์อ้างถึงหัวข้อใ�
 
 ## สถานะล่าสุดหลังอนุมัติลงมือ
 
-ผู้ใช้อนุมัติ “เริ่มได้ bro make no mistake” และยืนยันให้ทำต่อแล้ว งาน implementation และ verification บนระบบทดสอบเสร็จแล้ว ดูสถานะสุดท้าย/ผลตรวจ/ข้อจำกัดใน [work map](implementation.md) ข้อความ “ยังไม่ได้แก้” และผลเก่าในบันทึกต้นทางเป็นประวัติ ไม่ใช่สถานะปัจจุบัน
+ผู้ใช้อนุมัติ “เริ่มได้ bro make no mistake” และยืนยันให้ทำต่อแล้ว งาน implementation และ verification บนระบบทดสอบเสร็จแล้ว ดูสถานะสุดท้าย/ผลตรวจ/ข้อจำกัดใน [work map](../evidence/implementation.md) ข้อความ “ยังไม่ได้แก้” และผลเก่าในบันทึกต้นทางเป็นประวัติ ไม่ใช่สถานะปัจจุบัน
 
-- [Auth implementation และผลตรวจ](auth-service/implementation.md)
-- [Order workflow/evidence/hold และผลตรวจ](order-service/workflow-implementation.md)
+- [Auth implementation และผลตรวจ](../evidence/auth-service/implementation.md)
+- [Order workflow/evidence/hold และผลตรวจ](../evidence/order-service/workflow-implementation.md)
 
-ผู้ใช้อนุมัติย้าย Auth `legacy_*` พร้อมข้อมูลไป `legacy_archive` แล้ว migration และการตรวจรักษาข้อมูล/constraints/indexes/sequence ผ่าน และอนุมัติ `reviews.product_id` เป็น logical reference เพื่อคงรีวิวและ ID หลังลบสินค้า ดู [หลักฐาน Auth](auth-service/archive-implementation.md) และ work map สำหรับผลตรวจโดยผู้ช่วยหลัก
+ผู้ใช้อนุมัติย้าย Auth `legacy_*` พร้อมข้อมูลไป `legacy_archive` แล้ว migration และการตรวจรักษาข้อมูล/constraints/indexes/sequence ผ่าน และอนุมัติ `reviews.product_id` เป็น logical reference เพื่อคงรีวิวและ ID หลังลบสินค้า ดู [หลักฐาน Auth](../evidence/auth-service/archive-implementation.md) และ work map สำหรับผลตรวจโดยผู้ช่วยหลัก
 
 ## ขอบเขตและกติกาที่ตกลง
 

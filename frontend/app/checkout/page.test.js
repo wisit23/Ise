@@ -97,6 +97,48 @@ test("shows the Marketing voucher and its server-calculated order summary", asyn
   expect(screen.getByText("฿800")).toBeInTheDocument();
 });
 
+test("entering checkout creates orders from cart reservations before confirming payment", async () => {
+  window.history.replaceState(null, "", "/checkout?items=basket-1");
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/cart/prepare"
+      ? Promise.resolve({ items: [ORDER] })
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+  await screen.findByText("สมชาย ใจดี");
+  expect(apiFetch).toHaveBeenCalledWith("/api/orders/cart/prepare", {
+    method: "POST",
+    token: "buyer-token",
+    body: { basketIds: ["basket-1"] },
+  });
+  expect(
+    apiFetch.mock.calls.some(
+      ([path]) => path === "/api/orders/checkout-sessions",
+    ),
+  ).toBe(false);
+});
+
+test("checkout can combine cart reservations with an existing auction order", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/checkout?items=basket-1&orders=order-1",
+  );
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/cart/prepare"
+      ? Promise.resolve({
+          items: [{ ...ORDER, id: "order-new", productTitle: "New cart item" }],
+        })
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+  await screen.findByText("สมชาย ใจดี");
+  expect(screen.getAllByText("New cart item").length).toBeGreaterThan(0);
+  expect(screen.getAllByText(ORDER.productTitle).length).toBeGreaterThan(0);
+});
+
 test("chooses separate vouchers for two products and totals only the updated item", async () => {
   window.history.replaceState(null, "", "/checkout?orders=order-1,order-2");
   const original = apiFetch.getMockImplementation();

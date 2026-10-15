@@ -1,6 +1,6 @@
 # Product Service review fixes (Sonnet 5.5 implementation)
 
-Guides read: nes-mode SKILL.md, ref/harness.md, ref/senior-mentor.md, ref/wayfinder-unified.md, playbooks/bug-fix.md; log/loger/product-service/sonnet-review.md. No subagents, commits, .env or production change. Rehearsal DB `product_luna_er` on localhost:55439 only.
+Guides read: nes-mode SKILL.md, ref/harness.md, ref/senior-mentor.md, ref/wayfinder-unified.md, playbooks/bug-fix.md; log/evidence/product-service/sonnet-review.md. No subagents, commits, .env or production change. Rehearsal DB `product_luna_er` on localhost:55439 only.
 
 ## Changes (product-service only)
 1. `migrateReviewsFromReviewDb.js` — reads the legacy tables (`reviews`, `review_photos`, `review_videos`) with raw SQL; writes `review_media` with `image:`/`video:` ids (same as migration 20261014000000). Idempotent; conflict check compares review id and media id set. Exports `migrateReviews` and runs `main` only when executed directly. `REVIEW_MIGRATION.md` gets a paragraph on this.

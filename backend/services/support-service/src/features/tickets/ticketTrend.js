@@ -8,7 +8,6 @@ const {
 const { Prisma } = require("../../generated/prisma-client");
 const prisma = require("../../models/prismaClient");
 const { queueFilter } = require("./ticketModel");
-const { stateJoins } = require("./ticketEvents");
 
 async function readTicketTrend(
   { role, userId, days },
@@ -33,7 +32,7 @@ async function readTicketTrend(
       LEFT JOIN LATERAL (SELECT assignment_id, assignee_id FROM ticket_assignments
         WHERE ticket_id=t.ticket_id AND (ended_at IS NULL OR s.code='CLOSED')
         ORDER BY assigned_at DESC LIMIT 1) a ON true
-      ${stateJoins}
+
       ${filter}
     )
     SELECT dates.day::text AS date, count(v.id)::int AS value

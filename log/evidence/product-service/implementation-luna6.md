@@ -23,7 +23,7 @@ node --test --test-concurrency=1 --test-timeout=120000 --test-force-exit \
   --test-reporter=spec 'test/**/*.test.js' 'src/**/*.test.js'
 ```
 
-Result: **316 tests passed, 0 failed, 0 skipped** in 111.84 seconds. Full output: `log/loger/product-service/luna6-full-product-34files-final.txt`.
+Result: **316 tests passed, 0 failed, 0 skipped** in 111.84 seconds. Full output: `log/evidence/product-service/luna6-full-product-34files-final.txt`.
 
 Focused ESLint on the changed JS files passed with no output:
 

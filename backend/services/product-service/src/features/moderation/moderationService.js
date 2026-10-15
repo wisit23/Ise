@@ -63,7 +63,7 @@ async function restoreCommerceState(tx, product, now = new Date()) {
   const auction = ["reserved", "auction"].includes(status)
     ? await tx.auctionItem.findFirst({
         where: { productId: product.id },
-        orderBy:{createdAt:"desc"},
+        orderBy: { createdAt: "desc" },
         select: { status: true, winningOrderId: true },
       })
     : null;
@@ -114,21 +114,20 @@ async function executeCommand({
     // Same-key commands serialize even when two Auth retries arrive together.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${idempotencyKey}))`;
 
-    const existing = await tx.marketingAuditLog.findUnique({
+    const existing = await tx.productModerationCommand.findUnique({
       where: { idempotencyKey },
     });
     if (existing) {
       if (
         existing.action !== action ||
-        existing.entityType !== "PRODUCT_MODERATION" ||
-        existing.entityId !== productId ||
-        existing.metadata?.payloadHash !== payloadHash
+        existing.productId !== productId ||
+        existing.payloadHash !== payloadHash
       ) {
         throw conflict(
           "idempotency key was already used with a different moderation command",
         );
       }
-      return existing.metadata.result;
+      return existing.result;
     }
 
     // Different moderation keys for the same product must also serialize.
@@ -138,6 +137,9 @@ async function executeCommand({
     if (!product) throw notFound("product not found");
     const updated = await mutate(tx, product);
     const result = jsonResult(updated);
+    await tx.productModerationCommand.create({
+      data: { idempotencyKey, action, productId, payloadHash, result },
+    });
     await tx.marketingAuditLog.create({
       data: {
         idempotencyKey,
@@ -170,7 +172,7 @@ async function removeProduct(productId, reason, idempotencyKey) {
       if (product.status === "auction") {
         const auction = await tx.auctionItem.findFirst({
           where: { productId },
-          orderBy:{createdAt:"desc"},
+          orderBy: { createdAt: "desc" },
           select: { winningOrderId: true },
         });
         await tx.auctionItem.updateMany({

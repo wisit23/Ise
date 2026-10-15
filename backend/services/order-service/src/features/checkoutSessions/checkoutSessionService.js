@@ -1,10 +1,11 @@
+const productSync = require("../../services/productSyncService");
 const chatClient = require("../../services/chatClient");
 const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const productClient = require("../../services/productClient");
 const buyerActivityClient = require("../../services/buyerActivityClient");
 const orderModel = require("../../models/orderModel");
-const { calculateOrderTotals, money } = require("../../models/money");
+const { calculateOrderTotals } = require("../../models/money");
 const { resolveSelectedAddress } = require("../shipping/shippingService");
 const PAYMENT_TTL_MS = 10 * 60 * 1000;
 const INCLUDE = {
@@ -46,7 +47,6 @@ function createCheckoutSessionService(
     buyerId,
     orderIds,
     addressId,
-    shippingAddress,
     authorization,
     couponCode,
     now = new Date(),
@@ -63,7 +63,11 @@ function createCheckoutSessionService(
       throw badRequest("addressId is required");
     if (couponCode)
       throw badRequest("apply voucher codes per order, not per checkout");
-    const addressSnapshot = await addresses({ buyerId, addressId: addressId.trim(), authorization });
+    const addressSnapshot = await addresses({
+      buyerId,
+      addressId: addressId.trim(),
+      authorization,
+    });
     const orders = await db.order.findMany({
       where: { id: { in: ids }, buyerId },
       include: orderModel.INCLUDE,
@@ -146,7 +150,10 @@ function createCheckoutSessionService(
           });
         }
         // Address history is attached only after orders have checkout_id.
-        await tx.checkout.update({ where: { id: checkout.id }, data: { addressSnapshot } });
+        await tx.checkout.update({
+          where: { id: checkout.id },
+          data: { addressSnapshot },
+        });
         return tx.checkout.findUnique({
           where: { id: checkout.id },
           include: INCLUDE,
@@ -182,24 +189,22 @@ function createCheckoutSessionService(
             where: { id: order.basketId },
             data: { status: "expired" },
           });
-        await tx.orderLog.create({
-          data: orderModel.logData(
-            order,
-            order.buyerId,
-            "PRODUCT_SYNC_REQUESTED",
-            order.basketId
-              ? {
-                  action: "RELEASE_RESERVATION",
-                  productId: order.productId,
-                  reservationId: order.basketId,
-                }
-              : {
-                  action: "SET_STATUS",
-                  productId: order.productId,
-                  targetStatus: "available",
-                },
-          ),
-        });
+        await productSync.createRequest(
+          tx,
+          order,
+          order.buyerId,
+          order.basketId
+            ? {
+                action: "RELEASE_RESERVATION",
+                productId: order.productId,
+                reservationId: order.basketId,
+              }
+            : {
+                action: "SET_STATUS",
+                productId: order.productId,
+                targetStatus: "available",
+              },
+        );
         await tx.orderLog.create({
           data: orderModel.logData(order, order.buyerId, "CHECKOUT_EXPIRED", {
             checkoutId: checkout.id,
@@ -270,24 +275,22 @@ function createCheckoutSessionService(
               where: { id: order.basketId },
               data: { status: "purchased" },
             });
-          await tx.orderLog.create({
-            data: orderModel.logData(
-              order,
-              buyerId,
-              "PRODUCT_SYNC_REQUESTED",
-              order.basketId
-                ? {
-                    action: "COMPLETE_RESERVATION",
-                    productId: order.productId,
-                    reservationId: order.basketId,
-                  }
-                : {
-                    action: "SET_STATUS",
-                    productId: order.productId,
-                    targetStatus: "sold",
-                  },
-            ),
-          });
+          await productSync.createRequest(
+            tx,
+            order,
+            buyerId,
+            order.basketId
+              ? {
+                  action: "COMPLETE_RESERVATION",
+                  productId: order.productId,
+                  reservationId: order.basketId,
+                }
+              : {
+                  action: "SET_STATUS",
+                  productId: order.productId,
+                  targetStatus: "sold",
+                },
+          );
           await tx.orderLog.create({
             data: orderModel.logData(order, buyerId, "PAYMENT_COMPLETED", {
               checkoutId: checkout.id,
@@ -342,19 +345,26 @@ function createCheckoutSessionService(
         ),
       ),
     );
-    await Promise.all(paid.orders.map(order=>chatClient.notifyOrderPaid(orderModel.view(order)).catch(()=>{})));
+    await Promise.all(
+      paid.orders.map((order) =>
+        chatClient.notifyOrderPaid(orderModel.view(order)).catch(() => {}),
+      ),
+    );
     return sessionView(paid);
   }
   async function updateAddress({
     buyerId,
     sessionId,
     addressId,
-    shippingAddress,
     authorization,
   }) {
     if (typeof addressId !== "string" || !addressId.trim())
       throw badRequest("addressId is required");
-    const addressSnapshot = await addresses({ buyerId, addressId: addressId.trim(), authorization });
+    const addressSnapshot = await addresses({
+      buyerId,
+      addressId: addressId.trim(),
+      authorization,
+    });
     return sessionView(
       await db.$transaction(async (tx) => {
         const checkout = await findOwnedSession(sessionId, buyerId, tx);

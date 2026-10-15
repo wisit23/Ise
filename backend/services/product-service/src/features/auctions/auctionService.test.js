@@ -17,16 +17,26 @@ function withAuditState(tx) {
   tx.marketingAuditLog = {
     ...log,
     async findFirst(args) {
-      const matches = snapshots.filter((row) =>
-        row.entityType === args.where.entityType &&
-        row.entityId === args.where.entityId &&
-        args.where.action.in.includes(row.action));
-      matches.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt) || b.id.localeCompare(a.id));
+      const matches = snapshots.filter(
+        (row) =>
+          row.entityType === args.where.entityType &&
+          row.entityId === args.where.entityId &&
+          args.where.action.in.includes(row.action),
+      );
+      matches.sort(
+        (a, b) =>
+          new Date(b.createdAt) - new Date(a.createdAt) ||
+          b.id.localeCompare(a.id),
+      );
       return matches[0] || (findFirst ? await findFirst(args) : null);
     },
     async create(args) {
       const returned = create ? await create(args) : null;
-      const row = { id: `snapshot-${snapshots.length}`, ...args.data, ...returned };
+      const row = {
+        id: `snapshot-${snapshots.length}`,
+        ...args.data,
+        ...returned,
+      };
       snapshots.push(row);
       return row;
     },
@@ -171,7 +181,12 @@ test("submit rejects a product under Trust & Safety moderation", async (t) => {
   await assert.rejects(
     service.submit({
       user: { id: "seller-1", role: "SELLER" },
-      input: { roundId:"round-1", productId: "p1", startingPrice: 100, bidIncrement: 10 },
+      input: {
+        roundId: "round-1",
+        productId: "p1",
+        startingPrice: 100,
+        bidIncrement: 10,
+      },
     }),
     (err) => err.status === 403,
   );
@@ -307,7 +322,10 @@ test("schedule accepts a valid window for an approved auction", async (t) => {
 /** A minimal fake Prisma transaction client for placeBid's tx-scoped queries. */
 function fakeTx({ auction, existingBid = null, bids = [] }) {
   return {
-    marketingAuditLog: { findFirst: async () => null, create: async ({ data }) => ({ id: "audit-snapshot", ...data }) },
+    marketingAuditLog: {
+      findFirst: async () => null,
+      create: async ({ data }) => ({ id: "audit-snapshot", ...data }),
+    },
     auctionItem: {
       findUnique: async () => auction,
       update: async ({ data }) => Object.assign(auction, data),
@@ -655,7 +673,9 @@ test("placeBid P2002 race recovery validates existing bid and returns on match",
       },
     },
   };
-  t.mock.method(repository, "withAuctionLock", (id, fn) => fn(withAuditState(tx)));
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(withAuditState(tx)),
+  );
   t.mock.method(repository, "highestBid", async () => null);
   t.mock.method(repository, "createBid", async () => {
     const err = new Error("P2002");
@@ -701,7 +721,9 @@ test("placeBid P2002 race recovery throws 409 Conflict if race-created bid has d
       },
     },
   };
-  t.mock.method(repository, "withAuctionLock", (id, fn) => fn(withAuditState(tx)));
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(withAuditState(tx)),
+  );
   t.mock.method(repository, "highestBid", async () => null);
   t.mock.method(repository, "createBid", async () => {
     const err = new Error("P2002");
@@ -2840,6 +2862,10 @@ test("cancelRound atomically transitions items and products, logs audit, and not
         }),
       },
       auctionItem: {
+        update: async ({ where, data }) => {
+          updatedItems.push({ where, data });
+          return { id: where.id, ...data };
+        },
         updateMany: async ({ where, data }) => {
           updatedItems.push({ where, data });
           return { count: 2 };
@@ -2878,24 +2904,23 @@ test("cancelRound atomically transitions items and products, logs audit, and not
   assert.equal(result.cancellationReason, "เกิดเหตุขัดข้องทางเทคนิค");
   assert.equal(result.cancelledBy, "mkt-1");
 
-  assert.equal(updatedItems.length, 1);
+  assert.equal(updatedItems.length, 3);
   assert.equal(updatedItems[0].data.status, "cancelled");
 
   assert.equal(updatedProducts.length, 1);
   assert.equal(updatedProducts[0].data.status, "auction_action_required");
 
-  const commandAudits = auditLogs.filter((row) => row.action === "AUCTION_ROUND_CANCEL");
+  const commandAudits = auditLogs.filter(
+    (row) => row.action === "AUCTION_ROUND_CANCEL",
+  );
   assert.equal(commandAudits.length, 1);
   assert.equal(commandAudits[0].metadata.affectedItemCount, 2);
   assert.equal(commandAudits[0].metadata.affectedSellerCount, 2);
-  const snapshots = auditLogs.filter((row) => row.action === "ER_STATE_SNAPSHOT");
-  assert.equal(auditLogs.length, 4);
-  assert.equal(snapshots.length, 3);
-  assert.deepEqual(snapshots.map((row) => row.entityId).sort(), ["item-1", "item-2", "round-1"]);
-  for (const row of snapshots) {
-    assert.equal(row.metadata.erFields.cancellationReason, "เกิดเหตุขัดข้องทางเทคนิค");
-    assert.equal(row.metadata.erFields.cancelledBy, "mkt-1");
-    assert.ok(!Number.isNaN(new Date(row.metadata.erFields.cancelledAt).getTime()));
+  assert.equal(auditLogs.length, 1);
+  for (const change of updatedItems.slice(1)) {
+    assert.equal(change.data.cancellationReason, result.cancellationReason);
+    assert.equal(change.data.cancelledBy, "mkt-1");
+    assert.ok(change.data.cancelledAt instanceof Date);
   }
 
   assert.deepEqual(cancelledJobs.sort(), ["item-1", "item-2"]);

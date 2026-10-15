@@ -22,6 +22,7 @@ router.use("/disputes", disputeRoutes);
 router.use("/support", supportRoutes);
 router.use("/checkout-sessions", checkoutSessionRoutes);
 router.use("/checkouts", checkoutSessionRoutes);
+router.use("/cart", require("../features/cart/cartRoutes"));
 
 router.post(
   "/",

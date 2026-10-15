@@ -1,5 +1,19 @@
 # One voucher per checkout item
 
+Adding a buy-now product now creates only a Basket reservation through
+`POST /api/orders/cart`. The basket remembers the selected campaign ID and shows
+an estimate without holding the voucher or notifying the seller of an order.
+Entering `/checkout?items=...` calls `POST /api/orders/cart/prepare` with the selected
+`basketIds`, creates pending-payment orders and holds their vouchers. Basket row
+locks serialize this with removal and repeated/concurrent checkout entry reuses
+the existing order. Cart removal uses `DELETE /api/orders/cart/:id` before an order
+exists and the existing order cancellation endpoint afterward. Existing auction
+orders and `/checkout?orders=...` links continue to work.
+
+Migration `20261017000000_cart_before_order` adds the nullable `basket.campaign_id`
+column without modifying existing orders. Apply the order-service migrations and
+rebuild/restart the order-service runtime when installing this change.
+
 The checkout page places a voucher popup button under each product. Each order has
 one campaign ID; multiple items can use different vouchers in one checkout.
 The existing wallet rule remains: one claimed voucher can be held by one order

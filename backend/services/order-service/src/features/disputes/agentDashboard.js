@@ -10,7 +10,7 @@ function disputeDashboardBase(userId) {
     SELECT dispute_case_id AS id, order_id AS reference, reason AS subject, status, priority, priority_score,
       created_at AT TIME ZONE 'UTC' AS created_at, assigned_to AS assignee_id,
       sla_expires_at AT TIME ZONE 'UTC' AS due_at
-    FROM dispute_case_state
+    FROM dispute_case
     WHERE status IN ('OPEN', 'NEEDS_INFO')
       AND (assigned_role IS NULL OR assigned_role = 'CUSTOMER_SERVICE')
       AND (assigned_to IS NULL OR assigned_to = ${userId})

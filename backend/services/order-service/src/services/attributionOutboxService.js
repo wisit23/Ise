@@ -36,25 +36,49 @@ async function deliver(event, client = productClient) {
 
 function assertQueue(db) {
   if (!db?.attributionJob || !db?.orderLog)
-    throw new Error("attributionJob view and orderLog model are required on Prisma client");
+    throw new Error(
+      "attributionJob table and orderLog model are required on Prisma client",
+    );
 }
 async function appendResult(db, event, action, detail) {
-  const job = await db.orderLog.findUnique({ where: { id: event.id } });
-  if (!job) throw new Error("attribution job history is missing");
-  const { orderId, buyerId, sellerId, actorId } = job;
-  try {
-    await db.orderLog.create({ data: {
-      ...(action === "ATTRIBUTION_ACK" ? { id: `${event.id}:ack` } : {}),
-      orderId, buyerId, sellerId, actorId, action,
-      detail: JSON.stringify({ schema_version: 1, eventId: event.id, ...detail }),
-    } });
-  } catch (error) {
-    // Concurrent delivery may send twice; Product dedupes eventId/orderId.
-    // ACK uniqueness makes local completion append-only and idempotent too.
-    if (!(action === "ATTRIBUTION_ACK" && error.code === "P2002")) throw error;
-  }
+  return db.$transaction(async (tx) => {
+    const patch = { ...detail };
+    delete patch.attempts;
+    const changed = await tx.attributionJob.updateMany({
+      where: { id: event.id, processedAt: null },
+      data: {
+        ...patch,
+        attempts: { increment: 1 },
+        ...(action === "ATTRIBUTION_ACK" ? { lastError: null } : {}),
+      },
+    });
+    if (!changed.count) return;
+    const order = await tx.order.findUnique({ where: { id: event.orderId } });
+    const state = await tx.attributionJob.findUnique({
+      where: { id: event.id },
+    });
+    await tx.orderLog.create({
+      data: {
+        ...(action === "ATTRIBUTION_ACK" ? { id: `${event.id}:ack` } : {}),
+        orderId: order.id,
+        buyerId: order.buyerId,
+        sellerId: order.sellerId,
+        actorId: order.buyerId,
+        action,
+        detail: JSON.stringify({
+          schema_version: 1,
+          eventId: event.id,
+          ...detail,
+          attempts: state.attempts,
+        }),
+      },
+    });
+  });
 }
-async function processEvent(eventId, { db = prisma, client = productClient, now = new Date() } = {}) {
+async function processEvent(
+  eventId,
+  { db = prisma, client = productClient, now = new Date() } = {},
+) {
   assertQueue(db);
   const event = await db.attributionJob.findUnique({ where: { id: eventId } });
   if (!event || event.processedAt) return event;
@@ -70,7 +94,10 @@ async function processEvent(eventId, { db = prisma, client = productClient, now 
   }
   // A crash after Product accepts but before this append leaves the same
   // durable job pending. Restart reuses its ID, never a new attribution ID.
-  await appendResult(db, event, "ATTRIBUTION_ACK", { attempts: event.attempts + 1, processedAt: now });
+  await appendResult(db, event, "ATTRIBUTION_ACK", {
+    attempts: event.attempts + 1,
+    processedAt: now,
+  });
   return db.attributionJob.findUnique({ where: { id: event.id } });
 }
 

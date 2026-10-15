@@ -179,7 +179,7 @@ export default function NavBar() {
       setKycStatus(claims?.kycStatus || null);
 
       if (isCustomerAccountRoles(getCurrentRoles())) {
-        apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
+        apiFetch("/api/orders/cart", { token })
           .then((data) => setCartCount(data.total))
           .catch((err) =>
             console.error("โหลดจำนวนสินค้าในตะกร้าไม่สำเร็จ:", err),

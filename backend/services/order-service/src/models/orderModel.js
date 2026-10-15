@@ -189,14 +189,12 @@ async function transitionStatusWithProductSync({
           paidAt: new Date(),
         },
       });
-    const event = await tx.orderLog.create({
-      data: logData(
-        before,
-        actorId || before.buyerId,
-        "PRODUCT_SYNC_REQUESTED",
-        productSync,
-      ),
-    });
+    const event = await require("../services/productSyncService").createRequest(
+      tx,
+      before,
+      actorId || before.buyerId,
+      productSync,
+    );
     if (status === "cancelled" && before.basketId)
       await tx.basket.update({
         where: { id: before.basketId },
@@ -208,17 +206,42 @@ async function transitionStatusWithProductSync({
         to: status,
       }),
     });
-    let attributionEvent=null;
-    if(status === "completed" && before.campaignId){
-      attributionEvent = await tx.attributionJob.findUnique({ where: { orderId: id } });
+    let attributionEvent = null;
+    if (status === "completed" && before.campaignId) {
+      attributionEvent = await tx.attributionJob.findUnique({
+        where: { orderId: id },
+      });
       if (!attributionEvent) {
-        const job = await tx.orderLog.create({ data: logData(before, actorId || before.buyerId, "ATTRIBUTION_REQUESTED", {
-          schema_version: 1, campaignId: before.campaignId,
-          grossAmount: before.originalAmount.toString(),
-          discountAmount: money(before.originalAmount).minus(before.ordersAmount).toString(),
-          netAmount: before.ordersAmount.toString(), completedAt: new Date(),
-        }) });
-        attributionEvent = await tx.attributionJob.findUnique({ where: { id: job.id } });
+        attributionEvent = await tx.attributionJob.create({
+          data: {
+            orderId: id,
+            campaignId: before.campaignId,
+            grossAmount: before.originalAmount,
+            discountAmount: money(before.originalAmount).minus(
+              before.ordersAmount,
+            ),
+            netAmount: before.ordersAmount,
+            completedAt: new Date(),
+            attempts: 0,
+            nextAttemptAt: new Date(),
+            createdAt: new Date(),
+          },
+        });
+        await tx.orderLog.create({
+          data: logData(
+            before,
+            actorId || before.buyerId,
+            "ATTRIBUTION_REQUESTED",
+            {
+              eventId: attributionEvent.id,
+              campaignId: before.campaignId,
+              grossAmount: before.originalAmount.toString(),
+              discountAmount: attributionEvent.discountAmount.toString(),
+              netAmount: before.ordersAmount.toString(),
+              completedAt: attributionEvent.completedAt,
+            },
+          ),
+        });
       }
     }
     return {

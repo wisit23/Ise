@@ -91,10 +91,12 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
         excluded.push((await create({ moderatedAt: new Date() })).id);
         excluded.push((await create({ sellerId: buyer })).id);
         const repo = createRecommendationRepository(tx);
+        // Score and pool assertions need the whole catalog, including old
+        // zero-score fixtures that can fall beyond the first page after seeding.
         const args = {
           userId: buyer,
           skip: 0,
-          take: 50,
+          take: await tx.product.count(),
           profile: normalizeProfile({
             categories: [category],
             brands: [brand.toUpperCase()],
@@ -103,6 +105,7 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
           }),
         };
         const first = await repo.list(args);
+        assert.equal(first.items.length, first.total);
         assert.deepEqual(
           first.items.slice(0, 3).map((item) => item.id),
           [multiCategory.id, ...[older.id, tie.id].sort()],
@@ -210,12 +213,10 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
         const browse = await repo.list({
           ...args,
           seed: "browse-one",
-          take: 50,
         });
         const sameBrowse = await repo.list({
           ...args,
           seed: "browse-one",
-          take: 50,
         });
         assert.deepEqual(
           browse.items.slice(0, 4).map((item) => item.recommendation.bucket),
@@ -237,6 +238,7 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
           counts[bucket] = (counts[bucket] || 0) + 1;
           return counts;
         }, {});
+        assert.equal(browse.items.length, browse.total);
         assert.equal(buckets.personal, Math.round(browse.total * 0.7));
         assert.equal(buckets.new, Math.round(browse.total * 0.15));
         assert.equal(
@@ -259,7 +261,6 @@ test("PostgreSQL ranking: category memberships, category-specific sizes, eligibi
         const refreshed = await repo.list({
           ...args,
           seed: "browse-two",
-          take: 50,
         });
         assert.notDeepEqual(
           refreshed.items.map((item) => item.id),

@@ -9,12 +9,12 @@ const {
 function ticketDashboardBase(userId) {
   return Prisma.sql`
     SELECT t.ticket_id AS id, t.ticket_number AS reference, t.subject, s.code AS status,
-      p.code AS priority, COALESCE((q.payload->>'priorityScore')::int,0) AS priority_score, t.created_at, a.assignee_id, sla.due_at
+      p.code AS priority, t.priority_score AS priority_score, t.created_at, a.assignee_id, sla.due_at
     FROM support_tickets t
     JOIN ticket_statuses s ON s.ticket_status_id = t.current_status_id
     JOIN ticket_priorities p ON p.ticket_priority_id = t.ticket_priority_id
     LEFT JOIN ticket_assignments a ON a.ticket_id = t.ticket_id AND a.ended_at IS NULL
-    ${events.stateJoins}
+
     LEFT JOIN LATERAL (
       SELECT min(st.due_at) AS due_at FROM ticket_sla_targets st
       WHERE st.ticket_id = t.ticket_id AND st.achieved_at IS NULL AND ${events.activeTarget}

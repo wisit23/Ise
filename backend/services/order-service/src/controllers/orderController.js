@@ -16,6 +16,7 @@ const chatClient = require("../services/chatClient");
 const buyerActivityClient = require("../services/buyerActivityClient");
 const authClient = require("../services/authClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
+const { authorizeReservation } = require("../services/reservationAuthorization");
 const orderTransitionService = require("../services/orderTransitionService");
 const productSyncService = require("../services/productSyncService");
 const { money } = require("../models/money");
@@ -60,18 +61,7 @@ async function create(req, res, next) {
         campaignId: req.body.campaignId,
       },
       {
-        authorizeReservation: async (reservation) => {
-          const seller = await authClient.getUser(reservation.product.sellerId);
-          if (!seller) throw badRequest("product seller account was not found");
-          if (
-            restrictionsForStatus(seller.status).includes(CAPABILITY.SELLER)
-          ) {
-            throw forbidden("product seller's selling rights are restricted");
-          }
-          if (seller.status !== "ACTIVE") {
-            throw forbidden("product seller account is not active");
-          }
-        },
+        authorizeReservation,
       },
     );
     await buyerActivityClient.recordOrderActivity(order, "ORDER_PLACED", {

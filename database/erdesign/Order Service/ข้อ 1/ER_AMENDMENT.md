@@ -1,5 +1,13 @@
 # Order Service ข้อ 1 — approved ER amendments
 
+## Current approved operational storage amendment (2026-10-14)
+
+The user approved the new typed operational storage design in the current thread. It supersedes the earlier log-backed state direction recorded below for the affected fields. The editable ER has a new `Approved operational storage - current amendment` page. Original diagram pages and original PDF archives are retained; their old storage notes are historical, not the current direction.
+
+See [the complete current storage dictionary](../../../operational-storage.md) and [implementation evidence](../../../../log/evidence/operational-storage.md). New PDF exports are in `output/pdf/*-operational-storage-er.pdf`. Audit logs continue to record actions and preserve old events; operational readers use columns/dedicated tables. Shipping snapshots are a separate table keyed by shipping_id. Auth/Chat ownership and API behavior remain unchanged.
+
+
+
 This is an explicit amendment to the existing ER reference, not a claim that the historical PDF/drawing has been regenerated. Runtime authority: `backend/services/order-service/prisma/schema.prisma`. Agreements and measured implementation status: `log/loger/order-service/decisions.md`, `workflow-implementation.md`, and the overall work map.
 
 ## DisputeCase storage

@@ -1,10 +1,9 @@
 const { randomUUID } = require("node:crypto");
 const { Prisma } = require("../generated/prisma-client");
 const { calculateOrderTotals } = require("./money");
-const { STATE_FIELDS: DISPUTE_FIELDS } = require("./disputeWorkflowClient");
 const ORDER_FIELDS = ["productTitle", "campaignCode", "preDisputeStatus"];
 const VIRTUAL = {
-  order: ORDER_FIELDS,
+  order: [],
   checkout: ["addressSnapshot", "originalAmount", "ordersAmount"],
   shipping: ["addressSnapshot"],
 };
@@ -40,7 +39,7 @@ function fieldsFor(model) {
   return VIRTUAL[model] || [];
 }
 function readFieldsFor(model) {
-  return model === "disputeCase" ? DISPUTE_FIELDS : fieldsFor(model);
+  return fieldsFor(model);
 }
 
 // Selection rewriting is bounded to the named relations/delegates below.
@@ -74,51 +73,44 @@ function project(row, select) {
       .map(([key]) => [key, row[key]]),
   );
 }
-async function latestState(db, model, id) {
-  const rows = await db.$queryRaw`SELECT detail FROM order_log
-    WHERE action = ${ACTION[model]} AND detail::jsonb->>'entity_id' = ${id}
-    ORDER BY (detail::jsonb->>'revision')::bigint DESC LIMIT 1`;
-  return rows[0] ? JSON.parse(rows[0].detail) : null;
-}
-async function appendState(db, model, row, patch) {
-  const previous = await latestState(db, model, row.id);
-  let order;
-  if (model === "order") order = row;
-  else if (model === "shipping")
-    order = await db.order.findUnique({ where: { id: row.orderId } });
-  else
-    order = await db.order.findFirst({
-      where: { checkoutId: row.id },
-      orderBy: { id: "asc" },
-    });
-  if (!order)
-    throw new Error("Cannot preserve checkout address without a linked order");
-  const state =
-    model === "order"
-      ? {
-          productTitle: null,
-          campaignCode: null,
-          preDisputeStatus: null,
-          ...previous?.state,
-          ...patch,
-        }
-      : { addressSnapshot: patch.addressSnapshot };
-  await db.orderLog.create({
-    data: {
-      orderId: order.id,
-      buyerId: order.buyerId,
-      sellerId: order.sellerId,
-      actorId: order.buyerId,
-      action: ACTION[model],
-      detail: JSON.stringify({
-        schema_version: 1,
-        entity_id: row.id,
-        revision: (previous?.revision || 0) + 1,
-        ...(model !== "order" ? { address_id: row.addressId } : {}),
-        state,
-      }),
-    },
+const ADDRESS_FIELDS = [
+  "recipientName",
+  "phone",
+  "addressLine",
+  "subdistrict",
+  "district",
+  "province",
+  "postalCode",
+];
+async function addressState(db, model, id) {
+  if (model === "order") return null;
+  const row = await db[`${model}AddressSnapshot`].findUnique({
+    where: { [`${model}Id`]: id },
   });
+  return {
+    state: {
+      addressSnapshot: row
+        ? Object.fromEntries(ADDRESS_FIELDS.map((k) => [k, row[k]]))
+        : null,
+    },
+  };
+}
+async function saveAddress(db, model, row, patch) {
+  if (model === "order" || patch.addressSnapshot === undefined) return;
+  const delegate = db[`${model}AddressSnapshot`];
+  const where = { [`${model}Id`]: row.id };
+  if (patch.addressSnapshot === null) {
+    await delegate.deleteMany({ where });
+    return;
+  }
+  const data = Object.fromEntries(
+    ADDRESS_FIELDS.map((k) => [k, patch.addressSnapshot[k]]),
+  );
+  if (
+    Object.keys(patch.addressSnapshot).some((k) => !ADDRESS_FIELDS.includes(k))
+  )
+    throw new Error("Address snapshot contains unsupported fields");
+  await delegate.upsert({ where, create: { ...where, ...data }, update: data });
 }
 async function lockRow(db, model, id) {
   const table = {
@@ -145,22 +137,10 @@ function wrapClient(db, inTransaction = false) {
     if (Array.isArray(row))
       return Promise.all(row.map((item) => hydrate(model, item, args)));
     const result = { ...row };
-    // Nested Prisma relation reads cannot select fields backed by the parent's
-    // workflow log. Reuse its read facade, then hydrate any included order here.
-    if (model === "disputeCase" && row.id)
-      Object.assign(
-        result,
-        await db.disputeCase.findUnique({ where: { id: row.id } }),
-      );
     if (VIRTUAL[model]) {
-      const history = await latestState(db, model, row.id);
-      if (model === "order")
-        Object.assign(
-          result,
-          { productTitle: null, campaignCode: null, preDisputeStatus: null },
-          history?.state,
-        );
-      else result.addressSnapshot = history?.state.addressSnapshot ?? null;
+      const history = await addressState(db, model, row.id);
+      if (model !== "order")
+        result.addressSnapshot = history?.state.addressSnapshot ?? null;
       if (model === "checkout") {
         const orders = await db.order.findMany({
           where: { checkoutId: row.id },
@@ -220,7 +200,7 @@ function wrapClient(db, inTransaction = false) {
           )
         )
           throw new Error(
-            `Use explicit ${related} writes for log-backed nested ${op}`,
+            `Use explicit ${related} writes for address-snapshot nested ${op}`,
           );
       }
     }
@@ -231,7 +211,7 @@ function wrapClient(db, inTransaction = false) {
     for (const item of pending) {
       const row = await tx[item.model].findUnique({ where: { id: item.id } });
       await lockRow(tx, item.model, item.id);
-      await appendState(tx, item.model, row, item.patch);
+      await saveAddress(tx, item.model, row, item.patch);
     }
   }
   const delegates = {};
@@ -312,7 +292,7 @@ function wrapClient(db, inTransaction = false) {
               if (!changed.count) continue;
             }
             const after = await tx[model].findUnique({ where: { id: row.id } });
-            await appendState(tx, model, after, patch);
+            await saveAddress(tx, model, after, patch);
             count++;
           }
           return { count };
@@ -397,7 +377,7 @@ function wrapClient(db, inTransaction = false) {
   if (!inTransaction)
     exposed.$transaction = (callback, options) => {
       if (typeof callback !== "function")
-        throw new Error("Use an interactive transaction for order history");
+        throw new Error("Use an interactive transaction for address snapshots");
       return db.$transaction((tx) => callback(wrapClient(tx, true)), options);
     };
   return new Proxy(exposed, {
