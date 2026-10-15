@@ -63,6 +63,16 @@ test("form dropdown ignores hover and opens only on click", () => {
   expect(trigger).toHaveAttribute("aria-expanded", "false");
 });
 
+test("shows the placeholder without adding it to the selectable options", () => {
+  render(<Select label="ประเภทปัญหา" placeholder="เลือกประเภทปัญหา" value="" options={[
+    { value: "fraud", label: "หลอกลวงหรือฉ้อโกง" },
+  ]} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "เลือกประเภทปัญหา" }));
+  expect(screen.queryByRole("radio", { name: "เลือกประเภทปัญหา" })).not.toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "หลอกลวงหรือฉ้อโกง" })).toBeInTheDocument();
+});
+
 test("search filters options, keeps All available and clears when reopened", () => {
   const change = jest.fn();
   render(

@@ -74,7 +74,8 @@ export default function RadioSelect({
   });
 
   const selectedOption =
-    normalizedOptions.find((o) => o.value === value) || normalizedOptions[0];
+    normalizedOptions.find((o) => o.value === value) ||
+    (value === "" ? null : normalizedOptions[0]);
 
   const handleSelect = (val) => {
     if (disabled) return;

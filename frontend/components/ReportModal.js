@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createReportWithEvidence } from "../lib/api";
 import { getAccessToken } from "../lib/auth";
 import { REPORT_CATEGORIES } from "../lib/reportCategories";
+import Select from "./ui/Select";
 
 /** Buyer/Seller-facing "file a report" modal — reused wherever a report can
  * be filed against a seller (product page, store page). This
@@ -98,17 +99,16 @@ export default function ReportModal({
                 ร้านค้า: {targetLabel}
               </p>
             )}
-            <label className="mt-4 block text-xs font-medium text-gray-800" htmlFor="report-category">ประเภทปัญหา</label>
-            <select
+            <Select
               id="report-category"
               required
+              label="ประเภทปัญหา"
+              placeholder="เลือกประเภทปัญหา"
+              options={REPORT_CATEGORIES}
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
-            >
-              <option value="">เลือกประเภทปัญหา</option>
-              {REPORT_CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
+              className="mt-3"
+            />
             <textarea
               autoFocus
               value={reason}

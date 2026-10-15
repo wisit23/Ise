@@ -11,7 +11,9 @@ test("requires a category and sends the selected image with a seller report", as
   const file = new File(["image bytes"], "proof.png", { type: "image/png" });
   fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [file] } });
   fireEvent.change(screen.getByPlaceholderText("อธิบายปัญหาที่พบ..."), { target: { value: "สินค้าผิดรายละเอียด" } });
-  fireEvent.change(screen.getByLabelText("ประเภทปัญหา"), { target: { value: "MISLEADING_INFORMATION" } });
+  fireEvent.click(screen.getByRole("button", { name: "เลือกประเภทปัญหา" }));
+  expect(screen.queryByRole("radio", { name: "เลือกประเภทปัญหา" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("radio", { name: "ข้อมูลร้านค้าหรือสินค้าไม่ตรงความจริง" }));
   fireEvent.click(screen.getByRole("button", { name: "ส่งรายงาน" }));
   await waitFor(() => expect(createReportWithEvidence).toHaveBeenCalledWith({
     targetId: "seller-1", category: "MISLEADING_INFORMATION", reason: "สินค้าผิดรายละเอียด", file,
