@@ -58,6 +58,7 @@ async function agentDashboard(req, res, next) {
       new Date(),
       ticketActivityBase(options.userId),
     );
+    data.csat = await require("./csat").stats(options.userId, options.days);
     res.set("Cache-Control", "private, no-store");
     res.json(data);
   } catch (error) {

@@ -65,7 +65,43 @@ function rejectSuspended(data) {
   });
 }
 
-export async function apiFetch(path, { method = "GET", body, token, signal } = {}) {
+// Opt-in deadline covers fetch, authentication refresh, and response decoding.
+// Callers without a deadline retain the existing cancellation behavior.
+export async function apiFetch(path, { timeoutMs, ...options } = {}) {
+  if (timeoutMs === undefined) return apiFetchRequest(path, options);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+    throw new RangeError("timeoutMs must be a positive number");
+  const controller = new AbortController();
+  const { signal } = options;
+  const cancel = () => controller.abort(signal.reason);
+  let timer;
+  let onAbort;
+  if (signal?.aborted) cancel();
+  else signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    const cancelled = new Promise((_, reject) => {
+      onAbort = () => reject(controller.signal.reason);
+      controller.signal.addEventListener("abort", onAbort, { once: true });
+      if (controller.signal.aborted) onAbort();
+      timer = setTimeout(() => {
+        controller.abort(Object.assign(
+          new Error("การเชื่อมต่อใช้เวลานานเกินไป กรุณาลองใหม่"),
+          { code: "REQUEST_TIMEOUT" },
+        ));
+      }, timeoutMs);
+    });
+    return await Promise.race([
+      apiFetchRequest(path, { ...options, signal: controller.signal }),
+      cancelled,
+    ]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
+    controller.signal.removeEventListener("abort", onAbort);
+  }
+}
+
+async function apiFetchRequest(path, { method = "GET", body, token, signal } = {}) {
   const authToken = token ?? getAccessToken();
 
   let res = await fetch(`${API_URL}${path}`, {
@@ -79,7 +115,9 @@ export async function apiFetch(path, { method = "GET", body, token, signal } = {
   });
 
   if (res.status === 401 && authToken) {
+    signal?.throwIfAborted();
     const newToken = await refreshAccessToken();
+    signal?.throwIfAborted();
     if (newToken) {
       res = await fetch(`${API_URL}${path}`, {
         signal,

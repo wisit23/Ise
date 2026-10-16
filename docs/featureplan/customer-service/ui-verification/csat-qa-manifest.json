@@ -1,0 +1,46 @@
+{
+  "createdAt": "2026-10-15T21:04:39.906Z",
+  "tickets": [
+    {
+      "role": "buyer",
+      "id": "b093b2dd-f102-4627-b7ee-bfe9b0313934",
+      "url": "http://localhost:3000/support/tickets/b093b2dd-f102-4627-b7ee-bfe9b0313934"
+    },
+    {
+      "role": "seller",
+      "id": "5d6b6f75-9c38-43fd-905b-5c931f04cbba",
+      "url": "http://localhost:3000/support/tickets/5d6b6f75-9c38-43fd-905b-5c931f04cbba"
+    },
+    {
+      "role": "buyer",
+      "id": "dd2bad93-09b4-4b2d-92e8-ae8a0b5e7e0f",
+      "preview": true,
+      "url": "http://localhost:3000/support/tickets/dd2bad93-09b4-4b2d-92e8-ae8a0b5e7e0f"
+    },
+    {
+      "role": "seller",
+      "id": "19b6f447-423c-419a-8477-130219e6adcd",
+      "preview": true,
+      "url": "http://localhost:3000/support/tickets/19b6f447-423c-419a-8477-130219e6adcd"
+    }
+  ],
+  "disputes": [
+    {
+      "id": "affc1387-09ed-4a62-8242-3421b770ac2f",
+      "preview": false,
+      "orderId": "csat-qa-order-fb774fdf-5b0a-4b66-87e7-66a59a9dd593",
+      "url": "http://localhost:3000/support/cases/csat-qa-order-fb774fdf-5b0a-4b66-87e7-66a59a9dd593"
+    },
+    {
+      "id": "f17e1fec-c993-430a-a5b4-4d2ef4a703b1",
+      "preview": true,
+      "orderId": "csat-qa-order-250ecaa1-6130-4c32-961e-badb280dd931",
+      "url": "http://localhost:3000/support/cases/csat-qa-order-250ecaa1-6130-4c32-961e-badb280dd931"
+    }
+  ],
+  "checks": [
+    "Buyer and seller tickets: eligibility, identity, validation, concurrent retry, persistence after closure",
+    "Disputes: independent buyer/seller responses, ownership, closed-state check, private feedback",
+    "Both dashboards count each response once and credit CS history after Admin handoff"
+  ]
+}

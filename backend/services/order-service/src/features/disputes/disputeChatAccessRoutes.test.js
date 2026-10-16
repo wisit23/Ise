@@ -40,3 +40,28 @@ test("dispute owner denies stale agents and allows case parties", async (t) => {
   assert.deepEqual((await call("new-agent", "AGENT")).body, { allowed: false, writable: false });
   assert.deepEqual((await call("admin-1", "ADMIN")).body, { allowed: true, writable: false });
 });
+
+test("escalating CS reads but cannot write while T&S reviews", async (t) => {
+  const previousToken = process.env.INTERNAL_SERVICE_TOKEN;
+  const originalDispute = disputeModel.findById;
+  const originalOrder = orderModel.findById;
+  t.after(() => {
+    process.env.INTERNAL_SERVICE_TOKEN = previousToken;
+    disputeModel.findById = originalDispute;
+    orderModel.findById = originalOrder;
+  });
+  process.env.INTERNAL_SERVICE_TOKEN = "unit-internal-token";
+  let status = "OPEN";
+  disputeModel.findById = async () => ({
+    orderId: "order-1", assignedTo: "ts-1", assignedRole: "TRUST_AND_SAFETY", escalatedBy: "cs-1", status,
+  });
+  orderModel.findById = async () => ({ buyerId: "buyer-1", sellerId: "seller-1" });
+  const app = express().use("/internal", router);
+  const call = (id) => request(app)
+    .get(`/internal/disputes/case-1/chat-access/${id}?role=AGENT&channel=DISPUTE_BUYER`)
+    .set("x-internal-token", "unit-internal-token");
+  assert.deepEqual((await call("cs-1")).body, { allowed: true, writable: false });
+  assert.deepEqual((await call("cs-2")).body, { allowed: false, writable: false });
+  status = "DECIDED";
+  assert.deepEqual((await call("cs-1")).body, { allowed: false, writable: false });
+});

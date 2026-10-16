@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { apiFetch, fetchAuthedBlobUrl } from "../../../../lib/api";
 import ConfirmDialog from "../../../ui/ConfirmDialog";
+import ReturnToCsDialog from "../../workspace/ReturnToCsDialog";
+import ReturnTaskResults from "../../workspace/ReturnTaskResults";
 
 const SIDES = [["buyer", "ผู้ซื้อ"], ["seller", "ผู้ขาย"], ["legacy", "ห้องเก่า"]];
 
@@ -17,6 +19,7 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
   const [cursor, setCursor] = useState(null);
   const [logsLoading, setLogsLoading] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
+  const [returning, setReturning] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,17 +54,27 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
     finally { setLogsLoading(false); }
   }
 
+  async function returnToCs({ reason: text, tasks }) {
+    const updated = await apiFetch(`/api/orders/disputes/${detail.id}/request-evidence`, {
+      method: "POST", token, body: { reason: text, tasks, version: detail.version },
+    });
+    setDetail(updated);
+    onUpdated?.();
+    if (updated.chatNoticeError) setError("ส่งกลับให้ CS แล้ว แต่ส่งประกาศเข้าแชทไม่สำเร็จ");
+  }
+
   async function action(kind) {
     if (!detail || busy || !reason.trim()) return;
     setBusy(true);
     setError("");
     try {
-      const url = kind === "MORE" ? "request-evidence" : "decision";
-      const body = { reason: reason.trim(), version: detail.version };
-      if (kind !== "MORE") {
-        body.decision = kind;
-        body.idempotencyKey = `${detail.id}:${detail.version}:${kind}`;
-      }
+      const url = "decision";
+      const body = {
+        reason: reason.trim(),
+        version: detail.version,
+        decision: kind,
+        idempotencyKey: `${detail.id}:${detail.version}:${kind}`,
+      };
       const updated = await apiFetch(`/api/orders/disputes/${detail.id}/${url}`, { method: "POST", token, body });
       setDetail(updated);
       apiFetch(`/api/orders/disputes/${detail.id}`, { token }).then(setDetail).catch((err) => console.error("Could not refresh dispute after action:", err));
@@ -113,9 +126,14 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
           <div><span className="block text-xs text-slate-500">CS ผู้ส่งต่อ</span><strong className="font-mono">{detail?.escalatedBy || "—"}</strong></div>
         </div>
         <section className="rounded-xl border bg-white p-4"><h3 className="font-bold">CS Memo</h3>
-          <p className="mt-2 text-sm"><b>ปัญหา:</b> {memo["ปัญหา"] || detail?.reason || dispute.reason}</p>
-          <p className="mt-1 text-sm"><b>ขาดอำนาจ:</b> {memo["ขาดอำนาจ"] || detail?.escalationNote || "ยังไม่มีสรุปจาก CS"}</p>
-          <p className="mt-1 text-sm"><b>ข้อเสนอแนะ:</b> {memo["ข้อเสนอแนะ"] || "ยังไม่มีข้อเสนอแนะ"}</p>
+          {detail?.escalationNote?.startsWith("ตอบกลับคำขอ")
+            // A follow-up memo is a checklist summary, not problem/authority fields.
+            ? <p className="mt-2 whitespace-pre-line text-sm">{detail.escalationNote}</p>
+            : <>
+              <p className="mt-2 text-sm"><b>ปัญหา:</b> {memo["ปัญหา"] || detail?.reason || dispute.reason}</p>
+              <p className="mt-1 text-sm"><b>ขาดอำนาจ:</b> {memo["ขาดอำนาจ"] || detail?.escalationNote || "ยังไม่มีสรุปจาก CS"}</p>
+              <p className="mt-1 text-sm"><b>ข้อเสนอแนะ:</b> {memo["ข้อเสนอแนะ"] || "ยังไม่มีข้อเสนอแนะ"}</p>
+            </>}
         </section>
         <section className="rounded-xl border bg-white p-4"><h3 className="mb-3 font-bold">หลักฐานเปรียบเทียบ</h3>
           <div className="grid grid-cols-2 gap-3">{parties.map(([id, label, border]) => <div key={label} className={`min-h-28 rounded-lg border p-3 ${border}`}><h4 className="mb-2 text-sm font-bold">{label}</h4>
@@ -131,17 +149,39 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
             <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">{messages.map((m) => <div key={m.id} className="rounded-lg border p-2 text-xs"><div className="mb-1 text-slate-500">{m.senderRole} · {new Date(m.createdAt).toLocaleString("th-TH")}</div><p className="whitespace-pre-wrap">{m.body || `[${m.type}]`}</p></div>)}</div>
           </div>}
         </section>
+        {detail && !detail.returnedAt && detail.returnTasks?.length > 0 && detail.status !== "DECIDED" && (
+          <section className="rounded-xl border border-emerald-200 bg-white p-4">
+            <h3 className="font-bold">ผลจาก CS ตามที่ขอไว้</h3>
+            <p className="mt-1 text-xs text-slate-500">เหตุผลที่ตีกลับ: {detail.returnReason}</p>
+            <ReturnTaskResults tasks={detail.returnTasks} />
+          </section>
+        )}
         <section className="rounded-xl border bg-white p-4"><h3 className="font-bold">Verdict Console</h3>
           {detail?.status === "DECIDED" ? <p className="mt-2 text-sm">{detail.decision === "APPROVE_REFUND" ? "คืนเงินผู้ซื้อ" : "ปล่อยเงินให้ผู้ขาย"}: {detail.decisionReason}</p>
-          : detail?.assignedRole !== "ADMIN" ? <p className="mt-2 text-sm text-amber-700">รอ CS ส่งต่อเคสให้ Admin</p>
-          : !detail?.assignedTo ? <button type="button" disabled={busy} onClick={claim} className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white">รับเคสเพื่อพิจารณา</button>
-          : detail.assignedTo !== currentUserId ? <p className="mt-2 text-sm text-slate-600">เจ้าหน้าที่คนอื่นกำลังรับผิดชอบเคสนี้ ({detail.assignedTo})</p>
-          : <><textarea aria-label="เหตุผลการตัดสิน" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="ระบุเหตุผลการตัดสินหรือหลักฐานที่ต้องการเพิ่ม" className="mt-3 w-full rounded-lg border p-3 text-sm" />
-            <div className="mt-2 flex flex-wrap gap-2">{[["APPROVE_REFUND", "คืนเงินผู้ซื้อ"], ["RELEASE_ESCROW", "ปล่อยเงินให้ผู้ขาย"], ["MORE", "ตีกลับขอหลักฐานเพิ่ม"]].map(([value, label]) => <button key={value} type="button" disabled={busy || !reason.trim()} onClick={() => setPendingAction(value)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{label}</button>)}</div>
+          : !detail ? <p className="mt-2 text-sm text-slate-500">กำลังโหลด…</p>
+          : !["ADMIN", "TRUST_AND_SAFETY"].includes(detail.assignedRole) ? (
+            detail.returnedAt
+              ? <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p className="font-semibold">ส่งกลับให้ CS แล้ว · รอ CS ส่งต่อกลับมา</p>
+                  <ReturnTaskResults tasks={detail.returnTasks} />
+                </div>
+              : <p className="mt-2 text-sm text-amber-700">เคสอยู่ที่ CS ยังไม่ได้ส่งต่อมา</p>)
+          : !detail.assignedTo ? <button type="button" disabled={busy || !detail.capabilities?.canClaim} onClick={claim} className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">รับเคสเพื่อพิจารณา</button>
+          : detail.assignedTo !== currentUserId ? <p className="mt-2 text-sm text-slate-600">เจ้าหน้าที่คนอื่นกำลังรับผิดชอบเคสนี้ ({detail.assigneeName || detail.assignedTo})</p>
+          : <>
+            {detail.capabilities?.canDecide !== false && <>
+              <textarea aria-label="เหตุผลการตัดสิน" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="ระบุเหตุผลการตัดสิน" className="mt-3 w-full rounded-lg border p-3 text-sm" />
+              <div className="mt-2 flex flex-wrap gap-2">{[["APPROVE_REFUND", "คืนเงินผู้ซื้อ"], ["RELEASE_ESCROW", "ปล่อยเงินให้ผู้ขาย"]].map(([value, label]) => <button key={value} type="button" disabled={busy || !reason.trim()} onClick={() => setPendingAction(value)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{label}</button>)}</div>
+            </>}
+            {detail.capabilities?.canRequestEvidence !== false && <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3">
+              <p className="text-xs text-slate-600">ข้อมูลยังไม่พอตัดสิน? ส่งกลับให้ CS พร้อมระบุสิ่งที่ต้องทำ</p>
+              <button type="button" disabled={busy} onClick={() => setReturning(true)} className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-50">ตีกลับให้ CS</button>
+            </div>}
           </>}
         </section>
       </div>
-      <ConfirmDialog open={Boolean(pendingAction)} busy={busy} onCancel={() => setPendingAction(null)} onConfirm={() => action(pendingAction)} title={pendingAction === "APPROVE_REFUND" ? "ยืนยันคืนเงินผู้ซื้อ" : pendingAction === "RELEASE_ESCROW" ? "ยืนยันปล่อยเงินให้ผู้ขาย" : "ยืนยันขอหลักฐานเพิ่ม"} description={reason} confirmLabel="ยืนยันคำสั่ง" tone={pendingAction === "MORE" ? "primary" : "danger"} />
+      <ConfirmDialog open={Boolean(pendingAction)} busy={busy} onCancel={() => setPendingAction(null)} onConfirm={() => action(pendingAction)} title={pendingAction === "APPROVE_REFUND" ? "ยืนยันคืนเงินผู้ซื้อ" : "ยืนยันปล่อยเงินให้ผู้ขาย"} description={reason} confirmLabel="ยืนยันคำสั่ง" tone="danger" />
+      <ReturnToCsDialog open={returning} onClose={() => setReturning(false)} onSubmit={returnToCs} />
     </section>
   </div>;
 }

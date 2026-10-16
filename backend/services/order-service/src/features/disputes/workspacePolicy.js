@@ -10,8 +10,16 @@ function disputeCapabilities(dispute, userId, role, roles = []) {
     ts ||
     (cs && !["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) && (!dispute.assignedTo || owner));
   const team = dispute.assignedRole;
+  // The CS agent who escalated keeps a read-only view while T&S reviews.
+  const watching =
+    cs && !admin && !ts && live &&
+    dispute.escalatedBy === userId &&
+    ["ADMIN", "TRUST_AND_SAFETY"].includes(team);
   return {
-    canViewDetail: accessible,
+    canViewDetail: accessible || watching,
+    isWatching: watching,
+    isReturned:
+      live && team === "CUSTOMER_SERVICE" && Boolean(dispute.returnedAt),
     canClaim:
       accessible &&
       live &&
@@ -38,6 +46,8 @@ function disputeCapabilities(dispute, userId, role, roles = []) {
     canRequestEvidence: live && owner && ((admin && team === "ADMIN") || ((ts || admin) && team === "TRUST_AND_SAFETY")),
     readOnlyReason: !live
       ? "ข้อพิพาทนี้ตัดสินแล้ว"
+      : watching
+        ? "ส่งต่อให้ Trust & Safety แล้ว ดูได้อย่างเดียวระหว่างรอตรวจ"
       : admin || ts
         ? "ดูประวัติสนทนาแบบอ่านอย่างเดียว"
         : !owner

@@ -195,6 +195,25 @@ async function requestMoreEvidence(req, res, next) {
         roles: req.userRoles,
         reason: req.body.reason,
         version: req.body.version,
+        tasks: req.body.tasks,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateReturnTask(req, res, next) {
+  try {
+    res.json(
+      await disputeService.updateReturnTask({
+        disputeId: req.params.id,
+        taskId: req.params.taskId,
+        userId: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+        done: req.body.done,
+        note: req.body.note,
       }),
     );
   } catch (err) {
@@ -288,6 +307,7 @@ async function chatAttachment(req, res, next) {
 }
 
 module.exports = {
+  updateReturnTask,
   chatAttachment,
   chatHistory,
   dashboard,

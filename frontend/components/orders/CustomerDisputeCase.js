@@ -16,6 +16,7 @@ import Button from "../ui/Button";
 import Alert from "../ui/Alert";
 import EmbeddedChat from "../support/EmbeddedChat";
 import DisputeEvidence from "./DisputeEvidence";
+import CsatRating from "../support/CsatRating";
 import styles from "./disputeCase.module.css";
 
 export default function CustomerDisputeCase({ orderId }) {
@@ -224,6 +225,13 @@ export default function CustomerDisputeCase({ orderId }) {
                     </p>
                     <time>{caseDate(dispute.decidedAt)}</time>
                   </section>
+                )}
+                {decided && side && (
+                  <CsatRating
+                    key={`${dispute.id}:${user?.id}`}
+                    endpoint={`/api/orders/disputes/${dispute.id}/csat`}
+                    caseLabel="ข้อพิพาทนี้"
+                  />
                 )}
                 <section className={styles.card}>
                   <div className={styles.cardHeading}>

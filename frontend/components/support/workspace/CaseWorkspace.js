@@ -28,6 +28,8 @@ import CaseContextPanel from "./CaseContextPanel";
 import EscalationMemoDialog from "./EscalationMemoDialog";
 import EvidenceInspector from "./EvidenceInspector";
 import StaffReassignDialog from "./StaffReassignDialog";
+import ReturnToCsDialog from "./ReturnToCsDialog";
+import CaseHandoffBanner from "./CaseHandoffBanner";
 import layoutStyles from "./workspace.module.css";
 import contextStyles from "./CaseContextPanel.module.css";
 
@@ -96,8 +98,8 @@ export default function CaseWorkspace({
   const [decision, setDecision] = useState(null);
   const [reason, setReason] = useState("");
   const [decisionError, setDecisionError] = useState("");
-  const [infoReason, setInfoReason] = useState("");
-  const [infoError, setInfoError] = useState("");
+  const [returnDialog, setReturnDialog] = useState(false);
+  const deniedRoom = useRef(null);
   const [modeHost, setModeHost] = useState(null);
   useEffect(() => {
     setModeHost(document.getElementById("workspace-view-control"));
@@ -118,6 +120,28 @@ export default function CaseWorkspace({
   const elevated = [user.role, ...(user.roles || [])].some((role) =>
     ["ADMIN", "TRUST_AND_SAFETY"].includes(role),
   );
+  // The chat inbox keeps three tabs; the table view carries the full set.
+  const sidebarScopes = elevated
+    ? [
+        { value: "mine", label: "งานของฉัน" },
+        { value: "unassigned", label: "รอรับเรื่อง" },
+        { value: "all", label: "ทุกงาน" },
+      ]
+    : [
+        { value: "mine", label: "งานของฉัน" },
+        { value: "unassigned", label: "รอรับเรื่อง" },
+        { value: "escalated", label: "ส่งต่อแล้ว" },
+      ];
+  const tableScopes = [
+    { value: "mine", label: "งานของฉัน" },
+    ...(dispute && !elevated ? [{ value: "returned", label: "ตีกลับจาก T&S" }] : []),
+    { value: "unassigned", label: "รอรับเรื่อง" },
+    {
+      value: "escalated",
+      label: elevated ? "เคสที่ถูกส่งต่อ" : `ส่งต่อแล้ว (รอ ${dispute ? "T&S" : "Admin"})`,
+    },
+    { value: "all", label: "ทุกงาน" },
+  ];
   const setView = (value) => {
     if (!chatBusy && !busy) w.update({ view: value });
   };
@@ -134,6 +158,11 @@ export default function CaseWorkspace({
     setViewMode?.(state.view);
   }, [state.view, setViewMode]);
   useEffect(() => {
+    // Table-only tabs fold back into "mine" in the compact chat inbox.
+    if (state.view === "workspace" && !sidebarScopes.some((item) => item.value === state.scope))
+      w.update({ scope: "mine", page: 1 }, true);
+  }, [state.view, state.scope, elevated, w.update]);
+  useEffect(() => {
     setRoom(null);
     setJoining(false);
     setRoomError("");
@@ -143,8 +172,7 @@ export default function CaseWorkspace({
     setDecision(null);
     setNote("");
     setReason("");
-    setInfoReason("");
-    setInfoError("");
+    setReturnDialog(false);
     setChatBusy(false);
     roomGeneration.current++;
   }, [state.selectedId]);
@@ -184,6 +212,7 @@ export default function CaseWorkspace({
     if (
       !dispute ||
       caps.canReply ||
+      caps.isWatching ||
       (selected.status === "DECIDED" && selected.assignedTo === user.id) ||
       elevated
     ) {
@@ -221,8 +250,10 @@ export default function CaseWorkspace({
     else
       toast.success(
         action === "escalate" || body?.status === "ESCALATED"
-          ? (dispute ? "ส่งต่อให้ Trust & Safety แล้ว" : "ส่งต่อให้ Admin แล้ว")
-          : "บันทึกเรียบร้อย",
+          ? `ส่งต่อให้ ${dispute ? "Trust & Safety" : "Admin"} แล้ว ติดตามได้ที่แท็บ “ส่งต่อแล้ว”`
+          : action === "request-evidence"
+            ? "ส่งกลับให้ CS แล้ว"
+            : "บันทึกเรียบร้อย",
       );
     if (
       action === "escalate" ||
@@ -232,6 +263,16 @@ export default function CaseWorkspace({
       setContext(false);
       w.update({ selectedId: null });
     }
+    return result;
+  }
+  async function updateReturnTask(taskId, patch) {
+    const id = selected.id;
+    const result = await apiFetch(
+      `${base}/${encodeURIComponent(id)}/return-tasks/${encodeURIComponent(taskId)}`,
+      { method: "PATCH", token, body: patch },
+    );
+    w.patchDetail(id, result);
+    w.refreshQueue();
     return result;
   }
   async function claim() {
@@ -358,7 +399,21 @@ export default function CaseWorkspace({
     {
       key: "status",
       header: "สถานะ",
-      render: (row) => labels[row.status] || row.status,
+      render: (row) => (
+        <div className="flex flex-col items-start gap-1">
+          <span>{labels[row.status] || row.status}</span>
+          {row.capabilities?.isReturned && (
+            <span className="rounded border border-amber-300 bg-amber-50 px-1.5 text-[11px] font-semibold text-amber-800">
+              ตีกลับจาก T&S
+            </span>
+          )}
+          {(row.capabilities?.isWatching || (!dispute && row.status === "ESCALATED")) && (
+            <span className="rounded border border-blue-200 bg-blue-50 px-1.5 text-[11px] font-semibold text-blue-800">
+              รอ{dispute ? " T&S" : " Admin"}ตรวจ
+            </span>
+          )}
+        </div>
+      ),
     },
     {
       key: "priority",
@@ -464,12 +519,8 @@ export default function CaseWorkspace({
         <div
           className={`min-h-0 flex-1 overflow-auto p-4 sm:p-6 ${layoutStyles.surfaceEnter}`}
         >
-          <div className="mb-4 flex gap-5 border-b border-slate-200">
-            {[
-              ["mine", "งานของฉัน"],
-              ["unassigned", "รอรับเรื่อง"],
-              ["all", "ทุกงาน"],
-            ].map(([value, label]) => (
+          <div className="mb-4 flex gap-5 overflow-x-auto border-b border-slate-200">
+            {tableScopes.map(({ value, label }) => (
               <Button
                 key={value}
                 variant="ghost"
@@ -515,6 +566,7 @@ export default function CaseWorkspace({
               selectedTicketId={state.selectedId}
               onSelectTicket={select}
               scope={state.scope}
+              scopes={sidebarScopes}
               onScopeChange={(value) => filter("scope", value)}
               search={state.search}
               onSearchChange={(value) => filter("search", value)}
@@ -619,6 +671,14 @@ export default function CaseWorkspace({
                     </Button>
                   </div>
                 </header>
+                <CaseHandoffBanner
+                  key={selected.id}
+                  caseItem={selected}
+                  caps={caps}
+                  busy={busy || chatBusy}
+                  onEscalate={() => setMemo(true)}
+                  onTaskChange={updateReturnTask}
+                />
                 {!mapped.some((row) => row.id === selected.id) &&
                   !w.loading && (
                     <p className="border-b bg-amber-50 px-4 py-2 text-xs text-amber-800">
@@ -747,7 +807,12 @@ export default function CaseWorkspace({
                               selected.requesterId,
                             )
                       }
-                      onAccessDenied={w.refresh}
+                      onAccessDenied={() => {
+                        // Refresh once per room; a persistent 403 must not remount-loop.
+                        if (deniedRoom.current === room.conversationId) return;
+                        deniedRoom.current = room.conversationId;
+                        w.refresh();
+                      }}
                       key={room.conversationId}
                       conversationId={room.conversationId}
                       maxHeight="100%"
@@ -898,37 +963,15 @@ export default function CaseWorkspace({
                       </>
                     )}
                     {caps.canRequestEvidence && (
-                      <div className="space-y-2">
-                        <textarea
-                          aria-label="เหตุผลขอหลักฐานเพิ่มเติม"
-                          value={infoReason}
-                          onChange={(e) => setInfoReason(e.target.value)}
-                          rows={2}
-                          className="w-full rounded border p-2 text-sm"
-                          placeholder="ระบุข้อมูลที่ต้องการเพิ่มเติม"
-                        />
-                        {infoError && <Alert>{infoError}</Alert>}
-                        <Button
-                          variant="secondary"
-                          className={contextStyles.actionInfo}
-                          icon="post_add"
-                          disabled={busy || !infoReason.trim()}
-                          onClick={async () => {
-                            setInfoError("");
-                            try {
-                              await run("request-evidence", {
-                                version: selected.version,
-                                reason: infoReason.trim(),
-                              });
-                              setInfoReason("");
-                            } catch (err) {
-                              setInfoError(err.message);
-                            }
-                          }}
-                        >
-                          ขอหลักฐานเพิ่มเติม
-                        </Button>
-                      </div>
+                      <Button
+                        variant="secondary"
+                        className={contextStyles.actionInfo}
+                        icon="assignment_return"
+                        disabled={busy}
+                        onClick={() => setReturnDialog(true)}
+                      >
+                        ส่งกลับให้ CS ดำเนินการเพิ่ม
+                      </Button>
                     )}
                     {selected.status === "DECIDED" && (
                       <div className="rounded bg-emerald-50 p-3 text-sm">
@@ -1110,8 +1153,22 @@ export default function CaseWorkspace({
         </div>
       )}
       <Modal open={Boolean(safetyChat)} onClose={()=>setSafetyChat(null)} title="ประวัติผู้ซื้อกับร้านค้า" size="lg">{safetyChat && <SafetyOrderChatPanel dispute={safetyChat} token={token} onClose={()=>setSafetyChat(null)}/>}</Modal>
+      <ReturnToCsDialog
+        key={`return-${selected?.id || "empty"}`}
+        open={returnDialog}
+        onClose={() => setReturnDialog(false)}
+        onSubmit={({ reason: text, tasks }) =>
+          run("request-evidence", {
+            version: selected.version,
+            reason: text,
+            tasks,
+          })
+        }
+      />
       <EscalationMemoDialog
         dispute={dispute}
+        returnTasks={caps.isReturned ? selected?.returnTasks : undefined}
+        onTaskChange={updateReturnTask}
         key={selected?.id || "empty"}
         open={memo}
         onClose={() => setMemo(false)}

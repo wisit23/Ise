@@ -203,7 +203,7 @@ async function listQueue({
   retention = require("@reloop/shared/src/caseRetention").retentionView(retention, role);
   if (work && !["open", "overdue", "soon", "reply"].includes(work))
     throw badRequest("invalid work filter");
-  if (scope && !["mine", "unassigned", "all"].includes(scope))
+  if (scope && !["mine", "unassigned", "escalated", "all"].includes(scope))
     throw badRequest("invalid scope");
   if (status && !STATUSES.includes(status)) throw badRequest("invalid status");
   if (

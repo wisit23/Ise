@@ -139,6 +139,7 @@ model OrderLog {
 }
 
 model DisputeCase {
+  satisfaction CustomerSatisfaction[]
   archivedAt DateTime? @map("archived_at")
   deletedAt DateTime? @map("deleted_at")
   retentionUntil DateTime? @map("retention_until")
@@ -163,6 +164,10 @@ model DisputeCase {
   verdictKey       String?           @unique @map("verdict_key")
   escalationNote   String?           @map("escalation_note")
   escalatedBy      String?           @map("escalated_by")
+  returnReason     String?           @map("return_reason")
+  returnTasks      Json              @default("[]") @map("return_tasks")
+  returnedBy       String?           @map("returned_by")
+  returnedAt       DateTime?         @map("returned_at")
   priority         String            @default("NORMAL")
   priorityScore    Int               @default(0) @map("priority_score")
   riskReportCount  Int               @default(0) @map("risk_report_count")
@@ -173,6 +178,7 @@ model DisputeCase {
   decisionDueAt    DateTime?         @map("decision_due_at")
 
   @@index([status, assignedRole, slaExpiresAt])
+  @@index([escalatedBy])
 
   @@map("dispute_case")
   @@index([archivedAt, deletedAt, decidedAt])
@@ -325,4 +331,18 @@ model ProductSyncJob {
   @@index([processedAt, createdAt])
   @@index([orderId])
   @@map("order_product_sync_jobs")
+}
+
+model CustomerSatisfaction {
+  caseId String @map("case_id")
+  respondentId String @map("respondent_id")
+  respondentSide String @map("respondent_side")
+  agentId String? @map("agent_id")
+  rating Int @db.SmallInt
+  comment String @default("")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  case DisputeCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  @@id([caseId, respondentId])
+  @@index([agentId, createdAt])
+  @@map("customer_satisfaction")
 }

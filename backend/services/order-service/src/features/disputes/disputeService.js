@@ -44,12 +44,14 @@ function actingAgentRole(role, roles, requiredRole) {
   return null;
 }
 
-async function assertAccess({ dispute, userId, role, roles }) {
+async function assertAccess({ dispute, userId, role, roles, allowWatcher = false }) {
   if (dispute.deletedAt && !hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
     throw notFound("dispute not found");
   if (hasRole(role, roles, "ADMIN") || hasRole(role, roles, "TRUST_AND_SAFETY"))
     return dispute;
   if (hasRole(role, roles, "CUSTOMER_SERVICE")) {
+    if (allowWatcher && disputeCapabilities(dispute, userId, role, roles).isWatching)
+      return dispute;
     if (["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole))
       throw forbidden(`this dispute is in the ${dispute.assignedRole === "ADMIN" ? "Admin" : "Trust & Safety"} queue`);
     if (!dispute.assignedTo || dispute.assignedTo === userId) return dispute;
@@ -58,6 +60,18 @@ async function assertAccess({ dispute, userId, role, roles }) {
   const order = await orderModel.findById(dispute.orderId);
   if (order.buyerId === userId || order.sellerId === userId) return dispute;
   throw forbidden("you do not have access to this dispute");
+}
+
+/** Internal to-do list T&S attaches when returning a case to CS. */
+function normalizeReturnTasks(tasks) {
+  if (tasks === undefined || tasks === null) return [];
+  if (!Array.isArray(tasks) || tasks.some((task) => typeof task !== "string"))
+    throw badRequest("tasks must be a list of text items");
+  const items = tasks.map((task) => task.trim()).filter(Boolean);
+  if (items.length > 10) throw badRequest("tasks must not exceed 10 items");
+  if (items.some((task) => task.length > 300))
+    throw badRequest("each task must not exceed 300 characters");
+  return items;
 }
 
 /** WF-08 step 1-2: buyer opens a dispute on a completed order. */
@@ -125,7 +139,7 @@ async function open({ orderId, userId, reason, disputeType }) {
 async function getById({ disputeId, userId, role, roles }) {
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
-  await assertAccess({ dispute, userId, role, roles });
+  await assertAccess({ dispute, userId, role, roles, allowWatcher: true });
   if (isAgent(role, roles)) {
     const order = await orderModel.findById(dispute.orderId);
     const summary = order
@@ -228,6 +242,8 @@ async function joinConversation({ disputeId, userId, role, roles, side }) {
     hasRole(role, roles, "TRUST_AND_SAFETY")
   ) {
     chatRole = "ADMIN";
+  } else if (dispute.capabilities?.isWatching) {
+    chatRole = "AGENT";
   } else if (hasRole(role, roles, "CUSTOMER_SERVICE")) {
     if (
       dispute.assignedRole === "TRUST_AND_SAFETY" ||
@@ -254,7 +270,10 @@ async function joinConversation({ disputeId, userId, role, roles, side }) {
   return {
     conversationId,
     side,
-    readOnly: chatRole === "ADMIN" || dispute.status === "DECIDED",
+    readOnly:
+      chatRole === "ADMIN" ||
+      dispute.status === "DECIDED" ||
+      Boolean(dispute.capabilities?.isWatching),
   };
 }
 
@@ -280,7 +299,7 @@ async function listQueue({
     hasRole(role, roles, "ADMIN") ? "ADMIN" : hasRole(role, roles, "TRUST_AND_SAFETY") ? "TRUST_AND_SAFETY" : role);
   if (work && !["open", "overdue", "soon", "reply"].includes(work))
     throw badRequest("invalid work filter");
-  if (scope && !["mine", "unassigned", "all"].includes(scope))
+  if (scope && !["mine", "unassigned", "escalated", "returned", "all"].includes(scope))
     throw badRequest("invalid scope");
   if (status && !["OPEN", "NEEDS_INFO", "DECIDED"].includes(status))
     throw badRequest("invalid status");
@@ -393,7 +412,7 @@ async function addEvidence({ disputeId, userId, role, roles, file }) {
 async function viewEvidence({ disputeId, evidenceId, userId, role, roles }) {
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
-  await assertAccess({ dispute, userId, role, roles });
+  await assertAccess({ dispute, userId, role, roles, allowWatcher: true });
 
   const evidence = await disputeModel.findEvidence(disputeId, evidenceId);
   if (!evidence) throw notFound("evidence not found");
@@ -758,10 +777,12 @@ async function requestMoreEvidence({
   roles,
   reason,
   version,
+  tasks,
 }) {
   if (!hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
     throw forbidden("only Trust & Safety can request more evidence");
   if (!reason?.trim()) throw badRequest("reason is required");
+  const checklist = normalizeReturnTasks(tasks);
   if (typeof version !== "number") throw badRequest("version is required");
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
@@ -775,6 +796,7 @@ async function requestMoreEvidence({
     version,
     actorId: userId,
     reason: reason.trim(),
+    tasks: checklist,
   });
   if (!updated) throw conflict("dispute changed; reload and retry");
   const order = await orderModel.findById(updated.orderId);
@@ -794,6 +816,29 @@ async function requestMoreEvidence({
     }
   }
   return updated;
+}
+
+/** The CS owner records progress on a task T&S asked for. */
+async function updateReturnTask({ disputeId, taskId, userId, role, roles, done, note }) {
+  if (done !== undefined && typeof done !== "boolean")
+    throw badRequest("done must be true or false");
+  if (note !== undefined && typeof note !== "string")
+    throw badRequest("note must be text");
+  if (note && note.trim().length > 500)
+    throw badRequest("note must not exceed 500 characters");
+  const dispute = await disputeModel.findById(disputeId);
+  if (!dispute) throw notFound("dispute not found");
+  if (!disputeCapabilities(dispute, userId, role, roles).isReturned || dispute.assignedTo !== userId)
+    throw forbidden("only the assigned CS agent can update returned tasks");
+  const updated = await disputeModel.updateReturnTask({
+    id: disputeId,
+    taskId,
+    actorId: userId,
+    done,
+    note: note === undefined ? undefined : note.trim(),
+  });
+  if (!updated) throw conflict("task not found or case changed; reload and retry");
+  return { returnTasks: updated.returnTasks, returnedAt: updated.returnedAt };
 }
 
 async function getAuditTranscript({
@@ -1025,6 +1070,7 @@ async function getDashboardMetrics({ role, roles }) {
 
 
 module.exports = {
+  updateReturnTask,
   getDashboardMetrics, getChatHistory, getChatAttachment,
   setEvidenceDeadline,
   async eligibleStaff({ disputeId, userId, role, roles, q, page, limit }) {

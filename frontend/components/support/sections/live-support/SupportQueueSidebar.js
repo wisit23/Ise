@@ -12,6 +12,12 @@ import {
   PRIORITY_STYLE,
 } from "../../../../lib/supportConstants";
 
+const DEFAULT_SCOPES = [
+  { value: "mine", label: "งานของฉัน" },
+  { value: "unassigned", label: "รอรับเรื่อง" },
+  { value: "all", label: "ทุกงาน" },
+];
+
 export default function SupportQueueSidebar({
   tickets = [],
   selectedTicketId,
@@ -30,6 +36,7 @@ export default function SupportQueueSidebar({
   pagination,
   unreadCounts,
   unreadError = false,
+  scopes = DEFAULT_SCOPES,
 }) {
   const unreadById = new Map((unreadCounts?.items || []).map(item => [item.id, item.count]));
   const unreadBadge = (value, variant) => value > 0 ? (
@@ -55,21 +62,21 @@ export default function SupportQueueSidebar({
         {unreadError && <p role="status" className="text-xs text-amber-700">อัปเดตจำนวนข้อความยังไม่อ่านไม่สำเร็จ</p>}
         <div
           className={`${styles.scopeTabs} relative mt-2 border-b border-slate-200`}
+          style={{ gridTemplateColumns: `repeat(${scopes.length}, minmax(0, 1fr))` }}
           role="group"
           aria-label="เลือกคิวงาน"
         >
-          <span
-            aria-hidden="true"
-            className={motion.indicator}
-            style={{
-              transform: `translateX(${Math.max(0, ["mine", "unassigned", "all"].indexOf(scope)) * 100}%)`,
-            }}
-          />
-          {[
-            { value: "mine", label: "งานของฉัน" },
-            { value: "unassigned", label: "รอรับเรื่อง" },
-            { value: "all", label: "ทุกงาน" },
-          ].map((item) => (
+          {scopes.some((item) => item.value === scope) && (
+            <span
+              aria-hidden="true"
+              className={motion.indicator}
+              style={{
+                width: `${100 / scopes.length}%`,
+                transform: `translateX(${scopes.findIndex((item) => item.value === scope) * 100}%)`,
+              }}
+            />
+          )}
+          {scopes.map((item) => (
             <button
               key={item.value}
               type="button"
@@ -208,14 +215,18 @@ export default function SupportQueueSidebar({
                   ? "ยังไม่มีงานในความดูแล"
                   : scope === "unassigned"
                     ? "ไม่มีงานรอรับเรื่อง"
-                    : "ยังไม่มี Ticket"}
+                    : scope === "escalated"
+                      ? "ไม่มีเคสที่รอผลตรวจ"
+                      : "ยังไม่มี Ticket"}
             </p>
             <p className="mt-2 text-sm leading-relaxed text-slate-500">
               {search.trim()
                 ? "ลองใช้เลข Ticket หรือคำค้นที่สั้นลง"
                 : scope === "mine"
                   ? "เลือกงานที่รอรับเรื่องเพื่อเริ่มดูแลลูกค้า"
-                  : "รายการใหม่จะแสดงที่นี่เมื่อโหลดคิวอีกครั้ง"}
+                  : scope === "escalated"
+                    ? "เคสที่คุณส่งต่อจะแสดงที่นี่จนกว่าจะได้ผลตรวจ"
+                    : "รายการใหม่จะแสดงที่นี่เมื่อโหลดคิวอีกครั้ง"}
             </p>
             {search.trim() ? (
               <button
@@ -273,6 +284,18 @@ export default function SupportQueueSidebar({
                   </p>
                   {unreadBadge(unreadById.get(t.id), "case")}
                 </div>
+                {t.capabilities?.isReturned && (
+                  <span className={styles.returnedFlag}>
+                    <span aria-hidden="true" className="material-symbols-outlined">assignment_return</span>
+                    ตีกลับจาก T&S · ทำแล้ว {(t.returnTasks || []).filter((task) => task.done).length}/{t.returnTasks?.length || 0}
+                  </span>
+                )}
+                {(t.capabilities?.isWatching || (scope === "escalated" && domain === "tickets")) && (
+                  <span className={styles.waitingFlag}>
+                    <span aria-hidden="true" className="material-symbols-outlined">hourglass_top</span>
+                    {domain === "disputes" ? "รอ T&S ตรวจ" : "รอ Admin ตรวจ · ยังคุยกับลูกค้าได้"}
+                  </span>
+                )}
                 <div className={`${styles.cardStatus} mt-1 flex w-full flex-wrap items-center gap-1.5`}>
                   <Badge
                     text={statusLabels[t.status] || t.status}

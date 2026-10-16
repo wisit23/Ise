@@ -22,6 +22,8 @@ router.get("/queue", requireAuth, ticketController.queue);
 router.get("/dashboard", requireAuth, ticketController.dashboard);
 
 router.post("/", requireAuth, ticketController.create);
+router.get("/:id/csat", requireAuth, require("./csat").get);
+router.post("/:id/csat", requireAuth, require("./csat").post);
 router.get("/:id", requireAuth, ticketController.getOne);
 router.get("/:id/conversation", requireAuth, ticketController.getConversation);
 router.post("/:id/conversation", requireAuth, ticketController.joinChat);

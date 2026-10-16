@@ -315,12 +315,23 @@ function queueFilter({
     clauses.push(
       Prisma.sql`(a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
     );
+  else if (scope === "escalated")
+    // Escalated cases; CS sees only those it handed off and still chats on.
+    clauses.push(
+      role === "CUSTOMER_SERVICE"
+        ? Prisma.sql`s.code = 'ESCALATED' AND t.chat_responder_id = ${assigneeId}`
+        : Prisma.sql`s.code = 'ESCALATED'`,
+    );
   else if (scope === "all" && role === "CUSTOMER_SERVICE")
     clauses.push(
       Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
     );
   if (status) clauses.push(Prisma.sql`s.code = ${status}`);
-  else if (scope !== "all")
+  else if (scope === "mine")
+    clauses.push(Prisma.sql`s.code NOT IN ('CLOSED', 'ESCALATED')`);
+  else if (scope === "escalated") {
+    // already constrained to ESCALATED above
+  } else if (scope !== "all")
     clauses.push(
       Prisma.sql`(s.code NOT IN ('CLOSED', 'ESCALATED') OR (s.code='ESCALATED' AND t.chat_responder_id=${assigneeId}))`,
     );

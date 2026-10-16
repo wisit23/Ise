@@ -62,3 +62,25 @@ test("T&S owns final decisions while CS only investigates and escalates", () => 
   assert.equal(own.canEscalate, true);
   assert.equal(disputeCapabilities({ ...safety, status: "DECIDED" }, "ts", "TRUST_AND_SAFETY").canDecide, false);
 });
+
+test("escalating CS keeps a read-only view while T&S reviews", () => {
+  const escalated = { status: "OPEN", assignedRole: "TRUST_AND_SAFETY", assignedTo: "ts", escalatedBy: "cs" };
+  const caps = disputeCapabilities(escalated, "cs", "CUSTOMER_SERVICE");
+  assert.equal(caps.canViewDetail, true);
+  assert.equal(caps.isWatching, true);
+  assert.equal(caps.canReply, false);
+  assert.equal(caps.canEscalate, false);
+  assert.equal(caps.canReassign, false);
+  assert.match(caps.readOnlyReason, /Trust & Safety/);
+  assert.equal(disputeCapabilities(escalated, "other-cs", "CUSTOMER_SERVICE").canViewDetail, false);
+  assert.equal(disputeCapabilities({ ...escalated, status: "DECIDED" }, "cs", "CUSTOMER_SERVICE").isWatching, false);
+});
+
+test("a dispute returned by T&S is flagged for the CS owner", () => {
+  const returned = { status: "NEEDS_INFO", assignedRole: "CUSTOMER_SERVICE", assignedTo: "cs", escalatedBy: "cs", returnedAt: new Date() };
+  const caps = disputeCapabilities(returned, "cs", "CUSTOMER_SERVICE");
+  assert.equal(caps.isReturned, true);
+  assert.equal(caps.canReply, true);
+  assert.equal(caps.canEscalate, true);
+  assert.equal(disputeCapabilities({ ...returned, returnedAt: null }, "cs", "CUSTOMER_SERVICE").isReturned, false);
+});

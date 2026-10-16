@@ -14,6 +14,10 @@ import AgentDashboard from "./AgentDashboard";
 import { apiFetch } from "../../../lib/api";
 import { navigateWorkspaceSection } from "../workspace/useCaseWorkspace";
 jest.mock("../../../lib/api", () => ({ apiFetch: jest.fn() }));
+const mockSocketHandlers = {};
+jest.mock("../../chat/ChatSocketProvider", () => ({
+  useChatSocketEvent: (event, handler) => { mockSocketHandlers[event] = handler; },
+}));
 jest.mock("../workspace/useCaseWorkspace", () => ({
   navigateWorkspaceSection: jest.fn(),
 }));
@@ -203,7 +207,7 @@ test("refresh failure keeps a labelled coherent previous snapshot", async () => 
   view();
   await screen.findByRole("button", { name: /เกินกำหนด/ });
   apiFetch.mockRejectedValueOnce(new Error("offline"));
-  fireEvent.click(screen.getByRole("button", { name: "อัปเดตข้อมูล" }));
+  fireEvent(window, new Event("focus"));
   expect(await screen.findByRole("alert")).toHaveTextContent("ข้อมูลเดิม");
   expect(screen.getByRole("button", { name: /เกินกำหนด/ })).toHaveTextContent(
     "Ticket 1",
@@ -214,14 +218,31 @@ test("polls both sources and cleans up timers", async () => {
   const { unmount } = view();
   await act(async () => {});
   await act(async () => {
-    jest.advanceTimersByTime(60000);
+    jest.advanceTimersByTime(15000);
   });
   expect(apiFetch).toHaveBeenCalledTimes(4);
   unmount();
   await act(async () => {
-    jest.advanceTimersByTime(60000);
+    jest.advanceTimersByTime(15000);
   });
   expect(apiFetch).toHaveBeenCalledTimes(4);
+});
+
+test("socket activity refreshes both sources without a manual refresh button", async () => {
+  view();
+  await screen.findByRole("button", { name: /เกินกำหนด/ });
+  expect(screen.queryByRole("button", { name: "อัปเดตข้อมูล" })).not.toBeInTheDocument();
+  apiFetch.mockClear();
+  await act(async () => { mockSocketHandlers["conversation:activity"](); });
+  expect(apiFetch).toHaveBeenCalledTimes(2);
+});
+
+test("socket reconnect reloads the coherent dashboard snapshot", async () => {
+  view();
+  await screen.findByRole("button", { name: /เกินกำหนด/ });
+  apiFetch.mockClear();
+  await act(async () => { mockSocketHandlers.connect(); });
+  expect(apiFetch).toHaveBeenCalledTimes(2);
 });
 
 test("all hidden lines have a visible explanation and can be restored", async () => {

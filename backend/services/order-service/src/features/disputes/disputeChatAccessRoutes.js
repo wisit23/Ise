@@ -25,9 +25,13 @@ router.get("/disputes/:id/chat-access/:userId", async (req, res, next) => {
         (role === "SELLER" && order.sellerId === userId)));
     const agent = role === "AGENT" && dispute.assignedTo === userId &&
       dispute.assignedRole === "CUSTOMER_SERVICE";
+    // The CS agent who escalated may read, not write, while T&S reviews.
+    const watcher = role === "AGENT" && dispute.escalatedBy === userId &&
+      ["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) &&
+      dispute.status !== "DECIDED";
     const admin = role === "ADMIN";
-    const allowed = validRoom && (party || agent || admin);
-    res.json({ allowed, writable: allowed && !admin && !isLegacyRoom && dispute.status !== "DECIDED" });
+    const allowed = validRoom && (party || agent || admin || watcher);
+    res.json({ allowed, writable: allowed && !admin && !watcher && !isLegacyRoom && dispute.status !== "DECIDED" });
   } catch (err) {
     next(err);
   }

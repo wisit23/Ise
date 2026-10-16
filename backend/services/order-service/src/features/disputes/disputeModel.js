@@ -211,12 +211,20 @@ async function listQueue(
         },
       });
   }
-  if (restricted)
+  if (scope === "escalated")
+    // Cases this agent handed to Trust & Safety and is waiting on.
+    filters.push(
+      { assignedRole: { in: ["ADMIN", "TRUST_AND_SAFETY"] } },
+      restricted ? { escalatedBy: userId } : { escalatedBy: { not: null } },
+    );
+  else if (restricted)
     filters.push(
       { OR: [{ assignedRole: null }, { assignedRole: { notIn: ["ADMIN", "TRUST_AND_SAFETY"] } }] },
       { OR: [{ assignedTo: null }, { assignedTo: userId }] },
     );
   if (scope === "mine") filters.push({ assignedTo: userId });
+  if (scope === "returned")
+    filters.push({ assignedTo: userId }, { returnedAt: { not: null } });
   if (scope === "unassigned") filters.push({ assignedTo: null });
   if (scope && scope !== "all" && !status)
     filters.push({ status: { not: "DECIDED" } });
@@ -236,6 +244,8 @@ async function listQueue(
 
   const sorts = {
     sla: [
+      // Work returned by Trust & Safety stays on top of the agent's inbox.
+      ...(scope === "mine" ? [{ returnedAt: { sort: "desc", nulls: "last" } }] : []),
       { slaExpiresAt: { sort: "asc", nulls: "last" } },
       { priorityScore: "desc" },
       { id: "asc" },
@@ -504,6 +514,8 @@ function escalate({ id, version, actorId, toUserId, reason }) {
       escalatedBy: actorId,
       escalationNote: reason,
       assignedAt: toUserId ? new Date() : null,
+      // Answering a return closes it; the checklist stays for T&S to review.
+      returnedAt: null,
     },
   });
 }
@@ -573,7 +585,7 @@ async function decide({
     return caseView(after);
   });
 }
-async function requestMoreEvidence({ id, version, actorId, reason }) {
+async function requestMoreEvidence({ id, version, actorId, reason, tasks = [] }) {
   const before = await prisma.disputeCase.findUnique({ where: { id } });
   if (!before || before.decision) return null;
   return changeAssignment({
@@ -587,8 +599,49 @@ async function requestMoreEvidence({ id, version, actorId, reason }) {
       assignedTo: before.escalatedBy,
       assignedRole: "CUSTOMER_SERVICE",
       assignedAt: before.escalatedBy ? new Date() : null,
-      escalationNote: reason,
+      returnReason: reason,
+      returnTasks: tasks.map((text) => ({
+        id: require("node:crypto").randomUUID(),
+        text,
+        done: false,
+        note: "",
+        doneBy: null,
+        doneAt: null,
+      })),
+      returnedBy: actorId,
+      returnedAt: new Date(),
     },
+  });
+}
+/** CS ticks one returned task; does not bump the case version. */
+async function updateReturnTask({ id, taskId, actorId, done, note }) {
+  return prisma.$transaction(async (tx) => {
+    const before = await tx.disputeCase.findUnique({ where: { id } });
+    if (!before?.returnedAt) return null;
+    const tasks = Array.isArray(before.returnTasks) ? before.returnTasks : [];
+    const index = tasks.findIndex((task) => task.id === taskId);
+    if (index < 0) return null;
+    const current = tasks[index];
+    const nextDone = done ?? current.done;
+    const next = {
+      ...current,
+      done: nextDone,
+      note: note ?? current.note,
+      doneBy: nextDone ? current.doneBy || actorId : null,
+      doneAt: nextDone ? current.doneAt || new Date().toISOString() : null,
+    };
+    const returnTasks = tasks.map((task, i) => (i === index ? next : task));
+    const changed = await tx.disputeCase.updateMany({
+      where: { id, returnedAt: before.returnedAt, assignedTo: actorId, decision: null },
+      data: { returnTasks },
+    });
+    if (changed.count !== 1) return null;
+    const after = await tx.disputeCase.findUnique({ where: { id }, include: INCLUDE });
+    await tx.disputeCaseLog.create({
+      data: caseLogData(before, after, actorId, "RETURN_TASK",
+        `${next.done ? "done" : "open"}: ${next.text}${next.note ? " — " + next.note : ""}`),
+    });
+    return caseView(after);
   });
 }
 async function dashboardMetrics() {
@@ -606,6 +659,7 @@ async function dashboardMetrics() {
 module.exports = {
   dashboardMetrics,
   requestMoreEvidence,
+  updateReturnTask,
   findByOrderId,
   findById,
   findEvidence,

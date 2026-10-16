@@ -40,3 +40,31 @@ test("a failed escalation preserves all fields and keeps dialog open", async () 
   expect(screen.getByLabelText(/ปัญหาคืออะไร/)).toHaveValue("problem");
   expect(screen.getByText("network unavailable")).toBeInTheDocument();
 });
+
+test("follow-up memo is built from the checklist and needs a reason for unfinished items", async () => {
+  const submit = jest.fn().mockResolvedValue(undefined);
+  const onTaskChange = jest.fn().mockResolvedValue({});
+  render(
+    <EscalationMemoDialog
+      open
+      dispute
+      onClose={() => {}}
+      onSubmit={submit}
+      onTaskChange={onTaskChange}
+      returnTasks={[
+        { id: "t1", text: "ขอวิดีโอ", done: true, note: "ได้แล้ว" },
+        { id: "t2", text: "ยืนยันเลขพัสดุ", done: false, note: "" },
+      ]}
+    />,
+  );
+  const button = screen.getByRole("button", { name: "ส่งกลับให้ Trust & Safety" });
+  expect(button).toBeDisabled();
+  expect(screen.getByText(/ยังไม่ได้ทำ 1 ข้อ/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("เหตุผลที่ยังไม่ได้ทำ: ยืนยันเลขพัสดุ"), { target: { value: "ร้านยังไม่ตอบ" } });
+  expect(button).toBeEnabled();
+  await act(async () => fireEvent.click(button));
+  expect(onTaskChange).toHaveBeenCalledWith("t2", { note: "ร้านยังไม่ตอบ" });
+  expect(submit).toHaveBeenCalledWith(
+    "ตอบกลับคำขอ Trust & Safety:\n✓ ขอวิดีโอ — ได้แล้ว\n✗ ยืนยันเลขพัสดุ — ร้านยังไม่ตอบ",
+  );
+});

@@ -1,0 +1,300 @@
+.bar {
+  position: relative;
+  display: flex;
+  min-height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #e2e8f0;
+  border-left: 3px solid #f59e0b;
+  background: #fff;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.waiting {
+  border-left-color: #3b82f6;
+}
+
+.barIcon {
+  font-size: 18px;
+  color: #d97706;
+}
+
+.waiting .barIcon {
+  color: #2563eb;
+}
+
+.barTitle {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.barTime {
+  margin-left: 6px;
+  font-weight: 400;
+  color: #64748b;
+}
+
+.waitingText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #475569;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.track {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #fde68a;
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: #059669;
+  transition: width 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #334155;
+}
+
+.toggle {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  border-radius: 8px;
+  padding: 0 8px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.toggle:hover {
+  background: #f1f5f9;
+}
+
+.toggle :global(.material-symbols-outlined) {
+  font-size: 18px;
+}
+
+.send,
+.sendReady {
+  min-height: 32px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-weight: 600;
+  transition: background-color 160ms, color 160ms, border-color 160ms;
+}
+
+.send {
+  border: 1px solid #cbd5e1;
+  color: #334155;
+}
+
+.send:hover {
+  background: #f8fafc;
+}
+
+.sendReady {
+  border: 1px solid #047857;
+  background: #047857;
+  color: #fff;
+}
+
+.sendReady:hover {
+  background: #065f46;
+}
+
+.send:disabled,
+.sendReady:disabled {
+  opacity: 0.5;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 12px;
+  left: 12px;
+  z-index: 20;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 14px;
+  box-shadow: 0 12px 32px -12px rgb(15 23 42 / 0.25);
+  animation: popIn 160ms ease-out;
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    animation: none;
+  }
+  .fill {
+    transition: none;
+  }
+}
+
+.popoverTitle {
+  font-weight: 600;
+}
+
+.reason {
+  margin-top: 8px;
+  border-left: 3px solid #f59e0b;
+  border-radius: 0 8px 8px 0;
+  background: #fffbeb;
+  padding: 8px 12px;
+}
+
+.reasonLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #b45309;
+}
+
+.reasonText {
+  margin-top: 2px;
+  white-space: pre-line;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #451a03;
+}
+
+.tasks {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 4px 4px 4px 0;
+}
+
+.check {
+  display: flex;
+  height: 32px;
+  width: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #64748b;
+}
+
+.check:hover {
+  background: #f1f5f9;
+}
+
+.taskDone .check {
+  color: #059669;
+}
+
+.taskText {
+  padding-top: 6px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.taskDone .taskText {
+  color: #64748b;
+}
+
+.taskIndex {
+  color: #94a3b8;
+}
+
+.saveState {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.note {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.addNote {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.addNote:hover {
+  color: #047857;
+}
+
+.noteEditor {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.noteEditor input {
+  min-height: 34px;
+  flex: 1;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.noteEditor input:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 2px rgb(16 185 129 / 0.15);
+}
+
+.linkButton {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #047857;
+}
+
+.error {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+@media (max-width: 640px) {
+  .barTime,
+  .progress .track {
+    display: none;
+  }
+}

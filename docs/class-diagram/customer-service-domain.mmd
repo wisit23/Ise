@@ -1,0 +1,161 @@
+classDiagram
+direction LR
+
+%% ---------- support-service (reloop_support) ----------
+class SupportTicket {
+  +id: String
+  +ticketNumber: String
+  +requesterId: String
+  +subject: String
+  +orderId: String
+  +priorityScore: Int
+  +version: Int
+  +closedAt: DateTime
+}
+class TicketCategory {
+  +code: String
+  +nameTh: String
+}
+class TicketPriority {
+  +code: LOW|NORMAL|HIGH|URGENT
+  +rank: Int
+}
+class TicketStatus {
+  +code: NEW..CLOSED
+  +isTerminal: Boolean
+}
+class SlaPolicy {
+  +firstResponseMinutes: Int
+  +resolutionMinutes: Int
+  +effectiveFrom: DateTime
+}
+class TicketAssignment {
+  +assigneeId: String
+  +assignedAt: DateTime
+  +endedAt: DateTime
+}
+class TicketStatusHistory {
+  +changedById: String
+  +reason: String
+}
+class TicketSlaRound {
+  +cycle: Int
+  +startedAt: DateTime
+}
+class TicketSlaTarget {
+  +metricType: String
+  +dueAt: DateTime
+  +breachedAt: DateTime
+}
+class TicketChatLink {
+  +conversationId: String
+}
+class TicketAuditLog {
+  +actorId: String
+  +action: String
+  +payload: Json
+}
+class TicketCsat {
+  <<CustomerSatisfaction>>
+  +respondentId: String
+  +agentId: String
+  +rating: Int
+  +comment: String
+}
+
+%% ---------- order-service (reloop_order) ----------
+class Order {
+  +id: String
+  +status: String
+  +version: Int
+}
+class DisputeCase {
+  +id: String
+  +orderId: String
+  +createdBy: String
+  +status: String
+  +assignedTo: String
+  +assignedRole: String
+  +decision: APPROVE_REFUND|RELEASE_ESCROW|REJECT
+  +priority: String
+  +slaExpiresAt: DateTime
+  +version: Int
+}
+class DisputeCaseLog {
+  +actorId: String
+  +action: String
+}
+class DisputeEvidence {
+  +uploaderId: String
+  +fileType: String
+  +evidenceDeadline: DateTime
+}
+class Evidence {
+  +refPath: String
+}
+class DisputeAuditLog {
+  +actorId: String
+  +action: String
+}
+class DisputeCsat {
+  <<CustomerSatisfaction>>
+  +respondentId: String
+  +agentId: String
+  +rating: Int
+}
+
+%% ---------- shared (@reloop/shared) ----------
+class ServicePolicy {
+  <<shared module>>
+  +classifyCase(input)
+  +getServicePolicy(priority)
+  +disputeDeadlines(priority)
+}
+class CasePriority {
+  <<shared module>>
+  +scoreCase(input)
+}
+class CsatFactory {
+  <<shared module>>
+  +createCsat(db, readCase)
+  +submit(id, userId, body)
+  +stats(agentId, days)
+}
+class CaseRetention {
+  <<shared module>>
+  +sweepCaseRetention(db, domain)
+}
+class TicketStateMachine {
+  <<pure>>
+  +canTransition(from, to)
+}
+
+%% ---------- relationships ----------
+TicketCategory "1" --> "0..*" SupportTicket
+TicketPriority "1" --> "0..*" SupportTicket
+TicketStatus "1" --> "0..*" SupportTicket : current
+SupportTicket "1" *-- "0..*" TicketAssignment
+SupportTicket "1" *-- "0..*" TicketStatusHistory
+SupportTicket "1" *-- "0..*" TicketSlaRound
+TicketSlaRound "1" *-- "1..*" TicketSlaTarget
+SlaPolicy "1" --> "0..*" TicketSlaRound
+SupportTicket "1" *-- "0..1" TicketChatLink
+SupportTicket "1" *-- "0..*" TicketAuditLog
+SupportTicket "1" *-- "0..*" TicketCsat
+
+Order "1" --> "0..1" DisputeCase
+DisputeCase "1" *-- "0..*" DisputeCaseLog
+DisputeCase "1" *-- "0..*" DisputeEvidence
+DisputeEvidence "1" *-- "1..*" Evidence
+DisputeEvidence "1" *-- "0..*" DisputeAuditLog
+DisputeCase "1" *-- "0..*" DisputeCsat
+
+SupportTicket ..> Order : orderId (cross-service)
+SupportTicket ..> TicketStateMachine
+SupportTicket ..> ServicePolicy
+DisputeCase ..> ServicePolicy
+ServicePolicy <.. CasePriority
+CsatFactory ..> TicketCsat
+CsatFactory ..> DisputeCsat
+CaseRetention ..> SupportTicket
+CaseRetention ..> DisputeCase

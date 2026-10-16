@@ -152,6 +152,25 @@ export function smoothLinePath(points) {
   }, `M${points[0].x},${points[0].y}`);
 }
 
+// Reserve enough actual pixels between labels, including the final date.
+export function lineTickIndices(count, width, compact = false) {
+  if (count < 1) return [];
+  if (count === 1) return [0];
+  const plotWidth = Math.max(1, width - 65);
+  const gap = Math.max(70, plotWidth / (compact ? 2 : 7));
+  const pointWidth = plotWidth / (count - 1);
+  const indices = [0];
+  for (let i = 1; i < count - 1; i++) {
+    if (
+      (i - indices.at(-1)) * pointWidth >= gap &&
+      (count - 1 - i) * pointWidth >= gap
+    )
+      indices.push(i);
+  }
+  indices.push(count - 1);
+  return indices;
+}
+
 export function ComparisonChart({
   rows,
   kind,
@@ -185,6 +204,7 @@ export function ComparisonChart({
   }, []);
   const width = size.width;
   const height = size.height;
+  const dateTicks = new Set(lineTickIndices(rows.length, width, compact));
   const [hover, setHover] = useState(null);
   const shown = CASE_SERIES.filter((series) => visible[series.key]);
   const maximum = Math.max(
@@ -392,12 +412,17 @@ export function ComparisonChart({
             )}
             {rows.map((row, i) => (
               <g key={row.label}>
-                {(i % Math.ceil(rows.length / (compact ? 3 : 6)) === 0 ||
-                  i === rows.length - 1) && (
+                {dateTicks.has(i) && (
                   <text
                     x={x(i)}
                     y={height - 8}
-                    textAnchor="middle"
+                    textAnchor={
+                      i === 0
+                        ? "start"
+                        : i === rows.length - 1
+                          ? "end"
+                          : "middle"
+                    }
                     fontSize="12"
                     fill="rgb(var(--color-ink-subtle))"
                   >
@@ -678,7 +703,9 @@ export function ComparisonChart({
             ? "เลือก Ticket หรือ Dispute เพื่อแสดงเส้น"
             : hover
               ? `${dayLabel(hover.label)} · Ticket ${hover.tickets} · Dispute ${hover.disputes}`
-              : hourly ? "ชี้หรือกด Tab เพื่อดูรายชั่วโมง · วันนี้นับถึงเวลาอัปเดต" : "ชี้หรือกด Tab เพื่อดูรายวัน · วันนี้นับถึงเวลาอัปเดต"}
+              : hourly
+                ? "ชี้หรือกด Tab เพื่อดูรายชั่วโมง · วันนี้นับถึงเวลาอัปเดต"
+                : "ชี้หรือกด Tab เพื่อดูรายวัน · วันนี้นับถึงเวลาอัปเดต"}
         </p>
       )}
       {kind === "bar" && !rows.length && (
@@ -692,8 +719,10 @@ export function ComparisonChart({
 const dayLabel = (date) =>
   // A calendar date already belongs to the server's reporting timezone;
   // format it without converting it into a different calendar day.
-  date.includes("T") ? date.slice(11, 16) : new Date(`${date}T00:00:00Z`).toLocaleDateString("th-TH", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+  date.includes("T")
+    ? date.slice(11, 16)
+    : new Date(`${date}T00:00:00Z`).toLocaleDateString("th-TH", {
+        day: "numeric",
+        month: "short",
+        timeZone: "UTC",
+      });

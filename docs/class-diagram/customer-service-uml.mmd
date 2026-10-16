@@ -1,0 +1,210 @@
+classDiagram
+direction TB
+
+class SupportTicket {
+  -id : String
+  -ticketNumber : String
+  -requesterId : String
+  -subject : String
+  -description : String
+  -orderId : String [0..1]
+  -priorityScore : Integer
+  -version : Integer
+  -createdAt : DateTime
+  -closedAt : DateTime [0..1]
+  +create(requesterId, subject, categoryId) SupportTicket
+  +assign(assigneeId, assignedById) void
+  +takeover(agentId) void
+  +changeStatus(to : TicketStatusCode, reason) void
+  +reply(authorId, body) void
+}
+class TicketCategory {
+  -id : Integer
+  -code : String
+  -nameTh : String
+  -isActive : Boolean
+}
+class TicketPriority {
+  -id : Integer
+  -code : PriorityLevel
+  -rank : Integer
+}
+class TicketStatus {
+  -id : Integer
+  -code : TicketStatusCode
+  -isTerminal : Boolean
+}
+class SlaPolicy {
+  -id : String
+  -firstResponseMinutes : Integer
+  -resolutionMinutes : Integer
+  -effectiveFrom : DateTime
+  -effectiveTo : DateTime [0..1]
+}
+class TicketAssignment {
+  -id : String
+  -assigneeId : String
+  -assignedById : String
+  -assignedAt : DateTime
+  -endedAt : DateTime [0..1]
+  -endReason : String [0..1]
+}
+class TicketStatusHistory {
+  -id : String
+  -changedById : String
+  -reason : String [0..1]
+  -createdAt : DateTime
+}
+class TicketSlaRound {
+  -id : String
+  -cycle : Integer
+  -startedAt : DateTime
+}
+class TicketSlaTarget {
+  -id : String
+  -metricType : String
+  -dueAt : DateTime
+  -achievedAt : DateTime [0..1]
+  -breachedAt : DateTime [0..1]
+  +isBreached(now : DateTime) Boolean
+}
+class TicketChatLink {
+  -conversationId : String
+  -linkedAt : DateTime
+}
+class TicketAuditLog {
+  -id : String
+  -actorId : String
+  -action : String
+  -payload : Json
+}
+
+class Order {
+  -id : String
+  -status : String
+  -version : Integer
+}
+class DisputeCase {
+  -id : String
+  -createdBy : String
+  -reason : String
+  -disputeType : String
+  -status : String
+  -assignedTo : String [0..1]
+  -assignedRole : StaffRole [0..1]
+  -decision : DisputeDecision [0..1]
+  -decisionReason : String [0..1]
+  -priority : PriorityLevel
+  -slaExpiresAt : DateTime [0..1]
+  -version : Integer
+  +open(orderId, userId, reason) DisputeCase
+  +claim(agentId, version) void
+  +reassign(toAgentId, version) void
+  +escalate(note, version) void
+  +requestMoreEvidence(deadline) void
+  +decide(decision, reason, idempotencyKey) void
+}
+class DisputeCaseLog {
+  -id : String
+  -actorId : String
+  -action : String
+  -detail : String
+}
+class DisputeEvidence {
+  -id : String
+  -uploaderId : String
+  -fileType : String
+  -evidenceDeadline : DateTime [0..1]
+}
+class Evidence {
+  -id : String
+  -refPath : String
+}
+
+class CustomerSatisfaction {
+  <<abstract>>
+  -respondentId : String
+  -respondentSide : String
+  -agentId : String [0..1]
+  -rating : Integer
+  -comment : String
+  -createdAt : DateTime
+}
+class TicketSatisfaction
+class DisputeSatisfaction
+
+class ServicePolicy {
+  <<utility>>
+  +classifyCase(category, isDispute, amount, reason) Classification
+  +getServicePolicy(priority : PriorityLevel) Policy
+  +disputeDeadlines(priority : PriorityLevel) Deadlines
+}
+class CsatService {
+  <<service>>
+  +read(caseId, userId) CsatState
+  +submit(caseId, userId, rating, comment) CsatState
+  +stats(agentId, days) CsatSummary
+}
+
+class TicketStatusCode {
+  <<enumeration>>
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  PENDING_USER
+  RESOLVED
+  ESCALATED
+  CLOSED
+}
+class PriorityLevel {
+  <<enumeration>>
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+class DisputeDecision {
+  <<enumeration>>
+  APPROVE_REFUND
+  RELEASE_ESCROW
+  REJECT
+}
+class StaffRole {
+  <<enumeration>>
+  CUSTOMER_SERVICE
+  TRUST_AND_SAFETY
+  ADMIN
+}
+
+SupportTicket "0..*" --> "1" TicketCategory : category
+SupportTicket "0..*" --> "1" TicketPriority : priority
+SupportTicket "0..*" --> "1" TicketStatus : currentStatus
+SlaPolicy "0..*" --> "1" TicketPriority : appliesTo
+SlaPolicy "0..*" --> "0..1" TicketCategory : appliesTo
+SupportTicket "1" *-- "0..*" TicketAssignment : assignments
+SupportTicket "1" *-- "0..*" TicketStatusHistory : history
+SupportTicket "1" *-- "0..*" TicketSlaRound : slaRounds
+TicketSlaRound "1" *-- "1..*" TicketSlaTarget : targets
+TicketSlaRound "0..*" --> "1" SlaPolicy : snapshotOf
+SupportTicket "1" *-- "0..1" TicketChatLink : chat
+SupportTicket "1" *-- "0..*" TicketAuditLog : audit
+TicketStatusHistory "0..*" --> "1" TicketStatus : toStatus
+
+Order "1" -- "0..1" DisputeCase : disputedBy
+DisputeCase "1" *-- "0..*" DisputeCaseLog : log
+DisputeCase "1" *-- "0..*" DisputeEvidence : evidence
+DisputeEvidence "1" *-- "1..*" Evidence : files
+
+CustomerSatisfaction <|-- TicketSatisfaction
+CustomerSatisfaction <|-- DisputeSatisfaction
+SupportTicket "1" *-- "0..*" TicketSatisfaction : ratings
+DisputeCase "1" *-- "0..*" DisputeSatisfaction : ratings
+
+SupportTicket ..> Order : orderId (cross-service)
+SupportTicket ..> ServicePolicy : use
+DisputeCase ..> ServicePolicy : use
+CsatService ..> CustomerSatisfaction : create
+TicketPriority ..> PriorityLevel
+TicketStatus ..> TicketStatusCode
+DisputeCase ..> DisputeDecision
+DisputeCase ..> StaffRole

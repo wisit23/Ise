@@ -124,7 +124,7 @@ export default function SupportPanelPage() {
           {/* ── Sidebar ── */}
           <aside aria-label="เมนู workspace" className={`hidden shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex transition-[width] duration-200 z-10 ${sidebarCollapsed ? "w-16" : "w-60"}`}>
             {/* Brand */}
-            <div className={`flex h-12 shrink-0 items-center border-b border-slate-200/60 bg-white ${sidebarCollapsed ? "justify-center px-2" : "justify-between gap-1 px-2"}`}>
+            <div className={`${motion.workspaceHeader} flex shrink-0 items-center border-b border-slate-200/60 bg-white ${sidebarCollapsed ? "justify-center px-2" : "justify-between gap-1 px-2"}`}>
               <div className={`${sidebarCollapsed ? "hidden" : "flex"} min-w-0 items-center gap-2`}>
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-600">
                   <span className="material-symbols-outlined text-[19px]">
@@ -215,7 +215,7 @@ export default function SupportPanelPage() {
             }`}
           >
             {/* Top bar */}
-            <div className={`${section === "dashboard" && staffRole === "CUSTOMER_SERVICE" ? motion.dashboardToolbar : ""} sticky top-0 z-30 flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-3 py-2 sm:px-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]`}>
+            <div className={`${motion.workspaceHeader} ${section === "dashboard" && staffRole === "CUSTOMER_SERVICE" ? motion.dashboardToolbar : ""} sticky top-0 z-30 flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-3 py-2 sm:px-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]`}>
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                   <span className="material-symbols-outlined text-[18px]">

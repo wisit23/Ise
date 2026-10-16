@@ -73,6 +73,7 @@ model SlaPolicy {
 }
 
 model SupportTicket {
+  satisfaction CustomerSatisfaction[]
   closedAt DateTime? @map("closed_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
@@ -279,4 +280,18 @@ model TicketChatMessageReceipt {
   receivedAt DateTime? @default(now()) @map("received_at") @db.Timestamptz(3)
   ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   @@map("ticket_chat_message_receipts")
+}
+
+model CustomerSatisfaction {
+  caseId String @map("case_id")
+  respondentId String @map("respondent_id")
+  respondentSide String @map("respondent_side")
+  agentId String? @map("agent_id")
+  rating Int @db.SmallInt
+  comment String @default("")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  case SupportTicket @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  @@id([caseId, respondentId])
+  @@index([agentId, createdAt])
+  @@map("customer_satisfaction")
 }

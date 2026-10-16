@@ -31,3 +31,11 @@
 /* Workspace scrolls inside its panels, so no document scrollbar gutter is needed. */
 .shell { min-width: 0; }
 :global(html):has(.shell) { scrollbar-gutter: auto; }
+
+/* 40px view buttons + 8px pill padding + 16px toolbar padding + border. */
+@media (min-width: 640px) {
+  .shell .workspaceHeader {
+    height: 65px;
+    min-height: 65px;
+  }
+}

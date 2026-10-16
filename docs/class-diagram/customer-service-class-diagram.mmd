@@ -1,0 +1,155 @@
+classDiagram
+direction LR
+
+class TicketController {
+  <<module>>
+  +create(req, res, next)
+  +mine(req, res, next)
+  +queue(req, res, next)
+  +getOne(req, res, next)
+  +reply(req, res, next)
+  +assign(req, res, next)
+  +changeStatus(req, res, next)
+}
+class TicketService {
+  <<module>>
+  +createTicket(input)
+  +getTicket(input)
+  +listMine(requesterId, pagination)
+  +listQueue(options)
+  +reply(input)
+  +assignToSelf(input)
+  +changeStatus(input)
+  +joinTicketChat(input)
+  +takeoverTicket(input)
+}
+class TicketModel {
+  <<module>>
+  +create(data)
+  +findById(id)
+  +listByRequester(id, pagination)
+  +listQueue(options)
+  +assign(input)
+  +transitionStatus(input)
+  +reassign(input)
+  +recordChatMessage(payload)
+}
+class HelpController {
+  <<module>>
+  +search(req, res, next)
+  +manage(req, res, next)
+  +create(req, res, next)
+  +revise(req, res, next)
+  +publish(req, res, next)
+  +unpublish(req, res, next)
+  +remove(req, res, next)
+}
+class HelpService {
+  <<module>>
+  +searchPublic(input)
+  +listForAgent(input)
+  +createDraft(input)
+  +revise(input)
+  +publish(input)
+  +unpublish(input)
+  +remove(input)
+}
+class HelpModel {
+  <<module>>
+  +search(input)
+  +listAll(input)
+  +findBySlug(slug)
+  +findById(id)
+  +create(input)
+  +revise(input)
+  +publish(id, version)
+}
+class ChatClient {
+  <<external service client>>
+  +createSupportConversation(ticketId, ticketNumber, requesterId)
+  +getTicketMessages(conversationId, options)
+  +sendTicketMessage(conversationId, data)
+  +addAgentToConversation(conversationId, agentId)
+  +lockConversation(conversationId)
+}
+class OrderClient {
+  <<external service client>>
+  +getOrder(orderId)
+}
+class RiskClient {
+  <<external service client>>
+  +getReportCount(userId)
+}
+class SupportTicket {
+  <<Prisma model>>
+  +id: String
+  +ticketNumber: String
+  +requesterId: String
+  +subject: String
+  +description: String
+  +priorityScore: Int
+  +riskReportCount: Int
+  +version: Int
+}
+class TicketAssignment {
+  <<Prisma model>>
+  +assigneeId: String
+  +assignedById: String
+  +assignedAt: DateTime
+  +endedAt: DateTime
+}
+class TicketStatusHistory {
+  <<Prisma model>>
+  +changedById: String
+  +reason: String
+  +createdAt: DateTime
+}
+class TicketSlaRound {
+  <<Prisma model>>
+  +cycle: Int
+  +startedAt: DateTime
+  +snapshotSource: String
+}
+class TicketSlaTarget {
+  <<Prisma model>>
+  +metricType: String
+  +dueAt: DateTime
+  +achievedAt: DateTime
+  +breachedAt: DateTime
+}
+class TicketChatLink {
+  <<Prisma model>>
+  +conversationId: String
+  +linkedAt: DateTime
+}
+class HelpArticle {
+  <<Prisma model>>
+  +id: String
+  +slug: String
+  +status: String
+  +publishedVersion: Int
+}
+class HelpArticleRevision {
+  <<Prisma model>>
+  +version: Int
+  +title: String
+  +body: String
+  +authorId: String
+}
+
+TicketController ..> TicketService : delegates requests
+TicketService ..> TicketModel : business operations
+TicketService ..> ChatClient : chat and message history
+TicketService ..> OrderClient : order validation
+TicketService ..> RiskClient : risk score input
+TicketModel ..> SupportTicket : persists via Prisma
+SupportTicket "1" --> "0..*" TicketAssignment : assignments
+SupportTicket "1" --> "0..*" TicketStatusHistory : status changes
+SupportTicket "1" --> "0..*" TicketSlaRound : SLA cycles
+TicketSlaRound "1" --> "1..*" TicketSlaTarget : deadlines
+SupportTicket "1" --> "0..1" TicketChatLink : conversation
+
+HelpController ..> HelpService : delegates requests
+HelpService ..> HelpModel : content operations
+HelpModel ..> HelpArticle : persists via Prisma
+HelpArticle "1" *-- "1..*" HelpArticleRevision : version history

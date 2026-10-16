@@ -95,7 +95,7 @@ function parseState(domain, account) {
   if (params.get("section") !== domain) return result;
   const enums = {
     view: ["workspace", "table"],
-    scope: ["mine", "unassigned", "all"],
+    scope: ["mine", "unassigned", "escalated", "returned", "all"],
     sort: ["sla", "newest", "oldest", "priority"],
     side: ["buyer", "seller"],
     work: ["", "open", "overdue", "soon", "reply"],
@@ -236,6 +236,8 @@ export default function useCaseWorkspace(domain, token, account) {
       const request = ++generation.current;
       if (!id) {
         setDetail(null);
+        setDetailError("");
+        setRefreshError("");
         setDetailLoading(false);
         return;
       }
@@ -373,5 +375,9 @@ export default function useCaseWorkspace(domain, token, account) {
     refresh,
     refreshAfterReply,
     retryDetail: () => loadDetail(state.selectedId),
+    // Merge a partial server response without reloading (keeps chat mounted).
+    patchDetail: (id, patch) =>
+      setDetail((old) => (old?.id === id ? { ...old, ...patch } : old)),
+    refreshQueue: () => setRevision((value) => value + 1),
   };
 }
