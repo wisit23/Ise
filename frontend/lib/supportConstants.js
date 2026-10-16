@@ -47,8 +47,12 @@ export const DISPUTE_STATUS_STYLE = {
 
 export const ORDER_STATUS_LABEL = {
   pending: "รอชำระเงิน",
+  pending_payment: "รอชำระเงิน",
+  paid: "ชำระแล้ว รอผู้ขายยืนยัน",
   confirmed: "ยืนยันแล้ว",
+  ready_to_ship: "รอขนส่งมารับ",
   shipped: "จัดส่งแล้ว",
+  delivered: "ส่งถึงแล้ว",
   completed: "สำเร็จ",
   cancelled: "ยกเลิก",
   disputed: "อยู่ระหว่างพิพาท",

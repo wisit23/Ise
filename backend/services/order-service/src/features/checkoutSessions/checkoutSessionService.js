@@ -257,7 +257,7 @@ function createCheckoutSessionService(
               version: order.version,
               status: { in: ["pending", "pending_payment"] },
             },
-            data: { status: "confirmed", version: { increment: 1 } },
+            data: { status: "paid", version: { increment: 1 } },
           });
           if (changed.count !== 1)
             throw conflict("order changed during payment");

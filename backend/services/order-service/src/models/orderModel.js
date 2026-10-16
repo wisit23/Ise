@@ -3,11 +3,15 @@ const prisma = require("./prismaClient");
 const { money } = require("./money");
 const evidenceModel = require("../features/disputes/evidenceView");
 const { assertCanCancelOrder } = require("../services/orderTransitionService");
+const { isRefundingCancellation } = require("../services/orderLifecycle");
 const VALID_STATUSES = [
   "pending",
   "pending_payment",
+  "paid",
   "confirmed",
+  "ready_to_ship",
   "shipped",
+  "delivered",
   "completed",
   "cancelled",
   "disputed",
@@ -154,6 +158,15 @@ async function updateCampaign(id, { campaignId, finalPrice }) {
     }),
   );
 }
+const STATUS_TIMESTAMP = {
+  shipped: "shippedAt",
+  delivered: "deliveredAt",
+  completed: "completedAt",
+};
+function statusData(status, now = new Date()) {
+  const field = STATUS_TIMESTAMP[status];
+  return { status, version: { increment: 1 }, ...(field ? { [field]: now } : {}) };
+}
 async function transitionStatusWithProductSync({
   id,
   status,
@@ -168,33 +181,43 @@ async function transitionStatusWithProductSync({
       include: INCLUDE,
     });
     if (!before) return { order: null, event: null };
-    if (status === "cancelled") assertCanCancelOrder(before);
+    const refunding = isRefundingCancellation(before, status);
+    if (status === "cancelled" && !refunding) assertCanCancelOrder(before);
+    const now = new Date();
     const claimed = await tx.order.updateMany({
       where: {
         id,
         version: expectedVersion,
         ...(expectedStatuses ? { status: { in: expectedStatuses } } : {}),
       },
-      data: { status, version: { increment: 1 } },
+      data: statusData(status, now),
     });
     if (claimed.count !== 1)
       throw conflict("order was modified concurrently — reload and retry");
-    if (status === "confirmed")
+    // Simulated refund: no money moves, the payment history records it.
+    if (refunding)
       await tx.payment.create({
         data: {
           orderId: id,
-          paymentType: "SIMULATED",
-          paymentStatus: "paid",
+          paymentType: "SIMULATED_REFUND",
+          paymentStatus: "refunded",
           paymentAmount: before.ordersAmount,
-          paidAt: new Date(),
+          paidAt: now,
         },
       });
-    const event = await require("../services/productSyncService").createRequest(
-      tx,
-      before,
-      actorId || before.buyerId,
-      productSync,
-    );
+    if (status === "delivered" && before.shipping)
+      await tx.shipping.update({
+        where: { orderId: id },
+        data: { status: "delivered" },
+      });
+    const event = productSync
+      ? await require("../services/productSyncService").createRequest(
+          tx,
+          before,
+          actorId || before.buyerId,
+          productSync,
+        )
+      : null;
     if (status === "cancelled" && before.basketId)
       await tx.basket.update({
         where: { id: before.basketId },
@@ -300,4 +323,5 @@ module.exports = {
   view,
   disputeView,
   logData,
+  statusData,
 };

@@ -69,6 +69,7 @@ const ORDERS_RESPONSE = {
       price: 1290,
       status: "completed",
       dispute: null,
+      deliveredAt: new Date().toISOString(),
       createdAt: "2025-04-11T00:00:00.000Z",
     },
   ],
@@ -240,7 +241,7 @@ describe("ProfilePage", () => {
 
     // 4 statuses provided by order-service
     expect(screen.getByText("รอชำระเงิน")).toBeInTheDocument();
-    expect(screen.getByText("รอยืนยัน")).toBeInTheDocument();
+    expect(screen.getByText("รอจัดส่ง")).toBeInTheDocument();
     expect(screen.getByText("จัดส่งแล้ว")).toBeInTheDocument();
     expect(screen.getByText("สำเร็จ")).toBeInTheDocument();
     await screen.findByRole("button", { name: /บันทึกความสนใจ/ });

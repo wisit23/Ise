@@ -482,6 +482,9 @@ async function seedFixtures({ auth, order, support, chat }) {
         ordersAmount: price,
         orderType: "BUY_NOW",
         preDisputeStatus: payoutHeld ? "completed" : null,
+        ...(payoutHeld || status === "completed"
+          ? { shippedAt: daysAgo(4), deliveredAt: daysAgo(4), completedAt: daysAgo(4) }
+          : {}),
         payments: {create:{paymentType:"DEMO",paymentStatus:"paid",paymentAmount:price,paidAt:daysAgo(4)}},
       },
     });

@@ -13,17 +13,26 @@ import EmptyState from "../../components/ui/EmptyState";
 import Skeleton from "../../components/ui/Skeleton";
 import OrderLine from "../../components/OrderLine";
 import OrderDisputeForm from "../../components/orders/OrderDisputeForm";
+import BuyerOrderDetailModal from "../../components/orders/BuyerOrderDetailModal";
 import ContactSellerButton from "../../components/chat/ContactSellerButton";
 import ReviewMediaUploader from "../../components/ReviewMediaUploader";
 import ReviewMediaGallery from "../../components/ReviewMediaGallery";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
+import {
+  autoCompleteAt,
+  canOpenDispute,
+  disputeDeadline,
+} from "../../lib/orderLifecycle";
 
 const STATUS_LABEL = {
   pending: "อยู่ในตะกร้า",
   pending_payment: "อยู่ในตะกร้า",
-  confirmed: "ชำระแล้ว รอจัดส่ง",
-  shipped: "จัดส่งแล้ว",
+  paid: "ชำระแล้ว รอผู้ขายยืนยัน",
+  confirmed: "ผู้ขายกำลังเตรียมสินค้า",
+  ready_to_ship: "รอขนส่งมารับสินค้า",
+  shipped: "อยู่ระหว่างจัดส่ง",
+  delivered: "สินค้าถึงแล้ว รอยืนยันรับ",
   completed: "สำเร็จ",
   cancelled: "ยกเลิกแล้ว",
   disputed: "อยู่ระหว่างข้อพิพาท",
@@ -33,8 +42,11 @@ const STATUS_LABEL = {
 const STATUS_STYLE = {
   pending: "bg-amber-50 text-amber-700",
   pending_payment: "bg-amber-50 text-amber-700",
+  paid: "bg-sky-50 text-sky-700",
   confirmed: "bg-sky-50 text-sky-700",
+  ready_to_ship: "bg-sky-50 text-sky-700",
   shipped: "bg-sky-50 text-sky-700",
+  delivered: "bg-violet-50 text-violet-700",
   completed: "bg-emerald-50 text-emerald-700",
   cancelled: "bg-gray-100 text-gray-500",
   disputed: "bg-red-50 text-red-700",
@@ -48,7 +60,9 @@ const TABS = [
     label: "รอชำระเงิน",
     status: "pending_payment",
   },
-  { key: "shipped", label: "จัดส่งแล้ว", status: "shipped" },
+  { key: "paid", label: "รอผู้ขายยืนยัน", status: "paid" },
+  { key: "shipped", label: "กำลังจัดส่ง", status: "shipped" },
+  { key: "delivered", label: "รอยืนยันรับ", status: "delivered" },
   { key: "completed", label: "สำเร็จ", status: "completed" },
   { key: "cancelled", label: "ยกเลิก", status: "cancelled" },
 ];
@@ -127,19 +141,21 @@ export default function OrdersPage() {
   const [openDisputeFor, setOpenDisputeFor] = useState(null);
   const [justDisputedIds, setJustDisputedIds] = useState(new Set());
   const [confirmingOrderId, setConfirmingOrderId] = useState(null);
+  const [detailOrderId, setDetailOrderId] = useState(null);
+  const detailOrder = items.find((o) => o.id === detailOrderId);
 
   async function handleConfirmReceived(orderId) {
     const token = getAccessToken();
     if (!token || !orderId) return;
     setConfirmingOrderId(orderId);
     try {
-      await apiFetch(`/api/orders/${orderId}/status`, {
+      const updated = await apiFetch(`/api/orders/${orderId}/status`, {
         method: "PATCH",
         token,
         body: { status: "completed" },
       });
       setItems((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: "completed" } : o)),
+        prev.map((o) => (o.id === orderId ? { ...o, ...updated } : o)),
       );
     } catch (err) {
       alert(err.message || "ยืนยันการรับสินค้าไม่สำเร็จ");
@@ -260,6 +276,13 @@ export default function OrdersPage() {
                         productId={o.productId}
                         className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-panel disabled:cursor-not-allowed disabled:opacity-60"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setDetailOrderId(o.id)}
+                        className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-panel"
+                      >
+                        ดูรายละเอียด
+                      </button>
                       {["pending", "pending_payment"].includes(o.status) && (
                         <Link
                           href={
@@ -275,7 +298,7 @@ export default function OrdersPage() {
                           ไปชำระเงิน
                         </Link>
                       )}
-                      {o.status === "shipped" && (
+                      {o.status === "delivered" && (
                         <button
                           type="button"
                           onClick={() => handleConfirmReceived(o.id)}
@@ -321,7 +344,8 @@ export default function OrdersPage() {
                 {/* Everything a buyer can still *do* with a finished order
                     lives in one strip under the row, so the row itself stays
                     the same shape in every status. */}
-                {(o.status === "completed" || disputed) && (
+                {(["delivered", "completed"].includes(o.status) ||
+                  disputed) && (
                   <div className="flex flex-col gap-2 border-t border-line bg-surface-subtle px-4 py-3">
                     {o.status === "completed" &&
                       (review ? (
@@ -358,8 +382,15 @@ export default function OrdersPage() {
                         </button>
                       ))}
 
-                    {o.status === "completed" &&
-                      !disputed &&
+                    {o.status === "delivered" && autoCompleteAt(o) && (
+                      <p className="text-xs text-ink-subtle">
+                        หากไม่กดยืนยัน ระบบจะยืนยันรับสินค้าให้อัตโนมัติวันที่{" "}
+                        {autoCompleteAt(o).toLocaleDateString("th-TH")}
+                      </p>
+                    )}
+
+                    {!disputed &&
+                      canOpenDispute(o) &&
                       (openDisputeFor === o.id ? (
                         <OrderDisputeForm
                           order={o}
@@ -382,7 +413,8 @@ export default function OrdersPage() {
                           onClick={() => setOpenDisputeFor(o.id)}
                           className="focus-ring self-start rounded text-sm font-medium text-danger hover:underline"
                         >
-                          มีปัญหากับคำสั่งซื้อนี้? ขอคืนเงิน/คืนสินค้า
+                          มีปัญหากับคำสั่งซื้อนี้? ขอคืนเงิน/คืนสินค้า (ภายใน{" "}
+                          {disputeDeadline(o).toLocaleDateString("th-TH")})
                         </button>
                       ))}
 
@@ -402,6 +434,18 @@ export default function OrdersPage() {
         </ul>
 
         <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+        {detailOrder && (
+          <BuyerOrderDetailModal
+            order={detailOrder}
+            statusLabel={STATUS_LABEL[detailOrder.status] || detailOrder.status}
+            onClose={() => setDetailOrderId(null)}
+            onOrderChange={(fresh) =>
+              setItems((prev) =>
+                prev.map((o) => (o.id === fresh.id ? { ...o, ...fresh } : o)),
+              )
+            }
+          />
+        )}
       </section>
       <Footer />
     </main>

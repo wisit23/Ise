@@ -112,6 +112,18 @@ export default function CheckoutPage() {
       apiFetch("/api/auth/me/addresses", { token }),
     ])
       .then(([savedOrders, savedAddresses]) => {
+        // Already confirmed once: the payment session is still open, so go
+        // straight back to its QR page instead of asking to confirm again.
+        const openSession = savedOrders.find(
+          (order) =>
+            order.checkoutSessionId &&
+            (!order.checkoutSession?.status ||
+              order.checkoutSession.status === "pending"),
+        );
+        if (openSession) {
+          router.replace(`/payment/${openSession.checkoutSessionId}`);
+          return;
+        }
         setOrders(savedOrders);
         setAddresses(savedAddresses);
         const defaultAddress =

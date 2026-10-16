@@ -17,7 +17,9 @@ const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 // SYSTEM message — "pending" (still in the cart) isn't chat-worthy.
 const STATUS_MESSAGE_TH = {
   confirmed: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
+  ready_to_ship: "ผู้ขายเตรียมสินค้าแล้ว รอขนส่งมารับ",
   shipped: "ผู้ขายจัดส่งสินค้าแล้ว",
+  delivered: "ขนส่งส่งสินค้าถึงผู้ซื้อแล้ว",
   completed: "คำสั่งซื้อเสร็จสมบูรณ์แล้ว",
   cancelled: "คำสั่งซื้อนี้ถูกยกเลิกแล้ว",
 };
@@ -235,12 +237,12 @@ async function notifyOrderPaid(order) {
   const title = order.productTitle || "สินค้า";
   await postToProductRoom({
     order,
-    body: `🛒 ผู้ซื้อทำการซื้อสินค้า '${title}' และชำระเงินเรียบร้อยแล้ว | หมายเลขคำสั่งซื้อ: #${order.id}`,
+    body: `🛒 ผู้ซื้อทำการซื้อสินค้า '${title}' และชำระเงินเรียบร้อยแล้ว กรุณายืนยันคำสั่งซื้อภายใน 1 วัน | หมายเลขคำสั่งซื้อ: #${order.id}`,
     payload: {
       event: "order.paid",
       orderId: order.id,
       productId: order.productId,
-      status: "confirmed",
+      status: "paid",
     },
   });
 }
@@ -254,8 +256,10 @@ async function notifyOrderStatusChanged(order, status) {
 
   const body =
     status === "shipped"
-      ? `📦 ผู้ขายจัดส่งสินค้าแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า | หมายเลขคำสั่งซื้อ: #${order.id}`
-      : `คำสั่งซื้อ #${order.id}: ${statusLabel}`;
+      ? `📦 ผู้ขายจัดส่งสินค้าแล้ว | หมายเลขคำสั่งซื้อ: #${order.id}`
+      : status === "delivered"
+        ? `📬 สินค้าถึงผู้ซื้อแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า (ระบบจะยืนยันให้อัตโนมัติใน 14 วัน) | หมายเลขคำสั่งซื้อ: #${order.id}`
+        : `คำสั่งซื้อ #${order.id}: ${statusLabel}`;
 
   await postToProductRoom({
     order,

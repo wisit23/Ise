@@ -63,6 +63,8 @@ async function makeCompletedOrder() {
       ordersAmount: 1500,
       orderType: "BUY_NOW",
       status: "completed",
+      deliveredAt: new Date(),
+      completedAt: new Date(),
     },
   });
 }

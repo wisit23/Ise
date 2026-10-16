@@ -379,7 +379,7 @@ async function openDispute({
       where: {
         id: orderId,
         version: expectedVersion ?? order.version,
-        status: { in: ["completed", "disputed"] },
+        status: { in: ["delivered", "completed", "disputed"] },
       },
       data: {
         status: "disputed",

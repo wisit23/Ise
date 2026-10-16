@@ -31,7 +31,8 @@ jest.mock(
 );
 
 const push = jest.fn();
-const mockRouter = { push };
+const replace = jest.fn();
+const mockRouter = { push, replace };
 jest.mock("next/navigation", () => ({
   useRouter: () => mockRouter,
 }));
@@ -95,6 +96,40 @@ test("shows the Marketing voucher and its server-calculated order summary", asyn
   ).toHaveTextContent("SAVE200");
   expect(screen.getByText("ส่วนลดสินค้าชิ้นนี้ -฿200")).toBeInTheDocument();
   expect(screen.getByText("฿800")).toBeInTheDocument();
+});
+
+test("returns straight to the QR page when the order already has an open payment session", async () => {
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/order-1"
+      ? Promise.resolve({
+          ...ORDER,
+          checkoutSessionId: "session-1",
+          checkoutSession: { id: "session-1", status: "pending" },
+        })
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+  await waitFor(() =>
+    expect(replace).toHaveBeenCalledWith("/payment/session-1"),
+  );
+  expect(screen.queryByText("สมชาย ใจดี")).not.toBeInTheDocument();
+});
+
+test("stays on checkout when the previous payment session is no longer pending", async () => {
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/order-1"
+      ? Promise.resolve({
+          ...ORDER,
+          checkoutSessionId: "session-0",
+          checkoutSession: { id: "session-0", status: "expired" },
+        })
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+  await screen.findByText("สมชาย ใจดี");
+  expect(replace).not.toHaveBeenCalled();
 });
 
 test("entering checkout creates orders from cart reservations before confirming payment", async () => {

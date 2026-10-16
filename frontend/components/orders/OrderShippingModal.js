@@ -184,7 +184,7 @@ export default function OrderShippingModal({
               )}
             </div>
 
-            {canShip && order.status === "confirmed" && <div className="grid gap-3 sm:grid-cols-2">
+            {canShip && order.status === "ready_to_ship" && <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-sm">บริษัทขนส่ง<input aria-label="บริษัทขนส่ง" value={company} onChange={e=>setCompany(e.target.value)} maxLength={120} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
               <label className="text-sm">เลขติดตามพัสดุ<input aria-label="เลขติดตามพัสดุ" value={trackingNumber} onChange={e=>setTrackingNumber(e.target.value)} maxLength={120} className="mt-1 w-full rounded-lg border px-3 py-2" /></label>
             </div>}
@@ -194,7 +194,7 @@ export default function OrderShippingModal({
                 ปิด
               </Button>
 
-              {canShip && order.status === "confirmed" && (
+              {canShip && order.status === "ready_to_ship" && (
                 <Button
                   variant="primary"
                   icon="local_shipping"
@@ -207,7 +207,7 @@ export default function OrderShippingModal({
                 </Button>
               )}
 
-              {order.status === "shipped" && (
+              {["shipped", "delivered"].includes(order.status) && (
                 <span className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 border border-sky-200">
                   <span className="material-symbols-outlined text-[16px]">
                     check_circle

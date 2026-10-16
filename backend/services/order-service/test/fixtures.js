@@ -32,6 +32,13 @@ async function createOrder(prisma, { data }) {
     ordersAmount: fields.ordersAmount ?? finalPrice ?? price,
     orderType: fields.orderType || "BUY_NOW",
   };
+  // Mirror the timestamps a real transition stamps; dispute windows use them.
+  const now = new Date();
+  if (["shipped", "delivered", "completed"].includes(data.status))
+    data.shippedAt ??= now;
+  if (["delivered", "completed"].includes(data.status))
+    data.deliveredAt ??= now;
+  if (data.status === "completed") data.completedAt ??= now;
   const pending = ["pending", "pending_payment"].includes(data.status);
   return prisma.order.create({
     data: {

@@ -160,7 +160,27 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
       .addressId,
     "address2",
   );
+  // Shipping waits for the seller: paid -> confirmed -> ready_to_ship.
   let order = await prisma.order.findUnique({ where: { id: first.id } });
+  await assert.rejects(
+    shippingService.markShipped({
+      orderId: first.id,
+      actorId: "seller1",
+      version: order.version,
+      company: "Carrier",
+      trackingNumber: "TRACK-0",
+    }),
+    (err) => err.status === 409,
+  );
+  for (const status of ["confirmed", "ready_to_ship"]) {
+    res = await request(app)
+      .patch(`/${first.id}/status`)
+      .set("Authorization", `Bearer ${token("seller1", "BUYER")}`)
+      .send({ status });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.status, status);
+  }
+  order = await prisma.order.findUnique({ where: { id: first.id } });
   await assert.rejects(
     shippingService.markShipped({
       orderId: first.id,
@@ -211,6 +231,8 @@ test("ER evidence API: buyer uploads before claim, staff chooses deadline, audit
       originalAmount: "99.99",
       ordersAmount: "99.99",
       status: "completed",
+      deliveredAt: new Date(),
+      completedAt: new Date(),
       payments: {
         create: {
           paymentType: "TEST",
