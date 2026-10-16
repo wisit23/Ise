@@ -17,6 +17,7 @@ import OrderReviewForm from "../../components/orders/OrderReviewForm";
 import OrderDisputeForm from "../../components/orders/OrderDisputeForm";
 import { apiFetch } from "../../lib/api";
 import { validateAddressContact } from "../../lib/addressValidation";
+import { canOpenDispute } from "../../lib/orderLifecycle";
 import {
   getAccessToken,
   getRefreshToken,
@@ -44,14 +45,14 @@ const ORDER_STATUSES = [
   },
   {
     key: "confirmed",
-    statuses: ["confirmed"],
-    label: "รอยืนยัน",
+    statuses: ["paid", "confirmed", "ready_to_ship"],
+    label: "รอจัดส่ง",
     icon: "inventory_2",
     badgeColor: "bg-sky-100 text-sky-800",
   },
   {
     key: "shipped",
-    statuses: ["shipped"],
+    statuses: ["shipped", "delivered"],
     label: "จัดส่งแล้ว",
     icon: "local_shipping",
     badgeColor: "bg-indigo-100 text-indigo-800",
@@ -68,8 +69,11 @@ const ORDER_STATUSES = [
 const ORDER_STATUS_META = {
   pending: ORDER_STATUSES[0],
   pending_payment: ORDER_STATUSES[0],
-  confirmed: ORDER_STATUSES[1],
+  paid: { ...ORDER_STATUSES[1], label: "รอผู้ขายยืนยัน" },
+  confirmed: { ...ORDER_STATUSES[1], label: "ผู้ขายกำลังเตรียมสินค้า" },
+  ready_to_ship: { ...ORDER_STATUSES[1], label: "รอขนส่งมารับสินค้า" },
   shipped: ORDER_STATUSES[2],
+  delivered: { ...ORDER_STATUSES[2], label: "สินค้าถึงแล้ว รอยืนยันรับ" },
   completed: ORDER_STATUSES[3],
   cancelled: {
     label: "ยกเลิกแล้ว",
@@ -809,7 +813,7 @@ export default function ProfilePage() {
                                 รีวิว
                               </Button>
                             )}
-                          {ord.status === "completed" && !ord.dispute && (
+                          {canOpenDispute(ord) && (
                             <Button
                               variant="danger"
                               size="sm"

@@ -4,6 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import EmptyState from "../../ui/EmptyState";
 import OrderShippingModal from "../../orders/OrderShippingModal";
+import { apiFetch } from "../../../lib/api";
+import { getAccessToken } from "../../../lib/auth";
+import { SELLER_NEXT_STEP } from "../../../lib/orderLifecycle";
 import {
   ORDER_STATUS_LABEL,
   ORDER_STATUS_STYLE,
@@ -15,8 +18,11 @@ const ALL_STATUSES = [
   { value: "", label: "ทั้งหมด" },
   { value: "pending", label: "รอชำระเงิน" },
   { value: "pending_payment", label: "รอชำระเงิน (PP)" },
-  { value: "confirmed", label: "รอขนส่ง" },
+  { value: "paid", label: "รอยืนยันคำสั่งซื้อ" },
+  { value: "confirmed", label: "ต้องเตรียมสินค้า" },
+  { value: "ready_to_ship", label: "รอขนส่งมารับ" },
   { value: "shipped", label: "อยู่ระหว่างการขนส่ง" },
+  { value: "delivered", label: "ส่งถึงผู้ซื้อแล้ว" },
   { value: "completed", label: "ขายสำเร็จ" },
   { value: "cancelled", label: "ยกเลิกแล้ว" },
   { value: "disputed", label: "ข้อพิพาท" },
@@ -35,6 +41,28 @@ export default function SellerOrderTracker({
   const [localStatusFilter, setLocalStatusFilter] = useState("");
   const [selectedOrderForShipping, setSelectedOrderForShipping] = useState(null);
   const [shippingModalOpen, setShippingModalOpen] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
+
+  async function changeStatus(order, status) {
+    if (
+      status === "cancelled" &&
+      !window.confirm("ปฏิเสธคำสั่งซื้อนี้? ระบบจะคืนเงินให้ผู้ซื้อ")
+    )
+      return;
+    setUpdatingOrderId(order.id);
+    try {
+      const updated = await apiFetch(`/api/orders/${order.id}/status`, {
+        method: "PATCH",
+        token: getAccessToken(),
+        body: { status },
+      });
+      onOrderUpdated?.(updated);
+    } catch (err) {
+      alert(err.message || "อัปเดตคำสั่งซื้อไม่สำเร็จ");
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  }
   const statusFilter =
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
@@ -191,7 +219,32 @@ export default function SellerOrderTracker({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                      {o.status === "confirmed" && (
+                      {["paid", "confirmed"].includes(o.status) && (
+                        <button
+                          type="button"
+                          disabled={updatingOrderId === o.id}
+                          onClick={() =>
+                            changeStatus(o, SELLER_NEXT_STEP[o.status].status)
+                          }
+                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-700 transition disabled:opacity-50"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">
+                            {o.status === "paid" ? "task_alt" : "inventory_2"}
+                          </span>
+                          <span>{SELLER_NEXT_STEP[o.status].label}</span>
+                        </button>
+                      )}
+                      {o.status === "paid" && (
+                        <button
+                          type="button"
+                          disabled={updatingOrderId === o.id}
+                          onClick={() => changeStatus(o, "cancelled")}
+                          className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                        >
+                          <span>ปฏิเสธ</span>
+                        </button>
+                      )}
+                      {o.status === "ready_to_ship" && (
                         <button
                           type="button"
                           onClick={() => {

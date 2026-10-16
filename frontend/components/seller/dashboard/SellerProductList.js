@@ -182,7 +182,7 @@ export default function SellerProductList({
                   </td>
                   {(() => {
                     const awaitingOrder = (orders || []).find(
-                      (o) => o.productId === p.id && o.status === "confirmed",
+                      (o) => o.productId === p.id && o.status === "ready_to_ship",
                     );
 
                     return (

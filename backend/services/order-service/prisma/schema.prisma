@@ -57,6 +57,9 @@ model Order {
   ordersAmount     Decimal                 @map("orders_amount") @db.Decimal(18, 2)
   status           String                  @default("pending_payment")
   version          Int                     @default(1)
+  shippedAt        DateTime?               @map("shipped_at")
+  deliveredAt      DateTime?               @map("delivered_at")
+  completedAt      DateTime?               @map("completed_at")
   createdAt        DateTime                @default(now()) @map("created_at")
   updatedAt        DateTime                @updatedAt @map("updated_at")
   checkout         Checkout?               @relation(fields: [checkoutId], references: [id])
@@ -72,6 +75,8 @@ model Order {
   @@index([buyerId])
   @@index([sellerId])
   @@index([checkoutId])
+  @@index([status, shippedAt])
+  @@index([status, deliveredAt])
   @@map("orders")
 }
 

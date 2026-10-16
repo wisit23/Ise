@@ -20,6 +20,18 @@ function fixture(
   };
   const writes = [];
   const tx = {
+    payment: {
+      create: async ({ data }) => {
+        writes.push({ payment: data });
+        return data;
+      },
+    },
+    shipping: {
+      update: async (args) => {
+        writes.push({ shipping: args.data });
+        return args.data;
+      },
+    },
     productSyncJob: {
       create: async ({ data }) => {
         writes.push({ job: data });
@@ -94,4 +106,36 @@ test("a concurrent payment/version change prevents cancellation and event creati
     (err) => err.status === 409,
   );
   assert.equal(writes.length, 1);
+});
+
+test("a paid order cancelled by the seller records a simulated refund", async (t) => {
+  const { writes } = fixture(t, {
+    status: "paid",
+    payments: [{ paymentStatus: "paid" }],
+  });
+  const result = await model.transitionStatusWithProductSync({
+    ...cancellation,
+    expectedStatuses: ["paid"],
+    actorId: "seller",
+  });
+  assert.equal(result.order.status, "cancelled");
+  const refund = writes.find((w) => w.payment)?.payment;
+  assert.equal(refund.paymentStatus, "refunded");
+  assert.equal(refund.paymentAmount, "100");
+});
+
+test("delivered and completed transitions stamp their time and need no product sync", async (t) => {
+  const { writes } = fixture(t, { status: "shipped" });
+  const result = await model.transitionStatusWithProductSync({
+    id: "o",
+    status: "delivered",
+    expectedVersion: 1,
+    expectedStatuses: ["shipped"],
+    actorId: "system",
+  });
+  assert.equal(result.event, null);
+  assert.ok(writes[0].data.deliveredAt instanceof Date);
+  assert.equal(writes.some((w) => w.job), false);
+  assert.equal(model.statusData("completed").completedAt instanceof Date, true);
+  assert.equal(model.statusData("confirmed").completedAt, undefined);
 });

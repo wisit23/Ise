@@ -228,7 +228,9 @@ export default function ProductDetailPage() {
         const orderForThisProduct = (data.items || []).find(
           (o) =>
             o.productId === product.id &&
-            ["confirmed", "shipped"].includes(o.status),
+            ["paid", "confirmed", "ready_to_ship", "shipped"].includes(
+              o.status,
+            ),
         );
         setSellerActiveOrder(orderForThisProduct || null);
       })
@@ -574,9 +576,13 @@ export default function ProductDetailPage() {
                 </span>
                 <div>
                   <p className="font-bold">
-                    {sellerActiveOrder.status === "confirmed"
-                      ? "📦 สินค้านี้มีคำสั่งซื้อรอจัดส่ง!"
-                      : "🚚 สินค้านี้อยู่ระหว่างการขนส่ง"}
+                    {sellerActiveOrder.status === "paid"
+                      ? "🛒 สินค้านี้มีคำสั่งซื้อใหม่ รอคุณยืนยันภายใน 1 วัน"
+                      : sellerActiveOrder.status === "confirmed"
+                        ? "📦 กรุณาเตรียมสินค้าสำหรับคำสั่งซื้อนี้"
+                        : sellerActiveOrder.status === "ready_to_ship"
+                          ? "📦 สินค้านี้มีคำสั่งซื้อรอจัดส่ง!"
+                          : "🚚 สินค้านี้อยู่ระหว่างการขนส่ง"}
                   </p>
                   <p className="text-xs text-emerald-700 font-mono mt-0.5">
                     Order ID: #{sellerActiveOrder.id}
@@ -585,16 +591,22 @@ export default function ProductDetailPage() {
               </div>
               <button
                 type="button"
-                onClick={() => setShippingModalOpen(true)}
+                onClick={() =>
+                  ["paid", "confirmed"].includes(sellerActiveOrder.status)
+                    ? router.push("/seller/dashboard")
+                    : setShippingModalOpen(true)
+                }
                 className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold text-xs shadow-sm transition active:scale-95"
               >
                 <span className="material-symbols-outlined text-[16px]">
                   local_shipping
                 </span>
                 <span>
-                  {sellerActiveOrder.status === "confirmed"
-                    ? "จัดส่งสินค้า"
-                    : "ดูรายละเอียดการจัดส่ง"}
+                  {["paid", "confirmed"].includes(sellerActiveOrder.status)
+                    ? "จัดการคำสั่งซื้อ"
+                    : sellerActiveOrder.status === "ready_to_ship"
+                      ? "จัดส่งสินค้า"
+                      : "ดูรายละเอียดการจัดส่ง"}
                 </span>
               </button>
             </div>

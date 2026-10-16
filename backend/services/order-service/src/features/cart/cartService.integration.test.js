@@ -295,7 +295,7 @@ test("cart to checkout persists reservations separately and serializes order cre
         sessionId: session.id,
       });
       assert.equal(paid.status, "paid");
-      assert.equal(paid.orders[0].status, "confirmed");
+      assert.equal(paid.orders[0].status, "paid");
       assert.equal(await db.payment.count({ where: { orderId: order.id } }), 1);
       await checkout.confirm({ buyerId: "buyer", sessionId: session.id });
       assert.equal(await db.payment.count({ where: { orderId: order.id } }), 1);
