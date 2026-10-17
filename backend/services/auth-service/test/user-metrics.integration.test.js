@@ -62,9 +62,11 @@ test("executive user metrics against a real database", async (t) => {
   const insideWindow = new Date("2026-01-15T00:00:00.000Z");
   const outsideWindow = new Date("2025-12-15T00:00:00.000Z");
 
-  // Two users created inside the window (newUsers=2); one of them logs in
-  // twice inside the window (still counts once — activeUsers is distinct
-  // by user), the other logs in outside the window (must not count).
+  // Two customers created inside the window; one of them logs in twice
+  // inside the window (still counts once — activeUsers is distinct by user),
+  // the other logs in outside the window (must not count). Staff accounts,
+  // and a buyer promoted to staff, are not customers: neither their logins nor
+  // their sign-ups count. A seller and a buyer-and-seller do count.
   const userA = await prisma.user.create({
     data: {
       email: `${FIXTURE_EMAIL_PREFIX}a-${runId}@example.test`,
@@ -84,12 +86,47 @@ test("executive user metrics against a real database", async (t) => {
     },
   });
 
+  const makeUser = (name, role) =>
+    prisma.user.create({
+      data: {
+        email: `${FIXTURE_EMAIL_PREFIX}${name}-${runId}@example.test`,
+        passwordHash,
+        firstName: "Metrics",
+        lastName: name,
+        role,
+        createdAt: insideWindow,
+      },
+    });
+  const seller = await makeUser("seller", "SELLER");
+  const staff = await makeUser("staff", "CUSTOMER_SERVICE");
+  const executive = await makeUser("executive", "EXECUTIVE");
+  // Legacy role says buyer, but a role row makes the account a staff account.
+  const promoted = await makeUser("promoted", "BUYER");
+  await prisma.userRole.create({
+    data: { userId: promoted.id, role: "ADMIN" },
+  });
+  // A customer with role rows: both customer roles still count once.
+  const both = await makeUser("both", "BUYER");
+  await prisma.userRole.createMany({
+    data: [
+      { userId: both.id, role: "BUYER" },
+      { userId: both.id, role: "SELLER" },
+    ],
+  });
+  const allUsers = [userA, userB, seller, staff, executive, promoted, both];
+
   try {
     await prisma.loginLog.createMany({
       data: [
         { userId: userA.id, loginAt: insideWindow },
         { userId: userA.id, loginAt: insideWindow },
         { userId: userB.id, loginAt: outsideWindow },
+        { userId: seller.id, loginAt: insideWindow },
+        { userId: staff.id, loginAt: insideWindow },
+        { userId: executive.id, loginAt: insideWindow },
+        { userId: promoted.id, loginAt: insideWindow },
+        { userId: both.id, loginAt: insideWindow },
+        { userId: both.id, loginAt: insideWindow },
       ],
     });
 
@@ -99,7 +136,9 @@ test("executive user metrics against a real database", async (t) => {
       .set("Authorization", `Bearer ${executiveToken}`);
 
     assert.equal(res.status, 200);
-    assert.deepEqual(res.body.data, { activeUsers: 1, newUsers: 2 });
+    // Customers only: A, the seller and the buyer-and-seller log in inside the
+    // window (3); A, B, the seller and the buyer-and-seller sign up (4).
+    assert.deepEqual(res.body.data, { activeUsers: 3, newUsers: 4 });
     assert.equal(res.body.meta.definitionVersion, "v1");
     assert.equal(res.body.meta.timezone, "Asia/Bangkok");
 
@@ -111,12 +150,10 @@ test("executive user metrics against a real database", async (t) => {
     const unauthenticatedRes = await request(app).get("/executive/metrics");
     assert.equal(unauthenticatedRes.status, 401);
   } finally {
-    await prisma.loginLog.deleteMany({
-      where: { userId: { in: [userA.id, userB.id] } },
-    });
-    await prisma.user.deleteMany({
-      where: { id: { in: [userA.id, userB.id] } },
-    });
+    const ids = allUsers.map((u) => u.id);
+    await prisma.loginLog.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.userRole.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.user.deleteMany({ where: { id: { in: ids } } });
     await prisma.$disconnect();
   }
 });

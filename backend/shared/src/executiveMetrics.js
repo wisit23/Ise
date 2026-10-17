@@ -74,8 +74,8 @@ function offsetMs(instant, timezone) {
  * The offset is re-read at the candidate instant so a zone whose offset
  * changes that day (DST) still lands on the correct midnight.
  */
-function zonedMidnight(year, monthIndex, day, timezone) {
-  const wall = Date.UTC(year, monthIndex, day);
+function zonedMidnight(year, monthIndex, day, timezone, minutes = 0) {
+  const wall = Date.UTC(year, monthIndex, day, 0, minutes);
   const guess = wall - offsetMs(new Date(wall), timezone);
   return new Date(wall - offsetMs(new Date(guess), timezone));
 }
@@ -140,6 +140,11 @@ function metricMeta({ from, to, timezone }) {
 }
 
 const SERIES_GRANULARITIES = ["day", "month"];
+// Hourly buckets (00:00, 01:00 … 23:00 local) for looking inside one day.
+// Offered only by providers whose SQL can bucket by the hour, so it is not
+// part of the default list every series endpoint accepts.
+const SLOT_GRANULARITY = "hour";
+const SLOT_MINUTES = 60;
 const MAX_SERIES_POINTS = 366;
 
 /**
@@ -156,18 +161,29 @@ function buildSeriesPeriods({
   to,
   granularity,
   timezone = DEFAULT_METRIC_TIMEZONE,
+  granularities = SERIES_GRANULARITIES,
 }) {
-  if (!SERIES_GRANULARITIES.includes(granularity)) {
-    throw badRequest(
-      `granularity must be one of ${SERIES_GRANULARITIES.join(", ")}`,
-    );
+  if (!granularities.includes(granularity)) {
+    throw badRequest(`granularity must be one of ${granularities.join(", ")}`);
   }
 
   const start = zonedParts(from, timezone);
-  const bucketAt = (step) =>
-    granularity === "day"
+  const startMinute = start.hour * 60 + start.minute;
+  const firstSlot = Math.floor(startMinute / SLOT_MINUTES) * SLOT_MINUTES;
+  const bucketAt = (step) => {
+    if (granularity === SLOT_GRANULARITY) {
+      return zonedMidnight(
+        start.year,
+        start.monthIndex,
+        start.day,
+        timezone,
+        firstSlot + step * SLOT_MINUTES,
+      );
+    }
+    return granularity === "day"
       ? zonedMidnight(start.year, start.monthIndex, start.day + step, timezone)
       : zonedMidnight(start.year, start.monthIndex + step, 1, timezone);
+  };
 
   const periods = [];
   for (
@@ -206,6 +222,8 @@ module.exports = {
   METRIC_DEFINITION_VERSION,
   DEFAULT_METRIC_TIMEZONE,
   SERIES_GRANULARITIES,
+  SLOT_GRANULARITY,
+  SLOT_MINUTES,
   MAX_SERIES_POINTS,
   resolveMetricRange,
   metricMeta,

@@ -1,3 +1,4 @@
+const { forbidden } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 
 const MAX_AUDIT_LIMIT = 100;
@@ -15,7 +16,7 @@ const AUDIT_CATEGORIES = {
  *
  * @param {Object} entry
  * @param {string} entry.actorId - User ID of the executive performing the action
- * @param {string} [entry.actorEmail] - Email or display name of the actor
+ * (the actor's email is read from the users table, never taken from the caller)
  * @param {string} [entry.actorRole] - Role of the actor (defaults to EXECUTIVE)
  * @param {string} entry.action - Machine-readable action code (e.g., REPORT_EXPORT_CSV)
  * @param {string} [entry.category] - Category of action (GENERAL, DATA_EXPORT, etc.)
@@ -28,7 +29,6 @@ const AUDIT_CATEGORIES = {
  */
 async function recordExecutiveAudit({
   actorId,
-  actorEmail,
   actorRole = "EXECUTIVE",
   action,
   category = AUDIT_CATEGORIES.GENERAL,
@@ -45,10 +45,20 @@ async function recordExecutiveAudit({
     );
   }
 
+  // The email is whatever the account says now, read here, not trusted from
+  // the request. No account means there is nobody to attribute the action to.
+  const actor = await prisma.user.findUnique({
+    where: { id: actorId },
+    select: { email: true },
+  });
+  if (!actor) {
+    throw forbidden("Audit actor account not found");
+  }
+
   return prisma.executiveAuditLog.create({
     data: {
       actorId,
-      actorEmail: actorEmail || null,
+      actorEmail: actor.email,
       actorRole: actorRole || "EXECUTIVE",
       action,
       category,

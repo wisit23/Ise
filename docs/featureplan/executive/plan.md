@@ -27,7 +27,7 @@
 | `UR-27` | `FR-6.1.1`             | `NFR-P-01`, `NFR-AR-01`, `NFR-U-02`, `NFR-BR-02`; `NFR-SP-01` (Security Phase) | `WF-12`  | `CEO-001`, `CEO-002` / Core |
 | `UR-28` | `FR-6.1.2`             | `NFR-SC-02`, `NFR-BR-02`, `NFR-BR-03`                                          | `WF-12`  | `CEO-001`, `CEO-002` / Core |
 | `UR-29` | `FR-6.1.3`             | `NFR-U-01`                                                                     | `WF-12`  | `CEO-003` / Core            |
-| `UR-30` | `FR-6.2.1`             | `NFR-M-02`; `NFR-SP-03` (Security Phase)                                       | `WF-12`  | `CEO-004` / Extended        |
+| `UR-30` | `FR-6.2.1`             | `NFR-M-02`; `NFR-SP-03` (Security Phase)                                       | `WF-12`  | `CEO-004` / Not delivered   |
 | `UR-31` | `FR-6.1.4`             | `NFR-P-06`                                                                     | `WF-12`  | `CEO-005` / Extended        |
 
 ### PostgreSQL acceptance for Executive
@@ -35,7 +35,7 @@
 - `CEO-001`: GMV/revenue/user metrics are aggregated from persisted service-owner facts
 - `CEO-002`: dashboard fixtures are created through APIs/Prisma and partial state is not a fake zero
 - `CEO-003`: rankings rebuild from completed Order/Product facts with deterministic ties
-- `CEO-004`: alert fingerprint/status persists in the provider database
+- `CEO-004`: alert fingerprint/status persists in the provider database (not delivered, see CEO-DEC-011)
 - `CEO-005`: export job/status/expiry persists and export content derives from database facts
 - Database tests run with `REQUIRE_INTEGRATION=1`; an unavailable database must fail, not skip
 
@@ -129,15 +129,22 @@ rows.sort(
       if listings ever become soft-deleted.
 - [x] **Step 5: Update docs** — commit `feat(executive): add catalog rankings` still pending
 
-### Task CEO-004: Extended Anomaly Alerts
+### Task CEO-004: Extended Anomaly Alerts — NOT DELIVERED
+
+**Status:** stays in scope but will not be delivered before the deadline (CEO-DEC-011, 2026-10-16).
+It is not started: the anomaly rule, alert worker, persisted alert fingerprint/status and
+notifications need a new table and a worker, which needs ER approval. The repeat-complaint warning
+on the complaints page (a target with `EXECUTIVE_REPORT_ANOMALY_THRESHOLD` or more complaints,
+computed on request, nothing stored) is what ships for `UR-30`. The steps below are the plan if it is
+picked up later, now pointing at `auth-service`.
 
 **Files:**
 
-- Create: `backend/services/review-service/src/features/alerts/anomalyRule.js`
-- Create: `backend/services/review-service/src/features/alerts/alertWorker.js`
-- Modify: `backend/services/review-service/prisma/schema.prisma`
-- Test: `backend/services/review-service/test/executive-alert.integration.test.js`
-- Test: `backend/services/review-service/src/features/alerts/anomalyRule.test.js`
+- Create: `backend/services/auth-service/src/features/alerts/anomalyRule.js`
+- Create: `backend/services/auth-service/src/features/alerts/alertWorker.js`
+- Modify: `backend/services/auth-service/prisma/schema.prisma`
+- Test: `backend/services/auth-service/test/executive-alert.integration.test.js`
+- Test: `backend/services/auth-service/src/features/alerts/anomalyRule.test.js`
 
 **Interfaces:** Produces `executive.alert.created.v1` from explicit threshold/version
 
@@ -158,15 +165,15 @@ function alertFingerprint({ ruleId, bucketStart }) {
 
 **Files:**
 
-- Create: `backend/services/review-service/src/features/exports/exportRoutes.js`
-- Create: `backend/services/review-service/src/features/exports/exportService.js`
-- Create: `backend/services/review-service/src/features/exports/exportWorker.js`
-- Modify: `backend/services/review-service/prisma/schema.prisma`
-- Test: `backend/services/review-service/test/executive-export.integration.test.js`
+- Create: `backend/services/auth-service/src/features/exports/exportRoutes.js`
+- Create: `backend/services/auth-service/src/features/exports/exportService.js`
+- Create: `backend/services/auth-service/src/features/exports/exportWorker.js`
+- Modify: `backend/services/auth-service/prisma/schema.prisma`
+- Test: `backend/services/auth-service/test/executive-export.integration.test.js`
 
 **Interfaces:**
 
-- Produces: `POST /api/reviews/executive/exports {format, from, to, category}`
+- Produces: `POST /api/auth/executive/exports {format, from, to, category}`
 - Produces: `runExportJob({exportJobId})` which claims one persisted `PENDING` job and writes
   `COMPLETED` or `FAILED`
 

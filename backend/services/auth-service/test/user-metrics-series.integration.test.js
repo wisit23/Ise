@@ -79,6 +79,18 @@ test("executive user metrics series against a real database", async (t) => {
     },
   });
 
+  // A staff account that logs in on the busiest day: not a customer, so it
+  // must not add to any day or month.
+  const staff = await prisma.user.create({
+    data: {
+      email: `${FIXTURE_EMAIL_PREFIX}staff-${runId}@example.com`,
+      passwordHash,
+      firstName: "Series",
+      lastName: "Staff",
+      role: "EXECUTIVE",
+    },
+  });
+
   try {
     await prisma.loginLog.createMany({
       data: [
@@ -87,6 +99,8 @@ test("executive user metrics series against a real database", async (t) => {
         { userId: userA.id, loginAt: day5 },
         { userId: userB.id, loginAt: day5 },
         { userId: userA.id, loginAt: day10 },
+        { userId: staff.id, loginAt: day5 },
+        { userId: staff.id, loginAt: day10 },
         { userId: userB.id, loginAt: bangkokMarch1 },
       ],
     });
@@ -134,6 +148,30 @@ test("executive user metrics series against a real database", async (t) => {
     assert.equal(res.body.meta.definitionVersion, "v1");
     assert.equal(res.body.meta.timezone, "Asia/Bangkok");
 
+    // A month adds up its days: Mar 1 (B) + Mar 5 (A, B) + Mar 10 (A) = 4
+    // user-days, although only two different people logged in. Counting
+    // distinct people per month would give 2 and disagree with the days.
+    const monthRes = await request(app)
+      .get("/executive/metrics-series")
+      .query({
+        from: "2019-01-01",
+        to: "2020-01-01",
+        granularity: "month",
+        timezone: "Asia/Bangkok",
+      })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(monthRes.status, 200);
+    assert.equal(monthRes.body.data.length, 12);
+    const marchRow = monthRes.body.data.find(
+      (r) => r.period === "2019-02-28T17:00:00.000Z",
+    );
+    assert.equal(marchRow.activeUsers, 4);
+    assert.equal(
+      monthRes.body.data.reduce((total, r) => total + r.activeUsers, 0),
+      res.body.data.reduce((total, r) => total + r.activeUsers, 0),
+      "the year adds up to the same as the days of March",
+    );
+
     const badGranularityRes = await request(app)
       .get("/executive/metrics-series")
       .query({ granularity: "week" })
@@ -152,10 +190,10 @@ test("executive user metrics series against a real database", async (t) => {
     assert.equal(unauthenticatedRes.status, 401);
   } finally {
     await prisma.loginLog.deleteMany({
-      where: { userId: { in: [userA.id, userB.id] } },
+      where: { userId: { in: [userA.id, userB.id, staff.id] } },
     });
     await prisma.user.deleteMany({
-      where: { id: { in: [userA.id, userB.id] } },
+      where: { id: { in: [userA.id, userB.id, staff.id] } },
     });
     await prisma.$disconnect();
   }

@@ -6,24 +6,18 @@ import {
   baht,
   currentYearMonth,
   dayLabel,
+  fetchFirstSaleYear,
   fetchMetricsSeries,
   monthLabel,
   monthWindow,
   MONTH_NAMES,
-  PLATFORM_FEE_RATE,
+  feePercent,
+  reportYears,
   yearWindow,
   logExecutiveAction,
 } from "../../../lib/executive";
 
-const FIRST_YEAR = 2024;
 const UNAVAILABLE = "ไม่พร้อมใช้งาน";
-
-function yearChoices() {
-  const thisYear = currentYearMonth().year;
-  const years = [];
-  for (let y = thisYear; y >= FIRST_YEAR; y--) years.push(y);
-  return years;
-}
 
 /** Builds the [{period,label,gmv,platformRevenue,completedOrders,activeUsers}]
  * rows the table and the CSV both render from. Backbone comes from whichever
@@ -63,6 +57,22 @@ export default function ReportsSection({ token }) {
   const [series, setSeries] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Undefined until the order service has said when the first sale was.
+  const [firstSaleYear, setFirstSaleYear] = useState(undefined);
+  const years = useMemo(() => reportYears(firstSaleYear), [firstSaleYear]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchFirstSaleYear(token).then((first) => {
+      if (cancelled) return;
+      setFirstSaleYear(first);
+      // A year picked from the stand-in list may predate the first sale.
+      setYear((picked) => Math.max(picked, reportYears(first).at(-1)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const seriesGranularity = granularity === "year" ? "month" : "day";
   const periodLabel =
@@ -107,6 +117,8 @@ export default function ReportsSection({ token }) {
       completedOrders: hasOrderUnavailable
         ? null
         : rows.reduce((sum, r) => sum + (r.completedOrders || 0), 0),
+      // Web usage adds up bucket by bucket: someone who comes on three days
+      // counts three times (CEO-DEC-007).
       activeUsers: hasAuthUnavailable
         ? null
         : rows.reduce((sum, r) => sum + (r.activeUsers || 0), 0),
@@ -125,7 +137,7 @@ export default function ReportsSection({ token }) {
       { key: "gmv", label: "ยอดขาย (บาท)" },
       { key: "platformRevenue", label: "รายได้แพลตฟอร์ม (บาท)" },
       { key: "completedOrders", label: "คำสั่งซื้อ (รายการ)" },
-      { key: "activeUsers", label: "ผู้ใช้งานที่ล็อกอิน (คน)" },
+      { key: "activeUsers", label: "ผู้ใช้งานเว็บ (คน)" },
     ];
 
     const csvRows = rows.map((r) => ({
@@ -230,7 +242,7 @@ export default function ReportsSection({ token }) {
             id="year"
             value={year}
             onChange={setYear}
-            options={yearChoices().map((y) => ({
+            options={years.map((y) => ({
               value: y,
               label: String(y + 543),
             }))}
@@ -265,7 +277,9 @@ export default function ReportsSection({ token }) {
             — {periodLabel}
           </h2>
           <p className="mb-3 text-xs text-slate-500">
-            รายได้แพลตฟอร์มคำนวณที่ {PLATFORM_FEE_RATE * 100}% ของยอดขายใน
+            {feePercent(series?.feeRate) === null
+              ? "รายได้แพลตฟอร์มคำนวณจากยอดขายใน"
+              : `รายได้แพลตฟอร์มคำนวณที่ ${feePercent(series.feeRate)}% ของยอดขายใน`}
             {granularity === "year" ? "แต่ละเดือน" : "แต่ละวัน"}
           </p>
 
@@ -286,7 +300,7 @@ export default function ReportsSection({ token }) {
                     คำสั่งซื้อ
                   </th>
                   <th scope="col" className="px-5 py-3 text-center font-medium">
-                    ผู้ใช้งานที่ล็อกอิน
+                    ผู้ใช้งานเว็บ
                   </th>
                 </tr>
               </thead>
@@ -352,6 +366,9 @@ export default function ReportsSection({ token }) {
               )}
             </table>
           </div>
+          <p className="mt-2 text-xs text-slate-500">
+            {`ผู้ใช้งานเว็บนับจากผู้ซื้อและผู้ขายที่ล็อกอิน · นับเป็นรายวัน คนที่กลับมาใช้ซ้ำนับทุกวัน แถวรวมคือผลรวมของทุกวันในช่วง`}
+          </p>
         </>
       )}
     </div>

@@ -8,6 +8,7 @@ const request = require("supertest");
 
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
+process.env.PLATFORM_FEE_RATE = "0.03";
 if (process.env.DATABASE_URL_ORDER) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_ORDER;
 }
@@ -82,8 +83,9 @@ test("executive platform metrics series against a real database", async (t) => {
         {
           buyerId,
           sellerId: "s1",
+          // A 100 coupon: the day's gmv counts the 300 paid, not the 400 list.
           productId: "p2",
-          originalAmount: 300,
+          originalAmount: 400,
           ordersAmount: 300,
           orderType: "BUY_NOW",
           status: "completed",
@@ -186,6 +188,8 @@ test("executive platform metrics series against a real database", async (t) => {
 
     assert.equal(res.body.meta.definitionVersion, "v1");
     assert.equal(res.body.meta.timezone, "Asia/Bangkok");
+    // The fee rate travels with the figures so the dashboard never hardcodes it.
+    assert.equal(res.body.meta.platformFeeRate, 0.03);
     assert.equal(res.body.meta.from, "2019-02-28T17:00:00.000Z");
 
     // The non-series total uses the same Bangkok month boundaries.
@@ -219,6 +223,28 @@ test("executive platform metrics series against a real database", async (t) => {
       (r) => r.period === "2019-03-31T17:00:00.000Z",
     );
     assert.equal(aprilRow.gmv, 70);
+
+    // One Bangkok day by the hour: 24 points from 00:00 to 23:00. Both orders
+    // on 5 March were placed at 17:00 Bangkok, so they land in the 17:00 slot
+    // (index 17); the pending order does not count.
+    const slotsRes = await request(app)
+      .get("/executive/metrics-series")
+      .query({
+        from: "2019-03-05",
+        to: "2019-03-06",
+        granularity: "hour",
+        timezone: "Asia/Bangkok",
+      })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(slotsRes.status, 200);
+    assert.equal(slotsRes.body.data.length, 24);
+    assert.equal(slotsRes.body.data[0].period, "2019-03-04T17:00:00.000Z");
+    assert.deepEqual(
+      slotsRes.body.data.map((row) => row.gmv),
+      Array.from({ length: 24 }, (_, i) => (i === 17 ? 500 : 0)),
+    );
+    assert.equal(slotsRes.body.data[17].period, "2019-03-05T10:00:00.000Z");
+    assert.equal(slotsRes.body.data[17].completedOrders, 2);
 
     const badTimezoneRes = await request(app)
       .get("/executive/metrics-series")

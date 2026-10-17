@@ -111,7 +111,13 @@ async function getReports(req, res, next) {
       );
     }
 
+    // A window is optional: without one this is the live queue it always was;
+    // with one, only complaints reported in [from, to) are listed and counted.
+    const windowed = req.query.from !== undefined || req.query.to !== undefined;
+    const range = windowed ? resolveMetricRange(req.query) : null;
+
     const data = await executiveReports.getReportOverview({
+      range: range && { from: range.from, to: range.to },
       status,
       limit,
       sortBy: sortBy || "newest",
@@ -121,11 +127,11 @@ async function getReports(req, res, next) {
       page,
     });
 
-    // Complaints are a live queue, not a windowed aggregate, so there is no
-    // from/to to report here — only the definition version applies.
     res.json({
       data,
-      meta: { definitionVersion: METRIC_DEFINITION_VERSION },
+      meta: range
+        ? metricMeta(range)
+        : { definitionVersion: METRIC_DEFINITION_VERSION },
     });
   } catch (err) {
     next(err);

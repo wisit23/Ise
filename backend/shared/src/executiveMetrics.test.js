@@ -134,3 +134,40 @@ test("rows keyed by local bucket start fill the matching period", () => {
     { period: "2026-10-01T17:00:00.000Z", gmv: 0 },
   ]);
 });
+
+test("day slots start every hour from local 00:00", () => {
+  const { from, to } = resolveMetricRange({
+    from: "2025-10-16",
+    to: "2025-10-17",
+  });
+  const periods = buildSeriesPeriods({
+    from,
+    to,
+    granularity: "hour",
+    granularities: ["day", "month", "hour"],
+  });
+
+  // Bangkok is UTC+7, so local midnight is 17:00 UTC the day before.
+  assert.equal(periods.length, 24);
+  assert.deepEqual(
+    periods.slice(0, 3).map((p) => p.toISOString()),
+    [
+      "2025-10-15T17:00:00.000Z",
+      "2025-10-15T18:00:00.000Z",
+      "2025-10-15T19:00:00.000Z",
+    ],
+  );
+  // The last slot starts at 23:00 local.
+  assert.equal(periods.at(-1).toISOString(), "2025-10-16T16:00:00.000Z");
+});
+
+test("day slots are refused unless the endpoint offers them", () => {
+  const { from, to } = resolveMetricRange({
+    from: "2025-10-16",
+    to: "2025-10-17",
+  });
+  assert.throws(
+    () => buildSeriesPeriods({ from, to, granularity: "hour" }),
+    (err) => err.status === 400,
+  );
+});

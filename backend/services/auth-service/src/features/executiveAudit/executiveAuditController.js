@@ -3,43 +3,37 @@ const {
   recordExecutiveAudit,
   queryExecutiveAudit,
 } = require("./executiveAuditService");
+const { buildAuditEntry } = require("./executiveAuditPolicy");
 
 /**
- * Extract actor information from authenticated request or gateway headers.
+ * Who is acting, from the verified access token only. requireAuth has already
+ * checked the token, so these come from it and never from request headers a
+ * client could set; the email is read from the users table when recording.
  */
 function extractActor(req) {
-  const actorId = req.userId || req.headers["x-user-id"] || req.user?.id;
-  const actorRole = req.userRole || req.headers["x-user-role"] || "EXECUTIVE";
-  const actorEmail =
-    req.userDisplayName || req.headers["x-user-display-name"] || null;
   const ipAddress =
     req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
     req.socket?.remoteAddress ||
     null;
   const userAgent = req.headers["user-agent"] || null;
 
-  return { actorId, actorRole, actorEmail, ipAddress, userAgent };
+  return {
+    actorId: req.userId,
+    actorRole: req.userRole,
+    ipAddress,
+    userAgent,
+  };
 }
 
 /**
  * POST /executive/audit
- * Record an executive action log entry.
+ * Record an executive action log entry. The browser names the action and the
+ * facts; the server decides the category, wording and what is kept.
  */
 async function createAuditLog(req, res, next) {
   try {
-    const { action, category, targetType, targetId, description, metadata } =
-      req.body;
-    const actor = extractActor(req);
-
-    const log = await recordExecutiveAudit({
-      ...actor,
-      action,
-      category: category || "GENERAL",
-      targetType,
-      targetId,
-      description,
-      metadata,
-    });
+    const entry = buildAuditEntry(req.body);
+    const log = await recordExecutiveAudit({ ...extractActor(req), ...entry });
 
     res.status(201).json({ status: "ok", data: log });
   } catch (err) {

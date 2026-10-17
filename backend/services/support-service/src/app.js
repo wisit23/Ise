@@ -4,6 +4,7 @@ const ticketRoutes = require("./features/tickets/ticketRoutes");
 const helpRoutes = require("./features/help-content/helpRoutes");
 const internalRoutes = require("./features/internal/internalRoutes");
 const auditRoutes = require("./features/audit/auditRoutes");
+const executiveRoutes = require("./features/executive/executiveRoutes");
 
 const app = express();
 app.use(express.json());
@@ -14,6 +15,7 @@ app.get("/health", (req, res) =>
 
 app.use("/internal", internalRoutes);
 app.use("/audit", auditRoutes);
+app.use("/executive", executiveRoutes);
 app.use("/help", helpRoutes);
 app.use("/tickets", ticketRoutes);
 
