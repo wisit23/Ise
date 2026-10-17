@@ -348,13 +348,14 @@ export default function CaseWorkspace({
     {
       key: "id",
       header: "เลขเคส",
-      headerClassName: "w-px",
+      headerClassName: "w-px !pr-8",
+      className: "!pr-8",
       render: (row) => (
         <button
           type="button"
           aria-label={`คัดลอกเลขเคส ${row.ticketNumber || row.id}`}
           title={`${row.ticketNumber || row.id} · คลิกเพื่อคัดลอก`}
-          className="group/id inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 font-mono text-xs text-slate-600 hover:bg-slate-100 hover:text-emerald-700"
+          className="group/id -ml-1.5 inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 font-mono text-xs text-slate-600 hover:bg-slate-100 hover:text-emerald-700"
           onClick={async (event) => {
             event.stopPropagation();
             try {
@@ -379,7 +380,7 @@ export default function CaseWorkspace({
       key: "subject",
       header: dispute ? (closedView ? "เหตุผล / ออเดอร์" : "เหตุผล / คู่กรณี") : "หัวข้อ / ผู้แจ้ง",
       render: (row) => (
-        <div className={closedView ? "min-w-[220px] max-w-[420px]" : "min-w-[150px] max-w-[220px]"}>
+        <div className={closedView ? "min-w-[220px] max-w-[420px]" : dispute ? "min-w-[150px] max-w-[200px]" : "min-w-[150px] max-w-[220px]"}>
           <p className="truncate font-medium text-slate-900" title={row.subject || row.reason}>
             {row.subject || row.reason}
           </p>
