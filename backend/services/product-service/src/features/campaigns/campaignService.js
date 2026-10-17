@@ -590,7 +590,7 @@ function createCampaignService(
     });
   }
 
-  async function getCampaign({ user, campaignId }) {
+  async function getCampaign({ user, campaignId, profile = null }) {
     const campaign = await loadCampaign(campaignId);
 
     const isMarketing = Boolean(
@@ -602,7 +602,8 @@ function createCampaignService(
       if (
         campaign.status !== "published" ||
         now < new Date(campaign.startsAt) ||
-        now > new Date(campaign.endsAt)
+        now > new Date(campaign.endsAt) ||
+        !matchesSegment(profile, campaign.targetSegment)
       ) {
         throw notFound("campaign not found");
       }
@@ -621,7 +622,7 @@ function createCampaignService(
     return campaigns.filter((c) => matchesSegment(profile, c.targetSegment));
   }
 
-  async function claimVoucher({ user, campaignId }) {
+  async function claimVoucher({ user, campaignId, profile = null }) {
     if (!user || !user.id) {
       throw badRequest("user authentication required");
     }
@@ -637,6 +638,9 @@ function createCampaignService(
     }
     if (now > new Date(campaign.endsAt)) {
       throw badRequest("คูปองหมดอายุแล้ว");
+    }
+    if (!matchesSegment(profile, campaign.targetSegment)) {
+      throw forbidden("บัญชีนี้ไม่อยู่ในกลุ่มเป้าหมายของคูปอง");
     }
 
     if (
@@ -1021,7 +1025,9 @@ function createCampaignService(
       throw notFound("campaign not found");
     }
     if (campaign.status !== "published") {
-      throw badRequest(campaignUnavailableMessage(campaign, { checkout: true }));
+      throw badRequest(
+        campaignUnavailableMessage(campaign, { checkout: true }),
+      );
     }
     if (now < new Date(campaign.startsAt)) {
       throw badRequest("คูปองยังไม่เริ่มใช้งาน");
@@ -1042,8 +1048,11 @@ function createCampaignService(
     }
     if (campaign.applicableCategory && product.category) {
       if (
-        !(product.categories || [product.category]).some((name) =>
-          name.trim().toLowerCase() === campaign.applicableCategory.trim().toLowerCase())
+        !(product.categories || [product.category]).some(
+          (name) =>
+            name.trim().toLowerCase() ===
+            campaign.applicableCategory.trim().toLowerCase(),
+        )
       ) {
         throw badRequest(
           `voucher is only applicable for category: ${campaign.applicableCategory}`,

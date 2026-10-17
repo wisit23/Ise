@@ -164,7 +164,7 @@ router.post(
 - Status: Completed, verified with Jest tests (41/41 passing) and Next.js static build (24/24 pages)
 
 **Part B: Buyer Segmentation Rules (UR-13 / FR-5.1.4)**
-**Status note:** Source implementation exists in `backend/services/product-service/src/features/segments/segmentRule.js`, unit tested via `segmentRule.test.js` (7/7 passing), and integrated into public campaign listings (`listAvailablePublicCampaigns`, `getApplicableVouchers`). End-to-end buyer profile persistence hardening is scheduled for Part 4.
+**Status note:** Completed. Campaign discovery, direct detail, claim, and applicable-voucher evaluation load the authenticated buyer's persisted multi-value style profile from Auth Service. Client-supplied profile query/header/body values are ignored, and targeted campaigns fail closed when no trusted profile is available.
 
 **Files:**
 
@@ -174,11 +174,11 @@ router.post(
 
 **Interfaces:** Produces deterministic `matchesSegment(profile, rule)`
 
-- [x] **Step 1: Write segment rule unit tests** (`segmentRule.test.js`, 7/7 passing)
+- [x] **Step 1: Write segment rule unit tests** (`segmentRule.test.js`, 8/8 passing)
 - [x] **Step 2: Verify source implementation exists** (`segmentRule.js` matching whitelist fields and operators)
 - [x] **Step 3: Implement deterministic fields and evaluation** (`favoriteCategory`, `preferredSize`, `styleTag`, `brandPreference`)
-- [ ] **Step 4: Verify end-to-end Buyer profile persistence hardening** (Pending Part 4)
-- [ ] **Step 5: Update docs and commit `feat(marketing): add segmentation`** (Pending Part 4)
+- [x] **Step 4: Verify end-to-end Buyer profile persistence hardening** (`campaign-profile-persistence.integration.test.js`: Auth profile update -> targeted discovery -> anti-spoofing -> claim -> applicable voucher, 1/1 passing against live Docker PostgreSQL services)
+- [x] **Step 5: Update docs** (implementation and verification documented; commit remains a repository workflow action)
 
 ### Task MKT-005: Extended Auction and Swipe Contracts
 
@@ -189,7 +189,7 @@ route/controller/service/repository, feed แสดง Product `available` เ�
 Buyer-only authorization (403 Forbidden สำหรับ Role อื่น, 401 Unauthorized สำหรับผู้ไม่ล็อกอิน),
 Server-side persistence พร้อม Batch Query relation บน `reloop_product` (ไม่มีปัญหา N+1 query),
 User isolation (แยกสถานะ chosen รายบุคคล, Guest คืน chosen: false),
-Anti-spoofing บน API Gateway และ Public route (ห้ามเชื่อถือ client x-user-* header เมื่อไม่มี Bearer token),
+Anti-spoofing บน API Gateway และ Public route (ห้ามเชื่อถือ client x-user-\* header เมื่อไม่มี Bearer token),
 Idempotent choose, ป้องกัน 500 error ใน safe unchoose, และ Frontend optimistic rollback
 ผ่านการทดสอบ Backend/Gateway (29/29 tests), Frontend Swipe (3/3 suites, 42/42 tests), และ PostgreSQL Integration (`REQUIRE_INTEGRATION=1`, 1/1 suite);
 ทั้งนี้ Browser E2E / Responsive UI verification บนเบราว์เซอร์จริงยังไม่ได้ดำเนินการและคงสถานะเป็น Final Acceptance ที่รอดำเนินการ

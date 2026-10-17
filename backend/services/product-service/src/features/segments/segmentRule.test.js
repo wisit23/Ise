@@ -82,6 +82,41 @@ test("Buyer Segmentation Rule Engine Suite", async (t) => {
   );
 
   await t.test(
+    "matchesSegment: reads Auth's persisted multi-value style profile",
+    () => {
+      const profile = {
+        categories: ["เสื้อ", "รองเท้า"],
+        styles: ["Minimal", "Vintage"],
+        brands: ["Uniqlo"],
+        sizes: [{ category: "เสื้อ", values: ["M", "L"] }],
+        unassignedSizes: ["Free Size"],
+      };
+
+      assert.equal(
+        matchesSegment(profile, {
+          type: "rules",
+          rules: [
+            { field: "favoriteCategory", operator: "eq", value: "รองเท้า" },
+            { field: "styleTag", operator: "in", value: ["Vintage"] },
+            { field: "brandPreference", operator: "eq", value: "uniqlo" },
+            { field: "preferredSize", operator: "eq", value: "L" },
+          ],
+        }),
+        true,
+      );
+      assert.equal(
+        matchesSegment(profile, {
+          type: "rules",
+          rules: [
+            { field: "stylePreference", operator: "nin", value: ["Minimal"] },
+          ],
+        }),
+        false,
+      );
+    },
+  );
+
+  await t.test(
     "matchesSegment: in and nin operators evaluate correctly",
     () => {
       const inRule = {

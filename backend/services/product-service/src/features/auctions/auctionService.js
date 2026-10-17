@@ -21,7 +21,10 @@ const {
 const productModel = require("../../models/productModel");
 const { buildCreateProductData } = require("../../controllers/productPayload");
 const sellerActivityClient = require("../../services/sellerActivityClient");
-const { searchUsers } = require("../audit/marketingAuditAuthClient");
+const {
+  getDisplayNames,
+  searchUsers,
+} = require("../audit/marketingAuditAuthClient");
 
 const AUCTION_STATUSES = new Set([
   "draft",
@@ -1288,7 +1291,7 @@ async function list({ status, statuses = [], skip, take, roundId, roundIds = [],
       .filter((id) => typeof id === "string" && id);
   }
 
-  return auctionRepository.list({
+  const result = await auctionRepository.list({
     statuses: effectiveStatuses,
     roundIds: effectiveRoundIds,
     search: cleanSearch,
@@ -1296,6 +1299,20 @@ async function list({ status, statuses = [], skip, take, roundId, roundIds = [],
     skip,
     take,
   });
+
+  const sellerNames = new Map(
+    (await getDisplayNames(result.items.map((item) => item.sellerId)))
+      .filter((seller) => seller?.userId && seller?.displayName)
+      .map((seller) => [seller.userId, seller.displayName]),
+  );
+
+  return {
+    ...result,
+    items: result.items.map((item) => ({
+      ...item,
+      sellerDisplayName: sellerNames.get(item.sellerId) || null,
+    })),
+  };
 }
 
 function validateIdempotentBid(existing, { auctionId, userId, bidAmount }) {

@@ -1430,16 +1430,24 @@ export default function AuctionScheduleSection({ token }) {
         }}
       />
 
-      <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0">
-            <h3 className="text-base font-bold text-slate-900">
+      <section className="mb-5 overflow-visible rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <span className="material-symbols-outlined text-[22px]" aria-hidden="true">
+              inventory_2
+            </span>
+          </div>
+          <div className="min-w-0 pt-0.5">
+            <h3 className="text-base font-bold text-slate-900 sm:text-lg">
               รายการสินค้าประมูล
             </h3>
-            <p className="mt-1 text-xs leading-5 text-slate-500 sm:text-sm">
-              ตรวจสอบและอนุมัติสินค้าประมูล หรือกรองตามรอบและสถานะเพื่อจัดการรายการ
+            <p className="mt-0.5 text-xs leading-5 text-slate-500 sm:text-sm">
+              ค้นหา ตรวจสอบ และจัดการสินค้าตามรอบประมูลหรือสถานะ
             </p>
           </div>
+        </div>
+
+        <div className="mt-4 border-t border-slate-100 pt-4">
           <AuctionItemFilters
             rounds={allRoundsForFilter}
             selectedRoundIds={roundFilters}
@@ -1540,6 +1548,17 @@ export default function AuctionScheduleSection({ token }) {
                     >
                       {a.product?.title || a.productId}
                     </Link>
+                    <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
+                      <span
+                        className="material-symbols-outlined shrink-0 text-[15px] leading-none text-slate-400"
+                        aria-hidden="true"
+                      >
+                        storefront
+                      </span>
+                      <span className="truncate" title={a.sellerDisplayName || "ไม่พบชื่อร้าน"}>
+                        ร้าน: {a.sellerDisplayName || "ไม่พบชื่อร้าน"}
+                      </span>
+                    </p>
                   </div>
                   <div className="shrink-0 self-start">
                     <Badge

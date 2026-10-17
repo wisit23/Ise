@@ -169,6 +169,25 @@ test("list resolves matching shop names through auth-service and combines seller
   assert.equal(list.mock.callCount(), 1);
 });
 
+test("list enriches auction items with seller display names", async (t) => {
+  t.mock.method(global, "fetch", async (url, options) => {
+    assert.match(url, /\/internal\/users\/display-names$/);
+    assert.deepEqual(JSON.parse(options.body), { userIds: ["seller-1"] });
+    return {
+      ok: true,
+      json: async () => [{ userId: "seller-1", displayName: "ร้านวินเทจ" }],
+    };
+  });
+  t.mock.method(repository, "list", async () => ({
+    items: [{ id: "auction-1", sellerId: "seller-1" }],
+    total: 1,
+  }));
+
+  const result = await service.list({ skip: 0, take: 20 });
+
+  assert.equal(result.items[0].sellerDisplayName, "ร้านวินเทจ");
+});
+
 test("submit rejects a non-positive starting price", async () => {
   await assert.rejects(
     service.submit({

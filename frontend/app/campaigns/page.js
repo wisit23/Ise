@@ -9,7 +9,11 @@ import EmptyState from "../../components/ui/EmptyState";
 import ErrorState from "../../components/ui/ErrorState";
 import Skeleton from "../../components/ui/Skeleton";
 import { apiFetch } from "../../lib/api";
-import { getAccessToken } from "../../lib/auth";
+import {
+  getAccessToken,
+  getCurrentRoles,
+  isCustomerAccountRoles,
+} from "../../lib/auth";
 
 function formatThaiDateTime(dateString) {
   if (!dateString) return "-";
@@ -38,6 +42,7 @@ function CampaignsContent() {
 
   const [tab, setTab] = useState(initialTab);
   const [token, setToken] = useState(null);
+  const [hasCustomerAccount, setHasCustomerAccount] = useState(false);
 
   // Available campaigns state
   const [availableCampaigns, setAvailableCampaigns] = useState([]);
@@ -101,6 +106,7 @@ function CampaignsContent() {
   useEffect(() => {
     const t = getAccessToken();
     setToken(t);
+    setHasCustomerAccount(t ? isCustomerAccountRoles(getCurrentRoles()) : false);
   }, []);
 
   // Fetch available campaigns
@@ -120,7 +126,7 @@ function CampaignsContent() {
 
   // Fetch user's vouchers
   async function loadMyVouchers() {
-    if (!token) {
+    if (!token || !hasCustomerAccount) {
       setMyVouchers([]);
       setClaimedCampaignIds(new Set());
       setUsedCampaignIds(new Set());
@@ -159,14 +165,24 @@ function CampaignsContent() {
   }, []);
 
   useEffect(() => {
-    if (token) {
+    if (token && hasCustomerAccount) {
       loadMyVouchers();
     }
-  }, [token]);
+  }, [token, hasCustomerAccount]);
+
+  useEffect(() => {
+    if (token && !hasCustomerAccount && tab === "mine") {
+      setTab("available");
+    }
+  }, [token, hasCustomerAccount, tab]);
 
   async function handleClaimVoucher(campaign) {
     if (!token) {
       router.push("/login?redirect=/campaigns");
+      return;
+    }
+    if (!hasCustomerAccount) {
+      showToast("บัญชีเจ้าหน้าที่ไม่สามารถเก็บคูปองได้");
       return;
     }
 
@@ -232,7 +248,7 @@ function CampaignsContent() {
 
           {/* Navigation Tabs */}
           <div className="mt-8 flex justify-center">
-            <div className="grid grid-cols-2 sm:inline-flex w-full sm:w-auto max-w-md sm:max-w-none rounded-2xl bg-slate-200/70 p-1 shadow-inner">
+            <div className={`${token && !hasCustomerAccount ? "grid-cols-1" : "grid-cols-2"} grid sm:inline-flex w-full sm:w-auto max-w-md sm:max-w-none rounded-2xl bg-slate-200/70 p-1 shadow-inner`}>
               <button
                 type="button"
                 onClick={() => setTab("available")}
@@ -254,29 +270,31 @@ function CampaignsContent() {
                 )}
               </button>
 
-              <button
-                type="button"
-                onClick={() => setTab("mine")}
-                aria-label="คูปองของฉัน (กระเป๋าคูปอง)"
-                className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-2.5 sm:px-5 py-2 text-xs font-bold transition ${
-                  tab === "mine"
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <span className="material-symbols-outlined text-base shrink-0">
-                  account_balance_wallet
-                </span>
-                <span className="truncate">
-                  คูปองของฉัน
-                  <span className="hidden sm:inline"> (กระเป๋าคูปอง)</span>
-                </span>
-                {activeVouchers.length > 0 && (
-                  <span className="rounded-full bg-emerald-100 text-emerald-800 px-1.5 sm:px-2 py-0.5 text-[10px] font-semibold shrink-0">
-                    {activeVouchers.length}
+              {(!token || hasCustomerAccount) && (
+                <button
+                  type="button"
+                  onClick={() => setTab("mine")}
+                  aria-label="คูปองของฉัน (กระเป๋าคูปอง)"
+                  className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl px-2.5 sm:px-5 py-2 text-xs font-bold transition ${
+                    tab === "mine"
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-base shrink-0">
+                    account_balance_wallet
                   </span>
-                )}
-              </button>
+                  <span className="truncate">
+                    คูปองของฉัน
+                    <span className="hidden sm:inline"> (กระเป๋าคูปอง)</span>
+                  </span>
+                  {activeVouchers.length > 0 && (
+                    <span className="rounded-full bg-emerald-100 text-emerald-800 px-1.5 sm:px-2 py-0.5 text-[10px] font-semibold shrink-0">
+                      {activeVouchers.length}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -451,6 +469,10 @@ function CampaignsContent() {
                           >
                             สิทธิ์เต็มแล้ว
                           </button>
+                        ) : token && !hasCustomerAccount ? (
+                          <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-center text-xs font-medium text-slate-500">
+                            บัญชีเจ้าหน้าที่ไม่สามารถเก็บคูปองได้
+                          </div>
                         ) : (
                           <button
                             type="button"

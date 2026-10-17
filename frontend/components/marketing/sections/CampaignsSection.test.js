@@ -250,7 +250,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     fireEvent.click(targetedRadio);
 
     expect(screen.getByText("เงื่อนไขเป้าหมาย")).toBeInTheDocument();
-    expect(screen.getByText("การเปรียบเทียบ")).toBeInTheDocument();
+    expect(screen.getByText("การเลือกกลุ่มเป้าหมาย")).toBeInTheDocument();
     expect(screen.getByText("ค่าเป้าหมาย")).toBeInTheDocument();
 
     // Verify UI does NOT have size options
@@ -263,10 +263,10 @@ describe("CampaignsSection (Marketing Workspace)", () => {
 
     // Verify operator labels for brand targeting
     expect(
-      screen.getAllByText("ตรงกับแบรนด์ใดแบรนด์หนึ่ง").length,
+      screen.getAllByText("ให้เฉพาะกลุ่มนี้").length,
     ).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getAllByText("ไม่รวมแบรนด์ที่เลือก").length,
+      screen.getAllByText("ยกเว้นกลุ่มนี้").length,
     ).toBeGreaterThanOrEqual(1);
   });
 
@@ -543,7 +543,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     expect(screen.getByText("แก้ไขแคมเปญฉบับร่าง")).toBeInTheDocument();
 
     // Verify operator was normalized to "nin"
-    const opSelect = screen.getByLabelText("เลือกการเปรียบเทียบ");
+    const opSelect = screen.getByLabelText("เลือกวิธีกำหนดกลุ่มเป้าหมาย");
     expect(opSelect.value).toBe("nin");
 
     // Verify brand Nike chip is rendered
@@ -614,7 +614,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     const brandInputRestored = screen.getByLabelText("ค้นหาหรือระบุแบรนด์");
     expect(brandInputRestored.value).toBe("");
 
-    const opSelect = screen.getByLabelText("เลือกการเปรียบเทียบ");
+    const opSelect = screen.getByLabelText("เลือกวิธีกำหนดกลุ่มเป้าหมาย");
     expect(opSelect.value).toBe("in");
   });
 

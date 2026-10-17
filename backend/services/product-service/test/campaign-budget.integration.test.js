@@ -5,15 +5,6 @@ const request = require("supertest");
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
 process.env.INTERNAL_SERVICE_TOKEN ||= "test-internal-token";
-if (
-  process.env.DATABASE_URL_PRODUCT &&
-  process.env.DATABASE_URL_PRODUCT.includes("@postgres:")
-) {
-  process.env.DATABASE_URL_PRODUCT = process.env.DATABASE_URL_PRODUCT.replace(
-    "@postgres:",
-    "@localhost:",
-  );
-}
 if (!process.env.DATABASE_URL_PRODUCT) {
   process.env.DATABASE_URL_PRODUCT =
     "postgresql://reloop:reloop_dev_password@localhost:5432/reloop_product";

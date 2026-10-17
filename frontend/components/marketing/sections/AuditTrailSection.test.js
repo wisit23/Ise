@@ -88,21 +88,21 @@ describe("AuditTrailSection", () => {
 
     // Initially loading
     expect(
-      screen.getByText("ประวัติการดำเนินงาน (Marketing Audit Trail)"),
+      screen.getByText("ประวัติการดำเนินงาน"),
     ).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText("CAMPAIGN_CREATE")).toBeInTheDocument();
-      expect(screen.getByText("CAMPAIGN_END")).toBeInTheDocument();
+      expect(screen.getByText("สร้างแคมเปญใหม่ (ร่าง)")).toBeInTheDocument();
+      expect(screen.getByText("สิ้นสุดแคมเปญ")).toBeInTheDocument();
     });
 
     // Verify actor rendering
-    expect(screen.getByText("user-123")).toBeInTheDocument();
-    expect(screen.getByText("ระบบอัตโนมัติ (SYSTEM)")).toBeInTheDocument();
+    expect(screen.getByText("ไม่พบชื่อผู้ดำเนินการ")).toBeInTheDocument();
+    expect(screen.getAllByText("ระบบอัตโนมัติ").length).toBeGreaterThanOrEqual(1);
 
     // Verify entity IDs
-    expect(screen.getByText("camp-001")).toBeInTheDocument();
-    expect(screen.getByText("camp-002")).toBeInTheDocument();
+    expect(screen.queryByText("camp-001")).not.toBeInTheDocument();
+    expect(screen.queryByText("camp-002")).not.toBeInTheDocument();
 
     // Verify pagination summary
     expect(screen.getByText(/ทั้งหมด/)).toBeInTheDocument();
@@ -119,16 +119,16 @@ describe("AuditTrailSection", () => {
     render(<AuditTrailSection token={mockToken} />);
 
     await waitFor(() => {
-      expect(screen.getByText("CAMPAIGN_CREATE")).toBeInTheDocument();
+      expect(screen.getByText("สร้างแคมเปญใหม่ (ร่าง)")).toBeInTheDocument();
     });
 
     // Select action filter
-    const actionSelect = screen.getByLabelText(/คำสั่ง \(Action\)/i);
+    const actionSelect = document.querySelector("#actionFilter");
     fireEvent.change(actionSelect, { target: { value: "CAMPAIGN_CREATE" } });
 
     // Fill operator search query
     const actorInput = screen.getByPlaceholderText(
-      /ค้นหาชื่อหรือรหัสผู้ดำเนินการ/i,
+      /ค้นหาชื่อผู้ดำเนินการ/i,
     );
     fireEvent.change(actorInput, { target: { value: "user-123" } });
 
@@ -162,11 +162,11 @@ describe("AuditTrailSection", () => {
     render(<AuditTrailSection token={mockToken} />);
 
     await waitFor(() => {
-      expect(screen.getByText("CAMPAIGN_CREATE")).toBeInTheDocument();
+      expect(screen.getByText("สร้างแคมเปญใหม่ (ร่าง)")).toBeInTheDocument();
     });
 
     const actorInput = screen.getByPlaceholderText(
-      /ค้นหาชื่อหรือรหัสผู้ดำเนินการ/i,
+      /ค้นหาชื่อผู้ดำเนินการ/i,
     );
     fireEvent.change(actorInput, { target: { value: "custom-user" } });
     expect(actorInput.value).toBe("custom-user");
@@ -221,7 +221,7 @@ describe("AuditTrailSection", () => {
     fireEvent.click(retryBtn);
 
     await waitFor(() => {
-      expect(screen.getByText("CAMPAIGN_CREATE")).toBeInTheDocument();
+      expect(screen.getByText("สร้างแคมเปญใหม่ (ร่าง)")).toBeInTheDocument();
     });
   });
 
@@ -236,7 +236,7 @@ describe("AuditTrailSection", () => {
     render(<AuditTrailSection token={mockToken} />);
 
     await waitFor(() => {
-      expect(screen.getByText("CAMPAIGN_CREATE")).toBeInTheDocument();
+      expect(screen.getByText("สร้างแคมเปญใหม่ (ร่าง)")).toBeInTheDocument();
     });
 
     const detailButtons = screen.getAllByRole("button", {
@@ -246,7 +246,7 @@ describe("AuditTrailSection", () => {
 
     // Modal title
     expect(
-      screen.getByText("รายละเอียดบันทึกการดำเนินงาน (Audit Detail)"),
+      screen.getByText("รายละเอียดการดำเนินงาน"),
     ).toBeInTheDocument();
 
     // Verify modal contents
@@ -260,7 +260,7 @@ describe("AuditTrailSection", () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByText("รายละเอียดบันทึกการดำเนินงาน (Audit Detail)"),
+        screen.queryByText("รายละเอียดการดำเนินงาน"),
       ).not.toBeInTheDocument();
     });
   });
@@ -276,7 +276,7 @@ describe("AuditTrailSection", () => {
     render(<AuditTrailSection token={mockToken} />);
 
     await waitFor(() => {
-      expect(screen.getByText("CAMPAIGN_CREATE")).toBeInTheDocument();
+      expect(screen.getByText("สร้างแคมเปญใหม่ (ร่าง)")).toBeInTheDocument();
     });
 
     getMarketingAuditLogs.mockResolvedValueOnce({
@@ -309,7 +309,7 @@ describe("AuditTrailSection", () => {
     render(<AuditTrailSection token={mockToken} />);
 
     await waitFor(() => {
-      expect(screen.getByText("CAMPAIGN_CREATE")).toBeInTheDocument();
+      expect(screen.getByText("สร้างแคมเปญใหม่ (ร่าง)")).toBeInTheDocument();
     });
 
     const fromInput = screen.getByLabelText(/ตั้งแต่วันที่/i);
@@ -344,7 +344,7 @@ describe("AuditTrailSection", () => {
     render(<AuditTrailSection token={mockToken} />);
 
     await waitFor(() => {
-      expect(screen.getByText("CAMPAIGN_CREATE")).toBeInTheDocument();
+      expect(screen.getByText("สร้างแคมเปญใหม่ (ร่าง)")).toBeInTheDocument();
     });
 
     const fromInput = screen.getByLabelText(/ตั้งแต่วันที่/i);
@@ -394,7 +394,7 @@ describe("AuditTrailSection", () => {
     await waitFor(() => {
       expect(screen.getByText("สมชาย ผู้จัดการ")).toBeInTheDocument();
       expect(screen.getByText("แคมเปญลดพิเศษ 2026")).toBeInTheDocument();
-      expect(screen.getByText("(เปลี่ยนชื่อ)")).toBeInTheDocument();
+      expect(screen.getByText("มีการเปลี่ยนชื่อรายการ")).toBeInTheDocument();
     });
   });
 
@@ -448,33 +448,32 @@ describe("AuditTrailSection", () => {
 
     // Modal is open
     expect(
-      screen.getByText("รายละเอียดบันทึกการดำเนินงาน (Audit Detail)"),
+      screen.getByText("รายละเอียดการดำเนินงาน"),
     ).toBeInTheDocument();
 
-    // Verify structured Thai diff table headers
-    expect(screen.getByText("ข้อมูล (Field)")).toBeInTheDocument();
-    expect(screen.getByText("ก่อนดำเนินการ (Before)")).toBeInTheDocument();
-    expect(screen.getByText("หลังดำเนินการ (After)")).toBeInTheDocument();
+    // Verify user-facing Thai diff table headers
+    expect(screen.getByText("ข้อมูล")).toBeInTheDocument();
+    expect(screen.getByText("ก่อนดำเนินการ")).toBeInTheDocument();
+    expect(screen.getByText("หลังดำเนินการ")).toBeInTheDocument();
 
     // Verify Thai translated values
     expect(screen.getByText("ใช่ / เปิดใช้งาน")).toBeInTheDocument();
     expect(screen.getByText("ไม่ใช่ / ปิดใช้งาน")).toBeInTheDocument();
     expect(screen.getByText("฿5,000")).toBeInTheDocument();
 
-    // Verify Metadata section rendered cleanly
+    // Verify user-facing note section rendered cleanly
     expect(
-      screen.getByText("ข้อมูลเพิ่มเติมและหมายเหตุ (Metadata)"),
+      screen.getByText("หมายเหตุเพิ่มเติม"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("ปรับปรุงเนื้อหาตามข้อเสนอแนะของบรรณาธิการ"),
     ).toBeInTheDocument();
 
-    // Verify System Reference Info section at bottom
-    expect(
-      screen.getByText(/ข้อมูลอ้างอิงสำหรับการตรวจสอบ/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText("audit-diff-1")).toBeInTheDocument();
-    expect(screen.getAllByText("art-555")[0]).toBeInTheDocument();
+    // Internal references must not be displayed to Marketing users
+    expect(screen.queryByText(/ข้อมูลอ้างอิงสำหรับการตรวจสอบ/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("audit-diff-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("art-555")).not.toBeInTheDocument();
+    expect(screen.queryByText("ARTICLE_UPDATE")).not.toBeInTheDocument();
 
     // Ensure NO raw JSON code blocks or <pre> elements exist
     expect(document.querySelector("pre")).toBeNull();
@@ -551,7 +550,7 @@ describe("AuditTrailSection", () => {
     expect(document.querySelector("pre")).toBeNull();
   });
 
-  test("translates searchText field to Thai label in detail modal", async () => {
+  test("hides backend-only search index fields in detail modal", async () => {
     const logWithSearchText = {
       id: "audit-searchtext-1",
       actorId: "usr-marketing-01",
@@ -588,7 +587,9 @@ describe("AuditTrailSection", () => {
     const detailBtn = screen.getByRole("button", { name: /ดูรายละเอียด/i });
     fireEvent.click(detailBtn);
 
-    expect(screen.getByText("ข้อความสำหรับค้นหา")).toBeInTheDocument();
+    expect(screen.queryByText("ข้อความสำหรับค้นหา")).not.toBeInTheDocument();
+    expect(screen.queryByText("searchText")).not.toBeInTheDocument();
+    expect(screen.queryByText("เทคนิค การตั้งราคา")).not.toBeInTheDocument();
   });
 });
 

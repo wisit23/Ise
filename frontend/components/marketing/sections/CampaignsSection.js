@@ -63,13 +63,13 @@ const SEGMENT_FIELD_OPTIONS = [
 ];
 
 const SEGMENT_OP_BRAND_OPTIONS = [
-  { value: "in", label: "ตรงกับแบรนด์ใดแบรนด์หนึ่ง" },
-  { value: "nin", label: "ไม่รวมแบรนด์ที่เลือก" },
+  { value: "in", label: "ให้เฉพาะกลุ่มนี้" },
+  { value: "nin", label: "ยกเว้นกลุ่มนี้" },
 ];
 
 const SEGMENT_OP_GENERAL_OPTIONS = [
-  { value: "eq", label: "ตรงกับ" },
-  { value: "neq", label: "ไม่ตรงกับ" },
+  { value: "eq", label: "ให้เฉพาะกลุ่มนี้" },
+  { value: "neq", label: "ยกเว้นกลุ่มนี้" },
 ];
 
 const STYLE_TAG_OPTIONS = [
@@ -1622,12 +1622,12 @@ export default function CampaignsSection({ token }) {
                       htmlFor="segment-op-select"
                       className="block text-[11px] font-semibold text-slate-700 mb-1"
                     >
-                      การเปรียบเทียบ
+                      การเลือกกลุ่มเป้าหมาย
                     </label>
                     <RadioSelect
                       id="segment-op-select"
                       name="segmentOp"
-                      nativeAriaLabel="เลือกการเปรียบเทียบ"
+                      nativeAriaLabel="เลือกวิธีกำหนดกลุ่มเป้าหมาย"
                       value={segmentOp}
                       onChange={setSegmentOp}
                       options={

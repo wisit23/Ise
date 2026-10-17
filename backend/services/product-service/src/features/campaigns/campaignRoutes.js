@@ -2,6 +2,7 @@ const { Router } = require("express");
 const {
   requireAuth,
   requireRole,
+  requireCustomerAccount,
   fromGatewayHeaders,
   verifyAccessToken,
   requireCommerceCapability,
@@ -36,8 +37,18 @@ router.get("/available", optionalAuth, campaignController.listAvailable);
 router.get("/published", optionalAuth, campaignController.listAvailable);
 
 // Buyer wallet & smart filter
-router.get("/my-vouchers", requireAuth, campaignController.myVouchers);
-router.post("/applicable", requireAuth, campaignController.applicable);
+router.get(
+  "/my-vouchers",
+  requireAuth,
+  requireCustomerAccount,
+  campaignController.myVouchers,
+);
+router.post(
+  "/applicable",
+  requireAuth,
+  requireCustomerAccount,
+  campaignController.applicable,
+);
 
 // Marketing / Admin list & create
 router.get("/", requireAuth, requireRole("MARKETING"), campaignController.list);
@@ -52,6 +63,7 @@ router.post(
 router.post(
   "/:id/claim",
   requireAuth,
+  requireCustomerAccount,
   requireCommerceCapability(CAPABILITY.BUYER),
   campaignController.claim,
 );

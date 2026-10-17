@@ -223,8 +223,8 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
   await t.test(
     "Validation on Partial Update: rejects partial date update where new startsAt >= existing endsAt",
     async () => {
-      const existingStart = new Date(Date.now()+86400000);
-      const existingEnd = new Date(Date.now()+10*86400000);
+      const existingStart = new Date(Date.now() + 86400000);
+      const existingEnd = new Date(Date.now() + 10 * 86400000);
       const repo = createMockRepo({
         findById: async (id) => ({
           id,
@@ -245,7 +245,7 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
             user: marketingUser,
             campaignId: "date-camp",
             input: {
-              startsAt: new Date(Date.now()+15*86400000).toISOString(), // after existing endsAt
+              startsAt: new Date(Date.now() + 15 * 86400000).toISOString(), // after existing endsAt
             },
           }),
         (err) => {
@@ -460,6 +460,45 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
         profile: { styleTag: "streetwear" },
       });
       assert.equal(resMatch.length, 2);
+    },
+  );
+
+  await t.test(
+    "Segmentation Claim: targeted voucher requires a matching persisted profile",
+    async () => {
+      const repo = createMockRepo({
+        findById: async (id) => ({
+          id,
+          code: "VINTAGE_ONLY",
+          status: "published",
+          startsAt: new Date(Date.now() - 3600000),
+          endsAt: new Date(Date.now() + 86400000),
+          usageLimit: 10,
+          usedCount: 0,
+          targetSegment: {
+            type: "rules",
+            rules: [{ field: "styleTag", operator: "eq", value: "Vintage" }],
+          },
+        }),
+      });
+      const service = createCampaignService(repo);
+
+      await assert.rejects(
+        () =>
+          service.claimVoucher({
+            user: buyerUser,
+            campaignId: "targeted-id",
+            profile: { styles: ["Minimal"] },
+          }),
+        (error) => error.status === 403 && /กลุ่มเป้าหมาย/.test(error.message),
+      );
+
+      const voucher = await service.claimVoucher({
+        user: buyerUser,
+        campaignId: "targeted-id",
+        profile: { styles: ["Vintage", "Minimal"] },
+      });
+      assert.equal(voucher.status, "CLAIMED");
     },
   );
 
@@ -682,49 +721,52 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
     },
   );
 
-  await t.test("Manual campaign closure requires and audits a reason", async () => {
-    let updateData;
-    let auditData;
-    const repo = createMockRepo({
-      findById: async () => ({
-        id: "camp-1",
-        status: "published",
-      }),
-      updateCampaign: async (_id, data) => {
-        updateData = data;
-        return { id: "camp-1", ...data };
-      },
-      expireClaimedVouchers: async () => ({ count: 1 }),
-      marketingAuditLog: {
-        create: async ({ data }) => {
-          auditData = data;
-          return data;
-        },
-        createMany: async () => ({ count: 1 }),
-      },
-    });
-    const service = createCampaignService(repo);
-
-    await assert.rejects(
-      () =>
-        service.endCampaign({
-          user: marketingUser,
-          campaignId: "camp-1",
-          reason: " ",
+  await t.test(
+    "Manual campaign closure requires and audits a reason",
+    async () => {
+      let updateData;
+      let auditData;
+      const repo = createMockRepo({
+        findById: async () => ({
+          id: "camp-1",
+          status: "published",
         }),
-      /กรุณาระบุเหตุผลที่ปิดแคมเปญ/,
-    );
-    await service.endCampaign({
-      user: marketingUser,
-      campaignId: "camp-1",
-      reason: "งบการตลาดถูกโยกไปกิจกรรมอื่น",
-    });
+        updateCampaign: async (_id, data) => {
+          updateData = data;
+          return { id: "camp-1", ...data };
+        },
+        expireClaimedVouchers: async () => ({ count: 1 }),
+        marketingAuditLog: {
+          create: async ({ data }) => {
+            auditData = data;
+            return data;
+          },
+          createMany: async () => ({ count: 1 }),
+        },
+      });
+      const service = createCampaignService(repo);
 
-    assert.equal(updateData.status, "ended");
-    assert.equal(updateData.endReason, "ADMIN_CLOSED");
-    assert.ok(updateData.endedAt instanceof Date);
-    assert.deepEqual(auditData.metadata, {
-      reason: "งบการตลาดถูกโยกไปกิจกรรมอื่น",
-    });
-  });
+      await assert.rejects(
+        () =>
+          service.endCampaign({
+            user: marketingUser,
+            campaignId: "camp-1",
+            reason: " ",
+          }),
+        /กรุณาระบุเหตุผลที่ปิดแคมเปญ/,
+      );
+      await service.endCampaign({
+        user: marketingUser,
+        campaignId: "camp-1",
+        reason: "งบการตลาดถูกโยกไปกิจกรรมอื่น",
+      });
+
+      assert.equal(updateData.status, "ended");
+      assert.equal(updateData.endReason, "ADMIN_CLOSED");
+      assert.ok(updateData.endedAt instanceof Date);
+      assert.deepEqual(auditData.metadata, {
+        reason: "งบการตลาดถูกโยกไปกิจกรรมอื่น",
+      });
+    },
+  );
 });

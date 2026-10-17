@@ -11,55 +11,55 @@ import { MARKETING_PAGE_SIZE } from "../marketingConstants";
 import MarketingPagination from "./MarketingPagination";
 
 const ACTION_OPTIONS = [
-  { value: "AUCTION_ROUND_UPDATE", label: "ประมูล: แก้ไขเวลารอบ (AUCTION_ROUND_UPDATE)" },
-  { value: "", label: "ทุกการดำเนินงาน (All Actions)" },
+  { value: "", label: "ทุกการดำเนินงาน" },
+  { value: "AUCTION_ROUND_UPDATE", label: "ประมูล: แก้ไขเวลารอบ" },
   // Campaign
-  { value: "CAMPAIGN_CREATE", label: "แคมเปญ: สร้างร่าง (CAMPAIGN_CREATE)" },
-  { value: "CAMPAIGN_UPDATE", label: "แคมเปญ: แก้ไขข้อมูล (CAMPAIGN_UPDATE)" },
-  { value: "CAMPAIGN_SUBMIT", label: "แคมเปญ: ส่งขออนุมัติ (CAMPAIGN_SUBMIT)" },
-  { value: "CAMPAIGN_APPROVE", label: "แคมเปญ: อนุมัติ (CAMPAIGN_APPROVE)" },
-  { value: "CAMPAIGN_REJECT", label: "แคมเปญ: ปฏิเสธ (CAMPAIGN_REJECT)" },
-  { value: "CAMPAIGN_PUBLISH", label: "แคมเปญ: เผยแพร่ (CAMPAIGN_PUBLISH)" },
-  { value: "CAMPAIGN_END", label: "แคมเปญ: สิ้นสุด (CAMPAIGN_END)" },
+  { value: "CAMPAIGN_CREATE", label: "แคมเปญ: สร้างร่าง" },
+  { value: "CAMPAIGN_UPDATE", label: "แคมเปญ: แก้ไขข้อมูล" },
+  { value: "CAMPAIGN_SUBMIT", label: "แคมเปญ: ส่งขออนุมัติ" },
+  { value: "CAMPAIGN_APPROVE", label: "แคมเปญ: อนุมัติ" },
+  { value: "CAMPAIGN_REJECT", label: "แคมเปญ: ปฏิเสธ" },
+  { value: "CAMPAIGN_PUBLISH", label: "แคมเปญ: เผยแพร่" },
+  { value: "CAMPAIGN_END", label: "แคมเปญ: สิ้นสุด" },
   // Auction
   {
     value: "AUCTION_ROUND_CREATE",
-    label: "ประมูล: สร้างรอบ (AUCTION_ROUND_CREATE)",
+    label: "ประมูล: สร้างรอบ",
   },
   {
     value: "AUCTION_ITEM_APPROVE",
-    label: "ประมูล: อนุมัติสินค้า (AUCTION_ITEM_APPROVE)",
+    label: "ประมูล: อนุมัติสินค้า",
   },
   {
     value: "AUCTION_ITEM_REJECT",
-    label: "ประมูล: ปฏิเสธสินค้า (AUCTION_ITEM_REJECT)",
+    label: "ประมูล: ปฏิเสธสินค้า",
   },
   {
     value: "AUCTION_ITEM_SCHEDULE",
-    label: "ประมูล: กำหนดเวลา (AUCTION_ITEM_SCHEDULE)",
+    label: "ประมูล: กำหนดเวลา",
   },
   {
     value: "AUCTION_ITEM_CANCEL",
-    label: "ประมูล: ยกเลิก (AUCTION_ITEM_CANCEL)",
+    label: "ประมูล: ยกเลิก",
   },
-  { value: "AUCTION_ITEM_CLOSE", label: "ประมูล: ปิดรอบ (AUCTION_ITEM_CLOSE)" },
+  { value: "AUCTION_ITEM_CLOSE", label: "ประมูล: ปิดรอบ" },
   // Article
-  { value: "ARTICLE_CREATE", label: "บทความ: สร้างบทความ (ARTICLE_CREATE)" },
-  { value: "ARTICLE_UPDATE", label: "บทความ: แก้ไขเนื้อหา (ARTICLE_UPDATE)" },
+  { value: "ARTICLE_CREATE", label: "บทความ: สร้างบทความ" },
+  { value: "ARTICLE_UPDATE", label: "บทความ: แก้ไขเนื้อหา" },
   {
     value: "ARTICLE_PUBLISH",
-    label: "บทความ: เผยแพร่บทความ (ARTICLE_PUBLISH)",
+    label: "บทความ: เผยแพร่บทความ",
   },
-  { value: "ARTICLE_ARCHIVE", label: "บทความ: เก็บถาวร (ARTICLE_ARCHIVE)" },
-  { value: "ARTICLE_DELETE", label: "บทความ: ลบบทความ (ARTICLE_DELETE)" },
+  { value: "ARTICLE_ARCHIVE", label: "บทความ: เก็บถาวร" },
+  { value: "ARTICLE_DELETE", label: "บทความ: ลบบทความ" },
 ];
 
 const ENTITY_TYPE_OPTIONS = [
-  { value: "", label: "ทุกประเภท (All Entities)" },
-  { value: "CAMPAIGN", label: "แคมเปญ (CAMPAIGN)" },
-  { value: "AUCTION_ROUND", label: "รอบประมูล (AUCTION_ROUND)" },
-  { value: "AUCTION_ITEM", label: "สินค้าประมูล (AUCTION_ITEM)" },
-  { value: "ARTICLE", label: "บทความ (ARTICLE)" },
+  { value: "", label: "ทุกประเภท" },
+  { value: "CAMPAIGN", label: "แคมเปญ" },
+  { value: "AUCTION_ROUND", label: "รอบประมูล" },
+  { value: "AUCTION_ITEM", label: "สินค้าประมูล" },
+  { value: "ARTICLE", label: "บทความ" },
 ];
 
 const ACTION_BADGES = {
@@ -103,6 +103,11 @@ const ACTION_LABELS_THAI = {
   AUCTION_ITEM_SCHEDULE: "กำหนดเวลารอบประมูล",
   AUCTION_ITEM_CANCEL: "ยกเลิกสินค้าประมูล",
   AUCTION_ITEM_CLOSE: "ปิดรอบการประมูล",
+  AUCTION_PAYMENT_EXPIRED_NO_NEXT_BIDDER:
+    "คืนสินค้าเนื่องจากไม่มีผู้ชำระเงินตามกำหนด",
+  AUCTION_WINNER_ADVANCE: "เลื่อนสิทธิ์ให้ผู้ประมูลลำดับถัดไป",
+  REMOVE_PRODUCT: "ระงับการแสดงสินค้า",
+  RESTORE_PRODUCT: "นำสินค้ากลับมาแสดง",
   ARTICLE_CREATE: "สร้างบทความใหม่ (ร่าง)",
   ARTICLE_UPDATE: "แก้ไขเนื้อหาบทความ",
   ARTICLE_PUBLISH: "เผยแพร่บทความ",
@@ -132,7 +137,6 @@ const FIELD_TRANSLATIONS = {
   auctionEndsAt: "วันเวลาปิดประมูลของรอบ",
   maxItems: "จำนวนสินค้าสูงสุดต่อรอบ",
   softCloseEndsAt: "เวลาปิดที่ต่อจากการเสนอราคา",
-  id: "รหัสรายการ (ID)",
   name: "ชื่อรายการ",
   title: "หัวข้อ / ชื่อ",
   code: "รหัสโค้ดคูปอง",
@@ -141,6 +145,9 @@ const FIELD_TRANSLATIONS = {
   content: "เนื้อหาบทความ",
   category: "หมวดหมู่",
   status: "สถานะ",
+  phase: "ช่วงการดำเนินงาน",
+  isActive: "สถานะการใช้งาน",
+  enabled: "สถานะการใช้งาน",
   discountType: "ประเภทส่วนลด",
   discountValue: "มูลค่าส่วนลด",
   minSpend: "ยอดซื้อขั้นต่ำ",
@@ -149,10 +156,17 @@ const FIELD_TRANSLATIONS = {
   totalQuota: "โควตารวมทั้งหมด",
   userQuota: "โควตาต่อผู้ใช้",
   targetSegment: "กลุ่มเป้าหมาย",
+  tieredRewards: "สิทธิประโยชน์ตามระดับ",
+  tier: "ระดับสมาชิก",
+  bonus: "โบนัส",
+  label: "ชื่อ",
+  reward: "รางวัล",
+  notes: "หมายเหตุ",
+  verified: "สถานะการตรวจสอบ",
+  minOrders: "จำนวนคำสั่งซื้อขั้นต่ำ",
   startsAt: "วันเวลาเริ่มต้น",
   endsAt: "วันเวลาสิ้นสุด",
   coverImage: "รูปภาพหน้าปก",
-  authorId: "รหัสผู้เขียน",
   authorName: "ชื่อผู้เขียน",
   startingPrice: "ราคาเริ่มต้น",
   stepPrice: "ขั้นราคาเสนอ",
@@ -164,13 +178,52 @@ const FIELD_TRANSLATIONS = {
   submissionEndsAt: "วันปิดรับสินค้า",
   reason: "เหตุผล / หมายเหตุ",
   comment: "ความคิดเห็น",
-  tags: "ป้ายกำกับ (Tags)",
+  tags: "ป้ายกำกับ",
   condition: "สภาพสินค้า",
-  productId: "รหัสสินค้า",
-  sellerId: "รหัสผู้ขาย",
-  roundId: "รหัสรอบประมูล",
-  searchText: "ข้อความสำหรับค้นหา",
+  usageLimit: "จำนวนสิทธิ์ทั้งหมด",
+  usedCount: "จำนวนสิทธิ์ที่ใช้แล้ว",
+  cancellationReason: "เหตุผลที่ยกเลิก",
+  affectedItemCount: "จำนวนสินค้าที่ได้รับผลกระทบ",
+  affectedSellerCount: "จำนวนผู้ขายที่ได้รับผลกระทบ",
+  affectedBidderCount: "จำนวนผู้ประมูลที่ได้รับผลกระทบ",
+  previousStatus: "สถานะก่อนดำเนินการ",
+  approvedBy: "ผู้อนุมัติ",
+  field: "ข้อมูลที่ใช้แบ่งกลุ่ม",
+  operator: "การเลือกกลุ่มเป้าหมาย",
+  value: "ค่าที่เลือก",
+  brandPreference: "แบรนด์ที่สนใจ",
+  favoriteCategory: "หมวดหมู่ที่สนใจ",
+  styleTag: "สไตล์แฟชั่นที่สนใจ",
 };
+
+const HIDDEN_AUDIT_FIELDS = new Set([
+  "id",
+  "version",
+  "createdAt",
+  "updatedAt",
+  "deletedAt",
+  "searchText",
+  "idempotencyKey",
+]);
+
+const VISIBLE_METADATA_FIELDS = new Set([
+  "reason",
+  "comment",
+  "cancellationReason",
+  "affectedItemCount",
+  "affectedSellerCount",
+  "affectedBidderCount",
+  "previousStatus",
+  "approvedBy",
+]);
+
+function isUserVisibleAuditField(key) {
+  return (
+    !HIDDEN_AUDIT_FIELDS.has(key) &&
+    !/(^|_)(id|ids)$/i.test(key) &&
+    Boolean(FIELD_TRANSLATIONS[key])
+  );
+}
 
 export function convertAuditDateFilter(fromDateStr, toDateStr) {
   if (!fromDateStr && !toDateStr) return { from: undefined, to: undefined };
@@ -281,6 +334,26 @@ const ENUM_LABELS_THAI = {
   ACTIVE_BUYERS: "ผู้ซื้อประจำ",
   INACTIVE_BUYERS: "ผู้ใช้ที่ไม่ได้ใช้งานนาน",
   HIGH_SPENDERS: "ผู้มียอดซื้อสูง",
+  SCHEDULED_EXPIRY: "สิ้นสุดตามเวลาที่กำหนด",
+  BUDGET_EXHAUSTED: "ใช้งบประมาณครบแล้ว",
+  EXPIRED: "หมดอายุ",
+  draft: "ฉบับร่าง",
+  pending_approval: "รออนุมัติ",
+  approved: "อนุมัติแล้ว",
+  published: "เผยแพร่แล้ว",
+  ended: "สิ้นสุดแล้ว",
+  rejected: "ปฏิเสธแล้ว",
+  scheduled: "กำหนดเวลาแล้ว",
+  open: "กำลังประมูล",
+  closed: "ปิดการประมูลแล้ว",
+  cancelled: "ยกเลิกแล้ว",
+  eq: "ให้เฉพาะกลุ่มนี้",
+  neq: "ยกเว้นกลุ่มนี้",
+  in: "ให้เฉพาะกลุ่มนี้",
+  nin: "ยกเว้นกลุ่มนี้",
+  brandPreference: "แบรนด์ที่สนใจ",
+  favoriteCategory: "หมวดหมู่ที่สนใจ",
+  styleTag: "สไตล์แฟชั่นที่สนใจ",
 };
 
 /**
@@ -325,7 +398,9 @@ export function renderDiffValue(key, value, contextObj = null) {
               className="rounded border border-slate-200/90 bg-slate-50/80 p-2 text-[11px] space-y-1"
             >
               {typeof item === "object" && item !== null ? (
-                Object.entries(item).map(([subK, subV]) => (
+                Object.entries(item)
+                  .filter(([subK]) => isUserVisibleAuditField(subK))
+                  .map(([subK, subV]) => (
                   <div key={subK} className="flex flex-wrap items-baseline gap-1.5">
                     <span className="font-medium text-slate-600">
                       {FIELD_TRANSLATIONS[subK] || subK}:
@@ -334,7 +409,7 @@ export function renderDiffValue(key, value, contextObj = null) {
                       {renderDiffValue(subK, subV, item)}
                     </div>
                   </div>
-                ))
+                  ))
               ) : (
                 <span className="text-slate-800">
                   {renderDiffValue(key, item, contextObj)}
@@ -438,7 +513,9 @@ export function renderDiffValue(key, value, contextObj = null) {
   }
 
   if (typeof value === "object") {
-    const entries = Object.entries(value);
+    const entries = Object.entries(value).filter(([nestedKey]) =>
+      isUserVisibleAuditField(nestedKey),
+    );
     if (entries.length === 0) {
       return <span className="text-slate-400 italic font-normal">-</span>;
     }
@@ -574,6 +651,7 @@ export default function AuditTrailSection({ token }) {
       const prevVal = prev[key];
       const nextVal = next[key];
       const isChanged = JSON.stringify(prevVal) !== JSON.stringify(nextVal);
+      if (!isChanged || !isUserVisibleAuditField(key)) continue;
       rows.push({
         key,
         label: FIELD_TRANSLATIONS[key] || key,
@@ -583,12 +661,7 @@ export default function AuditTrailSection({ token }) {
       });
     }
 
-    // Sort: changed fields first, then alphabetical
-    rows.sort((a, b) => {
-      if (a.isChanged && !b.isChanged) return -1;
-      if (!a.isChanged && b.isChanged) return 1;
-      return a.key.localeCompare(b.key);
-    });
+    rows.sort((a, b) => a.label.localeCompare(b.label, "th"));
 
     return rows;
   }
@@ -598,11 +671,10 @@ export default function AuditTrailSection({ token }) {
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold tracking-tight text-slate-900">
-          ประวัติการดำเนินงาน (Marketing Audit Trail)
+          ประวัติการดำเนินงาน
         </h2>
         <p className="text-sm text-slate-500 mt-1">
-          บันทึกตรวจสอบการเปลี่ยนแปลงข้อมูลแบบ Append-Only สำหรับแคมเปญการตลาด,
-          ตารางประมูล และบทความ
+          ตรวจสอบว่าใครทำอะไร กับรายการใด และดำเนินการเมื่อไร
         </p>
       </div>
 
@@ -617,7 +689,7 @@ export default function AuditTrailSection({ token }) {
               htmlFor="actionFilter"
               className="block text-xs font-semibold text-slate-700 mb-1"
             >
-              คำสั่ง (Action)
+              การดำเนินงาน
             </label>
             <DropdownFilter
               id="actionFilter"
@@ -637,7 +709,7 @@ export default function AuditTrailSection({ token }) {
               htmlFor="entityTypeFilter"
               className="block text-xs font-semibold text-slate-700 mb-1"
             >
-              ประเภท (Entity Type)
+              ประเภทรายการ
             </label>
             <DropdownFilter
               id="entityTypeFilter"
@@ -657,7 +729,7 @@ export default function AuditTrailSection({ token }) {
               htmlFor="actorIdFilter"
               className="block text-xs font-semibold text-slate-700 mb-1"
             >
-              ผู้ดำเนินการ (Operator)
+              ผู้ดำเนินการ
             </label>
             <div className="relative">
               <span className="material-symbols-outlined absolute left-2.5 top-2 text-[15px] text-slate-400 pointer-events-none">
@@ -666,7 +738,7 @@ export default function AuditTrailSection({ token }) {
               <input
                 id="actorIdFilter"
                 type="text"
-                placeholder="ค้นหาชื่อหรือรหัสผู้ดำเนินการ"
+                placeholder="ค้นหาชื่อผู้ดำเนินการ"
                 value={actorIdFilter}
                 onChange={(e) => {
                   setActorIdFilter(e.target.value);
@@ -682,7 +754,7 @@ export default function AuditTrailSection({ token }) {
               htmlFor="fromDateFilter"
               className="block text-xs font-semibold text-slate-700 mb-1"
             >
-              ตั้งแต่วันที่ (From)
+              ตั้งแต่วันที่
             </label>
             <input
               id="fromDateFilter"
@@ -698,7 +770,7 @@ export default function AuditTrailSection({ token }) {
               htmlFor="toDateFilter"
               className="block text-xs font-semibold text-slate-700 mb-1"
             >
-              ถึงวันที่ (To)
+              ถึงวันที่
             </label>
             <input
               id="toDateFilter"
@@ -800,12 +872,8 @@ export default function AuditTrailSection({ token }) {
 
                     // Operator display: prefer actorName, fallback to actorId
                     const operatorDisplayName = isSystem
-                      ? "ระบบอัตโนมัติ (SYSTEM)"
-                      : log.actorName || log.actorId;
-                    const hasDistinctActorName =
-                      !isSystem &&
-                      log.actorName &&
-                      log.actorName !== log.actorId;
+                      ? "ระบบอัตโนมัติ"
+                      : log.actorName || "ไม่พบชื่อผู้ดำเนินการ";
 
                     // Related entity display: prefer entityName or snapshot name, fallback to entityId
                     const entityDisplayName =
@@ -814,9 +882,7 @@ export default function AuditTrailSection({ token }) {
                       log.previousState?.name ||
                       log.newState?.title ||
                       log.previousState?.title ||
-                      log.entityId;
-                    const hasDistinctEntityName =
-                      entityDisplayName && entityDisplayName !== log.entityId;
+                      `รายการ${ENTITY_LABELS_THAI[log.entityType] || "ที่เกี่ยวข้อง"}`;
                     const isRenamed =
                       log.previousEntityName &&
                       log.newEntityName &&
@@ -853,7 +919,7 @@ export default function AuditTrailSection({ token }) {
                               <span className="material-symbols-outlined text-[12px]">
                                 smart_toy
                               </span>
-                              ระบบอัตโนมัติ (SYSTEM)
+                              ระบบอัตโนมัติ
                             </span>
                           ) : (
                             <div className="flex flex-col min-w-0">
@@ -863,33 +929,20 @@ export default function AuditTrailSection({ token }) {
                               >
                                 {operatorDisplayName}
                               </span>
-                              {hasDistinctActorName && (
-                                <span
-                                  className="text-[10px] text-slate-400 font-mono truncate block"
-                                  title={log.actorId}
-                                >
-                                  {log.actorId}
-                                  {log.isCurrentName && (
-                                    <span className="ml-1 text-[9px] text-slate-400 font-sans">
-                                      (ชื่อปัจจุบัน)
-                                    </span>
-                                  )}
-                                </span>
-                              )}
                             </div>
                           )}
                         </td>
                         <td className="py-2 px-1.5 whitespace-nowrap">
                           <span className="inline-block rounded bg-slate-100 px-1 py-0.5 text-[10px] font-semibold text-slate-600 tracking-wide whitespace-nowrap">
-                            {ROLE_LABELS_THAI[log.actorRole] || log.actorRole}
+                            {ROLE_LABELS_THAI[log.actorRole] || "ผู้ใช้งานระบบ"}
                           </span>
                         </td>
                         <td className="py-2 px-2">
                           <span
                             className={`inline-block w-full max-w-full truncate rounded px-1.5 py-0.5 text-[10px] font-semibold border text-center whitespace-nowrap ${badgeClass}`}
-                            title={ACTION_LABELS_THAI[log.action] || log.action}
+                            title={ACTION_LABELS_THAI[log.action] || "ดำเนินการกับรายการ"}
                           >
-                            {log.action}
+                            {ACTION_LABELS_THAI[log.action] || "ดำเนินการกับรายการ"}
                           </span>
                         </td>
                         <td className="py-2 px-2 text-slate-700 font-medium text-[11px] truncate">
@@ -897,11 +950,11 @@ export default function AuditTrailSection({ token }) {
                             className="truncate block"
                             title={
                               ENTITY_LABELS_THAI[log.entityType] ||
-                              log.entityType
+                              "รายการที่เกี่ยวข้อง"
                             }
                           >
                             {ENTITY_LABELS_THAI[log.entityType] ||
-                              log.entityType}
+                              "รายการที่เกี่ยวข้อง"}
                           </span>
                         </td>
                         <td className="py-2 px-2">
@@ -912,17 +965,9 @@ export default function AuditTrailSection({ token }) {
                             >
                               {entityDisplayName}
                             </span>
-                            {hasDistinctEntityName && (
-                              <span
-                                className="text-[10px] text-slate-400 font-mono truncate block"
-                                title={log.entityId}
-                              >
-                                {log.entityId}
-                                {isRenamed && (
-                                  <span className="ml-1 text-[9px] text-violet-600 font-sans font-medium">
-                                    (เปลี่ยนชื่อ)
-                                  </span>
-                                )}
+                            {isRenamed && (
+                              <span className="text-[10px] text-violet-600 font-medium">
+                                มีการเปลี่ยนชื่อรายการ
                               </span>
                             )}
                           </div>
@@ -964,7 +1009,7 @@ export default function AuditTrailSection({ token }) {
         <Modal
           open={Boolean(selectedLog)}
           onClose={() => setSelectedLog(null)}
-          title="รายละเอียดบันทึกการดำเนินงาน (Audit Detail)"
+          title="รายละเอียดการดำเนินงาน"
           size="lg"
           footer={
             <Button
@@ -987,14 +1032,11 @@ export default function AuditTrailSection({ token }) {
                       "bg-slate-100 text-slate-700 border-slate-200"
                     }`}
                   >
-                    {selectedLog.action}
-                  </span>
-                  <span className="font-semibold text-slate-800 text-sm">
                     {ACTION_LABELS_THAI[selectedLog.action] ||
-                      selectedLog.action}
+                      "ดำเนินการกับรายการ"}
                   </span>
                 </div>
-                <span className="font-mono text-slate-500 text-[11px]">
+                <span className="text-slate-500 text-[11px]">
                   {formatBangkokTimestamp(selectedLog.createdAt)}
                 </span>
               </div>
@@ -1005,11 +1047,12 @@ export default function AuditTrailSection({ token }) {
                     รายการที่เกี่ยวข้อง:
                   </span>
                   <span className="text-slate-900 font-semibold text-sm">
-                    {selectedLog.entityName || selectedLog.entityId}
+                    {selectedLog.entityName ||
+                      `รายการ${ENTITY_LABELS_THAI[selectedLog.entityType] || "ที่เกี่ยวข้อง"}`}
                   </span>
                   <span className="text-slate-500 text-[11px] ml-1.5">
                     ({ENTITY_LABELS_THAI[selectedLog.entityType] ||
-                      selectedLog.entityType})
+                      "รายการที่เกี่ยวข้อง"})
                   </span>
                   {selectedLog.previousEntityName &&
                     selectedLog.newEntityName &&
@@ -1031,22 +1074,17 @@ export default function AuditTrailSection({ token }) {
                       <span className="material-symbols-outlined text-[14px]">
                         smart_toy
                       </span>
-                      ระบบอัตโนมัติ (SYSTEM)
+                      ระบบอัตโนมัติ
                     </span>
                   ) : (
                     <div>
                       <span className="text-slate-900 font-semibold">
-                        {selectedLog.actorName || selectedLog.actorId}
+                        {selectedLog.actorName || "ไม่พบชื่อผู้ดำเนินการ"}
                       </span>
                       <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 ml-1.5">
                         {ROLE_LABELS_THAI[selectedLog.actorRole] ||
-                          selectedLog.actorRole}
+                          "ผู้ใช้งานระบบ"}
                       </span>
-                      {selectedLog.isCurrentName && (
-                        <span className="text-[10px] text-slate-400 ml-1">
-                          (ชื่อปัจจุบัน)
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>
@@ -1055,28 +1093,32 @@ export default function AuditTrailSection({ token }) {
 
             {/* 2. Metadata / Additional Note Card if present */}
             {selectedLog.metadata &&
-              Object.keys(selectedLog.metadata).length > 0 && (
+              Object.entries(selectedLog.metadata).some(([key]) =>
+                VISIBLE_METADATA_FIELDS.has(key),
+              ) && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3.5">
                   <div className="flex items-center gap-1.5 text-amber-800 font-semibold mb-2">
                     <span className="material-symbols-outlined text-[16px]">
                       info
                     </span>
-                    <span>ข้อมูลเพิ่มเติมและหมายเหตุ (Metadata)</span>
+                    <span>หมายเหตุเพิ่มเติม</span>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    {Object.entries(selectedLog.metadata).map(([k, v]) => (
+                    {Object.entries(selectedLog.metadata)
+                      .filter(([key]) => VISIBLE_METADATA_FIELDS.has(key))
+                      .map(([k, v]) => (
                       <div
                         key={k}
                         className="rounded bg-white/80 p-2 border border-amber-100"
                       >
-                        <span className="text-[10px] font-bold text-amber-900/70 block uppercase tracking-wider">
-                          {FIELD_TRANSLATIONS[k] || k}
+                        <span className="text-[10px] font-bold text-amber-900/70 block">
+                          {FIELD_TRANSLATIONS[k]}
                         </span>
                         <div className="mt-0.5">
                           {renderDiffValue(k, v, selectedLog.metadata)}
                         </div>
                       </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
               )}
@@ -1088,7 +1130,7 @@ export default function AuditTrailSection({ token }) {
                   <span className="material-symbols-outlined text-[16px] text-violet-600">
                     difference
                   </span>
-                  <span>ตารางเปรียบเทียบการเปลี่ยนแปลง (Field Changes)</span>
+                  <span>ข้อมูลที่เปลี่ยนแปลง</span>
                 </h4>
               </div>
 
@@ -1105,7 +1147,7 @@ export default function AuditTrailSection({ token }) {
                         checklist
                       </span>
                       <p className="text-xs">
-                        ไม่มีบันทึกการเปลี่ยนแปลงฟิลด์ข้อมูลในสถานะก่อนหน้าและใหม่
+                        การดำเนินการนี้ไม่มีรายละเอียดอื่นที่เปลี่ยนแปลง
                       </p>
                     </div>
                   );
@@ -1117,12 +1159,12 @@ export default function AuditTrailSection({ token }) {
                       <table className="w-full text-left text-xs border-collapse">
                         <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold z-10">
                           <tr>
-                            <th className="py-2.5 px-3 w-1/3">ข้อมูล (Field)</th>
+                            <th className="py-2.5 px-3 w-1/3">ข้อมูล</th>
                             <th className="py-2.5 px-3 w-1/3">
-                              ก่อนดำเนินการ (Before)
+                              ก่อนดำเนินการ
                             </th>
                             <th className="py-2.5 px-3 w-1/3">
-                              หลังดำเนินการ (After)
+                              หลังดำเนินการ
                             </th>
                           </tr>
                         </thead>
@@ -1139,9 +1181,6 @@ export default function AuditTrailSection({ token }) {
                               <td className="py-2.5 px-3 align-top">
                                 <span className="font-semibold text-slate-800 block">
                                   {row.label}
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                  {row.key}
                                 </span>
                               </td>
                               <td className="py-2.5 px-3 align-top text-slate-600">
@@ -1160,53 +1199,6 @@ export default function AuditTrailSection({ token }) {
               })()}
             </div>
 
-            {/* 4. System Reference Info Section at bottom */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
-              <div className="flex items-center gap-1.5 text-slate-600 font-semibold text-[11px] uppercase tracking-wider">
-                <span className="material-symbols-outlined text-[15px]">
-                  terminal
-                </span>
-                <span>ข้อมูลอ้างอิงสำหรับการตรวจสอบ (System References)</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
-                <div className="rounded bg-white p-2 border border-slate-200/70">
-                  <span className="text-slate-400 block text-[9px] uppercase font-bold tracking-wider">
-                    Audit Log ID
-                  </span>
-                  <span className="text-slate-800 break-all select-all">
-                    {selectedLog.id}
-                  </span>
-                </div>
-                <div className="rounded bg-white p-2 border border-slate-200/70">
-                  <span className="text-slate-400 block text-[9px] uppercase font-bold tracking-wider">
-                    Entity ID ({selectedLog.entityType})
-                  </span>
-                  <span className="text-slate-800 break-all select-all">
-                    {selectedLog.entityId}
-                  </span>
-                </div>
-                <div className="rounded bg-white p-2 border border-slate-200/70">
-                  <span className="text-slate-400 block text-[9px] uppercase font-bold tracking-wider">
-                    Operator ID ({selectedLog.actorRole})
-                  </span>
-                  <span className="text-slate-800 break-all select-all">
-                    {selectedLog.actorId === "SYSTEM"
-                      ? "SYSTEM (ระบบอัตโนมัติ)"
-                      : `${selectedLog.actorName ? selectedLog.actorName + " : " : ""}${selectedLog.actorId}`}
-                  </span>
-                </div>
-                {selectedLog.idempotencyKey && (
-                  <div className="rounded bg-white p-2 border border-slate-200/70">
-                    <span className="text-slate-400 block text-[9px] uppercase font-bold tracking-wider">
-                      Idempotency Key
-                    </span>
-                    <span className="text-slate-700 break-all select-all">
-                      {selectedLog.idempotencyKey}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </Modal>
       )}

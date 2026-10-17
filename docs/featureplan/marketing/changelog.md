@@ -569,8 +569,7 @@
 
 ## 2026-09-19 — Feature: Auction Round Overlap Protection, Concurrency Serialization & Deterministic Selection (MKT-DEC-020)
 
-> [!NOTE]
-> **Historical Record:** ข้อกำหนดเรื่อง Overlap Protection และการคืน 409 Conflict ในหัวข้อนี้ถูกแทนที่แล้วโดย MKT-DEC-025 เพื่อรองรับการเปิดรอบคู่ขนาน โดยฟังก์ชัน `findConflictingRound`, `withRoundLock`, `findActiveSubmissionRound` และ `findCurrentRound` ถูกลบออกจาก Production Code แล้วใน MKT-DEC-025
+> [!NOTE] > **Historical Record:** ข้อกำหนดเรื่อง Overlap Protection และการคืน 409 Conflict ในหัวข้อนี้ถูกแทนที่แล้วโดย MKT-DEC-025 เพื่อรองรับการเปิดรอบคู่ขนาน โดยฟังก์ชัน `findConflictingRound`, `withRoundLock`, `findActiveSubmissionRound` และ `findCurrentRound` ถูกลบออกจาก Production Code แล้วใน MKT-DEC-025
 
 - **Problem:**
   - เดิมตาราง `AuctionRound` อนุญาตให้สร้างหลายรอบได้ แต่ `createRound` ขาดการตรวจสอบช่วงเวลาที่ซ้อนทับกัน (Overlap)
@@ -1060,3 +1059,11 @@
     - `npm run format:check`: ผ่าน 100% (All matched files use Prettier code style)
     - Production Build (`next build`): ผ่าน 100%
     - `git diff --check`: ผ่าน 100%
+
+## 2026-10-17 — UR-13 Buyer Profile Persistence Hardening
+
+- Campaign discovery, direct detail, voucher claim, and applicable-voucher evaluation now use the authenticated buyer profile persisted by Auth Service; query/header/body profile overrides are no longer trusted.
+- Segment matching supports the persisted multi-value profile (`categories`, `styles`, `brands`, categorized sizes, and unassigned sizes) while retaining the approved field/operator contract.
+- Targeted campaigns are hidden from guests and profile-less buyers, fail closed when Auth profile lookup is unavailable, and are rechecked during direct voucher claim.
+- Added a corrective Product migration that restores and backfills `campaigns.spent_budget` after the approved ER migration removed it while the atomic budget workflow still requires it.
+- Verification: campaign/segmentation suite **105/105 passing**, Order lifecycle regression **45/45 passing**, and live Auth -> Product -> Campaign persistence E2E **1/1 passing** with no skips.

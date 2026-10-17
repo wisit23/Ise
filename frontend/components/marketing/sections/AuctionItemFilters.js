@@ -301,31 +301,48 @@ export default function AuctionItemFilters({
   onSearchSubmit,
 }) {
   return (
-    <div className="grid w-full min-w-0 grid-cols-1 gap-2 lg:grid-cols-[minmax(16rem,1fr)_minmax(12rem,0.65fr)_minmax(12rem,0.65fr)] xl:w-auto xl:min-w-[48rem]">
+    <div className="grid w-full min-w-0 grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-[minmax(20rem,1.5fr)_minmax(12rem,0.75fr)_minmax(12rem,0.75fr)]">
       <form
-        className="flex min-w-0 gap-2"
+        className="min-w-0 md:col-span-2 xl:col-span-1"
         onSubmit={(event) => {
           event.preventDefault();
           onSearchSubmit();
         }}
       >
-        <label className="min-w-0 flex-1">
-          <span className="sr-only">ค้นหาชื่อสินค้าหรือร้านค้า</span>
-          <input
-            type="search"
-            value={searchValue}
-            maxLength={100}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="ค้นหาชื่อสินค้า / ร้านค้า"
-            className="min-h-[42px] w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm outline-none placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-          />
-        </label>
-        <button
-          type="submit"
-          className="min-h-[42px] shrink-0 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
-        >
-          ค้นหา
-        </button>
+        <div className="relative min-w-0">
+          <label className="block min-w-0">
+            <span className="sr-only">ค้นหาชื่อสินค้าหรือร้านค้า</span>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-3 flex items-center"
+            >
+              <span className="material-symbols-outlined text-[20px] leading-none text-slate-400">
+                search
+              </span>
+            </span>
+            <input
+              type="search"
+              value={searchValue}
+              maxLength={100}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="ค้นหาชื่อสินค้า หรือชื่อร้าน"
+              className="block min-h-[42px] w-full rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-14 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+            />
+          </label>
+          <button
+            type="submit"
+            aria-label="ค้นหา"
+            title="ค้นหา"
+            className="absolute inset-y-0 right-1.5 my-auto flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-700 text-white transition hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+          >
+            <span
+              className="material-symbols-outlined text-[20px] leading-none"
+              aria-hidden="true"
+            >
+              search
+            </span>
+          </button>
+        </div>
       </form>
       <RoundFilter
         rounds={rounds}

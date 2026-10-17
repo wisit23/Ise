@@ -422,7 +422,7 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     ).toBeGreaterThanOrEqual(1);
     // Renders the parent filters/sections
     expect(
-      screen.getByText(/ตรวจสอบและอนุมัติสินค้าประมูล/),
+      screen.getByText(/ค้นหา ตรวจสอบ และจัดการสินค้า/),
     ).toBeInTheDocument();
     expect(screen.getAllByText("ทุกสถานะ").length).toBeGreaterThanOrEqual(1);
   });
@@ -681,6 +681,7 @@ describe("AuctionReviewModal & Pending Approval UX Improvements", () => {
     id: "auc-pending-1",
     productId: "prod-1",
     sellerId: "seller-1",
+    sellerDisplayName: "ร้านวินเทจ 90s",
     roundId: "round-active-1",
     startingPrice: 500,
     bidIncrement: 50,
@@ -736,6 +737,7 @@ describe("AuctionReviewModal & Pending Approval UX Improvements", () => {
     expect(
       await screen.findByRole("button", { name: "ตรวจสอบสินค้า" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("ร้าน: ร้านวินเทจ 90s")).toBeInTheDocument();
   });
 
   it("2. opens review modal with comprehensive product details when clicked", async () => {
