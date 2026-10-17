@@ -51,7 +51,9 @@ function view(row) {
     checkoutSession: row.checkout ? {...row.checkout,shippingAddress:row.shipping?.addressSnapshot || row.checkout.addressSnapshot} : null,
     shippingAddress:row.shipping?.addressSnapshot || row.checkout?.addressSnapshot || null,
     reservationId: row.basketId,
-    reservationExpiresAt: row.basket?.unlockAt || null,
+    reservationExpiresAt:
+      row.basket?.unlockAt ||
+      (row.orderType === "AUCTION" ? row.paymentDeadlineAt : null),
     auctionId: row.auctionId || (row.orderType === "AUCTION" ? row.id : null),
     dispute: row.dispute?.deletedAt ? null : disputeView(row.dispute),
     holds,
@@ -102,7 +104,10 @@ function listByBuyer(buyerId, options = {}) {
       ...(status === "pending_payment"
         ? {
             OR: [
-              { basketId: null },
+              {
+                orderType: "AUCTION",
+                paymentDeadlineAt: { gt: new Date() },
+              },
               { basket: { unlockAt: { gt: new Date() } } },
             ],
           }
@@ -119,6 +124,130 @@ function listBySeller(sellerId, options = {}) {
     },
     options,
   );
+}
+
+async function findAuctionOrdersDueForSettlement(now = new Date(), take = 50) {
+  const rows = await prisma.order.findMany({
+    where: {
+      orderType: "AUCTION",
+      OR: [
+        {
+          status: { in: ["pending", "pending_payment"] },
+          paymentDeadlineAt: { lte: now },
+        },
+        {
+          status: "cancelled",
+          paymentDeadlineAt: { not: null },
+        },
+      ],
+    },
+    include: INCLUDE,
+    orderBy: [{ paymentDeadlineAt: "asc" }, { createdAt: "asc" }],
+    take,
+  });
+  return rows.map(view);
+}
+
+async function claimExpiredAuctionOrder({ id, expectedVersion, now = new Date() }) {
+  return prisma.$transaction(async (tx) => {
+    const before = await tx.order.findUnique({ where: { id }, include: INCLUDE });
+    if (!before) return null;
+    if (
+      !["pending", "pending_payment"].includes(before.status) ||
+      before.orderType !== "AUCTION" ||
+      !before.paymentDeadlineAt ||
+      before.paymentDeadlineAt > now
+    ) {
+      return view(before);
+    }
+    const claimed = await tx.order.updateMany({
+      where: {
+        id,
+        version: expectedVersion ?? before.version,
+        status: { in: ["pending", "pending_payment"] },
+        paymentDeadlineAt: { lte: now },
+      },
+      data: { status: "cancelled", version: { increment: 1 } },
+    });
+    if (claimed.count !== 1) return null;
+    await tx.orderLog.create({
+      data: logData(before, "SYSTEM", "AUCTION_PAYMENT_EXPIRED", {
+        buyerId: before.buyerId,
+        auctionBidId: before.auctionBidId,
+        paymentDeadlineAt: before.paymentDeadlineAt,
+      }),
+    });
+    return view(await tx.order.findUnique({ where: { id }, include: INCLUDE }));
+  });
+}
+
+async function reassignAuctionOrder({
+  id,
+  expectedVersion,
+  buyerId,
+  auctionBidId,
+  price,
+  paymentDeadlineAt,
+}) {
+  return prisma.$transaction(async (tx) => {
+    const before = await tx.order.findUnique({ where: { id }, include: INCLUDE });
+    if (!before) return null;
+    const claimed = await tx.order.updateMany({
+      where: {
+        id,
+        version: expectedVersion ?? before.version,
+        status: "cancelled",
+        orderType: "AUCTION",
+      },
+      data: {
+        buyerId,
+        auctionBidId,
+        originalAmount: money(price),
+        ordersAmount: money(price),
+        paymentDeadlineAt,
+        status: "pending_payment",
+        version: { increment: 1 },
+      },
+    });
+    if (claimed.count !== 1) return null;
+    await tx.orderLog.create({
+      data: logData(before, "SYSTEM", "AUCTION_WINNER_REASSIGNED", {
+        previousBuyerId: before.buyerId,
+        buyerId,
+        auctionBidId,
+        price,
+        paymentDeadlineAt,
+      }),
+    });
+    return view(await tx.order.findUnique({ where: { id }, include: INCLUDE }));
+  });
+}
+
+async function finalizeAuctionOrderWithoutWinner({ id, expectedVersion }) {
+  return prisma.$transaction(async (tx) => {
+    const before = await tx.order.findUnique({ where: { id }, include: INCLUDE });
+    if (!before) return null;
+    const claimed = await tx.order.updateMany({
+      where: {
+        id,
+        version: expectedVersion ?? before.version,
+        status: "cancelled",
+        orderType: "AUCTION",
+      },
+      data: {
+        auctionBidId: null,
+        paymentDeadlineAt: null,
+        version: { increment: 1 },
+      },
+    });
+    if (claimed.count !== 1) return null;
+    await tx.orderLog.create({
+      data: logData(before, "SYSTEM", "AUCTION_NO_PAYING_BIDDER", {
+        auctionId: before.auctionId,
+      }),
+    });
+    return view(await tx.order.findUnique({ where: { id }, include: INCLUDE }));
+  });
 }
 function logData(order, actorId, action, detail) {
   return {
@@ -317,6 +446,10 @@ module.exports = {
   updateStatus,
   updateCampaign,
   cleanExpiredOrders,
+  findAuctionOrdersDueForSettlement,
+  claimExpiredAuctionOrder,
+  reassignAuctionOrder,
+  finalizeAuctionOrderWithoutWinner,
   transitionStatusWithProductSync,
   VALID_STATUSES,
   INCLUDE,

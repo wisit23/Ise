@@ -1,14 +1,78 @@
 const prisma = require("../../models/prismaClient");
 const { recordAudit } = require("../audit/marketingAuditRepository");
-const { lockCampaign, withSpentBudget, withVoucherBudget } = require("./campaignBudget");
+const { lockCampaign } = require("./campaignBudget");
 
 /**
  * Database access for the Campaign and Voucher Wallet feature.
  * Layering: route -> controller -> service -> repository -> PostgreSQL (reloop_product).
  */
 function createCampaignRepository(prismaClient) {
+  const SERIALIZABLE_RETRY_LIMIT = 3;
+
   function transaction(fn) {
     return prismaClient.$transaction(fn);
+  }
+
+  async function serializableTransaction(fn) {
+    let lastError;
+    for (let attempt = 1; attempt <= SERIALIZABLE_RETRY_LIMIT; attempt += 1) {
+      try {
+        return await prismaClient.$transaction(fn, {
+          isolationLevel: "Serializable",
+        });
+      } catch (error) {
+        lastError = error;
+        if (error?.code !== "P2034" || attempt === SERIALIZABLE_RETRY_LIMIT) {
+          throw error;
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  function isBudgetUnavailable(campaign) {
+    if (campaign.budget === null || campaign.budget === undefined) return false;
+    const spentBudget = Number(campaign.spentBudget || 0);
+    const reservedBudget = Number(campaign.reservedBudget || 0);
+    if (spentBudget >= campaign.budget) return true;
+    return (
+      campaign.discountType === "FIXED" &&
+      reservedBudget === 0 &&
+      campaign.budget - spentBudget < Number(campaign.discountValue)
+    );
+  }
+
+  async function endCampaignForBudget(tx, campaign) {
+    if (!campaign || campaign.status === "ended" || !isBudgetUnavailable(campaign)) {
+      return campaign;
+    }
+    const endedCampaign = await tx.campaign.update({
+      where: { id: campaign.id },
+      data: {
+        status: "ended",
+        endedAt: new Date(),
+        endReason: "BUDGET_EXHAUSTED",
+      },
+    });
+    await tx.userVoucher.updateMany({
+      where: { campaignId: campaign.id, status: "CLAIMED", usedOrderId: null },
+      data: { status: "EXPIRED" },
+    });
+    await recordAudit(
+      {
+        actorId: "SYSTEM",
+        actorRole: "SYSTEM",
+        action: "CAMPAIGN_END",
+        entityType: "CAMPAIGN",
+        entityId: campaign.id,
+        previousState: campaign,
+        newState: endedCampaign,
+        metadata: { reason: "BUDGET_EXHAUSTED" },
+        idempotencyKey: `CAMPAIGN_END_BUDGET:${campaign.id}`,
+      },
+      { tx },
+    );
+    return endedCampaign;
   }
 
   async function createCampaign(data, { tx } = {}) {
@@ -17,7 +81,7 @@ function createCampaignRepository(prismaClient) {
       data,
     });
     return {
-      ...(await withSpentBudget(client, campaign)),
+      ...campaign,
       claimedCount: campaign.usedCount ?? 0,
       redeemedCount: 0,
     };
@@ -48,7 +112,7 @@ function createCampaignRepository(prismaClient) {
     }
 
     return {
-      ...(await withSpentBudget(client, campaign)),
+      ...campaign,
       claimedCount: campaign.usedCount ?? (campaign._count?.vouchers || 0),
       redeemedCount,
     };
@@ -56,12 +120,12 @@ function createCampaignRepository(prismaClient) {
 
   async function findByCode(code, { tx } = {}) {
     const client = tx || prismaClient;
-    return withSpentBudget(client, await client.campaign.findUnique({ where: { code } }));
+    return client.campaign.findUnique({ where: { code } });
   }
 
   async function updateCampaign(id, data, { tx } = {}) {
     const client = tx || prismaClient;
-    return withSpentBudget(client, await client.campaign.update({ where: { id }, data }));
+    return client.campaign.update({ where: { id }, data });
   }
 
   async function deleteCampaign(id, { tx } = {}) {
@@ -85,12 +149,17 @@ function createCampaignRepository(prismaClient) {
         await prismaClient.$transaction(async (tx) => {
           const updated = await tx.campaign.update({
             where: { id: camp.id },
-            data: { status: "ended" },
+            data: {
+              status: "ended",
+              endedAt: now,
+              endReason: "EXPIRED",
+            },
           });
           await tx.userVoucher.updateMany({
             where: {
               status: "CLAIMED",
               campaignId: camp.id,
+              usedOrderId: null,
             },
             data: { status: "EXPIRED" },
           });
@@ -133,7 +202,50 @@ function createCampaignRepository(prismaClient) {
       ];
     }
 
-    const [rawItems, total] = await Promise.all([
+    const now = new Date();
+    let publishedPromise;
+    let pendingPromise;
+
+    if (status === "published") {
+      publishedPromise = prismaClient.campaign.count({
+        where: {
+          ...where,
+          startsAt: { lte: now },
+          endsAt: { gte: now },
+        },
+      });
+      pendingPromise = Promise.resolve(0);
+    } else if (status === "pending_approval") {
+      publishedPromise = Promise.resolve(0);
+      pendingPromise = Promise.resolve(null);
+    } else if (status) {
+      publishedPromise = Promise.resolve(0);
+      pendingPromise = Promise.resolve(0);
+    } else {
+      publishedPromise = prismaClient.campaign.count({
+        where: {
+          ...where,
+          status: "published",
+          startsAt: { lte: now },
+          endsAt: { gte: now },
+        },
+      });
+      pendingPromise = prismaClient.campaign.count({
+        where: {
+          ...where,
+          status: "pending_approval",
+        },
+      });
+    }
+
+    const [
+      rawItems,
+      total,
+      pubCount,
+      pendCount,
+      voucherCount,
+      usedCountAgg,
+    ] = await Promise.all([
       prismaClient.campaign.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -146,7 +258,26 @@ function createCampaignRepository(prismaClient) {
         },
       }),
       prismaClient.campaign.count({ where }),
+      publishedPromise,
+      pendingPromise,
+      prismaClient.userVoucher
+        .count({
+          where: {
+            campaign: where,
+          },
+        })
+        .catch(() => 0),
+      prismaClient.campaign
+        .aggregate({
+          where,
+          _sum: { usedCount: true },
+        })
+        .catch(() => ({ _sum: { usedCount: 0 } })),
     ]);
+
+    const published = pubCount !== null ? pubCount : 0;
+    const pending =
+      pendCount !== null ? pendCount : status === "pending_approval" ? total : 0;
 
     const campaignIds = rawItems.map((c) => c.id);
     let redeemedMap = new Map();
@@ -168,13 +299,25 @@ function createCampaignRepository(prismaClient) {
       }
     }
 
-    const items = await Promise.all(rawItems.map(async (c) => ({
-      ...(await withSpentBudget(prismaClient, c)),
+    const items = rawItems.map((c) => ({
+      ...c,
       claimedCount: c.usedCount ?? (c._count?.vouchers || 0),
       redeemedCount: redeemedMap.get(c.id) || 0,
-    })));
+    }));
 
-    return { items, total };
+    const totalClaimed = Math.max(
+      voucherCount,
+      usedCountAgg?._sum?.usedCount || 0,
+    );
+
+    const summary = {
+      total,
+      published,
+      pending,
+      totalClaimed,
+    };
+
+    return { items, total, summary };
   }
 
   async function listAvailableCampaigns(now = new Date()) {
@@ -184,7 +327,7 @@ function createCampaignRepository(prismaClient) {
       where: { status: "published", startsAt: { lte: now }, endsAt: { gte: now } },
       orderBy: { createdAt: "desc" },
     });
-    return Promise.all(campaigns.map((c) => withSpentBudget(prismaClient, c)));
+    return campaigns;
   }
 
   function createVoucher({ campaignId, userId }) {
@@ -201,10 +344,10 @@ function createCampaignRepository(prismaClient) {
   }
 
   async function findVoucher(userId, campaignId) {
-    return withVoucherBudget(prismaClient, await prismaClient.userVoucher.findUnique({
+    return prismaClient.userVoucher.findUnique({
       where: { userId_campaignId: { userId, campaignId } },
       include: { campaign: true },
-    }));
+    });
   }
 
   async function listUserVouchers(userId, { status } = {}) {
@@ -219,7 +362,7 @@ function createCampaignRepository(prismaClient) {
       },
       orderBy: { claimedAt: "desc" },
     });
-    return Promise.all(vouchers.map((v) => withVoucherBudget(prismaClient, v)));
+    return vouchers;
   }
 
   function incrementUsedCount(campaignId) {
@@ -248,47 +391,162 @@ function createCampaignRepository(prismaClient) {
     });
   }
 
-  async function releaseVoucher({ userId, campaignId, orderId }) {
-    const voucher = await findVoucher(userId, campaignId);
-    if (!voucher) return null;
-    if (
-      voucher.status === "CLAIMED" &&
-      (voucher.usedOrderId === orderId || !orderId)
-    ) {
-      return prismaClient.userVoucher.update({
-        where: {
-          userId_campaignId: {
-            userId,
-            campaignId,
-          },
-        },
+  async function reserveVoucherBudget({
+    userId,
+    campaignId,
+    orderId,
+    discountAmount,
+  }) {
+    return serializableTransaction(async (tx) => {
+      const voucher = await tx.userVoucher.findUnique({
+        where: { userId_campaignId: { userId, campaignId } },
+      });
+      if (!voucher || voucher.status !== "CLAIMED") {
+        return { held: false, reason: "VOUCHER_UNAVAILABLE" };
+      }
+
+      const reservedDiscount = Number(voucher.reservedDiscount || 0);
+      if (voucher.usedOrderId === orderId && reservedDiscount === discountAmount) {
+        const existing = await tx.userVoucher.findUnique({
+          where: { userId_campaignId: { userId, campaignId } },
+          include: { campaign: true },
+        });
+        return { held: true, voucher: existing, deduplicated: true };
+      }
+      if (voucher.usedOrderId && voucher.usedOrderId !== orderId) {
+        return { held: false, reason: "VOUCHER_HELD" };
+      }
+      if (reservedDiscount > 0 && reservedDiscount !== discountAmount) {
+        return { held: false, reason: "RESERVATION_MISMATCH" };
+      }
+
+      const campaign = await tx.campaign.findUnique({
+        where: { id: campaignId },
+      });
+      if (!campaign || campaign.status !== "published") {
+        return { held: false, reason: "CAMPAIGN_INACTIVE" };
+      }
+      const spentBudget = Number(campaign.spentBudget || 0);
+      const campaignReservedBudget = Number(campaign.reservedBudget || 0);
+      if (
+        campaign.budget !== null &&
+        campaign.budget !== undefined &&
+        spentBudget + campaignReservedBudget + discountAmount > campaign.budget
+      ) {
+        await endCampaignForBudget(tx, campaign);
+        return { held: false, reason: "BUDGET_EXHAUSTED" };
+      }
+
+      await tx.userVoucher.update({
+        where: { userId_campaignId: { userId, campaignId } },
         data: {
-          usedOrderId: null,
-        },
-        include: {
-          campaign: true,
+          usedOrderId: orderId,
+          reservedDiscount: discountAmount,
         },
       });
-    }
-    return voucher;
+      if (discountAmount > 0) {
+        await tx.campaign.update({
+          where: { id: campaignId },
+          data: { reservedBudget: { increment: discountAmount } },
+        });
+      }
+      const heldVoucher = await tx.userVoucher.findUnique({
+        where: { userId_campaignId: { userId, campaignId } },
+        include: { campaign: true },
+      });
+      return { held: true, voucher: heldVoucher };
+    });
   }
 
-  function completeVoucher({ userId, campaignId, orderId }) {
-    return prismaClient.userVoucher.update({
-      where: {
-        userId_campaignId: {
-          userId,
-          campaignId,
+  async function releaseVoucher({ userId, campaignId, orderId }) {
+    return serializableTransaction(async (tx) => {
+      const voucher = await tx.userVoucher.findUnique({
+        where: { userId_campaignId: { userId, campaignId } },
+      });
+      if (!voucher) return null;
+      if (
+        voucher.status !== "CLAIMED" ||
+        (orderId && voucher.usedOrderId !== orderId)
+      ) {
+        return tx.userVoucher.findUnique({
+          where: { userId_campaignId: { userId, campaignId } },
+          include: { campaign: true },
+        });
+      }
+
+      const reservedDiscount = Number(voucher.reservedDiscount || 0);
+      const campaign = await tx.campaign.findUnique({
+        where: { id: campaignId },
+      });
+      await tx.userVoucher.update({
+        where: { userId_campaignId: { userId, campaignId } },
+        data: {
+          usedOrderId: null,
+          reservedDiscount: 0,
+          ...(campaign?.status === "ended" ? { status: "EXPIRED" } : {}),
         },
-      },
-      data: {
-        status: "USED",
-        usedAt: new Date(),
-        usedOrderId: orderId || undefined,
-      },
-      include: {
-        campaign: true,
-      },
+      });
+      if (reservedDiscount > 0) {
+        const updatedCampaign = await tx.campaign.update({
+          where: { id: campaignId },
+          data: { reservedBudget: { decrement: reservedDiscount } },
+        });
+        await endCampaignForBudget(tx, updatedCampaign);
+      }
+      return tx.userVoucher.findUnique({
+        where: { userId_campaignId: { userId, campaignId } },
+        include: { campaign: true },
+      });
+    });
+  }
+
+  async function completeVoucher({
+    userId,
+    campaignId,
+    orderId,
+    discountAmount = 0,
+  }) {
+    return serializableTransaction(async (tx) => {
+      const voucher = await tx.userVoucher.findUnique({
+        where: { userId_campaignId: { userId, campaignId } },
+      });
+      if (!voucher) return null;
+      if (voucher.status === "USED") {
+        return tx.userVoucher.findUnique({
+          where: { userId_campaignId: { userId, campaignId } },
+          include: { campaign: true },
+        });
+      }
+      if (voucher.status !== "CLAIMED" || voucher.usedOrderId !== orderId) {
+        return null;
+      }
+
+      const reservedDiscount = Number(voucher.reservedDiscount || 0);
+      const committedDiscount = reservedDiscount || Number(discountAmount || 0);
+      const campaign = await tx.campaign.update({
+        where: { id: campaignId },
+        data: {
+          ...(reservedDiscount > 0
+            ? { reservedBudget: { decrement: reservedDiscount } }
+            : {}),
+          ...(committedDiscount > 0
+            ? { spentBudget: { increment: committedDiscount } }
+            : {}),
+        },
+      });
+      const completedVoucher = await tx.userVoucher.update({
+        where: { userId_campaignId: { userId, campaignId } },
+        data: {
+          status: "USED",
+          usedAt: new Date(),
+          usedOrderId: orderId,
+          reservedDiscount: 0,
+        },
+        include: { campaign: true },
+      });
+
+      await endCampaignForBudget(tx, campaign);
+      return completedVoucher;
     });
   }
 
@@ -331,20 +589,27 @@ function createCampaignRepository(prismaClient) {
         throw err;
       }
 
-      const camp = await withSpentBudget(tx, await tx.campaign.findUnique({
+      const camp = await tx.campaign.findUnique({
         where: { id: campaignId },
-      }));
+      });
       if (!camp || camp.status !== "published") {
-        const err = new Error("แคมเปญไม่ได้เปิดใช้งานอยู่");
+        const err = new Error(
+          camp?.endReason === "BUDGET_EXHAUSTED"
+            ? "วงเงินส่วนลดของคูปองนี้ถูกใช้ครบแล้ว"
+            : camp?.endReason === "ADMIN_CLOSED"
+              ? "คูปองถูกปิดโดยผู้ดูแล"
+              : "คูปองหมดอายุแล้ว",
+        );
         err.statusCode = 409;
         throw err;
       }
       if (
         camp.budget !== null &&
         camp.budget !== undefined &&
-        camp.spentBudget >= camp.budget
+        Number(camp.spentBudget || 0) + Number(camp.reservedBudget || 0) >=
+          camp.budget
       ) {
-        const err = new Error("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
+        const err = new Error("วงเงินส่วนลดของคูปองนี้ถูกใช้ครบแล้ว");
         err.statusCode = 409;
         throw err;
       }
@@ -362,15 +627,15 @@ function createCampaignRepository(prismaClient) {
       });
 
       if (updateResult.count === 0) {
-        const err = new Error("campaign usage limit reached");
+        const err = new Error("สิทธิ์คูปองถูกใช้ครบแล้ว");
         err.statusCode = 409;
         throw err;
       }
 
-      return withVoucherBudget(tx, await tx.userVoucher.create({
+      return tx.userVoucher.create({
         data: { campaignId, userId, status: "CLAIMED" },
         include: { campaign: true },
-      }));
+      });
     });
   }
 
@@ -380,6 +645,7 @@ function createCampaignRepository(prismaClient) {
       where: {
         campaignId,
         status: "CLAIMED",
+        usedOrderId: null,
       },
       data: {
         status: "EXPIRED",
@@ -398,15 +664,16 @@ function createCampaignRepository(prismaClient) {
     listAvailableCampaigns,
     autoExpireCampaigns,
     expireClaimedVouchers,
-    createVoucher: async (input) => withVoucherBudget(prismaClient, await createVoucher(input)),
+    createVoucher,
     findVoucher,
     listUserVouchers,
     incrementUsedCount,
     claimVoucherAtomic,
-    holdVoucher: async (input) => withVoucherBudget(prismaClient, await holdVoucher(input)),
+    holdVoucher,
     holdVoucherWithLock,
-    releaseVoucher: async (input) => withVoucherBudget(prismaClient, await releaseVoucher(input)),
-    completeVoucher: async (input) => withVoucherBudget(prismaClient, await completeVoucher(input)),
+    reserveVoucherBudget,
+    releaseVoucher,
+    completeVoucher,
     findProduct,
   };
 }

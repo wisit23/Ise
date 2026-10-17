@@ -18,6 +18,11 @@ app.locals.validateAccessSession = async () => {};
 
 const buyerToken = signAccessToken({ sub: "buyer-1", role: "BUYER" });
 const executiveToken = signAccessToken({ sub: "exec-1", role: "EXECUTIVE" });
+const adminToken = signAccessToken({ sub: "admin-1", role: "ADMIN" });
+const customerServiceToken = signAccessToken({
+  sub: "customer-service-1",
+  role: "CUSTOMER_SERVICE",
+});
 const sellerToken = signAccessToken({ sub: "seller-1", role: "SELLER" });
 
 function removeUploadedMedia(url) {
@@ -69,6 +74,21 @@ test("POST /auctions/:id/bids from a staff account is rejected before touching t
   assert.equal(res.status, 403);
   assert.equal(res.body.error.code, "CUSTOMER_ACCOUNT_REQUIRED");
 });
+
+for (const [role, token] of [
+  ["EXECUTIVE", executiveToken],
+  ["ADMIN", adminToken],
+  ["CUSTOMER_SERVICE", customerServiceToken],
+]) {
+  test(`POST /campaigns/:id/claim rejects ${role} before touching the database`, async () => {
+    const res = await request(app)
+      .post("/campaigns/campaign-1/claim")
+      .set("Authorization", `Bearer ${token}`);
+
+    assert.equal(res.status, 403);
+    assert.equal(res.body.error.code, "CUSTOMER_ACCOUNT_REQUIRED");
+  });
+}
 
 test("POST /uploads with no bearer token is rejected with 401", async () => {
   const res = await request(app).post("/uploads");

@@ -1,8 +1,30 @@
 # Marketing Feature Progress
 
+## Current addendum — 2026-10-14: Round capacity
+
+Implemented user-approved nullable `auction_rounds.max_items`, required capacity
+on new-round creation, atomic slot checks for both submission flows, and Marketing
+capacity display. Pending items reserve slots; rejected/cancelled items free them.
+See [rules and verification](round-capacity.md). Automated checks passed; real
+Browser create/full/reject-release acceptance and four Desktop sizes now verified
+after the user reopened the tab. Fixed immediate count refresh after rejection or
+cancellation; Frontend regression now 163 tests. Disposable fixtures removed.
+No commit/push; historical progress below is retained.
+
+## Current addendum — 2026-10-14: Round time editing
+
+Implemented Marketing round time editing and the user-approved nullable
+`auction_items.soft_close_ends_at` floor. See [rules, migration and acceptance
+evidence](round-time-editing.md). Latest rerun: Backend 121 tests (no skips),
+Frontend 160 tests, targeted lint and diff check. Earlier existing Marketing
+integration: 16 tests (no skips). Browser modal layout checked at four Desktop
+sizes; isolated real save/shortening, soft-close retention, Redis deadlines and
+live Chat delivery/retry were verified and fixtures removed. Full-project final
+regression/production build remains pending. Historical records below are retained.
+
 > Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-10-08
 
-**Status:** `MKT-001` (Campaign Lifecycle & Voucher Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-003` / `MKT-007` (Durable Campaign Attribution & Conversion Metrics Dashboard), `MKT-004 Part A` (Knowledge Base & Articles System), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling), `UR-11` (Swipe-to-Choose Hardening: Buyer Authorization, Persistence, User Isolation & Anti-Spoofing), `UR-08` (User/Peak-Usage Analytics สำหรับ Marketing: Active Users, New Users, Hourly Usage, Peak Hour & Date Range Filtering), `Marketing Audit Trail` (Append-Only Audit Log for Campaigns, Auctions, and Articles with Atomic Mutation Contracts & SYSTEM Idempotency), และ `Campaign Date Validation & Budget Tracking with Auto-End` (`MKT-DEC-023`: Server-side date boundaries, Atomic spentBudget tracking, auto-end after completed attribution processing, CLAIMED voucher expiry, and Marketing UI budget progress) ตรวจสอบผ่านการทดสอบอัตโนมัติครบถ้วน (Verified with automated tests; รอ commit; ER Diagram update pending); และ `MKT-004 Part B` (Buyer Segmentation Rules) อยู่ระหว่างเตรียม Buyer profile persistence hardening (Part 4)
+**Status:** `MKT-001` (Campaign Lifecycle & Voucher Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-003` / `MKT-007` (Durable Campaign Attribution & Conversion Metrics Dashboard), `MKT-004 Part A` (Knowledge Base & Articles System), `MKT-004 Part B` / `UR-13` (Buyer Segmentation with persisted Auth profile and anti-spoofing), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling), `UR-11` (Swipe-to-Choose Hardening: Buyer Authorization, Persistence, User Isolation & Anti-Spoofing), `UR-08` (User/Peak-Usage Analytics สำหรับ Marketing: Active Users, New Users, Hourly Usage, Peak Hour & Date Range Filtering), `Marketing Audit Trail` (Append-Only Audit Log for Campaigns, Auctions, and Articles with Atomic Mutation Contracts & SYSTEM Idempotency), และ `Campaign Date Validation & Budget Tracking with Auto-End` (`MKT-DEC-023`: Server-side date boundaries, Atomic spentBudget tracking, auto-end after completed attribution processing, CLAIMED voucher expiry, and Marketing UI budget progress) ตรวจสอบผ่านการทดสอบอัตโนมัติครบถ้วน (Verified with automated tests; รอ commit; ER Diagram update pending)
 
 **Plan coverage:** Explicit trace rows cover `UR-08`–`UR-16` through FR, active/deferred NFR,
 `WF-03`, `WF-11`, documented Workflow gaps and `MKT-001`–`MKT-007`
@@ -77,7 +99,7 @@
 - `MKT-006`: Implementation and automated tests are complete (quote-and-hold, concurrency guard, admin decoupling). Waiting only for commit (pending explicit user instruction).
 - `UR-08`: User & Peak-Usage Analytics completed & verified across unit, cross-service, PostgreSQL integration, and frontend tests; waiting for commit.
 - `Marketing Audit Trail`: Completed & verified across unit, component, and PostgreSQL integration tests (`REQUIRE_INTEGRATION=1` without skips); waiting for commit.
-- `MKT-004 Part B`: Source implementation and unit tests exist; buyer profile persistence hardening belongs to Part 4.
+- `MKT-004 Part B`: Completed and verified. Product Service reads the signed-in buyer's persisted multi-value profile from Auth Service for discovery, direct detail, claim, and applicable-voucher checks; client profile spoofing is ignored and Auth outages fail closed for targeted campaigns.
 
 **Deferred:** Production campaign authorization, privacy and push-notification security hardening
 (Deferred Security Phase)

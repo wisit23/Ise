@@ -6,7 +6,7 @@ import Alert from "../ui/Alert";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
 import { apiFetch } from "../../lib/api";
-import { saveSession } from "../../lib/auth";
+import { resolvePostLoginPath, saveSession } from "../../lib/auth";
 import { AuthIcon, PasswordInput } from "./AuthLayout";
 import styles from "./AuthLayout.module.css";
 import { authError } from "./authError";
@@ -39,9 +39,13 @@ export function LoginPage({ onAuthenticated } = {}) {
         body: form,
       });
       saveSession(data);
-      // An executive's job here is the dashboard, not the storefront — land
-      // them on the business overview straight after login (UR-27).
-      const destination = data.user?.role === "EXECUTIVE" ? "/executive" : "/";
+      const search = new URLSearchParams(window.location.search);
+      const destination = resolvePostLoginPath({
+        accessToken: data.accessToken,
+        user: data.user,
+        requestedDestination:
+          search.get("next") || search.get("returnTo") || search.get("redirect"),
+      });
       if (onAuthenticated) await onAuthenticated(destination);
       else router.push(destination);
     } catch (err) {

@@ -22,6 +22,7 @@ export default function ConfirmDialog({
   reason = "none",
   reasonLabel = "เหตุผล",
   reasonHint,
+  note,
   busy = false,
   loading,
   onConfirm,
@@ -66,7 +67,9 @@ export default function ConfirmDialog({
         </>
       }
     >
-      {reason !== "none" ? (
+      {reason === "none" ? (
+        note ? <p className="text-sm text-ink-muted">{note}</p> : null
+      ) : (
         <Textarea
           label={reasonLabel}
           hint={reasonHint ?? (reason === "optional" ? "ไม่บังคับ" : undefined)}
@@ -78,7 +81,7 @@ export default function ConfirmDialog({
             if (error) setError("");
           }}
         />
-      ) : null}
+      )}
     </Modal>
   );
 }

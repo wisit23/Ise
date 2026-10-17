@@ -1,7 +1,12 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import CampaignsPage from "./page";
 import { apiFetch } from "../../lib/api";
-import { getAccessToken, getStoredUser } from "../../lib/auth";
+import {
+  getAccessToken,
+  getStoredUser,
+  getCurrentRoles,
+  isCustomerAccountRoles,
+} from "../../lib/auth";
 
 jest.mock(
   "../../components/NavBar",
@@ -36,6 +41,8 @@ jest.mock("../../lib/api", () => ({
 jest.mock("../../lib/auth", () => ({
   getAccessToken: jest.fn(),
   getStoredUser: jest.fn(),
+  getCurrentRoles: jest.fn(),
+  isCustomerAccountRoles: jest.fn(),
 }));
 
 describe("CampaignsPage (Buyer Voucher Hub)", () => {
@@ -44,6 +51,8 @@ describe("CampaignsPage (Buyer Voucher Hub)", () => {
     mockSearchParams = new URLSearchParams();
     getAccessToken.mockReturnValue("fake-token");
     getStoredUser.mockReturnValue({ id: "user-1", email: "buyer@example.com" });
+    getCurrentRoles.mockReturnValue(["BUYER"]);
+    isCustomerAccountRoles.mockReturnValue(true);
   });
 
   it("shows empty state when no available campaigns exist", async () => {
@@ -143,4 +152,48 @@ describe("CampaignsPage (Buyer Voucher Hub)", () => {
     expect(screen.getByText("WELCOME100")).toBeInTheDocument();
     expect(screen.getByText("ลด ฿100")).toBeInTheDocument();
   });
+
+  it.each(["EXECUTIVE", "ADMIN", "CUSTOMER_SERVICE"])(
+    "does not let %s collect or open a voucher wallet",
+    async (role) => {
+      getCurrentRoles.mockReturnValue([role]);
+      isCustomerAccountRoles.mockReturnValue(false);
+      apiFetch.mockImplementation((url) => {
+        if (url.includes("/api/products/campaigns/available")) {
+          return Promise.resolve([
+            {
+              id: "camp-staff-test",
+              name: "Staff restriction test",
+              code: "STAFF-NO-CLAIM",
+              discountType: "FIXED",
+              discountValue: 50,
+              minOrderPrice: 0,
+              startsAt: "2026-09-01T00:00:00.000Z",
+              endsAt: "2026-12-31T23:59:59.000Z",
+              status: "published",
+              usageLimit: 100,
+              usedCount: 0,
+            },
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      render(<CampaignsPage />);
+
+      expect(
+        await screen.findByText("บัญชีเจ้าหน้าที่ไม่สามารถเก็บคูปองได้"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "เก็บคูปอง" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /คูปองของฉัน/i }),
+      ).not.toBeInTheDocument();
+      expect(apiFetch).not.toHaveBeenCalledWith(
+        "/api/products/campaigns/my-vouchers",
+        expect.anything(),
+      );
+    },
+  );
 });

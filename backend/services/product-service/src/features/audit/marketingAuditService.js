@@ -1,5 +1,7 @@
 const { badRequest } = require("@reloop/shared");
 const defaultRepository = require("./marketingAuditRepository");
+const defaultAuthClient = require("./marketingAuditAuthClient");
+const defaultPrisma = require("../../models/prismaClient");
 
 const VALID_ACTIONS = new Set([
   // Campaign actions
@@ -12,12 +14,15 @@ const VALID_ACTIONS = new Set([
   "CAMPAIGN_END",
   // Auction actions
   "AUCTION_ROUND_CREATE",
+  "AUCTION_ROUND_UPDATE",
   "AUCTION_ROUND_CANCEL",
   "AUCTION_ITEM_APPROVE",
   "AUCTION_ITEM_REJECT",
   "AUCTION_ITEM_SCHEDULE",
   "AUCTION_ITEM_CANCEL",
   "AUCTION_ITEM_CLOSE",
+  "AUCTION_WINNER_ADVANCE",
+  "AUCTION_PAYMENT_EXPIRED_NO_NEXT_BIDDER",
   // Article actions
   "ARTICLE_CREATE",
   "ARTICLE_UPDATE",
@@ -55,7 +60,11 @@ function parseDateBoundary(dateStr, isEndDate = false) {
   return d;
 }
 
-function createMarketingAuditService(repository = defaultRepository) {
+function createMarketingAuditService(
+  repository = defaultRepository,
+  authClient = defaultAuthClient,
+  prismaClient = defaultPrisma,
+) {
   /**
    * Internal service method to record an audit log.
    * Never exposed directly to client write API.
@@ -100,6 +109,228 @@ function createMarketingAuditService(repository = defaultRepository) {
       },
       { tx },
     );
+  }
+
+  async function enrichActors(items) {
+    if (!Array.isArray(items) || items.length === 0) return items;
+
+    const unresolvedIds = [];
+    for (const item of items) {
+      if (!item.actorId) {
+        item.actorName = "-";
+        continue;
+      }
+      if (item.actorId === "SYSTEM") {
+        item.actorName = "ระบบอัตโนมัติ";
+        item.actorNameSource = "system";
+        continue;
+      }
+
+      // Check snapshot that explicitly confirms the ACTOR's name
+      // NEVER use article authorName or entity owner - the editor is not necessarily the author!
+      const snapshotName =
+        item.metadata?.actorName ||
+        item.metadata?.operatorName ||
+        item.metadata?.actorDisplayName ||
+        null;
+
+      if (snapshotName) {
+        item.actorName = snapshotName;
+        item.actorNameSource = "snapshot";
+        continue;
+      }
+
+      unresolvedIds.push(item.actorId);
+    }
+
+    const uniqueIds = [...new Set(unresolvedIds)];
+    let nameMap = {};
+    if (
+      uniqueIds.length > 0 &&
+      authClient &&
+      typeof authClient.getDisplayNames === "function"
+    ) {
+      try {
+        const resolved = await authClient.getDisplayNames(uniqueIds);
+        if (Array.isArray(resolved)) {
+          nameMap = Object.fromEntries(
+            resolved
+              .filter((r) => r && r.userId && r.displayName)
+              .map((r) => [r.userId, r.displayName]),
+          );
+        }
+      } catch (err) {
+        console.warn("[marketingAuditService] enrichActors error:", err.message);
+      }
+    }
+
+    for (const item of items) {
+      if (!item.actorName) {
+        if (nameMap[item.actorId]) {
+          item.actorName = nameMap[item.actorId];
+          item.isCurrentName = true;
+          item.actorNameSource = "auth_directory";
+        } else {
+          item.actorName = item.actorId;
+          item.actorNameSource = "fallback_id";
+        }
+      }
+    }
+
+    return items;
+  }
+
+  async function enrichEntities(items) {
+    if (!Array.isArray(items) || items.length === 0) return items;
+
+    const missingByType = {
+      CAMPAIGN: [],
+      ARTICLE: [],
+      AUCTION_ROUND: [],
+      AUCTION_ITEM: [],
+    };
+
+    for (const item of items) {
+      if (!item.entityId) {
+        item.entityName = "-";
+        continue;
+      }
+
+      let prevName = null;
+      let newName = null;
+      let resolvedName = null;
+
+      if (item.entityType === "CAMPAIGN") {
+        prevName = item.previousState?.name || item.previousState?.title || null;
+        newName = item.newState?.name || item.newState?.title || null;
+        resolvedName =
+          newName ||
+          prevName ||
+          item.newState?.code ||
+          item.previousState?.code ||
+          null;
+      } else if (item.entityType === "ARTICLE") {
+        prevName = item.previousState?.title || null;
+        newName = item.newState?.title || null;
+        resolvedName = newName || prevName || null;
+      } else if (item.entityType === "AUCTION_ROUND") {
+        prevName = item.previousState?.title || item.previousState?.name || null;
+        newName = item.newState?.title || item.newState?.name || null;
+        resolvedName = newName || prevName || null;
+      } else if (item.entityType === "AUCTION_ITEM") {
+        prevName =
+          item.previousState?.product?.title ||
+          item.previousState?.productTitle ||
+          item.previousState?.itemTitle ||
+          item.previousState?.title ||
+          null;
+        newName =
+          item.newState?.product?.title ||
+          item.newState?.productTitle ||
+          item.newState?.itemTitle ||
+          item.newState?.title ||
+          null;
+        resolvedName = newName || prevName || null;
+      }
+
+      item.previousEntityName = prevName;
+      item.newEntityName = newName;
+
+      if (resolvedName) {
+        item.entityName = resolvedName;
+        item.entityNameSource = "snapshot";
+      } else {
+        if (missingByType[item.entityType]) {
+          missingByType[item.entityType].push(item.entityId);
+        }
+      }
+    }
+
+    const currentNames = {};
+    try {
+      if (prismaClient) {
+        const cIds = [...new Set(missingByType.CAMPAIGN || [])];
+        if (
+          cIds.length > 0 &&
+          prismaClient.campaign &&
+          typeof prismaClient.campaign.findMany === "function"
+        ) {
+          const rows = await prismaClient.campaign.findMany({
+            where: { id: { in: cIds } },
+            select: { id: true, name: true, code: true },
+          });
+          rows.forEach((r) => {
+            currentNames[`CAMPAIGN:${r.id}`] = r.name || r.code || r.id;
+          });
+        }
+
+        const aIds = [...new Set(missingByType.ARTICLE || [])];
+        if (
+          aIds.length > 0 &&
+          prismaClient.article &&
+          typeof prismaClient.article.findMany === "function"
+        ) {
+          const rows = await prismaClient.article.findMany({
+            where: { id: { in: aIds } },
+            select: { id: true, title: true },
+          });
+          rows.forEach((r) => {
+            currentNames[`ARTICLE:${r.id}`] = r.title || r.id;
+          });
+        }
+
+        const rIds = [...new Set(missingByType.AUCTION_ROUND || [])];
+        if (
+          rIds.length > 0 &&
+          prismaClient.auctionRound &&
+          typeof prismaClient.auctionRound.findMany === "function"
+        ) {
+          const rows = await prismaClient.auctionRound.findMany({
+            where: { id: { in: rIds } },
+            select: { id: true, title: true },
+          });
+          rows.forEach((r) => {
+            currentNames[`AUCTION_ROUND:${r.id}`] = r.title || r.id;
+          });
+        }
+
+        const iIds = [...new Set(missingByType.AUCTION_ITEM || [])];
+        if (
+          iIds.length > 0 &&
+          prismaClient.auctionItem &&
+          typeof prismaClient.auctionItem.findMany === "function"
+        ) {
+          const rows = await prismaClient.auctionItem.findMany({
+            where: { id: { in: iIds } },
+            select: { id: true, product: { select: { title: true } } },
+          });
+          rows.forEach((r) => {
+            currentNames[`AUCTION_ITEM:${r.id}`] = r.product?.title || r.id;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "[marketingAuditService] enrichEntities lookup error:",
+        err.message,
+      );
+    }
+
+    for (const item of items) {
+      if (!item.entityName) {
+        const lookupKey = `${item.entityType}:${item.entityId}`;
+        if (currentNames[lookupKey]) {
+          item.entityName = currentNames[lookupKey];
+          item.isCurrentEntityName = true;
+          item.entityNameSource = "current_record";
+        } else {
+          item.entityName = item.entityId;
+          item.entityNameSource = "fallback_id";
+        }
+      }
+    }
+
+    return items;
   }
 
   /**
@@ -147,17 +378,67 @@ function createMarketingAuditService(repository = defaultRepository) {
       throw badRequest(`invalid entityType filter: "${query.entityType}"`);
     }
 
+    // Operator search filter: supports query by name, partial name, or User ID
+    const actorSearch = (query.actorQuery || query.q || "").trim();
+    let matchedActorIds = null;
+
+    if (actorSearch) {
+      const candidateIds = [];
+      const isSystemQuery =
+        actorSearch.toUpperCase() === "SYSTEM" ||
+        "ระบบอัตโนมัติ".toLowerCase().includes(actorSearch.toLowerCase()) ||
+        "ระบบ".includes(actorSearch.toLowerCase());
+
+      if (isSystemQuery) {
+        candidateIds.push("SYSTEM");
+      }
+
+      // Search users in auth-service via internal API boundary (never direct DB)
+      // Fail-closed: If auth service fails or is unreachable, errors bubble up to return 502
+      if (authClient && typeof authClient.searchUsers === "function") {
+        const authUsers = await authClient.searchUsers(actorSearch);
+        if (Array.isArray(authUsers)) {
+          for (const u of authUsers) {
+            if (u.id) candidateIds.push(u.id);
+            if (u.userId) candidateIds.push(u.userId);
+          }
+        }
+      }
+
+      // Always allow matching actorSearch directly as an exact actorId candidate in Audit records
+      // (supports non-UUID IDs, custom IDs, deleted accounts, or legacy IDs)
+      candidateIds.push(actorSearch);
+
+      matchedActorIds = [...new Set(candidateIds)];
+
+      // If actor search was provided but yielded 0 matching IDs, return clean empty result
+      if (matchedActorIds.length === 0) {
+        return {
+          items: [],
+          data: [],
+          page,
+          limit,
+          total: 0,
+          totalPages: 1,
+        };
+      }
+    }
+
     const { items, total } = await repository.listAuditLogs({
       action: query.action || undefined,
       entityType: query.entityType || undefined,
       entityId: query.entityId || undefined,
-      actorId: query.actorId || undefined,
+      actorId: actorSearch ? undefined : (query.actorId || undefined),
+      actorIds: matchedActorIds || undefined,
       actorRole: query.actorRole || undefined,
       fromDate,
       toDate,
       skip,
       take,
     });
+
+    await enrichActors(items);
+    await enrichEntities(items);
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
@@ -182,5 +463,9 @@ function createMarketingAuditService(repository = defaultRepository) {
   };
 }
 
-module.exports = createMarketingAuditService(defaultRepository);
+module.exports = createMarketingAuditService(
+  defaultRepository,
+  defaultAuthClient,
+  defaultPrisma,
+);
 module.exports.createMarketingAuditService = createMarketingAuditService;

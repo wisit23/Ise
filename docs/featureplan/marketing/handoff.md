@@ -1,5 +1,22 @@
 # Marketing Feature Handoff
 
+## 2026-10-14 addendum: Round capacity
+
+See [round-capacity.md](round-capacity.md) for the approved `max_items` migration,
+occupancy rules, API change, concurrency/regression evidence and verified Browser
+acceptance (including immediate quota refresh after rejection/cancellation).
+Migration applied locally; old rounds remain unlimited. No capacity
+editing feature or commit/push. Preserve all existing Working Tree work.
+
+## 2026-10-14 addendum: Round time editing
+
+`PATCH /auctions/rounds/:roundId` and the Marketing edit-time modal are implemented.
+The user approved one nullable `auction_items.soft_close_ends_at` column; its migration
+has been applied locally. Read [round-time-editing.md](round-time-editing.md) for the
+agreed rules, exact test evidence, legacy-row handling, explicit retry behavior and
+verified isolated Browser saves/live Chat delivery, and remaining full-project
+acceptance. Test fixtures were removed. No commit/push or max-round-capacity work done.
+
 > อัปเดตล่าสุด: 2026-10-09
 
 ## Ownership

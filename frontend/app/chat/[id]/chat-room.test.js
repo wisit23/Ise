@@ -44,6 +44,7 @@ jest.mock("../../../lib/chat", () => ({
 jest.mock("../../../lib/auth", () => ({
   getAccessToken: jest.fn(),
   getStoredUser: jest.fn(),
+  safeInternalPath: jest.requireActual("../../../lib/auth").safeInternalPath,
 }));
 
 // Mutable so each test can decide whether the app-wide socket is connected.

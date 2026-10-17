@@ -6,7 +6,8 @@ import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import MediaGallery from "../../../components/MediaGallery";
-import { apiFetch } from "../../../lib/api";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
+import { apiFetch, apiUrl } from "../../../lib/api";
 import {
   getAccessToken,
   getAccessTokenClaims,
@@ -14,6 +15,9 @@ import {
   getCurrentRoles,
   isCustomerAccountRoles,
 } from "../../../lib/auth";
+
+const MAX_BID_AMOUNT = 1_000_000;
+const BID_CONFIRMATION_INCREASE = 10_000;
 
 const STATUS_LABEL = {
   pending_approval: "รออนุมัติ",
@@ -46,6 +50,8 @@ export default function AuctionDetailPage() {
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
   const [bidding, setBidding] = useState(false);
+  const [pendingBid, setPendingBid] = useState(null);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [viewer, setViewer] = useState({
     ready: false,
     isAuthenticated: false,
@@ -78,10 +84,28 @@ export default function AuctionDetailPage() {
 
   useEffect(load, [load]);
 
-  // Poll while the auction can still change (bids coming in, or a
-  // scheduled/open transition due) so the page doesn't go stale mid-bid war.
+  // TC_AUC15: only the auction detail page holds a real-time connection.
+  // The event contains no bid data; it tells the page to reload the committed
+  // auction snapshot, keeping the API as the single source of truth.
+  useEffect(() => {
+    if (typeof EventSource === "undefined") return undefined;
+    const source = new EventSource(
+      apiUrl(`/api/products/auctions/${id}/events`),
+    );
+    source.onopen = () => setRealtimeConnected(true);
+    source.addEventListener("auction-update", load);
+    source.onerror = () => setRealtimeConnected(false);
+    return () => {
+      source.removeEventListener("auction-update", load);
+      source.close();
+    };
+  }, [id, load]);
+
+  // Keep the accepted 4-second polling behavior only as a fallback when SSE
+  // is unavailable or temporarily disconnected.
   useEffect(() => {
     if (
+      realtimeConnected ||
       !auction ||
       ["closed", "cancelled", "rejected"].includes(auction.status)
     ) {
@@ -89,7 +113,7 @@ export default function AuctionDetailPage() {
     }
     const interval = setInterval(load, 4000);
     return () => clearInterval(interval);
-  }, [auction, load]);
+  }, [auction, load, realtimeConnected]);
 
   // Auto-fill price input with the minimum valid next bid, while allowing buyer to edit.
   useEffect(() => {
@@ -109,18 +133,7 @@ export default function AuctionDetailPage() {
     }
   }, [auction]);
 
-  async function handleBid(e) {
-    e.preventDefault();
-    setError("");
-    if (!getAccessToken()) {
-      window.location.href = "/login";
-      return;
-    }
-    const value = Number(amount);
-    if (!Number.isInteger(value) || value <= 0) {
-      setError("จำนวนเงินเสนอราคาต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
-      return;
-    }
+  async function submitBid(value) {
     setBidding(true);
     try {
       await apiFetch(`/api/products/auctions/${id}/bids`, {
@@ -142,6 +155,41 @@ export default function AuctionDetailPage() {
     } finally {
       setBidding(false);
     }
+  }
+
+  function handleBid(e) {
+    e.preventDefault();
+    setError("");
+    if (!getAccessToken()) {
+      window.location.href = "/login";
+      return;
+    }
+    const value = Number(amount);
+    if (!Number.isInteger(value) || value <= 0) {
+      setError("จำนวนเงินเสนอราคาต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
+      return;
+    }
+    if (value > MAX_BID_AMOUNT) {
+      setError(
+        `ราคาเสนอประมูลต่อครั้งต้องไม่เกิน ${MAX_BID_AMOUNT.toLocaleString("th-TH")} บาท`,
+      );
+      return;
+    }
+
+    const currentPrice = auction.bids?.[0]?.amount ?? auction.startingPrice;
+    const increase = value - currentPrice;
+    if (increase >= BID_CONFIRMATION_INCREASE) {
+      setPendingBid({ amount: value, currentPrice, increase });
+      return;
+    }
+
+    submitBid(value);
+  }
+
+  function handleConfirmBid() {
+    const value = pendingBid?.amount;
+    setPendingBid(null);
+    if (value !== undefined) submitBid(value);
   }
 
   if (auction === undefined) {
@@ -341,6 +389,7 @@ export default function AuctionDetailPage() {
             ) : isOpen ? (
               <form
                 onSubmit={handleBid}
+                noValidate
                 className="flex flex-col sm:flex-row items-stretch sm:items-start gap-3"
               >
                 <div className="flex-1">
@@ -355,6 +404,7 @@ export default function AuctionDetailPage() {
                   <input
                     type="number"
                     min={minNext}
+                    max={MAX_BID_AMOUNT}
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder={`อย่างน้อย ${minNext}`}
@@ -370,7 +420,11 @@ export default function AuctionDetailPage() {
                   disabled={bidding}
                   className="sm:mt-6 rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 shadow-sm text-center"
                 >
-                  {bidding ? "กำลังส่ง..." : "เสนอราคา"}
+                  {bidding
+                    ? "กำลังส่ง..."
+                    : Number.isInteger(Number(amount)) && Number(amount) > 0
+                      ? `เสนอราคา ${baht(Number(amount))}`
+                      : "เสนอราคา"}
                 </button>
               </form>
             ) : (
@@ -458,6 +512,23 @@ export default function AuctionDetailPage() {
           </div>
         </div>
       </section>
+      <ConfirmDialog
+        open={Boolean(pendingBid)}
+        title="ยืนยันยอดเสนอราคา"
+        description={
+          pendingBid
+            ? `ราคาปัจจุบัน ${baht(pendingBid.currentPrice)} คุณกำลังเสนอ ${baht(pendingBid.amount)} ซึ่งเพิ่มขึ้น ${baht(pendingBid.increase)}`
+            : ""
+        }
+        confirmLabel={
+          pendingBid ? `ยืนยันเสนอราคา ${baht(pendingBid.amount)}` : "ยืนยัน"
+        }
+        tone="primary"
+        note="โปรดตรวจสอบยอดเสนอราคาให้ถูกต้องก่อนยืนยัน"
+        busy={bidding}
+        onConfirm={handleConfirmBid}
+        onCancel={() => setPendingBid(null)}
+      />
       <Footer />
     </main>
   );

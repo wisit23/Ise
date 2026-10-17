@@ -91,6 +91,12 @@ const BUYERS = [
     firstName: "สมชาย",
     lastName: "ใจดี",
   },
+  {
+    id: "30000000-0000-0000-0000-000000000002",
+    email: "buyer.test@example.com",
+    firstName: "ผู้ซื้อ",
+    lastName: "ทดสอบ",
+  },
 ];
 
 const SUPPORT_AGENTS = [
@@ -292,7 +298,7 @@ async function main() {
   }
 
   console.log(
-    `[auth-service] seeded ${SELLERS.length} sellers, ${BUYERS.length} buyer, ${SUPPORT_AGENTS.length} customer-service agents, ${STAFF.length} staff, 1 executive, and no automatic case reports (password: "${DEMO_PASSWORD}")`,
+    `[auth-service] seeded ${SELLERS.length} sellers, ${BUYERS.length} buyers, ${SUPPORT_AGENTS.length} customer-service agents, ${STAFF.length} staff, 1 executive, and no automatic case reports (password: "${DEMO_PASSWORD}")`,
   );
 }
 

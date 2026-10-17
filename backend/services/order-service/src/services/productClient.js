@@ -145,11 +145,14 @@ function releaseVoucher(campaignId, { userId, orderId }) {
   );
 }
 
-function completeVoucher(campaignId, { userId, orderId }) {
+function completeVoucher(campaignId, { userId, orderId, discountAmount }) {
   if (!campaignId) return Promise.resolve(null);
   return reservationRequest(
     `/internal/campaigns/${campaignId}/complete`,
-    { method: "POST", body: JSON.stringify({ userId, orderId }) },
+    {
+      method: "POST",
+      body: JSON.stringify({ userId, orderId, discountAmount }),
+    },
     "failed to complete voucher",
   );
 }
@@ -162,6 +165,17 @@ function recordOrderCompleted(event) {
       body: JSON.stringify(event),
     },
     "failed to record order completed event",
+  );
+}
+
+function advanceAuctionWinner(auctionId, { currentBidId, orderId, expiredBuyerId }) {
+  return reservationRequest(
+    `/internal/auctions/${encodeURIComponent(auctionId)}/advance-winner`,
+    {
+      method: "POST",
+      body: JSON.stringify({ currentBidId, orderId, expiredBuyerId }),
+    },
+    "failed to advance auction winner",
   );
 }
 
@@ -178,4 +192,5 @@ module.exports = {
   releaseVoucher,
   completeVoucher,
   recordOrderCompleted,
+  advanceAuctionWinner,
 };

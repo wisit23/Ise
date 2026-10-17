@@ -7,6 +7,10 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
+export function apiUrl(path) {
+  return `${API_URL}${path}`;
+}
+
 // Access tokens expire after 15 minutes (JWT_ACCESS_EXPIRES). Rather than
 // force a re-login every 15 minutes, a 401 triggers one silent refresh (via
 // the 7-day refresh token) and the original request is retried once. If the
@@ -434,6 +438,8 @@ export async function getMarketingAuditLogs(params = {}, token) {
   if (params.entityId) query.set("entityId", params.entityId);
   if (params.actorId) query.set("actorId", params.actorId);
   if (params.actorRole) query.set("actorRole", params.actorRole);
+  if (params.actorQuery) query.set("actorQuery", params.actorQuery);
+  if (params.q) query.set("q", params.q);
   if (params.from) query.set("from", params.from);
   if (params.to) query.set("to", params.to);
   const qStr = query.toString() ? `?${query.toString()}` : "";

@@ -78,14 +78,53 @@ function validateSegmentRule(targetSegment) {
 
 function normalizeProfile(profile) {
   if (!profile) return null;
+
+  const values = (...inputs) => {
+    const flattened = inputs.flatMap((input) => {
+      if (input === undefined || input === null || input === "") return [];
+      return Array.isArray(input) ? input : [input];
+    });
+    return [
+      ...new Map(
+        flattened
+          .map((value) => String(value).trim())
+          .filter(Boolean)
+          .map((value) => [value.toLowerCase(), value]),
+      ).values(),
+    ];
+  };
+
+  const savedSizes = Array.isArray(profile.sizes)
+    ? profile.sizes.flatMap((group) =>
+        Array.isArray(group?.values) ? group.values : [],
+      )
+    : [];
+
+  const categories = values(
+    profile.categories,
+    profile.favoriteCategory,
+    profile.categoryPreference,
+  );
+  const sizes = values(
+    savedSizes,
+    profile.unassignedSizes,
+    profile.preferredSize,
+    profile.sizePreference,
+  );
+  const styles = values(
+    profile.styles,
+    profile.styleTag,
+    profile.stylePreference,
+  );
+  const brands = values(profile.brands, profile.brandPreference);
+
   return {
-    favoriteCategory:
-      profile.favoriteCategory || profile.categoryPreference || null,
-    preferredSize: profile.preferredSize || profile.sizePreference || null,
-    sizePreference: profile.sizePreference || profile.preferredSize || null,
-    styleTag: profile.styleTag || profile.stylePreference || null,
-    stylePreference: profile.stylePreference || profile.styleTag || null,
-    brandPreference: profile.brandPreference || null,
+    favoriteCategory: categories,
+    preferredSize: sizes,
+    sizePreference: sizes,
+    styleTag: styles,
+    stylePreference: styles,
+    brandPreference: brands,
   };
 }
 
@@ -104,29 +143,35 @@ function matchesSegment(profile, targetSegment) {
   const normalized = normalizeProfile(profile);
 
   for (const rule of rules) {
-    const buyerValue = normalized[rule.field];
-    if (buyerValue === undefined || buyerValue === null) {
+    const buyerValues = normalized[rule.field] || [];
+    if (buyerValues.length === 0) {
       return false;
     }
 
-    const bValStr = String(buyerValue).trim().toLowerCase();
+    const normalizedBuyerValues = buyerValues.map((value) =>
+      String(value).trim().toLowerCase(),
+    );
 
     if (rule.operator === "eq") {
-      if (bValStr !== String(rule.value).trim().toLowerCase()) {
+      if (
+        !normalizedBuyerValues.includes(String(rule.value).trim().toLowerCase())
+      ) {
         return false;
       }
     } else if (rule.operator === "neq") {
-      if (bValStr === String(rule.value).trim().toLowerCase()) {
+      if (
+        normalizedBuyerValues.includes(String(rule.value).trim().toLowerCase())
+      ) {
         return false;
       }
     } else if (rule.operator === "in") {
       const allowed = rule.value.map((v) => String(v).trim().toLowerCase());
-      if (!allowed.includes(bValStr)) {
+      if (!normalizedBuyerValues.some((value) => allowed.includes(value))) {
         return false;
       }
     } else if (rule.operator === "nin") {
       const disallowed = rule.value.map((v) => String(v).trim().toLowerCase());
-      if (disallowed.includes(bValStr)) {
+      if (normalizedBuyerValues.some((value) => disallowed.includes(value))) {
         return false;
       }
     }

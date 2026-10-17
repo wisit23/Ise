@@ -17,7 +17,10 @@ afterAll(() => {
 });
 jest.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock("../../lib/api", () => ({ apiFetch: jest.fn() }));
-jest.mock("../../lib/auth", () => ({ saveSession: jest.fn() }));
+jest.mock("../../lib/auth", () => ({
+  ...jest.requireActual("../../lib/auth"),
+  saveSession: jest.fn(),
+}));
 jest.mock(
   "./AuthScene",
   () =>

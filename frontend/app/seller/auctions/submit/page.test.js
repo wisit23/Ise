@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import SellerAuctionSubmitPage from "./page";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
@@ -161,7 +161,7 @@ describe("SellerAuctionSubmitPage - Explicit roundId submission and category val
 
     expect(await screen.findByText("รอบรองเท้าผ้าใบ")).toBeInTheDocument();
     expect(screen.getByText("เปลี่ยนรอบประมูล")).toBeInTheDocument();
-    expect(screen.getByText("รองเท้า")).toBeInTheDocument();
+    expect(screen.getAllByText("รองเท้า").length).toBeGreaterThan(0);
     expect(
       screen.getByPlaceholderText(/เช่น เสื้อยืดวินเทจ/),
     ).toBeInTheDocument();
@@ -175,7 +175,7 @@ describe("SellerAuctionSubmitPage - Explicit roundId submission and category val
     fireEvent.change(screen.getByPlaceholderText(/เช่น เสื้อยืดวินเทจ/), {
       target: { value: "เสื้อเชิ้ต" },
     });
-    fireEvent.change(screen.getByPlaceholderText(/พิมพ์หรือเลือกหมวดหมู่/), {
+    fireEvent.change(screen.getByLabelText(/หมวดหมู่/, { selector: "select" }), {
       target: { value: "เสื้อผ้า" },
     });
     fireEvent.change(screen.getByLabelText(/สภาพสินค้า/), {
@@ -225,7 +225,7 @@ describe("SellerAuctionSubmitPage - Explicit roundId submission and category val
     fireEvent.change(screen.getByPlaceholderText(/เช่น เสื้อยืดวินเทจ/), {
       target: { value: "รองเท้าผ้าใบ Nike Dunk Low" },
     });
-    fireEvent.change(screen.getByPlaceholderText(/พิมพ์หรือเลือกหมวดหมู่/), {
+    fireEvent.change(screen.getByLabelText(/หมวดหมู่/, { selector: "select" }), {
       target: { value: "รองเท้า" },
     });
     fireEvent.change(screen.getByLabelText(/สภาพสินค้า/), {
@@ -266,5 +266,66 @@ describe("SellerAuctionSubmitPage - Explicit roundId submission and category val
       });
       expect(mockPush).toHaveBeenCalledWith("/seller/auctions");
     });
+  });
+
+  it("uses the shared category dropdown and preserves other fields when dismissed", async () => {
+    const { container } = render(<SellerAuctionSubmitPage />);
+    await screen.findByText("รอบรองเท้าผ้าใบ");
+    const title = screen.getByPlaceholderText(/เช่น เสื้อยืดวินเทจ/);
+    fireEvent.change(title, { target: { value: "รองเท้าทดสอบ" } });
+    const trigger = screen.getByRole("button", { name: "เลือกหมวดหมู่" });
+    expect(container.querySelector("datalist")).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(trigger.parentElement);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const listbox = within(trigger.parentElement).getByRole("listbox");
+    fireEvent.click(within(listbox).getByText("รองเท้า"));
+    expect(screen.getByLabelText(/หมวดหมู่/, { selector: "select" })).toHaveValue("รองเท้า");
+    expect(trigger).toHaveTextContent("รองเท้า");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
+    expect(title).toHaveValue("รองเท้าทดสอบ");
+
+    fireEvent.click(trigger);
+    fireEvent.mouseDown(title);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByLabelText(/หมวดหมู่/, { selector: "select" })).toHaveValue("รองเท้า");
+  });
+
+  it("keeps category required instead of silently selecting the first API option", async () => {
+    render(<SellerAuctionSubmitPage />);
+    await screen.findByText("รอบรองเท้าผ้าใบ");
+    expect(screen.getByLabelText(/หมวดหมู่/, { selector: "select" })).toHaveValue("");
+    fireEvent.change(screen.getByPlaceholderText(/เช่น เสื้อยืดวินเทจ/), {
+      target: { value: "รองเท้าทดสอบ" },
+    });
+    fireEvent.submit(screen.getByRole("button", { name: /ลงสินค้าเข้าประมูล/ }).closest("form"));
+    expect(await screen.findByText(/กรุณากรอกชื่อสินค้าและเลือกหมวดหมู่ให้ครบถ้วน/)).toBeInTheDocument();
+    expect(apiFetch.mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
+  });
+
+  it("disables the category dropdown for sellers without verified KYC", async () => {
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/api/auth/kyc/mine")) {
+        return Promise.resolve({ kycStatus: "PENDING" });
+      }
+      if (url.includes("/api/products/auctions/rounds/")) {
+        return Promise.resolve(sampleRoundShoesOnly);
+      }
+      return Promise.resolve({});
+    });
+    render(<SellerAuctionSubmitPage />);
+    await screen.findByText("รอบรองเท้าผ้าใบ");
+    const trigger = screen.getByRole("button", { name: "เลือกหมวดหมู่" });
+    expect(trigger).toBeDisabled();
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 });

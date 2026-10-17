@@ -347,6 +347,8 @@ function createCheckoutSessionService(
         await products.completeVoucher(order.campaignId, {
           userId: buyerId,
           orderId: order.id,
+          discountAmount:
+            Number(order.originalAmount) - Number(order.ordersAmount),
         });
     }
     const paidAt = checkout.orders[0]?.payments?.find(

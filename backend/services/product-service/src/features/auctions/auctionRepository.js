@@ -1,4 +1,6 @@
 const prisma = require("../../models/prismaClient");
+const { conflict } = require("@reloop/shared");
+const { addRoundCapacityCounts } = require("./roundCapacity");
 const { hydrateRound, hydrateItem, splitFields, saveFields, writeRound, writeItem } = require("./auctionAuditState");
 
 /**
@@ -36,14 +38,35 @@ function createAuctionRepository(prismaClient) {
     const client = tx || prismaClient;
     return hydrateItem(client, await client.auctionItem.findUnique({
       where: { id },
-      include: { ...WITH_PRODUCT, bids: { orderBy: { amount: "desc" } } },
+      include: {
+        ...WITH_PRODUCT,
+        bids: { orderBy: [{ amount: "desc" }, { createdAt: "asc" }] },
+      },
     }));
   }
 
-  async function list({ status, skip, take, roundId }) {
+  async function list({ status, statuses, skip, take, roundId, roundIds, search, sellerIds = [] }) {
+    const effectiveStatuses = statuses?.length ? statuses : status ? [status] : [];
+    const effectiveRoundIds = roundIds?.length ? roundIds : roundId ? [roundId] : [];
     const where = {
-      ...(status ? { status } : {}),
-      ...(roundId ? { roundId } : {}),
+      ...(effectiveStatuses.length
+        ? { status: { in: effectiveStatuses } }
+        : {}),
+      ...(effectiveRoundIds.length
+        ? { roundId: { in: effectiveRoundIds } }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                product: {
+                  title: { contains: search, mode: "insensitive" },
+                },
+              },
+              ...(sellerIds.length ? [{ sellerId: { in: sellerIds } }] : []),
+            ],
+          }
+        : {}),
     };
     const [items, total] = await Promise.all([
       prismaClient.auctionItem.findMany({
@@ -58,18 +81,22 @@ function createAuctionRepository(prismaClient) {
     return { items: await Promise.all(items.map((item) => hydrateItem(prismaClient, item))), total };
   }
 
-  async function updateStatus(id, data, txOrOptions = prismaClient) {
+  async function updateStatus(id, data, txOrOptions = prismaClient, transactionOptions = {}) {
     const tx = txOrOptions?.auctionItem ? txOrOptions : null;
-    const options = tx ? {} : txOrOptions || {};
+    const options = tx ? transactionOptions : txOrOptions || {};
     const run = async (client) => {
-      if (options.expectedStatus || options.requireUnmoderatedProduct) {
+      if (options.expectedStatus || options.requireUnmoderatedProduct || options.startDueAt) {
         const { columns, erFields } = splitFields(data, "AUCTION_ITEM");
         const changed = await client.auctionItem.updateMany({
           where: { id, ...(options.expectedStatus ? { status: options.expectedStatus } : {}),
+            ...(options.startDueAt ? { scheduledStartAt: { lte: options.startDueAt } } : {}),
             ...(options.requireUnmoderatedProduct ? { product: { moderatedAt: null, status: { not: "removed" } } } : {}) },
           data: columns,
         });
         if (changed.count) await saveFields(client, "AUCTION_ITEM", id, erFields);
+        if (options.strictStatus && changed.count !== 1) {
+          throw conflict("สถานะสินค้าประมูลเปลี่ยนไปแล้ว กรุณาโหลดข้อมูลใหม่");
+        }
         return findById(id, client);
       }
       return writeItem(client, "update", { where: { id }, data, include: WITH_PRODUCT });
@@ -211,14 +238,36 @@ function createAuctionRepository(prismaClient) {
     return rounds.filter((r) => includeCancelled || !r.cancelledAt);
   }
 
-  async function listRounds() {
-    const rows = await prismaClient.auctionRound.findMany({
-      orderBy: { submissionStartsAt: "desc" },
-      include: {
-        _count: { select: { auctions: true } },
-      },
-    });
-    return Promise.all(rows.map((r) => hydrateRound(prismaClient, r)));
+  async function listRounds(options = {}) {
+    const { skip, take } = options;
+    const isPaginated = typeof skip === "number" && typeof take === "number";
+
+    if (!isPaginated) {
+      const rows = await prismaClient.auctionRound.findMany({
+        orderBy: { submissionStartsAt: "desc" },
+        include: {
+          _count: { select: { auctions: true } },
+        },
+      });
+      return Promise.all(rows.map((round) => hydrateRound(prismaClient, round)));
+    }
+
+    const [items, total] = await Promise.all([
+      prismaClient.auctionRound.findMany({
+        orderBy: { submissionStartsAt: "desc" },
+        include: {
+          _count: { select: { auctions: true } },
+        },
+        skip,
+        take,
+      }),
+      prismaClient.auctionRound.count(),
+    ]);
+
+    return {
+      items: await Promise.all(items.map((round) => hydrateRound(prismaClient, round))),
+      total,
+    };
   }
 
   async function findRoundById(id, tx = prismaClient) {
@@ -240,7 +289,7 @@ function createAuctionRepository(prismaClient) {
       include: {
         auctions: {
           where: {
-            status: { in: ["open", "scheduled", "cancelled"] },
+            status: { in: ["open", "scheduled"] },
           },
           include: WITH_PRODUCT,
           orderBy: [{ scheduledEndAt: "asc" }, { createdAt: "desc" }],
@@ -325,6 +374,7 @@ function createAuctionRepository(prismaClient) {
   }
 
   return {
+    addCapacityCounts: rounds => addRoundCapacityCounts(rounds, prismaClient),
     transaction,
     findProductOwner,
     create,

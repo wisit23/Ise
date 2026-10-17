@@ -59,6 +59,8 @@ async function transition({ order, status, actorId, purpose = "ORDER_STATUS", re
     await productClient.completeVoucher(order.campaignId, {
       userId: order.buyerId,
       orderId: order.id,
+      discountAmount:
+        Number(order.originalAmount) - Number(order.ordersAmount),
     });
   if (status === "completed") {
     if (attributionEvent)

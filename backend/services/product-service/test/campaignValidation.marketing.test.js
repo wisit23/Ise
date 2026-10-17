@@ -358,7 +358,7 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
           service.claimVoucher({ user: buyerUser, campaignId: "limited-id" }),
         (err) => {
           assert.equal(err.status, 409);
-          assert.match(err.message, /campaign usage limit reached/i);
+          assert.equal(err.message, "สิทธิ์คูปองถูกใช้ครบแล้ว");
           return true;
         },
       );
@@ -711,7 +711,7 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
           }),
         (err) => {
           assert.equal(err.status, 409);
-          assert.match(err.message, /งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว/);
+          assert.match(err.message, /วงเงินส่วนลดของคูปองนี้ถูกใช้ครบแล้ว/);
           return true;
         },
       );
@@ -767,16 +767,79 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
           }),
         (err) => {
           assert.equal(err.status, 409);
-          assert.match(err.message, /งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว/);
+          assert.match(err.message, /วงเงินส่วนลดของคูปองนี้ถูกใช้ครบแล้ว/);
           return true;
         },
       );
     },
   );
 
+  await t.test(
+    "Applicable voucher details explain when the calculated discount exceeds remaining budget",
+    async () => {
+      const campaign = {
+        id: "budget-low",
+        code: "LOW_BUDGET",
+        name: "Low budget campaign",
+        status: "published",
+        budget: 50,
+        spentBudget: 0,
+        reservedBudget: 0,
+        startsAt: new Date(Date.now() - 1000),
+        endsAt: futureEnd,
+        minOrderPrice: 0,
+        discountType: "PERCENT",
+        discountValue: 15,
+        maxDiscount: 200,
+      };
+      const repo = createMockRepo({
+        listUserVouchers: async () => [
+          {
+            id: "voucher-low-budget",
+            campaignId: campaign.id,
+            usedOrderId: null,
+            campaign,
+          },
+        ],
+      });
+      const service = createCampaignService(repo);
+
+      const legacyResponse = await service.getApplicableVouchers({
+        user: buyerUser,
+        price: 450,
+      });
+      assert.deepEqual(legacyResponse, []);
+
+      const detailedResponse = await service.getApplicableVouchers({
+        user: buyerUser,
+        price: 450,
+        includeUnavailable: true,
+      });
+      assert.equal(detailedResponse.applicable.length, 0);
+      assert.equal(detailedResponse.unavailable.length, 1);
+      assert.equal(
+        detailedResponse.unavailable[0].reasonCode,
+        "BUDGET_INSUFFICIENT",
+      );
+      assert.match(
+        detailedResponse.unavailable[0].reasonMessage,
+        /วงเงินส่วนลดของแคมเปญคงเหลือไม่เพียงพอ/,
+      );
+
+      const affordableResponse = await service.getApplicableVouchers({
+        user: buyerUser,
+        price: 199,
+        includeUnavailable: true,
+      });
+      assert.equal(affordableResponse.applicable.length, 1);
+      assert.equal(affordableResponse.applicable[0].estimatedDiscount, 30);
+      assert.equal(affordableResponse.unavailable.length, 0);
+    },
+  );
+
   // --- Idempotency & Budget Concurrency Tests ---
   await t.test(
-    "Idempotency: duplicate attribution event does not increment spentBudget twice",
+    "Attribution events never increment budget already committed at payment",
     async () => {
       const campaignStore = {
         id: "camp-idem",
@@ -815,25 +878,25 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
         netAmount: 800,
       };
 
-      // First delivery: increments budget
+      // First delivery records analytics only. Payment completion owns budget.
       const firstRes = await metricsService.recordOrderCompletedEvent(event);
       assert.equal(firstRes.recorded, true);
-      assert.equal(campaignStore.spentBudget, 200);
+      assert.equal(campaignStore.spentBudget, 0);
 
-      // Duplicate delivery retry: deduplicates and DOES NOT increment budget again
+      // Duplicate delivery remains idempotent and still cannot charge budget.
       const retryRes = await metricsService.recordOrderCompletedEvent(event);
       assert.equal(retryRes.recorded, true);
       assert.equal(retryRes.deduplicated, true);
       assert.equal(
         campaignStore.spentBudget,
-        200,
-        "spentBudget must remain 200 after retry",
+        0,
+        "attribution must not duplicate payment-time budget accounting",
       );
     },
   );
 
   await t.test(
-    "Concurrency & Budget Reached: transitions campaign to ended when cumulative discount reaches ceiling",
+    "Concurrent attribution events cannot overspend or end a campaign",
     async () => {
       const campaignStore = {
         id: "camp-ceiling",
@@ -872,7 +935,7 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
         { isTestAdapter: true },
       );
 
-      // Concurrently deliver orders summing to over budget ceiling: 200 + 200 + 200 = 600 (> 500)
+      // These analytics events may arrive concurrently after payment callbacks.
       const events = [
         {
           eventId: "evt-conc-1",
@@ -904,16 +967,13 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
         events.map((e) => metricsService.recordOrderCompletedEvent(e)),
       );
 
-      assert.equal(campaignStore.spentBudget, 600);
+      assert.equal(campaignStore.spentBudget, 0);
       assert.equal(
         campaignStore.status,
-        "ended",
-        "Campaign must transition to ended when budget reached",
+        "published",
+        "attribution must not own the campaign budget lifecycle",
       );
-      assert.ok(
-        expiredVouchersCount > 0,
-        "Claimed vouchers must be expired when campaign ends",
-      );
+      assert.equal(expiredVouchersCount, 0);
     },
   );
 });

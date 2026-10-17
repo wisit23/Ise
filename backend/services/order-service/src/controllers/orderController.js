@@ -193,6 +193,15 @@ async function pay(req, res, next) {
     if (!order) throw notFound("order not found");
     if (order.buyerId !== req.userId)
       throw forbidden("only the buyer can pay for this order");
+    if (
+      order.orderType === "AUCTION" &&
+      order.paymentDeadlineAt &&
+      new Date(order.paymentDeadlineAt) <= new Date()
+    ) {
+      throw conflict(
+        "auction payment deadline has expired; the right to purchase is being reassigned",
+      );
+    }
     orderTransitionService.assertCanParticipantUpdateStatus(order);
     if (!order.checkoutId)
       throw badRequest(
@@ -233,7 +242,15 @@ async function pay(req, res, next) {
  */
 async function createFromAuction(req, res, next) {
   try {
-    const { auctionId, productId, sellerId, buyerId, price } = req.body;
+    const {
+      auctionId,
+      auctionBidId,
+      productId,
+      sellerId,
+      buyerId,
+      price,
+      paymentDeadlineAt,
+    } = req.body;
     if (!auctionId || !productId || !sellerId || !buyerId || !price) {
       throw badRequest(
         "auctionId, productId, sellerId, buyerId, price are required",
@@ -280,6 +297,10 @@ async function createFromAuction(req, res, next) {
       ordersAmount: money(price),
       orderType: "AUCTION",
       auctionId: String(auctionId),
+      auctionBidId: auctionBidId ? String(auctionBidId) : null,
+      paymentDeadlineAt: paymentDeadlineAt
+        ? new Date(paymentDeadlineAt)
+        : new Date(Date.now() + 24 * 60 * 60 * 1000),
       productTitle: req.body.productTitle || null,
       status: "pending_payment",
     });

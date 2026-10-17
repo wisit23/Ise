@@ -107,12 +107,20 @@ test("activityMetrics unit tests - range validation", async () => {
     (err) => err.status === 400,
   );
 
-  // 8. Range exceeding 31 days throws 400
+  // 8. A calendar year is supported, but a longer range is rejected.
+  const yearRange = parseAndValidateRange({
+    from: "2026-01-01T00:00:00+07:00",
+    to: "2027-01-01T00:00:00+07:00",
+  });
+  assert.equal(
+    (yearRange.to.getTime() - yearRange.from.getTime()) / (1000 * 3600 * 24),
+    365,
+  );
   assert.throws(
     () =>
       parseAndValidateRange({
         from: "2026-01-01T00:00:00+07:00",
-        to: "2026-02-15T00:00:00+07:00",
+        to: "2027-01-03T00:00:00+07:00",
       }),
     (err) => err.status === 400,
   );

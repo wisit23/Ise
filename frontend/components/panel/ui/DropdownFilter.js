@@ -7,6 +7,7 @@ import RadioSelect from "../../ui/RadioSelect";
  * Wraps the unified RadioSelect primitive with backoffice panel defaults.
  */
 export default function DropdownFilter({
+  id,
   value,
   onChange,
   options = [],
@@ -17,6 +18,7 @@ export default function DropdownFilter({
 }) {
   return (
     <RadioSelect
+      id={id}
       options={options}
       value={value}
       onChange={onChange}

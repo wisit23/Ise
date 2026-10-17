@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import CampaignsSection from "./CampaignsSection";
 import { apiFetch } from "../../../lib/api";
 import { fetchCategories } from "../../../lib/catalog";
@@ -106,6 +106,60 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     expect(screen.getAllByText("ฉบับร่าง").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("only shows the publish action for approved campaigns that have not expired", async () => {
+    const activeApprovedCampaign = {
+      ...sampleCampaigns[1],
+      id: "approved-active",
+      code: "APPROVED-ACTIVE",
+      name: "Approved active campaign",
+      status: "approved",
+      endsAt: "2099-12-31T23:59:59.000Z",
+    };
+    const expiredApprovedCampaign = {
+      ...sampleCampaigns[1],
+      id: "approved-expired",
+      code: "APPROVED-EXPIRED",
+      name: "Approved expired campaign",
+      status: "approved",
+      endsAt: "2020-01-01T00:00:00.000Z",
+    };
+    apiFetch.mockResolvedValue({
+      items: [activeApprovedCampaign, expiredApprovedCampaign],
+      total: 2,
+    });
+
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+
+    const activeRow = (await screen.findByText("APPROVED-ACTIVE")).closest("tr");
+    const expiredRow = screen.getByText("APPROVED-EXPIRED").closest("tr");
+
+    expect(
+      within(activeRow).getByRole("button", { name: "เผยแพร่ (Publish)" }),
+    ).toBeEnabled();
+    expect(
+      within(expiredRow).queryByRole("button", { name: "เผยแพร่ (Publish)" }),
+    ).not.toBeInTheDocument();
+    expect(within(expiredRow).getAllByText("สิ้นสุดแล้ว").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("retains all columns and draft actions when names and descriptions are long", async () => {
+    const longName = "แคมเปญสำหรับชื่อที่ยาวมากและต้องไม่ดันปุ่มออกนอกตาราง".repeat(3);
+    const longDescription = "รายละเอียดเงื่อนไขโปรโมชันที่ต้องอ่านได้ครบ".repeat(4);
+    const campaign = { ...sampleCampaigns[1], name: longName, description: longDescription };
+    apiFetch.mockResolvedValue({ items: [campaign], total: 1 });
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+    expect(await screen.findByText(longName)).toHaveAttribute("title", longName);
+    expect(screen.getByText(longDescription)).toHaveAttribute("title", longDescription);
+    const table = screen.getByRole("table");
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(7);
+    const row = within(table).getAllByRole("row")[1];
+    for (const name of ["แก้ไข", "ส่งขออนุมัติ", "ลบ"]) {
+      expect(within(row).getByRole("button", { name, exact: true })).toBeEnabled();
+    }
+    fireEvent.click(within(row).getByRole("button", { name: "แก้ไข", exact: true }));
+    expect(screen.getByPlaceholderText("เช่น ลดพิเศษต้อนรับซัมเมอร์สำหรับคนรักยีนส์")).toHaveValue(longName);
+  });
+
   it("opens modal when clicking 'สร้างแคมเปญใหม่'", async () => {
     render(<CampaignsSection token={mockToken} user={mockUser} />);
 
@@ -196,7 +250,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     fireEvent.click(targetedRadio);
 
     expect(screen.getByText("เงื่อนไขเป้าหมาย")).toBeInTheDocument();
-    expect(screen.getByText("การเปรียบเทียบ")).toBeInTheDocument();
+    expect(screen.getByText("การเลือกกลุ่มเป้าหมาย")).toBeInTheDocument();
     expect(screen.getByText("ค่าเป้าหมาย")).toBeInTheDocument();
 
     // Verify UI does NOT have size options
@@ -208,8 +262,12 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     expect(fieldSelect.value).toBe("brandPreference");
 
     // Verify operator labels for brand targeting
-    expect(screen.getByText("ตรงกับแบรนด์ใดแบรนด์หนึ่ง")).toBeInTheDocument();
-    expect(screen.getByText("ไม่รวมแบรนด์ที่เลือก")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("ให้เฉพาะกลุ่มนี้").length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getAllByText("ยกเว้นกลุ่มนี้").length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("loads brands from /api/products/filters, allows searching, adding, preventing duplicates, and removing chips", async () => {
@@ -485,7 +543,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     expect(screen.getByText("แก้ไขแคมเปญฉบับร่าง")).toBeInTheDocument();
 
     // Verify operator was normalized to "nin"
-    const opSelect = screen.getByLabelText("เลือกการเปรียบเทียบ");
+    const opSelect = screen.getByLabelText("เลือกวิธีกำหนดกลุ่มเป้าหมาย");
     expect(opSelect.value).toBe("nin");
 
     // Verify brand Nike chip is rendered
@@ -556,7 +614,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     const brandInputRestored = screen.getByLabelText("ค้นหาหรือระบุแบรนด์");
     expect(brandInputRestored.value).toBe("");
 
-    const opSelect = screen.getByLabelText("เลือกการเปรียบเทียบ");
+    const opSelect = screen.getByLabelText("เลือกวิธีกำหนดกลุ่มเป้าหมาย");
     expect(opSelect.value).toBe("in");
   });
 
@@ -598,7 +656,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     expect(screen.getByLabelText("ลบแบรนด์ Nike")).toBeInTheDocument();
   });
 
-  it("displays budget progress and 'ใช้แล้ว ฿X / ฿Budget' formatting in table", async () => {
+  it("displays unambiguous claimed, redeemed, and budget usage labels", async () => {
     const budgetCampaign = {
       id: "camp-budget",
       name: "Budget Test Campaign",
@@ -609,6 +667,8 @@ describe("CampaignsSection (Marketing Workspace)", () => {
       spentBudget: 1500,
       usageLimit: 50,
       usedCount: 15,
+      claimedCount: 15,
+      redeemedCount: 4,
       status: "published",
       startsAt: "2026-11-01T00:00:00.000Z",
       endsAt: "2026-11-30T23:59:59.000Z",
@@ -620,8 +680,76 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     render(<CampaignsSection token={mockToken} user={mockUser} />);
 
     expect(await screen.findByText("BUDGET2026")).toBeInTheDocument();
-    expect(screen.getByText("ใช้แล้ว ฿1,500 / ฿5,000")).toBeInTheDocument();
+    expect(screen.getByText("เก็บ 15 / โควตา 50")).toBeInTheDocument();
+    expect(screen.getByText("ใช้สำเร็จ 4 สิทธิ์")).toBeInTheDocument();
+    expect(screen.getByText("ใช้งบ ฿1,500 / งบ ฿5,000")).toBeInTheDocument();
     expect(screen.getByTitle("สัดส่วนงบประมาณที่ใช้")).toBeInTheDocument();
+  });
+
+  it("shows a live coupon preview before saving a campaign", async () => {
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /สร้างแคมเปญใหม่/i }),
+    );
+    expect(screen.getByText("ตัวอย่างคูปอง")).toBeInTheDocument();
+    expect(screen.getByText("รหัสคูปอง")).toBeInTheDocument();
+  });
+
+  it("blocks a fixed discount that reaches the minimum order amount", async () => {
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+    await screen.findByText("NEWMEM50");
+    const draftRow = screen.getByText("NEWMEM50").closest("tr");
+    fireEvent.click(
+      within(draftRow).getByRole("button", { name: "แก้ไข", exact: true }),
+    );
+    fireEvent.change(screen.getByPlaceholderText("0"), {
+      target: { value: "50" },
+    });
+    fireEvent.submit(screen.getByPlaceholderText("0").closest("form"));
+    expect(
+      screen.getByText(
+        "ส่วนลดคงที่ต้องน้อยกว่ายอดซื้อขั้นต่ำ เพื่อไม่ให้ยอดชำระเป็นศูนย์หรือติดลบ",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("requires a reason when Marketing closes a published campaign", async () => {
+    const activeCampaign = {
+      ...sampleCampaigns[0],
+      startsAt: new Date(Date.now() - 60_000).toISOString(),
+      endsAt: new Date(Date.now() + 86_400_000).toISOString(),
+    };
+    apiFetch.mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/products/filters")) {
+        return Promise.resolve({ brands: [], styles: [], sizes: [] });
+      }
+      return Promise.resolve({ items: [activeCampaign], total: 1 });
+    });
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "ปิดแคมเปญ" }),
+    );
+    const closeDialog = screen.getByRole("dialog");
+    fireEvent.click(
+      within(closeDialog).getByRole("button", { name: "ปิดแคมเปญ" }),
+    );
+    expect(screen.getByText("กรุณาระบุเหตุผลที่ปิดแคมเปญ")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/เหตุผลที่ปิดแคมเปญ/), {
+      target: { value: "ยุติกิจกรรมตามแผน" },
+    });
+    fireEvent.click(
+      within(closeDialog).getByRole("button", { name: "ปิดแคมเปญ" }),
+    );
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        `/api/products/campaigns/${activeCampaign.id}/end`,
+        expect.objectContaining({
+          method: "POST",
+          body: { reason: "ยุติกิจกรรมตามแผน" },
+        }),
+      ),
+    );
   });
 
   it("enforces min attribute on datetime inputs and shows Thai validation errors for past dates", async () => {
@@ -689,5 +817,242 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     expect(
       screen.getByText("ไม่สามารถกำหนดวันเวลาเริ่มต้นย้อนหลังในอดีตได้"),
     ).toBeInTheDocument();
+  });
+
+  describe("Pagination & Boundary Behavior", () => {
+    it("renders pagination controls correctly for 45 items (3 pages)", async () => {
+      apiFetch.mockImplementation((url) => {
+        if (typeof url === "string" && url.includes("/api/products/filters")) {
+          return Promise.resolve({ brands: [], styles: [], sizes: [] });
+        }
+        return Promise.resolve({
+          items: sampleCampaigns,
+          total: 45,
+          page: 1,
+          totalPages: 3,
+        });
+      });
+
+      render(<CampaignsSection token={mockToken} user={mockUser} />);
+      await screen.findByText("Super Summer 2026");
+
+      const prevBtn = screen.getByRole("button", { name: /ก่อนหน้า/i });
+      const nextBtn = screen.getByRole("button", { name: /ถัดไป/i });
+
+      expect(prevBtn).toBeDisabled();
+      expect(nextBtn).not.toBeDisabled();
+      expect(screen.getAllByText("45").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
+
+      // Click next page
+      fireEvent.click(nextBtn);
+      await waitFor(() => {
+        expect(apiFetch).toHaveBeenCalledWith(
+          expect.stringContaining("page=2"),
+          expect.anything(),
+        );
+      });
+    });
+
+    it("resets page to 1 when changing status filter or searching", async () => {
+      render(<CampaignsSection token={mockToken} user={mockUser} />);
+      await screen.findByText("Super Summer 2026");
+
+      const searchInput = screen.getByPlaceholderText(/ค้นหารหัส/i);
+      fireEvent.change(searchInput, { target: { value: "SUMMER" } });
+
+      const searchForm = searchInput.closest("form");
+      fireEvent.submit(searchForm);
+
+      await waitFor(() => {
+        expect(apiFetch).toHaveBeenCalledWith(
+          expect.stringContaining("page=1"),
+          expect.anything(),
+        );
+      });
+    });
+
+    it("clamps out-of-bounds page to the last valid page", async () => {
+      apiFetch.mockImplementation((url) => {
+        if (typeof url === "string" && url.includes("/api/products/filters")) {
+          return Promise.resolve({ brands: [], styles: [], sizes: [] });
+        }
+        return Promise.resolve({
+          items: sampleCampaigns,
+          total: 20,
+          page: 1,
+          totalPages: 1,
+        });
+      });
+
+      render(<CampaignsSection token={mockToken} user={mockUser} />);
+      await screen.findByText("Super Summer 2026");
+
+      expect(screen.getAllByText("20").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByRole("button", { name: /ก่อนหน้า/i })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /ถัดไป/i })).toBeDisabled();
+    });
+
+    it("maintains card summary counts across page navigation", async () => {
+      const summaryFixture = {
+        total: 45,
+        published: 28,
+        pending: 10,
+        totalClaimed: 350,
+      };
+
+      apiFetch.mockImplementation((url) => {
+        if (typeof url === "string" && url.includes("/api/products/filters")) {
+          return Promise.resolve({ brands: [], styles: [], sizes: [] });
+        }
+        if (typeof url === "string" && url.includes("page=2")) {
+          return Promise.resolve({
+            items: sampleCampaigns,
+            total: 45,
+            page: 2,
+            totalPages: 3,
+            summary: summaryFixture,
+          });
+        }
+        return Promise.resolve({
+          items: sampleCampaigns,
+          total: 45,
+          page: 1,
+          totalPages: 3,
+          summary: summaryFixture,
+        });
+      });
+
+      render(<CampaignsSection token={mockToken} user={mockUser} />);
+      await screen.findByText("Super Summer 2026");
+
+      // Verify Page 1 summary card values
+      expect(screen.getByText("28")).toBeInTheDocument();
+      expect(screen.getByText("10")).toBeInTheDocument();
+      expect(screen.getByText("350")).toBeInTheDocument();
+
+      // Navigate to Page 2
+      const nextBtn = screen.getByRole("button", { name: /ถัดไป/i });
+      fireEvent.click(nextBtn);
+
+      await waitFor(() => {
+        expect(apiFetch).toHaveBeenCalledWith(
+          expect.stringContaining("page=2"),
+          expect.anything(),
+        );
+      });
+
+      // Verify Page 2 summary cards remain the same
+      expect(screen.getByText("28")).toBeInTheDocument();
+      expect(screen.getByText("10")).toBeInTheDocument();
+      expect(screen.getByText("350")).toBeInTheDocument();
+    });
+
+    it("displays correct summary cards when filtering by draft (published=0, pending=0) and pending_approval (published=0)", async () => {
+      apiFetch.mockImplementation((url) => {
+        if (typeof url === "string" && url.includes("/api/products/filters")) {
+          return Promise.resolve({ brands: [], styles: [], sizes: [] });
+        }
+        if (typeof url === "string" && url.includes("status=draft")) {
+          return Promise.resolve({
+            items: [
+              {
+                id: "camp-draft-1",
+                code: "DRAFT10",
+                name: "Draft Campaign",
+                status: "draft",
+                discountType: "PERCENT",
+                discountValue: 10,
+                startsAt: "2026-11-01T00:00:00.000Z",
+                endsAt: "2026-11-30T00:00:00.000Z",
+                usedCount: 5,
+              },
+            ],
+            total: 1,
+            page: 1,
+            totalPages: 1,
+            summary: {
+              total: 1,
+              published: 0,
+              pending: 0,
+              totalClaimed: 5,
+            },
+          });
+        }
+        if (typeof url === "string" && url.includes("status=pending_approval")) {
+          return Promise.resolve({
+            items: [
+              {
+                id: "camp-pending-1",
+                code: "PENDING10",
+                name: "Pending Campaign",
+                status: "pending_approval",
+                discountType: "PERCENT",
+                discountValue: 10,
+                startsAt: "2026-11-01T00:00:00.000Z",
+                endsAt: "2026-11-30T00:00:00.000Z",
+                usedCount: 0,
+              },
+            ],
+            total: 1,
+            page: 1,
+            totalPages: 1,
+            summary: {
+              total: 1,
+              published: 0,
+              pending: 1,
+              totalClaimed: 0,
+            },
+          });
+        }
+        return Promise.resolve({
+          items: sampleCampaigns,
+          total: 2,
+          page: 1,
+          totalPages: 1,
+          summary: { total: 2, published: 1, pending: 1, totalClaimed: 15 },
+        });
+      });
+
+      render(<CampaignsSection token={mockToken} user={mockUser} />);
+      await screen.findByText("Super Summer 2026");
+
+      // 1. Filter by status: draft
+      const statusContainer = screen.getByText("สถานะ:").closest("div");
+      const statusTrigger = within(statusContainer).getByRole("button");
+      fireEvent.click(statusTrigger);
+      const draftListbox = within(statusContainer).getByRole("listbox");
+      const draftOption = within(draftListbox).getByText("ฉบับร่าง");
+      fireEvent.click(draftOption);
+
+      await waitFor(() => {
+        expect(apiFetch).toHaveBeenCalledWith(
+          expect.stringContaining("status=draft"),
+          expect.anything(),
+        );
+      });
+
+      expect(await screen.findByText("DRAFT10")).toBeInTheDocument();
+      // Published card must be 0, Pending card must be 0, totalClaimed must be 5
+      expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(2);
+      expect(screen.getByText("5")).toBeInTheDocument();
+
+      // 2. Filter by status: pending_approval
+      fireEvent.click(statusTrigger);
+      const pendingListbox = within(statusContainer).getByRole("listbox");
+      const pendingOption = within(pendingListbox).getByText("รออนุมัติ");
+      fireEvent.click(pendingOption);
+
+      await waitFor(() => {
+        expect(apiFetch).toHaveBeenCalledWith(
+          expect.stringContaining("status=pending_approval"),
+          expect.anything(),
+        );
+      });
+
+      expect(await screen.findByText("PENDING10")).toBeInTheDocument();
+      // Published card must be 0, Pending card must be 1
+      expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

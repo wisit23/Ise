@@ -10,7 +10,7 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
   const futureEnd = new Date(Date.now() + 86400000);
   // Mock repository factory
   function createMockRepo(overrides = {}) {
-    return {
+    const repo = {
       createCampaign: async (data) => ({
         id: "camp-uuid-1",
         ...data,
@@ -49,8 +49,14 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
         userId,
         status: "CLAIMED",
       }),
+      marketingAuditLog: {
+        create: async () => ({ id: "audit-1" }),
+        createMany: async () => ({ count: 1 }),
+      },
+      transaction: async (fn) => fn(repo),
       ...overrides,
     };
+    return repo;
   }
 
   const marketingUser = { id: "mkt-1", role: "MARKETING" };
@@ -217,8 +223,8 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
   await t.test(
     "Validation on Partial Update: rejects partial date update where new startsAt >= existing endsAt",
     async () => {
-      const existingStart = new Date(Date.now()+86400000);
-      const existingEnd = new Date(Date.now()+10*86400000);
+      const existingStart = new Date(Date.now() + 86400000);
+      const existingEnd = new Date(Date.now() + 10 * 86400000);
       const repo = createMockRepo({
         findById: async (id) => ({
           id,
@@ -239,7 +245,7 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
             user: marketingUser,
             campaignId: "date-camp",
             input: {
-              startsAt: new Date(Date.now()+15*86400000).toISOString(), // after existing endsAt
+              startsAt: new Date(Date.now() + 15 * 86400000).toISOString(), // after existing endsAt
             },
           }),
         (err) => {
@@ -346,7 +352,7 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
           service.claimVoucher({ user: buyerUser, campaignId: "limited-id" }),
         (err) => {
           assert.equal(err.status, 409);
-          assert.match(err.message, /campaign usage limit reached/i);
+          assert.equal(err.message, "สิทธิ์คูปองถูกใช้ครบแล้ว");
           return true;
         },
       );
@@ -458,6 +464,45 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
   );
 
   await t.test(
+    "Segmentation Claim: targeted voucher requires a matching persisted profile",
+    async () => {
+      const repo = createMockRepo({
+        findById: async (id) => ({
+          id,
+          code: "VINTAGE_ONLY",
+          status: "published",
+          startsAt: new Date(Date.now() - 3600000),
+          endsAt: new Date(Date.now() + 86400000),
+          usageLimit: 10,
+          usedCount: 0,
+          targetSegment: {
+            type: "rules",
+            rules: [{ field: "styleTag", operator: "eq", value: "Vintage" }],
+          },
+        }),
+      });
+      const service = createCampaignService(repo);
+
+      await assert.rejects(
+        () =>
+          service.claimVoucher({
+            user: buyerUser,
+            campaignId: "targeted-id",
+            profile: { styles: ["Minimal"] },
+          }),
+        (error) => error.status === 403 && /กลุ่มเป้าหมาย/.test(error.message),
+      );
+
+      const voucher = await service.claimVoucher({
+        user: buyerUser,
+        campaignId: "targeted-id",
+        profile: { styles: ["Vintage", "Minimal"] },
+      });
+      assert.equal(voucher.status, "CLAIMED");
+    },
+  );
+
+  await t.test(
     "Checkout quote rejects a product under Trust & Safety moderation",
     async () => {
       const repo = createMockRepo({
@@ -488,6 +533,240 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
           err.status === 400 &&
           err.message === "product is unavailable due to moderation",
       );
+    },
+  );
+
+  await t.test(
+    "Checkout quote atomically reserves the calculated discount budget",
+    async () => {
+      let reservationInput;
+      const repo = createMockRepo({
+        findVoucher: async () => ({
+          id: "voucher-1",
+          status: "CLAIMED",
+          usedOrderId: null,
+        }),
+        findProduct: async () => ({
+          id: "product-1",
+          price: 1000,
+          category: "Clothing",
+          status: "reserved",
+          reservedBy: buyerUser.id,
+          reservationExpiresAt: new Date(Date.now() + 60000),
+        }),
+        findById: async () => ({
+          id: "camp-1",
+          code: "SAVE100",
+          status: "published",
+          discountType: "FIXED",
+          discountValue: 100,
+          minOrderPrice: 0,
+          budget: 500,
+          spentBudget: 100,
+          reservedBudget: 200,
+          startsAt: new Date(Date.now() - 60000),
+          endsAt: new Date(Date.now() + 60000),
+        }),
+        reserveVoucherBudget: async (input) => {
+          reservationInput = input;
+          return { held: true };
+        },
+      });
+      const service = createCampaignService(repo);
+
+      const quote = await service.quoteAndHold({
+        campaignId: "camp-1",
+        userId: buyerUser.id,
+        orderId: "order-1",
+        productId: "product-1",
+      });
+
+      assert.equal(quote.discountAmount, 100);
+      assert.deepEqual(reservationInput, {
+        campaignId: "camp-1",
+        userId: buyerUser.id,
+        orderId: "order-1",
+        discountAmount: 100,
+      });
+    },
+  );
+
+  await t.test(
+    "Checkout quote rejects a discount that does not fit remaining budget",
+    async () => {
+      const repo = createMockRepo({
+        findVoucher: async () => ({
+          id: "voucher-1",
+          status: "CLAIMED",
+          usedOrderId: null,
+        }),
+        findProduct: async () => ({
+          id: "product-1",
+          price: 1000,
+          category: "Clothing",
+          status: "reserved",
+          reservedBy: buyerUser.id,
+          reservationExpiresAt: new Date(Date.now() + 60000),
+        }),
+        findById: async () => ({
+          id: "camp-1",
+          code: "SAVE100",
+          status: "published",
+          discountType: "FIXED",
+          discountValue: 100,
+          minOrderPrice: 0,
+          budget: 500,
+          spentBudget: 350,
+          reservedBudget: 100,
+          startsAt: new Date(Date.now() - 60000),
+          endsAt: new Date(Date.now() + 60000),
+        }),
+      });
+      const service = createCampaignService(repo);
+
+      await assert.rejects(
+        () =>
+          service.quoteAndHold({
+            campaignId: "camp-1",
+            userId: buyerUser.id,
+            orderId: "order-1",
+            productId: "product-1",
+          }),
+        (error) =>
+          error.status === 409 &&
+          error.message ===
+            "วงเงินส่วนลดของคูปองนี้ถูกใช้ครบแล้ว กรุณาเลือกคูปองอื่นหรือดำเนินการต่อโดยไม่ใช้คูปอง",
+      );
+    },
+  );
+
+  await t.test(
+    "Payment completion forwards the trusted discount for legacy holds",
+    async () => {
+      let completionInput;
+      const repo = createMockRepo({
+        findVoucher: async () => ({
+          id: "voucher-1",
+          status: "CLAIMED",
+          usedOrderId: "order-1",
+        }),
+        completeVoucher: async (input) => {
+          completionInput = input;
+          return { id: "voucher-1", status: "USED" };
+        },
+      });
+      const service = createCampaignService(repo);
+
+      await service.completeVoucher({
+        user: buyerUser,
+        campaignId: "camp-1",
+        orderId: "order-1",
+        discountAmount: 125,
+      });
+
+      assert.deepEqual(completionInput, {
+        userId: buyerUser.id,
+        campaignId: "camp-1",
+        orderId: "order-1",
+        discountAmount: 125,
+      });
+    },
+  );
+
+  await t.test(
+    "Fixed discount must stay below the minimum order amount",
+    async () => {
+      const service = createCampaignService(createMockRepo());
+      await assert.rejects(
+        () =>
+          service.createDraft({
+            user: marketingUser,
+            input: {
+              code: "FREEORDER",
+              name: "Invalid free order campaign",
+              discountType: "FIXED",
+              discountValue: 100,
+              minOrderPrice: 100,
+              startsAt: futureStart.toISOString(),
+              endsAt: futureEnd.toISOString(),
+            },
+          }),
+        /ส่วนลดคงที่ต้องน้อยกว่ายอดซื้อขั้นต่ำ/,
+      );
+    },
+  );
+
+  await t.test(
+    "Fixed campaign budget must cover every configured voucher right",
+    async () => {
+      const service = createCampaignService(createMockRepo());
+      await assert.rejects(
+        () =>
+          service.createDraft({
+            user: marketingUser,
+            input: {
+              code: "LOWBUDGET",
+              name: "Insufficient fixed budget",
+              discountType: "FIXED",
+              discountValue: 100,
+              minOrderPrice: 500,
+              usageLimit: 10,
+              budget: 999,
+              startsAt: futureStart.toISOString(),
+              endsAt: futureEnd.toISOString(),
+            },
+          }),
+        /งบประมาณต้องไม่น้อยกว่าจำนวนสิทธิ์คูณส่วนลดคงที่ต่อครั้ง/,
+      );
+    },
+  );
+
+  await t.test(
+    "Manual campaign closure requires and audits a reason",
+    async () => {
+      let updateData;
+      let auditData;
+      const repo = createMockRepo({
+        findById: async () => ({
+          id: "camp-1",
+          status: "published",
+        }),
+        updateCampaign: async (_id, data) => {
+          updateData = data;
+          return { id: "camp-1", ...data };
+        },
+        expireClaimedVouchers: async () => ({ count: 1 }),
+        marketingAuditLog: {
+          create: async ({ data }) => {
+            auditData = data;
+            return data;
+          },
+          createMany: async () => ({ count: 1 }),
+        },
+      });
+      const service = createCampaignService(repo);
+
+      await assert.rejects(
+        () =>
+          service.endCampaign({
+            user: marketingUser,
+            campaignId: "camp-1",
+            reason: " ",
+          }),
+        /กรุณาระบุเหตุผลที่ปิดแคมเปญ/,
+      );
+      await service.endCampaign({
+        user: marketingUser,
+        campaignId: "camp-1",
+        reason: "งบการตลาดถูกโยกไปกิจกรรมอื่น",
+      });
+
+      assert.equal(updateData.status, "ended");
+      assert.equal(updateData.endReason, "ADMIN_CLOSED");
+      assert.ok(updateData.endedAt instanceof Date);
+      assert.deepEqual(auditData.metadata, {
+        reason: "งบการตลาดถูกโยกไปกิจกรรมอื่น",
+      });
     },
   );
 });

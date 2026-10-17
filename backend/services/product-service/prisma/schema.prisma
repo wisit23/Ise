@@ -239,6 +239,8 @@ model AuctionItem {
   // Marketing-owned schedule.
   scheduledStartAt DateTime?     @map("scheduled_start_at")
   scheduledEndAt   DateTime?     @map("scheduled_end_at")
+  // Independent floor granted by anti-sniping, retained when Marketing edits a round.
+  softCloseEndsAt  DateTime?     @map("soft_close_ends_at")
   openedAt         DateTime?     @map("opened_at")
   closedAt         DateTime?     @map("closed_at")
   approvedBy       String?       @map("approved_by")
@@ -263,12 +265,14 @@ model AuctionItem {
 }
 
 model AuctionRound {
-  title String @default("")
-  categories String[] @default([])
-  cancellationReason String? @map("cancellation_reason")
-  cancelledAt DateTime? @map("cancelled_at")
-  cancelledBy String? @map("cancelled_by")
   id                 String   @id @default(uuid())
+  title              String   @default("")
+  // NULL preserves unlimited capacity for rounds created before this feature.
+  maxItems           Int?     @map("max_items")
+  categories         String[] @default([])
+  cancellationReason String?  @map("cancellation_reason")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancelledBy        String?  @map("cancelled_by")
   submissionStartsAt DateTime @map("submission_starts_at")
   submissionEndsAt   DateTime @map("submission_ends_at")
   auctionStartsAt    DateTime @map("auction_starts_at")
@@ -313,12 +317,32 @@ model Article {
   publishedAt DateTime?     @map("published_at")
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
+  views       ArticleView[]
 
   @@index([status])
   @@index([category])
   @@index([status, category])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("articles")
+}
+
+// A read is counted only after the server has observed at least 20 seconds
+// between start and completion. One row per account or anonymous browser
+// session keeps the public and Marketing totals consistent and idempotent.
+model ArticleView {
+  id             String    @id @default(uuid())
+  articleId      String    @map("article_id")
+  userId         String?   @map("user_id")
+  guestSessionId String?   @map("guest_session_id")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  countedAt      DateTime? @map("counted_at")
+
+  article Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, userId])
+  @@unique([articleId, guestSessionId])
+  @@index([articleId, countedAt])
+  @@map("article_views")
 }
 
 enum ArticleStatus {
@@ -359,6 +383,8 @@ model Campaign {
   maxDiscount        Int?           @map("max_discount")
   applicableCategory String?        @map("applicable_category")
   budget             Int?
+  spentBudget        Decimal        @default(0) @map("spent_budget") @db.Decimal(12, 2)
+  reservedBudget     Decimal        @default(0) @map("reserved_budget") @db.Decimal(12, 2)
   usageLimit         Int?           @map("usage_limit")
   usedCount          Int            @default(0) @map("used_count")
   status             CampaignStatus @default(draft)
@@ -367,6 +393,8 @@ model Campaign {
   createdById        String         @map("created_by_id")
   approvedById       String?        @map("approved_by_id")
   approvedAt         DateTime?      @map("approved_at")
+  endedAt            DateTime?      @map("ended_at")
+  endReason          String?        @map("end_reason")
   version            Int            @default(1)
   targetSegment      Json?          @map("target_segment")
   createdAt          DateTime       @default(now()) @map("created_at")
@@ -389,6 +417,7 @@ model UserVoucher {
   claimedAt   DateTime      @default(now()) @map("claimed_at")
   usedAt      DateTime?     @map("used_at")
   usedOrderId String?       @map("used_order_id")
+  reservedDiscount Decimal @default(0) @map("reserved_discount") @db.Decimal(12, 2)
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 

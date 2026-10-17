@@ -6,6 +6,14 @@ const CHAT_SERVICE_URL =
 const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 const MARKETING_SYSTEM_SENDER_ID = "system-marketing";
 
+function auctionItemUrl(itemId) {
+  return `/auctions/${encodeURIComponent(itemId)}`;
+}
+
+function auctionRoundUrl(roundId) {
+  return `/auctions/rounds/${encodeURIComponent(roundId)}`;
+}
+
 async function internalPost(path, body) {
   const res = await fetch(`${CHAT_SERVICE_URL}${path}`, {
     method: "POST",
@@ -121,6 +129,7 @@ async function notifyItemCancelled({
         body: `รายการประมูลสินค้า "${productTitle}" ในรอบประมูล "${roundTitle}" ถูกยกเลิกเนื่องจาก: ${cleanReason} กรุณาไปที่หน้าจัดการประมูลของผู้ขายเพื่อเลือกส่งสินค้าเข้ารอบประมูลใหม่ หรือกำหนดราคาเพื่อนำกลับไปขายปกติ`,
         payload: {
           event: "auction.item_cancelled",
+          summary: `รายการประมูล "${productTitle}" ถูกยกเลิก`,
           auctionId: itemId,
           roundId,
           productId: item.productId,
@@ -128,6 +137,8 @@ async function notifyItemCancelled({
           roundTitle,
           reason: cleanReason,
           role: "SELLER",
+          actionUrl: auctionItemUrl(itemId),
+          actionLabel: "ดูรายละเอียดรายการ",
         },
       }),
     );
@@ -154,6 +165,7 @@ async function notifyItemCancelled({
           body: `รายการประมูลสินค้า "${productTitle}" ในรอบประมูล "${roundTitle}" ที่คุณเข้าร่วมประมูลถูกยกเลิกเนื่องจาก: ${cleanReason} การเสนอราคาของคุณในรายการนี้ถูกยกเลิกและไม่มีการเรียกเก็บค่าใช้จ่ายใดๆ`,
           payload: {
             event: "auction.item_cancelled",
+            summary: `รายการประมูล "${productTitle}" ถูกยกเลิก`,
             auctionId: itemId,
             roundId,
             productId: item.productId,
@@ -161,6 +173,8 @@ async function notifyItemCancelled({
             roundTitle,
             reason: cleanReason,
             role: "BUYER",
+            actionUrl: auctionItemUrl(itemId),
+            actionLabel: "ดูรายละเอียดรายการ",
           },
         }),
       );
@@ -168,6 +182,45 @@ async function notifyItemCancelled({
   }
 
   return runNotificationTasks(tasks, `item ${itemId}`);
+}
+
+/** Sends the required rejection reason to the product owner. */
+async function notifyItemRejected({ item, round, reason }) {
+  if (!item?.sellerId) {
+    return { deliveredCount: 0, failedCount: 0, warnings: [] };
+  }
+
+  const productTitle = item.product?.title || "สินค้า";
+  const roundTitle = round?.title || item.round?.title || "รอบประมูล";
+  const cleanReason =
+    reason || item.cancellationReason || "ฝ่ายการตลาดปฏิเสธรายการประมูล";
+
+  return runNotificationTasks(
+    [
+      () =>
+        deliverAuctionNotification({
+          contextId: `${item.roundId || round?.id || item.id}:${item.sellerId}`,
+          recipientId: item.sellerId,
+          recipientRole: "SELLER",
+          idempotencyKey: `auction.item_rejected:${item.id}:${item.sellerId}`,
+          body: `รายการประมูลสินค้า "${productTitle}" ในรอบประมูล "${roundTitle}" ถูกปฏิเสธเนื่องจาก: ${cleanReason}`,
+          payload: {
+            event: "auction.item_rejected",
+            summary: `รายการประมูล "${productTitle}" ถูกปฏิเสธ`,
+            auctionId: item.id,
+            roundId: item.roundId || round?.id || null,
+            productId: item.productId,
+            productTitle,
+            roundTitle,
+            reason: cleanReason,
+            role: "SELLER",
+            actionUrl: auctionItemUrl(item.id),
+            actionLabel: "ดูรายละเอียดรายการ",
+          },
+        }),
+    ],
+    `rejected item ${item.id}`,
+  );
 }
 
 /**
@@ -200,10 +253,13 @@ async function notifyRoundCancelled({ round, sellerIds = [], bidderIds = [] }) {
         body: `รอบประมูล "${round.title}" ถูกยกเลิกเนื่องจาก: ${cleanReason} ส่งผลให้รายการสินค้าของคุณในรอบนี้ถูกยกเลิก กรุณาไปที่หน้าจัดการประมูลของผู้ขายเพื่อเลือกส่งสินค้าเข้ารอบประมูลใหม่ หรือกำหนดราคาเพื่อนำกลับไปขายปกติ`,
         payload: {
           event: "auction.round_cancelled",
+          summary: `รอบประมูล "${round.title}" ถูกยกเลิก`,
           roundId: round.id,
           roundTitle: round.title,
           reason: cleanReason,
           role: "SELLER",
+          actionUrl: auctionRoundUrl(round.id),
+          actionLabel: "ดูรายละเอียดรอบประมูล",
         },
       }),
     );
@@ -222,10 +278,13 @@ async function notifyRoundCancelled({ round, sellerIds = [], bidderIds = [] }) {
         body: `รอบประมูล "${round.title}" ที่คุณเข้าร่วมประมูลถูกยกเลิกเนื่องจาก: ${cleanReason} ส่งผลให้การเสนอราคาทั้งหมดในรอบนี้ถูกยกเลิกและไม่มีการเรียกเก็บค่าใช้จ่ายใดๆ`,
         payload: {
           event: "auction.round_cancelled",
+          summary: `รอบประมูล "${round.title}" ถูกยกเลิก`,
           roundId: round.id,
           roundTitle: round.title,
           reason: cleanReason,
           role: "BUYER",
+          actionUrl: auctionRoundUrl(round.id),
+          actionLabel: "ดูรายละเอียดรอบประมูล",
         },
       }),
     );
@@ -303,8 +362,47 @@ async function notifyRoundOpened(round) {
   });
 }
 
+async function notifyRoundUpdated({ round, metadata, eventId }) {
+  const labels = {
+    submissionStartsAt: "เริ่มรับสินค้า", submissionEndsAt: "ปิดรับสินค้า",
+    auctionStartsAt: "เริ่มประมูล", auctionEndsAt: "ปิดประมูล",
+  };
+  const formatTime = value => new Date(value).toLocaleString("th-TH", {
+    timeZone: "Asia/Bangkok", dateStyle: "medium", timeStyle: "short",
+  });
+  const changes = metadata.changedFields.map(field =>
+    `${labels[field]}: ${formatTime(metadata.previousTimes[field])} → ${formatTime(round[field])}`,
+  ).join("\n");
+  const recipients = new Map(metadata.sellerIds.map(id => [id, "SELLER"]));
+  for (const item of metadata.affectedItems) {
+    for (const id of item.bidderIds) if (!recipients.has(id)) recipients.set(id, "BUYER");
+  }
+  const tasks = [...recipients].map(([id, role]) => () => {
+    const relevantItems = metadata.affectedItems.filter(item =>
+      item.sellerId === id || item.bidderIds.includes(id));
+    const itemTimes = relevantItems.map(item => `${item.title}: ปิด ${formatTime(item.closesAt)}`).join("\n");
+    return deliverAuctionNotification({ contextId: `${round.id}:${id}`, recipientId: id,
+      recipientRole: role, idempotencyKey: `${eventId}:${id}`,
+      body: `ฝ่ายการตลาดแก้ไขเวลารอบประมูล "${round.title}"\n${changes}${itemTimes ? `\nเวลาปิดจริงของสินค้าที่เกี่ยวข้อง:\n${itemTimes}` : ""}\nเวลาที่ต่อจากการเสนอราคายังคงได้รับการรักษาไว้`,
+      payload: {
+        event: "auction.round_updated",
+        summary: `เวลารอบประมูล "${round.title}" มีการเปลี่ยนแปลง`,
+        roundId: round.id,
+        roundTitle: round.title,
+        eventId,
+        role,
+        actionUrl: auctionRoundUrl(round.id),
+        actionLabel: "ดูรายละเอียดรอบประมูล",
+      },
+    });
+  });
+  return runNotificationTasks(tasks, `update round ${round.id}`);
+}
+
 module.exports = {
+  notifyRoundUpdated,
   MARKETING_SYSTEM_SENDER_ID,
+  notifyItemRejected,
   notifyItemCancelled,
   notifyRoundCancelled,
   notifyBidPlaced,

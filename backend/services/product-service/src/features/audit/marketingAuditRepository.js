@@ -101,6 +101,7 @@ function createMarketingAuditRepository(prismaClient = defaultPrisma) {
       entityType,
       entityId,
       actorId,
+      actorIds,
       actorRole,
       fromDate,
       toDate,
@@ -119,7 +120,21 @@ function createMarketingAuditRepository(prismaClient = defaultPrisma) {
     if (action) where.action = action;
     if (entityType) where.AND = [{ entityType }];
     if (entityId) where.entityId = entityId;
-    if (actorId) where.actorId = actorId;
+    if (actorIds && Array.isArray(actorIds)) {
+      if (actorId) {
+        if (actorIds.includes(actorId)) {
+          where.actorId = actorId;
+        } else {
+          where.actorId = "__NO_MATCH__";
+        }
+      } else if (actorIds.length === 1) {
+        where.actorId = actorIds[0];
+      } else {
+        where.actorId = { in: actorIds };
+      }
+    } else if (actorId) {
+      where.actorId = actorId;
+    }
     if (actorRole) where.actorRole = actorRole;
 
     if (fromDate || toDate) {

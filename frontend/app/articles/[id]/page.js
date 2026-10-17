@@ -9,6 +9,11 @@ import Button from "../../../components/ui/Button";
 import Skeleton from "../../../components/ui/Skeleton";
 import ErrorState from "../../../components/ui/ErrorState";
 import { apiFetch, mediaUrl } from "../../../lib/api";
+import {
+  ARTICLE_VIEW_DWELL_MS,
+  getArticleViewSessionId,
+  scheduleVisibleArticleDwell,
+} from "../../../lib/articleViews";
 
 const CATEGORY_MAP = {
   care: {
@@ -206,6 +211,62 @@ export default function ArticleDetailPage() {
     loadArticle();
   }, [id]);
 
+  useEffect(() => {
+    if (!article?.id || article.status !== "published") return;
+
+    let cancelled = false;
+    let cancelDwell = () => {};
+    const guestSessionId = getArticleViewSessionId();
+
+    async function completeView() {
+      try {
+        const result = await apiFetch(
+          `/api/products/articles/${article.id}/views/complete`,
+          { method: "POST", body: { guestSessionId } },
+        );
+        if (!cancelled && Number.isFinite(Number(result.viewCount))) {
+          setArticle((current) =>
+            current
+              ? { ...current, viewCount: Number(result.viewCount) }
+              : current,
+          );
+        }
+      } catch {
+        // Reading must remain available even if analytics cannot be recorded.
+      }
+    }
+
+    apiFetch(`/api/products/articles/${article.id}/views/start`, {
+      method: "POST",
+      body: { guestSessionId },
+    })
+      .then((result) => {
+        if (cancelled) return;
+        if (result.alreadyCounted) {
+          if (Number.isFinite(Number(result.viewCount))) {
+            setArticle((current) =>
+              current
+                ? { ...current, viewCount: Number(result.viewCount) }
+                : current,
+            );
+          }
+          return;
+        }
+        cancelDwell = scheduleVisibleArticleDwell(
+          completeView,
+          Number(result.dwellMs) || ARTICLE_VIEW_DWELL_MS,
+        );
+      })
+      .catch(() => {
+        // Analytics failure must not block the article itself.
+      });
+
+    return () => {
+      cancelled = true;
+      cancelDwell();
+    };
+  }, [article?.id, article?.status]);
+
   function handleShare() {
     if (typeof window !== "undefined") {
       navigator.clipboard?.writeText(window.location.href);
@@ -284,6 +345,13 @@ export default function ArticleDetailPage() {
             <span className="text-xs text-slate-400">·</span>
             <span className="text-xs text-slate-500">
               อ่าน {estimateReadingTime(article.content)}
+            </span>
+            <span className="text-xs text-slate-400">·</span>
+            <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                visibility
+              </span>
+              ผู้อ่าน {Number(article.viewCount || 0).toLocaleString("th-TH")} คน
             </span>
           </div>
 
