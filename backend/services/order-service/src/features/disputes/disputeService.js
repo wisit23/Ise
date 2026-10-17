@@ -306,7 +306,7 @@ async function listQueue({
     hasRole(role, roles, "ADMIN") ? "ADMIN" : hasRole(role, roles, "TRUST_AND_SAFETY") ? "TRUST_AND_SAFETY" : role);
   if (work && !["open", "overdue", "soon", "reply"].includes(work))
     throw badRequest("invalid work filter");
-  if (scope && !["mine", "unassigned", "escalated", "returned", "all"].includes(scope))
+  if (scope && !["mine", "unassigned", "escalated", "returned", "closed", "all"].includes(scope))
     throw badRequest("invalid scope");
   if (status && !["OPEN", "NEEDS_INFO", "DECIDED"].includes(status))
     throw badRequest("invalid status");
@@ -353,10 +353,12 @@ async function listQueue({
     })),
     ["buyerId", "sellerId", "assigneeId"],
   );
+  const ratings = await disputeModel.ratingsFor(items.map((item) => item.id));
   return {
     ...queue,
     items: items.map((item) => ({
       ...item,
+      csat: ratings.get(item.id) || [],
       capabilities: disputeCapabilities(item, userId, role, roles),
       queuePriority: item.priority,
       sla: disputeSla(item),

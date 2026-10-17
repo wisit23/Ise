@@ -203,7 +203,7 @@ async function listQueue({
   retention = require("@reloop/shared/src/caseRetention").retentionView(retention, role);
   if (work && !["open", "overdue", "soon", "reply"].includes(work))
     throw badRequest("invalid work filter");
-  if (scope && !["mine", "unassigned", "escalated", "all"].includes(scope))
+  if (scope && !["mine", "unassigned", "escalated", "closed", "all"].includes(scope))
     throw badRequest("invalid scope");
   if (status && !STATUSES.includes(status)) throw badRequest("invalid status");
   if (
@@ -233,6 +233,7 @@ async function listQueue({
     search,
     ...pagination,
   });
+  const ratings = await ticketModel.ratingsFor(queue.items.map((ticket) => ticket.id));
   return {
     ...queue,
     items: await enrichStaffRows(
@@ -247,6 +248,7 @@ async function listQueue({
         return {
           ...ticket,
           capabilities: ticketCapabilities(ticket, userId, role),
+          csat: ratings.get(ticket.id) || [],
           queuePriority: ticket.priority,
           priorityScore: score.priorityScore,
         };

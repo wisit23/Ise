@@ -95,7 +95,7 @@ function parseState(domain, account) {
   if (params.get("section") !== domain) return result;
   const enums = {
     view: ["workspace", "table"],
-    scope: ["mine", "unassigned", "escalated", "returned", "all"],
+    scope: ["mine", "unassigned", "escalated", "returned", "closed", "all"],
     sort: ["sla", "newest", "oldest", "priority"],
     side: ["buyer", "seller"],
     work: ["", "open", "overdue", "soon", "reply"],

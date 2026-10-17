@@ -322,6 +322,14 @@ function queueFilter({
         ? Prisma.sql`s.code = 'ESCALATED' AND t.chat_responder_id = ${assigneeId}`
         : Prisma.sql`s.code = 'ESCALATED'`,
     );
+  else if (scope === "closed")
+    // Finished work this agent handled at any point (assignment or chat).
+    clauses.push(
+      Prisma.sql`s.code IN ('RESOLVED','CLOSED')`,
+      ...(role === "CUSTOMER_SERVICE"
+        ? [Prisma.sql`(t.chat_responder_id = ${assigneeId} OR EXISTS (SELECT 1 FROM ticket_assignments ha WHERE ha.ticket_id = t.ticket_id AND ha.assignee_id = ${assigneeId}))`]
+        : []),
+    );
   else if (scope === "all" && role === "CUSTOMER_SERVICE")
     clauses.push(
       Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
@@ -329,8 +337,8 @@ function queueFilter({
   if (status) clauses.push(Prisma.sql`s.code = ${status}`);
   else if (scope === "mine")
     clauses.push(Prisma.sql`s.code NOT IN ('CLOSED', 'ESCALATED')`);
-  else if (scope === "escalated") {
-    // already constrained to ESCALATED above
+  else if (scope === "escalated" || scope === "closed") {
+    // already constrained above
   } else if (scope !== "all")
     clauses.push(
       Prisma.sql`(s.code NOT IN ('CLOSED', 'ESCALATED') OR (s.code='ESCALATED' AND t.chat_responder_id=${assigneeId}))`,
@@ -388,6 +396,19 @@ async function listQueue(options = {}) {
     items: ids.map((r) => byId.get(r.id)).filter(Boolean),
     total: counts[0].total,
   };
+}
+
+/** CSAT responses for queue rows, keyed by ticket id. */
+async function ratingsFor(ids) {
+  if (!ids.length) return new Map();
+  const rows = await prisma.customerSatisfaction.findMany({
+    where: { caseId: { in: ids } },
+    select: { caseId: true, respondentSide: true, rating: true, comment: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const byCase = new Map();
+  for (const row of rows) byCase.set(row.caseId, [...(byCase.get(row.caseId) || []), row]);
+  return byCase;
 }
 
 async function markAchieved(db, ticketId, metricType, at) {
@@ -866,6 +887,7 @@ async function dashboardMetrics({ includeEscalated, days }) {
   };
 }
 module.exports = {
+  ratingsFor,
   reassign,
   dashboardMetrics,
   create,

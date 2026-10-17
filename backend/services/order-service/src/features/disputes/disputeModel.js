@@ -217,6 +217,14 @@ async function listQueue(
       { assignedRole: { in: ["ADMIN", "TRUST_AND_SAFETY"] } },
       restricted ? { escalatedBy: userId } : { escalatedBy: { not: null } },
     );
+  else if (scope === "closed")
+    // Decided cases; CS sees the ones it handled or escalated.
+    filters.push(
+      { decision: { not: null } },
+      ...(restricted
+        ? [{ OR: [{ escalatedBy: userId }, { caseLog: { some: { toAssignedTo: userId } } }] }]
+        : []),
+    );
   else if (restricted)
     filters.push(
       { OR: [{ assignedRole: null }, { assignedRole: { notIn: ["ADMIN", "TRUST_AND_SAFETY"] } }] },
@@ -226,7 +234,7 @@ async function listQueue(
   if (scope === "returned")
     filters.push({ assignedTo: userId }, { returnedAt: { not: null } });
   if (scope === "unassigned") filters.push({ assignedTo: null });
-  if (scope && scope !== "all" && !status)
+  if (scope && !["all", "closed"].includes(scope) && !status)
     filters.push({ status: { not: "DECIDED" } });
   if (filters.length) where.AND = filters;
   if (priority) where.priority = priority;
@@ -616,6 +624,8 @@ async function requestMoreEvidence({ id, version, actorId, reason, tasks = [] })
 /** CS ticks one returned task; does not bump the case version. */
 async function updateReturnTask({ id, taskId, actorId, done, note }) {
   return prisma.$transaction(async (tx) => {
+    // Lock the row: two quick ticks must not overwrite each other's list.
+    await tx.$queryRaw`SELECT 1 FROM dispute_case WHERE dispute_case_id = ${id} FOR UPDATE`;
     const before = await tx.disputeCase.findUnique({ where: { id } });
     if (!before?.returnedAt) return null;
     const tasks = Array.isArray(before.returnTasks) ? before.returnTasks : [];
@@ -644,6 +654,18 @@ async function updateReturnTask({ id, taskId, actorId, done, note }) {
     return caseView(after);
   });
 }
+/** CSAT responses for queue rows, keyed by dispute id. */
+async function ratingsFor(ids) {
+  if (!ids.length) return new Map();
+  const rows = await prisma.customerSatisfaction.findMany({
+    where: { caseId: { in: ids } },
+    select: { caseId: true, respondentSide: true, rating: true, comment: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const byCase = new Map();
+  for (const row of rows) byCase.set(row.caseId, [...(byCase.get(row.caseId) || []), row]);
+  return byCase;
+}
 async function dashboardMetrics() {
   const rows = await prisma.disputeCase.groupBy({
     by: ["status"],
@@ -660,6 +682,7 @@ module.exports = {
   dashboardMetrics,
   requestMoreEvidence,
   updateReturnTask,
+  ratingsFor,
   findByOrderId,
   findById,
   findEvidence,

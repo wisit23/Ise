@@ -7,8 +7,11 @@ import { apiFetch } from "../../../lib/api";
 import { getStoredUser } from "../../../lib/auth";
 import {
   TICKET_STATUS_LABEL,
+  TICKET_STATUS_STYLE,
   DISPUTE_STATUS_LABEL,
+  DISPUTE_STATUS_STYLE,
   PRIORITY_LABEL,
+  PRIORITY_STYLE,
   ORDER_STATUS_LABEL,
   STAFF_ROLE_LABEL,
 } from "../../../lib/supportConstants";
@@ -30,6 +33,8 @@ import EvidenceInspector from "./EvidenceInspector";
 import StaffReassignDialog from "./StaffReassignDialog";
 import ReturnToCsDialog from "./ReturnToCsDialog";
 import CaseHandoffBanner from "./CaseHandoffBanner";
+import CsatCell from "./CsatCell";
+import CsatSummary from "./CsatSummary";
 import layoutStyles from "./workspace.module.css";
 import contextStyles from "./CaseContextPanel.module.css";
 
@@ -140,8 +145,10 @@ export default function CaseWorkspace({
       value: "escalated",
       label: elevated ? "เคสที่ถูกส่งต่อ" : `ส่งต่อแล้ว (รอ ${dispute ? "T&S" : "Admin"})`,
     },
+    { value: "closed", label: "ปิดแล้ว" },
     { value: "all", label: "ทุกงาน" },
   ];
+  const closedView = state.scope === "closed";
   const setView = (value) => {
     if (!chatBusy && !busy) w.update({ view: value });
   };
@@ -330,16 +337,24 @@ export default function CaseWorkspace({
       }
     />
   );
+  const thaiDate = (value) =>
+    value
+      ? new Date(value).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })
+      : "—";
+  const TEAM_SHORT = { CUSTOMER_SERVICE: "ทีม CS", TRUST_AND_SAFETY: "ทีม T&S", ADMIN: "Admin" };
+  const statusStyle = dispute ? DISPUTE_STATUS_STYLE : TICKET_STATUS_STYLE;
+  const pill = "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium";
   const columns = [
     {
       key: "id",
       header: "เลขเคส",
+      headerClassName: "w-px",
       render: (row) => (
         <button
           type="button"
           aria-label={`คัดลอกเลขเคส ${row.ticketNumber || row.id}`}
-          title={row.ticketNumber || row.id}
-          className="min-h-11 whitespace-nowrap font-mono text-xs text-slate-700 hover:text-emerald-700"
+          title={`${row.ticketNumber || row.id} · คลิกเพื่อคัดลอก`}
+          className="group/id inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 font-mono text-xs text-slate-600 hover:bg-slate-100 hover:text-emerald-700"
           onClick={async (event) => {
             event.stopPropagation();
             try {
@@ -350,10 +365,10 @@ export default function CaseWorkspace({
             }
           }}
         >
-          {row.ticketNumber || `#${row.id.slice(0, 8)}…${row.id.slice(-4)}`}{" "}
+          {row.ticketNumber || `#…${row.id.slice(-6)}`}
           <span
             aria-hidden="true"
-            className="material-symbols-outlined align-middle text-[14px]"
+            className="material-symbols-outlined text-[14px] text-slate-300 group-hover/id:text-emerald-600"
           >
             content_copy
           </span>
@@ -362,115 +377,151 @@ export default function CaseWorkspace({
     },
     {
       key: "subject",
-      header: dispute ? "เหตุผล / ออเดอร์" : "หัวข้อ / ผู้แจ้ง",
+      header: dispute ? (closedView ? "เหตุผล / ออเดอร์" : "เหตุผล / คู่กรณี") : "หัวข้อ / ผู้แจ้ง",
       render: (row) => (
-        <div className="min-w-[190px] max-w-[320px]">
-          <p className="line-clamp-2 font-medium">
+        <div className={closedView ? "min-w-[220px] max-w-[420px]" : "min-w-[150px] max-w-[220px]"}>
+          <p className="truncate font-medium text-slate-900" title={row.subject || row.reason}>
             {row.subject || row.reason}
           </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {dispute
-              ? row.orderId
-              : fallback(row.requesterName, row.requesterId)}
+          <p
+            className="mt-0.5 truncate text-xs text-slate-500"
+            title={dispute ? `ออเดอร์ ${row.orderId}` : undefined}
+          >
+            {dispute && !closedView
+              ? `ซื้อ ${fallback(row.buyerName, row.order?.buyerId)} · ขาย ${fallback(row.sellerName, row.order?.sellerId)}`
+              : dispute
+                ? `ออเดอร์ #${String(row.orderId).slice(0, 8)}…${String(row.orderId).slice(-4)}`
+                : fallback(row.requesterName, row.requesterId)}
           </p>
         </div>
       ),
     },
-    ...(dispute
+    ...(dispute && !closedView
       ? [
           {
-            key: "parties",
-            header: "ผู้ซื้อ / ร้านค้า",
+            key: "amount",
+            header: "ยอดเงิน",
+            align: "right",
             render: (row) => (
-              <div className="text-xs">
-                <p>{fallback(row.buyerName, row.order?.buyerId)}</p>
-                <p>{fallback(row.sellerName, row.order?.sellerId)}</p>
+              <span className="whitespace-nowrap font-medium tabular-nums text-slate-900">
+                {currency(row.order?.finalPrice ?? row.order?.price)}
+              </span>
+            ),
+          },
+        ]
+      : []),
+    ...(closedView
+      ? []
+      : [
+          {
+            key: "status",
+            header: "สถานะ",
+            // One badge per row: a handoff state replaces the raw status.
+            render: (row) =>
+              row.capabilities?.isReturned ? (
+                <span className={`${pill} gap-1 border border-amber-300 bg-amber-50 text-amber-800`}>
+                  <span aria-hidden="true" className="material-symbols-outlined !text-[14px]">assignment_return</span>
+                  ตีกลับจาก T&amp;S
+                </span>
+              ) : row.capabilities?.isWatching || (!dispute && row.status === "ESCALATED") ? (
+                <span className={`${pill} border border-blue-300 bg-blue-50 text-blue-800`}>
+                  {`รอ ${dispute ? "T&S" : "Admin"} ตรวจ`}
+                </span>
+              ) : (
+                <span className={`${pill} ${statusStyle[row.status] || "border border-slate-200 bg-slate-50 text-slate-600"}`}>
+                  {labels[row.status] || row.status}
+                </span>
+              ),
+          },
+          {
+            key: "priority",
+            header: "ความสำคัญ",
+            render: (row) => {
+              const level = row.queuePriority || row.priority;
+              return level ? (
+                <span className={`${pill} ${PRIORITY_STYLE[level] || "border border-slate-200 bg-slate-50 text-slate-600"}`}>
+                  {PRIORITY_LABEL[level] || level}
+                </span>
+              ) : (
+                "—"
+              );
+            },
+          },
+          {
+            key: "sla",
+            header: "SLA",
+            render: (row) => (
+              <div className="min-w-[110px] max-w-[170px] text-xs leading-5">
+                <SlaIndicator sla={row.sla} />
               </div>
             ),
           },
           {
-            key: "amount",
-            header: "ยอดเงินในเคส",
-            render: (row) =>
-              currency(row.order?.finalPrice ?? row.order?.price),
+            key: "owner",
+            header: "ผู้รับผิดชอบ",
+            render: (row) => {
+              const mine = (row.assigneeId || row.assignedTo) === user.id;
+              const name = mine ? "คุณ" : fallback(row.assigneeName, row.assigneeId || row.assignedTo);
+              return (
+                <div className="flex max-w-[140px] items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${mine ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+                  >
+                    {String(name).replace(/^ผู้ใช้\s*#?/, "").charAt(0).toUpperCase() || "?"}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-slate-800">{name}</p>
+                    {dispute && (
+                      <p className="truncate text-xs text-slate-500">
+                        {TEAM_SHORT[row.assignedRole] || "ไม่ทราบทีม"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            },
+          },
+        ]),
+    ...(closedView
+      ? [
+          {
+            key: "closedAt",
+            header: "ปิดเมื่อ",
+            headerClassName: "w-[120px]",
+            render: (row) => (
+              <span className="whitespace-nowrap tabular-nums text-slate-600">
+                {thaiDate(row.decidedAt || row.closedAt || row.resolvedAt || row.updatedAt)}
+              </span>
+            ),
+          },
+          {
+            key: "csat",
+            header: "ความพึงพอใจ",
+            headerClassName: "w-[300px]",
+            render: (row) => <CsatCell ratings={row.csat} />,
           },
         ]
       : []),
     {
-      key: "status",
-      header: "สถานะ",
-      render: (row) => (
-        <div className="flex flex-col items-start gap-1">
-          <span>{labels[row.status] || row.status}</span>
-          {row.capabilities?.isReturned && (
-            <span className="rounded border border-amber-300 bg-amber-50 px-1.5 text-[11px] font-semibold text-amber-800">
-              ตีกลับจาก T&S
-            </span>
-          )}
-          {(row.capabilities?.isWatching || (!dispute && row.status === "ESCALATED")) && (
-            <span className="rounded border border-blue-200 bg-blue-50 px-1.5 text-[11px] font-semibold text-blue-800">
-              รอ{dispute ? " T&S" : " Admin"}ตรวจ
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "priority",
-      header: "ความสำคัญ",
-      render: (row) =>
-        PRIORITY_LABEL[row.queuePriority || row.priority] ||
-        row.queuePriority ||
-        row.priority ||
-        "—",
-    },
-    {
-      key: "sla",
-      header: "SLA",
-      render: (row) => <SlaIndicator sla={row.sla} />,
-    },
-    {
-      key: "owner",
-      header: "ผู้รับผิดชอบ",
-      render: (row) => (
-        <div>
-          {(row.assigneeId || row.assignedTo) === user.id
-            ? "คุณ"
-            : fallback(row.assigneeName, row.assigneeId || row.assignedTo)}
-          {dispute && (
-            <p className="text-xs text-slate-500">
-              {ROLE_LABEL[row.assignedRole] || "ไม่ทราบทีม"}
-            </p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "createdAt",
-      header: "วันที่เปิด",
-      render: (row) =>
-        row.createdAt
-          ? new Date(row.createdAt).toLocaleDateString("th-TH", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })
-          : "—",
-    },
-    {
       key: "open",
-      header: "เปิดเคส",
+      header: <span className="sr-only">เปิดเคส</span>,
+      align: "right",
+      headerClassName: "w-14",
       render: (row) => (
-        <Button
-          size="sm"
+        <button
+          type="button"
+          aria-label="เปิดเคส"
+          title="เปิดเคส"
           disabled={busy || chatBusy}
           onClick={(e) => {
             e.stopPropagation();
             select(row);
           }}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
         >
-          เปิดเคส
-        </Button>
+          <span aria-hidden="true" className="material-symbols-outlined text-[18px]">arrow_forward</span>
+        </button>
       ),
     },
   ];
@@ -538,6 +589,7 @@ export default function CaseWorkspace({
               <Button onClick={w.refresh}>ลองใหม่</Button>
             </Alert>
           )}
+          {closedView && <CsatSummary rows={queue.items || []} />}
           <p className="mb-2 text-xs text-slate-600">
             ทั้งหมด {queue.total || 0} รายการ
           </p>

@@ -29,8 +29,22 @@
   grid-column: auto;
 }
 .filterFieldsToolbar {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
   padding: 12px 0 0;
-  max-width: 560px;
+}
+.filterFieldsToolbar > div:nth-child(3) {
+  grid-column: auto;
+}
+/* "Clear filters" sits on its own line, right-aligned under the fields. */
+.filterFieldsToolbar > button {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+@media (max-width: 900px) {
+  .filterFieldsToolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .surfaceEnter {
   animation: surface-enter 180ms ease-out;
