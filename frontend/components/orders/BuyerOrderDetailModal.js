@@ -172,7 +172,11 @@ export default function BuyerOrderDetailModal({
           </div>
         </section>
 
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-ink-muted">หมายเลขคำสั่งซื้อ</dt>
+          <dd className="select-text break-all font-mono text-gray-900">
+            {order.id}
+          </dd>
           <dt className="text-ink-muted">ราคา</dt>
           <dd className="text-gray-900">
             ฿{Number(order.finalPrice ?? order.price).toLocaleString("th-TH")}

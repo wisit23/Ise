@@ -128,7 +128,7 @@ describe("NavBar role permissions", () => {
       "คูปองส่วนลดของฉัน",
       "ตั๋วแจ้งปัญหาของฉัน",
       "ศูนย์ช่วยเหลือ",
-      "ตั้งค่าโปรไฟล์",
+      "ฉัน",
     ]) {
       expect(
         screen.queryByRole("link", { name: customerMenu }),
@@ -157,7 +157,7 @@ describe("NavBar role permissions", () => {
       "คูปองส่วนลดของฉัน",
       "ตั๋วแจ้งปัญหาของฉัน",
       "ศูนย์ช่วยเหลือ",
-      "ตั้งค่าโปรไฟล์",
+      "ฉัน",
     ]) {
       expect(
         screen.getByRole("link", { name: customerMenu }),
@@ -379,9 +379,7 @@ describe("NavBar responsive navigation and dropdowns", () => {
     expect(
       screen.getByRole("link", { name: "ศูนย์ช่วยเหลือ" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "ตั้งค่าโปรไฟล์" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "ฉัน" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "ออกจากระบบ" }),
     ).toBeInTheDocument();

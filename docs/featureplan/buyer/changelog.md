@@ -2,6 +2,17 @@
 
 > แต่ละรายการเป็น historical snapshot ณ วันนั้น; ใช้รายการล่าสุดและ `progress.md` เป็นสถานะปัจจุบัน
 
+## 2026-10-17 — Shared My Orders UI in profile
+
+- แยก UI/behavior เดิมจาก `/orders` เป็น `frontend/components/orders/MyOrders.js` ให้ `/orders` และแท็บสถานะสินค้าใน `/profile` ใช้ร่วมกัน ไม่แสดง Navbar/Footer ซ้อน
+- แทนรายการคำสั่งซื้อแบบเก่าในหน้า “ฉัน” ด้วยรูปสินค้า ตัวกรอง pagination ปุ่มติดต่อผู้ขาย รายละเอียดคำสั่งซื้อ ยืนยันรับ รีวิว และข้อพิพาทชุดเดียวกับ `/orders`
+- เปิด Buyer detail modal ในหน้า “ฉัน” ได้โดยไม่เปลี่ยนหน้า และคง shipping/shop/product details ที่ทำไว้แล้ว
+- Quick shortcuts ใช้สถานะตรงกับ shared filters; กด shortcut ซ้ำหลังสลับ filter ภายในจะกลับไป filter ที่เลือกและเริ่มหน้าแรก ส่วนข้อมูลส่วนตัว/ที่อยู่/Voucher ยังคงอยู่
+- เพิ่ม profile integration tests สำหรับ shared list/photos/details, filtering/pagination และ shortcuts; ปรับ NavBar test expectations ให้ตรงกับชื่อเมนู “ฉัน” ที่อนุมัติไว้ก่อนหน้า
+- Browser DOM check บน dev server ด้วย intercepted fixture responses: อยู่ `/profile`, มี 7 filters/2 order cards/2 images, ไม่พบปุ่ม panel เก่า และไม่พบ horizontal overflow ที่ viewport 1280px; ไม่ใช่ live-database acceptance
+- Screenshot และ browser detail-click checks ทำต่อไม่สำเร็จเพราะ preview automation timeout; ไม่อ้างว่า visual/mobile E2E ผ่าน
+- Frontend full suite: 105 suites / 616 tests ผ่านทั้งหมด; targeted ESLint และ diff check ผ่าน มี Next.js workspace-root warning ที่ยังไม่ได้แก้ใน scope นี้
+
 ## 2026-10-17 — Buyer order product photo and shop name
 
 - เพิ่มรูปสินค้าและชื่อร้านด้านบน Buyer order detail โดยใช้ existing Product/Auth loaders และ `ProductThumb`

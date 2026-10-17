@@ -46,7 +46,7 @@ function order(status, extra = {}) {
 
 function mockApi(current, { patch } = {}) {
   apiFetch.mockImplementation((url, opts = {}) => {
-    if (url === "/api/orders/o1" && !opts.method)
+    if (url === `/api/orders/${current.id}` && !opts.method)
       return Promise.resolve(current);
     if (url === "/api/auth/me/addresses")
       return Promise.resolve([ADDR_OLD, ADDR_NEW]);
@@ -59,6 +59,21 @@ beforeEach(() => {
   apiFetch.mockReset();
   fetchProduct.mockReset().mockResolvedValue(null);
   fetchSellerSummary.mockReset().mockResolvedValue(null);
+});
+
+test("shows the full order number without truncation and allows selecting it", async () => {
+  const current = order("paid", {
+    id: "550e8400-e29b-41d4-a716-446655440000",
+  });
+  mockApi(current);
+  render(
+    <BuyerOrderDetailModal order={current} statusLabel="ชำระแล้ว" onClose={() => {}} />,
+  );
+  expect(screen.getByText("หมายเลขคำสั่งซื้อ")).toBeInTheDocument();
+  expect(screen.getByText(current.id)).toHaveClass("select-text", "break-all");
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+    `/api/orders/${current.id}`, { token: "token" },
+  ));
 });
 
 test("shows the shop name and product photo alongside shipping details", async () => {
