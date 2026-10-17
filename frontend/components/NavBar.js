@@ -115,7 +115,7 @@ const CUSTOMER_ACCOUNT_MENU_ITEMS = [
     icon: "confirmation_number",
   },
   { href: "/help", label: "ศูนย์ช่วยเหลือ", icon: "help" },
-  { href: "/profile", label: "ตั้งค่าโปรไฟล์", icon: "person" },
+  { href: "/profile", label: "ฉัน", icon: "person" },
 ];
 
 function resolveMenuHref(item, context) {
