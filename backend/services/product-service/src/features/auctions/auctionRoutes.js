@@ -6,6 +6,7 @@ const {
   CAPABILITY,
 } = require("@reloop/shared");
 const auctionController = require("./auctionController");
+const auctionRealtime = require("./auctionRealtime");
 
 const router = Router();
 
@@ -16,6 +17,7 @@ router.get("/rounds/:roundId/items", auctionController.getRoundItems);
 router.get("/rounds/:roundId", auctionController.getRoundDetails);
 router.get("/rounds", requireAuth, auctionController.listRounds);
 router.post("/rounds", requireAuth, auctionController.createRound);
+router.patch("/rounds/:roundId", requireAuth, auctionController.updateRound);
 router.patch(
   "/rounds/:roundId/cancel",
   requireAuth,
@@ -25,6 +27,9 @@ router.patch(
 // Public browsing — gateway lets these through without a bearer token, same
 // as the product feed.
 router.get("/", auctionController.list);
+router.get("/:id/events", (req, res) =>
+  auctionRealtime.subscribe(req.params.id, req, res),
+);
 router.get("/:id", auctionController.getOne);
 
 // Seller submits their own product; role/ownership rules live in the service.

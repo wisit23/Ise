@@ -7,8 +7,12 @@ import EmptyState from "../../ui/EmptyState";
 import ErrorState from "../../ui/ErrorState";
 import Skeleton from "../../ui/Skeleton";
 import ConfirmDialog from "../../ui/ConfirmDialog";
+import DropdownFilter from "../../panel/ui/DropdownFilter";
+import RadioSelect from "../../ui/RadioSelect";
 import { apiFetch } from "../../../lib/api";
 import { fetchCategories } from "../../../lib/catalog";
+import { MARKETING_PAGE_SIZE } from "../marketingConstants";
+import MarketingPagination from "./MarketingPagination";
 
 const STATUS_MAP = {
   draft: {
@@ -45,6 +49,38 @@ const STATUS_OPTIONS = [
   { value: "published", label: "เผยแพร่อยู่" },
   { value: "ended", label: "สิ้นสุดแล้ว" },
   { value: "rejected", label: "ถูกปฏิเสธ" },
+];
+
+const DISCOUNT_TYPE_OPTIONS = [
+  { value: "PERCENT", label: "ลดเป็นเปอร์เซ็นต์ (%)" },
+  { value: "FIXED", label: "ลดเป็นจำนวนเงินคงที่ (บาท)" },
+];
+
+const SEGMENT_FIELD_OPTIONS = [
+  { value: "brandPreference", label: "แบรนด์ที่สนใจ (brandPreference)" },
+  { value: "favoriteCategory", label: "หมวดหมู่ที่สนใจ (favoriteCategory)" },
+  { value: "styleTag", label: "สไตล์แฟชั่นที่สนใจ (styleTag)" },
+];
+
+const SEGMENT_OP_BRAND_OPTIONS = [
+  { value: "in", label: "ตรงกับแบรนด์ใดแบรนด์หนึ่ง" },
+  { value: "nin", label: "ไม่รวมแบรนด์ที่เลือก" },
+];
+
+const SEGMENT_OP_GENERAL_OPTIONS = [
+  { value: "eq", label: "ตรงกับ" },
+  { value: "neq", label: "ไม่ตรงกับ" },
+];
+
+const STYLE_TAG_OPTIONS = [
+  { value: "", label: "-- เลือกสไตล์ --" },
+  { value: "streetwear", label: "Streetwear" },
+  { value: "vintage", label: "Vintage" },
+  { value: "minimal", label: "Minimal" },
+  { value: "y2k", label: "Y2K" },
+  { value: "casual", label: "Casual" },
+  { value: "sportswear", label: "Sportswear" },
+  { value: "workwear", label: "Workwear" },
 ];
 
 function formatThaiDateTime(dateString) {
@@ -86,6 +122,69 @@ function formatSegmentSummary(rules) {
   return `${label}: ${val}`;
 }
 
+function campaignEndLabel(campaign, isExpired) {
+  if (isExpired || campaign.endReason === "EXPIRED") {
+    return "สิ้นสุดแล้ว (หมดเวลา)";
+  }
+  if (campaign.endReason === "BUDGET_EXHAUSTED") {
+    return "สิ้นสุดแล้ว (วงเงินครบ)";
+  }
+  if (campaign.endReason === "USAGE_LIMIT_REACHED") {
+    return "สิ้นสุดแล้ว (สิทธิ์หมด)";
+  }
+  if (campaign.endReason === "ADMIN_CLOSED") {
+    return "สิ้นสุดแล้ว (ปิดโดยผู้ดูแล)";
+  }
+  return "สิ้นสุดแล้ว";
+}
+
+function CampaignCouponPreview({ campaign }) {
+  const isPercent = campaign.discountType === "PERCENT";
+  return (
+    <div className="rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-600">
+            ตัวอย่างคูปอง
+          </div>
+          <div className="mt-1 truncate font-mono text-base font-bold text-slate-900">
+            {campaign.code || "รหัสคูปอง"}
+          </div>
+          <div className="mt-0.5 text-xs font-semibold text-slate-700">
+            {campaign.name || "ชื่อแคมเปญ"}
+          </div>
+        </div>
+        <div className="rounded-xl bg-brand-600 px-3 py-2 text-right text-white">
+          <div className="text-[10px] opacity-80">รับส่วนลด</div>
+          <div className="text-lg font-bold leading-none">
+            {isPercent
+              ? `${campaign.discountValue || 0}%`
+              : `฿${Number(campaign.discountValue || 0).toLocaleString("th-TH")}`}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-1 text-[11px] text-slate-600 sm:grid-cols-2">
+        <div>
+          ยอดซื้อขั้นต่ำ ฿
+          {Number(campaign.minOrderPrice || 0).toLocaleString("th-TH")}
+        </div>
+        <div>ใช้กับ {campaign.applicableCategory || "ทุกหมวดหมู่"}</div>
+        {isPercent && campaign.maxDiscount ? (
+          <div>
+            ลดสูงสุด ฿{Number(campaign.maxDiscount).toLocaleString("th-TH")}
+          </div>
+        ) : null}
+        <div>กลุ่มเป้าหมาย: {formatSegmentSummary(campaign.targetSegment)}</div>
+      </div>
+      {campaign.description ? (
+        <p className="mt-3 border-t border-brand-100 pt-2 text-[11px] text-slate-500">
+          {campaign.description}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export default function CampaignsSection({ token }) {
   const [campaigns, setCampaigns] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -93,6 +192,10 @@ export default function CampaignsSection({ token }) {
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [summary, setSummary] = useState(null);
 
   // Editor modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -144,6 +247,7 @@ export default function CampaignsSection({ token }) {
 
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [viewCampaign, setViewCampaign] = useState(null);
 
   // Reject modal state
   const [rejectTarget, setRejectTarget] = useState(null);
@@ -162,19 +266,36 @@ export default function CampaignsSection({ token }) {
     setTimeout(() => setToastMessage(""), 3500);
   }
 
-  async function loadCampaigns() {
+  async function loadCampaigns(pageToLoad = page) {
     setLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
       if (search.trim()) params.set("search", search.trim());
-      params.set("limit", 100);
+      params.set("page", pageToLoad);
+      params.set("limit", MARKETING_PAGE_SIZE);
 
       const data = await apiFetch(`/api/products/campaigns?${params}`, {
         token,
       });
-      setCampaigns(data.items || []);
+      const items = data.items || [];
+      const totalCount = data.total ?? items.length;
+      const calculatedTotalPages = Math.max(
+        1,
+        data.totalPages ?? Math.ceil(totalCount / MARKETING_PAGE_SIZE),
+      );
+
+      if (calculatedTotalPages > 0 && pageToLoad > calculatedTotalPages) {
+        setPage(calculatedTotalPages);
+        loadCampaigns(calculatedTotalPages);
+        return;
+      }
+
+      setCampaigns(items);
+      setTotal(totalCount);
+      setTotalPages(calculatedTotalPages);
+      setSummary(data.summary || null);
     } catch (err) {
       console.error("Failed to load campaigns:", err);
       setError(err.message || "ไม่สามารถดึงข้อมูลแคมเปญได้");
@@ -219,12 +340,14 @@ export default function CampaignsSection({ token }) {
   }, []);
 
   useEffect(() => {
-    loadCampaigns();
+    setPage(1);
+    loadCampaigns(1);
   }, [token, statusFilter]);
 
   function handleSearchSubmit(e) {
     e.preventDefault();
-    loadCampaigns();
+    setPage(1);
+    loadCampaigns(1);
   }
 
   function handleSelectBrand(name) {
@@ -355,6 +478,17 @@ export default function CampaignsSection({ token }) {
     setModalOpen(true);
   }
 
+  function openDuplicateModal(camp) {
+    openEditModal(camp);
+    setEditingCampaign(null);
+    setCode("");
+    setName(`${camp.name} (สำเนา)`);
+    const now = new Date();
+    const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    setStartsAt(toLocalDatetimeInput(now));
+    setEndsAt(toLocalDatetimeInput(nextMonth));
+  }
+
   async function handleSaveCampaign(e) {
     e.preventDefault();
     setFormError("");
@@ -374,6 +508,26 @@ export default function CampaignsSection({ token }) {
     }
     if (discountType === "PERCENT" && (val < 1 || val > 100)) {
       setFormError("ส่วนลดแบบเปอร์เซ็นต์ต้องอยู่ระหว่าง 1 ถึง 100%");
+      return;
+    }
+    const minimumOrder = Number(minOrderPrice) || 0;
+    const configuredBudget = budget ? Number(budget) : null;
+    const configuredUsageLimit = usageLimit ? Number(usageLimit) : null;
+    if (discountType === "FIXED" && val >= minimumOrder) {
+      setFormError(
+        "ส่วนลดคงที่ต้องน้อยกว่ายอดซื้อขั้นต่ำ เพื่อไม่ให้ยอดชำระเป็นศูนย์หรือติดลบ",
+      );
+      return;
+    }
+    if (
+      discountType === "FIXED" &&
+      configuredBudget !== null &&
+      configuredUsageLimit !== null &&
+      configuredBudget < configuredUsageLimit * val
+    ) {
+      setFormError(
+        "งบประมาณต้องไม่น้อยกว่าจำนวนสิทธิ์คูณส่วนลดคงที่ต่อครั้ง",
+      );
       return;
     }
     if (!startsAt || !endsAt) {
@@ -488,12 +642,18 @@ export default function CampaignsSection({ token }) {
   }
 
   // Lifecycle action trigger
-  async function triggerAction(endpoint, successMsg, method = "POST") {
+  async function triggerAction(
+    endpoint,
+    successMsg,
+    method = "POST",
+    body,
+  ) {
     setActionLoading(true);
     try {
       await apiFetch(endpoint, {
         method,
         token,
+        ...(body ? { body } : {}),
       });
       showToast(successMsg);
       setConfirmAction(null);
@@ -527,22 +687,55 @@ export default function CampaignsSection({ token }) {
     }
   }
 
-  // Summary KPIs
-  const totalCampaigns = campaigns.length;
+  // Summary KPIs (aggregated across dataset before pagination)
+  const totalCampaigns = summary?.total ?? total ?? campaigns.length;
   const now = new Date();
-  const publishedCount = campaigns.filter(
-    (c) =>
-      c.status === "published" &&
-      new Date(c.startsAt) <= now &&
-      new Date(c.endsAt) >= now,
-  ).length;
-  const pendingCount = campaigns.filter(
-    (c) => c.status === "pending_approval",
-  ).length;
-  const totalClaimed = campaigns.reduce(
-    (sum, c) => sum + (c._count?.vouchers || c.usedCount || 0),
-    0,
-  );
+  const publishedCount =
+    summary?.published ??
+    campaigns.filter(
+      (c) =>
+        c.status === "published" &&
+        new Date(c.startsAt) <= now &&
+        new Date(c.endsAt) >= now,
+    ).length;
+  const pendingCount =
+    summary?.pending ??
+    campaigns.filter((c) => c.status === "pending_approval").length;
+  const totalClaimed =
+    summary?.totalClaimed ??
+    campaigns.reduce(
+      (sum, c) => sum + (c._count?.vouchers || c.usedCount || 0),
+      0,
+    );
+  const percentageBudgetWarning =
+    discountType === "PERCENT" &&
+    Boolean(budget) &&
+    Boolean(usageLimit) &&
+    (!maxDiscount ||
+      Number(budget) < Number(usageLimit) * Number(maxDiscount));
+  const previewTargetSegment =
+    segmentMode !== "targeted"
+      ? null
+      : [
+          {
+            field: segmentField,
+            value:
+              segmentField === "brandPreference"
+                ? selectedBrands
+                : segmentValue,
+          },
+        ];
+  const campaignPreview = {
+    code,
+    name,
+    description,
+    discountType,
+    discountValue,
+    minOrderPrice,
+    maxDiscount,
+    applicableCategory,
+    targetSegment: previewTargetSegment,
+  };
 
   return (
     <div className="space-y-6">
@@ -564,7 +757,6 @@ export default function CampaignsSection({ token }) {
           </h1>
           <p className="text-xs text-slate-500 mt-1">
             สร้าง อนุมัติ เผยแพร่ และตรวจสอบเงื่อนไขส่วนลดโปรโมชันตามลำดับขั้น
-            (MKT-001 / UR-15, UR-16)
           </p>
         </div>
         <Button
@@ -663,17 +855,12 @@ export default function CampaignsSection({ token }) {
           <label className="text-xs font-semibold text-slate-500 shrink-0">
             สถานะ:
           </label>
-          <select
+          <DropdownFilter
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full md:w-auto rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-700 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-100"
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={setStatusFilter}
+            options={STATUS_OPTIONS}
+            align="right"
+          />
         </div>
       </div>
 
@@ -695,8 +882,17 @@ export default function CampaignsSection({ token }) {
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-          <div className="overflow-x-auto -mx-1">
-            <table className="w-full min-w-[780px] text-left text-xs">
+          <div>
+            <table className="w-full table-fixed text-left text-xs [&_th]:px-2 [&_td]:px-2 xl:[&_th]:px-4 xl:[&_td]:px-4 [&_td]:break-words">
+              <colgroup>
+                <col className="w-[20%]" />
+                <col className="w-[11%]" />
+                <col className="w-[15%]" />
+                <col className="w-[18%]" />
+                <col className="w-[12%]" />
+                <col className="w-[10%]" />
+                <col className="w-[14%]" />
+              </colgroup>
               <thead className="border-b border-slate-200/80 bg-slate-50/75 text-[11px] font-bold tracking-wider text-slate-500 uppercase">
                 <tr>
                   <th className="px-4 py-3">รหัส / ชื่อแคมเปญ</th>
@@ -717,13 +913,18 @@ export default function CampaignsSection({ token }) {
                   const effectiveStatus = isExpired ? "ended" : camp.status;
                   const statusInfo = isExpired
                     ? {
-                        label: "สิ้นสุดแล้ว (หมดเวลา)",
+                        label: campaignEndLabel(camp, true),
                         color: "bg-purple-50 text-purple-700 border-purple-200",
                       }
-                    : STATUS_MAP[effectiveStatus] || {
-                        label: camp.status,
-                        color: "bg-slate-100 text-slate-700",
+                    : {
+                        ...(STATUS_MAP[effectiveStatus] || {
+                          label: camp.status,
+                          color: "bg-slate-100 text-slate-700",
+                        }),
                       };
+                  if (effectiveStatus === "ended") {
+                    statusInfo.label = campaignEndLabel(camp, false);
+                  }
                   const discountLabel =
                     camp.discountType === "PERCENT"
                       ? `ลด ${camp.discountValue}% ${camp.maxDiscount ? `(สูงสุด ฿${camp.maxDiscount})` : ""}`
@@ -736,15 +937,15 @@ export default function CampaignsSection({ token }) {
                     >
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                          <span title={camp.code} className="min-w-0 truncate font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                             {camp.code}
                           </span>
                         </div>
-                        <div className="font-semibold text-slate-800 mt-1 line-clamp-1">
+                        <div title={camp.name} className="font-semibold text-slate-800 mt-1 line-clamp-1">
                           {camp.name}
                         </div>
                         {camp.description && (
-                          <div className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+                          <div title={camp.description} className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
                             {camp.description}
                           </div>
                         )}
@@ -772,7 +973,7 @@ export default function CampaignsSection({ token }) {
                         {Array.isArray(camp.targetSegment) &&
                         camp.targetSegment.length > 0 ? (
                           <div className="mt-1">
-                            <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
+                            <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
                               <span className="material-symbols-outlined text-[12px]">
                                 group
                               </span>
@@ -815,13 +1016,16 @@ export default function CampaignsSection({ token }) {
 
                       <td className="px-4 py-3.5">
                         <div className="font-semibold text-slate-800">
-                          {camp._count?.vouchers ?? camp.usedCount ?? 0}
+                          เก็บ {camp.claimedCount ?? camp.usedCount ?? 0}
                           {camp.usageLimit
-                            ? ` / ${camp.usageLimit}`
-                            : " สิทธิ์"}
+                            ? ` / โควตา ${camp.usageLimit}`
+                            : " / ไม่จำกัด"}
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-slate-500">
+                          ใช้สำเร็จ {camp.redeemedCount ?? 0} สิทธิ์
                         </div>
                         {camp.usageLimit && (
-                          <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
+                          <div className="w-16 max-w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
                             <div
                               className="bg-brand-500 h-full rounded-full"
                               style={{
@@ -833,10 +1037,10 @@ export default function CampaignsSection({ token }) {
                         {camp.budget ? (
                           <>
                             <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
-                              {`ใช้แล้ว ฿${(camp.spentBudget || 0).toLocaleString("th-TH")} / ฿${camp.budget.toLocaleString("th-TH")}`}
+                              {`ใช้งบ ฿${Number(camp.spentBudget || 0).toLocaleString("th-TH")} / งบ ฿${camp.budget.toLocaleString("th-TH")}`}
                             </div>
                             <div
-                              className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1"
+                              className="w-16 max-w-full bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1"
                               title="สัดส่วนงบประมาณที่ใช้"
                             >
                               <div
@@ -857,20 +1061,46 @@ export default function CampaignsSection({ token }) {
                               />
                             </div>
                           </>
-                        ) : null}
+                        ) : (
+                          <div className="mt-1 text-[10px] font-medium text-slate-500">
+                            ไม่จำกัดงบ
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-4 py-3.5">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${statusInfo.color}`}
+                          className={`inline-flex max-w-full items-center justify-center px-2 py-0.5 rounded-full text-center text-[11px] font-semibold border ${statusInfo.color}`}
                         >
                           {statusInfo.label}
                         </span>
                       </td>
 
                       {/* Action buttons based on State Machine */}
-                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5 [&_button]:max-w-full [&_button]:whitespace-normal">
+                          <button
+                            type="button"
+                            onClick={() => setViewCampaign(camp)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                            title="ดูรายละเอียดแคมเปญ"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">
+                              visibility
+                            </span>
+                            ดู
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openDuplicateModal(camp)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                            title="สร้างฉบับร่างจากแคมเปญนี้"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">
+                              content_copy
+                            </span>
+                            สร้างซ้ำ
+                          </button>
                           {camp.status === "draft" && (
                             <>
                               <button
@@ -951,7 +1181,7 @@ export default function CampaignsSection({ token }) {
                             </>
                           )}
 
-                          {camp.status === "approved" && (
+                          {camp.status === "approved" && !isExpired && (
                             <button
                               onClick={() =>
                                 setConfirmAction({
@@ -978,11 +1208,17 @@ export default function CampaignsSection({ token }) {
                                   title: "ยืนยันสิ้นสุดแคมเปญ",
                                   message: `คุณต้องการสั่งปิดแคมเปญ "${camp.name}" (${camp.code}) ทันทีใช่หรือไม่? ผู้ซื้อจะไม่สามารถกดเก็บสิทธิ์เพิ่มได้`,
                                   confirmLabel: "ปิดแคมเปญ",
-                                  variant: "danger",
-                                  actionFn: () =>
+                                  tone: "danger",
+                                  reason: "required",
+                                  reasonLabel: "เหตุผลที่ปิดแคมเปญ",
+                                  reasonHint:
+                                    "เหตุผลนี้จะถูกบันทึกใน Audit Log",
+                                  actionFn: (reason) =>
                                     triggerAction(
                                       `/api/products/campaigns/${camp.id}/end`,
                                       "ปิดแคมเปญเรียบร้อยแล้ว",
+                                      "POST",
+                                      { reason },
                                     ),
                                 })
                               }
@@ -1028,8 +1264,63 @@ export default function CampaignsSection({ token }) {
               </tbody>
             </table>
           </div>
+          <MarketingPagination
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            loading={loading}
+            onPageChange={(p) => {
+              setPage(p);
+              loadCampaigns(p);
+            }}
+          />
         </div>
       )}
+
+      <Modal
+        open={Boolean(viewCampaign)}
+        onClose={() => setViewCampaign(null)}
+        title="รายละเอียดแคมเปญ"
+        size="lg"
+      >
+        {viewCampaign && (
+          <div className="space-y-4">
+            <CampaignCouponPreview campaign={viewCampaign} />
+            <dl className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs sm:grid-cols-2">
+              <div>
+                <dt className="text-slate-500">ช่วงเวลาเริ่ม</dt>
+                <dd className="mt-0.5 font-semibold text-slate-800">
+                  {formatThaiDateTime(viewCampaign.startsAt)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">ช่วงเวลาสิ้นสุด</dt>
+                <dd className="mt-0.5 font-semibold text-slate-800">
+                  {formatThaiDateTime(viewCampaign.endsAt)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">จำนวนสิทธิ์</dt>
+                <dd className="mt-0.5 font-semibold text-slate-800">
+                  เก็บ {viewCampaign.claimedCount ?? viewCampaign.usedCount ?? 0}
+                  {viewCampaign.usageLimit
+                    ? ` / โควตา ${viewCampaign.usageLimit}`
+                    : " / ไม่จำกัด"}
+                  {` · ใช้สำเร็จ ${viewCampaign.redeemedCount ?? 0}`}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">งบประมาณ</dt>
+                <dd className="mt-0.5 font-semibold text-slate-800">
+                  {viewCampaign.budget
+                    ? `ใช้งบ ฿${Number(viewCampaign.spentBudget || 0).toLocaleString("th-TH")} / งบ ฿${Number(viewCampaign.budget).toLocaleString("th-TH")}`
+                    : "ไม่จำกัดงบ"}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
+      </Modal>
 
       {/* Modal สร้าง / แก้ไขแคมเปญ */}
       <Modal
@@ -1062,17 +1353,23 @@ export default function CampaignsSection({ token }) {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label
+                htmlFor="campaign-discount-type"
+                className="block text-xs font-semibold text-slate-700 mb-1"
+              >
                 ประเภทส่วนลด *
               </label>
-              <select
+              <RadioSelect
+                id="campaign-discount-type"
+                name="discountType"
                 value={discountType}
-                onChange={(e) => setDiscountType(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-              >
-                <option value="PERCENT">ลดเป็นเปอร์เซ็นต์ (%)</option>
-                <option value="FIXED">ลดเป็นจำนวนเงินคงที่ (บาท)</option>
-              </select>
+                onChange={setDiscountType}
+                options={DISCOUNT_TYPE_OPTIONS}
+                variant="form"
+                size="sm"
+                className="w-full"
+                buttonClassName="w-full"
+              />
             </div>
           </div>
 
@@ -1102,6 +1399,8 @@ export default function CampaignsSection({ token }) {
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
             />
           </div>
+
+          <CampaignCouponPreview campaign={campaignPreview} />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -1158,21 +1457,26 @@ export default function CampaignsSection({ token }) {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label
+                htmlFor="campaign-applicable-category"
+                className="block text-xs font-semibold text-slate-700 mb-1"
+              >
                 หมวดหมู่สินค้าที่ใช้ได้
               </label>
-              <select
+              <RadioSelect
+                id="campaign-applicable-category"
+                name="applicableCategory"
                 value={applicableCategory}
-                onChange={(e) => setApplicableCategory(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-              >
-                <option value="">ใช้ได้กับทุกหมวดหมู่</option>
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
+                onChange={setApplicableCategory}
+                options={[
+                  { value: "", label: "ใช้ได้กับทุกหมวดหมู่" },
+                  ...categories.map((cat) => ({ value: cat, label: cat })),
+                ]}
+                variant="form"
+                size="sm"
+                className="w-full"
+                buttonClassName="w-full"
+              />
             </div>
           </div>
 
@@ -1205,6 +1509,13 @@ export default function CampaignsSection({ token }) {
               />
             </div>
           </div>
+
+          {percentageBudgetWarning && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+              งบที่กำหนดอาจไม่พอสำหรับทุกสิทธิ์ของส่วนลดแบบเปอร์เซ็นต์
+              ระบบจะตรวจวงเงินจริงอีกครั้งก่อนใช้คูปองทุกครั้ง
+            </div>
+          )}
 
           {/* กำหนดกลุ่มเป้าหมาย (Buyer Segmentation) */}
           <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-3">
@@ -1275,13 +1586,18 @@ export default function CampaignsSection({ token }) {
               <div className="pt-2 border-t border-slate-200/80 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    <label
+                      htmlFor="segment-field-select"
+                      className="block text-[11px] font-semibold text-slate-700 mb-1"
+                    >
                       เงื่อนไขเป้าหมาย
                     </label>
-                    <select
+                    <RadioSelect
+                      id="segment-field-select"
+                      name="segmentField"
+                      nativeAriaLabel="เลือกเงื่อนไขเป้าหมาย"
                       value={segmentField}
-                      onChange={(e) => {
-                        const newField = e.target.value;
+                      onChange={(newField) => {
                         if (newField === segmentField) return;
                         setSegmentField(newField);
                         setSelectedBrands([]);
@@ -1293,46 +1609,37 @@ export default function CampaignsSection({ token }) {
                           setSegmentOp("eq");
                         }
                       }}
-                      aria-label="เลือกเงื่อนไขเป้าหมาย"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                    >
-                      <option value="brandPreference">
-                        แบรนด์ที่สนใจ (brandPreference)
-                      </option>
-                      <option value="favoriteCategory">
-                        หมวดหมู่ที่สนใจ (favoriteCategory)
-                      </option>
-                      <option value="styleTag">
-                        สไตล์แฟชั่นที่สนใจ (styleTag)
-                      </option>
-                    </select>
+                      options={SEGMENT_FIELD_OPTIONS}
+                      variant="form"
+                      size="sm"
+                      className="w-full"
+                      buttonClassName="w-full"
+                    />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    <label
+                      htmlFor="segment-op-select"
+                      className="block text-[11px] font-semibold text-slate-700 mb-1"
+                    >
                       การเปรียบเทียบ
                     </label>
-                    {segmentField === "brandPreference" ? (
-                      <select
-                        value={segmentOp}
-                        onChange={(e) => setSegmentOp(e.target.value)}
-                        aria-label="เลือกการเปรียบเทียบ"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                      >
-                        <option value="in">ตรงกับแบรนด์ใดแบรนด์หนึ่ง</option>
-                        <option value="nin">ไม่รวมแบรนด์ที่เลือก</option>
-                      </select>
-                    ) : (
-                      <select
-                        value={segmentOp}
-                        onChange={(e) => setSegmentOp(e.target.value)}
-                        aria-label="เลือกการเปรียบเทียบ"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                      >
-                        <option value="eq">ตรงกับ</option>
-                        <option value="neq">ไม่ตรงกับ</option>
-                      </select>
-                    )}
+                    <RadioSelect
+                      id="segment-op-select"
+                      name="segmentOp"
+                      nativeAriaLabel="เลือกการเปรียบเทียบ"
+                      value={segmentOp}
+                      onChange={setSegmentOp}
+                      options={
+                        segmentField === "brandPreference"
+                          ? SEGMENT_OP_BRAND_OPTIONS
+                          : SEGMENT_OP_GENERAL_OPTIONS
+                      }
+                      variant="form"
+                      size="sm"
+                      className="w-full"
+                      buttonClassName="w-full"
+                    />
                   </div>
                 </div>
 
@@ -1456,41 +1763,34 @@ export default function CampaignsSection({ token }) {
                       )}
                     </div>
                   ) : segmentField === "favoriteCategory" ? (
-                    <select
+                    <RadioSelect
+                      id="segment-favorite-category-select"
+                      name="segmentValue"
+                      nativeAriaLabel="เลือกหมวดหมู่ที่สนใจ"
                       value={segmentValue}
-                      onChange={(e) => setSegmentValue(e.target.value)}
-                      aria-label="เลือกหมวดหมู่ที่สนใจ"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                    >
-                      <option value="">-- เลือกหมวดหมู่ --</option>
-                      {categories.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setSegmentValue}
+                      options={[
+                        { value: "", label: "-- เลือกหมวดหมู่ --" },
+                        ...categories.map((c) => ({ value: c, label: c })),
+                      ]}
+                      variant="form"
+                      size="sm"
+                      className="w-full"
+                      buttonClassName="w-full"
+                    />
                   ) : segmentField === "styleTag" ? (
-                    <select
+                    <RadioSelect
+                      id="segment-style-tag-select"
+                      name="segmentValue"
+                      nativeAriaLabel="เลือกสไตล์แฟชั่นที่สนใจ"
                       value={segmentValue}
-                      onChange={(e) => setSegmentValue(e.target.value)}
-                      aria-label="เลือกสไตล์แฟชั่นที่สนใจ"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-                    >
-                      <option value="">-- เลือกสไตล์ --</option>
-                      {[
-                        "Streetwear",
-                        "Vintage",
-                        "Minimal",
-                        "Y2K",
-                        "Casual",
-                        "Sportswear",
-                        "Workwear",
-                      ].map((st) => (
-                        <option key={st} value={st.toLowerCase()}>
-                          {st}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setSegmentValue}
+                      options={STYLE_TAG_OPTIONS}
+                      variant="form"
+                      size="sm"
+                      className="w-full"
+                      buttonClassName="w-full"
+                    />
                   ) : (
                     <input
                       type="text"
@@ -1608,11 +1908,14 @@ export default function CampaignsSection({ token }) {
       <ConfirmDialog
         open={Boolean(confirmAction)}
         title={confirmAction?.title || "ยืนยันการดำเนินการ"}
-        message={confirmAction?.message || ""}
+        description={confirmAction?.message || ""}
         confirmLabel={confirmAction?.confirmLabel || "ยืนยัน"}
-        variant={confirmAction?.variant || "primary"}
-        loading={actionLoading}
-        onConfirm={() => confirmAction?.actionFn?.()}
+        tone={confirmAction?.tone || confirmAction?.variant || "primary"}
+        reason={confirmAction?.reason || "none"}
+        reasonLabel={confirmAction?.reasonLabel}
+        reasonHint={confirmAction?.reasonHint}
+        busy={actionLoading}
+        onConfirm={(reason) => confirmAction?.actionFn?.(reason)}
         onCancel={() => setConfirmAction(null)}
       />
     </div>

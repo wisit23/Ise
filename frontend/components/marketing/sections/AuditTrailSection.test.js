@@ -1,5 +1,8 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import AuditTrailSection, { convertAuditDateFilter } from "./AuditTrailSection";
+import AuditTrailSection, {
+  convertAuditDateFilter,
+  renderDiffValue,
+} from "./AuditTrailSection";
 import { getMarketingAuditLogs } from "../../../lib/api";
 
 jest.mock("../../../lib/api", () => ({
@@ -123,9 +126,9 @@ describe("AuditTrailSection", () => {
     const actionSelect = screen.getByLabelText(/คำสั่ง \(Action\)/i);
     fireEvent.change(actionSelect, { target: { value: "CAMPAIGN_CREATE" } });
 
-    // Fill actor ID
+    // Fill operator search query
     const actorInput = screen.getByPlaceholderText(
-      /e\.g\. SYSTEM หรือ user id/i,
+      /ค้นหาชื่อหรือรหัสผู้ดำเนินการ/i,
     );
     fireEvent.change(actorInput, { target: { value: "user-123" } });
 
@@ -137,12 +140,14 @@ describe("AuditTrailSection", () => {
       expect(getMarketingAuditLogs).toHaveBeenCalledWith(
         expect.objectContaining({
           action: "CAMPAIGN_CREATE",
-          actorId: "user-123",
+          actorQuery: "user-123",
           page: 1,
           limit: 20,
         }),
         mockToken,
       );
+      const callArgs = getMarketingAuditLogs.mock.calls[0][0];
+      expect(callArgs.actorId).toBeUndefined();
     });
   });
 
@@ -161,7 +166,7 @@ describe("AuditTrailSection", () => {
     });
 
     const actorInput = screen.getByPlaceholderText(
-      /e\.g\. SYSTEM หรือ user id/i,
+      /ค้นหาชื่อหรือรหัสผู้ดำเนินการ/i,
     );
     fireEvent.change(actorInput, { target: { value: "custom-user" } });
     expect(actorInput.value).toBe("custom-user");
@@ -246,7 +251,7 @@ describe("AuditTrailSection", () => {
 
     // Verify modal contents
     expect(
-      screen.getByText("Summer Sale 2026", { exact: false }),
+      screen.getAllByText("Summer Sale 2026", { exact: false })[0],
     ).toBeInTheDocument();
 
     // Close modal using close button
@@ -356,5 +361,308 @@ describe("AuditTrailSection", () => {
         screen.getByText("วันที่เริ่มต้นต้องไม่มากกว่าวันที่สิ้นสุด"),
       ).toBeInTheDocument();
     });
+  });
+
+  test("displays operator name and related entity name with rename indicator", async () => {
+    const enrichedLogs = [
+      {
+        id: "audit-enrich-1",
+        actorId: "u-999",
+        actorName: "สมชาย ผู้จัดการ",
+        actorRole: "MARKETING",
+        action: "CAMPAIGN_UPDATE",
+        entityType: "CAMPAIGN",
+        entityId: "camp-099",
+        entityName: "แคมเปญลดพิเศษ 2026",
+        previousEntityName: "แคมเปญเดิม",
+        newEntityName: "แคมเปญลดพิเศษ 2026",
+        previousState: { name: "แคมเปญเดิม" },
+        newState: { name: "แคมเปญลดพิเศษ 2026" },
+        createdAt: "2026-06-01T10:00:00.000Z",
+      },
+    ];
+
+    getMarketingAuditLogs.mockResolvedValueOnce({
+      items: enrichedLogs,
+      total: 1,
+      page: 1,
+      totalPages: 1,
+    });
+
+    render(<AuditTrailSection token={mockToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("สมชาย ผู้จัดการ")).toBeInTheDocument();
+      expect(screen.getByText("แคมเปญลดพิเศษ 2026")).toBeInTheDocument();
+      expect(screen.getByText("(เปลี่ยนชื่อ)")).toBeInTheDocument();
+    });
+  });
+
+  test("detail modal renders structured Thai diff table, highlights, and reference info without raw JSON", async () => {
+    const logWithDiff = {
+      id: "audit-diff-1",
+      actorId: "u-888",
+      actorName: "กานดา การตลาด",
+      actorRole: "MARKETING",
+      action: "ARTICLE_UPDATE",
+      entityType: "ARTICLE",
+      entityId: "art-555",
+      entityName: "เทรนด์แฟชั่นยั่งยืน",
+      previousState: {
+        title: "เทรนด์เก่า",
+        status: "draft",
+        content: "เนื้อหาบทความเดิมสั้นๆ",
+        budget: 0,
+        isActive: false,
+      },
+      newState: {
+        title: "เทรนด์แฟชั่นยั่งยืน",
+        status: "published",
+        content: "เนื้อหาบทความใหม่ที่ปรับปรุงแล้วเพื่อความสมบูรณ์แบบในการเผยแพร่สู่ผู้อ่าน",
+        budget: 5000,
+        isActive: true,
+      },
+      metadata: {
+        reason: "ปรับปรุงเนื้อหาตามข้อเสนอแนะของบรรณาธิการ",
+        approvedBy: "หัวหน้าฝ่ายการตลาด",
+      },
+      createdAt: "2026-06-01T10:00:00.000Z",
+    };
+
+    getMarketingAuditLogs.mockResolvedValueOnce({
+      items: [logWithDiff],
+      total: 1,
+      page: 1,
+      totalPages: 1,
+    });
+
+    render(<AuditTrailSection token={mockToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("เทรนด์แฟชั่นยั่งยืน")).toBeInTheDocument();
+    });
+
+    // Click view details
+    const detailBtn = screen.getByRole("button", { name: /ดูรายละเอียด/i });
+    fireEvent.click(detailBtn);
+
+    // Modal is open
+    expect(
+      screen.getByText("รายละเอียดบันทึกการดำเนินงาน (Audit Detail)"),
+    ).toBeInTheDocument();
+
+    // Verify structured Thai diff table headers
+    expect(screen.getByText("ข้อมูล (Field)")).toBeInTheDocument();
+    expect(screen.getByText("ก่อนดำเนินการ (Before)")).toBeInTheDocument();
+    expect(screen.getByText("หลังดำเนินการ (After)")).toBeInTheDocument();
+
+    // Verify Thai translated values
+    expect(screen.getByText("ใช่ / เปิดใช้งาน")).toBeInTheDocument();
+    expect(screen.getByText("ไม่ใช่ / ปิดใช้งาน")).toBeInTheDocument();
+    expect(screen.getByText("฿5,000")).toBeInTheDocument();
+
+    // Verify Metadata section rendered cleanly
+    expect(
+      screen.getByText("ข้อมูลเพิ่มเติมและหมายเหตุ (Metadata)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("ปรับปรุงเนื้อหาตามข้อเสนอแนะของบรรณาธิการ"),
+    ).toBeInTheDocument();
+
+    // Verify System Reference Info section at bottom
+    expect(
+      screen.getByText(/ข้อมูลอ้างอิงสำหรับการตรวจสอบ/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("audit-diff-1")).toBeInTheDocument();
+    expect(screen.getAllByText("art-555")[0]).toBeInTheDocument();
+
+    // Ensure NO raw JSON code blocks or <pre> elements exist
+    expect(document.querySelector("pre")).toBeNull();
+  });
+
+  test("detail modal correctly formats discountType switch (PERCENT -> FIXED), nested objects, and arrays without raw JSON", async () => {
+    const campaignDiffLog = {
+      id: "audit-camp-diff-1",
+      actorId: "usr-marketing-01",
+      actorName: "นารีรัตน์ การตลาด",
+      actorRole: "MARKETING",
+      action: "CAMPAIGN_UPDATE",
+      entityType: "CAMPAIGN",
+      entityId: "camp-777",
+      entityName: "แคมเปญลดกระหน่ำกลางปี",
+      previousState: {
+        name: "แคมเปญลดกระหน่ำกลางปี",
+        discountType: "PERCENT",
+        discountValue: 15,
+        targetSegment: { category: "FASHION", minOrders: 2 },
+        tieredRewards: [{ tier: "GOLD", bonus: 50 }, { tier: "SILVER", bonus: 20 }],
+      },
+      newState: {
+        name: "แคมเปญลดกระหน่ำกลางปี",
+        discountType: "FIXED",
+        discountValue: 100,
+        targetSegment: { category: "ELECTRONICS", minOrders: 5 },
+        tieredRewards: [{ tier: "PLATINUM", bonus: 100 }],
+      },
+      metadata: {
+        reason: "เปลี่ยนเงื่อนไขส่วนลดเป็นจำนวนเงินคงที่",
+      },
+      createdAt: "2026-06-03T14:30:00.000Z",
+    };
+
+    getMarketingAuditLogs.mockResolvedValueOnce({
+      items: [campaignDiffLog],
+      total: 1,
+      page: 1,
+      totalPages: 1,
+    });
+
+    render(<AuditTrailSection token={mockToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("แคมเปญลดกระหน่ำกลางปี")).toBeInTheDocument();
+    });
+
+    const detailBtn = screen.getByRole("button", { name: /ดูรายละเอียด/i });
+    fireEvent.click(detailBtn);
+
+    // Verify discountValue formatting respects each side's discountType
+    // Before side: PERCENT -> 15%
+    expect(screen.getByText("15%")).toBeInTheDocument();
+    // After side: FIXED -> ฿100
+    expect(screen.getByText("฿100")).toBeInTheDocument();
+
+    // Verify discountType labels
+    expect(screen.getByText("ลดเป็นเปอร์เซ็นต์ (%)")).toBeInTheDocument();
+    expect(screen.getByText("ลดเป็นจำนวนเงินคงที่ (บาท)")).toBeInTheDocument();
+
+    // Verify nested object rendered cleanly
+    expect(screen.getByText("FASHION")).toBeInTheDocument();
+    expect(screen.getByText("ELECTRONICS")).toBeInTheDocument();
+
+    // Verify array of objects rendered without raw JSON
+    expect(screen.getByText("GOLD")).toBeInTheDocument();
+    expect(screen.getByText("PLATINUM")).toBeInTheDocument();
+
+    // Verify no [object Object] or raw JSON braces
+    const modalContent = screen.getByRole("dialog").textContent;
+    expect(modalContent).not.toContain("[object Object]");
+    expect(modalContent).not.toContain('{"category":');
+    expect(document.querySelector("pre")).toBeNull();
+  });
+
+  test("translates searchText field to Thai label in detail modal", async () => {
+    const logWithSearchText = {
+      id: "audit-searchtext-1",
+      actorId: "usr-marketing-01",
+      actorName: "สมชาย แอดมิน",
+      actorRole: "MARKETING",
+      action: "ARTICLE_UPDATE",
+      entityType: "ARTICLE",
+      entityId: "art-101",
+      entityName: "เทคนิคการตั้งราคาประมูล",
+      previousState: {
+        title: "เทคนิคการตั้งราคา",
+        searchText: "เทคนิค การตั้งราคา",
+      },
+      newState: {
+        title: "เทคนิคการตั้งราคาประมูล",
+        searchText: "เทคนิค การตั้งราคาประมูล สินค้า",
+      },
+      createdAt: "2026-06-03T14:30:00.000Z",
+    };
+
+    getMarketingAuditLogs.mockResolvedValueOnce({
+      items: [logWithSearchText],
+      total: 1,
+      page: 1,
+      totalPages: 1,
+    });
+
+    render(<AuditTrailSection token={mockToken} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("เทคนิคการตั้งราคาประมูล")).toBeInTheDocument();
+    });
+
+    const detailBtn = screen.getByRole("button", { name: /ดูรายละเอียด/i });
+    fireEvent.click(detailBtn);
+
+    expect(screen.getByText("ข้อความสำหรับค้นหา")).toBeInTheDocument();
+  });
+});
+
+describe("renderDiffValue unit helper", () => {
+  test("formats discountValue according to context discountType", () => {
+    // PERCENT -> %
+    const { container: percentContainer } = render(
+      <div>{renderDiffValue("discountValue", 20, { discountType: "PERCENT" })}</div>,
+    );
+    expect(percentContainer.textContent).toBe("20%");
+
+    // FIXED -> ฿
+    const { container: fixedContainer } = render(
+      <div>{renderDiffValue("discountValue", 50, { discountType: "FIXED" })}</div>,
+    );
+    expect(fixedContainer.textContent).toBe("฿50");
+
+    // Unconfirmed discountType -> plain number, do not guess
+    const { container: plainContainer } = render(
+      <div>{renderDiffValue("discountValue", 30, null)}</div>,
+    );
+    expect(plainContainer.textContent).toBe("30");
+
+    const { container: plainObjContainer } = render(
+      <div>{renderDiffValue("discountValue", 45, {})}</div>,
+    );
+    expect(plainObjContainer.textContent).toBe("45");
+  });
+
+  test("formats nested objects without JSON.stringify or [object Object]", () => {
+    const nested = {
+      category: "BOOKS",
+      minOrders: 3,
+      verified: true,
+    };
+    const { container } = render(
+      <div>{renderDiffValue("targetSegment", nested)}</div>,
+    );
+    expect(container.textContent).not.toContain("[object Object]");
+    expect(container.textContent).not.toContain('{"category"');
+    expect(container.textContent).toContain("BOOKS");
+    expect(container.textContent).toContain("3");
+    expect(container.textContent).toContain("ใช่ / เปิดใช้งาน");
+  });
+
+  test("formats array of objects into structured elements without raw JSON", () => {
+    const objArray = [
+      { id: "1", label: "ขั้นที่ 1", reward: 50 },
+      { id: "2", label: "ขั้นที่ 2", reward: 100 },
+    ];
+    const { container } = render(
+      <div>{renderDiffValue("tiers", objArray)}</div>,
+    );
+    expect(container.textContent).not.toContain("[object Object]");
+    expect(container.textContent).not.toContain('{"id":');
+    expect(container.textContent).toContain("ขั้นที่ 1");
+    expect(container.textContent).toContain("ขั้นที่ 2");
+  });
+
+  test("preserves edge case falsy values: null, false, 0, and empty array", () => {
+    // null -> '-'
+    const { container: nullC } = render(<div>{renderDiffValue("notes", null)}</div>);
+    expect(nullC.textContent).toBe("-");
+
+    // false -> 'ไม่ใช่ / ปิดใช้งาน'
+    const { container: falseC } = render(<div>{renderDiffValue("isActive", false)}</div>);
+    expect(falseC.textContent).toBe("ไม่ใช่ / ปิดใช้งาน");
+
+    // 0 -> '0'
+    const { container: zeroC } = render(<div>{renderDiffValue("totalQuota", 0)}</div>);
+    expect(zeroC.textContent).toBe("0");
+
+    // empty array -> '(ไม่มีรายการ / ว่าง)'
+    const { container: emptyArrC } = render(<div>{renderDiffValue("tags", [])}</div>);
+    expect(emptyArrC.textContent).toBe("(ไม่มีรายการ / ว่าง)");
   });
 });

@@ -14,6 +14,7 @@ export default function AuctionReviewModal({
   onReject,
   actionLoading,
   errorMessage,
+  readOnly = false,
 }) {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
 
@@ -68,8 +69,8 @@ export default function AuctionReviewModal({
     <Modal
       open={isOpen}
       onClose={handleSafeClose}
-      title="ตรวจสอบสินค้าก่อนอนุมัติเข้าประมูล"
-      description="ตรวจสอบรูปภาพ รายละเอียด และเงื่อนไขการประมูลก่อนตัดสินใจอนุมัติ"
+      title={readOnly ? "รายละเอียดรายการประมูล" : "ตรวจสอบสินค้าก่อนอนุมัติเข้าประมูล"}
+      description={readOnly ? "ข้อมูลแบบอ่านอย่างเดียวจากประวัติรายการประมูล" : "ตรวจสอบรูปภาพ รายละเอียด และเงื่อนไขการประมูลก่อนตัดสินใจอนุมัติ"}
       size="xl"
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-3">
@@ -81,7 +82,7 @@ export default function AuctionReviewModal({
           >
             กลับไปหน้ารายการประมูล
           </button>
-          <div className="flex flex-wrap items-center gap-2">
+          {!readOnly && <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onReject}
@@ -107,7 +108,7 @@ export default function AuctionReviewModal({
                 ? "กำลังอนุมัติ..."
                 : "อนุมัติสินค้าเข้าประมูล"}
             </button>
-          </div>
+          </div>}
         </div>
       }
     >
@@ -243,6 +244,13 @@ export default function AuctionReviewModal({
                 error
               </span>
               <span className="flex-1 font-medium">{errorMessage}</span>
+            </div>
+          )}
+
+          {auction.cancellationReason && ["rejected", "cancelled"].includes(auction.status) && (
+            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+              <strong>{auction.status === "rejected" ? "เหตุผลที่ปฏิเสธ:" : "เหตุผลที่ยกเลิก:"}</strong>{" "}
+              {auction.cancellationReason}
             </div>
           )}
         </div>

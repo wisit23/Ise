@@ -8,7 +8,7 @@ import Alert from "../../components/ui/Alert";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
 import { apiFetch } from "../../lib/api";
-import { saveSession } from "../../lib/auth";
+import { resolvePostLoginPath, saveSession } from "../../lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,9 +38,18 @@ export default function LoginPage() {
         body: form,
       });
       saveSession(data);
-      // An executive's job here is the dashboard, not the storefront — land
-      // them on the business overview straight after login (UR-27).
-      router.push(data.user?.role === "EXECUTIVE" ? "/executive" : "/");
+      const searchParams = new URLSearchParams(window.location.search);
+      const requestedDestination =
+        searchParams.get("next") ||
+        searchParams.get("returnTo") ||
+        searchParams.get("redirect");
+      router.push(
+        resolvePostLoginPath({
+          accessToken: data.accessToken,
+          user: data.user,
+          requestedDestination,
+        }),
+      );
     } catch (err) {
       setError(err.message);
     } finally {

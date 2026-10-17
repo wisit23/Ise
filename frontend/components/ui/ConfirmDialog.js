@@ -20,6 +20,7 @@ export default function ConfirmDialog({
   reason = "none",
   reasonLabel = "เหตุผล",
   reasonHint,
+  note = "การกระทำนี้จะถูกบันทึกไว้ใน Audit Log",
   busy = false,
   onConfirm,
   onCancel,
@@ -61,9 +62,7 @@ export default function ConfirmDialog({
       }
     >
       {reason === "none" ? (
-        <p className="text-sm text-ink-muted">
-          การกระทำนี้จะถูกบันทึกไว้ใน Audit Log
-        </p>
+        note ? <p className="text-sm text-ink-muted">{note}</p> : null
       ) : (
         <Textarea
           label={reasonLabel}

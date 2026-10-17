@@ -250,6 +250,16 @@ test("payment retry after external failure does not charge or confirm orders twi
   assert.equal(result.status, "paid");
   assert.equal(f.state.payments.length, 2);
   assert.equal(f.calls.products.length, 2);
+  assert.deepEqual(f.calls.vouchers, [
+    [
+      "v1",
+      {
+        userId: "b1",
+        orderId: "o1",
+        discountAmount: 100.25,
+      },
+    ],
+  ]);
   await f.service.confirm(input);
   assert.equal(f.calls.products.length, 2);
   assert.equal(f.state.payments.length, 2);

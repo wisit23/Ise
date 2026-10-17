@@ -10,6 +10,22 @@ export const STAFF_ROLES = [
   "MARKETING",
   "EXECUTIVE",
 ];
+
+const DEFAULT_POST_LOGIN_PATH_BY_ROLE = {
+  EXECUTIVE: "/executive",
+  MARKETING: "/marketing",
+};
+
+const ROLE_PROTECTED_PATHS = [
+  { prefix: "/marketing", allowedRoles: ["MARKETING"] },
+  { prefix: "/executive", allowedRoles: ["EXECUTIVE"] },
+  {
+    prefix: "/workspace",
+    allowedRoles: ["CUSTOMER_SERVICE", "ADMIN", "TRUST_AND_SAFETY"],
+  },
+  { prefix: "/admin", allowedRoles: ["ADMIN", "TRUST_AND_SAFETY"] },
+  { prefix: "/seller", allowedRoles: ["SELLER"] },
+];
 function notifyAuthChange() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("reloop:auth"));
@@ -55,6 +71,66 @@ function decodeJwtPayload(token) {
   } catch {
     return null;
   }
+}
+
+function rolesFromAuthResult({ accessToken, user } = {}) {
+  const claims = decodeJwtPayload(accessToken);
+  if (Array.isArray(claims?.roles) && claims.roles.length > 0) {
+    return [...new Set(claims.roles)];
+  }
+
+  const fallbackRole = claims?.role || user?.role;
+  return fallbackRole ? [fallbackRole] : [];
+}
+
+export function safeInternalPath(destination) {
+  if (
+    typeof destination !== "string" ||
+    !destination.startsWith("/") ||
+    destination.startsWith("//") ||
+    destination.includes("\\")
+  ) {
+    return null;
+  }
+
+  try {
+    const baseUrl = "https://reloop.local";
+    const parsed = new URL(destination, baseUrl);
+    if (parsed.origin !== baseUrl || parsed.pathname === "/login") return null;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+function canAccessPath(path, roles) {
+  const pathname = new URL(path, "https://reloop.local").pathname;
+  const protectedPath = ROLE_PROTECTED_PATHS.find(
+    ({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+  return (
+    !protectedPath ||
+    protectedPath.allowedRoles.some((role) => roles.includes(role))
+  );
+}
+
+export function resolvePostLoginPath({
+  accessToken,
+  user,
+  requestedDestination,
+} = {}) {
+  const roles = rolesFromAuthResult({ accessToken, user });
+  const requestedPath = safeInternalPath(requestedDestination);
+
+  if (requestedPath && canAccessPath(requestedPath, roles)) {
+    return requestedPath;
+  }
+
+  if (!isValidRoleCombinationRoles(roles)) return "/";
+  const staffLandingRole = roles.find(
+    (role) => DEFAULT_POST_LOGIN_PATH_BY_ROLE[role],
+  );
+  return DEFAULT_POST_LOGIN_PATH_BY_ROLE[staffLandingRole] || "/";
 }
 
 export function getAccessTokenClaims() {

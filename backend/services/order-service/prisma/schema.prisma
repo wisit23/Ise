@@ -53,6 +53,8 @@ model Order {
   productTitle     String?                 @map("product_title")
   campaignCode     String?                 @map("campaign_code")
   auctionId        String?                 @unique @map("auction_id")
+  auctionBidId     String?                 @map("auction_bid_id")
+  paymentDeadlineAt DateTime?              @map("payment_deadline_at")
   orderType        String                  @map("order_type")
   originalAmount   Decimal                 @map("original_amount") @db.Decimal(18, 2)
   ordersAmount     Decimal                 @map("orders_amount") @db.Decimal(18, 2)
@@ -72,6 +74,7 @@ model Order {
   @@index([buyerId])
   @@index([sellerId])
   @@index([checkoutId])
+  @@index([orderType, status, paymentDeadlineAt])
   @@map("orders")
 }
 

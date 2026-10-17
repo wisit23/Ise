@@ -4,8 +4,20 @@ import { useEffect, useState, useCallback } from "react";
 import { apiFetch, getMarketingUserAnalytics } from "../../../lib/api";
 import KpiCard from "../../panel/ui/KpiCard";
 import ChartCard from "../../panel/ui/ChartCard";
-import DonutChart from "../../charts/DonutChart";
-import TrendBarChart from "../../charts/TrendBarChart";
+import TrendLineChart from "../../charts/TrendLineChart";
+import AuctionStatusBars from "./AuctionStatusBars";
+import { MARKETING_TIME_ZONE } from "../marketingConstants";
+import SalesMixChart, { formatMoney } from "./SalesMixChart";
+import UsageHeatmap from "./UsageHeatmap";
+
+const DEFAULT_RANGE_PRESET = "week";
+const RANGE_PRESETS = [
+  { key: "day", label: "วัน" },
+  { key: "week", label: "สัปดาห์" },
+  { key: "month", label: "เดือน" },
+  { key: "year", label: "ปี" },
+  { key: "custom", label: "กำหนดเอง" },
+];
 
 const DONUT_COLORS = {
   pending_approval: "#f59e0b",
@@ -32,12 +44,12 @@ function formatPeakHour(peakHour) {
   const date = new Date(peakHour.hour);
   if (Number.isNaN(date.getTime())) return "—";
   const dayStr = date.toLocaleDateString("th-TH", {
-    timeZone: "Asia/Bangkok",
+    timeZone: MARKETING_TIME_ZONE,
     month: "short",
     day: "numeric",
   });
   const timeStr = date.toLocaleTimeString("th-TH", {
-    timeZone: "Asia/Bangkok",
+    timeZone: MARKETING_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -50,12 +62,12 @@ function formatHourLabel(isoString) {
   const date = new Date(isoString);
   if (Number.isNaN(date.getTime())) return isoString;
   const dayStr = date.toLocaleDateString("th-TH", {
-    timeZone: "Asia/Bangkok",
+    timeZone: MARKETING_TIME_ZONE,
     month: "numeric",
     day: "numeric",
   });
   const timeStr = date.toLocaleTimeString("th-TH", {
-    timeZone: "Asia/Bangkok",
+    timeZone: MARKETING_TIME_ZONE,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -81,21 +93,178 @@ export function convertThaiDateFilterToRange(fromDateStr, toDateStr) {
   const nextD = String(nextDate.getUTCDate()).padStart(2, "0");
   const to = `${nextY}-${nextM}-${nextD}T00:00:00+07:00`;
 
-  return { from, to, timezone: "Asia/Bangkok" };
+  return { from, to, timezone: MARKETING_TIME_ZONE };
+}
+
+function formatCalendarDate(date) {
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+export function getCalendarDateRange(preset, now = new Date()) {
+  const bangkokNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const year = bangkokNow.getUTCFullYear();
+  const month = bangkokNow.getUTCMonth();
+  const day = bangkokNow.getUTCDate();
+  const today = new Date(Date.UTC(year, month, day));
+  let from = new Date(today);
+  let to = new Date(today);
+
+  if (preset === "week") {
+    const mondayOffset = (today.getUTCDay() + 6) % 7;
+    from.setUTCDate(from.getUTCDate() - mondayOffset);
+    to = new Date(from);
+    to.setUTCDate(to.getUTCDate() + 6);
+  } else if (preset === "month") {
+    from = new Date(Date.UTC(year, month, 1));
+    to = new Date(Date.UTC(year, month + 1, 0));
+  } else if (preset === "year") {
+    from = new Date(Date.UTC(year, 0, 1));
+    to = new Date(Date.UTC(year, 11, 31));
+  }
+
+  return { fromDate: formatCalendarDate(from), toDate: formatCalendarDate(to) };
+}
+
+function isDateInput(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value || "");
+}
+
+export function readDashboardFilter(search = "", now = new Date()) {
+  const params = new URLSearchParams(search);
+  const requestedPreset = params.get("range");
+  const preset = RANGE_PRESETS.some((item) => item.key === requestedPreset)
+    ? requestedPreset
+    : DEFAULT_RANGE_PRESET;
+  const queryFrom = params.get("from");
+  const queryTo = params.get("to");
+  const fallback = getCalendarDateRange(preset === "custom" ? DEFAULT_RANGE_PRESET : preset, now);
+  const fromDate = isDateInput(queryFrom) ? queryFrom : fallback.fromDate;
+  const toDate = isDateInput(queryTo) ? queryTo : fallback.toDate;
+  const safePreset = preset === "custom" && (!isDateInput(queryFrom) || !isDateInput(queryTo))
+    ? DEFAULT_RANGE_PRESET
+    : preset;
+  return {
+    preset: safePreset,
+    fromDate,
+    toDate,
+    range: convertThaiDateFilterToRange(fromDate, toDate),
+  };
+}
+
+function syncDashboardFilterToUrl({ preset, fromDate, toDate }) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.set("range", preset);
+  url.searchParams.set("from", fromDate);
+  url.searchParams.set("to", toDate);
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function formatSelectedRange(fromDate, toDate) {
+  const format = (value) =>
+    new Date(`${value}T00:00:00+07:00`).toLocaleDateString("th-TH", {
+      timeZone: MARKETING_TIME_ZONE,
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  return `${format(fromDate)} – ${format(toDate)}`;
+}
+
+function formatUpdatedAt(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("th-TH", {
+    timeZone: MARKETING_TIME_ZONE,
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function ComparisonText({ comparison }) {
+  if (!comparison) return null;
+  const difference = Number(comparison.difference || 0);
+  if (difference === 0) {
+    return <span className="text-slate-500">ไม่เปลี่ยนแปลงจากช่วงก่อน</span>;
+  }
+  const increase = difference > 0;
+  const percent = comparison.percentChange;
+  return (
+    <span className={increase ? "text-emerald-600" : "text-rose-600"}>
+      {increase ? "เพิ่มขึ้น" : "ลดลง"} {formatMoney(Math.abs(difference))}
+      {percent === null ? " (ช่วงก่อนยังไม่มียอดขาย)" : ` (${Math.abs(percent)}%)`}
+    </span>
+  );
+}
+
+function SalesKpiCard({ label, data, icon, color, onClick, className = "", loading, error }) {
+  const Component = onClick ? "button" : "article";
+  const colors = {
+    slate: "bg-slate-100 text-slate-600",
+    sky: "bg-sky-50 text-sky-600",
+    violet: "bg-violet-50 text-violet-600",
+    emerald: "bg-emerald-50 text-emerald-600",
+  };
+  return (
+    <Component
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={`flex min-h-44 w-full flex-col rounded-xl border border-slate-200/70 bg-white p-5 text-left shadow-sm transition-all ${
+        onClick ? "hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md" : ""
+      } ${className}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-600">{label}</p>
+          <p className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
+            {loading ? "…" : error ? "—" : formatMoney(data?.sales)}
+          </p>
+        </div>
+        <span className={`flex h-10 w-10 items-center justify-center rounded-full ${colors[color]}`}>
+          <span className="material-symbols-outlined text-[21px]">{icon}</span>
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        {loading || error ? "กำลังเตรียมข้อมูล" : `${Number(data?.completedOrders || 0).toLocaleString("th-TH")} คำสั่งซื้อสำเร็จ`}
+      </p>
+      <p className="mt-auto pt-4 text-xs font-semibold">
+        {!loading && !error && <ComparisonText comparison={data?.comparison} />}
+      </p>
+      {onClick && (
+        <span className="mt-2 text-[11px] font-semibold text-violet-600">
+          ไปยังหน้าที่เกี่ยวข้อง →
+        </span>
+      )}
+    </Component>
+  );
 }
 
 export { formatPeakHour, formatHourLabel };
 
 export default function DashboardSection({ token, onNavigate }) {
-  // Filters
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [initialFilter] = useState(() =>
+    readDashboardFilter(
+      typeof window === "undefined" ? "" : window.location.search,
+    ),
+  );
+  const [rangePreset, setRangePreset] = useState(initialFilter.preset);
+  const [fromDate, setFromDate] = useState(initialFilter.fromDate);
+  const [toDate, setToDate] = useState(initialFilter.toDate);
 
   // Loading & Error states for Campaign/Overview
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // User Analytics states (UR-08) — independent error handling
+  // User analytics has an independent error state because it comes from Auth.
   const [userAnalytics, setUserAnalytics] = useState(null);
   const [userAnalyticsLoading, setUserAnalyticsLoading] = useState(true);
   const [userAnalyticsError, setUserAnalyticsError] = useState(null);
@@ -110,6 +279,7 @@ export default function DashboardSection({ token, onNavigate }) {
     totalRedeemed: 0,
     overallConversionRate: 0,
   });
+  const [salesOverview, setSalesOverview] = useState(null);
 
   // Trends data
   const [trendData, setTrendData] = useState([]);
@@ -125,13 +295,17 @@ export default function DashboardSection({ token, onNavigate }) {
     open: null,
   });
   const [auctionStatusData, setAuctionStatusData] = useState([]);
+  const [auctionActivity, setAuctionActivity] = useState({
+    distinctBidders: 0,
+    activeStores: 0,
+  });
 
-  // Applied filter range for API queries (null means default 7 days)
-  const [appliedRange, setAppliedRange] = useState(null);
+  const [appliedFilter, setAppliedFilter] = useState(initialFilter);
+  const appliedRange = appliedFilter.range;
   const [filterValidationError, setFilterValidationError] = useState(null);
 
   const loadUserAnalytics = useCallback(
-    async (targetRange = appliedRange) => {
+    async (targetRange) => {
       setUserAnalyticsLoading(true);
       setUserAnalyticsError(null);
       try {
@@ -139,9 +313,9 @@ export default function DashboardSection({ token, onNavigate }) {
           ? {
               from: targetRange.from,
               to: targetRange.to,
-              timezone: "Asia/Bangkok",
+              timezone: MARKETING_TIME_ZONE,
             }
-          : { timezone: "Asia/Bangkok" };
+          : { timezone: MARKETING_TIME_ZONE };
         const uaRes = await getMarketingUserAnalytics(params, token);
         setUserAnalytics(uaRes);
       } catch (err) {
@@ -153,11 +327,11 @@ export default function DashboardSection({ token, onNavigate }) {
         setUserAnalyticsLoading(false);
       }
     },
-    [token, appliedRange],
+    [token],
   );
 
   const loadOverviewData = useCallback(
-    async (targetRange = appliedRange) => {
+    async (targetRange) => {
       setLoading(true);
       setError(null);
       try {
@@ -168,75 +342,72 @@ export default function DashboardSection({ token, onNavigate }) {
           ? `?${queryParams.toString()}`
           : "";
 
-        // 1. Fetch Overview Metrics
-        const overviewRes = await apiFetch(
-          `/api/products/campaigns/metrics/overview${queryStr}`,
-          { token },
-        ).catch(() => ({
-          completedOrders: 0,
-          grossRevenue: 0,
-          totalDiscount: 0,
-          netRevenue: 0,
-          totalClaimed: 0,
-          totalRedeemed: 0,
-          overallConversionRate: 0,
-        }));
+        const [overviewRes, trendsRes, compareRes, auctionRes, salesRes] =
+          await Promise.all([
+            apiFetch(`/api/products/campaigns/metrics/overview${queryStr}`, {
+              token,
+            }),
+            apiFetch(`/api/products/campaigns/metrics/trends${queryStr}`, {
+              token,
+            }),
+            apiFetch(`/api/products/campaigns/metrics/compare${queryStr}`, {
+              token,
+            }),
+            apiFetch(
+              `/api/products/campaigns/metrics/auction-activity${queryStr}`,
+              { token },
+            ),
+            apiFetch(`/api/orders/marketing/sales-dashboard${queryStr}`, {
+              token,
+            }),
+          ]);
         setMetrics(overviewRes);
+        setSalesOverview(salesRes.data || null);
 
-        // 2. Fetch Sales Trends
-        const trendsRes = await apiFetch(
-          `/api/products/campaigns/metrics/trends${queryStr}`,
-          { token },
-        ).catch(() => ({ series: [] }));
         const formattedTrends = (trendsRes.series || []).map((item) => ({
           label: item.date ? item.date.slice(5) : "-", // MM-DD
           value: item.grossRevenue || 0,
         }));
         setTrendData(formattedTrends);
 
-        // 3. Fetch Campaign Comparison
-        const compareRes = await apiFetch(
-          `/api/products/campaigns/metrics/compare${queryStr}`,
-          { token },
-        ).catch(() => ({ comparisons: [] }));
         setCampaigns(compareRes.comparisons || []);
-
-        // 4. Fetch Auction Status for Pipeline
-        const fc = (status) =>
-          apiFetch(`/api/products/auctions?status=${status}&limit=1`, { token })
-            .then((d) => d.total)
-            .catch(() => 0);
-
-        const [pApp, app, sch, op] = await Promise.all([
-          fc("pending_approval"),
-          fc("approved"),
-          fc("scheduled"),
-          fc("open"),
-        ]);
-        setAuctionStats({
-          pendingApproval: pApp,
-          approved: app,
-          scheduled: sch,
-          open: op,
+        setAuctionActivity({
+          distinctBidders: auctionRes.distinctBidders || 0,
+          activeStores: auctionRes.activeStores || 0,
         });
-
-        const donutValues = await Promise.all(
-          Object.keys(DONUT_LABEL).map((st) => fc(st)),
-        );
+        const statusCounts = auctionRes.statusCounts || {};
+        setAuctionStats({
+          pendingApproval: statusCounts.pending_approval || 0,
+          approved: statusCounts.approved || 0,
+          scheduled: statusCounts.scheduled || 0,
+          open: statusCounts.open || 0,
+        });
         setAuctionStatusData(
-          Object.keys(DONUT_LABEL).map((st, idx) => ({
+          Object.keys(DONUT_LABEL).map((st) => ({
             label: DONUT_LABEL[st],
-            value: donutValues[idx] || 0,
+            value: statusCounts[st] || 0,
             color: DONUT_COLORS[st],
           })),
         );
       } catch (err) {
         setError(err.message || "เกิดข้อผิดพลาดในการโหลดข้อมูล Dashboard");
+        setMetrics(null);
+        setSalesOverview(null);
+        setTrendData([]);
+        setCampaigns([]);
+        setAuctionActivity(null);
+        setAuctionStats({
+          pendingApproval: null,
+          approved: null,
+          scheduled: null,
+          open: null,
+        });
+        setAuctionStatusData([]);
       } finally {
         setLoading(false);
       }
     },
-    [token, appliedRange],
+    [token],
   );
 
   const loadData = useCallback(() => {
@@ -245,18 +416,33 @@ export default function DashboardSection({ token, onNavigate }) {
   }, [loadUserAnalytics, loadOverviewData, appliedRange]);
 
   useEffect(() => {
-    loadUserAnalytics(null);
-    loadOverviewData(null);
-  }, [token]);
+    syncDashboardFilterToUrl(appliedFilter);
+    loadUserAnalytics(appliedRange);
+    loadOverviewData(appliedRange);
+  }, [appliedFilter, appliedRange, loadUserAnalytics, loadOverviewData]);
+
+  const applyFilter = (preset, nextFromDate, nextToDate) => {
+    const converted = convertThaiDateFilterToRange(nextFromDate, nextToDate);
+    setRangePreset(preset);
+    setFromDate(nextFromDate);
+    setToDate(nextToDate);
+    setAppliedFilter({
+      preset,
+      fromDate: nextFromDate,
+      toDate: nextToDate,
+      range: converted,
+    });
+  };
+
+  const handlePresetChange = (preset) => {
+    setFilterValidationError(null);
+    setRangePreset(preset);
+    if (preset === "custom") return;
+    const dates = getCalendarDateRange(preset);
+    applyFilter(preset, dates.fromDate, dates.toDate);
+  };
 
   const handleApplyFilter = () => {
-    if (!fromDate && !toDate) {
-      setFilterValidationError(null);
-      setAppliedRange(null);
-      loadUserAnalytics(null);
-      loadOverviewData(null);
-      return;
-    }
     if (!fromDate || !toDate) {
       setFilterValidationError("กรุณาระบุทั้งวันที่เริ่มต้นและวันที่สิ้นสุด");
       return;
@@ -266,27 +452,14 @@ export default function DashboardSection({ token, onNavigate }) {
       return;
     }
     setFilterValidationError(null);
-    const converted = convertThaiDateFilterToRange(fromDate, toDate);
-    setAppliedRange(converted);
-    loadUserAnalytics(converted);
-    loadOverviewData(converted);
+    applyFilter("custom", fromDate, toDate);
   };
 
   const handleResetFilters = () => {
-    setFromDate("");
-    setToDate("");
+    const dates = getCalendarDateRange(DEFAULT_RANGE_PRESET);
     setFilterValidationError(null);
-    setAppliedRange(null);
-    loadUserAnalytics(null);
-    loadOverviewData(null);
+    applyFilter(DEFAULT_RANGE_PRESET, dates.fromDate, dates.toDate);
   };
-
-  const formattedHourlyData = (userAnalytics?.hourlyUsage || []).map(
-    (item) => ({
-      label: formatHourLabel(item.hour),
-      value: item.usageCount || 0,
-    }),
-  );
 
   const isUserAnalyticsEmpty =
     userAnalytics &&
@@ -295,68 +468,99 @@ export default function DashboardSection({ token, onNavigate }) {
     (userAnalytics.hourlyUsage || []).every((h) => h.usageCount === 0);
 
   return (
-    <div className="animate-fade-in-up space-y-6">
+    <div className="animate-fade-in-up flex flex-col gap-6">
       {/* ── Filter Bar ── */}
-      <div className="flex flex-col gap-3.5 rounded-xl border border-slate-200/70 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-2 text-slate-800 min-w-0">
-          <span className="material-symbols-outlined text-[20px] text-violet-600 shrink-0">
-            calendar_today
-          </span>
-          <span className="text-xs sm:text-sm font-semibold truncate">
-            ช่วงเวลาการวัดผล (Attribution Window)
+      <div className="order-0 space-y-4 rounded-xl border border-slate-200/70 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-2 text-slate-800">
+            <span className="material-symbols-outlined shrink-0 text-[20px] text-violet-600">
+              calendar_today
+            </span>
+            <span className="text-sm font-semibold">
+              ช่วงเวลาของข้อมูล Dashboard
+            </span>
+          </div>
+          <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500">
+            <span className="material-symbols-outlined text-[15px]">sync</span>
+            {salesOverview?.refreshedAt
+              ? `อัปเดตล่าสุด ${formatUpdatedAt(salesOverview.refreshedAt)} น.`
+              : "กำลังอัปเดตข้อมูล"}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-            <span className="shrink-0">ตั้งแต่:</span>
-            <input
-              type="date"
-              aria-label="วันที่เริ่มต้น"
-              value={fromDate}
-              onChange={(e) => {
-                setFromDate(e.target.value);
-                setFilterValidationError(null);
-              }}
-              className="w-full sm:w-auto rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-800 focus:border-violet-500 focus:outline-none"
-            />
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2" aria-label="เลือกช่วงเวลา">
+              {RANGE_PRESETS.map((preset) => (
+                <button
+                  key={preset.key}
+                  type="button"
+                  aria-pressed={rangePreset === preset.key}
+                  onClick={() => handlePresetChange(preset.key)}
+                  className={`h-10 rounded-lg border px-4 text-sm font-semibold transition-colors ${
+                    rangePreset === preset.key
+                      ? "border-violet-600 bg-violet-600 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:text-violet-700"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500">
+              ข้อมูลทุกการ์ดและทุกกราฟใช้ช่วงเดียวกัน: {formatSelectedRange(appliedFilter.fromDate, appliedFilter.toDate)}
+            </p>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-slate-600">
-            <span className="shrink-0">ถึง:</span>
-            <input
-              type="date"
-              aria-label="วันที่สิ้นสุด"
-              value={toDate}
-              onChange={(e) => {
-                setToDate(e.target.value);
-                setFilterValidationError(null);
-              }}
-              className="w-full sm:w-auto rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-800 focus:border-violet-500 focus:outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            {(fromDate || toDate) && (
+          {rangePreset === "custom" && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+                ตั้งแต่วันที่
+                <input
+                  type="date"
+                  aria-label="วันที่เริ่มต้น"
+                  value={fromDate}
+                  onChange={(event) => {
+                    setFromDate(event.target.value);
+                    setFilterValidationError(null);
+                  }}
+                  className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 focus:border-violet-500 focus:outline-none"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
+                ถึงวันที่
+                <input
+                  type="date"
+                  aria-label="วันที่สิ้นสุด"
+                  value={toDate}
+                  onChange={(event) => {
+                    setToDate(event.target.value);
+                    setFilterValidationError(null);
+                  }}
+                  className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 focus:border-violet-500 focus:outline-none"
+                />
+              </label>
               <button
-                onClick={handleResetFilters}
-                className="rounded-lg px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                type="button"
+                onClick={handleApplyFilter}
+                className="h-10 rounded-lg bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-700"
               >
-                ล้างตัวกรอง
+                ใช้ช่วงเวลานี้
               </button>
-            )}
+            </div>
+          )}
+          {rangePreset !== DEFAULT_RANGE_PRESET && (
             <button
-              onClick={handleApplyFilter}
-              className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1 text-xs font-semibold text-white shadow-sm hover:bg-violet-700 transition-colors"
+              type="button"
+              onClick={handleResetFilters}
+              className="h-10 self-start rounded-lg px-3 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 xl:self-end"
             >
-              <span className="material-symbols-outlined text-[15px]">
-                refresh
-              </span>
-              ค้นหา / รีเฟรช
+              กลับไปดูสัปดาห์นี้
             </button>
-          </div>
+          )}
         </div>
       </div>
 
       {filterValidationError && (
-        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
+        <div className="order-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-1.5">
           <span className="material-symbols-outlined text-[16px]">info</span>
           <span>{filterValidationError}</span>
         </div>
@@ -364,7 +568,7 @@ export default function DashboardSection({ token, onNavigate }) {
 
       {/* ── Error Banner for Overview ── */}
       {error && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 flex items-center justify-between">
+        <div className="order-1 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[20px] text-rose-600">
               error
@@ -380,8 +584,60 @@ export default function DashboardSection({ token, onNavigate }) {
         </div>
       )}
 
-      {/* ── User & Peak-Usage Analytics Section (UR-08) ── */}
-      <div className="space-y-4 rounded-xl border border-slate-200/70 bg-white p-4 sm:p-5 shadow-sm">
+      {/* ── Sales overview: the primary 5-second view ── */}
+      <section className="order-2 space-y-4" aria-labelledby="sales-overview-title">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 id="sales-overview-title" className="text-base font-bold text-slate-900">
+              ภาพรวมยอดขาย
+            </h2>
+            <p className="text-xs text-slate-500">
+              นับเฉพาะคำสั่งซื้อสำเร็จตามเวลาชำระเงินในช่วงที่เลือก
+            </p>
+          </div>
+          <p className="text-[11px] text-slate-400">เทียบกับช่วงก่อนหน้าที่มีจำนวนวันเท่ากัน</p>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <SalesKpiCard
+            label="ยอดขายสุทธิรวม"
+            data={salesOverview?.total}
+            icon="monitoring"
+            color="slate"
+            className="xl:col-span-2"
+            loading={loading}
+            error={error}
+          />
+          <SalesKpiCard
+            label="ยอดขายทั่วไป"
+            data={salesOverview?.byType?.standard}
+            icon="shopping_bag"
+            color="sky"
+            loading={loading}
+            error={error}
+          />
+          <SalesKpiCard
+            label="ยอดขายจากแคมเปญ"
+            data={salesOverview?.byType?.campaign}
+            icon="confirmation_number"
+            color="violet"
+            onClick={() => onNavigate?.("campaigns")}
+            loading={loading}
+            error={error}
+          />
+          <SalesKpiCard
+            label="ยอดขายจากประมูล"
+            data={salesOverview?.byType?.auction}
+            icon="gavel"
+            color="emerald"
+            onClick={() => onNavigate?.("auctions")}
+            loading={loading}
+            error={error}
+          />
+        </div>
+      </section>
+
+      {/* ── User & Peak-Usage Analytics Section ── */}
+      <div className="order-6 space-y-4 rounded-xl border border-slate-200/70 bg-white p-4 sm:p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[22px] text-violet-600">
@@ -389,11 +645,10 @@ export default function DashboardSection({ token, onNavigate }) {
             </span>
             <div>
               <h2 className="text-sm font-bold text-slate-800">
-                สถิติผู้ใช้งานและช่วงเวลาการใช้งาน (User & Peak-Usage Analytics)
+                สถิติผู้ใช้งานและช่วงเวลาการใช้งาน
               </h2>
               <p className="text-xs text-slate-500">
                 วิเคราะห์พฤติกรรมผู้ใช้งานจริงและช่วงเวลาหนาแน่นเพื่อวางแผนโปรโมชัน
-                (UR-08)
               </p>
             </div>
           </div>
@@ -480,10 +735,10 @@ export default function DashboardSection({ token, onNavigate }) {
           />
         </div>
 
-        {/* Hourly Usage Chart & Table Fallback */}
+        {/* Weekday × hour usage heatmap */}
         <div className="mt-4">
           <h3 className="mb-2 text-xs font-bold text-slate-700">
-            กราฟแสดงการใช้งานรายชั่วโมง (Hourly Usage)
+            Heatmap การใช้งาน: วันในสัปดาห์ × ชั่วโมง
           </h3>
           {userAnalyticsLoading ? (
             <div className="flex h-44 items-center justify-center text-xs text-slate-400">
@@ -508,11 +763,7 @@ export default function DashboardSection({ token, onNavigate }) {
             </div>
           ) : (
             <div className="space-y-3">
-              <TrendBarChart
-                data={formattedHourlyData}
-                height={180}
-                formatValue={(v) => `${v.toLocaleString("th-TH")} คน`}
-              />
+              <UsageHeatmap hourlyUsage={userAnalytics?.hourlyUsage || []} />
               <details className="text-xs text-slate-600">
                 <summary className="cursor-pointer text-violet-600 hover:text-violet-700 font-semibold select-none">
                   ดูตารางสถิติรายชั่วโมง (Accessible Table View)
@@ -552,79 +803,113 @@ export default function DashboardSection({ token, onNavigate }) {
         </div>
       </div>
 
-      {/* ── Conversion & Revenue KPI Row ── */}
-      <div className="grid grid-cols-1 min-[440px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+      {/* ── Supporting operational KPIs ── */}
+      <div className="order-3 grid grid-cols-1 gap-3 min-[440px]:grid-cols-2 sm:gap-4 lg:grid-cols-3">
         <KpiCard
-          label="คำสั่งซื้อสำเร็จ"
-          value={loading ? "…" : metrics.completedOrders?.toLocaleString()}
+          label="คำสั่งซื้อสำเร็จทั้งหมด"
+          value={loading ? "…" : error ? "—" : salesOverview?.total?.completedOrders?.toLocaleString("th-TH")}
           icon="shopping_bag"
           color="indigo"
-          sub="Attributed Orders"
+          sub="รวมยอดขายทั่วไป แคมเปญ และประมูล"
         />
         <KpiCard
-          label="ยอดขายรวม (Gross)"
+          label="ส่วนลดจากแคมเปญ"
           value={
-            loading ? "…" : `฿${(metrics.grossRevenue || 0).toLocaleString()}`
-          }
-          icon="payments"
-          color="sky"
-          sub="ก่อนหักส่วนลด"
-        />
-        <KpiCard
-          label="ส่วนลดทั้งหมด"
-          value={
-            loading ? "…" : `฿${(metrics.totalDiscount || 0).toLocaleString()}`
+            loading ? "…" : error ? "—" : formatMoney(metrics?.totalDiscount)
           }
           icon="loyalty"
           color="amber"
-          sub="งบแคมเปญที่ใช้จริง"
+          onClick={() => onNavigate?.("campaigns")}
+          sub="ส่วนลดที่ใช้สำเร็จในช่วงที่เลือก"
         />
         <KpiCard
-          label="ยอดขายสุทธิ (Net)"
-          value={
-            loading ? "…" : `฿${(metrics.netRevenue || 0).toLocaleString()}`
-          }
-          icon="account_balance_wallet"
-          color="emerald"
-          sub="หลังหักส่วนลด"
-        />
-        <KpiCard
-          label="Conversion Rate"
-          value={loading ? "…" : `${metrics.overallConversionRate || 0}%`}
+          label="อัตราการใช้คูปองสำเร็จ"
+          value={loading ? "…" : error ? "—" : `${metrics?.overallConversionRate || 0}%`}
           icon="trending_up"
           color="violet"
-          sub="ใช้จริง / เก็บสิทธิ์"
+          onClick={() => onNavigate?.("campaigns")}
+          sub="สิทธิ์ที่ใช้สำเร็จเทียบกับสิทธิ์ที่เก็บ"
         />
         <KpiCard
           label="คูปองเก็บ vs ใช้"
           value={
             loading
               ? "…"
-              : `${metrics.totalClaimed || 0} / ${metrics.totalRedeemed || 0}`
+              : error
+                ? "—"
+                : `${metrics?.totalClaimed || 0} / ${metrics?.totalRedeemed || 0}`
           }
           icon="confirmation_number"
           color="sky"
-          sub="Claimed vs Redeemed"
+          onClick={() => onNavigate?.("campaigns")}
+          sub="จำนวนสิทธิ์ที่เก็บ / ใช้สำเร็จ"
+        />
+        <KpiCard
+          label="ผู้เข้าร่วมประมูล"
+          value={
+            loading
+              ? "…"
+              : error
+                ? "—"
+                : (auctionActivity?.distinctBidders || 0).toLocaleString()
+          }
+          icon="groups"
+          color="violet"
+          sub="ผู้เสนอราคาไม่ซ้ำในช่วงที่เลือก"
+        />
+        <KpiCard
+          label="ร้านค้าที่มีกิจกรรม"
+          value={
+            loading
+              ? "…"
+              : error
+                ? "—"
+                : (auctionActivity?.activeStores || 0).toLocaleString()
+          }
+          icon="storefront"
+          color="emerald"
+          sub="ร้านที่ลงสินค้าหรือมีกิจกรรมประมูล"
         />
       </div>
 
       {/* ── Charts Grid ── */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Sales Trend Bar Chart */}
+      <div className="order-4 grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <ChartCard title="ยอดขายสุทธิแยกตามประเภท" icon="bar_chart">
+          {loading ? (
+            <div className="flex h-40 items-center justify-center text-xs text-slate-400">
+              กำลังคำนวณสัดส่วนยอดขาย...
+            </div>
+          ) : error ? (
+            <div className="flex h-40 items-center justify-center text-xs text-rose-500">
+              ไม่สามารถแสดงสัดส่วนยอดขายได้
+            </div>
+          ) : (
+            <SalesMixChart
+              byType={salesOverview?.byType}
+              total={salesOverview?.total?.sales}
+            />
+          )}
+        </ChartCard>
+
+        {/* Sales Trend Line Chart */}
         <ChartCard
-          title="แนวโน้มยอดขายแคมเปญรายวัน (Gross Sales Trend)"
-          icon="bar_chart"
+          title="แนวโน้มยอดขายจากแคมเปญรายวัน"
+          icon="show_chart"
         >
           {loading ? (
             <div className="flex h-40 items-center justify-center text-xs text-slate-400">
               กำลังคำนวณแนวโน้มยอดขาย...
+            </div>
+          ) : error ? (
+            <div className="flex h-40 items-center justify-center text-xs text-rose-500">
+              ไม่สามารถแสดงแนวโน้มยอดขายได้
             </div>
           ) : trendData.length === 0 ? (
             <div className="flex h-40 items-center justify-center text-xs text-slate-400">
               ยังไม่มียอดขายแคมเปญในช่วงเวลาที่เลือก
             </div>
           ) : (
-            <TrendBarChart
+            <TrendLineChart
               data={trendData}
               height={180}
               formatValue={(v) => `฿${v.toLocaleString("th-TH")}`}
@@ -632,17 +917,31 @@ export default function DashboardSection({ token, onNavigate }) {
           )}
         </ChartCard>
 
-        {/* Auction Pipeline Donut */}
+        {/* Auction status comparison */}
         <ChartCard
-          title="สัดส่วนสถานะการประมูล (Auction Pipeline)"
-          icon="donut_small"
+          title="จำนวนรอบประมูลแยกตามสถานะ"
+          icon="stacked_bar_chart"
         >
-          <DonutChart data={auctionStatusData} size={170} strokeWidth={38} />
+          {loading ? (
+            <div className="flex h-40 items-center justify-center text-xs text-slate-400">
+              กำลังโหลดสถานะการประมูล...
+            </div>
+          ) : error ? (
+            <div className="flex h-40 items-center justify-center text-xs text-rose-500">
+              ไม่สามารถแสดงสถานะการประมูลได้
+            </div>
+          ) : auctionStatusData.every((item) => item.value === 0) ? (
+            <div className="flex h-40 items-center justify-center text-xs text-slate-400">
+              ไม่มีกิจกรรมประมูลในช่วงเวลาที่เลือก
+            </div>
+          ) : (
+            <AuctionStatusBars data={auctionStatusData} />
+          )}
         </ChartCard>
       </div>
 
       {/* ── Campaign Comparison & Performance Table ── */}
-      <div className="rounded-xl border border-slate-200/70 bg-white p-4 sm:p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
+      <div className="order-5 rounded-xl border border-slate-200/70 bg-white p-4 sm:p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800 min-w-0">
             <span className="material-symbols-outlined text-[20px] text-violet-600 shrink-0">
@@ -665,6 +964,10 @@ export default function DashboardSection({ token, onNavigate }) {
         {loading ? (
           <div className="py-12 text-center text-xs text-slate-400">
             กำลังโหลดข้อมูลประสิทธิภาพแคมเปญ...
+          </div>
+        ) : error ? (
+          <div className="py-12 text-center text-xs text-rose-500">
+            ไม่สามารถโหลดตารางประสิทธิภาพแคมเปญได้
           </div>
         ) : campaigns.length === 0 ? (
           <div className="py-12 text-center">
@@ -746,14 +1049,14 @@ export default function DashboardSection({ token, onNavigate }) {
       </div>
 
       {/* ── Auction Pipeline Quick KPI Cards (Retained for completeness) ── */}
-      <div className="border-t border-slate-200/60 pt-4">
+      <div className="order-7 border-t border-slate-200/60 pt-4">
         <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
           การจัดการรอบประมูล (Auction Workspace Quick Stats)
         </h3>
         <div className="grid grid-cols-1 min-[440px]:grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <KpiCard
             label="รอการอนุมัติ (Marketing)"
-            value={auctionStats.pendingApproval}
+            value={error ? "—" : auctionStats.pendingApproval}
             icon="pending_actions"
             color="amber"
             onClick={() => onNavigate?.("auctions")}
@@ -761,7 +1064,7 @@ export default function DashboardSection({ token, onNavigate }) {
           />
           <KpiCard
             label="อนุมัติแล้ว พร้อมเปิด"
-            value={auctionStats.approved}
+            value={error ? "—" : auctionStats.approved}
             icon="event_available"
             color="sky"
             onClick={() => onNavigate?.("auctions")}
@@ -769,7 +1072,7 @@ export default function DashboardSection({ token, onNavigate }) {
           />
           <KpiCard
             label="ตั้งเวลาแล้ว"
-            value={auctionStats.scheduled}
+            value={error ? "—" : auctionStats.scheduled}
             icon="schedule"
             color="indigo"
             onClick={() => onNavigate?.("auctions")}
@@ -777,7 +1080,7 @@ export default function DashboardSection({ token, onNavigate }) {
           />
           <KpiCard
             label="กำลังประมูลสด"
-            value={auctionStats.open}
+            value={error ? "—" : auctionStats.open}
             icon="gavel"
             color="emerald"
             onClick={() => onNavigate?.("auctions")}

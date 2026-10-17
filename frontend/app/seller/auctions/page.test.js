@@ -259,6 +259,36 @@ describe("SellerAuctionsPage - Explicit Round Selection & Empty State", () => {
     expect(screen.getByText("ราคาเริ่มต้น ฿500")).toBeInTheDocument();
   });
 
+  it("shows the recorded rejection reason in the seller's auction history", async () => {
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/api/auth/kyc/mine")) {
+        return Promise.resolve({ kycStatus: "VERIFIED" });
+      }
+      if (url.includes("/api/products/auctions/rounds/current")) {
+        return Promise.resolve({ activeSubmissionRounds: [], isSubmissionOpen: false });
+      }
+      if (url.includes("/api/products/auctions")) {
+        return Promise.resolve({
+          items: [{
+            id: "auc-rejected-1",
+            sellerId: "seller-123",
+            productId: "prod-rejected-1",
+            status: "rejected",
+            startingPrice: 500,
+            cancellationReason: "รูปภาพสินค้าไม่ชัดเจน",
+            product: { title: "เสื้อคลุมทดสอบ" },
+          }],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<SellerAuctionsPage />);
+
+    expect(await screen.findByText("เสื้อคลุมทดสอบ")).toBeInTheDocument();
+    expect(screen.getByText("เหตุผลที่ปฏิเสธ: รูปภาพสินค้าไม่ชัดเจน")).toBeInTheDocument();
+  });
+
   it("renders 'รอคุณดำเนินการ' section for products with status auction_action_required", async () => {
     apiFetch.mockImplementation((url) => {
       if (url.includes("/api/auth/kyc/mine"))

@@ -76,7 +76,82 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     });
   });
 
-  it("renders current round with submission phase badge", async () => {
+  it("shows occupied capacity including pending submissions and flags full rounds", async () => {
+    const round = { ...sampleActiveRound, maxItems: 5, submittedItemCount: 5, phase: "submission" };
+    apiFetch.mockImplementation(url => Promise.resolve(url.includes("/rounds/current")
+      ? { activeSubmissionRounds: [round] } : { items: [round] }));
+    render(<RoundManagementSection token={mockToken} />);
+    expect((await screen.findAllByText("5 / 5")).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("เต็มแล้ว").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("requires a positive capacity and does not post an invalid round", async () => {
+    render(<RoundManagementSection token={mockToken} />);
+    fireEvent.click(await screen.findByRole("button", { name: /สร้างรอบประมูลใหม่/ }));
+    fireEvent.change(screen.getByPlaceholderText(/รอบประมูลสินค้ามือสอง/), { target: { value: "Capacity test" } });
+    for (const [label, value] of [
+      [/วัน-เวลาเริ่มเปิดรับ/, "2035-01-01T10:00"], [/วัน-เวลาปิดรับสินค้า/, "2035-01-01T11:00"],
+      [/วัน-เวลาเริ่มเปิดประมูล/, "2035-01-01T12:00"], [/วัน-เวลาสิ้นสุดการประมูล/, "2035-01-01T13:00"],
+    ]) fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    fireEvent.change(screen.getByLabelText("จำนวนสินค้าสูงสุดต่อรอบ"), { target: { value: "0" } });
+    fireEvent.submit(screen.getByRole("button", { name: /บันทึกและเปิดรอบ/ }).closest("form"));
+    expect(await screen.findByText(/กรุณาระบุจำนวนสินค้าสูงสุดเป็นจำนวนเต็มบวก/)).toBeInTheDocument();
+    expect(apiFetch.mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
+  });
+
+  it("rejects a new round whose submission start is in the past", async () => {
+    render(<RoundManagementSection token={mockToken} />);
+    fireEvent.click(await screen.findByRole("button", { name: /สร้างรอบประมูลใหม่/ }));
+    fireEvent.change(screen.getByPlaceholderText(/รอบประมูลสินค้ามือสอง/), {
+      target: { value: "Past round" },
+    });
+    fireEvent.change(screen.getByLabelText("จำนวนสินค้าสูงสุดต่อรอบ"), {
+      target: { value: "10" },
+    });
+    for (const [label, value] of [
+      [/วัน-เวลาเริ่มเปิดรับ/, "2020-01-01T10:00"],
+      [/วัน-เวลาปิดรับสินค้า/, "2035-01-01T11:00"],
+      [/วัน-เวลาเริ่มเปิดประมูล/, "2035-01-01T12:00"],
+      [/วัน-เวลาสิ้นสุดการประมูล/, "2035-01-01T13:00"],
+    ]) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    }
+
+    expect(screen.getByLabelText(/วัน-เวลาเริ่มเปิดรับ/)).toHaveAttribute("min");
+    fireEvent.submit(screen.getByRole("button", { name: /บันทึกและเปิดรอบ/ }).closest("form"));
+
+    expect(
+      await screen.findByText(/เวลาเริ่มเปิดรับสินค้าต้องเป็นเวลาปัจจุบันหรืออนาคต/),
+    ).toBeInTheDocument();
+    expect(apiFetch.mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
+  });
+
+  it("refreshes history capacity immediately after rejecting an item", async () => {
+    let rejected = false;
+    const round = () => ({ ...sampleActiveRound, phase: "submission", maxItems: 1, submittedItemCount: rejected ? 0 : 1 });
+    apiFetch.mockImplementation((url, options) => {
+      if (options?.method === "PATCH" && url.endsWith("/reject")) {
+        rejected = true;
+        return Promise.resolve({ id: "quota-item", status: "rejected" });
+      }
+      if (url.includes("/rounds/current")) return Promise.resolve({ activeSubmissionRounds: [round()] });
+      if (url.includes("/rounds")) return Promise.resolve({ items: [round()], total: 1, totalPages: 1 });
+      return Promise.resolve({ items: [{ id: "quota-item", productId: "quota-product", status: rejected ? "rejected" : "pending_approval",
+        startingPrice: 100, bidIncrement: 10, product: { title: "Quota regression item" } }], total: 1, totalPages: 1 });
+    });
+    render(<AuctionScheduleSection token={mockToken} />);
+    await screen.findByRole("button", { name: "ปฏิเสธสินค้า" });
+    expect(screen.getAllByText("1 / 1").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "ปฏิเสธสินค้า" }));
+    fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียดที่ผู้ขายต้องแก้ไข/), {
+      target: { value: "รายละเอียดสินค้าไม่ครบถ้วน" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ยืนยันการปฏิเสธสินค้า" }));
+    await waitFor(() => expect(screen.getAllByText("0 / 1")).toHaveLength(1));
+    expect(screen.queryByText("เต็มแล้ว")).not.toBeInTheDocument();
+  });
+
+  it("renders an active round in the all-round history with its phase badge", async () => {
     render(<RoundManagementSection token={mockToken} />);
 
     expect(
@@ -85,10 +160,10 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     expect(
       screen.getAllByText("กำลังเปิดรับสินค้า").length,
     ).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/สินค้าในรอบนี้:/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ดูรายละเอียดรอบ รอบประมูลประจำสัปดาห์ที่ 1/ })).toBeInTheDocument();
   });
 
-  it("renders nearest upcoming round with upcoming phase badge when no active round exists", async () => {
+  it("renders an upcoming round in the all-round history with its phase badge", async () => {
     apiFetch.mockImplementation((url) => {
       if (url.includes("/api/products/auctions/rounds/current")) {
         return Promise.resolve({
@@ -114,7 +189,7 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     expect(
       screen.getAllByText("รอเปิดรับสินค้า").length,
     ).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("(รอบที่กำลังจะมาถึง)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ดูรายละเอียดรอบ รอบประมูลสินค้าแบรนด์เนม/ })).toBeInTheDocument();
   });
 
   it("renders all-round history list with phase badges and item counts", async () => {
@@ -146,11 +221,7 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
 
     render(<RoundManagementSection token={mockToken} />);
 
-    expect(
-      await screen.findByText(
-        /ยังไม่มีรอบการประมูลที่กำลังดำเนินอยู่หรือกำลังจะมาถึง/,
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/ยังไม่มีประวัติรอบการประมูล/)).toBeInTheDocument();
   });
 
   it("creates overlapping round successfully without conflict under MKT-DEC-025", async () => {
@@ -197,10 +268,11 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     const aucStartInput = screen.getByLabelText(/วัน-เวลาเริ่มเปิดประมูล/);
     const aucEndInput = screen.getByLabelText(/วัน-เวลาสิ้นสุดการประมูล/);
 
-    fireEvent.change(subStartInput, { target: { value: "2026-10-02T00:00" } });
-    fireEvent.change(subEndInput, { target: { value: "2026-10-04T00:00" } });
-    fireEvent.change(aucStartInput, { target: { value: "2026-10-04T12:00" } });
-    fireEvent.change(aucEndInput, { target: { value: "2026-10-06T12:00" } });
+    fireEvent.change(subStartInput, { target: { value: "2035-10-02T00:00" } });
+    fireEvent.change(subEndInput, { target: { value: "2035-10-04T00:00" } });
+    fireEvent.change(aucStartInput, { target: { value: "2035-10-04T12:00" } });
+    fireEvent.change(aucEndInput, { target: { value: "2035-10-06T12:00" } });
+    fireEvent.change(screen.getByLabelText("จำนวนสินค้าสูงสุดต่อรอบ"), { target: { value: "20" } });
 
     const submitBtn = screen.getByRole("button", { name: /บันทึกและเปิดรอบ/ });
     fireEvent.click(submitBtn);
@@ -332,6 +404,7 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
       target: { value: "2026-10-25T12:00" },
     });
 
+    fireEvent.change(screen.getByLabelText("จำนวนสินค้าสูงสุดต่อรอบ"), { target: { value: "20" } });
     const submitBtn = screen.getByRole("button", { name: /บันทึกและเปิดรอบ/ });
     fireEvent.click(submitBtn);
 
@@ -353,7 +426,7 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     ).toBeInTheDocument();
     expect(screen.getAllByText("ทุกสถานะ").length).toBeGreaterThanOrEqual(1);
   });
-  it("renders round accepted categories in current round card and history table", async () => {
+  it("renders round accepted categories in the all-round history table", async () => {
     apiFetch.mockImplementation((url) => {
       if (url.includes("/api/products/auctions/rounds/current")) {
         return Promise.resolve({
@@ -387,10 +460,100 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
 
     render(<RoundManagementSection token={mockToken} />);
 
-    expect(await screen.findByText("หมวดหมู่ที่เปิดรับ:")).toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: "หมวดหมู่" })).toBeInTheDocument();
     expect(screen.getAllByText("เสื้อผ้า").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("รองเท้า").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("ทุกหมวดหมู่").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps the round history table within its panel and exposes readable column labels", async () => {
+    const longRoundTitle =
+      "รอบประมูลสินค้าคอลเลกชันพิเศษชื่อยาวสำหรับตรวจการจัดวางบนเดสก์ท็อปแคบ";
+    const round = {
+      ...sampleActiveRound,
+      id: "round-layout-regression",
+      title: longRoundTitle,
+      phase: "submission",
+      categories: ["เสื้อผ้าชื่อหมวดหมู่ยาว", "รองเท้า"],
+    };
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/rounds/current")) {
+        return Promise.resolve({ activeSubmissionRounds: [round] });
+      }
+      if (url.includes("/rounds")) {
+        return Promise.resolve({ items: [round], total: 1, totalPages: 1 });
+      }
+      return Promise.resolve({ items: [] });
+    });
+
+    const { container } = render(
+      <RoundManagementSection token={mockToken} />,
+    );
+
+    expect(await screen.findByRole("columnheader", { name: "ช่วงรับสินค้า" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "ช่วงประมูล" })).toBeInTheDocument();
+    expect(screen.getAllByTitle(longRoundTitle).length).toBeGreaterThanOrEqual(1);
+
+    const historyTable = screen.getByRole("table");
+    expect(historyTable).toHaveClass("table-fixed");
+    expect(historyTable.className).not.toMatch(/min-w-\[/);
+    expect(historyTable.parentElement).not.toHaveClass("overflow-x-auto");
+    expect(container.querySelector("table .whitespace-nowrap")).toHaveTextContent(
+      "กำลังเปิดรับสินค้า",
+    );
+  });
+
+  it("wraps long auction item names while keeping status and actions visible", async () => {
+    const longProductTitle =
+      "กระเป๋ารุ่นพิเศษชื่อยาวมากสำหรับตรวจว่าชื่อสินค้าไม่ดันสถานะและปุ่มจัดการออกนอกการ์ด";
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/rounds/current")) return Promise.resolve(null);
+      if (url.includes("/rounds")) {
+        return Promise.resolve({ items: [], total: 0, totalPages: 1 });
+      }
+      if (url.includes("/categories")) return Promise.resolve({ items: [] });
+      if (url.includes("/auctions?")) {
+        return Promise.resolve({
+          items: [
+            {
+              id: "auction-layout-regression",
+              productId: "product-layout-regression",
+              status: "pending_approval",
+              startingPrice: 750,
+              bidIncrement: 50,
+              scheduledStartAt: "2026-10-20T03:00:00.000Z",
+              scheduledEndAt: "2026-10-20T04:00:00.000Z",
+              product: { title: longProductTitle, category: "กระเป๋า" },
+              round: { title: "รอบทดสอบ Layout" },
+            },
+          ],
+          total: 1,
+          totalPages: 1,
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<AuctionScheduleSection token={mockToken} />);
+
+    const productLink = await screen.findByRole("link", {
+      name: longProductTitle,
+    });
+    expect(productLink).toHaveAttribute("title", longProductTitle);
+    expect(productLink).toHaveClass("line-clamp-2", "break-words");
+    const statusBadge = screen
+      .getAllByText("รออนุมัติจาก Marketing")
+      .find((element) => element.classList.contains("whitespace-nowrap"));
+    expect(statusBadge).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "ตรวจสอบสินค้า" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "✓ อนุมัติสินค้าเข้าประมูล" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "ปฏิเสธสินค้า" }),
+    ).toBeVisible();
   });
 
   it("validates specific category mode requires at least one category", async () => {
@@ -431,6 +594,7 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     });
 
     // Select specific categories radio without checking any checkbox
+    fireEvent.change(screen.getByLabelText("จำนวนสินค้าสูงสุดต่อรอบ"), { target: { value: "20" } });
     const specificRadio = screen.getByLabelText(/เลือกเฉพาะบางหมวดหมู่/);
     fireEvent.click(specificRadio);
 
@@ -498,12 +662,14 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     });
     fireEvent.click(shoesCheckbox);
 
+    fireEvent.change(screen.getByLabelText("จำนวนสินค้าสูงสุดต่อรอบ"), { target: { value: "20" } });
     const submitBtn = screen.getByRole("button", { name: /บันทึกและเปิดรอบ/ });
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
       expect(capturedBody).not.toBeNull();
       expect(capturedBody.categories).toEqual(["รองเท้า"]);
+      expect(capturedBody.maxItems).toBe(20);
     });
   });
 });
@@ -686,14 +852,15 @@ describe("AuctionReviewModal & Pending Approval UX Improvements", () => {
     const filterBtn = await screen.findByRole("button", { name: /ทุกสถานะ/ });
     fireEvent.click(filterBtn);
 
-    const listbox = within(filterBtn.parentElement).getByRole("listbox");
-    const pendingOption = within(listbox).getByText("รออนุมัติจาก Marketing");
-    fireEvent.click(pendingOption);
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "รออนุมัติจาก Marketing" }),
+    );
 
-    // Filter now shows "รออนุมัติจาก Marketing"
+    // Filter summary reflects one selected status.
     expect(
-      screen.getByRole("button", { name: /รออนุมัติจาก Marketing/ }),
+      screen.getByRole("button", { name: /เลือกแล้ว 1 สถานะ/ }),
     ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /เลือกแล้ว 1 สถานะ/ }));
 
     // Open and close modal
     fireEvent.click(
@@ -706,10 +873,14 @@ describe("AuctionReviewModal & Pending Approval UX Improvements", () => {
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-    // Status filter is still selected
+    // Status filter is still selected after the review modal closes.
+    const retainedFilter = screen.getByRole("button", {
+      name: /เลือกแล้ว 1 สถานะ/,
+    });
+    fireEvent.click(retainedFilter);
     expect(
-      screen.getByRole("button", { name: /รออนุมัติจาก Marketing/ }),
-    ).toBeInTheDocument();
+      screen.getByRole("checkbox", { name: "รออนุมัติจาก Marketing" }),
+    ).toBeChecked();
   });
 
   it("9. approves from modal calling original endpoint", async () => {
@@ -760,10 +931,18 @@ describe("AuctionReviewModal & Pending Approval UX Improvements", () => {
     const rejectBtns = screen.getAllByRole("button", { name: "ปฏิเสธสินค้า" });
     const modalRejectBtn = rejectBtns[rejectBtns.length - 1];
     fireEvent.click(modalRejectBtn);
+    fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียดที่ผู้ขายต้องแก้ไข/), {
+      target: { value: "รูปภาพสินค้าไม่ชัดเจน" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ยืนยันการปฏิเสธสินค้า" }));
 
     expect(apiFetch).toHaveBeenCalledWith(
       "/api/products/auctions/auc-pending-1/reject",
-      expect.objectContaining({ method: "PATCH", token: mockToken }),
+      expect.objectContaining({
+        method: "PATCH",
+        token: mockToken,
+        body: { reason: "รูปภาพสินค้าไม่ชัดเจน" },
+      }),
     );
 
     await waitFor(() => {
@@ -779,6 +958,10 @@ describe("AuctionReviewModal & Pending Approval UX Improvements", () => {
     );
     const rejectBtns = screen.getAllByRole("button", { name: "ปฏิเสธสินค้า" });
     fireEvent.click(rejectBtns[rejectBtns.length - 1]);
+    fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียดที่ผู้ขายต้องแก้ไข/), {
+      target: { value: "รายละเอียดไม่ตรงกับรูปภาพ" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ยืนยันการปฏิเสธสินค้า" }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -969,10 +1152,18 @@ describe("AuctionReviewModal & Pending Approval UX Improvements", () => {
 
     const listRejectBtn = screen.getByRole("button", { name: "ปฏิเสธสินค้า" });
     fireEvent.click(listRejectBtn);
+    fireEvent.change(screen.getByPlaceholderText(/ระบุรายละเอียดที่ผู้ขายต้องแก้ไข/), {
+      target: { value: "กรุณาเพิ่มรายละเอียดสินค้า" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ยืนยันการปฏิเสธสินค้า" }));
 
     expect(apiFetch).toHaveBeenCalledWith(
       "/api/products/auctions/auc-pending-1/reject",
-      expect.objectContaining({ method: "PATCH", token: mockToken }),
+      expect.objectContaining({
+        method: "PATCH",
+        token: mockToken,
+        body: { reason: "กรุณาเพิ่มรายละเอียดสินค้า" },
+      }),
     );
 
     await waitFor(() => {
@@ -1051,7 +1242,7 @@ describe("MKT-DEC-026: Round Filter, Single-Item Cancellation Modal, Round Cance
         });
       }
       if (url.includes("/api/products/auctions")) {
-        if (url.includes("roundId=round-a")) {
+        if (url.includes("roundIds=round-a")) {
           return Promise.resolve({ items: [pendingItemA], total: 1 });
         }
         return Promise.resolve({
@@ -1063,29 +1254,71 @@ describe("MKT-DEC-026: Round Filter, Single-Item Cancellation Modal, Round Cance
     });
   });
 
-  it("renders round filter with default 'ทุกรอบประมูล' and filters AuctionItems by selected round", async () => {
+  it("groups the round filter and filters AuctionItems by selected round", async () => {
     render(<AuctionScheduleSection token={mockToken} />);
 
     expect(await screen.findByText("เสื้อเชิ้ตผ้าลินิน")).toBeInTheDocument();
     expect(screen.getByText("รองเท้าวิ่ง Nike Zoom")).toBeInTheDocument();
 
-    // Open round filter dropdown
     const filterBtn = screen.getByRole("button", { name: /ทุกรอบประมูล/ });
     fireEvent.click(filterBtn);
-
-    const listbox = within(filterBtn.parentElement).getByRole("listbox");
-    const roundAOption = within(listbox).getByText(/รอบประมูลแฟชั่นวินเทจ/);
-    fireEvent.click(roundAOption);
+    fireEvent.click(screen.getByRole("checkbox", { name: "รอบประมูลแฟชั่นวินเทจ" }));
 
     await waitFor(() => {
       expect(apiFetch).toHaveBeenCalledWith(
-        expect.stringContaining("roundId=round-a"),
+        expect.stringContaining("roundIds=round-a"),
         expect.objectContaining({ token: mockToken }),
       );
     });
 
     expect(await screen.findByText("เสื้อเชิ้ตผ้าลินิน")).toBeInTheDocument();
     expect(screen.queryByText("รองเท้าวิ่ง Nike Zoom")).not.toBeInTheDocument();
+  });
+
+  it("combines round, status, and search filters in the server-side paginated request", async () => {
+    render(<AuctionScheduleSection token={mockToken} />);
+    expect(await screen.findByText("เสื้อเชิ้ตผ้าลินิน")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /ทุกรอบประมูล/ }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "รอบประมูลแฟชั่นวินเทจ" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /ทุกสถานะ/ }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "รออนุมัติจาก Marketing" }),
+    );
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "ค้นหาชื่อสินค้าหรือร้านค้า" }),
+      { target: { value: "เสื้อเชิ้ต" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "ค้นหา" }));
+
+    await waitFor(() => {
+      const listCalls = apiFetch.mock.calls
+        .map(([url]) => url)
+        .filter((url) => url.startsWith("/api/products/auctions?"));
+      expect(listCalls.some((url) =>
+        url.includes("roundIds=round-a") &&
+        url.includes("statuses=pending_approval") &&
+        url.includes("search=%E0%B9%80%E0%B8%AA%E0%B8%B7%E0%B9%89%E0%B8%AD%E0%B9%80%E0%B8%8A%E0%B8%B4%E0%B9%89%E0%B8%95") &&
+        url.includes("page=1") &&
+        url.includes("limit=20"),
+      )).toBe(true);
+    });
+  });
+
+  it("does not offer the legacy approved-without-schedule status in Marketing filters", async () => {
+    render(<AuctionScheduleSection token={mockToken} />);
+    expect(await screen.findByText("เสื้อเชิ้ตผ้าลินิน")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /ทุกสถานะ/ }));
+
+    expect(
+      screen.queryByRole("checkbox", { name: "อนุมัติแล้ว รอกำหนดเวลา" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", { name: "อนุมัติแล้ว (รอเปิดประมูล)" }),
+    ).toBeInTheDocument();
   });
 
   it("displays clear Thai error message when loading rounds for filter fails", async () => {
@@ -1438,6 +1671,623 @@ describe("MKT-DEC-026: Round Filter, Single-Item Cancellation Modal, Round Cance
 
     await waitFor(() => {
       expect(roundCancelAttempt).toBe(2);
+    });
+  });
+});
+
+describe("AuctionScheduleSection & RoundManagementSection - Unified Marketing Pagination", () => {
+  const mockToken = "mock-mkt-jwt-token";
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("RoundManagementSection: paginates round history with 20 items per page and navigates pages", async () => {
+    const mockRounds = Array.from({ length: 25 }, (_, i) => ({
+      id: `round-${i + 1}`,
+      title: `รอบการประมูลทดสอบที่ ${i + 1}`,
+      phase: "upcoming",
+      submissionStartsAt: "2026-10-01T00:00:00.000Z",
+      submissionEndsAt: "2026-10-03T00:00:00.000Z",
+      auctionStartsAt: "2026-10-03T12:00:00.000Z",
+      auctionEndsAt: "2026-10-05T12:00:00.000Z",
+      _count: { auctions: i },
+    }));
+
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/api/products/auctions/rounds/current")) {
+        return Promise.resolve(null);
+      }
+      if (url.includes("/api/products/auctions/rounds")) {
+        if (url.includes("page=2")) {
+          return Promise.resolve({
+            items: mockRounds.slice(20, 25),
+            total: 25,
+            totalPages: 2,
+            page: 2,
+            limit: 20,
+          });
+        }
+        if (url.includes("page=")) {
+          return Promise.resolve({
+            items: mockRounds.slice(0, 20),
+            total: 25,
+            totalPages: 2,
+            page: 1,
+            limit: 20,
+          });
+        }
+        return Promise.resolve({ items: mockRounds, total: 25 });
+      }
+      if (url.includes("/api/products/categories")) {
+        return Promise.resolve({ items: ["อิเล็กทรอนิกส์"] });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<RoundManagementSection token={mockToken} />);
+
+    // Page 1: Check item 1 and item 20 are visible, item 21 is not
+    expect(
+      await screen.findByText("รอบการประมูลทดสอบที่ 1"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("รอบการประมูลทดสอบที่ 20")).toBeInTheDocument();
+    expect(
+      screen.queryByText("รอบการประมูลทดสอบที่ 21"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "ดูรายละเอียดรอบ รอบการประมูลทดสอบที่ 1",
+      }),
+    );
+    const detailsDialog = screen.getByRole("dialog", {
+      name: "รายละเอียดรอบการประมูล",
+    });
+    expect(within(detailsDialog).getByText("ข้อมูลแบบอ่านอย่างเดียวจากประวัติรอบการประมูล")).toBeInTheDocument();
+    expect(within(detailsDialog).queryByRole("button", { name: "แก้ไขเวลา" })).not.toBeInTheDocument();
+    fireEvent.click(within(detailsDialog).getByRole("button", { name: "ปิดหน้าต่าง" }));
+
+    // Verify pagination controls on Page 1
+    const prevBtn = screen.getByRole("button", { name: "ก่อนหน้า" });
+    const nextBtn = screen.getByRole("button", { name: "ถัดไป" });
+    expect(prevBtn).toBeDisabled();
+    expect(nextBtn).toBeEnabled();
+
+    // Page summary
+    expect(screen.getByText("25")).toBeInTheDocument();
+    expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("2").length).toBeGreaterThanOrEqual(1);
+
+    // Navigate to Page 2
+    fireEvent.click(nextBtn);
+
+    expect(
+      await screen.findByText("รอบการประมูลทดสอบที่ 21"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("รอบการประมูลทดสอบที่ 25")).toBeInTheDocument();
+    expect(
+      screen.queryByText("รอบการประมูลทดสอบที่ 1"),
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "ก่อนหน้า" })).toBeEnabled();
+    });
+    expect(screen.getByRole("button", { name: "ถัดไป" })).toBeDisabled();
+
+    // Navigate back to Page 1
+    fireEvent.click(screen.getByRole("button", { name: "ก่อนหน้า" }));
+    expect(
+      await screen.findByText("รอบการประมูลทดสอบที่ 1"),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "ก่อนหน้า" })).toBeDisabled();
+    });
+    expect(screen.getByRole("button", { name: "ถัดไป" })).toBeEnabled();
+  });
+
+  it("AuctionScheduleSection: loads page 1 with limit 20 and handles pagination controls", async () => {
+    const mockAuctionsPage1 = Array.from({ length: 20 }, (_, i) => ({
+      id: `auc-${i + 1}`,
+      productId: `prod-${i + 1}`,
+      product: { title: `สินค้าประมูลชิ้นที่ ${i + 1}` },
+      status: "approved",
+      startingPrice: 1000,
+      bidIncrement: 100,
+      scheduledStartAt: "2026-10-01T00:00:00.000Z",
+      scheduledEndAt: "2026-10-02T00:00:00.000Z",
+    }));
+
+    const mockAuctionsPage2 = Array.from({ length: 5 }, (_, i) => ({
+      id: `auc-${i + 21}`,
+      productId: `prod-${i + 21}`,
+      product: { title: `สินค้าประมูลชิ้นที่ ${i + 21}` },
+      status: "approved",
+      startingPrice: 2000,
+      bidIncrement: 200,
+      scheduledStartAt: "2026-10-01T00:00:00.000Z",
+      scheduledEndAt: "2026-10-02T00:00:00.000Z",
+    }));
+
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/api/products/auctions/rounds/current")) {
+        return Promise.resolve(null);
+      }
+      if (url.includes("/api/products/auctions/rounds")) {
+        return Promise.resolve({ items: [] });
+      }
+      if (url.includes("/api/products/categories")) {
+        return Promise.resolve({ items: [] });
+      }
+      if (url.includes("/api/products/auctions?")) {
+        if (url.includes("page=2")) {
+          return Promise.resolve({
+            items: mockAuctionsPage2,
+            total: 25,
+            totalPages: 2,
+            page: 2,
+            limit: 20,
+          });
+        }
+        return Promise.resolve({
+          items: mockAuctionsPage1,
+          total: 25,
+          totalPages: 2,
+          page: 1,
+          limit: 20,
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<AuctionScheduleSection token={mockToken} />);
+
+    // Verify initial call has page=1 and limit=20
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/products\/auctions\?.*page=1.*limit=20/),
+        expect.anything(),
+      );
+    });
+
+    expect(
+      await screen.findByText("สินค้าประมูลชิ้นที่ 1"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("สินค้าประมูลชิ้นที่ 20")).toBeInTheDocument();
+
+    const prevBtns = screen.getAllByRole("button", { name: "ก่อนหน้า" });
+    const nextBtns = screen.getAllByRole("button", { name: "ถัดไป" });
+    const itemPrevBtn = prevBtns[prevBtns.length - 1];
+    const itemNextBtn = nextBtns[nextBtns.length - 1];
+    expect(itemPrevBtn).toBeDisabled();
+    expect(itemNextBtn).toBeEnabled();
+
+    // Navigate to page 2
+    fireEvent.click(itemNextBtn);
+
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/products\/auctions\?.*page=2.*limit=20/),
+        expect.anything(),
+      );
+    });
+
+    expect(
+      await screen.findByText("สินค้าประมูลชิ้นที่ 21"),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      const updatedPrev = screen.getAllByRole("button", { name: "ก่อนหน้า" });
+      expect(updatedPrev[updatedPrev.length - 1]).toBeEnabled();
+    });
+    const updatedNext = screen.getAllByRole("button", { name: "ถัดไป" });
+    expect(updatedNext[updatedNext.length - 1]).toBeDisabled();
+  });
+
+  it("AuctionScheduleSection: resets page to 1 on filter changes", async () => {
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/api/products/auctions/rounds")) {
+        return Promise.resolve({
+          items: [{ id: "round-1", title: "รอบที่ 1", phase: "submission" }],
+        });
+      }
+      if (url.includes("/api/products/auctions?")) {
+        return Promise.resolve({
+          items: [
+            {
+              id: "auc-1",
+              productId: "prod-1",
+              product: { title: "สินค้าทดสอบ" },
+              status: "approved",
+            },
+          ],
+          total: 25,
+          totalPages: 2,
+          page: 1,
+          limit: 20,
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<AuctionScheduleSection token={mockToken} />);
+
+    expect(await screen.findByText("สินค้าทดสอบ")).toBeInTheDocument();
+
+    // Verify initial call was page 1
+    expect(apiFetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/api\/products\/auctions\?.*page=1.*limit=20/),
+      expect.anything(),
+    );
+  });
+
+  describe("RoundManagementSection - Pagination Comprehensive Coverage", () => {
+    it("RoundManagementSection: handles 0 items with empty message, 'ทั้งหมด 0 รายการ · หน้า 1 จาก 1', and disabled buttons", async () => {
+      apiFetch.mockImplementation((url) => {
+        if (url.includes("/api/products/auctions/rounds/current")) {
+          return Promise.resolve(null);
+        }
+        if (url.includes("/api/products/auctions/rounds")) {
+          return Promise.resolve({ items: [], total: 0, totalPages: 1 });
+        }
+        if (url.includes("/api/products/categories")) {
+          return Promise.resolve({ items: [] });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<RoundManagementSection token={mockToken} />);
+
+      expect(
+        await screen.findByText("ยังไม่มีประวัติรอบการประมูล"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "ทั้งหมด 0 รายการ",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "หน้า 1 จาก 1",
+        ),
+      ).toBeInTheDocument();
+
+      const prevBtn = screen.getByRole("button", { name: "ก่อนหน้า" });
+      const nextBtn = screen.getByRole("button", { name: "ถัดไป" });
+      expect(prevBtn).toBeInTheDocument();
+      expect(nextBtn).toBeInTheDocument();
+      expect(prevBtn).toBeDisabled();
+      expect(nextBtn).toBeDisabled();
+    });
+
+    it("RoundManagementSection: handles single page with disabled buttons", async () => {
+      apiFetch.mockImplementation((url) => {
+        if (url.includes("/api/products/auctions/rounds/current")) {
+          return Promise.resolve(null);
+        }
+        if (url.includes("/api/products/auctions/rounds")) {
+          return Promise.resolve({
+            items: [
+              {
+                id: "round-1",
+                title: "รอบประมูลรอบเดียว",
+                phase: "upcoming",
+                submissionStartsAt: "2026-10-01T00:00:00.000Z",
+                submissionEndsAt: "2026-10-02T00:00:00.000Z",
+                auctionStartsAt: "2026-10-03T00:00:00.000Z",
+                auctionEndsAt: "2026-10-04T00:00:00.000Z",
+                categories: [],
+                _count: { auctions: 2 },
+              },
+            ],
+            total: 1,
+            totalPages: 1,
+          });
+        }
+        if (url.includes("/api/products/categories")) {
+          return Promise.resolve({ items: [] });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<RoundManagementSection token={mockToken} />);
+
+      expect(
+        await screen.findByText("รอบประมูลรอบเดียว"),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "ทั้งหมด 1 รายการ",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "หน้า 1 จาก 1",
+        ),
+      ).toBeInTheDocument();
+
+      const prevBtn = screen.getByRole("button", { name: "ก่อนหน้า" });
+      const nextBtn = screen.getByRole("button", { name: "ถัดไป" });
+      expect(prevBtn).toBeInTheDocument();
+      expect(nextBtn).toBeInTheDocument();
+      expect(prevBtn).toBeDisabled();
+      expect(nextBtn).toBeDisabled();
+    });
+
+    it("RoundManagementSection: handles loading state with disabled buttons and prevents double submit", async () => {
+      let resolvePromise;
+      apiFetch.mockImplementation((url) => {
+        if (url.includes("/api/products/auctions/rounds/current")) {
+          return Promise.resolve(null);
+        }
+        if (url.includes("/api/products/auctions/rounds")) {
+          return new Promise((resolve) => {
+            resolvePromise = resolve;
+          });
+        }
+        if (url.includes("/api/products/categories")) {
+          return Promise.resolve({ items: [] });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<RoundManagementSection token={mockToken} />);
+
+      const prevBtn = screen.getByRole("button", { name: "ก่อนหน้า" });
+      const nextBtn = screen.getByRole("button", { name: "ถัดไป" });
+      expect(prevBtn).toBeInTheDocument();
+      expect(nextBtn).toBeInTheDocument();
+      expect(prevBtn).toBeDisabled();
+      expect(nextBtn).toBeDisabled();
+
+      const callsBefore = apiFetch.mock.calls.length;
+      fireEvent.click(prevBtn);
+      fireEvent.click(nextBtn);
+      expect(apiFetch.mock.calls.length).toBe(callsBefore);
+
+      resolvePromise({ items: [], total: 0, totalPages: 1 });
+    });
+
+    it("RoundManagementSection: handles API error without displaying count 0 and disables navigation", async () => {
+      apiFetch.mockImplementation((url) => {
+        if (url.includes("/api/products/auctions/rounds/current")) {
+          return Promise.resolve(null);
+        }
+        if (url.includes("/api/products/auctions/rounds")) {
+          return Promise.reject(new Error("เครือข่ายขัดข้อง"));
+        }
+        if (url.includes("/api/products/categories")) {
+          return Promise.resolve({ items: [] });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<RoundManagementSection token={mockToken} />);
+
+      expect(
+        await screen.findByText("เครือข่ายขัดข้อง"),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "ทั้งหมด 0 รายการ",
+        ),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "ทั้งหมด — รายการ",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "หน้า — จาก —",
+        ),
+      ).toBeInTheDocument();
+
+      const prevBtn = screen.getByRole("button", { name: "ก่อนหน้า" });
+      const nextBtn = screen.getByRole("button", { name: "ถัดไป" });
+      expect(prevBtn).toBeInTheDocument();
+      expect(nextBtn).toBeInTheDocument();
+      expect(prevBtn).toBeDisabled();
+      expect(nextBtn).toBeDisabled();
+    });
+  });
+
+  describe("AuctionScheduleSection Items - Pagination Comprehensive Coverage", () => {
+    it("AuctionScheduleSection: handles 0 auction items with empty state and disabled buttons", async () => {
+      apiFetch.mockImplementation((url) => {
+        if (url.includes("/api/products/auctions/rounds/current")) {
+          return Promise.resolve(null);
+        }
+        if (url.includes("/api/products/auctions/rounds")) {
+          return Promise.resolve({ items: [], total: 0 });
+        }
+        if (url.includes("/api/products/categories")) {
+          return Promise.resolve({ items: [] });
+        }
+        if (url.includes("/api/products/auctions?")) {
+          return Promise.resolve({ items: [], total: 0, totalPages: 1 });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<AuctionScheduleSection token={mockToken} />);
+
+      expect(
+        await screen.findByText("ยังไม่มีรายการประมูลในหมวดนี้"),
+      ).toBeInTheDocument();
+
+      const allItemsCountSpans = screen.getAllByText(
+        (_, el) =>
+          el?.tagName?.toLowerCase() === "span" &&
+          el?.textContent?.trim() === "ทั้งหมด 0 รายการ",
+      );
+      // Both round and items pagination display 0 items
+      expect(allItemsCountSpans.length).toBe(2);
+
+      const prevBtns = screen.getAllByRole("button", { name: "ก่อนหน้า" });
+      const nextBtns = screen.getAllByRole("button", { name: "ถัดไป" });
+      expect(prevBtns.length).toBe(2);
+      expect(nextBtns.length).toBe(2);
+      expect(prevBtns[1]).toBeDisabled();
+      expect(nextBtns[1]).toBeDisabled();
+    });
+
+    it("AuctionScheduleSection: handles single page of auction items with disabled buttons", async () => {
+      apiFetch.mockImplementation((url) => {
+        if (url.includes("/api/products/auctions/rounds/current")) {
+          return Promise.resolve(null);
+        }
+        if (url.includes("/api/products/auctions/rounds")) {
+          return Promise.resolve({ items: [], total: 0 });
+        }
+        if (url.includes("/api/products/categories")) {
+          return Promise.resolve({ items: [] });
+        }
+        if (url.includes("/api/products/auctions?")) {
+          return Promise.resolve({
+            items: [
+              {
+                id: "auc-single-1",
+                productId: "prod-single-1",
+                product: { title: "สินค้าประมูลเดี่ยว" },
+                status: "approved",
+                startingPrice: 500,
+                bidIncrement: 50,
+                scheduledStartAt: "2026-10-01T00:00:00.000Z",
+                scheduledEndAt: "2026-10-02T00:00:00.000Z",
+              },
+            ],
+            total: 1,
+            totalPages: 1,
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<AuctionScheduleSection token={mockToken} />);
+
+      expect(
+        await screen.findByText("สินค้าประมูลเดี่ยว"),
+      ).toBeInTheDocument();
+
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "ทั้งหมด 1 รายการ",
+        ),
+      ).toBeInTheDocument();
+
+      const prevBtns = screen.getAllByRole("button", { name: "ก่อนหน้า" });
+      const nextBtns = screen.getAllByRole("button", { name: "ถัดไป" });
+      const itemPrevBtn = prevBtns[prevBtns.length - 1];
+      const itemNextBtn = nextBtns[nextBtns.length - 1];
+      expect(itemPrevBtn).toBeInTheDocument();
+      expect(itemNextBtn).toBeInTheDocument();
+      expect(itemPrevBtn).toBeDisabled();
+      expect(itemNextBtn).toBeDisabled();
+    });
+
+    it("AuctionScheduleSection: handles loading state for auction items with disabled buttons", async () => {
+      let resolvePromise;
+      apiFetch.mockImplementation((url) => {
+        if (url.includes("/api/products/auctions/rounds/current")) {
+          return Promise.resolve(null);
+        }
+        if (url.includes("/api/products/auctions/rounds")) {
+          return Promise.resolve({ items: [], total: 0 });
+        }
+        if (url.includes("/api/products/categories")) {
+          return Promise.resolve({ items: [] });
+        }
+        if (url.includes("/api/products/auctions?")) {
+          return new Promise((resolve) => {
+            resolvePromise = resolve;
+          });
+        }
+        return Promise.resolve({});
+      });
+
+      render(<AuctionScheduleSection token={mockToken} />);
+
+      expect(screen.getByText("กำลังโหลด...")).toBeInTheDocument();
+
+      const prevBtns = screen.getAllByRole("button", { name: "ก่อนหน้า" });
+      const nextBtns = screen.getAllByRole("button", { name: "ถัดไป" });
+      const itemPrevBtn = prevBtns[prevBtns.length - 1];
+      const itemNextBtn = nextBtns[nextBtns.length - 1];
+      expect(itemPrevBtn).toBeInTheDocument();
+      expect(itemNextBtn).toBeInTheDocument();
+      expect(itemPrevBtn).toBeDisabled();
+      expect(itemNextBtn).toBeDisabled();
+
+      const callsBefore = apiFetch.mock.calls.length;
+      fireEvent.click(itemPrevBtn);
+      fireEvent.click(itemNextBtn);
+      expect(apiFetch.mock.calls.length).toBe(callsBefore);
+
+      resolvePromise({ items: [], total: 0, totalPages: 1 });
+    });
+
+    it("AuctionScheduleSection: handles API error without displaying count 0 as success and disables navigation", async () => {
+      apiFetch.mockImplementation((url) => {
+        if (url.includes("/api/products/auctions/rounds/current")) {
+          return Promise.resolve(null);
+        }
+        if (url.includes("/api/products/auctions/rounds")) {
+          return Promise.resolve({ items: [], total: 0 });
+        }
+        if (url.includes("/api/products/categories")) {
+          return Promise.resolve({ items: [] });
+        }
+        if (url.includes("/api/products/auctions?")) {
+          return Promise.reject(new Error("การเชื่อมต่อรายการสินค้าล้มเหลว"));
+        }
+        return Promise.resolve({});
+      });
+
+      render(<AuctionScheduleSection token={mockToken} />);
+
+      expect(
+        await screen.findByText("การเชื่อมต่อรายการสินค้าล้มเหลว"),
+      ).toBeInTheDocument();
+
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "ทั้งหมด — รายการ",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          (_, el) =>
+            el?.tagName?.toLowerCase() === "span" &&
+            el?.textContent?.trim() === "หน้า — จาก —",
+        ),
+      ).toBeInTheDocument();
+
+      const prevBtns = screen.getAllByRole("button", { name: "ก่อนหน้า" });
+      const nextBtns = screen.getAllByRole("button", { name: "ถัดไป" });
+      const itemPrevBtn = prevBtns[prevBtns.length - 1];
+      const itemNextBtn = nextBtns[nextBtns.length - 1];
+      expect(itemPrevBtn).toBeInTheDocument();
+      expect(itemNextBtn).toBeInTheDocument();
+      expect(itemPrevBtn).toBeDisabled();
+      expect(itemNextBtn).toBeDisabled();
     });
   });
 });

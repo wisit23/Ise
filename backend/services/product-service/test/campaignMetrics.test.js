@@ -708,4 +708,123 @@ test("Campaign Metrics, Attribution & Conversion Suite", async (t) => {
       assert.equal(raceRetryOk.deduplicated, true);
     },
   );
+
+  await t.test(
+    "getAuctionActivityMetrics: counts distinct bidders and active stores within one shared range",
+    async () => {
+      const calls = [];
+      const dashboardPrisma = {
+        bid: {
+          findMany: async (args) => {
+            calls.push(["bid", args]);
+            return [{ bidderId: "buyer-1" }, { bidderId: "buyer-2" }];
+          },
+        },
+        product: {
+          findMany: async (args) => {
+            calls.push(["product", args]);
+            return [{ sellerId: "seller-1" }, { sellerId: "seller-2" }];
+          },
+        },
+        auctionItem: {
+          findMany: async (args) => {
+            calls.push(["auction", args]);
+            return [{ sellerId: "seller-2" }, { sellerId: "seller-3" }];
+          },
+          groupBy: async (args) => {
+            calls.push(["status", args]);
+            return [
+              { status: "open", _count: { _all: 2 } },
+              { status: "closed", _count: { _all: 4 } },
+            ];
+          },
+        },
+      };
+      const dashboardMetrics = createCampaignMetricsService(dashboardPrisma, {
+        isTestAdapter: true,
+      });
+
+      const result = await dashboardMetrics.getAuctionActivityMetrics({
+        from: "2026-06-01T00:00:00+07:00",
+        to: "2026-06-08T00:00:00+07:00",
+      });
+
+      assert.equal(result.distinctBidders, 2);
+      assert.equal(result.activeStores, 3);
+      assert.deepEqual(result.statusCounts, { open: 2, closed: 4 });
+      for (const [, args] of calls) {
+        const range = args.where.createdAt || args.where.updatedAt;
+        assert.equal(range.gte.toISOString(), "2026-05-31T17:00:00.000Z");
+        assert.equal(range.lt.toISOString(), "2026-06-07T17:00:00.000Z");
+      }
+    },
+  );
+
+  await t.test(
+    "dashboard campaign claims use the same half-open date range as revenue",
+    async () => {
+      const voucherCountCalls = [];
+      const rangedMetrics = createCampaignMetricsService(
+        {
+          campaign: {
+            count: async () => 2,
+            findUnique: async ({ where }) => ({
+              id: where.id,
+              code: "RANGED",
+              name: "Ranged Campaign",
+              usedCount: 99,
+            }),
+          },
+          userVoucher: {
+            count: async (args) => {
+              voucherCountCalls.push(args);
+              return args.where.campaignId ? 3 : 7;
+            },
+          },
+        },
+        { isTestAdapter: true },
+      );
+
+      const range = {
+        from: "2026-06-01T00:00:00+07:00",
+        to: "2026-06-08T00:00:00+07:00",
+      };
+      const campaign = await rangedMetrics.getCampaignMetrics({
+        campaignId: "camp-ranged",
+        ...range,
+      });
+      const overview = await rangedMetrics.getOverviewMetrics(range);
+
+      assert.equal(campaign.claimedCount, 3);
+      assert.equal(overview.totalClaimed, 7);
+      for (const call of voucherCountCalls) {
+        assert.equal(
+          call.where.claimedAt.gte.toISOString(),
+          "2026-05-31T17:00:00.000Z",
+        );
+        assert.equal(
+          call.where.claimedAt.lt.toISOString(),
+          "2026-06-07T17:00:00.000Z",
+        );
+      }
+    },
+  );
+
+  await t.test("dashboard metrics propagate campaign database errors", async () => {
+    const failingMetrics = createCampaignMetricsService(
+      {
+        campaign: {
+          findMany: async () => {
+            throw new Error("campaign database unavailable");
+          },
+        },
+      },
+      { isTestAdapter: true },
+    );
+
+    await assert.rejects(
+      () => failingMetrics.getOverviewMetrics({}),
+      /campaign database unavailable/,
+    );
+  });
 });

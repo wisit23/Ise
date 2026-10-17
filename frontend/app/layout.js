@@ -1,6 +1,7 @@
 import { Anuphan, Noto_Sans_Thai } from "next/font/google";
 import "./globals.css";
 import ChatSocketProvider from "../components/chat/ChatSocketProvider";
+import AuctionNotificationCenter from "../components/chat/AuctionNotificationCenter";
 import CommerceRestrictionBanner from "../components/CommerceRestrictionBanner";
 
 /* Self-hosted by next/font at build time — no runtime request to Google, no
@@ -53,6 +54,7 @@ export default function RootLayout({ children }) {
           See ChatSocketProvider's comment. */}
       <body className="font-sans">
         <ChatSocketProvider>
+          <AuctionNotificationCenter />
           <CommerceRestrictionBanner />
           {children}
         </ChatSocketProvider>

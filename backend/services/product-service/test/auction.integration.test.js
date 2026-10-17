@@ -1027,6 +1027,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
         .set("Authorization", `Bearer ${marketingToken}`)
         .send({
           title: roundATitle,
+          maxItems: 20,
           submissionStartsAt: new Date(testBaseMs).toISOString(),
           submissionEndsAt: new Date(testBaseMs + 2 * HOUR_MS).toISOString(),
           auctionStartsAt: new Date(testBaseMs + 3 * HOUR_MS).toISOString(),
@@ -1046,6 +1047,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
         .set("Authorization", `Bearer ${marketingToken}`)
         .send({
           title: roundOverlapTitle,
+          maxItems: 20,
           submissionStartsAt: new Date(testBaseMs + 1 * HOUR_MS).toISOString(),
           submissionEndsAt: new Date(testBaseMs + 2 * HOUR_MS).toISOString(),
           auctionStartsAt: new Date(testBaseMs + 3.5 * HOUR_MS).toISOString(),
@@ -1066,6 +1068,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
         .set("Authorization", `Bearer ${marketingToken}`)
         .send({
           title: roundBTitle,
+          maxItems: 20,
           submissionStartsAt: new Date(testBaseMs + 5 * HOUR_MS).toISOString(),
           submissionEndsAt: new Date(testBaseMs + 7 * HOUR_MS).toISOString(),
           auctionStartsAt: new Date(testBaseMs + 7 * HOUR_MS).toISOString(),
@@ -1085,6 +1088,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
         .set("Authorization", `Bearer ${marketingToken}`)
         .send({
           title: roundCTitle,
+          maxItems: 20,
           submissionStartsAt: new Date(testBaseMs + 11 * HOUR_MS).toISOString(),
           submissionEndsAt: new Date(testBaseMs + 13 * HOUR_MS).toISOString(),
           auctionStartsAt: new Date(testBaseMs + 13 * HOUR_MS).toISOString(),
@@ -1165,6 +1169,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
           .set("Authorization", `Bearer ${marketingToken}`)
           .send({
             title: concurrentInterval.title1,
+            maxItems: 20,
             submissionStartsAt: concurrentInterval.submissionStartsAt,
             submissionEndsAt: concurrentInterval.submissionEndsAt,
             auctionStartsAt: concurrentInterval.auctionStartsAt,
@@ -1175,6 +1180,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
           .set("Authorization", `Bearer ${marketingToken}`)
           .send({
             title: concurrentInterval.title2,
+            maxItems: 20,
             submissionStartsAt: concurrentInterval.submissionStartsAt,
             submissionEndsAt: concurrentInterval.submissionEndsAt,
             auctionStartsAt: concurrentInterval.auctionStartsAt,

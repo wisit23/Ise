@@ -1,6 +1,5 @@
 const { badRequest, conflict } = require("@reloop/shared");
 const defaultPrisma = require("../../models/prismaClient");
-const { recordAudit } = require("../audit/marketingAuditRepository");
 
 function createCampaignMetricsService(
   prismaClient = defaultPrisma,
@@ -181,58 +180,8 @@ function createCampaignMetricsService(
             },
           });
 
-          // Atomic budget increment and threshold check
-          if (campaignId && tx.campaign) {
-            const camp = await tx.campaign.findUnique({
-              where: { id: campaignId },
-            });
-            if (camp) {
-              const updated = await tx.campaign.update({
-                where: { id: campaignId },
-                data: {
-                  spentBudget: { increment: discountAmount },
-                },
-              });
-
-              // Check if budget reached
-              if (
-                updated.budget !== null &&
-                updated.budget !== undefined &&
-                updated.spentBudget >= updated.budget &&
-                updated.status !== "ended"
-              ) {
-                const endedCampaign = await tx.campaign.update({
-                  where: { id: campaignId },
-                  data: { status: "ended" },
-                });
-
-                if (tx.userVoucher) {
-                  await tx.userVoucher.updateMany({
-                    where: {
-                      campaignId,
-                      status: "CLAIMED",
-                    },
-                    data: { status: "EXPIRED" },
-                  });
-                }
-
-                await recordAudit(
-                  {
-                    actorId: "SYSTEM",
-                    actorRole: "SYSTEM",
-                    action: "CAMPAIGN_END",
-                    entityType: "CAMPAIGN",
-                    entityId: campaignId,
-                    previousState: updated,
-                    newState: endedCampaign,
-                    metadata: { reason: "BUDGET_REACHED" },
-                    idempotencyKey: `CAMPAIGN_END_BUDGET:${campaignId}`,
-                  },
-                  { tx },
-                );
-              }
-            }
-          }
+          // Budget is committed when payment succeeds in completeVoucher.
+          // Attribution may arrive later and must never charge the budget twice.
 
           return { recorded: true, fact };
         });
@@ -278,34 +227,6 @@ function createCampaignMetricsService(
     };
     memoryAttributions.set(eventId, factRecord);
 
-    if (campaignId && prismaClient && prismaClient.campaign) {
-      if (typeof prismaClient.campaign.findUnique === "function") {
-        const camp = await prismaClient.campaign.findUnique({
-          where: { id: campaignId },
-        });
-        if (camp) {
-          camp.spentBudget = (camp.spentBudget || 0) + discountAmount;
-          if (
-            camp.budget !== null &&
-            camp.budget !== undefined &&
-            camp.spentBudget >= camp.budget &&
-            camp.status !== "ended"
-          ) {
-            camp.status = "ended";
-            if (
-              prismaClient.userVoucher &&
-              typeof prismaClient.userVoucher.updateMany === "function"
-            ) {
-              await prismaClient.userVoucher.updateMany({
-                where: { campaignId, status: "CLAIMED" },
-                data: { status: "EXPIRED" },
-              });
-            }
-          }
-        }
-      }
-    }
-
     return { recorded: true, fact: factRecord };
   }
 
@@ -320,7 +241,7 @@ function createCampaignMetricsService(
       if (fromDate || toDate) {
         where.completedAt = {};
         if (fromDate) where.completedAt.gte = fromDate;
-        if (toDate) where.completedAt.lte = toDate;
+        if (toDate) where.completedAt.lt = toDate;
       }
       return prismaClient.campaignAttribution.findMany({
         where,
@@ -339,7 +260,7 @@ function createCampaignMetricsService(
       facts = facts.filter((f) => new Date(f.completedAt) >= fromDate);
     }
     if (toDate) {
-      facts = facts.filter((f) => new Date(f.completedAt) <= toDate);
+      facts = facts.filter((f) => new Date(f.completedAt) < toDate);
     }
     return facts;
   }
@@ -352,14 +273,10 @@ function createCampaignMetricsService(
 
     let camp = campaign;
     if (!camp && prismaClient && prismaClient.campaign) {
-      try {
-        camp = await prismaClient.campaign.findUnique({
-          where: { id: targetId },
-          include: { _count: { select: { vouchers: true } } },
-        });
-      } catch {
-        camp = null;
-      }
+      camp = await prismaClient.campaign.findUnique({
+        where: { id: targetId },
+        include: { _count: { select: { vouchers: true } } },
+      });
     }
 
     const facts = await getAttributionFacts({
@@ -373,7 +290,15 @@ function createCampaignMetricsService(
     const totalDiscount = facts.reduce((sum, f) => sum + Math.round(Number(f.discountAmount)*100), 0)/100;
     const netRevenue = facts.reduce((sum, f) => sum + Math.round(Number(f.netAmount)*100), 0)/100;
 
-    const claimedCount = camp?.usedCount ?? (camp?._count?.vouchers || 0);
+    let claimedCount = camp?.usedCount ?? (camp?._count?.vouchers || 0);
+    if ((fromDate || toDate) && prismaClient?.userVoucher?.count) {
+      const claimedAt = {};
+      if (fromDate) claimedAt.gte = fromDate;
+      if (toDate) claimedAt.lt = toDate;
+      claimedCount = await prismaClient.userVoucher.count({
+        where: { campaignId: targetId, claimedAt },
+      });
+    }
     const redeemedCount = completedOrders;
     const conversionRate =
       claimedCount > 0
@@ -403,17 +328,20 @@ function createCampaignMetricsService(
     let totalCampaigns = 0;
     let totalClaimed = 0;
 
-    if (prismaClient && prismaClient.campaign) {
-      try {
-        const camps = await prismaClient.campaign.findMany({
-          select: { usedCount: true },
-        });
-        totalCampaigns = camps.length;
-        totalClaimed = camps.reduce((s, c) => s + (c.usedCount || 0), 0);
-      } catch {
-        totalCampaigns = 0;
-        totalClaimed = 0;
-      }
+    if ((fromDate || toDate) && prismaClient?.userVoucher?.count) {
+      const claimedAt = {};
+      if (fromDate) claimedAt.gte = fromDate;
+      if (toDate) claimedAt.lt = toDate;
+      totalClaimed = await prismaClient.userVoucher.count({
+        where: { claimedAt },
+      });
+      totalCampaigns = await prismaClient.campaign.count();
+    } else if (prismaClient && prismaClient.campaign) {
+      const camps = await prismaClient.campaign.findMany({
+        select: { usedCount: true },
+      });
+      totalCampaigns = camps.length;
+      totalClaimed = camps.reduce((s, c) => s + (c.usedCount || 0), 0);
     }
 
     const completedOrders = facts.length;
@@ -475,6 +403,75 @@ function createCampaignMetricsService(
     };
   }
 
+  async function getAuctionActivityMetrics({ from, to }) {
+    const { fromDate, toDate } = validateDateRange(from, to);
+    const activityWindow = {};
+    if (fromDate) activityWindow.gte = fromDate;
+    if (toDate) activityWindow.lt = toDate;
+    const hasWindow = fromDate || toDate;
+
+    if (
+      !prismaClient?.bid?.findMany ||
+      !prismaClient?.product?.findMany ||
+      !prismaClient?.auctionItem?.findMany ||
+      !prismaClient?.auctionItem?.groupBy
+    ) {
+      if (isProductionPath) {
+        throw new Error(
+          "bid, product and auctionItem Prisma models are required for dashboard auction metrics",
+        );
+      }
+      return {
+        distinctBidders: 0,
+        activeStores: 0,
+        statusCounts: {},
+        from: from || null,
+        to: to || null,
+      };
+    }
+
+    const [bidders, productSellers, auctionSellers, statusRows] =
+      await Promise.all([
+        prismaClient.bid.findMany({
+          where: hasWindow ? { createdAt: activityWindow } : {},
+          distinct: ["bidderId"],
+          select: { bidderId: true },
+        }),
+        prismaClient.product.findMany({
+          where: hasWindow ? { createdAt: activityWindow } : {},
+          distinct: ["sellerId"],
+          select: { sellerId: true },
+        }),
+        prismaClient.auctionItem.findMany({
+          where: hasWindow ? { updatedAt: activityWindow } : {},
+          distinct: ["sellerId"],
+          select: { sellerId: true },
+        }),
+        prismaClient.auctionItem.groupBy({
+          by: ["status"],
+          where: hasWindow ? { updatedAt: activityWindow } : {},
+          _count: { _all: true },
+        }),
+      ]);
+
+    const activeSellerIds = new Set(
+      [...productSellers, ...auctionSellers]
+        .map((item) => item.sellerId)
+        .filter(Boolean),
+    );
+    const statusCounts = Object.fromEntries(
+      statusRows.map((row) => [row.status, row._count?._all || 0]),
+    );
+
+    return {
+      distinctBidders: bidders.length,
+      activeStores: activeSellerIds.size,
+      statusCounts,
+      from: from || null,
+      to: to || null,
+    };
+  }
+
   async function getCampaignComparison({ campaignIds, from, to }) {
     validateDateRange(from, to);
 
@@ -488,15 +485,11 @@ function createCampaignMetricsService(
     if (!Array.isArray(ids) || ids.length === 0) {
       // If no campaign IDs given, load all campaigns
       if (prismaClient && prismaClient.campaign) {
-        try {
-          const all = await prismaClient.campaign.findMany({
-            select: { id: true },
-            take: 20,
-          });
-          ids = all.map((c) => c.id);
-        } catch {
-          ids = [];
-        }
+        const all = await prismaClient.campaign.findMany({
+          select: { id: true },
+          take: 20,
+        });
+        ids = all.map((c) => c.id);
       } else {
         ids = [];
       }
@@ -527,6 +520,7 @@ function createCampaignMetricsService(
     getCampaignMetrics,
     getOverviewMetrics,
     getSalesTrends,
+    getAuctionActivityMetrics,
     getCampaignComparison,
     resetMemory,
   };

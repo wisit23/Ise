@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useId } from "react";
+import React, { useState, useRef, useEffect, useId, useCallback } from "react";
+
+const VIEWPORT_EDGE_MARGIN_PX = 16;
+const MENU_OFFSET_GAP_PX = 8;
+const DEFAULT_MENU_MAX_HEIGHT_PX = 280;
+const MIN_DOWNWARD_SPACE_PX = 160;
+const MIN_MENU_MAX_HEIGHT_PX = 120;
 
 /**
  * RadioSelect / Animated Select Component
@@ -41,10 +47,15 @@ export default function RadioSelect({
   buttonClassName = "",
   disabled = false,
   ariaLabel,
+  nativeAriaLabel,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [effectiveAlign, setEffectiveAlign] = useState(
     align === "right" ? "right" : "left",
+  );
+  const [verticalPlacement, setVerticalPlacement] = useState("bottom");
+  const [menuMaxHeight, setMenuMaxHeight] = useState(
+    DEFAULT_MENU_MAX_HEIGHT_PX,
   );
   const dropdownRef = useRef(null);
   const triggerRef = useRef(null);
@@ -77,18 +88,18 @@ export default function RadioSelect({
     triggerRef.current?.focus();
   };
 
-  const checkAlignment = () => {
+  const checkAlignment = useCallback(() => {
+    const hasWindow = typeof window !== "undefined";
+    const rect =
+      dropdownRef.current && hasWindow
+        ? dropdownRef.current.getBoundingClientRect()
+        : null;
+
     if (align === "right") {
       setEffectiveAlign("right");
-      return;
-    }
-    if (align === "left") {
+    } else if (align === "left") {
       setEffectiveAlign("left");
-      return;
-    }
-    // "auto" detection
-    if (dropdownRef.current && typeof window !== "undefined") {
-      const rect = dropdownRef.current.getBoundingClientRect();
+    } else if (rect) {
       const viewportWidth = window.innerWidth;
       // If dropdown button's right side is close to viewport right edge (less than 190px space), align right
       if (viewportWidth - rect.left < 210 || rect.right > viewportWidth - 30) {
@@ -97,7 +108,64 @@ export default function RadioSelect({
         setEffectiveAlign("left");
       }
     }
-  };
+
+    if (rect && window.innerHeight > 0) {
+      let clippingBottom = window.innerHeight;
+      let clippingTop = 0;
+      let parent = dropdownRef.current?.parentElement;
+
+      while (
+        parent &&
+        parent !== document.body &&
+        parent !== document.documentElement
+      ) {
+        const style = window.getComputedStyle(parent);
+        const overflow = (style.overflowY || "") + " " + (style.overflow || "");
+        if (/(auto|scroll|hidden)/.test(overflow)) {
+          const parentRect = parent.getBoundingClientRect();
+          if (parentRect.height > 0) {
+            clippingBottom = Math.min(clippingBottom, parentRect.bottom);
+            clippingTop = Math.max(clippingTop, parentRect.top);
+          }
+        }
+        parent = parent.parentElement;
+      }
+
+      const spaceBelow =
+        clippingBottom -
+        rect.bottom -
+        VIEWPORT_EDGE_MARGIN_PX -
+        MENU_OFFSET_GAP_PX;
+      const spaceAbove =
+        rect.top - clippingTop - VIEWPORT_EDGE_MARGIN_PX - MENU_OFFSET_GAP_PX;
+      const shouldFlipUpward =
+        spaceBelow < MIN_DOWNWARD_SPACE_PX && spaceAbove > spaceBelow;
+      const availableSpace = shouldFlipUpward ? spaceAbove : spaceBelow;
+
+      setVerticalPlacement(shouldFlipUpward ? "top" : "bottom");
+      setMenuMaxHeight(
+        Math.min(
+          DEFAULT_MENU_MAX_HEIGHT_PX,
+          Math.max(MIN_MENU_MAX_HEIGHT_PX, Math.floor(availableSpace)),
+        ),
+      );
+    }
+  }, [align]);
+
+  // Recalculate positioning and bounds on resize or scroll when open
+  useEffect(() => {
+    if (!isOpen) return;
+    checkAlignment();
+    const handleScrollOrResize = () => {
+      checkAlignment();
+    };
+    window.addEventListener("resize", handleScrollOrResize);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    return () => {
+      window.removeEventListener("resize", handleScrollOrResize);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+    };
+  }, [isOpen, checkAlignment]);
 
   const handleMouseEnter = () => {
     if (disabled || !hoverToOpen) return;
@@ -130,16 +198,34 @@ export default function RadioSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape" && isOpen) {
+      e.stopPropagation();
+      e.nativeEvent?.stopImmediatePropagation?.();
+      setIsOpen(false);
+      triggerRef.current?.focus();
+    }
+  };
+
   // Handle Escape key
   useEffect(() => {
-    function handleKeyDown(e) {
-      if (e.key === "Escape" && isOpen) {
+    if (!isOpen) return;
+
+    function handleEscape(e) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
         setIsOpen(false);
         triggerRef.current?.focus();
       }
     }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+
+    window.addEventListener("keydown", handleEscape, true);
+    document.addEventListener("keydown", handleEscape, true);
+    return () => {
+      window.removeEventListener("keydown", handleEscape, true);
+      document.removeEventListener("keydown", handleEscape, true);
+    };
   }, [isOpen]);
 
   // Variant themes
@@ -234,17 +320,18 @@ export default function RadioSelect({
       ref={dropdownRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onKeyDown={handleKeyDown}
     >
       {/* Hidden native select for standard HTML form submission & test compatibility */}
-      {id && (
+      {(id || nativeAriaLabel) && (
         <select
           id={id}
           name={groupName}
-          value={value}
+          value={value ?? ""}
           onChange={(e) => handleSelect(e.target.value)}
           className="sr-only"
           tabIndex={-1}
-          aria-hidden="true"
+          aria-label={nativeAriaLabel}
         >
           {normalizedOptions.map((opt) => (
             <option key={String(opt.value)} value={opt.value}>
@@ -310,18 +397,22 @@ export default function RadioSelect({
       <div
         role="listbox"
         tabIndex={-1}
-        className={`absolute top-full z-50 min-w-[170px] w-full max-w-[calc(100vw-32px)] transition-all duration-300 ease-out ${
-          variantStyles.menu
-        } ${sizeStyles.menu} ${
+        className={`absolute z-50 min-w-[170px] w-full max-w-[calc(100vw-32px)] overflow-y-auto overscroll-contain transition-opacity transition-transform duration-300 ease-out ${
+          verticalPlacement === "top" ? "bottom-full mb-1.5 mt-0" : "top-full"
+        } ${variantStyles.menu} ${sizeStyles.menu} ${
           effectiveAlign === "right" ? "right-0 left-auto" : "left-0 right-auto"
         } ${
           isOpen
             ? "opacity-100 translate-y-0 pointer-events-auto visible"
-            : "opacity-0 -translate-y-3 pointer-events-none invisible"
+            : verticalPlacement === "top"
+              ? "opacity-0 translate-y-3 pointer-events-none invisible"
+              : "opacity-0 -translate-y-3 pointer-events-none invisible"
         }`}
         style={{
-          transformOrigin:
-            effectiveAlign === "right" ? "top right" : "top left",
+          maxHeight: `${menuMaxHeight}px`,
+          transformOrigin: `${verticalPlacement === "top" ? "bottom" : "top"} ${
+            effectiveAlign === "right" ? "right" : "left"
+          }`,
         }}
       >
         <div className="flex flex-col gap-0.5">

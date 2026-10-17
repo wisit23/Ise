@@ -9,6 +9,7 @@ const productClient = require("./services/productClient");
 const checkoutSessionService = require("./features/checkoutSessions/checkoutSessionService");
 const productSyncService = require("./services/productSyncService");
 const attributionOutboxService = require("./services/attributionOutboxService");
+const auctionSettlementService = require("./features/auctionSettlements/auctionSettlementService");
 
 const PORT = process.env.ORDER_PORT || 3003;
 app.listen(PORT, () => {
@@ -22,4 +23,5 @@ app.listen(PORT, () => {
   checkoutSessionService.startExpiryWorker();
   productSyncService.startWorker();
   attributionOutboxService.startWorker();
+  auctionSettlementService.startWorker();
 });

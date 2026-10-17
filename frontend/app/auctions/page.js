@@ -52,14 +52,8 @@ export default function AuctionsBrowsePage() {
     load();
   }, [load]);
 
-  const nowMs = Date.now();
-  const isVisibleRound = (r) => {
-    const isCancelled = Boolean(r?.cancelledAt || r?.phase === "cancelled");
-    if (isCancelled && r?.auctionEndsAt) {
-      return new Date(r.auctionEndsAt).getTime() > nowMs;
-    }
-    return true;
-  };
+  const isVisibleRound = (round) =>
+    !round?.cancelledAt && round?.phase !== "cancelled";
   const activeRounds = data.activeAuctionRounds.filter(isVisibleRound);
   const upcomingRounds = data.upcomingRounds.filter(isVisibleRound);
   const hasNoRounds = activeRounds.length === 0 && upcomingRounds.length === 0;

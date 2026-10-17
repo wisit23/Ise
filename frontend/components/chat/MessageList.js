@@ -1,9 +1,10 @@
 "use client";
 
 import { Fragment, useRef, useState } from "react";
+import Link from "next/link";
 import MessageAttachment from "./MessageAttachment";
 import { apiFetch } from "../../lib/api";
-import { getAccessToken } from "../../lib/auth";
+import { getAccessToken, safeInternalPath } from "../../lib/auth";
 
 const QUICK_PROMPTS = [
   "สินค้ายังอยู่ไหมครับ?",
@@ -146,6 +147,12 @@ export default function MessageList({
           dateKey(m.createdAt) !== dateKey(messages[index - 1]?.createdAt);
 
         if (m.type === "SYSTEM") {
+          const actionUrl = safeInternalPath(m.payload?.actionUrl);
+          const actionLabel =
+            typeof m.payload?.actionLabel === "string" &&
+            m.payload.actionLabel.trim()
+              ? m.payload.actionLabel.trim()
+              : "ดูรายละเอียด";
           const isOrderNotification =
             Boolean(m.payload?.orderId) ||
             m.body?.includes("หมายเลขคำสั่งซื้อ") ||
@@ -212,9 +219,25 @@ export default function MessageList({
                     ) : null}
                   </div>
                 ) : (
-                  <span className="rounded-full bg-gray-100/90 border border-gray-200/60 px-3.5 py-1 text-[11px] font-medium text-gray-500 shadow-2xs">
-                    {m.body}
-                  </span>
+                  <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-xs text-slate-700 shadow-2xs">
+                    <p className="whitespace-pre-line leading-relaxed">
+                      {m.body}
+                    </p>
+                    {actionUrl && (
+                      <Link
+                        href={actionUrl}
+                        className="focus-ring mt-3 inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                      >
+                        <span
+                          className="material-symbols-outlined text-[17px]"
+                          aria-hidden="true"
+                        >
+                          open_in_new
+                        </span>
+                        {actionLabel}
+                      </Link>
+                    )}
+                  </div>
                 )}
               </li>
             </Fragment>

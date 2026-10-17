@@ -123,7 +123,7 @@ describe("AuctionsBrowsePage - Buyer Round Browsing", () => {
     ).toBeInTheDocument();
   });
 
-  it("displays cancelled round before auctionEndsAt with 'ยกเลิกแล้ว' badge, reason, and disabled button", async () => {
+  it("hides a cancelled active round from the current buyer list", async () => {
     const cancelledRound = {
       ...sampleActiveRound,
       id: "round-cancelled-1",
@@ -146,18 +146,12 @@ describe("AuctionsBrowsePage - Buyer Round Browsing", () => {
 
     render(<AuctionsBrowsePage />);
 
-    expect(
-      await screen.findByText("รอบประมูลที่ถูกยกเลิก"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("ยกเลิกแล้ว")).toBeInTheDocument();
-    expect(screen.getByText(/ระบบขัดข้องชั่วคราว/)).toBeInTheDocument();
-    const disabledBtn = screen.getByRole("button", {
-      name: "รอบประมูลถูกยกเลิกแล้ว",
-    });
-    expect(disabledBtn).toBeDisabled();
+    expect(await screen.findByText("รอบประมูลเสื้อผ้าวินเทจ")).toBeInTheDocument();
+    expect(screen.queryByText("รอบประมูลที่ถูกยกเลิก")).not.toBeInTheDocument();
+    expect(screen.queryByText(/ระบบขัดข้องชั่วคราว/)).not.toBeInTheDocument();
   });
 
-  it("displays cancelled upcoming round (cancelled before auctionStartsAt) in Upcoming until auctionEndsAt and hides it after auctionEndsAt", async () => {
+  it("hides cancelled upcoming rounds regardless of their original auction end time", async () => {
     const cancelledUpcomingValid = {
       ...sampleUpcomingRound,
       id: "round-upc-cancelled-valid",
@@ -192,20 +186,10 @@ describe("AuctionsBrowsePage - Buyer Round Browsing", () => {
 
     render(<AuctionsBrowsePage />);
 
+    expect(await screen.findByText("ขณะนี้ยังไม่มีรอบการประมูล")).toBeInTheDocument();
     expect(
-      await screen.findByText("รอบเร็วๆ นี้ที่ถูกยกเลิกแต่ยังไม่ถึงเวลาจบ"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("ยกเลิกแล้ว")).toBeInTheDocument();
-    expect(
-      screen.getByText(/เลื่อนกำหนดการจัดกิจกรรมประมูล/),
-    ).toBeInTheDocument();
-
-    const disabledBtn = screen.getByRole("button", {
-      name: "รอบประมูลถูกยกเลิกแล้ว",
-    });
-    expect(disabledBtn).toBeDisabled();
-
-    // Expired cancelled round must be hidden after auctionEndsAt
+      screen.queryByText("รอบเร็วๆ นี้ที่ถูกยกเลิกแต่ยังไม่ถึงเวลาจบ"),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("รอบที่ถูกยกเลิกและเลยเวลาสิ้นสุดเดิมแล้ว"),
     ).not.toBeInTheDocument();

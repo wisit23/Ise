@@ -8,13 +8,34 @@ import EmptyState from "../../ui/EmptyState";
 import ErrorState from "../../ui/ErrorState";
 import Skeleton from "../../ui/Skeleton";
 import ConfirmDialog from "../../ui/ConfirmDialog";
+import DropdownFilter from "../../panel/ui/DropdownFilter";
+import RadioSelect from "../../ui/RadioSelect";
 import { apiFetch, uploadFiles, mediaUrl } from "../../../lib/api";
+import { MARKETING_PAGE_SIZE } from "../marketingConstants";
+import MarketingPagination from "./MarketingPagination";
 
 const CATEGORY_OPTIONS = [
   { value: "care", label: "การดูแลเสื้อผ้า (Care Guide)" },
   { value: "styling", label: "เคล็ดลับการแต่งตัว (Styling Tips)" },
   { value: "sustainability", label: "แฟชั่นยั่งยืน & Eco (Sustainability)" },
   { value: "general", label: "สาระน่ารู้ทั่วไป (General)" },
+];
+
+const CATEGORY_FILTER_OPTIONS = [
+  { value: "", label: "ทุกหมวดหมู่" },
+  ...CATEGORY_OPTIONS,
+];
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "ทุกสถานะ" },
+  { value: "published", label: "เผยแพร่แล้ว" },
+  { value: "draft", label: "ฉบับร่าง" },
+  { value: "archived", label: "เก็บถาวร" },
+];
+
+const ARTICLE_STATUS_OPTIONS = [
+  { value: "published", label: "🟢 เผยแพร่ทันที (Published)" },
+  { value: "draft", label: "⚪ บันทึกเป็นฉบับร่าง (Draft)" },
 ];
 
 const CATEGORY_MAP = {
@@ -43,6 +64,10 @@ export default function ArticlesSection({ token }) {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [statSummary, setStatSummary] = useState(null);
 
   // Editor modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -70,7 +95,7 @@ export default function ArticlesSection({ token }) {
     setTimeout(() => setToastMessage(""), 3500);
   }
 
-  async function loadArticles() {
+  async function loadArticles(pageToLoad = page) {
     setLoading(true);
     setError("");
     try {
@@ -78,13 +103,30 @@ export default function ArticlesSection({ token }) {
       if (statusFilter) params.set("status", statusFilter);
       if (categoryFilter) params.set("category", categoryFilter);
       if (q.trim()) params.set("q", q.trim());
-      params.set("limit", 50);
+      params.set("page", pageToLoad);
+      params.set("limit", MARKETING_PAGE_SIZE);
 
       const data = await apiFetch(
         `/api/products/articles/marketing/all?${params}`,
         { token },
       );
-      setArticles(data.items || []);
+      const items = data.items || [];
+      const totalCount = data.total ?? items.length;
+      const calculatedTotalPages = Math.max(
+        1,
+        data.totalPages ?? Math.ceil(totalCount / MARKETING_PAGE_SIZE),
+      );
+
+      if (calculatedTotalPages > 0 && pageToLoad > calculatedTotalPages) {
+        setPage(calculatedTotalPages);
+        loadArticles(calculatedTotalPages);
+        return;
+      }
+
+      setArticles(items);
+      setTotal(totalCount);
+      setTotalPages(calculatedTotalPages);
+      setStatSummary(data.summary || null);
     } catch (err) {
       console.error("Failed to load marketing articles:", err);
       setError(err.message || "ไม่สามารถดึงข้อมูลบทความได้");
@@ -94,12 +136,14 @@ export default function ArticlesSection({ token }) {
   }
 
   useEffect(() => {
-    loadArticles();
+    setPage(1);
+    loadArticles(1);
   }, [token, statusFilter, categoryFilter]);
 
   function handleSearchSubmit(e) {
     e.preventDefault();
-    loadArticles();
+    setPage(1);
+    loadArticles(1);
   }
 
   function openCreateModal() {
@@ -215,12 +259,14 @@ export default function ArticlesSection({ token }) {
     }
   }
 
-  // Stats calculation
-  const totalCount = articles.length;
-  const publishedCount = articles.filter(
-    (a) => a.status === "published",
-  ).length;
-  const draftCount = articles.filter((a) => a.status === "draft").length;
+  // Stats calculation (aggregated across dataset before pagination)
+  const totalCount = statSummary?.total ?? total ?? articles.length;
+  const publishedCount =
+    statSummary?.published ??
+    articles.filter((a) => a.status === "published").length;
+  const draftCount =
+    statSummary?.draft ??
+    articles.filter((a) => a.status === "draft").length;
 
   return (
     <div className="space-y-6">
@@ -327,9 +373,9 @@ export default function ArticlesSection({ token }) {
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-        <form onSubmit={handleSearchSubmit} className="relative w-full md:w-80">
-          <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]">
+      <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+        <form onSubmit={handleSearchSubmit} className="relative w-full lg:max-w-xs">
+          <span className="material-symbols-outlined absolute left-2.5 top-2 text-slate-400 text-[18px]">
             search
           </span>
           <input
@@ -337,7 +383,7 @@ export default function ArticlesSection({ token }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="ค้นหาชื่อเรื่องหรือเนื้อหา..."
-            className="w-full pl-9 pr-8 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/40"
+            className="h-[34px] w-full pl-8 pr-8 rounded-lg bg-slate-50 border border-slate-200 text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/40 text-slate-800"
           />
           {q && (
             <button
@@ -346,7 +392,8 @@ export default function ArticlesSection({ token }) {
                 setQ("");
                 loadArticles();
               }}
-              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+              aria-label="ล้างคำค้นหา"
+              className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
             >
               <span className="material-symbols-outlined text-[16px]">
                 close
@@ -355,36 +402,34 @@ export default function ArticlesSection({ token }) {
           )}
         </form>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-          <select
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full lg:w-auto">
+          <DropdownFilter
+            options={CATEGORY_FILTER_OPTIONS}
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 focus:bg-white focus:outline-none"
-          >
-            <option value="">ทุกหมวดหมู่</option>
-            {CATEGORY_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            onChange={setCategoryFilter}
+            ariaLabel="ตัวกรองหมวดหมู่"
+            placeholder="ทุกหมวดหมู่"
+            size="sm"
+            className="w-full sm:w-44 shrink-0"
+          />
 
-          <select
+          <DropdownFilter
+            options={STATUS_FILTER_OPTIONS}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full sm:w-auto text-xs px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 focus:bg-white focus:outline-none"
-          >
-            <option value="">ทุกสถานะ</option>
-            <option value="published">เผยแพร่แล้ว</option>
-            <option value="draft">ฉบับร่าง</option>
-          </select>
+            onChange={setStatusFilter}
+            ariaLabel="ตัวกรองสถานะ"
+            placeholder="ทุกสถานะ"
+            size="sm"
+            className="w-full sm:w-36 shrink-0"
+          />
 
           <Button
             variant="secondary"
             size="sm"
             onClick={loadArticles}
             icon="refresh"
-            className="w-full sm:w-auto justify-center"
+            aria-label="รีเฟรชข้อมูลบทความ"
+            className="w-full sm:w-auto justify-center shrink-0 h-[34px] px-3 text-xs"
           >
             รีเฟรช
           </Button>
@@ -407,7 +452,7 @@ export default function ArticlesSection({ token }) {
           </div>
         ) : error ? (
           <div className="p-8">
-            <ErrorState message={error} onRetry={loadArticles} />
+            <ErrorState description={error} onRetry={loadArticles} />
           </div>
         ) : articles.length === 0 ? (
           <div className="p-12">
@@ -422,16 +467,26 @@ export default function ArticlesSection({ token }) {
             />
           </div>
         ) : (
-          <div className="overflow-x-auto -mx-1">
-            <table className="w-full min-w-[700px] text-left text-xs text-slate-600">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full table-fixed text-left text-xs text-slate-600">
+              <colgroup>
+                <col className="w-[24%]" />
+                <col className="w-[13%]" />
+                <col className="w-[11%]" />
+                <col className="w-[10%]" />
+                <col className="w-[11%]" />
+                <col className="w-[11%]" />
+                <col className="w-[20%]" />
+              </colgroup>
               <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200/80 uppercase text-[11px] tracking-wider">
                 <tr>
-                  <th className="px-5 py-3.5">บทความ</th>
-                  <th className="px-4 py-3.5">หมวดหมู่</th>
-                  <th className="px-4 py-3.5">สถานะ</th>
-                  <th className="px-4 py-3.5">ผู้เขียน</th>
-                  <th className="px-4 py-3.5">วันที่สร้าง</th>
-                  <th className="px-5 py-3.5 text-right">จัดการ</th>
+                  <th className="px-3 py-3.5">บทความ</th>
+                  <th className="px-2 py-3.5">หมวดหมู่</th>
+                  <th className="px-2 py-3.5">สถานะ</th>
+                  <th className="px-2 py-3.5 text-right">ผู้อ่าน</th>
+                  <th className="px-2 py-3.5">ผู้เขียน</th>
+                  <th className="px-2 py-3.5">วันที่สร้าง</th>
+                  <th className="px-3 py-3.5 text-right">จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -448,9 +503,9 @@ export default function ArticlesSection({ token }) {
                       className="hover:bg-slate-50/70 transition-colors"
                     >
                       {/* Image & Title */}
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3.5">
-                          <div className="h-14 w-20 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="h-10 w-14 rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
                             {article.coverImage ? (
                               <img
                                 src={mediaUrl(article.coverImage)}
@@ -459,18 +514,25 @@ export default function ArticlesSection({ token }) {
                               />
                             ) : (
                               <div className="h-full w-full flex items-center justify-center text-slate-300">
-                                <span className="material-symbols-outlined text-[20px]">
+                                <span className="material-symbols-outlined text-[18px]">
                                   menu_book
                                 </span>
                               </div>
                             )}
                           </div>
-                          <div className="min-w-0 max-w-sm sm:max-w-md">
-                            <div className="font-bold text-slate-900 truncate hover:text-brand-600">
+                          <div className="min-w-0 flex-1">
+                            <div
+                              className="font-bold text-slate-900 truncate hover:text-brand-600 cursor-pointer"
+                              title={article.title}
+                              onClick={() => openEditModal(article)}
+                            >
                               {article.title}
                             </div>
                             {article.summary && (
-                              <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                              <p
+                                className="text-[11px] text-slate-500 truncate mt-0.5"
+                                title={article.summary}
+                              >
                                 {article.summary}
                               </p>
                             )}
@@ -479,36 +541,60 @@ export default function ArticlesSection({ token }) {
                       </td>
 
                       {/* Category */}
-                      <td className="px-4 py-3.5">
+                      <td className="px-2 py-3">
                         <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${catInfo.color}`}
+                          className={`inline-flex max-w-full truncate px-2.5 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${catInfo.color}`}
+                          title={catInfo.label}
                         >
                           {catInfo.label}
                         </span>
                       </td>
 
                       {/* Status */}
-                      <td className="px-4 py-3.5">
+                      <td className="px-2 py-3">
                         {isPublished ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 shrink-0" />
                             เผยแพร่แล้ว
                           </span>
+                        ) : article.status === "archived" ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                            เก็บถาวร
+                          </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-400 shrink-0" />
                             ฉบับร่าง
                           </span>
                         )}
                       </td>
 
+                      {/* Unique readers */}
+                      <td className="px-2 py-3 text-right whitespace-nowrap">
+                        <span className="inline-flex items-center justify-end gap-1 font-semibold text-slate-700">
+                          <span
+                            className="material-symbols-outlined text-[16px] text-slate-400"
+                            aria-hidden="true"
+                          >
+                            visibility
+                          </span>
+                          {Number(article.viewCount || 0).toLocaleString("th-TH")}
+                        </span>
+                      </td>
+
                       {/* Author */}
-                      <td className="px-4 py-3.5 text-slate-700">
-                        {article.authorName || "ทีมการตลาด"}
+                      <td className="px-2 py-3 text-slate-700">
+                        <span
+                          className="block truncate text-xs"
+                          title={article.authorName || "ทีมการตลาด"}
+                        >
+                          {article.authorName || "ทีมการตลาด"}
+                        </span>
                       </td>
 
                       {/* Date */}
-                      <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">
+                      <td className="px-2 py-3 text-slate-500 whitespace-nowrap text-[11px]">
                         {new Date(article.createdAt).toLocaleDateString(
                           "th-TH",
                           {
@@ -520,13 +606,14 @@ export default function ArticlesSection({ token }) {
                       </td>
 
                       {/* Actions */}
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="px-3 py-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
                           {isPublished && (
                             <Link
                               href={`/articles/${article.id}`}
                               target="_blank"
                               title="ดูหน้าบทความ"
+                              aria-label={`ดูบทความ ${article.title}`}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                             >
                               <span className="material-symbols-outlined text-[18px]">
@@ -538,6 +625,7 @@ export default function ArticlesSection({ token }) {
                             type="button"
                             onClick={() => openEditModal(article)}
                             title="แก้ไขบทความ"
+                            aria-label={`แก้ไขบทความ ${article.title}`}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
                           >
                             <span className="material-symbols-outlined text-[18px]">
@@ -548,6 +636,7 @@ export default function ArticlesSection({ token }) {
                             type="button"
                             onClick={() => setDeleteTarget(article)}
                             title="ลบบทความ"
+                            aria-label={`ลบบทความ ${article.title}`}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
                           >
                             <span className="material-symbols-outlined text-[18px]">
@@ -563,6 +652,18 @@ export default function ArticlesSection({ token }) {
             </table>
           </div>
         )}
+
+        <MarketingPagination
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          loading={loading}
+          error={error}
+          onPageChange={(p) => {
+            setPage(p);
+            loadArticles(p);
+          }}
+        />
       </div>
 
       {/* Editor Modal (Create / Edit) */}
@@ -672,34 +773,45 @@ export default function ArticlesSection({ token }) {
           {/* Category & Status */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-800 mb-1">
+              <label
+                htmlFor="article-category-select"
+                className="block text-xs font-semibold text-slate-800 mb-1"
+              >
                 หมวดหมู่บทความ (Category)
               </label>
-              <select
+              <RadioSelect
+                id="article-category-select"
+                name="articleCategory"
                 value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/40 bg-white"
-              >
-                {CATEGORY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                onChange={setCategory}
+                options={CATEGORY_OPTIONS}
+                variant="form"
+                size="sm"
+                className="w-full"
+                buttonClassName="w-full"
+                nativeAriaLabel="เลือกหมวดหมู่บทความ"
+              />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-800 mb-1">
+              <label
+                htmlFor="article-status-select"
+                className="block text-xs font-semibold text-slate-800 mb-1"
+              >
                 สถานะการเผยแพร่ (Status)
               </label>
-              <select
+              <RadioSelect
+                id="article-status-select"
+                name="articleStatus"
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/40 bg-white"
-              >
-                <option value="published">🟢 เผยแพร่ทันที (Published)</option>
-                <option value="draft">⚪ บันทึกเป็นฉบับร่าง (Draft)</option>
-              </select>
+                onChange={setStatus}
+                options={ARTICLE_STATUS_OPTIONS}
+                variant="form"
+                size="sm"
+                className="w-full"
+                buttonClassName="w-full"
+                nativeAriaLabel="เลือกสถานะการเผยแพร่"
+              />
             </div>
           </div>
 

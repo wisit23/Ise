@@ -30,6 +30,14 @@ function getQueue() {
  */
 async function scheduleClose(auctionId, closeAt) {
   const q = getQueue();
+  const existing = await q.getJob(auctionId);
+  if (existing && await existing.getState() === "active") {
+    // A worker may already be waiting for the auction lock at the old deadline.
+    // It rechecks DB time; book a separate future job instead of reusing its active ID.
+    const delay = Math.max(0, new Date(closeAt).getTime() - Date.now());
+    await q.add("close", { auctionId }, { jobId: `${auctionId}-${new Date(closeAt).getTime()}`, delay });
+    return;
+  }
   await q.remove(auctionId).catch(() => {});
   const delay = Math.max(0, new Date(closeAt).getTime() - Date.now());
   await q.add("close", { auctionId }, { jobId: auctionId, delay });

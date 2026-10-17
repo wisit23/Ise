@@ -25,6 +25,7 @@ export default function Select({
   onChange,
   name,
   disabled = false,
+  hoverToOpen = true,
   variant = "form",
   size = "md",
   className = "",
@@ -82,6 +83,7 @@ export default function Select({
         variant={variant}
         size={size}
         disabled={disabled}
+        hoverToOpen={hoverToOpen}
         className={`w-full block ${className}`}
         buttonClassName={`w-full text-left justify-between ${
           error ? "border-danger ring-1 ring-danger/30" : ""

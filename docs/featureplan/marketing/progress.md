@@ -1,5 +1,27 @@
 # Marketing Feature Progress
 
+## Current addendum — 2026-10-14: Round capacity
+
+Implemented user-approved nullable `auction_rounds.max_items`, required capacity
+on new-round creation, atomic slot checks for both submission flows, and Marketing
+capacity display. Pending items reserve slots; rejected/cancelled items free them.
+See [rules and verification](round-capacity.md). Automated checks passed; real
+Browser create/full/reject-release acceptance and four Desktop sizes now verified
+after the user reopened the tab. Fixed immediate count refresh after rejection or
+cancellation; Frontend regression now 163 tests. Disposable fixtures removed.
+No commit/push; historical progress below is retained.
+
+## Current addendum — 2026-10-14: Round time editing
+
+Implemented Marketing round time editing and the user-approved nullable
+`auction_items.soft_close_ends_at` floor. See [rules, migration and acceptance
+evidence](round-time-editing.md). Latest rerun: Backend 121 tests (no skips),
+Frontend 160 tests, targeted lint and diff check. Earlier existing Marketing
+integration: 16 tests (no skips). Browser modal layout checked at four Desktop
+sizes; isolated real save/shortening, soft-close retention, Redis deadlines and
+live Chat delivery/retry were verified and fixtures removed. Full-project final
+regression/production build remains pending. Historical records below are retained.
+
 > Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-10-08
 
 **Status:** `MKT-001` (Campaign Lifecycle & Voucher Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-003` / `MKT-007` (Durable Campaign Attribution & Conversion Metrics Dashboard), `MKT-004 Part A` (Knowledge Base & Articles System), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling), `UR-11` (Swipe-to-Choose Hardening: Buyer Authorization, Persistence, User Isolation & Anti-Spoofing), `UR-08` (User/Peak-Usage Analytics สำหรับ Marketing: Active Users, New Users, Hourly Usage, Peak Hour & Date Range Filtering), `Marketing Audit Trail` (Append-Only Audit Log for Campaigns, Auctions, and Articles with Atomic Mutation Contracts & SYSTEM Idempotency), และ `Campaign Date Validation & Budget Tracking with Auto-End` (`MKT-DEC-023`: Server-side date boundaries, Atomic spentBudget tracking, auto-end after completed attribution processing, CLAIMED voucher expiry, and Marketing UI budget progress) ตรวจสอบผ่านการทดสอบอัตโนมัติครบถ้วน (Verified with automated tests; รอ commit; ER Diagram update pending); และ `MKT-004 Part B` (Buyer Segmentation Rules) อยู่ระหว่างเตรียม Buyer profile persistence hardening (Part 4)

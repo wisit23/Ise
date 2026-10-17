@@ -24,4 +24,54 @@ async function eligibleStaff(req, res, next) {
     res.json(paginatedResponse(rows.map(row=>({id:row.id,displayName:row.firstName,roles:[...new Set(row.roles.length ? row.roles.map(item=>item.role) : [row.role])].filter(role=>allowed.includes(role))})),total,pagination));
   } catch(err) { next(err); }
 }
-module.exports = { displayNames, eligibleStaff };
+async function searchUsers(req, res, next) {
+  try {
+    const q = typeof req.body?.q === "string" ? req.body.q.trim().slice(0, 100) : "";
+    if (!q) {
+      return res.json([]);
+    }
+    const prisma = require("../../models/prismaClient");
+
+    const orConditions = [
+      { id: { contains: q, mode: "insensitive" } },
+      { firstName: { contains: q, mode: "insensitive" } },
+      { lastName: { contains: q, mode: "insensitive" } },
+      { sellerProfile: { shopName: { contains: q, mode: "insensitive" } } },
+    ];
+
+    const parts = q.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      orConditions.push({
+        AND: parts.map((part) => ({
+          OR: [
+            { firstName: { contains: part, mode: "insensitive" } },
+            { lastName: { contains: part, mode: "insensitive" } },
+            { sellerProfile: { shopName: { contains: part, mode: "insensitive" } } },
+          ],
+        })),
+      });
+    }
+
+    const users = await prisma.user.findMany({
+      where: { OR: orConditions },
+      take: 100,
+      select: {
+        id: true,
+        firstName: true,
+        sellerProfile: { select: { shopName: true } },
+      },
+    });
+
+    res.json(
+      users.map((u) => ({
+        id: u.id,
+        userId: u.id,
+        displayName: u.sellerProfile?.shopName || u.firstName,
+      })),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { displayNames, eligibleStaff, searchUsers };

@@ -447,7 +447,7 @@ export default function SellerAuctionsPage() {
           ) : (
             <ul className="flex flex-col gap-3">
               {myAuctions.map((a) => {
-                const cancelReason =
+                const decisionReason =
                   a.cancellationReason || a.round?.cancellationReason || "";
                 return (
                   <li
@@ -464,9 +464,9 @@ export default function SellerAuctionsPage() {
                       <p className="text-xs text-gray-500">
                         ราคาเริ่มต้น {baht(a.startingPrice)}
                       </p>
-                      {a.status === "cancelled" && cancelReason && (
+                      {["rejected", "cancelled"].includes(a.status) && decisionReason && (
                         <p className="mt-1 text-xs font-medium text-rose-700">
-                          เหตุผลที่ยกเลิก: {cancelReason}
+                          {a.status === "rejected" ? "เหตุผลที่ปฏิเสธ" : "เหตุผลที่ยกเลิก"}: {decisionReason}
                         </p>
                       )}
                     </div>

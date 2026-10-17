@@ -136,6 +136,12 @@ router.get(
   campaignController.getSalesTrends,
 );
 router.get(
+  "/metrics/auction-activity",
+  requireAuth,
+  requireRole("MARKETING"),
+  campaignController.getAuctionActivityMetrics,
+);
+router.get(
   "/metrics/compare",
   requireAuth,
   requireRole("MARKETING"),

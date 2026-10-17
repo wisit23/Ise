@@ -452,22 +452,24 @@ function SellerAuctionSubmitContent() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    หมวดหมู่
-                  </label>
-                  <input
+                  <Select
+                    id="auction-product-category"
+                    name="category"
+                    label="หมวดหมู่"
                     required
-                    list="category-suggestions"
-                    placeholder="พิมพ์หรือเลือกหมวดหมู่"
+                    placeholder="เลือกหมวดหมู่"
                     value={form.category}
                     onChange={update("category")}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+                    disabled={isKycLocked || submitting}
+                    hoverToOpen={false}
+                    options={[
+                      { value: "", label: "เลือกหมวดหมู่" },
+                      ...categories,
+                      ...(form.category && !categories.includes(form.category)
+                        ? [form.category]
+                        : []),
+                    ]}
                   />
-                  <datalist id="category-suggestions">
-                    {categories.map((c) => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
                   {Array.isArray(round?.categories) &&
                     round.categories.length > 0 && (
                       <p className="mt-1 text-[11px] text-emerald-700">
