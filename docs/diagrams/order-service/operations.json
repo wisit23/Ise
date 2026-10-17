@@ -1,0 +1,174 @@
+{
+  "Basket": {
+    "operations": [
+      "add(productId, buyerId)",
+      "remove(buyerId, basketId)",
+      "prepare(buyerId, basketIds)"
+    ],
+    "sources": [
+      "features/cart/cartService.js"
+    ]
+  },
+  "Checkout": {
+    "operations": [
+      "create(buyerId, orderIds, addressId)",
+      "confirm(buyerId, sessionId)",
+      "updateAddress(addressId)",
+      "expire(now)"
+    ],
+    "sources": [
+      "features/checkoutSessions/checkoutSessionService.js"
+    ]
+  },
+  "Order": {
+    "operations": [
+      "create(data)",
+      "updateStatus(status, expectedVersion)",
+      "updateCampaign(campaignId, finalPrice)",
+      "transitionStatusWithProductSync(options)"
+    ],
+    "sources": [
+      "models/orderModel.js"
+    ]
+  },
+  "Payment": {
+    "operations": [
+      "recordPaid(amount, paidAt)",
+      "recordSimulatedRefund(amount)"
+    ],
+    "sources": [
+      "features/checkoutSessions/checkoutSessionService.js: confirm / payment.create",
+      "models/orderModel.js: transitionStatusWithProductSync / payment.create"
+    ]
+  },
+  "Shipping": {
+    "operations": [
+      "updateAddress(addressId)",
+      "markShipped(company, trackingNumber)"
+    ],
+    "sources": [
+      "features/shipping/shippingService.js"
+    ]
+  },
+  "Hold": {
+    "operations": [
+      "addHold(source, referenceId, reason)",
+      "releaseHold(releasedBy)",
+      "hasActiveHolds()"
+    ],
+    "sources": [
+      "services/orderTransitionService.js"
+    ]
+  },
+  "OrderLog": {
+    "operations": [
+      "append(actorId, action, detail)"
+    ],
+    "sources": [
+      "models/orderModel.js: orderLog.create"
+    ]
+  },
+  "DisputeCase": {
+    "operations": [
+      "openDispute(reason, disputeType)",
+      "claim(userId, version)",
+      "reassign(toUserId, reason)",
+      "escalate(toUserId, reason)",
+      "decide(decision, reason, version)"
+    ],
+    "sources": [
+      "features/disputes/disputeModel.js"
+    ]
+  },
+  "DisputeCaseLog": {
+    "operations": [
+      "append(actorId, action, detail)"
+    ],
+    "sources": [
+      "features/disputes/disputeModel.js: disputeCaseLog.create"
+    ]
+  },
+  "DisputeEvidence": {
+    "operations": [
+      "addEvidence(file, uploaderId)",
+      "setEvidenceDeadline(deadline)",
+      "requestMoreEvidence(reason)"
+    ],
+    "sources": [
+      "features/disputes/disputeModel.js: addEvidence, setEvidenceDeadline, requestMoreEvidence"
+    ]
+  },
+  "Evidence": {
+    "operations": [
+      "attach(refPath)",
+      "viewEvidence(actorId)"
+    ],
+    "sources": [
+      "features/disputes/disputeModel.js: addEvidence / nested files.create",
+      "features/disputes/disputeService.js: viewEvidence"
+    ]
+  },
+  "DisputeAuditLog": {
+    "operations": [
+      "append(actorId, action, detail)"
+    ],
+    "sources": [
+      "features/disputes/disputeModel.js: disputeAuditLog.create"
+    ]
+  },
+  "SafetyDisputeEvidence": {
+    "operations": [
+      "verifyEvidence(status, detail, actorId)",
+      "getDisputeView(adminId)"
+    ],
+    "sources": [
+      "features/adminDisputes/adminDisputeService.js"
+    ]
+  },
+  "SafetyLog": {
+    "operations": [
+      "append(actorId, action, detail)"
+    ],
+    "sources": [
+      "features/adminDisputes/adminDisputeService.js: safetyLog.create"
+    ]
+  },
+  "AttributionJob": {
+    "operations": [
+      "processEvent()",
+      "deliver()",
+      "retryDelayMs(attempts)"
+    ],
+    "sources": [
+      "services/attributionOutboxService.js"
+    ]
+  },
+  "CheckoutAddressSnapshot": {
+    "operations": [
+      "saveAddress(address)",
+      "addressState()"
+    ],
+    "sources": [
+      "models/orderHistoryClient.js: saveAddress, addressState (model=checkout)"
+    ]
+  },
+  "ShippingAddressSnapshot": {
+    "operations": [
+      "saveAddress(address)",
+      "addressState()"
+    ],
+    "sources": [
+      "models/orderHistoryClient.js: saveAddress, addressState (model=shipping)"
+    ]
+  },
+  "ProductSyncJob": {
+    "operations": [
+      "createRequest(action, actorId)",
+      "processEvent()",
+      "findPendingForOrder(orderId)"
+    ],
+    "sources": [
+      "services/productSyncService.js"
+    ]
+  }
+}

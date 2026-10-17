@@ -72,10 +72,14 @@ function buildCatalogWhere(filters, { PrismaClient } = {}) {
     clauses.push(PrismaClient.sql`AND price >= ${filters.minPrice}`);
   if (filters.maxPrice !== undefined)
     clauses.push(PrismaClient.sql`AND price <= ${filters.maxPrice}`);
-  if (filters.q)
+  if (filters.q) {
+    const shopMatch = filters.matchingSellerIds?.length
+      ? PrismaClient.sql`OR products.seller_id IN (${PrismaClient.join(filters.matchingSellerIds)})`
+      : PrismaClient.sql``;
     clauses.push(
-      PrismaClient.sql`AND (search_text ILIKE '%' || ${filters.q} || '%' OR ${filters.q} <% search_text)`,
+      PrismaClient.sql`AND (search_text ILIKE '%' || ${filters.q} || '%' OR ${filters.q} <% search_text ${shopMatch})`,
     );
+  }
   return PrismaClient.join(clauses, " ");
 }
 

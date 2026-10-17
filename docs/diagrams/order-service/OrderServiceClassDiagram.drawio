@@ -1,0 +1,1321 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mxfile host="app.diagrams.net" version="32.5.4" type="device">
+  <diagram id="01" name="01 · Domain overview">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1980" pageHeight="2470" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="ORDER SERVICE / CLASS DIAGRAM" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=30;fontColor=#000000;fontStyle=1;">
+          <mxGeometry x="60" y="35" width="1860" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="01  Logical OO classes · attributes + operations in every class · 18 classes / 18 associations&#10;Three compartments: class name / attributes / functions. Pages 02–03 expand attributes; page 04 shows the source modules." vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=16;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="95" width="1860" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="CheckoutAddressSnapshot" value="«logical class»&#10;CheckoutAddressSnapshot" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="220" width="350" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="CheckoutAddressSnapshot_fields" value="checkoutId: String {id}&#10;recipientName: String&#10;phone: String&#10;addressLine: String&#10;subdistrict: String" vertex="1" parent="CheckoutAddressSnapshot" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="CheckoutAddressSnapshot_separator" vertex="1" parent="CheckoutAddressSnapshot" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="CheckoutAddressSnapshot_operations" value="+ saveAddress(address)&#10;+ addressState()" vertex="1" parent="CheckoutAddressSnapshot" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="Checkout" value="«logical class»&#10;Checkout" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="550" y="220" width="350" height="315" as="geometry" />
+        </mxCell>
+        <mxCell id="Checkout_fields" value="id: String {id}&#10;buyerId: String&#10;status: String&#10;paidAt: DateTime?&#10;cancelAt: DateTime" vertex="1" parent="Checkout" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="Checkout_separator" vertex="1" parent="Checkout" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Checkout_operations" value="+ create(buyerId, orderIds, addressId)&#10;+ confirm(buyerId, sessionId)&#10;+ updateAddress(addressId)&#10;+ expire(now)" vertex="1" parent="Checkout" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="Shipping" value="«logical class»&#10;Shipping" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1090" y="220" width="350" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="Shipping_fields" value="id: String {id}&#10;orderId: String {unique}&#10;addressId: String&#10;trackingNumber: String?&#10;status: String" vertex="1" parent="Shipping" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="Shipping_separator" vertex="1" parent="Shipping" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Shipping_operations" value="+ updateAddress(addressId)&#10;+ markShipped(company, trackingNumber)" vertex="1" parent="Shipping" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="ShippingAddressSnapshot" value="«logical class»&#10;ShippingAddressSnapshot" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1570" y="220" width="350" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="ShippingAddressSnapshot_fields" value="shippingId: String {id}&#10;recipientName: String&#10;phone: String&#10;addressLine: String&#10;subdistrict: String" vertex="1" parent="ShippingAddressSnapshot" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="ShippingAddressSnapshot_separator" vertex="1" parent="ShippingAddressSnapshot" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ShippingAddressSnapshot_operations" value="+ saveAddress(address)&#10;+ addressState()" vertex="1" parent="ShippingAddressSnapshot" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="Basket" value="«logical class»&#10;Basket" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="650" width="350" height="292" as="geometry" />
+        </mxCell>
+        <mxCell id="Basket_fields" value="id: String {id}&#10;buyerId: String&#10;productId: String&#10;campaignId: String?&#10;status: String" vertex="1" parent="Basket" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="Basket_separator" vertex="1" parent="Basket" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Basket_operations" value="+ add(productId, buyerId)&#10;+ remove(buyerId, basketId)&#10;+ prepare(buyerId, basketIds)" vertex="1" parent="Basket" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="Order" value="«logical class»&#10;Order" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="550" y="650" width="350" height="338" as="geometry" />
+        </mxCell>
+        <mxCell id="Order_fields" value="id: String {id}&#10;checkoutId: String?&#10;basketId: String? {unique}&#10;ordersAmount: Decimal {18,2}&#10;status: String&#10;version: Int" vertex="1" parent="Order" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="148" as="geometry" />
+        </mxCell>
+        <mxCell id="Order_separator" vertex="1" parent="Order" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="224" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Order_operations" value="+ create(data)&#10;+ updateStatus(status, expectedVersion)&#10;+ updateCampaign(campaignId, finalPrice)&#10;+ transitionStatusWithProductSync(options)" vertex="1" parent="Order" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="234" width="326" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="Payment" value="«logical class»&#10;Payment" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1090" y="650" width="350" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="Payment_fields" value="id: String {id}&#10;orderId: String&#10;paymentType: String&#10;paymentStatus: String&#10;paymentAmount: Decimal {18,2}" vertex="1" parent="Payment" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="Payment_separator" vertex="1" parent="Payment" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Payment_operations" value="+ recordPaid(amount, paidAt)&#10;+ recordSimulatedRefund(amount)" vertex="1" parent="Payment" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="Hold" value="«logical class»&#10;Hold" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1570" y="650" width="350" height="292" as="geometry" />
+        </mxCell>
+        <mxCell id="Hold_fields" value="id: String {id}&#10;paymentId: String&#10;source: String&#10;referenceId: String&#10;holdStatus: String" vertex="1" parent="Hold" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="Hold_separator" vertex="1" parent="Hold" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Hold_operations" value="+ addHold(source, referenceId, reason)&#10;+ releaseHold(releasedBy)&#10;+ hasActiveHolds()" vertex="1" parent="Hold" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="OrderLog" value="«logical class»&#10;OrderLog" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="1070" width="350" height="246" as="geometry" />
+        </mxCell>
+        <mxCell id="OrderLog_fields" value="id: String {id}&#10;orderId: String&#10;sellerId: String&#10;buyerId: String&#10;actorId: String" vertex="1" parent="OrderLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="OrderLog_separator" vertex="1" parent="OrderLog" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="OrderLog_operations" value="+ append(actorId, action, detail)" vertex="1" parent="OrderLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="33" as="geometry" />
+        </mxCell>
+        <mxCell id="AttributionJob" value="«logical class»&#10;AttributionJob" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="550" y="1070" width="350" height="292" as="geometry" />
+        </mxCell>
+        <mxCell id="AttributionJob_fields" value="id: String {id}&#10;orderId: String {unique}&#10;campaignId: String&#10;grossAmount: Decimal {18,2}&#10;discountAmount: Decimal {18,2}" vertex="1" parent="AttributionJob" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="AttributionJob_separator" vertex="1" parent="AttributionJob" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="AttributionJob_operations" value="+ processEvent()&#10;+ deliver()&#10;+ retryDelayMs(attempts)" vertex="1" parent="AttributionJob" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="ProductSyncJob" value="«logical class»&#10;ProductSyncJob" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1090" y="1070" width="350" height="292" as="geometry" />
+        </mxCell>
+        <mxCell id="ProductSyncJob_fields" value="id: String {id}&#10;orderId: String&#10;productId: String&#10;action: String&#10;reservationId: String?" vertex="1" parent="ProductSyncJob" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="ProductSyncJob_separator" vertex="1" parent="ProductSyncJob" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ProductSyncJob_operations" value="+ createRequest(action, actorId)&#10;+ processEvent()&#10;+ findPendingForOrder(orderId)" vertex="1" parent="ProductSyncJob" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCaseLog" value="«logical class»&#10;DisputeCaseLog" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="1490" width="350" height="246" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCaseLog_fields" value="id: String {id}&#10;disputeCaseId: String&#10;actorId: String&#10;action: String&#10;fromAssignedTo: String?" vertex="1" parent="DisputeCaseLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCaseLog_separator" vertex="1" parent="DisputeCaseLog" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCaseLog_operations" value="+ append(actorId, action, detail)" vertex="1" parent="DisputeCaseLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="33" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCase" value="«logical class»&#10;DisputeCase" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="550" y="1490" width="350" height="361" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCase_fields" value="id: String {id}&#10;orderId: String {unique}&#10;decision: String?&#10;version: Int&#10;assignedTo: String?&#10;status: String" vertex="1" parent="DisputeCase" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="148" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCase_separator" vertex="1" parent="DisputeCase" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="224" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCase_operations" value="+ openDispute(reason, disputeType)&#10;+ claim(userId, version)&#10;+ reassign(toUserId, reason)&#10;+ escalate(toUserId, reason)&#10;+ decide(decision, reason, version)" vertex="1" parent="DisputeCase" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="234" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeEvidence" value="«logical class»&#10;DisputeEvidence" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1090" y="1490" width="350" height="292" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeEvidence_fields" value="id: String {id}&#10;disputeCaseId: String&#10;uploaderId: String&#10;status: String&#10;version: Int" vertex="1" parent="DisputeEvidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeEvidence_separator" vertex="1" parent="DisputeEvidence" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeEvidence_operations" value="+ addEvidence(file, uploaderId)&#10;+ setEvidenceDeadline(deadline)&#10;+ requestMoreEvidence(reason)" vertex="1" parent="DisputeEvidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="Evidence" value="«logical class»&#10;Evidence" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1570" y="1490" width="350" height="223" as="geometry" />
+        </mxCell>
+        <mxCell id="Evidence_fields" value="id: String {id}&#10;disputeEvidenceId: String&#10;refPath: String" vertex="1" parent="Evidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="Evidence_separator" vertex="1" parent="Evidence" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="155" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Evidence_operations" value="+ attach(refPath)&#10;+ viewEvidence(actorId)" vertex="1" parent="Evidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="165" width="326" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyLog" value="«logical class»&#10;SafetyLog" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="1910" width="350" height="246" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyLog_fields" value="id: String {id}&#10;safetyId: String&#10;actorId: String&#10;action: String&#10;detail: String" vertex="1" parent="SafetyLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyLog_separator" vertex="1" parent="SafetyLog" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyLog_operations" value="+ append(actorId, action, detail)" vertex="1" parent="SafetyLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="33" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyDisputeEvidence" value="«logical class»&#10;SafetyDisputeEvidence" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="550" y="1910" width="350" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyDisputeEvidence_fields" value="id: String {id}&#10;orderId: String&#10;evidenceId: String {unique}&#10;verifyBy: String?&#10;status: String" vertex="1" parent="SafetyDisputeEvidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyDisputeEvidence_separator" vertex="1" parent="SafetyDisputeEvidence" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyDisputeEvidence_operations" value="+ verifyEvidence(status, detail, actorId)&#10;+ getDisputeView(adminId)" vertex="1" parent="SafetyDisputeEvidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeAuditLog" value="«logical class»&#10;DisputeAuditLog" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1090" y="1910" width="350" height="246" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeAuditLog_fields" value="id: String {id}&#10;disputeEvidenceId: String&#10;actorId: String&#10;action: String&#10;detail: String" vertex="1" parent="DisputeAuditLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="326" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeAuditLog_separator" vertex="1" parent="DisputeAuditLog" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="201" width="350" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeAuditLog_operations" value="+ append(actorId, action, detail)" vertex="1" parent="DisputeAuditLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="211" width="326" height="33" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="Checkout" target="Order" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1s" value="0..1" vertex="1" connectable="0" parent="e1" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1t" value="0..*" vertex="1" connectable="0" parent="e1" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="Basket" target="Order" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2s" value="0..1" vertex="1" connectable="0" parent="e2" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2t" value="0..1" vertex="1" connectable="0" parent="e2" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="Order" target="Payment" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3s" value="1" vertex="1" connectable="0" parent="e3" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3t" value="0..*" vertex="1" connectable="0" parent="e3" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="Order" target="Shipping" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.8;exitY=0;entryX=0.5;entryY=1;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="830" y="560" />
+              <mxPoint x="1265" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4s" value="1" vertex="1" connectable="0" parent="e4" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4t" value="0..1" vertex="1" connectable="0" parent="e4" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="Payment" target="Hold" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5s" value="1" vertex="1" connectable="0" parent="e5" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5t" value="0..*" vertex="1" connectable="0" parent="e5" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="Order" target="OrderLog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0;exitY=0.8;entryX=1;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="863" />
+              <mxPoint x="480" y="1200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6s" value="1" vertex="1" connectable="0" parent="e6" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6t" value="0..*" vertex="1" connectable="0" parent="e6" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="Order" target="DisputeCase" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.2;exitY=1;entryX=0.2;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="620" y="980" />
+              <mxPoint x="440" y="980" />
+              <mxPoint x="440" y="1410" />
+              <mxPoint x="620" y="1410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7s" value="1" vertex="1" connectable="0" parent="e7" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7t" value="0..1" vertex="1" connectable="0" parent="e7" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="DisputeCase" target="DisputeCaseLog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0;exitY=0.5;entryX=1;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8s" value="1" vertex="1" connectable="0" parent="e8" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8t" value="0..*" vertex="1" connectable="0" parent="e8" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="DisputeCase" target="DisputeEvidence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9s" value="1" vertex="1" connectable="0" parent="e9" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9t" value="0..*" vertex="1" connectable="0" parent="e9" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="DisputeEvidence" target="Evidence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10s" value="1" vertex="1" connectable="0" parent="e10" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10t" value="0..*" vertex="1" connectable="0" parent="e10" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="DisputeEvidence" target="DisputeAuditLog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11s" value="1" vertex="1" connectable="0" parent="e11" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11t" value="0..*" vertex="1" connectable="0" parent="e11" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="Order" target="SafetyDisputeEvidence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.4;entryX=0.9;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="960" y="750" />
+              <mxPoint x="960" y="1878" />
+              <mxPoint x="865" y="1878" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12s" value="1" vertex="1" connectable="0" parent="e12" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12t" value="0..*" vertex="1" connectable="0" parent="e12" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="DisputeEvidence" target="SafetyDisputeEvidence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.2;exitY=1;entryX=1;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1160" y="1810" />
+              <mxPoint x="1010" y="1810" />
+              <mxPoint x="1010" y="2025" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13s" value="1" vertex="1" connectable="0" parent="e13" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13t" value="0..1" vertex="1" connectable="0" parent="e13" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14" edge="1" parent="1" source="SafetyDisputeEvidence" target="SafetyLog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0;exitY=0.5;entryX=1;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14s" value="1" vertex="1" connectable="0" parent="e14" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14t" value="0..*" vertex="1" connectable="0" parent="e14" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="Order" target="AttributionJob" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15s" value="1" vertex="1" connectable="0" parent="e15" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15t" value="0..1" vertex="1" connectable="0" parent="e15" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="Checkout" target="CheckoutAddressSnapshot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0;exitY=0.5;entryX=1;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16s" value="1" vertex="1" connectable="0" parent="e16" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16t" value="0..1" vertex="1" connectable="0" parent="e16" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e17" edge="1" parent="1" source="Shipping" target="ShippingAddressSnapshot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17s" value="1" vertex="1" connectable="0" parent="e17" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e17t" value="0..1" vertex="1" connectable="0" parent="e17" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="Order" target="ProductSyncJob" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.8;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="990" y="863" />
+              <mxPoint x="990" y="1010" />
+              <mxPoint x="1265" y="1010" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18s" value="1" vertex="1" connectable="0" parent="e18" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18t" value="0..*" vertex="1" connectable="0" parent="e18" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" value="UML KEY   ━  Association; navigability unspecified     •     0..1 optional     •     0..* zero or more     •     ? nullable     •     {id} identifier     •     {unique} unique value" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=15;fontColor=#000000;fontStyle=1;">
+          <mxGeometry x="60" y="2300" width="1860" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="notes" value="Logical OO design: each class combines schema attributes and operations allocated by responsibility from existing module behavior.&#10;Operations are design mappings, not literal Prisma instance methods; signatures are condensed. Page 04 preserves selected actual module functions.&#10;Multiplicity follows the current schema. Checkout creation requires 1–20 orders. External user/product/address IDs are scalar references.&#10;Source: backend/services/order-service/prisma/schema.prisma + src/. Operation mapping: operations.json. Notation: OMG UML 2.5.1." vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=15;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="2348" width="1860" height="110" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="02" name="02 · Commerce details">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2440" pageHeight="2700" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="ORDER SERVICE / COMMERCE" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=30;fontColor=#000000;fontStyle=1;">
+          <mxGeometry x="60" y="35" width="2320" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="02  Complete scalar attributes + allocated operations · checkout, order, payment, shipping and durable jobs&#10;Logical OO design mapped to the existing schema and module behavior; see operations.json for implementation sources." vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=16;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="95" width="2320" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="Checkout" value="«logical class»&#10;Checkout" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="220" width="440" height="384" as="geometry" />
+        </mxCell>
+        <mxCell id="Checkout_fields" value="id: String {id}&#10;buyerId: String&#10;addressId: String&#10;status: String&#10;paidAt: DateTime?&#10;cancelAt: DateTime&#10;createdAt: DateTime&#10;updatedAt: DateTime" vertex="1" parent="Checkout" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="194" as="geometry" />
+        </mxCell>
+        <mxCell id="Checkout_separator" vertex="1" parent="Checkout" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="270" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Checkout_operations" value="+ create(buyerId, orderIds, addressId)&#10;+ confirm(buyerId, sessionId)&#10;+ updateAddress(addressId)&#10;+ expire(now)" vertex="1" parent="Checkout" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="280" width="416" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="CheckoutAddressSnapshot" value="«logical class»&#10;CheckoutAddressSnapshot" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="800" width="440" height="338" as="geometry" />
+        </mxCell>
+        <mxCell id="CheckoutAddressSnapshot_fields" value="checkoutId: String {id}&#10;recipientName: String&#10;phone: String&#10;addressLine: String&#10;subdistrict: String&#10;district: String&#10;province: String&#10;postalCode: String" vertex="1" parent="CheckoutAddressSnapshot" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="194" as="geometry" />
+        </mxCell>
+        <mxCell id="CheckoutAddressSnapshot_separator" vertex="1" parent="CheckoutAddressSnapshot" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="270" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="CheckoutAddressSnapshot_operations" value="+ saveAddress(address)&#10;+ addressState()" vertex="1" parent="CheckoutAddressSnapshot" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="280" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="Basket" value="«logical class»&#10;Basket" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="1320" width="440" height="338" as="geometry" />
+        </mxCell>
+        <mxCell id="Basket_fields" value="id: String {id}&#10;buyerId: String&#10;productId: String&#10;campaignId: String?&#10;status: String&#10;lockAt: DateTime&#10;unlockAt: DateTime" vertex="1" parent="Basket" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="171" as="geometry" />
+        </mxCell>
+        <mxCell id="Basket_separator" vertex="1" parent="Basket" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="247" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Basket_operations" value="+ add(productId, buyerId)&#10;+ remove(buyerId, basketId)&#10;+ prepare(buyerId, basketIds)" vertex="1" parent="Basket" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="257" width="416" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="Order" value="«logical class»&#10;Order" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="660" y="590" width="440" height="683" as="geometry" />
+        </mxCell>
+        <mxCell id="Order_fields" value="id: String {id}&#10;checkoutId: String?&#10;basketId: String? {unique}&#10;buyerId: String&#10;sellerId: String&#10;productId: String&#10;productTitle: String?&#10;campaignCode: String?&#10;preDisputeStatus: String?&#10;campaignId: String?&#10;auctionId: String? {unique}&#10;orderType: String&#10;originalAmount: Decimal {18,2}&#10;ordersAmount: Decimal {18,2}&#10;status: String&#10;version: Int&#10;shippedAt: DateTime?&#10;deliveredAt: DateTime?&#10;completedAt: DateTime?&#10;createdAt: DateTime&#10;updatedAt: DateTime" vertex="1" parent="Order" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="493" as="geometry" />
+        </mxCell>
+        <mxCell id="Order_separator" vertex="1" parent="Order" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="569" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Order_operations" value="+ create(data)&#10;+ updateStatus(status, expectedVersion)&#10;+ updateCampaign(campaignId, finalPrice)&#10;+ transitionStatusWithProductSync(options)" vertex="1" parent="Order" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="579" width="416" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="Shipping" value="«logical class»&#10;Shipping" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1260" y="220" width="440" height="315" as="geometry" />
+        </mxCell>
+        <mxCell id="Shipping_fields" value="id: String {id}&#10;orderId: String {unique}&#10;addressId: String&#10;company: String?&#10;trackingNumber: String?&#10;status: String&#10;updatedAt: DateTime" vertex="1" parent="Shipping" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="171" as="geometry" />
+        </mxCell>
+        <mxCell id="Shipping_separator" vertex="1" parent="Shipping" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="247" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Shipping_operations" value="+ updateAddress(addressId)&#10;+ markShipped(company, trackingNumber)" vertex="1" parent="Shipping" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="257" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="ShippingAddressSnapshot" value="«logical class»&#10;ShippingAddressSnapshot" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1860" y="220" width="440" height="338" as="geometry" />
+        </mxCell>
+        <mxCell id="ShippingAddressSnapshot_fields" value="shippingId: String {id}&#10;recipientName: String&#10;phone: String&#10;addressLine: String&#10;subdistrict: String&#10;district: String&#10;province: String&#10;postalCode: String" vertex="1" parent="ShippingAddressSnapshot" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="194" as="geometry" />
+        </mxCell>
+        <mxCell id="ShippingAddressSnapshot_separator" vertex="1" parent="ShippingAddressSnapshot" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="270" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ShippingAddressSnapshot_operations" value="+ saveAddress(address)&#10;+ addressState()" vertex="1" parent="ShippingAddressSnapshot" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="280" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="Payment" value="«logical class»&#10;Payment" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1260" y="800" width="440" height="315" as="geometry" />
+        </mxCell>
+        <mxCell id="Payment_fields" value="id: String {id}&#10;orderId: String&#10;paymentType: String&#10;paymentStatus: String&#10;paymentAmount: Decimal {18,2}&#10;paidAt: DateTime?&#10;createdAt: DateTime" vertex="1" parent="Payment" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="171" as="geometry" />
+        </mxCell>
+        <mxCell id="Payment_separator" vertex="1" parent="Payment" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="247" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Payment_operations" value="+ recordPaid(amount, paidAt)&#10;+ recordSimulatedRefund(amount)" vertex="1" parent="Payment" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="257" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="Hold" value="«logical class»&#10;Hold" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1860" y="800" width="440" height="453" as="geometry" />
+        </mxCell>
+        <mxCell id="Hold_fields" value="id: String {id}&#10;paymentId: String&#10;source: String&#10;referenceId: String&#10;holdReason: String&#10;holdStatus: String&#10;holdAmount: Decimal {18,2}&#10;holdAt: DateTime&#10;holdBy: String&#10;releaseAmount: Decimal? {18,2}&#10;releaseAt: DateTime?&#10;releasedBy: String?" vertex="1" parent="Hold" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="286" as="geometry" />
+        </mxCell>
+        <mxCell id="Hold_separator" vertex="1" parent="Hold" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="362" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Hold_operations" value="+ addHold(source, referenceId, reason)&#10;+ releaseHold(releasedBy)&#10;+ hasActiveHolds()" vertex="1" parent="Hold" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="372" width="416" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="OrderLog" value="«logical class»&#10;OrderLog" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="1850" width="440" height="315" as="geometry" />
+        </mxCell>
+        <mxCell id="OrderLog_fields" value="id: String {id}&#10;orderId: String&#10;sellerId: String&#10;buyerId: String&#10;actorId: String&#10;action: String&#10;detail: String&#10;createdAt: DateTime" vertex="1" parent="OrderLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="194" as="geometry" />
+        </mxCell>
+        <mxCell id="OrderLog_separator" vertex="1" parent="OrderLog" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="270" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="OrderLog_operations" value="+ append(actorId, action, detail)" vertex="1" parent="OrderLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="280" width="416" height="33" as="geometry" />
+        </mxCell>
+        <mxCell id="AttributionJob" value="«logical class»&#10;AttributionJob" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="660" y="1850" width="440" height="453" as="geometry" />
+        </mxCell>
+        <mxCell id="AttributionJob_fields" value="id: String {id}&#10;orderId: String {unique}&#10;campaignId: String&#10;grossAmount: Decimal {18,2}&#10;discountAmount: Decimal {18,2}&#10;netAmount: Decimal {18,2}&#10;completedAt: DateTime&#10;attempts: Int&#10;lastError: String?&#10;nextAttemptAt: DateTime&#10;processedAt: DateTime?&#10;createdAt: DateTime" vertex="1" parent="AttributionJob" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="286" as="geometry" />
+        </mxCell>
+        <mxCell id="AttributionJob_separator" vertex="1" parent="AttributionJob" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="362" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="AttributionJob_operations" value="+ processEvent()&#10;+ deliver()&#10;+ retryDelayMs(attempts)" vertex="1" parent="AttributionJob" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="372" width="416" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="ProductSyncJob" value="«logical class»&#10;ProductSyncJob" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1260" y="1850" width="440" height="384" as="geometry" />
+        </mxCell>
+        <mxCell id="ProductSyncJob_fields" value="id: String {id}&#10;orderId: String&#10;productId: String&#10;action: String&#10;reservationId: String?&#10;targetStatus: String?&#10;actorId: String&#10;createdAt: DateTime&#10;processedAt: DateTime?" vertex="1" parent="ProductSyncJob" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="217" as="geometry" />
+        </mxCell>
+        <mxCell id="ProductSyncJob_separator" vertex="1" parent="ProductSyncJob" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="293" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ProductSyncJob_operations" value="+ createRequest(action, actorId)&#10;+ processEvent()&#10;+ findPendingForOrder(orderId)" vertex="1" parent="ProductSyncJob" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="303" width="416" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="Checkout" target="Order" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0.25;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="580" y="400" />
+              <mxPoint x="580" y="540" />
+              <mxPoint x="770" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1s" value="0..1" vertex="1" connectable="0" parent="e1" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1t" value="0..*" vertex="1" connectable="0" parent="e1" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="Basket" target="Order" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.85;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2s" value="0..1" vertex="1" connectable="0" parent="e2" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2t" value="0..1" vertex="1" connectable="0" parent="e2" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="Order" target="Payment" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3s" value="1" vertex="1" connectable="0" parent="e3" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3t" value="0..*" vertex="1" connectable="0" parent="e3" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="Order" target="Shipping" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.8;exitY=0;entryX=0.5;entryY=1;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1012" y="540" />
+              <mxPoint x="1480" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4s" value="1" vertex="1" connectable="0" parent="e4" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4t" value="0..1" vertex="1" connectable="0" parent="e4" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="Payment" target="Hold" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5s" value="1" vertex="1" connectable="0" parent="e5" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5t" value="0..*" vertex="1" connectable="0" parent="e5" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="Order" target="OrderLog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.2;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="748" y="1730" />
+              <mxPoint x="280" y="1730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6s" value="1" vertex="1" connectable="0" parent="e6" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6t" value="0..*" vertex="1" connectable="0" parent="e6" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="Order" target="AttributionJob" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="880" y="1730" />
+              <mxPoint x="880" y="1730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7s" value="1" vertex="1" connectable="0" parent="e7" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7t" value="0..1" vertex="1" connectable="0" parent="e7" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="Checkout" target="CheckoutAddressSnapshot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8s" value="1" vertex="1" connectable="0" parent="e8" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8t" value="0..1" vertex="1" connectable="0" parent="e8" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="Shipping" target="ShippingAddressSnapshot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9s" value="1" vertex="1" connectable="0" parent="e9" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9t" value="0..1" vertex="1" connectable="0" parent="e9" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="Order" target="ProductSyncJob" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.8;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1012" y="1730" />
+              <mxPoint x="1480" y="1730" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10s" value="1" vertex="1" connectable="0" parent="e10" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10t" value="0..*" vertex="1" connectable="0" parent="e10" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" value="UML KEY   ━  Association; navigability unspecified     •     0..1 optional     •     0..* zero or more     •     ? nullable     •     {id} identifier     •     {unique} unique value" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=15;fontColor=#000000;fontStyle=1;">
+          <mxGeometry x="60" y="2500" width="2320" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="notes" value="Logical OO design: each class combines schema attributes and operations allocated by responsibility from existing module behavior.&#10;Operations are design mappings, not literal Prisma instance methods; signatures are condensed. Page 04 preserves selected actual module functions.&#10;Multiplicity follows the current schema. Checkout creation requires 1–20 orders. External user/product/address IDs are scalar references.&#10;Source: backend/services/order-service/prisma/schema.prisma + src/. Operation mapping: operations.json. Notation: OMG UML 2.5.1." vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=15;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="2548" width="2320" height="110" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="03" name="03 · Dispute details">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2420" pageHeight="2250" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="ORDER SERVICE / DISPUTES &amp; EVIDENCE" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=30;fontColor=#000000;fontStyle=1;">
+          <mxGeometry x="60" y="35" width="2300" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="03  Complete scalar attributes + allocated operations · case ownership, evidence and safety review&#10;Logical OO design: case and evidence behavior is allocated from the existing dispute modules." vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=16;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="95" width="2300" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="Order" value="«logical class»&#10;Order" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="220" width="440" height="683" as="geometry" />
+        </mxCell>
+        <mxCell id="Order_fields" value="id: String {id}&#10;checkoutId: String?&#10;basketId: String? {unique}&#10;buyerId: String&#10;sellerId: String&#10;productId: String&#10;productTitle: String?&#10;campaignCode: String?&#10;preDisputeStatus: String?&#10;campaignId: String?&#10;auctionId: String? {unique}&#10;orderType: String&#10;originalAmount: Decimal {18,2}&#10;ordersAmount: Decimal {18,2}&#10;status: String&#10;version: Int&#10;shippedAt: DateTime?&#10;deliveredAt: DateTime?&#10;completedAt: DateTime?&#10;createdAt: DateTime&#10;updatedAt: DateTime" vertex="1" parent="Order" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="493" as="geometry" />
+        </mxCell>
+        <mxCell id="Order_separator" vertex="1" parent="Order" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="569" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Order_operations" value="+ create(data)&#10;+ updateStatus(status, expectedVersion)&#10;+ updateCampaign(campaignId, finalPrice)&#10;+ transitionStatusWithProductSync(options)" vertex="1" parent="Order" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="579" width="416" height="102" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCase" value="«logical class»&#10;DisputeCase" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="650" y="220" width="440" height="821" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCase_fields" value="id: String {id}&#10;orderId: String {unique}&#10;createdBy: String&#10;reason: String&#10;decision: String?&#10;disputeType: String&#10;version: Int&#10;assignedTo: String?&#10;assignedAt: DateTime?&#10;status: String&#10;createdAt: DateTime&#10;assignedRole: String?&#10;decisionReason: String?&#10;decidedBy: String?&#10;decidedAt: DateTime?&#10;verdictKey: String? {unique}&#10;escalationNote: String?&#10;escalatedBy: String?&#10;priority: String&#10;priorityScore: Int&#10;riskReportCount: Int&#10;slaExpiresAt: DateTime?&#10;slaPolicyVersion: String?&#10;firstReviewDueAt: DateTime?&#10;firstReviewedAt: DateTime?&#10;decisionDueAt: DateTime?" vertex="1" parent="DisputeCase" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="608" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCase_separator" vertex="1" parent="DisputeCase" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="684" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCase_operations" value="+ openDispute(reason, disputeType)&#10;+ claim(userId, version)&#10;+ reassign(toUserId, reason)&#10;+ escalate(toUserId, reason)&#10;+ decide(decision, reason, version)" vertex="1" parent="DisputeCase" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="694" width="416" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCaseLog" value="«logical class»&#10;DisputeCaseLog" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1240" y="220" width="440" height="315" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCaseLog_fields" value="id: String {id}&#10;disputeCaseId: String&#10;actorId: String&#10;action: String&#10;fromAssignedTo: String?&#10;toAssignedTo: String?&#10;detail: String&#10;createdAt: DateTime" vertex="1" parent="DisputeCaseLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="194" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCaseLog_separator" vertex="1" parent="DisputeCaseLog" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="270" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeCaseLog_operations" value="+ append(actorId, action, detail)" vertex="1" parent="DisputeCaseLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="280" width="416" height="33" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeEvidence" value="«logical class»&#10;DisputeEvidence" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1240" y="850" width="440" height="384" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeEvidence_fields" value="id: String {id}&#10;disputeCaseId: String&#10;uploaderId: String&#10;fileType: String&#10;status: String&#10;version: Int&#10;evidenceDeadline: DateTime?&#10;createdAt: DateTime&#10;updatedAt: DateTime" vertex="1" parent="DisputeEvidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="217" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeEvidence_separator" vertex="1" parent="DisputeEvidence" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="293" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeEvidence_operations" value="+ addEvidence(file, uploaderId)&#10;+ setEvidenceDeadline(deadline)&#10;+ requestMoreEvidence(reason)" vertex="1" parent="DisputeEvidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="303" width="416" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="Evidence" value="«logical class»&#10;Evidence" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1830" y="850" width="440" height="223" as="geometry" />
+        </mxCell>
+        <mxCell id="Evidence_fields" value="id: String {id}&#10;disputeEvidenceId: String&#10;refPath: String" vertex="1" parent="Evidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="Evidence_separator" vertex="1" parent="Evidence" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="155" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Evidence_operations" value="+ attach(refPath)&#10;+ viewEvidence(actorId)" vertex="1" parent="Evidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="165" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeAuditLog" value="«logical class»&#10;DisputeAuditLog" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1830" y="1350" width="440" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeAuditLog_fields" value="id: String {id}&#10;disputeEvidenceId: String&#10;actorId: String&#10;action: String&#10;detail: String&#10;createdAt: DateTime" vertex="1" parent="DisputeAuditLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="148" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeAuditLog_separator" vertex="1" parent="DisputeAuditLog" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="224" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="DisputeAuditLog_operations" value="+ append(actorId, action, detail)" vertex="1" parent="DisputeAuditLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="234" width="416" height="33" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyDisputeEvidence" value="«logical class»&#10;SafetyDisputeEvidence" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="650" y="1450" width="440" height="315" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyDisputeEvidence_fields" value="id: String {id}&#10;orderId: String&#10;evidenceId: String {unique}&#10;detail: String?&#10;verifyBy: String?&#10;verifyAt: DateTime?&#10;status: String" vertex="1" parent="SafetyDisputeEvidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="171" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyDisputeEvidence_separator" vertex="1" parent="SafetyDisputeEvidence" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="247" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyDisputeEvidence_operations" value="+ verifyEvidence(status, detail, actorId)&#10;+ getDisputeView(adminId)" vertex="1" parent="SafetyDisputeEvidence" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="257" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyLog" value="«logical class»&#10;SafetyLog" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="1450" width="440" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyLog_fields" value="id: String {id}&#10;safetyId: String&#10;actorId: String&#10;action: String&#10;detail: String&#10;createdAt: DateTime" vertex="1" parent="SafetyLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="148" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyLog_separator" vertex="1" parent="SafetyLog" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="224" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="SafetyLog_operations" value="+ append(actorId, action, detail)" vertex="1" parent="SafetyLog" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="234" width="416" height="33" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="Order" target="DisputeCase" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1s" value="1" vertex="1" connectable="0" parent="e1" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1t" value="0..1" vertex="1" connectable="0" parent="e1" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="DisputeCase" target="DisputeCaseLog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2s" value="1" vertex="1" connectable="0" parent="e2" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2t" value="0..*" vertex="1" connectable="0" parent="e2" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="DisputeCase" target="DisputeEvidence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.8;entryX=0;entryY=0.3;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3s" value="1" vertex="1" connectable="0" parent="e3" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3t" value="0..*" vertex="1" connectable="0" parent="e3" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="DisputeEvidence" target="Evidence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4s" value="1" vertex="1" connectable="0" parent="e4" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4t" value="0..*" vertex="1" connectable="0" parent="e4" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="DisputeEvidence" target="DisputeAuditLog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.75;exitY=1;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1570" y="1490" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5s" value="1" vertex="1" connectable="0" parent="e5" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5t" value="0..*" vertex="1" connectable="0" parent="e5" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="Order" target="SafetyDisputeEvidence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.15;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="280" y="1290" />
+              <mxPoint x="716" y="1290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6s" value="1" vertex="1" connectable="0" parent="e6" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6t" value="0..*" vertex="1" connectable="0" parent="e6" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="DisputeEvidence" target="SafetyDisputeEvidence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0;exitY=0.7;entryX=0.8;entryY=0;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1160" y="1160" />
+              <mxPoint x="1160" y="1370" />
+              <mxPoint x="1002" y="1370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7s" value="1" vertex="1" connectable="0" parent="e7" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7t" value="0..1" vertex="1" connectable="0" parent="e7" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="-18" y="-22" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="SafetyDisputeEvidence" target="SafetyLog" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=none;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0;exitY=0.5;entryX=1;entryY=0.5;exitPerimeter=1;entryPerimeter=1;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8s" value="1" vertex="1" connectable="0" parent="e8" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="-1" y="0" relative="1" as="geometry">
+            <mxPoint x="-24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8t" value="0..*" vertex="1" connectable="0" parent="e8" style="edgeLabel;html=0;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=13;fontFamily=Helvetica;labelBackgroundColor=none;fontColor=#000000;">
+          <mxGeometry x="1" y="0" relative="1" as="geometry">
+            <mxPoint x="24" y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" value="UML KEY   ━  Association; navigability unspecified     •     0..1 optional     •     0..* zero or more     •     ? nullable     •     {id} identifier     •     {unique} unique value" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=15;fontColor=#000000;fontStyle=1;">
+          <mxGeometry x="60" y="1960" width="2300" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="notes" value="Logical OO design: each class combines schema attributes and operations allocated by responsibility from existing module behavior.&#10;Operations are design mappings, not literal Prisma instance methods; signatures are condensed. Page 04 preserves selected actual module functions.&#10;Multiplicity follows the current schema. Checkout creation requires 1–20 orders. External user/product/address IDs are scalar references.&#10;Source: backend/services/order-service/prisma/schema.prisma + src/. Operation mapping: operations.json. Notation: OMG UML 2.5.1." vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=15;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="2008" width="2300" height="110" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="04" name="04 · Application operations">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2420" pageHeight="2040" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="ORDER SERVICE / APPLICATION OPERATIONS" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=30;fontColor=#000000;fontStyle=1;">
+          <mxGeometry x="60" y="35" width="2300" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="04  Module attributes/dependencies + selected real functions in three compartments&#10;These are JavaScript modules/factory objects. Dashed open arrows point from caller to supplier; / marks a derived configuration value." vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=16;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="95" width="2300" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="orderController" value="«module»&#10;orderController" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="230" width="440" height="292" as="geometry" />
+        </mxCell>
+        <mxCell id="orderController_fields" value="orderModel: Object {readOnly}&#10;productClient: Object {readOnly}" vertex="1" parent="orderController" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="orderController_separator" vertex="1" parent="orderController" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="orderController_operations" value="+ create(req, res, next)&#10;+ mine(req, res, next)&#10;+ selling(req, res, next)&#10;+ getOne(req, res, next)&#10;+ updateStatus(req, res, next)&#10;+ pay(req, res, next)" vertex="1" parent="orderController" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="148" as="geometry" />
+        </mxCell>
+        <mxCell id="orderController_source" value="controllers/orderController.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="186" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutSessionService" value="«module»&#10;checkoutSessionService" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="650" y="230" width="440" height="292" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutSessionService_fields" value="PAYMENT_TTL_MS: Number {readOnly}&#10;INCLUDE: Object {readOnly}" vertex="1" parent="checkoutSessionService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutSessionService_separator" vertex="1" parent="checkoutSessionService" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutSessionService_operations" value="+ create(options)&#10;+ get(options)&#10;+ confirm(options)&#10;+ updateAddress(options)&#10;+ expireDue(options)&#10;+ startExpiryWorker()" vertex="1" parent="checkoutSessionService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="148" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutSessionService_source" value="features/checkoutSessions/checkoutSessionService.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="650" y="186" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutService" value="«module»&#10;checkoutService" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1240" y="230" width="440" height="177" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutService_fields" value="defaultOrderModel: Object {readOnly}&#10;defaultProductClient: Object {readOnly}" vertex="1" parent="checkoutService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutService_separator" vertex="1" parent="checkoutService" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutService_operations" value="+ reserveOrder(options, dependencies)" vertex="1" parent="checkoutService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="33" as="geometry" />
+        </mxCell>
+        <mxCell id="checkoutService_source" value="features/checkout/checkoutService.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="1240" y="186" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="orderModel" value="«module»&#10;orderModel" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="800" width="440" height="315" as="geometry" />
+        </mxCell>
+        <mxCell id="orderModel_fields" value="prisma: PrismaClient {readOnly}&#10;VALID_STATUSES: String[] {readOnly}&#10;INCLUDE: Object {readOnly}" vertex="1" parent="orderModel" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="orderModel_separator" vertex="1" parent="orderModel" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="155" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="orderModel_operations" value="+ create(data)&#10;+ findById(id)&#10;+ findByReservationId(basketId)&#10;+ listByBuyer(buyerId, options)&#10;+ listBySeller(sellerId, options)&#10;+ transitionStatusWithProductSync(options)" vertex="1" parent="orderModel" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="165" width="416" height="148" as="geometry" />
+        </mxCell>
+        <mxCell id="orderModel_source" value="models/orderModel.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="756" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="productSyncService" value="«module»&#10;productSyncService" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="650" y="800" width="440" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="productSyncService_fields" value="prisma: PrismaClient {readOnly}&#10;ACTIONS: Object {readOnly}" vertex="1" parent="productSyncService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="productSyncService_separator" vertex="1" parent="productSyncService" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="productSyncService_operations" value="+ createRequest(db, order, actorId, data)&#10;+ processEvent(eventId, options)&#10;+ processPendingEvents(options)&#10;+ findPendingForOrder(orderId, db)&#10;+ startWorker()" vertex="1" parent="productSyncService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="productSyncService_source" value="services/productSyncService.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="650" y="756" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="productClient" value="«module»&#10;productClient" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1830" y="230" width="440" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="productClient_fields" value="/serviceUrl: String {derived}&#10;/internalToken: String {derived}" vertex="1" parent="productClient" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="productClient_separator" vertex="1" parent="productClient" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="productClient_operations" value="+ reserveProduct(productId, buyerId)&#10;+ releaseProductReservation(...)&#10;+ completeProductReservation(...)&#10;+ quoteAndHold(...)&#10;+ recordOrderCompleted(...)" vertex="1" parent="productClient" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="productClient_source" value="services/productClient.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="1830" y="186" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeController" value="«module»&#10;disputeController" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="60" y="1370" width="440" height="223" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeController_fields" value="disputeService: Object {readOnly}&#10;upload: Object {readOnly}" vertex="1" parent="disputeController" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeController_separator" vertex="1" parent="disputeController" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeController_operations" value="+ open(req, res, next)&#10;+ getOne(req, res, next)&#10;+ queue(req, res, next)" vertex="1" parent="disputeController" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="79" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeController_source" value="features/disputes/disputeController.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="1326" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeService" value="«module»&#10;disputeService" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="650" y="1370" width="440" height="338" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeService_fields" value="orderModel: Object {readOnly}&#10;disputeModel: Object {readOnly}" vertex="1" parent="disputeService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeService_separator" vertex="1" parent="disputeService" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeService_operations" value="+ open(options)&#10;+ getById(options)&#10;+ addEvidence(options)&#10;+ claim(options)&#10;+ reassign(options)&#10;+ escalate(options)&#10;+ decide(options)&#10;+ getChatHistory(options)" vertex="1" parent="disputeService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="194" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeService_source" value="features/disputes/disputeService.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="650" y="1326" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeModel" value="«module»&#10;disputeModel" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1240" y="1370" width="440" height="292" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeModel_fields" value="prisma: PrismaClient {readOnly}&#10;transitions: Object {readOnly}" vertex="1" parent="disputeModel" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeModel_separator" vertex="1" parent="disputeModel" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeModel_operations" value="+ findById(id)&#10;+ findByOrderId(orderId)&#10;+ openDispute(options)&#10;+ addEvidence(options)&#10;+ claim(options)&#10;+ decide(options)" vertex="1" parent="disputeModel" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="148" as="geometry" />
+        </mxCell>
+        <mxCell id="disputeModel_source" value="features/disputes/disputeModel.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="1240" y="1326" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="orderTransitionService" value="«module»&#10;orderTransitionService" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1240" y="800" width="440" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="orderTransitionService_fields" value="badRequest: Function {readOnly}&#10;conflict: Function {readOnly}" vertex="1" parent="orderTransitionService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="orderTransitionService_separator" vertex="1" parent="orderTransitionService" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="orderTransitionService_operations" value="+ addHold(tx, options)&#10;+ releaseHold(tx, options)&#10;+ hasActiveHolds(tx, orderId)&#10;+ resolveHoldState(tx, orderId)&#10;+ assertCanCancelOrder(order)" vertex="1" parent="orderTransitionService" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="orderTransitionService_source" value="services/orderTransitionService.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="1240" y="756" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="chatClient" value="«module»&#10;chatClient" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1830" y="1370" width="440" height="269" as="geometry" />
+        </mxCell>
+        <mxCell id="chatClient_fields" value="CHAT_SERVICE_URL: String {readOnly}&#10;INTERNAL_TOKEN: String {readOnly}" vertex="1" parent="chatClient" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="chatClient_separator" vertex="1" parent="chatClient" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="chatClient_operations" value="+ notifyOrderPlaced(order)&#10;+ notifyOrderPaid(order)&#10;+ notifyOrderStatusChanged(order, status)&#10;+ joinDisputeConversation(...)&#10;+ getDisputeTranscript(...)" vertex="1" parent="chatClient" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="chatClient_source" value="services/chatClient.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="1830" y="1326" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="authClient" value="«module»&#10;authClient" vertex="1" parent="1" style="swimlane;html=0;startSize=58;horizontal=1;rounded=0;collapsible=0;whiteSpace=wrap;align=center;verticalAlign=middle;fontFamily=Helvetica;fontSize=17;fontStyle=1;fillColor=none;swimlaneFillColor=none;strokeColor=#000000;fontColor=#000000;strokeWidth=1.5;gradientColor=none;">
+          <mxGeometry x="1830" y="800" width="440" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="authClient_fields" value="AUTH_SERVICE_URL: String {readOnly}&#10;REQUEST_TIMEOUT_MS: Number {readOnly}" vertex="1" parent="authClient" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="70" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="authClient_separator" vertex="1" parent="authClient" style="line;strokeColor=#000000;strokeWidth=1;">
+          <mxGeometry x="0" y="132" width="440" height="1" as="geometry" />
+        </mxCell>
+        <mxCell id="authClient_operations" value="+ getUser(...)&#10;+ searchStaff(query)" vertex="1" parent="authClient" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=14;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="12" y="142" width="416" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="authClient_source" value="services/authClient.js" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=12;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="1830" y="756" width="440" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="orderController" target="checkoutService" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=0;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="280" y="180" />
+              <mxPoint x="1460" y="180" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="orderController" target="orderModel" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="checkoutSessionService" target="orderModel" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="checkoutSessionService" target="productSyncService" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="checkoutService" target="productClient" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="checkoutService" target="orderModel" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=1;entryY=0.2;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1460" y="660" />
+              <mxPoint x="560" y="660" />
+              <mxPoint x="560" y="868" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="orderModel" target="orderTransitionService" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=0;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="280" y="720" />
+              <mxPoint x="1460" y="720" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="productSyncService" target="productClient" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.9;exitY=0;entryX=0.5;entryY=1;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1046" y="620" />
+              <mxPoint x="2050" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="disputeController" target="disputeService" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="disputeService" target="disputeModel" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="disputeService" target="authClient" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.9;exitY=0;entryX=0.5;entryY=1;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1046" y="1270" />
+              <mxPoint x="2050" y="1270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="disputeService" target="chatClient" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=1;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="870" y="1770" />
+              <mxPoint x="2050" y="1770" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="disputeModel" target="orderTransitionService" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=0;orthogonalLoop=1;jettySize=30;endArrow=open;endFill=0;startArrow=none;strokeWidth=1.5;strokeColor=#000000;fontFamily=Helvetica;fontSize=13;labelBackgroundColor=none;exitX=0.5;exitY=1;entryX=0.5;entryY=0;exitPerimeter=1;entryPerimeter=1;dashed=1;dashPattern=8 5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" value="UML KEY   - - - &gt;  Dependency: caller → supplier     •     + exported/public operation     •     (...) parameters suppressed for long signatures" vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=16;fontColor=#000000;fontStyle=1;">
+          <mxGeometry x="60" y="1830" width="2300" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="notes" value="Selected call view; not an exhaustive dependency graph. Source paths are relative to backend/services/order-service/src/.&#10;Attributes show module bindings/configuration; /serviceUrl and /internalToken are derived from productClient getter functions. Pages 01–03 show logical domain classes." vertex="1" parent="1" style="text;html=0;whiteSpace=wrap;align=left;verticalAlign=top;spacing=0;fontFamily=Helvetica;fontSize=15;fontColor=#000000;fontStyle=0;">
+          <mxGeometry x="60" y="1880" width="2300" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

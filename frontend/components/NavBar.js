@@ -115,7 +115,7 @@ const CUSTOMER_ACCOUNT_MENU_ITEMS = [
     icon: "confirmation_number",
   },
   { href: "/help", label: "ศูนย์ช่วยเหลือ", icon: "help" },
-  { href: "/profile", label: "ตั้งค่าโปรไฟล์", icon: "person" },
+  { href: "/profile", label: "ฉัน", icon: "person" },
 ];
 
 function resolveMenuHref(item, context) {
@@ -355,7 +355,7 @@ export default function NavBar() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               aria-label="ค้นหาสินค้า"
-              placeholder="ค้นหาแบรนด์ หมวดหมู่ หรือสไตล์..."
+              placeholder="ค้นหาสินค้า แบรนด์ หรือชื่อร้าน..."
               className="placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent text-sm outline-none"
             />
             <button
@@ -684,7 +684,7 @@ export default function NavBar() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             aria-label="ค้นหาสินค้า"
-            placeholder="ค้นหาสินค้า..."
+            placeholder="ค้นหาสินค้าหรือชื่อร้าน..."
             className="placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
         </div>

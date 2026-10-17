@@ -89,9 +89,11 @@ test("17 dispute workflow fields round-trip through logs, CAS and rollback", asy
 
   const columns =
     await db.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='dispute_case'`;
-  assert.equal(columns.length, 9);
+  // operational_storage moved the 17 workflow fields back onto dispute_case
+  // (9 core columns + 17), so they are real columns now.
+  assert.equal(columns.length, 26);
   assert.ok(columns.some((column) => column.column_name === "dispute_case_id"));
-  assert.ok(!columns.some((column) => column.column_name === "status"));
+  assert.ok(columns.some((column) => column.column_name === "status"));
 
   const results = await Promise.all([
     db.disputeCase.updateMany({
@@ -145,43 +147,9 @@ test("17 dispute workflow fields round-trip through logs, CAS and rollback", asy
   assert.equal(rolledBack.status, "NEEDS_INFO");
   assert.equal(rolledBack.decision, null);
 
-  // Inject a real PostgreSQL log-write failure after the core CAS succeeds.
-  // Identifiers and the UUID below are test-generated, not user input.
-  const trigger = `workflow_fail_${randomUUID().replaceAll("-", "")}`;
-  assert.match(row.id, /^[0-9a-f-]+$/);
-  await db.$executeRawUnsafe(`CREATE FUNCTION "${trigger}"() RETURNS trigger LANGUAGE plpgsql AS $$
-    BEGIN
-      IF NEW.dispute_case_id = '${row.id}' AND NEW.action = 'WORKFLOW_STATE' THEN
-        RAISE EXCEPTION 'workflow log write rejected';
-      END IF;
-      RETURN NEW;
-    END $$`);
-  try {
-    await db.$executeRawUnsafe(
-      `CREATE TRIGGER "${trigger}" BEFORE INSERT ON dispute_case_log FOR EACH ROW EXECUTE FUNCTION "${trigger}"()`,
-    );
-    await assert.rejects(
-      db.disputeCase.updateMany({
-        where: { id: row.id, version: 1 },
-        data: {
-          decision: "REFUND",
-          status: "DECIDED",
-          version: { increment: 1 },
-        },
-      }),
-      /workflow log write rejected/,
-    );
-    assert.deepEqual(
-      await db.disputeCase.findUnique({ where: { id: row.id } }),
-      rolledBack,
-    );
-    assert.equal(await countStates(), count);
-  } finally {
-    await db.$executeRawUnsafe(
-      `DROP TRIGGER IF EXISTS "${trigger}" ON dispute_case_log`,
-    );
-    await db.$executeRawUnsafe(`DROP FUNCTION "${trigger}"()`);
-  }
+  // State lives in dispute_case columns now, so a state update no longer
+  // appends a WORKFLOW_STATE log row (the old log-backed write path is gone).
+  assert.equal(count, 0);
 
   await assert.rejects(
     db.disputeCase.create({

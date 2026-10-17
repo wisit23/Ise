@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 import Alert from "../ui/Alert";
+import { ProductThumb } from "../OrderLine";
+import { fetchProduct } from "../../lib/products";
+import { fetchSellerSummary } from "../../lib/sellers";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
 
@@ -30,7 +33,7 @@ function AddressBlock({ address }) {
 }
 
 /**
- * Buyer-side order detail. Shows the delivery address and, while the seller
+ * Buyer-side order detail. Shows shipping details and the address; while the seller
  * has not yet prepared the parcel, lets the buyer pick another saved address.
  */
 export default function BuyerOrderDetailModal({
@@ -41,6 +44,7 @@ export default function BuyerOrderDetailModal({
 }) {
   const [order, setOrder] = useState(initialOrder);
   const [loadError, setLoadError] = useState("");
+  const [listing, setListing] = useState(null);
   const [editing, setEditing] = useState(false);
   const [addresses, setAddresses] = useState([]);
   const [selectedId, setSelectedId] = useState("");
@@ -62,9 +66,35 @@ export default function BuyerOrderDetailModal({
     reload().catch((err) =>
       setLoadError(err.message || "โหลดรายละเอียดคำสั่งซื้อไม่สำเร็จ"),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOrder.id]);
 
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      fetchProduct(order.productId),
+      fetchSellerSummary(order.sellerId),
+    ]).then(([product, seller]) => {
+      if (active) {
+        setListing({
+          productId: order.productId,
+          sellerId: order.sellerId,
+          product,
+          seller,
+        });
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [order.productId, order.sellerId]);
+
+  const product = listing?.productId === order.productId ? listing?.product : null;
+  const seller = listing?.sellerId === order.sellerId ? listing?.seller : null;
+  const shopName = seller?.shopName || "ไม่พบชื่อร้าน";
+  const productTitle = order.productTitle || product?.title || "สินค้า";
+  const photoProduct = product
+    ? { ...product, media: product.media?.filter((item) => item.type === "image") }
+    : null;
   const address = order.shippingAddress;
   const canChange = ADDRESS_EDITABLE_STATUSES.includes(order.status);
 
@@ -112,7 +142,9 @@ export default function BuyerOrderDetailModal({
       try {
         await reload();
         setEditing(false);
-      } catch {}
+      } catch {
+        // Keep the original error message; the reload is best-effort.
+      }
     } finally {
       setSaving(false);
     }
@@ -125,9 +157,26 @@ export default function BuyerOrderDetailModal({
         {error && <Alert tone="error">{error}</Alert>}
         {success && <Alert tone="success">{success}</Alert>}
 
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-          <dt className="text-ink-muted">สินค้า</dt>
-          <dd className="text-gray-900">{order.productTitle || "-"}</dd>
+        <section
+          aria-label="สินค้าและร้านค้า"
+          className="flex items-start gap-4 rounded-lg border border-line p-4"
+        >
+          <ProductThumb product={photoProduct} title={productTitle} size={88} />
+          <div className="min-w-0 space-y-1">
+            <p className="break-words font-semibold text-gray-900">
+              {productTitle}
+            </p>
+            <p className="break-words text-sm text-ink-muted">
+              ร้านค้า: <span className="text-gray-900">{shopName}</span>
+            </p>
+          </div>
+        </section>
+
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-ink-muted">หมายเลขคำสั่งซื้อ</dt>
+          <dd className="select-text break-all font-mono text-gray-900">
+            {order.id}
+          </dd>
           <dt className="text-ink-muted">ราคา</dt>
           <dd className="text-gray-900">
             ฿{Number(order.finalPrice ?? order.price).toLocaleString("th-TH")}
@@ -139,6 +188,37 @@ export default function BuyerOrderDetailModal({
             {new Date(order.createdAt).toLocaleDateString("th-TH")}
           </dd>
         </dl>
+
+        <section
+          aria-labelledby="buyer-shipping-details-heading"
+          className="rounded-lg border border-line p-4"
+        >
+          <h3
+            id="buyer-shipping-details-heading"
+            className="mb-2 font-bold text-gray-900"
+          >
+            ข้อมูลการจัดส่ง
+          </h3>
+          {order.shipping?.company || order.shipping?.trackingNumber ? (
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+              <dt className="text-ink-muted">บริษัทขนส่ง</dt>
+              <dd className="break-words text-gray-900">
+                {order.shipping.company || "ไม่พบข้อมูลบริษัทขนส่ง"}
+              </dd>
+              <dt className="text-ink-muted">เลขพัสดุ</dt>
+              <dd className="select-text break-all font-mono text-gray-900">
+                {order.shipping.trackingNumber || "ไม่พบข้อมูลเลขพัสดุ"}
+              </dd>
+            </dl>
+          ) : (
+            <p className="text-sm text-ink-muted">
+              {order.shippedAt ||
+              ["shipped", "delivered", "completed"].includes(order.status)
+                ? "ไม่พบข้อมูลการจัดส่ง"
+                : "รอผู้ขายระบุข้อมูลการจัดส่ง"}
+            </p>
+          )}
+        </section>
 
         <section className="rounded-lg border border-line p-4">
           <h3 className="mb-2 font-bold text-gray-900">ที่อยู่จัดส่ง</h3>
@@ -176,11 +256,7 @@ export default function BuyerOrderDetailModal({
                 >
                   ยกเลิก
                 </Button>
-                <Button
-                  loading={saving}
-                  disabled={!selectedId}
-                  onClick={save}
-                >
+                <Button loading={saving} disabled={!selectedId} onClick={save}>
                   บันทึกที่อยู่
                 </Button>
               </div>

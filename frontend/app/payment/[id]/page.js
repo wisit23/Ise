@@ -8,6 +8,8 @@ import Footer from "../../../components/Footer";
 import Alert from "../../../components/ui/Alert";
 import Button from "../../../components/ui/Button";
 import Skeleton from "../../../components/ui/Skeleton";
+import Modal from "../../../components/ui/Modal";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken } from "../../../lib/auth";
 import {
@@ -25,6 +27,15 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
+  const actionInFlight = useRef(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [addressOpen, setAddressOpen] = useState(false);
+  const [addresses, setAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [addressError, setAddressError] = useState("");
 
   async function load() {
     const token = getAccessToken();
@@ -85,7 +96,70 @@ export default function PaymentPage() {
     load();
   }, [seconds, session?.status]);
 
+  const editable = session?.status === "pending" && seconds > 0;
+  const busy = confirming || cancelling || savingAddress || addressLoading;
+
+  async function openAddresses() {
+    if (!editable || busy || actionInFlight.current) return;
+    setAddressOpen(true);
+    setAddressLoading(true);
+    setAddressError("");
+    try {
+      const saved = await apiFetch("/api/auth/me/addresses", { token: getAccessToken() });
+      setAddresses(saved);
+      setSelectedAddressId(saved.some((address) => address.id === session.addressId) ? session.addressId : "");
+    } catch (err) {
+      setAddressError(err.message || "โหลดที่อยู่จัดส่งไม่สำเร็จ");
+    } finally {
+      setAddressLoading(false);
+    }
+  }
+
+  async function saveAddress() {
+    if (!editable || busy || actionInFlight.current || !selectedAddressId) return;
+    actionInFlight.current = true;
+    setSavingAddress(true);
+    setAddressError("");
+    try {
+      const updated = await apiFetch(`/api/orders/checkout-sessions/${id}/address`, {
+        method: "PATCH", token: getAccessToken(), body: { addressId: selectedAddressId },
+      });
+      setSession(updated);
+      setAddressOpen(false);
+    } catch (err) {
+      setAddressError(err.message || "เปลี่ยนที่อยู่จัดส่งไม่สำเร็จ");
+      await load();
+    } finally {
+      actionInFlight.current = false;
+      setSavingAddress(false);
+    }
+  }
+
+  async function handleCancel() {
+    if (!editable || busy || actionInFlight.current) return;
+    actionInFlight.current = true;
+    setCancelling(true);
+    setError("");
+    try {
+      const updated = await apiFetch(`/api/orders/checkout-sessions/${id}/cancel`, {
+        method: "POST", token: getAccessToken(),
+      });
+      setSession(updated);
+      setCancelOpen(false);
+      router.push("/cart");
+    } catch (err) {
+      setError(err.message || "ยกเลิกการชำระเงินไม่สำเร็จ กรุณาลองอีกครั้ง");
+      setCancelOpen(false);
+      await load();
+    } finally {
+      actionInFlight.current = false;
+      setCancelling(false);
+    }
+  }
+
   async function handlePaid() {
+    if (busy || actionInFlight.current || addressOpen || cancelOpen) return;
+    actionInFlight.current = true;
     setConfirming(true);
     setError("");
     try {
@@ -98,6 +172,7 @@ export default function PaymentPage() {
       setError(err.message || "ยืนยันการชำระเงินไม่สำเร็จ");
       await load();
     } finally {
+      actionInFlight.current = false;
       setConfirming(false);
     }
   }
@@ -163,7 +238,7 @@ export default function PaymentPage() {
               </span>
             </div>
             <h1 className="mt-5 text-2xl font-bold text-gray-900">
-              หมดเวลาชำระเงิน
+              {session.status === "cancelled" ? "ยกเลิกการชำระเงินแล้ว" : "หมดเวลาชำระเงิน"}
             </h1>
             <p className="mt-2 text-sm leading-relaxed text-ink-muted">
               ระบบยกเลิกการจองแล้ว
@@ -254,15 +329,34 @@ export default function PaymentPage() {
                     {session.shippingAddress.province}{" "}
                     {session.shippingAddress.postalCode}
                   </dd>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="edit_location_alt"
+                    className="mt-3"
+                    disabled={!editable || busy || cancelOpen || addressOpen}
+                    onClick={openAddresses}
+                  >
+                    เปลี่ยนที่อยู่จัดส่ง
+                  </Button>
                 </div>
               </dl>
               <Button
                 className="mt-5 w-full"
                 icon="check_circle"
                 loading={confirming}
+                disabled={busy || cancelOpen || addressOpen}
                 onClick={handlePaid}
               >
                 ฉันชำระเงินแล้ว
+              </Button>
+              <Button
+                variant="secondary"
+                className="mt-3 w-full text-red-700"
+                disabled={!editable || busy || cancelOpen || addressOpen}
+                onClick={() => setCancelOpen(true)}
+              >
+                ยกเลิกการชำระเงิน
               </Button>
               <p className="mt-3 text-center text-xs text-ink-subtle">
                 ระบบนี้เป็นการจำลองการชำระเงิน ยังไม่มีการตัดเงินจริง
@@ -271,6 +365,44 @@ export default function PaymentPage() {
           </div>
         ) : null}
       </div>
+      <ConfirmDialog
+        open={cancelOpen && editable}
+        title="ยกเลิกการชำระเงิน?"
+        description="รายการทั้งหมดในรอบชำระนี้จะถูกยกเลิก และสินค้าจะกลับไปพร้อมขายให้ผู้ซื้อคนอื่น"
+        confirmLabel="ยืนยันยกเลิกการชำระเงิน"
+        cancelLabel="ชำระเงินต่อ"
+        busy={cancelling}
+        onConfirm={handleCancel}
+        onCancel={() => { if (!cancelling) setCancelOpen(false); }}
+      />
+      <Modal
+        open={addressOpen && editable}
+        title="เปลี่ยนที่อยู่จัดส่ง"
+        onClose={() => { if (!savingAddress) setAddressOpen(false); }}
+        footer={
+          <>
+            <Button variant="secondary" disabled={savingAddress} onClick={() => setAddressOpen(false)}>ยกเลิก</Button>
+            <Button loading={savingAddress} disabled={busy || !selectedAddressId} onClick={saveAddress}>บันทึกที่อยู่จัดส่ง</Button>
+          </>
+        }
+      >
+        {addressError && <Alert tone="error" className="mb-4">{addressError}</Alert>}
+        {addressLoading ? <Skeleton className="h-32 rounded-lg" /> : (
+          <div className="space-y-3">
+            {!addresses.length && <p className="text-sm text-ink-muted">ยังไม่มีที่อยู่จัดส่ง กรุณาเพิ่มที่อยู่ในหน้าโปรไฟล์</p>}
+            {addresses.map((address) => (
+              <label key={address.id} className="flex cursor-pointer gap-3 rounded-lg border border-line p-4">
+                <input type="radio" name="shipping-address" value={address.id} checked={selectedAddressId === address.id} disabled={savingAddress} onChange={() => setSelectedAddressId(address.id)} />
+                <span className="text-sm">
+                  <span className="block font-semibold">{address.recipientName}</span>
+                  {address.phone}<br />
+                  {address.addressLine} {address.subdistrict} {address.district} {address.province} {address.postalCode}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+      </Modal>
       <Footer />
     </main>
   );

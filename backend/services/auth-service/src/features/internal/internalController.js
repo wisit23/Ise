@@ -27,4 +27,27 @@ async function eligibleStaff(req, res, next) {
     res.json(paginatedResponse(rows.map(row=>({id:row.id,displayName:row.firstName,roles:[...new Set(row.roles.length ? row.roles.map(item=>item.role) : [row.role])].filter(role=>allowed.includes(role))})),total,pagination));
   } catch(err) { next(err); }
 }
-module.exports = { displayNames, eligibleStaff };
+async function searchShops(req, res, next) {
+  try {
+    const { badRequest } = require("@reloop/shared");
+    const prisma = require("../../models/prismaClient");
+    const q = typeof req.body?.q === "string" ? req.body.q.trim() : "";
+    if (!q) throw badRequest("q must be a non-empty string");
+    // Treat SQL wildcard characters as literal parts of a shop name.
+    const query = q.replace(/[\\%_]/g, "\\$&");
+    const shops = await prisma.sellerProfile.findMany({
+      where: {
+        shopName: { contains: query, mode: "insensitive" },
+        user: { status: "ACTIVE" },
+      },
+      select: { userId: true },
+      orderBy: { userId: "asc" },
+    });
+    // Only seller ids cross the boundary; KYC/contact data stays in auth.
+    res.json({ sellerIds: shops.map((shop) => shop.userId) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { displayNames, eligibleStaff, searchShops };

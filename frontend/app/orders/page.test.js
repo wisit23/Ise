@@ -19,18 +19,20 @@ jest.mock(
       return <footer />;
     },
 );
-jest.mock(
-  "../../components/OrderLine",
-  () =>
-    function Line({ actions, status }) {
-      return (
-        <div>
-          {status}
-          {actions}
-        </div>
-      );
-    },
-);
+jest.mock("../../components/OrderLine", () => ({
+  __esModule: true,
+  default: function Line({ actions, status }) {
+    return (
+      <div>
+        {status}
+        {actions}
+      </div>
+    );
+  },
+  ProductThumb: function Thumb() {
+    return null;
+  },
+}));
 jest.mock(
   "../../components/chat/ContactSellerButton",
   () =>
@@ -75,7 +77,7 @@ test("decided completed orders link to their case and cannot open a duplicate; a
   ).toHaveAttribute("href", "/support/cases/decided-order");
   expect(
     screen.getAllByRole("button", {
-      name: /มีปัญหากับคำสั่งซื้อนี้\? ขอคืนเงิน\/คืนสินค้า/,
+      name: "ขอคืนเงิน/คืนสินค้า",
     }),
   ).toHaveLength(1);
   expect(screen.getByText("พักเงินเพื่อตรวจสอบ")).toBeInTheDocument();
@@ -120,10 +122,12 @@ test("buyer confirms receipt only after delivery and disputes only within 14 day
   ).toHaveLength(1);
   expect(
     screen.getAllByRole("button", {
-      name: /มีปัญหากับคำสั่งซื้อนี้\? ขอคืนเงิน\/คืนสินค้า/,
+      name: "ขอคืนเงิน/คืนสินค้า",
     }),
   ).toHaveLength(1);
-  expect(screen.getByText(/ระบบจะยืนยันรับสินค้าให้อัตโนมัติ/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/ระบบจะยืนยันรับสินค้าให้อัตโนมัติ/),
+  ).toBeInTheDocument();
 });
 
 test("the detail button opens the buyer order detail for that order", async () => {
@@ -136,7 +140,11 @@ test("the detail button opens the buyer order detail for that order", async () =
     status: "paid",
     version: 2,
     createdAt: "2026-10-16T04:00:00Z",
-    shippingAddress: { recipientName: "Somchai", phone: "081", addressLine: "1 Road" },
+    shippingAddress: {
+      recipientName: "Somchai",
+      phone: "081",
+      addressLine: "1 Road",
+    },
   };
   apiFetch.mockImplementation((url) =>
     Promise.resolve(
@@ -151,5 +159,58 @@ test("the detail button opens the buyer order detail for that order", async () =
   fireEvent.click(await screen.findByRole("button", { name: "ดูรายละเอียด" }));
   expect(await screen.findByText("รายละเอียดคำสั่งซื้อ")).toBeInTheDocument();
   expect(await screen.findByText("Somchai")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "เปลี่ยนที่อยู่" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "เปลี่ยนที่อยู่" }),
+  ).toBeInTheDocument();
+});
+
+test("green review and red refund buttons keep their forms and deadline", async () => {
+  apiFetch.mockImplementation((url) =>
+    Promise.resolve(
+      url.startsWith("/api/orders/mine")
+        ? {
+            items: [
+              {
+                id: "completed-order",
+                buyerId: "buyer",
+                productId: "product",
+                price: 650,
+                status: "completed",
+                createdAt: new Date().toISOString(),
+                deliveredAt: new Date().toISOString(),
+              },
+            ],
+            totalPages: 1,
+          }
+        : { items: [] },
+    ),
+  );
+  render(<OrdersPage />);
+  const review = await screen.findByRole("button", { name: "ให้คะแนนร้านค้า" });
+  const refund = screen.getByRole("button", { name: "ขอคืนเงิน/คืนสินค้า" });
+  expect(review.parentElement).toHaveClass("flex", "flex-wrap", "items-start");
+  expect(review.parentElement).not.toHaveClass("flex-col");
+  expect(refund.parentElement.parentElement).toBe(review.parentElement);
+  expect(review.parentElement).toHaveClass("[&>form]:w-full");
+  expect(review).toHaveClass("!bg-emerald-50", "!text-emerald-800");
+  expect(refund).toHaveClass("!bg-rose-50", "!text-rose-800");
+  expect(refund).toHaveAccessibleDescription(/แจ้งปัญหาได้ภายในวันที่/);
+  expect(refund.parentElement).toHaveClass(
+    "flex-1",
+    "items-center",
+    "justify-between",
+  );
+  expect(screen.getByText(/แจ้งปัญหาได้ภายในวันที่/)).toHaveClass(
+    "ml-auto",
+    "text-right",
+  );
+  expect(refund).not.toHaveTextContent("ภายใน");
+  fireEvent.click(review);
+  expect(
+    screen.getByText("ให้คะแนนร้านค้าสำหรับคำสั่งซื้อนี้"),
+  ).toBeInTheDocument();
+  fireEvent.click(refund);
+  expect(
+    screen.getByRole("heading", { name: "แจ้งปัญหาหลังรับสินค้า" }),
+  ).toBeInTheDocument();
 });

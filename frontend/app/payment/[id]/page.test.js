@@ -53,6 +53,7 @@ const SESSION = {
     },
   ],
   expiresAt: "2099-08-10T12:10:00.000Z",
+  addressId: "a1",
   shippingAddress: {
     recipientName: "สมชาย ใจดี",
     addressLine: "99 ถนนสุขุมวิท",
@@ -75,6 +76,14 @@ beforeEach(() => {
     ) {
       return Promise.resolve({ ...SESSION, status: "paid" });
     }
+    if (path === "/api/auth/me/addresses") return Promise.resolve([
+      { ...SESSION.shippingAddress, id: "a1", phone: "0812345678" },
+      { ...SESSION.shippingAddress, id: "a2", recipientName: "ผู้รับใหม่", addressLine: "123 ถนนใหม่", phone: "0899999999" },
+    ]);
+    if (path === "/api/orders/checkout-sessions/session-1/cancel") return Promise.resolve({ ...SESSION, status: "cancelled" });
+    if (path === "/api/orders/checkout-sessions/session-1/address") return Promise.resolve({
+      ...SESSION, addressId: "a2", shippingAddress: { ...SESSION.shippingAddress, recipientName: "ผู้รับใหม่", addressLine: "123 ถนนใหม่" },
+    });
     return Promise.reject(new Error(`unexpected request: ${path}`));
   });
 });
@@ -106,4 +115,78 @@ test("confirms payment and shows the success state", async () => {
     );
     expect(screen.getByText("ชำระเงินสำเร็จ")).toBeInTheDocument();
   });
+});
+
+
+test("cancel requires confirmation and backing out makes no cancellation request", async () => {
+  render(<PaymentPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "ยกเลิกการชำระเงิน" }));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(apiFetch).not.toHaveBeenCalledWith(expect.stringContaining("/cancel"), expect.anything());
+  expect(screen.getByRole("button", { name: "ฉันชำระเงินแล้ว" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "ชำระเงินต่อ" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(apiFetch).not.toHaveBeenCalledWith(expect.stringContaining("/cancel"), expect.anything());
+});
+
+test("confirmed cancellation calls API once and returns to cart", async () => {
+  render(<PaymentPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "ยกเลิกการชำระเงิน" }));
+  const confirm = screen.getByRole("button", { name: "ยืนยันยกเลิกการชำระเงิน" });
+  fireEvent.click(confirm);
+  fireEvent.click(confirm);
+  await waitFor(() => expect(push).toHaveBeenCalledWith("/cart"));
+  expect(apiFetch.mock.calls.filter(([path]) => path.endsWith("/cancel"))).toHaveLength(1);
+  expect(apiFetch).toHaveBeenCalledWith("/api/orders/checkout-sessions/session-1/cancel", { method: "POST", token: "buyer-token" });
+});
+
+test("cancellation failure stays on payment and shows the error", async () => {
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) => path.endsWith("/cancel") ? Promise.reject(new Error("ยกเลิกไม่สำเร็จ")) : original(path, options));
+  render(<PaymentPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "ยกเลิกการชำระเงิน" }));
+  fireEvent.click(screen.getByRole("button", { name: "ยืนยันยกเลิกการชำระเงิน" }));
+  expect(await screen.findByText("ยกเลิกไม่สำเร็จ")).toBeInTheDocument();
+  expect(push).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "ฉันชำระเงินแล้ว" })).toBeEnabled();
+});
+
+test("address selection saves the checkout snapshot without confirming payment", async () => {
+  render(<PaymentPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "เปลี่ยนที่อยู่จัดส่ง" }));
+  fireEvent.click(await screen.findByRole("radio", { name: /ผู้รับใหม่/ }));
+  expect(screen.getByRole("button", { name: "ฉันชำระเงินแล้ว" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "บันทึกที่อยู่จัดส่ง" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(apiFetch).toHaveBeenCalledWith("/api/orders/checkout-sessions/session-1/address", {
+    method: "PATCH", token: "buyer-token", body: { addressId: "a2" },
+  });
+  expect(screen.getByText(/123 ถนนใหม่/)).toBeInTheDocument();
+  expect(apiFetch).not.toHaveBeenCalledWith(expect.stringContaining("/confirm"), expect.anything());
+});
+
+test("failed address save preserves the old address and allows retry", async () => {
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) => path.endsWith("/address") ? Promise.reject(new Error("บันทึกที่อยู่ไม่สำเร็จ")) : original(path, options));
+  render(<PaymentPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "เปลี่ยนที่อยู่จัดส่ง" }));
+  fireEvent.click(await screen.findByRole("radio", { name: /ผู้รับใหม่/ }));
+  fireEvent.click(screen.getByRole("button", { name: "บันทึกที่อยู่จัดส่ง" }));
+  expect(await screen.findByText("บันทึกที่อยู่ไม่สำเร็จ")).toBeInTheDocument();
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "บันทึกที่อยู่จัดส่ง" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "ยกเลิก" }));
+  expect(screen.getByText(/99 ถนนสุขุมวิท/)).toBeInTheDocument();
+});
+
+test("paid and expired sessions do not offer cancel or address changes", async () => {
+  apiFetch.mockResolvedValue({ ...SESSION, status: "paid" });
+  const view = render(<PaymentPage />);
+  await screen.findByText("ชำระเงินสำเร็จ");
+  expect(screen.queryByRole("button", { name: "เปลี่ยนที่อยู่จัดส่ง" })).not.toBeInTheDocument();
+  view.unmount();
+  apiFetch.mockResolvedValue({ ...SESSION, status: "expired", expiresAt: "2000-01-01" });
+  render(<PaymentPage />);
+  await screen.findByText("หมดเวลาชำระเงิน");
+  expect(screen.queryByRole("button", { name: "ยกเลิกการชำระเงิน" })).not.toBeInTheDocument();
 });

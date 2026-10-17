@@ -28,13 +28,25 @@ test("catalog search applies all filters against PostgreSQL", async (t) => {
     return;
   }
   const prefix = `catalog-filter-${Date.now()}`;
+  const shoeCategory = `${prefix}-shoes`;
+  // Product inserts also create category lookup rows through a database trigger.
+  // Own unique category names so teardown never removes a shared catalog value.
+  t.after(async () => {
+    await prisma.product.deleteMany({
+      where: { sellerId: "catalog-test", title: { startsWith: prefix } },
+    });
+    await prisma.category.deleteMany({
+      where: { name: { in: [prefix, shoeCategory] }, products: { none: {} } },
+    });
+    assert.equal(await prisma.category.count({ where: { name: { in: [prefix, shoeCategory] } } }), 0);
+  });
   const rows = await prisma.product.createManyAndReturn({
     data: [
       {
         sellerId: "catalog-test",
         title: `${prefix}-match`,
         price: 900,
-        category: "shoes",
+        category: shoeCategory,
         brand: "Acme",
         condition: "Good",
         size: "M",
@@ -44,7 +56,7 @@ test("catalog search applies all filters against PostgreSQL", async (t) => {
         sellerId: "catalog-test",
         title: `${prefix}-wrong`,
         price: 900,
-        category: "shoes",
+        category: shoeCategory,
         brand: "Other",
         condition: "Good",
         size: "M",
@@ -108,7 +120,7 @@ test("catalog search applies all filters against PostgreSQL", async (t) => {
   try {
     const result = await request(app).get("/search").query({
       q: "Acme",
-      category: "shoes",
+      category: shoeCategory,
       style: "vintage",
       brand: "Acme",
       size: "M",

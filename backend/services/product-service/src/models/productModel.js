@@ -1,6 +1,7 @@
 const prisma = require("./prismaClient");
 const { Prisma } = require("../generated/prisma-client");
 const { buildCatalogWhere } = require("../features/catalog/catalogQuery");
+const shopSearchClient = require("../services/shopSearchClient");
 
 const WITH_MEDIA = { photos: true, videos: true, categoryLinks: { include: { category: true } } };
 
@@ -105,14 +106,26 @@ function mediaToNestedCreate(media) {
  */
 async function searchProducts(filters) {
   const { skip = 0, take = 20, q } = filters;
-  const where = buildCatalogWhere(filters, { PrismaClient: Prisma });
+  let matchingSellerIds = [];
+  if (q) {
+    try {
+      matchingSellerIds = await shopSearchClient.findSellerIds(q);
+    } catch (err) {
+      // Keep product keyword search available during an auth-service outage.
+      console.warn("[shopSearch] Shop lookup failed:", err.message);
+    }
+  }
+  const where = buildCatalogWhere(
+    { ...filters, matchingSellerIds },
+    { PrismaClient: Prisma },
+  );
   const order = q
     ? Prisma.sql`
         ts_rank_cd(search_vector, plainto_tsquery('simple', ${q})) DESC,
         GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) DESC,
-        created_at DESC
+        created_at DESC, id ASC
       `
-    : Prisma.sql`created_at DESC`;
+    : Prisma.sql`created_at DESC, id ASC`;
 
   const [rows, countRows] = await Promise.all([
     prisma.$queryRaw`

@@ -22,7 +22,7 @@ test("PostgreSQL trend counts beyond 50, fills empty dates, and keeps CS ownersh
   try {
     await db.$transaction(async (tx) => {
       for (const sql of [
-        "CREATE TEMP TABLE support_tickets (ticket_id text, created_at timestamptz, current_status_id int, ticket_priority_id int) ON COMMIT DROP",
+        "CREATE TEMP TABLE support_tickets (ticket_id text, created_at timestamptz, current_status_id int, ticket_priority_id int, chat_responder_id text) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_audit_events (audit_event_id text, ticket_id text, event_type text, payload jsonb, created_at timestamptz) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_statuses (ticket_status_id int, code text) ON COMMIT DROP",
         "CREATE TEMP TABLE ticket_priorities (ticket_priority_id int, code text) ON COMMIT DROP",
