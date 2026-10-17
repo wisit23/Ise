@@ -55,4 +55,15 @@ async function updateAddress(req, res, next) {
     next(err);
   }
 }
-module.exports = { create, get, confirm, updateAddress };
+async function cancel(req, res, next) {
+  try {
+    res.json(await checkoutSessionService.cancel({
+      buyerId: req.userId,
+      sessionId: req.params.id,
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, get, confirm, cancel, updateAddress };

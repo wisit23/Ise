@@ -62,7 +62,6 @@ export default function BuyerOrderDetailModal({
     reload().catch((err) =>
       setLoadError(err.message || "โหลดรายละเอียดคำสั่งซื้อไม่สำเร็จ"),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOrder.id]);
 
   const address = order.shippingAddress;
@@ -112,7 +111,9 @@ export default function BuyerOrderDetailModal({
       try {
         await reload();
         setEditing(false);
-      } catch {}
+      } catch {
+        // Keep the original error message; the reload is best-effort.
+      }
     } finally {
       setSaving(false);
     }
@@ -176,11 +177,7 @@ export default function BuyerOrderDetailModal({
                 >
                   ยกเลิก
                 </Button>
-                <Button
-                  loading={saving}
-                  disabled={!selectedId}
-                  onClick={save}
-                >
+                <Button loading={saving} disabled={!selectedId} onClick={save}>
                   บันทึกที่อยู่
                 </Button>
               </div>

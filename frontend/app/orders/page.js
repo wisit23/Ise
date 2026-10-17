@@ -346,10 +346,10 @@ export default function OrdersPage() {
                     the same shape in every status. */}
                 {(["delivered", "completed"].includes(o.status) ||
                   disputed) && (
-                  <div className="flex flex-col gap-2 border-t border-line bg-surface-subtle px-4 py-3">
+                  <div className="flex flex-wrap items-start gap-2 border-t border-line bg-surface-subtle px-4 py-3 [&>form]:w-full">
                     {o.status === "completed" &&
                       (review ? (
-                        <div className="flex flex-col gap-1 text-sm text-ink-muted">
+                        <div className="flex w-full flex-col gap-1 text-sm text-ink-muted">
                           <div className="flex items-center gap-2">
                             <StarDisplay value={review.rating} />
                             {review.comment && (
@@ -374,16 +374,19 @@ export default function OrdersPage() {
                           }}
                         />
                       ) : (
-                        <button
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon="star"
                           onClick={() => setOpenReviewFor(o.id)}
-                          className="focus-ring self-start rounded text-sm font-medium text-brand-700 hover:underline"
+                          className="self-start !border-emerald-200 !bg-emerald-50 !text-emerald-800 hover:!bg-emerald-100"
                         >
                           ให้คะแนนร้านค้า
-                        </button>
+                        </Button>
                       ))}
 
                     {o.status === "delivered" && autoCompleteAt(o) && (
-                      <p className="text-xs text-ink-subtle">
+                      <p className="w-full text-xs text-ink-subtle">
                         หากไม่กดยืนยัน ระบบจะยืนยันรับสินค้าให้อัตโนมัติวันที่{" "}
                         {autoCompleteAt(o).toLocaleDateString("th-TH")}
                       </p>
@@ -409,13 +412,25 @@ export default function OrdersPage() {
                           }}
                         />
                       ) : (
-                        <button
-                          onClick={() => setOpenDisputeFor(o.id)}
-                          className="focus-ring self-start rounded text-sm font-medium text-danger hover:underline"
-                        >
-                          มีปัญหากับคำสั่งซื้อนี้? ขอคืนเงิน/คืนสินค้า (ภายใน{" "}
-                          {disputeDeadline(o).toLocaleDateString("th-TH")})
-                        </button>
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            icon="flag"
+                            onClick={() => setOpenDisputeFor(o.id)}
+                            aria-describedby={`dispute-deadline-${o.id}`}
+                            className="!border-rose-200 !bg-rose-50 !text-rose-800 hover:!bg-rose-100"
+                          >
+                            ขอคืนเงิน/คืนสินค้า
+                          </Button>
+                          <p
+                            id={`dispute-deadline-${o.id}`}
+                            className="ml-auto text-right text-xs text-rose-700"
+                          >
+                            แจ้งปัญหาได้ภายในวันที่{" "}
+                            {disputeDeadline(o).toLocaleDateString("th-TH")}
+                          </p>
+                        </div>
                       ))}
 
                     {disputed && (

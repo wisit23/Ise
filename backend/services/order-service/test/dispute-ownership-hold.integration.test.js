@@ -542,7 +542,11 @@ test("TSR-02: Payment outbox survives product-service failure and retries", asyn
     where: { orderId: order.id, action: "PRODUCT_SYNC_REQUESTED" },
   });
   assert.ok(pendingEvent);
-  assert.equal(await prisma.orderLog.count({where:{action:"PRODUCT_SYNC_COMPLETED",detail:pendingEvent.id}}), 0);
+  // The completion log points at the product-sync job, whose id the request
+  // log carries as `eventId` (it is not the request log's own id).
+  const jobId = JSON.parse(pendingEvent.detail).eventId;
+  assert.ok(jobId);
+  assert.equal(await prisma.orderLog.count({where:{action:"PRODUCT_SYNC_COMPLETED",detail:jobId}}), 0);
 
   productClient.setProductStatus = async () => ({ ok: true });
   const retried = await request(app)
@@ -553,7 +557,7 @@ test("TSR-02: Payment outbox survives product-service failure and retries", asyn
   assert.equal(retried.body.status, "paid");
 
   const processedEvent = await prisma.orderLog.findFirst({
-    where: { action: "PRODUCT_SYNC_COMPLETED", detail: pendingEvent.id },
+    where: { action: "PRODUCT_SYNC_COMPLETED", detail: jobId },
   });
   assert.ok(processedEvent);
 });

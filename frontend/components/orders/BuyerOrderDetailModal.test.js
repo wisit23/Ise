@@ -39,7 +39,8 @@ function order(status, extra = {}) {
 
 function mockApi(current, { patch } = {}) {
   apiFetch.mockImplementation((url, opts = {}) => {
-    if (url === "/api/orders/o1" && !opts.method) return Promise.resolve(current);
+    if (url === "/api/orders/o1" && !opts.method)
+      return Promise.resolve(current);
     if (url === "/api/auth/me/addresses")
       return Promise.resolve([ADDR_OLD, ADDR_NEW]);
     if (url === "/api/orders/o1/shipping-address") return patch(opts);
@@ -108,13 +109,16 @@ test.each(["ready_to_ship", "shipped", "delivered", "completed"])(
 test("on conflict it shows the error and reloads the order, hiding the button when the seller already moved on", async () => {
   let current = order("confirmed");
   apiFetch.mockImplementation((url, opts = {}) => {
-    if (url === "/api/orders/o1" && !opts.method) return Promise.resolve(current);
+    if (url === "/api/orders/o1" && !opts.method)
+      return Promise.resolve(current);
     if (url === "/api/auth/me/addresses")
       return Promise.resolve([ADDR_OLD, ADDR_NEW]);
     if (url === "/api/orders/o1/shipping-address") {
       current = order("ready_to_ship", { version: 4 });
       return Promise.reject(
-        new Error("the address can only change before the seller prepares the parcel"),
+        new Error(
+          "the address can only change before the seller prepares the parcel",
+        ),
       );
     }
     return Promise.reject(new Error("unexpected " + url));

@@ -74,6 +74,7 @@ test("normalized ticket claim, history and message SLA survive the existing API 
   await model.recordChatMessage({
     chatMessageId: "internal-" + ticket.id,
     ticketId: ticket.id,
+    conversationId: "conversation-" + ticket.id,
     authorId: "agent-a",
     authorRole: "AGENT",
     body: "internal",
@@ -83,6 +84,7 @@ test("normalized ticket claim, history and message SLA survive the existing API 
   const reply = await model.recordChatMessage({
     chatMessageId: "public-" + ticket.id,
     ticketId: ticket.id,
+    conversationId: "conversation-" + ticket.id,
     authorId: "agent-a",
     authorRole: "AGENT",
     body: "public",
@@ -159,6 +161,7 @@ test("reopened case receives a new resolution SLA cycle without deleting the pre
   await model.recordChatMessage({
     chatMessageId: "reply-" + ticket.id,
     ticketId: ticket.id,
+    conversationId: "conversation-" + ticket.id,
     authorId: "normalized-agent",
     authorRole: "AGENT",
     body: "reply",

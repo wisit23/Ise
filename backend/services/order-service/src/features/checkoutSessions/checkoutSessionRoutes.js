@@ -21,6 +21,11 @@ router.post(
   checkoutSessionController.confirm,
 );
 
+router.post(
+  "/:id/cancel",
+  requireCommerceCapability(CAPABILITY.BUYER),
+  checkoutSessionController.cancel,
+);
 router.patch("/:id/address", requireCommerceCapability(CAPABILITY.BUYER), checkoutSessionController.updateAddress);
 router.patch("/:id/address", requireCommerceCapability(CAPABILITY.BUYER), checkoutSessionController.updateAddress);
 module.exports = router;

@@ -1,0 +1,182 @@
+[
+  {
+    "parent": "Checkout",
+    "child": "Order",
+    "parentMult": "0..1",
+    "childMult": "0..*",
+    "parentRole": "checkout",
+    "childRole": "orders",
+    "fk": "checkoutId",
+    "cascade": false
+  },
+  {
+    "parent": "Basket",
+    "child": "Order",
+    "parentMult": "0..1",
+    "childMult": "0..1",
+    "parentRole": "basket",
+    "childRole": "order",
+    "fk": "basketId",
+    "cascade": false
+  },
+  {
+    "parent": "Order",
+    "child": "Payment",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "order",
+    "childRole": "payments",
+    "fk": "orderId",
+    "cascade": false
+  },
+  {
+    "parent": "Order",
+    "child": "Shipping",
+    "parentMult": "1",
+    "childMult": "0..1",
+    "parentRole": "order",
+    "childRole": "shipping",
+    "fk": "orderId",
+    "cascade": false
+  },
+  {
+    "parent": "Payment",
+    "child": "Hold",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "payment",
+    "childRole": "holds",
+    "fk": "paymentId",
+    "cascade": false
+  },
+  {
+    "parent": "Order",
+    "child": "OrderLog",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "order",
+    "childRole": "logs",
+    "fk": "orderId",
+    "cascade": false
+  },
+  {
+    "parent": "Order",
+    "child": "DisputeCase",
+    "parentMult": "1",
+    "childMult": "0..1",
+    "parentRole": "order",
+    "childRole": "dispute",
+    "fk": "orderId",
+    "cascade": false
+  },
+  {
+    "parent": "DisputeCase",
+    "child": "DisputeCaseLog",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "dispute",
+    "childRole": "caseLog",
+    "fk": "disputeCaseId",
+    "cascade": false
+  },
+  {
+    "parent": "DisputeCase",
+    "child": "DisputeEvidence",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "dispute",
+    "childRole": "evidence",
+    "fk": "disputeCaseId",
+    "cascade": false
+  },
+  {
+    "parent": "DisputeEvidence",
+    "child": "Evidence",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "disputeEvidence",
+    "childRole": "files",
+    "fk": "disputeEvidenceId",
+    "cascade": true
+  },
+  {
+    "parent": "DisputeEvidence",
+    "child": "DisputeAuditLog",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "evidence",
+    "childRole": "auditLog",
+    "fk": "disputeEvidenceId",
+    "cascade": false
+  },
+  {
+    "parent": "Order",
+    "child": "SafetyDisputeEvidence",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "order",
+    "childRole": "safetyEvidence",
+    "fk": "orderId",
+    "cascade": false
+  },
+  {
+    "parent": "DisputeEvidence",
+    "child": "SafetyDisputeEvidence",
+    "parentMult": "1",
+    "childMult": "0..1",
+    "parentRole": "evidence",
+    "childRole": "safetyEvidence",
+    "fk": "evidenceId",
+    "cascade": false
+  },
+  {
+    "parent": "SafetyDisputeEvidence",
+    "child": "SafetyLog",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "safety",
+    "childRole": "logs",
+    "fk": "safetyId",
+    "cascade": false
+  },
+  {
+    "parent": "Order",
+    "child": "AttributionJob",
+    "parentMult": "1",
+    "childMult": "0..1",
+    "parentRole": "order",
+    "childRole": "attributionJob",
+    "fk": "orderId",
+    "cascade": false
+  },
+  {
+    "parent": "Checkout",
+    "child": "CheckoutAddressSnapshot",
+    "parentMult": "1",
+    "childMult": "0..1",
+    "parentRole": "checkout",
+    "childRole": "addressSnapshotRow",
+    "fk": "checkoutId",
+    "cascade": true
+  },
+  {
+    "parent": "Shipping",
+    "child": "ShippingAddressSnapshot",
+    "parentMult": "1",
+    "childMult": "0..1",
+    "parentRole": "shipping",
+    "childRole": "addressSnapshotRow",
+    "fk": "shippingId",
+    "cascade": true
+  },
+  {
+    "parent": "Order",
+    "child": "ProductSyncJob",
+    "parentMult": "1",
+    "childMult": "0..*",
+    "parentRole": "order",
+    "childRole": "productSyncJobs",
+    "fk": "orderId",
+    "cascade": false
+  }
+]
