@@ -7,6 +7,11 @@ import Textarea from "../../ui/Textarea";
 import IdCardField from "./IdCardField";
 import KycDocumentUpload from "./KycDocumentUpload";
 
+import BankAccountInput, {
+  parseBankAccount,
+  formatBankAccount,
+} from "../BankAccountInput";
+
 export default function KycForm({
   form,
   onFormChange,
@@ -20,6 +25,22 @@ export default function KycForm({
 }) {
   const set = (field) => (e) =>
     onFormChange({ ...form, [field]: e.target.value });
+
+  const { bank, accountNumber } = parseBankAccount(form.bankAccount);
+
+  const handleBankChange = (newBank) => {
+    onFormChange({
+      ...form,
+      bankAccount: formatBankAccount(newBank, accountNumber),
+    });
+  };
+
+  const handleAccountChange = (newAcc) => {
+    onFormChange({
+      ...form,
+      bankAccount: formatBankAccount(bank, newAcc),
+    });
+  };
 
   return (
     <form
@@ -40,7 +61,7 @@ export default function KycForm({
         <h2 className="mb-3 text-base font-semibold text-gray-900">
           1. ข้อมูลร้านค้า
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-4">
           <Input
             required
             label="ชื่อร้านค้า"
@@ -48,12 +69,12 @@ export default function KycForm({
             value={form.shopName}
             onChange={set("shopName")}
           />
-          <Input
-            label="เลขบัญชีธนาคาร / พร้อมเพย์"
-            hint="ไม่บังคับ"
-            placeholder="เช่น กสิกรไทย 123-4-56789-0"
-            value={form.bankAccount}
-            onChange={set("bankAccount")}
+          <BankAccountInput
+            bank={bank}
+            accountNumber={accountNumber}
+            onBankChange={handleBankChange}
+            onAccountNumberChange={handleAccountChange}
+            required={false}
           />
         </div>
       </div>

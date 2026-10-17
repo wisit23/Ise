@@ -19,6 +19,8 @@ function fixture(overrides = {}, changed = 1) {
     sellerId: "seller-1",
     status: "confirmed",
     version: 3,
+    ordersAmount: 100,
+    originalAmount: 100,
     shipping: {
       status: "pending",
       addressId: "old",
@@ -38,6 +40,10 @@ function fixture(overrides = {}, changed = 1) {
     shipping: {
       updateMany: async (query) => {
         writes.push({ table: "shipping", query });
+        return { count: 1 };
+      },
+      update: async (query) => {
+        writes.push({ table: "shipping_update", query });
         return { count: 1 };
       },
       findUnique: async () => ({ orderId: order.id, addressSnapshot: ADDRESS }),
@@ -144,3 +150,53 @@ test("stale client version and incomplete selected addresses are rejected before
   );
   assert.equal(writes.length, 0);
 });
+
+test("markShipped: rejects if caller is not the seller", async () => {
+  const { service } = fixture({ status: "confirmed" });
+  await assert.rejects(
+    service.markShipped({
+      orderId: "order-1",
+      actorId: "buyer-1",
+      version: 3,
+      company: "Flash Express",
+      trackingNumber: "TH12345",
+    }),
+    (error) => error.status === 403,
+  );
+});
+
+test("markShipped: rejects if order has not been confirmed yet (status is paid)", async () => {
+  const { service } = fixture({ status: "paid" });
+  await assert.rejects(
+    service.markShipped({
+      orderId: "order-1",
+      actorId: "seller-1",
+      version: 3,
+      company: "Flash Express",
+      trackingNumber: "TH12345",
+    }),
+    (error) => {
+      assert.equal(error.status, 409);
+      assert.match(error.message, /ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องทำการยืนยันรับออเดอร์ก่อน/);
+      return true;
+    },
+  );
+});
+
+test("markShipped: succeeds when seller marks confirmed order as shipped", async () => {
+  const { service, writes } = fixture({ status: "confirmed" });
+  const result = await service.markShipped({
+    orderId: "order-1",
+    actorId: "seller-1",
+    version: 3,
+    company: "Flash Express",
+    trackingNumber: "TH12345",
+  });
+  assert.ok(result);
+  const orderWrite = writes.find((w) => w.table === "order");
+  assert.equal(orderWrite.query.data.status, "shipped");
+  const shippingUpdate = writes.find((w) => w.table === "shipping_update");
+  assert.equal(shippingUpdate.query.data.company, "Flash Express");
+  assert.equal(shippingUpdate.query.data.trackingNumber, "TH12345");
+});
+

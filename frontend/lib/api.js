@@ -65,7 +65,7 @@ function rejectSuspended(data) {
   });
 }
 
-export async function apiFetch(path, { method = "GET", body, token, signal } = {}) {
+export async function apiFetch(path, { method = "GET", body, token, signal, headers = {} } = {}) {
   const authToken = token ?? getAccessToken();
 
   let res = await fetch(`${API_URL}${path}`, {
@@ -74,6 +74,7 @@ export async function apiFetch(path, { method = "GET", body, token, signal } = {
     headers: {
       "Content-Type": "application/json",
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -87,6 +88,7 @@ export async function apiFetch(path, { method = "GET", body, token, signal } = {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${newToken}`,
+          ...headers,
         },
         body: body ? JSON.stringify(body) : undefined,
       });

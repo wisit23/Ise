@@ -1,5 +1,6 @@
 const { badRequest, forbidden, notFound } = require("@reloop/shared");
 const productVideoRepository = require("./productVideoRepository");
+const chatClient = require("../auctions/chatClient");
 
 const UPLOAD_ROLES = new Set(["SELLER", "ADMIN"]);
 
@@ -51,6 +52,9 @@ async function createClip({ user, input = {} }) {
   if (product.moderatedAt || product.status === "removed") {
     throw forbidden("cannot attach a video to a moderated product");
   }
+  if (product.status === "sold") {
+    throw badRequest("cannot attach a video to a sold product");
+  }
   if (product.sellerId !== user.id) {
     throw forbidden("you can only attach video clips to your own products");
   }
@@ -88,6 +92,34 @@ async function chooseClip({ user, productVideoId }) {
     userId: user.id,
   });
 
+  // Notify seller if another user liked their review clip
+  if (clip.sellerId && clip.sellerId !== user.id) {
+    const likerName =
+      user.displayName || (user.id ? `ผู้ใช้ ${user.id.slice(-6)}` : "ผู้ใช้");
+    const productTitle = clip.product?.title || "สินค้า";
+    chatClient
+      .sendSystemNotification({
+        userId: clip.sellerId,
+        type: "LIKE",
+        title: "มีคนถูกใจคลิปรีวิวของคุณ",
+        message: `❤️ คุณ ${likerName} ได้ถูกใจคลิปรีวิวสินค้า "${productTitle}"`,
+        link: `/swipe?videoId=${clip.id}`,
+        metadata: {
+          event: "video.liked",
+          productVideoId: clip.id,
+          productId: clip.productId,
+          userId: user.id,
+          userName: likerName,
+        },
+      })
+      .catch((err) => {
+        console.error(
+          "[product-service] like notification failed:",
+          err.message,
+        );
+      });
+  }
+
   return {
     ...choice,
     chosen: true,
@@ -118,9 +150,83 @@ async function unchooseClip({ user, productVideoId }) {
   return { chosen: false };
 }
 
+async function createComment({ user, productVideoId, input = {} }) {
+  if (!isBuyer(user)) {
+    throw forbidden("only buyer accounts can comment on review clips");
+  }
+
+  const text = requiredText(input.comment, "comment");
+  if (text.length > 500) {
+    throw badRequest("comment cannot exceed 500 characters");
+  }
+
+  const clip = await productVideoRepository.findById(productVideoId);
+  if (
+    !clip ||
+    clip.product?.moderatedAt ||
+    clip.product?.status === "removed"
+  ) {
+    throw notFound("swipe card not found");
+  }
+
+  const commenterName =
+    user.displayName || (user.id ? `ผู้ใช้ ${user.id.slice(-6)}` : "ผู้ใช้");
+
+  const createdComment = await productVideoRepository.createComment({
+    productVideoId,
+    userId: user.id,
+    userName: commenterName,
+    comment: text,
+  });
+
+  // Notify seller if another user commented on their review clip
+  if (clip.sellerId && clip.sellerId !== user.id) {
+    const productTitle = clip.product?.title || "สินค้า";
+    const snippet = text.length > 50 ? `${text.slice(0, 47)}...` : text;
+    chatClient
+      .sendSystemNotification({
+        userId: clip.sellerId,
+        type: "REVIEW",
+        title: "มีความคิดเห็นใหม่บนคลิปรีวิวของคุณ",
+        message: `💬 คุณ ${commenterName} ได้แสดงความคิดเห็นบนคลิปรีวิวสินค้า "${productTitle}": "${snippet}"`,
+        link: `/swipe?videoId=${clip.id}`,
+        metadata: {
+          event: "video.commented",
+          productVideoId: clip.id,
+          productId: clip.productId,
+          commentId: createdComment.id,
+          userId: user.id,
+          userName: commenterName,
+        },
+      })
+      .catch((err) => {
+        console.error(
+          "[product-service] comment notification failed:",
+          err.message,
+        );
+      });
+  }
+
+  return createdComment;
+}
+
+async function listComments(productVideoId) {
+  const clip = await productVideoRepository.findById(productVideoId);
+  if (
+    !clip ||
+    clip.product?.moderatedAt ||
+    clip.product?.status === "removed"
+  ) {
+    throw notFound("swipe card not found");
+  }
+  return productVideoRepository.listComments(productVideoId);
+}
+
 module.exports = {
   listFeed,
   createClip,
   chooseClip,
   unchooseClip,
+  createComment,
+  listComments,
 };

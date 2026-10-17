@@ -20,4 +20,22 @@ async function getOrder(orderId) {
   return res.json();
 }
 
-module.exports = { getOrder };
+async function getOrderByProductId(productId) {
+  if (!productId) return null;
+  let res;
+  try {
+    res = await fetch(
+      `${ORDER_SERVICE_URL}/internal/by-product/${encodeURIComponent(productId)}`,
+      {
+        headers: { "x-internal-token": INTERNAL_TOKEN },
+        signal: AbortSignal.timeout(2000),
+      },
+    );
+  } catch {
+    return null;
+  }
+  if (!res || !res.ok) return null;
+  return res.json().catch(() => null);
+}
+
+module.exports = { getOrder, getOrderByProductId };

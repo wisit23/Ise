@@ -41,3 +41,26 @@ test("public auction detail uses the lifecycle-aware service and propagates erro
   );
   assert.equal(error, missing);
 });
+
+test("controller.getBids delegates to service.getBids and returns { items }", async (t) => {
+  const bids = [
+    { id: "b1", amount: 500, bidderId: "u1", bidderName: "User 1" },
+  ];
+  t.mock.method(service, "getBids", async (id) => {
+    assert.equal(id, "demo-auction");
+    return bids;
+  });
+  let body;
+  await controller.getBids(
+    { params: { id: "demo-auction" } },
+    {
+      json: (data) => {
+        body = data;
+      },
+    },
+    (err) => {
+      throw err;
+    },
+  );
+  assert.deepEqual(body, { items: bids });
+});

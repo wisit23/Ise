@@ -59,6 +59,11 @@ router.post("/:id/reassign", requireAuth, disputeController.reassign);
 router.post("/:id/escalate", requireAuth, disputeController.escalate);
 router.post("/:id/decision", requireAuth, disputeController.decide);
 router.post(
+  "/:id/acknowledge",
+  requireAuth,
+  disputeController.acknowledge,
+);
+router.post(
   "/:id/request-evidence",
   requireAuth,
   disputeController.requestMoreEvidence,

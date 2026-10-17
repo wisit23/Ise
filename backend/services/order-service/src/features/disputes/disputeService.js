@@ -100,8 +100,9 @@ async function open({ orderId, userId, reason, disputeType }) {
   const startedAt = new Date();
   const deadlines = disputeDeadlines(initial.priority, startedAt);
 
+  let dispute;
   try {
-    return await disputeModel.openDispute({
+    dispute = await disputeModel.openDispute({
       orderId,
       openedBy: userId,
       reason: reason.trim(),
@@ -119,6 +120,20 @@ async function open({ orderId, userId, reason, disputeType }) {
       throw conflict("this order already has an open dispute");
     throw err;
   }
+
+  try {
+    const freshOrder = await orderModel.findById(orderId);
+    if (chatClient?.notifyDisputeOpened) {
+      await chatClient.notifyDisputeOpened(dispute, freshOrder || order);
+    }
+  } catch (noticeErr) {
+    console.error(
+      `[disputeService] dispute open notification failed for order ${orderId}:`,
+      noticeErr.message,
+    );
+  }
+
+  return dispute;
 }
 
 async function getById({ disputeId, userId, role, roles }) {
@@ -130,6 +145,7 @@ async function getById({ disputeId, userId, role, roles }) {
     const summary = order
       ? {
           id: order.id,
+          productId: order.productId,
           buyerId: order.buyerId,
           sellerId: order.sellerId,
           price: order.price,
@@ -153,15 +169,42 @@ async function getById({ disputeId, userId, role, roles }) {
       ],
       ["buyerId", "sellerId", "assigneeId"],
     );
+    const logs = dispute.auditLog || [];
+    const buyerId = summary?.buyerId;
+    const sellerId = summary?.sellerId;
+    const buyerAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === buyerId);
+    const sellerAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === sellerId);
+    const bothAcknowledged = buyerAcknowledged && sellerAcknowledged;
+    const currentUserAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === userId);
+
     return {
       ...row,
       order: summary,
       shipping: withShippingFacts({...dispute,order}).shipping,
       capabilities: disputeCapabilities(dispute, userId, role, roles),
       sla: disputeSla(dispute),
+      buyerAcknowledged,
+      sellerAcknowledged,
+      bothAcknowledged,
+      currentUserAcknowledged,
     };
   }
-  return dispute;
+
+  const logs = dispute.auditLog || [];
+  const buyerId = dispute.order?.buyerId;
+  const sellerId = dispute.order?.sellerId;
+  const buyerAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === buyerId);
+  const sellerAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === sellerId);
+  const bothAcknowledged = buyerAcknowledged && sellerAcknowledged;
+  const currentUserAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === userId);
+
+  return {
+    ...dispute,
+    buyerAcknowledged,
+    sellerAcknowledged,
+    bothAcknowledged,
+    currentUserAcknowledged,
+  };
 }
 
 /** Convenience lookup for the frontend: a CSS-002 order-search result only
@@ -730,6 +773,46 @@ async function deliverVerdictNotice(dispute, order) {
       `ผลการตัดสิน: ${outcome} — ${dispute.decisionReason}`,
     );
     await chatClient.lockDisputeConversation(dispute, order);
+
+    if (chatClient?.sendSystemNotification) {
+      const title = order.productTitle || "สินค้า";
+      if (order.sellerId) {
+        chatClient.sendSystemNotification({
+          userId: order.sellerId,
+          type: "DISPUTE",
+          title: "ผลการตัดสินข้อพิพาท",
+          message: `⚖️ สินค้าของคุณ '${title}' สำหรับคำสั่งซื้อ #${order.id} ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
+          link: "/orders",
+          entityId: order.id,
+          metadata: {
+            orderId: order.id,
+            disputeId: dispute.id,
+            decision: dispute.decision,
+            reason: dispute.decisionReason,
+            role: "seller",
+            outcome,
+          },
+        }).catch(() => {});
+      }
+      if (order.buyerId) {
+        chatClient.sendSystemNotification({
+          userId: order.buyerId,
+          type: "DISPUTE",
+          title: "ผลการตัดสินข้อพิพาท",
+          message: `⚖️ คำสั่งซื้อ #${order.id} ('${title}') ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
+          link: "/orders",
+          entityId: order.id,
+          metadata: {
+            orderId: order.id,
+            disputeId: dispute.id,
+            decision: dispute.decision,
+            reason: dispute.decisionReason,
+            role: "buyer",
+            outcome,
+          },
+        }).catch(() => {});
+      }
+    }
   } catch (err) {
     // The decision is committed in PostgreSQL. A later chat open retries the
     // lock; expose the failed side effect so operators can reconcile it.
@@ -768,18 +851,44 @@ async function requestMoreEvidence({
   if (!updated) throw conflict("dispute changed; reload and retry");
   const order = await orderModel.findById(updated.orderId);
   if (order) {
-    try {
-      await chatClient.sendDisputeNotice(
-        updated,
-        order,
-        `request-evidence:${updated.version}`,
-        `Admin ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
-      );
-    } catch (err) {
-      console.error(
-        `[disputeService] evidence request notice failed: ${err.message}`,
-      );
-      return { ...updated, chatNoticeError: err.message };
+    if (chatClient?.sendSystemNotification) {
+      const title = order.productTitle || "สินค้า";
+      if (order.buyerId) {
+        chatClient.sendSystemNotification({
+          userId: order.buyerId,
+          type: "DISPUTE",
+          title: "เจ้าหน้าที่ขอหลักฐานเพิ่มเติมสำหรับข้อพิพาท",
+          message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): เจ้าหน้าที่ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
+          link: "/orders",
+          entityId: order.id,
+          metadata: {
+            orderId: order.id,
+            disputeId: updated.id,
+            reason: reason.trim(),
+            decision: "REQUEST_EVIDENCE",
+            decisionLabel: "ขอหลักฐานเพิ่มเติม",
+            role: "buyer",
+          },
+        }).catch(() => {});
+      }
+      if (order.sellerId) {
+        chatClient.sendSystemNotification({
+          userId: order.sellerId,
+          type: "DISPUTE",
+          title: "อัปเดตข้อพิพาท: ขอหลักฐานเพิ่มเติม",
+          message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): มีการขอข้อมูล/หลักฐานเพิ่มเติมสำหรับข้อพิพาท: ${reason.trim()}`,
+          link: "/orders",
+          entityId: order.id,
+          metadata: {
+            orderId: order.id,
+            disputeId: updated.id,
+            reason: reason.trim(),
+            decision: "REQUEST_EVIDENCE",
+            decisionLabel: "ขอหลักฐานเพิ่มเติม",
+            role: "seller",
+          },
+        }).catch(() => {});
+      }
     }
   }
   return updated;
@@ -1013,6 +1122,68 @@ async function getDashboardMetrics({ role, roles }) {
 }
 
 
+async function acknowledge({ disputeId, userId, role, roles }) {
+  const dispute = await disputeModel.findById(disputeId);
+  if (!dispute) throw notFound("dispute not found");
+  if (dispute.status !== "DECIDED") {
+    throw badRequest("ข้อพิพาทนี้ยังไม่มีผลการตัดสิน");
+  }
+  const order = await orderModel.findById(dispute.orderId);
+  if (!order) throw notFound("order not found");
+  if (order.buyerId !== userId && order.sellerId !== userId) {
+    throw forbidden("you are not part of this dispute");
+  }
+
+  const prisma = require("../../models/prismaClient");
+  const existing = await prisma.disputeCaseLog.findFirst({
+    where: {
+      disputeCaseId: dispute.id,
+      actorId: userId,
+      action: "DECISION_ACKNOWLEDGED",
+    },
+  });
+
+  if (!existing) {
+    await prisma.disputeCaseLog.create({
+      data: {
+        disputeCaseId: dispute.id,
+        actorId: userId,
+        action: "DECISION_ACKNOWLEDGED",
+        detail: JSON.stringify({
+          role: order.buyerId === userId ? "BUYER" : "SELLER",
+          acknowledgedAt: new Date(),
+        }),
+      },
+    });
+  }
+
+  const logs = await prisma.disputeCaseLog.findMany({
+    where: { disputeCaseId: dispute.id, action: "DECISION_ACKNOWLEDGED" },
+  });
+  const hasBuyerAck = logs.some((l) => l.actorId === order.buyerId);
+  const hasSellerAck = logs.some((l) => l.actorId === order.sellerId);
+  const bothAcknowledged = hasBuyerAck && hasSellerAck;
+
+  let chatDeleted = false;
+  if (bothAcknowledged) {
+    try {
+      await chatClient.deleteDisputeConversation(dispute.id);
+      chatDeleted = true;
+    } catch (err) {
+      console.error("[disputeService] error deleting dispute conversation:", err.message);
+    }
+  }
+
+  return {
+    disputeId: dispute.id,
+    acknowledged: true,
+    hasBuyerAck,
+    hasSellerAck,
+    bothAcknowledged,
+    chatDeleted,
+  };
+}
+
 module.exports = {
   getDashboardMetrics, getChatHistory, getChatAttachment,
   setEvidenceDeadline,
@@ -1038,6 +1209,7 @@ module.exports = {
   reassign,
   escalate,
   decide,
+  acknowledge,
   requestMoreEvidence,
   getAuditTranscript,
   listQueue,

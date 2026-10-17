@@ -132,7 +132,148 @@ async function getOne(req, res, next) {
 
 // disputed/refunded are set only through the dispute flow (CSS-003's
 // disputeService), never by a buyer/seller PATCHing status directly.
-const USER_SETTABLE_STATUSES = ["pending", "shipped", "completed", "cancelled"];
+const USER_SETTABLE_STATUSES = [
+  "pending",
+  "paid",
+  "confirmed",
+  "shipped",
+  "completed",
+  "cancelled",
+];
+
+async function confirmOrder(req, res, next) {
+  try {
+    const order = await orderModel.findById(req.params.id);
+    if (!order) throw notFound("order not found");
+    if (order.sellerId !== req.userId) {
+      throw forbidden("only the seller can confirm this order");
+    }
+    orderTransitionService.assertCanParticipantUpdateStatus(order);
+
+    if (order.status === "confirmed") {
+      return res.json(order);
+    }
+    if (!["paid", "pending", "pending_payment"].includes(order.status)) {
+      throw conflict(`cannot confirm order in status: ${order.status}`);
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const changed = await tx.order.updateMany({
+        where: { id: order.id, version: order.version, status: { in: ["paid", "pending", "pending_payment"] } },
+        data: { status: "confirmed", version: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw conflict("order changed — please refresh and retry");
+      await tx.orderLog.create({
+        data: {
+          orderId: order.id,
+          buyerId: order.buyerId,
+          sellerId: order.sellerId,
+          actorId: req.userId,
+          action: "ORDER_CONFIRMED",
+          detail: JSON.stringify({ confirmedAt: new Date() }),
+        },
+      });
+      return tx.order.findUnique({ where: { id: order.id }, include: orderModel.INCLUDE });
+    });
+
+    const viewed = orderModel.view(updated);
+    await chatClient.notifyOrderConfirmed(viewed);
+    res.json(viewed);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function rejectOrder(req, res, next) {
+  try {
+    const order = await orderModel.findById(req.params.id);
+    if (!order) throw notFound("order not found");
+    if (order.sellerId !== req.userId) {
+      throw forbidden("only the seller can reject this order");
+    }
+    orderTransitionService.assertCanParticipantUpdateStatus(order);
+
+    if (["shipped", "completed", "cancelled", "disputed"].includes(order.status)) {
+      throw conflict(`cannot reject order in status: ${order.status}`);
+    }
+
+    const reason = req.body?.reason?.trim() || "ผู้ขายไม่สะดวกจัดส่งสินค้า";
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const changed = await tx.order.updateMany({
+        where: { id: order.id, version: order.version },
+        data: { status: "cancelled", version: { increment: 1 } },
+      });
+      if (changed.count !== 1) throw conflict("order changed — please refresh and retry");
+
+      await tx.payment.updateMany({
+        where: { orderId: order.id, paymentStatus: "paid" },
+        data: { paymentStatus: "refunded" },
+      });
+
+      await tx.payment.create({
+        data: {
+          orderId: order.id,
+          paymentType: "REFUND",
+          paymentStatus: "refunded",
+          paymentAmount: order.ordersAmount,
+          paidAt: new Date(),
+        },
+      });
+
+      if (order.basketId) {
+        await tx.basket.updateMany({
+          where: { id: order.basketId },
+          data: { status: "expired" },
+        });
+      }
+
+      await tx.orderLog.create({
+        data: {
+          orderId: order.id,
+          buyerId: order.buyerId,
+          sellerId: order.sellerId,
+          actorId: req.userId,
+          action: "ORDER_REJECTED",
+          detail: JSON.stringify({
+            reason,
+            refundAmount: Number(order.ordersAmount),
+            rejectedAt: new Date(),
+          }),
+        },
+      });
+
+      return tx.order.findUnique({ where: { id: order.id }, include: orderModel.INCLUDE });
+    });
+
+    try {
+      await productClient.setProductStatus(order.productId, "available");
+    } catch (err) {
+      console.error("[orderController] failed to reset product status:", err.message);
+    }
+
+    if (order.campaignId) {
+      try {
+        await productClient.releaseVoucher(order.campaignId, {
+          userId: order.buyerId,
+          orderId: order.id,
+        });
+      } catch (err) {
+        console.error("[orderController] failed to release voucher:", err.message);
+      }
+    }
+
+    const viewed = orderModel.view(updated);
+    await buyerActivityClient.recordOrderActivity(viewed, "ORDER_CANCELLED", {
+      initiatedBy: req.userId,
+      reason,
+    });
+    await chatClient.notifyOrderRejected(viewed, reason);
+    res.json(viewed);
+  } catch (err) {
+    next(err);
+  }
+}
 
 async function updateStatus(req, res, next) {
   try {
@@ -149,8 +290,16 @@ async function updateStatus(req, res, next) {
       );
     }
 
-    if (status === "cancelled")
+    if (status === "confirmed" && order.sellerId === req.userId) {
+      return confirmOrder(req, res, next);
+    }
+
+    if (status === "cancelled") {
+      if (order.sellerId === req.userId) {
+        return rejectOrder(req, res, next);
+      }
       orderTransitionService.assertCanCancelOrder(order);
+    }
     // TSR-02: Prevent participant updating status while order has open dispute or hold
     orderTransitionService.assertCanParticipantUpdateStatus(order);
 
@@ -195,6 +344,12 @@ async function updateStatus(req, res, next) {
     // "the SYSTEM message exists by the time this request returns" an
     // actual guarantee instead of a race a test would have to poll for.
     if (status === "shipped") {
+      if (order.sellerId !== req.userId) {
+        throw forbidden("only the seller can mark this order as shipped");
+      }
+      if (order.status !== "confirmed") {
+        throw conflict("ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องทำการยืนยันรับออเดอร์ก่อน");
+      }
       const shipped = await shippingService.markShipped({
         orderId: order.id,
         actorId: req.userId,
@@ -284,10 +439,15 @@ async function createFromAuction(req, res, next) {
       );
     }
 
-    // Idempotency: if an order was already created for this auction (e.g. race between BullMQ worker and page visit), return it.
+    // Idempotency: concise deterministic ID for auction order (e.g. AUC-A1B2C3D4E5)
     const stableId =
-      "auction-" +
-      crypto.createHash("sha256").update(String(auctionId)).digest("hex");
+      "AUC-" +
+      crypto
+        .createHash("sha256")
+        .update(String(auctionId))
+        .digest("hex")
+        .slice(0, 10)
+        .toUpperCase();
     const existing = await orderModel.findById(stableId);
     if (existing) {
       return res.status(200).json(existing);
@@ -330,11 +490,13 @@ async function createFromAuction(req, res, next) {
   } catch (err) {
     if (err.code === "P2002") {
       const stableId =
-        "auction-" +
+        "AUC-" +
         crypto
           .createHash("sha256")
           .update(String(req.body.auctionId))
-          .digest("hex");
+          .digest("hex")
+          .slice(0, 10)
+          .toUpperCase();
       const existing = await orderModel.findById(stableId);
       if (existing) {
         return res.status(200).json(existing);
@@ -360,13 +522,36 @@ async function updateShippingAddress(req, res, next) {
     next(err);
   }
 }
+async function getByProductInternal(req, res, next) {
+  try {
+    const order = await prisma.order.findFirst({
+      where: {
+        productId: req.params.productId,
+        status: { notIn: ["cancelled", "refunded"] },
+      },
+      select: {
+        id: true,
+        buyerId: true,
+        sellerId: true,
+        status: true,
+      },
+    });
+    res.json(order || null);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   create,
   mine,
   selling,
   getOne,
   getOneInternal,
+  getByProductInternal,
   updateStatus,
+  confirmOrder,
+  rejectOrder,
   pay,
   createFromAuction,
   updateShippingAddress,

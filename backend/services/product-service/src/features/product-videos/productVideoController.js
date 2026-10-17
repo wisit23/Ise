@@ -61,7 +61,8 @@ async function chooseClip(req, res, next) {
         id: req.userId,
         role: req.userRole,
         roles: req.userRoles,
-        status:req.accountStatus,
+        status: req.accountStatus,
+        displayName: req.userDisplayName,
       },
       productVideoId: req.params.id,
     });
@@ -78,11 +79,40 @@ async function unchooseClip(req, res, next) {
         id: req.userId,
         role: req.userRole,
         roles: req.userRoles,
-        status:req.accountStatus,
+        status: req.accountStatus,
+        displayName: req.userDisplayName,
       },
       productVideoId: req.params.id,
     });
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function createComment(req, res, next) {
+  try {
+    const comment = await productVideoService.createComment({
+      user: {
+        id: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+        status: req.accountStatus,
+        displayName: req.userDisplayName,
+      },
+      productVideoId: req.params.id,
+      input: req.body,
+    });
+    res.status(201).json(comment);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listComments(req, res, next) {
+  try {
+    const comments = await productVideoService.listComments(req.params.id);
+    res.json(comments);
   } catch (err) {
     next(err);
   }
@@ -94,4 +124,6 @@ module.exports = {
   createClip,
   chooseClip,
   unchooseClip,
+  createComment,
+  listComments,
 };

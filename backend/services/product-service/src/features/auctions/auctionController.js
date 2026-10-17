@@ -113,6 +113,15 @@ async function bid(req, res, next) {
   }
 }
 
+async function getBids(req, res, next) {
+  try {
+    const bids = await auctionService.getBids(req.params.id);
+    res.json({ items: bids });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getCurrentRound(req, res, next) {
   try {
     const data = await auctionService.getCurrentRound();
@@ -194,6 +203,7 @@ module.exports = {
   getOne,
   list,
   bid,
+  getBids,
   getCurrentRound,
   browseRounds,
   getRoundDetails,

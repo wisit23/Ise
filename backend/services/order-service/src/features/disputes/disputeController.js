@@ -286,6 +286,20 @@ async function chatAttachment(req, res, next) {
   }
 }
 
+async function acknowledge(req, res, next) {
+  try {
+    const result = await disputeService.acknowledge({
+      disputeId: req.params.id,
+      userId: req.userId,
+      role: req.userRole,
+      roles: req.userRoles,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   chatAttachment,
   chatHistory,
@@ -302,6 +316,7 @@ module.exports = {
   reassign,
   escalate,
   decide,
+  acknowledge,
   requestMoreEvidence,
   auditTranscript,
 };

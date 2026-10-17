@@ -1,6 +1,7 @@
 const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const defaultRepository = require("./campaignRepository");
 const defaultPrisma = require("../../models/prismaClient");
+const defaultChatClient = require("../auctions/chatClient");
 const { recordMarketingAudit } = require("../audit/marketingAuditService");
 const {
   validateSegmentRule,
@@ -442,7 +443,7 @@ function createCampaignService(
       );
     }
 
-    return runInTransaction(async (tx) => {
+    const result = await runInTransaction(async (tx) => {
       const updated = await repository.updateCampaign(
         campaignId,
         {
@@ -464,6 +465,21 @@ function createCampaignService(
       );
       return updated;
     });
+
+    if (defaultChatClient?.sendSystemNotification) {
+      defaultChatClient
+        .sendSystemNotification({
+          userId: "ALL",
+          type: "DISCOUNT",
+          title: "มีโค้ดส่วนลดใหม่!",
+          message: `🎉 โค้ดส่วนลด '${result.name || result.code}' พร้อมใช้งานแล้ว (${result.code}) รีบเก็บก่อนหมด!`,
+          link: "/campaigns",
+          metadata: { campaignId: result.id, code: result.code },
+        })
+        .catch(() => {});
+    }
+
+    return result;
   }
 
   async function endCampaign({ user, campaignId }) {

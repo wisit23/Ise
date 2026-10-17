@@ -68,4 +68,13 @@ router.post(
   productVideoController.unchooseClip,
 );
 
+// Review clip comments
+router.get("/:id/comments", productVideoController.listComments);
+router.post(
+  "/:id/comments",
+  requireAuth,
+  requireCommerceCapability(CAPABILITY.BUYER),
+  productVideoController.createComment,
+);
+
 module.exports = router;

@@ -58,6 +58,7 @@ router.get("/conditions", productController.listConditions);
 router.get("/filters", productController.listFilterOptions);
 
 router.get("/:id", fromGatewayHeaders, productController.getOne);
+router.post("/:id/view", fromGatewayHeaders, productController.recordView);
 router.post(
   "/",
   requireAuth,

@@ -6,6 +6,7 @@ const { recordMarketingAudit } = require("../audit/marketingAuditService");
 const orderClient = require("./orderClient");
 const auctionCloseQueue = require("../../jobs/auctionCloseQueue");
 const chatClient = require("./chatClient");
+const { getDisplayNames, maskBidderName } = require("./authClient");
 const MAX_CANCELLATION_REASON_LENGTH = 500;
 
 const {
@@ -676,6 +677,12 @@ async function createRound({ user, input = {} }) {
 
     return round;
   });
+
+  if (typeof chatClient?.notifyRoundOpened === "function") {
+    chatClient.notifyRoundOpened(round).catch(() => {});
+  }
+
+  return round;
 }
 
 /** Get current round status, active submission rounds, and active auction rounds. */
@@ -1024,13 +1031,58 @@ async function cancel({ user, auctionId, reason, cancellationReason }) {
   };
 }
 
+function enrichBids(bids, nameMap = new Map()) {
+  if (!Array.isArray(bids)) return [];
+  return bids.map((b) => {
+    const name = nameMap.get(b.bidderId) || maskBidderName(b.bidderId);
+    return {
+      ...b,
+      bidderName: name,
+    };
+  });
+}
+
 async function get(auctionId) {
   const auction = await loadAuction(auctionId);
-  return maybeAdvance(auction);
+  const advanced = await maybeAdvance(auction);
+  if (advanced && Array.isArray(advanced.bids) && advanced.bids.length > 0) {
+    const bidderIds = advanced.bids.map((b) => b.bidderId);
+    const names = await getDisplayNames(bidderIds);
+    advanced.bids = enrichBids(advanced.bids, names);
+  }
+  return advanced;
+}
+
+async function getBids(auctionId) {
+  const auction = await loadAuction(auctionId);
+  const bids = auction?.bids || [];
+  if (bids.length === 0) return [];
+  const bidderIds = bids.map((b) => b.bidderId);
+  const names = await getDisplayNames(bidderIds);
+  return enrichBids(bids, names);
 }
 
 async function list({ status, skip, take, roundId }) {
-  return auctionRepository.list({ status, skip, take, roundId });
+  const result = await auctionRepository.list({ status, skip, take, roundId });
+  if (Array.isArray(result?.items) && result.items.length > 0) {
+    const allBidderIds = [];
+    for (const item of result.items) {
+      if (Array.isArray(item?.bids)) {
+        for (const b of item.bids) {
+          if (b.bidderId) allBidderIds.push(b.bidderId);
+        }
+      }
+    }
+    if (allBidderIds.length > 0) {
+      const names = await getDisplayNames(allBidderIds);
+      for (const item of result.items) {
+        if (Array.isArray(item?.bids)) {
+          item.bids = enrichBids(item.bids, names);
+        }
+      }
+    }
+  }
+  return result;
 }
 
 function validateIdempotentBid(existing, { auctionId, userId, bidAmount }) {
@@ -1064,12 +1116,14 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
     throw badRequest("จำนวนเงินเสนอราคาต้องเป็นจำนวนเต็มบวกมากกว่า 0 บาท");
   }
 
-  return auctionRepository.withAuctionLock(auctionId, async (tx) => {
+  let targetAuction = null;
+  const createdBid = await auctionRepository.withAuctionLock(auctionId, async (tx) => {
     const auction = await hydrateItem(tx, await tx.auctionItem.findUnique({
       where: { id: auctionId },
-      include: { round: true, product:{select:{status:true,moderatedAt:true}} },
+      include: { round: true, product: { select: { id: true, title: true, status: true, moderatedAt: true } } },
     }));
     if (!auction) throw notFound("ไม่พบข้อมูลรายการประมูลที่ระบุ");
+    targetAuction = auction;
     if(auction.product?.moderatedAt || auction.product?.status === "removed")throw conflict("auction product is unavailable due to moderation");
     if (auction.status === "cancelled" || auction.round?.cancelledAt) {
       throw conflict("รอบประมูลนี้ถูกยกเลิกแล้ว ไม่สามารถเสนอราคาได้");
@@ -1156,6 +1210,20 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
 
     return createdBid;
   });
+
+  if (createdBid && targetAuction && typeof chatClient?.notifyBidPlaced === "function") {
+    chatClient
+      .notifyBidPlaced({
+        auction: targetAuction,
+        bid: createdBid,
+        bidder: user,
+      })
+      .catch((err) => {
+        console.warn("[auctionService] Failed to notify seller about bid:", err.message);
+      });
+  }
+
+  return createdBid;
 }
 
 /**
@@ -1383,6 +1451,7 @@ module.exports = {
   schedule,
   cancel,
   get,
+  getBids,
   list,
   placeBid,
   maybeAdvance,

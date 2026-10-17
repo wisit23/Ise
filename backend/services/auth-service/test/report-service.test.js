@@ -14,6 +14,10 @@ const prisma = {
       calls.reportCount = query;
       return query?.where?.targetId ? 4 : 5;
     },
+    findFirst: async (query) => {
+      calls.findFirst = query;
+      return null;
+    },
     findUnique: async () => ({
       id: "report-1",
       reporterId: "reporter-1",

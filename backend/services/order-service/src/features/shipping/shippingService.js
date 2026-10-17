@@ -72,12 +72,12 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
       if (order.buyerId !== buyerId)
         throw forbidden("only the buyer can change the shipping address");
       if (
-        order.status !== "confirmed" ||
+        !["paid", "confirmed"].includes(order.status) ||
         !order.shipping ||
         ["shipped", "delivered"].includes(order.shipping.status)
       ) {
         throw conflict(
-          "only confirmed orders awaiting shipment can change address",
+          "only confirmed or paid orders awaiting shipment can change address",
         );
       }
       if (version !== undefined && version !== order.version) {
@@ -88,7 +88,7 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
         where: {
           id: orderId,
           buyerId,
-          status: "confirmed",
+          status: { in: ["paid", "confirmed"] },
           version: order.version,
         },
         data: { version: { increment: 1 } },
@@ -143,9 +143,12 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
         include: { shipping: true },
       });
       if (!order) throw notFound("order not found");
-      if (order.buyerId !== actorId && order.sellerId !== actorId)
-        throw forbidden("you are not part of this order");
+      if (order.sellerId !== actorId)
+        throw forbidden("only the seller can mark an order as shipped");
       if (!order.shipping) throw conflict("shipping address is missing");
+      if (order.status !== "confirmed") {
+        throw conflict("ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องทำการยืนยันรับออเดอร์ก่อน");
+      }
       const changed = await tx.order.updateMany({
         where: { id: orderId, version, status: "confirmed" },
         data: { status: "shipped", version: { increment: 1 } },

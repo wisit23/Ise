@@ -18,6 +18,7 @@ import Button from "./ui/Button";
 import { fetchActiveCategories } from "../lib/catalog";
 import { getUnreadCount } from "../lib/chat";
 import { useChatSocket, useChatSocketEvent } from "./chat/ChatSocketProvider";
+import NotificationBell from "./notifications/NotificationBell";
 
 // Only used while the shared socket is down — the badge's normal path is a
 // pushed "conversation:activity" event (see the effects below). 15s keeps
@@ -62,14 +63,7 @@ const WORK_MENU_ITEMS = [
   },
   {
     href: "/seller/dashboard",
-    label: "แดชบอร์ดผู้ขาย",
-    icon: "storefront",
-    roles: ["SELLER"],
-    requiresVerifiedSeller: true,
-  },
-  {
-    href: ({ userId }) => `/store/${userId}`,
-    label: "ร้านค้าของฉัน",
+    label: "My Store",
     icon: "storefront",
     roles: ["SELLER"],
     requiresVerifiedSeller: true,
@@ -368,6 +362,8 @@ export default function NavBar() {
         </form>
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {canUseCart && <NotificationBell user={user} />}
+
           {canUseCart && (
             <Link
               href="/chat"

@@ -2,15 +2,17 @@ const { Router } = require("express");
 const { requireInternalToken } = require("@reloop/shared");
 const internalController = require("./internalController");
 const supportMessages = require("./supportMessages");
+const notificationController = require("../notifications/notificationController");
 
 const router = Router();
 
 // Every route here requires x-internal-token (see product-service's
 // lock/unlock/sold endpoints for the same pattern) — this is how another
 // service opens a room or sends a SYSTEM message without a user's JWT.
-router.use(requireInternalToken);
 router.post("/awaiting-reply", require("./awaitingReply").awaitingReply);
 
+router.post("/realtime/broadcast", internalController.broadcastRealtime);
+router.post("/notifications", notificationController.createInternal);
 router.post("/conversations", internalController.createConversation);
 router.get(
   "/conversations/by-context/:type/:id",
@@ -31,6 +33,10 @@ router.get("/conversations/:id/transcript", internalController.getTranscript);
 router.get(
   "/conversations/:id/attachments/:messageId",
   internalController.getAttachment,
+);
+router.delete(
+  "/conversations/by-context/:type/:id",
+  internalController.deleteByContext,
 );
 
 module.exports = router;

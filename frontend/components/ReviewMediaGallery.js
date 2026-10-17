@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { mediaUrl } from "../lib/api";
 
 export default function ReviewMediaGallery({ media = [] }) {
+  const [mounted, setMounted] = useState(false);
   const [activeIndex, setActiveIndex] = useState(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const items = Array.isArray(media) ? media : [];
   const isOpen = activeIndex !== null && items[activeIndex] !== undefined;
@@ -29,6 +35,15 @@ export default function ReviewMediaGallery({ media = [] }) {
     },
     [items.length],
   );
+
+  useEffect(() => {
+    if (!isOpen || !mounted) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen, mounted]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -84,12 +99,12 @@ export default function ReviewMediaGallery({ media = [] }) {
         ))}
       </div>
 
-      {isOpen && (
+      {isOpen && mounted && createPortal(
         <div
           role="dialog"
           aria-modal="true"
           onClick={handleClose}
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 p-4 backdrop-blur-sm animate-fade-in"
+          className="fixed inset-0 z-modal flex flex-col items-center justify-center bg-black/85 p-4 backdrop-blur-sm animate-fade-in"
         >
           <div className="absolute top-4 right-4 z-10 flex items-center gap-3">
             <span className="text-xs font-medium text-white/80">
@@ -190,7 +205,8 @@ export default function ReviewMediaGallery({ media = [] }) {
               ))}
             </div>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

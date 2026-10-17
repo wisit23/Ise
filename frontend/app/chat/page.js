@@ -31,7 +31,9 @@ export default function ChatInboxPage() {
     listConversations(token)
       .then((data) => {
         const items = (data.items || []).filter(
-          (c) => c.contextType !== "SUPPORT",
+          (c) =>
+            c.contextType !== "SUPPORT" &&
+            !c.contextType?.startsWith("DISPUTE"),
         );
         setConversations(items);
         setCachedConversations(items);
@@ -48,12 +50,19 @@ export default function ChatInboxPage() {
     listConversations(token)
       .then((data) => {
         const items = (data.items || []).filter(
-          (c) => c.contextType !== "SUPPORT",
+          (c) =>
+            c.contextType !== "SUPPORT" &&
+            !c.contextType?.startsWith("DISPUTE"),
         );
         setConversations(items);
         setCachedConversations(items);
       })
       .catch(() => {});
+  });
+
+  useChatSocketEvent("conversation:deleted", ({ conversationId }) => {
+    setConversations((prev) => (prev || []).filter((c) => c.id !== conversationId));
+    setCachedConversations((prev) => (prev || []).filter((c) => c.id !== conversationId));
   });
 
   // Fallback path: gated on the socket being down
@@ -67,7 +76,9 @@ export default function ChatInboxPage() {
       listConversations(token)
         .then((data) => {
           const items = (data.items || []).filter(
-            (c) => c.contextType !== "SUPPORT",
+            (c) =>
+              c.contextType !== "SUPPORT" &&
+              !c.contextType?.startsWith("DISPUTE"),
           );
           setConversations(items);
         })
@@ -84,7 +95,9 @@ export default function ChatInboxPage() {
     listConversations(token)
       .then((data) => {
         const items = (data.items || []).filter(
-          (c) => c.contextType !== "SUPPORT",
+          (c) =>
+            c.contextType !== "SUPPORT" &&
+            !c.contextType?.startsWith("DISPUTE"),
         );
         setConversations(items);
       })

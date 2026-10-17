@@ -14,6 +14,7 @@ const {
 } = require("./productPayload");
 const { parseCatalogFilters } = require("../features/catalog/catalogQuery");
 const sellerActivityClient = require("../services/sellerActivityClient");
+const realtimeClient = require("../services/realtimeClient");
 const {
   requireSellerRole,
   requireVerifiedSeller,
@@ -98,6 +99,19 @@ async function adminSearch(req, res, next) {
   }
 }
 
+function getViewerId(req) {
+  if (req.userId) return req.userId;
+  const visitorId = req.headers["x-visitor-id"];
+  if (visitorId && typeof visitorId === "string" && visitorId.trim()) {
+    return visitorId.trim();
+  }
+  const ip = req.headers["x-forwarded-for"]?.split(",")?.[0]?.trim() || req.ip;
+  if (ip) {
+    return `guest-${ip}`;
+  }
+  return "guest-anonymous";
+}
+
 async function getOne(req, res, next) {
   try {
     const product = await productModel.findById(req.params.id);
@@ -110,7 +124,35 @@ async function getOne(req, res, next) {
         throw notFound("product not found");
       }
     }
+
+    // Record view: count only when product is not yet sold, and exclude seller
+    if (req.query?.noTrack !== "1") {
+      const viewerId = getViewerId(req);
+      const counted = await productModel.recordView(product.id, viewerId);
+      if (counted) {
+        product.viewCount = (product.viewCount || 0) + 1;
+      }
+    }
+
     res.json(product);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function recordView(req, res, next) {
+  try {
+    const product = await productModel.findById(req.params.id);
+    if (!product) throw notFound("product not found");
+
+    const viewerId = getViewerId(req);
+    const counted = await productModel.recordView(product.id, viewerId);
+    const viewCount = await productModel.getViewCount(product.id);
+    res.json({
+      success: true,
+      counted,
+      viewCount,
+    });
   } catch (err) {
     next(err);
   }
@@ -141,6 +183,7 @@ async function toggleVisibility(req, res, next) {
     }
     const product = await productModel.setVisibility(req.params.id, visible);
     if (!product) throw notFound("product not found");
+    realtimeClient.broadcastProductUpdated(product);
     res.json(product);
   } catch (err) {
     next(err);
@@ -213,6 +256,7 @@ async function create(req, res, next) {
     // Fire-and-forget: update lastActiveAt on the seller's profile so the
     // daily inactivity job doesn't flag them if they've just listed something.
     sellerActivityClient.recordActivity(req.userId);
+    realtimeClient.broadcastProductCreated(product);
     res.status(201).json(product);
   } catch (err) {
     next(err);
@@ -249,6 +293,7 @@ async function update(req, res, next) {
     // Fire-and-forget: refreshes lastActiveAt so the inactivity job doesn't
     // flag an active seller who edits rather than creates listings.
     sellerActivityClient.recordActivity(req.userId);
+    realtimeClient.broadcastProductUpdated(updated);
     res.json(updated);
   } catch (err) {
     next(err);
@@ -275,6 +320,7 @@ async function remove(req, res, next) {
     if (!removed) {
       throw conflict("listing changed, was reserved or was moderated; reload before deleting");
     }
+    realtimeClient.broadcastProductDeleted(req.params.id, req.userId);
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -307,6 +353,7 @@ async function markStatusInternal(req, res, next) {
     }
     const product = await productModel.update(req.params.id, { status });
     if (!product) throw notFound("product not found");
+    realtimeClient.broadcastProductUpdated(product);
     res.json(product);
   } catch (err) {
     next(err);
@@ -352,6 +399,7 @@ async function relistAvailable(req, res, next) {
       );
     });
     sellerActivityClient.recordActivity(req.userId);
+    realtimeClient.broadcastProductUpdated(updated);
     res.json(updated);
   } catch (err) {
     next(err);
@@ -380,4 +428,5 @@ module.exports = {
   validateCreateRequest,
   requireValidMediaCount,
   requireKnownCondition,
+  recordView,
 };

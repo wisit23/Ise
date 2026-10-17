@@ -168,12 +168,29 @@ model ProductVideo {
 
   product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   choices SwipeChoice[]
+  comments ProductVideoComment[]
 
   @@index([productId])
   @@index([sellerId])
   @@index([createdAt])
   @@map("product_videos")
 }
+
+model ProductVideoComment {
+  id             String       @id @default(uuid())
+  productVideoId String       @map("product_video_id")
+  userId         String       @map("user_id")
+  userName       String?      @map("user_name")
+  comment        String
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  productVideo ProductVideo @relation(fields: [productVideoId], references: [id], onDelete: Cascade)
+
+  @@index([productVideoId, createdAt])
+  @@index([userId])
+  @@map("product_video_comments")
+}
+
 
 // UR-11 "Swipe-to-Choose": a buyer marking one swipe card as interesting.
 // Deliberately separate from Bid below — choosing a card just bookmarks it

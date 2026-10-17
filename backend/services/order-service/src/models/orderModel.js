@@ -6,6 +6,7 @@ const { assertCanCancelOrder } = require("../services/orderTransitionService");
 const VALID_STATUSES = [
   "pending",
   "pending_payment",
+  "paid",
   "confirmed",
   "shipped",
   "completed",

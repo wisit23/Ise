@@ -18,11 +18,13 @@ import ReviewMediaUploader from "../../components/ReviewMediaUploader";
 import ReviewMediaGallery from "../../components/ReviewMediaGallery";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
+import { useChatSocketEvent } from "../../components/chat/ChatSocketProvider";
 
 const STATUS_LABEL = {
   pending: "อยู่ในตะกร้า",
   pending_payment: "อยู่ในตะกร้า",
-  confirmed: "ชำระแล้ว รอจัดส่ง",
+  paid: "ชำระแล้ว รอร้านค้ายืนยัน",
+  confirmed: "ยืนยันแล้ว รอจัดส่ง",
   shipped: "จัดส่งแล้ว",
   completed: "สำเร็จ",
   cancelled: "ยกเลิกแล้ว",
@@ -33,12 +35,13 @@ const STATUS_LABEL = {
 const STATUS_STYLE = {
   pending: "bg-amber-50 text-amber-700",
   pending_payment: "bg-amber-50 text-amber-700",
+  paid: "bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200",
   confirmed: "bg-sky-50 text-sky-700",
   shipped: "bg-sky-50 text-sky-700",
   completed: "bg-emerald-50 text-emerald-700",
   cancelled: "bg-gray-100 text-gray-500",
   disputed: "bg-red-50 text-red-700",
-  refunded: "bg-emerald-50 text-emerald-700",
+  refunded: "bg-purple-50 text-purple-700",
 };
 
 const TABS = [
@@ -178,6 +181,23 @@ export default function OrdersPage() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [tab, page]);
+
+  // ── Real-time WebSocket Listeners ──────────────────────────────────────────
+  useChatSocketEvent("order:updated", (payload) => {
+    if (!payload?.order?.id) return;
+    const updated = payload.order;
+    setItems((prev) => {
+      const idx = prev.findIndex((o) => o.id === updated.id);
+      if (idx !== -1) {
+        return prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o));
+      }
+      const tabDef = TABS.find((t) => t.key === tab);
+      if (!tabDef?.status || tabDef.status === updated.status) {
+        return [updated, ...prev];
+      }
+      return prev;
+    });
+  });
 
   function handleTab(key) {
     setTab(key);

@@ -380,6 +380,81 @@ export default function AuctionDetailPage() {
             )}
 
             {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+            {/* ประวัติการเสนอราคา (Bid History) */}
+            <div className="mt-6 border-t border-gray-200 pt-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
+                  <span className="material-symbols-outlined text-base text-gray-500">
+                    history
+                  </span>
+                  ประวัติการเสนอราคา ({bids.length} ครั้ง)
+                </h3>
+                {isOwnAuction && (
+                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                    สินค้าของคุณ
+                  </span>
+                )}
+              </div>
+
+              {bids.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-6 text-center text-xs text-gray-500">
+                  ยังไม่มีผู้เสนอราคาในขณะนี้ เป็นคนแรกที่เริ่มเสนอราคา!
+                </div>
+              ) : (
+                <div className="max-h-64 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xs">
+                  <table className="min-w-full divide-y divide-gray-100 text-xs">
+                    <thead className="sticky top-0 bg-gray-50 text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">ผู้เสนอราคา</th>
+                        <th className="px-3 py-2 text-right font-semibold">จำนวนเงิน</th>
+                        <th className="px-3 py-2 text-right font-semibold">เวลา</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {bids.map((b, idx) => {
+                        const isHighest = idx === 0;
+                        return (
+                          <tr
+                            key={b.id || idx}
+                            className={
+                              isHighest
+                                ? "bg-emerald-50/60 font-semibold"
+                                : "hover:bg-gray-50"
+                            }
+                          >
+                            <td className="px-3 py-2 text-gray-800">
+                              <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-xs text-gray-400">
+                                  person
+                                </span>
+                                <span>
+                                  {b.bidderName ||
+                                    (b.bidderId
+                                      ? `ผู้ใช้ ${b.bidderId.slice(-6)}`
+                                      : "ผู้ใช้นิรนาม")}
+                                </span>
+                                {isHighest && (
+                                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                                    สูงสุด
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right font-bold text-gray-900">
+                              {baht(b.amount)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-gray-500 text-[11px]">
+                              {fmt(b.createdAt)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </section>

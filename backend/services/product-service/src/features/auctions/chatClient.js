@@ -234,8 +234,80 @@ async function notifyRoundCancelled({ round, sellerIds = [], bidderIds = [] }) {
   return runNotificationTasks(tasks, `round ${round.id}`);
 }
 
+async function sendSystemNotification({ userId, type, title, message, link, metadata, entityId }) {
+  try {
+    return await internalPost("/internal/notifications", {
+      userId,
+      type,
+      title,
+      message,
+      link,
+      metadata,
+      entityId,
+    });
+  } catch (err) {
+    console.error(`[product-service] notification failed: ${err.message}`);
+  }
+}
+
+/**
+ * Sends a notification message to the seller when a buyer places a bid on their auction item.
+ * Delivers directly to the Notification Center without polluting the buyer-seller chat.
+ */
+async function notifyBidPlaced({ auction, bid, bidder }) {
+  if (!auction || !bid || !auction.sellerId) {
+    return { deliveredCount: 0, failedCount: 0, warnings: [] };
+  }
+
+  const tasks = [];
+  const productTitle = auction.product?.title || "สินค้าประมูล";
+  const bidAmount = bid.amount;
+  const bidderName =
+    bidder?.firstName ||
+    (bid.bidderId ? `ผู้ใช้ ${bid.bidderId.slice(-6)}` : "ผู้ซื้อ");
+
+  tasks.push(async () => {
+    return internalPost("/internal/notifications", {
+      userId: auction.sellerId,
+      type: "AUCTION",
+      title: "มีการเสนอราคาประมูลใหม่",
+      message: `🔨 มีการเสนอราคาประมูลสินค้า "${productTitle}" ล่าสุดที่ ฿${bidAmount.toLocaleString("th-TH")} (โดย ${bidderName})`,
+      link: `/auctions/${auction.id}`,
+      metadata: {
+        auctionId: auction.id,
+        productId: auction.productId,
+        productTitle,
+        amount: bidAmount,
+        bidderId: bid.bidderId,
+        bidderName,
+      },
+      entityId: auction.id,
+    });
+  });
+
+  return runNotificationTasks(tasks, `bid ${bid.id}`);
+}
+
+/**
+ * Sends a platform-wide notification when an auction round opens.
+ */
+async function notifyRoundOpened(round) {
+  if (!round) return;
+  return sendSystemNotification({
+    userId: "ALL",
+    type: "AUCTION",
+    title: "เปิดรอบการประมูลใหม่",
+    message: `🔨 รอบประมูล "${round.title}" เปิดให้เสนอราคาแล้ว เข้าร่วมประมูลสินค้าเลย!`,
+    link: "/auctions",
+    metadata: { roundId: round.id, roundTitle: round.title },
+  });
+}
+
 module.exports = {
   MARKETING_SYSTEM_SENDER_ID,
   notifyItemCancelled,
   notifyRoundCancelled,
+  notifyBidPlaced,
+  notifyRoundOpened,
+  sendSystemNotification,
 };

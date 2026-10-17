@@ -16,6 +16,7 @@ const SERVICES = {
 const PUBLIC_PATHS = [
   /^\/api\/auth\/(register|login|refresh)/,
   /^\/api\/auth\/users\/[^/]+\/public/,
+  /^\/api\/auth\/users\/[^/]+\/auto-messages/,
   /^\/api\/products\/feed/,
   /^\/api\/products\/search/,
   /^\/api\/products\/by-seller\//,
@@ -28,6 +29,7 @@ const PUBLIC_PATHS = [
   // Single-item browsing must stay open to guests; write/delete routes on the
   // same path are still gated by product-service's own requireAuth middleware.
   /^\/api\/products\/[^/]+$/,
+  /^\/api\/products\/[^/]+\/view$/,
   // Uploaded media must render for guests too; POST /uploads (creating new
   // files) is still gated by product-service's own requireAuth/requireRole.
   /^\/uploads\//,
@@ -163,6 +165,14 @@ app.use(
   createProxyMiddleware({
     target: SERVICES.chat,
     changeOrigin: true,
+  }),
+);
+app.use(
+  "/api/notifications",
+  createProxyMiddleware({
+    target: SERVICES.chat,
+    changeOrigin: true,
+    pathRewrite: (path) => `/notifications${path}`,
   }),
 );
 app.use(

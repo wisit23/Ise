@@ -32,7 +32,7 @@ import {
   mergeMessages,
   useSocketResync,
 } from "../../../components/chat/messageSync";
-import { uploadChatAttachment } from "../../../lib/api";
+import { apiFetch, uploadChatAttachment } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
 const PAGE_SIZE = 30;
@@ -57,6 +57,7 @@ export default function ChatRoomPage() {
   const [error, setError] = useState("");
   const [realtime, setRealtime] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [autoPrompts, setAutoPrompts] = useState([]);
   const typingExpiryRef = useRef(null);
   useEffect(() => {
     setOtherTyping(false);
@@ -140,6 +141,18 @@ export default function ChatRoomPage() {
       )
     : null;
 
+  const selfParticipant =
+    conversation && user
+      ? conversation.participants?.find((p) => p.userId === user.id)
+      : null;
+  const selfName =
+    selfParticipant?.displayName ||
+    user?.firstName ||
+    (user?.email ? user.email.split("@")[0] : "คุณ");
+  const selfRoleLabel = conversation
+    ? participantRoleLabel(selfParticipant?.role, conversation?.contextType) || "ผู้ใช้"
+    : "ผู้ใช้";
+
   const updateConversationReadLocally = useCallback(
     (roomId, userId, readTime = new Date().toISOString()) => {
       setSidebarConversations((prev) => {
@@ -166,9 +179,33 @@ export default function ChatRoomPage() {
         setError("");
         const conv = await getConversation(roomId, token);
         if (requestId !== roomRequestRef.current) return;
+        if (conv.contextType?.startsWith("DISPUTE")) {
+          router.replace("/orders");
+          return;
+        }
         setConversation(conv);
         const name = conversationDisplayName(conv, currentUser.id);
         setOtherName(name);
+
+        // If current user is buyer chatting with a seller, fetch seller's auto messages
+        const sellerParticipant = conv.participants?.find((p) => p.role === "SELLER");
+        const myParticipant = conv.participants?.find((p) => p.userId === currentUser.id);
+        const isBuyerUser =
+          myParticipant?.role === "BUYER" ||
+          (sellerParticipant && sellerParticipant.userId !== currentUser.id);
+        if (isBuyerUser && sellerParticipant?.userId) {
+          apiFetch(`/api/auth/users/${sellerParticipant.userId}/auto-messages`, { token })
+            .then((items) => {
+              if (requestId === roomRequestRef.current) {
+                setAutoPrompts(Array.isArray(items) ? items : []);
+              }
+            })
+            .catch(() => {
+              if (requestId === roomRequestRef.current) setAutoPrompts([]);
+            });
+        } else {
+          setAutoPrompts([]);
+        }
 
         const page = await listMessages(roomId, { limit: PAGE_SIZE }, token);
         if (requestId !== roomRequestRef.current) return;
@@ -201,7 +238,7 @@ export default function ChatRoomPage() {
         if (requestId === roomRequestRef.current) setRoomLoading(false);
       }
     },
-    [updateConversationReadLocally, scrollToBottom],
+    [updateConversationReadLocally, scrollToBottom, router],
   );
 
   // Sync ONLY if route param was changed externally by Next.js router
@@ -231,7 +268,9 @@ export default function ChatRoomPage() {
       listConversations(token)
         .then((data) => {
           const items = (data?.items || []).filter(
-            (c) => c.contextType !== "SUPPORT",
+            (c) =>
+              c.contextType !== "SUPPORT" &&
+              !c.contextType?.startsWith("DISPUTE"),
           );
           setSidebarConversations(items);
           setCachedConversations(items);
@@ -457,12 +496,24 @@ export default function ChatRoomPage() {
     listConversations(token)
       .then((data) => {
         const items = (data?.items || []).filter(
-          (c) => c.contextType !== "SUPPORT",
+          (c) =>
+            c.contextType !== "SUPPORT" &&
+            !c.contextType?.startsWith("DISPUTE"),
         );
         setSidebarConversations(items);
         setCachedConversations(items);
       })
       .catch(() => {});
+  });
+
+  useChatSocketEvent("conversation:deleted", ({ conversationId }) => {
+    if (conversationId === activeRoomId) {
+      alert("ผลการตัดสินได้รับการรับทราบจากทั้งสองฝ่ายแล้ว ห้องสนทนาข้อพิพาทนี้ถูกปิดและลบออกจากระบบ");
+      router.push("/chat");
+    }
+    setSidebarConversations((prev) =>
+      (prev || []).filter((c) => c.id !== conversationId),
+    );
   });
 
   // Auto-scroll when a new message is appended (sent or received)
@@ -542,7 +593,11 @@ export default function ChatRoomPage() {
       if (tokenRef.current) {
         listConversations(tokenRef.current)
           .then((data) => {
-            const items = data?.items || [];
+            const items = (data?.items || []).filter(
+              (c) =>
+                c.contextType !== "SUPPORT" &&
+                !c.contextType?.startsWith("DISPUTE"),
+            );
             setSidebarConversations(items);
             setCachedConversations(items);
           })
@@ -569,7 +624,11 @@ export default function ChatRoomPage() {
       if (tokenRef.current) {
         listConversations(tokenRef.current)
           .then((data) => {
-            const items = data?.items || [];
+            const items = (data?.items || []).filter(
+              (c) =>
+                c.contextType !== "SUPPORT" &&
+                !c.contextType?.startsWith("DISPUTE"),
+            );
             setSidebarConversations(items);
             setCachedConversations(items);
           })
@@ -601,7 +660,15 @@ export default function ChatRoomPage() {
 
   const locked = conversation?.status === "LOCKED";
   const productId =
-    conversation?.contextType === "PRODUCT" ? conversation.contextId : null;
+    conversation?.contextType === "PRODUCT"
+      ? conversation.contextId
+      : conversation?.contextType === "AUCTION"
+        ? (conversation.productId || messages.find((m) => m.payload?.productId)?.payload?.productId || null)
+        : null;
+  const auctionId =
+    (conversation?.contextType === "AUCTION" ? conversation.contextId : null) ||
+    messages.find((m) => m.payload?.auctionId)?.payload?.auctionId ||
+    null;
   const supportTicketId =
     conversation?.contextType === "SUPPORT" ? conversation.contextId : null;
 
@@ -655,15 +722,30 @@ export default function ChatRoomPage() {
                 </div>
 
                 <div className="min-w-0">
-                  <h1 className="truncate text-sm font-bold text-gray-900">
-                    {otherName || (error ? "ไม่พบการสนทนา" : "กำลังโหลด...")}
-                  </h1>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <h1
+                      className="truncate text-sm font-bold text-gray-900"
+                      title={otherName}
+                    >
+                      {otherName || (error ? "ไม่พบการสนทนา" : "กำลังโหลด...")}
+                    </h1>
                     {otherRoleLabel && (
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
                         {otherRoleLabel}
                       </span>
                     )}
+                    <span className="text-gray-300 text-xs font-semibold">↔</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 border border-emerald-200">
+                      <span className="text-gray-400 font-normal">คุณ:</span>
+                      <span className="font-semibold">{selfName}</span>
+                      {selfRoleLabel && (
+                        <span className="text-[10px] text-emerald-600">
+                          ({selfRoleLabel})
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
                     {otherOnline ? (
                       <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
                         <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -702,7 +784,12 @@ export default function ChatRoomPage() {
             )}
 
             {/* Sticky Product Header */}
-            {productId && <ChatProductHeader productId={productId} />}
+            {productId && (
+              <ChatProductHeader
+                productId={productId}
+                auctionId={auctionId}
+              />
+            )}
             {/* Sticky Support Ticket Header */}
             {supportTicketId && (
               <ChatSupportHeader ticketId={supportTicketId} />
@@ -760,6 +847,7 @@ export default function ChatRoomPage() {
                       otherName={otherName}
                       onPromptClick={handleSend}
                       activeRoomId={activeRoomId}
+                      prompts={autoPrompts}
                     />
 
                     <TypingIndicator typing={otherTyping && !locked} name={otherName} />
@@ -772,6 +860,41 @@ export default function ChatRoomPage() {
                 </div>
               )}
             </div>
+
+            {/* Quick Prompts Bar for Buyer (if seller has automated questions) */}
+            {autoPrompts.length > 0 &&
+              !locked &&
+              (conversation?.participants?.find((p) => p.userId === user?.id)?.role ===
+                "BUYER" ||
+                conversation?.participants?.some(
+                  (p) => p.role === "SELLER" && p.userId !== user?.id,
+                )) && (
+                <div className="border-t border-slate-100 bg-emerald-50/50 px-4 py-2">
+                  <div className="mx-auto flex max-w-4xl items-center gap-2 overflow-x-auto text-xs">
+                    <span className="shrink-0 text-[11px] font-semibold text-emerald-800 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">
+                        chat_bubble
+                      </span>
+                      <span>คำถามด่วน:</span>
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto py-0.5">
+                      {autoPrompts.map((p) => {
+                        const text = typeof p === "string" ? p : p.messageText;
+                        return (
+                          <button
+                            key={p.id || text}
+                            type="button"
+                            onClick={() => handleSend(text)}
+                            className="shrink-0 rounded-full border border-emerald-200/90 bg-white px-3 py-1 text-[11px] font-medium text-emerald-700 shadow-2xs hover:border-emerald-400 hover:bg-emerald-50 active:scale-95 transition cursor-pointer"
+                          >
+                            {text}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
 
             {/* Composer / Locked notice - PERMANENTLY MOUNTED AT THE BOTTOM */}
             <div className="shrink-0 border-t border-gray-150 bg-white">

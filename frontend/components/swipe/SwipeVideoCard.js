@@ -31,6 +31,11 @@ export default function SwipeVideoCard({ video, isActive }) {
   const [shareStatus, setShareStatus] = useState("idle"); // "idle" | "success" | "error"
   const [heartAnim, setHeartAnim] = useState(false);
   const [commentOpen, setCommentOpen] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [commentError, setCommentError] = useState("");
 
   // Synchronize muted state to video element without affecting play/pause or resetting position
   useEffect(() => {
@@ -140,6 +145,54 @@ export default function SwipeVideoCard({ video, isActive }) {
 
   function handleCloseComment() {
     setCommentOpen(false);
+    setCommentError("");
+  }
+
+  // Fetch comments when comment dialog opens
+  useEffect(() => {
+    if (!commentOpen || !video?.id) return;
+    setLoadingComments(true);
+    setCommentError("");
+    Promise.resolve(apiFetch(`/api/products/videos/${video.id}/comments`))
+      .then((data) => {
+        setComments(Array.isArray(data) ? data : data?.items || []);
+      })
+      .catch((err) => {
+        console.error("โหลดความคิดเห็นไม่สำเร็จ:", err);
+      })
+      .finally(() => {
+        setLoadingComments(false);
+      });
+  }, [commentOpen, video?.id]);
+
+  async function handleSubmitComment(e) {
+    if (e) e.preventDefault();
+    const token = getAccessToken();
+    if (!token) {
+      window.location.href = "/login";
+      return;
+    }
+    const trimmed = commentText.trim();
+    if (!trimmed || submittingComment) return;
+
+    setSubmittingComment(true);
+    setCommentError("");
+    try {
+      const created = await apiFetch(
+        `/api/products/videos/${video.id}/comments`,
+        {
+          method: "POST",
+          token,
+          body: { comment: trimmed },
+        },
+      );
+      setComments((prev) => [created, ...prev]);
+      setCommentText("");
+    } catch (err) {
+      setCommentError(err.message || "ส่งความคิดเห็นไม่สำเร็จ");
+    } finally {
+      setSubmittingComment(false);
+    }
   }
 
   // Manage focus lifecycle for accessible comment dialog
@@ -800,7 +853,7 @@ export default function SwipeVideoCard({ video, isActive }) {
         </aside>
       </div>
 
-      {/* Honest Comment Affordance Dialog */}
+      {/* Comment Dialog */}
       {commentOpen && (
         <div
           role="dialog"
@@ -813,7 +866,7 @@ export default function SwipeVideoCard({ video, isActive }) {
           <div
             ref={dialogRef}
             tabIndex={-1}
-            className="relative w-full max-w-md rounded-t-3xl sm:rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl animate-fade-in-up focus:outline-none"
+            className="relative flex flex-col w-full max-w-md max-h-[85vh] sm:max-h-[80vh] rounded-t-3xl sm:rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6 shadow-2xl animate-fade-in-up focus:outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
@@ -828,7 +881,7 @@ export default function SwipeVideoCard({ video, isActive }) {
                   id={`comment-title-${video.id}`}
                   className="text-base font-bold text-white"
                 >
-                  ความคิดเห็น
+                  ความคิดเห็น {comments.length > 0 && `(${comments.length})`}
                 </h3>
               </div>
               <button
@@ -854,34 +907,107 @@ export default function SwipeVideoCard({ video, isActive }) {
               </button>
             </div>
 
-            <div className="my-6 flex flex-col items-center text-center">
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
-                <span
-                  className="material-symbols-outlined text-2xl"
-                  aria-hidden="true"
-                >
-                  chat_bubble_outline
-                </span>
-              </div>
-              <p className="text-sm font-semibold text-white">
-                ยังไม่มีระบบความคิดเห็นบนคลิปวิดีโอ
-              </p>
-              <p
-                id={`comment-desc-${video.id}`}
-                className="mt-2 text-xs text-zinc-400 leading-relaxed max-w-xs"
-              >
-                ระบบคลิปวิดีโอปัจจุบันยังไม่รองรับการแสดงความคิดเห็นโดยตรง
-                แต่คุณสามารถอ่านรีวิวจากผู้ซื้อจริงและสอบถามข้อมูลเพิ่มเติมได้ที่หน้ารายละเอียดสินค้า
-              </p>
+            <p id={`comment-desc-${video.id}`} className="sr-only">
+              รายการความคิดเห็นสำหรับคลิปรีวิวสินค้านี้
+            </p>
+
+            {/* Comments List */}
+            <div className="my-3 flex-1 overflow-y-auto max-h-[40vh] sm:max-h-[45vh] space-y-3 pr-1">
+              {loadingComments ? (
+                <div className="py-8 text-center text-xs text-zinc-400">
+                  กำลังโหลดความคิดเห็น...
+                </div>
+              ) : comments.length === 0 ? (
+                <div className="py-8 flex flex-col items-center text-center">
+                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
+                    <span
+                      className="material-symbols-outlined text-2xl"
+                      aria-hidden="true"
+                    >
+                      chat_bubble_outline
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-white">
+                    ยังไม่มีความคิดเห็น
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    เป็นคนแรกที่แสดงความคิดเห็นบนคลิปรีวิวนี้!
+                  </p>
+                </div>
+              ) : (
+                comments.map((c) => {
+                  const commenterInitial = (c.userName || "U")
+                    .charAt(0)
+                    .toUpperCase();
+                  return (
+                    <div
+                      key={c.id || c.createdAt}
+                      className="flex items-start gap-3 rounded-lg bg-zinc-800/40 p-2.5"
+                    >
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600/30 text-xs font-bold text-brand-400 border border-brand-500/30">
+                        {commenterInitial}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-zinc-200 truncate">
+                            {c.userName || "ผู้ใช้"}
+                          </span>
+                          {c.createdAt && (
+                            <span className="text-[10px] text-zinc-500 shrink-0">
+                              {new Date(c.createdAt).toLocaleDateString("th-TH", {
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-zinc-300 break-words whitespace-pre-wrap">
+                          {c.comment}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
 
-            <div className="flex flex-col gap-2">
+            {/* Input Box to submit comment */}
+            <form
+              onSubmit={handleSubmitComment}
+              className="mt-2 border-t border-zinc-800 pt-3"
+            >
+              {commentError && (
+                <p className="mb-2 text-xs text-rose-400">{commentError}</p>
+              )}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="เขียนความคิดเห็น..."
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  maxLength={500}
+                  className="flex-1 rounded-full border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs text-white placeholder-zinc-500 focus:border-brand-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={submittingComment || !commentText.trim()}
+                  className="focus-ring flex items-center justify-center rounded-full bg-brand-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-500 active:scale-95 disabled:opacity-40"
+                >
+                  {submittingComment ? "..." : "ส่ง"}
+                </button>
+              </div>
+            </form>
+
+            {/* Bottom Navigation & Close */}
+            <div className="mt-3 flex gap-2">
               {video.productId && (
                 <Button
                   href={`/products/${video.productId}`}
                   variant="primary"
-                  size="md"
-                  className="w-full justify-center"
+                  size="sm"
+                  className="flex-1 justify-center text-xs"
                 >
                   ดูรีวิวและรายละเอียดสินค้า
                 </Button>
@@ -889,9 +1015,9 @@ export default function SwipeVideoCard({ video, isActive }) {
               <Button
                 type="button"
                 variant="secondary"
-                size="md"
+                size="sm"
                 onClick={handleCloseComment}
-                className="w-full justify-center !border-zinc-700 !bg-zinc-800 !text-white hover:!bg-zinc-700"
+                className="flex-1 justify-center !border-zinc-700 !bg-zinc-800 !text-white hover:!bg-zinc-700 text-xs"
               >
                 ปิด
               </Button>

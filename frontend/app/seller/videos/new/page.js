@@ -40,7 +40,8 @@ export default function UploadVideoPage() {
     apiFetch("/api/products/mine?limit=50", { token: getAccessToken() })
       .then((data) => {
         const eligibleProducts = (data.items || []).filter(
-          (product) => product.status !== "removed",
+          (product) =>
+            product.status !== "removed" && product.status !== "sold",
         );
         setProducts(eligibleProducts);
         if (eligibleProducts.length > 0) {
@@ -147,7 +148,7 @@ export default function UploadVideoPage() {
               <p className="text-sm text-gray-500">กำลังโหลดรายการสินค้า...</p>
             ) : products.length === 0 ? (
               <p className="text-sm text-red-600">
-                คุณยังไม่มีสินค้าในร้าน กรุณา
+                คุณยังไม่มีสินค้าที่พร้อมให้รีวิว (หรือสินค้าที่มีขายหมดแล้ว) กรุณา
                 <Link href="/sell" className="mx-1 underline">
                   ลงขายสินค้า
                 </Link>

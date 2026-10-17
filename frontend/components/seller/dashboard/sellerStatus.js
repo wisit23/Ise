@@ -21,7 +21,8 @@ export const PRODUCT_STATUS_STYLE = {
 export const ORDER_STATUS_LABEL = {
   pending: "รอลูกค้าชำระเงิน",
   pending_payment: "รอลูกค้าชำระเงิน",
-  confirmed: "รอขนส่ง",
+  paid: "ชำระแล้ว รอยืนยัน",
+  confirmed: "ยืนยันแล้ว รอจัดส่ง",
   shipped: "อยู่ระหว่างการขนส่ง",
   completed: "ขายสำเร็จ",
   cancelled: "ยกเลิกแล้ว",
@@ -32,16 +33,31 @@ export const ORDER_STATUS_LABEL = {
 export const ORDER_STATUS_STYLE = {
   pending: "bg-amber-50 text-amber-700",
   pending_payment: "bg-amber-50 text-amber-700",
+  paid: "bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200",
   confirmed: "bg-sky-50 text-sky-700",
   shipped: "bg-sky-50 text-sky-700",
   completed: "bg-emerald-50 text-emerald-700",
   cancelled: "bg-gray-100 text-gray-600",
   disputed: "bg-red-50 text-red-700",
-  refunded: "bg-indigo-50 text-indigo-700",
+  refunded: "bg-purple-50 text-purple-700",
 };
 
 export function baht(v) {
   return `฿${v.toLocaleString("th-TH")}`;
+}
+
+/**
+ * Checks whether an order is currently in an active, unresolved dispute.
+ * Returns false once the dispute has been decided or resolved.
+ */
+export function isOrderDisputed(order) {
+  if (!order) return false;
+  if (order.dispute) {
+    if (order.dispute.decision) return false;
+    if (["DECIDED", "RESOLVED", "CLOSED"].includes(order.dispute.status)) return false;
+    return true;
+  }
+  return order.status === "disputed";
 }
 
 export function StatusPill({ label, style }) {
@@ -55,3 +71,4 @@ export function StatusPill({ label, style }) {
     </span>
   );
 }
+
