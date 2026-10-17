@@ -1,223 +1,247 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import MetricCard from "../MetricCard";
 import TrendLineChart from "../TrendLineChart";
-import RankingList from "../RankingList";
+import PopularCategories from "../PopularCategories";
+import CategoryDonut, {
+  COLLAPSED_SLICES,
+  EXPANDED_SLICES,
+} from "../CategoryDonut";
+import OrderStatusDonut from "../OrderStatusDonut";
 import ChartCard from "../../panel/ui/ChartCard";
-import { apiFetch } from "../../../lib/api";
+import { CHART_COLORS } from "../../charts/palette";
+import DayField from "../DayField";
+import MoreToggle from "../MoreToggle";
+import PeriodTabs from "../PeriodTabs";
 import {
   baht,
-  buildPath,
-  fetchWindowMetrics,
-  fulfilled,
+  fetchOverview,
+  customDayError,
+  defaultCustomDay,
+  describeMode,
+  PERIOD_MODES,
   growthPct,
-  lastNWindows,
-  monthWindow,
-  PROVIDERS,
+  feePercent,
 } from "../../../lib/executive";
 
-/** Helper to extract metric time-series from settled promises */
-function extractSeries(windows, settledResults, fieldKey) {
-  return windows.map((win, i) => {
-    const pair = fulfilled(settledResults[i]);
-    const orderData = pair ? pair[0]?.data : undefined;
-    return {
-      label: win.shortLabel,
-      shortLabel: win.shortLabel,
-      fullLabel: win.fullLabel,
-      value: orderData?.[fieldKey] ?? 0,
-      unavailable: pair === null || pair[0] === undefined,
-    };
-  });
-}
-
 // ─── Overview Section ───────────────────────────────────────────────────────
-// Clean, single-screen dashboard layout:
-// Row 1: The Golden 4 KPI Cards
-// Row 2: 6-Month Line Charts (GMV & Revenue side-by-side with direct data labels)
-// Row 3: Top Categories and Top Products rankings (side-by-side)
+// One period picker (this month / this year / last 7 days) drives everything:
+// Row 1: KPI cards, compared with an equally long previous period
+// Row 2: a sales trend of whole periods beside the paid orders by status
+// Row 3: the rankings
 
 export default function OverviewSection({ token }) {
+  const [mode, setMode] = useState("week");
+  // The day picked in the date field, which is always on the page. It only
+  // takes effect when "กำหนดเอง" is the chosen period: pressing that button
+  // applies it, and while it is chosen a new day applies at once. A half-typed
+  // or invalid date never blanks the page or refetches; the overview keeps the
+  // last good day.
+  const [draft, setDraft] = useState(() => defaultCustomDay());
+  const draftError = customDayError(draft);
+  const lastValid = useRef(draft);
+  if (mode === "custom" && !draftError) lastValid.current = draft;
+  const custom = lastValid.current;
+  const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [current, setCurrent] = useState(null);
-  const [previous, setPrevious] = useState(null);
-  const [rankings, setRankings] = useState(null);
-  const [trend, setTrend] = useState({ gmv: [], revenue: [] });
+  // "ดูเพิ่มเติม": the popular list grows from 5 to 10 rows; the category ring
+  // names 10 categories instead of 5 and folds fewer into "other".
+  const [popularOpen, setPopularOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
-    const now = new Date();
-    const currentWindow = monthWindow(now.getUTCFullYear(), now.getUTCMonth());
-    const previousWindow = monthWindow(
-      now.getUTCFullYear(),
-      now.getUTCMonth() - 1,
-    );
-
-    const recentWindows = lastNWindows("month", 6).map((win) => ({
-      ...win,
-      shortLabel: win.label,
-      fullLabel: win.longLabel,
-    }));
-
     let cancelled = false;
     setLoading(true);
-
-    Promise.all([
-      fetchWindowMetrics(currentWindow, token),
-      fetchWindowMetrics(previousWindow, token),
-      Promise.allSettled(
-        recentWindows.map((win) =>
-          Promise.all([
-            apiFetch(buildPath(PROVIDERS.order, win), { token }),
-            apiFetch(buildPath(PROVIDERS.auth, win), { token }),
-          ]),
-        ),
-      ),
-      Promise.allSettled([
-        apiFetch(
-          buildPath("/api/products/executive/top-catalog", currentWindow),
-          { token },
-        ),
-      ]),
-    ])
-      .then(([cur, prev, recentSettled, rankingSettled]) => {
-        if (cancelled) return;
-
-        setCurrent(cur);
-        setPrevious(prev);
-        setRankings(fulfilled(rankingSettled[0]));
-
-        setTrend({
-          gmv: extractSeries(recentWindows, recentSettled, "gmv"),
-          revenue: extractSeries(
-            recentWindows,
-            recentSettled,
-            "platformRevenue",
-          ),
-        });
+    fetchOverview(mode, token, new Date(), custom)
+      .then((result) => {
+        if (!cancelled) setOverview(result);
       })
-      .catch((err) => !cancelled && setError(err.message))
-      .finally(() => !cancelled && setLoading(false));
-
+      .catch(() => {
+        if (!cancelled) setOverview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [mode, token, custom]);
+
+  const modeInfo = describeMode(mode, custom);
+  const popular = overview?.rankings?.popularCategories;
+  const popularRows = popular
+    ? popular.slice(0, popularOpen ? EXPANDED_SLICES : COLLAPSED_SLICES)
+    : null;
 
   const cards = useMemo(() => {
-    if (!current) return [];
-    const o = current.order?.data;
-    const po = previous?.order?.data;
-    const a = current.auth?.data;
-    const pa = previous?.auth?.data;
+    if (!overview) return [];
+    const { order, auth } = overview;
+    const fee = feePercent(overview.feeRate);
+    const o = order?.current;
+    const po = order?.previous;
+    const a = auth?.current;
+    const pa = auth?.previous;
 
     return [
       {
-        key: "gmv",
-        label: "ยอดขายรวม (GMV)",
-        value: o?.gmv,
-        unavailable: !current.order,
-        delta: growthPct(o?.gmv, po?.gmv),
+        key: "gmvPurchase",
+        label: "ยอดขายจากการสั่งซื้อ",
+        value: o?.gmvPurchase,
+        unavailable: !order || o?.gmvPurchase === undefined,
+        delta: growthPct(o?.gmvPurchase, po?.gmvPurchase),
+        noBaseline: po?.gmvPurchase === 0,
+        formatValue: baht,
+      },
+      {
+        key: "gmvAuction",
+        label: "ยอดขายจากการประมูล",
+        value: o?.gmvAuction,
+        unavailable: !order || o?.gmvAuction === undefined,
+        delta: growthPct(o?.gmvAuction, po?.gmvAuction),
+        noBaseline: po?.gmvAuction === 0,
         formatValue: baht,
       },
       {
         key: "platformRevenue",
-        label: "รายได้แพลตฟอร์ม",
+        label: fee === null ? "รายได้แพลตฟอร์ม" : `รายได้แพลตฟอร์ม (${fee}%)`,
         value: o?.platformRevenue,
-        unavailable: !current.order,
+        unavailable: !order,
         delta: growthPct(o?.platformRevenue, po?.platformRevenue),
+        noBaseline: po?.platformRevenue === 0,
         formatValue: baht,
       },
       {
-        key: "completedOrders",
-        label: "คำสั่งซื้อสำเร็จ",
-        value: o?.completedOrders,
-        unavailable: !current.order,
-        delta: growthPct(o?.completedOrders, po?.completedOrders),
-      },
-      {
         key: "activeUsers",
-        label: "ผู้ใช้งานที่ล็อกอิน (เดือนนี้)",
+        label: `ผู้ใช้งานเว็บ (${modeInfo.periodName})`,
         value: a?.activeUsers,
-        unavailable: !current.auth,
+        unavailable: !auth,
         delta: growthPct(a?.activeUsers, pa?.activeUsers),
+        noBaseline: pa?.activeUsers === 0,
       },
     ];
-  }, [current, previous]);
-
-  if (loading) {
-    return <p className="text-slate-500">กำลังโหลด...</p>;
-  }
+  }, [overview, modeInfo]);
 
   return (
     <div className="animate-fade-in-up space-y-4">
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      {/* ── 1. The Golden 4 KPI Cards (Clean Single Row) ── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {cards.map((c) => (
-          <MetricCard
-            key={c.key}
-            label={c.label}
-            value={c.value}
-            unavailable={c.unavailable}
-            deltaPct={c.delta}
-            formatValue={c.formatValue}
-          />
-        ))}
+      <div className="flex flex-wrap items-start justify-end gap-3">
+        <PeriodTabs options={PERIOD_MODES} value={mode} onChange={setMode} />
+        <DayField
+          value={draft}
+          onChange={setDraft}
+          max={defaultCustomDay()}
+          label="เลือกวันที่"
+          error={draftError}
+        />
       </div>
 
-      {/* ── 2. 6-Month Line Charts: GMV & Platform Revenue Side-by-Side ── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ChartCard
-          title="แนวโน้มยอดขายรวม (GMV) — 6 เดือนล่าสุด"
-          icon="payments"
-        >
-          <TrendLineChart
-            data={trend.gmv}
-            color="#3b82f6"
-            formatValue={baht}
-            label="แนวโน้มยอดขายรวม (GMV)"
-          />
-        </ChartCard>
+      {loading ? (
+        <p role="status" className="text-slate-500">
+          กำลังโหลด...
+        </p>
+      ) : !overview ? (
+        <p role="alert" className="text-sm text-red-600">
+          โหลดข้อมูลภาพรวมไม่สำเร็จ กรุณาลองใหม่
+        </p>
+      ) : (
+        <>
+          {/* ── 1. KPI cards ── */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {cards.map((c) => (
+              <MetricCard
+                key={c.key}
+                label={c.label}
+                value={c.value}
+                unavailable={c.unavailable}
+                deltaPct={c.delta}
+                deltaLabel={modeInfo.compareLabel}
+                baselineName={modeInfo.baselineName}
+                noBaseline={c.noBaseline}
+                hint={c.hint}
+                formatValue={c.formatValue}
+              />
+            ))}
+          </div>
 
-        <ChartCard
-          title="แนวโน้มรายได้แพลตฟอร์ม — 6 เดือนล่าสุด"
-          icon="account_balance_wallet"
-        >
-          <TrendLineChart
-            data={trend.revenue}
-            color="#10b981"
-            formatValue={baht}
-            label="แนวโน้มรายได้แพลตฟอร์ม"
-          />
-        </ChartCard>
-      </div>
+          {/* ── 2. Two columns of cards: sales trend over the most popular
+              categories, and order status over the category share. The last
+              card of each column stretches so both columns end together. ── */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="flex flex-col gap-4">
+              <ChartCard title="แนวโน้มยอดขาย" icon="trending_up" align="start">
+                <p className="mb-2 -mt-2 text-xs text-slate-500">
+                  {modeInfo.trendCaption}
+                </p>
+                {overview.trend ? (
+                  <TrendLineChart
+                    data={overview.trend}
+                    color={CHART_COLORS.series}
+                    formatValue={baht}
+                    label="แนวโน้มยอดขาย"
+                    height={215}
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500">ไม่พร้อมใช้งาน</p>
+                )}
+              </ChartCard>
+              <ChartCard
+                className="flex-1"
+                title="หมวดหมู่ที่นิยมสุด"
+                icon="workspace_premium"
+                align="start"
 
-      {/* ── 3. Top Rankings (Categories & Products Side-by-Side) ── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ChartCard title="หมวดหมู่ที่ขายดีที่สุด" icon="category">
-          <p className="mb-2 -mt-2 text-xs text-slate-500">
-            จัดอันดับจากยอดขายในเดือนนี้
-          </p>
-          <RankingList
-            rows={rankings?.data?.categories}
-            unavailable={!rankings}
-            emptyText="ยังไม่มีสินค้าที่ขายได้ในเดือนนี้"
-          />
-        </ChartCard>
+                actions={
+                  <MoreToggle
+                    open={popularOpen}
+                    onToggle={() => setPopularOpen((v) => !v)}
+                  />
+                }
+              >
+                <p className="mb-2 -mt-2 text-xs text-slate-500">
+                  หมวดหมู่ที่นิยมสุด{modeInfo.inPeriod}
+                </p>
+                <PopularCategories
+                  rows={popularRows}
+                  total={overview.rankings?.categoryTotal}
+                  emptyText="ยังไม่มีสินค้าที่ขายได้ในช่วงนี้"
+                />
+              </ChartCard>
+            </div>
+            <div className="flex flex-col gap-4">
+              <ChartCard
+                title="สถานะคำสั่งซื้อ"
+                icon="donut_large"
+                align="start"
+              >
+                <p className="mb-2 -mt-2 text-xs text-slate-500">
+                  เฉพาะคำสั่งซื้อที่ชำระเงินแล้ว
+                </p>
+                <OrderStatusDonut counts={overview.orderStatus} />
+              </ChartCard>
+              <ChartCard
+                className="flex-1"
+                title="ประเภทสินค้ายอดขายสูงสุด"
+                icon="donut_large"
 
-        <ChartCard title="สินค้าที่ทำรายได้สูงสุด" icon="workspace_premium">
-          <p className="mb-2 -mt-2 text-xs text-slate-500">
-            จัดอันดับจากยอดขายในเดือนนี้
-          </p>
-          <RankingList
-            rows={rankings?.data?.products}
-            unavailable={!rankings}
-            emptyText="ยังไม่มีสินค้าที่ขายได้ในเดือนนี้"
-          />
-        </ChartCard>
-      </div>
+                actions={
+                  <MoreToggle
+                    open={shareOpen}
+                    onToggle={() => setShareOpen((v) => !v)}
+                  />
+                }
+              >
+                <p className="mb-2 -mt-2 text-xs text-slate-500">
+                  ประเภทสินค้าที่ยอดขายสูงสุด{modeInfo.inPeriod}
+                </p>
+                <CategoryDonut
+                  rows={overview.rankings?.categories ?? null}
+                  expanded={shareOpen}
+                  total={overview.rankings?.categoryTotal}
+                />
+              </ChartCard>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

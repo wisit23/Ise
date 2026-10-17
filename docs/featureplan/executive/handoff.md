@@ -28,15 +28,16 @@
 - Owner: อัสนัย เมืองรอด
 - Reviewer: ศิวกร วรวัฒน์อมรชัย
 - Requirement scope: `UR-27`–`UR-31`
-- Current status: `CEO-001`–`CEO-003` implemented and database-verified; `CEO-004`/`CEO-005`
-  partially delivered — see [`progress.md`](progress.md) for the exact scope boundary
+- Current status: `CEO-001`–`CEO-003` implemented and database-verified; `CEO-004` not delivered
+  (CEO-DEC-011); `CEO-005` partially delivered — see [`progress.md`](progress.md) for the
+  exact scope boundary
 
 ## Scope to hand off
 
 - `CEO-001`: Metric Definitions and Provider Endpoints
 - `CEO-002`: Executive Dashboard and Comparisons
 - `CEO-003`: Top Products and Categories
-- `CEO-004`: Extended Anomaly Alerts
+- `CEO-004`: Extended Anomaly Alerts — in scope but not delivered before the deadline (CEO-DEC-011)
 - `CEO-005`: Extended CSV/PDF Export
 
 ## Current evidence
@@ -48,8 +49,9 @@
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
 - `CEO-001`–`CEO-003` มี implementation + PostgreSQL integration test ที่รันผ่านจริงแล้ว
   (`REQUIRE_INTEGRATION=1`, 49 passed / 0 skipped) — รายละเอียดใน [`progress.md`](progress.md)
-- `CEO-004`/`CEO-005` ยังไม่ครบตาม acceptance เดิม: ไม่มี persisted alert state และไม่มี
-  persisted export job/expiry — ห้ามรายงานว่า Done จนกว่าจะทำเพิ่มหรือ rescope อย่างเป็นทางการ
+- `CEO-004` ยังอยู่ใน scope แต่ไม่ได้ส่งมอบทันกำหนด (CEO-DEC-011): มีแค่คำเตือนร้องเรียนซ้ำที่คำนวณตอนเรียก
+- `CEO-005` ยังไม่ครบตาม acceptance เดิม: ไม่มี persisted export job/expiry —
+  ห้ามรายงานว่า Done จนกว่าจะทำเพิ่มหรือ rescope อย่างเป็นทางการ
 
 ## Dependencies and contracts
 

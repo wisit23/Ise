@@ -30,7 +30,12 @@ async function getTopCatalog(req, res, next) {
       );
     }
 
-    const data = await topCatalog.getCatalogRankings({ from, to, limit });
+    const data = await topCatalog.getCatalogRankings({
+      from,
+      to,
+      timezone,
+      limit,
+    });
 
     res.json({ data, meta: metricMeta({ from, to, timezone }) });
   } catch (err) {

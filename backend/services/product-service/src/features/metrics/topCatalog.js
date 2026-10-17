@@ -1,75 +1,72 @@
 const prisma = require("../../models/prismaClient");
+const orderSalesClient = require("./orderSalesClient");
 
 /**
- * Catalog rankings for the Executive dashboard (CEO-003).
+ * Category rankings for the Executive dashboard (CEO-003, CEO-DEC-009).
  *
- * Ranked from this service's own sold-product facts — product-service owns
- * both `category` and `price`, so "which category sells best" needs no
- * cross-service join (CEO-DEC-003 forbids reading another service's database).
- *
- * A sale is a product whose status reached `sold` with `updatedAt` inside
- * [from, to) — the same bucketing `catalogMetrics.soldListings` uses, so the
- * ranking always sums to the soldListings KPI on the same dashboard.
+ * Amounts come from order-service — the completed orders the dashboard's GMV
+ * is summed from, at the price the buyer paid — so the rankings add up to the
+ * GMV on the same screen. This service adds what it owns: each product's
+ * category. A sale is a completed order placed in [from, to), the same
+ * bucketing as GMV. Second-hand items sell once, so there is no product
+ * ranking; categories are what repeat.
  */
 
-// Deterministic order: revenue first, then units, then label. Without the
-// final label tie-break, two categories with identical gmv+count could swap
-// places between requests and make the dashboard look unstable.
-function rankRows(rows) {
-  return rows.sort(
-    (a, b) =>
-      b.gmv - a.gmv ||
-      b.count - a.count ||
-      a.label.localeCompare(b.label, "th"),
-  );
-}
+// Sales of a product whose category is unknown (deleted from the catalog, or
+// listed without one) are grouped under this id with no label; what to call
+// them is for the screen to say.
+const UNCATEGORIZED_ID = "__uncategorized__";
 
-async function getTopCategories({ from, to, limit = 10 }) {
-  const grouped = await prisma.product.groupBy({
-    by: ["category"],
-    where: { status: "sold", updatedAt: { gte: from, lt: to } },
-    _sum: { price: true },
-    _count: { _all: true },
-  });
+// Deterministic order: the main measure first, then the other, then id.
+// Without the final tie-break, two categories with identical figures
+// could swap places between requests and make the dashboard look unstable.
+const byGmv = (a, b) =>
+  b.gmv - a.gmv || b.count - a.count || a.id.localeCompare(b.id, "th");
+const byCount = (a, b) =>
+  b.count - a.count || b.gmv - a.gmv || a.id.localeCompare(b.id, "th");
 
-  const rows = grouped.map((row) => ({
-    id: row.category,
-    label: row.category,
-    count: row._count._all,
-    gmv: row._sum.price ?? 0,
-  }));
+// Round to 2 decimals after every add so float error cannot accumulate.
+const addMoney = (a, b) => Math.round((a + b) * 100) / 100;
 
-  return rankRows(rows).slice(0, limit);
-}
+async function getCatalogRankings({ from, to, timezone, limit = 10 }) {
+  const sales = await orderSalesClient.getProductSales({ from, to, timezone });
 
-async function getTopProducts({ from, to, limit = 10 }) {
   const products = await prisma.product.findMany({
-    where: { status: "sold", updatedAt: { gte: from, lt: to } },
-    select: { id: true, title: true, price: true, category: true },
+    where: { id: { in: sales.map((s) => s.productId) } },
+    select: { id: true, category: true },
   });
+  const categoryById = new Map(products.map((p) => [p.id, p.category]));
 
-  // A second-hand listing sells exactly once, so each row is one sale —
-  // count is always 1 and the ranking is effectively by price. Kept in the
-  // same {id,label,count,gmv} shape as categories so the UI renders both
-  // lists with one component.
-  const rows = products.map((p) => ({
-    id: p.id,
-    label: p.title,
-    category: p.category,
-    count: 1,
-    gmv: p.price,
+  const categoryTotals = new Map();
+  for (const sale of sales) {
+    const category = categoryById.get(sale.productId) || UNCATEGORIZED_ID;
+    const total = categoryTotals.get(category) || { count: 0, gmv: 0 };
+    total.count += sale.count;
+    total.gmv = addMoney(total.gmv, sale.gmv);
+    categoryTotals.set(category, total);
+  }
+
+  // Everything sold, not just the ranked rows, so shares can be shown against
+  // the whole instead of against the ranked categories only.
+  const categoryTotal = [...categoryTotals.values()].reduce(
+    (sum, t) => ({ count: sum.count + t.count, gmv: addMoney(sum.gmv, t.gmv) }),
+    { count: 0, gmv: 0 },
+  );
+
+  const rows = [...categoryTotals].map(([category, total]) => ({
+    id: category,
+    label: category === UNCATEGORIZED_ID ? null : category,
+    count: total.count,
+    gmv: total.gmv,
   }));
 
-  return rankRows(rows).slice(0, limit);
+  return {
+    // By what buyers paid: feeds the share-of-sales chart.
+    categories: [...rows].sort(byGmv).slice(0, limit),
+    // By pieces sold: the most popular categories.
+    popularCategories: [...rows].sort(byCount).slice(0, limit),
+    categoryTotal,
+  };
 }
 
-async function getCatalogRankings({ from, to, limit = 10 }) {
-  const [categories, products] = await Promise.all([
-    getTopCategories({ from, to, limit }),
-    getTopProducts({ from, to, limit }),
-  ]);
-
-  return { categories, products };
-}
-
-module.exports = { getCatalogRankings, getTopCategories, getTopProducts };
+module.exports = { getCatalogRankings, UNCATEGORIZED_ID };

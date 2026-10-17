@@ -2,7 +2,7 @@ const { Prisma } = require("@prisma/client");
 
 /** One parameterized predicate shared by the result page and its total count. */
 function reportPredicate(
-  { status, targetId, search, reasonCategory },
+  { range, status, targetId, search, reasonCategory },
   { openStatuses, categoryKeywords },
 ) {
   const statuses = status ? [status] : openStatuses;
@@ -11,6 +11,11 @@ function reportPredicate(
       ? Prisma.sql`TRUE`
       : Prisma.sql`r.status::text IN (${Prisma.join(statuses)})`,
   ];
+  if (range) {
+    clauses.push(
+      Prisma.sql`r.reported_at >= ${range.from} AND r.reported_at < ${range.to}`,
+    );
+  }
   if (targetId) clauses.push(Prisma.sql`r.target_id = ${targetId}`);
   if (search) {
     // STRPOS treats % and _ as literal text, not user-controlled wildcards.

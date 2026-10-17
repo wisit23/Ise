@@ -42,7 +42,8 @@ Implemented: แต่ละคำร้องมีปุ่มรายละ�
 > Owner: อัสนัย เมืองรอด · Reviewer: ศิวกร วรวัฒน์อมรชัย · Updated: 2026-08-26
 
 **Status:** `CEO-001`, `CEO-002`, `CEO-003` implemented and verified against PostgreSQL;
-`CEO-004`/`CEO-005` partially delivered (see Scope notes) — awaiting Reviewer sign-off
+`CEO-004` not delivered by the deadline (CEO-DEC-011); `CEO-005` partially delivered (see Scope notes) —
+awaiting Reviewer sign-off
 
 **Plan coverage:** Explicit trace rows cover `UR-27`–`UR-31` through FR, active/deferred NFR,
 `WF-12` and `CEO-001`–`CEO-005`
@@ -79,9 +80,10 @@ Implemented: แต่ละคำร้องมีปุ่มรายละ�
 
 ## Scope notes / deviations
 
-- **`CEO-004` is NOT complete.** No anomaly-detection rule, no `alertWorker`, no alert
-  fingerprint/status persistence, no review-service schema change. The complaints page reads
-  user-submitted reports only — the page states this to the reader.
+- **`CEO-004` is NOT delivered** (CEO-DEC-011, 2026-10-16): it stays in scope, but there is no
+  anomaly-detection rule, no alert worker and no persisted alert state, and it will not be built
+  before the deadline. The repeat-complaint warning on the complaints page is what ships; it is
+  computed on request and stores nothing.
 - **`CEO-005` is NOT complete.** CSV is generated client-side from figures already fetched;
   there is no persisted export job, status or expiry as the task requires. PDF is not built.
 - `auth-service/prisma/seed.js` no longer seeds demo `Report` rows (removed by Owner). It still
@@ -111,11 +113,17 @@ Implemented: แต่ละคำร้องมีปุ่มรายละ�
 (`NFR-SP-*`, `NFR-CP-*`) remain Security Phase and must not be reported as Done
 
 **Next action:** Reviewer to check `CEO-001`–`CEO-003` acceptance evidence, then decide
-whether `CEO-004`/`CEO-005` are finished properly (persisted alerts, persisted export jobs)
-or formally rescoped to what is built
+whether `CEO-005` is finished properly (persisted export jobs) or formally rescoped to what is
+built; `CEO-004` is recorded as not delivered (CEO-DEC-011)
 
 **2026-08-26 update:** Consolidated the three `/executive/*` routes into one sidebar panel
 (same format as CS/Admin's `/workspace`) and reconnected the Complaints tab to real data —
 see `changelog.md` "Consolidate into a Panel" for the full rationale, the `{data,meta}`
 response-shape bug found and fixed, and updated test evidence. Does not change `CEO-001`–
 `CEO-005` status above; this was a UI-consistency and bug-fix pass, not new feature scope.
+
+**2026-10-17 update:** The overview and complaints tabs were rebuilt (see `changelog.md`
+"Overview redesign, complaints inbox, hardening" and `decision.md` CEO-DEC-005 to CEO-DEC-014).
+Status of the task list is unchanged: `CEO-001`–`CEO-003` delivered, `CEO-004` not delivered
+(CEO-DEC-011), `CEO-005` partial. Before using real data volumes: add indexes for the metric
+queries and have the gateway refuse `/internal/` paths (both listed in the changelog).

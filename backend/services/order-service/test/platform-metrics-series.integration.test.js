@@ -8,6 +8,7 @@ const request = require("supertest");
 
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
+process.env.PLATFORM_FEE_RATE = "0.03";
 if (process.env.DATABASE_URL_ORDER) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_ORDER;
 }
@@ -57,10 +58,14 @@ test("executive platform metrics series against a real database", async (t) => {
 
   // A year far in the past so pre-existing demo/seed orders in the shared
   // dev database cannot land inside this window and perturb the series.
-  const monthFrom = new Date("2019-03-01T00:00:00.000Z");
-  const monthTo = new Date("2019-04-01T00:00:00.000Z");
+  // Buckets are Bangkok calendar days (UTC+7): a Bangkok day starts at
+  // 17:00 UTC the previous day.
   const day5 = new Date("2019-03-05T10:00:00.000Z");
   const day10 = new Date("2019-03-10T10:00:00.000Z");
+  // 01:00 Bangkok on 1 March, still 28 February in UTC.
+  const bangkokMarch1 = new Date("2019-02-28T18:00:00.000Z");
+  // 01:00 Bangkok on 1 April, still 31 March in UTC.
+  const bangkokApril1 = new Date("2019-03-31T18:00:00.000Z");
 
   try {
     await prisma.order.createMany({
@@ -78,8 +83,9 @@ test("executive platform metrics series against a real database", async (t) => {
         {
           buyerId,
           sellerId: "s1",
+          // A 100 coupon: the day's gmv counts the 300 paid, not the 400 list.
           productId: "p2",
-          originalAmount: 300,
+          originalAmount: 400,
           ordersAmount: 300,
           orderType: "BUY_NOW",
           status: "completed",
@@ -98,6 +104,26 @@ test("executive platform metrics series against a real database", async (t) => {
         {
           buyerId,
           sellerId: "s1",
+          productId: "p5",
+          originalAmount: 40,
+          ordersAmount: 40,
+          orderType: "BUY_NOW",
+          status: "completed",
+          createdAt: bangkokMarch1,
+        },
+        {
+          buyerId,
+          sellerId: "s1",
+          productId: "p6",
+          originalAmount: 70,
+          ordersAmount: 70,
+          orderType: "BUY_NOW",
+          status: "completed",
+          createdAt: bangkokApril1,
+        },
+        {
+          buyerId,
+          sellerId: "s1",
           productId: "p4",
           originalAmount: 9000,
           ordersAmount: 9000,
@@ -111,61 +137,120 @@ test("executive platform metrics series against a real database", async (t) => {
     const res = await request(app)
       .get("/executive/metrics-series")
       .query({
-        from: monthFrom.toISOString(),
-        to: monthTo.toISOString(),
+        from: "2019-03-01",
+        to: "2019-04-01",
         granularity: "day",
+        timezone: "Asia/Bangkok",
       })
       .set("Authorization", `Bearer ${executiveToken}`);
 
     assert.equal(res.status, 200);
     // March 2019 has 31 days — every day appears exactly once, in order,
-    // even the 28 with no orders at all.
+    // even the days with no orders at all.
     assert.equal(res.body.data.length, 31);
-    assert.equal(res.body.data[0].period, "2019-03-01T00:00:00.000Z");
-    assert.equal(res.body.data[30].period, "2019-03-31T00:00:00.000Z");
+    assert.equal(res.body.data[0].period, "2019-02-28T17:00:00.000Z");
+    assert.equal(res.body.data[30].period, "2019-03-30T17:00:00.000Z");
 
+    // Placed on 28 Feb UTC but 1 March in Bangkok: belongs to 1 March.
     const day1Row = res.body.data.find(
-      (r) => r.period === "2019-03-01T00:00:00.000Z",
+      (r) => r.period === "2019-02-28T17:00:00.000Z",
     );
     assert.deepEqual(day1Row, {
-      period: "2019-03-01T00:00:00.000Z",
-      gmv: 0,
-      platformRevenue: 0,
-      completedOrders: 0,
+      period: "2019-02-28T17:00:00.000Z",
+      gmv: 40,
+      platformRevenue: 1.2,
+      completedOrders: 1,
     });
 
+    const day2Row = res.body.data.find(
+      (r) => r.period === "2019-03-01T17:00:00.000Z",
+    );
+    assert.equal(day2Row.gmv, 0);
+
+    // Placed on 31 March UTC but 1 April in Bangkok: not part of March.
+    const day31Row = res.body.data.find(
+      (r) => r.period === "2019-03-30T17:00:00.000Z",
+    );
+    assert.equal(day31Row.gmv, 0);
+
     const day5Row = res.body.data.find(
-      (r) => r.period === "2019-03-05T00:00:00.000Z",
+      (r) => r.period === "2019-03-04T17:00:00.000Z",
     );
     assert.equal(day5Row.gmv, 500);
     assert.equal(day5Row.completedOrders, 2);
     assert.equal(day5Row.platformRevenue, 15);
 
     const day10Row = res.body.data.find(
-      (r) => r.period === "2019-03-10T00:00:00.000Z",
+      (r) => r.period === "2019-03-09T17:00:00.000Z",
     );
     assert.equal(day10Row.gmv, 300);
     assert.equal(day10Row.completedOrders, 1);
 
     assert.equal(res.body.meta.definitionVersion, "v1");
+    assert.equal(res.body.meta.timezone, "Asia/Bangkok");
+    // The fee rate travels with the figures so the dashboard never hardcodes it.
+    assert.equal(res.body.meta.platformFeeRate, 0.03);
+    assert.equal(res.body.meta.from, "2019-02-28T17:00:00.000Z");
 
-    // Month granularity across the whole year: the two days above collapse
-    // into one March bucket (500 + 300 = 800); every other month is zero.
+    // The non-series total uses the same Bangkok month boundaries.
+    const totalRes = await request(app)
+      .get("/executive/metrics")
+      .query({ from: "2019-03-01", to: "2019-04-01" })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(totalRes.status, 200);
+    assert.equal(totalRes.body.data.gmv, 840);
+    assert.equal(totalRes.body.data.completedOrders, 4);
+
+    // Month granularity across the whole year: the March days collapse into
+    // one Bangkok March bucket (40 + 500 + 300 = 840), and the order placed at
+    // 01:00 Bangkok on 1 April lands in April.
     const yearRes = await request(app)
       .get("/executive/metrics-series")
       .query({
-        from: "2019-01-01T00:00:00.000Z",
-        to: "2020-01-01T00:00:00.000Z",
+        from: "2019-01-01",
+        to: "2020-01-01",
         granularity: "month",
       })
       .set("Authorization", `Bearer ${executiveToken}`);
     assert.equal(yearRes.status, 200);
     assert.equal(yearRes.body.data.length, 12);
     const marchRow = yearRes.body.data.find(
-      (r) => r.period === "2019-03-01T00:00:00.000Z",
+      (r) => r.period === "2019-02-28T17:00:00.000Z",
     );
-    assert.equal(marchRow.gmv, 800);
-    assert.equal(marchRow.completedOrders, 3);
+    assert.equal(marchRow.gmv, 840);
+    assert.equal(marchRow.completedOrders, 4);
+    const aprilRow = yearRes.body.data.find(
+      (r) => r.period === "2019-03-31T17:00:00.000Z",
+    );
+    assert.equal(aprilRow.gmv, 70);
+
+    // One Bangkok day by the hour: 24 points from 00:00 to 23:00. Both orders
+    // on 5 March were placed at 17:00 Bangkok, so they land in the 17:00 slot
+    // (index 17); the pending order does not count.
+    const slotsRes = await request(app)
+      .get("/executive/metrics-series")
+      .query({
+        from: "2019-03-05",
+        to: "2019-03-06",
+        granularity: "hour",
+        timezone: "Asia/Bangkok",
+      })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(slotsRes.status, 200);
+    assert.equal(slotsRes.body.data.length, 24);
+    assert.equal(slotsRes.body.data[0].period, "2019-03-04T17:00:00.000Z");
+    assert.deepEqual(
+      slotsRes.body.data.map((row) => row.gmv),
+      Array.from({ length: 24 }, (_, i) => (i === 17 ? 500 : 0)),
+    );
+    assert.equal(slotsRes.body.data[17].period, "2019-03-05T10:00:00.000Z");
+    assert.equal(slotsRes.body.data[17].completedOrders, 2);
+
+    const badTimezoneRes = await request(app)
+      .get("/executive/metrics-series")
+      .query({ granularity: "day", timezone: "Mars/Olympus" })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(badTimezoneRes.status, 400);
 
     const missingGranularityRes = await request(app)
       .get("/executive/metrics-series")

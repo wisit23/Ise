@@ -80,27 +80,83 @@ test("executive audit log endpoints against real database", async (t) => {
     assert.equal(res.status, 403);
   });
 
-  await t.test("records a new executive audit log entry via POST", async () => {
-    const payload = {
-      action: "REPORT_EXPORT_CSV",
-      category: "DATA_EXPORT",
-      targetType: "report",
-      targetId: "monthly-financials",
-      description: "ส่งออกรายงานยอดขายและรายได้รอบ 6 เดือนล่าสุด",
-      metadata: { rowCount: 6, format: "csv" },
-    };
+  await t.test(
+    "records an allowed action, with server-owned wording",
+    async () => {
+      const res = await request(app)
+        .post("/executive/audit")
+        .set("Authorization", `Bearer ${executiveToken}`)
+        // Headers a client sets itself must not decide who is recorded.
+        .set("x-user-id", "someone-else")
+        .set("x-user-display-name", "Somebody Else")
+        .send({
+          action: "REPORT_EXPORT_CSV",
+          category: "FINANCIAL",
+          targetId: "2026-10",
+          description: "ลบข้อมูลลูกค้าทั้งหมด",
+          metadata: {
+            granularity: "month",
+            year: 2026,
+            monthIndex: 9,
+            rowCount: 31,
+            injected: "ignored",
+          },
+        });
 
-    const res = await request(app)
-      .post("/executive/audit")
-      .set("Authorization", `Bearer ${executiveToken}`)
-      .send(payload);
+      assert.equal(res.status, 201);
+      assert.equal(res.body.status, "ok");
+      const log = res.body.data;
+      assert.equal(log.action, "REPORT_EXPORT_CSV");
+      assert.equal(log.actorId, actorId);
+      // The email is read from the users table, not the token's display name.
+      assert.equal(log.actorEmail, `ceo-${runId}@reloop.test`);
+      assert.equal(log.actorRole, "EXECUTIVE");
+      assert.equal(log.category, "DATA_EXPORT");
+      assert.equal(
+        log.description,
+        "ส่งออกรายงานยอดขายและรายได้ (เดือน ตุลาคม 2569)",
+      );
+      assert.deepEqual(log.metadata, {
+        granularity: "month",
+        year: 2026,
+        monthIndex: 9,
+        rowCount: 31,
+      });
+    },
+  );
 
-    assert.equal(res.status, 201);
-    assert.equal(res.body.status, "ok");
-    assert.equal(res.body.data.action, "REPORT_EXPORT_CSV");
-    assert.equal(res.body.data.actorId, actorId);
-    assert.equal(res.body.data.category, "DATA_EXPORT");
-  });
+  await t.test(
+    "rejects an unknown action and bad metadata with 400",
+    async () => {
+      for (const body of [
+        { action: "DELETE_ALL_USERS", description: "x" },
+        { action: "REPORT_EXPORT_CSV", metadata: { rowCount: "many" } },
+        { action: "REPORT_EXPORT_CSV", targetId: "../../etc" },
+      ]) {
+        const res = await request(app)
+          .post("/executive/audit")
+          .set("Authorization", `Bearer ${executiveToken}`)
+          .send(body);
+        assert.equal(res.status, 400, JSON.stringify(body));
+      }
+    },
+  );
+
+  await t.test(
+    "refuses to record for an account that does not exist",
+    async () => {
+      const ghost = signAccessToken({
+        sub: `ghost-${runId}`,
+        role: "EXECUTIVE",
+        displayName: "Ghost",
+      });
+      const res = await request(app)
+        .post("/executive/audit")
+        .set("Authorization", `Bearer ${ghost}`)
+        .send({ action: "REPORT_EXPORT_CSV" });
+      assert.equal(res.status, 403);
+    },
+  );
 
   await t.test(
     "queries executive audit logs via GET with pagination",

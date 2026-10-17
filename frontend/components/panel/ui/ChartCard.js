@@ -5,12 +5,16 @@ export default function ChartCard({
   children,
   actions,
   action,
+  align = "center",
+  className = "",
 }) {
   return (
     /* h-full + column so two cards sharing a grid row end at the same
        baseline however tall their contents are — a donut, a bar chart and a
        list were each setting the row height on their own before this. */
-    <div className="flex h-full flex-col rounded-xl border border-slate-200/60 bg-white p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] transition-shadow hover:shadow-[0_8px_20px_-6px_rgba(6,81,237,0.08)]">
+    <div
+      className={`flex h-full flex-col ${className} rounded-xl border border-slate-200/60 bg-white p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] transition-shadow hover:shadow-[0_8px_20px_-6px_rgba(6,81,237,0.08)]`}
+    >
       <div className="mb-4 flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -31,7 +35,13 @@ export default function ChartCard({
           <div className="shrink-0">{actions || action}</div>
         )}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col justify-center">
+      {/* Centered by default; "start" keeps a short body at the top when a
+          taller neighbour stretches the card. */}
+      <div
+        className={`flex min-h-0 flex-1 flex-col ${
+          align === "start" ? "justify-start" : "justify-center"
+        }`}
+      >
         {children}
       </div>
     </div>

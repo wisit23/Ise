@@ -8,6 +8,7 @@ const request = require("supertest");
 
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
+process.env.PLATFORM_FEE_RATE = "0.03";
 if (process.env.DATABASE_URL_ORDER) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_ORDER;
 }
@@ -57,7 +58,9 @@ test("executive platform metrics against a real database", async (t) => {
 
   // Window fixtures fall inside; two completed orders (1000 + 2000 = gmv 3000,
   // platformRevenue 90 at the explicit 3% rate) plus one pending and one
-  // cancelled order that must NOT count toward gmv/completedOrders.
+  // cancelled order that must NOT count toward gmv/completedOrders. The second
+  // order used a 500 coupon: gmv is what the buyer paid (ordersAmount 2000),
+  // not the 2500 list price.
   const windowFrom = new Date("2026-01-01T00:00:00.000Z");
   const windowTo = new Date("2026-02-01T00:00:00.000Z");
   const insideWindow = new Date("2026-01-15T00:00:00.000Z");
@@ -80,9 +83,9 @@ test("executive platform metrics against a real database", async (t) => {
           buyerId,
           sellerId: "s1",
           productId: "p2",
-          originalAmount: 2000,
+          originalAmount: 2500,
           ordersAmount: 2000,
-          orderType: "BUY_NOW",
+          orderType: "AUCTION",
           status: "completed",
           createdAt: insideWindow,
         },
@@ -115,13 +118,33 @@ test("executive platform metrics against a real database", async (t) => {
       .set("Authorization", `Bearer ${executiveToken}`);
 
     assert.equal(res.status, 200);
+    // The 2000 order was won at auction, the 1000 one bought directly; the two
+    // always add up to gmv.
     assert.deepEqual(res.body.data, {
       gmv: 3000,
+      gmvPurchase: 1000,
+      gmvAuction: 2000,
       platformRevenue: 90,
       completedOrders: 2,
     });
     assert.equal(res.body.meta.definitionVersion, "v1");
     assert.equal(res.body.meta.timezone, "Asia/Bangkok");
+    // The fee rate travels with the figures so the dashboard never hardcodes it.
+    assert.equal(res.body.meta.platformFeeRate, 0.03);
+
+    // Changing the configured rate changes revenue, not GMV, and is reported.
+    process.env.PLATFORM_FEE_RATE = "0.05";
+    try {
+      const repriced = await request(app)
+        .get("/executive/metrics")
+        .query({ from: windowFrom.toISOString(), to: windowTo.toISOString() })
+        .set("Authorization", `Bearer ${executiveToken}`);
+      assert.equal(repriced.body.data.gmv, 3000);
+      assert.equal(repriced.body.data.platformRevenue, 150);
+      assert.equal(repriced.body.meta.platformFeeRate, 0.05);
+    } finally {
+      process.env.PLATFORM_FEE_RATE = "0.03";
+    }
 
     const forbiddenRes = await request(app)
       .get("/executive/metrics")

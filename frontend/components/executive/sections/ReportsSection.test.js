@@ -1,4 +1,10 @@
-import { render, screen, within, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  within,
+  fireEvent,
+} from "@testing-library/react";
 import ReportsSection from "./ReportsSection";
 import { apiFetch } from "../../../lib/api";
 import { downloadCsv } from "../../../lib/csv";
@@ -10,7 +16,12 @@ jest.mock("../../../lib/csv", () => ({
   downloadCsv: jest.fn(),
 }));
 
-const META = { definitionVersion: "v1", timezone: "Asia/Bangkok" };
+// A rate that is not 3%, so a label can only be right by reading it from the API.
+const META = {
+  definitionVersion: "v1",
+  timezone: "Asia/Bangkok",
+  platformFeeRate: 0.07,
+};
 
 const ORDER_SERIES = [
   {
@@ -31,8 +42,16 @@ const AUTH_SERIES = [
   { period: "2026-08-02T00:00:00.000Z", activeUsers: 1 },
 ];
 
-function serveSeries({ order = ORDER_SERIES, auth = AUTH_SERIES } = {}) {
+function serveSeries({
+  order = ORDER_SERIES,
+  auth = AUTH_SERIES,
+  firstSaleAt = "2024-03-10T00:00:00.000Z",
+} = {}) {
   apiFetch.mockImplementation((path) => {
+    if (path.startsWith("/api/orders/executive/first-sale")) {
+      if (firstSaleAt instanceof Error) return Promise.reject(firstSaleAt);
+      return Promise.resolve({ data: { firstSaleAt }, meta: META });
+    }
     if (path.startsWith("/api/orders/executive/metrics-series")) {
       if (order instanceof Error) return Promise.reject(order);
       return Promise.resolve({ data: order, meta: META });
@@ -79,10 +98,20 @@ describe("ReportsSection", () => {
     expect(within(totalRow).getByText("฿500")).toBeInTheDocument();
     expect(within(totalRow).getByText("฿50")).toBeInTheDocument();
     expect(within(totalRow).getByText("2")).toBeInTheDocument();
+    // Rows are 3 and 1; web usage adds up day by day, so the total is 4.
     expect(within(totalRow).getByText("4")).toBeInTheDocument();
 
     expect(screen.queryByText(/MoM/)).not.toBeInTheDocument();
     expect(screen.queryByText(/YoY/)).not.toBeInTheDocument();
+  });
+
+  it("states the fee rate the API sent in the footnote", async () => {
+    serveSeries();
+    render(<ReportsSection token="t" />);
+
+    expect(
+      await screen.findByText(/รายได้แพลตฟอร์มคำนวณที่ 7% ของยอดขาย/),
+    ).toBeInTheDocument();
   });
 
   it("switches to one row per month, with full Thai month names, for a yearly report", async () => {
@@ -136,6 +165,142 @@ describe("ReportsSection", () => {
     expect(within(day1Row).getByText("3")).toBeInTheDocument();
   });
 
+  describe("years offered in the year picker", () => {
+    const yearOptions = () =>
+      [...screen.getByLabelText("ปี").options].map((o) => o.textContent);
+
+    it("start at the year of the first sale, not a fixed year", async () => {
+      serveSeries({ firstSaleAt: "2024-03-10T00:00:00.000Z" });
+
+      render(<ReportsSection token="token" />);
+
+      await waitFor(() =>
+        expect(yearOptions()).toEqual(["2569", "2568", "2567"]),
+      );
+    });
+
+    it("follow an earlier first sale back as far as it goes", async () => {
+      serveSeries({ firstSaleAt: "2021-06-01T00:00:00.000Z" });
+
+      render(<ReportsSection token="token" />);
+
+      await waitFor(() =>
+        expect(yearOptions()).toEqual([
+          "2569",
+          "2568",
+          "2567",
+          "2566",
+          "2565",
+          "2564",
+        ]),
+      );
+    });
+
+    it("are just this year while nothing has sold", async () => {
+      serveSeries({ firstSaleAt: null });
+
+      render(<ReportsSection token="token" />);
+
+      await waitFor(() => expect(yearOptions()).toEqual(["2569"]));
+    });
+
+    it("fall back to the last five years when the first sale is unknown", async () => {
+      serveSeries({ firstSaleAt: new Error("order-service unreachable") });
+
+      render(<ReportsSection token="token" />);
+      await screen.findByText("01/ส.ค./69");
+
+      expect(yearOptions()).toEqual(["2569", "2568", "2567", "2566", "2565"]);
+    });
+  });
+
+  it("adds the days up for web usage, counting people who return every day", async () => {
+    serveSeries({
+      auth: [
+        { period: "2026-08-01T00:00:00.000Z", activeUsers: 3 },
+        { period: "2026-08-02T00:00:00.000Z", activeUsers: 4 },
+      ],
+    });
+
+    render(<ReportsSection token="token" />);
+
+    const day2Row = (await screen.findByText("02/ส.ค./69")).closest("tr");
+    expect(within(day2Row).getByText("4")).toBeInTheDocument();
+
+    // 3 + 4 = 7, even though some of those people came on both days.
+    const totalRow = screen.getByText("รวมทั้งหมด").closest("tr");
+    expect(within(totalRow).getByText("7")).toBeInTheDocument();
+    expect(
+      screen.getByText(/นับเป็นรายวัน คนที่กลับมาใช้ซ้ำนับทุกวัน/),
+    ).toBeInTheDocument();
+  });
+
+  it("adds the months up in the yearly report, each month already a sum of its days", async () => {
+    serveSeries({
+      order: [
+        {
+          period: "2026-01-01T00:00:00.000Z",
+          gmv: 100,
+          platformRevenue: 10,
+          completedOrders: 1,
+        },
+        {
+          period: "2026-02-01T00:00:00.000Z",
+          gmv: 200,
+          platformRevenue: 20,
+          completedOrders: 2,
+        },
+      ],
+      auth: [
+        { period: "2026-01-01T00:00:00.000Z", activeUsers: 5 },
+        { period: "2026-02-01T00:00:00.000Z", activeUsers: 6 },
+      ],
+    });
+
+    render(<ReportsSection token="token" />);
+    fireEvent.change(screen.getByLabelText("รูปแบบรายงาน"), {
+      target: { value: "year" },
+    });
+
+    const totalRow = (await screen.findByText("มกราคม"))
+      .closest("table")
+      .querySelector("tfoot tr");
+    // 5 + 6: the people who came in each month, added up.
+    expect(within(totalRow).getByText("11")).toBeInTheDocument();
+    expect(
+      screen.getByText(/แถวรวมคือผลรวมของทุกวันในช่วง/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows 0, not unavailable, when nobody came during the period", async () => {
+    serveSeries({
+      auth: [
+        { period: "2026-08-01T00:00:00.000Z", activeUsers: 0 },
+        { period: "2026-08-02T00:00:00.000Z", activeUsers: 0 },
+      ],
+    });
+
+    render(<ReportsSection token="token" />);
+    await screen.findByText("01/ส.ค./69");
+
+    const totalRow = screen.getByText("รวมทั้งหมด").closest("tr");
+    expect(within(totalRow).getByText("0")).toBeInTheDocument();
+    expect(
+      within(totalRow).queryByText("ไม่พร้อมใช้งาน"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks only the web usage total unavailable when its provider failed", async () => {
+    serveSeries({ auth: new Error("auth-service unreachable") });
+
+    render(<ReportsSection token="token" />);
+    await screen.findByText("01/ส.ค./69");
+
+    const totalRow = screen.getByText("รวมทั้งหมด").closest("tr");
+    expect(within(totalRow).getByText("ไม่พร้อมใช้งาน")).toBeInTheDocument();
+    expect(within(totalRow).getByText("฿500")).toBeInTheDocument();
+  });
+
   it("shows a page-level message rather than an empty table when both providers fail", async () => {
     serveSeries({
       order: new Error("order-service unreachable"),
@@ -164,7 +329,7 @@ describe("ReportsSection", () => {
     const lines = content.trim().split("\r\n");
     expect(lines).toHaveLength(4);
     expect(lines[0]).toBe(
-      "ช่วงเวลา,ยอดขาย (บาท),รายได้แพลตฟอร์ม (บาท),คำสั่งซื้อ (รายการ),ผู้ใช้งานที่ล็อกอิน (คน)",
+      "ช่วงเวลา,ยอดขาย (บาท),รายได้แพลตฟอร์ม (บาท),คำสั่งซื้อ (รายการ),ผู้ใช้งานเว็บ (คน)",
     );
     expect(lines[1]).toBe("01/ส.ค./69,500,50,2,3");
     expect(lines[2]).toBe("02/ส.ค./69,0,0,0,1");

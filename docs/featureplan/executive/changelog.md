@@ -1,5 +1,26 @@
 # Executive Feature Changelog
 
+## 2026-10-17 — Overview redesign, complaints inbox, hardening
+
+ตัดสินใจทั้งหมดอยู่ใน `decision.md` (CEO-DEC-005 ถึง CEO-DEC-014)
+
+- **Metrics/เวลา:** นับตามเวลา Asia/Bangkok ทุก endpoint (`resolveMetricRange` รับ `YYYY-MM-DD` เป็นเที่ยงคืนท้องถิ่น); series มี `day`/`month` และ `hour` (เฉพาะ order-service) สำหรับดูรายชั่วโมงของวันเดียว
+- **ยอดขาย:** GMV = ยอดที่ลูกค้าจ่ายจริงหลังคูปอง (`orders_amount`); แยกยอดสั่งซื้อ/ประมูล; ค่าธรรมเนียมแพลตฟอร์มมาจาก env `PLATFORM_FEE_RATE` ที่ order-service ตรวจตอนเปิดบริการ และส่งกลับใน `meta.platformFeeRate` (ไม่ฝังใน frontend)
+- **จัดอันดับหมวดหมู่:** product-service ถามยอดขายรายสินค้าจาก order-service ผ่าน `/internal/executive/product-sales` (token ภายใน) แล้วจับคู่หมวดหมู่ของตัวเอง; ไม่อ่านฐานข้อมูลบริการอื่น. เอาอันดับสินค้าออก (มือสองขายชิ้นเดียว) ใช้ "หมวดหมู่ที่นิยมสุด" แทน
+- **ผู้ใช้งานเว็บ:** ผลรวมรายวันของผู้ซื้อ/ผู้ขายที่ล็อกอิน ไม่นับ staff
+- **หน้าภาพรวม:** ปุ่มช่วงเวลา 7 วัน/เดือนนี้/ปีนี้/กำหนดเอง (เลือกวันเดียว รูปแบบ วว/ดด/ปปปป พ.ศ.); กราฟแนวโน้มมีแกนตัวเลขกลมซ้าย ค่าตอนชี้ ไม่ขยายการ์ด; กราฟวงกลมสถานะ/ประเภทสินค้า; ตัวอย่างสีทั้งหมดใช้สีแบรนด์
+- **หน้าข้อร้องเรียน:** รวมข้อร้องเรียน/Ticket/ข้อพิพาท พร้อมตัวกรองตามประเภท (CEO-DEC-014); endpoint อ่านอย่างเดียวใหม่ที่ support-service และ order-service, เพิ่มช่วงวันที่ให้ auth-service. ตัดการค้นหาร้าน/เรียงตามถูกรายงานมากสุด/กรองเป้าหมาย
+- **Audit log:** server กำหนด action ที่รับได้ ข้อความ และ metadata; อีเมลผู้ทำอ่านจาก `users`; ผู้ทำมาจาก token เท่านั้น (CEO-DEC-012)
+- **ไม่ส่งมอบ:** `CEO-004` (CEO-DEC-011) และ `CEO-005`; ไม่มีหน้าดู audit log
+
+**Verification:** frontend 109 suites / 700+ tests ผ่านและ `next build` ผ่าน; unit tests ของ shared/auth/order/product ผ่าน; integration tests ที่เพิ่ม/แก้ (order metrics+disputes, auth reports window/audit/user-metrics, support tickets, product top-catalog) ผ่านบนฐานข้อมูลทดสอบ ณ รอบก่อนแก้เล็กน้อยสุดท้าย (หมวดหมู่ไม่ทราบ → `label: null` ใน `top-catalog`; ต้องรันซ้ำเมื่อ Docker ขึ้น). lint ของ repo มี 21 errors เดิมของทีมในไฟล์ที่ไม่ได้แตะ; secret scan 0
+
+**ข้อจำกัดที่ทราบก่อนใช้งานข้อมูลจริง:**
+
+- ไม่มี index รองรับ `orders(status, created_at)`, `login_logs(login_at)`, `users(created_at)`, `reports(reported_at)`, `support_tickets(created_at)`; ต้องเพิ่ม migration เมื่อข้อมูลมีมาก (ต้องให้เจ้าของบริการเห็นชอบ)
+- gateway ส่งต่อทุกเส้นทางใต้ `/api/orders/*` รวม `/internal/*` (ถูกกันด้วย token ภายใน แต่ควรให้ gateway ปฏิเสธ `/internal/`)
+- Audit log ยังถูกส่งจากเบราว์เซอร์หลังดาวน์โหลด CSV และใช้ IP จาก `x-forwarded-for`
+
 ## 2026-10-10 — Pre-Git recheck
 
 - แก้ pagination เมื่อหน้าสุดท้ายหายหลังคำร้องเปลี่ยนสถานะ ให้กลับหน้าที่มีผลลัพธ์ได้ และไม่ submit Search ขณะ IME กำลังประกอบข้อความ

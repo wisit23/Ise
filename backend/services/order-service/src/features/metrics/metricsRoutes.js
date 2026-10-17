@@ -18,4 +18,25 @@ router.get(
   metricsController.getMetricsSeries,
 );
 
+router.get(
+  "/order-status",
+  requireAuth,
+  requireRole("EXECUTIVE"),
+  metricsController.getOrderStatus,
+);
+
+router.get(
+  "/first-sale",
+  requireAuth,
+  requireRole("EXECUTIVE"),
+  metricsController.getFirstSale,
+);
+
+router.get(
+  "/disputes",
+  requireAuth,
+  requireRole("EXECUTIVE"),
+  metricsController.getDisputes,
+);
+
 module.exports = router;

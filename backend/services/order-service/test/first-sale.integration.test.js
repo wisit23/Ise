@@ -1,0 +1,106 @@
+// Integration test against a real, disposable Postgres database (reloop_order).
+// Skips cleanly when DATABASE_URL is unset/unreachable so `npm test` still
+// passes on a machine with no database configured. Set REQUIRE_INTEGRATION=1
+// (the CI workflow does) to turn that skip into a hard failure instead.
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const request = require("supertest");
+
+process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
+process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
+if (process.env.DATABASE_URL_ORDER) {
+  process.env.DATABASE_URL = process.env.DATABASE_URL_ORDER;
+}
+
+const { signAccessToken } = require("@reloop/shared");
+const prisma = require("../src/models/prismaClient");
+const app = require("../src/app");
+// This feature suite uses signed identity fixtures; live session enforcement
+// is covered separately by account-suspension.integration.test.js.
+app.locals.validateAccessSession = async () => {};
+
+async function databaseIsReachable() {
+  if (!process.env.DATABASE_URL) return false;
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test("executive first sale against a real database", async (t) => {
+  if (!(await databaseIsReachable())) {
+    const message =
+      "DATABASE_URL not set or database unreachable — set it to a disposable test database " +
+      "(after running the order-service migrations against it) to run this test";
+    if (process.env.REQUIRE_INTEGRATION === "1") {
+      throw new Error(`REQUIRE_INTEGRATION=1 but ${message}`);
+    }
+    t.skip(message);
+    return;
+  }
+
+  const runId = Date.now();
+  const buyerId = `mock-first-sale-buyer-${runId}`;
+  const executiveToken = signAccessToken({
+    sub: "int-test-executive",
+    role: "EXECUTIVE",
+    displayName: "Trusted Integration Executive",
+  });
+  const buyerToken = signAccessToken({
+    sub: buyerId,
+    role: "BUYER",
+    displayName: "Trusted Integration Buyer",
+  });
+
+  // Years long before any real data, so only these rows can be the earliest.
+  // Earlier orders that never completed are not sales and must be ignored.
+  const fixtures = [
+    ["cancelled", new Date("1998-05-01T00:00:00.000Z")],
+    ["pending_payment", new Date("1999-05-01T00:00:00.000Z")],
+    ["completed", new Date("2002-08-20T10:00:00.000Z")],
+    ["completed", new Date("2004-01-10T10:00:00.000Z")],
+  ].map(([status, createdAt], i) => ({
+    id: `mock-first-sale-${runId}-${i}`,
+    status,
+    createdAt,
+  }));
+
+  try {
+    await prisma.order.createMany({
+      data: fixtures.map((f) => ({
+        id: f.id,
+        buyerId,
+        sellerId: "s1",
+        productId: `p-${f.id}`,
+        originalAmount: 100,
+        ordersAmount: 100,
+        orderType: "BUY_NOW",
+        status: f.status,
+        createdAt: f.createdAt,
+      })),
+    });
+
+    const res = await request(app)
+      .get("/executive/first-sale")
+      .set("Authorization", `Bearer ${executiveToken}`);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.firstSaleAt, "2002-08-20T10:00:00.000Z");
+    assert.equal(res.body.meta.definitionVersion, "v1");
+
+    const forbidden = await request(app)
+      .get("/executive/first-sale")
+      .set("Authorization", `Bearer ${buyerToken}`);
+    assert.equal(forbidden.status, 403);
+
+    const unauthenticated = await request(app).get("/executive/first-sale");
+    assert.equal(unauthenticated.status, 401);
+  } finally {
+    await prisma.order.deleteMany({
+      where: { id: { in: fixtures.map((f) => f.id) } },
+    });
+    await prisma.$disconnect();
+  }
+});

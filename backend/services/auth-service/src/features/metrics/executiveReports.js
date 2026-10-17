@@ -161,6 +161,7 @@ async function enrichTargets(allTargetIds = []) {
  * - Anomaly detection flag when a target breaches the risk threshold (>= 3 complaints)
  */
 async function getReportOverview({
+  range = null,
   status,
   limit = DEFAULT_REPORT_LIMIT,
   sortBy = "newest",
@@ -172,10 +173,16 @@ async function getReportOverview({
   const [{ reports, total }, statusGroups, targetGroups] = await Promise.all([
     findReportPage(
       prisma,
-      { status, targetId, search, page, limit, sortBy, reasonCategory },
+      { range, status, targetId, search, page, limit, sortBy, reasonCategory },
       { openStatuses: OPEN_STATUSES, categoryKeywords: CATEGORY_KEYWORDS },
     ),
-    prisma.report.groupBy({ by: ["status"], _count: { _all: true } }),
+    prisma.report.groupBy({
+      by: ["status"],
+      ...(range
+        ? { where: { reportedAt: { gte: range.from, lt: range.to } } }
+        : {}),
+      _count: { _all: true },
+    }),
     prisma.report.groupBy({
       by: ["targetId"],
       where: { targetId: { not: null }, status: { in: OPEN_STATUSES } },

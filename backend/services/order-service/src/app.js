@@ -4,6 +4,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const adminDisputeRoutes = require("./features/adminDisputes/adminDisputeRoutes");
 const metricsRoutes = require("./features/metrics/metricsRoutes");
 const marketingMetricsRoutes = require("./features/metrics/marketingMetricsRoutes");
+const internalMetricsRoutes = require("./features/metrics/internalMetricsRoutes");
 const disputeChatAccessRoutes = require("./features/disputes/disputeChatAccessRoutes");
 
 const app = express();
@@ -15,6 +16,7 @@ app.get("/health", (req, res) =>
 
 app.use("/executive", metricsRoutes);
 app.use("/marketing", marketingMetricsRoutes);
+app.use("/internal/executive", internalMetricsRoutes);
 app.use("/internal", disputeChatAccessRoutes);
 app.use("/", orderRoutes);
 app.use("/", adminDisputeRoutes);

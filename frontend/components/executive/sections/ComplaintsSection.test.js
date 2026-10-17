@@ -1,482 +1,377 @@
-import {
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-  within,
-  act,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ComplaintsSection from "./ComplaintsSection";
 import { apiFetch } from "../../../lib/api";
 
 jest.mock("../../../lib/api", () => ({ apiFetch: jest.fn() }));
 
-// Matches the real /api/auth/executive/reports envelope — every executive
-// metrics endpoint wraps its payload as { data, meta }, not the bare object.
-const EMPTY = {
-  data: { items: [], statusCounts: {}, totalOpen: 0, topReported: [] },
-  meta: { definitionVersion: "v1" },
+const META = { definitionVersion: "v1", timezone: "Asia/Bangkok" };
+
+const REPORT = {
+  id: "r1",
+  reason: "ร้านไม่ส่งของ",
+  category: "FRAUD",
+  status: "OPEN",
+  actionTaken: null,
+  actionDetails: null,
+  reportedAt: "2026-10-16T04:00:00.000Z",
+  targetId: "target-1",
+  targetName: "สมชาย",
+  targetShopName: "ร้านสมชาย",
+  targetReportCount: 1,
+  productId: null,
+  reporterName: "มาลี ใจดี",
 };
+const TICKET = {
+  id: "t1",
+  ticketNumber: "TK-0001",
+  subject: "จ่ายเงินแล้วไม่ได้รับของ",
+  category: { code: "PAYMENT", name: "การชำระเงิน" },
+  priority: { code: "HIGH", name: "HIGH" },
+  status: { code: "NEW", name: "NEW", isTerminal: false },
+  orderId: null,
+  createdAt: "2026-10-16T06:00:00.000Z",
+};
+const DISPUTE = {
+  id: "d1",
+  orderId: "order-9999-abcdef",
+  disputeType: "DAMAGED_ITEM",
+  status: "OPEN",
+  priority: "URGENT",
+  reason: "กระเป๋าขาด",
+  decision: null,
+  createdAt: "2026-10-16T05:00:00.000Z",
+};
+
+const TICKET_OPTIONS = {
+  statuses: [
+    { code: "NEW", name: "NEW" },
+    { code: "CLOSED", name: "CLOSED" },
+  ],
+  categories: [
+    { code: "ORDER", name: "คำสั่งซื้อ" },
+    { code: "PAYMENT", name: "การชำระเงิน" },
+  ],
+  priorities: [
+    { code: "LOW", name: "LOW" },
+    { code: "HIGH", name: "HIGH" },
+  ],
+};
+const DISPUTE_OPTIONS = {
+  statuses: ["OPEN", "NEEDS_INFO", "DECIDED"],
+  types: ["ITEM_NOT_AS_DESCRIBED", "DAMAGED_ITEM", "WRONG_ITEM", "OTHER"],
+  priorities: ["LOW", "NORMAL", "HIGH", "URGENT", "CRITICAL"],
+};
+
+const reportAnswer = (items = [REPORT], anomaly) => ({
+  data: {
+    items,
+    total: items.length,
+    page: 1,
+    limit: 20,
+    totalPages: Math.ceil(items.length / 20),
+    statusCounts: { OPEN: items.length },
+    totalOpen: items.length,
+    topReported: [],
+    anomalySummary: anomaly || {
+      detected: false,
+      threshold: 3,
+      highRiskTargets: [],
+    },
+  },
+  meta: META,
+});
+const listAnswer = (items, options) => ({
+  items,
+  total: items.length,
+  page: 1,
+  limit: 20,
+  totalPages: Math.ceil(items.length / 20),
+  statusCounts: { NEW: items.length, OPEN: items.length },
+  options,
+  meta: META,
+});
+
+/** Routes each service's path to its answer; `overrides` replaces one. */
+function serve(overrides = {}) {
+  apiFetch.mockImplementation(async (path) => {
+    const key = Object.keys(overrides).find((name) => path.includes(name));
+    if (key) return overrides[key](path);
+    if (path.includes("/api/auth/executive/reports")) return reportAnswer();
+    if (path.includes("/api/support/executive/tickets")) {
+      return listAnswer([TICKET], TICKET_OPTIONS);
+    }
+    if (path.includes("/api/orders/executive/disputes")) {
+      return listAnswer([DISPUTE], DISPUTE_OPTIONS);
+    }
+    throw new Error(`unexpected path ${path}`);
+  });
+}
+
+const pathsFor = (name) =>
+  apiFetch.mock.calls.map(([path]) => path).filter((p) => p.includes(name));
+
+// 12:00 Bangkok on 16 October 2026.
+const NOW = new Date("2026-10-16T05:00:00.000Z");
+
+function pick(name, option) {
+  fireEvent.click(screen.getByRole("button", { name }));
+  fireEvent.click(screen.getByRole("radio", { name: option }));
+}
 
 describe("ComplaintsSection", () => {
   beforeEach(() => {
     apiFetch.mockReset();
+    jest.useFakeTimers({ doNotFake: ["setTimeout", "queueMicrotask"] });
+    jest.setSystemTime(NOW);
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it("starts on everything, today, with every kind merged newest first", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+
+    expect(await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ")).toBeVisible();
+
+    // Each service is asked for today in Bangkok time.
+    for (const name of [
+      "/api/auth/executive/reports",
+      "/api/support/executive/tickets",
+      "/api/orders/executive/disputes",
+    ]) {
+      const [path] = pathsFor(name);
+      expect(path).toContain("from=2026-10-16");
+      expect(path).toContain("to=2026-10-17");
+      expect(path).toContain("timezone=Asia%2FBangkok");
+    }
+
+    // 06:00Z ticket, 05:00Z dispute, 04:00Z complaint.
+    const rows = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(rows[0]).toContain("จ่ายเงินแล้วไม่ได้รับของ");
+    expect(rows[1]).toContain("กระเป๋าขาด");
+    expect(rows[2]).toContain("ร้านไม่ส่งของ");
+    expect(screen.getByText("3 รายการ")).toBeVisible();
   });
 
-  it("returns to a valid page when the last page disappears", async () => {
-    apiFetch
-      .mockResolvedValueOnce({
-        data: { ...EMPTY.data, total: 4, page: 1, limit: 2, totalPages: 2 },
-      })
-      .mockResolvedValueOnce({
-        data: { ...EMPTY.data, total: 1, page: 2, limit: 2, totalPages: 1 },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          ...EMPTY.data,
-          total: 1,
-          page: 1,
-          limit: 2,
-          totalPages: 1,
-          items: [
-            {
-              id: "last",
-              reason: "Remaining complaint",
-              status: "OPEN",
-              reportedAt: "2026-10-09T03:00:00.000Z",
-            },
-          ],
-        },
-      });
-    render(<ComplaintsSection token="token" />);
-    fireEvent.click(await screen.findByRole("button", { name: "ถัดไป" }));
-    expect(await screen.findByText("Remaining complaint")).toBeInTheDocument();
-    expect(apiFetch).toHaveBeenCalledTimes(3);
-    expect(apiFetch.mock.calls.at(-1)[0]).toContain("page=1");
-  });
+  it("offers no kind-specific filters while looking at everything", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
 
-  it("times out a stalled request, keeps search editable and allows retry", async () => {
-    apiFetch
-      .mockResolvedValueOnce(EMPTY)
-      .mockImplementationOnce(() => new Promise(() => {}))
-      .mockResolvedValueOnce(EMPTY);
-    render(<ComplaintsSection token="token" />);
-    await screen.findByRole("searchbox");
-    jest.useFakeTimers();
-    try {
-      fireEvent.click(screen.getByRole("button", { name: "ดำเนินการแล้ว" }));
-      await act(async () => {
-        jest.advanceTimersByTime(10000);
-      });
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "ระบบใช้เวลาตอบกลับนานเกินไป",
-      );
-      expect(screen.getByRole("searchbox")).toBeEnabled();
-      fireEvent.click(screen.getByRole("button", { name: "ลองใหม่" }));
-      await act(async () => {});
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-      expect(apiFetch).toHaveBeenCalledTimes(3);
-    } finally {
-      jest.useRealTimers();
+    expect(screen.getByRole("button", { name: "ประเภทเรื่อง" })).toBeVisible();
+    for (const name of [
+      "สถานะ",
+      "หมวดหมู่",
+      "ประเภทข้อพิพาท",
+      "ความเร่งด่วน",
+    ]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
     }
   });
 
-  it("places All after dismissed and requests all statuses", async () => {
-    apiFetch.mockResolvedValue(EMPTY);
-    render(<ComplaintsSection token="token" />);
-    const all = await screen.findByRole("button", { name: "ทั้งหมด" });
-    const dismissed = screen.getByRole("button", { name: "ยกคำร้อง" });
-    expect(dismissed.nextElementSibling).toBe(all);
-    fireEvent.click(all);
+  it("shows only the complaint filter for complaints", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    pick("ประเภทเรื่อง", "ข้อร้องเรียน");
+
+    expect(await screen.findByRole("button", { name: "สถานะ" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "หมวดหมู่" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "ความเร่งด่วน" })).toBeNull();
+    // The list follows the kind: only complaints are left.
     await waitFor(() =>
-      expect(apiFetch.mock.calls.at(-1)[0]).toContain("status=ALL"),
+      expect(screen.queryByText("จ่ายเงินแล้วไม่ได้รับของ")).toBeNull(),
     );
-    expect(apiFetch.mock.calls.at(-1)[0]).toContain("page=1");
+    expect(screen.getByText("ร้านไม่ส่งของ")).toBeVisible();
   });
 
-  it("searches automatically after typing settles and preserves input focus during the request", async () => {
-    let resolveSearch;
-    apiFetch.mockResolvedValueOnce(EMPTY).mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveSearch = resolve;
-        }),
+  it("gives tickets a status, a category and a priority", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    pick("ประเภทเรื่อง", "Ticket");
+    await screen.findByRole("button", { name: "หมวดหมู่" });
+    expect(screen.getByRole("button", { name: "สถานะ" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "ความเร่งด่วน" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "ประเภทข้อพิพาท" })).toBeNull();
+
+    // The choices come from the service.
+    pick("หมวดหมู่", "การชำระเงิน");
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+    const asked = pathsFor("/api/support/executive/tickets").at(-1);
+    expect(asked).toContain("category=PAYMENT");
+    expect(asked).not.toContain("priority=");
+  });
+
+  it("gives disputes a status, a dispute type and a priority", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    pick("ประเภทเรื่อง", "ข้อพิพาท");
+    await screen.findByRole("button", { name: "ประเภทข้อพิพาท" });
+    expect(screen.getByRole("button", { name: "สถานะ" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "ความเร่งด่วน" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "หมวดหมู่" })).toBeNull();
+
+    pick("ประเภทข้อพิพาท", "สินค้าชำรุดหรือเสียหาย");
+    await screen.findByText("กระเป๋าขาด");
+    expect(pathsFor("/api/orders/executive/disputes").at(-1)).toContain(
+      "disputeType=DAMAGED_ITEM",
     );
-    render(<ComplaintsSection token="token" />);
-    const input = await screen.findByRole("searchbox");
-    input.focus();
-    fireEvent.change(input, { target: { value: "Shop" } });
-    fireEvent.change(input, { target: { value: "Shop A" } });
-    expect(apiFetch).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
-    expect(apiFetch.mock.calls.at(-1)[0]).toContain("search=Shop+A");
-    expect(screen.getByRole("searchbox")).toBe(input);
-    expect(input).toHaveFocus();
-    fireEvent.change(input, { target: { value: "Shop B" } });
-    expect(input).toHaveValue("Shop B");
-    resolveSearch(EMPTY);
-    await screen.findByText("Shop A");
   });
 
-  it("waits for text composition to finish before searching", async () => {
-    apiFetch.mockResolvedValue(EMPTY);
-    render(<ComplaintsSection token="token" />);
-    const input = await screen.findByRole("searchbox");
-    fireEvent.compositionStart(input);
-    fireEvent.change(input, { target: { value: "ร้าน ก" } });
-    await new Promise((resolve) => setTimeout(resolve, 350));
-    expect(apiFetch).toHaveBeenCalledTimes(1);
-    fireEvent.compositionEnd(input);
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
-    expect(
-      new URL(
-        apiFetch.mock.calls.at(-1)[0],
-        "http://test.local",
-      ).searchParams.get("search"),
-    ).toBe("ร้าน ก");
-  });
+  it("clears the filters when the kind changes", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
 
-  it("searches shops through the API, keeps the selected status and resets pagination", async () => {
-    apiFetch.mockResolvedValue({
-      data: { ...EMPTY.data, total: 4, page: 1, limit: 2, totalPages: 2 },
-    });
-    render(<ComplaintsSection token="token" />);
-    await screen.findByText("ไม่มีข้อร้องเรียนในหมวดนี้");
-    fireEvent.click(screen.getByRole("button", { name: "ดำเนินการแล้ว" }));
-    const input = await screen.findByRole("searchbox", {
-      name: "ค้นหาเป้าหมายหรือชื่อร้านค้า",
-    });
-    fireEvent.change(input, { target: { value: " Shop A " } });
-    fireEvent.click(screen.getByRole("button", { name: "ค้นหา" }));
-    await screen.findByText("Shop A");
-    const query = new URL(apiFetch.mock.calls.at(-1)[0], "http://test.local")
-      .searchParams;
-    expect(query.get("search")).toBe("Shop A");
-    expect(query.get("status")).toBe("ACTIONED");
-    expect(query.get("page")).toBe("1");
-    fireEvent.click(screen.getByRole("button", { name: "ถัดไป" }));
-    await screen.findByText("Shop A");
-    expect(apiFetch.mock.calls.at(-1)[0]).toContain("page=2");
-    fireEvent.click(screen.getByRole("button", { name: "ล้าง" }));
-    await screen.findByRole("searchbox");
-    expect(apiFetch.mock.calls.at(-1)[0]).not.toContain("search=");
-    expect(apiFetch.mock.calls.at(-1)[0]).toContain("page=1");
-  });
+    pick("ประเภทเรื่อง", "Ticket");
+    await screen.findByRole("button", { name: "หมวดหมู่" });
+    pick("หมวดหมู่", "การชำระเงิน");
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
 
-  it.each([
-    ["ACTIONED", "WARN_USER", "เตือนร้านค้า"],
-    ["ACTIONED", "SUSPEND_USER", "ระงับบัญชีผู้ใช้"],
-    ["DISMISSED", "DISMISS", "ไม่ดำเนินการ"],
-    ["ACTIONED", "REMOVE_PRODUCT", "นำสินค้าออก"],
-  ])(
-    "shows the decision and its actor in the details for %s/%s",
-    async (status, actionTaken, label) => {
-      apiFetch.mockResolvedValue({
-        data: {
-          ...EMPTY.data,
-          items: [
-            {
-              id: "report-1",
-              reason: "เหตุผลของผู้ร้อง",
-              status,
-              actionTaken,
-              reportedAt: "2026-10-09T03:00:00.000Z",
-              targetShopName: "ร้านทดสอบ",
-              actionDetails: {
-                actorId: "staff-1",
-                actorName: "เจ้าหน้าที่ เอ",
-                reason: "เหตุผลที่เจ้าหน้าที่ตัดสิน",
-              },
-            },
-          ],
-        },
-      });
-      render(<ComplaintsSection token="token" />);
-      fireEvent.click(
-        await screen.findByRole("button", { name: "รายละเอียด" }),
-      );
-      const dialog = screen.getByRole("dialog", { name: "รายละเอียดคำร้อง" });
-      expect(within(dialog).getByText("เจ้าหน้าที่ เอ")).toBeInTheDocument();
-      expect(within(dialog).getByText(label)).toBeInTheDocument();
-      expect(
-        within(dialog).getByText("เหตุผลที่เจ้าหน้าที่ตัดสิน"),
-      ).toBeInTheDocument();
-      expect(within(dialog).getByText("เหตุผลของผู้ร้อง")).toBeInTheDocument();
-      fireEvent.click(within(dialog).getByRole("button", { name: "ปิด" }));
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    },
-  );
-
-  it.each(["OPEN", "REVIEWED", "ACTIONED"])(
-    "shows missing decision information as dashes for %s",
-    async (status) => {
-      apiFetch.mockResolvedValue({
-        data: {
-          ...EMPTY.data,
-          items: [
-            {
-              id: "r1",
-              reason: "คำร้องเดิม",
-              status,
-              reportedAt: "2026-10-09T03:00:00.000Z",
-            },
-          ],
-        },
-      });
-      render(<ComplaintsSection token="token" />);
-      fireEvent.click(
-        await screen.findByRole("button", { name: "รายละเอียด" }),
-      );
-      const dialog = screen.getByRole("dialog");
-      expect(within(dialog).getAllByText("-")).toHaveLength(3);
-    },
-  );
-
-  it("renders the empty state when there is nothing in the requested status", async () => {
-    apiFetch.mockResolvedValue(EMPTY);
-
-    render(<ComplaintsSection token="token" />);
-
-    expect(
-      await screen.findByText("ไม่มีข้อร้องเรียนในหมวดนี้"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("เรื่องที่ยังเปิดอยู่")).toBeInTheDocument();
-  });
-
-  it("opens above the whole page and restores panel scrolling after closing", async () => {
-    apiFetch.mockResolvedValue({
-      data: {
-        ...EMPTY.data,
-        items: [
-          {
-            id: "r1",
-            reason: "คำร้อง",
-            status: "OPEN",
-            reportedAt: "2026-10-09T03:00:00.000Z",
-          },
-        ],
-      },
-    });
-    const { container } = render(
-      <div style={{ overflowY: "auto" }}>
-        <ComplaintsSection token="token" />
-      </div>,
+    pick("ประเภทเรื่อง", "ข้อพิพาท");
+    await screen.findByText("กระเป๋าขาด");
+    // The new kind starts unfiltered; nothing of the old filter is sent.
+    expect(pathsFor("/api/orders/executive/disputes").at(-1)).not.toContain(
+      "PAYMENT",
     );
-    const scroller = container.firstElementChild;
-    const previousBodyOverflow = document.body.style.overflow;
-    fireEvent.click(await screen.findByRole("button", { name: "รายละเอียด" }));
-    const dialog = screen.getByRole("dialog");
-    expect(dialog.parentElement.parentElement).toBe(document.body);
-    expect(scroller.style.overflowY).toBe("hidden");
-    expect(document.body.style.overflow).toBe("hidden");
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(scroller.style.overflowY).toBe("auto");
-    expect(document.body.style.overflow).toBe(previousBodyOverflow);
   });
 
-  it("renders error state when apiFetch fails", async () => {
-    apiFetch.mockRejectedValue(new Error("Failed to load reports"));
+  it("filters by status from the counts under the filters", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
 
-    render(<ComplaintsSection token="token" />);
-
-    expect(
-      await screen.findByText("Failed to load reports"),
-    ).toBeInTheDocument();
+    pick("ประเภทเรื่อง", "Ticket");
+    const chip = await screen.findByRole("button", { name: /ตั๋วใหม่ 1/ });
+    fireEvent.click(chip);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+    expect(pathsFor("/api/support/executive/tickets").at(-1)).toContain(
+      "status=NEW",
+    );
+    expect(chip).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("rejects malformed API data and retries without displaying invented zero counts", async () => {
-    apiFetch
-      .mockResolvedValueOnce({ data: { items: "invalid", totalOpen: 0 } })
-      .mockResolvedValueOnce(EMPTY);
-    render(<ComplaintsSection token="token" />);
+  it("changes the window with the period buttons", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    fireEvent.click(screen.getByRole("radio", { name: "7 วัน" }));
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+    let latest = pathsFor("/api/support/executive/tickets").at(-1);
+    expect(latest).toContain("from=2026-10-10");
+    expect(latest).toContain("to=2026-10-17");
+
+    fireEvent.click(screen.getByRole("radio", { name: "30 วัน" }));
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+    latest = pathsFor("/api/support/executive/tickets").at(-1);
+    expect(latest).toContain("from=2026-09-17");
+  });
+
+  it("reads a custom range from two date fields, the last day included", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    expect(screen.queryByLabelText("ตั้งแต่วันที่")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "กำหนดเอง" }));
+    fireEvent.change(screen.getByLabelText("ตั้งแต่วันที่"), {
+      target: { value: "01/10/2569" },
+    });
+    fireEvent.change(screen.getByLabelText("ถึงวันที่"), {
+      target: { value: "05/10/2569" },
+    });
+
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+    const latest = pathsFor("/api/support/executive/tickets").at(-1);
+    expect(latest).toContain("from=2026-10-01");
+    expect(latest).toContain("to=2026-10-06");
+  });
+
+  it("refuses a range that ends before it starts and keeps the last good list", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+    fireEvent.click(screen.getByRole("radio", { name: "กำหนดเอง" }));
+    await screen.findByLabelText("ถึงวันที่");
+    const calls = apiFetch.mock.calls.length;
+
+    fireEvent.change(screen.getByLabelText("ตั้งแต่วันที่"), {
+      target: { value: "10/10/2569" },
+    });
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+    const afterFrom = apiFetch.mock.calls.length;
+    expect(afterFrom).toBeGreaterThan(calls);
+
+    fireEvent.change(screen.getByLabelText("ถึงวันที่"), {
+      target: { value: "01/10/2569" },
+    });
+
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "ข้อมูลข้อร้องเรียนจากระบบไม่ถูกต้อง",
+      "วันที่เริ่มต้นต้องไม่หลังวันที่สิ้นสุด",
     );
-    expect(screen.queryByText("เรื่องที่ยังเปิดอยู่")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "ลองใหม่" }));
-    expect(
-      await screen.findByText("ไม่มีข้อร้องเรียนในหมวดนี้"),
-    ).toBeInTheDocument();
+    expect(apiFetch.mock.calls.length).toBe(afterFrom);
+    expect(screen.getByText("จ่ายเงินแล้วไม่ได้รับของ")).toBeVisible();
   });
 
-  it("ignores an older response after the status filter changes", async () => {
-    let resolveOld;
-    apiFetch
-      .mockResolvedValueOnce(EMPTY)
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveOld = resolve;
-          }),
-      )
-      .mockResolvedValueOnce(EMPTY);
-    const { rerender } = render(<ComplaintsSection token="first-token" />);
-    await screen.findByText("ไม่มีข้อร้องเรียนในหมวดนี้");
-    rerender(<ComplaintsSection token="second-token" />);
-    rerender(<ComplaintsSection token="third-token" />);
-    await screen.findByText("ไม่มีข้อร้องเรียนในหมวดนี้");
-    resolveOld({
-      data: {
-        ...EMPTY.data,
-        items: [
-          {
-            id: "old",
-            status: "OPEN",
-            reason: "Stale report",
-            reportedAt: "2026-10-09T03:00:00.000Z",
-          },
-        ],
-      },
+  it("says which service is unavailable and keeps showing the others", async () => {
+    serve({
+      "/api/support/executive/tickets": () =>
+        Promise.reject(new Error("support unreachable")),
     });
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(3));
-    expect(screen.queryByText("Stale report")).not.toBeInTheDocument();
+    render(<ComplaintsSection token="t" />);
+
+    expect(await screen.findByText("กระเป๋าขาด")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Ticket ไม่พร้อมใช้งานในขณะนี้",
+    );
+    // Its count says so on its card; it is not shown as zero.
+    expect(screen.getByText("ไม่พร้อมใช้งาน")).toBeVisible();
   });
 
-  it("renders real complaint rows and re-fetches with the selected status filter", async () => {
-    apiFetch.mockResolvedValue({
-      data: {
-        items: [
-          {
-            id: "r1",
-            reason: "ผู้ขายไม่ส่งของ",
-            status: "OPEN",
-            reportedAt: "2026-08-01T00:00:00.000Z",
-            targetId: "seller-123",
-            productId: null,
-            reporterName: "สมชาย ใจดี",
-          },
-        ],
-        statusCounts: { OPEN: 1 },
-        totalOpen: 1,
-      },
-      meta: { definitionVersion: "v1" },
+  it("says nothing was found, not an error, when the period is empty", async () => {
+    serve({
+      "/api/auth/executive/reports": () => reportAnswer([]),
+      "/api/support/executive/tickets": () => listAnswer([], TICKET_OPTIONS),
+      "/api/orders/executive/disputes": () => listAnswer([], DISPUTE_OPTIONS),
     });
+    render(<ComplaintsSection token="t" />);
 
-    render(<ComplaintsSection token="token" />);
-
-    expect(await screen.findByText("ผู้ขายไม่ส่งของ")).toBeInTheDocument();
-    expect(screen.getByText(/สมชาย ใจดี/)).toBeInTheDocument();
-
-    apiFetch.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "ยกคำร้อง" }));
-
-    await waitFor(() => {
-      const lastCall = apiFetch.mock.calls.at(-1);
-      expect(lastCall[0]).toContain("status=DISMISSED");
-    });
+    expect(await screen.findByText("ไม่มีรายการในช่วงเวลานี้")).toBeVisible();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("defaults to newest sort, renders anomaly banner, and supports sorting and target filtering", async () => {
-    const mockData = {
-      data: {
-        items: [
-          {
-            id: "r1",
-            reason: "ผู้ขายไม่ส่งของและติดต่อไม่ได้",
-            status: "OPEN",
-            reportedAt: "2026-08-01T00:00:00.000Z",
-            targetId: "seller-123",
-            targetShopName: "ร้านยีนส์เดนิม",
-            targetReportCount: 3,
-            productId: null,
-            reporterName: "สมชาย ใจดี",
-          },
-        ],
-        statusCounts: { OPEN: 1 },
-        totalOpen: 1,
-        anomalySummary: {
+  it("warns about a target complained about again and again", async () => {
+    serve({
+      "/api/auth/executive/reports": () =>
+        reportAnswer([REPORT], {
           detected: true,
           threshold: 3,
           highRiskTargets: [
             {
-              targetId: "seller-123",
-              count: 3,
-              targetShopName: "ร้านยีนส์เดนิม",
+              targetId: "target-1",
+              count: 4,
+              targetName: "สมชาย",
+              targetShopName: "ร้านสมชาย",
             },
           ],
-        },
-      },
-      meta: { definitionVersion: "v1" },
-    };
-
-    apiFetch.mockResolvedValue(mockData);
-
-    render(<ComplaintsSection token="token" />);
-
-    // 1. Verify Anomaly Warning Banner is rendered
-    expect(
-      await screen.findByText(/ตรวจพบเป้าหมายที่มีข้อร้องเรียนสูงผิดปกติ/),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("ผู้ขายไม่ส่งของและติดต่อไม่ได้"),
-    ).toBeInTheDocument();
-    expect(screen.getAllByText(/ร้านยีนส์เดนิม/).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/โดนรายงานรวม/)).not.toBeInTheDocument();
-
-    // Default sort is newest
-    expect(screen.getByLabelText("จัดเรียง:")).toHaveValue("newest");
-
-    // 2. Sort by oldest
-    apiFetch.mockClear();
-    fireEvent.change(screen.getByLabelText("จัดเรียง:"), {
-      target: { value: "oldest" },
+        }),
     });
-    await waitFor(() => {
-      const lastCall = apiFetch.mock.calls.at(-1);
-      expect(lastCall[0]).toContain("sortBy=oldest");
-    });
-    expect(
-      await screen.findByText("ผู้ขายไม่ส่งของและติดต่อไม่ได้"),
-    ).toBeInTheDocument();
+    render(<ComplaintsSection token="t" />);
 
-    // 3. Sort by most_reported
-    apiFetch.mockClear();
-    fireEvent.change(screen.getByLabelText("จัดเรียง:"), {
-      target: { value: "most_reported" },
-    });
-    await waitFor(() => {
-      const lastCall = apiFetch.mock.calls.at(-1);
-      expect(lastCall[0]).toContain("sortBy=most_reported");
-      expect(
-        screen.getByText("เรียงตามเป้าหมายที่โดน report มากที่สุด"),
-      ).toBeInTheDocument();
-    });
+    expect(await screen.findByText(/ร้านสมชาย \(4 ครั้ง\)/)).toBeVisible();
+  });
 
-    // 4. Click high risk target button inside Anomaly Banner
-    apiFetch.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: /ร้านยีนส์เดนิม/ }));
-    await waitFor(() => {
-      const lastCall = apiFetch.mock.calls.at(-1);
-      expect(lastCall[0]).toContain("targetId=seller-123");
-    });
-    expect(await screen.findByText(/ชื่อร้าน:/)).toBeInTheDocument();
+  it("opens the details of a complaint", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("ร้านไม่ส่งของ");
 
-    // 5. Clear target filter using banner button
-    apiFetch.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "ดูทุกเป้าหมาย" }));
-    await waitFor(() => {
-      const lastCall = apiFetch.mock.calls.at(-1);
-      expect(lastCall[0]).not.toContain("targetId=");
-    });
-
-    // 6. Filter by target from individual complaint item
-    apiFetch.mockClear();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "กรองดูเป้าหมายนี้" }),
-    );
-    await waitFor(() => {
-      const lastCall = apiFetch.mock.calls.at(-1);
-      expect(lastCall[0]).toContain("targetId=seller-123");
-    });
-    expect(await screen.findByText(/ชื่อร้าน:/)).toBeInTheDocument();
-
-    // 7. Cancel target filter using "✕ ยกเลิก" button
-    apiFetch.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "✕ ยกเลิก" }));
-    await waitFor(() => {
-      const lastCall = apiFetch.mock.calls.at(-1);
-      expect(lastCall[0]).not.toContain("targetId=");
-    });
+    fireEvent.click(screen.getByRole("button", { name: "รายละเอียด" }));
+    expect(await screen.findByRole("dialog")).toBeVisible();
   });
 });
