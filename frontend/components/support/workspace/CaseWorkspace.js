@@ -348,8 +348,6 @@ export default function CaseWorkspace({
     {
       key: "id",
       header: "เลขเคส",
-      headerClassName: "w-px !pr-8",
-      className: "!pr-8",
       render: (row) => (
         <button
           type="button"
@@ -380,7 +378,7 @@ export default function CaseWorkspace({
       key: "subject",
       header: dispute ? (closedView ? "เหตุผล / ออเดอร์" : "เหตุผล / คู่กรณี") : "หัวข้อ / ผู้แจ้ง",
       render: (row) => (
-        <div className={closedView ? "min-w-[220px] max-w-[420px]" : dispute ? "min-w-[150px] max-w-[200px]" : "min-w-[150px] max-w-[220px]"}>
+        <div className="min-w-0">
           <p className="truncate font-medium text-slate-900" title={row.subject || row.reason}>
             {row.subject || row.reason}
           </p>
@@ -402,7 +400,6 @@ export default function CaseWorkspace({
           {
             key: "amount",
             header: "ยอดเงิน",
-            align: "right",
             render: (row) => (
               <span className="whitespace-nowrap font-medium tabular-nums text-slate-900">
                 {currency(row.order?.finalPrice ?? row.order?.price)}
@@ -452,7 +449,7 @@ export default function CaseWorkspace({
             key: "sla",
             header: "SLA",
             render: (row) => (
-              <div className="min-w-[110px] max-w-[170px] text-xs leading-5">
+              <div className="text-xs leading-5">
                 <SlaIndicator sla={row.sla} />
               </div>
             ),
@@ -464,7 +461,7 @@ export default function CaseWorkspace({
               const mine = (row.assigneeId || row.assignedTo) === user.id;
               const name = mine ? "คุณ" : fallback(row.assigneeName, row.assigneeId || row.assignedTo);
               return (
-                <div className="flex max-w-[140px] items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span
                     aria-hidden="true"
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${mine ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
@@ -489,7 +486,6 @@ export default function CaseWorkspace({
           {
             key: "closedAt",
             header: "ปิดเมื่อ",
-            headerClassName: "w-[120px]",
             render: (row) => (
               <span className="whitespace-nowrap tabular-nums text-slate-600">
                 {thaiDate(row.decidedAt || row.closedAt || row.resolvedAt || row.updatedAt)}
@@ -499,7 +495,6 @@ export default function CaseWorkspace({
           {
             key: "csat",
             header: "ความพึงพอใจ",
-            headerClassName: "w-[300px]",
             render: (row) => <CsatCell ratings={row.csat} />,
           },
         ]
@@ -508,7 +503,6 @@ export default function CaseWorkspace({
       key: "open",
       header: <span className="sr-only">เปิดเคส</span>,
       align: "right",
-      headerClassName: "w-14",
       render: (row) => (
         <button
           type="button"
@@ -526,6 +520,21 @@ export default function CaseWorkspace({
       ),
     },
   ];
+  // Fixed widths (Tailwind literals) keep column rhythm stable across tabs
+  // and row counts; the open action keeps a fixed 64px.
+  const COLUMN_WIDTH = closedView
+    ? { id: "w-[13%]", subject: "w-[35%]", closedAt: "w-[12%]", csat: "w-[34%]" }
+    : dispute
+      ? { id: "w-[11%]", subject: "w-[23%]", amount: "w-[10%]", status: "w-[14%]", priority: "w-[11%]", sla: "w-[13%]", owner: "w-[12%]" }
+      : { id: "w-[12%]", subject: "w-[29%]", status: "w-[14%]", priority: "w-[11%]", sla: "w-[16%]", owner: "w-[12%]" };
+  // Text reads left-aligned; badge-like UI (status, priority, stars, the
+  // open action) is centred in its column.
+  const CENTERED = new Set(["status", "priority", "csat", "open"]);
+  const tableColumns = columns.map((column) => ({
+    ...column,
+    align: CENTERED.has(column.key) ? "center" : "left",
+    headerClassName: column.key === "open" ? "w-16" : COLUMN_WIDTH[column.key],
+  }));
   const mapped = (queue.items || []).map((row) => ({
     ...row,
     ticketNumber:
@@ -595,7 +604,8 @@ export default function CaseWorkspace({
             ทั้งหมด {queue.total || 0} รายการ
           </p>
           <DataTable
-            columns={columns}
+            columns={tableColumns}
+            fixed
             rows={queue.items || []}
             loading={w.loading}
             onRowClick={select}

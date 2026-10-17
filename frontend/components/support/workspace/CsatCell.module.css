@@ -1,13 +1,14 @@
 .cell {
   display: flex;
-  min-width: 200px;
-  max-width: 340px;
+  min-width: 0;
+  align-items: center;
   flex-direction: column;
   gap: 4px;
 }
 
 .summary {
   display: flex;
+  justify-content: center;
   align-items: center;
   gap: 8px;
 }
@@ -72,6 +73,7 @@
 
 .respondents {
   display: flex;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 4px;
 }
@@ -100,6 +102,7 @@
 }
 
 .comment {
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

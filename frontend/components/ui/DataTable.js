@@ -16,6 +16,8 @@ export default function DataTable({
   rowKey = (row) => row.id,
   minWidth = "min-w-[750px]",
   className = "",
+  // Fixed layout keeps column widths stable regardless of row content.
+  fixed = false,
 }) {
   const align = (a) =>
     a === "center" ? "text-center" : a === "right" ? "text-right" : "text-left";
@@ -24,7 +26,7 @@ export default function DataTable({
     <div
       className={`overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] ${className}`}
     >
-      <table className={`w-full ${minWidth} border-collapse text-sm`}>
+      <table className={`w-full ${minWidth} border-collapse text-sm ${fixed ? "table-fixed" : ""}`}>
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold text-slate-500 [&>th:first-child]:pl-5 [&>th:last-child]:pr-5">
             {columns.map((c) => (
