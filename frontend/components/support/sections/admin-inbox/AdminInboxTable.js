@@ -15,11 +15,11 @@ import {
 
 const STATUS_OPTIONS = [
   { value: "PENDING", label: "รอดำเนินการ" },
-  { value: "OPEN", label: "รอดำเนินการ (OPEN)" },
-  { value: "REVIEWED", label: "ตรวจสอบแล้ว (REVIEWED)" },
-  { value: "ACTIONED", label: "จัดการแล้ว (ACTIONED)" },
-  { value: "DISMISSED", label: "ยกเลิกแล้ว (DISMISSED)" },
-  { value: "", label: "ทั้งหมด (ALL)" },
+  { value: "OPEN", label: "รายงานใหม่" },
+  { value: "REVIEWED", label: "กำลังตรวจสอบ" },
+  { value: "ACTIONED", label: "จัดการแล้ว" },
+  { value: "DISMISSED", label: "ยกเลิกแล้ว" },
+  { value: "", label: "ทั้งหมด" },
 ];
 const TICKET_OPTIONS = [
   { value: "ALL", label: "ทุกสถานะ" },
@@ -37,6 +37,7 @@ export default function AdminInboxTable({
   onQInputChange,
   onSearch,
   statusFilter,
+  history = false,
   ticketStatus,
   onTicketStatusChange,
   onStatusFilterChange,
@@ -48,13 +49,13 @@ export default function AdminInboxTable({
   const columns = [
     {
       key: "ticketNumber",
-      header: "Ticket ID",
+      header: "Case ID",
       className:
         "font-mono text-[13px] font-semibold tracking-tight text-slate-500",
     },
     {
       key: "parties",
-      header: "คู่กรณี / ผู้แจ้ง",
+      header: "Reported User / Requester",
       className: "text-xs font-medium",
       render: (t) => (
         <div className="flex flex-col gap-0.5">
@@ -86,20 +87,20 @@ export default function AdminInboxTable({
     },
     {
       key: "subject",
-      header: "หัวข้อปัญหา",
+      header: "Subject",
       className:
         "max-w-[200px] truncate text-sm font-medium text-slate-900 transition-colors group-hover:text-emerald-700",
     },
     {
       key: "priority",
-      header: "ความสำคัญ",
+      header: "Priority",
       align: "center",
       render: (t) =>
         // A report is always treated as the most urgent thing in the queue,
         // regardless of the priority field it was mapped from.
         t._type === "REPORT" ? (
           <Badge
-            text="ด่วนที่สุด (CRITICAL)"
+            text="ด่วนที่สุด"
             style="bg-red-100 text-red-700 border border-red-200"
           />
         ) : (
@@ -111,7 +112,7 @@ export default function AdminInboxTable({
     },
     {
       key: "status",
-      header: "สถานะ",
+      header: "Status",
       align: "center",
       render: (t) => (
         <Badge
@@ -122,7 +123,7 @@ export default function AdminInboxTable({
     },
     {
       key: "assigneeId",
-      header: "ผู้รับผิดชอบ",
+      header: "Assigned Agent",
       align: "center",
       className: "text-xs font-medium text-slate-500",
       render: (t) =>
@@ -159,21 +160,21 @@ export default function AdminInboxTable({
               aria-label="ค้นหาเคส"
               placeholder="ค้นหาเคส..."
             />
-          </form><DropdownFilter
+          </form>{!history && <DropdownFilter
             value={ticketStatus}
             onChange={onTicketStatusChange}
             options={TICKET_OPTIONS}
             align="right"
-          /></>
+          />}</>
         )}
 
         {source === "reports" && (
-          <><form onSubmit={e=>{e.preventDefault();onSearch();}} className="flex-1"><Input icon="search" value={qInput} onChange={e=>onQInputChange(e.target.value)} aria-label="ค้นหาเคส" placeholder="ค้นหารายงาน..." /></form><DropdownFilter
+          <><form onSubmit={e=>{e.preventDefault();onSearch();}} className="flex-1"><Input icon="search" value={qInput} onChange={e=>onQInputChange(e.target.value)} aria-label="ค้นหาเคส" placeholder="ค้นหารายงาน..." /></form>{!history && <DropdownFilter
             value={statusFilter}
             onChange={onStatusFilterChange}
             options={STATUS_OPTIONS}
             align="right"
-          /></>
+          />}</>
         )}
       </div>
 
@@ -193,7 +194,7 @@ export default function AdminInboxTable({
       />
 
       <p className="mt-3 text-right text-xs font-medium text-slate-500">
-        คลิกที่แถวตั๋วเพื่อเปิดหน้าต่างแชท (Chat) เพื่อจัดการคำร้อง
+        เลือกคำร้องเพื่อดูรายละเอียดและประวัติการสนทนา
       </p>
       <Pagination page={page} totalPages={totalPages} onChange={onPageChange} />
     </>

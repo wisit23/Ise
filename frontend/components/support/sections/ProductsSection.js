@@ -213,7 +213,7 @@ export default function ProductsSection({ token }) {
               inventory_2
             </span>
             <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-              จัดการสินค้า
+              Product Moderation
             </h2>
             <p className="mt-2 text-sm font-medium text-slate-500">
               ค้นหาสินค้าเพื่อลบออกจากระบบ หรือกู้คืนสินค้าที่เคยลบ
@@ -316,7 +316,7 @@ export default function ProductsSection({ token }) {
                         setReasonById((r) => ({ ...r, [p.id]: e.target.value }))
                       }
                       placeholder="เหตุผลในการกู้คืน..."
-                      className="min-w-[200px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
+                      className="min-w-0 w-full sm:w-auto sm:min-w-[200px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
                     />
                     <button
                       onClick={() => handleRestore(p)}
@@ -334,7 +334,7 @@ export default function ProductsSection({ token }) {
                         setReasonById((r) => ({ ...r, [p.id]: e.target.value }))
                       }
                       placeholder="เหตุผลในการลบ..."
-                      className="flex-1 min-w-[200px] rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
+                      className="flex-1 min-w-0 w-full sm:w-auto sm:min-w-[200px] rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
                     />
                     <button
                       onClick={() => handleRemove(p)}
@@ -363,7 +363,7 @@ export default function ProductsSection({ token }) {
         )}
       </div>
 
-      <Modal open={Boolean(selectedProduct)} onClose={() => setSelectedProduct(null)} title="รายละเอียดสินค้า" size="lg">
+      <Modal open={Boolean(selectedProduct)} onClose={() => setSelectedProduct(null)} title="Product Details" size="lg">
         {selectedProduct && <div className="space-y-3 p-5 text-sm text-slate-700">
           <p><strong>ชื่อ:</strong> {selectedProduct.title}</p>
           <p className="break-all"><strong>รหัสสินค้า:</strong> {selectedProduct.id}</p>

@@ -4,6 +4,14 @@ const prisma = require("../../models/prismaClient");
 const model = require("./ticketModel");
 const { toTicket } = require("./ticketShape");
 
+test("personal history selects resolved/closed tickets belonging to the current staff", () => {
+  const filter = model.queueFilter({ role: "TRUST_AND_SAFETY", scope: "history", assigneeId: "safety-1", status: "ESCALATED" });
+  assert.match(filter.sql, /assignee_id = .*responder_id = /);
+  assert.match(filter.sql, /s.code IN \('RESOLVED', 'CLOSED'\)/);
+  assert.ok(filter.values.includes("safety-1"));
+  assert.ok(!filter.values.includes("ESCALATED"));
+});
+
 test("admin queue includes closed/escalated while CS sees only own or unassigned cases", () => {
   const admin = model.queueFilter({ role: "ADMIN", scope: "all" });
   assert.equal(admin.sql, "");

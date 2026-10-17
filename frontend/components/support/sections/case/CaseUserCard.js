@@ -29,6 +29,7 @@ export default function CaseUserCard({
   icon,
   tone = "requester",
   busy,
+  actionsDisabled = false,
   onWarn,
   onBan,
   onRestrictBuyer,
@@ -56,7 +57,7 @@ export default function CaseUserCard({
                 size="sm"
                 variant="ghost"
                 icon="warning"
-                disabled={busy}
+                disabled={busy || actionsDisabled}
                 onClick={() => onWarn(userId)}
                 className="bg-amber-50 font-bold text-amber-700 hover:bg-amber-100 hover:text-amber-800"
               >
@@ -68,7 +69,7 @@ export default function CaseUserCard({
                 size="sm"
                 variant="ghost"
                 icon="block"
-                disabled={busy}
+                disabled={busy || actionsDisabled}
                 onClick={() => onBan(userId)}
                 className={
                   isRequester
@@ -79,8 +80,30 @@ export default function CaseUserCard({
                 {banLabel}
               </Button>
             )}
-            {onRestrictBuyer && <Button size="sm" variant="ghost" icon="block" disabled={busy} onClick={() => onRestrictBuyer(userId)} className="bg-orange-50 font-bold text-orange-700 hover:bg-orange-100">เพิกถอนสิทธิ์ซื้อ</Button>}
-            {onRestrictSeller && <Button size="sm" variant="ghost" icon="block" disabled={busy} onClick={() => onRestrictSeller(userId)} className="bg-orange-50 font-bold text-orange-700 hover:bg-orange-100">เพิกถอนสิทธิ์ขาย</Button>}
+            {onRestrictBuyer && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="block"
+                disabled={busy || actionsDisabled}
+                onClick={() => onRestrictBuyer(userId)}
+                className="bg-orange-50 font-bold text-orange-700 hover:bg-orange-100"
+              >
+                เพิกถอนสิทธิ์ซื้อ
+              </Button>
+            )}
+            {onRestrictSeller && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="block"
+                disabled={busy || actionsDisabled}
+                onClick={() => onRestrictSeller(userId)}
+                className="bg-orange-50 font-bold text-orange-700 hover:bg-orange-100"
+              >
+                เพิกถอนสิทธิ์ขาย
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -90,7 +113,7 @@ export default function CaseUserCard({
         >
           {(userName || userId).slice(0, 1).toUpperCase()}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 break-words">
           <p className="text-sm font-bold text-slate-800">
             {userName || `รหัส: ${userId.slice(0, 16)}`}
           </p>

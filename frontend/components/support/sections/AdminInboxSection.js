@@ -62,6 +62,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
   const [statusFilter, setStatusFilter] = useState("PENDING");
   const [ticketStatus, setTicketStatus] = useState("ESCALATED");
   const [workScope, setWorkScope] = useState("all");
+  const showHistory = workScope === "history";
   const [source, setSource] = useState(initialReportId ? "reports" : "all");
   const [selectedDispute, setSelectedDispute] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -119,7 +120,10 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
     if (item._type === "REPORT") {
       try {
         const report=await apiFetch(`/api/auth/admin/reports/${item.id}`,{token});
-        if(request===selectionRequest.current)setSelectedTicket({...item,rawReport:report});
+        if(request===selectionRequest.current) {
+          setSelectedTicket({...item,rawReport:report});
+          setReportDecision(report.targetId ? "SUSPEND_USER" : "DISMISS");
+        }
       } catch(err){if(request===selectionRequest.current)setActionError(err.message);}
       return;
     }
@@ -157,6 +161,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
     });
     if (q) params.set("q", q);
     if (source === "all" || ticketStatus !== "ALL") params.set("status", source === "all" ? "ESCALATED" : ticketStatus);
+    if (showHistory) { params.delete("status"); params.set("sort", "newest"); }
 
     const repParams = new URLSearchParams({
       page,
@@ -166,6 +171,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
     });
     if(q) repParams.set("q",q);
     const disputeParams = new URLSearchParams({ page, limit: PAGE_SIZE, status: "OPEN", assignedRole: "ADMIN", scope: workScope });
+    if (showHistory) { disputeParams.set("status", "DECIDED"); disputeParams.set("sort", "newest"); }
     if (q) disputeParams.set("q", q);
     const request = source === "all"
       ? Promise.all([
@@ -178,7 +184,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
             subject: r.reason || "รายงาน", requesterId: r.reporterId,
             requesterName: [r.reporter?.firstName, r.reporter?.lastName].filter(Boolean).join(" ") || r.reporter?.email,
             targetId: r.targetId, assigneeId: r.reviewedBy, priority: "URGENT",
-            status: r.status === "OPEN" ? "NEW" : "IN_PROGRESS", createdAt: r.reportedAt, rawReport: r,
+            status: r.status === "OPEN" ? "NEW" : r.status === "REVIEWED" ? "IN_PROGRESS" : "RESOLVED", createdAt: r.reportedAt, rawReport: r,
           }))]
             .sort((a, b) => new Date(a.slaExpiresAt || a.slaDueAt || a.createdAt) - new Date(b.slaExpiresAt || b.slaDueAt || b.createdAt)),
           totalPages: Math.max(tickets.totalPages || 1, disputes.totalPages || 1, reports.totalPages || 1),
@@ -365,36 +371,16 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
       return handleStatusChange("ESCALATED", reason);
     }
 
-    if (action.kind === "restrict") {
-      return runAction(() => apiFetch(`/api/auth/admin/users/${action.userId}/commerce-restriction`, {
-        method: "POST", token, body: { scope: action.scope, reason },
-      }), `เพิกถอนสิทธิ์${action.scope === "BUYER" ? "ซื้อ" : "ขาย"}สำเร็จ`);
+    if (!selectedTicket?.capabilities?.canModerateUsers) {
+      setActionError("ต้องรับผิดชอบเคสนี้ก่อน จึงจะดำเนินการกับบัญชีได้");
+      return;
     }
-
-    if (action.kind === "ban") {
-      return runAction(
-        () =>
-          apiFetch(`/api/auth/admin/bulk`, {
-            method: "POST",
-            token,
-            body: {
-              action: "SUSPEND_USER",
-              ids: [action.userId],
-              reason,
-            },
-          }),
-        `ระงับบัญชี${action.roleLabel || "ผู้ใช้"}สำเร็จ`,
-      );
-    }
-
     return runAction(
-      () =>
-        apiFetch(`/api/auth/admin/users/${action.userId}/warn`, {
-          method: "POST",
-          token,
-          body: { reason },
-        }),
-      `บันทึกการตักเตือน${action.roleLabel || "ผู้ใช้"}สำเร็จ`,
+      () => apiFetch(`/api/support/tickets/${selectedTicket.id}/moderation`, {
+        method: "POST", token,
+        body: { action: action.kind === "restrict" ? action.scope === "BUYER" ? "restrictBuyer" : "restrictSeller" : action.kind, targetId: action.userId, reason, version: selectedTicket.version },
+      }),
+      "ดำเนินการกับบัญชีเรียบร้อยแล้ว",
     );
   }
 
@@ -407,7 +393,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
       ban: isRequester
         ? {
             title: "⚠️ ยืนยันการระงับบัญชีผู้แจ้งปัญหา?",
-            description: `คุณกำลังจะระงับบัญชี (SUSPEND) ของ "${roleLabel}" (รหัส: ${targetUserId}) ซึ่งเป็นผู้ส่งคำร้องเข้ามา ไม่ใช่คู่กรณี บัญชีนี้จะไม่สามารถเข้าใช้งานระบบได้ทันที`,
+            description: `คุณกำลังจะระงับบัญชี ของ "${roleLabel}" (รหัส: ${targetUserId}) ซึ่งเป็นผู้ส่งคำร้องเข้ามา ไม่ใช่คู่กรณี บัญชีนี้จะไม่สามารถเข้าใช้งานระบบได้ทันที`,
             confirmLabel: "ยืนยันระงับบัญชีผู้แจ้ง",
             tone: "danger",
             reason: "required",
@@ -415,7 +401,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
           }
         : {
             title: `ระงับบัญชีคู่กรณี (${targetUserId ? targetUserId.slice(0, 8) : ""}...)?`,
-            description: `ผู้ใช้เป้าหมาย/คู่กรณี (รหัส: ${targetUserId}) จะเข้าสู่ระบบไม่ได้ทันที (SUSPEND_USER) และจะถูกบันทึกใน Audit Log`,
+            description: `ผู้ใช้เป้าหมาย/คู่กรณี (รหัส: ${targetUserId}) จะเข้าสู่ระบบไม่ได้ทันที และจะถูกบันทึกใน ประวัติการดำเนินการ`,
             confirmLabel: "ระงับบัญชีคู่กรณี",
             tone: "danger",
             reason: "required",
@@ -458,17 +444,17 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
 
   return (
     <>
-      <div className="animate-fade-in-up flex min-h-full flex-col">
+      <div className="animate-fade-in-up flex min-h-full min-w-0 flex-col">
         <div
-          className="mb-4 flex gap-2"
+          className="mb-4 flex flex-wrap gap-2"
           role="tablist"
           aria-label="ประเภทเคส Trust and Safety"
         >
           {[
-            ["all", "ทั้งหมด"],
-            ["disputes", "ข้อพิพาทรอตัดสินเงิน"],
-            ["tickets", "ทิกเก็ตขออนุมัติพิเศษ"],
-            ["reports", "รายงานผู้ใช้"],
+            ["all", "All"],
+            ["disputes", showHistory ? "Resolved Disputes" : "Financial Disputes"],
+            ["tickets", "Escalated Tickets"],
+            ["reports", "User Reports"],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -492,31 +478,34 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
           ))}
         </div>
         <div className="mb-4 flex flex-wrap items-center gap-2" aria-label="กรองเจ้าของงาน">
-          <span className="text-sm text-slate-600">งาน:</span>
-          {[["all", "ทั้งหมด"], ["mine", "งานของฉัน"], ["unassigned", "ยังไม่มีคนรับ"]].map(([value, label]) => (
-            <button key={value} type="button" aria-pressed={workScope === value} onClick={() => { setWorkScope(value); setPage(1); setItems([]); }} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${workScope === value ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700"}`}>{label}</button>
+          <span className="text-sm text-slate-600">View:</span>
+          {[["all", "All"], ["mine", "My Work"], ["unassigned", "Unassigned"], ["history", "My History"]].map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={workScope === value} onClick={() => { selectionRequest.current += 1; setSelectedTicket(null); setSelectedDispute(null); setConversationId(null); savedPages.current = {all:1,tickets:1,reports:1,disputes:1}; setWorkScope(value); setPage(1); setItems([]); }} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${workScope === value ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700"}`}>{label}</button>
           ))}
         </div>
         {error && <Alert className="mb-3">{source === "reports" && <span>โหลดรายงานไม่สำเร็จ</span>} {error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setRefreshKey((k) => k + 1)}>ลองใหม่</button></Alert>}
 
+        {showHistory && <p className="mb-3 text-sm text-slate-500">แสดงเคสของคุณที่ตัดสิน แก้ไข ปิดงาน หรือจัดการรายงานเสร็จแล้ว คลิกเคสเพื่อดูรายละเอียด</p>}
         {(source === "all" || source === "disputes") ? <div className="space-y-2">
           <form onSubmit={(e) => { e.preventDefault(); setQ(qInput.trim()); setPage(1); setItems([]); }} className="mb-3 flex gap-2"><input value={qInput} onChange={(e) => setQInput(e.target.value)} aria-label="ค้นหาเคส Trust and Safety" placeholder="ค้นหาเลขออเดอร์หรือเหตุผล" className="min-w-0 flex-1 rounded-lg border bg-white px-3 py-2 text-sm" /><button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">ค้นหา</button></form>
           {loading && <p className="text-sm text-slate-500">กำลังโหลดคิวงาน...</p>}
-          {!loading && items.length === 0 && <p className="rounded-xl border bg-white p-6 text-sm text-slate-500">ไม่มีเคสที่รอทีม Trust &amp; Safety</p>}
+          {!loading && !error && items.length === 0 && <p className="rounded-xl border bg-white p-6 text-sm text-slate-500">{showHistory ? "ยังไม่มีประวัติงานที่คุณดำเนินการเสร็จแล้ว" : "ไม่มีเคสที่รอทีม Trust & Safety"}</p>}
           {items.map((item) => {
             const isDispute = item._type === "DISPUTE";
             const isReport = item._type === "REPORT";
             const amount = item.order?.finalPrice ?? item.order?.price;
             const deadline = item.slaExpiresAt || item.slaDueAt;
-            return <button type="button" key={`${item._type || "TICKET"}-${item.id}`} onClick={() => selectCase(item)} className="grid w-full grid-cols-1 gap-2 rounded-xl border bg-white p-4 text-left shadow-sm hover:border-indigo-300 sm:grid-cols-5">
-              <span className="text-sm font-bold"><span className={`mr-2 rounded px-2 py-1 text-[10px] ${isDispute ? "bg-amber-100 text-amber-800" : isReport ? "bg-red-100 text-red-800" : "bg-indigo-100 text-indigo-800"}`}>{isDispute ? "DISPUTE" : isReport ? "REPORT" : "TICKET"}</span>{isDispute ? item.orderId?.slice(0, 10) : item.ticketNumber}</span>
-              <span className="truncate text-sm">{isDispute ? item.reason : item.subject}</span>
-              <span className="text-xs">Hold: {isDispute && typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</span>
+            return <button type="button" key={`${item._type || "TICKET"}-${item.id}`} onClick={() => selectCase(item)} className={`grid w-full grid-cols-1 gap-2 rounded-xl border bg-white p-4 text-left shadow-sm hover:border-indigo-300 ${showHistory ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}>
+              <span className="text-sm font-bold"><span className={`mr-2 rounded px-2 py-1 text-[10px] ${isDispute ? "bg-amber-100 text-amber-800" : isReport ? "bg-red-100 text-red-800" : "bg-indigo-100 text-indigo-800"}`}>{isDispute ? "ข้อพิพาท" : isReport ? "รายงาน" : "คำร้อง"}</span>{isDispute ? item.orderId?.slice(0, 10) : item.ticketNumber}</span>
+              <span className="min-w-0 break-words text-sm">{isDispute ? item.reason : item.subject}</span>
+              {showHistory && <span className="text-xs font-semibold text-emerald-700">{isDispute ? "ตัดสินแล้ว" : isReport ? item.rawReport?.status === "DISMISSED" ? "ยกเลิกรายงานแล้ว" : "จัดการรายงานแล้ว" : item.status === "CLOSED" ? "ปิดแล้ว" : "แก้ไขแล้ว"}</span>}
+              <span className="text-xs">Escrow: {isDispute && typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</span>
               <span className="text-xs">SLA: {deadline ? new Date(deadline).toLocaleString("th-TH") : "—"}</span>
-              <span className="truncate text-xs">ผู้รับผิดชอบ: {item.assigneeName || item.assigneeId || item.assignedTo || "ยังไม่มีคนรับ"}</span>
+              <span className="min-w-0 break-words text-xs">ผู้รับผิดชอบ: {item.assigneeName || item.assigneeId || item.assignedTo || "ยังไม่มีคนรับ"}</span>
             </button>;
           })}
-          {source === "all" && page < totalPages && <button type="button" onClick={() => setPage((p) => p + 1)} className="rounded-lg border bg-white px-4 py-2 text-sm font-bold text-indigo-700">โหลดเคสเพิ่ม</button>}
+          {page < totalPages && <button type="button" onClick={() => setPage((p) => p + 1)} className="rounded-lg border bg-white px-4 py-2 text-sm font-bold text-indigo-700">{source === "all" ? "โหลดเคสเพิ่ม" : "หน้าถัดไป"}</button>}
+          {source === "disputes" && page > 1 && <button type="button" onClick={() => setPage((p) => p - 1)} className="rounded-lg border bg-white px-4 py-2 text-sm font-bold">ก่อนหน้า</button>}
         </div> : <AdminInboxTable
           items={items}
           source={source}
@@ -528,6 +517,7 @@ export default function AdminInboxSection({ token, currentUserId, initialReportI
             setPage(1);
           }}
           statusFilter={statusFilter}
+          history={showHistory}
           ticketStatus={ticketStatus}
           onTicketStatusChange={(v) => { setTicketStatus(v); setPage(1); }}
           onStatusFilterChange={(v) => {

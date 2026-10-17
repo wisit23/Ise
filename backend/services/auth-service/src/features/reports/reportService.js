@@ -100,13 +100,13 @@ function reportSearchWhere(search) {
   };
 }
 
-async function listReports({ page, limit, status, search, scope = "all", staffId }) {
+async function listReports({ page, limit, status, search, scope = "all", staffId }, db = prisma) {
   const searchWhere = reportSearchWhere(search);
   const where = {};
-  if (!["all", "mine", "unassigned"].includes(scope)) {
+  if (!["all", "mine", "unassigned", "history"].includes(scope)) {
     throw badRequest("invalid report scope");
   }
-  if (scope === "mine") {
+  if (scope === "mine" || scope === "history") {
     if (!staffId) throw badRequest("staffId is required for mine scope");
     where.reviewedBy = staffId;
   }
@@ -116,19 +116,20 @@ async function listReports({ page, limit, status, search, scope = "all", staffId
   else if (status.trim() && status.trim() !== "ALL") where.status = status.trim();
   if (scope === "unassigned") where.status = "OPEN";
   Object.assign(where, searchWhere);
+  if (scope === "history") where.status = { in: ["ACTIONED", "DISMISSED"] };
   const [items, total] = await Promise.all([
-    prisma.report.findMany({
+    db.report.findMany({
       where,
       include: {
         reporter: {
           select: { id: true, email: true, firstName: true, lastName: true },
         },
       },
-      orderBy: { reportedAt: "asc" },
+      orderBy: { reportedAt: scope === "history" ? "desc" : "asc" },
       skip: (page - 1) * limit,
       take: limit,
     }),
-    prisma.report.count({ where }),
+    db.report.count({ where }),
   ]);
   return { items, total };
 }

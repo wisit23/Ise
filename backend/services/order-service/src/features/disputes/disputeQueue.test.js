@@ -2,6 +2,19 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const model = require("./disputeModel");
 const service = require("./disputeService");
+
+test("personal completed history filters by owner and decided status before counting/paging", async () => {
+  let query, count;
+  const db = { disputeCase: {
+    findMany: async (options) => { query = options; return []; },
+    count: async (options) => { count = options; return 0; },
+  } };
+  await model.listQueue({ scope: "history", userId: "safety-1", status: "OPEN", skip: 15, take: 15, sort: "newest" }, db);
+  assert.equal(query.where.status, "DECIDED");
+  assert.ok(query.where.AND.some((clause) => clause.assignedTo === "safety-1"));
+  assert.deepEqual(query.where, count.where);
+  assert.equal(query.skip, 15);
+});
 test("CS queue cannot remove access restrictions using scope or team filters", async (t) => {
   let input;
   t.mock.method(model, "listQueue", async (options) => {

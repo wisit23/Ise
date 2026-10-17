@@ -2,6 +2,18 @@ import { useState } from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import Modal from "./Modal";
 
+test("fullscreen cases use a viewport portal and preserve keyboard close", () => {
+  const onClose = jest.fn();
+  const { container } = render(<div style={{ transform: "translateY(0)" }}><Modal open onClose={onClose} title="รายละเอียดเคส" placement="fullscreen"><p>เนื้อหาเคส</p></Modal></div>);
+  const dialog = screen.getByRole("dialog", { name: "รายละเอียดเคส" });
+  expect(container.contains(dialog)).toBe(false);
+  expect(dialog).toHaveClass("h-dvh", "w-full");
+  expect(dialog.className).not.toMatch(/max-w-/);
+  expect(document.body.style.overflow).toBe("hidden");
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
 function Harness({ onClose }) {
   const [open, setOpen] = useState(false);
   return (

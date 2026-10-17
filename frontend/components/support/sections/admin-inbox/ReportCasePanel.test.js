@@ -14,6 +14,7 @@ test("shows report category without product or chat controls", () => {
 
   expect(screen.getByText("หลอกลวงหรือฉ้อโกง")).toBeInTheDocument();
   expect(screen.queryByText("สินค้าเป้าหมาย:")).not.toBeInTheDocument();
-  expect(screen.queryByText("รายละเอียดสินค้า")).not.toBeInTheDocument();
+  expect(screen.getByText("Product Details")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /View Product/ })).toHaveAttribute("href", "/products/legacy-product-1");
   expect(screen.queryByText("ดูบทสนทนาก่อนหน้า")).not.toBeInTheDocument();
 });

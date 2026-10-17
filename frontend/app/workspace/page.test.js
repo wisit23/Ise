@@ -31,7 +31,7 @@ it("keeps Tickets and Disputes for CS but removes them from Trust and Safety", a
     getStoredUser.mockReturnValue({ id: "safety-1", role, roles: [] });
     const { unmount } = render(<SupportPanelPage />);
     const safetyMenu = within(screen.getByRole("navigation"));
-    expect(await safetyMenu.findByRole("button", { name: "เคสส่งต่อ" })).toBeInTheDocument();
+    expect(await safetyMenu.findByRole("button", { name: "Escalation Inbox" })).toBeInTheDocument();
     expect(safetyMenu.queryByRole("button", { name: "Tickets" })).not.toBeInTheDocument();
     expect(safetyMenu.queryByRole("button", { name: "Disputes" })).not.toBeInTheDocument();
     unmount();

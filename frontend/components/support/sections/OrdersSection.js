@@ -8,13 +8,13 @@ import RadioSelect from "../../ui/RadioSelect";
 import ConfirmDialog from "../../ui/ConfirmDialog";
 import { useToast } from "../../ui/ToastProvider";
 import { apiFetch } from "../../../lib/api";
-import { ORDER_STATUS_LABEL } from "../../../lib/supportConstants";
+import { ORDER_STATUS_LABEL, REPORT_STATUS_LABEL, safetyActionLabel } from "../../../lib/supportConstants";
 
 const SEARCH_TYPE_OPTIONS = [
-  { value: "orderId", label: "รหัสคำสั่งซื้อ (Order ID)" },
-  { value: "buyerId", label: "รหัสผู้ซื้อ (Buyer ID / Email)" },
-  { value: "sellerId", label: "รหัสผู้ขาย (Seller ID / Shop Name / Email)" },
-  { value: "userId", label: "รหัสผู้ใช้ทั่วไป (User ID / Email)" },
+  { value: "orderId", label: "Order ID" },
+  { value: "buyerId", label: "Buyer ID / Email" },
+  { value: "sellerId", label: "Seller / Shop / Email" },
+  { value: "userId", label: "User ID / Email" },
 ];
 
 const SEARCH_PLACEHOLDERS = {
@@ -24,15 +24,7 @@ const SEARCH_PLACEHOLDERS = {
   userId: "ระบุ User ID หรืออีเมลของผู้ใช้งาน...",
 };
 
-const ORDER_STATUS_STYLE = {
-  pending: "border border-amber-400 text-amber-700 bg-amber-50",
-  confirmed: "border border-sky-400 text-sky-700 bg-sky-50",
-  shipped: "border border-blue-400 text-blue-700 bg-blue-50",
-  completed: "border border-emerald-400 text-emerald-700 bg-emerald-50",
-  cancelled: "border border-slate-300 text-slate-500 bg-slate-50",
-  disputed: "border border-red-400 text-red-700 bg-red-50",
-  refunded: "border border-purple-400 text-purple-700 bg-purple-50",
-};
+const ORDER_STATUS_STYLE = "border border-slate-200 text-slate-600 bg-slate-100";
 
 const KYC_STATUS_STYLE = {
   VERIFIED: "border border-emerald-400 text-emerald-700 bg-emerald-50",
@@ -143,8 +135,19 @@ export default function OrdersSection({
         }),
       ),
     );
+    const products = new Map(await Promise.all(
+      [...new Set(orders.filter((order) => !order.productTitle && order.productId).map((order) => order.productId))].map(async (id) => {
+        try {
+          const product = await apiFetch(`/api/products/${encodeURIComponent(id)}`, { token });
+          return [id, product.title];
+        } catch {
+          return [id, ""];
+        }
+      }),
+    ));
     return orders.map((order) => ({
       ...order,
+      productTitle: order.productTitle || products.get(order.productId) || "ไม่พบชื่อสินค้า",
       buyer: users.get(order.buyerId),
       seller: users.get(order.sellerId),
     }));
@@ -407,7 +410,7 @@ export default function OrdersSection({
       tone: "primary",
     },
     suspend: {
-      title: "ยืนยันการระงับบัญชีผู้ใช้งาน (Ban)",
+      title: "ยืนยันการระงับบัญชี",
       description: `คุณกำลังจะระงับบัญชีของคุณ ${pendingAction?.userName || ""} ผู้ใช้จะไม่สามารถเข้าสู่ระบบได้${hasCommerceRestriction ? " ข้อจำกัดสิทธิ์ซื้อขายเดิมจะสิ้นสุดและบันทึกไว้ในประวัติ เมื่อปลดแบนจะไม่กลับมาจำกัดสิทธิ์อัตโนมัติ" : ""}`,
       label: "ระงับบัญชีทันที",
       reasonLabel: "เหตุผลในการระงับบัญชี",
@@ -436,7 +439,7 @@ export default function OrdersSection({
     },
     restoreCommerce: {
       title: "คืนสิทธิ์การซื้อขาย",
-      description: `คืนเฉพาะสิทธิ์การซื้อขายของคุณ ${pendingAction?.userName || ""} โดยไม่ปลด Hold หรือ moderation จากเคสอื่น`,
+      description: `คืนเฉพาะสิทธิ์การซื้อขายของคุณ ${pendingAction?.userName || ""} โดยไม่เปลี่ยนการพักเงินหรือข้อจำกัดจากเคสอื่น`,
       label: "ยืนยันคืนสิทธิ์",
       reasonLabel: "เหตุผลในการคืนสิทธิ์",
       tone: "primary",
@@ -467,7 +470,7 @@ export default function OrdersSection({
             manage_search
           </span>
           <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-            ศูนย์ค้นหาข้อมูล Trust & Safety
+            Trust & Safety Search
           </h2>
           <p className="mt-2 text-sm font-medium text-slate-500 max-w-md mx-auto">
             ค้นหาข้อมูลคำสั่งซื้อ ผู้ซื้อ ผู้ขาย หรือบัญชีผู้ใช้งาน
@@ -484,7 +487,7 @@ export default function OrdersSection({
       >
         <form
           onSubmit={handleFormSubmit}
-          className="relative flex w-full items-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
+          className="relative flex w-full flex-wrap items-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
         >
           <RadioSelect
             options={SEARCH_TYPE_OPTIONS}
@@ -495,11 +498,11 @@ export default function OrdersSection({
             }}
             variant="panel"
             size="sm"
-            className="w-56 border-r border-slate-200 shrink-0"
+            className="w-full shrink-0 border-b border-slate-200 sm:w-56 sm:border-b-0 sm:border-r"
             buttonClassName="!border-0 !shadow-none bg-slate-50/80 rounded-l-[8px] rounded-r-none py-2.5 pl-3.5 pr-2.5 text-xs font-semibold"
           />
 
-          <div className="flex flex-1 items-center px-3">
+          <div className="flex min-w-0 flex-1 items-center px-3">
             <span className="material-symbols-outlined mr-2 text-[20px] text-slate-400">
               search
             </span>
@@ -585,19 +588,19 @@ export default function OrdersSection({
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white text-xl font-bold shadow-md shadow-emerald-500/20">
                   {userDisplayName.charAt(0).toUpperCase()}
                 </div>
-                <div className="space-y-1">
+                <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-3 flex-wrap">
                     <h3 className="text-lg font-bold text-slate-900">
                       {userDisplayName}
                     </h3>
                     {userResult.status === "ACTIVE" ? (
                       <Badge
-                        text="บัญชีปกติ (ACTIVE)"
+                        text="บัญชีปกติ"
                         style="bg-emerald-50 text-emerald-700 border border-emerald-300 font-semibold"
                       />
                     ) : userResult.status === "SUSPENDED" ? (
                       <Badge
-                        text="ถูกระงับ (SUSPENDED)"
+                        text="ถูกระงับ"
                         style="bg-rose-50 text-rose-700 border border-rose-300 font-semibold"
                       />
                     ) : userResult.status?.startsWith("RESTRICTED_") ? (
@@ -755,7 +758,7 @@ export default function OrdersSection({
                     <span className="material-symbols-outlined text-[16px] text-rose-600">
                       block
                     </span>
-                    ระงับบัญชี (Ban)
+                    ระงับบัญชี
                   </button>
                 ) : userResult.status === "SUSPENDED" ? (
                   <button
@@ -783,7 +786,7 @@ export default function OrdersSection({
               <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-500">
-                    รายงานที่ได้รับ (Reports)
+                    รายงานที่ได้รับ
                   </span>
                   <span className="material-symbols-outlined text-[18px] text-slate-400">
                     flag
@@ -806,7 +809,7 @@ export default function OrdersSection({
               <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-500">
-                    การตักเตือน (Warnings)
+                    การตักเตือน
                   </span>
                   <span className="material-symbols-outlined text-[18px] text-amber-500">
                     warning
@@ -896,12 +899,12 @@ export default function OrdersSection({
             {userResult.sellerProfile && (
               <div className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50/30 p-5">
                 <div className="flex items-center justify-between mb-3 pb-3 border-b border-emerald-100/60">
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="material-symbols-outlined text-[20px] text-emerald-600">
                       storefront
                     </span>
                     <span className="text-sm font-bold text-slate-800">
-                      ข้อมูลร้านค้า (Seller Profile)
+                      ข้อมูลร้านค้า
                     </span>
                   </div>
                   <Badge
@@ -940,7 +943,7 @@ export default function OrdersSection({
           <div className="grid gap-4 lg:grid-cols-2">
             {[
               ["reports", "ประวัติ Report"],
-              ["actions", "ประวัติ Warning / Restriction / Suspend / Restore"],
+              ["actions", "ประวัติการดำเนินการกับบัญชี"],
             ].map(([kind, label]) => {
               const history = safetyHistory[kind];
               return (
@@ -989,8 +992,8 @@ export default function OrdersSection({
                               <div>
                                 <p className="font-bold text-slate-800">
                                   {kind === "reports"
-                                    ? `REP-${item.id.slice(0, 6).toUpperCase()} · ${item.status}`
-                                    : item.action}
+                                    ? `REP-${item.id.slice(0, 6).toUpperCase()} · ${REPORT_STATUS_LABEL[item.status] || item.status}`
+                                    : safetyActionLabel(item.action)}
                                 </p>
                                 <p className="mt-1 text-slate-600">
                                   {item.reason || "ไม่ระบุเหตุผล"}
@@ -1068,10 +1071,6 @@ export default function OrdersSection({
                 </span>
               </h4>
             </div>
-            <p className="text-[11px] text-slate-500">
-              สถิติส่งช้าและปัญหาพัสดุ: ยังไม่มีข้อมูล shipping ที่เชื่อถือได้
-              (รอ TSR-10)
-            </p>
 
             {orderHistoryLoading ? (
               <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-xs font-semibold text-slate-500">
@@ -1112,22 +1111,19 @@ export default function OrdersSection({
                     key={order.id}
                     className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-slate-300 transition-colors"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-slate-900">
-                          #{order.id}
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="break-words text-sm font-bold text-slate-900" title={`รหัสคำสั่งซื้อ: ${order.id}`}>
+                          {order.productTitle}
                         </span>
                         <Badge
                           text={
                             ORDER_STATUS_LABEL[order.status] || order.status
                           }
-                          style={
-                            ORDER_STATUS_STYLE[order.status] ||
-                            "bg-slate-100 text-slate-700"
-                          }
+                          style={ORDER_STATUS_STYLE}
                         />
                       </div>
-                      <div className="text-xs text-slate-500 flex items-center gap-2">
+                      <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
                         <span>
                           ผู้ซื้อ: {order.buyer?.name || order.buyerId}
                         </span>
@@ -1219,18 +1215,15 @@ export default function OrdersSection({
                 {/* Header row */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm font-black text-slate-900">
-                      #{order.id}
+                    <span className="break-words text-sm font-black text-slate-900" title={`รหัสคำสั่งซื้อ: ${order.id}`}>
+                      {order.productTitle}
                     </span>
                     <Badge
                       text={ORDER_STATUS_LABEL[order.status] || order.status}
-                      style={
-                        ORDER_STATUS_STYLE[order.status] ||
-                        "bg-slate-100 text-slate-700"
-                      }
+                      style={ORDER_STATUS_STYLE}
                     />
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="text-sm font-extrabold text-slate-900">
                       ฿{Number(orderAmount(order)).toLocaleString()}
                     </span>
@@ -1253,7 +1246,7 @@ export default function OrdersSection({
                   <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 flex items-center justify-between">
                     <div className="space-y-0.5">
                       <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                        ผู้ซื้อ (Buyer)
+                        ผู้ซื้อ
                       </span>
                       <span className="font-semibold text-slate-800 block">
                         {order.buyer?.name || "ไม่ระบุชื่อ"}
@@ -1280,7 +1273,7 @@ export default function OrdersSection({
                   <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 flex items-center justify-between">
                     <div className="space-y-0.5">
                       <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                        ผู้ขาย (Seller)
+                        ผู้ขาย
                       </span>
                       <span className="font-semibold text-slate-800 block">
                         {order.seller?.name || "ไม่ระบุชื่อ"}
@@ -1329,7 +1322,7 @@ export default function OrdersSection({
         tone={actionCopy?.tone || "primary"}
         reason="required"
         reasonLabel={actionCopy?.reasonLabel || "เหตุผล"}
-        reasonHint="กรุณาระบุรายละเอียดเพื่อบันทึกลงใน Audit Log สำหรับการตรวจสอบย้อนหลัง"
+        reasonHint="กรุณาระบุเหตุผลเพื่อใช้ตรวจสอบย้อนหลัง"
       />
     </div>
   );

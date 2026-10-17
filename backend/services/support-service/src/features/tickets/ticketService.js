@@ -201,7 +201,7 @@ async function listQueue({
   if (!isAgent(role)) throw forbidden("only support agents can view the queue");
   if (work && !["open", "overdue", "soon", "reply"].includes(work))
     throw badRequest("invalid work filter");
-  if (scope && !["mine", "unassigned", "all"].includes(scope))
+  if (scope && !["mine", "unassigned", "all", "history"].includes(scope))
     throw badRequest("invalid scope");
   if (status && !STATUSES.includes(status)) throw badRequest("invalid status");
   if (
@@ -332,7 +332,7 @@ async function changeStatus({
     throw forbidden("only support agents can change ticket status");
   const ticket = await assertAccess({ ticketId, userId, role });
 
-  if (role === "CUSTOMER_SERVICE" && (ticket.assigneeId !== userId || ticket.status === "ESCALATED"))
+  if (ticket.assigneeId !== userId || (role === "CUSTOMER_SERVICE" && ticket.status === "ESCALATED"))
     throw forbidden("only the case owner can change this ticket status");
   if (version !== undefined && version !== ticket.version)
     throw conflict("ticket was modified, reload before changing status");

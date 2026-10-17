@@ -215,9 +215,9 @@ async function listQueue(
       { OR: [{ assignedRole: null }, { assignedRole: { not: "ADMIN" } }] },
       { OR: [{ assignedTo: null }, { assignedTo: userId }] },
     );
-  if (scope === "mine") filters.push({ assignedTo: userId });
+  if (scope === "mine" || scope === "history") filters.push({ assignedTo: userId });
   if (scope === "unassigned") filters.push({ assignedTo: null });
-  if (scope && scope !== "all" && !status)
+  if (scope && scope !== "all" && scope !== "history" && !status)
     filters.push({ status: { not: "DECIDED" } });
   if (filters.length) where.AND = filters;
   if (priority) where.priority = priority;
@@ -225,6 +225,7 @@ async function listQueue(
   if (status) {
     where.status = status;
   }
+  if (scope === "history") where.status = "DECIDED";
   if (search) {
     where.OR = [
       { reason: { contains: search, mode: "insensitive" } },

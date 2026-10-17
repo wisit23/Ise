@@ -276,7 +276,7 @@ async function listQueue({
   }
   if (work && !["open", "overdue", "soon", "reply"].includes(work))
     throw badRequest("invalid work filter");
-  if (scope && !["mine", "unassigned", "all"].includes(scope))
+  if (scope && !["mine", "unassigned", "all", "history"].includes(scope))
     throw badRequest("invalid scope");
   if (status && !["OPEN", "NEEDS_INFO", "DECIDED"].includes(status))
     throw badRequest("invalid status");

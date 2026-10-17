@@ -249,13 +249,14 @@ function queueFilter({
       );
   }
   if (scope === "unassigned") clauses.push(Prisma.sql`a.assignment_id IS NULL`);
-  else if (scope === "mine")
+  else if (scope === "mine" || scope === "history")
     clauses.push(Prisma.sql`(a.assignee_id = ${assigneeId} OR cr.responder_id = ${assigneeId})`);
   else if (scope === "all" && role === "CUSTOMER_SERVICE")
     clauses.push(
       Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId} OR cr.responder_id = ${assigneeId})`,
     );
-  if (status) clauses.push(Prisma.sql`s.code = ${status}`);
+  if (scope === "history") clauses.push(Prisma.sql`s.code IN ('RESOLVED', 'CLOSED')`);
+  else if (status) clauses.push(Prisma.sql`s.code = ${status}`);
   else if (scope !== "all")
     clauses.push(Prisma.sql`(s.code NOT IN ('CLOSED', 'ESCALATED') OR (s.code='ESCALATED' AND cr.responder_id=${assigneeId}))`);
   else if (!["ADMIN", "TRUST_AND_SAFETY"].includes(role))

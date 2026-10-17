@@ -46,6 +46,8 @@ export const DISPUTE_STATUS_STYLE = {
 };
 
 export const ORDER_STATUS_LABEL = {
+  pending_payment: "รอชำระเงิน",
+  paid: "ชำระเงินแล้ว",
   pending: "รอชำระเงิน",
   confirmed: "ยืนยันแล้ว",
   shipped: "จัดส่งแล้ว",
@@ -54,6 +56,17 @@ export const ORDER_STATUS_LABEL = {
   disputed: "อยู่ระหว่างพิพาท",
   refunded: "คืนเงินแล้ว",
 };
+
+export const REPORT_STATUS_LABEL = { OPEN: "รายงานใหม่", REVIEWED: "กำลังตรวจสอบ", ACTIONED: "จัดการแล้ว", DISMISSED: "ยกเลิกแล้ว" };
+export const SAFETY_ACTION_LABEL = {
+  SUSPEND_USER: "ระงับบัญชี", WARN_USER: "ตักเตือน", DISMISS: "ยกเลิกรายงาน", REMOVE_PRODUCT: "ระงับสินค้า", RESTORE_PRODUCT: "คืนสถานะสินค้า",
+  RESTRICT_BUYER: "เพิกถอนสิทธิ์ซื้อ", RESTRICT_SELLER: "เพิกถอนสิทธิ์ขาย",
+  USER_SUSPENDED: "ระงับบัญชี", USER_WARNED: "ตักเตือน", USER_RESTORED: "ปลดระงับบัญชี",
+  COMMERCE_RESTRICTED_BUYER: "เพิกถอนสิทธิ์ซื้อ", COMMERCE_RESTRICTED_SELLER: "เพิกถอนสิทธิ์ขาย", COMMERCE_RESTRICTED_ALL: "เพิกถอนสิทธิ์ซื้อขาย", COMMERCE_RESTRICTION_REVOKED: "คืนสิทธิ์ซื้อขาย",
+};
+export function safetyActionLabel(action) {
+  return SAFETY_ACTION_LABEL[action] || SAFETY_ACTION_LABEL[action?.replace(/^REPORT_/, "")] || action;
+}
 
 // UI Bakery emerald palette
 export const DONUT_PRIORITY_COLORS = {

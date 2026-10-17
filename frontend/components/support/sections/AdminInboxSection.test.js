@@ -35,6 +35,21 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+it("loads personal completed history from all three services and restores the active queue", async () => {
+  apiFetch.mockImplementation((url) => Promise.resolve({ items: url.includes("/disputes/queue?") && url.includes("scope=history") ? [{ id: "done-1", orderId: "past-order", reason: "งานเก่าที่ตัดสินแล้ว", status: "DECIDED" }] : [], totalPages: 1 }));
+  render(<AdminInboxSection token="token" currentUserId="me" />);
+  fireEvent.click(screen.getByRole("button", { name: "My History" }));
+  expect(await screen.findByText("งานเก่าที่ตัดสินแล้ว")).toBeInTheDocument();
+  expect(screen.getByText("ตัดสินแล้ว")).toBeInTheDocument();
+  const historyCalls = apiFetch.mock.calls.map(([url]) => new URL(url, "http://test")).filter((url) => url.searchParams.get("scope") === "history");
+  expect(historyCalls).toHaveLength(3);
+  expect(historyCalls.find((url) => url.pathname.includes("tickets")).searchParams.has("status")).toBe(false);
+  expect(historyCalls.find((url) => url.pathname.includes("disputes")).searchParams.get("status")).toBe("DECIDED");
+  fireEvent.click(screen.getByRole("button", { name: "My Work" }));
+  await waitFor(() => expect(screen.queryByText("งานเก่าที่ตัดสินแล้ว")).not.toBeInTheDocument());
+  expect(apiFetch.mock.calls.some(([url]) => url.includes("scope=mine"))).toBe(true);
+});
+
 it("keeps report and escalated-ticket pagination independent", async () => {
   apiFetch.mockImplementation((url) => {
     if (url.includes("/admin/reports?")) {
@@ -48,7 +63,7 @@ it("keeps report and escalated-ticket pagination independent", async () => {
   });
 
   render(<AdminInboxSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", {name:"รายงานผู้ใช้"}));
+  fireEvent.click(screen.getByRole("tab", {name:"User Reports"}));
   expect(await screen.findByText("Report page 1")).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "3" }));
@@ -57,7 +72,7 @@ it("keeps report and escalated-ticket pagination independent", async () => {
     expect.arrayContaining([expect.stringContaining("page=3")]),
   );
 
-  fireEvent.click(screen.getByRole("tab", { name: "ทิกเก็ตขออนุมัติพิเศษ" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Escalated Tickets" }));
   expect(await screen.findByRole("button", { name: "7" })).toBeInTheDocument();
   expect(apiFetch.mock.calls.map(([url]) => url)).toEqual(
     expect.arrayContaining([
@@ -71,7 +86,7 @@ it("keeps report and escalated-ticket pagination independent", async () => {
 it("sends report search to the report service", async () => {
   apiFetch.mockResolvedValue({ items: [], totalPages: 1 });
   render(<AdminInboxSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", {name:"รายงานผู้ใช้"}));
+  fireEvent.click(screen.getByRole("tab", {name:"User Reports"}));
 
   const input = await screen.findByRole("textbox", { name: "ค้นหาเคส" });
   fireEvent.change(input, { target: { value: "counterfeit" } });
@@ -100,7 +115,7 @@ it("shows a source-specific failure and retries only that source", async () => {
   });
 
   render(<AdminInboxSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", {name:"รายงานผู้ใช้"}));
+  fireEvent.click(screen.getByRole("tab", {name:"User Reports"}));
   expect(await screen.findByText("โหลดรายงานไม่สำเร็จ")).toBeInTheDocument();
   expect(screen.getByText("auth offline")).toBeInTheDocument();
 
@@ -126,7 +141,7 @@ it("loads a fresh report detail when a row is opened", async () => {
   });
 
   render(<AdminInboxSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", {name:"รายงานผู้ใช้"}));
+  fireEvent.click(screen.getByRole("tab", {name:"User Reports"}));
   fireEvent.click(await screen.findByText("Open fresh detail"));
 
   await waitFor(() =>

@@ -24,8 +24,8 @@ const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "tickets", label: "Tickets", icon: "confirmation_number" },
   { key: "disputes", label: "Disputes", icon: "gavel" },
-  { key: "orders", label: "ค้นหา", icon: "manage_search" },
-  { key: "faq", label: "จัดการ FAQ", icon: "menu_book" },
+  { key: "orders", label: "Search", icon: "manage_search" },
+  { key: "faq", label: "FAQ Management", icon: "menu_book" },
 ];
 
 // Escalated tickets, moderation, and every other Admin-only privileged
@@ -33,14 +33,14 @@ const SECTIONS = [
 // anywhere in the CS agent's own tabs (see TicketsSection's dropped
 // ESCALATED filter option).
 const ADMIN_SECTIONS = [
-  { key: "admin_inbox", label: "เคสส่งต่อ", icon: "assignment_late" },
-  { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
-  { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
+  { key: "admin_inbox", label: "Escalation Inbox", icon: "assignment_late" },
+  { key: "products", label: "Product Moderation", icon: "inventory_2" },
+  { key: "kyc", label: "KYC Review", icon: "how_to_reg" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
 ];
 
 const ADMIN_ONLY_SECTIONS = [
-  { key: "shop_changes", label: "ตรวจข้อมูลร้านค้า", icon: "storefront" },
+  { key: "shop_changes", label: "Shop Updates", icon: "storefront" },
 ];
 const SAFETY_SECTIONS = [
   ...SECTIONS.filter((item) => !["tickets", "disputes"].includes(item.key)),
@@ -136,7 +136,7 @@ export default function SupportPanelPage() {
         {/* Keep workspace sticky bars below the navbar and its profile menu. */}
         <div className="isolate flex min-h-0 flex-1">
           {/* ── Sidebar ── */}
-          <aside aria-label="เมนู workspace" className={`hidden shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex transition-[width] duration-200 motion-reduce:transition-none z-10 ${sidebarCollapsed ? "w-16" : "w-60"}`}>
+          <aside aria-label="เมนู workspace" className={`hidden shrink-0 flex-col border-r border-slate-200/60 bg-white lg:flex transition-[width] duration-200 motion-reduce:transition-none z-10 ${sidebarCollapsed ? "w-16" : "w-60"}`}>
             {/* Brand */}
             <div className={`flex h-12 shrink-0 items-center border-b border-slate-200/60 bg-white ${sidebarCollapsed ? "justify-center px-2" : "justify-between gap-1 px-2"}`}>
               <div className={`${sidebarCollapsed ? "hidden" : "flex"} min-w-0 items-center gap-2`}>
@@ -171,7 +171,7 @@ export default function SupportPanelPage() {
             </div>
 
             {/* Nav items */}
-            <nav className="relative flex flex-1 flex-col gap-1 p-2">
+            <nav className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
               <span aria-hidden="true" className={motion.selection} style={{ transform: `translateY(${Math.max(0, visibleSections.findIndex(item => item.key === visibleSection)) * 48}px)` }} />
               {visibleSections.map((s) => {
                 const active = visibleSection === s.key;
@@ -240,7 +240,7 @@ export default function SupportPanelPage() {
               {/* Mobile section switcher */}
               <div className="ml-auto flex items-center gap-2">
                 <div id="workspace-view-control" />
-                <div className="flex items-center gap-3 sm:hidden">
+                <div className="flex items-center gap-3 lg:hidden">
                   <RadioSelect
                     value={visibleSection}
                     onChange={value=>navigateTo(value)}
@@ -263,7 +263,7 @@ export default function SupportPanelPage() {
                 {visibleSection === "tickets" ? <TicketsSection token={token} currentUser={{...user,role:staffRole}} statusFilter={ticketsFilter} /> : <DisputesSection token={token} currentUser={{...user,role:staffRole}} status={disputesFilter} />}
               </div>
             ) : (
-              <div key={visibleSection} className={`${visibleSection === 'dashboard' ? 'h-full min-h-0 p-3 sm:p-4' : 'p-8'} ${visibleSection === "dashboard" && staffRole === "CUSTOMER_SERVICE" ? "max-w-none" : "max-w-7xl"} mx-auto w-full ${motion.content}`}>
+              <div key={visibleSection} className={`${visibleSection === 'dashboard' ? 'h-full min-h-0 p-3 sm:p-4' : 'p-3 sm:p-4 lg:p-6'} ${(isAdminOrSafety || (visibleSection === "dashboard" && staffRole === "CUSTOMER_SERVICE")) ? "max-w-none" : "max-w-7xl"} mx-auto w-full ${motion.content}`}>
                 {visibleSection === "dashboard" && (
                   <DashboardSection
                     token={token}
