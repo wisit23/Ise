@@ -1,5 +1,6 @@
 const { badRequest, conflict, notFound } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
+const chatClient = require("./chatClient");
 
 const SHOP_CHANGE_FIELDS = Object.freeze([
   {
@@ -219,7 +220,31 @@ function createShopChangeRequestService(prismaClient) {
       });
     });
 
-    return serializeRequest(request);
+    const serialized = serializeRequest(request);
+
+    if (decision === "APPROVED") {
+      chatClient.sendSystemNotification({
+        userId: request.sellerId,
+        type: "SYSTEM",
+        title: "คำขอแก้ไขข้อมูลร้านค้าได้รับการอนุมัติ",
+        message: `✅ คำขอแก้ไขข้อมูลร้านค้าของคุณได้รับการอนุมัติแล้ว${adminNote?.trim() ? ` (หมายเหตุ: ${adminNote.trim()})` : ""}`,
+        link: "/seller/dashboard",
+        entityId: `shop-change:decision:${requestId}`,
+        metadata: { requestId, decision, adminNote },
+      }).catch(() => {});
+    } else if (decision === "REJECTED") {
+      chatClient.sendSystemNotification({
+        userId: request.sellerId,
+        type: "SYSTEM",
+        title: "คำขอแก้ไขข้อมูลร้านค้าถูกปฏิเสธ",
+        message: `⚠️ คำขอแก้ไขข้อมูลร้านค้าของคุณถูกปฏิเสธ${adminNote?.trim() ? ` เนื่องจาก: ${adminNote.trim()}` : ""}`,
+        link: "/seller/dashboard",
+        entityId: `shop-change:decision:${requestId}`,
+        metadata: { requestId, decision, adminNote },
+      }).catch(() => {});
+    }
+
+    return serialized;
   }
 
   return { submit, listMine, listPending, decide };

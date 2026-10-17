@@ -14,6 +14,7 @@ import EditShopModal from "../../../components/seller/EditShopModal";
 import ReviewMediaGallery from "../../../components/ReviewMediaGallery";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
+import { useChatSocketEvent } from "../../../components/chat/ChatSocketProvider";
 
 const PRODUCT_PAGE_SIZE = 12;
 const REVIEW_PAGE_SIZE = 5;
@@ -37,6 +38,8 @@ export default function StorePage() {
   const [reviewTotalPages, setReviewTotalPages] = useState(1);
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [showReport, setShowReport] = useState(false);
+  const [reportReviewTarget, setReportReviewTarget] = useState(null);
+  const [reportedReviewIds, setReportedReviewIds] = useState([]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [pendingRequest, setPendingRequest] = useState(null);
   const [user, setUser] = useState(undefined);
@@ -57,6 +60,17 @@ export default function StorePage() {
   useEffect(() => {
     const currentUser = getStoredUser();
     setUser(currentUser);
+    const token = getAccessToken();
+    if (token) {
+      apiFetch("/api/auth/reports/my-reported-reviews", { token })
+        .then((res) => {
+          if (res?.reportedReviewIds) {
+            setReportedReviewIds(res.reportedReviewIds);
+          }
+        })
+        .catch(() => {});
+    }
+
     apiFetch(`/api/auth/users/${sellerId}/public`)
       .then(setSeller)
       .catch(() => setSeller(null));
@@ -111,6 +125,31 @@ export default function StorePage() {
       .catch((err) => console.error("โหลดรีวิวของร้านไม่สำเร็จ:", err))
       .finally(() => setReviewsLoading(false));
   }, [sellerId, reviewPage]);
+
+  // ── Real-time WebSocket Listeners ──────────────────────────────────────────
+  useChatSocketEvent("product:created", (payload) => {
+    if (!payload?.product?.id) return;
+    const prod = payload.product;
+    if (prod.sellerId && String(prod.sellerId) === String(sellerId)) {
+      setItems((prev) => (prev.some((p) => p.id === prod.id) ? prev : [prod, ...prev]));
+      setProductTotal((prev) => prev + 1);
+    }
+  });
+
+  useChatSocketEvent("product:updated", (payload) => {
+    if (!payload?.product?.id) return;
+    const updated = payload.product;
+    setItems((prev) =>
+      prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+    );
+  });
+
+  useChatSocketEvent("product:deleted", (payload) => {
+    const id = payload?.productId || payload?.product?.id || payload?.id;
+    if (!id) return;
+    setItems((prev) => prev.filter((p) => p.id !== id));
+    setProductTotal((prev) => Math.max(0, prev - 1));
+  });
 
   const sellerName = seller
     ? seller.shopName || `${seller.firstName} ${seller.lastName}`
@@ -247,9 +286,49 @@ export default function StorePage() {
               >
                 <div className="flex items-center justify-between">
                   <StarDisplay value={r.rating} />
-                  <span className="text-xs text-gray-500">
-                    {new Date(r.createdAt).toLocaleDateString("th-TH")}
-                  </span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs text-gray-500">
+                      {new Date(r.createdAt).toLocaleDateString("th-TH")}
+                    </span>
+                    {user !== undefined && user?.id !== r.buyerId && (
+                      (() => {
+                        const isReported = reportedReviewIds.includes(r.id);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setReportReviewTarget(r)}
+                            className={`inline-flex items-center gap-1 text-[11px] transition ${
+                              isReported
+                                ? "text-red-600 font-medium"
+                                : "text-gray-400 hover:text-red-600"
+                            }`}
+                            title={
+                              isReported
+                                ? "คุณได้รายงานความคิดเห็นนี้แล้ว (อยู่ระหว่างรอผลการตัดสิน)"
+                                : "รายงานรีวิวนี้ (เช่น รีวิวปั่น, ข้อมูลเท็จ)"
+                            }
+                          >
+                            <span
+                              className={`material-symbols-outlined text-[14px] ${
+                                isReported
+                                  ? "text-red-600 [font-variation-settings:'FILL'_1]"
+                                  : ""
+                              }`}
+                              style={
+                                isReported
+                                  ? { fontVariationSettings: "'FILL' 1" }
+                                  : undefined
+                              }
+                            >
+                              flag
+                            </span>
+                            <span>{isReported ? "รายงานแล้ว" : "รายงาน"}</span>
+                          </button>
+                        );
+                      })()
+                    )}
+
+                  </div>
                 </div>
                 {r.comment && (
                   <p className="mt-1.5 text-sm text-gray-700">{r.comment}</p>
@@ -273,6 +352,29 @@ export default function StorePage() {
         onClose={() => setShowReport(false)}
         targetId={sellerId}
         targetLabel={sellerName}
+      />
+
+      <ReportModal
+        open={Boolean(reportReviewTarget)}
+        onClose={() => setReportReviewTarget(null)}
+        onSuccess={({ reviewId }) => {
+          if (reviewId) {
+            setReportedReviewIds((prev) =>
+              Array.from(new Set([...prev, reviewId])),
+            );
+          }
+        }}
+        title="รายงานรีวิวที่ไม่เหมาะสม"
+
+        targetId={reportReviewTarget?.buyerId || sellerId}
+        targetLabel={
+          reportReviewTarget?.buyerId
+            ? `ผู้ใช้ #${reportReviewTarget.buyerId.slice(0, 8)}`
+            : sellerName
+        }
+        productId={reportReviewTarget?.productId || null}
+        reviewId={reportReviewTarget?.id}
+        reviewComment={reportReviewTarget?.comment}
       />
 
       {isOwner && (

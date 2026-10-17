@@ -17,6 +17,7 @@ import ReviewMediaUploader from "../ReviewMediaUploader";
 import ReviewMediaGallery from "../ReviewMediaGallery";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
+import { useChatSocketEvent } from "../chat/ChatSocketProvider";
 import {
   autoCompleteAt,
   canOpenDispute,
@@ -195,6 +196,23 @@ export default function MyOrders({
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [tab, page]);
+
+  // Order status pushed by order-service (seller accepts, ships, etc.).
+  useChatSocketEvent("order:updated", (payload) => {
+    if (!payload?.order?.id) return;
+    const updated = payload.order;
+    setItems((prev) => {
+      const idx = prev.findIndex((o) => o.id === updated.id);
+      if (idx !== -1) {
+        return prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o));
+      }
+      const tabDef = TABS.find((t) => t.key === tab);
+      if (!tabDef?.status || tabDef.status === updated.status) {
+        return [updated, ...prev];
+      }
+      return prev;
+    });
+  });
 
   function handleTab(key) {
     setTab(key);

@@ -38,6 +38,11 @@ router.get(
   requireInternalToken,
   orderController.getOneInternal,
 );
+router.get(
+  "/internal/by-product/:productId",
+  requireInternalToken,
+  orderController.getByProductInternal,
+);
 // Called by product-service when an auction closes with a winning bid.
 router.post(
   "/internal/from-auction",
@@ -45,6 +50,10 @@ router.post(
   orderController.createFromAuction,
 );
 router.get("/:id", requireAuth, orderController.getOne);
+router.patch("/:id/confirm", requireAuth, orderController.confirmOrder);
+router.post("/:id/confirm", requireAuth, orderController.confirmOrder);
+router.patch("/:id/reject", requireAuth, orderController.rejectOrder);
+router.post("/:id/reject", requireAuth, orderController.rejectOrder);
 router.patch("/:id/status", requireAuth, orderController.updateStatus);
 router.patch(
   "/:id/shipping-address",

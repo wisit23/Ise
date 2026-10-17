@@ -44,6 +44,7 @@ router.patch("/:id/schedule", requireAuth, auctionController.schedule);
 router.patch("/:id/cancel", requireAuth, auctionController.cancel);
 
 // Buyer bidding.
+router.get("/:id/bids", auctionController.getBids);
 router.post(
   "/:id/bids",
   requireAuth,

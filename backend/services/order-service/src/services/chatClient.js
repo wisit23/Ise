@@ -122,7 +122,14 @@ async function sendDisputeNotice(dispute, order, eventKey, body) {
     await internalPost(`/internal/conversations/${conversationId}/messages`, {
       senderId: "system", senderRole: "SYSTEM", type: "SYSTEM", body,
       eventKey: `${dispute.id}:${eventKey}`,
-      payload: { disputeId: dispute.id, event: eventKey },
+      payload: {
+        disputeId: dispute.id,
+        event: eventKey,
+        orderId: order.id,
+        productId: order.productId,
+        productTitle: order.productTitle,
+        price: order.price || order.finalPrice,
+      },
     });
   }));
 }
@@ -169,106 +176,384 @@ async function getOrderAttachment(orderId, messageId, options = {}) {
  */
 
 module.exports = {
-  notifyOrderPlaced,notifyOrderPaid,
-  getOrderTranscript, getOrderAttachment,
+  notifyOrderPlaced,
+  notifyOrderPaid,
+  notifyOrderConfirmed,
+  notifyOrderRejected,
+  getOrderTranscript,
+  getOrderAttachment,
   notifyOrderStatusChanged,
+  notifyDisputeOpened,
   joinDisputeConversation,
   lockDisputeConversation,
   getDisputeTranscript,
   sendDisputeNotice,
+  sendSystemNotification,
+  deleteDisputeConversation,
+  broadcastOrderRealtime,
 };
 
-async function postToProductRoom({ order, body, payload }) {
-  if (!order.productId) return;
+async function sendSystemNotification({ userId, type, title, message, link, metadata, entityId }) {
   try {
-    const conversation = await internalPost("/internal/conversations", {
-      contextType: "PRODUCT",
-      contextId: order.productId,
-      createdBy: "system",
-      participants: [
-        { userId: order.buyerId, role: "BUYER" },
-        { userId: order.sellerId, role: "SELLER" },
-      ],
-    });
-
-    await internalPost(`/internal/conversations/${conversation.id}/messages`, {
-      senderId: "system",
-      senderRole: "SYSTEM",
-      type: "SYSTEM",
-      body,
-      payload,
-      idempotencyKey:`${payload.event}:${order.id}:${order.version || 0}`,
+    await internalPost("/internal/notifications", {
+      userId,
+      type,
+      title,
+      message,
+      link,
+      metadata,
+      entityId,
     });
   } catch (err) {
     console.error(
-      `[order-service] chat notification failed for PRODUCT:${order.productId} (order ${order.id}):`,
+      `[order-service] notification failed for user ${userId}:`,
       err.message,
     );
   }
 }
 
 /**
- * Notifies the seller in the PRODUCT chat room when a new order is placed.
+ * Does NOT notify seller on cart addition or reservation.
+ * Per requirement: "เมื่อผู้ซื้อกดซื้อสินค้ามันจะแจ้งเตือนในขั้นตอนที่ผู้ซื้อกดชำระเงินแล้วเท่านั้น ก่อนหน้านั้นกดจอง หรือกดใส่ตะกร้าจะไม่แจ้งเตือนผู้ขาย"
  */
 async function notifyOrderPlaced(order) {
-  if (!order || !order.id || !order.buyerId || !order.sellerId || !order.productId) return;
-
-  const title = order.productTitle || "สินค้า";
-  await postToProductRoom({
-    order,
-    body: `🛒 มีการสั่งซื้อสินค้า '${title}' | หมายเลขคำสั่งซื้อ: #${order.id}`,
-    payload: {
-      event: "order.placed",
-      orderId: order.id,
-      productId: order.productId,
-      productTitle: order.productTitle,
-      price: order.price,
-      status: order.status || "pending_payment",
-    },
-  });
+  if (order && order.buyerId) {
+    try {
+      await internalPost("/internal/realtime/broadcast", {
+        event: "order:updated",
+        data: { order, action: "created" },
+        rooms: [`user:${order.buyerId}`],
+        broadcastGlobal: false,
+      });
+    } catch (_) {}
+  }
 }
 
 /**
- * Notifies the seller in the PRODUCT chat room when payment is completed.
+ * Notifies both seller and buyer in the Notification Center when payment is completed.
+ * For seller: links directly to the product page with ?ship=1 to fulfill shipment.
+ * Uses entityId: order.id to update stages in-place.
  */
 async function notifyOrderPaid(order) {
-  if (!order || !order.id || !order.buyerId || !order.sellerId || !order.productId) return;
+  if (!order || !order.id || !order.buyerId || !order.sellerId) return;
 
   const title = order.productTitle || "สินค้า";
-  await postToProductRoom({
-    order,
-    body: `🛒 ผู้ซื้อทำการซื้อสินค้า '${title}' และชำระเงินเรียบร้อยแล้ว กรุณายืนยันคำสั่งซื้อภายใน 1 วัน | หมายเลขคำสั่งซื้อ: #${order.id}`,
-    payload: {
-      event: "order.paid",
-      orderId: order.id,
-      productId: order.productId,
-      status: "paid",
-    },
-  });
+  const tasks = [
+    sendSystemNotification({
+      userId: order.sellerId,
+      type: "ORDER",
+      title: "ผู้ซื้อชำระเงินแล้ว",
+      message: `💰 ผู้ซื้อชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว กรุณาดำเนินการตรวจสอบและยืนยันออเดอร์ | หมายเลขคำสั่งซื้อ: #${order.id}`,
+      link: `/seller/dashboard?orderId=${order.id}`,
+      metadata: {
+        orderId: order.id,
+        productId: order.productId,
+        auctionId: order.auctionId,
+        status: "paid",
+      },
+      entityId: order.id,
+    }),
+    broadcastOrderRealtime(order, "paid"),
+  ];
+
+  if (order.buyerId !== order.sellerId) {
+    tasks.push(
+      sendSystemNotification({
+        userId: order.buyerId,
+        type: "ORDER",
+        title: "ชำระเงินสำเร็จ",
+        message: `✅ คุณได้ชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว รอผู้ขายยืนยันคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: #${order.id}`,
+        link: "/orders",
+        metadata: {
+          orderId: order.id,
+          productId: order.productId,
+          auctionId: order.auctionId,
+          status: "paid",
+        },
+        entityId: order.id,
+      })
+    );
+  }
+
+  await Promise.all(tasks);
+}
+
+async function notifyOrderConfirmed(order) {
+  if (!order || !order.id || !order.buyerId || !order.sellerId) return;
+  const title = order.productTitle || "สินค้า";
+  const tasks = [
+    sendSystemNotification({
+      userId: order.buyerId,
+      type: "ORDER",
+      title: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
+      message: `📦 ผู้ขายยืนยันคำสั่งซื้อ #${order.id} ('${title}') แล้ว กำลังเตรียมการจัดส่งสินค้า`,
+      link: "/orders",
+      metadata: {
+        orderId: order.id,
+        productId: order.productId,
+        auctionId: order.auctionId,
+        status: "confirmed",
+      },
+      entityId: order.id,
+    }),
+  ];
+
+  if (order.sellerId !== order.buyerId) {
+    tasks.push(
+      sendSystemNotification({
+        userId: order.sellerId,
+        type: "ORDER",
+        title: "ยืนยันคำสั่งซื้อสำเร็จ",
+        message: `✅ คุณได้ยืนยันคำสั่งซื้อ #${order.id} ('${title}') แล้ว กรุณาดำเนินการจัดส่งสินค้า`,
+        link: `/seller/dashboard?orderId=${order.id}`,
+        metadata: {
+          orderId: order.id,
+          productId: order.productId,
+          auctionId: order.auctionId,
+          status: "confirmed",
+        },
+        entityId: order.id,
+      })
+    );
+  }
+
+  tasks.push(broadcastOrderRealtime(order, "confirmed"));
+
+  await Promise.all(tasks);
+}
+
+async function notifyOrderRejected(order, reason) {
+  if (!order || !order.id || !order.buyerId) return;
+  const title = order.productTitle || "สินค้า";
+  const amount = Number(order.ordersAmount || order.price || 0).toLocaleString("th-TH");
+  const reasonText = reason ? ` (เหตุผล: ${reason})` : "";
+  const tasks = [
+    sendSystemNotification({
+      userId: order.buyerId,
+      type: "ORDER",
+      title: "คำสั่งซื้อถูกปฏิเสธและคืนเงินเต็มจำนวน",
+      message: `❌ ผู้ขายได้ปฏิเสธออเดอร์ #${order.id} ('${title}')${reasonText} — ระบบได้ทำการคืนเงินเต็มจำนวน ฿${amount} ให้กับคุณเรียบร้อยแล้ว`,
+      link: "/orders",
+      metadata: {
+        orderId: order.id,
+        productId: order.productId,
+        status: "cancelled",
+        refundAmount: amount,
+        reason,
+      },
+      entityId: order.id,
+    }),
+    broadcastOrderRealtime({ ...order, status: "cancelled" }, "rejected"),
+  ];
+  await Promise.all(tasks);
+}
+
+async function deleteDisputeConversation(disputeId) {
+  try {
+    const res = await fetch(
+      `${CHAT_SERVICE_URL}/internal/conversations/by-context/DISPUTE/${encodeURIComponent(disputeId)}`,
+      {
+        method: "DELETE",
+        signal: AbortSignal.timeout(5000),
+        headers: { "x-internal-token": INTERNAL_TOKEN },
+      },
+    );
+    if (!res.ok) throw new Error(`chat-service delete failed with status ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error(`[chatClient] deleteDisputeConversation error for dispute ${disputeId}:`, err.message);
+    return null;
+  }
 }
 
 /**
- * Notifies parties in the PRODUCT chat room when order status changes.
+ * Updates the existing notification in-place for each stage (e.g. จาก "ผู้ซื้อชำระสินค้า" ไป "ลูกค้าได้รับสินค้าแล้ว")
  */
-async function notifyOrderStatusChanged(order, status) {
+async function notifyOrderStatusChanged(order, status, { reason } = {}) {
+  // Seller accept/reject have their own two-sided messages and realtime push.
+  if (status === "confirmed" && order?.status === "paid")
+    return notifyOrderConfirmed({ ...order, status });
+  if (status === "cancelled" && order?.status === "paid")
+    return notifyOrderRejected(order, reason);
+  broadcastOrderRealtime({ ...order, status }, status).catch(() => {});
+
   const statusLabel = STATUS_MESSAGE_TH[status];
-  if (!statusLabel || !order || !order.id || !order.productId) return;
+  if (!statusLabel || !order || !order.id) return;
 
-  const body =
-    status === "shipped"
-      ? `📦 ผู้ขายจัดส่งสินค้าแล้ว | หมายเลขคำสั่งซื้อ: #${order.id}`
-      : status === "delivered"
-        ? `📬 สินค้าถึงผู้ซื้อแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า (ระบบจะยืนยันให้อัตโนมัติใน 14 วัน) | หมายเลขคำสั่งซื้อ: #${order.id}`
-        : `คำสั่งซื้อ #${order.id}: ${statusLabel}`;
+  const title = order.productTitle || "สินค้า";
+  const tasks = [];
 
-  await postToProductRoom({
-    order,
-    body,
-    payload: {
-      event: `order.${status}`,
-      orderId: order.id,
-      productId: order.productId,
-      status,
-    },
-  });
+  if (order.buyerId) {
+    const buyerBody =
+      status === "shipped"
+        ? `📦 ผู้ขายจัดส่งสินค้าแล้ว | หมายเลขคำสั่งซื้อ: #${order.id}`
+        : status === "delivered"
+          ? `📬 สินค้าถึงผู้ซื้อแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า (ระบบจะยืนยันให้อัตโนมัติใน 14 วัน) | หมายเลขคำสั่งซื้อ: #${order.id}`
+          : status === "completed"
+          ? `🎉 คำสั่งซื้อ #${order.id} ('${title}') เสร็จสมบูรณ์แล้ว ขอบคุณที่ใช้บริการ`
+          : status === "cancelled"
+            ? `⚠️ คำสั่งซื้อ #${order.id} ('${title}') ถูกยกเลิกแล้ว`
+            : `คำสั่งซื้อ #${order.id}: ${statusLabel}`;
+
+    tasks.push(
+      sendSystemNotification({
+        userId: order.buyerId,
+        type: "ORDER",
+        title:
+          status === "shipped"
+            ? "ผู้ขายจัดส่งสินค้าแล้ว"
+            : status === "delivered"
+              ? "สินค้าถึงแล้ว กรุณายืนยันการรับสินค้า"
+              : status === "completed"
+              ? "คำสั่งซื้อเสร็จสมบูรณ์"
+              : status === "cancelled"
+                ? "คำสั่งซื้อถูกยกเลิก"
+                : `อัปเดตสถานะคำสั่งซื้อ #${order.id}`,
+        message: buyerBody,
+        link: "/orders",
+        metadata: {
+          orderId: order.id,
+          productId: order.productId,
+          auctionId: order.auctionId,
+          status,
+        },
+        entityId: order.id,
+      }),
+    );
+  }
+
+  if (order.sellerId && order.sellerId !== order.buyerId) {
+    let sellerTitle = null;
+    let sellerBody = null;
+    let sellerLink = `/products/${order.productId}`;
+
+    if (status === "shipped") {
+      sellerTitle = "จัดส่งสินค้าแล้ว";
+      sellerBody = `🚚 คุณได้จัดส่งสินค้า '${title}' แล้ว รอลูกค้ายืนยันการรับสินค้า | หมายเลขคำสั่งซื้อ: #${order.id}`;
+    } else if (status === "completed") {
+      sellerTitle = "ลูกค้าได้รับสินค้าแล้ว";
+      sellerBody = `🎉 ลูกค้าได้รับสินค้าแล้ว คำสั่งซื้อ #${order.id} ('${title}') เสร็จสมบูรณ์`;
+    } else if (status === "cancelled") {
+      sellerTitle = "คำสั่งซื้อถูกยกเลิก";
+      sellerBody = `⚠️ คำสั่งซื้อ #${order.id} ('${title}') ถูกยกเลิกแล้ว`;
+    }
+
+    if (sellerTitle && sellerBody) {
+      tasks.push(
+        sendSystemNotification({
+          userId: order.sellerId,
+          type: "ORDER",
+          title: sellerTitle,
+          message: sellerBody,
+          link: sellerLink,
+          metadata: {
+            orderId: order.id,
+            productId: order.productId,
+            auctionId: order.auctionId,
+            status,
+          },
+          entityId: order.id,
+        }),
+      );
+    }
+  }
+
+  await Promise.all(tasks);
 }
+
+/**
+ * Notifies the seller in the Notification Center when a dispute is opened.
+ * Also opens/notifies in the dispute room for Trust and Safety case handling.
+ */
+async function notifyDisputeOpened(dispute, order) {
+  if (!order || !order.id) return;
+
+  const title = order.productTitle || "สินค้า";
+  const reasonText = dispute.reason ? ` — เหตุผล: ${dispute.reason}` : "";
+
+  if (order.sellerId) {
+    await sendSystemNotification({
+      userId: order.sellerId,
+      type: "DISPUTE",
+      title: "สินค้าโดนเปิดข้อพิพาท",
+      message: `⚠️ สินค้าของคุณ '${title}' สำหรับคำสั่งซื้อ #${order.id} ถูกเปิดข้อพิพาท (${dispute.disputeType || "ข้อพิพาท"})${reasonText}`,
+      link: "/orders",
+      entityId: order.id,
+      metadata: {
+        orderId: order.id,
+        disputeId: dispute.id,
+        productId: order.productId,
+        disputeType: dispute.disputeType,
+        reason: dispute.reason,
+        decision: "DISPUTE_OPENED",
+        decisionLabel: "เปิดข้อพิพาทแล้ว",
+        role: "seller",
+      },
+    });
+  }
+
+  if (order.buyerId) {
+    await sendSystemNotification({
+      userId: order.buyerId,
+      type: "DISPUTE",
+      title: "เปิดข้อพิพาทสำเร็จ",
+      message: `⚠️ คำสั่งซื้อ #${order.id} ('${title}') เปิดข้อพิพาทเรียบร้อยแล้ว อยู่ระหว่างการพิจารณาตรวจสอบของเจ้าหน้าที่`,
+      link: "/orders",
+      entityId: order.id,
+      metadata: {
+        orderId: order.id,
+        disputeId: dispute.id,
+        productId: order.productId,
+        disputeType: dispute.disputeType,
+        reason: dispute.reason,
+        decision: "DISPUTE_OPENED",
+        decisionLabel: "เปิดข้อพิพาทแล้ว",
+        role: "buyer",
+      },
+    });
+  }
+}
+
+async function broadcastOrderRealtime(order, action = "updated") {
+  if (!order || !order.id) return;
+  const sellerId = order.sellerId || order.seller?.id;
+  const buyerId = order.buyerId || order.buyer?.id;
+  const rooms = [];
+  if (sellerId) rooms.push(`user:${sellerId}`);
+  if (buyerId) rooms.push(`user:${buyerId}`);
+
+  try {
+    await internalPost("/internal/realtime/broadcast", {
+      event: "order:updated",
+      data: { order, action },
+      rooms,
+      broadcastGlobal: false,
+    });
+
+    if (order.productId) {
+      const statusMap = {
+        completed: "sold",
+        paid: "reserved",
+        confirmed: "reserved",
+        shipped: "reserved",
+        cancelled: "available",
+      };
+      const effectiveStatus = order.status || action;
+      const productStatus = statusMap[effectiveStatus];
+      if (productStatus) {
+        await internalPost("/internal/realtime/broadcast", {
+          event: "product:updated",
+          data: {
+            product: { id: order.productId, status: productStatus },
+            action: "status_changed",
+          },
+          rooms: sellerId ? [`user:${sellerId}`] : [],
+          broadcastGlobal: true,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("[chatClient] broadcastOrderRealtime warning:", err.message);
+  }
+}
+

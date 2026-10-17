@@ -3,6 +3,11 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken } from "../../../lib/auth";
+import BankAccountInput, {
+  parseBankAccount,
+  formatBankAccount,
+  validateBankAccount,
+} from "../BankAccountInput";
 
 const STATUS_LABEL = {
   PENDING: "รอตรวจสอบ",
@@ -41,7 +46,8 @@ export default function SellerShopSettings() {
   // Form state
   const [shopName, setShopName] = useState("");
   const [address, setAddress] = useState("");
-  const [bankAccount, setBankAccount] = useState("");
+  const [bank, setBank] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [comment, setComment] = useState("");
 
   const token = getAccessToken();
@@ -54,7 +60,9 @@ export default function SellerShopSettings() {
         // Pre-fill form with current values
         setShopName(data.shopName || "");
         setAddress(data.address || "");
-        setBankAccount(data.bankAccount || "");
+        const parsed = parseBankAccount(data.bankAccount || "");
+        setBank(parsed.bank);
+        setAccountNumber(parsed.accountNumber);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoadingProfile(false));
@@ -85,14 +93,22 @@ export default function SellerShopSettings() {
       return;
     }
 
+    const bankError = validateBankAccount(bank, accountNumber, { required: false });
+    if (bankError) {
+      setError(bankError);
+      return;
+    }
+
+    const currentBankFormatted = formatBankAccount(bank, accountNumber);
+
     // Only send fields that actually differ from current profile
     const patch = {};
     if (shopName.trim() && shopName.trim() !== profile?.shopName)
       patch.shopName = shopName.trim();
     if (address.trim() !== (profile?.address || ""))
       patch.address = address.trim();
-    if (bankAccount.trim() !== (profile?.bankAccount || ""))
-      patch.bankAccount = bankAccount.trim();
+    if (currentBankFormatted !== (profile?.bankAccount || ""))
+      patch.bankAccount = currentBankFormatted;
 
     if (Object.keys(patch).length === 0) {
       setError("ไม่มีข้อมูลที่เปลี่ยนแปลง กรุณาแก้ไขอย่างน้อย 1 ช่อง");
@@ -196,16 +212,16 @@ export default function SellerShopSettings() {
               />
             </Field>
 
-            <Field label="เลขบัญชีธนาคาร">
-              <input
-                type="text"
-                value={bankAccount}
-                onChange={(e) => setBankAccount(e.target.value)}
+            <div>
+              <BankAccountInput
+                bank={bank}
+                accountNumber={accountNumber}
+                onBankChange={setBank}
+                onAccountNumberChange={setAccountNumber}
                 disabled={hasPending}
-                placeholder={profile?.bankAccount || "000-0-00000-0"}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:bg-slate-50 disabled:text-slate-400"
+                required={false}
               />
-            </Field>
+            </div>
 
             <Field label="อธิบายการเปลี่ยนแปลง (required)">
               <textarea

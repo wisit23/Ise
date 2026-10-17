@@ -20,6 +20,28 @@ describe("MessageList", () => {
     expect(onPromptClick).toHaveBeenCalledWith("สินค้ายังอยู่ไหมครับ?");
   });
 
+  it("renders custom automated questions when provided by seller", () => {
+    const onPromptClick = jest.fn();
+    const customPrompts = [
+      { id: "q-1", messageText: "มีของพร้อมส่งไหมครับ?" },
+      { id: "q-2", messageText: "สามารถนัดรับได้ไหมครับ?" },
+    ];
+    render(
+      <MessageList
+        messages={[]}
+        currentUserId="user-1"
+        onPromptClick={onPromptClick}
+        prompts={customPrompts}
+      />,
+    );
+
+    expect(screen.getByText("มีของพร้อมส่งไหมครับ?")).toBeInTheDocument();
+    expect(screen.getByText("สามารถนัดรับได้ไหมครับ?")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("มีของพร้อมส่งไหมครับ?"));
+    expect(onPromptClick).toHaveBeenCalledWith("มีของพร้อมส่งไหมครับ?");
+  });
+
   it("marks historical messages with none and animates the latest message on initial load", () => {
     const messages = [
       {

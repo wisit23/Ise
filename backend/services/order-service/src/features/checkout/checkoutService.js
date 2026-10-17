@@ -49,8 +49,8 @@ async function reserveOrder(
     throw error;
   }
 
-  // 2. Pre-generate orderId
-  const orderId = crypto.randomUUID();
+  // 2. Pre-generate concise orderId (e.g. ORD-A1B2C3D4E5)
+  const orderId = `ORD-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
 
   // 3. Server-side Voucher Validation & Discount Calculation via quoteAndHold
   let verifiedCampaignId = null;

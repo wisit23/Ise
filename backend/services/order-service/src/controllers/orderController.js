@@ -117,6 +117,18 @@ async function getOne(req, res, next) {
 // Only the transitions in orderLifecycle.PARTICIPANT_TRANSITIONS can be
 // requested here. paid/delivered/timeouts come from the system, and
 // disputed/refunded only through the dispute flow (CSS-003's disputeService).
+
+/** Seller accepts a paid order; same rules as PATCH status "confirmed". */
+function confirmOrder(req, res, next) {
+  req.body = { ...req.body, status: "confirmed" };
+  return updateStatus(req, res, next);
+}
+
+/** Seller rejects a paid order (refunded by the lifecycle) with a reason. */
+function rejectOrder(req, res, next) {
+  req.body = { ...req.body, status: "cancelled" };
+  return updateStatus(req, res, next);
+}
 async function updateStatus(req, res, next) {
   try {
     const order = await orderModel.findById(req.params.id);
@@ -133,6 +145,9 @@ async function updateStatus(req, res, next) {
     orderTransitionService.assertCanParticipantUpdateStatus(order);
 
     if (status === "shipped") {
+      if (order.sellerId !== req.userId) {
+        throw forbidden("only the seller can mark this order as shipped");
+      }
       const shipped = await shippingService.markShipped({
         orderId: order.id,
         actorId: req.userId,
@@ -150,6 +165,7 @@ async function updateStatus(req, res, next) {
       order,
       status,
       actorId: req.userId,
+      reason: req.body.reason?.trim() || undefined,
     });
     if (event) return respondAfterProductSync(res, updated, event);
     res.json(updated);
@@ -224,10 +240,15 @@ async function createFromAuction(req, res, next) {
       );
     }
 
-    // Idempotency: if an order was already created for this auction (e.g. race between BullMQ worker and page visit), return it.
+    // Idempotency: concise deterministic ID for auction order (e.g. AUC-A1B2C3D4E5)
     const stableId =
-      "auction-" +
-      crypto.createHash("sha256").update(String(auctionId)).digest("hex");
+      "AUC-" +
+      crypto
+        .createHash("sha256")
+        .update(String(auctionId))
+        .digest("hex")
+        .slice(0, 10)
+        .toUpperCase();
     const existing = await orderModel.findById(stableId);
     if (existing) {
       return res.status(200).json(existing);
@@ -270,11 +291,13 @@ async function createFromAuction(req, res, next) {
   } catch (err) {
     if (err.code === "P2002") {
       const stableId =
-        "auction-" +
+        "AUC-" +
         crypto
           .createHash("sha256")
           .update(String(req.body.auctionId))
-          .digest("hex");
+          .digest("hex")
+          .slice(0, 10)
+          .toUpperCase();
       const existing = await orderModel.findById(stableId);
       if (existing) {
         return res.status(200).json(existing);
@@ -300,13 +323,36 @@ async function updateShippingAddress(req, res, next) {
     next(err);
   }
 }
+async function getByProductInternal(req, res, next) {
+  try {
+    const order = await prisma.order.findFirst({
+      where: {
+        productId: req.params.productId,
+        status: { notIn: ["cancelled", "refunded"] },
+      },
+      select: {
+        id: true,
+        buyerId: true,
+        sellerId: true,
+        status: true,
+      },
+    });
+    res.json(order || null);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   create,
   mine,
   selling,
   getOne,
   getOneInternal,
+  getByProductInternal,
   updateStatus,
+  confirmOrder,
+  rejectOrder,
   pay,
   createFromAuction,
   updateShippingAddress,

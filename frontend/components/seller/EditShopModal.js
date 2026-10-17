@@ -6,6 +6,11 @@ import Button from "../ui/Button";
 import Alert from "../ui/Alert";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
+import BankAccountInput, {
+  parseBankAccount,
+  formatBankAccount,
+  validateBankAccount,
+} from "./BankAccountInput";
 
 export default function EditShopModal({
   open,
@@ -15,7 +20,8 @@ export default function EditShopModal({
 }) {
   const [shopName, setShopName] = useState("");
   const [address, setAddress] = useState("");
-  const [bankAccount, setBankAccount] = useState("");
+  const [bank, setBank] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [comment, setComment] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -47,9 +53,13 @@ export default function EditShopModal({
         if (prof) {
           setShopName(prof.shopName || currentShopName || "");
           setAddress(prof.address || "");
-          setBankAccount(prof.bankAccount || "");
+          const parsed = parseBankAccount(prof.bankAccount || "");
+          setBank(parsed.bank);
+          setAccountNumber(parsed.accountNumber);
         } else {
           setShopName(currentShopName || "");
+          setBank("");
+          setAccountNumber("");
         }
 
         const pending = (reqs?.items || []).find((r) => r.status === "PENDING");
@@ -69,6 +79,12 @@ export default function EditShopModal({
       return;
     }
 
+    const bankError = validateBankAccount(bank, accountNumber, { required: false });
+    if (bankError) {
+      setError(bankError);
+      return;
+    }
+
     const token = getAccessToken();
     if (!token) {
       setError("กรุณาเข้าสู่ระบบก่อนดำเนินการ");
@@ -77,10 +93,11 @@ export default function EditShopModal({
 
     setSubmitting(true);
     try {
+      const formattedBank = formatBankAccount(bank, accountNumber);
       const payload = {
         shopName: shopName.trim() || undefined,
         address: address.trim() || undefined,
-        bankAccount: bankAccount.trim() || undefined,
+        bankAccount: formattedBank || undefined,
         comment: comment.trim(),
       };
 
@@ -185,16 +202,13 @@ export default function EditShopModal({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              เลขบัญชีธนาคาร
-            </label>
-            <input
-              type="text"
-              value={bankAccount}
-              onChange={(e) => setBankAccount(e.target.value)}
+            <BankAccountInput
+              bank={bank}
+              accountNumber={accountNumber}
+              onBankChange={setBank}
+              onAccountNumberChange={setAccountNumber}
               disabled={submitting || Boolean(pendingRequest)}
-              placeholder="เช่น กสิกรไทย 123-4-56789-0"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 font-mono"
+              required={false}
             />
           </div>
 

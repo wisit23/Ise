@@ -79,7 +79,7 @@ export default function KycStatusCard({ status, statusLabel }) {
             variant="secondary"
             icon="storefront"
           >
-            แดชบอร์ดผู้ขาย
+            My Store
           </Button>
         </div>
       )}

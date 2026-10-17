@@ -1,0 +1,78 @@
+import { render, screen, fireEvent } from "@testing-library/react";
+import ReportDecisionModal from "./ReportDecisionModal";
+
+describe("ReportDecisionModal", () => {
+  it("renders nothing when open is false", () => {
+    const { container } = render(
+      <ReportDecisionModal open={false} onClose={jest.fn()} notification={null} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("renders nothing when notification is null", () => {
+    const { container } = render(
+      <ReportDecisionModal open={true} onClose={jest.fn()} notification={null} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("renders decision details for SUSPEND_USER verdict", () => {
+    const mockNotification = {
+      title: "บัญชีของคุณถูกระงับการใช้งาน",
+      message: "ผู้ดูแลระบบได้ระงับการใช้งานบัญชีของคุณ",
+      link: "/products/prod-123",
+      createdAt: new Date("2026-10-17T00:00:00Z").toISOString(),
+      metadata: {
+        reportId: "rep-1",
+        decision: "SUSPEND_USER",
+        reason: "มีพฤติกรรมหลอกลวงผู้ซื้อ",
+        role: "target",
+      },
+    };
+
+    const handleClose = jest.fn();
+    render(
+      <ReportDecisionModal
+        open={true}
+        onClose={handleClose}
+        notification={mockNotification}
+      />,
+    );
+
+    expect(screen.getByText("รายละเอียดผลการตัดสินจากผู้ดูแลระบบ")).toBeInTheDocument();
+    expect(screen.getByText("ระงับการใช้งานบัญชีผู้ใช้")).toBeInTheDocument();
+    expect(screen.getByText("คุณเป็นผู้ถูกรายงาน")).toBeInTheDocument();
+    expect(screen.getByText("มีพฤติกรรมหลอกลวงผู้ซื้อ")).toBeInTheDocument();
+    expect(screen.getByText("ดูรายการที่เกี่ยวข้อง").closest("a")).toHaveAttribute("href", "/products/prod-123");
+
+    fireEvent.click(screen.getByRole("button", { name: /รับทราบและปิด/i }));
+
+    expect(handleClose).toHaveBeenCalled();
+  });
+
+  it("renders DISMISS decision for reporter", () => {
+    const mockNotification = {
+      title: "ผลการพิจารณารายงาน",
+      message: "ผู้ดูแลระบบได้ยกเลิกรายงาน",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        reportId: "rep-2",
+        decision: "DISMISS",
+        reason: "ไม่พบหลักฐานการกระทำความผิด",
+        role: "reporter",
+      },
+    };
+
+    render(
+      <ReportDecisionModal
+        open={true}
+        onClose={jest.fn()}
+        notification={mockNotification}
+      />,
+    );
+
+    expect(screen.getByText("ยกเลิกรายงาน / ไม่พบการกระทำผิด")).toBeInTheDocument();
+    expect(screen.getByText("คุณเป็นผู้รายงาน")).toBeInTheDocument();
+    expect(screen.getByText("ไม่พบหลักฐานการกระทำความผิด")).toBeInTheDocument();
+  });
+});

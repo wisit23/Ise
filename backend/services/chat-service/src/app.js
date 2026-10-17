@@ -3,6 +3,7 @@ const { errorHandler } = require("@reloop/shared");
 const prisma = require("./models/prismaClient");
 const conversationRoutes = require("./features/conversations/conversationRoutes");
 const messageRoutes = require("./features/messages/messageRoutes");
+const notificationRoutes = require("./features/notifications/notificationRoutes");
 const internalRoutes = require("./features/internal/internalRoutes");
 const attachmentRoutes = require("./features/attachments/attachmentRoutes");
 
@@ -30,6 +31,7 @@ app.get("/health", async (req, res) => {
 
 app.use("/", conversationRoutes);
 app.use("/", messageRoutes);
+app.use("/", notificationRoutes);
 // Mounted before express.json() would matter if this parsed bodies, but
 // multer handles its own multipart parsing — express.json() above simply
 // ignores multipart requests, so ordering here is not load-bearing.

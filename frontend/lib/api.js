@@ -101,7 +101,7 @@ export async function apiFetch(path, { timeoutMs, ...options } = {}) {
   }
 }
 
-async function apiFetchRequest(path, { method = "GET", body, token, signal } = {}) {
+async function apiFetchRequest(path, { method = "GET", body, token, signal, headers = {} } = {}) {
   const authToken = token ?? getAccessToken();
 
   let res = await fetch(`${API_URL}${path}`, {
@@ -110,6 +110,7 @@ async function apiFetchRequest(path, { method = "GET", body, token, signal } = {
     headers: {
       "Content-Type": "application/json",
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -125,6 +126,7 @@ async function apiFetchRequest(path, { method = "GET", body, token, signal } = {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${newToken}`,
+          ...headers,
         },
         body: body ? JSON.stringify(body) : undefined,
       });
@@ -155,9 +157,11 @@ async function apiFetchRequest(path, { method = "GET", body, token, signal } = {
   return data;
 }
 
-export async function createReportWithEvidence({ targetId, category, reason, file }, token) {
+export async function createReportWithEvidence({ targetId, productId, reviewId, category, reason, file }, token) {
   const form = new FormData();
   if (targetId) form.append("targetId", targetId);
+  if (productId) form.append("productId", productId);
+  if (reviewId) form.append("reviewId", reviewId);
   if (category) form.append("category", category);
   form.append("reason", reason);
   if (file) form.append("file", file);

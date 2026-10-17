@@ -35,6 +35,41 @@ router.get(
   },
 );
 
+router.get(
+  "/reports/pending-check",
+  requireAuth,
+  async (req, res, next) => {
+    try {
+      const result = await reportService.checkPendingReport({
+        reporterId: req.userId,
+        productId: req.query.productId,
+        reviewId: req.query.reviewId,
+        targetId: req.query.targetId,
+      });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.get(
+  "/reports/my-reported-reviews",
+  requireAuth,
+  async (req, res, next) => {
+    try {
+      const reviewIds = await reportService.getMyReportedReviewIds(
+        req.userId,
+        req.query.productId,
+      );
+      res.json({ reportedReviewIds: reviewIds });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+
 router.post(
   "/reports",
   requireAuth,
@@ -47,7 +82,9 @@ router.post(
         targetId: req.body.targetId,
         category: req.body.category,
         reason: req.body.reason,
+        productId: req.body.productId,
         file: req.file,
+        reviewId: req.body.reviewId,
       });
       res.status(201).json(report);
     } catch (err) {

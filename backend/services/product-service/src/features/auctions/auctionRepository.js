@@ -48,7 +48,7 @@ function createAuctionRepository(prismaClient) {
     const [items, total] = await Promise.all([
       prismaClient.auctionItem.findMany({
         where,
-        include: WITH_PRODUCT,
+        include: { ...WITH_PRODUCT, bids: { orderBy: { amount: "desc" } } },
         orderBy: { createdAt: "desc" },
         skip,
         take,

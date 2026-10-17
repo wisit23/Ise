@@ -10,6 +10,10 @@ const STATUS_CONFIG = {
     label: "พร้อมขาย",
     className: "bg-emerald-50 text-emerald-700 border-emerald-200",
   },
+  auction: {
+    label: "สินค้าประมูล",
+    className: "bg-sky-50 text-sky-700 border-sky-200",
+  },
   reserved: {
     label: "ถูกจองแล้ว",
     className: "bg-amber-50 text-amber-700 border-amber-200",
@@ -20,7 +24,7 @@ const STATUS_CONFIG = {
   },
 };
 
-export default function ChatProductHeader({ productId }) {
+export default function ChatProductHeader({ productId, auctionId }) {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(Boolean(productId));
 
@@ -63,7 +67,12 @@ export default function ChatProductHeader({ productId }) {
   const thumbUrl = product.media?.[0]?.url
     ? mediaUrl(product.media[0].url)
     : null;
-  const statusInfo = STATUS_CONFIG[product.status] || STATUS_CONFIG.available;
+  const resolvedAuctionId = auctionId || product.auctionId || null;
+  const isAuction = product.status === "auction" || Boolean(resolvedAuctionId);
+  const statusInfo = (isAuction ? STATUS_CONFIG.auction : null) || STATUS_CONFIG[product.status] || STATUS_CONFIG.available;
+  const targetHref = isAuction && resolvedAuctionId
+    ? `/auctions/${resolvedAuctionId}`
+    : `/products/${product.id}`;
 
   return (
     <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-3 border-b border-gray-100 bg-white/95 px-4 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.03)] backdrop-blur-md">
@@ -98,17 +107,17 @@ export default function ChatProductHeader({ productId }) {
             </span>
           </div>
           <p className="mt-0.5 text-xs font-bold text-emerald-600">
-            ฿{Number(product.price || 0).toLocaleString("th-TH")}
+            ฿{Number(product.price || product.startingPrice || 0).toLocaleString("th-TH")}
           </p>
         </div>
       </div>
 
       {/* View Listing CTA */}
       <Link
-        href={`/products/${product.id}`}
+        href={targetHref}
         className="flex min-h-10 shrink-0 items-center gap-1 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-emerald-800 shadow-xs transition hover:border-emerald-500 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
       >
-        <span>ดูสินค้า</span>
+        <span>{isAuction ? "ดูสินค้าประมูล" : "ดูสินค้า"}</span>
         <span
           className="material-symbols-outlined text-[15px]"
           aria-hidden="true"

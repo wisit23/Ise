@@ -13,8 +13,25 @@ export default function LineChart({
   height = 160,
   fillArea = false,
   gridLines = 4,
+  formatValue,
 }) {
-  const [hover, setHover] = useState(null); // { seriesIdx, pointIdx }
+  const [hover, setHover] = useState(null); // { si, i }
+  const [selected, setSelected] = useState(() => {
+    if (!series[0]?.data) return null;
+    const valid = series[0].data
+      .map((d, i) => ({ ...d, i, si: 0 }))
+      .filter((d) => d.y !== null && d.y !== undefined);
+    if (!valid.length) return null;
+    return { si: 0, i: valid[valid.length - 1].i };
+  });
+
+  const active = hover || selected;
+  const activeSeries = active ? series[active.si] : null;
+  const activeData = activeSeries?.data?.[active.i] || null;
+
+  const fmt =
+    formatValue ||
+    ((v) => (v !== undefined && v !== null ? `฿${Math.round(v).toLocaleString("th-TH")}` : ""));
 
   if (!series.length || !series[0]?.data?.length) {
     return (
@@ -24,17 +41,21 @@ export default function LineChart({
     );
   }
 
-  const allValues = series.flatMap((s) => s.data.map((d) => d.y));
+  const allValues = series.flatMap((s) =>
+    s.data
+      .filter((d) => d.y !== null && d.y !== undefined)
+      .map((d) => d.y),
+  );
   const maxY = Math.max(...allValues, 1);
   const minY = 0;
   const labels = series[0].data.map((d) => d.x);
   const n = labels.length;
 
-  const padLeft = 32;
-  const padRight = 8;
-  const padTop = 10;
-  const padBottom = 24;
-  const W = 300;
+  const padLeft = 44;
+  const padRight = 12;
+  const padTop = 14;
+  const padBottom = 26;
+  const W = 320;
   const H = height;
   const chartW = W - padLeft - padRight;
   const chartH = H - padTop - padBottom;
@@ -47,19 +68,31 @@ export default function LineChart({
   }
 
   function buildPath(data) {
-    return data
-      .map((d, i) => `${i === 0 ? "M" : "L"}${xPos(i)},${yPos(d.y)}`)
+    const valid = data
+      .map((d, i) => ({ ...d, i }))
+      .filter((d) => d.y !== null && d.y !== undefined);
+    if (!valid.length) return "";
+    return valid
+      .map((d, idx) => `${idx === 0 ? "M" : "L"}${xPos(d.i)},${yPos(d.y)}`)
       .join(" ");
   }
   function buildArea(data) {
+    const valid = data
+      .map((d, i) => ({ ...d, i }))
+      .filter((d) => d.y !== null && d.y !== undefined);
+    if (!valid.length) return "";
     const line = buildPath(data);
-    const last = `L${xPos(data.length - 1)},${yPos(0)} L${xPos(0)},${yPos(0)} Z`;
+    const firstI = valid[0].i;
+    const lastI = valid[valid.length - 1].i;
+    const last = `L${xPos(lastI)},${yPos(0)} L${xPos(firstI)},${yPos(0)} Z`;
     return `${line} ${last}`;
   }
 
   const yTicks = Array.from({ length: gridLines + 1 }, (_, i) =>
     Math.round((maxY / gridLines) * i),
   );
+
+  const latestVal = allValues[allValues.length - 1] ?? 0;
 
   return (
     <div className="w-full overflow-x-auto">
@@ -82,13 +115,13 @@ export default function LineChart({
               strokeDasharray="4 2"
             />
             <text
-              x={padLeft - 4}
+              x={padLeft - 5}
               y={yPos(tick) + 3}
               textAnchor="end"
               fontSize="8"
               fill={CHART_INK.muted}
             >
-              {tick}
+              {fmt(tick)}
             </text>
           </g>
         ))}
@@ -121,63 +154,71 @@ export default function LineChart({
               d={buildPath(s.data)}
               fill="none"
               stroke={s.color}
-              strokeWidth="2"
+              strokeWidth="2.5"
               strokeLinejoin="round"
               strokeLinecap="round"
             />
             {/* Data points */}
             {s.data.map((d, i) => {
+              if (d.y === null || d.y === undefined) return null;
+              const isSelected = selected?.si === si && selected?.i === i;
               const isHov = hover?.si === si && hover?.i === i;
+              const isActive = isSelected || isHov;
               return (
-                <circle
-                  key={i}
-                  cx={xPos(i)}
-                  cy={yPos(d.y)}
-                  r={isHov ? 4 : 3}
-                  fill="white"
-                  stroke={s.color}
-                  strokeWidth="2"
-                  className="cursor-pointer transition-all"
-                  onPointerEnter={() => setHover({ si, i })}
-                  onPointerLeave={() => setHover(null)}
-                />
+                <g key={i}>
+                  {/* Invisible hit target for easy clicking and hovering */}
+                  <circle
+                    cx={xPos(i)}
+                    cy={yPos(d.y)}
+                    r="12"
+                    fill="transparent"
+                    className="cursor-pointer"
+                    onClick={() => setSelected({ si, i })}
+                    onPointerEnter={() => setHover({ si, i })}
+                    onPointerLeave={() => setHover(null)}
+                  />
+                  {/* Halo ring for active/selected point */}
+                  {isActive && (
+                    <circle
+                      cx={xPos(i)}
+                      cy={yPos(d.y)}
+                      r="6.5"
+                      fill={s.color}
+                      fillOpacity="0.25"
+                      className="pointer-events-none"
+                    />
+                  )}
+                  {/* Core data point */}
+                  <circle
+                    cx={xPos(i)}
+                    cy={yPos(d.y)}
+                    r={isActive ? 4.5 : 3}
+                    fill={isActive ? s.color : "white"}
+                    stroke={s.color}
+                    strokeWidth="2"
+                    className="cursor-pointer transition-all pointer-events-none"
+                  />
+                </g>
               );
             })}
+
           </g>
         ))}
-
-        {/* Hover tooltip */}
-        {hover &&
-          (() => {
-            const s = series[hover.si];
-            const d = s.data[hover.i];
-            const tx = Math.min(Math.max(xPos(hover.i), 40), W - 40);
-            const ty = Math.max(yPos(d.y) - 20, padTop + 5);
-            return (
-              <g>
-                <rect
-                  x={tx - 28}
-                  y={ty - 12}
-                  width={56}
-                  height={18}
-                  rx="4"
-                  fill="#1f2937"
-                  fillOpacity="0.88"
-                />
-                <text
-                  x={tx}
-                  y={ty}
-                  textAnchor="middle"
-                  fontSize="9"
-                  fill="white"
-                  fontWeight="600"
-                >
-                  {d.x}: {d.y}
-                </text>
-              </g>
-            );
-          })()}
       </svg>
+
+      {/* Detail / Summary below chart: shows month and revenue earned from that month when pressing point */}
+      <div className="mt-1 flex items-center text-xs text-slate-600 min-h-5 px-0.5">
+        {activeData && (
+          <div className="flex items-center gap-1">
+            <span className="font-semibold text-slate-900">
+              {(activeData.monthFull || activeData.monthLabel || activeData.x)}:
+            </span>
+            <span className="font-bold text-emerald-700">
+              {fmt(activeData.monthValue !== undefined ? activeData.monthValue : activeData.y)}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Legend */}
       {series.length > 1 && (

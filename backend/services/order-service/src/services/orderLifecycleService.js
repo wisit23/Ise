@@ -39,7 +39,7 @@ function productSyncFor(order, status, purpose) {
  * attribution, buyer activity, chat). Used by participants and by the sweeps
  * so an automatic transition behaves exactly like the button press.
  */
-async function transition({ order, status, actorId, purpose = "ORDER_STATUS" }) {
+async function transition({ order, status, actorId, purpose = "ORDER_STATUS", reason }) {
   const { order: updated, event, attributionEvent } =
     await orderModel.transitionStatusWithProductSync({
       id: order.id,
@@ -75,7 +75,7 @@ async function transition({ order, status, actorId, purpose = "ORDER_STATUS" }) 
       initiatedBy: actorId,
     });
   }
-  await chatClient.notifyOrderStatusChanged(order, status);
+  await chatClient.notifyOrderStatusChanged(order, status, { reason });
   return { order: updated, event };
 }
 

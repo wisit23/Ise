@@ -3746,3 +3746,22 @@ test("chatClient.notifyRoundCancelled partial failure followed by retry delivers
     "Retry must deliver missing buyer-2 without duplicating seller-1 or buyer-1",
   );
 });
+
+test("service.getBids returns enriched bids with bidder names", async (t) => {
+  const auction = {
+    id: "a-bids-test",
+    status: "open",
+    bids: [
+      { id: "b1", amount: 1200, bidderId: "user-alpha", createdAt: new Date() },
+      { id: "b2", amount: 1000, bidderId: "user-beta", createdAt: new Date() },
+    ],
+  };
+  t.mock.method(repository, "findById", async (id) => auction);
+
+  const bids = await service.getBids("a-bids-test");
+  assert.equal(bids.length, 2);
+  assert.equal(bids[0].amount, 1200);
+  assert.ok(bids[0].bidderName);
+  assert.equal(bids[1].amount, 1000);
+  assert.ok(bids[1].bidderName);
+});

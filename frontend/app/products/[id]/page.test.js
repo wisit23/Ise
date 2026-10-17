@@ -120,3 +120,34 @@ test("adding a product reserves a cart item without creating an order", async ()
     ),
   ).toBe(false);
 });
+
+test("displays view count badge with accurate count", async () => {
+  apiFetch.mockImplementation((path) => {
+    if (path.startsWith("/api/products/p"))
+      return Promise.resolve({
+        id: "p",
+        title: "View count test listing",
+        sellerId: "seller-123",
+        status: "available",
+        price: 100,
+        viewCount: 42,
+        media: [],
+        tags: [],
+      });
+    if (path.includes("/public"))
+      return Promise.resolve({ firstName: "Seller", lastName: "Test" });
+    if (path.includes("/summary"))
+      return Promise.resolve({ total: 0, averageRating: 0 });
+    return Promise.resolve({ items: [], totalPages: 1 });
+  });
+
+  render(<ProductDetailPage />);
+  expect(await screen.findByTestId("product-view-count")).toBeInTheDocument();
+  expect(screen.getByText(/เข้าชม 42 ครั้ง/)).toBeInTheDocument();
+});
+
+test("displays 0 views when viewCount is 0", async () => {
+  setup("available");
+  expect(await screen.findByTestId("product-view-count")).toBeInTheDocument();
+  expect(screen.getByText(/เข้าชม 0 ครั้ง/)).toBeInTheDocument();
+});

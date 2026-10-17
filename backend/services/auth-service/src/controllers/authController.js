@@ -119,6 +119,55 @@ async function decideChangeRequest(req, res, next) {
   }
 }
 
+async function getMyAutoMessages(req, res, next) {
+  try {
+    const list = await authService.listMyAutoMessages(req.userId);
+    res.json(list);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function createAutoMessage(req, res, next) {
+  try {
+    const item = await authService.createAutoMessage(req.userId, req.body);
+    res.status(201).json(item);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateAutoMessage(req, res, next) {
+  try {
+    const item = await authService.updateAutoMessage(
+      req.userId,
+      req.params.id,
+      req.body,
+    );
+    res.json(item);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteAutoMessage(req, res, next) {
+  try {
+    const result = await authService.deleteAutoMessage(req.userId, req.params.id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getPublicAutoMessages(req, res, next) {
+  try {
+    const list = await authService.getPublicAutoMessages(req.params.id);
+    res.json(list);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   register,
   login,
@@ -132,4 +181,9 @@ module.exports = {
   getMyChangeRequests,
   getPendingChangeRequests,
   decideChangeRequest,
+  getMyAutoMessages,
+  createAutoMessage,
+  updateAutoMessage,
+  deleteAutoMessage,
+  getPublicAutoMessages,
 };

@@ -170,6 +170,37 @@ function broadcastStatusChange(conversation, newStatus) {
   });
 }
 
+function broadcastNotification(notification) {
+  if (!ioInstance) return;
+  if (!notification.userId || notification.userId === "ALL") {
+    ioInstance.emit("notification:new", notification);
+  } else {
+    ioInstance
+      .to(userRoomName(notification.userId))
+      .emit("notification:new", notification);
+  }
+}
+
+function broadcastConversationDeleted(conversationId, participantUserIds = []) {
+  if (!ioInstance) return;
+  ioInstance.to(roomName(conversationId)).emit("conversation:deleted", { conversationId });
+  for (const uid of participantUserIds) {
+    ioInstance.to(userRoomName(uid)).emit("conversation:deleted", { conversationId });
+  }
+}
+
+function broadcastRealtime({ event, data, rooms = [], broadcastGlobal = false }) {
+  if (!ioInstance || !event) return;
+  if (broadcastGlobal) {
+    ioInstance.emit(event, data);
+  }
+  for (const r of rooms) {
+    if (r) {
+      ioInstance.to(r).emit(event, data);
+    }
+  }
+}
+
 module.exports = {
   setIo,
   roomName,
@@ -178,4 +209,7 @@ module.exports = {
   broadcastActivity,
   broadcastCaseTyping,
   broadcastStatusChange,
+  broadcastNotification,
+  broadcastConversationDeleted,
+  broadcastRealtime,
 };

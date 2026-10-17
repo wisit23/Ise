@@ -8,6 +8,8 @@ const {
 } = require("@reloop/shared");
 const reviewModel = require("../models/reviewModel");
 const orderClient = require("../services/orderClient");
+const chatClient = require("../../auctions/chatClient");
+const productModel = require("../../../models/productModel");
 const {
   assertReviewCommentAllowed,
 } = require("../services/reviewCommentPolicy");
@@ -70,6 +72,41 @@ async function create(req, res, next) {
       comment: reviewComment.slice(0, 1000),
       media: normalizedMedia,
     });
+
+    try {
+      let productTitle = "สินค้าของคุณ";
+      if (order.productId) {
+        try {
+          const prod = await productModel.findById(order.productId);
+          if (prod?.title) productTitle = prod.title;
+        } catch {
+          // ignore product lookup failure
+        }
+      }
+      const stars = "⭐".repeat(rating);
+      const commentSnippet = reviewComment
+        ? ` "${reviewComment.slice(0, 50)}${reviewComment.length > 50 ? "..." : ""}"`
+        : "";
+
+      chatClient.sendSystemNotification({
+        userId: order.sellerId,
+        type: "REVIEW",
+        title: "มีคนคอมเมนต์สินค้าของคุณ",
+        message: `💬 มีลูกค้าแสดงความคิดเห็น/รีวิวสินค้า '${productTitle}' ให้คะแนน ${stars} (${rating}/5)${commentSnippet ? `: ${commentSnippet}` : ""}`,
+        link: order.productId ? `/products/${order.productId}` : "/orders",
+        entityId: `review:${review.id}`,
+        metadata: {
+          reviewId: review.id,
+          orderId: order.id,
+          productId: order.productId,
+          rating,
+          comment: reviewComment,
+        },
+      }).catch(() => {});
+    } catch (notifyErr) {
+      console.error("[reviewController] notify review failed:", notifyErr.message);
+    }
+
     res.status(201).json(review);
   } catch (err) {
     next(err);

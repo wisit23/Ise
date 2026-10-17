@@ -16,8 +16,8 @@ router.get(
           by: ["status"],
           _count: { _all: true },
         }),
-        prisma.orderHold.count({
-          where: { source: "TRUST_AND_SAFETY", releasedAt: null },
+        prisma.hold.count({
+          where: { source: "TRUST_AND_SAFETY", releaseAt: null },
         }),
       ]);
       res.json({

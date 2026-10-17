@@ -14,6 +14,7 @@ const productModerationClient = require("../../services/productModerationClient"
 const { lockUser } = require("../../services/sessionService");
 const authService = require("../../services/authService");
 const reportEvidenceStorage = require("./reportEvidenceStorage");
+const chatClient = require("../../services/chatClient");
 
 function toPublicUser(user) {
   return {
@@ -40,16 +41,114 @@ async function recordAdminAction({
   });
 }
 
+async function checkPendingReport({ reporterId, productId, reviewId, targetId }) {
+  if (!reporterId) return { hasPendingReport: false };
+
+  // 1. Comment / review report check
+  if (reviewId) {
+    const existing = await prisma.report.findFirst({
+      where: {
+        reporterId,
+        status: { in: ["OPEN", "REVIEWED"] },
+        reason: { contains: reviewId },
+      },
+    });
+    if (existing) {
+      return {
+        hasPendingReport: true,
+        type: "review",
+        message:
+          "คุณได้รายงานความคิดเห็นนี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+        report: existing,
+      };
+    }
+  }
+
+  // 2. Product report check
+  if (productId && !reviewId) {
+    const existing = await prisma.report.findFirst({
+      where: {
+        reporterId,
+        productId,
+        status: { in: ["OPEN", "REVIEWED"] },
+        NOT: {
+          reason: { contains: "[รายงานรีวิว" },
+        },
+      },
+    });
+    if (existing) {
+      return {
+        hasPendingReport: true,
+        type: "product",
+        message:
+          "คุณได้รายงานสินค้านี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+        report: existing,
+      };
+    }
+  }
+
+  // 3. User report check
+  if (targetId && !productId && !reviewId) {
+    const existing = await prisma.report.findFirst({
+      where: {
+        reporterId,
+        targetId,
+        productId: null,
+        status: { in: ["OPEN", "REVIEWED"] },
+        NOT: {
+          reason: { contains: "[รายงานรีวิว" },
+        },
+      },
+    });
+    if (existing) {
+      return {
+        hasPendingReport: true,
+        type: "user",
+        message:
+          "คุณได้รายงานผู้ใช้นี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+        report: existing,
+      };
+    }
+  }
+
+  return { hasPendingReport: false };
+}
+
+async function getMyReportedReviewIds(reporterId, productId) {
+  if (!reporterId) return [];
+  const where = {
+    reporterId,
+    status: { in: ["OPEN", "REVIEWED"] },
+    reason: { contains: "[รายงานรีวิว" },
+  };
+  if (productId) {
+    where.productId = productId;
+  }
+  const reports = await prisma.report.findMany({
+    where,
+    select: { reason: true },
+  });
+
+  const ids = [];
+  for (const r of reports) {
+    const match = r.reason?.match(/\[รายงานรีวิว\s*#?([^\]]+)\]/);
+    if (match) {
+      ids.push(match[1].trim());
+    }
+  }
+  return Array.from(new Set(ids));
+}
+
 /**
- * A Buyer/Seller reports another account with a reason and category.
+ * A Buyer/Seller reports another account, optionally about a product or a
+ * review, with a reason, a category and an optional image as evidence.
  * Product/order disputes use their own case flow.
  */
-async function createReport({ reporterId, targetId, category, reason, file }) {
+async function createReport({ reporterId, targetId, productId, category, reason, file, reviewId }) {
   const trimmedReason = reason?.trim();
   if (!trimmedReason) throw badRequest("reason is required");
-  if (!targetId) throw badRequest("targetId is required");
-  if (targetId === reporterId) throw badRequest("cannot report yourself");
-  if (!category) throw badRequest("category is required");
+  if (!targetId && !productId) throw badRequest("targetId or productId is required");
+  if (targetId && targetId === reporterId) throw badRequest("cannot report yourself");
   const allowedCategories = new Set([
     "FRAUD", "COUNTERFEIT_IP", "INAPPROPRIATE_BEHAVIOR",
     "MISLEADING_INFORMATION", "OTHER",
@@ -58,13 +157,94 @@ async function createReport({ reporterId, targetId, category, reason, file }) {
     throw badRequest("invalid report category");
   }
 
-  let storageKey;
-  try {
-    if (file) storageKey = await reportEvidenceStorage.persist(file);
-    return await prisma.report.create({
-      data: {
+  let extractedReviewId = reviewId || null;
+  if (!extractedReviewId) {
+    const match = trimmedReason.match(/\[รายงานรีวิว\s*#?([^\]]+)\]/);
+    if (match) extractedReviewId = match[1].trim();
+  }
+
+  const isReviewReport = Boolean(
+    extractedReviewId ||
+    trimmedReason.includes("[รายงานรีวิว") ||
+    trimmedReason.includes("เนื้อหารีวิว")
+  );
+  // Review reports carry their topic in the reason; other reports need a category.
+  if (!category && !isReviewReport) throw badRequest("category is required");
+
+  // Prevent duplicate reports while pending admin decision
+  if (isReviewReport) {
+    const conditions = [];
+    if (extractedReviewId) {
+      conditions.push({ reason: { contains: extractedReviewId } });
+    }
+    if (targetId && productId) {
+      conditions.push({
+        AND: [
+          { targetId },
+          { productId },
+          { reason: { contains: "[รายงานรีวิว" } },
+        ],
+      });
+    }
+
+    if (conditions.length > 0) {
+      const existing = await prisma.report.findFirst({
+        where: {
+          reporterId,
+          status: { in: ["OPEN", "REVIEWED"] },
+          OR: conditions,
+        },
+      });
+      if (existing) {
+        throw conflict(
+          "คุณได้รายงานความคิดเห็นนี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+        );
+      }
+    }
+  } else if (productId) {
+    const existing = await prisma.report.findFirst({
+      where: {
+        reporterId,
+        productId,
+        status: { in: ["OPEN", "REVIEWED"] },
+        NOT: {
+          reason: { contains: "[รายงานรีวิว" },
+        },
+      },
+    });
+    if (existing) {
+      throw conflict(
+        "คุณได้รายงานสินค้านี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+      );
+    }
+  } else {
+    const existing = await prisma.report.findFirst({
+      where: {
         reporterId,
         targetId,
+        productId: null,
+        status: { in: ["OPEN", "REVIEWED"] },
+        NOT: {
+          reason: { contains: "[รายงานรีวิว" },
+        },
+      },
+    });
+    if (existing) {
+      throw conflict(
+        "คุณได้รายงานผู้ใช้นี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+      );
+    }
+  }
+
+  let storageKey;
+  let report;
+  try {
+    if (file) storageKey = await reportEvidenceStorage.persist(file);
+    report = await prisma.report.create({
+      data: {
+        reporterId,
+        targetId: targetId || null,
+        productId: productId || null,
         category: category || null,
         reason: trimmedReason,
         ...(file ? { evidence: { create: { storageKey, fileType: file.mimetype, originalName: file.originalname || "evidence" } } } : {}),
@@ -74,6 +254,39 @@ async function createReport({ reporterId, targetId, category, reason, file }) {
     if (storageKey) await reportEvidenceStorage.remove(storageKey);
     throw error;
   }
+
+  if (isReviewReport && targetId) {
+    try {
+      let productTitle = "สินค้า";
+      if (productId) {
+        try {
+          const product = await productModerationClient.getProduct(productId);
+          if (product?.title) productTitle = product.title;
+        } catch {
+          // ignore lookup failure
+        }
+      }
+
+      chatClient.sendSystemNotification({
+        userId: targetId,
+        type: "REPORT",
+        title: "ความคิดเห็นของคุณถูกรายงาน",
+        message: `⚠️ ความคิดเห็น/รีวิวของคุณในสินค้า '${productTitle}' ถูกรายงานและอยู่ระหว่างการตรวจสอบโดยทีมงาน`,
+        link: productId ? `/products/${productId}` : "/orders",
+        entityId: `report:review:${reviewId || report.id}`,
+        metadata: {
+          reportId: report.id,
+          targetId,
+          productId,
+          reviewId: reviewId || null,
+        },
+      }).catch(() => {});
+    } catch (notifyErr) {
+      console.error("[reportService] notify report failed:", notifyErr.message);
+    }
+  }
+
+  return report;
 }
 
 function reportSearchWhere(search) {
@@ -293,6 +506,151 @@ const VALID_DECISIONS = [
   "DISMISS",
 ];
 
+const DECISION_LABELS = {
+  SUSPEND_USER: "ระงับการใช้งานบัญชีผู้ใช้",
+  WARN_USER: "ตักเตือนผู้ใช้",
+  REMOVE_PRODUCT: "ลบสินค้าออกจากระบบ",
+  DISMISS: "ยกเลิกรายงาน / ไม่พบการกระทำผิด",
+};
+
+async function sendReportDecisionNotifications({ report, decision, reason }) {
+  if (!report) return;
+
+  const trimmedReason = reason?.trim() || "";
+  const isReviewReport = Boolean(
+    report.reason?.includes("[รายงานรีวิว") ||
+    report.reason?.includes("เนื้อหารีวิว")
+  );
+
+  let productTitle = "สินค้า";
+  let sellerId = null;
+  if (report.productId) {
+    try {
+      const product = await productModerationClient.getProduct(report.productId);
+      if (product?.title) productTitle = product.title;
+      if (product?.sellerId) sellerId = product.sellerId;
+    } catch {
+      // product lookup error ignored
+    }
+  }
+
+  const decisionLabel = DECISION_LABELS[decision] || decision;
+  const notifications = [];
+
+  // 1. Notify reporter (ผู้รายงาน)
+  if (report.reporterId) {
+    let reporterMsg = "";
+    if (isReviewReport) {
+      reporterMsg = `ผลการพิจารณารายงานความคิดเห็น: ${decisionLabel} (เหตุผล: ${trimmedReason})`;
+    } else if (report.productId) {
+      reporterMsg = `ผลการพิจารณารายงานสินค้า '${productTitle}': ${decisionLabel} (เหตุผล: ${trimmedReason})`;
+    } else {
+      reporterMsg = `ผลการพิจารณารายงานของคุณ: ${decisionLabel} (เหตุผล: ${trimmedReason})`;
+    }
+
+    notifications.push({
+      userId: report.reporterId,
+      type: "REPORT",
+      title: "ผลการพิจารณารายงาน",
+      message: reporterMsg,
+      link: report.productId ? `/products/${report.productId}` : "/profile",
+      entityId: `report:decision:${report.id}:reporter`,
+      metadata: {
+        reportId: report.id,
+        decision,
+        reason: trimmedReason,
+        role: "reporter",
+      },
+    });
+  }
+
+  // 2. Notify target user (ผู้ถูกรายงาน)
+  if (report.targetId && report.targetId !== report.reporterId) {
+    let targetTitle = "ผลการพิจารณารายงาน";
+    let targetMsg = "";
+
+    if (decision === "SUSPEND_USER") {
+      targetTitle = "บัญชีของคุณถูกระงับการใช้งาน";
+      targetMsg = `⚠️ ผู้ดูแลระบบได้ระงับการใช้งานบัญชีของคุณ เนื่องจาก: ${trimmedReason}`;
+    } else if (decision === "WARN_USER") {
+      targetTitle = "แจ้งเตือนคำเตือนจากผู้ดูแลระบบ";
+      targetMsg = `⚠️ คุณได้รับการตักเตือนจากผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`;
+    } else if (decision === "REMOVE_PRODUCT") {
+      targetTitle = "ผลการพิจารณารายงาน";
+      targetMsg = isReviewReport
+        ? `เนื้อหา/สินค้าที่เกี่ยวข้องถูกนำออกจากระบบโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`
+        : `สินค้า '${productTitle}' ถูกลบออกจากระบบโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`;
+    } else if (decision === "DISMISS") {
+      targetTitle = "ผลการตรวจสอบรายงาน";
+      targetMsg = isReviewReport
+        ? `รายงานต่อความคิดเห็นของคุณได้รับการตรวจสอบแล้ว และผู้ดูแลระบบได้ยกเลิกรายงาน/ไม่พบการกระทำผิด (เหตุผล: ${trimmedReason})`
+        : `รายงานที่เกี่ยวข้องกับคุณได้รับการตรวจสอบแล้ว และผู้ดูแลระบบได้ยกเลิกรายงาน (เหตุผล: ${trimmedReason})`;
+    }
+
+    notifications.push({
+      userId: report.targetId,
+      type: "REPORT",
+      title: targetTitle,
+      message: targetMsg,
+      link: report.productId ? `/products/${report.productId}` : "/profile",
+      entityId: `report:decision:${report.id}:target`,
+      metadata: {
+        reportId: report.id,
+        decision,
+        reason: trimmedReason,
+        role: "target",
+      },
+    });
+  }
+
+  // 3. Notify seller (ผู้ขาย / เจ้าของสินค้า หากไม่ใช่ reporter หรือ target)
+  if (
+    sellerId &&
+    sellerId !== report.reporterId &&
+    sellerId !== report.targetId
+  ) {
+    let sellerTitle = "ผลการตรวจสอบรายงานในร้านค้าของคุณ";
+    let sellerMsg = "";
+
+    if (decision === "REMOVE_PRODUCT") {
+      sellerTitle = "สินค้าของคุณถูกลบโดยผู้ดูแลระบบ";
+      sellerMsg = `⚠️ สินค้า '${productTitle}' ของคุณถูกลบออกจากระบบโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`;
+    } else if (decision === "DISMISS") {
+      sellerTitle = "ผลการตรวจสอบรายงานสินค้า";
+      sellerMsg = `รายงานต่อสินค้า '${productTitle}' ได้รับการตรวจสอบแล้ว และผู้ดูแลระบบได้ยกเลิกรายงาน (เหตุผล: ${trimmedReason})`;
+    } else {
+      sellerTitle = "ผลการพิจารณารายงานในสินค้าของคุณ";
+      sellerMsg = `รายงานที่เกี่ยวข้องกับสินค้า '${productTitle}' ได้รับการพิจารณาแล้ว โดยมีผลการตัดสิน: ${decisionLabel} (เหตุผล: ${trimmedReason})`;
+    }
+
+    notifications.push({
+      userId: sellerId,
+      type: "REPORT",
+      title: sellerTitle,
+      message: sellerMsg,
+      link:
+        decision === "REMOVE_PRODUCT"
+          ? "/seller/dashboard"
+          : `/products/${report.productId}`,
+      entityId: `report:decision:${report.id}:seller`,
+      metadata: {
+        reportId: report.id,
+        decision,
+        reason: trimmedReason,
+        role: "seller",
+      },
+    });
+  }
+
+  for (const notif of notifications) {
+    try {
+      await chatClient.sendSystemNotification(notif);
+    } catch (err) {
+      console.error("[reportService] notify report decision failed:", err.message);
+    }
+  }
+}
+
 /**
  * A report must pass through REVIEWED first (reviewReport) — this keeps
  * the OPEN -> REVIEWED -> ACTIONED|DISMISSED lifecycle from plan.md strictly
@@ -344,7 +702,7 @@ async function actionReport({
     throw conflict("report must be reviewed before it can be actioned");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const actioned = await prisma.$transaction(async (tx) => {
     const claimed = await tx.report.updateMany({
       where: { id: reportId, status: "REVIEWED" },
       data: {
@@ -402,6 +760,18 @@ async function actionReport({
 
     return tx.report.findUnique({ where: { id: reportId } });
   });
+
+  try {
+    await sendReportDecisionNotifications({
+      report: actioned,
+      decision,
+      reason: trimmedReason,
+    });
+  } catch (err) {
+    console.error("[reportService] notify report decision error:", err.message);
+  }
+
+  return actioned;
 }
 
 async function actionProductReport({
@@ -427,7 +797,7 @@ async function actionProductReport({
     reason,
     idempotencyKey,
   );
-  return prisma.$transaction(async (tx) => {
+  const actioned = await prisma.$transaction(async (tx) => {
     const claimed = await tx.report.updateMany({
       where: { id: report.id, status: "REVIEWED" },
       data: { status: "ACTIONED", actionTaken: "REMOVE_PRODUCT" },
@@ -452,6 +822,18 @@ async function actionProductReport({
     });
     return tx.report.findUnique({ where: { id: report.id } });
   });
+
+  try {
+    await sendReportDecisionNotifications({
+      report: actioned,
+      decision: "REMOVE_PRODUCT",
+      reason,
+    });
+  } catch (err) {
+    console.error("[reportService] notify report decision error:", err.message);
+  }
+
+  return actioned;
 }
 
 async function suspendUserInTx(tx, { targetId, actorId, reason, requestId }) {
@@ -511,7 +893,7 @@ async function suspendUser({ targetId, adminId, staffId, reason, requestId }) {
   if (!trimmedReason) throw badRequest("reason is required");
   if (targetId === actorId) throw forbidden("staff cannot suspend themselves");
 
-  return prisma.$transaction((tx) =>
+  const result = await prisma.$transaction((tx) =>
     suspendUserInTx(tx, {
       targetId,
       actorId,
@@ -519,6 +901,22 @@ async function suspendUser({ targetId, adminId, staffId, reason, requestId }) {
       requestId,
     }),
   );
+
+  try {
+    await chatClient.sendSystemNotification({
+      userId: targetId,
+      type: "REPORT",
+      title: "บัญชีของคุณถูกระงับการใช้งาน",
+      message: `⚠️ บัญชีของคุณถูกระงับการใช้งานโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`,
+      link: "/login",
+      entityId: `admin:suspend:${targetId}:${Date.now()}`,
+      metadata: { targetId, reason: trimmedReason, action: "USER_SUSPENDED" },
+    });
+  } catch (err) {
+    console.error("[reportService] suspend notification failed:", err.message);
+  }
+
+  return result;
 }
 
 /**
@@ -534,7 +932,7 @@ async function warnUser({ targetId, adminId, staffId, reason, requestId }) {
   if (!trimmedReason) throw badRequest("reason is required");
   if (targetId === actorId) throw forbidden("staff cannot warn themselves");
 
-  return prisma.$transaction((tx) =>
+  const result = await prisma.$transaction((tx) =>
     warnUserInTx(tx, {
       targetId,
       actorId,
@@ -542,6 +940,22 @@ async function warnUser({ targetId, adminId, staffId, reason, requestId }) {
       requestId,
     }),
   );
+
+  try {
+    await chatClient.sendSystemNotification({
+      userId: targetId,
+      type: "REPORT",
+      title: "แจ้งเตือนคำเตือนจากผู้ดูแลระบบ",
+      message: `⚠️ คุณได้รับการตักเตือนจากผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`,
+      link: "/profile",
+      entityId: `admin:warn:${targetId}:${Date.now()}`,
+      metadata: { targetId, reason: trimmedReason, action: "USER_WARNED" },
+    });
+  } catch (err) {
+    console.error("[reportService] warn notification failed:", err.message);
+  }
+
+  return result;
 }
 
 async function restoreUser({ targetId, adminId, staffId, reason, requestId }) {
@@ -549,7 +963,7 @@ async function restoreUser({ targetId, adminId, staffId, reason, requestId }) {
   const trimmedReason = reason?.trim();
   if (!trimmedReason) throw badRequest("reason is required");
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const user = await lockUser(tx, targetId);
     if (!user) throw notFound("user not found");
     if (user.status !== "SUSPENDED") throw conflict("user is not suspended");
@@ -574,6 +988,22 @@ async function restoreUser({ targetId, adminId, staffId, reason, requestId }) {
     });
     return toPublicUser(updated);
   });
+
+  try {
+    await chatClient.sendSystemNotification({
+      userId: targetId,
+      type: "REPORT",
+      title: "บัญชีของคุณได้รับการคืนสถานะ",
+      message: `✅ บัญชีของคุณได้รับการปลดระงับและคืนสถานะการใช้งานแล้ว (เหตุผล: ${trimmedReason})`,
+      link: "/profile",
+      entityId: `admin:restore:${targetId}:${Date.now()}`,
+      metadata: { targetId, reason: trimmedReason, action: "USER_RESTORED" },
+    });
+  } catch (err) {
+    console.error("[reportService] restore notification failed:", err.message);
+  }
+
+  return result;
 }
 
 async function getUserSafetySummary(targetId) {
@@ -736,6 +1166,9 @@ async function getUserDetail(identifier) {
 
 module.exports = {
   createReport,
+  checkPendingReport,
+  getMyReportedReviewIds,
+  sendReportDecisionNotifications,
   listReports,
   getReportDetail,
   viewReportEvidence,

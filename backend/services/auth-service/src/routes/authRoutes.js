@@ -52,4 +52,34 @@ router.patch(
   authController.decideChangeRequest,
 );
 
+// ── Shop auto-messages (seller automated questions for chat) ────────────────
+router.get(
+  "/shop/auto-messages",
+  requireAuth,
+  requireRole("SELLER"),
+  authController.getMyAutoMessages,
+);
+router.post(
+  "/shop/auto-messages",
+  requireAuth,
+  requireRole("SELLER"),
+  authController.createAutoMessage,
+);
+router.patch(
+  "/shop/auto-messages/:id",
+  requireAuth,
+  requireRole("SELLER"),
+  authController.updateAutoMessage,
+);
+router.delete(
+  "/shop/auto-messages/:id",
+  requireAuth,
+  requireRole("SELLER"),
+  authController.deleteAutoMessage,
+);
+router.get(
+  "/users/:id/auto-messages",
+  authController.getPublicAutoMessages,
+);
+
 module.exports = router;

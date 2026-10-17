@@ -39,7 +39,7 @@ export default function SalesSummary({ stats, orderCount, trendDays }) {
         <div>
           <p className="text-sm text-ink-muted">ยอดขายสำเร็จทั้งหมด</p>
           <p className="mt-2 text-5xl font-semibold tracking-tight text-gray-900">
-            {baht(stats.totalRevenue)}
+            {baht(Math.round(stats.totalGrossRevenue ?? stats.totalRevenue ?? 0))}
           </p>
           {stats.delta !== null && (
             <p
@@ -56,6 +56,34 @@ export default function SalesSummary({ stats, orderCount, trendDays }) {
               </span>
             </p>
           )}
+
+          {/* แยกยอดขายปกติ vs ยอดขายประมูล */}
+          <div className="mt-4 pt-3.5 border-t border-gray-150 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg bg-emerald-50/70 p-2.5 border border-emerald-200">
+              <span className="text-emerald-800 font-semibold flex items-center gap-1">
+                <span className="material-symbols-outlined text-[15px]">storefront</span>
+                ยอดขายปกติ
+              </span>
+              <p className="text-base font-bold text-emerald-950 mt-1">
+                {baht(stats.regularRevenue || 0)}
+              </p>
+              <span className="text-[11px] text-emerald-700">
+                {stats.regularCompletedCount || 0} รายการ
+              </span>
+            </div>
+            <div className="rounded-lg bg-sky-50/70 p-2.5 border border-sky-200">
+              <span className="text-sky-800 font-semibold flex items-center gap-1">
+                <span className="material-symbols-outlined text-[15px]">gavel</span>
+                ยอดขายประมูล
+              </span>
+              <p className="text-base font-bold text-sky-950 mt-1">
+                {baht(stats.auctionRevenue || 0)}
+              </p>
+              <span className="text-[11px] text-sky-700">
+                {stats.auctionCompletedCount || 0} รายการ
+              </span>
+            </div>
+          </div>
         </div>
         <div className="mt-4 flex items-end justify-between">
           <p className="text-xs text-ink-subtle">

@@ -19,6 +19,10 @@ const prisma = {
       calls.reportCount = query;
       return query?.where?.targetId ? 4 : 5;
     },
+    findFirst: async (query) => {
+      calls.findFirst = query;
+      return null;
+    },
     findUnique: async () => calls.currentReport || ({
       id: "report-1",
       reporterId: "reporter-1",
@@ -87,15 +91,15 @@ require.cache[productClientPath] = {
 
 const reportService = require("../src/features/reports/reportService");
 
-test("new seller reports store their category without a product target", async () => {
+test("new seller reports store their category and the reported product", async () => {
   await reportService.createReport({
     reporterId: "buyer-1", targetId: "seller-1", category: "FRAUD",
-    productId: "ignored-product", reason: "  ร้านหลอกลวง  ",
+    productId: "product-9", reason: "  ร้านหลอกลวง  ",
   });
   assert.equal(calls.createdReport.category, "FRAUD");
   assert.equal(calls.createdReport.targetId, "seller-1");
   assert.equal(calls.createdReport.reason, "ร้านหลอกลวง");
-  assert.equal("productId" in calls.createdReport, false);
+  assert.equal(calls.createdReport.productId, "product-9");
   await assert.rejects(
     reportService.createReport({ reporterId: "buyer-1", targetId: "seller-1", reason: "test" }),
     (error) => error.status === 400,

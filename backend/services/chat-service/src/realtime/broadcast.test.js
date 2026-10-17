@@ -43,3 +43,30 @@ test("case messages and status reach current participants only", async (t) => {
   await broadcast.broadcastCaseTyping(conversation, "buyer-1", false);
   assert.equal(events.length, before); // sender excluded, stale agent denied
 });
+
+test("broadcastRealtime emits to targeted rooms and globally", () => {
+  const events = [];
+  broadcast.setIo({
+    to: (room) => ({ emit: (event, payload) => events.push({ room, event, payload }) }),
+    emit: (event, payload) => events.push({ room: "GLOBAL", event, payload }),
+  });
+
+  broadcast.broadcastRealtime({
+    event: "product:updated",
+    data: { id: "p-1", title: "Shirt" },
+    rooms: ["user:seller-1"],
+    broadcastGlobal: true,
+  });
+
+  assert.equal(events.length, 2);
+  assert.deepEqual(events[0], {
+    room: "GLOBAL",
+    event: "product:updated",
+    payload: { id: "p-1", title: "Shirt" },
+  });
+  assert.deepEqual(events[1], {
+    room: "user:seller-1",
+    event: "product:updated",
+    payload: { id: "p-1", title: "Shirt" },
+  });
+});

@@ -80,3 +80,22 @@ model Message {
   @@index([conversationId, deletedAt, createdAt, id])
   @@index([syncStatus, nextRetryAt])
 }
+
+model Notification {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String    // Recipient userId, or "ALL" for broadcast
+  type      String    // DISCOUNT | AUCTION | ORDER | DISPUTE | SYSTEM
+  title     String
+  message   String
+  link      String?
+  metadata  Json?
+  entityId  String?   // Reference entity ID (e.g. orderId) to update in-place across stages
+  read      Boolean   @default(false)
+  readBy    String[]  @default([])
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, read, createdAt])
+  @@index([userId, createdAt])
+  @@index([userId, entityId])
+}

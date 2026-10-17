@@ -5,6 +5,7 @@ import Link from "next/link";
 import { mediaUrl } from "../lib/api";
 import { fetchProduct } from "../lib/products";
 import { fetchConditions } from "../lib/catalog";
+import { formatOrderId } from "../lib/orders";
 
 const CONDITION_TONE = {
   New: "bg-brand-50 text-brand-700",
@@ -115,12 +116,19 @@ export default function OrderLine({
       </div>
 
       <div className="min-w-0">
-        <Link
-          href={`/products/${order.productId}`}
-          className="focus-ring line-clamp-2 rounded font-medium text-ink hover:text-brand-700 text-sm sm:text-base"
-        >
-          {order.productTitle}
-        </Link>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {order.id && (
+            <span className="font-mono text-[11px] font-semibold text-gray-600 bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5 shrink-0">
+              #{formatOrderId(order.id)}
+            </span>
+          )}
+          <Link
+            href={`/products/${order.productId}`}
+            className="focus-ring line-clamp-2 rounded font-medium text-ink hover:text-brand-700 text-sm sm:text-base"
+          >
+            {order.productTitle}
+          </Link>
+        </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
           {conditionLabel && (

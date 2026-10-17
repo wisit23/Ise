@@ -13,7 +13,9 @@ import ReportModal from "../../../components/ReportModal";
 import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import Alert from "../../../components/ui/Alert";
 import Modal from "../../../components/ui/Modal";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import OrderShippingModal from "../../../components/orders/OrderShippingModal";
+import OrderConfirmationModal from "../../../components/orders/OrderConfirmationModal";
 import { apiFetch } from "../../../lib/api";
 import {
   getAccessToken,
@@ -24,6 +26,7 @@ import {
   canPurchaseProduct,
 } from "../../../lib/auth";
 import { fetchConditions } from "../../../lib/catalog";
+import { useChatSocketEvent } from "../../../components/chat/ChatSocketProvider";
 
 const STATUS_LABEL = {
   available: "พร้อมขาย",
@@ -58,6 +61,20 @@ function baht(v) {
   return `฿${Number(v || 0).toLocaleString("th-TH")}`;
 }
 
+function getVisitorId() {
+  if (typeof window === "undefined") return null;
+  try {
+    let vid = localStorage.getItem("reloop_visitor_id");
+    if (!vid) {
+      vid = `guest-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 11)}`;
+      localStorage.setItem("reloop_visitor_id", vid);
+    }
+    return vid;
+  } catch {
+    return null;
+  }
+}
+
 export default function ProductDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -70,7 +87,10 @@ export default function ProductDetailPage() {
   const [conditionLabels, setConditionLabels] = useState({});
   const [reviewSummary, setReviewSummary] = useState(null);
   const [showReport, setShowReport] = useState(false);
+  const [reportReviewTarget, setReportReviewTarget] = useState(null);
+  const [reportedReviewIds, setReportedReviewIds] = useState([]);
   const [myPendingOrder, setMyPendingOrder] = useState(null);
+
   const [reviews, setReviews] = useState([]);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewTotalPages, setReviewTotalPages] = useState(1);
@@ -80,7 +100,11 @@ export default function ProductDetailPage() {
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [sellerActiveOrder, setSellerActiveOrder] = useState(null);
+  const [confirmingOrder, setConfirmingOrder] = useState(false);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [shippingModalOpen, setShippingModalOpen] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingProduct, setDeletingProduct] = useState(false);
   const [viewer, setViewer] = useState({
     ready: false,
     isAuthenticated: false,
@@ -111,11 +135,19 @@ export default function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    apiFetch(`/api/products/${id}`)
+    const token = getAccessToken();
+    const visitorId = getVisitorId();
+    const headers = {};
+    if (visitorId) headers["x-visitor-id"] = visitorId;
+
+    apiFetch(`/api/products/${id}`, {
+      ...(token ? { token } : {}),
+      headers,
+    })
       .then(setupProduct)
       .catch((err) => {
         // Fallback for owners if gateway stripped the token
-        apiFetch(`/api/products/mine?limit=100`)
+        apiFetch(`/api/products/mine?limit=100`, token ? { token } : {})
           .then((data) => {
             const p = data.items.find((item) => item.id === id);
             if (p) setupProduct(p);
@@ -178,6 +210,30 @@ export default function ProductDetailPage() {
       .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, [id]);
 
+  // ── Real-time WebSocket Listeners ──────────────────────────────────────────
+  useChatSocketEvent("product:updated", (payload) => {
+    if (!payload?.product?.id || String(payload.product.id) !== String(id)) return;
+    setProduct((prev) => (prev ? { ...prev, ...payload.product } : prev));
+  });
+
+  useChatSocketEvent("order:updated", (payload) => {
+    const order = payload?.order;
+    if (!order) return;
+    if (order.productId && String(order.productId) === String(id)) {
+      if (
+        payload.action === "paid" ||
+        payload.action === "confirmed" ||
+        payload.action === "shipped"
+      ) {
+        setProduct((prev) => (prev ? { ...prev, status: "reserved" } : prev));
+      } else if (payload.action === "completed") {
+        setProduct((prev) => (prev ? { ...prev, status: "sold" } : prev));
+      } else if (payload.action === "cancelled" || payload.action === "rejected") {
+        setProduct((prev) => (prev ? { ...prev, status: "available" } : prev));
+      }
+    }
+  });
+
   useEffect(() => {
     if (!product?.sellerId) return;
     setReviewsLoading(true);
@@ -217,6 +273,20 @@ export default function ProductDetailPage() {
   }, [product?.sellerId, reviewPage]);
 
   useEffect(() => {
+    if (!product?.id || !viewer.isAuthenticated) return;
+    const token = getAccessToken();
+    if (!token) return;
+    apiFetch(`/api/auth/reports/my-reported-reviews?productId=${product.id}`, { token })
+      .then((res) => {
+        if (res?.reportedReviewIds) {
+          setReportedReviewIds(res.reportedReviewIds);
+        }
+      })
+      .catch((err) => console.error("โหลดสถานะรีวิวที่รายงานแล้วไม่สำเร็จ:", err));
+  }, [product?.id, viewer.isAuthenticated]);
+
+  useEffect(() => {
+
     if (!viewer.isAuthenticated || !product || viewer.userId !== product.sellerId) {
       setSellerActiveOrder(null);
       return;
@@ -233,9 +303,57 @@ export default function ProductDetailPage() {
             ),
         );
         setSellerActiveOrder(orderForThisProduct || null);
+        const shouldOpenShip =
+          typeof window !== "undefined" &&
+          (new URLSearchParams(window.location.search).get("ship") === "1" ||
+            Boolean(new URLSearchParams(window.location.search).get("orderId")));
+        if (orderForThisProduct && shouldOpenShip) {
+          setShippingModalOpen(true);
+        }
       })
       .catch(() => {});
   }, [viewer, product]);
+
+  async function handleConfirmOrderFromProduct() {
+    if (!sellerActiveOrder?.id || confirmingOrder) return;
+    setConfirmingOrder(true);
+    try {
+      const token = getAccessToken();
+      const updated = await apiFetch(
+        `/api/orders/${sellerActiveOrder.id}/confirm`,
+        {
+          method: "POST",
+          token,
+        },
+      );
+      setSellerActiveOrder(updated);
+    } catch (err) {
+      alert(`ยืนยันรับออเดอร์ไม่สำเร็จ: ${err.message}`);
+    } finally {
+      setConfirmingOrder(false);
+    }
+  }
+
+  async function handleConfirmDeleteProduct() {
+    const token = getAccessToken();
+    if (!token || !product?.id) return;
+    setDeletingProduct(true);
+    try {
+      await apiFetch(`/api/products/${product.id}`, {
+        method: "DELETE",
+        token,
+      });
+      setShowDeleteModal(false);
+      const currentUser = getStoredUser();
+      const sellerId = currentUser?.id || product?.sellerId;
+      router.push(sellerId ? `/store/${sellerId}` : "/seller/dashboard");
+    } catch (err) {
+      alert(err.message || "เกิดข้อผิดพลาดในการลบสินค้า");
+      setShowDeleteModal(false);
+    } finally {
+      setDeletingProduct(false);
+    }
+  }
 
   async function addToCart() {
     const token = getAccessToken();
@@ -489,6 +607,13 @@ export default function ProductDetailPage() {
             >
               {STATUS_LABEL[product.status] || product.status}
             </span>
+            <span
+              data-testid="product-view-count"
+              className="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600 flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-[14px]">visibility</span>
+              เข้าชม {product.viewCount ?? 0} ครั้ง
+            </span>
           </div>
 
           <p className="mt-5 whitespace-pre-line text-sm text-gray-700">
@@ -551,13 +676,23 @@ export default function ProductDetailPage() {
           </div>
 
           {isOwnProduct ? (
-            <div className="flex items-center gap-3 mt-3">
+            <div className="flex items-center gap-2.5 mt-3">
               <Link
                 href={`/products/${product.id}/edit`}
                 className="inline-block text-xs font-medium text-gray-500 hover:text-emerald-600 hover:underline"
               >
                 แก้ไขสินค้านี้
               </Link>
+              <span className="text-gray-300">|</span>
+              <button
+                type="button"
+                disabled={product.status === "reserved" || busy || deletingProduct}
+                onClick={() => setShowDeleteModal(true)}
+                className="text-xs font-medium text-red-500 hover:text-red-700 hover:underline disabled:opacity-40 disabled:hover:text-red-500 disabled:no-underline"
+                title={product.status === "reserved" ? "ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้" : "ลบสินค้านี้"}
+              >
+                ลบสินค้านี้
+              </button>
             </div>
           ) : (
             <button
@@ -572,7 +707,9 @@ export default function ProductDetailPage() {
             <div className="mt-4 animate-slide-up rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-emerald-600 text-[24px] shrink-0">
-                  local_shipping
+                  {sellerActiveOrder.status === "paid"
+                    ? "receipt_long"
+                    : "local_shipping"}
                 </span>
                 <div>
                   <p className="font-bold">
@@ -589,26 +726,40 @@ export default function ProductDetailPage() {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() =>
-                  ["paid", "confirmed"].includes(sellerActiveOrder.status)
-                    ? router.push("/seller/dashboard")
-                    : setShippingModalOpen(true)
-                }
-                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold text-xs shadow-sm transition active:scale-95"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  local_shipping
-                </span>
-                <span>
-                  {["paid", "confirmed"].includes(sellerActiveOrder.status)
-                    ? "จัดการคำสั่งซื้อ"
-                    : sellerActiveOrder.status === "ready_to_ship"
-                      ? "จัดส่งสินค้า"
-                      : "ดูรายละเอียดการจัดส่ง"}
-                </span>
-              </button>
+              {sellerActiveOrder.status === "paid" ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmModalOpen(true)}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold text-xs shadow-sm transition active:scale-95"
+                  title="เปิดดูรายละเอียดผู้ซื้อเพื่อยืนยันหรือปฏิเสธออเดอร์"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    check_circle
+                  </span>
+                  <span>ยืนยันรับออเดอร์</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    sellerActiveOrder.status === "confirmed"
+                      ? router.push("/seller/dashboard")
+                      : setShippingModalOpen(true)
+                  }
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold text-xs shadow-sm transition active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    local_shipping
+                  </span>
+                  <span>
+                    {sellerActiveOrder.status === "confirmed"
+                      ? "จัดการคำสั่งซื้อ"
+                      : sellerActiveOrder.status === "ready_to_ship"
+                        ? "จัดส่งสินค้า"
+                        : "ดูรายละเอียดการจัดส่ง"}
+                  </span>
+                </button>
+              )}
             </div>
           )}
 
@@ -778,9 +929,49 @@ export default function ProductDetailPage() {
                       </div>
                     </div>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    {new Date(r.createdAt).toLocaleDateString("th-TH")}
-                  </span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs text-gray-500">
+                      {new Date(r.createdAt).toLocaleDateString("th-TH")}
+                    </span>
+                    {viewer.isAuthenticated && viewer.userId !== r.buyerId && (
+                      (() => {
+                        const isReported = reportedReviewIds.includes(r.id);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setReportReviewTarget(r)}
+                            className={`inline-flex items-center gap-1 text-[11px] transition ${
+                              isReported
+                                ? "text-red-600 font-medium"
+                                : "text-gray-400 hover:text-red-600"
+                            }`}
+                            title={
+                              isReported
+                                ? "คุณได้รายงานความคิดเห็นนี้แล้ว (อยู่ระหว่างรอผลการตัดสิน)"
+                                : "รายงานรีวิวนี้ (เช่น รีวิวปั่น, ข้อมูลเท็จ)"
+                            }
+                          >
+                            <span
+                              className={`material-symbols-outlined text-[14px] ${
+                                isReported
+                                  ? "text-red-600 [font-variation-settings:'FILL'_1]"
+                                  : ""
+                              }`}
+                              style={
+                                isReported
+                                  ? { fontVariationSettings: "'FILL' 1" }
+                                  : undefined
+                              }
+                            >
+                              flag
+                            </span>
+                            <span>{isReported ? "รายงานแล้ว" : "รายงาน"}</span>
+                          </button>
+                        );
+                      })()
+                    )}
+
+                  </div>
                 </div>
                 {r.comment && (
                   <p className="mt-2.5 pl-10.5 text-sm text-gray-700">
@@ -928,6 +1119,32 @@ export default function ProductDetailPage() {
         onShipped={(updated) => {
           setSellerActiveOrder(updated);
         }}
+        onRejected={(updated) => {
+          setSellerActiveOrder(updated);
+          setNotice("ปฏิเสธคำสั่งซื้อเรียบร้อยแล้ว สินค้านี้กลับมาพร้อมขายอีกครั้ง");
+          setProduct((prev) => (prev ? { ...prev, status: "available" } : prev));
+        }}
+        onOrderUpdated={(updated) => {
+          setSellerActiveOrder(updated);
+        }}
+      />
+
+      <OrderConfirmationModal
+        orderId={sellerActiveOrder?.id}
+        initialOrder={sellerActiveOrder}
+        isOpen={confirmModalOpen}
+        onClose={() => setConfirmModalOpen(false)}
+        onConfirmed={(updated) => {
+          setSellerActiveOrder(updated);
+        }}
+        onRejected={(updated) => {
+          setSellerActiveOrder(updated);
+          setNotice("ปฏิเสธคำสั่งซื้อเรียบร้อยแล้ว สินค้านี้กลับมาพร้อมขายอีกครั้ง");
+          setProduct((prev) => (prev ? { ...prev, status: "available" } : prev));
+        }}
+        onOrderUpdated={(updated) => {
+          setSellerActiveOrder(updated);
+        }}
       />
 
       <ReportModal
@@ -935,6 +1152,44 @@ export default function ProductDetailPage() {
         onClose={() => setShowReport(false)}
         targetId={product.sellerId}
         targetLabel={sellerName}
+      />
+
+      <ReportModal
+        open={Boolean(reportReviewTarget)}
+        onClose={() => setReportReviewTarget(null)}
+        onSuccess={({ reviewId }) => {
+          if (reviewId) {
+            setReportedReviewIds((prev) =>
+              Array.from(new Set([...prev, reviewId])),
+            );
+          }
+        }}
+        title="รายงานรีวิวที่ไม่เหมาะสม"
+
+        targetId={reportReviewTarget?.buyerId}
+        targetLabel={
+          reportReviewTarget?.reviewerName ||
+          (reportReviewTarget?.buyerId
+            ? `ผู้ใช้ #${reportReviewTarget.buyerId.slice(0, 8)}`
+            : null)
+        }
+        productId={product?.id}
+        productLabel={product?.title}
+        reviewId={reportReviewTarget?.id}
+        reviewComment={reportReviewTarget?.comment}
+      />
+
+      {/* ── Product Deletion Confirmation Modal ── */}
+      <ConfirmDialog
+        open={showDeleteModal}
+        title="ยืนยันการลบสินค้า"
+        description={`คุณแน่ใจว่าต้องการลบสินค้า "${product?.title || ""}" ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
+        confirmLabel="ยืนยันการลบ"
+        cancelLabel="ยกเลิก"
+        tone="danger"
+        busy={deletingProduct}
+        onConfirm={handleConfirmDeleteProduct}
+        onCancel={() => !deletingProduct && setShowDeleteModal(false)}
       />
 
       <Footer />

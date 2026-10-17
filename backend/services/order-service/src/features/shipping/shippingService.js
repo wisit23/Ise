@@ -149,6 +149,8 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
       if (order.sellerId !== actorId)
         throw forbidden("only the seller can ship this order");
       if (!order.shipping) throw conflict("shipping address is missing");
+      if (order.status !== "ready_to_ship")
+        throw conflict("ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องเตรียมสินค้าให้พร้อมจัดส่งก่อน");
       const changed = await tx.order.updateMany({
         where: { id: orderId, version, status: "ready_to_ship" },
         data: { status: "shipped", shippedAt: new Date(), version: { increment: 1 } },

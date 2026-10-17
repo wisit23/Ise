@@ -13,6 +13,10 @@ import BankAccountStep from "../../../components/seller/onboarding/BankAccountSt
 import { isCompleteIdCard } from "../../../components/seller/onboarding/IdCardField";
 import ErrorState from "../../../components/ui/ErrorState";
 import Skeleton from "../../../components/ui/Skeleton";
+import {
+  parseBankAccount,
+  validateBankAccount,
+} from "../../../components/seller/BankAccountInput";
 import { apiFetch, submitKyc } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
@@ -182,6 +186,15 @@ export default function SellerOnboardingPage() {
       return;
     }
 
+    if (form.bankAccount) {
+      const { bank, accountNumber } = parseBankAccount(form.bankAccount);
+      const bankError = validateBankAccount(bank, accountNumber, { required: false });
+      if (bankError) {
+        setError(bankError);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       await submitKyc(
@@ -233,6 +246,13 @@ export default function SellerOnboardingPage() {
     }
     if (!thaiIdData) {
       setError("กรุณาสแกน QR Thai ID ก่อน");
+      return;
+    }
+
+    const { bank, accountNumber } = parseBankAccount(thaiIdBankAccount);
+    const bankError = validateBankAccount(bank, accountNumber, { required: true });
+    if (bankError) {
+      setError(bankError);
       return;
     }
 

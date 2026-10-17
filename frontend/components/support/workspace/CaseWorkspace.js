@@ -293,21 +293,6 @@ export default function CaseWorkspace({
       toast.error(err.message);
     }
   }
-  async function changeTicketStatus(status) {
-    if (status === "CLOSED") {
-      setDecision({
-        ticketClose: true,
-        id: selected.id,
-        version: selected.version,
-      });
-      return;
-    }
-    try {
-      await run("status", { status }, "PATCH");
-    } catch (err) {
-      toast.error(err.message);
-    }
-  }
   const filter = (key, value) =>
     w.update(
       key === "resetFilters"

@@ -26,7 +26,11 @@ export default function ChatSidebar({
 
   const nonSupportConversations = useMemo(() => {
     if (!conversations) return null;
-    return conversations.filter((c) => c.contextType !== "SUPPORT");
+    return conversations.filter(
+      (c) =>
+        c.contextType !== "SUPPORT" &&
+        !c.contextType?.startsWith("DISPUTE"),
+    );
   }, [conversations]);
 
   // Query online status for all participants visible in the sidebar
