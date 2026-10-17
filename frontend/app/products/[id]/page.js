@@ -101,7 +101,6 @@ export default function ProductDetailPage() {
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [sellerActiveOrder, setSellerActiveOrder] = useState(null);
-  const [confirmingOrder, setConfirmingOrder] = useState(false);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [shippingModalOpen, setShippingModalOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -436,26 +435,6 @@ export default function ProductDetailPage() {
       })
       .catch(() => {});
   }, [viewer, product]);
-
-  async function handleConfirmOrderFromProduct() {
-    if (!sellerActiveOrder?.id || confirmingOrder) return;
-    setConfirmingOrder(true);
-    try {
-      const token = getAccessToken();
-      const updated = await apiFetch(
-        `/api/orders/${sellerActiveOrder.id}/confirm`,
-        {
-          method: "POST",
-          token,
-        },
-      );
-      setSellerActiveOrder(updated);
-    } catch (err) {
-      alert(`ยืนยันรับออเดอร์ไม่สำเร็จ: ${err.message}`);
-    } finally {
-      setConfirmingOrder(false);
-    }
-  }
 
   async function handleConfirmDeleteProduct() {
     const token = getAccessToken();

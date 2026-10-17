@@ -160,7 +160,7 @@ const MAX_ROUND_CAPACITY = 2147483647;
 
 export function RoundManagementSection({ token, onRoundCreated, refreshRevision = 0 }) {
   const [editingRound, setEditingRound] = useState(null);
-  const [roundInfo, setRoundInfo] = useState(null);
+  const [, setRoundInfo] = useState(null);
   const [allRounds, setAllRounds] = useState([]);
   const [availableCategories, setAvailableCategories] = useState([]);
   const [categoryMode, setCategoryMode] = useState("all");

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
-import SellerDashboardCharts from "../../../components/seller/dashboard/SellerDashboardCharts";
+import SellerDashboardCharts, { PLATFORM_FEE_RATE } from "../../../components/seller/dashboard/SellerDashboardCharts";
 import SellerOrderTracker from "../../../components/seller/dashboard/SellerOrderTracker";
 import SellerProductList from "../../../components/seller/dashboard/SellerProductList";
 import SellerAutoMessages from "../../../components/seller/dashboard/SellerAutoMessages";
@@ -19,7 +19,6 @@ import Skeleton from "../../../components/ui/Skeleton";
 import RadioSelect from "../../../components/ui/RadioSelect";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
-import { PLATFORM_FEE_RATE } from "../../../lib/executive";
 import { useChatSocketEvent } from "../../../components/chat/ChatSocketProvider";
 
 const TREND_DAYS = 7;

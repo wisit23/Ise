@@ -336,7 +336,6 @@ const ENUM_LABELS_THAI = {
   HIGH_SPENDERS: "ผู้มียอดซื้อสูง",
   SCHEDULED_EXPIRY: "สิ้นสุดตามเวลาที่กำหนด",
   BUDGET_EXHAUSTED: "ใช้งบประมาณครบแล้ว",
-  EXPIRED: "หมดอายุ",
   draft: "ฉบับร่าง",
   pending_approval: "รออนุมัติ",
   approved: "อนุมัติแล้ว",

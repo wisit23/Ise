@@ -41,7 +41,7 @@ const FULL_MONTH_LABELS = [
   "ธันวาคม",
 ];
 
-const PLATFORM_FEE_RATE = 0.03;
+export const PLATFORM_FEE_RATE = 0.03;
 
 /**
  * Helper to get ISO date string (YYYY-MM-DD) in local time.
@@ -158,14 +158,6 @@ function buildDailyRangeRevenue(orders, startKey, endKey) {
     fullLabel: formatThaiDateFull(d.key),
     value: map[d.key] || 0,
   }));
-}
-
-function buildDailyCumulativeProfit(dailyOrHourlyData) {
-  let running = 0;
-  return dailyOrHourlyData.map((d) => {
-    running += d.value;
-    return { x: d.label, y: running };
-  });
 }
 
 function filterOrdersByDateRange(orders, startKey, endKey) {
@@ -610,9 +602,7 @@ export default function SellerDashboardCharts({
           value={baht(
             Math.round(
               stats.totalGrossRevenue ??
-                ((stats.regularGrossRevenue || 0) + (stats.auctionGrossRevenue || 0)) ??
-                stats.totalRevenue ??
-                0,
+                ((stats.regularGrossRevenue || 0) + (stats.auctionGrossRevenue || 0)),
             ),
           )}
           icon="payments"

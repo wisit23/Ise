@@ -56,7 +56,6 @@ function DateDivider({ value }) {
 export default function MessageList({
   messages,
   currentUserId,
-  currentUserRole,
   otherName = "ผู้ใช้",
   resolveSenderName,
   onPromptClick,

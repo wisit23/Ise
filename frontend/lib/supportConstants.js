@@ -46,8 +46,6 @@ export const DISPUTE_STATUS_STYLE = {
 };
 
 export const ORDER_STATUS_LABEL = {
-  pending_payment: "รอชำระเงิน",
-  paid: "ชำระเงินแล้ว",
   pending: "รอชำระเงิน",
   pending_payment: "รอชำระเงิน",
   paid: "ชำระแล้ว รอผู้ขายยืนยัน",

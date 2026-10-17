@@ -78,25 +78,6 @@ export default function SellerOrderTracker({
     }
   }
 
-  async function handleConfirmOrder(order) {
-    if (actionLoading) return;
-    setActionLoading(true);
-    setActionError("");
-    try {
-      const token = getAccessToken();
-      const updated = await apiFetch(`/api/orders/${order.id}/confirm`, {
-        method: "POST",
-        token,
-      });
-      onOrderUpdated?.(updated);
-    } catch (err) {
-      setActionError(err.message);
-      alert(`ยืนยันออเดอร์ไม่สำเร็จ: ${err.message}`);
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
   async function handleRejectOrder() {
     if (!selectedOrderForReject || actionLoading) return;
     setActionLoading(true);

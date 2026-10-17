@@ -9,7 +9,6 @@ import {
   getConversation,
   listMessages,
   listConversations,
-  markRead,
 } from "../../../lib/chat";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 import { apiFetch } from "../../../lib/api";

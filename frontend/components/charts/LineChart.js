@@ -92,7 +92,6 @@ export default function LineChart({
     Math.round((maxY / gridLines) * i),
   );
 
-  const latestVal = allValues[allValues.length - 1] ?? 0;
 
   return (
     <div className="w-full overflow-x-auto">
