@@ -7,13 +7,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-enum Role {
-  BUYER
-  SELLER
-  ADMIN
-  EXECUTIVE
-}
-
 enum KycStatus {
   NONE
   PENDING
@@ -39,61 +32,132 @@ model User {
   firstName    String   @map("f_name")
   lastName     String   @map("l_name")
   phone        String?
-  role         Role     @default(BUYER)
+  // Legacy primary-role value kept for backward-compatible JWTs. UserRole is
+  // the multi-role source of truth once explicit grants exist.
+  role         String   @default("BUYER")
   status       String   @default("ACTIVE")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  buyerProfile  BuyerProfile?
-  sellerProfile SellerProfile?
-  loginLogs     LoginLog[]
-  refreshTokens RefreshToken[]
-  reports       Report[]
+  buyerProfile       BuyerProfile?
+  sellerProfile      SellerProfile?
+  loginLogs          LoginLog[]
+  buyerActivityLogs  BuyerActivityLog[]
+  refreshTokens      RefreshToken[]
+  reports            Report[]
+  roles              UserRole[]
+  kycApplications    KycApplication[]
+  addresses          UserAddress[]
+  shopChangeRequests ShopChangeRequest[]
+  adminAudits        AdminAudit[]        @relation("AdminAuditActor")
+  bulkActionRuns     BulkActionRun[]     @relation("BulkActionActor")
+  executiveAuditLogs ExecutiveAuditLog[] @relation("ExecutiveAuditActor")
 
   @@map("users")
 }
 
+// Delivery addresses shown on the authenticated profile page. They live in
+// auth-service because they are private user profile data, not order data.
+model UserAddress {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  recipientName String   @map("recipient_name")
+  phone         String
+  addressLine   String   @map("address_line")
+  subdistrict   String
+  district      String
+  province      String
+  postalCode    String   @map("postal_code")
+  isDefault     Boolean  @default(false) @map("is_default")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isDefault])
+  @@map("user_addresses")
+}
+
 // ER: Buyer — style/size/brand preference, filled in during the Phase 2 style quiz.
 model BuyerProfile {
-  userId          String  @id @map("user_id")
-  user            User    @relation(fields: [userId], references: [id])
-  stylePreference String? @map("style_preference")
-  sizePreference  String? @map("size_preference")
-  brandPreference String? @map("brand_preference")
+  userId           String   @id @map("user_id")
+  user             User     @relation(fields: [userId], references: [id])
+  favoriteCategory String?  @map("favorite_category")
+  stylePreference  String?  @map("style_preference")
+  sizePreference   String?  @map("size_preference")
+  brandPreference  String?  @map("brand_preference")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("buyer_profiles")
 }
 
-// ER: Seller — shop info + KYC fields (KYC upload/verification flow lands in a later phase).
+// ER: Seller — shop info + KYC fields.
 model SellerProfile {
-  userId         String    @id @map("user_id")
-  user           User      @relation(fields: [userId], references: [id])
-  shopName       String    @map("shop_name")
-  idCardNumber   String?   @map("id_card_number")
+  userId        String    @id @map("user_id")
+  user          User      @relation(fields: [userId], references: [id])
+  shopName      String    @map("shop_name")
+  idCardNumber  String?   @map("id_card_number")
   // Expiry date printed on the ID card (optional — permanent-card holders leave this null).
-  idCardExpiry   DateTime? @map("id_card_expiry")
-  bankAccount    String?   @map("bank_account")
-  kycStatus      KycStatus @default(NONE) @map("kyc_status")
-  kycDocumentUrl String?   @map("kyc_document_url")
-  verifiedAt     DateTime? @map("verified_at")
+  // The daily kycExpiryJob sets kycStatus = EXPIRED when this date is in the past.
+  idCardExpiry  DateTime? @map("id_card_expiry")
+  // Return/shipping address collected during seller verification.
+  address       String?
+  bankAccount   String?   @map("bank_account")
+  kycStatus     KycStatus @default(NONE) @map("kyc_status")
+  // Private storage key for the latest submitted ID card photo — never a
+  // public URL, same reasoning as KycApplication.storageKey below.
+  kycStorageKey String?   @map("kyc_storage_key")
+  verifiedAt    DateTime? @map("verified_at")
   // Timestamp of the seller's last listing activity (create or update a product).
-  lastActiveAt   DateTime? @map("last_active_at")
+  // The daily sellerInactivityJob sets kycStatus = INACTIVE_EXPIRED when this
+  // (or verifiedAt if null) is older than 365 days.
+  lastActiveAt  DateTime? @map("last_active_at")
+  autoMessages  AutoMessage[]
 
   @@map("seller_profiles")
 }
 
 // ER: Login_Log — audit trail of sign-ins (NFR-SP-03).
 model LoginLog {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id])
-  loginAt   DateTime @default(now()) @map("login_at")
-  ipAddress String?  @map("ip_address")
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  sessionId String?   @unique @map("session_id")
+  loginAt   DateTime  @default(now()) @map("login_at")
+  logoutAt  DateTime? @map("logout_at")
+  ipAddress String?   @map("ip_address")
+  userAgent String?   @map("user_agent")
 
+  @@index([userId, loginAt])
   @@map("login_logs")
 }
 
-// Not in the ER diagram — required to support JWT refresh/revoke (see database/ER-changes.md).
+// Append-only buyer activity stream. Auth-service owns this table so buyers
+// and authorized auditors have one privacy-controlled history even though the
+// activities originate in several marketplace services.
+model BuyerActivityLog {
+  id         String   @id @default(uuid())
+  buyerId    String   @map("buyer_id")
+  buyer      User     @relation(fields: [buyerId], references: [id])
+  action     String
+  source     String
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  requestId  String?  @unique @map("request_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([buyerId, occurredAt])
+  @@index([action, occurredAt])
+  @@index([targetType, targetId])
+  @@map("buyer_activity_logs")
+}
+
+// ER: refresh-token sessions used for JWT refresh/revoke.
 model RefreshToken {
   id        String    @id @default(uuid())
   userId    String    @map("user_id")
@@ -107,15 +171,185 @@ model RefreshToken {
 }
 
 // ER: Reports — table created now per plan (no tables cut from ER); report/moderation UI is a later phase.
+// ADM-003 extension: reviewedAt/reviewedBy/actionTaken track the
+// OPEN -> REVIEWED -> ACTIONED|DISMISSED lifecycle so a decision is never lost
+// once made (append-only AdminAudit below records the same fact independently).
 model Report {
-  id         String       @id @default(uuid())
-  reporterId String       @map("reporter_id")
-  reporter   User         @relation(fields: [reporterId], references: [id])
-  targetId   String?      @map("target_id")
-  productId  String?      @map("product_id")
-  reason     String
-  status     ReportStatus @default(OPEN)
-  reportedAt DateTime     @default(now()) @map("reported_at")
+  id          String       @id @default(uuid())
+  reporterId  String       @map("reporter_id")
+  reporter    User         @relation(fields: [reporterId], references: [id])
+  targetId    String?      @map("target_id")
+  productId   String?      @map("product_id")
+  reason      String
+  status      ReportStatus @default(OPEN)
+  reportedAt  DateTime     @default(now()) @map("reported_at")
+  reviewedAt  DateTime?    @map("reviewed_at")
+  reviewedBy  String?      @map("reviewed_by")
+  actionTaken String?      @map("action_taken")
 
   @@map("reports")
+}
+
+// ADM-003: append-only log of every privileged Admin action (suspend/restore,
+// report review/action/dismiss). Never updated or deleted — see decision.md
+// ADM-DEC-003 (evidence must persist in real PostgreSQL).
+model AdminAudit {
+  id        String   @id @default(uuid())
+  actorId   String   @map("actor_id")
+  action    String
+  targetId  String   @map("target_id")
+  reason    String
+  requestId String?  @map("request_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  actor User @relation("AdminAuditActor", fields: [actorId], references: [id])
+
+  @@index([targetId])
+  @@map("admin_audits")
+}
+
+// ADM-005: idempotency record for a bounded batch run — a replayed call with
+// the same idempotencyKey returns these stored `results` instead of
+// re-executing (so a retried network call can't double-suspend/double-decide).
+// `results` is a JSON snapshot of the batch summary (see bulkActionService).
+model BulkActionRun {
+  id             String   @id @default(uuid())
+  idempotencyKey String   @unique @map("idempotency_key")
+  actorId        String   @map("actor_id")
+  action         String
+  reason         String
+  requestedIds   String[] @map("requested_ids")
+  results        Json
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  actor User @relation("BulkActionActor", fields: [actorId], references: [id])
+
+  @@map("bulk_action_runs")
+}
+
+// ADM-001: explicit role grants. A user with zero rows here still resolves
+// functionally via the legacy `role` column (see authService.getUserRoles) —
+// rows only start existing once an admin assigns/removes a role for that user.
+// ER setup catalog. Permission behavior remains implemented in the shared
+// permission map; this table constrains persisted role codes and supplies a
+// stable setup/master record for each role.
+model RoleDefinition {
+  id   String @id @default(uuid()) @map("role_id")
+  code String @unique @map("role_code")
+
+  userRoles UserRole[]
+
+  @@map("role")
+}
+
+model UserRole {
+  id        String         @id @default(uuid())
+  userId    String         @map("user_id")
+  user      User           @relation(fields: [userId], references: [id])
+  role      String         @map("role_code")
+  roleEntry RoleDefinition @relation(fields: [role], references: [code])
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  // Keep the historical physical index name while the DB column is renamed
+  // from `role` to the ER's `role_code`.
+  @@unique([userId, role], map: "user_roles_user_id_role_key")
+  @@map("user_roles")
+}
+
+// ADM-002: one row per Synthetic KYC submission (including resubmissions after
+// a rejection) — kept separate from SellerProfile.kycStatus so decision history
+// and evidence persist even though SellerProfile only reflects the latest state.
+// `version` is an optimistic lock: decideKyc rejects a stale/duplicate decision.
+model KycApplication {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id])
+  // Private filesystem key, never a public URL — same convention as
+  // order-service's DisputeEvidence.storageKey (see evidenceStorage.js
+  // there). Served only through kycRoutes' authorized stream-through route.
+  storageKey  String    @map("storage_key")
+  fileType    String    @map("file_type")
+  status      KycStatus @default(PENDING)
+  reason      String?
+  version     Int       @default(1)
+  submittedAt DateTime  @default(now()) @map("submitted_at")
+  decidedAt   DateTime? @map("decided_at")
+  decidedBy   String?   @map("decided_by")
+
+  @@map("kyc_applications")
+}
+
+// CEO-LOG-001: Append-only audit log for executive actions
+// (sensitive report exports, complaint decisions, metrics views).
+model ExecutiveAuditLog {
+  id          String   @id @default(uuid())
+  actorId     String   @map("actor_id")
+  actorEmail  String?  @map("actor_email")
+  actorRole   String?  @map("actor_role")
+  action      String // e.g. "REPORT_EXPORT_CSV", "COMPLAINT_ACTIONED", "COMPLAINT_DISMISSED", "FINANCIAL_VIEW"
+  category    String // e.g. "DATA_EXPORT", "MODERATION", "FINANCIAL", "SECURITY"
+  targetType  String?  @map("target_type") // e.g. "report", "complaint", "order"
+  targetId    String?  @map("target_id")
+  description String
+  metadata    Json?
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  actor User @relation("ExecutiveAuditActor", fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([action])
+  @@index([category])
+  @@index([createdAt])
+  @@map("executive_audit_logs")
+}
+
+// Seller-initiated request to change their shop profile fields.
+// Admin must approve before the SellerProfile is updated — keeps an
+// audit trail of every change request and its outcome.
+model ShopChangeRequest {
+  id         String                  @id @default(uuid()) @map("requests_id")
+  sellerId   String                  @map("seller_id")
+  seller     User                    @relation(fields: [sellerId], references: [id])
+  // Required: seller must explain what changed and why
+  comment    String
+  // PENDING | APPROVED | REJECTED
+  status     String                  @default("PENDING")
+  adminNote  String?                 @map("admin_note")
+  reviewedBy String?                 @map("reviewed_by")
+  reviewedAt DateTime?               @map("reviewed_at")
+  createdAt  DateTime                @default(now()) @map("created_at")
+  items      ShopChangeRequestItem[]
+
+  @@index([sellerId])
+  @@index([status])
+  @@map("shop_change_requests")
+}
+
+// One row per changed field. Keeping old/new snapshots makes an approved or
+// rejected request auditable even after SellerProfile changes again later.
+model ShopChangeRequestItem {
+  id        String            @unique @default(uuid())
+  requestId String            @map("requests_id")
+  request   ShopChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fieldName String            @map("field_name")
+  oldValue  String?           @map("old_value")
+  newValue  String            @map("new_value")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@id([requestId, fieldName])
+  @@index([requestId])
+  @@map("shop_change_request_items")
+}
+
+model AutoMessage {
+  id          String        @id @default(uuid()) @map("message_id")
+  userId      String        @map("user_id")
+  messageText String        @map("message_text")
+  isActive    Boolean       @default(false) @map("is_active")
+  seller      SellerProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auto_messages")
 }

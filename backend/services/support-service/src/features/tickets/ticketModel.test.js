@@ -15,7 +15,13 @@ test("admin queue includes closed/escalated while CS sees only own or unassigned
   });
   assert.match(staff.sql, /assignment_id IS NULL OR a.assignee_id/);
   assert.match(staff.sql, /s.code <> 'ESCALATED'/);
-  assert.deepEqual(staff.values, ["agent-1", "agent-1", "agent-1", "%ref\\%und%", "%ref\\%und%"]);
+  assert.deepEqual(staff.values, [
+    "agent-1",
+    "agent-1",
+    "agent-1",
+    "%ref\\%und%",
+    "%ref\\%und%",
+  ]);
 });
 test("conversation repair accepts the same link but never replaces another room", async () => {
   const db = {
@@ -32,20 +38,42 @@ test("conversation repair accepts the same link but never replaces another room"
 });
 
 function chatDb(t, { existing = null } = {}) {
-  const records = { messages: [], audits: [], achieved: [] };
+  const records = { messages: [], receipts: [], audits: [], achieved: [] };
   const db = {
     supportTicket: {
       findUnique: async () => ({
         id: "ticket-1",
         requesterId: "buyer-1",
         chatLink: { conversationId: "conv-1" },
+        slaTargets: [
+          {
+            id: "response-1",
+            metricType: "FIRST_RESPONSE",
+            round: {
+              id: "round-1",
+              cycle: 1,
+              startedAt: "2026-10-06T00:00:00Z",
+            },
+          },
+        ],
+        auditLog: [
+          {
+            id: "round-1",
+            action: "TICKET_OPENED",
+            payload: {
+              cycle: 1,
+              startedAt: "2026-10-06T00:00:00Z",
+              targets: [{ id: "response-1", metricType: "FIRST_RESPONSE" }],
+            },
+          },
+        ],
       }),
     },
-    ticketMessage: {
+    ticketChatMessageReceipt: {
       findUnique: async () => existing,
       create: async ({ data }) => {
-        records.messages.push(data);
-        return { id: "message-1", ...data };
+        records.receipts.push(data);
+        return data;
       },
     },
     ticketSlaTarget: {
@@ -97,8 +125,7 @@ test("customer-facing reply satisfies FIRST_RESPONSE and audits in the same tran
   const result = await model.recordChatMessage(chatInput);
   assert.equal(result.alreadyRecorded, false);
   assert.deepEqual(records.achieved[0].where, {
-    ticketId: "ticket-1",
-    metricType: "FIRST_RESPONSE",
+    id: "response-1",
     OR: [
       { achievedAt: null },
       { achievedAt: { gt: new Date(chatInput.createdAt) } },
@@ -145,18 +172,36 @@ test("API projection derives current assignee, SLA and lifecycle without exposin
     ],
     slaTargets: [
       {
+        id: "response-1",
+        round: { id: "round-1", cycle: 1 },
         metricType: "FIRST_RESPONSE",
         dueAt: new Date(2000),
         achievedAt: new Date(100),
       },
       {
+        id: "resolution-1",
+        round: { id: "round-1", cycle: 1 },
         metricType: "RESOLUTION",
         dueAt: new Date(3000),
         achievedAt: new Date(1000),
       },
     ],
     chatLink: { conversationId: "conv-1" },
+    auditLog: [
+      {
+        id: "round-1",
+        action: "TICKET_OPENED",
+        payload: {
+          cycle: 1,
+          targets: [
+            { id: "response-1", metricType: "FIRST_RESPONSE" },
+            { id: "resolution-1", metricType: "RESOLUTION" },
+          ],
+        },
+      },
+    ],
     messages: [],
+    receipts: [],
   };
   const result = toTicket(row);
   assert.equal(result.status, "RESOLVED");

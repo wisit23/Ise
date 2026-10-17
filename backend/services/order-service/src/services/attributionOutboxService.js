@@ -34,46 +34,71 @@ async function deliver(event, client = productClient) {
   return client.recordOrderCompleted(payload);
 }
 
+function assertQueue(db) {
+  if (!db?.attributionJob || !db?.orderLog)
+    throw new Error(
+      "attributionJob table and orderLog model are required on Prisma client",
+    );
+}
+async function appendResult(db, event, action, detail) {
+  return db.$transaction(async (tx) => {
+    const patch = { ...detail };
+    delete patch.attempts;
+    const changed = await tx.attributionJob.updateMany({
+      where: { id: event.id, processedAt: null },
+      data: {
+        ...patch,
+        attempts: { increment: 1 },
+        ...(action === "ATTRIBUTION_ACK" ? { lastError: null } : {}),
+      },
+    });
+    if (!changed.count) return;
+    const order = await tx.order.findUnique({ where: { id: event.orderId } });
+    const state = await tx.attributionJob.findUnique({
+      where: { id: event.id },
+    });
+    await tx.orderLog.create({
+      data: {
+        ...(action === "ATTRIBUTION_ACK" ? { id: `${event.id}:ack` } : {}),
+        orderId: order.id,
+        buyerId: order.buyerId,
+        sellerId: order.sellerId,
+        actorId: order.buyerId,
+        action,
+        detail: JSON.stringify({
+          schema_version: 1,
+          eventId: event.id,
+          ...detail,
+          attempts: state.attempts,
+        }),
+      },
+    });
+  });
+}
 async function processEvent(
   eventId,
   { db = prisma, client = productClient, now = new Date() } = {},
 ) {
-  if (!db || !db.attributionOutboxEvent) {
-    throw new Error(
-      "attributionOutboxEvent model is required on Prisma client",
-    );
-  }
-
-  const event = await db.attributionOutboxEvent.findUnique({
-    where: { id: eventId },
-  });
+  assertQueue(db);
+  const event = await db.attributionJob.findUnique({ where: { id: eventId } });
   if (!event || event.processedAt) return event;
-
   try {
     await deliver(event, client);
   } catch (error) {
-    const message = String(error?.message || error).slice(0, 1000);
-    await db.attributionOutboxEvent.updateMany({
-      where: { id: event.id, processedAt: null },
-      data: {
-        attempts: { increment: 1 },
-        lastError: message,
-        nextAttemptAt: new Date(now.getTime() + retryDelayMs(event.attempts)),
-      },
+    await appendResult(db, event, "ATTRIBUTION_RETRY", {
+      attempts: event.attempts + 1,
+      lastError: String(error?.message || error).slice(0, 1000),
+      nextAttemptAt: new Date(now.getTime() + retryDelayMs(event.attempts)),
     });
     throw error;
   }
-
-  await db.attributionOutboxEvent.updateMany({
-    where: { id: event.id, processedAt: null },
-    data: {
-      attempts: { increment: 1 },
-      lastError: null,
-      processedAt: now,
-    },
+  // A crash after Product accepts but before this append leaves the same
+  // durable job pending. Restart reuses its ID, never a new attribution ID.
+  await appendResult(db, event, "ATTRIBUTION_ACK", {
+    attempts: event.attempts + 1,
+    processedAt: now,
   });
-
-  return db.attributionOutboxEvent.findUnique({ where: { id: event.id } });
+  return db.attributionJob.findUnique({ where: { id: event.id } });
 }
 
 async function processPendingEvents({
@@ -82,13 +107,8 @@ async function processPendingEvents({
   now = new Date(),
   take = MAX_BATCH_SIZE,
 } = {}) {
-  if (!db || !db.attributionOutboxEvent) {
-    throw new Error(
-      "attributionOutboxEvent model is required on Prisma client",
-    );
-  }
-
-  const events = await db.attributionOutboxEvent.findMany({
+  assertQueue(db);
+  const events = await db.attributionJob.findMany({
     where: { processedAt: null, nextAttemptAt: { lte: now } },
     orderBy: { createdAt: "asc" },
     take,
@@ -100,12 +120,8 @@ async function processPendingEvents({
 }
 
 async function findPendingForOrder(orderId, db = prisma) {
-  if (!db || !db.attributionOutboxEvent) {
-    throw new Error(
-      "attributionOutboxEvent model is required on Prisma client",
-    );
-  }
-  return db.attributionOutboxEvent.findFirst({
+  assertQueue(db);
+  return db.attributionJob.findFirst({
     where: { orderId, processedAt: null },
     orderBy: { createdAt: "desc" },
   });

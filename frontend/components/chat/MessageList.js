@@ -166,6 +166,11 @@ export default function MessageList({
             m.payload?.status === "shipped" ||
             m.body?.includes("ผู้ขายจัดส่งสินค้าแล้ว");
 
+          // The buyer can confirm receipt only once the parcel is delivered.
+          const isDeliveredNotification =
+            m.payload?.event === "order.delivered" ||
+            m.payload?.status === "delivered";
+
           const isCompleted =
             (orderId && completedOrderIds.has(orderId)) ||
             m.payload?.event === "order.completed" ||
@@ -182,7 +187,7 @@ export default function MessageList({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-teal-50/80 p-3 sm:px-4 sm:py-3 text-xs text-emerald-950 shadow-xs max-w-sm sm:max-w-lg w-full">
                     <div className="flex items-start gap-2.5 min-w-0 flex-1">
                       <span className="material-symbols-outlined text-[20px] text-emerald-600 shrink-0 mt-0.5">
-                        {isShippedNotification ? "local_shipping" : isCompleted ? "check_circle" : "shopping_bag"}
+                        {isShippedNotification || isDeliveredNotification ? "local_shipping" : isCompleted ? "check_circle" : "shopping_bag"}
                       </span>
                       <div className="flex-1 min-w-0 text-left">
                         <p className="font-semibold text-emerald-900 leading-snug">
@@ -196,13 +201,13 @@ export default function MessageList({
                       </div>
                     </div>
 
-                    {/* Receipt confirmation button: ONLY for BUYER when shipped */}
+                    {/* Receipt confirmation button: ONLY for BUYER when delivered */}
                     {isCompleted ? (
                       <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 px-2.5 py-1 text-xs font-semibold">
                         <span className="material-symbols-outlined text-[15px]">check_circle</span>
                         <span>สำเร็จ</span>
                       </span>
-                    ) : isShippedNotification && isBuyer && orderId ? (
+                    ) : isDeliveredNotification && isBuyer && orderId ? (
                       <button
                         type="button"
                         onClick={() => handleConfirmReceived(orderId)}

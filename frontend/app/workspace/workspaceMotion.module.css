@@ -14,12 +14,16 @@
   animation: section-in 160ms ease-out;
 }
 @keyframes section-in {
-  from { opacity: 0.8; }
-  to { opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .selection { transition: none; }
-  .content { animation: none; }
+  from {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-@media (min-width: 1024px) { .dashboardToolbar { display: none; } }
+@media (min-width: 1024px) {
+  .dashboardToolbar {
+    display: none;
+  }
+}

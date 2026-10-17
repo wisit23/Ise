@@ -14,9 +14,10 @@ beforeEach(() => {
   uploadDisputeEvidence.mockResolvedValue({ id: "evidence" });
 });
 function complete() {
-  fireEvent.change(screen.getByLabelText("ประเภทปัญหา"), {
-    target: { value: "DAMAGED_ITEM" },
-  });
+  fireEvent.click(screen.getByRole("button", { name: "เลือกประเภทปัญหา" }));
+  fireEvent.click(
+    screen.getByRole("radio", { name: "สินค้าชำรุดหรือเสียหาย" }),
+  );
   fireEvent.change(screen.getByLabelText("รายละเอียดปัญหา"), {
     target: { value: "ตะเข็บฉีกขาดหลังรับสินค้า" },
   });
@@ -45,6 +46,11 @@ test("a partial upload retries only failed files and never opens the case twice"
   fireEvent.click(screen.getByRole("button", { name: "ส่งหลักฐานที่เหลือ" }));
   await waitFor(() => expect(submitted).toHaveBeenCalledWith({ id: "case-1" }));
   expect(apiFetch).toHaveBeenCalledTimes(1);
+  expect(apiFetch).toHaveBeenCalledWith("/api/orders/order-1/disputes", {
+    method: "POST",
+    token: "token",
+    body: { reason: "ตะเข็บฉีกขาดหลังรับสินค้า", disputeType: "DAMAGED_ITEM" },
+  });
   expect(uploadDisputeEvidence).toHaveBeenCalledTimes(3);
   expect(uploadDisputeEvidence.mock.calls[2][1]).toBe(second);
   expect(mockPush).toHaveBeenCalledWith("/support/cases/order-1");
@@ -62,4 +68,22 @@ test("unsupported evidence is rejected before creating a case", async () => {
   );
   expect(await screen.findByRole("alert")).toHaveTextContent("รองรับรูป");
   expect(apiFetch).not.toHaveBeenCalled();
+});
+
+test("selected evidence can be removed before submission", async () => {
+  render(<OrderDisputeForm order={{ id: "order-1" }} />);
+  complete();
+  const keep = new File(["image"], "keep.png", { type: "image/png" });
+  const remove = new File(["image"], "remove.png", { type: "image/png" });
+  fireEvent.change(screen.getByLabelText("แนบหลักฐานคำร้อง"), {
+    target: { files: [keep, remove] },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "ลบไฟล์ remove.png" }));
+  expect(screen.queryByText("remove.png")).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "เปิดคำร้องและส่งข้อมูล" }),
+  );
+  await waitFor(() => expect(mockPush).toHaveBeenCalled());
+  expect(uploadDisputeEvidence).toHaveBeenCalledTimes(1);
+  expect(uploadDisputeEvidence).toHaveBeenCalledWith("case-1", keep, "token");
 });

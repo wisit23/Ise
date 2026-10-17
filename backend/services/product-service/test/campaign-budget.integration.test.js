@@ -22,6 +22,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL_PRODUCT;
 
 const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
+const campaignRepository = require("../src/features/campaigns/campaignRepository");
 const app = require("../src/app");
 app.locals.validateAccessSession = async () => {};
 
@@ -381,7 +382,6 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
           discountValue: 100,
           minOrderPrice: 200,
           budget: 10000,
-          spentBudget: 0,
           status: "published",
           startsAt: new Date(Date.now() - 3600_000),
           endsAt: new Date(Date.now() + 86400_000),

@@ -1,32 +1,24 @@
 const prisma = require("../../../models/prismaClient");
 
-const WITH_MEDIA = { photos: true, videos: true };
+const WITH_MEDIA = { mediaEntries: { orderBy: [{ position: "asc" }, { mediaType: "asc" }, { id: "asc" }] } };
 
-/** Merges photos and videos relations into a single ordered { url, type } array. */
+/** Keep the public ordered { url, type } contract over the unified ER table. */
 function toApiShape(review) {
   if (!review) return review;
-  const { photos, videos, ...rest } = review;
-  const media = [
-    ...(photos || []).map((p) => ({ ...p, type: "image" })),
-    ...(videos || []).map((v) => ({ ...v, type: "video" })),
-  ]
-    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-    .map((m) => ({ url: m.url, type: m.type }));
+  const { mediaEntries, ...rest } = review;
+  const media = [...(mediaEntries || [])]
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.mediaType.localeCompare(b.mediaType) || a.id.localeCompare(b.id))
+    .map((m) => ({ url: m.url, type: m.mediaType === "VIDEO" ? "video" : "image" }));
   return { ...rest, media };
 }
 
-/** Splits [{ url, type }] into nested create payloads for review_photos and review_videos. */
 function mediaToNestedCreate(media) {
-  const photos = [];
-  const videos = [];
-  (media || []).forEach((m, position) => {
-    if (m.type === "video") videos.push({ url: m.url, position });
-    else photos.push({ url: m.url, position });
-  });
-  return {
-    ...(photos.length ? { photos: { create: photos } } : {}),
-    ...(videos.length ? { videos: { create: videos } } : {}),
-  };
+  const entries = (media || []).map((m, position) => ({
+    url: m.url,
+    position,
+    mediaType: m.type === "video" ? "VIDEO" : "IMAGE",
+  }));
+  return entries.length ? { mediaEntries: { create: entries } } : {};
 }
 
 async function create(data) {

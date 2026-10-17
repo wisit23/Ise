@@ -7,7 +7,7 @@ const {
 
 function disputeDashboardBase(userId) {
   return Prisma.sql`
-    SELECT id, order_id AS reference, reason AS subject, status, priority, priority_score,
+    SELECT dispute_case_id AS id, order_id AS reference, reason AS subject, status, priority, priority_score,
       created_at AT TIME ZONE 'UTC' AS created_at, assigned_to AS assignee_id,
       sla_expires_at AT TIME ZONE 'UTC' AS due_at
     FROM dispute_case

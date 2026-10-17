@@ -1,5 +1,7 @@
 # RE-LOOP — Service-owned schema reference
 
+Current approved operational-storage amendment: [typed storage dictionary](operational-storage.md), [implementation and verification](../log/evidence/operational-storage.md). This supersedes the historical snapshot below for the affected Order/Product/Support models; the old snapshot is retained as history, not a current model inventory.
+
 Historical snapshot generated on 2026-09-09 / aad4092, not introspection of a running database. The current service-owned Prisma files are authoritative. Review models now live in product-service's schema; the review-service section below records the former layout.
 
 | Service         | Provider   | Models | Source                                                             |

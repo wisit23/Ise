@@ -57,12 +57,12 @@ async function search({ q, category, skip = 0, take = 20 }) {
     ? Prisma.sql`GREATEST(word_similarity(${q}, r.search_text), similarity(${q}, r.search_text))`
     : Prisma.sql`0`;
   const from = Prisma.sql`FROM help_articles a
-    JOIN help_article_revisions r ON r.article_id = a.id AND r.version = a.published_version
+    JOIN help_article_revisions r ON r.article_id = a.article_id AND r.version = a.published_version
     JOIN help_categories c ON c.help_category_id = r.help_category_id
     WHERE a.status = 'PUBLISHED' ${categoryFilter} ${match}`;
   const [ids, counts] = await Promise.all([
-    prisma.$queryRaw`SELECT a.id, ${rank} AS rank ${from}
-      ORDER BY rank DESC, a.updated_at DESC, a.id ASC LIMIT ${take} OFFSET ${skip}`,
+    prisma.$queryRaw`SELECT a.article_id AS id, ${rank} AS rank ${from}
+      ORDER BY rank DESC, a.updated_at DESC, a.article_id ASC LIMIT ${take} OFFSET ${skip}`,
     prisma.$queryRaw`SELECT count(*)::int AS count ${from}`,
   ]);
   const rows = ids.length

@@ -304,7 +304,7 @@ export function ComparisonChart({
               เคส / วัน
             </text>
             {shown.map((series) => (
-              <g key={series.key}>
+              <g key={series.key} className="agent-line-series">
                 <path
                   d={`${seriesPath(series)} L${x(rows.length - 1)},${y(0)} L${x(0)},${y(0)} Z`}
                   fill={`url(#${descriptionId}-${series.key}-fill)`}

@@ -88,8 +88,22 @@ model BuyerProfile {
   sizePreference   String?  @map("size_preference")
   brandPreference  String?  @map("brand_preference")
   updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+  // Legacy scalar columns are retained; Style Profile reads normalized selections.
+  preferences      BuyerPreference[]
 
   @@map("buyer_profiles")
+}
+
+model BuyerPreference {
+  userId   String @map("user_id")
+  kind     String
+  // Empty for non-size preferences and legacy sizes whose category is unknown.
+  category String @default("")
+  value    String
+  profile  BuyerProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([userId, kind, category, value])
+  @@map("buyer_preferences")
 }
 
 // ER: Seller — shop info + KYC fields.
@@ -113,6 +127,7 @@ model SellerProfile {
   // The daily sellerInactivityJob sets kycStatus = INACTIVE_EXPIRED when this
   // (or verifiedAt if null) is older than 365 days.
   lastActiveAt  DateTime? @map("last_active_at")
+  autoMessages  AutoMessage[]
 
   @@map("seller_profiles")
 }
@@ -329,7 +344,7 @@ model ShopChangeRequest {
 // One row per changed field. Keeping old/new snapshots makes an approved or
 // rejected request auditable even after SellerProfile changes again later.
 model ShopChangeRequestItem {
-  id        String            @id @default(uuid())
+  id        String            @unique @default(uuid())
   requestId String            @map("requests_id")
   request   ShopChangeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   fieldName String            @map("field_name")
@@ -337,7 +352,18 @@ model ShopChangeRequestItem {
   newValue  String            @map("new_value")
   createdAt DateTime          @default(now()) @map("created_at")
 
-  @@unique([requestId, fieldName])
+  @@id([requestId, fieldName])
   @@index([requestId])
   @@map("shop_change_request_items")
+}
+
+model AutoMessage {
+  id          String        @id @default(uuid()) @map("message_id")
+  userId      String        @map("user_id")
+  messageText String        @map("message_text")
+  isActive    Boolean       @default(false) @map("is_active")
+  seller      SellerProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auto_messages")
 }

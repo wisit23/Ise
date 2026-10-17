@@ -2,13 +2,46 @@ const prisma = require("./prismaClient");
 const { Prisma } = require("../generated/prisma-client");
 const { buildCatalogWhere } = require("../features/catalog/catalogQuery");
 
-const WITH_MEDIA = { photos: true, videos: true };
+const WITH_MEDIA = { photos: true, videos: true, categoryLinks: { include: { category: true } } };
+
+/** Row lock so concurrent category rewrites of one product cannot both
+ * delete and re-insert the same (product_id, category_id) pair. */
+async function lockProduct(client, id) {
+  await client.$queryRaw`SELECT id FROM products WHERE id = ${id} FOR UPDATE`;
+}
+
+/** Explicit `categories` replace the whole membership set. A legacy
+ * `category`-only edit swaps the old primary for the new one and keeps the
+ * other memberships. Read the current state before the primary column changes. */
+async function categoryNames(client, id, fields, categories) {
+  if (fields.category === undefined && categories === undefined) return null;
+  if (categories !== undefined || !id) {
+    return [...new Set([fields.category, ...(categories || [])].filter((v) => v !== undefined))];
+  }
+  const current = await client.product.findUnique({
+    where: { id },
+    select: { category: true, categoryLinks: { select: { category: { select: { name: true } } } } },
+  });
+  const kept = (current?.categoryLinks || []).map((link) => link.category.name).filter((name) => name !== current.category);
+  return [...new Set([...kept, fields.category])];
+}
+
+async function categoryData(client, names) {
+  if (!names) return {};
+  const links = [];
+  for (const name of names) {
+    const category = await client.category.upsert({ where: { name }, update: {}, create: { name } });
+    links.push({ categoryId: category.id });
+  }
+  return { categoryLinks: { create: links } };
+}
 
 /** Merges the photos/videos relations back into the { url, type } media array
  * shape the API/frontend expects, ordered by `position` (index 0 = cover). */
 function toApiShape(product) {
   if (!product) return product;
-  const { photos, videos, ...rest } = product;
+  const { photos, videos, categoryLinks, ...rest } = product;
+  if (categoryLinks) rest.categories = categoryLinks.map((link) => link.category.name).sort();
   const moderationActive = Boolean(
     rest.moderatedAt || rest.status === "removed",
   );
@@ -170,7 +203,7 @@ async function list({
               status: { notIn: ["removed", "hidden", "auction_action_required"] },
               moderatedAt: null,
             }),
-    ...(category ? { category } : {}),
+    ...(category ? { categoryLinks: { some: { category: { name: category } } } } : {}),
   };
   const [items, total] = await Promise.all([
     prisma.product.findMany({
@@ -224,26 +257,32 @@ async function findById(id, tx = prisma) {
 
 async function create(data, tx = prisma) {
   const client = tx || prisma;
-  const { media, ...fields } = data;
-  const product = await client.product.create({
-    data: { ...fields, ...mediaToNestedCreate(media) },
+  const { media, categories, ...fields } = data;
+  const run = async (db) => db.product.create({
+    data: { ...fields, ...(await categoryData(db, await categoryNames(db, null, fields, categories))), ...mediaToNestedCreate(media) },
     include: WITH_MEDIA,
   });
+  const product = client === prisma ? await prisma.$transaction(run) : await run(client);
   return toApiShape(product);
 }
 
 async function update(id, patch, tx = null) {
-  const { media, ...fields } = patch;
+  const { media, categories, ...fields } = patch;
   try {
     const run = async (client) => {
       if (media !== undefined) {
         await client.photo.deleteMany({ where: { productId: id } });
         await client.video.deleteMany({ where: { productId: id } });
       }
+      const changesCategories = fields.category !== undefined || categories !== undefined;
+      if (changesCategories) await lockProduct(client, id);
+      const links = await categoryData(client, await categoryNames(client, id, fields, categories));
+      if (links.categoryLinks) await client.productCategory.deleteMany({ where: { productId: id } });
       return client.product.update({
         where: { id },
         data: {
           ...fields,
+          ...links,
           ...(media !== undefined ? mediaToNestedCreate(media) : {}),
         },
         include: WITH_MEDIA,
@@ -260,8 +299,12 @@ async function update(id, patch, tx = null) {
 }
 
 async function updateBySeller(id, patch) {
-  const { media, ...fields } = patch;
+  const { media, categories, ...fields } = patch;
   return prisma.$transaction(async (tx) => {
+    // Lock and read memberships before updateMany overwrites the primary column.
+    const changesCategories = fields.category !== undefined || categories !== undefined;
+    if (changesCategories) await lockProduct(tx, id);
+    const names = await categoryNames(tx, id, fields, categories);
     const claimed = await tx.product.updateMany({
       where: {
         id,
@@ -272,6 +315,11 @@ async function updateBySeller(id, patch) {
     });
     if (claimed.count !== 1) return null;
 
+    const links = await categoryData(tx, names);
+    if (links.categoryLinks) {
+      await tx.productCategory.deleteMany({ where: { productId: id } });
+      await tx.product.update({ where: { id }, data: links });
+    }
     if (media !== undefined) {
       await tx.photo.deleteMany({ where: { productId: id } });
       await tx.video.deleteMany({ where: { productId: id } });
@@ -376,8 +424,9 @@ function listConditions() {
 }
 
 async function listFilterOptions() {
+  const { groupSizesByCategory } = require("../features/catalog/sizeOptions");
   try {
-    const [brands, styles, sizes] = await Promise.all([
+    const [brands, styles, sizes, sizedProducts] = await Promise.all([
       prisma.product.findMany({
         where: {
           status: "available",
@@ -395,19 +444,29 @@ async function listFilterOptions() {
         select: { size: true },
         orderBy: { size: "asc" },
       }),
+      prisma.product.findMany({
+        where: { status: "available", moderatedAt: null, size: { not: "" } },
+        select: {
+          size: true,
+          category: true,
+          categoryLinks: { select: { category: { select: { name: true } } } },
+        },
+      }),
     ]);
     return {
       brands: brands.map((x) => x.brand).filter(Boolean),
       styles: styles.map((x) => x.value).filter(Boolean),
       sizes: sizes.map((x) => x.size).filter(Boolean),
+      sizesByCategory: groupSizesByCategory(sizedProducts),
     };
   } catch (err) {
     console.warn("listFilterOptions fallback:", err.message);
-    return { brands: [], styles: [], sizes: [] };
+    return { brands: [], styles: [], sizes: [], sizesByCategory: [] };
   }
 }
 
 module.exports = {
+  toApiShape,
   list,
   listBySeller,
   findById,

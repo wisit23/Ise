@@ -102,14 +102,6 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
     }
 
     try {
-      await orderPrisma.attributionOutboxEvent.deleteMany({
-        where: { campaignId: { startsWith: TEST_PREFIX } },
-      });
-    } catch (err) {
-      // Best-effort cleanup of test outbox events
-      cleanupErrors.push(err);
-    }
-    try {
       await orderPrisma.orderLog.deleteMany({
         where: { order: { buyerId: { startsWith: TEST_PREFIX } } },
       });
@@ -199,7 +191,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
       outboxEvent = transitionResult.attributionEvent;
 
       // Verify row in real PostgreSQL attribution_outbox_events
-      const row = await orderPrisma.attributionOutboxEvent.findUnique({
+      const row = await orderPrisma.attributionJob.findUnique({
         where: { orderId: campaignOrder.id },
       });
 
@@ -247,7 +239,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
       assert.equal(transitionResult.order.status, "completed");
       assert.equal(transitionResult.attributionEvent, null);
 
-      const outboxInDb = await orderPrisma.attributionOutboxEvent.findUnique({
+      const outboxInDb = await orderPrisma.attributionJob.findUnique({
         where: { orderId: nonCampOrder.id },
       });
       assert.equal(outboxInDb, null);
@@ -295,7 +287,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
       assert.equal(Number(req.body.payload.netAmount), 2000);
 
       // Verify row updated in PostgreSQL
-      const row = await orderPrisma.attributionOutboxEvent.findUnique({
+      const row = await orderPrisma.attributionJob.findUnique({
         where: { id: outboxEvent.id },
       });
       assert.ok(row.processedAt);
@@ -365,7 +357,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
       );
 
       // Verify in PostgreSQL that processedAt is null and backoff is scheduled
-      const row = await orderPrisma.attributionOutboxEvent.findUnique({
+      const row = await orderPrisma.attributionJob.findUnique({
         where: { id: outbox2.id },
       });
       assert.equal(row.processedAt, null);
@@ -378,21 +370,14 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
   await t.test(
     "Step 5: Sweep recovery: processPendingEvents recovers and delivers backed-off events once recovered",
     async () => {
-      // Find the failed event and adjust nextAttemptAt to past
-      const pendingBefore = await orderPrisma.attributionOutboxEvent.findFirst({
+      // Advance the sweep clock; jobs/retry history remain immutable.
+      const pendingBefore = await orderPrisma.attributionJob.findFirst({
         where: {
           campaignId: TEST_CAMPAIGN_ID,
           processedAt: null,
         },
       });
       assert.ok(pendingBefore);
-
-      await orderPrisma.attributionOutboxEvent.update({
-        where: { id: pendingBefore.id },
-        data: {
-          nextAttemptAt: new Date(Date.now() - 5000),
-        },
-      });
 
       // Restore mock server to 200 OK
       mockHandler = (req, res) => {
@@ -410,6 +395,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
       const sweepResults = await attributionOutboxService.processPendingEvents({
         db: orderPrisma,
         client: productClient,
+        now: new Date(pendingBefore.nextAttemptAt.getTime() + 1),
       });
 
       assert.ok(sweepResults.length >= 1);
@@ -423,7 +409,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
       assert.equal(recovered.lastError, null);
 
       // Verify in PostgreSQL
-      const row = await orderPrisma.attributionOutboxEvent.findUnique({
+      const row = await orderPrisma.attributionJob.findUnique({
         where: { id: pendingBefore.id },
       });
       assert.ok(row.processedAt);

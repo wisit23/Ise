@@ -1,6 +1,19 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import HomePage from "./page";
 
+// Recommendation loading/error behavior has its own component suite.
+jest.mock(
+  "../components/home/RecommendedProducts",
+  () =>
+    function Recommendations() {
+      return <section aria-label="สินค้าแนะนำ" />;
+    },
+);
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: jest.fn() }),
+}));
+
 describe("HomePage", () => {
   it("renders the marketplace headline", async () => {
     render(<HomePage />);

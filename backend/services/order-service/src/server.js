@@ -10,6 +10,7 @@ const checkoutSessionService = require("./features/checkoutSessions/checkoutSess
 const productSyncService = require("./services/productSyncService");
 const attributionOutboxService = require("./services/attributionOutboxService");
 const auctionSettlementService = require("./features/auctionSettlements/auctionSettlementService");
+const orderLifecycleService = require("./services/orderLifecycleService");
 
 const PORT = process.env.ORDER_PORT || 3003;
 app.listen(PORT, () => {
@@ -24,4 +25,5 @@ app.listen(PORT, () => {
   productSyncService.startWorker();
   attributionOutboxService.startWorker();
   auctionSettlementService.startWorker();
+  orderLifecycleService.startWorker();
 });

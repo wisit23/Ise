@@ -21,9 +21,19 @@ for (const [service, path] of [
       "awaitingReplyIds",
       async () => [],
     );
-    t.mock.method(db, "$queryRaw", async (query) => {
-      calls.push(query);
-      return [{ dashboard: { total: 0, items: [] } }];
+    // The order ER client exposes inherited methods through a Proxy, so
+    // node:test cannot discover a method descriptor for mock.method.
+    const descriptor = Object.getOwnPropertyDescriptor(db, "$queryRaw");
+    Object.defineProperty(db, "$queryRaw", {
+      configurable: true,
+      value: t.mock.fn(async (query) => {
+        calls.push(query);
+        return [{ dashboard: { total: 0, items: [] } }];
+      }),
+    });
+    t.after(() => {
+      if (descriptor) Object.defineProperty(db, "$queryRaw", descriptor);
+      else delete db.$queryRaw;
     });
     await request(app).get(path).expect(401);
     const buyer = signAccessToken({ sub: "buyer", role: "BUYER" });

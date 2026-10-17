@@ -1,15 +1,15 @@
-import { Anuphan, Noto_Sans_Thai } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import ChatSocketProvider from "../components/chat/ChatSocketProvider";
 import AuctionNotificationCenter from "../components/chat/AuctionNotificationCenter";
 import CommerceRestrictionBanner from "../components/CommerceRestrictionBanner";
+import AuthArrival from "../components/auth/AuthArrival";
 
-/* Self-hosted by next/font at build time — no runtime request to Google, no
-   FOUT, and Thai text renders identically on every OS instead of falling back
-   to whatever each machine happens to ship. */
-const notoSansThai = Noto_Sans_Thai({
-  subsets: ["thai", "latin"],
-  weight: ["400", "500", "600", "700"],
+/* Bundled fonts keep builds independent of Google Fonts responses/network.
+   Licenses and sources are recorded in ../fonts/README.md. */
+const notoSansThai = localFont({
+  src: "../fonts/notosansthai.ttf",
+  weight: "100 900",
   display: "swap",
   variable: "--font-noto-sans-thai",
 });
@@ -17,9 +17,9 @@ const notoSansThai = Noto_Sans_Thai({
 /* Headings only. The reference design pairs a tighter display face with the
    body text; using one face for both is what made every heading read as
    "big body text" rather than as a heading. */
-const anuphan = Anuphan({
-  subsets: ["thai", "latin"],
-  weight: ["500", "600", "700"],
+const anuphan = localFont({
+  src: "../fonts/anuphan.ttf",
+  weight: "100 700",
   display: "swap",
   variable: "--font-anuphan",
 });
@@ -56,7 +56,7 @@ export default function RootLayout({ children }) {
         <ChatSocketProvider>
           <AuctionNotificationCenter />
           <CommerceRestrictionBanner />
-          {children}
+          <AuthArrival>{children}</AuthArrival>
         </ChatSocketProvider>
       </body>
     </html>

@@ -152,7 +152,7 @@ function createCampaignMetricsService(
       assertBalances();
       const runTx =
         typeof prismaClient.$transaction === "function"
-          ? (fn) => prismaClient.$transaction(fn)
+          ? (fn) => prismaClient.$transaction(fn, { maxWait: 10_000 })
           : (fn) => fn(prismaClient);
 
       try {

@@ -15,10 +15,10 @@ test("Buyer satang survive atomic completion, Product attribution, audit and dup
    await outbox.deliver(attributionEvent,client);const replay=await outbox.deliver(attributionEvent,client);assert.equal(replay.deduplicated,true);
   }
   const result=await metrics.getCampaignMetrics({campaignId:campaign.id});assert.equal(result.grossRevenue,101.05);assert.equal(result.totalDiscount,0.35);assert.equal(result.netRevenue,100.70);assert.equal(result.completedOrders,2);
-  const stored=await productDb.campaign.findUnique({where:{id:campaign.id}});assert.equal(stored.spentBudget.toFixed(2),"0.35");
+  const stored=await productDb.campaignAttribution.aggregate({where:{campaignId:campaign.id},_sum:{discountAmount:true}});assert.equal(stored._sum.discountAmount.toFixed(2),"0.35");
   await assert.rejects(metrics.recordOrderCompletedEvent({eventId:"bad-precision",orderId:"bad",campaignId:campaign.id,grossAmount:"1.001",discountAmount:0,netAmount:"1.001"}),e=>e.status===400);
  }finally{
-  for(const id of orders){await orderDb.attributionOutboxEvent.deleteMany({where:{orderId:id}});await deleteOrder(orderDb,id);}
+  for(const id of orders){await deleteOrder(orderDb,id);}
   await productDb.campaignAttribution.deleteMany({where:{campaignId:campaign.id}});await productDb.campaign.delete({where:{id:campaign.id}});await orderDb.$disconnect();await productDb.$disconnect();
  }
 });

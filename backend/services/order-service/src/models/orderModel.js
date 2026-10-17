@@ -1,12 +1,17 @@
 const { conflict } = require("@reloop/shared");
 const prisma = require("./prismaClient");
 const { money } = require("./money");
+const evidenceModel = require("../features/disputes/evidenceView");
 const { assertCanCancelOrder } = require("../services/orderTransitionService");
+const { isRefundingCancellation } = require("../services/orderLifecycle");
 const VALID_STATUSES = [
   "pending",
   "pending_payment",
+  "paid",
   "confirmed",
+  "ready_to_ship",
   "shipped",
+  "delivered",
   "completed",
   "cancelled",
   "disputed",
@@ -16,13 +21,14 @@ const INCLUDE = {
   basket: true,
   checkout: true,
   shipping: true,
-  dispute: { include: { evidence: true } },
+  dispute: { include: { evidence: { include: evidenceModel.INCLUDE } } },
   payments: { include: { holds: true } },
 };
 function disputeView(row) {
   if (!row) return null;
   return {
     ...row,
+    ...(row.evidence ? { evidence: row.evidence.map(evidenceModel.view) } : {}),
     openedBy: row.createdBy,
     claimedAt: row.assignedAt,
     status: row.decision
@@ -281,6 +287,15 @@ async function updateCampaign(id, { campaignId, finalPrice }) {
     }),
   );
 }
+const STATUS_TIMESTAMP = {
+  shipped: "shippedAt",
+  delivered: "deliveredAt",
+  completed: "completedAt",
+};
+function statusData(status, now = new Date()) {
+  const field = STATUS_TIMESTAMP[status];
+  return { status, version: { increment: 1 }, ...(field ? { [field]: now } : {}) };
+}
 async function transitionStatusWithProductSync({
   id,
   status,
@@ -295,35 +310,43 @@ async function transitionStatusWithProductSync({
       include: INCLUDE,
     });
     if (!before) return { order: null, event: null };
-    if (status === "cancelled") assertCanCancelOrder(before);
+    const refunding = isRefundingCancellation(before, status);
+    if (status === "cancelled" && !refunding) assertCanCancelOrder(before);
+    const now = new Date();
     const claimed = await tx.order.updateMany({
       where: {
         id,
         version: expectedVersion,
         ...(expectedStatuses ? { status: { in: expectedStatuses } } : {}),
       },
-      data: { status, version: { increment: 1 } },
+      data: statusData(status, now),
     });
     if (claimed.count !== 1)
       throw conflict("order was modified concurrently — reload and retry");
-    if (status === "confirmed")
+    // Simulated refund: no money moves, the payment history records it.
+    if (refunding)
       await tx.payment.create({
         data: {
           orderId: id,
-          paymentType: "SIMULATED",
-          paymentStatus: "paid",
+          paymentType: "SIMULATED_REFUND",
+          paymentStatus: "refunded",
           paymentAmount: before.ordersAmount,
-          paidAt: new Date(),
+          paidAt: now,
         },
       });
-    const event = await tx.orderLog.create({
-      data: logData(
-        before,
-        actorId || before.buyerId,
-        "PRODUCT_SYNC_REQUESTED",
-        productSync,
-      ),
-    });
+    if (status === "delivered" && before.shipping)
+      await tx.shipping.update({
+        where: { orderId: id },
+        data: { status: "delivered" },
+      });
+    const event = productSync
+      ? await require("../services/productSyncService").createRequest(
+          tx,
+          before,
+          actorId || before.buyerId,
+          productSync,
+        )
+      : null;
     if (status === "cancelled" && before.basketId)
       await tx.basket.update({
         where: { id: before.basketId },
@@ -335,9 +358,43 @@ async function transitionStatusWithProductSync({
         to: status,
       }),
     });
-    let attributionEvent=null;
-    if(status === "completed" && before.campaignId){
-      attributionEvent=await tx.attributionOutboxEvent.upsert({where:{orderId:id},update:{},create:{orderId:id,campaignId:before.campaignId,grossAmount:before.originalAmount,discountAmount:money(before.originalAmount).minus(before.ordersAmount),netAmount:before.ordersAmount,completedAt:new Date()}});
+    let attributionEvent = null;
+    if (status === "completed" && before.campaignId) {
+      attributionEvent = await tx.attributionJob.findUnique({
+        where: { orderId: id },
+      });
+      if (!attributionEvent) {
+        attributionEvent = await tx.attributionJob.create({
+          data: {
+            orderId: id,
+            campaignId: before.campaignId,
+            grossAmount: before.originalAmount,
+            discountAmount: money(before.originalAmount).minus(
+              before.ordersAmount,
+            ),
+            netAmount: before.ordersAmount,
+            completedAt: new Date(),
+            attempts: 0,
+            nextAttemptAt: new Date(),
+            createdAt: new Date(),
+          },
+        });
+        await tx.orderLog.create({
+          data: logData(
+            before,
+            actorId || before.buyerId,
+            "ATTRIBUTION_REQUESTED",
+            {
+              eventId: attributionEvent.id,
+              campaignId: before.campaignId,
+              grossAmount: before.originalAmount.toString(),
+              discountAmount: attributionEvent.discountAmount.toString(),
+              netAmount: before.ordersAmount.toString(),
+              completedAt: attributionEvent.completedAt,
+            },
+          ),
+        });
+      }
     }
     return {
       order: view(
@@ -399,4 +456,5 @@ module.exports = {
   view,
   disputeView,
   logData,
+  statusData,
 };

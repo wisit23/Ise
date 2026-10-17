@@ -287,6 +287,25 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
     }
   });
 
+  await Promise.all(
+    ["Excellent", "Good", "Like New", "Fair"].map((value) =>
+      prisma.condition.upsert({
+        where: { value },
+        update: {},
+        create: { value, label: value },
+      }),
+    ),
+  );
+  await Promise.all(
+    ["apparel", "กระเป๋า", "vintage"].map((name) =>
+      prisma.category.upsert({
+        where: { name },
+        update: {},
+        create: { name },
+      }),
+    ),
+  );
+
   // Helper to create clean product
   async function createTestProduct(
     sellerId,
@@ -299,6 +318,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
         title: `${title} ${Date.now()}_${Math.random().toString(36).substring(7)}`,
         price: 500,
         category: "apparel",
+        categoryLinks: { create: { category: { connect: { name: "apparel" } } } },
         brand: "ReloopBrand",
         condition: "Excellent",
         size: "M",
@@ -319,8 +339,16 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
     categories = [],
   } = {}) {
     const now = Date.now();
-    const round = await prisma.auctionRound.create({
-      data: {
+    for (const name of categories) {
+      await prisma.category.upsert({
+        where: { name },
+        update: {},
+        create: { name },
+      });
+    }
+    const round = await auctionService.createRound({
+      user: { id: "marketing-auction-lead-01", role: "MARKETING" },
+      input: {
         title: `Test Round ${now}`,
         categories,
         submissionStartsAt: new Date(now + subStartsInMs),
@@ -1445,9 +1473,8 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
         "Existing Bag",
         "available",
       );
-      await prisma.product.update({
-        where: { id: bagProduct.id },
-        data: { category: "กระเป๋า" },
+      await require("../src/models/productModel").update(bagProduct.id, {
+        category: "กระเป๋า",
       });
 
       const deceptionRes = await request(app)
@@ -1482,9 +1509,8 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
         "Existing Shoes",
         "available",
       );
-      await prisma.product.update({
-        where: { id: shoesProduct.id },
-        data: { category: "รองเท้า" },
+      await require("../src/models/productModel").update(shoesProduct.id, {
+        category: "รองเท้า",
       });
 
       const validRes = await request(app)
@@ -1998,10 +2024,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
       let orderCallsForCancelled = 0;
       t.mock.method(orderClient, "createOrderFromAuction", async (payload) => {
         // Verify inside mock that DB item is NEVER already cancelled when orderClient is called
-        const currentItem = await prisma.auctionItem.findUnique({
-          where: { id: payload.auctionId },
-          include: { round: true },
-        });
+        const currentItem = await auctionRepository.findById(payload.auctionId);
         if (
           currentItem?.status === "cancelled" ||
           currentItem?.round?.cancelledAt
@@ -2240,9 +2263,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
       const dbItem4 = await prisma.auctionItem.findUnique({
         where: { id: item4.id },
       });
-      const dbRound4 = await prisma.auctionRound.findUnique({
-        where: { id: round4.id },
-      });
+      const dbRound4 = await auctionRepository.findRoundById(round4.id);
       if (dbRound4.cancelledAt) {
         assert.equal(dbItem4.status, "cancelled");
         assert.equal(
@@ -2287,18 +2308,16 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
         "Seller Recovery Product",
         "auction_action_required",
       );
-      const historicalItem = await prisma.auctionItem.create({
-        data: {
-          productId: recoveryProd.id,
-          sellerId: "seller-auction-test-01",
-          roundId: oldRound.id,
-          startingPrice: 500,
-          bidIncrement: 50,
-          status: "cancelled",
-          cancellationReason: "ยกเลิกรอบเก่า",
-          cancelledAt: new Date(),
-          cancelledBy: "marketing-auction-lead-01",
-        },
+      const historicalItem = await auctionRepository.create({
+        productId: recoveryProd.id,
+        sellerId: "seller-auction-test-01",
+        roundId: oldRound.id,
+        startingPrice: 500,
+        bidIncrement: 50,
+        status: "cancelled",
+        cancellationReason: "ยกเลิกรอบเก่า",
+        cancelledAt: new Date(),
+        cancelledBy: "marketing-auction-lead-01",
       });
       createdAuctionIds.push(historicalItem.id);
       const historicalBid = await prisma.bid.create({

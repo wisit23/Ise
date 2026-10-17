@@ -535,7 +535,7 @@ test("TSR-02: Payment outbox survives product-service failure and retries", asyn
     .set("Authorization", `Bearer ${buyerToken}`)
     .send({});
   assert.equal(accepted.status, 202);
-  assert.equal(accepted.body.status, "confirmed");
+  assert.equal(accepted.body.status, "paid");
   assert.equal(accepted.body.productSyncPending, true);
 
   const pendingEvent = await prisma.orderLog.findFirst({
@@ -550,7 +550,7 @@ test("TSR-02: Payment outbox survives product-service failure and retries", asyn
     .set("Authorization", `Bearer ${buyerToken}`)
     .send({});
   assert.equal(retried.status, 200);
-  assert.equal(retried.body.status, "confirmed");
+  assert.equal(retried.body.status, "paid");
 
   const processedEvent = await prisma.orderLog.findFirst({
     where: { action: "PRODUCT_SYNC_COMPLETED", detail: pendingEvent.id },

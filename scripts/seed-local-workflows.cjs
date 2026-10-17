@@ -60,8 +60,11 @@ async function main() {
     if (stage !== 'pending') {
       await step(key + '-payment', () => request('/api/orders/checkout-sessions/' + checkout.id + '/confirm', token('buyer'), {}));
       if (!['paid', 'safety'].includes(stage)) {
+        for (const status of ['confirmed', 'ready_to_ship']) await step(key + '-' + status, () => request('/api/orders/' + order.id + '/status', token('seller'), { status }, 'PATCH'));
         await step(key + '-shipping', async () => { const current = await request('/api/orders/' + order.id, token('seller')); return request('/api/orders/' + order.id + '/status', token('seller'), { status: 'shipped', company: 'Demo Express', trackingNumber: 'DEMO-' + label + '-' + key.toUpperCase(), version: current.version }, 'PATCH'); });
-        if (stage !== 'shipped') await step(key + '-receipt', async () => { const current = await request('/api/orders/' + order.id, token('buyer')); return request('/api/orders/' + order.id + '/status', token('buyer'), { status: 'completed', version: current.version }, 'PATCH'); });
+        // Receipt and disputes need delivery, which order-service simulates ~10s after shipping.
+        if (stage !== 'shipped') await step(key + '-delivered', async () => { let current = await request('/api/orders/' + order.id, token('buyer')); for (let i = 0; i < 30 && current.status !== 'delivered'; i++) { await new Promise((resolve) => setTimeout(resolve, 1000)); current = await request('/api/orders/' + order.id, token('buyer')); } if (current.status !== 'delivered') throw new Error('order was not delivered: ' + current.status); return current; });
+        if (stage === 'completed') await step(key + '-receipt', async () => { const current = await request('/api/orders/' + order.id, token('buyer')); return request('/api/orders/' + order.id + '/status', token('buyer'), { status: 'completed', version: current.version }, 'PATCH'); });
       }
       if (stage === 'completed') await step('buyer-review', () => request('/api/products/reviews', token('buyer'), { orderId: order.id, rating: 5, comment: 'ได้รับเสื้อแล้ว สภาพตรงตามรายละเอียด ผู้ขายตอบคำถามและจัดส่งเรียบร้อย' }));
       if (stage === 'safety') await step('safety-hold', async () => { const current = await request('/api/orders/' + order.id, token('seller')); return request('/api/orders/admin/' + order.id + '/hold', token('trust'), { reason: 'ชุดสาธิต: พักเงินเพื่อตรวจสอบรายการที่ได้รับรายงาน ก่อนอนุญาตให้จัดส่ง', version: current.version }); });

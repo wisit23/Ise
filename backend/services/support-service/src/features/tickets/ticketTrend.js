@@ -26,12 +26,13 @@ async function readTicketTrend(
       SELECT ((${now}::timestamptz AT TIME ZONE ${timeZone})::date - (${days}::int - 1) + n) AS day
       FROM generate_series(0, ${days}::int - 1) n
     ), visible AS (
-      SELECT t.id, t.created_at FROM support_tickets t
+      SELECT t.ticket_id AS id, t.created_at FROM support_tickets t
       JOIN ticket_statuses s ON s.ticket_status_id = t.current_status_id
       JOIN ticket_priorities p ON p.ticket_priority_id = t.ticket_priority_id
       LEFT JOIN LATERAL (SELECT assignment_id, assignee_id FROM ticket_assignments
-        WHERE ticket_id=t.id AND (ended_at IS NULL OR s.code='CLOSED')
+        WHERE ticket_id=t.ticket_id AND (ended_at IS NULL OR s.code='CLOSED')
         ORDER BY assigned_at DESC LIMIT 1) a ON true
+
       ${filter}
     )
     SELECT dates.day::text AS date, count(v.id)::int AS value

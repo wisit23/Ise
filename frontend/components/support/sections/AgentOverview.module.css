@@ -125,7 +125,7 @@
   margin: 8px 0 12px;
   font-variant-numeric: tabular-nums;
 }
-.metricValue > span {
+.metricValue > span:not([data-animated-number]) {
   font-size: 14px;
   font-weight: 450;
   color: rgb(var(--color-ink-subtle));
@@ -195,7 +195,7 @@
   box-shadow: 0 6px 16px rgb(var(--color-brand-600) / 0.12);
 }
 .replyCard .metricHeading,
-.replyCard .metricValue > span {
+.replyCard .metricValue > span:not([data-animated-number]) {
   color: rgb(var(--color-brand-50));
 }
 .replyCard .metricIcon {
@@ -329,15 +329,16 @@
 }
 .priorityPanel {
   background: rgb(var(--color-surface)) !important;
+  min-height: min-content;
 }
 .slaDonutLayout {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 24px;
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: min-content;
 }
 .slaDonut {
   display: grid;
@@ -369,7 +370,7 @@
   max-width: 100%;
   overflow-wrap: anywhere;
 }
-.slaDonutCenter span {
+.slaDonutCenter > span {
   font-size: 13px;
   color: var(--muted);
   margin-top: 9px;
@@ -486,6 +487,19 @@
   place-items: center;
   color: var(--muted);
   min-height: 0;
+}
+.loadingHint {
+  font-size: 12px;
+  color: var(--muted);
+  animation: dashboard-text-in 220ms ease-out backwards;
+}
+@keyframes dashboard-text-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 .skeleton {
   width: 100%;
@@ -717,19 +731,6 @@
     font-size: 13px;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .metric,
-  .slaDonutGroup {
-    transition: none;
-  }
-  .metric:hover {
-    transform: none;
-  }
-  .skeletonMetrics > div,
-  .skeletonChart {
-    animation: none;
-  }
-}
 
 @media (min-width: 1024px) {
   .slaDonutLayout:has(.slaDonutGroup:nth-child(5)) {
@@ -888,12 +889,6 @@
   }
   .periodControl button {
     font-size: 13px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .periodIndicator,
-  .periodControl button {
-    transition: none;
   }
 }
 
@@ -1083,4 +1078,170 @@
 .trendPanel :global(.agent-series-check[data-checked="true"]) {
   background: rgb(var(--color-brand-600));
   border-color: rgb(var(--color-brand-600));
+}
+
+/* Pop only the contents; panel geometry stays fixed throughout loading. */
+.dashboard.entering .header h1,
+.dashboard.entering .metricHeading,
+.dashboard.entering .metricValue,
+.dashboard.entering .metricSources,
+.dashboard.entering .widgetHeader h2,
+.dashboard.entering .slaDonutGroup,
+.dashboard.entering .slaDonutCenter strong,
+.dashboard.entering :global(.agent-chart-plot),
+.dashboard.entering .donutSvg {
+  animation: dashboard-content-pop 650ms cubic-bezier(0.22, 1, 0.36, 1)
+    backwards;
+  transform-origin: center;
+}
+.dashboard.entering .header h1,
+.dashboard.entering .metricHeading,
+.dashboard.entering .metricValue,
+.dashboard.entering .metricSources,
+.dashboard.entering .widgetHeader h2 {
+  transform-origin: left center;
+}
+.dashboard.entering .metricValue {
+  animation-delay: 60ms;
+}
+.dashboard.entering .metricSources {
+  animation-delay: 140ms;
+}
+.dashboard.entering .widgetHeader h2 {
+  animation-delay: 100ms;
+}
+.dashboard.entering .slaDonutGroup:nth-child(2) {
+  animation-delay: 60ms;
+}
+.dashboard.entering .slaDonutGroup:nth-child(3) {
+  animation-delay: 120ms;
+}
+.dashboard.entering .slaDonutGroup:nth-child(4) {
+  animation-delay: 180ms;
+}
+.dashboard.entering :global(.agent-line-series) {
+  animation: dashboard-line-draw 1250ms 80ms cubic-bezier(0.22, 1, 0.36, 1)
+    backwards;
+}
+.dashboard.entering .donutSvg [data-priority] {
+  stroke-dasharray: 1;
+  animation: dashboard-arc-draw 1250ms 80ms cubic-bezier(0.22, 1, 0.36, 1)
+    backwards;
+}
+.dashboard.entering .donutSvg circle[data-priority] {
+  transform: rotate(-90deg);
+  transform-origin: 60px 60px;
+}
+.dashboard.entrancePaused .header h1,
+.dashboard.entrancePaused .metricHeading,
+.dashboard.entrancePaused .metricValue,
+.dashboard.entrancePaused .metricSources,
+.dashboard.entrancePaused .widgetHeader h2,
+.dashboard.entrancePaused .slaDonutGroup,
+.dashboard.entrancePaused .slaDonutCenter strong,
+.dashboard.entrancePaused :global(.agent-chart-plot),
+.dashboard.entrancePaused .donutSvg,
+.dashboard.entrancePaused :global(.agent-line-series),
+.dashboard.entrancePaused .donutSvg [data-priority] {
+  animation-play-state: paused;
+}
+@keyframes dashboard-content-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes dashboard-line-draw {
+  from {
+    clip-path: inset(-12px 100% -12px -12px);
+  }
+  to {
+    clip-path: inset(-12px -12px -12px -12px);
+  }
+}
+@keyframes dashboard-arc-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Size the priority panel from the dashboard's remaining height, rather than
+   forcing the entire row to grow to the donut's intrinsic content height. */
+.priorityPanel {
+  min-height: 0;
+  min-width: 0;
+}
+.priorityLayout {
+  width: 100%;
+  min-width: 0;
+}
+.priorityDonut {
+  max-width: 100%;
+}
+@media (min-width: 1024px) and (min-height: 700px) {
+  .priorityPanel .priorityLayout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    align-items: center;
+    justify-items: center;
+    gap: 8px;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  .priorityPanel .priorityLayout:has(.slaDonutNote) {
+    grid-template-rows: minmax(0, 1fr) auto auto;
+  }
+  .priorityPanel .priorityDonut {
+    grid-area: 1 / 1;
+    width: auto;
+    height: 100%;
+    max-height: 200px;
+    min-height: 0;
+    aspect-ratio: 1;
+  }
+  .priorityPanel .slaDonutGroup {
+    min-height: 44px;
+    padding-block: 6px;
+  }
+  .priorityPanel .slaDonutNote {
+    margin: 0;
+  }
+  .priorityPanel .widgetHeader {
+    margin-bottom: 12px;
+  }
+}
+
+@media (min-width: 1024px) and (min-height: 700px) {
+  /* The hover tooltip shares the chart row instead of reserving blank space. */
+  .priorityPanel .donutTooltipSlot {
+    grid-area: 1 / 1;
+    align-self: end;
+    transform: translateY(50%);
+    z-index: 6;
+    pointer-events: none;
+  }
+  .priorityPanel .slaDonutLegend {
+    grid-row: 2;
+  }
+  .priorityPanel .slaDonutNote {
+    grid-row: 3;
+  }
+}
+
+@media (min-width: 1600px) and (min-height: 900px) {
+  .priorityPanel .priorityDonut {
+    max-height: 260px;
+  }
 }

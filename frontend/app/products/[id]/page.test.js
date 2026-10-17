@@ -651,3 +651,21 @@ describe("MKT Coupon State Regression Suite - Account Switching & Ownership", ()
     expect(screen.getByRole("link", { name: "แก้ไขสินค้านี้" })).toBeInTheDocument();
   });
 });
+
+test("adding a product reserves a cart item without creating an order", async () => {
+  mockApiResponses({ status: "available" });
+  render(<ProductDetailPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "เพิ่มลงตะกร้า" }));
+  await waitFor(() =>
+    expect(apiFetch).toHaveBeenCalledWith("/api/orders/cart", {
+      method: "POST",
+      token: "buyer-token",
+      body: { productId: "p", campaignId: null },
+    }),
+  );
+  expect(
+    apiFetch.mock.calls.some(
+      ([path, options]) => path === "/api/orders" && options?.method === "POST",
+    ),
+  ).toBe(false);
+});

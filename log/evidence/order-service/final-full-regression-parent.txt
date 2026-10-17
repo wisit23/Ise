@@ -1,0 +1,178 @@
+✔ GET /health returns 200 ok without needing a database (107.977ms)
+✔ GET /mine with no bearer token is rejected with 401 (15.15ms)
+✔ POST / with no bearer token is rejected with 401 (36.4036ms)
+✔ GET /selling with no bearer token is rejected with 401 (7.8461ms)
+✔ PATCH /:id/pay with no bearer token is rejected with 401 (10.8309ms)
+✔ POST /checkout-sessions with no bearer token is rejected with 401 (10.2722ms)
+✔ automatic auction order is blocked for a restricted buyer (12.142ms)
+✔ automatic auction order is blocked for a restricted seller (0.352ms)
+✔ automatic auction order is blocked for a fully suspended participant (0.2697ms)
+[buyerActivityClient] failed to record ORDER_PLACED dd7abab0-53b9-46f9-af5a-6ff87a628fa4: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:product-a (order dd7abab0-53b9-46f9-af5a-6ff87a628fa4): fetch failed
+✔ checkout persists the reservation identity returned by product-service (3832.7016ms)
+✔ checkout releases the exact reservation when Order creation fails (16.245ms)
+[buyerActivityClient] failed to record ORDER_PLACED ad87e657-1386-46d4-8948-4a80fdfa25fd: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:product-other-shop (order ad87e657-1386-46d4-8948-4a80fdfa25fd): fetch failed
+✔ a seller account may buy another seller's product (3751.4112ms)
+✔ checkout rejects a restricted product seller and releases the reservation (20.7834ms)
+✔ a staff account is denied before product-service is called (15.4426ms)
+✔ TC10: direct cancellation of confirmed is rejected before any side effect (65.3665ms)
+✔ TC10: direct cancellation of shipped is rejected before any side effect (15.9279ms)
+✔ TC10: direct cancellation of completed is rejected before any side effect (15.8391ms)
+✔ TC10: direct cancellation of refunded is rejected before any side effect (14.3535ms)
+✔ TC10: a successful payment also blocks cancellation if status was reverted (6.9511ms)
+✔ TC10: processing checkout blocks cancellation before local payment records are read (15.4784ms)
+✔ TC10: paid checkout blocks cancellation before local payment records are read (12.3936ms)
+✔ unpaid pending cancellation still succeeds (9.9376ms)
+✔ unpaid pending_payment cancellation still succeeds (8.0262ms)
+✔ multi-seller checkout sums baht exactly; vouchers remain per order; auction has no basket (13.6541ms)
+✔ repeat creation returns the same checkout (0.8791ms)
+✔ checkout cannot accept a code shared across orders (0.6522ms)
+✔ creation requires address ID and rejects expired basket (0.4418ms)
+✔ concurrent order change rolls back checkout and shipping creation (0.4873ms)
+[order-service] chat notification failed for PRODUCT:p2 (order o2): fetch failed
+[order-service] chat notification failed for PRODUCT:p1 (order o1): fetch failed
+✔ payment retry after external failure does not charge or confirm orders twice (2795.0009ms)
+✔ foreign buyer cannot read or confirm checkout (2.1078ms)
+✔ expiry cancels orders and durably requests release without marking payment paid (2.3892ms)
+✔ payment CAS conflict rolls back every local payment (5.4615ms)
+✔ releases a newly-created product reservation when the Order write fails (7.8833ms)
+✔ authorization failure releases a newly-created reservation before Order write (0.3851ms)
+✔ Order write failure with voucher releases BOTH voucher hold and product reservation (0.5856ms)
+✔ reuses the Order for an existing reservation instead of creating a duplicate and does NOT update price (0.1764ms)
+✔ P2002 retry returns existing order without creating duplicate (0.3444ms)
+✔ calculates discount and finalPrice from backend quoteAndHold, ignoring client tampering (0.5806ms)
+✔ rejects order and releases reservation if voucher quoteAndHold fails (expired / wrong category / 409) (0.2594ms)
+✔ dispute chat reuses the case room and authorizes the assigned agent (29.9864ms)
+✔ dispute owner denies stale agents and allows case parties (84.126ms)
+✔ disputeService.claim enforces role, unassigned check, and optimistic concurrency (8.1523ms)
+✔ disputeService.reassign allows current assignee or Trust & Safety supervisor (0.9354ms)
+✔ disputeService.escalate transfers dispute to Trust & Safety (0.4227ms)
+✔ disputeService.decide and addEvidence enforce single ownership (0.8149ms)
+✔ disputeService requires numeric version on claim, reassign, escalate, and decide (0.6526ms)
+✔ disputeService prevents non-assignee from escalating and prevents CS from claiming/deciding escalated case (0.6775ms)
+✔ CS queue cannot remove access restrictions using scope or team filters (22.4797ms)
+✔ queue and count use the same access/filter predicate before pagination (1.4544ms)
+✔ SLA pagination reaches terminal history only after active cases (0.6236ms)
+✔ dashboard SLA filter uses the same bounded deadline predicate for rows and totals (1.7114ms)
+✔ only assigned Admin decides; oversight chat stays read-only (6.9954ms)
+✔ unassigned requires claim; multiple roles preserve read-only (1.8447ms)
+✔ TC05: invalid shipping phone is rejected without writes (3.3458ms)
+✔ TC05: invalid shipping postalCode is rejected without writes (0.9795ms)
+✔ buyer changes only this order's address and records both address snapshots (2.9879ms)
+✔ another buyer cannot change the order's delivery address (1.5958ms)
+✔ shipped orders cannot change address even if shipping has not caught up (3.7424ms)
+✔ shipped parcels cannot change address even if Order still says confirmed (1.8922ms)
+✔ a concurrent shipment prevents the address write and its audit log (1.7274ms)
+✔ stale client version and incomplete selected addresses are rejected before writes (0.9955ms)
+✔ checkout totals preserve satang across sellers and per-order discounts (2.6679ms)
+✔ money rejects missing, fractional-satang, negative and non-finite amounts (1.2021ms)
+✔ money preserves large exact decimal input and rejects database overflow (0.8946ms)
+✔ checkout rejects discounts that increase an order's price (0.5115ms)
+✔ checkout rejects aggregate overflow even when individual orders fit (0.6389ms)
+✔ TC10: cancellation rechecks the current paid status inside its transaction (9.0947ms)
+✔ TC10: successful payment history also blocks the transactional cancellation (0.4047ms)
+✔ an unpaid cancellation still records the product sync and audit together (0.9097ms)
+✔ a concurrent payment/version change prevents cancellation and event creation (0.2935ms)
+✔ retry backoff doubles and caps at 60s (1.2018ms)
+✔ delivery retains envelope, decimal baht, stable ID and flat compatibility fields (5.7664ms)
+✔ success appends one ACK; repeated delivery is a no-op; immutable job is unchanged (0.5676ms)
+✔ failure appends retry state and schedules backoff; sweep does not retry early (0.7749ms)
+✔ crash after Product accepts but before ACK retries the original event ID (0.3052ms)
+✔ concurrent delivery deduplicates ACKs (0.254ms)
+✔ worker starts and stops; missing durable queue fails loudly (0.3296ms)
+✔ authClient applies a timeout signal to internal user lookups (1.0887ms)
+✔ sends an idempotent order activity to auth-service (19.0678ms)
+✔ an auth-service outage does not fail the purchase flow (0.5478ms)
+✔ dry run reports missing dispute holds without writing or inventing payment data (6.6345ms)
+✔ refund with another active reason is valid and must remain frozen (0.2526ms)
+✔ backfill does not resurrect a case decided after initial scan (0.2545ms)
+✔ one payment has overlapping hold reasons; releasing dispute leaves T&S active (3.1778ms)
+✔ refund waits for the final active reason (0.631ms)
+✔ same reason is idempotent and another reference is not released (0.2509ms)
+✔ unpaid orders cannot create holds (0.6456ms)
+✔ open case stays frozen even if its hold is missing (0.3525ms)
+✔ participants cannot mutate disputed or held orders (13.0945ms)
+✔ failed delivery leaves durable request available for retry (8.937ms)
+✔ acknowledged delivery is skipped on retry (0.2073ms)
+✔ dispute hold/release enforce permission, version and single-hold rules (699.1382ms)
+✔ Buyer satang survive atomic completion, Product attribution, audit and duplicate delivery (1200.2104ms)
+▶ Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12, MKT-003, MKT-007)
+  ✔ Step 1: Order completion atomically creates AttributionOutboxEvent in PostgreSQL reloop_order (244.28ms)
+  ✔ Step 2: Non-campaign orders do NOT create AttributionOutboxEvent (81.2873ms)
+  ✔ Step 3: Outbox delivery sends REST contract with x-internal-token and marks outbox processed (136.3727ms)
+  ✔ Step 4: Retry handling: on failure, updates attempts, nextAttemptAt, lastError, and leaves processedAt null (138.7459ms)
+  ✔ Step 5: Sweep recovery: processPendingEvents recovers and delivers backed-off events once recovered (73.5749ms)
+  ✔ Step 6: Idempotent acknowledgment: handles deduplicated: true without error (188.3141ms)
+✔ Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12, MKT-003, MKT-007) (1126.8859ms)
+▶ Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Suite (UR-09, UR-12, MKT-003, MKT-007)
+  ✔ Step 1: Order completion in reloop_order atomically creates AttributionOutboxEvent (3768.8321ms)
+  ✔ Step 2: Real HTTP delivery via productClient delivers to Product Service and updates processedAt in reloop_order (200.4697ms)
+  ✔ Step 3: Verification in reloop_product: CampaignAttribution is durably persisted in PostgreSQL (3.5556ms)
+  ✔ Step 4: Idempotent re-delivery over real HTTP returns deduplicated and does not duplicate row in reloop_product (20.1139ms)
+  ✔ Step 5: Strengthened Idempotency: Conflicting attribution fields over real HTTP returns 409 Conflict (16.148ms)
+  ✔ Step 6: Strengthened Idempotency: Reusing eventId with different orderId over real HTTP returns 409 Conflict (21.7111ms)
+  ✔ Step 7: Delivery failure records lastError and nextAttemptAt in reloop_order PostgreSQL while keeping processedAt null (97.3723ms)
+  ✔ Step 8: Worker Sweep: processPendingEvents recovers and sweeps backed-off events over real HTTP to reloop_product (86.3921ms)
+  ✔ Step 9: Non-campaign orders do NOT create AttributionOutboxEvent in reloop_order (136.7757ms)
+✔ Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Suite (UR-09, UR-12, MKT-003, MKT-007) (4618.4327ms)
+✔ T&S reads paginated ORDER chat through the dispute with access audit (192.7088ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+[disputeService] verdict notice/lock failed for c1145295-d4d2-4797-993a-d8f15452855a: dispute chat is unavailable: fetch failed
+✔ dispute lifecycle: hold payout, one-way decision, RBAC (6645.6972ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+[disputeService] verdict notice/lock failed for 9862126c-8407-4905-b615-ecda93cb212e: dispute chat is unavailable: fetch failed
+✔ RELEASE_ESCROW verdict unholds payout and returns the order to completed (6383.9894ms)
+[disputeService] verdict notice/lock failed for 2cc00945-2e5d-4673-b073-d75ee8a4fc1d: dispute chat is unavailable: fetch failed
+[disputeService] verdict notice/lock failed for 2cc00945-2e5d-4673-b073-d75ee8a4fc1d: dispute chat is unavailable: fetch failed
+✔ TSR-02: Single-owner dispute assignment, unassigned read-only, validation, reassign & escalate (6762.3795ms)
+✔ TSR-02 Concurrency: 2 agents concurrent Claim race on same dispute (195.6266ms)
+✔ TSR-02 Concurrency: 2 admins concurrent Hold race on same order (97.2163ms)
+✔ TSR-02 Concurrency: Dispute Decision vs T&S Hold race on Order CAS (494.8553ms)
+[buyerActivityClient] failed to record PAYMENT_COMPLETED 74633c75-e80c-459b-90c0-c72bd49cd59b: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:tsr02-prod-1791889734649-w7b0n (order 74633c75-e80c-459b-90c0-c72bd49cd59b): fetch failed
+✔ TSR-02 Concurrency: Hold eligibility & Concurrent Pay (4075.1804ms)
+[buyerActivityClient] failed to record PAYMENT_COMPLETED 52d52311-d8b6-470f-960c-60a7b5d34e0b: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:tsr02-prod-1791889738725-9wjpp (order 52d52311-d8b6-470f-960c-60a7b5d34e0b): fetch failed
+✔ TSR-02: Payment outbox survives product-service failure and retries (4050.3977ms)
+✔ TSR-02 Concurrency: Reassign vs Decision race on Dispute (682.6964ms)
+[disputeService] verdict notice/lock failed for 483a67c2-9416-49c0-b701-9b5e8382d8f1: dispute chat is unavailable: fetch failed
+✔ TSR-02: Hold decoupling between CS dispute and Trust & Safety holds (3629.05ms)
+[disputeService] verdict notice/lock failed for 4c9703b3-7f6d-4f43-bd5a-e1e26306a371: dispute chat is unavailable: fetch failed
+✔ TSR-02: Approving refund locks order status — subsequent T&S release never reverts to completed (3569.4165ms)
+✔ TSR-02: Participants cannot mutate order status while under active hold or dispute (196.0858ms)
+✔ access-aware dispute queue paginates more than 50 cases with terminal SLA last (1781.0061ms)
+✔ 17 dispute workflow fields round-trip through logs, CAS and rollback (532.0089ms)
+✔ populated Order upgrade preserves all workflow values, roles, evidence and hold references (3684.7939ms)
+[order-service] chat notification failed for PRODUCT:er-test-1791889757636-p1 (order db6317ac-12c8-42da-b61c-ba17083cb4b3): fetch failed
+[order-service] chat notification failed for PRODUCT:er-test-1791889757636-p2 (order 69e6bf61-f34d-42c7-877d-9ce383637744): fetch failed
+✔ ER checkout API: multiple sellers, exact totals, immutable paidAt, address snapshots and shipment guards (3518.4555ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+✔ ER evidence API: buyer uploads before claim, staff chooses deadline, audits isolate evidence and safety review stays unique (3332.5516ms)
+[order-service] chat notification failed for PRODUCT:er-test-1791889757636-auction-product (order auction-5a057f65d09bd588451bb0226b5d725f256b5a9899a794a76c83d36c741a79ea): fetch failed
+✔ auction callback retries create one pending order and no basket (2779.859ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+✔ dispute evidence: private storage, authz on view, audit trail (3612.2313ms)
+✔ migration refuses an existing database without the canonical baseline, including a legacy ledger (9.224ms)
+﹣ approved order history: fresh install, actual checkout/payment/restart, and populated upgrade (0.6ms) # SKIP
+✔ executive platform metrics series against a real database (129.5523ms)
+✔ executive platform metrics against a real database (127.0565ms)
+[buyerActivityClient] failed to record ORDER_PLACED 04a153b3-3c6a-4933-8805-1f817f41ca9c: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:f6f962f0-332c-4e0f-adc3-adc3a57375d6 (order 04a153b3-3c6a-4933-8805-1f817f41ca9c): fetch failed
+[buyerActivityClient] failed to record ORDER_PLACED 04a153b3-3c6a-4933-8805-1f817f41ca9c: The operation was aborted due to timeout
+[buyerActivityClient] failed to record ORDER_PLACED f28e0c41-401a-49e1-8e00-e96adc760bd7: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:f6f962f0-332c-4e0f-adc3-adc3a57375d6 (order f28e0c41-401a-49e1-8e00-e96adc760bd7): fetch failed
+✔ only one of two buyers reserves a product and expiry cannot unlock a newer reservation (9930.84ms)
+﹣ Seller checkout, paid notification, shipping and T&S trading transcript share persisted facts (1.0337ms) # live Auth/Product/Order/Chat and isolated database URLs required
+✔ hold audit keeps the public action contract while querying payment-linked OrderLog (8.4185ms)
+✔ case and evidence audit use bound filters and one pagination/count contract (0.7595ms)
+✔ invalid audit kinds and date ranges fail before querying (0.6471ms)
+✔ support order lookup: role gate and bounded search (141.6417ms)
+ℹ tests 140
+ℹ suites 0
+ℹ pass 138
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 98943.3858

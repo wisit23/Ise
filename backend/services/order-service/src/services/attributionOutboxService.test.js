@@ -1,318 +1,229 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-
 const {
   deliver,
   retryDelayMs,
   processEvent,
   processPendingEvents,
+  findPendingForOrder,
   startWorker,
   stopWorker,
 } = require("./attributionOutboxService");
 
-test("Attribution Outbox Service Suite", async (t) => {
-  t.afterEach(() => {
-    stopWorker();
+function fixture(extra = {}) {
+  const event = {
+    id: "event-1",
+    orderId: "order-1",
+    campaignId: "campaign-1",
+    grossAmount: 1000.25,
+    discountAmount: 100,
+    netAmount: 900.25,
+    completedAt: new Date("2026-08-01T12:00:00Z"),
+    attempts: 0,
+    processedAt: null,
+    nextAttemptAt: new Date(0),
+    ...extra,
+  };
+  const job = {
+    id: event.id,
+    orderId: event.orderId,
+    buyerId: "buyer",
+    sellerId: "seller",
+    actorId: "buyer",
+    action: "ATTRIBUTION_REQUESTED",
+    detail: "immutable job",
+  };
+  const logs = [job];
+  let current = { ...event, lastError: null };
+  const state = () => ({ ...current });
+  const db = {
+    order: {
+      findUnique: async () => ({
+        id: event.orderId,
+        buyerId: "buyer",
+        sellerId: "seller",
+      }),
+    },
+    attributionJob: {
+      findUnique: async ({ where }) =>
+        where.id === event.id || where.orderId === event.orderId
+          ? state()
+          : null,
+      findMany: async ({ where }) =>
+        !current.processedAt && current.nextAttemptAt <= where.nextAttemptAt.lte
+          ? [state()]
+          : [],
+      findFirst: async ({ where }) =>
+        where.orderId === event.orderId && !current.processedAt
+          ? state()
+          : null,
+      updateMany: async ({ data }) => {
+        if (current.processedAt) return { count: 0 };
+        const { attempts, ...patch } = data;
+        current = {
+          ...current,
+          ...patch,
+          attempts: current.attempts + attempts.increment,
+        };
+        return { count: 1 };
+      },
+    },
+    orderLog: {
+      findUnique: async ({ where }) => logs.find((row) => row.id === where.id),
+      create: async ({ data }) => {
+        if (data.id && logs.some((row) => row.id === data.id))
+          throw Object.assign(new Error("duplicate ACK"), { code: "P2002" });
+        const row = { id: data.id || `result-${logs.length}`, ...data };
+        logs.push(row);
+        return row;
+      },
+    },
+  };
+  let tail = Promise.resolve();
+  db.$transaction = (callback) => {
+    const result = tail.then(async () => {
+      const before = { ...current },
+        count = logs.length;
+      try {
+        return await callback(db);
+      } catch (error) {
+        current = before;
+        logs.length = count;
+        throw error;
+      }
+    });
+    tail = result.catch(() => {});
+    return result;
+  };
+  return { db, logs, job, event, state };
+}
+test("retry backoff doubles and caps at 60s", () => {
+  assert.deepEqual(
+    [0, 1, 2, 3, 4, 5, 6, 10].map(retryDelayMs),
+    [1000, 2000, 4000, 8000, 16000, 32000, 60000, 60000],
+  );
+});
+test("delivery retains envelope, decimal baht, stable ID and flat compatibility fields", async () => {
+  const f = fixture();
+  let payload;
+  await deliver(f.event, {
+    recordOrderCompleted: async (row) => {
+      payload = row;
+    },
   });
-
-  await t.test(
-    "retryDelayMs: scales exponentially with attempts and caps at 60s",
-    () => {
-      assert.equal(retryDelayMs(0), 1_000);
-      assert.equal(retryDelayMs(1), 2_000);
-      assert.equal(retryDelayMs(2), 4_000);
-      assert.equal(retryDelayMs(3), 8_000);
-      assert.equal(retryDelayMs(4), 16_000);
-      assert.equal(retryDelayMs(5), 32_000);
-      assert.equal(retryDelayMs(6), 60_000);
-      assert.equal(retryDelayMs(10), 60_000);
+  assert.equal(payload.eventId, f.event.id);
+  assert.equal(payload.eventType, "order.completed.v1");
+  assert.equal(payload.aggregateId, f.event.orderId);
+  assert.equal(payload.occurredAt, f.event.completedAt.toISOString());
+  for (const key of [
+    "orderId",
+    "campaignId",
+    "grossAmount",
+    "discountAmount",
+    "netAmount",
+    "completedAt",
+  ])
+    assert.equal(payload[key], payload.payload[key]);
+  assert.equal(payload.netAmount, 900.25);
+});
+test("success appends one ACK; repeated delivery is a no-op; immutable job is unchanged", async () => {
+  const f = fixture();
+  const before = JSON.stringify(f.job);
+  let calls = 0;
+  const opts = {
+    db: f.db,
+    client: {
+      recordOrderCompleted: async () => {
+        calls++;
+      },
     },
-  );
-
-  await t.test(
-    "deliver: sends correct event envelope and flat compatibility fields",
-    async () => {
-      let capturedEvent = null;
-      const mockClient = {
-        recordOrderCompleted: async (payload) => {
-          capturedEvent = payload;
-          return { success: true, recorded: true };
-        },
-      };
-
-      const outboxRecord = {
-        id: "evt-uuid-1",
-        orderId: "ord-uuid-1",
-        campaignId: "camp-uuid-1",
-        grossAmount: 1200,
-        discountAmount: 200,
-        netAmount: 1000,
-        completedAt: new Date("2026-08-01T12:00:00.000Z"),
-      };
-
-      await deliver(outboxRecord, mockClient);
-
-      assert.ok(capturedEvent);
-      assert.equal(capturedEvent.eventId, "evt-uuid-1");
-      assert.equal(capturedEvent.eventType, "order.completed.v1");
-      assert.equal(capturedEvent.aggregateId, "ord-uuid-1");
-      assert.equal(capturedEvent.occurredAt, "2026-08-01T12:00:00.000Z");
-      assert.deepEqual(capturedEvent.payload, {
-        orderId: "ord-uuid-1",
-        campaignId: "camp-uuid-1",
-        grossAmount: 1200,
-        discountAmount: 200,
-        netAmount: 1000,
-        completedAt: "2026-08-01T12:00:00.000Z",
-      });
-      // Flat compatibility fields
-      assert.equal(capturedEvent.orderId, "ord-uuid-1");
-      assert.equal(capturedEvent.campaignId, "camp-uuid-1");
-      assert.equal(capturedEvent.netAmount, 1000);
-    },
-  );
-
-  await t.test(
-    "processEvent: marks event processed upon successful delivery",
-    async () => {
-      const store = new Map();
-      const event = {
-        id: "evt-success-1",
-        orderId: "ord-1",
-        campaignId: "camp-1",
-        grossAmount: 1000,
-        discountAmount: 100,
-        netAmount: 900,
-        completedAt: new Date(),
-        attempts: 0,
-        lastError: null,
-        processedAt: null,
-      };
-      store.set(event.id, event);
-
-      const mockDb = {
-        attributionOutboxEvent: {
-          findUnique: async ({ where }) => store.get(where.id) || null,
-          updateMany: async ({ where, data }) => {
-            const item = store.get(where.id);
-            if (
-              item &&
-              (!where.processedAt || item.processedAt === where.processedAt)
-            ) {
-              if (data.attempts?.increment)
-                item.attempts += data.attempts.increment;
-              if (data.lastError !== undefined) item.lastError = data.lastError;
-              if (data.processedAt !== undefined)
-                item.processedAt = data.processedAt;
-              return { count: 1 };
-            }
-            return { count: 0 };
-          },
-        },
-      };
-
-      let delivered = false;
-      const mockClient = {
+  };
+  const result = await processEvent(f.event.id, opts);
+  await processEvent(f.event.id, opts);
+  assert.equal(calls, 1);
+  assert.equal(result.attempts, 1);
+  assert.ok(result.processedAt);
+  assert.equal(f.logs[1].action, "ATTRIBUTION_ACK");
+  assert.equal(JSON.stringify(f.job), before);
+});
+test("failure appends retry state and schedules backoff; sweep does not retry early", async () => {
+  const f = fixture({ attempts: 1 });
+  const now = new Date("2026-08-01T15:00:00Z");
+  await assert.rejects(
+    processEvent(f.event.id, {
+      db: f.db,
+      now,
+      client: {
         recordOrderCompleted: async () => {
-          delivered = true;
-          return { success: true };
+          throw new Error("503");
         },
-      };
-
-      const result = await processEvent(event.id, {
-        db: mockDb,
-        client: mockClient,
-        now: new Date("2026-08-01T15:00:00.000Z"),
-      });
-
-      assert.equal(delivered, true);
-      assert.equal(result.attempts, 1);
-      assert.equal(result.lastError, null);
-      assert.ok(result.processedAt);
-
-      // Second call should be a no-op (idempotent, does not deliver again)
-      delivered = false;
-      const secondResult = await processEvent(event.id, {
-        db: mockDb,
-        client: mockClient,
-      });
-      assert.equal(delivered, false);
-      assert.ok(secondResult.processedAt);
-    },
+      },
+    }),
+    /503/,
   );
-
-  await t.test(
-    "processEvent: records error and schedules exponential backoff on delivery failure",
-    async () => {
-      const store = new Map();
-      const event = {
-        id: "evt-fail-1",
-        orderId: "ord-fail-1",
-        campaignId: "camp-1",
-        grossAmount: 500,
-        discountAmount: 50,
-        netAmount: 450,
-        completedAt: new Date(),
-        attempts: 1,
-        lastError: null,
-        processedAt: null,
-      };
-      store.set(event.id, event);
-
-      let nextAttemptTime = null;
-      const mockDb = {
-        attributionOutboxEvent: {
-          findUnique: async ({ where }) => store.get(where.id) || null,
-          updateMany: async ({ where, data }) => {
-            const item = store.get(where.id);
-            if (item) {
-              if (data.attempts?.increment)
-                item.attempts += data.attempts.increment;
-              if (data.lastError) item.lastError = data.lastError;
-              if (data.nextAttemptAt) nextAttemptTime = data.nextAttemptAt;
-              return { count: 1 };
-            }
-            return { count: 0 };
-          },
-        },
-      };
-
-      const mockClient = {
-        recordOrderCompleted: async () => {
-          throw new Error("product-service connection refused 503");
-        },
-      };
-
-      const baseNow = new Date("2026-08-01T10:00:00.000Z");
-      await assert.rejects(
-        () =>
-          processEvent(event.id, {
-            db: mockDb,
-            client: mockClient,
-            now: baseNow,
-          }),
-        /product-service connection refused 503/,
-      );
-
-      assert.equal(event.attempts, 2);
-      assert.match(event.lastError, /503/);
-      assert.equal(event.processedAt, null);
-      // Attempt 1 -> retry delay 2000ms
-      assert.equal(nextAttemptTime.getTime(), baseNow.getTime() + 2_000);
+  assert.equal(f.state().attempts, 2);
+  assert.equal(f.state().nextAttemptAt.getTime(), now.getTime() + 2000);
+  assert.equal(f.logs[1].action, "ATTRIBUTION_RETRY");
+  assert.equal(f.state().processedAt, null);
+  assert.deepEqual(await processPendingEvents({ db: f.db, now }), []);
+  const delivered = [];
+  const result = await processPendingEvents({
+    db: f.db,
+    now: new Date(now.getTime() + 2000),
+    client: {
+      recordOrderCompleted: async (row) => delivered.push(row.eventId),
     },
+  });
+  assert.equal(result[0].status, "fulfilled");
+  assert.deepEqual(delivered, [f.event.id]);
+  assert.equal(await findPendingForOrder(f.event.orderId, f.db), null);
+});
+test("crash after Product accepts but before ACK retries the original event ID", async () => {
+  const f = fixture();
+  const create = f.db.orderLog.create;
+  let fail = true;
+  const received = [];
+  f.db.orderLog.create = async (args) => {
+    if (fail) throw new Error("DB interrupted");
+    return create(args);
+  };
+  const opts = {
+    db: f.db,
+    client: { recordOrderCompleted: async (row) => received.push(row.eventId) },
+  };
+  await assert.rejects(processEvent(f.event.id, opts), /interrupted/);
+  assert.equal(f.state().processedAt, null);
+  fail = false;
+  await processEvent(f.event.id, opts);
+  assert.deepEqual(received, [f.event.id, f.event.id]);
+  assert.equal(f.logs.length, 2);
+});
+test("concurrent delivery deduplicates ACKs", async () => {
+  const f = fixture();
+  await Promise.all(
+    [1, 2].map(() =>
+      processEvent(f.event.id, {
+        db: f.db,
+        client: { recordOrderCompleted: async () => {} },
+      }),
+    ),
   );
-
-  await t.test(
-    "processPendingEvents: processes batch of pending events",
-    async () => {
-      const store = new Map([
-        [
-          "evt-p-1",
-          {
-            id: "evt-p-1",
-            orderId: "o-1",
-            campaignId: "c-1",
-            grossAmount: 100,
-            discountAmount: 10,
-            netAmount: 90,
-            attempts: 0,
-            processedAt: null,
-            nextAttemptAt: new Date("2026-08-01T10:00:00Z"),
-          },
-        ],
-        [
-          "evt-p-2",
-          {
-            id: "evt-p-2",
-            orderId: "o-2",
-            campaignId: "c-2",
-            grossAmount: 200,
-            discountAmount: 20,
-            netAmount: 180,
-            attempts: 0,
-            processedAt: null,
-            nextAttemptAt: new Date("2026-08-01T10:00:00Z"),
-          },
-        ],
-      ]);
-
-      const deliveredIds = [];
-      const mockDb = {
-        attributionOutboxEvent: {
-          findMany: async () => Array.from(store.values()),
-          findUnique: async ({ where }) => store.get(where.id),
-          updateMany: async ({ where, data }) => {
-            const item = store.get(where.id);
-            if (item) {
-              Object.assign(item, data);
-              return { count: 1 };
-            }
-            return { count: 0 };
-          },
-        },
-      };
-
-      const mockClient = {
-        recordOrderCompleted: async (payload) => {
-          deliveredIds.push(payload.eventId);
-          return { success: true };
-        },
-      };
-
-      const results = await processPendingEvents({
-        db: mockDb,
-        client: mockClient,
-        now: new Date("2026-08-01T10:05:00Z"),
-      });
-
-      assert.equal(results.length, 2);
-      assert.equal(deliveredIds.length, 2);
-      assert.ok(deliveredIds.includes("evt-p-1"));
-      assert.ok(deliveredIds.includes("evt-p-2"));
-    },
+  assert.equal(
+    f.logs.filter((row) => row.action === "ATTRIBUTION_ACK").length,
+    1,
   );
-
-  await t.test(
-    "startWorker & stopWorker: starts and cleanly shuts down worker timer",
-    () => {
-      const mockDb = {
-        attributionOutboxEvent: {
-          findMany: async () => [],
-        },
-      };
-      const mockClient = {
-        recordOrderCompleted: async () => ({ success: true }),
-      };
-      const timer = startWorker({
-        intervalMs: 60_000,
-        db: mockDb,
-        client: mockClient,
-      });
-      assert.ok(timer);
-      stopWorker();
-    },
-  );
-
-  await t.test(
-    "durability: fails loudly when db or attributionOutboxEvent model is unavailable",
-    async () => {
-      const badDb = {};
-      await assert.rejects(
-        () => processEvent("evt-1", { db: badDb }),
-        /attributionOutboxEvent model is required on Prisma client/,
-      );
-      await assert.rejects(
-        () => processPendingEvents({ db: badDb }),
-        /attributionOutboxEvent model is required on Prisma client/,
-      );
-      await assert.rejects(
-        () =>
-          require("./attributionOutboxService").findPendingForOrder(
-            "ord-1",
-            badDb,
-          ),
-        /attributionOutboxEvent model is required on Prisma client/,
-      );
-    },
-  );
+});
+test("worker starts and stops; missing durable queue fails loudly", async () => {
+  const f = fixture({ processedAt: new Date() });
+  assert.ok(startWorker({ db: f.db, intervalMs: 60000 }));
+  stopWorker();
+  for (const run of [
+    () => processEvent("missing", { db: {} }),
+    () => processPendingEvents({ db: {} }),
+    () => findPendingForOrder("missing", {}),
+  ])
+    await assert.rejects(
+      run(),
+      /attributionJob table and orderLog model are required/,
+    );
 });

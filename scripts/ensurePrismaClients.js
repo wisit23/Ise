@@ -43,6 +43,12 @@ function absolute(relativePath) {
 
 function clientNeedsGeneration(client, force) {
   if (force || !fs.existsSync(absolute(client.output))) return true;
+  // npm's @prisma/client postinstall leaves an index.js stub without a schema.
+  const generatedSchema = path.join(
+    path.dirname(absolute(client.output)),
+    "schema.prisma",
+  );
+  if (!fs.existsSync(generatedSchema)) return true;
 
   const schemaTime = fs.statSync(absolute(client.schema)).mtimeMs;
   const clientTime = fs.statSync(absolute(client.output)).mtimeMs;

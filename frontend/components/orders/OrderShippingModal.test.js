@@ -1,7 +1,7 @@
 import {fireEvent,render,screen,waitFor} from "@testing-library/react";
 import {apiFetch} from "../../lib/api";import {getStoredUser} from "../../lib/auth";import OrderShippingModal from "./OrderShippingModal";
 jest.mock("../../lib/api",()=>({apiFetch:jest.fn()}));jest.mock("../../lib/auth",()=>({getAccessToken:()=>"token",getStoredUser:jest.fn()}));
-const order={id:"o1",sellerId:"seller",status:"confirmed",version:7,price:100,shipping:{addressSnapshot:{recipientName:"Buyer",phone:"0812345678",addressLine:"Test Road",postalCode:"10110"}}};
+const order={id:"o1",sellerId:"seller",status:"ready_to_ship",version:7,price:100,shipping:{addressSnapshot:{recipientName:"Buyer",phone:"0812345678",addressLine:"Test Road",postalCode:"10110"}}};
 beforeEach(()=>{jest.clearAllMocks();apiFetch.mockImplementation((url,options)=>Promise.resolve(options?.method?{...order,status:"shipped"}:order));});
 it("seller must enter carrier and tracking before confirming shipment",async()=>{
  getStoredUser.mockReturnValue({id:"seller",role:"SELLER"});const onShipped=jest.fn();render(<OrderShippingModal orderId="o1" initialOrder={order} isOpen onClose={()=>{}} onShipped={onShipped}/>);

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createShippingService } = require("./shippingService");
+const { createShippingService, normalizeAddress } = require("./shippingService");
 
 const ADDRESS = {
   recipientName: "Buyer",
@@ -48,16 +48,17 @@ function fixture(overrides = {}, changed = 1) {
       },
     },
   };
+  let selectedAddress = ADDRESS;
   const service = createShippingService({
     $transaction: async (callback) => callback(tx),
-  });
+  }, async () => normalizeAddress(selectedAddress));
   const request = {
     orderId: order.id,
     buyerId: "buyer-1",
     addressId: "new",
     shippingAddress: ADDRESS,
   };
-  return { service, request, writes, order };
+  return { service, request, writes, order, setSelectedAddress: (value) => { selectedAddress = value; } };
 }
 
 for (const [field, value] of [
@@ -65,12 +66,10 @@ for (const [field, value] of [
   ["postalCode", "ABCDE"],
 ]) {
   test(`TC05: invalid shipping ${field} is rejected without writes`, async () => {
-    const { service, request, writes } = fixture();
+    const { service, request, writes, setSelectedAddress } = fixture();
+    setSelectedAddress({ ...ADDRESS, [field]: value });
     await assert.rejects(
-      service.updateAddress({
-        ...request,
-        shippingAddress: { ...ADDRESS, [field]: value },
-      }),
+      service.updateAddress(request),
       (err) => err.status === 400,
     );
     assert.equal(writes.length, 0);
@@ -132,17 +131,15 @@ test("a concurrent shipment prevents the address write and its audit log", async
   );
 });
 
-test("stale client version and incomplete addresses are rejected before writes", async () => {
-  const { service, request, writes } = fixture();
+test("stale client version and incomplete selected addresses are rejected before writes", async () => {
+  const { service, request, writes, setSelectedAddress } = fixture();
   await assert.rejects(
     service.updateAddress({ ...request, version: 2 }),
     (error) => error.status === 409,
   );
+  setSelectedAddress({ ...ADDRESS, phone: "" });
   await assert.rejects(
-    service.updateAddress({
-      ...request,
-      shippingAddress: { ...ADDRESS, phone: "" },
-    }),
+    service.updateAddress(request),
     (error) => error.status === 400,
   );
   assert.equal(writes.length, 0);

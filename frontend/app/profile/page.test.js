@@ -69,6 +69,7 @@ const ORDERS_RESPONSE = {
       price: 1290,
       status: "completed",
       dispute: null,
+      deliveredAt: new Date().toISOString(),
       createdAt: "2025-04-11T00:00:00.000Z",
     },
   ],
@@ -115,8 +116,30 @@ describe("ProfilePage", () => {
     jest.clearAllMocks();
     getAccessToken.mockReturnValue("test-token");
     getStoredUser.mockReturnValue(USER);
-    apiFetch.mockImplementation((path) => {
+    apiFetch.mockImplementation((path, options) => {
       if (path === "/api/auth/me") return Promise.resolve(USER);
+      if (path === "/api/auth/me/style-profile") {
+        return Promise.resolve(
+          options?.body || {
+            categories: [],
+            styles: [],
+            brands: [],
+            sizes: [],
+            unassignedSizes: [],
+          },
+        );
+      }
+      if (path === "/api/products/categories") {
+        return Promise.resolve({ items: ["เสื้อ"] });
+      }
+      if (path === "/api/products/filters") {
+        return Promise.resolve({
+          brands: ["Uniqlo"],
+          styles: ["minimal"],
+          sizes: ["M"],
+          sizesByCategory: [{ category: "เสื้อ", values: ["M"] }],
+        });
+      }
       if (path === "/api/auth/me/addresses") {
         return Promise.resolve(SAVED_ADDRESSES);
       }
@@ -155,7 +178,59 @@ describe("ProfilePage", () => {
     });
   });
 
-  it("renders profile summary and 4 order status shortcuts", () => {
+  it("shows Style Profile in the personal tab and saves it separately", async () => {
+    render(<ProfilePage />);
+    const styleGroup = within(
+      await screen.findByRole("group", { name: "สไตล์ที่ชอบ" }),
+    );
+    fireEvent.click(styleGroup.getByRole("button", { name: /เพิ่ม \/ แก้ไข/ }));
+    const dialog = within(screen.getByRole("dialog"));
+    fireEvent.click(dialog.getByRole("checkbox", { name: "minimal" }));
+    fireEvent.click(dialog.getByRole("button", { name: "ยืนยัน" }));
+    fireEvent.click(screen.getByRole("button", { name: /บันทึกความสนใจ/ }));
+    expect(await screen.findByText("บันทึกความสนใจสำเร็จ")).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith("/api/auth/me/style-profile", {
+      method: "PATCH",
+      token: "test-token",
+      body: {
+        categories: [],
+        styles: ["minimal"],
+        brands: [],
+        sizes: [],
+        unassignedSizes: [],
+      },
+    });
+    expect(screen.getByDisplayValue("สมชาย")).toBeInTheDocument();
+    expect(
+      apiFetch.mock.calls.filter(
+        ([path, options]) =>
+          path === "/api/auth/me" && options?.method === "PATCH",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("does not show Style Profile for staff accounts", async () => {
+    const previous = apiFetch.getMockImplementation();
+    const staff = { ...USER, role: "MARKETING" };
+    getStoredUser.mockReturnValue(staff);
+    apiFetch.mockImplementation((path, options) =>
+      path === "/api/auth/me"
+        ? Promise.resolve(staff)
+        : previous(path, options),
+    );
+    render(<ProfilePage />);
+    await screen.findByText("การตลาด");
+    expect(
+      screen.queryByRole("heading", { name: "ความสนใจของฉัน" }),
+    ).not.toBeInTheDocument();
+    expect(
+      apiFetch.mock.calls.some(
+        ([path]) => path === "/api/auth/me/style-profile",
+      ),
+    ).toBe(false);
+  });
+
+  it("renders profile summary and 4 order status shortcuts", async () => {
     render(<ProfilePage />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
@@ -166,9 +241,10 @@ describe("ProfilePage", () => {
 
     // 4 statuses provided by order-service
     expect(screen.getByText("รอชำระเงิน")).toBeInTheDocument();
-    expect(screen.getByText("รอยืนยัน")).toBeInTheDocument();
+    expect(screen.getByText("รอจัดส่ง")).toBeInTheDocument();
     expect(screen.getByText("จัดส่งแล้ว")).toBeInTheDocument();
     expect(screen.getByText("สำเร็จ")).toBeInTheDocument();
+    await screen.findByRole("button", { name: /บันทึกความสนใจ/ });
   });
 
   it("shows only order-service data when clicking a status shortcut", async () => {

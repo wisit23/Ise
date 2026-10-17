@@ -44,6 +44,11 @@ const PUBLIC_PATHS = [
   /^\/api\/products\/articles(\/|$)/,
   // Marketing Campaigns & Promotions (MKT-001 / UR-15 / UR-16) - public browsing of active campaigns
   /^\/api\/products\/campaigns\/(available|published)$/,
+  // Socket.IO long-polling carries no Authorization header: the access token
+  // travels inside the Socket.IO handshake and chat-service's socketAuth.js
+  // verifies it there — the same check a WebSocket upgrade (which never
+  // passes through this middleware at all) already relies on.
+  /^\/api\/chat\/socket\.io(\/|$)/,
 ];
 
 function isPublic(path) {
@@ -140,6 +145,19 @@ app.use(
 // and removed: http-proxy-middleware's upgrade handling corrupted the
 // response under concurrent WebSocket connections — see server.js's comment
 // for the full story).
+//
+// Socket.IO's HTTP long-polling transport is the exception: it is plain HTTP,
+// so it lands here, but chat-service serves Socket.IO at the full
+// "/api/chat/socket.io" path (see its socketServer.js). Mount-path stripping
+// below would hand it "/socket.io/..." and 404, so the prefix is put back.
+app.use(
+  "/api/chat/socket.io",
+  createProxyMiddleware({
+    target: SERVICES.chat,
+    changeOrigin: true,
+    pathRewrite: (path) => `/api/chat/socket.io${path}`,
+  }),
+);
 app.use(
   "/api/chat",
   createProxyMiddleware({
@@ -166,6 +184,10 @@ app.use(
   createProxyMiddleware({
     target: SERVICES.frontend,
     changeOrigin: true,
+    // ws: true installs a server-wide upgrade listener after the first UI
+    // request. Express's mount path does not restrict that listener, so
+    // exclude chat upgrades already owned by server.js's raw TCP proxy.
+    pathFilter: (path) => !/^\/api\/chat(?:\/|$)/.test(path),
     ws: true,
   }),
 );

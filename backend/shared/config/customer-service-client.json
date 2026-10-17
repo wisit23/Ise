@@ -26,6 +26,7 @@
     "slaClockMs": 30000,
     "searchDebounceMs": 300,
     "messageRefreshMs": 1200,
+    "socketFallbackPollMs": 4000,
     "typingExpiryMs": 6000,
     "typingStopMs": 2000,
     "typingHeartbeatMs": 1500

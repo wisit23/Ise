@@ -152,6 +152,13 @@ export function participantRoleLabel(role, contextType) {
  * upgrades by literal URL prefix, not through Express route stripping like
  * the REST endpoints (see backend/gateway/src/server.js).
  *
+ * Transports are left at Socket.IO's default (HTTP long-polling first, then
+ * an upgrade to WebSocket) rather than pinned to "websocket". The production
+ * host sits behind a reverse proxy that forwards HTTP/1.0 and drops the
+ * Upgrade header, so a WebSocket-only client never connected there at all;
+ * long-polling still delivers events in real time through it, and the client
+ * upgrades on its own wherever WebSockets do get through.
+ *
  * `reconnection: true` (the default) is intentional here, unlike test
  * scripts that disable it — a dropped connection should recover on its own;
  * the caller (ChatRoomPage) treats "not currently connected" as "fall back
@@ -159,7 +166,6 @@ export function participantRoleLabel(role, contextType) {
 export function connectSocket(token) {
   return io(API_URL, {
     path: "/api/chat/socket.io",
-    transports: ["websocket"],
     auth: (cb) => {
       cb({ token: getAccessToken() || token });
     },

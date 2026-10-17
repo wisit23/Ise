@@ -81,17 +81,34 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
     conversationId: conversationId,
     chatLink: { conversationId },
     firstResponseAt: null,
+    slaTargets: [
+      {
+        id: "first-response",
+        metricType: "FIRST_RESPONSE",
+        round: { id: "round-1", cycle: 1, startedAt: "1970-01-01T00:00:00Z" },
+      },
+    ],
+    auditLog: [
+      {
+        id: "opened",
+        action: "TICKET_OPENED",
+        payload: {
+          cycle: 1,
+          startedAt: "1970-01-01T00:00:00Z",
+          targets: [{ id: "first-response", metricType: "FIRST_RESPONSE" }],
+        },
+      },
+    ],
   };
 
   const storedMessages = [];
+  const receipts = [];
   const storedAudits = [];
 
-  const originalFindUnique = prisma.ticketMessage.findUnique;
   const originalTicketFindUnique = prisma.supportTicket.findUnique;
   const originalTicketUpdate = prisma.supportTicket.update;
   const originalTicketAuditCreate = prisma.ticketAuditLog.create;
   const originalAuditFind = prisma.ticketAuditLog.findUnique;
-  const originalTicketMessageCreate = prisma.ticketMessage.create;
   const originalTransaction = prisma.$transaction;
 
   // Mock Prisma for deterministic contract testing
@@ -108,32 +125,16 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
     return null;
   };
 
-  prisma.ticketMessage.findUnique = async ({ where }) => {
-    return (
-      storedMessages.find((m) => m.chatMessageId === where.chatMessageId) ||
-      null
-    );
-  };
-
-  prisma.ticketMessage.create = async ({ data }) => {
-    const msg = { id: `tm-${storedMessages.length + 1}`, ...data };
-    storedMessages.push(msg);
-    return msg;
-  };
-
   prisma.ticketAuditLog.create = async ({ data }) => {
     const audit = { id: `audit-${storedAudits.length + 1}`, ...data };
     storedAudits.push(audit);
     return audit;
   };
-  prisma.ticketAuditLog.findUnique = async ({ where }) => storedAudits.find((a) => a.dedupeKey === where.dedupeKey) || null;
+  prisma.ticketAuditLog.findUnique = async ({ where }) =>
+    storedAudits.find((a) => a.dedupeKey === where.dedupeKey) || null;
 
   prisma.$transaction = async (callback) => {
     return callback({
-      ticketMessage: {
-        findUnique: prisma.ticketMessage.findUnique,
-        create: prisma.ticketMessage.create,
-      },
       supportTicket: {
         findUnique: prisma.supportTicket.findUnique,
         update: prisma.supportTicket.update,
@@ -143,6 +144,14 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
             return { count: 1 };
           }
           return { count: 0 };
+        },
+      },
+      ticketChatMessageReceipt: {
+        findUnique: async ({ where }) =>
+          receipts.find((r) => r.messageId === where.messageId) || null,
+        create: async ({ data }) => {
+          receipts.push(data);
+          return data;
         },
       },
       ticketAuditLog: {
@@ -160,12 +169,10 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
   };
 
   t.after(() => {
-    prisma.ticketMessage.findUnique = originalFindUnique;
     prisma.supportTicket.findUnique = originalTicketFindUnique;
     prisma.supportTicket.update = originalTicketUpdate;
     prisma.ticketAuditLog.create = originalTicketAuditCreate;
     prisma.ticketAuditLog.findUnique = originalAuditFind;
-    prisma.ticketMessage.create = originalTicketMessageCreate;
     prisma.$transaction = originalTransaction;
   });
 
@@ -224,11 +231,7 @@ test("ticketModel.recordChatMessage idempotency, correlation and firstResponseAt
 
       assert.equal(result2.alreadyRecorded, true);
       assert.equal(result2.event.payload.chatMessageId, chatMessageId);
-      assert.equal(
-        storedMessages.length,
-        0,
-        "Must never create TicketMessage",
-      );
+      assert.equal(storedMessages.length, 0, "Must never create TicketMessage");
       assert.equal(
         storedAudits.length,
         1,

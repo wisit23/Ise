@@ -7,6 +7,43 @@ const auctionCloseQueue = require("../../jobs/auctionCloseQueue");
 const service = require("./auctionService");
 const productModel = require("../../models/productModel");
 
+// Transaction fixtures retain audit snapshots so read-after-write projection
+// and command-audit assertions exercise the same state boundary as PostgreSQL.
+function withAuditState(tx) {
+  const log = tx.marketingAuditLog || {};
+  const snapshots = [];
+  const create = log.create;
+  const findFirst = log.findFirst;
+  tx.marketingAuditLog = {
+    ...log,
+    async findFirst(args) {
+      const matches = snapshots.filter(
+        (row) =>
+          row.entityType === args.where.entityType &&
+          row.entityId === args.where.entityId &&
+          args.where.action.in.includes(row.action),
+      );
+      matches.sort(
+        (a, b) =>
+          new Date(b.createdAt) - new Date(a.createdAt) ||
+          b.id.localeCompare(a.id),
+      );
+      return matches[0] || (findFirst ? await findFirst(args) : null);
+    },
+    async create(args) {
+      const returned = create ? await create(args) : null;
+      const row = {
+        id: `snapshot-${snapshots.length}`,
+        ...args.data,
+        ...returned,
+      };
+      snapshots.push(row);
+      return row;
+    },
+  };
+  return tx;
+}
+
 // Unit tests never talk to real Redis — every test that exercises schedule()
 // stubs the queue calls it makes.
 beforeEach((t) => {
@@ -33,6 +70,7 @@ beforeEach((t) => {
       create: async () => ({ id: "audit-1" }),
       createMany: async () => ({ count: 1 }),
       findUnique: async () => ({ id: "audit-1" }),
+      findFirst: async () => null,
     },
     auctionItem: {
       findUnique: async () => ({ id: "a1", status: "open" }),
@@ -199,7 +237,12 @@ test("submit rejects a product under Trust & Safety moderation", async (t) => {
   await assert.rejects(
     service.submit({
       user: { id: "seller-1", role: "SELLER" },
-      input: { roundId:"round-1", productId: "p1", startingPrice: 100, bidIncrement: 10 },
+      input: {
+        roundId: "round-1",
+        productId: "p1",
+        startingPrice: 100,
+        bidIncrement: 10,
+      },
     }),
     (err) => err.status === 403,
   );
@@ -335,6 +378,10 @@ test("schedule accepts a valid window for an approved auction", async (t) => {
 /** A minimal fake Prisma transaction client for placeBid's tx-scoped queries. */
 function fakeTx({ auction, existingBid = null, bids = [] }) {
   return {
+    marketingAuditLog: {
+      findFirst: async () => null,
+      create: async ({ data }) => ({ id: "audit-snapshot", ...data }),
+    },
     auctionItem: {
       findUnique: async () => auction,
       update: async ({ data }) => Object.assign(auction, data),
@@ -720,7 +767,9 @@ test("placeBid P2002 race recovery validates existing bid and returns on match",
       },
     },
   };
-  t.mock.method(repository, "withAuctionLock", (id, fn) => fn(tx));
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(withAuditState(tx)),
+  );
   t.mock.method(repository, "highestBid", async () => null);
   t.mock.method(repository, "createBid", async () => {
     const err = new Error("P2002");
@@ -766,7 +815,9 @@ test("placeBid P2002 race recovery throws 409 Conflict if race-created bid has d
       },
     },
   };
-  t.mock.method(repository, "withAuctionLock", (id, fn) => fn(tx));
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(withAuditState(tx)),
+  );
   t.mock.method(repository, "highestBid", async () => null);
   t.mock.method(repository, "createBid", async () => {
     const err = new Error("P2002");
@@ -1353,7 +1404,7 @@ test("placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and res
         findUnique: async () => null,
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
   t.mock.method(repository, "highestBid", async () => null);
   t.mock.method(repository, "createBid", async (data) => ({
@@ -1408,7 +1459,7 @@ test("placeBid outside the last 5 minutes does NOT extend scheduledEndAt", async
         findUnique: async () => null,
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
   t.mock.method(repository, "highestBid", async () => null);
   t.mock.method(repository, "createBid", async (data) => ({
@@ -2731,7 +2782,7 @@ test("listRoundItems reconciles scheduled items to open and filters out expired/
         findUnique: async () => ({ id: "audit-close" }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   t.mock.method(repository, "findRoundWithItems", async (id) => ({
@@ -2797,7 +2848,7 @@ test("createRound supports concurrent round creation with overlapping times and 
         },
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   t.mock.method(repository, "createRound", async (data) => ({
@@ -2883,7 +2934,7 @@ test("cancelRound rejects non-existent round with 404", async (t) => {
         findUnique: async () => null,
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   await assert.rejects(
@@ -2941,7 +2992,7 @@ test("cancelRound on already cancelled round performs idempotent notification re
         },
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   const result = await service.cancelRound({
@@ -2974,7 +3025,7 @@ test("cancelRound rejects ended round with 400", async (t) => {
         }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   await assert.rejects(
@@ -3000,7 +3051,7 @@ test("cancelRound rejects round with winning order with 400", async (t) => {
         }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   await assert.rejects(
@@ -3061,6 +3112,10 @@ test("cancelRound atomically transitions items and products, logs audit, and not
         }),
       },
       auctionItem: {
+        update: async ({ where, data }) => {
+          updatedItems.push({ where, data });
+          return { id: where.id, ...data };
+        },
         updateMany: async ({ where, data }) => {
           updatedItems.push({ where, data });
           return { count: 2 };
@@ -3085,7 +3140,7 @@ test("cancelRound atomically transitions items and products, logs audit, and not
         findUnique: async () => ({ id: "audit-cancel" }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   const result = await service.cancelRound({
@@ -3099,16 +3154,24 @@ test("cancelRound atomically transitions items and products, logs audit, and not
   assert.equal(result.cancellationReason, "เกิดเหตุขัดข้องทางเทคนิค");
   assert.equal(result.cancelledBy, "mkt-1");
 
-  assert.equal(updatedItems.length, 1);
+  assert.equal(updatedItems.length, 3);
   assert.equal(updatedItems[0].data.status, "cancelled");
 
   assert.equal(updatedProducts.length, 1);
   assert.equal(updatedProducts[0].data.status, "auction_action_required");
 
+  const commandAudits = auditLogs.filter(
+    (row) => row.action === "AUCTION_ROUND_CANCEL",
+  );
+  assert.equal(commandAudits.length, 1);
+  assert.equal(commandAudits[0].metadata.affectedItemCount, 2);
+  assert.equal(commandAudits[0].metadata.affectedSellerCount, 2);
   assert.equal(auditLogs.length, 1);
-  assert.equal(auditLogs[0].action, "AUCTION_ROUND_CANCEL");
-  assert.equal(auditLogs[0].metadata.affectedItemCount, 2);
-  assert.equal(auditLogs[0].metadata.affectedSellerCount, 2);
+  for (const change of updatedItems.slice(1)) {
+    assert.equal(change.data.cancellationReason, result.cancellationReason);
+    assert.equal(change.data.cancelledBy, "mkt-1");
+    assert.ok(change.data.cancelledAt instanceof Date);
+  }
 
   assert.deepEqual(cancelledJobs.sort(), ["item-1", "item-2"]);
 
@@ -3152,7 +3215,7 @@ test("cancelRound returns warnings if chat notification encounters failures", as
         findUnique: async () => ({ id: "audit-1" }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   const result = await service.cancelRound({
@@ -3219,7 +3282,7 @@ test("submit allows product with auction_action_required status into a new round
         create: async ({ data }) => ({ id: "item-new", ...data }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   const result = await service.submit({
@@ -3268,7 +3331,7 @@ test("placeBid rejects bid when round or item is cancelled", async (t) => {
         }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   await assert.rejects(
@@ -3292,7 +3355,7 @@ test("placeBid rejects bid when round or item is cancelled", async (t) => {
         }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   await assert.rejects(
@@ -3341,7 +3404,7 @@ test("closeAuction transitions product to auction_action_required when there are
         findUnique: async () => ({ id: "audit-1" }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   const result = await service.closeAuction("item-no-bid");
@@ -3487,7 +3550,7 @@ test("cancel on open item with bids logs AUCTION_ITEM_CANCEL, cancels close job,
         findUnique: async () => ({ id: "audit-item-cancel" }),
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   const result = await service.cancel({
@@ -3686,7 +3749,7 @@ test("cancel on already cancelled item performs idempotent notification retry wi
         },
       },
     };
-    return fn(tx);
+    return fn(withAuditState(tx));
   });
 
   const result = await service.cancel({
@@ -3760,7 +3823,7 @@ test("submit re-reads round inside withRoundMutationLock and rejects without cre
           }),
         },
       };
-      return fn(tx);
+      return fn(withAuditState(tx));
     },
   );
 

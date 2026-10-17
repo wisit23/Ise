@@ -81,12 +81,11 @@ test("SUPPORT chat message updates ticket first-response and audit exactly once"
   const chatMessage = await sent.json();
 
   const synced = await waitFor(async () => {
-    const ticket = toTicket(
-      await prisma.supportTicket.findUnique({
-        where: { id: create.body.id },
-        include: { ...ticketInclude, messages: true, auditLog: true },
-      }),
-    );
+    const row = await prisma.supportTicket.findUnique({
+      where: { id: create.body.id },
+      include: { ...ticketInclude, auditLog: true },
+    });
+    const ticket = { ...toTicket(row), auditLog: row.auditLog };
     return ticket?.auditLog.some((m) => m.dedupeKey === "chat:" + chatMessage.id)
       ? ticket
       : null;
@@ -94,9 +93,18 @@ test("SUPPORT chat message updates ticket first-response and audit exactly once"
 
   assert.ok(synced, "chat metadata event was not delivered into support-service");
   assert.ok(synced.firstResponseAt);
+  const [messageStorage] = await prisma.$queryRaw`
+    SELECT to_regclass('public.ticket_messages')::text AS name`;
+  assert.equal(messageStorage.name, null);
+  const history = await fetch(
+    `${CHAT_SERVICE_URL}/conversations/${create.body.conversationId}/messages`,
+    { headers: { Authorization: `Bearer ${requesterToken}` } },
+  );
+  assert.equal(history.status, 200);
+  const transcript = await history.json();
   assert.equal(
-    synced.messages.filter((m) => m.chatMessageId === chatMessage.id).length,
-    0,
+    transcript.items.filter((message) => message.id === chatMessage.id).length,
+    1,
   );
   assert.equal(
     synced.auditLog.filter(

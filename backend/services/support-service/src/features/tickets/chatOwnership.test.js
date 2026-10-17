@@ -38,16 +38,15 @@ test("Chat outage leaves ticket available with explicit unavailable-history flag
   assert.equal(ticket.chatAvailable, false);
   assert.ok(ticket.chatError);
 });
-test("migration dry-run writes nothing; apply verifies every source without deleting archive", async () => {
-  let read = 0, imports = 0, events = 0;
-  const row = { id: "old", ticketId: "ticket", authorId: "buyer", authorRole: "REQUESTER", body: "old", isInternal: false, createdAt: new Date(), ticket: { chatLink: { conversationId: "room" } } };
-  const db = { ticketMessage: { findMany: async () => read++ === 0 ? [row] : [] } };
-  const chatClient = { importTicketMessage: async (_id, data) => { imports++; assert.equal(data.sourceId, "old"); return { id: "chat-id", senderId: "buyer", senderRole: "BUYER", createdAt: row.createdAt }; } };
-  const ticketModel = { recordChatMessage: async () => { events++; } };
-  assert.equal((await migrate({ db, chatClient, ticketModel })).pending, 1);
-  assert.equal(imports, 0);
+test("migration dry-run writes nothing; apply verifies source and writes only a fingerprint receipt", async () => {
+  let read = 0, imports = 0, receipts = 0;
+  const row = { id: "old", ticketId: "ticket", authorId: "buyer", authorRole: "REQUESTER", body: "old", isInternal: false, createdAt: new Date(), conversationId: "room", fingerprint: "fingerprint" };
+  const tx = { $queryRaw: async () => [{ fingerprint: row.fingerprint }], $executeRaw: async () => { receipts++; } };
+  const db = { $queryRaw: async (sql) => String(sql).includes("to_regclass") ? [{ archive: "ticket_messages", contracted: false }] : read++ === 0 ? [row] : [], $transaction: async work => work(tx) };
+  const chatClient = { importTicketMessage: async (_id, data) => { imports++; assert.equal(data.sourceId, "old"); return { id: "chat-id", conversationId: "room", senderId: "buyer", senderRole: "BUYER", body: row.body, visibility: "ALL", createdAt: row.createdAt }; } };
+  assert.equal((await migrate({ db, chatClient })).pending, 1);
+  assert.equal(imports, 0); assert.equal(receipts, 0);
   read = 0;
-  assert.deepEqual(await migrate({ db, chatClient, ticketModel, apply: true }), { verified: 1, pending: 0, archiveDeleted: false });
-  assert.equal(imports, 1);
-  assert.equal(events, 1);
+  assert.deepEqual(await migrate({ db, chatClient, apply: true }), { verified: 1, pending: 0, archiveDeleted: false });
+  assert.equal(imports, 1); assert.equal(receipts, 1);
 });

@@ -1,17 +1,33 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ProductCard from "../ProductCard";
 import Skeleton from "../ui/Skeleton";
+import styles from "./FannedHeroCards.module.css";
 
 /**
  * FannedHeroCards Component
  *
  * Renders 3 real ProductCards in an interactive fanned arc deck,
- * scaled to prominent dimensions with natural spring physics.
+ * with one motion layer and a rounded shadow matching each card.
  */
 export default function FannedHeroCards({ items = [], loading = false }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
+  const resetTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
+
+  const activateCard = (index) => {
+    clearTimeout(resetTimer.current);
+    setHoveredIndex(index);
+  };
+
+  // Moving cards can briefly leave the pointer. Keep the selected card stable
+  // across those gaps, and reset only once the pointer leaves the whole deck.
+  const resetDeck = () => {
+    clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setHoveredIndex(null), 100);
+  };
 
   if (loading) {
     return (
@@ -35,7 +51,8 @@ export default function FannedHeroCards({ items = [], loading = false }) {
 
   // Calculate dynamic transform and elevation on hover
   const getCardStyle = (index) => {
-    const transition = "all 600ms cubic-bezier(0.34, 1.45, 0.64, 1)";
+    const transition =
+      "transform 380ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 240ms ease-out";
 
     // Default resting positions (Fanned Arc)
     if (hoveredIndex === null) {
@@ -145,7 +162,14 @@ export default function FannedHeroCards({ items = [], loading = false }) {
   };
 
   return (
-    <div className="relative mx-auto flex h-[520px] w-full max-w-[600px] items-center justify-center select-none">
+    <div
+      className="relative isolate z-0 mx-auto flex h-[520px] w-full max-w-[600px] items-center justify-center select-none"
+      onPointerEnter={() => clearTimeout(resetTimer.current)}
+      onPointerLeave={resetDeck}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) resetDeck();
+      }}
+    >
       {/* Ambient background glow behind the deck */}
       <div
         aria-hidden="true"
@@ -159,10 +183,12 @@ export default function FannedHeroCards({ items = [], loading = false }) {
         return (
           <div
             key={product.id}
-            onMouseEnter={() => setHoveredIndex(i)}
-            onMouseLeave={() => setHoveredIndex(null)}
+            onPointerEnter={(event) => {
+              if (event.pointerType !== "touch") activateCard(i);
+            }}
+            onFocus={() => activateCard(i)}
             style={style}
-            className="absolute w-[250px] sm:w-[270px] md:w-[280px] will-change-transform drop-shadow-sm"
+            className={`${styles.card} absolute w-[250px] sm:w-[270px] md:w-[280px] rounded-md`}
           >
             <ProductCard product={product} showSeller={true} />
           </div>

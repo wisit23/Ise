@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const http = require("node:http");
 const request = require("supertest");
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.INTERNAL_SERVICE_TOKEN ||= "test-internal-token";
@@ -43,6 +44,35 @@ async function available(t) {
 }
 test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address snapshots and shipment guards", async (t) => {
   if (!(await available(t))) return;
+  const buyerToken = token(buyerId, "BUYER");
+  const previousAuthUrl = process.env.AUTH_SERVICE_URL;
+  const addressApi = http.createServer((req, res) => {
+    if (
+      req.url !== "/me/addresses" ||
+      req.headers.authorization !== `Bearer ${buyerToken}`
+    ) {
+      res.writeHead(403).end();
+      return;
+    }
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify(
+        ["address1", "address2", "address3", "address4"].map((addressId) => ({
+          ...ADDRESS,
+          id: addressId,
+          userId: buyerId,
+          ...(addressId === "address2" ? { addressLine: "Second Road" } : {}),
+        })),
+      ),
+    );
+  });
+  await new Promise((resolve) => addressApi.listen(0, "127.0.0.1", resolve));
+  process.env.AUTH_SERVICE_URL = `http://127.0.0.1:${addressApi.address().port}`;
+  t.after(async () => {
+    await new Promise((resolve) => addressApi.close(resolve));
+    if (previousAuthUrl === undefined) delete process.env.AUTH_SERVICE_URL;
+    else process.env.AUTH_SERVICE_URL = previousAuthUrl;
+  });
   const first = await prisma.order.create({
     data: {
       buyerId,
@@ -72,7 +102,6 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
       ordersAmount: "500.25",
     },
   });
-  const buyerToken = token(buyerId, "BUYER");
   let res = await request(app)
     .post("/checkouts")
     .set("Authorization", "Bearer " + buyerToken)
@@ -90,10 +119,15 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
     .set("Authorization", "Bearer " + buyerToken)
     .send({
       addressId: "address2",
-      shippingAddress: { ...ADDRESS, addressLine: "Second Road" },
+      shippingAddress: { ...ADDRESS, addressLine: "Untrusted client address" },
     });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   assert.ok(res.body.orders.every((o) => o.shipping.addressId === "address2"));
+  assert.ok(
+    res.body.orders.every(
+      (o) => o.shipping.addressSnapshot.addressLine === "Second Road",
+    ),
+  );
   const paid = await checkoutService.confirm({
     buyerId,
     sessionId: checkoutId,
@@ -111,18 +145,42 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
     }),
     2,
   );
-  await shippingService.updateAddress({
-    orderId: first.id,
-    buyerId,
-    addressId: "address3",
-    shippingAddress: ADDRESS,
-  });
+  res = await request(app)
+    .patch(`/${first.id}/shipping-address`)
+    .set("Authorization", `Bearer ${buyerToken}`)
+    .send({
+      addressId: "address3",
+      shippingAddress: { ...ADDRESS, addressLine: "Untrusted client address" },
+    });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  assert.equal(res.body.addressId, "address3");
+  assert.equal(res.body.addressSnapshot.addressLine, ADDRESS.addressLine);
   assert.equal(
     (await prisma.shipping.findUnique({ where: { orderId: second.id } }))
       .addressId,
     "address2",
   );
+  // Shipping waits for the seller: paid -> confirmed -> ready_to_ship.
   let order = await prisma.order.findUnique({ where: { id: first.id } });
+  await assert.rejects(
+    shippingService.markShipped({
+      orderId: first.id,
+      actorId: "seller1",
+      version: order.version,
+      company: "Carrier",
+      trackingNumber: "TRACK-0",
+    }),
+    (err) => err.status === 409,
+  );
+  for (const status of ["confirmed", "ready_to_ship"]) {
+    res = await request(app)
+      .patch(`/${first.id}/status`)
+      .set("Authorization", `Bearer ${token("seller1", "BUYER")}`)
+      .send({ status });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.status, status);
+  }
+  order = await prisma.order.findUnique({ where: { id: first.id } });
   await assert.rejects(
     shippingService.markShipped({
       orderId: first.id,
@@ -146,6 +204,7 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
       buyerId,
       addressId: "address4",
       shippingAddress: ADDRESS,
+      authorization: `Bearer ${buyerToken}`,
     }),
     (err) => err.status === 409,
   );
@@ -172,6 +231,8 @@ test("ER evidence API: buyer uploads before claim, staff chooses deadline, audit
       originalAmount: "99.99",
       ordersAmount: "99.99",
       status: "completed",
+      deliveredAt: new Date(),
+      completedAt: new Date(),
       payments: {
         create: {
           paymentType: "TEST",
@@ -276,7 +337,11 @@ test("ER evidence API: buyer uploads before claim, staff chooses deadline, audit
   );
 });
 test("auction callback retries create one pending order and no basket", async (t) => {
-  t.mock.method(require("../src/services/authClient"), "getUser", async id => ({id,status:"ACTIVE"}));
+  t.mock.method(
+    require("../src/services/authClient"),
+    "getUser",
+    async (id) => ({ id, status: "ACTIVE" }),
+  );
   if (!(await available(t))) return;
   const body = {
     auctionId: id + "-auction",

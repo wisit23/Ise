@@ -60,9 +60,12 @@ const upload = multer({
 });
 
 function absolutePath(storageKey) {
-  // storageKey is always our own crypto.randomUUID()+ext, but resolve+prefix
-  // check defensively anyway so a malformed key can never escape STORAGE_DIR
-  // (same guard as order-service's evidenceStorage.js).
+  // Keys are filenames, never nested paths. Reject both separators explicitly
+  // because POSIX treats Windows backslashes as ordinary filename characters.
+  if (/[\\/]/.test(storageKey)) {
+    throw badRequest("invalid attachment key");
+  }
+  // Retain the containment check for keys such as "." and "..".
   const resolved = path.resolve(STORAGE_DIR, storageKey);
   if (!resolved.startsWith(STORAGE_DIR + path.sep)) {
     throw badRequest("invalid attachment key");

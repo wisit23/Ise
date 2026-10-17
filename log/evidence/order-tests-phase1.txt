@@ -1,0 +1,317 @@
+✔ GET /health returns 200 ok without needing a database (107.2985ms)
+✔ GET /mine with no bearer token is rejected with 401 (47.543ms)
+✔ POST / with no bearer token is rejected with 401 (73.4566ms)
+✔ GET /selling with no bearer token is rejected with 401 (23.4887ms)
+✔ PATCH /:id/pay with no bearer token is rejected with 401 (17.5756ms)
+✔ POST /checkout-sessions with no bearer token is rejected with 401 (21.0323ms)
+✔ automatic auction order is blocked for a restricted buyer (39.5977ms)
+✔ automatic auction order is blocked for a restricted seller (1.0608ms)
+✔ automatic auction order is blocked for a fully suspended participant (0.5706ms)
+[buyerActivityClient] failed to record ORDER_PLACED 46c1ddf1-3d85-440c-9bc9-50d101c48b25: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:product-a (order 46c1ddf1-3d85-440c-9bc9-50d101c48b25): fetch failed
+✔ checkout persists the reservation identity returned by product-service (3949.6892ms)
+✔ checkout releases the exact reservation when Order creation fails (49.2185ms)
+[buyerActivityClient] failed to record ORDER_PLACED 1ac4f4ff-e1ce-460e-a9a3-6b3aed1beefa: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:product-other-shop (order 1ac4f4ff-e1ce-460e-a9a3-6b3aed1beefa): fetch failed
+✔ a seller account may buy another seller's product (3748.5587ms)
+✔ checkout rejects a restricted product seller and releases the reservation (15.1164ms)
+✔ a staff account is denied before product-service is called (11.7091ms)
+✔ TC10: direct cancellation of confirmed is rejected before any side effect (119.4473ms)
+✔ TC10: direct cancellation of shipped is rejected before any side effect (33.4336ms)
+✔ TC10: direct cancellation of completed is rejected before any side effect (26.9615ms)
+✔ TC10: direct cancellation of refunded is rejected before any side effect (28.5971ms)
+✔ TC10: a successful payment also blocks cancellation if status was reverted (30.8307ms)
+✔ TC10: processing checkout blocks cancellation before local payment records are read (51.0723ms)
+✔ TC10: paid checkout blocks cancellation before local payment records are read (17.2257ms)
+✔ unpaid pending cancellation still succeeds (13.8693ms)
+✔ unpaid pending_payment cancellation still succeeds (41.5008ms)
+✔ multi-seller checkout sums baht exactly; vouchers remain per order; auction has no basket (25.796ms)
+✔ repeat creation returns the same checkout (2.177ms)
+✔ checkout cannot accept a code shared across orders (1.1624ms)
+✔ creation requires address ID and rejects expired basket (0.8632ms)
+✔ concurrent order change rolls back checkout and shipping creation (1.1605ms)
+[order-service] chat notification failed for PRODUCT:p1 (order o1): fetch failed
+[order-service] chat notification failed for PRODUCT:p2 (order o2): fetch failed
+✔ payment retry after external failure does not charge or confirm orders twice (2883.8985ms)
+✔ foreign buyer cannot read or confirm checkout (4.3954ms)
+✔ expiry cancels orders and durably requests release without marking payment paid (2.9189ms)
+✔ payment CAS conflict rolls back every local payment (2.57ms)
+✔ releases a newly-created product reservation when the Order write fails (30.1591ms)
+✔ authorization failure releases a newly-created reservation before Order write (1.303ms)
+✔ Order write failure with voucher releases BOTH voucher hold and product reservation (1.9891ms)
+✔ reuses the Order for an existing reservation instead of creating a duplicate and does NOT update price (2.9012ms)
+✔ P2002 retry returns existing order without creating duplicate (2.4763ms)
+✔ calculates discount and finalPrice from backend quoteAndHold, ignoring client tampering (2.4556ms)
+✔ rejects order and releases reservation if voucher quoteAndHold fails (expired / wrong category / 409) (1.1351ms)
+✔ dispute chat reuses the case room and authorizes the assigned agent (34.0164ms)
+✔ dispute owner denies stale agents and allows case parties (256.063ms)
+✔ disputeService.claim enforces role, unassigned check, and optimistic concurrency (27.9158ms)
+✔ disputeService.reassign allows current assignee or Trust & Safety supervisor (3.2132ms)
+✔ disputeService.escalate transfers dispute to Trust & Safety (4.6144ms)
+✔ disputeService.decide and addEvidence enforce single ownership (5.3283ms)
+✔ disputeService requires numeric version on claim, reassign, escalate, and decide (2.2232ms)
+✔ disputeService prevents non-assignee from escalating and prevents CS from claiming/deciding escalated case (3.7494ms)
+✔ CS queue cannot remove access restrictions using scope or team filters (25.6151ms)
+✔ queue and count use the same access/filter predicate before pagination (6.241ms)
+✔ SLA pagination reaches terminal history only after active cases (1.4808ms)
+✔ dashboard SLA filter uses the same bounded deadline predicate for rows and totals (1.32ms)
+✔ only assigned Admin decides; oversight chat stays read-only (1.8365ms)
+✔ unassigned requires claim; multiple roles preserve read-only (0.5957ms)
+✔ TC05: invalid shipping phone is rejected without writes (3.2555ms)
+✔ TC05: invalid shipping postalCode is rejected without writes (0.6827ms)
+✔ buyer changes only this order's address and records both address snapshots (1.0752ms)
+✔ another buyer cannot change the order's delivery address (0.5482ms)
+✔ shipped orders cannot change address even if shipping has not caught up (0.4378ms)
+✔ shipped parcels cannot change address even if Order still says confirmed (0.4213ms)
+✔ a concurrent shipment prevents the address write and its audit log (0.6643ms)
+✔ stale client version and incomplete addresses are rejected before writes (0.572ms)
+✔ checkout totals preserve satang across sellers and per-order discounts (3.8839ms)
+✔ money rejects missing, fractional-satang, negative and non-finite amounts (4.9279ms)
+✔ money preserves large exact decimal input and rejects database overflow (0.7688ms)
+✔ checkout rejects discounts that increase an order's price (0.8279ms)
+✔ checkout rejects aggregate overflow even when individual orders fit (0.793ms)
+✖ TC10: cancellation rechecks the current paid status inside its transaction (42.6716ms)
+✖ TC10: successful payment history also blocks the transactional cancellation (1.3146ms)
+✖ an unpaid cancellation still records the product sync and audit together (0.6639ms)
+✖ a concurrent payment/version change prevents cancellation and event creation (0.9032ms)
+▶ Attribution Outbox Service Suite
+  ✔ retryDelayMs: scales exponentially with attempts and caps at 60s (20.8517ms)
+  ✔ deliver: sends correct event envelope and flat compatibility fields (1.6375ms)
+  ✔ processEvent: marks event processed upon successful delivery (1.0552ms)
+  ✔ processEvent: records error and schedules exponential backoff on delivery failure (1.7719ms)
+  ✔ processPendingEvents: processes batch of pending events (1.2754ms)
+  ✔ startWorker & stopWorker: starts and cleanly shuts down worker timer (0.8307ms)
+  ✔ durability: fails loudly when db or attributionOutboxEvent model is unavailable (0.8984ms)
+✔ Attribution Outbox Service Suite (34.1702ms)
+✔ authClient applies a timeout signal to internal user lookups (3.0566ms)
+✔ sends an idempotent order activity to auth-service (74.0018ms)
+✔ an auth-service outage does not fail the purchase flow (1.6986ms)
+✔ dry run reports missing dispute holds without writing or inventing payment data (24.2556ms)
+✔ refund with another active reason is valid and must remain frozen (0.498ms)
+✔ backfill does not resurrect a case decided after initial scan (0.62ms)
+✔ one payment has overlapping hold reasons; releasing dispute leaves T&S active (7.3153ms)
+✔ refund waits for the final active reason (0.8507ms)
+✔ same reason is idempotent and another reference is not released (1.4468ms)
+✔ unpaid orders cannot create holds (1.5006ms)
+✔ open case stays frozen even if its hold is missing (1.8217ms)
+✔ participants cannot mutate disputed or held orders (0.6821ms)
+✔ failed delivery leaves durable request available for retry (23.8196ms)
+✔ acknowledged delivery is skipped on retry (0.5651ms)
+✖ dispute hold/release enforce permission, version and single-hold rules (1800.9997ms)
+✖ Buyer satang survive atomic completion, Product attribution, audit and duplicate delivery (2812.0686ms)
+▶ Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12, MKT-003, MKT-007)
+  ✔ Step 1: Order completion atomically creates AttributionOutboxEvent in PostgreSQL reloop_order (506.9401ms)
+  ✔ Step 2: Non-campaign orders do NOT create AttributionOutboxEvent (180.3327ms)
+  ✔ Step 3: Outbox delivery sends REST contract with x-internal-token and marks outbox processed (195.6388ms)
+  ✔ Step 4: Retry handling: on failure, updates attempts, nextAttemptAt, lastError, and leaves processedAt null (369.4962ms)
+  ✔ Step 5: Sweep recovery: processPendingEvents recovers and delivers backed-off events once recovered (154.0392ms)
+  ✔ Step 6: Idempotent acknowledgment: handles deduplicated: true without error (303.8227ms)
+✔ Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12, MKT-003, MKT-007) (2634.9797ms)
+﹣ Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Suite (UR-09, UR-12, MKT-003, MKT-007) (4521.9854ms) # PostgreSQL databases not reachable, skipping cross-service suite
+✔ T&S reads paginated ORDER chat through the dispute with access audit (995.3533ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+[disputeService] verdict notice/lock failed for e1341fd1-3be8-4661-bafa-d5b9d15cf6ec: dispute chat is unavailable: fetch failed
+✔ dispute lifecycle: hold payout, one-way decision, RBAC (6929.1114ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+[disputeService] verdict notice/lock failed for 4d5c029e-858b-4c5b-839e-52ce8bbb661d: dispute chat is unavailable: fetch failed
+✔ RELEASE_ESCROW verdict unholds payout and returns the order to completed (5839.3539ms)
+[disputeService] verdict notice/lock failed for eef6e18a-9a89-4934-9722-52a30dba7648: dispute chat is unavailable: fetch failed
+[disputeService] verdict notice/lock failed for eef6e18a-9a89-4934-9722-52a30dba7648: dispute chat is unavailable: fetch failed
+✔ TSR-02: Single-owner dispute assignment, unassigned read-only, validation, reassign & escalate (8468.6052ms)
+✔ TSR-02 Concurrency: 2 agents concurrent Claim race on same dispute (125.2567ms)
+✔ TSR-02 Concurrency: 2 admins concurrent Hold race on same order (102.2501ms)
+✔ TSR-02 Concurrency: Dispute Decision vs T&S Hold race on Order CAS (394.8816ms)
+[buyerActivityClient] failed to record PAYMENT_COMPLETED 5e55e749-f24e-4ee4-8b9f-0c570f4ba0b3: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:tsr02-prod-1791873282268-93zms (order 5e55e749-f24e-4ee4-8b9f-0c570f4ba0b3): fetch failed
+✔ TSR-02 Concurrency: Hold eligibility & Concurrent Pay (4091.3918ms)
+[buyerActivityClient] failed to record PAYMENT_COMPLETED c6ef5a34-2cd6-4ba6-b618-0eee1bd5257a: The operation was aborted due to timeout
+[order-service] chat notification failed for PRODUCT:tsr02-prod-1791873286353-8x2g4 (order c6ef5a34-2cd6-4ba6-b618-0eee1bd5257a): fetch failed
+✔ TSR-02: Payment outbox survives product-service failure and retries (3903.6917ms)
+✔ TSR-02 Concurrency: Reassign vs Decision race on Dispute (789.1608ms)
+[disputeService] verdict notice/lock failed for d34c34df-93e6-4353-a4fe-83358247069c: dispute chat is unavailable: fetch failed
+✔ TSR-02: Hold decoupling between CS dispute and Trust & Safety holds (3246.3241ms)
+[disputeService] verdict notice/lock failed for 70a3a444-a7da-4b46-bf8c-0e480f2e42b5: dispute chat is unavailable: fetch failed
+✔ TSR-02: Approving refund locks order status — subsequent T&S release never reverts to completed (3161.1945ms)
+✔ TSR-02: Participants cannot mutate order status while under active hold or dispute (68.1211ms)
+✔ access-aware dispute queue paginates more than 50 cases with terminal SLA last (2958.7688ms)
+[order-service] chat notification failed for PRODUCT:er-test-1791873273544-p2 (order 14fb716d-b6bf-4d8b-bb26-03c3139a71d9): fetch failed
+[order-service] chat notification failed for PRODUCT:er-test-1791873273544-p1 (order 79eaedd9-ae85-4e7c-b822-2500aff37832): fetch failed
+✔ ER checkout API: multiple sellers, exact totals, immutable paidAt, address snapshots and shipment guards (4191.1179ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+✔ ER evidence API: buyer uploads before claim, staff chooses deadline, audits isolate evidence and safety review stays unique (3220.7044ms)
+[order-service] chat notification failed for PRODUCT:er-test-1791873273544-auction-product (order auction-d9a5027552a65b6eced65d12db53d4ec80f38b61bf4a1a0682844c93c65e8538): fetch failed
+✔ auction callback retries create one pending order and no basket (2764.4659ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+✔ dispute evidence: private storage, authz on view, audit trail (3354.8789ms)
+✔ migration refuses an existing database without the canonical baseline, including a legacy ledger (23.1586ms)
+✔ executive platform metrics series against a real database (265.5769ms)
+✔ executive platform metrics against a real database (299.8615ms)
+﹣ only one of two buyers reserves a product and expiry cannot unlock a newer reservation (2749.1857ms) # DATABASE_URL_PRODUCT/DATABASE_URL_ORDER not set or databases unreachable
+﹣ Seller checkout, paid notification, shipping and T&S trading transcript share persisted facts (3.0844ms) # live Auth/Product/Order/Chat required
+✖ hold audit keeps the public action contract while querying payment-linked OrderLog (71.5706ms)
+✔ case and evidence audit use bound filters and one pagination/count contract (2.8854ms)
+✔ invalid audit kinds and date ranges fail before querying (1.0166ms)
+✔ support order lookup: role gate and bounded search (174.9541ms)
+ℹ tests 129
+ℹ suites 0
+ℹ pass 119
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 26833.6766
+
+✖ failing tests:
+
+test at backend\services\order-service\src\models\orderModel.test.js:56:1
+✖ TC10: cancellation rechecks the current paid status inside its transaction (42.6716ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: Cannot create proxy with a non-object as target or handler
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:58:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: Cannot create proxy with a non-object as target or handler
+        at wrapClient (C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:184:23)
+        at C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:198:53
+        at Proxy.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:39:61)
+        at Object.apply (node:internal/test_runner/mock/mock:767:20)
+        at Proxy.get (C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:198:23)
+        at Object.transitionStatusWithProductSync (C:\ise\Ise\backend\services\order-service\src\models\orderModel.js:165:17)
+        at TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:59:11)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1397:25)
+        at Test.start (node:internal/test_runner/test:1257:17),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\order-service\src\models\orderModel.test.js:65:1
+✖ TC10: successful payment history also blocks the transactional cancellation (1.3146ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: Cannot create proxy with a non-object as target or handler
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:67:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: Cannot create proxy with a non-object as target or handler
+        at wrapClient (C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:184:23)
+        at C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:198:53
+        at Proxy.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:39:61)
+        at Object.apply (node:internal/test_runner/mock/mock:767:20)
+        at Proxy.get (C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:198:23)
+        at Object.transitionStatusWithProductSync (C:\ise\Ise\backend\services\order-service\src\models\orderModel.js:165:17)
+        at TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:68:11)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1397:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:969:18),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\order-service\src\models\orderModel.test.js:74:1
+✖ an unpaid cancellation still records the product sync and audit together (0.6639ms)
+  TypeError: Cannot create proxy with a non-object as target or handler
+      at wrapClient (C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:184:23)
+      at C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:198:53
+      at Proxy.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:39:61)
+      at Object.apply (node:internal/test_runner/mock/mock:767:20)
+      at Proxy.get (C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:198:23)
+      at Object.transitionStatusWithProductSync (C:\ise\Ise\backend\services\order-service\src\models\orderModel.js:165:17)
+      at TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:76:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+
+test at backend\services\order-service\src\models\orderModel.test.js:83:1
+✖ a concurrent payment/version change prevents cancellation and event creation (0.9032ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: Cannot create proxy with a non-object as target or handler
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:85:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: Cannot create proxy with a non-object as target or handler
+        at wrapClient (C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:184:23)
+        at C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:198:53
+        at Proxy.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:39:61)
+        at Object.apply (node:internal/test_runner/mock/mock:767:20)
+        at Proxy.get (C:\ise\Ise\backend\services\order-service\src\models\disputeWorkflowClient.js:198:23)
+        at Object.transitionStatusWithProductSync (C:\ise\Ise\backend\services\order-service\src\models\orderModel.js:165:17)
+        at TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:86:11)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1397:25)
+        at Test.processPendingSubtests (node:internal/test_runner/test:969:18),
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\order-service\test\admin-hold.integration.test.js:48:1
+✖ dispute hold/release enforce permission, version and single-hold rules (1800.9997ms)
+  PrismaClientKnownRequestError: 
+  Invalid `prisma.order.delete()` invocation in
+  C:\ise\Ise\backend\services\order-service\test\fixtures.js:73:28
+  
+    70 await prisma.payment.deleteMany({ where: { orderId } });
+    71 await prisma.shipping.deleteMany({ where: { orderId } });
+    72 await prisma.orderLog.deleteMany({ where: { orderId } });
+  → 73 await prisma.order.delete(
+  Foreign key constraint violated: `dispute_case_order_id_fkey (index)`
+      at $n.handleRequestError (C:\ise\Ise\backend\services\order-service\src\generated\prisma-client\runtime\library.js:121:7315)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\order-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\order-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\order-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async deleteOrder (C:\ise\Ise\backend\services\order-service\test\fixtures.js:73:3)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\test\admin-hold.integration.test.js:174:5)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at backend\services\order-service\test\attribution-satang.integration.test.js:5:1
+✖ Buyer satang survive atomic completion, Product attribution, audit and duplicate delivery (2812.0686ms)
+  PrismaClientInitializationError: 
+  Invalid `productDb.campaign.create()` invocation in
+  C:\ise\Ise\backend\services\order-service\test\attribution-satang.integration.test.js:7:42
+  
+    4 const outbox=require("../src/services/attributionOutboxService");const metrics=require("../../product-service/src/features/campaigns/campaignMetrics");
+    5 test("Buyer satang survive atomic completion, Product attribution, audit and duplicate delivery",async t=>{
+    6  if(!process.env.DATABASE_URL_ORDER || !process.env.DATABASE_URL_PRODUCT){if(process.env.REQUIRE_INTEGRATION==="1")throw Error("test databases required");t.skip("test databases required");return;}
+  → 7  const campaign=await productDb.campaign.create(
+  Can't reach database server at `postgres:5432`
+  
+  Please make sure your database server is running at `postgres:5432`.
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:7615)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\test\attribution-satang.integration.test.js:7:17)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at backend\services\order-service\test\support-audit.test.js:4:1
+✖ hold audit keeps the public action contract while querying payment-linked OrderLog (71.5706ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  null !== 'd1'
+  
+      at TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\test\support-audit.test.js:8:131)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: 'd1',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

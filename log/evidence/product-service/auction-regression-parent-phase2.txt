@@ -1,0 +1,141 @@
+[product-service] chat notification failed for round round-retry-1: chat-service /internal/conversations/conv-round-retry-1:buyer-2/messages returned 503
+✔ canTransition allows only the documented lifecycle edges (9.9387ms)
+✔ submit rejects a buyer before querying the database (1.0178ms)
+✔ submit rejects a non-positive starting price (0.4779ms)
+✔ submit rejects a product owned by another seller (0.5749ms)
+✔ submit rejects a product that is not available (0.5545ms)
+✔ submit rejects a product under Trust & Safety moderation (0.4119ms)
+✔ submit creates a pending_approval auction for the owning seller (14.3546ms)
+✔ approve rejects a non-Marketing/Admin caller (0.6471ms)
+✔ approve allows a Marketing caller and transitions to scheduled if round dates exist (2.4013ms)
+✔ approve rejects moving out of a non-pending_approval state (0.7321ms)
+✔ approve rejects non-Marketing callers (including ADMIN) (0.614ms)
+✔ schedule rejects a non-Marketing caller (0.5914ms)
+✔ schedule rejects endsAt before startsAt (0.2604ms)
+✔ schedule accepts a valid window for an approved auction (0.5001ms)
+✔ placeBid rejects the seller bidding on their own auction (0.7989ms)
+✔ placeBid rejects an auction whose product is moderated (0.5362ms)
+✔ placeBid rejects a bid below startingPrice with no existing bids (4.5187ms)
+✔ placeBid rejects a bid under the current highest + increment (0.6789ms)
+✔ placeBid rejects bidding on a closed auction window (0.3086ms)
+✔ placeBid accepts a valid raise and returns the created bid (0.448ms)
+✔ placeBid returns existing bid on exact retry with matching parameters (0.4366ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different amount (0.5198ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different bidderId (0.3105ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different auctionId (0.3835ms)
+✔ placeBid returns existing bid on retry even if auction status has changed to closed (0.2437ms)
+✔ placeBid P2002 race recovery validates existing bid and returns on match (0.7572ms)
+✔ placeBid P2002 race recovery throws 409 Conflict if race-created bid has different parameters (0.4799ms)
+✔ closing an auction with no bids never calls order-service (0.9777ms)
+✔ automatic close has no side effects after Trust & Safety moderation (0.2088ms)
+✔ scheduled auction opening uses a moderation-aware CAS (0.2797ms)
+✔ submit transitions available product to 'auction' status (0.6797ms)
+✔ submit accepts a product already created with 'auction' status without re-setting (0.7255ms)
+✔ reject resets product status back to 'available' (0.5766ms)
+✔ reject rejects non-Marketing callers (including ADMIN) (0.5036ms)
+✔ cancel transitions item to 'cancelled' and product status to 'auction_action_required' (2.0503ms)
+✔ closing an auction with no bids transitions product status to 'auction_action_required' (0.6061ms)
+✔ submit rejects when roundId is missing (0.295ms)
+✔ submit rejects when selected roundId is not found (0.6431ms)
+✔ submit rejects when selected round has not started accepting submissions (0.2519ms)
+✔ submit rejects when selected round has expired submission window (0.237ms)
+✔ createRound rejects non-Marketing/Admin callers (0.4307ms)
+✔ createRound rejects invalid or inverted dates (0.5353ms)
+✔ createRound creates round for Marketing user (0.641ms)
+✔ getCurrentRound correctly returns flags when active (0.383ms)
+✔ placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and reschedules close job (0.6075ms)
+✔ placeBid outside the last 5 minutes does NOT extend scheduledEndAt (0.2469ms)
+✔ deriveRoundPhase correctly identifies all 5 half-open phases (0.1521ms)
+✔ createRound rejects non-Marketing user with 403 Forbidden (0.6903ms)
+✔ createRound validates input dates and boundaries (0.4774ms)
+✔ createRound succeeds when overlapping round exists (MKT-DEC-025 overlap permitted) (0.3216ms)
+✔ createRound succeeds and passes tx when no conflict exists (0.3167ms)
+✔ getCurrentRound returns active round containing now with derived phase (4.0678ms)
+✔ getCurrentRound supports simultaneous active submission and auction rounds (0.4236ms)
+✔ getCurrentRound returns nearest upcoming round when none active (0.3252ms)
+✔ getCurrentRound returns null when all rounds ended or none exist (0.1575ms)
+✔ listRounds attaches derived phase to each round (0.2263ms)
+✔ auction error messages do not leak internal status or English technical terms (0.2339ms)
+✔ schedule rejects past startsAt with friendly Thai message (0.1825ms)
+✔ schedule rejects endsAt before startsAt with friendly Thai message (0.1728ms)
+✔ placeBid validates missing idempotencyKey with clear Thai message (0.1641ms)
+✔ placeBid validates non-positive amount with clear Thai message (0.1415ms)
+✔ createRound accepts empty categories array or omitted as all categories (0.3263ms)
+✔ createRound accepts one valid category (0.2855ms)
+✔ createRound accepts multiple valid categories (0.2475ms)
+✔ createRound rejects invalid categories format (0.2138ms)
+✔ createRound rejects non-existent category in database (0.1644ms)
+✔ isCategoryAllowedInRound treats empty or missing categories as all categories (0.1212ms)
+✔ submit new product creates Product and AuctionItem atomically in same transaction (1.7905ms)
+✔ submit new product rejects when category is not allowed by active round (0.7164ms)
+✔ submit new product rejects when category is not found in database (0.5512ms)
+✔ submit new product rolls back if product creation fails (0.5805ms)
+✔ submit new product rolls back if auction creation fails (0.6364ms)
+✔ submit existing product validates product.category from DB and ignores client category (1.1823ms)
+✔ submit rejects sellers with expired or unverified KYC and allows ADMIN (1.2149ms)
+✔ submit rejects and rolls back when round expires between validation and transaction (4.2596ms)
+✔ submit existing product rejects and does not update status when round expires in transaction (0.554ms)
+✔ browseRounds returns active and upcoming rounds with derived phases (0.6095ms)
+✔ getRound returns round with phase and rejects invalid roundId (0.4029ms)
+✔ listRoundItems returns round and items filtered by roundId (0.5091ms)
+✔ listRoundItems reconciles scheduled items to open and filters out expired/closed items (0.8531ms)
+✔ createRound supports concurrent round creation with overlapping times and creates audit log for each (0.7357ms)
+✔ deriveRoundPhase returns 'cancelled' when round.cancelledAt is set (0.1974ms)
+✔ cancelRound rejects non-Marketing user with 403 Forbidden (0.5187ms)
+✔ cancelRound validates cancellation reason (0.315ms)
+✔ cancelRound rejects non-existent round with 404 (0.6705ms)
+✔ cancelRound on already cancelled round performs idempotent notification retry without mutating state or creating duplicate audit logs (0.718ms)
+✔ cancelRound rejects ended round with 400 (0.4206ms)
+✔ cancelRound rejects round with winning order with 400 (0.3232ms)
+✖ cancelRound atomically transitions items and products, logs audit, and notifies chat (2.1969ms)
+✔ cancelRound returns warnings if chat notification encounters failures (0.7193ms)
+✔ submit rejects submission to a cancelled round (0.3276ms)
+✔ submit allows product with auction_action_required status into a new round (1.0764ms)
+✔ approve rejects item in a cancelled round (0.2719ms)
+✔ placeBid rejects bid when round or item is cancelled (0.4596ms)
+✔ closeAuction transitions product to auction_action_required when there are 0 bids (0.5484ms)
+✔ cancel rejects non-Marketing callers with 403 (0.2141ms)
+✔ cancel validates cancellation reason (non-empty and <= 500 chars) (0.2097ms)
+✔ cancel rejects item in pending_approval (must use reject instead) (0.2013ms)
+✔ cancel rejects item when winningOrderId already exists (0.1865ms)
+✔ cancel on open item with bids logs AUCTION_ITEM_CANCEL, cancels close job, and notifies seller and bidders (0.657ms)
+✔ chatClient.notifyItemCancelled notifies only seller before open, and notifies seller + bidders with isolated 1-on-1 rooms and idempotency keys when open (0.9322ms)
+✔ cancel still succeeds and returns warning when chat-service fails (0.4727ms)
+✔ cancel on already cancelled item performs idempotent notification retry without mutating state or creating duplicate audit logs (0.7804ms)
+✔ submit re-reads round inside withRoundMutationLock and rejects without creating Product or AuctionItem if round was cancelled concurrently (0.5908ms)
+✔ browseRounds includes cancelled upcoming round until auctionEndsAt and hides it after auctionEndsAt (0.2634ms)
+✔ chatClient.notifyRoundCancelled partial failure followed by retry delivers missing recipient and deduplicates already-delivered recipients (1.5648ms)
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller admin-1: getaddrinfo ENOTFOUND auth-service
+[sellerActivityClient] failed to record activity for seller seller-1: getaddrinfo ENOTFOUND auth-service
+ℹ tests 106
+ℹ suites 0
+ℹ pass 105
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11201.1951
+
+✖ failing tests:
+
+test at backend\services\product-service\src\features\auctions\auctionService.test.js:2791:1
+✖ cancelRound atomically transitions items and products, logs audit, and notifies chat (2.1969ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  4 !== 1
+  
+      at TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\src\features\auctions\auctionService.test.js:2887:10)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 4,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

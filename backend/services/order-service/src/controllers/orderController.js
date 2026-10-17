@@ -1,4 +1,3 @@
-const attributionOutboxService = require("../services/attributionOutboxService");
 const crypto = require("crypto");
 const {
   badRequest,
@@ -16,29 +15,15 @@ const chatClient = require("../services/chatClient");
 const buyerActivityClient = require("../services/buyerActivityClient");
 const authClient = require("../services/authClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
+const { authorizeReservation } = require("../services/reservationAuthorization");
 const orderTransitionService = require("../services/orderTransitionService");
+const orderLifecycle = require("../services/orderLifecycle");
+const orderLifecycleService = require("../services/orderLifecycleService");
 const productSyncService = require("../services/productSyncService");
 const { money } = require("../models/money");
 const prisma = require("../models/prismaClient");
 const shippingService =
   require("../features/shipping/shippingService").createShippingService(prisma);
-
-function productSyncFor(order, status, purpose) {
-  if (status === "cancelled" && order.reservationId) {
-    return {
-      dedupeKey: `${purpose}:${order.id}:${order.version}`,
-      action: productSyncService.ACTIONS.RELEASE_RESERVATION,
-      productId: order.productId,
-      reservationId: order.reservationId,
-    };
-  }
-  return {
-    dedupeKey: `${purpose}:${order.id}:${order.version}`,
-    action: productSyncService.ACTIONS.SET_STATUS,
-    productId: order.productId,
-    targetStatus: status === "completed" ? "sold" : "available",
-  };
-}
 
 async function respondAfterProductSync(res, order, event) {
   try {
@@ -60,18 +45,7 @@ async function create(req, res, next) {
         campaignId: req.body.campaignId,
       },
       {
-        authorizeReservation: async (reservation) => {
-          const seller = await authClient.getUser(reservation.product.sellerId);
-          if (!seller) throw badRequest("product seller account was not found");
-          if (
-            restrictionsForStatus(seller.status).includes(CAPABILITY.SELLER)
-          ) {
-            throw forbidden("product seller's selling rights are restricted");
-          }
-          if (seller.status !== "ACTIVE") {
-            throw forbidden("product seller account is not active");
-          }
-        },
+        authorizeReservation,
       },
     );
     await buyerActivityClient.recordOrderActivity(order, "ORDER_PLACED", {
@@ -140,10 +114,9 @@ async function getOne(req, res, next) {
   }
 }
 
-// disputed/refunded are set only through the dispute flow (CSS-003's
-// disputeService), never by a buyer/seller PATCHing status directly.
-const USER_SETTABLE_STATUSES = ["pending", "shipped", "completed", "cancelled"];
-
+// Only the transitions in orderLifecycle.PARTICIPANT_TRANSITIONS can be
+// requested here. paid/delivered/timeouts come from the system, and
+// disputed/refunded only through the dispute flow (CSS-003's disputeService).
 async function updateStatus(req, res, next) {
   try {
     const order = await orderModel.findById(req.params.id);
@@ -153,63 +126,12 @@ async function updateStatus(req, res, next) {
     }
 
     const { status } = req.body;
-    if (!USER_SETTABLE_STATUSES.includes(status)) {
-      throw badRequest(
-        `status must be one of ${USER_SETTABLE_STATUSES.join(", ")}`,
-      );
-    }
-
-    if (status === "cancelled")
+    if (status === "cancelled" && !orderLifecycle.isRefundingCancellation(order, status))
       orderTransitionService.assertCanCancelOrder(order);
+    orderLifecycle.assertParticipantTransition(order, req.userId, status);
     // TSR-02: Prevent participant updating status while order has open dispute or hold
     orderTransitionService.assertCanParticipantUpdateStatus(order);
 
-    if (["cancelled", "completed"].includes(status)) {
-      const { order: updated, event, attributionEvent } =
-        await orderModel.transitionStatusWithProductSync({
-          id: req.params.id,
-          status,
-          expectedVersion: order.version,
-          expectedStatuses: [order.status],
-          productSync: productSyncFor(order, status, "ORDER_STATUS"),
-          actorId: req.userId,
-        });
-
-      if (order.campaignId) {
-        const voucherAction =
-          status === "cancelled" ? "releaseVoucher" : "completeVoucher";
-        await productClient[voucherAction](order.campaignId, {
-          userId: order.buyerId,
-          orderId: order.id,
-          ...(status === "completed"
-            ? {
-                discountAmount:
-                  Number(order.originalAmount) - Number(order.ordersAmount),
-              }
-            : {}),
-        });
-      }
-      if (status === "completed") {
-        if(attributionEvent)attributionOutboxService.processEvent(attributionEvent.id).catch(err=>console.warn("attribution deferred to outbox worker:",err.message));
-        await buyerActivityClient.recordOrderActivity(updated,"ORDER_COMPLETED",{initiatedBy:req.userId});
-      } else {
-        await buyerActivityClient.recordOrderActivity(
-          updated,
-          "ORDER_CANCELLED",
-          { initiatedBy: req.userId },
-        );
-      }
-      await chatClient.notifyOrderStatusChanged(order, status);
-      await respondAfterProductSync(res, updated, event);
-      return;
-    }
-
-    // Best-effort — chatClient swallows its own errors internally (see its
-    // comment) so a chat-service outage can never fail this status update.
-    // Awaited anyway, not fire-and-forget: this is a low-traffic path
-    // (one call per status change, not per page view), and awaiting makes
-    // "the SYSTEM message exists by the time this request returns" an
-    // actual guarantee instead of a race a test would have to poll for.
     if (status === "shipped") {
       const shipped = await shippingService.markShipped({
         orderId: order.id,
@@ -218,16 +140,18 @@ async function updateStatus(req, res, next) {
         company: req.body.company,
         trackingNumber: req.body.trackingNumber,
       });
+      // Best-effort — chatClient swallows its own errors internally so a
+      // chat-service outage can never fail this status update.
       await chatClient.notifyOrderStatusChanged(order, status);
       return res.json(shipped);
     }
-    const updated = await orderModel.updateStatus(
-      req.params.id,
+
+    const { order: updated, event } = await orderLifecycleService.transition({
+      order,
       status,
-      order.version,
-      req.userId,
-    );
-    await chatClient.notifyOrderStatusChanged(order, status);
+      actorId: req.userId,
+    });
+    if (event) return respondAfterProductSync(res, updated, event);
     res.json(updated);
   } catch (err) {
     next(err);
@@ -389,6 +313,7 @@ async function updateShippingAddress(req, res, next) {
         buyerId: req.userId,
         addressId: req.body.addressId,
         shippingAddress: req.body.shippingAddress,
+        authorization: req.headers.authorization,
         version: req.body.version,
       }),
     );

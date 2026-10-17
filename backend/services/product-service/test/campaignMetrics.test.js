@@ -245,7 +245,15 @@ test("Campaign Metrics, Attribution & Conversion Suite", async (t) => {
     async () => {
       const dbStore = new Map();
       const mockPrisma = {
+        $queryRaw: async () => [],
         campaignAttribution: {
+          aggregate: async ({ where }) => ({
+            _sum: {
+              discountAmount: Array.from(dbStore.values())
+                .filter((item) => item.campaignId === where.campaignId)
+                .reduce((sum, item) => sum + Number(item.discountAmount), 0),
+            },
+          }),
           findFirst: async ({ where }) => {
             const orConditions = where?.OR || [];
             for (const item of dbStore.values()) {
@@ -332,6 +340,7 @@ test("Campaign Metrics, Attribution & Conversion Suite", async (t) => {
     "Prisma model persistence: propagates DB errors instead of swallowing",
     async () => {
       const failingPrisma = {
+        $queryRaw: async () => [],
         campaignAttribution: {
           findFirst: async () => null,
           create: async () => {
@@ -434,7 +443,9 @@ test("Campaign Metrics, Attribution & Conversion Suite", async (t) => {
         ],
       ]);
       const mockPrisma = {
+        $queryRaw: async () => [],
         campaignAttribution: {
+          aggregate: async () => ({ _sum: { discountAmount: 0 } }),
           findFirst: async ({ where }) => {
             for (const item of dbStore.values()) {
               for (const cond of where?.OR || []) {
@@ -483,6 +494,7 @@ test("Campaign Metrics, Attribution & Conversion Suite", async (t) => {
       };
 
       const racePrisma = {
+        $queryRaw: async () => [],
         campaignAttribution: {
           findFirst: async () => {
             findFirstCallCount++;
@@ -586,7 +598,15 @@ test("Campaign Metrics, Attribution & Conversion Suite", async (t) => {
       // 1. Pre-check path
       const stored = [];
       const mockPrisma = {
+        $queryRaw: async () => [],
         campaignAttribution: {
+          aggregate: async ({ where }) => ({
+            _sum: {
+              discountAmount: stored
+                .filter((item) => item.campaignId === where.campaignId)
+                .reduce((sum, item) => sum + Number(item.discountAmount), 0),
+            },
+          }),
           findFirst: async ({ where }) => {
             const or = where.OR || [];
             return (
@@ -656,6 +676,7 @@ test("Campaign Metrics, Attribution & Conversion Suite", async (t) => {
       };
 
       const racePrisma = {
+        $queryRaw: async () => [],
         campaignAttribution: {
           findFirst: async () => null, // pre-check sees nothing
           create: async () => {

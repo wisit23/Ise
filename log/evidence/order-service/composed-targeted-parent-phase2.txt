@@ -1,0 +1,39 @@
+✔ multi-seller checkout sums baht exactly; vouchers remain per order; auction has no basket (13.0925ms)
+✔ repeat creation returns the same checkout (0.9927ms)
+✔ checkout cannot accept a code shared across orders (0.4612ms)
+✔ creation requires address ID and rejects expired basket (0.4002ms)
+✔ concurrent order change rolls back checkout and shipping creation (0.6868ms)
+[order-service] chat notification failed for PRODUCT:p1 (order o1): fetch failed
+[order-service] chat notification failed for PRODUCT:p2 (order o2): fetch failed
+✔ payment retry after external failure does not charge or confirm orders twice (2776.2301ms)
+✔ foreign buyer cannot read or confirm checkout (2.0746ms)
+✔ expiry cancels orders and durably requests release without marking payment paid (1.8621ms)
+✔ payment CAS conflict rolls back every local payment (0.8518ms)
+✔ TC05: invalid shipping phone is rejected without writes (3.2208ms)
+✔ TC05: invalid shipping postalCode is rejected without writes (0.5254ms)
+✔ buyer changes only this order's address and records both address snapshots (1.3781ms)
+✔ another buyer cannot change the order's delivery address (0.2759ms)
+✔ shipped orders cannot change address even if shipping has not caught up (0.5332ms)
+✔ shipped parcels cannot change address even if Order still says confirmed (0.4262ms)
+✔ a concurrent shipment prevents the address write and its audit log (0.467ms)
+✔ stale client version and incomplete selected addresses are rejected before writes (0.3962ms)
+✔ TC10: cancellation rechecks the current paid status inside its transaction (11.8992ms)
+✔ TC10: successful payment history also blocks the transactional cancellation (0.316ms)
+✔ an unpaid cancellation still records the product sync and audit together (1.1217ms)
+✔ a concurrent payment/version change prevents cancellation and event creation (0.3259ms)
+✔ retry backoff doubles and caps at 60s (1.2071ms)
+✔ delivery retains envelope, decimal baht, stable ID and flat compatibility fields (9.4005ms)
+✔ success appends one ACK; repeated delivery is a no-op; immutable job is unchanged (1.5686ms)
+✔ failure appends retry state and schedules backoff; sweep does not retry early (1.4825ms)
+✔ crash after Product accepts but before ACK retries the original event ID (0.7164ms)
+✔ concurrent delivery deduplicates ACKs (0.601ms)
+✔ worker starts and stops; missing durable queue fails loudly (0.9402ms)
+✔ 17 dispute workflow fields round-trip through logs, CAS and rollback (895.9781ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4690.8111

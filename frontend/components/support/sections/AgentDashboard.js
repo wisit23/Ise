@@ -3,10 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import { PRIORITY_LABEL } from "../../../lib/supportConstants";
 import { ComparisonChart, ChartLegend } from "./AgentDashboardCharts";
+import { useAuthTransition } from "../../auth/AuthArrival";
 import styles from "./AgentOverview.module.css";
 import { navigateWorkspaceSection } from "../workspace/useCaseWorkspace";
 
 import PersonalPriorityDonut from "./PersonalPriorityDonut";
+import AnimatedNumber from "./AnimatedNumber";
 
 import defaults from "../../../lib/customerServiceConfig";
 import useCustomerServiceConfig from "../hooks/useCustomerServiceConfig";
@@ -176,6 +178,8 @@ function Panel({ title, children, className = "", action }) {
 }
 
 export default function AgentDashboard({ token, currentUserId }) {
+  const { phase } = useAuthTransition();
+  const [entrance, setEntrance] = useState(true);
   const config = useCustomerServiceConfig();
   const [days, setDays] = useState(defaults.dashboard.defaultDays);
   const focus = "mine";
@@ -191,6 +195,7 @@ export default function AgentDashboard({ token, currentUserId }) {
   const [revision, setRevision] = useState(0);
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showLoadingHint, setShowLoadingHint] = useState(false);
   const [error, setError] = useState("");
   const [visible, setVisible] = useState({ tickets: true, disputes: true });
   const query = `${days}:${focus}:${priority}`;
@@ -199,6 +204,24 @@ export default function AgentDashboard({ token, currentUserId }) {
       ? snapshot.data
       : null;
   const displayDays = snapshot?.days ?? days;
+  const hasData = Boolean(data);
+  useEffect(() => {
+    if (!loading || hasData) {
+      setShowLoadingHint(false);
+      return;
+    }
+    // Fast responses go straight into the entrance. Only show a quiet
+    // loading hint if the first request takes long enough to be noticeable.
+    const timer = setTimeout(() => setShowLoadingHint(true), 500);
+    return () => clearTimeout(timer);
+  }, [loading, hasData]);
+  useEffect(() => {
+    if (!entrance || !hasData || phase !== "idle") return;
+    // Entrance styles already exist on the first render, including the
+    // commit that inserts API data. Never show the final state then hide it.
+    const timer = setTimeout(() => setEntrance(false), 1500);
+    return () => clearTimeout(timer);
+  }, [entrance, hasData, phase]);
   useEffect(() => {
     let alive = true,
       inFlight = false,
@@ -344,7 +367,9 @@ export default function AgentDashboard({ token, currentUserId }) {
       }))
     : [];
   return (
-    <div className={styles.dashboard}>
+    <div
+      className={`${styles.dashboard} ${entrance ? styles.entering : ""} ${entrance && phase !== "idle" ? styles.entrancePaused : ""}`}
+    >
       <div className={styles.header}>
         <div>
           <p className={styles.eyebrow}>CUSTOMER SERVICE / OVERVIEW</p>
@@ -427,22 +452,15 @@ export default function AgentDashboard({ token, currentUserId }) {
       )}
       {!data ? (
         <div className={styles.placeholder} role="status">
-          <span className={loading ? "sr-only" : ""}>
+          <span
+            className={
+              loading && !showLoadingHint ? "sr-only" : styles.loadingHint
+            }
+          >
             {loading
               ? "กำลังสรุป Ticket และ Dispute…"
               : "ไม่สามารถแสดงยอดได้ในขณะนี้"}
           </span>
-          {loading && (
-            <div aria-hidden="true" className={styles.skeleton}>
-              <div className={styles.skeletonMetrics}>
-                {[0, 1, 2].map((i) => (
-                  <div key={i} />
-                ))}
-              </div>
-              <div className={styles.skeletonChart} />
-              <div className={styles.skeletonChart} />
-            </div>
-          )}
         </div>
       ) : (
         <>
@@ -469,7 +487,10 @@ export default function AgentDashboard({ token, currentUserId }) {
                 <p
                   className={`${styles.metricValue} ${card.key === "mine_overdue" && sumCard(card) > 0 ? styles.overdue : card.key === "mine_soon" && sumCard(card) > 0 ? styles.soon : ""}`}
                 >
-                  {fmt(sumCard(card))}
+                  <AnimatedNumber
+                    value={sumCard(card)}
+                    animate={entrance && phase === "idle"}
+                  />
                   <span> เคส</span>
                 </p>
                 <div className={styles.metricFooter}>
@@ -539,6 +560,7 @@ export default function AgentDashboard({ token, currentUserId }) {
             </Panel>
             <Panel title="ความสำคัญของงานฉัน" className={styles.priorityPanel}>
               <PersonalPriorityDonut
+                animate={entrance && phase === "idle"}
                 rows={SOURCES.flatMap(
                   (source) => data[source.key].personal.priorities,
                 )}

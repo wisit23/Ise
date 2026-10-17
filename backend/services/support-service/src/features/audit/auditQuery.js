@@ -1,5 +1,6 @@
 const { badRequest } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
+const { STATE_EVENTS } = require("../tickets/ticketEvents");
 
 function parseDate(value, label) {
   if (!value) return null;
@@ -24,6 +25,8 @@ async function queryAudit({
     throw badRequest("from must be before or equal to to");
   }
   const where = {
+    // Storage projections and migration receipts are not operator actions.
+    AND: [{ action: { notIn: [...STATE_EVENTS, "MESSAGE_MIGRATED"] } }],
     ...(actorId ? { actorId } : {}),
     ...(action ? { action } : {}),
     ...(targetId ? { ticketId: targetId } : {}),
@@ -59,9 +62,9 @@ async function queryAudit({
       targetId: row.ticketId,
       caseId: row.ticketId,
       caseNumber: row.ticket.ticketNumber,
-      reason: row.reason,
-      fromValue: row.fromValue,
-      toValue: row.toValue,
+      reason: row.payload?.reason ?? row.reason,
+      fromValue: row.payload?.fromValue ?? row.fromValue,
+      toValue: row.payload?.toValue ?? row.toValue,
       occurredAt: row.createdAt,
       createdAt: row.createdAt,
       requestId: null,

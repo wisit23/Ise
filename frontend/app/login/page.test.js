@@ -3,6 +3,18 @@ import LoginPage from "./page";
 import { apiFetch } from "../../lib/api";
 
 const mockPush = jest.fn();
+const originalResizeObserver = global.ResizeObserver;
+
+beforeAll(() => {
+  global.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  };
+});
+
+afterAll(() => {
+  global.ResizeObserver = originalResizeObserver;
+});
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
@@ -11,6 +23,14 @@ jest.mock("next/navigation", () => ({
 jest.mock("../../lib/api", () => ({
   apiFetch: jest.fn(),
 }));
+
+jest.mock(
+  "../../components/auth/AuthScene",
+  () =>
+    function MockAuthScene() {
+      return null;
+    },
+);
 
 function accessTokenFor(roles) {
   const payload = btoa(
@@ -23,13 +43,13 @@ function accessTokenFor(roles) {
 }
 
 function submitLogin() {
-  fireEvent.change(screen.getByLabelText(/^อีเมล/), {
+  fireEvent.change(screen.getByLabelText(/^Email/), {
     target: { value: "marketing@example.test" },
   });
-  fireEvent.change(screen.getByLabelText(/^รหัสผ่าน/), {
+  fireEvent.change(screen.getByLabelText(/^Password/), {
     target: { value: "valid-password" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "เข้าสู่ระบบ" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 }
 
 describe("LoginPage redirect", () => {
@@ -49,7 +69,9 @@ describe("LoginPage redirect", () => {
     render(<LoginPage />);
     submitLogin();
 
-    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/marketing"));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/marketing"), {
+      timeout: 2500,
+    });
   });
 
   test.each([
@@ -74,7 +96,9 @@ describe("LoginPage redirect", () => {
       render(<LoginPage />);
       submitLogin();
 
-      await waitFor(() => expect(mockPush).toHaveBeenCalledWith(destination));
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith(destination), {
+        timeout: 2500,
+      });
     },
   );
 

@@ -13,6 +13,7 @@ model Basket {
   id        String   @id @default(uuid()) @map("basket_id")
   buyerId   String   @map("buyer_id")
   productId String   @map("product_id")
+  campaignId String? @map("campaign_id")
   status    String
   lockAt    DateTime @map("lock_at")
   unlockAt  DateTime @map("unlock_at")
@@ -26,15 +27,13 @@ model Checkout {
   id              String    @id @default(uuid()) @map("checkout_id")
   buyerId         String    @map("buyer_id")
   addressId       String    @map("address_id")
-  addressSnapshot Json      @map("address_snapshot")
-  originalAmount  Decimal   @map("original_amount") @db.Decimal(18, 2)
-  ordersAmount    Decimal   @map("orders_amount") @db.Decimal(18, 2)
   status          String
   paidAt          DateTime? @map("paid_at")
   cancelAt        DateTime  @map("cancel_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
   orders          Order[]
+  addressSnapshotRow CheckoutAddressSnapshot?
 
   @@index([buyerId, status])
   @@index([status, cancelAt])
@@ -42,16 +41,16 @@ model Checkout {
 }
 
 model Order {
-  attributionOutboxEvent AttributionOutboxEvent?
   id               String                  @id @default(uuid()) @map("order_id")
   checkoutId       String?                 @map("checkout_id")
   basketId         String?                 @unique @map("basket_id")
   buyerId          String                  @map("buyer_id")
   sellerId         String                  @map("seller_id")
   productId        String                  @map("product_id")
-  campaignId       String?                 @map("campaign_id")
   productTitle     String?                 @map("product_title")
   campaignCode     String?                 @map("campaign_code")
+  preDisputeStatus String?                 @map("pre_dispute_status")
+  campaignId       String?                 @map("campaign_id")
   auctionId        String?                 @unique @map("auction_id")
   auctionBidId     String?                 @map("auction_bid_id")
   paymentDeadlineAt DateTime?              @map("payment_deadline_at")
@@ -59,8 +58,10 @@ model Order {
   originalAmount   Decimal                 @map("original_amount") @db.Decimal(18, 2)
   ordersAmount     Decimal                 @map("orders_amount") @db.Decimal(18, 2)
   status           String                  @default("pending_payment")
-  preDisputeStatus String?                 @map("pre_dispute_status")
   version          Int                     @default(1)
+  shippedAt        DateTime?               @map("shipped_at")
+  deliveredAt      DateTime?               @map("delivered_at")
+  completedAt      DateTime?               @map("completed_at")
   createdAt        DateTime                @default(now()) @map("created_at")
   updatedAt        DateTime                @updatedAt @map("updated_at")
   checkout         Checkout?               @relation(fields: [checkoutId], references: [id])
@@ -70,11 +71,15 @@ model Order {
   dispute          DisputeCase?
   logs             OrderLog[]
   safetyEvidence   SafetyDisputeEvidence[]
+  attributionJob   AttributionJob?
+  productSyncJobs  ProductSyncJob[]
 
   @@index([buyerId])
   @@index([sellerId])
   @@index([checkoutId])
   @@index([orderType, status, paymentDeadlineAt])
+  @@index([status, shippedAt])
+  @@index([status, deliveredAt])
   @@map("orders")
 }
 
@@ -97,12 +102,12 @@ model Shipping {
   id              String   @id @default(uuid()) @map("shipping_id")
   orderId         String   @unique @map("order_id")
   addressId       String   @map("address_id")
-  addressSnapshot Json     @map("address_snapshot")
   company         String?
   trackingNumber  String?  @map("tracking_number")
   status          String
   updatedAt       DateTime @updatedAt @map("updated_at")
   order           Order    @relation(fields: [orderId], references: [id])
+  addressSnapshotRow ShippingAddressSnapshot?
 
   @@map("shipping")
 }
@@ -110,7 +115,7 @@ model Shipping {
 model Hold {
   id            String    @id @default(uuid()) @map("hold_id")
   paymentId     String    @map("payment_id")
-  source        String
+  source        String    @map("hold_type")
   referenceId   String    @map("reference_id")
   holdReason    String    @map("hold_reason")
   holdStatus    String    @map("hold_status")
@@ -142,14 +147,24 @@ model OrderLog {
 }
 
 model DisputeCase {
-  id               String            @id @default(uuid())
+  id               String            @id @default(uuid()) @map("dispute_case_id")
   orderId          String            @unique @map("order_id")
   createdBy        String            @map("created_by")
   reason           String
   decision         String?
   disputeType      String            @map("dispute_type")
+  version          Int               @default(0) @map("dispute_case_version")
+  assignedTo       String?           @map("assigned_to")
+  assignedAt       DateTime?         @map("assigned_at")
+  order            Order             @relation(fields: [orderId], references: [id])
+  evidence         DisputeEvidence[]
+  caseLog          DisputeCaseLog[]
   status           String            @default("OPEN")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  assignedRole     String?           @map("assigned_role")
   decisionReason   String?           @map("decision_reason")
+  decidedBy        String?           @map("decided_by")
+  decidedAt        DateTime?         @map("decided_at")
   verdictKey       String?           @unique @map("verdict_key")
   escalationNote   String?           @map("escalation_note")
   escalatedBy      String?           @map("escalated_by")
@@ -161,16 +176,8 @@ model DisputeCase {
   firstReviewDueAt DateTime?         @map("first_review_due_at")
   firstReviewedAt  DateTime?         @map("first_reviewed_at")
   decisionDueAt    DateTime?         @map("decision_due_at")
-  version          Int               @default(0) @map("dispute_case_version")
-  createdAt        DateTime          @default(now()) @map("created_at")
-  decidedBy        String?           @map("decided_by")
-  decidedAt        DateTime?         @map("decided_at")
-  assignedTo       String?           @map("assigned_to")
-  assignedRole     String?           @map("assigned_role")
-  assignedAt       DateTime?         @map("assigned_at")
-  order            Order             @relation(fields: [orderId], references: [id])
-  evidence         DisputeEvidence[]
-  caseLog          DisputeCaseLog[]
+
+  @@index([status, assignedRole, slaExpiresAt])
 
   @@map("dispute_case")
 }
@@ -182,8 +189,6 @@ model DisputeCaseLog {
   action           String
   fromAssignedTo   String?     @map("from_assigned_to")
   toAssignedTo     String?     @map("to_assigned_to")
-  fromAssignedRole String?     @map("from_assigned_role")
-  toAssignedRole   String?     @map("to_assigned_role")
   detail           String
   createdAt        DateTime    @default(now()) @map("created_at")
   dispute          DisputeCase @relation(fields: [disputeCaseId], references: [id])
@@ -196,9 +201,9 @@ model DisputeEvidence {
   id               String                 @id @default(uuid()) @map("dispute_evidence_id")
   disputeCaseId    String                 @map("dispute_case_id")
   uploaderId       String                 @map("uploader_id")
-  evidencePath     String                 @map("evidence_path")
+  files            Evidence[]
   fileType         String                 @map("file_type")
-  status           String
+  status           String                 @map("dispute_status")
   version          Int                    @default(0)
   evidenceDeadline DateTime?              @map("evidence_deadline")
   createdAt        DateTime               @default(now()) @map("created_at")
@@ -211,9 +216,19 @@ model DisputeEvidence {
   @@map("dispute_evidence")
 }
 
+model Evidence {
+  id                String          @id @default(uuid()) @map("evidence_id")
+  disputeEvidenceId String          @map("dispute_evidence_id")
+  refPath           String          @map("ref_path")
+  disputeEvidence   DisputeEvidence @relation(fields: [disputeEvidenceId], references: [id], onDelete: Cascade)
+
+  @@index([disputeEvidenceId])
+  @@map("evidence")
+}
+
 model DisputeAuditLog {
   id                String          @id @default(uuid()) @map("dispute_audit_log_id")
-  disputeEvidenceId String          @map("dispute_evidence_id")
+  disputeEvidenceId String          @map("dispute_id")
   actorId           String          @map("actor_id")
   action            String
   detail            String
@@ -254,24 +269,64 @@ model SafetyLog {
 }
 
 
-model AttributionOutboxEvent {
+// Durable delivery queue, committed with the order transition.
+model AttributionJob {
   id             String    @id @default(uuid())
   orderId        String    @unique @map("order_id")
   campaignId     String    @map("campaign_id")
-  grossAmount    Decimal       @map("gross_amount") @db.Decimal(12, 2)
-  discountAmount Decimal       @map("discount_amount") @db.Decimal(12, 2)
-  netAmount      Decimal       @map("net_amount") @db.Decimal(12, 2)
+  grossAmount    Decimal   @map("gross_amount") @db.Decimal(18, 2)
+  discountAmount Decimal   @map("discount_amount") @db.Decimal(18, 2)
+  netAmount      Decimal   @map("net_amount") @db.Decimal(18, 2)
   completedAt    DateTime  @map("completed_at")
   attempts       Int       @default(0)
   lastError      String?   @map("last_error")
-  nextAttemptAt  DateTime  @default(now()) @map("next_attempt_at")
+  nextAttemptAt  DateTime  @map("next_attempt_at")
   processedAt    DateTime? @map("processed_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
+  createdAt      DateTime  @map("created_at")
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
   @@index([processedAt, nextAttemptAt])
-  @@index([orderId, processedAt])
-  @@map("attribution_outbox_events")
+  @@map("order_attribution_jobs")
+}
+
+
+model CheckoutAddressSnapshot {
+  checkoutId String @id @map("checkout_id")
+  recipientName String @map("recipient_name")
+  phone String
+  addressLine String @map("address_line")
+  subdistrict String
+  district String
+  province String
+  postalCode String @map("postal_code")
+  checkout Checkout @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  @@map("checkout_address_snapshots")
+}
+
+model ShippingAddressSnapshot {
+  shippingId String @id @map("shipping_id")
+  recipientName String @map("recipient_name")
+  phone String
+  addressLine String @map("address_line")
+  subdistrict String
+  district String
+  province String
+  postalCode String @map("postal_code")
+  shipping Shipping @relation(fields: [shippingId], references: [id], onDelete: Cascade)
+  @@map("shipping_address_snapshots")
+}
+
+model ProductSyncJob {
+  id String @id @default(uuid()) @map("event_id")
+  orderId String @map("order_id")
+  productId String @map("product_id")
+  action String
+  reservationId String? @map("reservation_id")
+  targetStatus String? @map("target_status")
+  actorId String @map("actor_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  processedAt DateTime? @map("processed_at")
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  @@index([processedAt, createdAt])
+  @@index([orderId])
+  @@map("order_product_sync_jobs")
 }

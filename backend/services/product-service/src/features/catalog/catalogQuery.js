@@ -56,10 +56,15 @@ function buildCatalogWhere(filters, { PrismaClient } = {}) {
     );
   }
   for (const field of FILTER_FIELDS) {
-    if (filters[field])
-      clauses.push(
-        PrismaClient.sql`AND ${PrismaClient.raw(field)} = ${filters[field]}`,
-      );
+    if (!filters[field]) continue;
+    if (field === "category") {
+      clauses.push(PrismaClient.sql`AND EXISTS (
+        SELECT 1 FROM product_categories pc JOIN categories c ON c.id = pc.category_id
+        WHERE pc.product_id = products.id AND c.name = ${filters.category}
+      )`);
+    } else {
+      clauses.push(PrismaClient.sql`AND ${PrismaClient.raw(field)} = ${filters[field]}`);
+    }
   }
   if (filters.style)
     clauses.push(PrismaClient.sql`AND ${filters.style} = ANY(tags)`);

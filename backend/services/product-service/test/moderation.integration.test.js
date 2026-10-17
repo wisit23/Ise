@@ -284,8 +284,8 @@ test("product moderation removes, hides and restores a listing", async (t) => {
       [200, 409],
     );
     assert.equal(
-      await prisma.productModerationCommand.count({
-        where: { productId: product.id, action: "REMOVE_PRODUCT" },
+      await prisma.marketingAuditLog.count({
+        where: { entityType: "PRODUCT_MODERATION", entityId: product.id, action: "REMOVE_PRODUCT" },
       }),
       2,
     );

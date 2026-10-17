@@ -13,6 +13,9 @@ const {
 
 const orderModel = require("../../models/orderModel");
 const disputeModel = require("./disputeModel");
+const orderLifecycle = require("../../services/orderLifecycle");
+
+const DISPUTABLE_STATUSES = ["delivered", "completed"];
 const authClient = require("../../services/authClient");
 const chatClient = require("../../services/chatClient");
 const { absolutePath } = require("./evidenceStorage");
@@ -59,7 +62,7 @@ async function assertAccess({ dispute, userId, role, roles }) {
   throw forbidden("you do not have access to this dispute");
 }
 
-/** WF-08 step 1-2: buyer opens a dispute on a completed order. */
+/** WF-08 step 1-2: buyer opens a dispute on a received (delivered/completed) order. */
 async function open({ orderId, userId, reason, disputeType }) {
   if (typeof disputeType !== "string" || !disputeType.trim())
     throw badRequest("disputeType is required");
@@ -77,12 +80,16 @@ async function open({ orderId, userId, reason, disputeType }) {
     );
   }
 
-  const isCompleted =
-    order.status === "completed" ||
-    (order.status === "disputed" && order.preDisputeStatus === "completed");
-  if (!isCompleted) {
+  const receivedStatus =
+    order.status === "disputed" ? order.preDisputeStatus : order.status;
+  if (!DISPUTABLE_STATUSES.includes(receivedStatus)) {
     throw badRequest(
-      "a dispute can only be opened on a completed order (already-disputed orders can't be reopened)",
+      "a dispute can only be opened on a delivered or completed order (already-disputed orders can't be reopened)",
+    );
+  }
+  if (!orderLifecycle.isWithinDisputeWindow(order)) {
+    throw badRequest(
+      "the dispute window has closed (14 days after delivery)",
     );
   }
 

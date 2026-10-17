@@ -48,8 +48,12 @@ export default function RadioSelect({
   disabled = false,
   ariaLabel,
   nativeAriaLabel,
+  searchable = false,
+  searchPlaceholder = "ค้นหารายการ...",
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const searchRef = useRef(null);
   const [effectiveAlign, setEffectiveAlign] = useState(
     align === "right" ? "right" : "left",
   );
@@ -87,6 +91,20 @@ export default function RadioSelect({
     setIsOpen(false);
     triggerRef.current?.focus();
   };
+  const query = search.trim().normalize("NFKC").toLocaleLowerCase("th-TH");
+  const filteredOptions = normalizedOptions.filter(
+    (option) =>
+      !query ||
+      option.value === "" ||
+      option.label.normalize("NFKC").toLocaleLowerCase("th-TH").includes(query),
+  );
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch("");
+      return;
+    }
+    if (searchable) searchRef.current?.focus();
+  }, [isOpen, searchable]);
 
   const checkAlignment = useCallback(() => {
     const hasWindow = typeof window !== "undefined";
@@ -94,7 +112,6 @@ export default function RadioSelect({
       dropdownRef.current && hasWindow
         ? dropdownRef.current.getBoundingClientRect()
         : null;
-
     if (align === "right") {
       setEffectiveAlign("right");
     } else if (align === "left") {
@@ -346,12 +363,16 @@ export default function RadioSelect({
         type="button"
         aria-label={ariaLabel}
         ref={triggerRef}
-        onKeyDown={event => {
+        onKeyDown={(event) => {
           if (!disabled && ["ArrowDown", "ArrowUp"].includes(event.key)) {
             event.preventDefault();
             checkAlignment();
             setIsOpen(true);
-            requestAnimationFrame(() => dropdownRef.current?.querySelector('input[type="radio"]:checked')?.focus());
+            requestAnimationFrame(() =>
+              dropdownRef.current
+                ?.querySelector('input[type="radio"]:checked')
+                ?.focus(),
+            );
           }
         }}
         onClick={handleClick}
@@ -397,7 +418,7 @@ export default function RadioSelect({
       <div
         role="listbox"
         tabIndex={-1}
-        className={`absolute z-50 min-w-[170px] w-full max-w-[calc(100vw-32px)] overflow-y-auto overscroll-contain transition-opacity transition-transform duration-300 ease-out ${
+        className={`absolute z-50 flex min-w-[170px] w-full max-w-[calc(100vw-32px)] flex-col overflow-y-auto overscroll-contain transition-opacity transition-transform duration-300 ease-out ${
           verticalPlacement === "top" ? "bottom-full mb-1.5 mt-0" : "top-full"
         } ${variantStyles.menu} ${sizeStyles.menu} ${
           effectiveAlign === "right" ? "right-0 left-auto" : "left-0 right-auto"
@@ -415,8 +436,30 @@ export default function RadioSelect({
           }`,
         }}
       >
-        <div className="flex flex-col gap-0.5">
-          {normalizedOptions.map((opt) => {
+        {searchable && (
+          <div className="mb-1 shrink-0 border-b border-line p-2">
+            <input
+              ref={searchRef}
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              aria-label={searchPlaceholder}
+              placeholder={searchPlaceholder}
+              disabled={disabled}
+              className="focus-ring min-h-10 w-full rounded-lg border border-line bg-surface-subtle px-3 text-sm text-ink placeholder:text-ink-subtle"
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  dropdownRef.current
+                    ?.querySelector('input[type="radio"]')
+                    ?.focus();
+                }
+              }}
+            />
+          </div>
+        )}
+        <div className="flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain">
+          {filteredOptions.map((opt) => {
             const isSelected = opt.value === value;
             const optionId = `${groupName}-${String(opt.value)}`;
 
@@ -425,7 +468,7 @@ export default function RadioSelect({
                 key={String(opt.value)}
                 htmlFor={optionId}
                 onClick={() => handleSelect(opt.value)}
-                className={`group/opt flex items-center justify-between cursor-pointer transition-colors duration-200 select-none ${
+                className={`group/opt flex shrink-0 items-center justify-between cursor-pointer transition-colors duration-200 select-none ${
                   sizeStyles.option
                 } ${isSelected ? variantStyles.activeOption : variantStyles.inactiveOption}`}
               >
@@ -443,6 +486,7 @@ export default function RadioSelect({
                 <div className="flex items-center gap-2 min-w-0">
                   {opt.icon && (
                     <span
+                      aria-hidden="true"
                       className={`material-symbols-outlined text-[17px] shrink-0 leading-none ${
                         isSelected
                           ? "text-current"
@@ -457,7 +501,10 @@ export default function RadioSelect({
 
                 {/* Active checkmark indicator */}
                 {isSelected ? (
-                  <span className="material-symbols-outlined text-[15px] leading-none shrink-0 ml-1.5 font-bold">
+                  <span
+                    aria-hidden="true"
+                    className="material-symbols-outlined text-[15px] leading-none shrink-0 ml-1.5 font-bold"
+                  >
                     check
                   </span>
                 ) : (
@@ -466,6 +513,14 @@ export default function RadioSelect({
               </label>
             );
           })}
+          {query && !filteredOptions.some((option) => option.value !== "") && (
+            <p
+              role="status"
+              className="px-3 py-4 text-center text-sm text-ink-subtle"
+            >
+              ไม่พบรายการที่ค้นหา
+            </p>
+          )}
         </div>
       </div>
     </div>

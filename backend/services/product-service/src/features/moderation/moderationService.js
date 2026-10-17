@@ -63,7 +63,7 @@ async function restoreCommerceState(tx, product, now = new Date()) {
   const auction = ["reserved", "auction"].includes(status)
     ? await tx.auctionItem.findFirst({
         where: { productId: product.id },
-        orderBy:{createdAt:"desc"},
+        orderBy: { createdAt: "desc" },
         select: { status: true, winningOrderId: true },
       })
     : null;
@@ -138,12 +138,20 @@ async function executeCommand({
     const updated = await mutate(tx, product);
     const result = jsonResult(updated);
     await tx.productModerationCommand.create({
+      data: { idempotencyKey, action, productId, payloadHash, result },
+    });
+    await tx.marketingAuditLog.create({
       data: {
         idempotencyKey,
         action,
-        productId,
-        payloadHash,
-        result,
+        entityType: "PRODUCT_MODERATION",
+        entityId: productId,
+        // The caller contract supplies no human actor ID. Do not invent one.
+        actorId: "AUTH_SERVICE",
+        actorRole: "INTERNAL_SERVICE",
+        previousState: jsonResult(product),
+        newState: result,
+        metadata: { payloadHash, result, reason: reason.trim() },
       },
     });
     return result;
@@ -164,7 +172,7 @@ async function removeProduct(productId, reason, idempotencyKey) {
       if (product.status === "auction") {
         const auction = await tx.auctionItem.findFirst({
           where: { productId },
-          orderBy:{createdAt:"desc"},
+          orderBy: { createdAt: "desc" },
           select: { winningOrderId: true },
         });
         await tx.auctionItem.updateMany({

@@ -65,6 +65,7 @@ model SlaPolicy {
   category             TicketCategory?   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   priority             TicketPriority    @relation(fields: [priorityId], references: [id], onDelete: Restrict)
   targets              TicketSlaTarget[]
+  rounds               TicketSlaRound[]
 
   @@index([categoryId, priorityId, effectiveFrom])
   @@index([priorityId])
@@ -72,8 +73,16 @@ model SlaPolicy {
 }
 
 model SupportTicket {
+  priorityScore Int @default(0) @map("priority_score")
+  riskReportCount Int @default(0) @map("risk_report_count")
+  chatResponderId String? @map("chat_responder_id")
+  classificationReasonCodes String[] @map("classification_reason_codes")
+  classificationPolicyVersion String? @map("classification_policy_version")
+  riskLookupAvailable Boolean? @map("risk_lookup_available")
+  slaRounds TicketSlaRound[]
+  chatMessageReceipts TicketChatMessageReceipt[]
   // Keep existing TEXT IDs, including non-UUID fixtures.
-  id              String                @id @default(uuid())
+  id              String                @id @default(uuid()) @map("ticket_id")
   ticketNumber    String                @unique @default(dbgenerated("next_support_ticket_number()")) @map("ticket_number")
   requesterId     String                @map("requester_id")
   subject         String
@@ -82,10 +91,7 @@ model SupportTicket {
   priorityId      Int                   @map("ticket_priority_id") @db.SmallInt
   currentStatusId Int                   @map("current_status_id") @db.SmallInt
   orderId         String?               @map("order_id")
-  chatResponderId String?               @map("chat_responder_id")
-  targetId        String?               @map("target_id")
-  priorityScore   Int                   @default(0) @map("priority_score")
-  riskReportCount Int                   @default(0) @map("risk_report_count")
+  targetId        String?               @map("target_user_id")
   version         Int                   @default(0) @map("lock_version")
   createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -96,11 +102,9 @@ model SupportTicket {
   statusHistory   TicketStatusHistory[]
   slaTargets      TicketSlaTarget[]
   chatLink        TicketChatLink?
-  messages        TicketMessage[]
   auditLog        TicketAuditLog[]
 
   @@index([currentStatusId, priorityId, createdAt])
-  @@index([chatResponderId], map: "support_tickets_chat_responder_idx")
   @@index([requesterId, createdAt])
   @@index([categoryId])
   @@index([priorityId])
@@ -124,6 +128,7 @@ model TicketAssignment {
 }
 
 model TicketStatusHistory {
+  slaRound TicketSlaRound?
   id           String        @id @default(uuid()) @map("status_history_id")
   ticketId     String        @map("ticket_id")
   fromStatusId Int?          @map("from_status_id") @db.SmallInt
@@ -138,15 +143,17 @@ model TicketStatusHistory {
   @@index([ticketId, createdAt])
   @@index([fromStatusId])
   @@index([toStatusId])
+  @@unique([id, ticketId])
   @@map("ticket_status_history")
 }
 
 model TicketSlaTarget {
+  roundId String @map("sla_round_id")
+  round TicketSlaRound @relation(fields: [roundId, ticketId, policyId], references: [id, ticketId, policyId], onDelete: Cascade)
   id         String        @id @default(uuid()) @map("sla_target_id")
   ticketId   String        @map("ticket_id")
   policyId   String        @map("sla_policy_id")
   metricType String        @map("metric_type") @db.VarChar(30)
-  cycle      Int           @default(1)
   dueAt      DateTime      @map("due_at") @db.Timestamptz(3)
   achievedAt DateTime?     @map("achieved_at") @db.Timestamptz(3)
   breachedAt DateTime?     @map("breached_at") @db.Timestamptz(3)
@@ -155,9 +162,9 @@ model TicketSlaTarget {
   ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   policy     SlaPolicy     @relation(fields: [policyId], references: [id], onDelete: Restrict)
 
-  @@unique([ticketId, metricType, cycle])
   @@index([policyId])
   @@index([metricType, dueAt])
+  @@unique([roundId, metricType])
   @@map("ticket_sla_targets")
 }
 
@@ -170,26 +177,9 @@ model TicketChatLink {
   @@map("ticket_chat_links")
 }
 
-// Legacy archive only: no runtime reads/writes. Retained until verified Chat migration
-// and a separately approved contract migration; not an active CS domain table.
-model TicketMessage {
-  id            String        @id @default(uuid())
-  ticketId      String        @map("ticket_id")
-  authorId      String        @map("author_id")
-  authorRole    String        @map("author_role")
-  body          String
-  isInternal    Boolean       @default(false) @map("is_internal")
-  chatMessageId String?       @unique @map("chat_message_id")
-  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
-  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-
-  @@index([ticketId, createdAt])
-  @@map("ticket_messages")
-}
-
 // Retain the delegate name for callers; SQL now stores structured audit events.
 model TicketAuditLog {
-  id        String        @id @default(uuid())
+  id        String        @id @default(uuid()) @map("audit_event_id")
   ticketId  String        @map("ticket_id")
   actorId   String        @map("actor_id")
   action    String        @map("event_type")
@@ -199,6 +189,7 @@ model TicketAuditLog {
   ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   @@index([ticketId, createdAt])
+  @@index([ticketId, action, createdAt(sort: Desc), id(sort: Desc)], map: "ticket_audit_events_state")
   @@map("ticket_audit_events")
 }
 
@@ -216,7 +207,7 @@ model HelpCategory {
 }
 
 model HelpArticle {
-  id                String                @id @default(uuid())
+  id                String                @id @default(uuid()) @map("article_id")
   slug              String                @unique
   status            String                @default("DRAFT")
   publishedVersion  Int?                  @map("published_version")
@@ -248,4 +239,39 @@ model HelpArticleRevision {
   @@index([categoryId])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("help_article_revisions")
+}
+
+model TicketSlaRound {
+  id String @id @default(uuid()) @map("sla_round_id")
+  ticketId String @map("ticket_id")
+  cycle Int
+  startedAt DateTime @map("started_at") @db.Timestamptz(3)
+  sourceHistoryId String? @unique @map("source_history_id")
+  policyId String @map("sla_policy_id")
+  policyEffectiveFrom DateTime? @map("policy_effective_from") @db.Timestamptz(3)
+  policyEffectiveTo DateTime? @map("policy_effective_to") @db.Timestamptz(3)
+  firstResponseMinutes Int? @map("first_response_minutes")
+  resolutionMinutes Int? @map("resolution_minutes")
+  snapshotSource String @map("snapshot_source")
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  policy SlaPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  sourceHistory TicketStatusHistory? @relation(fields: [sourceHistoryId, ticketId], references: [id, ticketId], onDelete: Restrict)
+  targets TicketSlaTarget[]
+  @@unique([sourceHistoryId, ticketId])
+  @@unique([ticketId, cycle])
+  @@unique([id, ticketId, policyId])
+  @@map("ticket_sla_rounds")
+}
+
+model TicketChatMessageReceipt {
+  messageId String @id @map("chat_message_id")
+  ticketId String @map("ticket_id")
+  conversationId String @map("conversation_id")
+  authorId String? @map("author_id")
+  authorRole String @map("author_role")
+  isInternal Boolean @map("is_internal")
+  messageCreatedAt DateTime @map("message_created_at") @db.Timestamptz(3)
+  receivedAt DateTime? @default(now()) @map("received_at") @db.Timestamptz(3)
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  @@map("ticket_chat_message_receipts")
 }

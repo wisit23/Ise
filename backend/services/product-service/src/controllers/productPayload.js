@@ -1,3 +1,17 @@
+const { badRequest } = require("@reloop/shared");
+
+function categoryPatch(body) {
+  if (body.categories === undefined) return {};
+  if (!Array.isArray(body.categories) || body.categories.length === 0 ||
+      body.categories.some((name) => typeof name !== "string" || !name.trim())) {
+    throw badRequest("categories must be a non-empty array of category names");
+  }
+  const categories = [...new Set(body.categories.map((name) => name.trim()))];
+  const category = body.category === undefined ? categories[0] : body.category;
+  if (!categories.includes(category)) throw badRequest("category must be included in categories");
+  return { category, categories };
+}
+
 const SIMPLE_UPDATE_FIELDS = [
   "title",
   "description",
@@ -45,6 +59,7 @@ function buildCreateProductData(sellerId, body) {
     tags: normalizeTags(body.tags),
     media: normalizeMedia(body.media),
     location: body.location || "",
+    ...categoryPatch(body),
   };
   if (body.status === "auction") {
     data.status = "auction";
@@ -66,7 +81,7 @@ function buildProductPatch(body) {
   if (body.tags !== undefined) patch.tags = normalizeTags(body.tags);
   if (body.media !== undefined) patch.media = normalizeMedia(body.media);
 
-  return patch;
+  return { ...patch, ...categoryPatch(body) };
 }
 
 module.exports = {

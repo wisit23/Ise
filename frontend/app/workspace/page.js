@@ -121,7 +121,7 @@ export default function SupportPanelPage() {
         {/* Keep workspace sticky bars below the navbar and its profile menu. */}
         <div className="isolate flex min-h-0 flex-1">
           {/* ── Sidebar ── */}
-          <aside aria-label="เมนู workspace" className={`hidden shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex transition-[width] duration-200 motion-reduce:transition-none z-10 ${sidebarCollapsed ? "w-16" : "w-60"}`}>
+          <aside aria-label="เมนู workspace" className={`hidden shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex transition-[width] duration-200 z-10 ${sidebarCollapsed ? "w-16" : "w-60"}`}>
             {/* Brand */}
             <div className={`flex h-12 shrink-0 items-center border-b border-slate-200/60 bg-white ${sidebarCollapsed ? "justify-center px-2" : "justify-between gap-1 px-2"}`}>
               <div className={`${sidebarCollapsed ? "hidden" : "flex"} min-w-0 items-center gap-2`}>
@@ -145,7 +145,7 @@ export default function SupportPanelPage() {
                 aria-label={sidebarCollapsed ? "ขยายเมนูซ้าย" : "ย่อเมนูซ้าย"}
                 title={sidebarCollapsed ? "ขยายเมนูซ้าย" : "ย่อเมนูซ้าย"}
                 aria-expanded={!sidebarCollapsed}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 motion-reduce:transition-none"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
               >
                 <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
                   <rect x="3" y="4" width="18" height="16" rx="2" />

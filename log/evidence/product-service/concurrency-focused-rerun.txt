@@ -1,0 +1,28 @@
+▶ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite
+  ✔ 1. Ingestion below budget: increments spentBudget and campaign remains published (126.0777ms)
+  ✔ 2. Idempotency: duplicate event delivery does NOT increment spentBudget again (15.3271ms)
+  ✔ 3. Budget threshold reached: transitions campaign to ended, expires CLAIMED vouchers, and writes SYSTEM audit log (73.1853ms)
+  ✔ 4. Post-ended gating: Claim, Applicable, and Quote-and-Hold are strictly rejected (54.6912ms)
+  ✔ 5. Real PostgreSQL Concurrency: concurrent completed events perform atomic increment of spentBudget (2151.6016ms)
+✔ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite (4621.2407ms)
+▶ Marketing Audit Trail Integration Suite (PostgreSQL)
+  ✔ RBAC: Marketing-only authorization, 401 unauthenticated, 403 for Buyer, Seller, Admin, permission bypass prevention, and anti-spoofing (2127.1712ms)
+  ✔ Read-only contract: Client write/update/delete endpoints do not exist (14.883ms)
+  ✔ Campaign lifecycle: Atomic mutations for CREATE, UPDATE, SUBMIT, APPROVE, REJECT, PUBLISH, END (265.4464ms)
+  ✔ Automatic SYSTEM actions: CAMPAIGN_END and AUCTION_ITEM_CLOSE with deterministic idempotencyKey (110.5076ms)
+  ✔ Concurrent retry deduplication: Promise.all creates no duplicate audit and no 25P02 error (2080.3223ms)
+  ✔ Transaction atomicity: Audit failure rolls back business mutation, failed mutation creates no audit (19.5375ms)
+[product-service] chat notification failed for item 04edbd7a-6ef0-4c8c-ac78-cbc7d4a79b2f: fetch failed
+  ✔ Auction lifecycle: AUCTION_ROUND_CREATE, ITEM_APPROVE, ITEM_REJECT, ITEM_SCHEDULE, ITEM_CANCEL, ITEM_CLOSE (2985.7685ms)
+  ✔ Article lifecycle: CREATE, UPDATE, PUBLISH, ARCHIVE, DELETE audit (143.2023ms)
+  ✔ API Filtering and date range semantics: [from, to) interval, same-day, month boundary, invalid range, pagination (62.3956ms)
+  ✔ Sanitizer verification: No secrets present in audit logs or API output (10.7903ms)
+✔ Marketing Audit Trail Integration Suite (PostgreSQL) (10029.8567ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10884.8456

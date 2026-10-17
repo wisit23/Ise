@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { normalizeAddress } = require("../shipping/shippingService");
 const {
   createCheckoutSessionService,
   PAYMENT_TTL_MS,
@@ -49,6 +50,7 @@ function fixture(extra = {}) {
     payments: [],
     logs: [],
     shipping: [],
+    syncJobs: [],
     ...extra,
   };
   let externalFailure = false;
@@ -79,6 +81,26 @@ function fixture(extra = {}) {
         .map(orderView),
     };
   const db = {
+    productSyncJob: {
+      create: async ({ data }) => {
+        const row = {
+          id: "sync" + state.syncJobs.length,
+          processedAt: null,
+          ...data,
+        };
+        state.syncJobs.push(row);
+        return row;
+      },
+      findMany: async ({ where }) =>
+        state.syncJobs.filter((j) => matches(j, where)),
+      findUnique: async ({ where }) =>
+        state.syncJobs.find((j) => j.id === where.id),
+      updateMany: async ({ where, data }) => {
+        const rows = state.syncJobs.filter((j) => matches(j, where));
+        rows.forEach((j) => apply(j, data));
+        return { count: rows.length };
+      },
+    },
     checkout: {
       create: async ({ data }) => {
         state.checkout = {
@@ -89,6 +111,10 @@ function fixture(extra = {}) {
           ordersAmount: String(data.ordersAmount),
         };
         return state.checkout;
+      },
+      update: async ({ data }) => {
+        apply(state.checkout, data);
+        return checkoutView();
       },
       findUnique: async () => checkoutView(),
       findMany: async ({ where }) =>
@@ -103,6 +129,7 @@ function fixture(extra = {}) {
       },
     },
     order: {
+      findUnique: async ({where}) => orderView(state.orders.find(o => o.id === where.id)),
       findMany: async () => state.orders.map(orderView),
       updateMany: async ({ where, data }) => {
         const rows = state.orders.filter((o) => matches(o, where));
@@ -171,7 +198,12 @@ function fixture(extra = {}) {
     releaseVoucher: async (...args) => calls.released.push(args),
     completeVoucher: async (...args) => calls.vouchers.push(args),
   };
-  const service = createCheckoutSessionService(db, products);
+  const service = createCheckoutSessionService(
+    db,
+    products,
+    undefined,
+    async () => normalizeAddress(ADDRESS),
+  );
   const create = (overrides) =>
     service.create({
       buyerId: "b1",

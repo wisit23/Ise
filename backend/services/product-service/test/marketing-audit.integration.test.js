@@ -594,7 +594,7 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
             },
             { tx },
           );
-        }),
+        }, { maxWait: 10_000 }),
       );
 
       const campResults = await Promise.all(campPromises);

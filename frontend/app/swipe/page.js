@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import BrandLogo from "../../components/BrandLogo";
 import SwipeFeedViewer from "../../components/swipe/SwipeFeedViewer";
 import Button from "../../components/ui/Button";
 import EmptyState from "../../components/ui/EmptyState";
@@ -9,6 +11,7 @@ import { apiFetch } from "../../lib/api";
 import { clearSession, getStoredUser } from "../../lib/auth";
 
 export default function SwipeFeed() {
+  const router = useRouter();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -48,7 +51,7 @@ export default function SwipeFeed() {
   function handleLogout() {
     clearSession();
     setUser(null);
-    window.location.href = "/";
+    router.replace("/");
   }
 
   return (
@@ -60,21 +63,7 @@ export default function SwipeFeed() {
       >
         <div className="flex flex-col">
           {/* RELOOP Logo */}
-          <Link
-            href="/"
-            aria-label="RE-LOOP หน้าแรก"
-            className="focus-ring mb-6 flex items-center gap-2.5 rounded font-display text-xl font-bold tracking-tight text-white transition hover:opacity-90"
-          >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-[linear-gradient(140deg,theme(colors.brand.600),theme(colors.brand.300))] text-white shadow-brand">
-              <span
-                className="material-symbols-outlined text-[18px] leading-none"
-                aria-hidden="true"
-              >
-                autorenew
-              </span>
-            </span>
-            <span>RE-LOOP</span>
-          </Link>
+          <BrandLogo inverse className="mb-6" />
 
           {/* Main Navigation Links */}
           <nav aria-label="แถบนำทางหลัก" className="flex flex-col gap-1.5">

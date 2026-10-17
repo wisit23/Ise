@@ -1,0 +1,37 @@
+.logo {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 9px;
+  border-radius: 5px;
+  color: #203c30;
+  font:
+    700 20px Arial,
+    sans-serif;
+  letter-spacing: -0.7px;
+  white-space: nowrap;
+}
+.logo svg {
+  flex-shrink: 0;
+  color: rgb(var(--color-brand-600));
+}
+.inverse {
+  color: #fff;
+}
+.inverse svg {
+  color: rgb(var(--color-brand-400));
+}
+@media (max-width: 639px) {
+  .compact {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+  .logo {
+    font-size: 18px;
+    gap: 6px;
+  }
+  .logo svg {
+    width: 28px;
+  }
+}

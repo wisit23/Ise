@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { toApiShape, mediaToNestedCreate } = require("./models/reviewModel");
 
-test("mediaToNestedCreate splits media into photos and videos with positions", () => {
+test("mediaToNestedCreate writes unified review media with types and positions", () => {
   const media = [
     { url: "/uploads/img1.jpg", type: "image" },
     { url: "/uploads/vid1.mp4", type: "video" },
@@ -10,14 +10,12 @@ test("mediaToNestedCreate splits media into photos and videos with positions", (
   ];
   const nested = mediaToNestedCreate(media);
   assert.deepEqual(nested, {
-    photos: {
+    mediaEntries: {
       create: [
-        { url: "/uploads/img1.jpg", position: 0 },
-        { url: "/uploads/img2.png", position: 2 },
+        { url: "/uploads/img1.jpg", position: 0, mediaType: "IMAGE" },
+        { url: "/uploads/vid1.mp4", position: 1, mediaType: "VIDEO" },
+        { url: "/uploads/img2.png", position: 2, mediaType: "IMAGE" },
       ],
-    },
-    videos: {
-      create: [{ url: "/uploads/vid1.mp4", position: 1 }],
     },
   });
 });
@@ -27,16 +25,16 @@ test("mediaToNestedCreate handles empty or null media", () => {
   assert.deepEqual(mediaToNestedCreate(null), {});
 });
 
-test("toApiShape sorts and combines photos and videos into unified media array", () => {
+test("toApiShape preserves the public media array over the unified ER table", () => {
   const review = {
     id: "r1",
     rating: 5,
     comment: "nice",
-    photos: [
-      { url: "/uploads/img2.jpg", position: 2 },
-      { url: "/uploads/img1.jpg", position: 0 },
+    mediaEntries: [
+      { id: "m2", url: "/uploads/img2.jpg", position: 2, mediaType: "IMAGE" },
+      { id: "m1", url: "/uploads/img1.jpg", position: 0, mediaType: "IMAGE" },
+      { id: "m3", url: "/uploads/vid1.mp4", position: 1, mediaType: "VIDEO" },
     ],
-    videos: [{ url: "/uploads/vid1.mp4", position: 1 }],
   };
   const result = toApiShape(review);
   assert.deepEqual(result.media, [
@@ -44,11 +42,12 @@ test("toApiShape sorts and combines photos and videos into unified media array",
     { url: "/uploads/vid1.mp4", type: "video" },
     { url: "/uploads/img2.jpg", type: "image" },
   ]);
-  assert.equal(result.photos, undefined);
-  assert.equal(result.videos, undefined);
+  assert.equal(result.mediaEntries, undefined);
+  assert.equal(result.rating, 5);
+  assert.equal(result.comment, "nice");
 });
 
-test("toApiShape handles null or reviews without photos/videos", () => {
+test("toApiShape handles null or reviews without media", () => {
   assert.equal(toApiShape(null), null);
   const emptyReview = { id: "r2", rating: 4 };
   assert.deepEqual(toApiShape(emptyReview), {

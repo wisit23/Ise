@@ -7,6 +7,7 @@ async function create(req, res, next) {
       orderIds: req.body.orderIds,
       addressId: req.body.addressId,
       shippingAddress: req.body.shippingAddress,
+      authorization: req.headers.authorization,
       couponCode: req.body.couponCode,
     });
     res.status(201).json(session);
@@ -47,6 +48,7 @@ async function updateAddress(req, res, next) {
         sessionId: req.params.id,
         addressId: req.body.addressId,
         shippingAddress: req.body.shippingAddress,
+        authorization: req.headers.authorization,
       }),
     );
   } catch (err) {

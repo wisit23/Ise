@@ -2,16 +2,15 @@ const { conflict, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const orderModel = require("../../models/orderModel");
 const transitions = require("../../services/orderTransitionService");
-const INCLUDE = { evidence: true, order: {include:orderModel.INCLUDE}, caseLog: { orderBy: { createdAt: "asc" } } };
-function evidenceView(row) {
-  return (
-    row && {
-      ...row,
-      disputeId: row.disputeCaseId,
-      storageKey: row.evidencePath,
-    }
-  );
-}
+const {
+  INCLUDE: EVIDENCE_INCLUDE,
+  view: evidenceView,
+} = require("./evidenceView");
+const INCLUDE = {
+  evidence: { include: EVIDENCE_INCLUDE },
+  order: { include: orderModel.INCLUDE },
+  caseLog: { orderBy: { createdAt: "asc" } },
+};
 function caseView(row) {
   if (!row) return null;
   return {
@@ -41,6 +40,7 @@ async function findEvidence(disputeId, evidenceId) {
   return evidenceView(
     await prisma.disputeEvidence.findFirst({
       where: { id: evidenceId, disputeCaseId: disputeId },
+      include: EVIDENCE_INCLUDE,
     }),
   );
 }
@@ -110,11 +110,12 @@ async function addEvidence({
       data: {
         disputeCaseId: disputeId,
         uploaderId,
-        evidencePath: storageKey,
+        files: { create: { refPath: storageKey } },
         fileType,
         status: "SUBMITTED",
         evidenceDeadline,
       },
+      include: EVIDENCE_INCLUDE,
     });
     await tx.disputeAuditLog.create({
       data: {
@@ -161,7 +162,10 @@ async function setEvidenceDeadline({
       },
     });
     return evidenceView(
-      await tx.disputeEvidence.findUnique({ where: { id: evidenceId } }),
+      await tx.disputeEvidence.findUnique({
+        where: { id: evidenceId },
+        include: EVIDENCE_INCLUDE,
+      }),
     );
   });
 }
@@ -271,7 +275,7 @@ async function listQueue(
           take: limit - items.length,
           include: {
             order: { include: orderModel.INCLUDE },
-            evidence: true,
+            evidence: { include: EVIDENCE_INCLUDE },
             caseLog: true,
           },
         })),
@@ -301,7 +305,7 @@ async function listQueue(
       take,
       include: {
         order: { include: orderModel.INCLUDE },
-        evidence: true,
+        evidence: { include: EVIDENCE_INCLUDE },
         caseLog: true,
       },
     });
@@ -317,7 +321,7 @@ async function listQueue(
             take: take - activeItems.length,
             include: {
               order: { include: orderModel.INCLUDE },
-              evidence: true,
+              evidence: { include: EVIDENCE_INCLUDE },
               caseLog: true,
             },
           })
@@ -332,7 +336,7 @@ async function listQueue(
       take,
       include: {
         order: { include: orderModel.INCLUDE },
-        evidence: true,
+        evidence: { include: EVIDENCE_INCLUDE },
         caseLog: true,
       },
     }),
@@ -364,7 +368,7 @@ async function openDispute({
       where: {
         id: orderId,
         version: expectedVersion ?? order.version,
-        status: { in: ["completed", "disputed"] },
+        status: { in: ["delivered", "completed", "disputed"] },
       },
       data: {
         status: "disputed",

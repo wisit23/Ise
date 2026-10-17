@@ -1,0 +1,112 @@
+✔ multi-seller checkout sums baht exactly; vouchers remain per order; auction has no basket (8.6581ms)
+✔ repeat creation returns the same checkout (1.2832ms)
+✔ checkout cannot accept a code shared across orders (0.6371ms)
+✔ creation requires address ID and rejects expired basket (0.4436ms)
+✔ concurrent order change rolls back checkout and shipping creation (0.4679ms)
+[order-service] chat notification failed for PRODUCT:p1 (order o1): fetch failed
+[order-service] chat notification failed for PRODUCT:p2 (order o2): fetch failed
+✔ payment retry after external failure does not charge or confirm orders twice (2785.5862ms)
+✔ foreign buyer cannot read or confirm checkout (0.5114ms)
+✔ expiry cancels orders and durably requests release without marking payment paid (0.6699ms)
+✔ payment CAS conflict rolls back every local payment (0.4805ms)
+✔ TC05: invalid shipping phone is rejected without writes (1.1068ms)
+✔ TC05: invalid shipping postalCode is rejected without writes (0.1892ms)
+✔ buyer changes only this order's address and records both address snapshots (0.3659ms)
+✔ another buyer cannot change the order's delivery address (0.1544ms)
+✔ shipped orders cannot change address even if shipping has not caught up (0.1588ms)
+✔ shipped parcels cannot change address even if Order still says confirmed (0.1465ms)
+✔ a concurrent shipment prevents the address write and its audit log (0.1867ms)
+✔ stale client version and incomplete selected addresses are rejected before writes (0.1469ms)
+✖ TC10: cancellation rechecks the current paid status inside its transaction (9.8528ms)
+✖ TC10: successful payment history also blocks the transactional cancellation (0.7875ms)
+✖ an unpaid cancellation still records the product sync and audit together (0.5619ms)
+✖ a concurrent payment/version change prevents cancellation and event creation (0.5638ms)
+✔ retry backoff doubles and caps at 60s (2.8523ms)
+✔ delivery retains envelope, decimal baht, stable ID and flat compatibility fields (10.0674ms)
+✔ success appends one ACK; repeated delivery is a no-op; immutable job is unchanged (0.9572ms)
+✔ failure appends retry state and schedules backoff; sweep does not retry early (1.6177ms)
+✔ crash after Product accepts but before ACK retries the original event ID (0.5495ms)
+✔ concurrent delivery deduplicates ACKs (0.3347ms)
+✔ worker starts and stops; missing durable queue fails loudly (1.0851ms)
+✔ 17 dispute workflow fields round-trip through logs, CAS and rollback (393.9816ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 25
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3995.7704
+
+✖ failing tests:
+
+test at backend\services\order-service\src\models\orderModel.test.js:56:1
+✖ TC10: cancellation rechecks the current paid status inside its transaction (9.8528ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: db.$queryRaw is not a function
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:58:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: db.$queryRaw is not a function
+        at latestState (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:50:34)
+        at hydrate (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:88:29)
+        at operations.<computed> (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:142:49)
+        at async C:\ise\Ise\backend\services\order-service\src\models\orderModel.js:166:20,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\order-service\src\models\orderModel.test.js:65:1
+✖ TC10: successful payment history also blocks the transactional cancellation (0.7875ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: db.$queryRaw is not a function
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:67:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: db.$queryRaw is not a function
+        at latestState (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:50:34)
+        at hydrate (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:88:29)
+        at operations.<computed> (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:142:49)
+        at async C:\ise\Ise\backend\services\order-service\src\models\orderModel.js:166:20,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\order-service\src\models\orderModel.test.js:74:1
+✖ an unpaid cancellation still records the product sync and audit together (0.5619ms)
+  TypeError: db.$queryRaw is not a function
+      at latestState (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:50:34)
+      at hydrate (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:88:29)
+      at operations.<computed> (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:142:49)
+      at async C:\ise\Ise\backend\services\order-service\src\models\orderModel.js:166:20
+
+test at backend\services\order-service\src\models\orderModel.test.js:83:1
+✖ a concurrent payment/version change prevents cancellation and event creation (0.5638ms)
+  AssertionError [ERR_ASSERTION]: The validation function is expected to return "true". Received false
+  
+  Caught error:
+  
+  TypeError: db.$queryRaw is not a function
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\order-service\src\models\orderModel.test.js:85:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: db.$queryRaw is not a function
+        at latestState (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:50:34)
+        at hydrate (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:88:29)
+        at operations.<computed> (C:\ise\Ise\backend\services\order-service\src\models\orderHistoryClient.js:142:49)
+        at async C:\ise\Ise\backend\services\order-service\src\models\orderModel.js:166:20,
+    operator: 'rejects',
+    diff: 'simple'
+  }

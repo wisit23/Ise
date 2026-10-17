@@ -2,6 +2,12 @@
 
 # RE-LOOP — Database change log (vs. `docs/erdatabase.png`)
 
+## 2026-10-14 — Approved operational storage amendment
+
+The user approved separating current state, address snapshots, delivery queues and moderation/Chat receipts from audit logs in Order/Product/Support. Shipping uses a dedicated `shipping_address_snapshots` table keyed to Shipping. See [the current storage dictionary](operational-storage.md) and [implementation evidence](../log/evidence/operational-storage.md). The editable ER item 1 files retain their original pages and now contain an `Approved operational storage - current amendment` page. Original PDF archives are unchanged; new exports are under `output/pdf/`.
+
+This approval supersedes the earlier log-backed storage direction for the affected data, without deleting audit history or changing Auth/Chat ownership.
+
 This file tracks every deviation from the original ER diagram, with the reason for each change.
 Rule (per project decision): **no ER table is ever dropped** — tables not yet used by a shipped
 feature are still created, just left with no routes/UI until that phase lands.

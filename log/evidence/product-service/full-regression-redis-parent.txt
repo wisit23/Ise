@@ -1,0 +1,1189 @@
+✔ GET /health returns 200 ok without needing a database (26.2208ms)
+✔ POST / with no bearer token is rejected with 401 (14.9474ms)
+✔ POST / from a BUYER account is rejected with 403 before touching the database (7.4322ms)
+✔ POST /videos with no bearer token is rejected with 401 (5.422ms)
+✔ POST /videos from a BUYER account is rejected with 403 before touching the database (5.4012ms)
+✔ POST /auctions/:id/bids from a staff account is rejected before touching the database (5.2156ms)
+✔ POST /uploads with no bearer token is rejected with 401 (3.2294ms)
+✔ POST /uploads allows SELLER to upload PNG images (10.7326ms)
+✔ POST /videos/upload rejects non-video files (5.0595ms)
+✔ POST /videos/upload stores a swipe clip in product-service uploads (6.0319ms)
+✔ TC18: reserved reserved listing cannot be deleted through the API (27.9861ms)
+✔ TC18: hidden reserved listing cannot be deleted through the API (3.9493ms)
+✔ TC18: deletion is guarded atomically if a reservation wins the race (3.5661ms)
+✔ seller can still delete an available listing (3.0983ms)
+✔ non-owner still cannot delete a listing (3.0302ms)
+✔ auction deletion remains forbidden (3.0995ms)
+✔ buildCreateProductData applies defaults and normalizes client arrays (0.8743ms)
+✔ buildProductPatch includes only submitted fields (0.2014ms)
+✔ buildProductPatch preserves scalar values but ignores reservation status (0.1144ms)
+✔ buildCreateProductData preserves status 'auction' if submitted (0.1205ms)
+✔ relistAvailable rejects non-owner seller (7.2316ms)
+✔ relistAvailable rejects products not in auction_action_required status (0.3262ms)
+✔ relistAvailable rejects when an active auction item exists for the product (0.2838ms)
+✔ relistAvailable validates positive integer price (0.2801ms)
+✔ relistAvailable updates product to available and refreshes seller activity (0.3515ms)
+✔ public auction detail uses the lifecycle-aware service and propagates errors (7.8723ms)
+[product-service] chat notification failed for round round-retry-1: chat-service /internal/conversations/conv-round-retry-1:buyer-2/messages returned 503
+✔ canTransition allows only the documented lifecycle edges (11.5749ms)
+✔ submit rejects a buyer before querying the database (0.8516ms)
+✔ submit rejects a non-positive starting price (0.414ms)
+✔ submit rejects a product owned by another seller (0.4235ms)
+✔ submit rejects a product that is not available (0.3989ms)
+✔ submit rejects a product under Trust & Safety moderation (0.3877ms)
+✔ submit creates a pending_approval auction for the owning seller (8.7273ms)
+✔ approve rejects a non-Marketing/Admin caller (0.611ms)
+✔ approve allows a Marketing caller and transitions to scheduled if round dates exist (1.8537ms)
+✔ approve rejects moving out of a non-pending_approval state (0.7497ms)
+✔ approve rejects non-Marketing callers (including ADMIN) (0.3505ms)
+✔ schedule rejects a non-Marketing caller (0.788ms)
+✔ schedule rejects endsAt before startsAt (0.4518ms)
+✔ schedule accepts a valid window for an approved auction (0.573ms)
+✔ placeBid rejects the seller bidding on their own auction (0.92ms)
+✔ placeBid rejects an auction whose product is moderated (0.4469ms)
+✔ placeBid rejects a bid below startingPrice with no existing bids (3.4492ms)
+✔ placeBid rejects a bid under the current highest + increment (0.6379ms)
+✔ placeBid rejects bidding on a closed auction window (0.3545ms)
+✔ placeBid accepts a valid raise and returns the created bid (0.3767ms)
+✔ placeBid returns existing bid on exact retry with matching parameters (0.5727ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different amount (0.4867ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different bidderId (0.3087ms)
+✔ placeBid throws 409 Conflict when idempotencyKey is reused with different auctionId (0.3375ms)
+✔ placeBid returns existing bid on retry even if auction status has changed to closed (0.2654ms)
+✔ placeBid P2002 race recovery validates existing bid and returns on match (0.4904ms)
+✔ placeBid P2002 race recovery throws 409 Conflict if race-created bid has different parameters (0.3974ms)
+✔ closing an auction with no bids never calls order-service (0.9783ms)
+✔ automatic close has no side effects after Trust & Safety moderation (0.2615ms)
+✔ scheduled auction opening uses a moderation-aware CAS (0.2862ms)
+✔ submit transitions available product to 'auction' status (0.7251ms)
+✔ submit accepts a product already created with 'auction' status without re-setting (0.6135ms)
+✔ reject resets product status back to 'available' (0.4075ms)
+✔ reject rejects non-Marketing callers (including ADMIN) (0.4313ms)
+✔ cancel transitions item to 'cancelled' and product status to 'auction_action_required' (1.1082ms)
+✔ closing an auction with no bids transitions product status to 'auction_action_required' (0.5166ms)
+✔ submit rejects when roundId is missing (0.3217ms)
+✔ submit rejects when selected roundId is not found (0.2863ms)
+✔ submit rejects when selected round has not started accepting submissions (0.3782ms)
+✔ submit rejects when selected round has expired submission window (0.2532ms)
+✔ createRound rejects non-Marketing/Admin callers (0.4072ms)
+✔ createRound rejects invalid or inverted dates (0.4879ms)
+✔ createRound creates round for Marketing user (0.5187ms)
+✔ getCurrentRound correctly returns flags when active (0.505ms)
+✔ placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and reschedules close job (0.4805ms)
+✔ placeBid outside the last 5 minutes does NOT extend scheduledEndAt (0.2898ms)
+✔ deriveRoundPhase correctly identifies all 5 half-open phases (0.1701ms)
+✔ createRound rejects non-Marketing user with 403 Forbidden (0.2089ms)
+✔ createRound validates input dates and boundaries (0.3493ms)
+✔ createRound succeeds when overlapping round exists (MKT-DEC-025 overlap permitted) (0.257ms)
+✔ createRound succeeds and passes tx when no conflict exists (0.2256ms)
+✔ getCurrentRound returns active round containing now with derived phase (0.2268ms)
+✔ getCurrentRound supports simultaneous active submission and auction rounds (2.733ms)
+✔ getCurrentRound returns nearest upcoming round when none active (0.22ms)
+✔ getCurrentRound returns null when all rounds ended or none exist (0.1376ms)
+✔ listRounds attaches derived phase to each round (0.2069ms)
+✔ auction error messages do not leak internal status or English technical terms (0.1559ms)
+✔ schedule rejects past startsAt with friendly Thai message (0.1365ms)
+✔ schedule rejects endsAt before startsAt with friendly Thai message (0.1172ms)
+✔ placeBid validates missing idempotencyKey with clear Thai message (0.1106ms)
+✔ placeBid validates non-positive amount with clear Thai message (0.0974ms)
+✔ createRound accepts empty categories array or omitted as all categories (0.3223ms)
+✔ createRound accepts one valid category (0.2714ms)
+✔ createRound accepts multiple valid categories (0.1708ms)
+✔ createRound rejects invalid categories format (0.1558ms)
+✔ createRound rejects non-existent category in database (0.1528ms)
+✔ isCategoryAllowedInRound treats empty or missing categories as all categories (0.0959ms)
+✔ submit new product creates Product and AuctionItem atomically in same transaction (1.1636ms)
+✔ submit new product rejects when category is not allowed by active round (0.3859ms)
+✔ submit new product rejects when category is not found in database (0.2931ms)
+✔ submit new product rolls back if product creation fails (0.3983ms)
+✔ submit new product rolls back if auction creation fails (0.3655ms)
+✔ submit existing product validates product.category from DB and ignores client category (1.2554ms)
+✔ submit rejects sellers with expired or unverified KYC and allows ADMIN (1.4218ms)
+✔ submit rejects and rolls back when round expires between validation and transaction (2.9011ms)
+✔ submit existing product rejects and does not update status when round expires in transaction (0.4201ms)
+✔ browseRounds returns active and upcoming rounds with derived phases (0.3182ms)
+✔ getRound returns round with phase and rejects invalid roundId (0.2498ms)
+✔ listRoundItems returns round and items filtered by roundId (0.2821ms)
+✔ listRoundItems reconciles scheduled items to open and filters out expired/closed items (0.454ms)
+✔ createRound supports concurrent round creation with overlapping times and creates audit log for each (0.5079ms)
+✔ deriveRoundPhase returns 'cancelled' when round.cancelledAt is set (0.1309ms)
+✔ cancelRound rejects non-Marketing user with 403 Forbidden (0.2774ms)
+✔ cancelRound validates cancellation reason (0.183ms)
+✔ cancelRound rejects non-existent round with 404 (0.3812ms)
+✔ cancelRound on already cancelled round performs idempotent notification retry without mutating state or creating duplicate audit logs (0.4109ms)
+✔ cancelRound rejects ended round with 400 (0.2217ms)
+✔ cancelRound rejects round with winning order with 400 (0.1923ms)
+✔ cancelRound atomically transitions items and products, logs audit, and notifies chat (0.8188ms)
+✔ cancelRound returns warnings if chat notification encounters failures (0.3557ms)
+✔ submit rejects submission to a cancelled round (0.1763ms)
+✔ submit allows product with auction_action_required status into a new round (0.7314ms)
+✔ approve rejects item in a cancelled round (0.2511ms)
+✔ placeBid rejects bid when round or item is cancelled (0.2716ms)
+✔ closeAuction transitions product to auction_action_required when there are 0 bids (0.3784ms)
+✔ cancel rejects non-Marketing callers with 403 (0.1485ms)
+✔ cancel validates cancellation reason (non-empty and <= 500 chars) (0.1656ms)
+✔ cancel rejects item in pending_approval (must use reject instead) (0.1393ms)
+✔ cancel rejects item when winningOrderId already exists (0.1301ms)
+✔ cancel on open item with bids logs AUCTION_ITEM_CANCEL, cancels close job, and notifies seller and bidders (0.4661ms)
+✔ chatClient.notifyItemCancelled notifies only seller before open, and notifies seller + bidders with isolated 1-on-1 rooms and idempotency keys when open (0.686ms)
+✔ cancel still succeeds and returns warning when chat-service fails (0.3652ms)
+✔ cancel on already cancelled item performs idempotent notification retry without mutating state or creating duplicate audit logs (0.7532ms)
+✔ submit re-reads round inside withRoundMutationLock and rejects without creating Product or AuctionItem if round was cancelled concurrently (0.6082ms)
+✔ browseRounds includes cancelled upcoming round until auctionEndsAt and hides it after auctionEndsAt (0.2479ms)
+✔ chatClient.notifyRoundCancelled partial failure followed by retry delivers missing recipient and deduplicates already-delivered recipients (1.1426ms)
+✔ marketingAuditSanitizer - key sensitivity detection (1.3157ms)
+✔ marketingAuditSanitizer - data sanitization and redacting (7.6128ms)
+✔ marketingAuditSanitizer - circular reference handling (0.1884ms)
+✔ marketingAuditService - recordMarketingAudit validation (0.8218ms)
+✔ marketingAuditService - getAuditLogs query validation and pagination (1.2127ms)
+✔ marketingAuditRepository - handles idempotencyKey collision via createMany skipDuplicates (0.5641ms)
+✔ catalog filters combine and preserve style as persisted tags (2.1298ms)
+✔ catalog trims strings and treats whitespace-only values as absent (0.2427ms)
+✔ catalog rejects invalid, negative, and reversed prices consistently (0.7783ms)
+✔ listAvailable queries clips for available products only and sets chosen: false for guest (7.9546ms)
+✔ listAvailable attaches chosen flag for authenticated userId and does not leak choices relation (0.2945ms)
+✔ listFeed delegates pagination to the available-product query (7.0091ms)
+✔ createClip rejects a buyer before querying the database (3.8825ms)
+✔ createClip reports missing required fields as a bad request (0.2415ms)
+✔ createClip rejects a product owned by another seller (0.1944ms)
+✔ createClip rejects a product under Trust & Safety moderation (0.2528ms)
+✔ createClip stores the verified token name and ignores a body sellerName (0.2332ms)
+✔ chooseClip rejects a non-existent card (0.2859ms)
+✔ chooseClip hides a card whose product is moderated (0.2262ms)
+✔ chooseClip upserts a choice for the user (0.3122ms)
+✔ chooseClip rejects non-buyer roles (MARKETING, ADMIN) with 403 (0.4732ms)
+✔ chooseClip accepts user when roles array contains BUYER (0.3693ms)
+✔ unchooseClip rejects non-buyer roles (MARKETING, ADMIN) with 403 (0.3653ms)
+✔ unchooseClip deletes the choice and returns chosen: false (0.2724ms)
+✔ listFeed passes userId to repository when provided (0.2364ms)
+✔ a seller cannot reserve their own product (10.3641ms)
+✔ a moderated product cannot be reserved (0.5122ms)
+✔ completeProductReservation treats an already-sold product as an idempotent retry (0.4047ms)
+✔ completeProductReservation still rejects an invalid active state (0.4729ms)
+✔ completeProductReservation rejects a sold product from another reservation (0.4253ms)
+✔ TC17: prohibited comment "ไอ้เหี้ย" is rejected without saving (34.2215ms)
+✔ TC17: prohibited comment "สัส" is rejected without saving (5.903ms)
+✔ TC17: prohibited comment "ควย" is rejected without saving (3.6659ms)
+✔ TC17: prohibited comment "เย็ด" is rejected without saving (3.2476ms)
+✔ TC17: prohibited comment "เห​ี้ย" is rejected without saving (3.79ms)
+✔ TC17: prohibited comment "เห⁠ี้ย" is rejected without saving (4.4197ms)
+✔ TC17: prohibited comment "ีดีดีดีเหี้ย" is rejected without saving (3.3734ms)
+✔ a polite comment is saved unchanged with its review media (3.1659ms)
+✔ TC17: editing a rejected comment to a polite comment allows retry (6.6711ms)
+✔ duplicate review rejection is preserved (3.1281ms)
+✔ review aggregation against a real database (181.8356ms)
+✔ mediaToNestedCreate writes unified review media with types and positions (3.0958ms)
+✔ mediaToNestedCreate handles empty or null media (7.8466ms)
+✔ toApiShape preserves the public media array over the unified ER table (0.3911ms)
+✔ toApiShape handles null or reviews without media (0.1489ms)
+✔ POST /reviews/uploads rejects unauthenticated review media uploads (30.283ms)
+✔ review media is stored and served by product-service (17.9949ms)
+▶ Buyer Segmentation Rule Engine Suite
+  ✔ validateSegmentRule: accepts empty or null targetSegment (0.5554ms)
+  ✔ validateSegmentRule: rejects invalid field or operator (0.4883ms)
+  ✔ matchesSegment: universal campaigns match everyone (0.1745ms)
+  ✔ matchesSegment: targeted campaigns require profile (0.1808ms)
+  ✔ matchesSegment: eq matches case-insensitively (0.1661ms)
+  ✔ matchesSegment: supports preferredSize and sizePreference aliases (0.1379ms)
+  ✔ matchesSegment: in and nin operators evaluate correctly (0.1906ms)
+✔ Buyer Segmentation Rule Engine Suite (3.1333ms)
+✔ articles API permissions, search, and CRUD (223.3138ms)
+▶ Auction Core, Concurrency, Soft Close & BullMQ Integration Suite
+  ✖ Step 1: Seller submits product to active round -> persists in PostgreSQL with status 'auction' (7.7478ms)
+  ✖ Step 2: Admin Decoupling & Marketing Approval -> direct to 'scheduled' and BullMQ booked (6.3111ms)
+  ✖ Step 3: Bidding rules & PostgreSQL persistence (2.6708ms)
+  ✖ Step 4: Idempotency Key DB constraint prevents duplicate bids on retry (2.7057ms)
+  ✖ Step 5: Concurrent bidding serialized by pg_advisory_xact_lock (5.8564ms)
+  ✖ Step 6: Anti-Sniping Soft Close extends scheduledEndAt by +5m in PostgreSQL (4.43ms)
+  ✖ Step 7: Auction Close with Winner -> calls Order Client once and records winningOrderId (4.8069ms)
+  ✖ Step 8: Real BullMQ delayed worker execution & idempotent re-close prevents duplicate orders (4.4438ms)
+  ✖ Step 9: No-bid Auction close transitions product status to 'auction_action_required' (MKT-DEC-026) (3.2947ms)
+  ✔ Step 10: Concurrent Auction Rounds Creation & Deterministic Selection (MKT-DEC-025) (402.2116ms)
+  ✖ Step 11: Atomic Product & AuctionItem Creation (Flow B) in PostgreSQL single transaction (12.1732ms)
+  ✖ Step 12: Atomic Rollback & Pre-creation Validation -> Rejects before creating Product in DB (6.9522ms)
+  ✖ Step 13: Category & KYC Pre-validation -> Rejection before database writes (8.3686ms)
+  ✖ Step 14: Flow A (Existing Product) Enforces DB Category & Ignores Client Category (8.6949ms)
+  ✖ Step 15: Backward Compatibility - Round with empty categories accepts any valid category (7.9005ms)
+  ✖ Step 16: Transaction Rollback when round expires between pre-validation and transaction (9.09ms)
+  ✖ Step 17: Multi-Round Concurrent Overlap, Explicit Selection, Item Isolation & Independent Bidding (MKT-DEC-025) (24.9695ms)
+  ✖ Step 18: Single-Item Cancellation vs Other Items in Same Round & Audit Log (MKT-DEC-026) (6.5936ms)
+  ✖ Step 19: Race Conditions across Cancel Item, Cancel Round, PlaceBid, and CloseAuction (MKT-DEC-026) (7.6704ms)
+  ✖ Step 20: Seller Recovery Concurrency Protection - Concurrent Resubmit & Resubmit vs Relist (MKT-DEC-026) (9.909ms)
+  ✖ Step 21: Submit vs CancelRound Serialization under Round Mutation Lock (MKT-DEC-026) (9.7416ms)
+✖ Auction Core, Concurrency, Soft Close & BullMQ Integration Suite (656.8562ms)
+▶ Product Service Campaign Attribution & Metrics PostgreSQL Integration Suite (MKT-003, MKT-007, UR-09, UR-12)
+  ✔ Security: POST /internal/campaigns/events/order-completed rejects requests without x-internal-token (36.7758ms)
+  ✔ Ingestion: records order.completed.v1 event into real PostgreSQL campaign_attributions (43.6045ms)
+  ✔ Idempotency: duplicate event delivery does not duplicate attribution fact in PostgreSQL (13.1625ms)
+  ✔ Idempotency: re-sending same orderId under different eventId is deduplicated (14.1578ms)
+  ✔ Idempotency conflict: returns 409 Conflict when incoming event has conflicting attribution attributes in PostgreSQL (12.9591ms)
+  ✔ Idempotency conflict: reusing existing eventId with different orderId returns 409 in PostgreSQL (15.7549ms)
+  ✔ No-campaign orders are ignored gracefully without recording attribution (8.5962ms)
+  ✔ Metrics: GET /api/products/campaigns/:id/metrics computes accurate KPIs from PostgreSQL (UR-09, UR-12) (58.3335ms)
+  ✔ Metrics: GET /api/products/campaigns/metrics/overview aggregates across campaigns (9.5528ms)
+  ✔ Metrics: GET /api/products/campaigns/metrics/trends returns daily series (6.3745ms)
+  ✔ Metrics: enforces date range validation (from > to returns 400 Bad Request per MKT-DEC-019) (3.1668ms)
+  ✔ RBAC: non-marketing roles are forbidden from accessing metrics (2.4985ms)
+✔ Product Service Campaign Attribution & Metrics PostgreSQL Integration Suite (MKT-003, MKT-007, UR-09, UR-12) (266.3335ms)
+▶ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite
+  ✔ 1. Ingestion below budget: increments spentBudget and campaign remains published (121.4568ms)
+  ✔ 2. Idempotency: duplicate event delivery does NOT increment spentBudget again (20.7591ms)
+  ✔ 3. Budget threshold reached: transitions campaign to ended, expires CLAIMED vouchers, and writes SYSTEM audit log (80.8832ms)
+  ✔ 4. Post-ended gating: Claim, Applicable, and Quote-and-Hold are strictly rejected (41.6124ms)
+  ✔ 5. Real PostgreSQL Concurrency: concurrent completed events perform atomic increment of spentBudget (134.9409ms)
+✔ Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integration Suite (486.8097ms)
+▶ Campaign Domain, State Machine & Voucher Wallet Integration Suite
+  ✔ Guest access: can browse available campaigns, cannot create (37.9698ms)
+  ✔ RBAC: BUYER and SELLER forbidden from campaign management (8.4551ms)
+  ✔ Validation: rejects invalid inputs (discount, dates, missing fields) (9.7064ms)
+  ✔ Lifecycle: draft -> pending_approval -> approved -> published -> ended (214.5861ms)
+  ✔ Lifecycle Rejection: draft -> pending_approval -> rejected (80.6859ms)
+  ✔ Voucher Wallet: Claim, 1-per-user uniqueness, and Smart Filter (476.2548ms)
+  ✔ Internal quote-and-hold endpoint, Concurrency, and Security Hardening (466.2766ms)
+  ✔ Validation: code normalization and partial update bounds (56.8321ms)
+  ✔ Gating: draft campaigns hidden from guest/buyer, visible to marketing (40.1561ms)
+  ✔ Claim Concurrency: quota full and duplicate claims return 409 Conflict (176.8581ms)
+✔ Campaign Domain, State Machine & Voucher Wallet Integration Suite (1642.1492ms)
+▶ Campaign Metrics, Attribution & Conversion Suite
+  ✔ recordOrderCompletedEvent: ignores orders without campaign (15.2351ms)
+  ✔ recordOrderCompletedEvent: records attribution and deduplicates retries (idempotency) (5.1475ms)
+  ✔ validateDateRange: rejects invalid date and from > to (2.9285ms)
+  ✔ getCampaignMetrics: calculates conversion rate (redeemedCount / claimedCount * 100) (1.848ms)
+  ✔ getCampaignMetrics: returns 0 values for campaign with no orders (no error) (1.1861ms)
+  ✔ getOverviewMetrics: aggregates revenue and orders across all campaigns (1.2976ms)
+  ✔ getSalesTrends: groups metrics by daily series (3.0654ms)
+  ✖ Prisma model persistence: records attribution, handles envelope, and deduplicates retries (1.9837ms)
+  ✖ Prisma model persistence: propagates DB errors instead of swallowing (2.2577ms)
+  ✔ Idempotency conflict: returns 409 Conflict when pre-check finds conflicting attribution fields (1.8636ms)
+  ✖ Idempotency conflict & deduplication on P2002 race recovery (0.9263ms)
+  ✔ production path: fails loudly if Prisma client lacks campaignAttribution model (1.1343ms)
+  ✖ identity conflict: reusing eventId with different orderId returns 409 even when monetary fields match (1.2106ms)
+✖ Campaign Metrics, Attribution & Conversion Suite (48.4852ms)
+▶ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite
+  ✔ Code Normalization: trims and converts code to UPPERCASE (7.602ms)
+  ✔ Validation on Create: rejects percent discount > 100 (0.5926ms)
+  ✔ Validation on Create: rejects startsAt >= endsAt (0.2385ms)
+  ✔ Validation on Partial Update: rejects changing discountValue > 100 when existing is PERCENT (0.3841ms)
+  ✔ Validation on Partial Update: rejects changing discountType to PERCENT when existing value > 100 (0.1999ms)
+  ✔ Validation on Partial Update: rejects partial date update where new startsAt >= existing endsAt (0.249ms)
+  ✔ Gating non-published campaigns: hides draft/pending/rejected/ended from Guest and Buyer (0.2849ms)
+  ✔ Gating published campaigns: allows Guest and Buyer if active (0.202ms)
+  ✔ Claim Concurrency & Usage Limit: returns 409 Conflict when usageLimit reached (0.4154ms)
+  ✔ Claim Concurrency: returns 409 Conflict when user already claimed (0.3404ms)
+  ✔ Segmentation Validation: rejects invalid segment rule on createDraft (0.3427ms)
+  ✔ Segmentation Filtering: listAvailablePublicCampaigns matches targeted profile (0.2809ms)
+  ✔ Date Validation on Create: rejects endsAt in the past (0.2023ms)
+  ✔ Date Validation on Create: rejects startsAt in the past without reason (0.1645ms)
+  ✔ Date Validation on Update: rejects changing endsAt to the past (0.2076ms)
+  ✔ Date Validation on Publish: rejects campaign whose endsAt is expired (0.2152ms)
+  ✔ Publish after startsAt but before endsAt: starts using immediately (0.2037ms)
+  ✔ Budget Enforcement: claim succeeds when spentBudget is below budget ceiling (0.1689ms)
+  ✔ Budget Enforcement: claim, applicable, and quote-and-hold fail when spentBudget reaches budget ceiling (0.4394ms)
+  ✔ Budget Enforcement: claim fails when spentBudget exceeds budget ceiling (0.1324ms)
+  ✔ Idempotency: duplicate attribution event does not increment spentBudget twice (1.1799ms)
+  ✔ Concurrency & Budget Reached: transitions campaign to ended when cumulative discount reaches ceiling (0.2223ms)
+✔ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite (16.4782ms)
+▶ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite
+  ✔ Code Normalization: trims and converts code to UPPERCASE (125.4969ms)
+  ✔ Validation on Create: rejects percent discount > 100 (1.3105ms)
+  ✔ Validation on Create: rejects startsAt >= endsAt (0.6556ms)
+  ✔ Validation on Partial Update: rejects changing discountValue > 100 when existing is PERCENT (0.7547ms)
+  ✔ Validation on Partial Update: rejects changing discountType to PERCENT when existing value > 100 (0.4954ms)
+  ✔ Validation on Partial Update: rejects partial date update where new startsAt >= existing endsAt (0.5677ms)
+  ✔ Gating non-published campaigns: hides draft/pending/rejected/ended from Guest and Buyer (0.6181ms)
+  ✔ Gating published campaigns: allows Guest and Buyer if active (0.3134ms)
+  ✔ Claim Concurrency & Usage Limit: returns 409 Conflict when usageLimit reached (0.8704ms)
+  ✔ Claim Concurrency: returns 409 Conflict when user already claimed (0.543ms)
+  ✔ Segmentation Validation: rejects invalid segment rule on createDraft (0.5206ms)
+  ✔ Segmentation Filtering: listAvailablePublicCampaigns matches targeted profile (0.61ms)
+  ✔ Checkout quote rejects a product under Trust & Safety moderation (0.3588ms)
+✔ Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite (136.6764ms)
+✔ executive catalog metrics against a real database (127.446ms)
+✔ catalog search applies all filters against PostgreSQL (191.5126ms)
+C:\ise\Ise\backend\services\product-service\test\er-alignment.integration.test.js:7
+if (!url || !/\/product_luna_er(?:\?|$)/.test(url)) throw new Error('Isolated product_luna_er required');
+                                                    ^
+
+Error: Isolated product_luna_er required
+    at Object.<anonymous> (C:\ise\Ise\backend\services\product-service\test\er-alignment.integration.test.js:7:59)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+
+Node.js v24.20.0
+✖ backend\services\product-service\test\er-alignment.integration.test.js (157.6619ms)
+▶ Marketing Audit Trail Integration Suite (PostgreSQL)
+  ✔ RBAC: Marketing-only authorization, 401 unauthenticated, 403 for Buyer, Seller, Admin, permission bypass prevention, and anti-spoofing (79.9827ms)
+  ✔ Read-only contract: Client write/update/delete endpoints do not exist (27.7592ms)
+  ✔ Campaign lifecycle: Atomic mutations for CREATE, UPDATE, SUBMIT, APPROVE, REJECT, PUBLISH, END (281.808ms)
+  ✔ Automatic SYSTEM actions: CAMPAIGN_END and AUCTION_ITEM_CLOSE with deterministic idempotencyKey (127.6726ms)
+  ✔ Concurrent retry deduplication: Promise.all creates no duplicate audit and no 25P02 error (65.3276ms)
+  ✔ Transaction atomicity: Audit failure rolls back business mutation, failed mutation creates no audit (32.7662ms)
+[product-service] chat notification failed for item 6f6a3fc8-f97f-499a-8085-86e8a9e1c92f: fetch failed
+  ✔ Auction lifecycle: AUCTION_ROUND_CREATE, ITEM_APPROVE, ITEM_REJECT, ITEM_SCHEDULE, ITEM_CANCEL, ITEM_CLOSE (3010.0175ms)
+  ✔ Article lifecycle: CREATE, UPDATE, PUBLISH, ARCHIVE, DELETE audit (90.0865ms)
+  ✔ API Filtering and date range semantics: [from, to) interval, same-day, month boundary, invalid range, pagination (53.3104ms)
+  ✔ Sanitizer verification: No secrets present in audit logs or API output (9.3651ms)
+✔ Marketing Audit Trail Integration Suite (PostgreSQL) (3862.2395ms)
+✔ migration refuses an existing database without the canonical baseline, including a legacy ledger (9.7098ms)
+✔ product moderation removes, hides and restores a listing (875.5137ms)
+✖ product CRUD against a real database (71.5975ms)
+✔ only one buyer wins an atomic PostgreSQL reservation (256.7046ms)
+✔ UR-11 Swipe-to-Choose Hardening: Buyer authorization, idempotency, feed state, and isolation (470.0301ms)
+✔ executive catalog rankings against a real database (108.2579ms)
+ℹ tests 311
+ℹ suites 0
+ℹ pass 283
+ℹ fail 28
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 24748.0855
+
+✖ failing tests:
+
+test at backend\services\product-service\test\auction.integration.test.js:336:11
+✖ Step 1: Seller submits product to active round -> persists in PostgreSQL with status 'auction' (7.7478ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161056",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.056Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.056Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.056Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.056Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:339:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:336:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:376:11
+✖ Step 2: Admin Decoupling & Marketing Approval -> direct to 'scheduled' and BullMQ booked (6.3111ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161065",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.065Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.065Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.065Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.065Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:379:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:376:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:429:11
+✖ Step 3: Bidding rules & PostgreSQL persistence (2.6708ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161072",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.072Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.072Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.072Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.072Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:430:19)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:429:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:523:11
+✖ Step 4: Idempotency Key DB constraint prevents duplicate bids on retry (2.7057ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161075",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.075Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.075Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.075Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.075Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:526:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:523:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:653:11
+✖ Step 5: Concurrent bidding serialized by pg_advisory_xact_lock (5.8564ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161078",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.078Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.078Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.078Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.078Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:656:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:653:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:710:11
+✖ Step 6: Anti-Sniping Soft Close extends scheduledEndAt by +5m in PostgreSQL (4.43ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161085",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.085Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.085Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.085Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.085Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:713:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:710:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:788:11
+✖ Step 7: Auction Close with Winner -> calls Order Client once and records winningOrderId (4.8069ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161089",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.089Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.089Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.089Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.089Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:791:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:788:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:852:11
+✖ Step 8: Real BullMQ delayed worker execution & idempotent re-close prevents duplicate orders (4.4438ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161095",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.095Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.095Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.095Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.095Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:855:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:852:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:960:11
+✖ Step 9: No-bid Auction close transitions product status to 'auction_action_required' (MKT-DEC-026) (3.2947ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161099",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.099Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.099Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.099Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.099Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:963:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:960:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:1211:11
+✖ Step 11: Atomic Product & AuctionItem Creation (Flow B) in PostgreSQL single transaction (12.1732ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161515",
+              ~~~~~
+              categories: [
+                "รองเท้า",
+                "เสื้อผ้า"
+              ],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.515Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.515Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.515Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.515Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1215:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1211:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:1273:11
+✖ Step 12: Atomic Rollback & Pre-creation Validation -> Rejects before creating Product in DB (6.9522ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161522",
+              ~~~~~
+              categories: [
+                "เสื้อผ้า"
+              ],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.522Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.522Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.522Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.522Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1277:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1273:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:1365:11
+✖ Step 13: Category & KYC Pre-validation -> Rejection before database writes (8.3686ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161531",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.531Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.531Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.531Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.531Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1369:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1365:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:1429:11
+✖ Step 14: Flow A (Existing Product) Enforces DB Category & Ignores Client Category (8.6949ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161540",
+              ~~~~~
+              categories: [
+                "รองเท้า"
+              ],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.540Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.540Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.540Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.540Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1433:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1429:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:1507:11
+✖ Step 15: Backward Compatibility - Round with empty categories accepts any valid category (7.9005ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161546",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.546Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.546Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.546Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.546Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1511:25)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1507:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:1539:11
+✖ Step 16: Transaction Rollback when round expires between pre-validation and transaction (9.09ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161557",
+              ~~~~~
+              categories: [
+                "เสื้อผ้า"
+              ],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.557Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.557Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.557Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.557Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1543:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1539:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:1605:11
+✖ Step 17: Multi-Round Concurrent Overlap, Explicit Selection, Item Isolation & Independent Bidding (MKT-DEC-025) (24.9695ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161581",
+              ~~~~~
+              categories: [
+                "เสื้อผ้า",
+                "รองเท้า"
+              ],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.581Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.581Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.581Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.581Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1658:22)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1605:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:1831:11
+✖ Step 18: Single-Item Cancellation vs Other Items in Same Round & Audit Log (MKT-DEC-026) (6.5936ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161589",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.589Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.589Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.589Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.589Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1842:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1831:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:1976:11
+✖ Step 19: Race Conditions across Cancel Item, Cancel Round, PlaceBid, and CloseAuction (MKT-DEC-026) (7.6704ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161596",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T08:42:41.596Z"),
+              submissionEndsAt: new Date("2026-10-13T09:42:41.596Z"),
+              auctionStartsAt: new Date("2026-10-13T10:12:41.596Z"),
+              auctionEndsAt: new Date("2026-10-13T11:42:41.596Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:2012:22)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:1976:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:2261:11
+✖ Step 20: Seller Recovery Concurrency Protection - Concurrent Resubmit & Resubmit vs Relist (MKT-DEC-026) (9.909ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161606",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T06:42:41.606Z"),
+              submissionEndsAt: new Date("2026-10-13T07:42:41.606Z"),
+              auctionStartsAt: new Date("2026-10-13T08:42:41.606Z"),
+              auctionEndsAt: new Date("2026-10-13T11:42:41.606Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:2273:24)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:2261:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\auction.integration.test.js:2444:11
+✖ Step 21: Submit vs CancelRound Serialization under Round Mutation Lock (MKT-DEC-026) (9.7416ms)
+  PrismaClientValidationError: 
+  Invalid `prisma.auctionRound.create()` invocation in
+  C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:45
+  
+    319   categories = [],
+    320 } = {}) {
+    321   const now = Date.now();
+  → 322   const round = await prisma.auctionRound.create({
+            data: {
+              title: "Test Round 1791888161616",
+              ~~~~~
+              categories: [],
+              submissionStartsAt: new Date("2026-10-13T09:42:41.616Z"),
+              submissionEndsAt: new Date("2026-10-13T11:42:41.616Z"),
+              auctionStartsAt: new Date("2026-10-13T11:42:41.616Z"),
+              auctionEndsAt: new Date("2026-10-13T12:42:41.616Z"),
+          ?   id?: String,
+          ?   createdAt?: DateTime,
+          ?   updatedAt?: DateTime,
+          ?   auctions?: AuctionItemCreateNestedManyWithoutRoundInput
+            }
+          })
+  
+  Unknown argument `title`. Available options are marked with ?.
+      at wn (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:29:1363)
+      at $n.handleRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6958)
+      at $n.handleAndLogRequestError (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6623)
+      at $n.request (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:121:6307)
+      at async l (C:\ise\Ise\backend\services\product-service\src\generated\prisma-client\runtime\library.js:130:9633)
+      at async createTestRound (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:322:19)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:2458:23)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\auction.integration.test.js:2444:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+
+test at backend\services\product-service\test\campaignMetrics.test.js:243:11
+✖ Prisma model persistence: records attribution, handles envelope, and deduplicates retries (1.9837ms)
+  TypeError: client.$queryRaw is not a function
+      at lockCampaign (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignBudget.js:5:25)
+      at C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:164:17
+      at runTx (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:158:21)
+      at Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:32)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:302:20)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:243:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at backend\services\product-service\test\campaignMetrics.test.js:331:11
+✖ Prisma model persistence: propagates DB errors instead of swallowing (2.2577ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /connection to database lost/. Input:
+  
+  'TypeError: client.$queryRaw is not a function'
+  
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:347:7)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:331:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: client.$queryRaw is not a function
+        at lockCampaign (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignBudget.js:5:25)
+        at C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:164:17
+        at runTx (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:158:21)
+        at Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:32)
+        at async waitForActual (node:assert:646:5)
+        at async strict.rejects (node:assert:769:25)
+        at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:347:7)
+        at async Test.run (node:internal/test_runner/test:1404:7)
+        at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:331:3)
+        at async Test.run (node:internal/test_runner/test:1404:7),
+    expected: /connection to database lost/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at backend\services\product-service\test\campaignMetrics.test.js:470:11
+✖ Idempotency conflict & deduplication on P2002 race recovery (0.9263ms)
+  TypeError: client.$queryRaw is not a function
+      at lockCampaign (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignBudget.js:5:25)
+      at C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:164:17
+      at runTx (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:158:21)
+      at Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:32)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:507:21)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:470:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at backend\services\product-service\test\campaignMetrics.test.js:583:11
+✖ identity conflict: reusing eventId with different orderId returns 409 even when monetary fields match (1.2106ms)
+  TypeError: client.$queryRaw is not a function
+      at lockCampaign (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignBudget.js:5:25)
+      at C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:164:17
+      at runTx (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:158:21)
+      at Object.recordOrderCompletedEvent (C:\ise\Ise\backend\services\product-service\src\features\campaigns\campaignMetrics.js:161:32)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:612:7)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\campaignMetrics.test.js:583:3)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at backend\services\product-service\test\er-alignment.integration.test.js:1:1
+✖ backend\services\product-service\test\er-alignment.integration.test.js (157.6619ms)
+  'test failed'
+
+test at backend\services\product-service\test\product-crud.integration.test.js:40:1
+✖ product CRUD against a real database (71.5975ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  400 !== 201
+  
+      at TestContext.<anonymous> (C:\ise\Ise\backend\services\product-service\test\product-crud.integration.test.js:71:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1404:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 400,
+    expected: 201,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
