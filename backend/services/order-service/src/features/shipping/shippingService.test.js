@@ -61,6 +61,32 @@ function fixture(overrides = {}, changed = 1) {
   return { service, request, writes, order, setSelectedAddress: (value) => { selectedAddress = value; } };
 }
 
+for (const [company, trackingNumber] of [
+  [undefined, "SIM123"],
+  ["", "SIM123"],
+  ["   ", "SIM123"],
+  ["Test Express", undefined],
+  ["Test Express", ""],
+  ["Test Express", "   "],
+]) {
+  test(`shipment requires both company (${JSON.stringify(company)}) and tracking (${JSON.stringify(trackingNumber)})`, async () => {
+    const { service, writes } = fixture({ status: "ready_to_ship" });
+    await assert.rejects(
+      service.markShipped({
+        orderId: "order-1",
+        actorId: "seller-1",
+        version: 3,
+        company,
+        trackingNumber,
+      }),
+      (error) =>
+        error.status === 400 &&
+        error.message === "company and trackingNumber are required to ship an order",
+    );
+    assert.equal(writes.length, 0);
+  });
+}
+
 for (const [field, value] of [
   ["phone", "12345"],
   ["postalCode", "ABCDE"],

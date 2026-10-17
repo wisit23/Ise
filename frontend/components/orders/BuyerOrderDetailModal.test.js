@@ -1,8 +1,15 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import BuyerOrderDetailModal from "./BuyerOrderDetailModal";
 import { apiFetch } from "../../lib/api";
+import { fetchProduct } from "../../lib/products";
+import { fetchSellerSummary } from "../../lib/sellers";
 
-jest.mock("../../lib/api", () => ({ apiFetch: jest.fn() }));
+jest.mock("../../lib/api", () => ({
+  apiFetch: jest.fn(),
+  mediaUrl: (url) => `https://media.test${url}`,
+}));
+jest.mock("../../lib/products", () => ({ fetchProduct: jest.fn() }));
+jest.mock("../../lib/sellers", () => ({ fetchSellerSummary: jest.fn() }));
 jest.mock("../../lib/auth", () => ({ getAccessToken: () => "token" }));
 
 const ADDR_OLD = {
@@ -48,7 +55,122 @@ function mockApi(current, { patch } = {}) {
   });
 }
 
-beforeEach(() => apiFetch.mockReset());
+beforeEach(() => {
+  apiFetch.mockReset();
+  fetchProduct.mockReset().mockResolvedValue(null);
+  fetchSellerSummary.mockReset().mockResolvedValue(null);
+});
+
+test("shows the shop name and product photo alongside shipping details", async () => {
+  const current = order("shipped", {
+    productId: "p1",
+    sellerId: "s1",
+    shipping: { company: "Test Express", trackingNumber: "SIM123" },
+  });
+  mockApi(current);
+  fetchProduct.mockResolvedValue({
+    title: "Current listing title",
+    media: [
+      { type: "video", url: "/uploads/clip.mp4" },
+      { type: "image", url: "/uploads/shoes.jpg" },
+    ],
+  });
+  fetchSellerSummary.mockResolvedValue({ shopName: "Secondhand Studio" });
+  render(
+    <BuyerOrderDetailModal order={current} statusLabel="จัดส่งแล้ว" onClose={() => {}} />,
+  );
+  expect(await screen.findByText("Secondhand Studio")).toBeInTheDocument();
+  expect(screen.getByRole("img", { name: "Shoes" })).toHaveAttribute(
+    "src",
+    "https://media.test/uploads/shoes.jpg",
+  );
+  expect(fetchProduct).toHaveBeenCalledWith("p1");
+  expect(fetchSellerSummary).toHaveBeenCalledWith("s1");
+  expect(screen.getByText("Test Express")).toBeInTheDocument();
+  expect(screen.getByText("SIM123")).toBeInTheDocument();
+  expect(screen.getByText("Old Name")).toBeInTheDocument();
+});
+
+test("keeps order details usable when the product and shop cannot be loaded", async () => {
+  const current = order("paid", { productId: "removed", sellerId: "s1" });
+  mockApi(current);
+  render(
+    <BuyerOrderDetailModal order={current} statusLabel="ชำระแล้ว" onClose={() => {}} />,
+  );
+  expect(await screen.findByText("ไม่พบชื่อร้าน")).toBeInTheDocument();
+  expect(screen.getByText("Shoes")).toBeInTheDocument();
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.getByText("Old Name")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "เปลี่ยนที่อยู่" })).toBeInTheDocument();
+  await waitFor(() => expect(fetchProduct).toHaveBeenCalledWith("removed"));
+});
+
+test("shows the shop without a broken image when a listing has no photos", async () => {
+  const current = order("paid", { productId: "p1", sellerId: "s1" });
+  mockApi(current);
+  fetchProduct.mockResolvedValue({ title: "Shoes", media: [] });
+  fetchSellerSummary.mockResolvedValue({ shopName: "Photo-free Shop" });
+  render(
+    <BuyerOrderDetailModal order={current} statusLabel="ชำระแล้ว" onClose={() => {}} />,
+  );
+  expect(await screen.findByText("Photo-free Shop")).toBeInTheDocument();
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+});
+
+test.each(["shipped", "delivered", "completed"])(
+  "shows the seller's shipping company and tracking number for %s orders after reload",
+  async (status) => {
+    const fresh = order(status, {
+      shipping: {
+        addressId: "a1",
+        company: "Test Express",
+        trackingNumber: "SIM123456789TH",
+      },
+    });
+    mockApi(fresh);
+    render(
+      <BuyerOrderDetailModal
+        order={order(status)}
+        statusLabel="x"
+        onClose={() => {}}
+      />,
+    );
+    expect(await screen.findByText("Test Express")).toBeInTheDocument();
+    expect(screen.getByText("SIM123456789TH")).toBeInTheDocument();
+    expect(screen.getByText("บริษัทขนส่ง")).toBeInTheDocument();
+    expect(screen.getByText("เลขพัสดุ")).toBeInTheDocument();
+    expect(screen.getByText("Old Name")).toBeInTheDocument();
+    expect(
+      screen.queryByText("รอผู้ขายระบุข้อมูลการจัดส่ง"),
+    ).not.toBeInTheDocument();
+  },
+);
+
+test("shows a waiting message before the seller ships, without invented tracking data", async () => {
+  const current = order("ready_to_ship", { shipping: null });
+  mockApi(current);
+  render(
+    <BuyerOrderDetailModal order={current} statusLabel="x" onClose={() => {}} />,
+  );
+  expect(
+    await screen.findByText("รอผู้ขายระบุข้อมูลการจัดส่ง"),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("เลขพัสดุ")).not.toBeInTheDocument();
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+});
+
+test("reports missing shipping data on a shipped order instead of claiming it is awaiting shipment", async () => {
+  const current = order("shipped", { shipping: null });
+  mockApi(current);
+  render(
+    <BuyerOrderDetailModal order={current} statusLabel="x" onClose={() => {}} />,
+  );
+  expect(await screen.findByText("ไม่พบข้อมูลการจัดส่ง")).toBeInTheDocument();
+  expect(
+    screen.queryByText("รอผู้ขายระบุข้อมูลการจัดส่ง"),
+  ).not.toBeInTheDocument();
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+});
 
 test.each(["paid", "confirmed"])(
   "buyer can change the address while the order is %s",

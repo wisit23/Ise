@@ -1,6 +1,10 @@
 # RE-LOOP Combined Feature Progress
 
-> อัปเดตล่าสุด: 2026-08-10
+> Historical combined snapshot: 2026-08-10
+>
+> Buyer status refreshed on 2026-10-17: ดู [`buyer/progress.md`](buyer/progress.md) สำหรับ `ST-BUY-01`–`ST-BUY-05`
+> และ [`buyer/handoff.md`](buyer/handoff.md) สำหรับงานที่เหลือ สถานะ Buyer/Chat/Swipe ด้านล่างเป็นประวัติ
+> ไม่ใช่สถานะ source ปัจจุบัน; รอบ refresh เป็น source review ไม่ใช่ acceptance test ใหม่
 
 ## สถานะรวม
 
