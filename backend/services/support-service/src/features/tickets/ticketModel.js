@@ -1,3 +1,4 @@
+const dashboardHourlyTrend = require("./dashboardHourlyTrend");
 const {
   serializableTransaction,
   badRequest,
@@ -655,7 +656,7 @@ async function dashboardMetrics({includeEscalated,days}) {
   ]);
   const buckets=new Map(Array.from({length:days},(_,i)=>{const d=new Date(since);d.setUTCDate(d.getUTCDate()+i);return [d.toISOString().slice(0,10),0];}));
   for(const r of created){const key=r.createdAt.toISOString().slice(0,10);if(buckets.has(key))buckets.set(key,buckets.get(key)+1);}
-  return {total,status:Object.fromEntries(statusRows.map(r=>[statuses.find(s=>s.id===r.currentStatusId)?.code,r._count._all])),priority:Object.fromEntries(priorityRows.map(r=>[priorities.find(p=>p.id===r.priorityId)?.code,r._count._all])),trend:[...buckets].map(([date,count])=>({date,count}))};
+  return {total,status:Object.fromEntries(statusRows.map(r=>[statuses.find(s=>s.id===r.currentStatusId)?.code,r._count._all])),priority:Object.fromEntries(priorityRows.map(r=>[priorities.find(p=>p.id===r.priorityId)?.code,r._count._all])),trend:[...buckets].map(([date,count])=>({date,count})),hourlyTrend:dashboardHourlyTrend(created)};
 }
 module.exports = {
   reassign,dashboardMetrics,

@@ -1,0 +1,242 @@
+.dashboard {
+  color: #17263c;
+}
+.sectionHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 24px 0 12px;
+  flex-wrap: wrap;
+}
+.sectionHeading h3 {
+  font-size: 15px;
+  font-weight: 700;
+}
+.sectionHeading > span {
+  color: #64748b;
+  font-size: 12px;
+}
+.metrics,
+.queues {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.queues {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.queueSection {
+  margin-bottom: 24px;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: left;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 16px;
+  min-width: 0;
+}
+button.metric:hover {
+  border-color: #6ee7b7;
+  box-shadow: 0 4px 16px #17263c08;
+}
+button.metric:focus-visible,
+.filters button:focus-visible {
+  outline: 3px solid #6ee7b7;
+  outline-offset: 3px;
+}
+.metricTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+.metricIcon {
+  color: #64748b;
+  font-size: 20px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+.metricIcon[data-color="red"] {
+  color: #e05252;
+  background: #fff1f2;
+}
+.metricIcon[data-color="amber"] {
+  color: #b77913;
+  background: #fffbeb;
+}
+.metricIcon[data-color="emerald"] {
+  color: #16836c;
+  background: #ecfdf5;
+}
+.metricIcon[data-color="violet"] {
+  color: #7c3aed;
+  background: #f5f3ff;
+}
+.metricValue {
+  display: block;
+  font-size: clamp(23px, 2.3vw, 32px);
+  letter-spacing: -0.6px;
+  margin: 8px 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.metricHint {
+  display: flex;
+  justify-content: space-between;
+  margin-top: auto;
+  font-size: 12px;
+  color: #64748b;
+}
+.trendCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 20px;
+  background: #fff;
+  margin: 20px 0;
+}
+.trendHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.trendHeader h3 {
+  font-size: 15px;
+  font-weight: 700;
+}
+.trendHeader p {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+}
+.filters {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #ecfdf5;
+  border-radius: 10px;
+}
+.filters button {
+  white-space: nowrap;
+  font-size: 12px;
+  color: #15805d;
+  padding: 6px 13px;
+  border-radius: 7px;
+}
+.filters button[aria-pressed="true"] {
+  color: white;
+  background: #15966b;
+  font-weight: 700;
+  box-shadow: 0 2px 5px #15966b30;
+}
+.scopeNote {
+  color: #64748b;
+  font-size: 11px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 14px;
+  margin-top: 12px;
+}
+.breakdowns {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 16px;
+}
+.chartSummary {
+  display: flex;
+  gap: 32px;
+  margin: 16px 0 0;
+  flex-wrap: wrap;
+}
+.chartSummary dt {
+  font-size: 11px;
+  color: #64748b;
+}
+.chartSummary dd {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.chartSummary dd span {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 400;
+  margin-left: 5px;
+}
+.chart {
+  margin-top: 8px;
+}
+.chart svg {
+  display: block;
+  width: 100%;
+  height: 240px;
+}
+.chart circle:focus {
+  outline: none;
+  stroke: #17263c;
+  stroke-width: 3;
+}
+.chartReadout {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  font-size: 13px;
+  color: #475569;
+  min-height: 24px;
+}
+.chartReadout strong {
+  color: #15805d;
+}
+.categoryHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: #64748b;
+  font-size: 11px;
+  margin-bottom: 20px;
+}
+.categoryHeader strong {
+  font-size: 24px;
+  color: #17263c;
+  margin-right: 5px;
+}
+@media (max-width: 1100px) {
+  .breakdowns {
+    grid-template-columns: 1fr;
+  }
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .queues {
+    grid-template-columns: 1fr;
+  }
+  .metric {
+    padding: 16px;
+  }
+  .trendCard {
+    padding: 16px 12px;
+  }
+  .chartSummary {
+    gap: 24px;
+  }
+  .filters {
+    width: 100%;
+  }
+  .filters button {
+    flex: 1;
+    padding: 7px 10px;
+  }
+  .trendHeader {
+    padding: 0 4px;
+  }
+}

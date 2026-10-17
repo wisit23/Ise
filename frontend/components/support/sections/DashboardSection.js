@@ -1,30 +1,47 @@
-/* eslint-disable no-unused-vars */
 "use client";
 import AgentDashboard from "./AgentDashboard";
-import { useState, useEffect, useRef } from "react";
-import Link from "next/link";
-import DonutChart from "../../charts/DonutChart";
-import TrendBarChart from "../../charts/TrendBarChart";
-
-import Badge from "../../panel/ui/Badge";
-import KpiCard from "../../panel/ui/KpiCard";
+import { useState, useEffect } from "react";
+import styles from "./SafetyDashboard.module.css";
 import ChartCard from "../../panel/ui/ChartCard";
-import DropdownFilter from "../../panel/ui/DropdownFilter";
 import {
-  TICKET_STATUS_LABEL,
-  TICKET_STATUS_STYLE,
-  PRIORITY_LABEL,
-  PRIORITY_STYLE,
-  AGENT_NEXT_STATUS,
-  DISPUTE_STATUS_LABEL,
-  DISPUTE_STATUS_STYLE,
-  ORDER_STATUS_LABEL,
-  HELP_CATEGORIES,
   DONUT_PRIORITY_COLORS,
   DONUT_DISPUTE_COLORS,
-  PAGE_SIZE,
 } from "../../../lib/supportConstants";
-import { apiFetch, fetchAuthedBlobUrl } from "../../../lib/api";
+import { apiFetch } from "../../../lib/api";
+import { CategoryBars, DailyVolume } from "./SafetyDashboardCharts";
+
+function KpiCard({ label, value, sub, icon, color, onClick }) {
+  const content = (
+    <>
+      <div className={styles.metricTop}>
+        <span>{label}</span>
+        <span
+          aria-hidden="true"
+          className={"material-symbols-outlined " + styles.metricIcon}
+          data-color={color}
+        >
+          {icon}
+        </span>
+      </div>
+      <strong className={styles.metricValue}>
+        {typeof value === "number"
+          ? value.toLocaleString("th-TH")
+          : (value ?? "…")}
+      </strong>
+      <span className={styles.metricHint}>
+        {sub}
+        {onClick && <span aria-hidden="true"> ↗</span>}
+      </span>
+    </>
+  );
+  return onClick ? (
+    <button type="button" className={styles.metric} onClick={onClick}>
+      {content}
+    </button>
+  ) : (
+    <div className={styles.metric}>{content}</div>
+  );
+}
 
 function SafetyDashboardSection({ token, userRole, onNavigate }) {
   const isSafety = userRole === "ADMIN" || userRole === "TRUST_AND_SAFETY";
@@ -40,18 +57,22 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
   const [statusData, setStatusData] = useState([]);
   const [disputeData, setDisputeData] = useState([]);
   const [ticketTrend, setTicketTrend] = useState([]);
+  const [hourlyTrend, setHourlyTrend] = useState([]);
   const [ownerStats, setOwnerStats] = useState({
     pendingKyc: null,
     openReports: null,
     activeTrustSafetyHolds: null,
   });
   const [sourceErrors, setSourceErrors] = useState({});
+  const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [days, setDays] = useState(7);
 
   useEffect(() => {
     let active = true;
     setSourceErrors({});
-    apiFetch("/api/support/tickets/dashboard?days=8", { token })
+    setLoading(true);
+    apiFetch("/api/support/tickets/dashboard?days=30", { token })
       .then((data) => {
         if (!active) return;
         const status = data.status || {};
@@ -64,27 +85,42 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
           escalated: status.ESCALATED || 0,
           open: status.IN_PROGRESS || 0,
         });
-      setPriorityData([
-          { label: "Low", value: priority.LOW || 0, color: DONUT_PRIORITY_COLORS.LOW },
-        {
-          label: "Medium",
+        setPriorityData([
+          {
+            label: "ต่ำ",
+            value: priority.LOW || 0,
+            color: DONUT_PRIORITY_COLORS.LOW,
+          },
+          {
+            label: "ปกติ",
             value: priority.NORMAL || 0,
-          color: DONUT_PRIORITY_COLORS.NORMAL,
-        },
-          { label: "High", value: priority.HIGH || 0, color: DONUT_PRIORITY_COLORS.HIGH },
-        {
-          label: "Urgent",
+            color: DONUT_PRIORITY_COLORS.NORMAL,
+          },
+          {
+            label: "สูง",
+            value: priority.HIGH || 0,
+            color: DONUT_PRIORITY_COLORS.HIGH,
+          },
+          {
+            label: "เร่งด่วน",
             value: priority.URGENT || 0,
-          color: DONUT_PRIORITY_COLORS.URGENT,
-        },
-      ]);
-      setStatusData([
-          { label: "New", value: status.NEW || 0 },
-          { label: "In Prog.", value: status.IN_PROGRESS || 0 },
-          { label: "Waiting", value: status.PENDING_USER || 0 },
-          { label: "Resolved", value: status.RESOLVED || 0 },
-          { label: "Closed", value: status.CLOSED || 0 },
-      ]);
+            color: DONUT_PRIORITY_COLORS.URGENT,
+          },
+        ]);
+        setStatusData([
+          { label: "ใหม่", value: status.NEW || 0 },
+          { label: "กำลังดำเนินการ", value: status.IN_PROGRESS || 0 },
+          { label: "รอผู้ใช้ตอบ", value: status.PENDING_USER || 0 },
+          { label: "แก้ไขแล้ว", value: status.RESOLVED || 0 },
+          { label: "ปิดแล้ว", value: status.CLOSED || 0 },
+          { label: "ส่งต่อ T&S", value: status.ESCALATED || 0 },
+        ]);
+        setHourlyTrend(
+          (data.hourlyTrend || []).map(({ hour, count }) => ({
+            label: hour,
+            value: count,
+          })),
+        );
         setTicketTrend(
           (data.trend || []).map(({ date, count }) => ({
             label: new Date(`${date}T00:00:00Z`).toLocaleDateString("th-TH", {
@@ -97,7 +133,11 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
         );
       })
       .catch((err) => {
-        if (active) setSourceErrors((current) => ({ ...current, support: err.message }));
+        if (active)
+          setSourceErrors((current) => ({ ...current, support: err.message }));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
 
     apiFetch("/api/orders/disputes/dashboard", { token })
@@ -105,13 +145,26 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
         if (!active) return;
         const dispute = data.disputesByStatus || {};
         setDisputeData([
-          { label: "รอตรวจสอบ", value: dispute.OPEN || 0, color: DONUT_DISPUTE_COLORS.OPEN },
-          { label: "รอข้อมูล", value: dispute.NEEDS_INFO || 0, color: DONUT_DISPUTE_COLORS.NEEDS_INFO },
-          { label: "ตัดสินแล้ว", value: dispute.DECIDED || 0, color: DONUT_DISPUTE_COLORS.DECIDED },
+          {
+            label: "รอตรวจสอบ",
+            value: dispute.OPEN || 0,
+            color: DONUT_DISPUTE_COLORS.OPEN,
+          },
+          {
+            label: "รอข้อมูล",
+            value: dispute.NEEDS_INFO || 0,
+            color: DONUT_DISPUTE_COLORS.NEEDS_INFO,
+          },
+          {
+            label: "ตัดสินแล้ว",
+            value: dispute.DECIDED || 0,
+            color: DONUT_DISPUTE_COLORS.DECIDED,
+          },
         ]);
       })
       .catch((err) => {
-        if (active) setSourceErrors((current) => ({ ...current, dispute: err.message }));
+        if (active)
+          setSourceErrors((current) => ({ ...current, dispute: err.message }));
       });
 
     if (isSafety) {
@@ -124,7 +177,8 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
           }));
         })
         .catch((err) => {
-          if (active) setSourceErrors((current) => ({ ...current, order: err.message }));
+          if (active)
+            setSourceErrors((current) => ({ ...current, order: err.message }));
         });
 
       apiFetch("/api/auth/admin/dashboard-summary", { token })
@@ -137,7 +191,8 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
           }));
         })
         .catch((err) => {
-          if (active) setSourceErrors((current) => ({ ...current, auth: err.message }));
+          if (active)
+            setSourceErrors((current) => ({ ...current, auth: err.message }));
         });
     }
     return () => {
@@ -145,35 +200,76 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
     };
   }, [token, isSafety, refreshKey]);
 
+  const visibleTrend = days === 1 ? hourlyTrend : ticketTrend.slice(-days);
+
   return (
-    <div className="animate-fade-in-up">
-      {/* KPI Row */}
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+    <div className={styles.dashboard}>
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-slate-900">
+          ภาพรวม Trust & Safety
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          ติดตามงานรอตรวจสอบ สถานะเคส และจำนวนเรื่องที่เข้ามา
+        </p>
+      </div>
+      <div className={styles.sectionHeading}>
+        <h3>ภาพรวมเคส</h3>
+        <span>สถานะปัจจุบัน · ทุกช่วงเวลา</span>
+      </div>
+      <div className={styles.metrics}>
         <KpiCard
-          label="Total Tickets"
-          value={stats.total}
+          label="เคสทั้งหมด"
+          value={
+            sourceErrors.support
+              ? "ไม่พร้อมใช้งาน"
+              : loading
+                ? null
+                : stats.total
+          }
           icon="confirmation_number"
           color="emerald"
-          sub={stats.open !== null ? `${stats.open} กำลังดำเนินการ` : null}
+          sub={
+            !sourceErrors.support && !loading && stats.open !== null
+              ? `${stats.open.toLocaleString("th-TH")} กำลังดำเนินการ`
+              : "รวมทุกสถานะ"
+          }
         />
         <KpiCard
-          label="Resolved Tickets"
-          value={stats.resolved}
+          label="เคสที่แก้ไขแล้ว"
+          value={
+            sourceErrors.support
+              ? "ไม่พร้อมใช้งาน"
+              : loading
+                ? null
+                : stats.resolved
+          }
           icon="check_circle"
           color="emerald"
           sub="แก้ไขแล้ว"
         />
         <KpiCard
-          label="Pending Tickets"
-          value={stats.pending}
+          label="เคสรอรับเรื่อง"
+          value={
+            sourceErrors.support
+              ? "ไม่พร้อมใช้งาน"
+              : loading
+                ? null
+                : stats.pending
+          }
           icon="pending"
           color="amber"
           sub="รอรับเรื่อง"
         />
         {isSafety ? (
           <KpiCard
-            label="Escalated Tickets"
-            value={stats.escalated}
+            label="เคสส่งต่อ T&S"
+            value={
+              sourceErrors.support
+                ? "ไม่พร้อมใช้งาน"
+                : loading
+                  ? null
+                  : stats.escalated
+            }
             icon="priority_high"
             color="red"
             onClick={() => onNavigate("admin_inbox", "")}
@@ -181,8 +277,14 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
           />
         ) : (
           <KpiCard
-            label="Urgent Tickets"
-            value={stats.urgent}
+            label="เคสเร่งด่วน"
+            value={
+              sourceErrors.support
+                ? "ไม่พร้อมใช้งาน"
+                : loading
+                  ? null
+                  : stats.urgent
+            }
             icon="priority_high"
             color="red"
             onClick={() => onNavigate("tickets", "")}
@@ -192,100 +294,145 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
       </div>
 
       {isSafety && (
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <KpiCard
-            label="Pending KYC"
-            value={sourceErrors.auth ? "Unavailable" : ownerStats.pendingKyc}
-            icon="how_to_reg"
-            color="amber"
-            onClick={() => onNavigate("kyc", "")}
-            sub={sourceErrors.auth ? "Auth API ไม่พร้อมใช้งาน" : "รอตรวจสอบ"}
-          />
-          <KpiCard
-            label="Open Reports"
-            value={sourceErrors.auth ? "Unavailable" : ownerStats.openReports}
-            icon="report"
-            color="red"
-            onClick={() => onNavigate("admin_inbox", "")}
-            sub={sourceErrors.auth ? "Auth API ไม่พร้อมใช้งาน" : "เปิดอยู่หรือกำลังตรวจ"}
-          />
-          <KpiCard
-            label="Active T&S Holds"
-            value={sourceErrors.order ? "Unavailable" : ownerStats.activeTrustSafetyHolds}
-            icon="lock"
-            color="violet"
-            onClick={() => onNavigate("admin_inbox", "")}
-            sub={sourceErrors.order ? "Order API ไม่พร้อมใช้งาน" : "สถานะพักเงินที่ยัง active"}
-          />
-        </div>
+        <section className={styles.queueSection}>
+          <div className={styles.sectionHeading}>
+            <h3>งานที่ต้องติดตาม</h3>
+            <span>เลือกการ์ดเพื่อเปิดคิวงาน</span>
+          </div>
+          <div className={styles.queues}>
+            <KpiCard
+              label="ยืนยันตัวตนรอตรวจ"
+              value={
+                sourceErrors.auth ? "ไม่พร้อมใช้งาน" : ownerStats.pendingKyc
+              }
+              icon="how_to_reg"
+              color="amber"
+              onClick={() => onNavigate("kyc", "")}
+              sub={sourceErrors.auth ? "โหลดข้อมูลไม่สำเร็จ" : "รอตรวจสอบ"}
+            />
+            <KpiCard
+              label="รายงานรอตรวจสอบ"
+              value={
+                sourceErrors.auth ? "ไม่พร้อมใช้งาน" : ownerStats.openReports
+              }
+              icon="report"
+              color="red"
+              onClick={() => onNavigate("admin_inbox", "")}
+              sub={
+                sourceErrors.auth
+                  ? "โหลดข้อมูลไม่สำเร็จ"
+                  : "เปิดอยู่หรือกำลังตรวจ"
+              }
+            />
+            <KpiCard
+              label="รายการพักเงิน"
+              value={
+                sourceErrors.order
+                  ? "ไม่พร้อมใช้งาน"
+                  : ownerStats.activeTrustSafetyHolds
+              }
+              icon="lock"
+              color="violet"
+              onClick={() => onNavigate("admin_inbox", "")}
+              sub={
+                sourceErrors.order
+                  ? "โหลดข้อมูลไม่สำเร็จ"
+                  : "รายการที่ยังระงับการจ่ายเงิน"
+              }
+            />
+          </div>
+        </section>
       )}
 
       {Object.keys(sourceErrors).length > 0 && (
         <div className="mb-4 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-          <span>ข้อมูลบางส่วนไม่พร้อมใช้งาน แยกจากค่า 0 เพื่อไม่ให้ตีความผิด</span>
-          <button type="button" className="font-bold underline" onClick={() => setRefreshKey((key) => key + 1)}>
+          <span>โหลดข้อมูลบางส่วนไม่สำเร็จ กรุณาลองอีกครั้ง</span>
+          <button
+            type="button"
+            className="font-bold underline"
+            onClick={() => setRefreshKey((key) => key + 1)}
+          >
             ลองใหม่
           </button>
         </div>
       )}
 
-      {/* Charts Row 1 */}
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <ChartCard title="Tickets by Priority" icon="bar_chart">
-          <DonutChart data={priorityData} size={170} strokeWidth={38} />
-        </ChartCard>
-
-        <ChartCard title="Tickets by Status" icon="schedule">
-          <TrendBarChart
-            data={statusData.length ? statusData : [{ label: "...", value: 0 }]}
-            height={200}
+      <section
+        className={styles.trendCard}
+        aria-labelledby="safety-trend-title"
+      >
+        <div className={styles.trendHeader}>
+          <div>
+            <h3 id="safety-trend-title">แนวโน้มเคสใหม่</h3>
+            <p>
+              จำนวนเรื่องที่เข้ามาในแต่ละ
+              {days === 1 ? "ชั่วโมงของวันนี้" : "วัน"} · หน่วย: เคส · เวลา UTC
+            </p>
+          </div>
+          <div
+            className={styles.filters}
+            role="group"
+            aria-label="ช่วงเวลากราฟเคสใหม่"
+          >
+            {[1, 7, 14, 30].map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={days === value}
+                onClick={() => setDays(value)}
+              >
+                {value === 1 ? "วันนี้" : value + " วัน"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <DailyVolume
+          key={days}
+          data={visibleTrend}
+          hourly={days === 1}
+          loading={loading}
+          error={sourceErrors.support}
+        />
+        <p className={styles.scopeNote}>
+          ตัวกรองช่วงเวลาใช้กับกราฟเคสใหม่
+          ส่วนสรุปและสถานะด้านล่างแสดงข้อมูลปัจจุบันทั้งหมด
+        </p>
+      </section>
+      <div className={styles.sectionHeading}>
+        <h3>รายละเอียดสถานะงาน</h3>
+        <span>ข้อมูลปัจจุบัน · ทุกช่วงเวลา</span>
+      </div>
+      <div className={styles.breakdowns}>
+        <ChartCard title="เคสตามสถานะ" icon="schedule">
+          <CategoryBars
+            data={statusData}
+            loading={loading}
+            error={sourceErrors.support}
           />
         </ChartCard>
-
-        <ChartCard title="Disputes by Status" icon="gavel">
-          <DonutChart data={disputeData} size={170} strokeWidth={38} />
+        <ChartCard title="เคสตามความสำคัญ" icon="priority_high">
+          <CategoryBars
+            data={[...priorityData].reverse()}
+            loading={loading}
+            error={sourceErrors.support}
+          />
         </ChartCard>
-      </div>
-
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <ChartCard title="Ticket Volume (ล่าสุด)" icon="trending_up">
-          {ticketTrend.length > 0 ? (
-            <TrendBarChart data={ticketTrend} height={160} />
-          ) : (
-            <div className="flex h-32 items-center justify-center text-sm text-gray-500">
-              กำลังโหลด...
-            </div>
-          )}
-        </ChartCard>
-
-        <ChartCard title="Priority Distribution" icon="donut_small">
-          <div className="flex flex-col gap-3 mt-2">
-            {priorityData.map((d) => {
-              const total = priorityData.reduce((s, x) => s + x.value, 0) || 1;
-              const pct = Math.round((d.value / total) * 100);
-              return (
-                <div key={d.label} className="group flex items-center gap-3">
-                  <span className="w-14 text-right text-xs font-medium text-slate-500">
-                    {d.label}
-                  </span>
-                  <div className="flex-1 overflow-hidden rounded-full bg-slate-100 h-2.5 shadow-inner">
-                    <div
-                      className="h-full rounded-full transition-all duration-1000 ease-out"
-                      style={{ width: `${pct}%`, backgroundColor: d.color }}
-                    />
-                  </div>
-                  <span className="w-8 text-xs font-semibold text-slate-700">
-                    {pct}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+        <ChartCard title="ข้อพิพาทตามสถานะ" icon="gavel">
+          <CategoryBars
+            data={disputeData}
+            loading={!disputeData.length}
+            error={sourceErrors.dispute}
+          />
         </ChartCard>
       </div>
     </div>
   );
 }
 
-export default function DashboardSection(props){return props.userRole === "CUSTOMER_SERVICE" ? <AgentDashboard token={props.token} currentUserId={props.currentUserId}/> : <SafetyDashboardSection {...props}/>;}
+export default function DashboardSection(props) {
+  return props.userRole === "CUSTOMER_SERVICE" ? (
+    <AgentDashboard token={props.token} currentUserId={props.currentUserId} />
+  ) : (
+    <SafetyDashboardSection {...props} />
+  );
+}
