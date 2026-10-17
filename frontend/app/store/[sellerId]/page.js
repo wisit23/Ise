@@ -194,7 +194,7 @@ export default function StorePage() {
               </span>
               <div>
                 <p className="font-semibold text-amber-900">
-                  คำขอแก้ไขข้อมูลร้านค้าของคุณอยู่ระหว่างรอแอดมินตรวจสอบ
+                  คำขอแก้ไขข้อมูลร้านค้าของคุณอยู่ระหว่างรอ Trust and Safety ตรวจสอบ
                 </p>
                 <p className="text-xs text-amber-700 mt-0.5">
                   ยื่นเมื่อ{" "}

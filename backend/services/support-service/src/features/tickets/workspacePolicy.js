@@ -12,16 +12,18 @@ function ticketCapabilities(ticket, userId, role) {
   const mutable = accessible && !closed && (owner || elevated) && !(role === "CUSTOMER_SERVICE" && ticket.status === "ESCALATED");
   return {
     canViewDetail: accessible,
+    canModerateUsers: elevated && owner && !["CLOSED", "RESOLVED"].includes(ticket.status),
     canClaim: accessible && !closed && !ticket.assigneeId,
     canTakeover: elevated && !closed && ticket.status === "ESCALATED" && Boolean(ticket.assigneeId) && !owner,
     canReply: !closed && role === "CUSTOMER_SERVICE" && (responder || (mutable && owner)),
     canAddNote: mutable || (!closed && responder),
-    canChangeStatus: mutable,
-    allowedNextStatuses: mutable
+    canChangeStatus: mutable && owner,
+    canClose: mutable && owner && (TRANSITIONS[ticket.status] || []).includes("CLOSED"),
+    allowedNextStatuses: mutable && owner
       ? (TRANSITIONS[ticket.status] || []).filter((s) => s !== "ASSIGNED")
       : [],
     canEscalate:
-      mutable && (TRANSITIONS[ticket.status] || []).includes("ESCALATED"),
+      mutable && owner && (TRANSITIONS[ticket.status] || []).includes("ESCALATED"),
     readOnlyReason: closed
       ? "เคสนี้ปิดแล้ว"
       : !accessible

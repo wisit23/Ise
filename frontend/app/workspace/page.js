@@ -25,8 +25,8 @@ const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "tickets", label: "Tickets", icon: "confirmation_number" },
   { key: "disputes", label: "Disputes", icon: "gavel" },
-  { key: "orders", label: "ค้นหา", icon: "manage_search" },
-  { key: "faq", label: "จัดการ FAQ", icon: "menu_book" },
+  { key: "orders", label: "Search", icon: "manage_search" },
+  { key: "faq", label: "FAQ Management", icon: "menu_book" },
 ];
 
 // Escalated tickets, moderation, and every other Admin-only privileged
@@ -34,14 +34,18 @@ const SECTIONS = [
 // anywhere in the CS agent's own tabs (see TicketsSection's dropped
 // ESCALATED filter option).
 const ADMIN_SECTIONS = [
-  { key: "admin_inbox", label: "เคสส่งต่อ", icon: "assignment_late" },
-  { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
-  { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
+  { key: "admin_inbox", label: "Escalation Inbox", icon: "assignment_late" },
+  { key: "products", label: "Product Moderation", icon: "inventory_2" },
+  { key: "kyc", label: "KYC Review", icon: "how_to_reg" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
 ];
 
 const ADMIN_ONLY_SECTIONS = [
-  { key: "shop_changes", label: "ตรวจข้อมูลร้านค้า", icon: "storefront" },
+  { key: "shop_changes", label: "Shop Updates", icon: "storefront" },
+];
+const SAFETY_SECTIONS = [
+  ...SECTIONS.filter((item) => !["tickets", "disputes"].includes(item.key)),
+  ...ADMIN_SECTIONS,
 ];
 const SECTION_KEYS = [...SECTIONS,...ADMIN_SECTIONS,...ADMIN_ONLY_SECTIONS].map(item=>item.key);
 
@@ -50,7 +54,18 @@ export default function SupportPanelPage() {
   const [user, setUser] = useState(undefined);
   const [section, setSection] = useState(() => typeof window !== "undefined" && SECTION_KEYS.includes(new URLSearchParams(window.location.search).get("section")) ? new URLSearchParams(window.location.search).get("section") : "dashboard");
   useEffect(() => { const sync = () => { const value = new URLSearchParams(window.location.search).get("section"); setSection(SECTION_KEYS.includes(value)?value:'dashboard'); }; window.addEventListener("popstate",sync); return () => window.removeEventListener("popstate",sync); }, []);
-  useEffect(()=>{if(!user)return;const roles=new Set([user.role,...(user.roles||[])]);const allowed=[...SECTIONS,...(roles.has('ADMIN')||roles.has('TRUST_AND_SAFETY')?ADMIN_SECTIONS:[]),...(roles.has('ADMIN')?ADMIN_ONLY_SECTIONS:[])];if(!allowed.some(item=>item.key===section)){setSection('dashboard');navigateWorkspaceSection('dashboard',user.id);}},[user,section]);
+  useEffect(() => {
+    if (!user) return;
+    const roles = new Set([user.role, ...(user.roles || [])]);
+    const isSafety = roles.has("ADMIN") || roles.has("TRUST_AND_SAFETY");
+    const allowed = isSafety
+      ? [...SAFETY_SECTIONS, ...(roles.has("ADMIN") ? ADMIN_ONLY_SECTIONS : [])]
+      : SECTIONS;
+    if (!allowed.some((item) => item.key === section)) {
+      setSection("dashboard");
+      navigateWorkspaceSection("dashboard", user.id);
+    }
+  }, [user, section]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   useEffect(() => {
     try { setSidebarCollapsed(localStorage.getItem("reloop:workspace:sidebar-collapsed") === "true"); } catch { /* Storage may be unavailable; keep the current preference. */ }
@@ -106,12 +121,12 @@ export default function SupportPanelPage() {
   const isAdminOrSafety = staffRole === "ADMIN" || staffRole === "TRUST_AND_SAFETY";
   const visibleSections = isAdminOrSafety
     ? [
-        ...SECTIONS,
-        ...ADMIN_SECTIONS,
+        ...SAFETY_SECTIONS,
         ...(staffRole === "ADMIN" ? ADMIN_ONLY_SECTIONS : []),
       ]
     : SECTIONS;
-  const activeSection = visibleSections.find((s) => s.key === section);
+  const visibleSection = visibleSections.some((s) => s.key === section) ? section : "dashboard";
+  const activeSection = visibleSections.find((s) => s.key === visibleSection);
 
   return (
     // Toasts are mounted at the panel root so every section beneath it can
@@ -122,7 +137,7 @@ export default function SupportPanelPage() {
         {/* Keep workspace sticky bars below the navbar and its profile menu. */}
         <div className="isolate flex min-h-0 flex-1">
           {/* ── Sidebar ── */}
-          <aside aria-label="เมนู workspace" className={`hidden shrink-0 flex-col border-r border-slate-200/60 bg-white sm:flex transition-[width] duration-200 z-10 ${sidebarCollapsed ? "w-16" : "w-60"}`}>
+          <aside aria-label="เมนู workspace" className={`hidden shrink-0 flex-col border-r border-slate-200/60 bg-white lg:flex transition-[width] duration-200 motion-reduce:transition-none z-10 ${sidebarCollapsed ? "w-16" : "w-60"}`}>
             {/* Brand */}
             <div className={`${motion.workspaceHeader} flex shrink-0 items-center border-b border-slate-200/60 bg-white ${sidebarCollapsed ? "justify-center px-2" : "justify-between gap-1 px-2"}`}>
               <div className={`${sidebarCollapsed ? "hidden" : "flex"} min-w-0 items-center gap-2`}>
@@ -157,10 +172,10 @@ export default function SupportPanelPage() {
             </div>
 
             {/* Nav items */}
-            <nav className="relative flex flex-1 flex-col gap-1 p-2">
-              <span aria-hidden="true" className={motion.selection} style={{ transform: `translateY(${Math.max(0, visibleSections.findIndex(item => item.key === section)) * 48}px)` }} />
+            <nav className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2">
+              <span aria-hidden="true" className={motion.selection} style={{ transform: `translateY(${Math.max(0, visibleSections.findIndex(item => item.key === visibleSection)) * 48}px)` }} />
               {visibleSections.map((s) => {
-                const active = section === s.key;
+                const active = visibleSection === s.key;
                 return (
                   <button
                     key={s.key}
@@ -211,11 +226,11 @@ export default function SupportPanelPage() {
           {/* ── Main Content ── */}
           <main
             className={`min-h-0 min-w-0 flex-1 flex flex-col ${
-              ["tickets","disputes"].includes(section) ? "overflow-hidden" : "overflow-y-auto"
+              ["tickets","disputes"].includes(visibleSection) ? "overflow-hidden" : "overflow-y-auto"
             }`}
           >
             {/* Top bar */}
-            <div className={`${motion.workspaceHeader} ${section === "dashboard" && staffRole === "CUSTOMER_SERVICE" ? motion.dashboardToolbar : ""} sticky top-0 z-30 flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-3 py-2 sm:px-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]`}>
+            <div className={`${motion.workspaceHeader} ${visibleSection === "dashboard" && staffRole === "CUSTOMER_SERVICE" ? motion.dashboardToolbar : ""} sticky top-0 z-30 flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-white/80 backdrop-blur-md px-3 py-2 sm:px-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]`}>
               <div className="flex items-center gap-3">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                   <span className="material-symbols-outlined text-[18px]">
@@ -229,9 +244,9 @@ export default function SupportPanelPage() {
               {/* Mobile section switcher */}
               <div className="ml-auto flex items-center gap-2">
                 <div id="workspace-view-control" />
-                <div className="flex items-center gap-3 sm:hidden">
+                <div className="flex items-center gap-3 lg:hidden">
                   <RadioSelect
-                    value={section}
+                    value={visibleSection}
                     onChange={value=>navigateTo(value)}
                     options={visibleSections.map((s) => ({
                       value: s.key,
@@ -247,13 +262,13 @@ export default function SupportPanelPage() {
             </div>
 
             {/* Content */}
-            {["tickets","disputes"].includes(section) ? (
-              <div key={section} className={`flex-1 min-h-0 overflow-hidden flex flex-col ${motion.content}`}>
-                {section === "tickets" ? <TicketsSection token={token} currentUser={{...user,role:staffRole}} statusFilter={ticketsFilter} /> : <DisputesSection token={token} currentUser={{...user,role:staffRole}} status={disputesFilter} />}
+            {["tickets","disputes"].includes(visibleSection) ? (
+              <div key={visibleSection} className={`flex-1 min-h-0 overflow-hidden flex flex-col ${motion.content}`}>
+                {visibleSection === "tickets" ? <TicketsSection token={token} currentUser={{...user,role:staffRole}} statusFilter={ticketsFilter} /> : <DisputesSection token={token} currentUser={{...user,role:staffRole}} status={disputesFilter} />}
               </div>
             ) : (
-              <div key={section} className={`${section === 'dashboard' ? 'h-full min-h-0 p-3 sm:p-4' : 'p-8'} ${section === "dashboard" && staffRole === "CUSTOMER_SERVICE" ? "max-w-none" : "max-w-7xl"} mx-auto w-full ${motion.content}`}>
-                {section === "dashboard" && (
+              <div key={visibleSection} className={`${visibleSection === 'dashboard' ? 'h-full min-h-0 p-3 sm:p-4' : 'p-3 sm:p-4 lg:p-6'} ${(isAdminOrSafety || (visibleSection === "dashboard" && staffRole === "CUSTOMER_SERVICE")) ? "max-w-none" : "max-w-7xl"} mx-auto w-full ${motion.content}`}>
+                {visibleSection === "dashboard" && (
                   <DashboardSection
                     token={token}
                     userRole={staffRole}
@@ -261,15 +276,15 @@ export default function SupportPanelPage() {
                     onNavigate={navigateTo}
                   />
                 )}
-                {section === "admin_inbox" && (
+                {visibleSection === "admin_inbox" && (
                   <AdminInboxSection token={token} currentUserId={user?.id} userRole={staffRole} initialReportId={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("reportId") || "" : ""} />
                 )}
-                {section === "orders" && <OrdersSection token={token} initialUserId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("userId") || "" : ""} initialOrderId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("orderId") || "" : ""} />}
-                {section === "faq" && <FaqSection token={token} />}
-                {section === "kyc" && <KycSection token={token} />}
-                {section === "audit" && <AuditSection token={token} />}
-                {section === "products" && <ProductsSection token={token} />}
-                {section === "shop_changes" && (
+                {visibleSection === "orders" && <OrdersSection token={token} canModerate={isAdminOrSafety} initialUserId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("userId") || "" : ""} initialOrderId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("orderId") || "" : ""} />}
+                {visibleSection === "faq" && <FaqSection token={token} />}
+                {visibleSection === "kyc" && <KycSection token={token} />}
+                {visibleSection === "audit" && <AuditSection token={token} />}
+                {visibleSection === "products" && <ProductsSection token={token} />}
+                {visibleSection === "shop_changes" && (
                   <SellerChangeRequestsSection token={token} />
                 )}
               </div>

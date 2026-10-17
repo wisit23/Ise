@@ -1,10 +1,11 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import config from "../../../lib/customerServiceConfig";
 import { apiFetch } from "../../../lib/api";
 import Pagination from "../../Pagination";
 import Badge from "../../panel/ui/Badge";
 import ConfirmDialog from "../../ui/ConfirmDialog";
+import Modal from "../../ui/Modal";
 import { useToast } from "../../ui/ToastProvider";
 
 const STATUS_LABEL = {
@@ -29,7 +30,10 @@ export default function ProductsSection({ token }) {
   const toast = useToast();
   const [pendingRemoval, setPendingRemoval] = useState(null);
   const [pendingRestore, setPendingRestore] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedSeller, setSelectedSeller] = useState(null);
   const operationKeys = useRef(new Map());
+  const searchRequest = useRef(0);
   const [query, setQuery] = useState("");
   const [includeRemoved, setIncludeRemoved] = useState(false);
   const [items, setItems] = useState([]);
@@ -41,12 +45,24 @@ export default function ProductsSection({ token }) {
   const [busyId, setBusyId] = useState(null);
   const [reasonById, setReasonById] = useState({});
 
+  useEffect(() => {
+    const sellerId = selectedProduct?.sellerId;
+    if (!sellerId) return;
+    let cancelled = false;
+    setSelectedSeller(null);
+    apiFetch(`/api/auth/admin/users/${sellerId}`, { token })
+      .then((seller) => { if (!cancelled) setSelectedSeller(seller); })
+      .catch(() => { if (!cancelled) setSelectedSeller(null); });
+    return () => { cancelled = true; };
+  }, [selectedProduct?.sellerId, token]);
+
   async function searchProducts(
     targetPage = 1,
     searchQuery = query,
     removedOnly = includeRemoved,
   ) {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() && !removedOnly) return;
+    const request = ++searchRequest.current;
     setLoading(true);
     setError("");
     setSearched(true);
@@ -60,20 +76,39 @@ export default function ProductsSection({ token }) {
       const data = await apiFetch(`/api/products/admin/search?${params}`, {
         token,
       });
+      if (request !== searchRequest.current) return;
       setItems(data.items || []);
       setTotalPages(data.totalPages || 1);
       setPage(targetPage);
     } catch (err) {
+      if (request !== searchRequest.current) return;
       setError(err.message);
       setItems([]);
     } finally {
-      setLoading(false);
+      if (request === searchRequest.current) setLoading(false);
     }
   }
 
   function handleSearch(e) {
     e.preventDefault();
     searchProducts(1, query, includeRemoved);
+  }
+
+  function showRemovedProducts() {
+    setIncludeRemoved(true);
+    setQuery("");
+    searchProducts(1, "", true);
+  }
+
+  function showProductSearch() {
+    searchRequest.current += 1;
+    setIncludeRemoved(false);
+    setQuery("");
+    setItems([]);
+    setSearched(false);
+    setLoading(false);
+    setPage(1);
+    setError("");
   }
 
   function handleRemove(product) {
@@ -155,11 +190,9 @@ export default function ProductsSection({ token }) {
         },
       );
       clearOperationKey("RESTORE_PRODUCT", product.id);
-      setItems((prev) =>
-        prev.map((p) =>
-          p.id === product.id ? { ...p, status: updated.status } : p,
-        ),
-      );
+      setItems((prev) => includeRemoved
+        ? prev.filter((p) => p.id !== product.id)
+        : prev.map((p) => p.id === product.id ? { ...p, status: updated.status } : p));
       toast.success(`กู้คืนสินค้า "${product.title}" สำเร็จ`);
     } catch (err) {
       setError(err.message);
@@ -180,7 +213,7 @@ export default function ProductsSection({ token }) {
               inventory_2
             </span>
             <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-              จัดการสินค้า
+              Product Moderation
             </h2>
             <p className="mt-2 text-sm font-medium text-slate-500">
               ค้นหาสินค้าเพื่อลบออกจากระบบ หรือกู้คืนสินค้าที่เคยลบ
@@ -202,27 +235,34 @@ export default function ProductsSection({ token }) {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="ค้นหาชื่อสินค้า, แท็ก, หมวดหมู่..."
+                placeholder={includeRemoved ? "ค้นหาในสินค้าที่ถูกลบ..." : "ค้นหาชื่อสินค้า, แท็ก, หมวดหมู่..."}
                 className="w-full border-0 bg-transparent py-2.5 text-sm font-medium text-slate-900 outline-none placeholder:text-slate-500 focus:ring-0"
               />
             </div>
             <button
               type="submit"
-              disabled={loading || !query.trim()}
+              disabled={loading || (!query.trim() && !includeRemoved)}
               className="flex shrink-0 items-center gap-1 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-bold tracking-wide text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
             >
               {loading ? "กำลังค้นหา..." : "ค้นหา"}
             </button>
           </form>
-          <label className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-500">
-            <input
-              type="checkbox"
-              checked={includeRemoved}
-              onChange={(e) => setIncludeRemoved(e.target.checked)}
-              className="h-3.5 w-3.5 rounded border-slate-300"
-            />
-            ค้นหาเฉพาะสินค้าที่ถูกลบไปแล้ว (เพื่อกู้คืน)
-          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={showRemovedProducts}
+              aria-pressed={includeRemoved}
+              disabled={loading && includeRemoved}
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 ${includeRemoved ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-white text-slate-700 hover:border-red-300 hover:text-red-700"}`}
+            >
+              ดูรายการที่ลบแล้ว
+            </button>
+            {includeRemoved && (
+              <button type="button" onClick={showProductSearch} className="text-sm font-semibold text-emerald-700 hover:underline">
+                กลับไปค้นหาสินค้า
+              </button>
+            )}
+          </div>
         </div>
 
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
@@ -245,9 +285,9 @@ export default function ProductsSection({ token }) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate font-semibold text-slate-900">
+                  <button type="button" onClick={() => setSelectedProduct(p)} className="text-left font-semibold text-slate-900 underline-offset-2 hover:underline">
                     {p.title}
-                  </p>
+                  </button>
                   <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-medium text-slate-500">
                     <span>รหัส {p.id.slice(0, 8)}</span>
                     <span>฿{p.price?.toLocaleString("th-TH")}</span>
@@ -263,6 +303,10 @@ export default function ProductsSection({ token }) {
                 />
               </div>
 
+              <button type="button" onClick={() => setSelectedProduct(p)} className="mt-3 text-xs font-semibold text-emerald-700 hover:underline">
+                ดูรายละเอียดสินค้า
+              </button>
+
               <div className="mt-4 border-t border-slate-100 pt-3">
                 {p.status === "removed" ? (
                   <div className="flex flex-wrap items-center gap-2">
@@ -272,7 +316,7 @@ export default function ProductsSection({ token }) {
                         setReasonById((r) => ({ ...r, [p.id]: e.target.value }))
                       }
                       placeholder="เหตุผลในการกู้คืน..."
-                      className="min-w-[200px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
+                      className="min-w-0 w-full sm:w-auto sm:min-w-[200px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
                     />
                     <button
                       onClick={() => handleRestore(p)}
@@ -290,7 +334,7 @@ export default function ProductsSection({ token }) {
                         setReasonById((r) => ({ ...r, [p.id]: e.target.value }))
                       }
                       placeholder="เหตุผลในการลบ..."
-                      className="flex-1 min-w-[200px] rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
+                      className="flex-1 min-w-0 w-full sm:w-auto sm:min-w-[200px] rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-emerald-500"
                     />
                     <button
                       onClick={() => handleRemove(p)}
@@ -319,6 +363,21 @@ export default function ProductsSection({ token }) {
         )}
       </div>
 
+      <Modal open={Boolean(selectedProduct)} onClose={() => setSelectedProduct(null)} title="Product Details" size="lg">
+        {selectedProduct && <div className="space-y-3 p-5 text-sm text-slate-700">
+          <p><strong>ชื่อ:</strong> {selectedProduct.title}</p>
+          <p className="break-all"><strong>รหัสสินค้า:</strong> {selectedProduct.id}</p>
+          <p><strong>เจ้าของสินค้า:</strong> {selectedSeller?.sellerProfile?.shopName || [selectedSeller?.firstName, selectedSeller?.lastName].filter(Boolean).join(" ") || selectedSeller?.email || selectedProduct.sellerId || "—"}</p>
+          <p className="break-all"><strong>รหัสผู้ขาย:</strong> {selectedProduct.sellerId || "—"}</p>
+          <p><strong>สถานะ:</strong> {STATUS_LABEL[selectedProduct.status] || selectedProduct.status}</p>
+          <p><strong>ราคา:</strong> ฿{selectedProduct.price?.toLocaleString("th-TH")}</p>
+          <p><strong>หมวดหมู่:</strong> {selectedProduct.category || "—"}</p>
+          <p className="whitespace-pre-wrap"><strong>รายละเอียด:</strong> {selectedProduct.description || "—"}</p>
+          {selectedProduct.media?.filter((media) => media.type === "image").length > 0 && <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {selectedProduct.media.filter((media) => media.type === "image").map((media, index) => <img key={`${media.url}-${index}`} src={media.url} alt={`รูปสินค้า ${index + 1}`} className="aspect-square w-full rounded-lg object-cover" />)}
+          </div>}
+        </div>}
+      </Modal>
       <ConfirmDialog
         open={Boolean(pendingRemoval)}
         busy={busyId === pendingRemoval?.id}

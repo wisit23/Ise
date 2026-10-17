@@ -5,7 +5,7 @@ import Modal from "../../ui/Modal";
 import Button from "../../ui/Button";
 import Alert from "../../ui/Alert";
 
-function PrivateFile({ disputeId, file }) {
+export function PrivateFile({ disputeId, file }) {
   const [url, setUrl] = useState(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);

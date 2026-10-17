@@ -22,11 +22,10 @@ export default function EscalationMemoDialog({
   open,
   onClose,
   onSubmit,
-  dispute = false,
   returnTasks,
   onTaskChange,
 }) {
-  const target = dispute ? "Trust & Safety" : "Admin";
+  const target = "Trust and Safety";
   const followUp = Array.isArray(returnTasks) && returnTasks.length > 0;
   const [memo, setMemo] = useState({
     problem: "",

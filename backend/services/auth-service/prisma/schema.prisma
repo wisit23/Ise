@@ -194,14 +194,29 @@ model Report {
   reporter    User         @relation(fields: [reporterId], references: [id])
   targetId    String?      @map("target_id")
   productId   String?      @map("product_id")
+  category    String?
   reason      String
   status      ReportStatus @default(OPEN)
   reportedAt  DateTime     @default(now()) @map("reported_at")
   reviewedAt  DateTime?    @map("reviewed_at")
   reviewedBy  String?      @map("reviewed_by")
   actionTaken String?      @map("action_taken")
+  evidence    ReportEvidence[]
 
   @@map("reports")
+}
+
+model ReportEvidence {
+  id           String   @id @default(uuid())
+  reportId     String   @map("report_id")
+  report       Report   @relation(fields: [reportId], references: [id])
+  storageKey   String   @map("storage_key")
+  fileType     String   @map("file_type")
+  originalName String   @map("original_name")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  @@index([reportId])
+  @@map("report_evidence")
 }
 
 // ADM-003: append-only log of every privileged Admin action (suspend/restore,

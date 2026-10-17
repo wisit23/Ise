@@ -136,7 +136,7 @@ const DISPUTES = [
     orderId: ID.orders[2],
     status: "OPEN",
     assignedTo: null,
-    assignedRole: "ADMIN",
+    assignedRole: "TRUST_AND_SAFETY",
     escalatedBy: ID.cs,
     escalationNote:
       "ปัญหา: ผู้ซื้อแจ้งว่าสินค้าผิดขนาด\nขาดอำนาจ: ต้องชี้ขาดเงิน Escrow\nข้อเสนอแนะ: ขอให้ Admin ตรวจหลักฐานทั้งสองฝ่าย",
@@ -147,7 +147,7 @@ const DISPUTES = [
     orderId: ID.orders[3],
     status: "DECIDED",
     assignedTo: ID.admin,
-    assignedRole: "ADMIN",
+    assignedRole: "TRUST_AND_SAFETY",
     escalatedBy: ID.cs,
     reason: "DEMO 04 ตัดสินแล้ว: สินค้าชำรุด",
   },

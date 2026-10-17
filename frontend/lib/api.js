@@ -155,6 +155,33 @@ async function apiFetchRequest(path, { method = "GET", body, token, signal } = {
   return data;
 }
 
+export async function createReportWithEvidence({ targetId, category, reason, file }, token) {
+  const form = new FormData();
+  if (targetId) form.append("targetId", targetId);
+  if (category) form.append("category", category);
+  form.append("reason", reason);
+  if (file) form.append("file", file);
+  const path = "/api/auth/reports";
+  const send = (accessToken) => fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  let response = await send(token ?? getAccessToken());
+  if (response.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) response = await send(refreshed);
+  }
+  const data = await response.json().catch(() => null);
+  rejectSuspended(data);
+  if (!response.ok) {
+    if (response.status === 401) forceLogout();
+    const message = typeof data?.error === "object" ? data.error.message : data?.error;
+    throw new Error(message || `ส่งรายงานไม่สำเร็จ (${response.status})`);
+  }
+  return data;
+}
+
 /** Uploads files as multipart/form-data. Browser sets the boundary itself, so
  * Content-Type must NOT be set manually here (unlike apiFetch's JSON body). */
 async function uploadMediaTo(path, files, token, fieldName = "files") {

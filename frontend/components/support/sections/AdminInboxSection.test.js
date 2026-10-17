@@ -17,7 +17,7 @@ jest.mock("./admin-inbox/ReportCasePanel", () => ({
 }));
 jest.mock("./case/TicketCasePanel", () => ({
   __esModule: true,
-  default: () => <div>ticket detail</div>,
+  default: ({ ticket }) => <div>ticket detail: {ticket.requesterName || ticket.requesterId} / {ticket.assigneeName || ticket.assigneeId}</div>,
 }));
 
 function report(id, reason) {
@@ -35,6 +35,21 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+it("loads personal completed history from all three services and restores the active queue", async () => {
+  apiFetch.mockImplementation((url) => Promise.resolve({ items: url.includes("/disputes/queue?") && url.includes("scope=history") ? [{ id: "done-1", orderId: "past-order", reason: "งานเก่าที่ตัดสินแล้ว", status: "DECIDED" }] : [], totalPages: 1 }));
+  render(<AdminInboxSection token="token" currentUserId="me" />);
+  fireEvent.click(screen.getByRole("button", { name: "My History" }));
+  expect(await screen.findByText("งานเก่าที่ตัดสินแล้ว")).toBeInTheDocument();
+  expect(screen.getByText("ตัดสินแล้ว")).toBeInTheDocument();
+  const historyCalls = apiFetch.mock.calls.map(([url]) => new URL(url, "http://test")).filter((url) => url.searchParams.get("scope") === "history");
+  expect(historyCalls).toHaveLength(3);
+  expect(historyCalls.find((url) => url.pathname.includes("tickets")).searchParams.has("status")).toBe(false);
+  expect(historyCalls.find((url) => url.pathname.includes("disputes")).searchParams.get("status")).toBe("DECIDED");
+  fireEvent.click(screen.getByRole("button", { name: "My Work" }));
+  await waitFor(() => expect(screen.queryByText("งานเก่าที่ตัดสินแล้ว")).not.toBeInTheDocument());
+  expect(apiFetch.mock.calls.some(([url]) => url.includes("scope=mine"))).toBe(true);
+});
+
 it("keeps report and escalated-ticket pagination independent", async () => {
   apiFetch.mockImplementation((url) => {
     if (url.includes("/admin/reports?")) {
@@ -48,7 +63,7 @@ it("keeps report and escalated-ticket pagination independent", async () => {
   });
 
   render(<AdminInboxSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", {name:"รายงานผู้ใช้"}));
+  fireEvent.click(screen.getByRole("tab", {name:"User Reports"}));
   expect(await screen.findByText("Report page 1")).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "3" }));
@@ -57,7 +72,7 @@ it("keeps report and escalated-ticket pagination independent", async () => {
     expect.arrayContaining([expect.stringContaining("page=3")]),
   );
 
-  fireEvent.click(screen.getByRole("tab", { name: "ทิกเก็ตขออนุมัติพิเศษ" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Escalated Tickets" }));
   expect(await screen.findByRole("button", { name: "7" })).toBeInTheDocument();
   expect(apiFetch.mock.calls.map(([url]) => url)).toEqual(
     expect.arrayContaining([
@@ -71,7 +86,7 @@ it("keeps report and escalated-ticket pagination independent", async () => {
 it("sends report search to the report service", async () => {
   apiFetch.mockResolvedValue({ items: [], totalPages: 1 });
   render(<AdminInboxSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", {name:"รายงานผู้ใช้"}));
+  fireEvent.click(screen.getByRole("tab", {name:"User Reports"}));
 
   const input = await screen.findByRole("textbox", { name: "ค้นหาเคส" });
   fireEvent.change(input, { target: { value: "counterfeit" } });
@@ -81,7 +96,7 @@ it("sends report search to the report service", async () => {
     expect(apiFetch.mock.calls.map(([url]) => url)).toEqual(
       expect.arrayContaining([
         expect.stringMatching(
-          /\/api\/auth\/admin\/reports\?.*page=1.*limit=15.*status=OPEN.*q=counterfeit/,
+          /\/api\/auth\/admin\/reports\?.*page=1.*limit=15.*status=PENDING.*scope=all.*q=counterfeit/,
         ),
       ]),
     ),
@@ -93,19 +108,19 @@ it("shows a source-specific failure and retries only that source", async () => {
   apiFetch.mockImplementation((url) => {
     if (url.includes("/admin/reports?")) {
       reportCalls += 1;
-      if (reportCalls === 1) return Promise.reject(new Error("auth offline"));
+      if (reportCalls === 2) return Promise.reject(new Error("auth offline"));
       return Promise.resolve({ items: [], totalPages: 1 });
     }
     return Promise.resolve({ items: [], totalPages: 1 });
   });
 
   render(<AdminInboxSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", {name:"รายงานผู้ใช้"}));
+  fireEvent.click(screen.getByRole("tab", {name:"User Reports"}));
   expect(await screen.findByText("โหลดรายงานไม่สำเร็จ")).toBeInTheDocument();
   expect(screen.getByText("auth offline")).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "ลองใหม่" }));
-  await waitFor(() => expect(reportCalls).toBe(2));
+  await waitFor(() => expect(reportCalls).toBe(3));
   await waitFor(() =>
     expect(screen.queryByText("auth offline")).not.toBeInTheDocument(),
   );
@@ -126,7 +141,7 @@ it("loads a fresh report detail when a row is opened", async () => {
   });
 
   render(<AdminInboxSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", {name:"รายงานผู้ใช้"}));
+  fireEvent.click(screen.getByRole("tab", {name:"User Reports"}));
   fireEvent.click(await screen.findByText("Open fresh detail"));
 
   await waitFor(() =>
@@ -154,4 +169,27 @@ it("opens a source report directly from user-history deep links", async () => {
     ),
   );
   expect(await screen.findByText("report detail")).toBeInTheDocument();
+});
+
+it("shows account names on an escalated ticket instead of only IDs", async () => {
+  const ticket = {
+    id: "ticket-1", _type: "TICKET", ticketNumber: "TKT-1",
+    subject: "Escalated case", status: "ESCALATED",
+    requesterId: "buyer-1", assigneeId: "staff-1",
+  };
+  apiFetch.mockImplementation((url) => {
+    if (url.includes("/api/support/tickets/queue?")) return Promise.resolve({ items: [ticket], totalPages: 1 });
+    if (url === "/api/support/tickets/ticket-1") return Promise.resolve(ticket);
+    if (url === "/api/support/tickets/ticket-1/join") return Promise.resolve({ conversationId: "chat-1" });
+    if (url === "/api/auth/admin/users/buyer-1") return Promise.resolve({ firstName: "สมชาย", lastName: "ใจดี" });
+    if (url === "/api/auth/admin/users/staff-1") return Promise.resolve({ firstName: "มาลี", lastName: "ผู้ดูแล" });
+    return Promise.resolve({ items: [], totalPages: 1 });
+  });
+
+  render(<AdminInboxSection token="token" />);
+  fireEvent.click(await screen.findByText("Escalated case"));
+
+  expect(await screen.findByText("ticket detail: สมชาย ใจดี / มาลี ผู้ดูแล")).toBeInTheDocument();
+  expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/users/buyer-1", { token: "token" });
+  expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/users/staff-1", { token: "token" });
 });

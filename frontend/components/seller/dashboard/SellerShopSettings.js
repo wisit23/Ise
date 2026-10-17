@@ -106,7 +106,7 @@ export default function SellerShopSettings() {
         token,
         body: { ...patch, comment: comment.trim() },
       });
-      setSuccess("ส่งคำขอเรียบร้อย — รอ Admin ตรวจสอบ");
+      setSuccess("ส่งคำขอเรียบร้อย — รอ Trust and Safety ตรวจสอบ");
       setComment("");
       loadHistory();
     } catch (err) {
@@ -123,7 +123,7 @@ export default function SellerShopSettings() {
           ข้อมูลร้านค้าปัจจุบัน
         </h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          หากต้องการเปลี่ยนแปลง ให้แก้ไขและส่งคำขอด้านล่าง — Admin
+          หากต้องการเปลี่ยนแปลง ให้แก้ไขและส่งคำขอด้านล่าง — Trust and Safety
           จะตรวจสอบก่อนมีผล
         </p>
       </div>
@@ -160,7 +160,7 @@ export default function SellerShopSettings() {
               </span>
               <span>
                 คุณมีคำขอที่รอตรวจสอบอยู่แล้ว ไม่สามารถส่งคำขอใหม่ได้จนกว่า
-                Admin จะตัดสินใจ
+                Trust and Safety จะตัดสินใจ
               </span>
             </div>
           )}
@@ -218,7 +218,7 @@ export default function SellerShopSettings() {
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:bg-slate-50 disabled:text-slate-400 resize-none"
               />
               <p className="mt-1 text-xs text-slate-400">
-                Admin จะเห็น comment นี้ก่อนอนุมัติ — ระบุให้ชัดเจนที่สุด
+                Trust and Safety จะเห็นความคิดเห็นนี้ก่อนอนุมัติ — ระบุให้ชัดเจนที่สุด
               </p>
             </Field>
 
@@ -244,7 +244,7 @@ export default function SellerShopSettings() {
               disabled={submitting || hasPending}
               className="w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {submitting ? "กำลังส่ง..." : "ส่งคำขอให้ Admin ตรวจสอบ"}
+              {submitting ? "กำลังส่ง..." : "ส่งคำขอให้ Trust and Safety ตรวจสอบ"}
             </button>
           </form>
         </>
@@ -323,7 +323,7 @@ export default function SellerShopSettings() {
                 {/* Admin note */}
                 {req.adminNote && (
                   <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    <span className="font-semibold">หมายเหตุ Admin: </span>
+                    <span className="font-semibold">หมายเหตุ Trust and Safety: </span>
                     {req.adminNote}
                   </div>
                 )}

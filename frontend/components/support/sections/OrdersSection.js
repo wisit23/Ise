@@ -5,14 +5,16 @@ import Modal from "../../ui/Modal";
 import SupportOrderDetails, { orderAmount } from "./orders/SupportOrderDetails";
 import Badge from "../../panel/ui/Badge";
 import RadioSelect from "../../ui/RadioSelect";
+import ConfirmDialog from "../../ui/ConfirmDialog";
+import { useToast } from "../../ui/ToastProvider";
 import { apiFetch } from "../../../lib/api";
-import { ORDER_STATUS_LABEL } from "../../../lib/supportConstants";
+import { ORDER_STATUS_LABEL, REPORT_STATUS_LABEL, safetyActionLabel } from "../../../lib/supportConstants";
 
 const SEARCH_TYPE_OPTIONS = [
-  { value: "orderId", label: "รหัสคำสั่งซื้อ (Order ID)" },
-  { value: "buyerId", label: "รหัสผู้ซื้อ (Buyer ID / Email)" },
-  { value: "sellerId", label: "รหัสผู้ขาย (Seller ID / Shop Name / Email)" },
-  { value: "userId", label: "รหัสผู้ใช้ทั่วไป (User ID / Email)" },
+  { value: "orderId", label: "Order ID" },
+  { value: "buyerId", label: "Buyer ID / Email" },
+  { value: "sellerId", label: "Seller / Shop / Email" },
+  { value: "userId", label: "User ID / Email" },
 ];
 
 const SEARCH_PLACEHOLDERS = {
@@ -22,15 +24,7 @@ const SEARCH_PLACEHOLDERS = {
   userId: "ระบุ User ID หรืออีเมลของผู้ใช้งาน...",
 };
 
-const ORDER_STATUS_STYLE = {
-  pending: "border border-amber-400 text-amber-700 bg-amber-50",
-  confirmed: "border border-sky-400 text-sky-700 bg-sky-50",
-  shipped: "border border-blue-400 text-blue-700 bg-blue-50",
-  completed: "border border-emerald-400 text-emerald-700 bg-emerald-50",
-  cancelled: "border border-slate-300 text-slate-500 bg-slate-50",
-  disputed: "border border-red-400 text-red-700 bg-red-50",
-  refunded: "border border-purple-400 text-purple-700 bg-purple-50",
-};
+const ORDER_STATUS_STYLE = "border border-slate-200 text-slate-600 bg-slate-100";
 
 const KYC_STATUS_STYLE = {
   VERIFIED: "border border-emerald-400 text-emerald-700 bg-emerald-50",
@@ -44,11 +38,42 @@ const KYC_STATUS_LABEL = {
   REJECTED: "ไม่อนุมัติ",
 };
 
+function CommerceRestrictionIcon({ kind = "buyer", className = "h-[18px] w-[18px]" }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`${className} shrink-0`}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      {kind === "seller" ? (
+        <>
+          <path d="M4 10h16l-1.2-5H5.2L4 10Z" />
+          <path d="M5 10v9h14v-9M9 19v-6h6v6" />
+        </>
+      ) : (
+        <>
+          <path d="M3 5h2l2 11h11l2-8H6" />
+          <path d="M9 20h.01M17 20h.01" strokeWidth="2.8" />
+        </>
+      )}
+      <path d="M3 21 21 3" strokeWidth="2.2" />
+    </svg>
+  );
+}
+
 export default function OrdersSection({
   token,
   initialUserId = "",
   initialOrderId = "",
+  // Account sanctions are a Trust & Safety tool; CS only looks things up.
+  canModerate = false,
 }) {
+  const toast = useToast();
 
   const [searchType, setSearchType] = useState("orderId");
   const [query, setQuery] = useState("");
@@ -112,8 +137,19 @@ export default function OrdersSection({
         }),
       ),
     );
+    const products = new Map(await Promise.all(
+      [...new Set(orders.filter((order) => !order.productTitle && order.productId).map((order) => order.productId))].map(async (id) => {
+        try {
+          const product = await apiFetch(`/api/products/${encodeURIComponent(id)}`, { token });
+          return [id, product.title];
+        } catch {
+          return [id, ""];
+        }
+      }),
+    ));
     return orders.map((order) => ({
       ...order,
+      productTitle: order.productTitle || products.get(order.productId) || "ไม่พบชื่อสินค้า",
       buyer: users.get(order.buyerId),
       seller: users.get(order.sellerId),
     }));
@@ -132,6 +168,8 @@ export default function OrdersSection({
   }
 
   // Moderation Dialog State
+  const [pendingAction, setPendingAction] = useState(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
   async function loadOrderHistory(userId, relationRole, page = 1) {
@@ -281,6 +319,75 @@ export default function OrdersSection({
     executeSearch(type, id);
   }
 
+  // Re-fetch user details after moderation action
+  async function refreshUserData(userId) {
+    try {
+      const refreshed = await apiFetch(
+        `/api/auth/admin/users/${encodeURIComponent(userId)}`,
+        { token },
+      );
+      setUserResult(refreshed);
+    } catch (err) {
+      console.error("Failed to refresh user data:", err);
+    }
+  }
+
+  // Execute Moderation Action (Warn, Suspend, Restore)
+  async function handleConfirmAction(reason) {
+    if (!pendingAction) return;
+    const { type, targetId, userName } = pendingAction;
+    setActionBusy(true);
+
+    try {
+      const restrictionScopes = {
+        restrictBuyer: "BUYER",
+        restrictSeller: "SELLER",
+      };
+      const isRestriction = Boolean(restrictionScopes[type]);
+      const isRestrictionRevoke = type === "restoreCommerce";
+      const path = isRestriction
+        ? `/api/auth/admin/users/${targetId}/commerce-restriction`
+        : isRestrictionRevoke
+          ? `/api/auth/admin/users/${targetId}/commerce-restriction/revoke`
+          : `/api/auth/admin/users/${targetId}/${type}`;
+      const body = isRestriction
+        ? { reason, scope: restrictionScopes[type] }
+        : isRestrictionRevoke
+          ? { reason, scope: "ALL_COMMERCE" }
+          : { reason };
+
+      await apiFetch(path, {
+        method: "POST",
+        token,
+        body,
+      });
+
+      const successMessages = {
+        warn: `บันทึกการตักเตือนคุณ ${userName} สำเร็จ`,
+        suspend: `ระงับการใช้งานบัญชีของคุณ ${userName} เรียบร้อยแล้ว`,
+        restore: `ปลดการระงับบัญชีของคุณ ${userName} เรียบร้อยแล้ว`,
+        restrictBuyer: `เพิกถอนสิทธิ์การซื้อของคุณ ${userName} แล้ว โดยผู้ใช้ยังเข้าสู่ระบบได้`,
+        restrictSeller: `เพิกถอนสิทธิ์การขายของคุณ ${userName} แล้ว โดยผู้ใช้ยังเข้าสู่ระบบได้`,
+        restoreCommerce: `คืนสิทธิ์การซื้อขายของคุณ ${userName} แล้ว`,
+      };
+
+      toast.success(
+        successMessages[type] || "ดำเนินการเสร็จสิ้น",
+        "Trust & Safety Action",
+      );
+      setPendingAction(null);
+      await refreshUserData(targetId);
+      await loadSafetyHistory(targetId, "actions", 1);
+    } catch (err) {
+      toast.error(
+        err.message || "ไม่สามารถทำรายการได้ กรุณาลองใหม่อีกครั้ง",
+        "เกิดข้อผิดพลาด",
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   function copyToClipboard(text) {
     if (!navigator.clipboard) return;
     navigator.clipboard.writeText(text);
@@ -294,7 +401,52 @@ export default function OrdersSection({
     : "";
   const userRoles =
     userResult?.roles || (userResult?.role ? [userResult.role] : []);
-
+  const commerceRestrictions = new Set(userResult?.commerceRestrictions || []);
+  const hasCommerceRestriction = commerceRestrictions.size > 0;
+  const actionCopy = {
+    warn: {
+      title: "ตักเตือนผู้ใช้งาน",
+      description: `ระบุเหตุผลในการตักเตือนคุณ ${pendingAction?.userName || ""} การตักเตือนนี้จะถูกบันทึกในประวัติความปลอดภัยของผู้ใช้`,
+      label: "ยืนยันการตักเตือน",
+      reasonLabel: "เหตุผลในการตักเตือน",
+      tone: "primary",
+    },
+    suspend: {
+      title: "ยืนยันการระงับบัญชี",
+      description: `คุณกำลังจะระงับบัญชีของคุณ ${pendingAction?.userName || ""} ผู้ใช้จะไม่สามารถเข้าสู่ระบบได้${hasCommerceRestriction ? " ข้อจำกัดสิทธิ์ซื้อขายเดิมจะสิ้นสุดและบันทึกไว้ในประวัติ เมื่อปลดแบนจะไม่กลับมาจำกัดสิทธิ์อัตโนมัติ" : ""}`,
+      label: "ระงับบัญชีทันที",
+      reasonLabel: "เหตุผลในการระงับบัญชี",
+      tone: "danger",
+    },
+    restore: {
+      title: "ยืนยันการปลดการระงับบัญชี",
+      description: `คืนสิทธิ์เข้าสู่ระบบให้คุณ ${pendingAction?.userName || ""} โดยไม่เปลี่ยนข้อจำกัดจากเคสอื่น`,
+      label: "ปลดการระงับ",
+      reasonLabel: "เหตุผลในการปลดการระงับ",
+      tone: "primary",
+    },
+    restrictBuyer: {
+      title: "เพิกถอนสิทธิ์การซื้อ",
+      description: `คุณ ${pendingAction?.userName || ""} จะยังเข้าสู่ระบบและดูข้อมูลเดิมได้ แต่สร้างรายการซื้อ จอง ชำระเงิน ใช้คูปอง หรือประมูลใหม่ไม่ได้`,
+      label: "ยืนยันเพิกถอนสิทธิ์ซื้อ",
+      reasonLabel: "เหตุผลในการเพิกถอนสิทธิ์ซื้อ",
+      tone: "danger",
+    },
+    restrictSeller: {
+      title: "เพิกถอนสิทธิ์การขาย",
+      description: `คุณ ${pendingAction?.userName || ""} จะยังเข้าสู่ระบบและดูข้อมูลเดิมได้ แต่เปิดร้าน ลงหรือแก้สินค้า เพิ่มวิดีโอ และส่งประมูลใหม่ไม่ได้`,
+      label: "ยืนยันเพิกถอนสิทธิ์ขาย",
+      reasonLabel: "เหตุผลในการเพิกถอนสิทธิ์ขาย",
+      tone: "danger",
+    },
+    restoreCommerce: {
+      title: "คืนสิทธิ์การซื้อขาย",
+      description: `คืนเฉพาะสิทธิ์การซื้อขายของคุณ ${pendingAction?.userName || ""} โดยไม่เปลี่ยนการพักเงินหรือข้อจำกัดจากเคสอื่น`,
+      label: "ยืนยันคืนสิทธิ์",
+      reasonLabel: "เหตุผลในการคืนสิทธิ์",
+      tone: "primary",
+    },
+  }[pendingAction?.type];
 
   return (
     <div
@@ -320,7 +472,7 @@ export default function OrdersSection({
             manage_search
           </span>
           <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-            ศูนย์ค้นหาข้อมูล Trust & Safety
+            Trust & Safety Search
           </h2>
           <p className="mt-2 text-sm font-medium text-slate-500 max-w-md mx-auto">
             ค้นหาข้อมูลคำสั่งซื้อ ผู้ซื้อ ผู้ขาย หรือบัญชีผู้ใช้งาน
@@ -337,7 +489,7 @@ export default function OrdersSection({
       >
         <form
           onSubmit={handleFormSubmit}
-          className="relative flex w-full items-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
+          className="relative flex w-full flex-wrap items-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 hover:border-slate-300"
         >
           <RadioSelect
             options={SEARCH_TYPE_OPTIONS}
@@ -348,11 +500,11 @@ export default function OrdersSection({
             }}
             variant="panel"
             size="sm"
-            className="w-56 border-r border-slate-200 shrink-0"
+            className="w-full shrink-0 border-b border-slate-200 sm:w-56 sm:border-b-0 sm:border-r"
             buttonClassName="!border-0 !shadow-none bg-slate-50/80 rounded-l-[8px] rounded-r-none py-2.5 pl-3.5 pr-2.5 text-xs font-semibold"
           />
 
-          <div className="flex flex-1 items-center px-3">
+          <div className="flex min-w-0 flex-1 items-center px-3">
             <span className="material-symbols-outlined mr-2 text-[20px] text-slate-400">
               search
             </span>
@@ -438,19 +590,19 @@ export default function OrdersSection({
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white text-xl font-bold shadow-md shadow-emerald-500/20">
                   {userDisplayName.charAt(0).toUpperCase()}
                 </div>
-                <div className="space-y-1">
+                <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-3 flex-wrap">
                     <h3 className="text-lg font-bold text-slate-900">
                       {userDisplayName}
                     </h3>
                     {userResult.status === "ACTIVE" ? (
                       <Badge
-                        text="บัญชีปกติ (ACTIVE)"
+                        text="บัญชีปกติ"
                         style="bg-emerald-50 text-emerald-700 border border-emerald-300 font-semibold"
                       />
                     ) : userResult.status === "SUSPENDED" ? (
                       <Badge
-                        text="ถูกระงับ (SUSPENDED)"
+                        text="ถูกระงับ"
                         style="bg-rose-50 text-rose-700 border border-rose-300 font-semibold"
                       />
                     ) : userResult.status?.startsWith("RESTRICTED_") ? (
@@ -517,14 +669,126 @@ export default function OrdersSection({
                 </div>
               </div>
 
+              {/* Action Buttons */}
+              {canModerate && <div className="flex flex-wrap items-center gap-2 pt-2 md:pt-0">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPendingAction({
+                      type: "warn",
+                      targetId: userResult.id,
+                      userName: userDisplayName,
+                    })
+                  }
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50/60 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-amber-600">
+                    warning
+                  </span>
+                  ตักเตือนผู้ใช้
+                </button>
+
+                {userRoles.includes("BUYER") &&
+                  !commerceRestrictions.has("BUYER_COMMERCE") &&
+                  userResult.status !== "SUSPENDED" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPendingAction({
+                          type: "restrictBuyer",
+                          targetId: userResult.id,
+                          userName: userDisplayName,
+                        })
+                      }
+                      className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                    >
+                      <CommerceRestrictionIcon />
+                      เพิกถอนสิทธิ์ซื้อ
+                    </button>
+                  )}
+
+                {userRoles.includes("SELLER") &&
+                  !commerceRestrictions.has("SELLER_COMMERCE") &&
+                  userResult.status !== "SUSPENDED" && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPendingAction({
+                          type: "restrictSeller",
+                          targetId: userResult.id,
+                          userName: userDisplayName,
+                        })
+                      }
+                      className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100"
+                    >
+                      <CommerceRestrictionIcon kind="seller" />
+                      เพิกถอนสิทธิ์ขาย
+                    </button>
+                  )}
+
+                {hasCommerceRestriction && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPendingAction({
+                        type: "restoreCommerce",
+                        targetId: userResult.id,
+                        userName: userDisplayName,
+                      })
+                    }
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">
+                      settings_backup_restore
+                    </span>
+                    คืนสิทธิ์ซื้อขาย
+                  </button>
+                )}
+
+                {userResult.status === "ACTIVE" || hasCommerceRestriction ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPendingAction({
+                        type: "suspend",
+                        targetId: userResult.id,
+                        userName: userDisplayName,
+                      })
+                    }
+                    className="flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50/60 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-colors shadow-xs"
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-rose-600">
+                      block
+                    </span>
+                    ระงับบัญชี
+                  </button>
+                ) : userResult.status === "SUSPENDED" ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPendingAction({
+                        type: "restore",
+                        targetId: userResult.id,
+                        userName: userDisplayName,
+                      })
+                    }
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-colors shadow-xs"
+                  >
+                    <span className="material-symbols-outlined text-[16px] text-emerald-600">
+                      lock_open
+                    </span>
+                    ปลดการระงับ
+                  </button>
+                ) : null}
+              </div>}
             </div>
 
             {/* Safety Metrics Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-6">
               <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-500">
-                    รายงานที่ได้รับ (Reports)
+                    รายงานที่ได้รับ
                   </span>
                   <span className="material-symbols-outlined text-[18px] text-slate-400">
                     flag
@@ -547,7 +811,7 @@ export default function OrdersSection({
               <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-500">
-                    การตักเตือน (Warnings)
+                    การตักเตือน
                   </span>
                   <span className="material-symbols-outlined text-[18px] text-amber-500">
                     warning
@@ -562,6 +826,27 @@ export default function OrdersSection({
                     }`}
                   >
                     {userResult.safetySummary?.warningCount ?? 0}
+                  </span>
+                  <span className="text-xs text-slate-500">ครั้ง</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-500">
+                    การเพิกถอนสิทธิ์ซื้อขาย
+                  </span>
+                  <CommerceRestrictionIcon className="h-[18px] w-[18px] text-amber-500" />
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span
+                    className={`text-2xl font-black ${
+                      (userResult.safetySummary?.commerceRestrictionCount || 0) > 0
+                        ? "text-amber-600"
+                        : "text-slate-800"
+                    }`}
+                  >
+                    {userResult.safetySummary?.commerceRestrictionCount ?? 0}
                   </span>
                   <span className="text-xs text-slate-500">ครั้ง</span>
                 </div>
@@ -616,12 +901,12 @@ export default function OrdersSection({
             {userResult.sellerProfile && (
               <div className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50/30 p-5">
                 <div className="flex items-center justify-between mb-3 pb-3 border-b border-emerald-100/60">
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="material-symbols-outlined text-[20px] text-emerald-600">
                       storefront
                     </span>
                     <span className="text-sm font-bold text-slate-800">
-                      ข้อมูลร้านค้า (Seller Profile)
+                      ข้อมูลร้านค้า
                     </span>
                   </div>
                   <Badge
@@ -660,7 +945,7 @@ export default function OrdersSection({
           <div className="grid gap-4 lg:grid-cols-2">
             {[
               ["reports", "ประวัติ Report"],
-              ["actions", "ประวัติ Warning / Restriction / Suspend / Restore"],
+              ["actions", "ประวัติการดำเนินการกับบัญชี"],
             ].map(([kind, label]) => {
               const history = safetyHistory[kind];
               return (
@@ -709,8 +994,8 @@ export default function OrdersSection({
                               <div>
                                 <p className="font-bold text-slate-800">
                                   {kind === "reports"
-                                    ? `REP-${item.id.slice(0, 6).toUpperCase()} · ${item.status}`
-                                    : item.action}
+                                    ? `REP-${item.id.slice(0, 6).toUpperCase()} · ${REPORT_STATUS_LABEL[item.status] || item.status}`
+                                    : safetyActionLabel(item.action)}
                                 </p>
                                 <p className="mt-1 text-slate-600">
                                   {item.reason || "ไม่ระบุเหตุผล"}
@@ -788,10 +1073,6 @@ export default function OrdersSection({
                 </span>
               </h4>
             </div>
-            <p className="text-[11px] text-slate-500">
-              สถิติส่งช้าและปัญหาพัสดุ: ยังไม่มีข้อมูล shipping ที่เชื่อถือได้
-              (รอ TSR-10)
-            </p>
 
             {orderHistoryLoading ? (
               <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-xs font-semibold text-slate-500">
@@ -832,22 +1113,19 @@ export default function OrdersSection({
                     key={order.id}
                     className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-slate-300 transition-colors"
                   >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs font-bold text-slate-900">
-                          #{order.id}
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="break-words text-sm font-bold text-slate-900" title={`รหัสคำสั่งซื้อ: ${order.id}`}>
+                          {order.productTitle}
                         </span>
                         <Badge
                           text={
                             ORDER_STATUS_LABEL[order.status] || order.status
                           }
-                          style={
-                            ORDER_STATUS_STYLE[order.status] ||
-                            "bg-slate-100 text-slate-700"
-                          }
+                          style={ORDER_STATUS_STYLE}
                         />
                       </div>
-                      <div className="text-xs text-slate-500 flex items-center gap-2">
+                      <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
                         <span>
                           ผู้ซื้อ: {order.buyer?.name || order.buyerId}
                         </span>
@@ -939,18 +1217,15 @@ export default function OrdersSection({
                 {/* Header row */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm font-black text-slate-900">
-                      #{order.id}
+                    <span className="break-words text-sm font-black text-slate-900" title={`รหัสคำสั่งซื้อ: ${order.id}`}>
+                      {order.productTitle}
                     </span>
                     <Badge
                       text={ORDER_STATUS_LABEL[order.status] || order.status}
-                      style={
-                        ORDER_STATUS_STYLE[order.status] ||
-                        "bg-slate-100 text-slate-700"
-                      }
+                      style={ORDER_STATUS_STYLE}
                     />
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="text-sm font-extrabold text-slate-900">
                       ฿{Number(orderAmount(order)).toLocaleString()}
                     </span>
@@ -973,7 +1248,7 @@ export default function OrdersSection({
                   <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 flex items-center justify-between">
                     <div className="space-y-0.5">
                       <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                        ผู้ซื้อ (Buyer)
+                        ผู้ซื้อ
                       </span>
                       <span className="font-semibold text-slate-800 block">
                         {order.buyer?.name || "ไม่ระบุชื่อ"}
@@ -1000,7 +1275,7 @@ export default function OrdersSection({
                   <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5 flex items-center justify-between">
                     <div className="space-y-0.5">
                       <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                        ผู้ขาย (Seller)
+                        ผู้ขาย
                       </span>
                       <span className="font-semibold text-slate-800 block">
                         {order.seller?.name || "ไม่ระบุชื่อ"}
@@ -1038,7 +1313,19 @@ export default function OrdersSection({
       >
         {selectedOrder && <SupportOrderDetails order={selectedOrder} />}
       </Modal>
-
+      <ConfirmDialog
+        open={canModerate && Boolean(pendingAction)}
+        busy={actionBusy}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={handleConfirmAction}
+        title={actionCopy?.title || "ยืนยันการดำเนินการ"}
+        description={actionCopy?.description || ""}
+        confirmLabel={actionCopy?.label || "ยืนยัน"}
+        tone={actionCopy?.tone || "primary"}
+        reason="required"
+        reasonLabel={actionCopy?.reasonLabel || "เหตุผล"}
+        reasonHint="กรุณาระบุเหตุผลเพื่อใช้ตรวจสอบย้อนหลัง"
+      />
     </div>
   );
 }

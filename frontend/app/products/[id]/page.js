@@ -564,7 +564,7 @@ export default function ProductDetailPage() {
               onClick={() => setShowReport(true)}
               className="mt-3 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
             >
-              รายงานสินค้า/ผู้ขายรายนี้
+              รายงานผู้ขายรายนี้
             </button>
           )}
 
@@ -935,8 +935,6 @@ export default function ProductDetailPage() {
         onClose={() => setShowReport(false)}
         targetId={product.sellerId}
         targetLabel={sellerName}
-        productId={product.id}
-        productLabel={product.title}
       />
 
       <Footer />

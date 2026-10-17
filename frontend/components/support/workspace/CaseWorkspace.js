@@ -143,7 +143,7 @@ export default function CaseWorkspace({
     { value: "unassigned", label: "รอรับเรื่อง" },
     {
       value: "escalated",
-      label: elevated ? "เคสที่ถูกส่งต่อ" : `ส่งต่อแล้ว (รอ ${dispute ? "T&S" : "Admin"})`,
+      label: elevated ? "เคสที่ถูกส่งต่อ" : `ส่งต่อแล้ว (รอ T&S)`,
     },
     { value: "closed", label: "ปิดแล้ว" },
     { value: "all", label: "ทุกงาน" },
@@ -257,7 +257,7 @@ export default function CaseWorkspace({
     else
       toast.success(
         action === "escalate" || body?.status === "ESCALATED"
-          ? `ส่งต่อให้ ${dispute ? "Trust & Safety" : "Admin"} แล้ว ติดตามได้ที่แท็บ “ส่งต่อแล้ว”`
+          ? "ส่งต่อให้ Trust and Safety แล้ว ติดตามได้ที่แท็บ “ส่งต่อแล้ว”"
           : action === "request-evidence"
             ? "ส่งกลับให้ CS แล้ว"
             : "บันทึกเรียบร้อย",
@@ -289,6 +289,21 @@ export default function CaseWorkspace({
         dispute ? { version: selected.version } : undefined,
       );
       w.update({ scope: "mine", page: 1 });
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+  async function changeTicketStatus(status) {
+    if (status === "CLOSED") {
+      setDecision({
+        ticketClose: true,
+        id: selected.id,
+        version: selected.version,
+      });
+      return;
+    }
+    try {
+      await run("status", { status }, "PATCH");
     } catch (err) {
       toast.error(err.message);
     }
@@ -423,7 +438,7 @@ export default function CaseWorkspace({
                 </span>
               ) : row.capabilities?.isWatching || (!dispute && row.status === "ESCALATED") ? (
                 <span className={`${pill} border border-blue-300 bg-blue-50 text-blue-800`}>
-                  {`รอ ${dispute ? "T&S" : "Admin"} ตรวจ`}
+                  รอ T&S ตรวจ
                 </span>
               ) : (
                 <span className={`${pill} ${statusStyle[row.status] || "border border-slate-200 bg-slate-50 text-slate-600"}`}>
@@ -968,7 +983,7 @@ export default function CaseWorkspace({
                         icon="forward_to_inbox"
                         onClick={() => setMemo(true)}
                       >
-                        ส่งต่อให้ {dispute ? "Trust & Safety" : "Admin"}
+                        ส่งต่อให้ Trust and Safety
                       </Button>
                     )}
                     {caps.canReassign && (

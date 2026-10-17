@@ -49,11 +49,14 @@ export default function TicketCasePanel({
   onStatusChange,
   onWarnUser,
   onBanUser,
+  onRestrictBuyer,
+  onRestrictSeller,
   onOpenLiveChat,
   auditReadOnly = false,
 }) {
   const [manualTargetId, setManualTargetId] = useState("");
   const nextStatuses = ticket.capabilities?.allowedNextStatuses || [];
+  const canModerate = ticket.capabilities?.canModerateUsers === true;
   const openedOn = new Date(ticket.createdAt).toLocaleDateString(
     "th-TH",
     THAI_DATE,
@@ -61,33 +64,33 @@ export default function TicketCasePanel({
 
   return (
     <>
-      <div className="grid grid-cols-4 divide-x divide-slate-100 border-b border-slate-100 bg-slate-50/70">
-        <InfoCell label="คู่กรณี (Target)">
+      <div className="grid shrink-0 grid-cols-2 divide-x sm:grid-cols-4 divide-slate-100 border-b border-slate-100 bg-slate-50/70">
+        <InfoCell label="Reported User">
           {ticket.targetId ? (
-            <span className="font-mono font-semibold text-orange-700">
-              {ticket.targetId.slice(0, 10)}...
+            <span className="font-semibold text-orange-700">
+              {ticket.targetName || `${ticket.targetId.slice(0, 10)}...`}
             </span>
           ) : (
             <span className="italic text-slate-400">ไม่ระบุ</span>
           )}
         </InfoCell>
-        <InfoCell label="ผู้แจ้ง (Requester)">
-          <span className="font-mono">
-            {ticket.requesterId?.slice(0, 10) ?? "—"}
+        <InfoCell label="Requester">
+          <span>
+            {ticket.requesterName || ticket.requesterId?.slice(0, 10) || "—"}
           </span>
         </InfoCell>
-        <InfoCell label="ผู้รับผิดชอบ (Agent)">
+        <InfoCell label="Assigned Agent">
           {ticket.assigneeId ? (
-            <span className="font-mono">{ticket.assigneeId.slice(0, 10)}</span>
+            <span>{ticket.assigneeName || ticket.assigneeId.slice(0, 10)}</span>
           ) : (
             <span className="italic text-slate-500">ยังไม่มอบหมาย</span>
           )}
         </InfoCell>
-        <InfoCell label="วันที่เปิด">{openedOn}</InfoCell>
+        <InfoCell label="Opened">{openedOn}</InfoCell>
       </div>
 
-      <div className="flex flex-1 flex-col gap-5 overflow-y-auto bg-slate-50/30 p-6">
-        <SectionCard icon="info" title="สาระคำร้อง">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto bg-slate-50/30 p-3 sm:p-5 lg:px-8">
+        <SectionCard icon="info" title="Case Summary">
           <p className="text-sm font-medium leading-relaxed text-slate-800">
             {ticket.subject}
           </p>
@@ -106,7 +109,7 @@ export default function TicketCasePanel({
         </SectionCard>
 
         {ticket.status === "ESCALATED" && (
-          <SectionCard icon="description" title="CS Memo">
+          <SectionCard icon="description" title="CS Notes">
             <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
               {ticket.escalationNote || "ยังไม่มีสรุปจาก CS"}
             </p>
@@ -115,19 +118,24 @@ export default function TicketCasePanel({
 
         {/* Counterparty is the primary focus of moderation when handling disputes/complaints.
             Rendered first so Trust & Safety officers act on the accused party by default. */}
+        {(onWarnUser || onBanUser) && !canModerate && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">ต้องรับผิดชอบเคสนี้ก่อน จึงจะตักเตือน ระงับบัญชี หรือเพิกถอนสิทธิ์ได้ และเคสต้องยังไม่ปิดหรือแก้ไขเสร็จ</p>}
         {ticket.targetId ? (
           <CaseUserCard
             userId={ticket.targetId}
-            heading="คู่กรณี (Target - ผู้ถูกร้องเรียน)"
+            userName={ticket.targetName}
+            heading="Reported User"
             icon="gavel"
             tone="target"
             busy={actionBusy}
+            actionsDisabled={!canModerate}
             warnLabel="ตักเตือนคู่กรณี"
             banLabel="แบนคู่กรณี"
             onWarn={
               onWarnUser ? (uid) => onWarnUser(uid, "คู่กรณี") : undefined
             }
             onBan={onBanUser ? (uid) => onBanUser(uid, "คู่กรณี") : undefined}
+            onRestrictBuyer={onRestrictBuyer ? (uid) => onRestrictBuyer(uid, "คู่กรณี") : undefined}
+            onRestrictSeller={onRestrictSeller ? (uid) => onRestrictSeller(uid, "คู่กรณี") : undefined}
           />
         ) : (
           <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-5 shadow-sm">
@@ -135,7 +143,7 @@ export default function TicketCasePanel({
               <span className="material-symbols-outlined text-[15px]">
                 gavel
               </span>
-              คู่กรณี (Target - ผู้ถูกร้องเรียน)
+              Reported User
             </div>
             <p className="text-xs text-slate-600">
               ตั๋วนี้ไม่ได้ผูกกับคำสั่งซื้ออัตโนมัติ จึงไม่มีรหัสคู่กรณีในระบบ
@@ -146,7 +154,7 @@ export default function TicketCasePanel({
                   type="text"
                   value={manualTargetId}
                   onChange={(e) => setManualTargetId(e.target.value)}
-                  placeholder="กรอก User ID คู่กรณีที่ต้องการดำเนินการ..."
+                  placeholder="กรอกรหัสผู้ใช้ คู่กรณีที่ต้องการดำเนินการ..."
                   className="flex-1 rounded-lg border border-orange-300 bg-white px-3 py-1.5 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus:border-orange-500 focus:outline-none"
                 />
                 {onWarnUser && (
@@ -154,7 +162,7 @@ export default function TicketCasePanel({
                     size="sm"
                     variant="ghost"
                     icon="warning"
-                    disabled={actionBusy || !manualTargetId.trim()}
+                    disabled={actionBusy || !canModerate || !manualTargetId.trim()}
                     onClick={() => onWarnUser(manualTargetId.trim(), "คู่กรณี")}
                     className="bg-amber-100 font-bold text-amber-800 hover:bg-amber-200"
                   >
@@ -166,7 +174,7 @@ export default function TicketCasePanel({
                     size="sm"
                     variant="ghost"
                     icon="block"
-                    disabled={actionBusy || !manualTargetId.trim()}
+                    disabled={actionBusy || !canModerate || !manualTargetId.trim()}
                     onClick={() => onBanUser(manualTargetId.trim(), "คู่กรณี")}
                     className="bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
                   >
@@ -182,18 +190,22 @@ export default function TicketCasePanel({
             Rendered second with distinct labels and caution styling. */}
         <CaseUserCard
           userId={ticket.requesterId}
-          heading="ผู้แจ้ง (Requester - ผู้ส่งคำร้อง)"
+          userName={ticket.requesterName}
+          heading="Requester"
           icon="person"
           tone="requester"
           isRequester={true}
           busy={actionBusy}
+          actionsDisabled={!canModerate}
           warnLabel="ตักเตือนผู้แจ้ง"
           banLabel="แบนผู้แจ้ง (ระวัง)"
           onWarn={onWarnUser ? (uid) => onWarnUser(uid, "ผู้แจ้ง") : undefined}
           onBan={onBanUser ? (uid) => onBanUser(uid, "ผู้แจ้ง") : undefined}
+          onRestrictBuyer={onRestrictBuyer ? (uid) => onRestrictBuyer(uid, "ผู้แจ้ง") : undefined}
+          onRestrictSeller={onRestrictSeller ? (uid) => onRestrictSeller(uid, "ผู้แจ้ง") : undefined}
         />
 
-        <SectionCard icon="support_agent" title="เจ้าหน้าที่รับผิดชอบ">
+        <SectionCard icon="support_agent" title="Assigned Agent">
           {ticket.assigneeId ? (
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-800 text-base font-bold text-white shadow">
@@ -203,7 +215,7 @@ export default function TicketCasePanel({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-slate-800">
-                  รหัส: {ticket.assigneeId.slice(0, 16)}
+                  {ticket.assigneeName || `รหัส: ${ticket.assigneeId.slice(0, 16)}`}
                 </p>
                 <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
                   {ticket.assigneeId}
@@ -222,14 +234,14 @@ export default function TicketCasePanel({
           )}
         </SectionCard>
 
-        <SectionCard icon="chat" title="สนทนากับลูกค้า" tone="indigo">
+        <SectionCard icon="chat" title="Customer Conversation" tone="indigo">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 font-bold text-white shadow">
-              {ticket.requesterId?.slice(0, 1).toUpperCase() ?? "U"}
+              {(ticket.requesterName || ticket.requesterId || "U").slice(0, 1).toUpperCase()}
             </div>
             <div className="flex-1">
               <p className="text-sm font-bold text-slate-800">
-                ผู้ใช้: #{ticket.requesterId?.slice(0, 12)}
+                {ticket.requesterName || `ผู้ใช้: #${ticket.requesterId?.slice(0, 12)}`}
               </p>
               <p className="mt-0.5 text-xs text-slate-500">
                 ประวัติการสนทนาของคำร้อง
@@ -263,9 +275,9 @@ export default function TicketCasePanel({
           ) : null}
         </SectionCard>
 
-        <SectionCard icon="build" title="จัดการคำร้อง (Actions)">
+        <SectionCard icon="build" title="Actions">
           {actionError && <Alert className="mb-3">{actionError}</Alert>}
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             {ticket.capabilities?.canTakeover && onTakeover && <Button onClick={onTakeover} disabled={actionBusy}>รับผิดชอบเคสที่ส่งต่อ</Button>}
             {!ticket.assigneeId && (
               <Button
@@ -273,17 +285,17 @@ export default function TicketCasePanel({
                 disabled={actionBusy}
                 className="flex-1"
               >
-                รับงาน (Assign)
+                รับผิดชอบเคส
               </Button>
             )}
-            {nextStatuses.includes("CLOSED") && (
+            {ticket.capabilities?.canClose === true && nextStatuses.includes("CLOSED") && (
               <Button
                 variant="secondary"
                 onClick={() => onStatusChange("CLOSED")}
                 disabled={actionBusy}
                 className="flex-1"
               >
-                ปิดงาน (Close)
+                ปิดงาน
               </Button>
             )}
             {nextStatuses.includes("ESCALATED") && (
@@ -293,7 +305,7 @@ export default function TicketCasePanel({
                 disabled={actionBusy}
                 className="flex-1 bg-red-50 font-bold text-red-600 hover:bg-red-100 hover:text-red-700"
               >
-                ส่งต่อ Admin
+                ส่งต่อ Trust and Safety
               </Button>
             )}
             {nextStatuses.length === 0 && ticket.assigneeId && (

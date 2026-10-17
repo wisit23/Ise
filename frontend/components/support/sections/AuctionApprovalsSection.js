@@ -67,7 +67,7 @@ export default function AuctionApprovalsSection({ token }) {
         </h2>
         <p className="mt-1 text-sm text-slate-500">
           ผู้ขายส่งคำขอเปิดประมูลสินค้า —
-          ต้องได้รับการอนุมัติจากแอดมินก่อนฝ่ายการตลาดจะตั้งเวลาเปิดประมูลได้
+          ต้องได้รับการอนุมัติจาก Trust and Safety ก่อนฝ่ายการตลาดจะตั้งเวลาเปิดประมูลได้
         </p>
       </div>
 

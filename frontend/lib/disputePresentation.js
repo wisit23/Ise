@@ -28,7 +28,7 @@ export function caseStage(dispute) {
       description:
         "อ่านคำขอในแชตกับเจ้าหน้าที่ แล้วแนบหลักฐานหรือคำชี้แจงเพิ่มเติม",
     };
-  if (dispute.assignedRole === "ADMIN")
+  if (["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole))
     return {
       label: "รอผลการพิจารณา",
       step: 2,

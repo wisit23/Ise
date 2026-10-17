@@ -4,7 +4,7 @@ import EscalationMemoDialog from "./EscalationMemoDialog";
 test("dispute can be sent to T&S without a CS recommendation", async () => {
   const submit = jest.fn().mockResolvedValue(undefined);
   render(<EscalationMemoDialog open dispute onClose={() => {}} onSubmit={submit} />);
-  const button = screen.getByRole("button", { name: "ส่งต่อให้ Trust & Safety", exact: true });
+  const button = screen.getByRole("button", { name: "ส่งต่อให้ Trust and Safety", exact: true });
   expect(button).toBeDisabled();
   fireEvent.change(screen.getByLabelText(/ปัญหาคืออะไร/), { target: { value: "wrong item" } });
   fireEvent.change(screen.getByLabelText(/ขาดอำนาจอะไร/), { target: { value: "refund" } });
@@ -33,7 +33,7 @@ test("a failed escalation preserves all fields and keeps dialog open", async () 
   });
   await act(async () =>
     fireEvent.click(
-      screen.getByRole("button", { name: "ส่งต่อให้ Admin", exact: true }),
+      screen.getByRole("button", { name: "ส่งต่อให้ Trust and Safety", exact: true }),
     ),
   );
   expect(onClose).not.toHaveBeenCalled();
@@ -57,7 +57,7 @@ test("follow-up memo is built from the checklist and needs a reason for unfinish
       ]}
     />,
   );
-  const button = screen.getByRole("button", { name: "ส่งกลับให้ Trust & Safety" });
+  const button = screen.getByRole("button", { name: "ส่งกลับให้ Trust and Safety" });
   expect(button).toBeDisabled();
   expect(screen.getByText(/ยังไม่ได้ทำ 1 ข้อ/)).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("เหตุผลที่ยังไม่ได้ทำ: ยืนยันเลขพัสดุ"), { target: { value: "ร้านยังไม่ตอบ" } });

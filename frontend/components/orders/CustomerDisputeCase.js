@@ -379,7 +379,7 @@ export default function CustomerDisputeCase({ orderId }) {
                         <time>{caseDate(dispute.assignedAt)}</time>
                       </li>
                     )}
-                    {dispute.assignedRole === "ADMIN" && (
+                    {["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) && (
                       <li>
                         <strong>ส่งต่อให้ผู้ดูแลพิจารณา</strong>
                       </li>

@@ -9,6 +9,8 @@ coverage
 **/coverage
 **/src/generated
 .env
+**/.env
+**/.env.*
 *.log
 uploads
 .DS_Store

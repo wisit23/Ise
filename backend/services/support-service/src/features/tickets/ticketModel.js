@@ -1,3 +1,4 @@
+const dashboardHourlyTrend = require("./dashboardHourlyTrend");
 const {
   serializableTransaction,
   badRequest,
@@ -311,7 +312,7 @@ function queueFilter({
       );
   }
   if (scope === "unassigned") clauses.push(Prisma.sql`a.assignment_id IS NULL`);
-  else if (scope === "mine")
+  else if (scope === "mine" || scope === "history")
     clauses.push(
       Prisma.sql`(a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
     );
@@ -334,7 +335,8 @@ function queueFilter({
     clauses.push(
       Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
     );
-  if (status) clauses.push(Prisma.sql`s.code = ${status}`);
+  if (scope === "history") clauses.push(Prisma.sql`s.code IN ('RESOLVED', 'CLOSED')`);
+  else if (status) clauses.push(Prisma.sql`s.code = ${status}`);
   else if (scope === "mine")
     clauses.push(Prisma.sql`s.code NOT IN ('CLOSED', 'ESCALATED')`);
   else if (scope === "escalated" || scope === "closed") {
@@ -884,6 +886,7 @@ async function dashboardMetrics({ includeEscalated, days }) {
       ]),
     ),
     trend: [...buckets].map(([date, count]) => ({ date, count })),
+    hourlyTrend: dashboardHourlyTrend(created),
   };
 }
 module.exports = {

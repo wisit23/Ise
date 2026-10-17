@@ -224,7 +224,7 @@ async function main() {
         decision: "REJECT",
         decisionReason: "[CSAT QA] ผลพิจารณาสำหรับทดสอบ UI",
         decidedAt: new Date(),
-        assignedRole: "ADMIN",
+        assignedRole: "TRUST_AND_SAFETY",
         assignedTo: "40000000-0000-0000-0000-000000000002",
       },
     });
