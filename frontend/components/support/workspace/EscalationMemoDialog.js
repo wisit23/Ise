@@ -20,6 +20,7 @@ export function followUpSummary(tasks, reasons = {}, recommendation = "") {
 
 export default function EscalationMemoDialog({
   open,
+  dispute = false,
   onClose,
   onSubmit,
   returnTasks,
@@ -51,8 +52,11 @@ export default function EscalationMemoDialog({
         }
         await onSubmit(followUpSummary(returnTasks, reasons, memo.recommendation));
       } else {
+        // Every dispute needs T&S to move escrowed funds, so the authority line adds nothing there.
         await onSubmit(
-          `ปัญหา: ${memo.problem.trim()}\nขาดอำนาจ: ${memo.authority.trim()}\nข้อเสนอแนะ: ${memo.recommendation.trim()}`,
+          dispute
+            ? `ปัญหา: ${memo.problem.trim()}\nข้อเสนอแนะ: ${memo.recommendation.trim()}`
+            : `ปัญหา: ${memo.problem.trim()}\nขาดอำนาจ: ${memo.authority.trim()}\nข้อเสนอแนะ: ${memo.recommendation.trim()}`,
         );
       }
       setMemo({ problem: "", authority: "", recommendation: "" });
@@ -66,7 +70,7 @@ export default function EscalationMemoDialog({
   }
   const disabled = followUp
     ? missingReason
-    : !memo.problem.trim() || !memo.authority.trim();
+    : !memo.problem.trim() || (!dispute && !memo.authority.trim());
   return (
     <Modal
       open={open}
@@ -142,7 +146,7 @@ export default function EscalationMemoDialog({
         <div className="space-y-3">
           {[
             ["problem", "ปัญหาคืออะไร"],
-            ["authority", "ขาดอำนาจอะไร"],
+            ...(dispute ? [] : [["authority", "ขาดอำนาจอะไร"]]),
             ["recommendation", "ข้อเสนอแนะของ CS"],
           ].map(([key, label]) => (
             <Textarea

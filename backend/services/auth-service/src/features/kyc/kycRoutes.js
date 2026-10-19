@@ -4,6 +4,7 @@
 const { Router } = require("express");
 const {
   requireAuth,
+  requireCustomerAccount,
   requireCommerceCapability,
   CAPABILITY,
 } = require("@reloop/shared");
@@ -13,8 +14,10 @@ const router = Router();
 
 router.use(requireAuth);
 
+// Staff accounts stay separate from marketplace identities, so they cannot open a shop.
 router.post(
   "/",
+  requireCustomerAccount,
   requireCommerceCapability(CAPABILITY.SELLER),
   kycController.submit,
 );

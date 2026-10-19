@@ -144,7 +144,7 @@ describe("ChatRoomPage — Normal Chat UX and Dispute Redirection", () => {
 
     // Should display current user's name and role in the header
     expect(screen.getByText("สมชาย ผู้ซื้อ")).toBeInTheDocument();
-    expect(screen.getByText("(ผู้ซื้อ)")).toBeInTheDocument();
+    expect(screen.getByText("(บัญชี)")).toBeInTheDocument();
   });
 
   it("redirects to /orders when opening a dispute conversation directly", async () => {

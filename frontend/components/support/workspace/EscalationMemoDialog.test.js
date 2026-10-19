@@ -7,11 +7,11 @@ test("dispute can be sent to T&S without a CS recommendation", async () => {
   const button = screen.getByRole("button", { name: "ส่งต่อให้ Trust and Safety", exact: true });
   expect(button).toBeDisabled();
   fireEvent.change(screen.getByLabelText(/ปัญหาคืออะไร/), { target: { value: "wrong item" } });
-  fireEvent.change(screen.getByLabelText(/ขาดอำนาจอะไร/), { target: { value: "refund" } });
+  expect(screen.queryByLabelText(/ขาดอำนาจอะไร/)).not.toBeInTheDocument();
   expect(screen.getByLabelText(/ข้อเสนอแนะของ CS/)).not.toBeRequired();
   expect(button).toBeEnabled();
   await act(async () => fireEvent.click(button));
-  expect(submit).toHaveBeenCalledWith("ปัญหา: wrong item\nขาดอำนาจ: refund\nข้อเสนอแนะ: ");
+  expect(submit).toHaveBeenCalledWith("ปัญหา: wrong item\nข้อเสนอแนะ: ");
 });
 test("a failed escalation preserves all fields and keeps dialog open", async () => {
   const onClose = jest.fn();

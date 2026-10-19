@@ -149,8 +149,11 @@ export default function ChatRoomPage() {
     selfParticipant?.displayName ||
     user?.firstName ||
     (user?.email ? user.email.split("@")[0] : "คุณ");
+  // A buyer is just chatting from their own account, so "ผู้ซื้อ" reads oddly on their own badge.
   const selfRoleLabel = conversation
-    ? participantRoleLabel(selfParticipant?.role, conversation?.contextType) || "ผู้ใช้"
+    ? selfParticipant?.role === "BUYER"
+      ? "บัญชี"
+      : participantRoleLabel(selfParticipant?.role, conversation?.contextType) || "ผู้ใช้"
     : "ผู้ใช้";
 
   const updateConversationReadLocally = useCallback(

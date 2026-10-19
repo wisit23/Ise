@@ -12,21 +12,21 @@ it("uses the domain total and hides once messages are read", () => {
   expect(useCaseUnread).toHaveBeenCalledWith("tickets", "test-token", "agent-1");
   useCaseUnread.mockReturnValue({ summary: { scopes: { all: 0 } } });
   rerender(<WorkspaceUnreadBadge {...props} />);
-  expect(screen.queryByText(/ข้อความยังไม่อ่าน/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/มีข้อความใหม่/)).not.toBeInTheDocument();
 });
 
 it("caps the visible count while preserving the accessible total", () => {
   useCaseUnread.mockReturnValue({ summary: { scopes: { all: 120 } } });
   render(<WorkspaceUnreadBadge {...props} domain="disputes" active />);
   expect(screen.getByText("99+")).toBeInTheDocument();
-  expect(screen.getByText("ข้อความยังไม่อ่าน 120 ข้อความ")).toBeInTheDocument();
+  expect(screen.getByText("มีข้อความใหม่ 120 เคส")).toBeInTheDocument();
   expect(useCaseUnread).toHaveBeenCalledWith("disputes", "test-token", "agent-1");
 });
 
 it("keeps an accessible count in collapsed mode without visible digits", () => {
   useCaseUnread.mockReturnValue({ summary: { scopes: { all: 4 } } });
   render(<WorkspaceUnreadBadge {...props} collapsed />);
-  expect(screen.getByText("ข้อความยังไม่อ่าน 4 ข้อความ")).toBeInTheDocument();
+  expect(screen.getByText("มีข้อความใหม่ 4 เคส")).toBeInTheDocument();
   expect(screen.queryByText("4")).not.toBeInTheDocument();
 });
 

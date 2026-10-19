@@ -8,7 +8,12 @@ import SwipeFeedViewer from "../../components/swipe/SwipeFeedViewer";
 import Button from "../../components/ui/Button";
 import EmptyState from "../../components/ui/EmptyState";
 import { apiFetch } from "../../lib/api";
-import { clearSession, getStoredUser } from "../../lib/auth";
+import {
+  clearSession,
+  getCurrentRoles,
+  getStoredUser,
+  isCustomerAccountRoles,
+} from "../../lib/auth";
 
 export default function SwipeFeed() {
   const router = useRouter();
@@ -135,42 +140,47 @@ export default function SwipeFeed() {
           {/* User / Auth section */}
           {user ? (
             <div className="flex flex-col gap-1.5">
-              <Link
-                href="/sell"
-                className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-brand-400 transition hover:bg-zinc-900"
-              >
-                <span
-                  className="material-symbols-outlined text-[20px]"
-                  aria-hidden="true"
+              {/* Selling, chat and orders belong to customer accounts; staff work from the workspace. */}
+              {isCustomerAccountRoles(getCurrentRoles()) && (
+                <>
+                <Link
+                  href="/sell"
+                  className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-brand-400 transition hover:bg-zinc-900"
                 >
-                  add_circle
-                </span>
-                <span>ลงขายสินค้า</span>
-              </Link>
-              <Link
-                href="/chat"
-                className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
-              >
-                <span
-                  className="material-symbols-outlined text-[20px] text-zinc-400"
-                  aria-hidden="true"
+                  <span
+                    className="material-symbols-outlined text-[20px]"
+                    aria-hidden="true"
+                  >
+                    add_circle
+                  </span>
+                  <span>ลงขายสินค้า</span>
+                </Link>
+                <Link
+                  href="/chat"
+                  className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
                 >
-                  chat_bubble
-                </span>
-                <span>ข้อความ</span>
-              </Link>
-              <Link
-                href="/orders"
-                className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
-              >
-                <span
-                  className="material-symbols-outlined text-[20px] text-zinc-400"
-                  aria-hidden="true"
+                  <span
+                    className="material-symbols-outlined text-[20px] text-zinc-400"
+                    aria-hidden="true"
+                  >
+                    chat_bubble
+                  </span>
+                  <span>ข้อความ</span>
+                </Link>
+                <Link
+                  href="/orders"
+                  className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
                 >
-                  receipt_long
-                </span>
-                <span>คำสั่งซื้อของฉัน</span>
-              </Link>
+                  <span
+                    className="material-symbols-outlined text-[20px] text-zinc-400"
+                    aria-hidden="true"
+                  >
+                    receipt_long
+                  </span>
+                  <span>คำสั่งซื้อของฉัน</span>
+                </Link>
+                </>
+              )}
 
               <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
                 <div className="flex items-center gap-2.5">

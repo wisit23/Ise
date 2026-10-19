@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readCaseUnread } = require("./caseUnread");
 
-test("unread counts are scoped to authorized cases, preserve zeroes, and sum messages rather than cases", async (t) => {
+test("unread counts are scoped to authorized cases, preserve zeroes, and count cases rather than messages", async (t) => {
   t.mock.method(global, "fetch", async (url, options) => {
     assert.ok(url.endsWith("/internal/case-unread"));
     assert.deepEqual(JSON.parse(options.body).contextTypes, [
@@ -28,7 +28,7 @@ test("unread counts are scoped to authorized cases, preserve zeroes, and sum mes
     "cs",
     "disputes",
   );
-  assert.deepEqual(result.scopes, { mine: 4, unassigned: 2, all: 6 });
+  assert.deepEqual(result.scopes, { mine: 1, unassigned: 1, all: 2 });
   assert.deepEqual(result.items[2], { id: "d3", count: 0 });
 });
 

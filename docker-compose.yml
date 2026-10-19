@@ -174,6 +174,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL_ORDER}
       PRODUCT_SERVICE_URL: http://product-service:3002
+      # Dispute details resolve buyer/seller names through auth-service.
+      AUTH_SERVICE_URL: http://auth-service:3001
     volumes:
       - order_private_evidence:/app/services/order-service/private-evidence
     depends_on:
@@ -230,6 +232,8 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL_SUPPORT}
       CHAT_SERVICE_URL: http://chat-service:3004
+      # Ticket details resolve requester and staff names through auth-service.
+      AUTH_SERVICE_URL: http://auth-service:3001
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
     depends_on:
       postgres:

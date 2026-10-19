@@ -26,7 +26,7 @@ import SupportQueueSidebar from "../sections/live-support/SupportQueueSidebar";
 import useCaseWorkspace from "./useCaseWorkspace";
 import useCaseUnread from "./useCaseUnread";
 import SlaIndicator from "./SlaIndicator";
-import CaseFilters from "./CaseFilters";
+import CaseFilters, { tabFilters } from "./CaseFilters";
 import CaseContextPanel from "./CaseContextPanel";
 import EscalationMemoDialog from "./EscalationMemoDialog";
 import EvidenceInspector from "./EvidenceInspector";
@@ -167,7 +167,7 @@ export default function CaseWorkspace({
   useEffect(() => {
     // Table-only tabs fold back into "mine" in the compact chat inbox.
     if (state.view === "workspace" && !sidebarScopes.some((item) => item.value === state.scope))
-      w.update({ scope: "mine", page: 1 }, true);
+      w.update(scopeChange("mine"), true);
   }, [state.view, state.scope, elevated, w.update]);
   useEffect(() => {
     setRoom(null);
@@ -288,14 +288,26 @@ export default function CaseWorkspace({
         dispute ? "claim" : "assign",
         dispute ? { version: selected.version } : undefined,
       );
-      w.update({ scope: "mine", page: 1 });
+      w.update(scopeChange("mine"));
     } catch (err) {
       toast.error(err.message);
     }
   }
+  // Switching tabs drops a status or work filter the new tab can never match.
+  const scopeChange = (value) => {
+    const allowed = tabFilters(dispute, value, labels);
+    return {
+      scope: value,
+      page: 1,
+      ...(state.status && !allowed.statuses?.includes(state.status) ? { status: "" } : {}),
+      ...(state.work && !allowed.work ? { work: "" } : {}),
+    };
+  };
   const filter = (key, value) =>
     w.update(
-      key === "resetFilters"
+      key === "scope"
+        ? scopeChange(value)
+        : key === "resetFilters"
         ? { status: "", priority: "", work: "", retention: "active", page: 1 }
         : key === "retention"
           ? { retention: value, scope: "all", work: "", status: "", selectedId: null, page: 1 }
@@ -309,6 +321,7 @@ export default function CaseWorkspace({
   };
   const filters = (
     <CaseFilters
+      dispute={dispute}
       canViewDeleted={elevated}
       state={state}
       labels={labels}
