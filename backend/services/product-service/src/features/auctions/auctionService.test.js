@@ -50,6 +50,10 @@ beforeEach((t) => {
   t.mock.method(auctionCloseQueue, "scheduleClose", async () => {});
   t.mock.method(auctionCloseQueue, "cancelClose", async () => {});
   t.mock.method(repository, "setProductStatus", async () => {});
+  t.mock.method(orderClient, "createOrderFromAuction", async (input) => ({
+    id: `order-${input.auctionBidId}`,
+    paymentDeadlineAt: input.paymentDeadlineAt,
+  }));
   const defaultRound = {
     id: "round-1",
     title: "Round 1",
@@ -406,10 +410,22 @@ function fakeTx({ auction, existingBid = null, bids = [] }) {
       update: async ({ data }) => Object.assign(auction, data),
     },
     bid: {
-      findFirst: async () =>
-        bids.length
-          ? bids.reduce((a, b) => (b.amount > a.amount ? b : a))
-          : null,
+      findFirst: async ({ where, orderBy } = {}) => {
+        const matching = bids.filter(
+          (bid) =>
+            (!where?.auctionId ||
+              !bid.auctionId ||
+              bid.auctionId === where.auctionId) &&
+            (!where?.bidderId || bid.bidderId === where.bidderId),
+        );
+        if (!matching.length) return null;
+        if (orderBy?.[0]?.createdAt === "desc") {
+          return [...matching].sort(
+            (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+          )[0];
+        }
+        return matching.reduce((a, b) => (b.amount > a.amount ? b : a));
+      },
       create: async ({ data }) => ({ id: "bid-new", ...data }),
       findUnique: async () => existingBid,
     },
@@ -585,6 +601,83 @@ test("placeBid accepts the maximum bid amount", async (t) => {
   });
 
   assert.equal(bid.amount, 1_000_000);
+});
+
+test("placeBid enforces a 2-second cooldown per bidder and auction", async (t) => {
+  const now = Date.now();
+  const auction = {
+    id: "a1",
+    sellerId: "seller-1",
+    status: "open",
+    startingPrice: 100,
+    bidIncrement: 10,
+    scheduledEndAt: new Date(now + 60_000),
+  };
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(
+      fakeTx({
+        auction,
+        bids: [
+          {
+            id: "recent-bid",
+            auctionId: "a1",
+            bidderId: "buyer-1",
+            amount: 100,
+            createdAt: new Date(now - 500),
+          },
+        ],
+      }),
+    ),
+  );
+
+  await assert.rejects(
+    service.placeBid({
+      user: { id: "buyer-1" },
+      auctionId: "a1",
+      amount: 110,
+      idempotencyKey: "cooldown-bid",
+    }),
+    (err) =>
+      err.status === 429 &&
+      err.code === "AUCTION_BID_COOLDOWN" &&
+      err.message.includes("กรุณารอ"),
+  );
+});
+
+test("placeBid cooldown does not block a different bidder", async (t) => {
+  const now = Date.now();
+  const auction = {
+    id: "a1",
+    sellerId: "seller-1",
+    status: "open",
+    startingPrice: 100,
+    bidIncrement: 10,
+    scheduledEndAt: new Date(now + 60_000),
+  };
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(
+      fakeTx({
+        auction,
+        bids: [
+          {
+            id: "recent-bid",
+            auctionId: "a1",
+            bidderId: "buyer-1",
+            amount: 100,
+            createdAt: new Date(now - 500),
+          },
+        ],
+      }),
+    ),
+  );
+
+  const bid = await service.placeBid({
+    user: { id: "buyer-2" },
+    auctionId: "a1",
+    amount: 110,
+    idempotencyKey: "other-bidder",
+  });
+  assert.equal(bid.bidderId, "buyer-2");
 });
 
 test("placeBid rejects an amount above the per-bid maximum", async () => {
@@ -916,7 +1009,11 @@ test("TC_AUC10 advances an expired winner to the next distinct bidder", async (t
   assert.equal(result.bidId, "bid-b-90");
   assert.equal(result.buyerId, "buyer-b");
   assert.equal(result.price, 90);
-  assert.deepEqual(updates[0], { winningBidId: "bid-b-90" });
+  assert.deepEqual(updates[0], {
+    winningBidId: "bid-b-90",
+    winningOrderId: "order-bid-b-90",
+  });
+  assert.equal(result.orderId, "order-bid-b-90");
 });
 
 test("TC_AUC10 releases the product when every distinct bidder has timed out", async (t) => {
@@ -947,7 +1044,7 @@ test("TC_AUC10 releases the product when every distinct bidder has timed out", a
   });
 
   assert.equal(result.outcome, "released");
-  assert.equal(productStatus, "available");
+  assert.equal(productStatus, "auction_action_required");
 });
 
 test("TC_AUC10 advances legacy auction orders that do not yet store auctionBidId", async (t) => {
@@ -968,7 +1065,6 @@ test("TC_AUC10 advances legacy auction orders that do not yet store auctionBidId
     ...data,
   }));
   t.mock.method(repository, "setProductStatus", async () => {});
-
   const result = await service.advanceWinnerAfterPaymentTimeout({
     auctionId: current.id,
     currentBidId: null,
@@ -979,6 +1075,100 @@ test("TC_AUC10 advances legacy auction orders that do not yet store auctionBidId
   assert.equal(result.outcome, "reassigned");
   assert.equal(result.bidId, "bid-b-90");
   assert.equal(result.buyerId, "buyer-b");
+});
+
+test("TC_AUC10 advances A to B to C, skips duplicate bidders, gives each winner 24 hours, and releases only after C", async (t) => {
+  const bids = [
+    { id: "bid-a-1000", bidderId: "buyer-a", amount: 1000 },
+    { id: "bid-b-900", bidderId: "buyer-b", amount: 900 },
+    { id: "bid-a-800", bidderId: "buyer-a", amount: 800 },
+    { id: "bid-b-700", bidderId: "buyer-b", amount: 700 },
+    { id: "bid-c-500", bidderId: "buyer-c", amount: 500 },
+  ];
+  const current = {
+    id: "auction-chain",
+    status: "closed",
+    productId: "product-chain",
+    winningBidId: "bid-a-1000",
+    winningOrderId: "order-a",
+    bids,
+  };
+  const createdOrders = [];
+  const productStatuses = [];
+  t.mock.method(repository, "findById", async () => current);
+  t.mock.method(repository, "updateStatus", async (_id, data) => {
+    Object.assign(current, data);
+    return { ...current };
+  });
+  t.mock.method(repository, "setProductStatus", async (_id, status) => {
+    productStatuses.push(status);
+  });
+  t.mock.method(orderClient, "createOrderFromAuction", async (input) => {
+    createdOrders.push(input);
+    return {
+      id: `order-${input.auctionBidId}`,
+      paymentDeadlineAt: input.paymentDeadlineAt,
+    };
+  });
+
+  const firstTimeoutAt = new Date("2026-10-17T00:00:00.000Z");
+  const promotedB = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: current.id,
+    currentBidId: "bid-a-1000",
+    orderId: "order-a",
+    expiredBuyerId: "buyer-a",
+    now: firstTimeoutAt,
+  });
+  assert.equal(promotedB.bidId, "bid-b-900");
+  assert.equal(promotedB.price, 900);
+  assert.equal(
+    promotedB.paymentDeadlineAt.getTime(),
+    firstTimeoutAt.getTime() + 24 * 60 * 60 * 1000,
+  );
+
+  const retryA = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: current.id,
+    currentBidId: "bid-a-1000",
+    orderId: "order-a",
+    expiredBuyerId: "buyer-a",
+    now: firstTimeoutAt,
+  });
+  assert.equal(retryA.orderId, promotedB.orderId);
+  assert.equal(retryA.alreadyAdvanced, true);
+  assert.equal(createdOrders.length, 1);
+
+  const secondTimeoutAt = new Date("2026-10-18T03:00:00.000Z");
+  const promotedC = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: current.id,
+    currentBidId: "bid-b-900",
+    orderId: promotedB.orderId,
+    expiredBuyerId: "buyer-b",
+    now: secondTimeoutAt,
+  });
+  assert.equal(promotedC.bidId, "bid-c-500");
+  assert.equal(promotedC.buyerId, "buyer-c");
+  assert.equal(promotedC.price, 500);
+  assert.equal(
+    promotedC.paymentDeadlineAt.getTime(),
+    secondTimeoutAt.getTime() + 24 * 60 * 60 * 1000,
+  );
+
+  const finalResult = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: current.id,
+    currentBidId: "bid-c-500",
+    orderId: promotedC.orderId,
+    expiredBuyerId: "buyer-c",
+    now: new Date("2026-10-19T04:00:00.000Z"),
+  });
+  assert.equal(finalResult.outcome, "released");
+  assert.equal(current.winningBidId, null);
+  assert.equal(current.winningOrderId, null);
+  assert.equal(createdOrders.length, 2);
+  assert.deepEqual(
+    createdOrders.map((order) => order.auctionBidId),
+    ["bid-b-900", "bid-c-500"],
+  );
+  assert.equal(productStatuses.at(-1), "auction_action_required");
 });
 
 test("automatic close has no side effects after Trust & Safety moderation", async (t) => {
@@ -2672,6 +2862,31 @@ test("browseRounds returns active and upcoming rounds with derived phases", asyn
   assert.equal(result.upcomingRounds[0].phase, "upcoming");
 });
 
+test("browseRounds keeps a base-ended round visible while an item is in soft close", async (t) => {
+  const fakeNow = new Date("2026-10-02T12:05:00.000Z");
+  t.mock.method(repository, "findActiveAuctionRounds", async () => [
+    {
+      id: "r-overtime",
+      submissionStartsAt: new Date("2026-10-01T00:00:00.000Z"),
+      submissionEndsAt: new Date("2026-10-02T00:00:00.000Z"),
+      auctionStartsAt: new Date("2026-10-02T10:00:00.000Z"),
+      auctionEndsAt: new Date("2026-10-02T12:00:00.000Z"),
+      _count: { auctions: 1 },
+    },
+  ]);
+  t.mock.method(repository, "findUpcomingRounds", async () => []);
+
+  const result = await service.browseRounds(fakeNow);
+  assert.equal(result.activeAuctionRounds.length, 1);
+  assert.equal(result.activeAuctionRounds[0].phase, "auction");
+  assert.equal(result.activeAuctionRounds[0].isSoftCloseActive, true);
+});
+
+test("maskBidderDisplayName partially hides resolved account names", () => {
+  assert.equal(service.maskBidderDisplayName("สมชาย", "buyer-1"), "ส***ย");
+  assert.equal(service.maskBidderDisplayName("A", "buyer-1"), "A***");
+});
+
 test("getRound returns round with phase and rejects invalid roundId", async (t) => {
   const fakeNow = new Date("2026-10-02T12:00:00.000Z");
   await assert.rejects(
@@ -3631,8 +3846,8 @@ test("chatClient.notifyItemCancelled notifies only seller before open, and notif
 
   assert.equal(preOpenRes.deliveredCount, 1);
   assert.equal(preOpenRes.failedCount, 0);
-  // 2 fetch calls: 1 conversation + 1 message for seller-A only
-  assert.equal(calls.length, 2);
+  // 3 fetch calls: 1 conversation + 1 message + 1 notification-bell item.
+  assert.equal(calls.length, 3);
   assert.equal(calls[0].body.contextType, "AUCTION");
   assert.equal(calls[0].body.contextId, "round-pre:seller-A");
   assert.deepEqual(calls[0].body.participants, [
@@ -3643,6 +3858,8 @@ test("chatClient.notifyItemCancelled notifies only seller before open, and notif
     calls[1].body.idempotencyKey,
     "auction.item_cancelled:item-pre:seller-A",
   );
+  assert.ok(calls[2].url.endsWith("/internal/notifications"));
+  assert.equal(calls[2].body.userId, "seller-A");
 
   // 2. Open cancellation: notifies seller + deduplicated bidders, each in their own isolated 1-on-1 room
   calls.length = 0;
@@ -3665,8 +3882,12 @@ test("chatClient.notifyItemCancelled notifies only seller before open, and notif
     c.url.endsWith("/internal/conversations"),
   );
   const msgCalls = calls.filter((c) => c.url.includes("/messages"));
+  const bellCalls = calls.filter((c) =>
+    c.url.endsWith("/internal/notifications"),
+  );
   assert.equal(convCalls.length, 3);
   assert.equal(msgCalls.length, 3);
+  assert.equal(bellCalls.length, 3);
 
   // Verify user isolation: each conversation has only 1 human recipient + system-marketing
   const contextIds = convCalls.map((c) => c.body.contextId).sort();

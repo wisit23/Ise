@@ -31,6 +31,12 @@ function notificationSummary(message) {
     "auction.item_cancelled": "รายการประมูลถูกยกเลิก",
     "auction.round_cancelled": "รอบประมูลถูกยกเลิก",
     "auction.round_updated": "เวลารอบประมูลมีการเปลี่ยนแปลง",
+    "auction.winner_assigned": "คุณชนะการประมูล",
+    "auction.winner_promoted": "คุณได้รับเลื่อนเป็นผู้ชนะการประมูล",
+    "auction.payment_expired": "สิทธิ์ชำระเงินประมูลสิ้นสุดแล้ว",
+    "auction.seller_winner_assigned": "สินค้าประมูลมีผู้ชนะแล้ว",
+    "auction.seller_winner_changed": "ผู้ชนะและราคาประมูลถูกเปลี่ยนแล้ว",
+    "auction.action_required": "สินค้าประมูลรอให้ผู้ขายดำเนินการ",
   };
   return labels[message?.payload?.event] || "มีการเปลี่ยนแปลงเกี่ยวกับการประมูล";
 }

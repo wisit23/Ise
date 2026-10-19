@@ -104,7 +104,7 @@ const ACTION_LABELS_THAI = {
   AUCTION_ITEM_CANCEL: "ยกเลิกสินค้าประมูล",
   AUCTION_ITEM_CLOSE: "ปิดรอบการประมูล",
   AUCTION_PAYMENT_EXPIRED_NO_NEXT_BIDDER:
-    "คืนสินค้าเนื่องจากไม่มีผู้ชำระเงินตามกำหนด",
+    "ไม่มีผู้ชำระเงินตามกำหนดและรอผู้ขายดำเนินการ",
   AUCTION_WINNER_ADVANCE: "เลื่อนสิทธิ์ให้ผู้ประมูลลำดับถัดไป",
   REMOVE_PRODUCT: "ระงับการแสดงสินค้า",
   RESTORE_PRODUCT: "นำสินค้ากลับมาแสดง",

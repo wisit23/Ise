@@ -769,4 +769,44 @@ test("Campaign Validation, Normalization, Gating & Claim Concurrency Unit Suite"
       });
     },
   );
+
+  await t.test(
+    "Approved campaigns can be cancelled through the audited end flow",
+    async () => {
+      let updateData;
+      let auditData;
+      const repo = createMockRepo({
+        findById: async () => ({
+          id: "approved-camp-1",
+          status: "approved",
+        }),
+        updateCampaign: async (_id, data) => {
+          updateData = data;
+          return { id: "approved-camp-1", ...data };
+        },
+        expireClaimedVouchers: async () => ({ count: 0 }),
+        marketingAuditLog: {
+          create: async ({ data }) => {
+            auditData = data;
+            return data;
+          },
+          createMany: async () => ({ count: 1 }),
+        },
+      });
+      const service = createCampaignService(repo);
+
+      await service.endCampaign({
+        user: marketingUser,
+        campaignId: "approved-camp-1",
+        reason: "ยกเลิกหลังตรวจพบว่าไม่มีกลุ่มเป้าหมาย",
+      });
+
+      assert.equal(updateData.status, "ended");
+      assert.equal(updateData.endReason, "ADMIN_CLOSED");
+      assert.equal(auditData.action, "CAMPAIGN_END");
+      assert.deepEqual(auditData.metadata, {
+        reason: "ยกเลิกหลังตรวจพบว่าไม่มีกลุ่มเป้าหมาย",
+      });
+    },
+  );
 });

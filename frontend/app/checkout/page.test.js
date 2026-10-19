@@ -132,6 +132,40 @@ test("stays on checkout when the previous payment session is no longer pending",
   expect(replace).not.toHaveBeenCalled();
 });
 
+test("shows an expired auction message without a payment action for a cancelled winner order", async () => {
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/order-1"
+      ? Promise.resolve({
+          ...ORDER,
+          orderType: "AUCTION",
+          auctionId: "auction-1",
+          status: "cancelled",
+          reservationExpiresAt: null,
+          checkoutSessionId: "expired-winner-session",
+          checkoutSession: { id: "expired-winner-session", status: "pending" },
+        })
+      : original(path, options),
+  );
+
+  render(<CheckoutPage />);
+
+  expect(
+    await screen.findByRole("heading", {
+      name: "สิทธิ์ในการชำระเงินสิ้นสุดแล้ว",
+    }),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/ไม่ได้ชำระเงินภายใน 24 ชั่วโมง/)).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "ยืนยันและไปสแกน QR" }),
+  ).not.toBeInTheDocument();
+  expect(replace).not.toHaveBeenCalled();
+  expect(screen.getByRole("link", { name: "ดูประวัติคำสั่งซื้อ" })).toHaveAttribute(
+    "href",
+    "/orders",
+  );
+});
+
 test("entering checkout creates orders from cart reservations before confirming payment", async () => {
   window.history.replaceState(null, "", "/checkout?items=basket-1");
   const original = apiFetch.getMockImplementation();

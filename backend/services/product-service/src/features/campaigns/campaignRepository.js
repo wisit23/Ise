@@ -93,7 +93,7 @@ function createCampaignRepository(prismaClient) {
       where: { id },
       include: {
         _count: {
-          select: { vouchers: true },
+          select: { vouchers: true, audience: true },
         },
       },
     });
@@ -115,6 +115,7 @@ function createCampaignRepository(prismaClient) {
       ...campaign,
       claimedCount: campaign.usedCount ?? (campaign._count?.vouchers || 0),
       redeemedCount,
+      audienceSize: campaign._count?.audience || 0,
     };
   }
 
@@ -253,7 +254,7 @@ function createCampaignRepository(prismaClient) {
         take,
         include: {
           _count: {
-            select: { vouchers: true },
+            select: { vouchers: true, audience: true },
           },
         },
       }),
@@ -303,6 +304,7 @@ function createCampaignRepository(prismaClient) {
       ...c,
       claimedCount: c.usedCount ?? (c._count?.vouchers || 0),
       redeemedCount: redeemedMap.get(c.id) || 0,
+      audienceSize: c._count?.audience || 0,
     }));
 
     const totalClaimed = Math.max(

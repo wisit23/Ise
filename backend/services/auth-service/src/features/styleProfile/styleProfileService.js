@@ -164,3 +164,4 @@ function createStyleProfileService(db) {
 
 module.exports = createStyleProfileService(prisma);
 module.exports.createStyleProfileService = createStyleProfileService;
+module.exports.profileView = profileView;

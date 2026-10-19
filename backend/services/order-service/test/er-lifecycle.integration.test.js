@@ -336,7 +336,7 @@ test("ER evidence API: buyer uploads before claim, staff chooses deadline, audit
     (err) => err.code === "P2002",
   );
 });
-test("auction callback retries create one pending order and no basket", async (t) => {
+test("auction callback retries one bid idempotently and creates a separate order for the next winning bid", async (t) => {
   t.mock.method(
     require("../src/services/authClient"),
     "getUser",
@@ -345,6 +345,7 @@ test("auction callback retries create one pending order and no basket", async (t
   if (!(await available(t))) return;
   const body = {
     auctionId: id + "-auction",
+    auctionBidId: id + "-bid",
     productId: id + "-auction-product",
     buyerId,
     sellerId: "auction-seller",
@@ -364,5 +365,30 @@ test("auction callback retries create one pending order and no basket", async (t
   assert.equal(one.body.basketId, null);
   assert.equal(one.body.status, "pending_payment");
   assert.equal(one.body.originalAmount, "1250.75");
+
+  const mismatchedRetry = await request(app)
+    .post("/internal/from-auction")
+    .set("x-internal-token", process.env.INTERNAL_SERVICE_TOKEN)
+    .send({ ...body, buyerId: buyerId + "-other" });
+  assert.equal(mismatchedRetry.status, 409);
+
+  const successor = await request(app)
+    .post("/internal/from-auction")
+    .set("x-internal-token", process.env.INTERNAL_SERVICE_TOKEN)
+    .send({
+      ...body,
+      auctionBidId: id + "-bid-next",
+      buyerId: buyerId + "-next",
+      price: "900.00",
+      previousOrderId: one.body.id,
+    });
+  assert.equal(successor.status, 201, JSON.stringify(successor.body));
+  assert.notEqual(successor.body.id, one.body.id);
+  assert.equal(successor.body.auctionId, body.auctionId);
+  assert.equal(successor.body.auctionBidId, id + "-bid-next");
+  assert.equal(
+    await prisma.order.count({ where: { auctionId: body.auctionId } }),
+    2,
+  );
 });
 test.after(() => prisma.$disconnect());

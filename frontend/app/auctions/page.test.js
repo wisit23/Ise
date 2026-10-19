@@ -97,6 +97,21 @@ describe("AuctionsBrowsePage - Buyer Round Browsing", () => {
     expect(viewButton).toHaveAttribute("href", "/auctions/rounds/round-act-1");
   });
 
+  it("marks a round that remains open because an item is in soft close", async () => {
+    apiFetch.mockResolvedValue({
+      activeAuctionRounds: [
+        { ...sampleActiveRound, isSoftCloseActive: true, visibleItemCount: 1 },
+      ],
+      upcomingRounds: [],
+    });
+
+    render(<AuctionsBrowsePage />);
+
+    expect(
+      await screen.findByText("⏱️ มีสินค้าที่ยังประมูลต่อในช่วงต่อเวลา 5 นาที"),
+    ).toBeInTheDocument();
+  });
+
   it("displays designated empty state when no rounds are available", async () => {
     apiFetch.mockImplementation((url) => {
       if (url.includes("/api/products/auctions/rounds/browse")) {

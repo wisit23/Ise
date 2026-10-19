@@ -137,9 +137,51 @@ describe("CampaignsSection (Marketing Workspace)", () => {
       within(activeRow).getByRole("button", { name: "เผยแพร่ (Publish)" }),
     ).toBeEnabled();
     expect(
+      within(activeRow).getByRole("button", { name: "ยกเลิกแคมเปญ" }),
+    ).toBeEnabled();
+    expect(
       within(expiredRow).queryByRole("button", { name: "เผยแพร่ (Publish)" }),
     ).not.toBeInTheDocument();
     expect(within(expiredRow).getAllByText("สิ้นสุดแล้ว").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("cancels an approved campaign through the audited end endpoint", async () => {
+    const approvedCampaign = {
+      ...sampleCampaigns[1],
+      id: "approved-cancel",
+      code: "APPROVED-CANCEL",
+      name: "Approved campaign to cancel",
+      status: "approved",
+      endsAt: "2099-12-31T23:59:59.000Z",
+    };
+    apiFetch.mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/products/filters")) {
+        return Promise.resolve({ brands: [], styles: [], sizes: [] });
+      }
+      return Promise.resolve({ items: [approvedCampaign], total: 1 });
+    });
+
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "ยกเลิกแคมเปญ" }),
+    );
+    const cancelDialog = screen.getByRole("dialog");
+    fireEvent.change(screen.getByLabelText(/เหตุผลที่ยกเลิกแคมเปญ/), {
+      target: { value: "ไม่พบผู้ซื้อในกลุ่มเป้าหมาย" },
+    });
+    fireEvent.click(
+      within(cancelDialog).getByRole("button", { name: "ยกเลิกแคมเปญ" }),
+    );
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        `/api/products/campaigns/${approvedCampaign.id}/end`,
+        expect.objectContaining({
+          method: "POST",
+          body: { reason: "ไม่พบผู้ซื้อในกลุ่มเป้าหมาย" },
+        }),
+      ),
+    );
   });
 
   it("retains all columns and draft actions when names and descriptions are long", async () => {
@@ -693,6 +735,61 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     );
     expect(screen.getByText("ตัวอย่างคูปอง")).toBeInTheDocument();
     expect(screen.getByText("รหัสคูปอง")).toBeInTheDocument();
+  });
+
+  it("keeps audience statistics visible while score criteria are adjusted", async () => {
+    const audiencePreview = {
+      eligibleCustomers: 3,
+      minimumObserved: 4,
+      maximumObserved: 18,
+      averageScore: 10,
+      medianScore: 9,
+      maximumPossible: 28,
+      globalMaximum: 33,
+      distribution: [
+        { key: "none", min: 0, max: 0, count: 2 },
+        { key: "emerging", min: 1, max: 6, count: 1 },
+        { key: "moderate", min: 7, max: 14, count: 2 },
+        { key: "high", min: 15, max: 24, count: 1 },
+        { key: "very_high", min: 25, max: 33, count: 0 },
+      ],
+    };
+    apiFetch.mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/products/filters")) {
+        return Promise.resolve({ brands: ["Nike"], styles: [], sizes: [] });
+      }
+      if (typeof url === "string" && url.includes("/audience/options")) {
+        return Promise.resolve({
+          dimensions: { categories: ["กระเป๋า"], brands: ["Nike"], styles: [], sizesByCategory: {} },
+          globalMaximum: 33,
+        });
+      }
+      if (typeof url === "string" && url.includes("/audience/preview")) {
+        return Promise.resolve(audiencePreview);
+      }
+      return Promise.resolve({ items: sampleCampaigns, total: 3 });
+    });
+
+    render(<CampaignsSection token={mockToken} user={mockUser} />);
+    fireEvent.click(await screen.findByRole("button", { name: /สร้างแคมเปญใหม่/i }));
+    fireEvent.click(screen.getByLabelText("ตามคะแนนความสนใจ"));
+
+    expect(screen.queryByLabelText("ไซซ์")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("คะแนนสิ้นสุด")).toHaveAttribute("max", "33");
+
+    expect(screen.getByText(/ยังไม่ได้คำนวณ/)).toBeInTheDocument();
+    expect(screen.getByText("ได้สิทธิ์")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("หมวดหมู่"), {
+      target: { value: "กระเป๋า" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "คำนวณสิทธิ์และสถิติ" }));
+    expect(await screen.findByText("3 คน")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("คะแนนเริ่มต้น"), {
+      target: { value: "7" },
+    });
+    expect(screen.getByText(/ผลด้านล่างเป็นผลก่อนหน้า/)).toBeInTheDocument();
+    expect(screen.getByText("3 คน")).toBeInTheDocument();
   });
 
   it("blocks a fixed discount that reaches the minimum order amount", async () => {

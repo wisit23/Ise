@@ -167,6 +167,25 @@ describe("AuctionDetailPage - Navigation to Round", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("locks the bid button for 2 seconds after a successful bid", async () => {
+    apiFetch.mockImplementation((url, options) => {
+      if (options?.method === "POST") {
+        return Promise.resolve({ id: "bid-1", amount: options.body.amount });
+      }
+      return Promise.resolve(sampleAuctionWithRound);
+    });
+    render(<AuctionDetailPage />);
+
+    const input = await screen.findByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "1600" } });
+    fireEvent.click(screen.getByRole("button", { name: "เสนอราคา ฿1,600" }));
+
+    const cooldownButton = await screen.findByRole("button", {
+      name: "รอ 2 วินาที",
+    });
+    expect(cooldownButton).toBeDisabled();
+  });
+
   it("requires confirmation when the raise is at least 10,000 baht and submits the displayed amount", async () => {
     apiFetch.mockImplementation((url, options) => {
       if (options?.method === "POST") {

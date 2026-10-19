@@ -1,13 +1,10 @@
 const orderModel = require("../../models/orderModel");
 const productClient = require("../../services/productClient");
-const chatClient = require("../../services/chatClient");
-
-const AUCTION_PAYMENT_TTL_MS = 24 * 60 * 60 * 1000;
+const { AUCTION_PAYMENT_TTL_MS } = require("@reloop/shared");
 
 function createAuctionSettlementService({
   orders = orderModel,
   products = productClient,
-  chat = chatClient,
   now = () => new Date(),
 } = {}) {
   let workerTimer = null;
@@ -22,7 +19,6 @@ function createAuctionSettlementService({
         now: settledAt,
       });
       if (!claimed || claimed.status !== "cancelled") return null;
-      await chat.notifyOrderStatusChanged(claimed, "cancelled");
     }
 
     const result = await products.advanceAuctionWinner(order.auctionId, {
@@ -32,23 +28,22 @@ function createAuctionSettlementService({
     });
 
     if (result?.outcome === "reassigned") {
-      const paymentDeadlineAt = new Date(
-        settledAt.getTime() + AUCTION_PAYMENT_TTL_MS,
-      );
-      const reassigned = await orders.reassignAuctionOrder({
+      const finalized = await orders.finalizeExpiredAuctionOrder({
         id: claimed.id,
         expectedVersion: claimed.version,
-        buyerId: result.buyerId,
-        auctionBidId: result.bidId,
-        price: result.price,
-        paymentDeadlineAt,
+        successorOrder: {
+          id: result.orderId,
+          buyerId: result.buyerId,
+          auctionBidId: result.bidId,
+          price: result.price,
+          paymentDeadlineAt: result.paymentDeadlineAt,
+        },
       });
-      if (reassigned) await chat.notifyOrderPlaced(reassigned);
-      return reassigned;
+      return finalized;
     }
 
     if (result?.outcome === "released") {
-      return orders.finalizeAuctionOrderWithoutWinner({
+      return orders.finalizeExpiredAuctionOrder({
         id: claimed.id,
         expectedVersion: claimed.version,
       });

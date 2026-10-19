@@ -15,6 +15,10 @@ const checkoutSessionRoutes = require("../features/checkoutSessions/checkoutSess
 const router = Router();
 router.use(require("../features/orderVouchers/orderVoucherRoutes"));
 router.use("/recommendation-history", require("../features/recommendationHistory/recommendationHistoryRoutes"));
+router.use(
+  "/internal/marketing-audience",
+  require("../features/marketingAudience/marketingAudienceRoutes"),
+);
 
 // Feature routers must come before "/:id" so Express doesn't read "disputes"
 // or "support" as an order id.

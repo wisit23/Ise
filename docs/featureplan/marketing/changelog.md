@@ -1067,3 +1067,38 @@
 - Targeted campaigns are hidden from guests and profile-less buyers, fail closed when Auth profile lookup is unavailable, and are rechecked during direct voucher claim.
 - Added a corrective Product migration that restores and backfills `campaigns.spent_budget` after the approved ER migration removed it while the atomic budget workflow still requires it.
 - Verification: campaign/segmentation suite **105/105 passing**, Order lifecycle regression **45/45 passing**, and live Auth -> Product -> Campaign persistence E2E **1/1 passing** with no skips.
+
+## 2026-10-17 — TC_AUC10 Immutable Winner Orders & Payment Rollover Notifications (MKT-DEC-027)
+
+- เปลี่ยน rollover จากการเปลี่ยนเจ้าของ Order เดิมเป็นการยกเลิก Order เดิมและสร้าง Order ใหม่ต่อ winning Bid
+- เพิ่ม Order migration: ลบ unique เฉพาะ `auction_id`, เพิ่ม index `(auction_id, created_at)` และ unique `(auction_id, auction_bid_id)` โดยไม่เพิ่ม column/status
+- ใช้ Order ID deterministic จาก `auctionId + auctionBidId`; retry คืน Order เดิมและไม่สร้าง OrderLog ซ้ำ
+- เก็บ `AUCTION_PAYMENT_EXPIRED`, `AUCTION_ORDER_CREATED`, `AUCTION_WINNER_REASSIGNED` และ `AUCTION_NO_PAYING_BIDDER` สำหรับลำดับ A → B → C
+- ใช้ shared `AUCTION_PAYMENT_TTL_MS` สำหรับเส้นตาย 24 ชั่วโมงทุกลำดับ
+- เมื่อหมดผู้ประมูล Product เป็น `auction_action_required` แทน `available` และล้างทั้ง `winningBidId`/`winningOrderId` เพื่อไม่ให้ชี้ Order ที่ถูกยกเลิกแล้ว
+- เพิ่ม Auction Chat notifications แบบ idempotent พร้อม Checkout link และ Seller Recovery link
+- หน้า Checkout แสดง expired-auction state และซ่อนปุ่มชำระเมื่อเปิดลิงก์เก่า
+- เพิ่ม test cases แล้ว; Docker targeted tests ผ่าน Product/Auction/Campaign **131/131** และ Order settlement/restriction **9/9** โดยยังไม่ได้ทำ browser time-advance E2E ของ rollover 24 ชั่วโมง
+
+## 2026-10-18 — Interest-score Campaigns & Customer Insights (MKT-DEC-028)
+
+- เพิ่มโมดูลคำนวณคะแนนความสนใจที่ reuse Recommendation rules เดิมและช่วง `0`, `1–6`, `7–14`, `15–24`, `25–38`
+- เพิ่ม Internal Auth buyer-profile และ Order paid-purchase APIs พร้อม Product clients แบบ pagination/fail-closed
+- เพิ่ม Campaign audience options/preview, immutable publish snapshot และ membership enforcement ทุกจุดที่แจก/ใช้คูปอง
+- ป้องกัน publish race: หลังล็อก Campaign จะตรวจว่าเกณฑ์กลุ่มเป้าหมายยังตรงกับ snapshot ที่คำนวณไว้ หากถูกแก้พร้อมกันจะยกเลิกและให้ลองใหม่แทนการเผยแพร่สิทธิ์ผิดกลุ่ม
+- เปลี่ยน Notification policy: Campaign ทั่วไปไม่ส่ง; Campaign ตามคะแนนส่ง `DISCOUNT` Notification รายผู้มีสิทธิ์พร้อมลิงก์ `/campaigns`
+- เพิ่มแท็บ Marketing `ความสนใจลูกค้า` พร้อม date-time range, shortcuts, filters, KPI, ranking, trend, previous-period comparison และเวลาที่อัปเดต
+- เพิ่ม Dashboard-to-Campaign prefill และแสดง preview จำนวนสิทธิ์/สถิติคะแนนใน Campaign editor
+- เพิ่ม Product migration `20261024000000_campaign_interest_audience`; deploy บน Docker สำเร็จ
+- Docker targeted tests ผ่าน Product **131/131**, Auth audience **2/2**, Order purchase signal **3/3** และ Frontend **24/24**
+- Browser verification ผ่านเส้นทาง Marketing → ความสนใจลูกค้า → prefill สร้างแคมเปญ → คำนวณสิทธิ์ โดยไม่บันทึกแคมเปญจริง
+- แก้กราฟแนวโน้มเมื่อค่าสูงสุดต่ำกว่า 4 ให้ปรับจำนวนเส้นกริดตามข้อมูล ป้องกันแกนซ้ำและ React duplicate-key warning
+
+## 2026-10-19 — Auction bidding and soft-close hardening (MKT-DEC-029)
+
+- เพิ่ม server-enforced Bid cooldown 2 วินาทีต่อบัญชีต่อ AuctionItem และ UI countdown หลัง Bid สำเร็จ
+- ทำให้รอบที่พ้นเวลาหลักแต่มี AuctionItem ต่อเวลายังคงอยู่ใน buyer browse พร้อมป้ายช่วงต่อเวลา
+- ปิดบัง display name ในประวัติ Bid และทำ ordering ของ Bid ให้คงที่
+- mirror Auction system messages ไป Notification Bell และเพิ่ม bell notification สำหรับ Soft Close
+- แก้จำนวนสินค้าในรอบไม่ให้นับ rejected/cancelled พร้อมเรียง active/manageable ก่อน history และแสดงราคาสูงสุดจริงใน Marketing
+- Docker targeted verification ผ่าน Backend 126/126 และ Frontend 69/69; ยังไม่ได้รัน browser/integration E2E ในรอบนี้

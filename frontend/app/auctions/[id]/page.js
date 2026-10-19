@@ -18,6 +18,7 @@ import {
 
 const MAX_BID_AMOUNT = 1_000_000;
 const BID_CONFIRMATION_INCREASE = 10_000;
+const BID_COOLDOWN_SECONDS = 2;
 
 const STATUS_LABEL = {
   pending_approval: "รออนุมัติ",
@@ -50,6 +51,7 @@ export default function AuctionDetailPage() {
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
   const [bidding, setBidding] = useState(false);
+  const [bidCooldown, setBidCooldown] = useState(0);
   const [pendingBid, setPendingBid] = useState(null);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [viewer, setViewer] = useState({
@@ -83,6 +85,15 @@ export default function AuctionDetailPage() {
   }, [id]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    if (bidCooldown <= 0) return undefined;
+    const timer = setTimeout(
+      () => setBidCooldown((remaining) => Math.max(0, remaining - 1)),
+      1000,
+    );
+    return () => clearTimeout(timer);
+  }, [bidCooldown]);
 
   // TC_AUC15: only the auction detail page holds a real-time connection.
   // The event contains no bid data; it tells the page to reload the committed
@@ -134,6 +145,7 @@ export default function AuctionDetailPage() {
   }, [auction]);
 
   async function submitBid(value) {
+    if (bidding || bidCooldown > 0) return;
     setBidding(true);
     try {
       await apiFetch(`/api/products/auctions/${id}/bids`, {
@@ -146,6 +158,7 @@ export default function AuctionDetailPage() {
               : `${Date.now()}-${Math.random()}`,
         },
       });
+      setBidCooldown(BID_COOLDOWN_SECONDS);
       setAmount("");
       load();
     } catch (err) {
@@ -417,11 +430,13 @@ export default function AuctionDetailPage() {
                 </div>
                 <button
                   type="submit"
-                  disabled={bidding}
+                  disabled={bidding || bidCooldown > 0}
                   className="sm:mt-6 rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 shadow-sm text-center"
                 >
                   {bidding
                     ? "กำลังส่ง..."
+                    : bidCooldown > 0
+                      ? `รอ ${bidCooldown} วินาที`
                     : Number.isInteger(Number(amount)) && Number(amount) > 0
                       ? `เสนอราคา ${baht(Number(amount))}`
                       : "เสนอราคา"}

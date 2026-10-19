@@ -75,7 +75,10 @@ describe("RadioSelect sizing & arrow safety", () => {
       fireEvent.click(screen.getByRole("button", { name: "ตัวกรองสถานะ" }));
 
       const listbox = screen.getByRole("listbox");
-      expect(listbox).toHaveClass("top-full", "overflow-y-auto", "overscroll-contain");
+      expect(listbox).toHaveClass("top-full", "overflow-hidden");
+      const scrollContainers = listbox.querySelectorAll(".overflow-y-auto");
+      expect(scrollContainers).toHaveLength(1);
+      expect(scrollContainers[0]).toHaveClass("flex-1", "overscroll-contain");
       expect(listbox.style.maxHeight).toBe("184px");
     } finally {
       Object.defineProperty(window, "innerHeight", {
@@ -116,7 +119,8 @@ describe("RadioSelect sizing & arrow safety", () => {
       fireEvent.click(screen.getByRole("button", { name: "ตัวกรองสถานะ" }));
 
       const listbox = screen.getByRole("listbox");
-      expect(listbox).toHaveClass("bottom-full", "overflow-y-auto");
+      expect(listbox).toHaveClass("bottom-full", "overflow-hidden");
+      expect(listbox.querySelectorAll(".overflow-y-auto")).toHaveLength(1);
       expect(listbox.style.maxHeight).toBe("280px");
     } finally {
       Object.defineProperty(window, "innerHeight", {

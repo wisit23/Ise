@@ -15,6 +15,7 @@ import { getAccessToken } from "../../lib/auth";
 import { formatCheckoutCountdown, remainingSeconds } from "../../lib/checkout";
 
 function orderDeadline(order) {
+  if (order.status === "cancelled") return null;
   if (order.reservationExpiresAt) return order.reservationExpiresAt;
   if (!order.createdAt) return null;
   const ttl = order.auctionId ? 24 * 60 * 60 * 1000 : 10 * 60 * 1000;
@@ -116,6 +117,7 @@ export default function CheckoutPage() {
         // straight back to its QR page instead of asking to confirm again.
         const openSession = savedOrders.find(
           (order) =>
+            ["pending", "pending_payment"].includes(order.status) &&
             order.checkoutSessionId &&
             (!order.checkoutSession?.status ||
               order.checkoutSession.status === "pending"),
@@ -169,6 +171,9 @@ export default function CheckoutPage() {
     (address) => address.id === selectedAddressId,
   );
   const voucherOrder = orders.find((order) => order.id === voucherOrderId);
+  const expiredAuctionOrder = orders.find(
+    (order) => order.orderType === "AUCTION" && order.status === "cancelled",
+  );
 
   function addressesChanged(updated, selectedId) {
     setAddresses(updated);
@@ -259,6 +264,28 @@ export default function CheckoutPage() {
             <Skeleton className="h-96 rounded-xl" />
             <Skeleton className="h-72 rounded-xl" />
           </div>
+        ) : expiredAuctionOrder ? (
+          <section className="mx-auto max-w-2xl rounded-xl border border-amber-200 bg-white p-6 text-center shadow-1">
+            <span
+              className="material-symbols-outlined text-5xl text-amber-600"
+              aria-hidden="true"
+            >
+              timer_off
+            </span>
+            <h2 className="mt-3 text-xl font-bold text-gray-900">
+              สิทธิ์ในการชำระเงินสิ้นสุดแล้ว
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+              คุณไม่ได้ชำระเงินภายใน 24 ชั่วโมง คำสั่งซื้อนี้จึงถูกยกเลิก
+              และระบบได้ดำเนินการตามลำดับผู้ประมูลถัดไปแล้ว
+            </p>
+            <p className="mt-3 font-mono text-xs text-ink-subtle">
+              Order ID: #{expiredAuctionOrder.id}
+            </p>
+            <Button href="/orders" className="mt-5">
+              ดูประวัติคำสั่งซื้อ
+            </Button>
+          </section>
         ) : (
           <div className="grid items-start gap-5 lg:grid-cols-[1fr_340px]">
             <div className="space-y-5">

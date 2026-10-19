@@ -8,6 +8,7 @@ const {
   paginatedResponse,
   restrictionsForStatus,
   CAPABILITY,
+  AUCTION_PAYMENT_TTL_MS,
 } = require("@reloop/shared");
 const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
@@ -234,6 +235,24 @@ async function pay(req, res, next) {
     next(err);
   }
 }
+function validateAuctionOrderRetry(existingOrder, input) {
+  const matchesOriginalWinningBid =
+    existingOrder.auctionId === String(input.auctionId) &&
+    existingOrder.auctionBidId === String(input.auctionBidId) &&
+    existingOrder.productId === input.productId &&
+    existingOrder.sellerId === input.sellerId &&
+    existingOrder.buyerId === input.buyerId &&
+    Number(existingOrder.price) === Number(input.price);
+
+  if (!matchesOriginalWinningBid) {
+    throw conflict(
+      "auction order retry does not match the original winning bid",
+    );
+  }
+
+  return existingOrder;
+}
+
 /**
  * Called by product-service (internal token) once an auction closes with a
  * winning bid. Creates the same shape of Order a normal "buy now" checkout
@@ -250,25 +269,29 @@ async function createFromAuction(req, res, next) {
       buyerId,
       price,
       paymentDeadlineAt,
+      previousOrderId,
     } = req.body;
-    if (!auctionId || !productId || !sellerId || !buyerId || !price) {
+    if (!auctionId || !auctionBidId || !productId || !sellerId || !buyerId || !price) {
       throw badRequest(
-        "auctionId, productId, sellerId, buyerId, price are required",
+        "auctionId, auctionBidId, productId, sellerId, buyerId, price are required",
       );
     }
 
-    // Idempotency: concise deterministic ID for auction order (e.g. AUC-A1B2C3D4E5)
+    // Each winning bid owns an immutable Order. A retry for the same bid
+    // resolves to the same deterministic ID instead of creating a duplicate.
     const stableId =
       "AUC-" +
       crypto
         .createHash("sha256")
-        .update(String(auctionId))
+        .update(`${auctionId}:${auctionBidId}`)
         .digest("hex")
         .slice(0, 10)
         .toUpperCase();
     const existing = await orderModel.findById(stableId);
     if (existing) {
-      return res.status(200).json(existing);
+      return res
+        .status(200)
+        .json(validateAuctionOrderRetry(existing, req.body));
     }
 
     const [buyer, seller] = await Promise.all([
@@ -288,40 +311,50 @@ async function createFromAuction(req, res, next) {
       throw forbidden("auction buyer and seller accounts must be active");
     }
 
-    const order = await orderModel.create({
-      id: stableId,
-      buyerId,
-      sellerId,
-      productId,
-      originalAmount: money(price),
-      ordersAmount: money(price),
-      orderType: "AUCTION",
-      auctionId: String(auctionId),
-      auctionBidId: auctionBidId ? String(auctionBidId) : null,
-      paymentDeadlineAt: paymentDeadlineAt
-        ? new Date(paymentDeadlineAt)
-        : new Date(Date.now() + 24 * 60 * 60 * 1000),
-      productTitle: req.body.productTitle || null,
-      status: "pending_payment",
-    });
+    const { order, created } = await orderModel.createAuctionOrder(
+      {
+        id: stableId,
+        buyerId,
+        sellerId,
+        productId,
+        originalAmount: money(price),
+        ordersAmount: money(price),
+        orderType: "AUCTION",
+        auctionId: String(auctionId),
+        auctionBidId: String(auctionBidId),
+        paymentDeadlineAt: paymentDeadlineAt
+          ? new Date(paymentDeadlineAt)
+          : new Date(Date.now() + AUCTION_PAYMENT_TTL_MS),
+        productTitle: req.body.productTitle || null,
+        status: "pending_payment",
+      },
+      { previousOrderId: previousOrderId || null },
+    );
 
-    await productClient.setProductStatus(productId, "reserved");
-    await chatClient.notifyOrderPlaced(order);
+    if (created) {
+      await chatClient.notifyOrderPlaced(order);
+    }
 
-    res.status(201).json(order);
+    res.status(created ? 201 : 200).json(order);
   } catch (err) {
     if (err.code === "P2002") {
       const stableId =
         "AUC-" +
         crypto
           .createHash("sha256")
-          .update(String(req.body.auctionId))
+          .update(`${req.body.auctionId}:${req.body.auctionBidId}`)
           .digest("hex")
           .slice(0, 10)
           .toUpperCase();
       const existing = await orderModel.findById(stableId);
       if (existing) {
-        return res.status(200).json(existing);
+        try {
+          return res
+            .status(200)
+            .json(validateAuctionOrderRetry(existing, req.body));
+        } catch (validationError) {
+          return next(validationError);
+        }
       }
     }
     next(err);

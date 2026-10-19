@@ -10,11 +10,13 @@ import AuctionScheduleSection from "../../components/marketing/sections/AuctionS
 import ArticlesSection from "../../components/marketing/sections/ArticlesSection";
 import CampaignsSection from "../../components/marketing/sections/CampaignsSection";
 import AuditTrailSection from "../../components/marketing/sections/AuditTrailSection";
+import CustomerInsightsSection from "../../components/marketing/sections/CustomerInsightsSection";
 
 const DEFAULT_SECTION = "dashboard";
 
 const SECTIONS = [
   { key: DEFAULT_SECTION, label: "Dashboard", icon: "dashboard" },
+  { key: "customer-insights", label: "ความสนใจลูกค้า", icon: "insights" },
   { key: "campaigns", label: "แคมเปญและคูปอง", icon: "confirmation_number" },
   { key: "auctions", label: "ตารางประมูล", icon: "gavel" },
   { key: "articles", label: "จัดการบทความ", icon: "article" },
@@ -25,6 +27,7 @@ export default function MarketingPanelPage() {
   const router = useRouter();
   const [user, setUser] = useState(undefined);
   const [section, setSection] = useState(DEFAULT_SECTION);
+  const [campaignAudienceSeed, setCampaignAudienceSeed] = useState(null);
   const mainContentRef = useRef(null);
 
   const resetMainContentScroll = useCallback(() => {
@@ -42,6 +45,14 @@ export default function MarketingPanelPage() {
       resetMainContentScroll();
     },
     [resetMainContentScroll],
+  );
+
+  const handleCreateCampaignFromInsights = useCallback(
+    (criteria) => {
+      setCampaignAudienceSeed({ ...criteria, requestedAt: Date.now() });
+      handleSectionChange("campaigns");
+    },
+    [handleSectionChange],
   );
 
   useEffect(() => {
@@ -174,7 +185,19 @@ export default function MarketingPanelPage() {
             {section === "dashboard" && (
               <DashboardSection token={token} onNavigate={handleSectionChange} />
             )}
-            {section === "campaigns" && <CampaignsSection token={token} />}
+            {section === "customer-insights" && (
+              <CustomerInsightsSection
+                token={token}
+                onCreateCampaign={handleCreateCampaignFromInsights}
+              />
+            )}
+            {section === "campaigns" && (
+              <CampaignsSection
+                token={token}
+                audienceSeed={campaignAudienceSeed}
+                onAudienceSeedConsumed={() => setCampaignAudienceSeed(null)}
+              />
+            )}
             {section === "auctions" && <AuctionScheduleSection token={token} />}
             {section === "articles" && <ArticlesSection token={token} />}
             {section === "audit" && <AuditTrailSection token={token} />}

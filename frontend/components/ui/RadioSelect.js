@@ -419,7 +419,7 @@ export default function RadioSelect({
       <div
         role="listbox"
         tabIndex={-1}
-        className={`absolute z-50 flex min-w-[170px] w-full max-w-[calc(100vw-32px)] flex-col overflow-y-auto overscroll-contain transition-opacity transition-transform duration-300 ease-out ${
+        className={`absolute z-50 flex min-w-[170px] w-full max-w-[calc(100vw-32px)] flex-col overflow-hidden transition-opacity transition-transform duration-300 ease-out ${
           verticalPlacement === "top" ? "bottom-full mb-1.5 mt-0" : "top-full"
         } ${variantStyles.menu} ${sizeStyles.menu} ${
           effectiveAlign === "right" ? "right-0 left-auto" : "left-0 right-auto"
@@ -459,7 +459,7 @@ export default function RadioSelect({
             />
           </div>
         )}
-        <div className="flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain">
+        <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain">
           {filteredOptions.map((opt) => {
             const isSelected = opt.value === value;
             const optionId = `${groupName}-${String(opt.value)}`;

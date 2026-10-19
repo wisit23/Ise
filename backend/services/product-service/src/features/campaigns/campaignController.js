@@ -135,6 +135,7 @@ async function listAvailable(req, res, next) {
   try {
     const profile = await resolveBuyerProfile(req);
     const campaigns = await campaignService.listAvailablePublicCampaigns({
+      userId: req.userId,
       profile,
     });
     res.set("Cache-Control", "private, no-store");

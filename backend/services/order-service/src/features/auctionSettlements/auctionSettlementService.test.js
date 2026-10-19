@@ -2,7 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   createAuctionSettlementService,
-  AUCTION_PAYMENT_TTL_MS,
 } = require("./auctionSettlementService");
 
 const NOW = new Date("2026-10-16T12:00:00.000Z");
@@ -20,12 +19,9 @@ test("TC_AUC10: expired winner is cancelled and the next distinct bidder receive
   const orders = {
     findAuctionOrdersDueForSettlement: async () => [due],
     claimExpiredAuctionOrder: async () => ({ ...due, status: "cancelled", version: 2 }),
-    reassignAuctionOrder: async (input) => {
+    finalizeExpiredAuctionOrder: async (input) => {
       calls.push(input);
-      return { ...due, ...input, status: "pending_payment", version: 3 };
-    },
-    finalizeAuctionOrderWithoutWinner: async () => {
-      throw new Error("must not release while another bidder exists");
+      return { ...due, status: "cancelled", paymentDeadlineAt: null, version: 3 };
     },
   };
   const products = {
@@ -41,24 +37,28 @@ test("TC_AUC10: expired winner is cancelled and the next distinct bidder receive
         bidId: "bid-b-90",
         buyerId: "buyer-b",
         price: 90,
+        orderId: "order-b",
+        paymentDeadlineAt: new Date("2026-10-17T12:00:00.000Z"),
       };
     },
   };
-  const notices = [];
-  const chat = {
-    notifyOrderStatusChanged: async (order, status) => notices.push([status, order.buyerId]),
-    notifyOrderPlaced: async (order) => notices.push(["placed", order.buyerId]),
-  };
-  const service = createAuctionSettlementService({ orders, products, chat, now: () => NOW });
+  const service = createAuctionSettlementService({ orders, products, now: () => NOW });
 
   const result = await service.expireDue({ at: NOW });
 
   assert.equal(result.processed, 1);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].buyerId, "buyer-b");
-  assert.equal(calls[0].auctionBidId, "bid-b-90");
-  assert.equal(calls[0].paymentDeadlineAt.getTime(), NOW.getTime() + AUCTION_PAYMENT_TTL_MS);
-  assert.deepEqual(notices, [["cancelled", "buyer-a"], ["placed", "buyer-b"]]);
+  assert.deepEqual(calls[0], {
+    id: "order-1",
+    expectedVersion: 2,
+    successorOrder: {
+      id: "order-b",
+      buyerId: "buyer-b",
+      auctionBidId: "bid-b-90",
+      price: 90,
+      paymentDeadlineAt: new Date("2026-10-17T12:00:00.000Z"),
+    },
+  });
 });
 
 test("TC_AUC10: exhausted ranking releases the product and permanently closes settlement", async () => {
@@ -76,22 +76,15 @@ test("TC_AUC10: exhausted ranking releases the product and permanently closes se
     claimExpiredAuctionOrder: async () => {
       throw new Error("already claimed order must not be claimed again");
     },
-    reassignAuctionOrder: async () => {
-      throw new Error("must not reassign without a next bidder");
-    },
-    finalizeAuctionOrderWithoutWinner: async (input) => {
+    finalizeExpiredAuctionOrder: async (input) => {
       finalized = input;
-      return { ...cancelled, auctionBidId: null };
+      return { ...cancelled, paymentDeadlineAt: null };
     },
   };
   const products = {
     advanceAuctionWinner: async () => ({ outcome: "released" }),
   };
-  const chat = {
-    notifyOrderStatusChanged: async () => {},
-    notifyOrderPlaced: async () => {},
-  };
-  const service = createAuctionSettlementService({ orders, products, chat, now: () => NOW });
+  const service = createAuctionSettlementService({ orders, products, now: () => NOW });
 
   const result = await service.expireDue({ at: NOW });
 

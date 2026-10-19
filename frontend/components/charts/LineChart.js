@@ -50,6 +50,14 @@ export default function LineChart({
   const minY = 0;
   const labels = series[0].data.map((d) => d.x);
   const n = labels.length;
+  const xLabelCount = Math.min(5, n);
+  const xLabelIndexes = new Set(
+    Array.from({ length: xLabelCount }, (_, index) =>
+      xLabelCount === 1
+        ? 0
+        : Math.round((index * (n - 1)) / (xLabelCount - 1)),
+    ),
+  );
 
   const padLeft = 44;
   const padRight = 12;
@@ -88,9 +96,13 @@ export default function LineChart({
     return `${line} ${last}`;
   }
 
-  const yTicks = Array.from({ length: gridLines + 1 }, (_, i) =>
-    Math.round((maxY / gridLines) * i),
-  );
+  const yTicks = [
+    ...new Set(
+      Array.from({ length: gridLines + 1 }, (_, i) =>
+        Math.round((maxY / gridLines) * i),
+      ),
+    ),
+  ];
 
 
   return (
@@ -127,14 +139,13 @@ export default function LineChart({
 
         {/* X axis labels */}
         {labels.map((label, i) => {
-          const step = Math.ceil(n / 5);
-          if (i % step !== 0 && i !== n - 1) return null;
+          if (!xLabelIndexes.has(i)) return null;
           return (
             <text
               key={label}
               x={xPos(i)}
               y={H - 6}
-              textAnchor="middle"
+              textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"}
               fontSize="8"
               fill={CHART_INK.muted}
             >

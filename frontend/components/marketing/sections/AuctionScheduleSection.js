@@ -157,6 +157,34 @@ const ROUND_PHASE_STYLE = {
 const ROUND_CANCEL_FORM_ID = "cancel-auction-round-form";
 // PostgreSQL INTEGER bound; no arbitrary business quota limit.
 const MAX_ROUND_CAPACITY = 2147483647;
+const ROUND_MANAGEMENT_PRIORITY = {
+  auction: 0,
+  submission: 1,
+  waiting: 2,
+  upcoming: 3,
+  ended: 4,
+  cancelled: 5,
+};
+const ITEM_MANAGEMENT_PRIORITY = {
+  open: 0,
+  scheduled: 1,
+  pending_approval: 2,
+  approved: 3,
+  draft: 4,
+  closed: 5,
+  rejected: 6,
+  cancelled: 7,
+};
+
+function sortByManagementPriority(items, priority) {
+  return [...items].sort(
+    (a, b) =>
+      (priority[a.status || a.phase] ?? 99) -
+        (priority[b.status || b.phase] ?? 99) ||
+      new Date(b.createdAt || b.submissionStartsAt || 0) -
+        new Date(a.createdAt || a.submissionStartsAt || 0),
+  );
+}
 
 export function RoundManagementSection({ token, onRoundCreated, refreshRevision = 0 }) {
   const [editingRound, setEditingRound] = useState(null);
@@ -837,7 +865,7 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {allRounds.map((r) => (
+                {sortByManagementPriority(allRounds, ROUND_MANAGEMENT_PRIORITY).map((r) => (
                   <tr key={r.id} className="align-top hover:bg-slate-50/50">
                     <td className="min-w-0 px-2 py-3 font-semibold leading-5 text-slate-900">
                       <span className="line-clamp-2 break-words" title={r.title}>
@@ -1523,7 +1551,7 @@ export default function AuctionScheduleSection({ token }) {
         </div>
       ) : (
         <ul className="flex flex-col gap-3">
-          {auctions.map((a) => (
+          {sortByManagementPriority(auctions, ITEM_MANAGEMENT_PRIORITY).map((a) => (
             <li
               key={a.id}
               className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-200/60 bg-white p-3.5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)] sm:p-4"
@@ -1597,6 +1625,11 @@ export default function AuctionScheduleSection({ token }) {
                       <span className="block font-semibold">
                         เริ่ม {baht(a.startingPrice)}
                       </span>
+                      {a.bids?.[0]?.amount != null && (
+                        <span className="block font-bold text-emerald-700">
+                          สูงสุดจริง {baht(a.bids[0].amount)}
+                        </span>
+                      )}
                       <span className="block text-slate-500">
                         เพิ่มขั้นต่ำ {baht(a.bidIncrement)}
                       </span>

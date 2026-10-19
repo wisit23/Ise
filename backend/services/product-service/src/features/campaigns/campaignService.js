@@ -2,6 +2,9 @@ const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const defaultRepository = require("./campaignRepository");
 const defaultPrisma = require("../../models/prismaClient");
 const defaultChatClient = require("../auctions/chatClient");
+const defaultAudienceService = require("../interestAudience/interestAudienceService");
+const defaultAudienceRepository = require("../interestAudience/interestAudienceRepository");
+const { lockCampaign } = require("./campaignBudget");
 const { recordMarketingAudit } = require("../audit/marketingAuditService");
 const {
   validateSegmentRule,
@@ -43,7 +46,7 @@ function campaignUnavailableMessage(campaign, { checkout = false } = {}) {
 const TRANSITIONS = {
   draft: ["pending_approval"],
   pending_approval: ["approved", "rejected"],
-  approved: ["published"],
+  approved: ["published", "ended"],
   published: ["ended"],
   ended: [],
   rejected: [],
@@ -57,6 +60,14 @@ function assertTransition(campaign, to) {
   if (!canTransition(campaign.status, to)) {
     throw conflict(`cannot move campaign from ${campaign.status} to ${to}`);
   }
+}
+
+function audienceCriteriaKey(criteria) {
+  return JSON.stringify(
+    criteria
+      ? defaultAudienceService.normalizeAudienceCriteria(criteria)
+      : null,
+  );
 }
 
 function assertMarketingOrAdmin(user) {
@@ -169,6 +180,14 @@ function validateCampaignInput(input, { isUpdate = false } = {}) {
   if (input.targetSegment !== undefined && input.targetSegment !== null) {
     validateSegmentRule(input.targetSegment);
   }
+  if (input.audienceCriteria !== undefined && input.audienceCriteria !== null) {
+    defaultAudienceService.normalizeAudienceCriteria(input.audienceCriteria);
+  }
+  if (input.targetSegment && input.audienceCriteria) {
+    throw badRequest(
+      "เลือกกลุ่มเป้าหมายได้เพียงแบบโปรไฟล์เดิมหรือแบบคะแนนความสนใจอย่างใดอย่างหนึ่ง",
+    );
+  }
 }
 
 function validateCampaignFinancialRules({
@@ -203,7 +222,12 @@ function validateCampaignFinancialRules({
 function createCampaignService(
   repository = defaultRepository,
   prismaClient = defaultPrisma,
+  dependencies = {},
 ) {
+  const audienceService = dependencies.audienceService || defaultAudienceService;
+  const audienceRepository =
+    dependencies.audienceRepository || defaultAudienceRepository;
+  const chatClient = dependencies.chatClient || defaultChatClient;
   function runInTransaction(fn) {
     if (repository.transaction) {
       return repository.transaction(fn);
@@ -215,6 +239,13 @@ function createCampaignService(
     const campaign = await repository.findById(id, { tx });
     if (!campaign) throw notFound("campaign not found");
     return campaign;
+  }
+
+  async function isAudienceEligible(campaign, userId, profile) {
+    if (campaign.audienceCriteria) {
+      return audienceRepository.isCampaignAudienceMember(campaign.id, userId);
+    }
+    return matchesSegment(profile, campaign.targetSegment);
   }
 
   async function createDraft({ user, input }) {
@@ -262,6 +293,9 @@ function createCampaignService(
       endsAt: new Date(input.endsAt),
       createdById: user.id,
       targetSegment: input.targetSegment || null,
+      audienceCriteria: input.audienceCriteria
+        ? audienceService.normalizeAudienceCriteria(input.audienceCriteria)
+        : null,
     };
 
     return runInTransaction(async (tx) => {
@@ -326,6 +360,22 @@ function createCampaignService(
     if (input.endsAt !== undefined) data.endsAt = new Date(input.endsAt);
     if (input.targetSegment !== undefined)
       data.targetSegment = input.targetSegment;
+    if (input.audienceCriteria !== undefined) {
+      data.audienceCriteria = input.audienceCriteria
+        ? audienceService.normalizeAudienceCriteria(input.audienceCriteria)
+        : null;
+    }
+    const effectiveTargetSegment = Object.hasOwn(data, "targetSegment")
+      ? data.targetSegment
+      : campaign.targetSegment;
+    const effectiveAudienceCriteria = Object.hasOwn(data, "audienceCriteria")
+      ? data.audienceCriteria
+      : campaign.audienceCriteria;
+    if (effectiveTargetSegment && effectiveAudienceCriteria) {
+      throw badRequest(
+        "เลือกกลุ่มเป้าหมายได้เพียงแบบโปรไฟล์เดิมหรือแบบคะแนนความสนใจอย่างใดอย่างหนึ่ง",
+      );
+    }
 
     // Validate dates combination if either changed
     const newStart = data.startsAt
@@ -523,11 +573,47 @@ function createCampaignService(
       );
     }
 
+    const audienceSnapshot = campaign.audienceCriteria
+      ? await audienceService.snapshot(campaign.audienceCriteria)
+      : null;
+    if (audienceSnapshot && audienceSnapshot.members.length === 0) {
+      throw badRequest(
+        "ไม่สามารถเผยแพร่แคมเปญได้ เนื่องจากไม่พบผู้ซื้อในช่วงคะแนนที่เลือก",
+      );
+    }
+
+    const snapshotAt = audienceSnapshot ? new Date() : null;
     const result = await runInTransaction(async (tx) => {
+      if (tx?.$queryRaw) {
+        await lockCampaign(tx, campaignId);
+      }
+      const lockedCampaign = await loadCampaign(campaignId, { tx });
+      assertTransition(lockedCampaign, "published");
+      if (
+        audienceCriteriaKey(lockedCampaign.audienceCriteria) !==
+        audienceCriteriaKey(audienceSnapshot?.criteria)
+      ) {
+        throw conflict(
+          "กลุ่มเป้าหมายของแคมเปญถูกแก้ไขระหว่างเผยแพร่ กรุณาลองใหม่อีกครั้ง",
+        );
+      }
+      if (audienceSnapshot) {
+        await audienceRepository.replaceCampaignAudience(
+          campaignId,
+          audienceSnapshot.members,
+          { tx },
+        );
+      }
       const updated = await repository.updateCampaign(
         campaignId,
         {
           status: "published",
+          ...(audienceSnapshot
+            ? {
+                audienceCriteria: audienceSnapshot.criteria,
+                audienceSnapshotAt: snapshotAt,
+              }
+            : {}),
         },
         { tx },
       );
@@ -538,28 +624,46 @@ function createCampaignService(
           action: "CAMPAIGN_PUBLISH",
           entityType: "CAMPAIGN",
           entityId: campaignId,
-          previousState: campaign,
+          previousState: lockedCampaign,
           newState: updated,
+          metadata: audienceSnapshot
+            ? {
+                audienceSize: audienceSnapshot.members.length,
+                scoreRange: {
+                  min: audienceSnapshot.criteria.minScore,
+                  max: audienceSnapshot.criteria.maxScore,
+                },
+              }
+            : null,
         },
         { tx },
       );
       return updated;
     });
 
-    if (defaultChatClient?.sendSystemNotification) {
-      defaultChatClient
-        .sendSystemNotification({
-          userId: "ALL",
-          type: "DISCOUNT",
-          title: "มีโค้ดส่วนลดใหม่!",
-          message: `🎉 โค้ดส่วนลด '${result.name || result.code}' พร้อมใช้งานแล้ว (${result.code}) รีบเก็บก่อนหมด!`,
-          link: "/campaigns",
-          metadata: { campaignId: result.id, code: result.code },
-        })
-        .catch(() => {});
+    let notificationResult = null;
+    if (audienceSnapshot && chatClient?.notifyCampaignAudience) {
+      try {
+        notificationResult = await chatClient.notifyCampaignAudience({
+          campaign: result,
+          userIds: audienceSnapshot.members.map((member) => member.userId),
+        });
+      } catch {
+        notificationResult = {
+          deliveredCount: 0,
+          failedCount: audienceSnapshot.members.length,
+          warnings: ["ไม่สามารถส่งการแจ้งเตือนแคมเปญได้ในขณะนี้"],
+        };
+      }
     }
 
-    return result;
+    return notificationResult
+      ? {
+          ...result,
+          notifiedAudienceCount: notificationResult.deliveredCount,
+          notificationWarnings: notificationResult.warnings,
+        }
+      : result;
   }
 
   async function endCampaign({ user, campaignId, reason }) {
@@ -619,7 +723,7 @@ function createCampaignService(
         campaign.status !== "published" ||
         now < new Date(campaign.startsAt) ||
         now > new Date(campaign.endsAt) ||
-        !matchesSegment(profile, campaign.targetSegment)
+        !(await isAudienceEligible(campaign, user?.id, profile))
       ) {
         throw notFound("campaign not found");
       }
@@ -633,9 +737,20 @@ function createCampaignService(
     return repository.listCampaigns({ status, search, skip, take });
   }
 
-  async function listAvailablePublicCampaigns({ profile } = {}) {
+  async function listAvailablePublicCampaigns({ userId, profile } = {}) {
     const campaigns = await repository.listAvailableCampaigns();
-    return campaigns.filter((c) => matchesSegment(profile, c.targetSegment));
+    const scoreTargetedIds = campaigns
+      .filter((campaign) => campaign.audienceCriteria)
+      .map((campaign) => campaign.id);
+    const eligibleIds = await audienceRepository.eligibleCampaignIds(
+      scoreTargetedIds,
+      userId,
+    );
+    return campaigns.filter((campaign) =>
+      campaign.audienceCriteria
+        ? eligibleIds.has(campaign.id)
+        : matchesSegment(profile, campaign.targetSegment),
+    );
   }
 
   async function claimVoucher({ user, campaignId, profile = null }) {
@@ -655,7 +770,7 @@ function createCampaignService(
     if (now > new Date(campaign.endsAt)) {
       throw badRequest("คูปองหมดอายุแล้ว");
     }
-    if (!matchesSegment(profile, campaign.targetSegment)) {
+    if (!(await isAudienceEligible(campaign, user.id, profile))) {
       throw forbidden("บัญชีนี้ไม่อยู่ในกลุ่มเป้าหมายของคูปอง");
     }
 
@@ -796,7 +911,7 @@ function createCampaignService(
         );
         continue;
       }
-      if (!matchesSegment(profile, camp.targetSegment)) {
+      if (!(await isAudienceEligible(camp, user.id, profile))) {
         addUnavailable(
           v,
           "SEGMENT_MISMATCH",

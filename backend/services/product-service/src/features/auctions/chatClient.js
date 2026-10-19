@@ -5,6 +5,7 @@ const CHAT_SERVICE_URL =
   process.env.CHAT_SERVICE_URL || "http://chat-service:3004";
 const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 const MARKETING_SYSTEM_SENDER_ID = "system-marketing";
+const CAMPAIGN_NOTIFICATION_BATCH_SIZE = 25;
 
 function auctionItemUrl(itemId) {
   return `/auctions/${encodeURIComponent(itemId)}`;
@@ -45,7 +46,7 @@ async function deliverAuctionNotification({
     ],
   });
 
-  return internalPost(`/internal/conversations/${conversation.id}/messages`, {
+  const message = await internalPost(`/internal/conversations/${conversation.id}/messages`, {
     senderId: MARKETING_SYSTEM_SENDER_ID,
     senderRole: "SYSTEM",
     type: "SYSTEM",
@@ -56,6 +57,24 @@ async function deliverAuctionNotification({
       idempotencyKey,
     },
   });
+
+  // Keep the detailed, immutable system message in chat and mirror the same
+  // event to the notification bell. The notification service upserts by
+  // userId + entityId, so retries update the same bell item instead of
+  // creating duplicates.
+  await internalPost("/internal/notifications", {
+    userId: recipientId,
+    type: "AUCTION",
+    title: payload?.summary || "อัปเดตการประมูล",
+    message: body,
+    link: payload?.actionUrl || "/auctions",
+    entityId:
+      payload?.orderId || payload?.auctionId || payload?.roundId || contextId,
+    metadata: { ...payload, idempotencyKey },
+    idempotencyKey,
+  });
+
+  return message;
 }
 
 async function runNotificationTasks(tasks, logLabel) {
@@ -347,6 +366,33 @@ async function notifyBidPlaced({ auction, bid, bidder }) {
   return runNotificationTasks(tasks, `bid ${bid.id}`);
 }
 
+async function notifyAuctionExtended({ auction, extendedUntil, bidderIds = [] }) {
+  if (!auction?.id || !extendedUntil) {
+    return { deliveredCount: 0, failedCount: 0, warnings: [] };
+  }
+  const productTitle = auction.product?.title || "สินค้าประมูล";
+  const recipients = [
+    ...new Set([auction.sellerId, ...bidderIds].filter(Boolean)),
+  ];
+  const tasks = recipients.map((userId) => () =>
+    internalPost("/internal/notifications", {
+      userId,
+      type: "AUCTION",
+      title: "ต่อเวลาการประมูลอีก 5 นาที",
+      message: `รายการประมูลสินค้า "${productTitle}" มีการเสนอราคาใน 5 นาทีสุดท้าย ระบบจึงต่อเวลาปิดออกไปอีก 5 นาที`,
+      link: auctionItemUrl(auction.id),
+      entityId: `${auction.id}:soft-close`,
+      metadata: {
+        auctionId: auction.id,
+        productId: auction.productId,
+        extendedUntil,
+        event: "auction.soft_close_extended",
+      },
+    }),
+  );
+  return runNotificationTasks(tasks, `soft close ${auction.id}`);
+}
+
 /**
  * Sends a platform-wide notification when an auction round opens.
  */
@@ -360,6 +406,47 @@ async function notifyRoundOpened(round) {
     link: "/auctions",
     metadata: { roundId: round.id, roundTitle: round.title },
   });
+}
+
+async function notifyCampaignAudience({ campaign, userIds = [] }) {
+  if (!campaign || !Array.isArray(userIds) || userIds.length === 0) {
+    return { deliveredCount: 0, failedCount: 0, warnings: [] };
+  }
+  const recipients = [...new Set(userIds.filter(Boolean))];
+  const tasks = recipients.map((userId) => () =>
+    internalPost("/internal/notifications", {
+      userId,
+      type: "DISCOUNT",
+      title: "คุณได้รับสิทธิ์ในแคมเปญใหม่",
+      message: `คุณอยู่ในกลุ่มผู้มีสิทธิ์รับโค้ดส่วนลด '${campaign.name || campaign.code}' (${campaign.code}) รีบเก็บก่อนสิทธิ์หมด`,
+      link: "/campaigns",
+      entityId: campaign.id,
+      metadata: {
+        campaignId: campaign.id,
+        code: campaign.code,
+        targeted: true,
+      },
+    }),
+  );
+  const totals = { deliveredCount: 0, failedCount: 0, warnings: [] };
+  for (
+    let offset = 0;
+    offset < tasks.length;
+    offset += CAMPAIGN_NOTIFICATION_BATCH_SIZE
+  ) {
+    const result = await runNotificationTasks(
+      tasks.slice(offset, offset + CAMPAIGN_NOTIFICATION_BATCH_SIZE),
+      `campaign ${campaign.id}`,
+    );
+    totals.deliveredCount += result.deliveredCount;
+    totals.failedCount += result.failedCount;
+  }
+  if (totals.failedCount > 0) {
+    totals.warnings.push(
+      `ไม่สามารถส่งข้อความแจ้งเตือนแคมเปญได้ ${totals.failedCount} รายการ`,
+    );
+  }
+  return totals;
 }
 
 async function notifyRoundUpdated({ round, metadata, eventId }) {
@@ -399,6 +486,165 @@ async function notifyRoundUpdated({ round, metadata, eventId }) {
   return runNotificationTasks(tasks, `update round ${round.id}`);
 }
 
+function formatAuctionPrice(value) {
+  return Number(value).toLocaleString("th-TH", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
+
+async function notifyAuctionWinnerAssigned({
+  auction,
+  order,
+  winnerName,
+  previousWinnerId = null,
+  previousBidId = null,
+  previousOrderId = null,
+}) {
+  if (!auction || !order?.id || !order?.buyerId || !auction.sellerId) {
+    return { deliveredCount: 0, failedCount: 0, warnings: [] };
+  }
+
+  const productTitle = auction.productTitle || auction.product?.title || "สินค้าประมูล";
+  const price = formatAuctionPrice(order.price);
+  const contextScope = auction.roundId || auction.id;
+  const promoted = Boolean(previousWinnerId);
+  const reason = promoted
+    ? "เนื่องจากผู้ชนะลำดับก่อนหน้าไม่ได้ชำระเงินภายใน 24 ชั่วโมง"
+    : "จากผลการปิดประมูล";
+  const tasks = [];
+
+  if (previousWinnerId) {
+    tasks.push(() =>
+      deliverAuctionNotification({
+        contextId: `${contextScope}:${previousWinnerId}`,
+        recipientId: previousWinnerId,
+        recipientRole: "BUYER",
+        idempotencyKey: `auction.payment_expired:${auction.id}:${previousBidId}:${previousWinnerId}`,
+        body: `สิทธิ์ชำระเงินสำหรับสินค้า "${productTitle}" สิ้นสุดแล้ว เนื่องจากคุณไม่ได้ชำระเงินภายใน 24 ชั่วโมง คำสั่งซื้อถูกยกเลิกและระบบได้เลื่อนสิทธิ์ให้ผู้ประมูลลำดับถัดไป`,
+        payload: {
+          event: "auction.payment_expired",
+          summary: `สิทธิ์ชำระเงินสินค้า "${productTitle}" สิ้นสุดแล้ว`,
+          auctionId: auction.id,
+          productId: auction.productId,
+          orderId: previousOrderId,
+          role: "BUYER",
+          actionUrl: "/orders",
+          actionLabel: "ดูประวัติคำสั่งซื้อ",
+        },
+      }),
+    );
+  }
+
+  tasks.push(() =>
+    deliverAuctionNotification({
+      contextId: `${contextScope}:${order.buyerId}`,
+      recipientId: order.buyerId,
+      recipientRole: "BUYER",
+      idempotencyKey: `auction.winner_assigned:${auction.id}:${order.auctionBidId}:${order.buyerId}`,
+      body: `คุณได้รับสิทธิ์เป็นผู้ชนะสินค้า "${productTitle}" ${reason} ในราคา ฿${price} กรุณาชำระเงินภายใน 24 ชั่วโมงก่อนหมดสิทธิ์`,
+      payload: {
+        event: promoted ? "auction.winner_promoted" : "auction.winner_assigned",
+        summary: promoted
+          ? `คุณได้รับเลื่อนเป็นผู้ชนะสินค้า "${productTitle}"`
+          : `คุณชนะการประมูลสินค้า "${productTitle}"`,
+        auctionId: auction.id,
+        productId: auction.productId,
+        orderId: order.id,
+        amount: order.price,
+        paymentDeadlineAt: order.paymentDeadlineAt,
+        role: "BUYER",
+        actionUrl: `/checkout?orders=${encodeURIComponent(order.id)}`,
+        actionLabel: "ไปชำระเงิน",
+      },
+    }),
+  );
+
+  tasks.push(() =>
+    deliverAuctionNotification({
+      contextId: `${contextScope}:${auction.sellerId}`,
+      recipientId: auction.sellerId,
+      recipientRole: "SELLER",
+      idempotencyKey: `auction.seller_winner_assigned:${auction.id}:${order.auctionBidId}:${auction.sellerId}`,
+      body: promoted
+        ? `ผู้ชนะสินค้า "${productTitle}" ถูกเปลี่ยนเป็น ${winnerName || "ผู้ประมูลลำดับถัดไป"} เนื่องจากผู้ชนะก่อนหน้าไม่ชำระเงินภายในกำหนด ราคาปัจจุบันคือ ฿${price}`
+        : `สินค้า "${productTitle}" มีผู้ชนะคือ ${winnerName || "ผู้ประมูลที่เสนอราคาสูงสุด"} ที่ราคา ฿${price} ขณะนี้อยู่ระหว่างรอชำระเงิน`,
+      payload: {
+        event: promoted
+          ? "auction.seller_winner_changed"
+          : "auction.seller_winner_assigned",
+        summary: promoted
+          ? `ผู้ชนะและราคาของ "${productTitle}" ถูกเปลี่ยนแล้ว`
+          : `สินค้า "${productTitle}" มีผู้ชนะแล้ว`,
+        auctionId: auction.id,
+        productId: auction.productId,
+        orderId: order.id,
+        amount: order.price,
+        winnerId: order.buyerId,
+        winnerName: winnerName || null,
+        role: "SELLER",
+        actionUrl: auctionItemUrl(auction.id),
+        actionLabel: "ดูรายละเอียดรายการประมูล",
+      },
+    }),
+  );
+
+  return runNotificationTasks(tasks, `winner assignment ${auction.id}:${order.auctionBidId}`);
+}
+
+async function notifyAuctionExhausted({
+  auction,
+  expiredBuyerId,
+  expiredBidId,
+  expiredOrderId,
+}) {
+  if (!auction || !expiredBuyerId || !auction.sellerId) {
+    return { deliveredCount: 0, failedCount: 0, warnings: [] };
+  }
+  const productTitle = auction.productTitle || auction.product?.title || "สินค้าประมูล";
+  const contextScope = auction.roundId || auction.id;
+  return runNotificationTasks(
+    [
+      () =>
+        deliverAuctionNotification({
+          contextId: `${contextScope}:${expiredBuyerId}`,
+          recipientId: expiredBuyerId,
+          recipientRole: "BUYER",
+          idempotencyKey: `auction.payment_expired:${auction.id}:${expiredBidId}:${expiredBuyerId}`,
+          body: `สิทธิ์ชำระเงินสำหรับสินค้า "${productTitle}" สิ้นสุดแล้ว เนื่องจากคุณไม่ได้ชำระเงินภายใน 24 ชั่วโมง คำสั่งซื้อถูกยกเลิกแล้ว`,
+          payload: {
+            event: "auction.payment_expired",
+            summary: `สิทธิ์ชำระเงินสินค้า "${productTitle}" สิ้นสุดแล้ว`,
+            auctionId: auction.id,
+            productId: auction.productId,
+            orderId: expiredOrderId,
+            role: "BUYER",
+            actionUrl: "/orders",
+            actionLabel: "ดูประวัติคำสั่งซื้อ",
+          },
+        }),
+      () =>
+        deliverAuctionNotification({
+          contextId: `${contextScope}:${auction.sellerId}`,
+          recipientId: auction.sellerId,
+          recipientRole: "SELLER",
+          idempotencyKey: `auction.action_required:${auction.id}:${expiredBidId}:${auction.sellerId}`,
+          body: `ไม่มีผู้ชนะรายใดชำระเงินสำหรับสินค้า "${productTitle}" ภายในกำหนด สินค้ากำลังรอให้คุณเลือกส่งเข้าประมูลรอบใหม่ หรือกำหนดราคาเพื่อนำกลับไปขายแบบปกติ`,
+          payload: {
+            event: "auction.action_required",
+            summary: `สินค้า "${productTitle}" รอให้คุณดำเนินการ`,
+            auctionId: auction.id,
+            productId: auction.productId,
+            role: "SELLER",
+            actionUrl: "/seller/auctions",
+            actionLabel: "จัดการสินค้าประมูล",
+          },
+        }),
+    ],
+    `auction exhausted ${auction.id}`,
+  );
+}
+
 module.exports = {
   notifyRoundUpdated,
   MARKETING_SYSTEM_SENDER_ID,
@@ -406,6 +652,10 @@ module.exports = {
   notifyItemCancelled,
   notifyRoundCancelled,
   notifyBidPlaced,
+  notifyAuctionExtended,
   notifyRoundOpened,
+  notifyCampaignAudience,
+  notifyAuctionWinnerAssigned,
+  notifyAuctionExhausted,
   sendSystemNotification,
 };

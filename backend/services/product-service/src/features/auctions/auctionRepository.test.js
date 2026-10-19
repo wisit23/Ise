@@ -64,3 +64,24 @@ test("list applies multiple round/status values and search before pagination", a
   assert.deepEqual(calls[1][1].where, expectedWhere);
 });
 
+test("findActiveAuctionRounds includes an open soft-close item after the base round end", async () => {
+  let receivedQuery;
+  const repository = createAuctionRepository({
+    auctionRound: {
+      findMany: async (query) => {
+        receivedQuery = query;
+        return [];
+      },
+    },
+  });
+  const now = new Date("2026-10-02T12:05:00.000Z");
+
+  await repository.findActiveAuctionRounds(now);
+
+  assert.deepEqual(receivedQuery.where.OR[1], {
+    auctions: {
+      some: { status: "open", scheduledEndAt: { gt: now } },
+    },
+  });
+});
+

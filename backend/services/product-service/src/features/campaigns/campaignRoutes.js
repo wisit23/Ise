@@ -9,6 +9,7 @@ const {
   CAPABILITY,
 } = require("@reloop/shared");
 const campaignController = require("./campaignController");
+const interestAudienceController = require("../interestAudience/interestAudienceController");
 
 const router = Router();
 
@@ -57,6 +58,25 @@ router.post(
   requireAuth,
   requireRole("MARKETING"),
   campaignController.createDraft,
+);
+
+router.get(
+  "/audience/options",
+  requireAuth,
+  requireRole("MARKETING"),
+  interestAudienceController.options,
+);
+router.post(
+  "/audience/preview",
+  requireAuth,
+  requireRole("MARKETING"),
+  interestAudienceController.preview,
+);
+router.get(
+  "/interest-insights",
+  requireAuth,
+  requireRole("MARKETING"),
+  interestAudienceController.insights,
 );
 
 // Buyer claiming (hold/release/complete are internal only)

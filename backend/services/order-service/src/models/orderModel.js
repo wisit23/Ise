@@ -67,6 +67,27 @@ function view(row) {
 async function create(data) {
   return view(await prisma.order.create({ data, include: INCLUDE }));
 }
+
+async function createAuctionOrder(data, { previousOrderId = null } = {}) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.order.findUnique({
+      where: { id: data.id },
+      include: INCLUDE,
+    });
+    if (existing) return { order: view(existing), created: false };
+
+    const created = await tx.order.create({ data, include: INCLUDE });
+    await tx.orderLog.create({
+      data: logData(created, "SYSTEM", "AUCTION_ORDER_CREATED", {
+        auctionId: created.auctionId,
+        auctionBidId: created.auctionBidId,
+        previousOrderId,
+        paymentDeadlineAt: created.paymentDeadlineAt,
+      }),
+    });
+    return { order: view(created), created: true };
+  });
+}
 async function findById(id) {
   return view(
     await prisma.order.findUnique({ where: { id }, include: INCLUDE }),
@@ -181,70 +202,51 @@ async function claimExpiredAuctionOrder({ id, expectedVersion, now = new Date() 
   });
 }
 
-async function reassignAuctionOrder({
+async function finalizeExpiredAuctionOrder({
   id,
   expectedVersion,
-  buyerId,
-  auctionBidId,
-  price,
-  paymentDeadlineAt,
+  successorOrder = null,
 }) {
   return prisma.$transaction(async (tx) => {
     const before = await tx.order.findUnique({ where: { id }, include: INCLUDE });
     if (!before) return null;
-    const claimed = await tx.order.updateMany({
-      where: {
-        id,
-        version: expectedVersion ?? before.version,
-        status: "cancelled",
-        orderType: "AUCTION",
-      },
-      data: {
-        buyerId,
-        auctionBidId,
-        originalAmount: money(price),
-        ordersAmount: money(price),
-        paymentDeadlineAt,
-        status: "pending_payment",
-        version: { increment: 1 },
-      },
-    });
-    if (claimed.count !== 1) return null;
-    await tx.orderLog.create({
-      data: logData(before, "SYSTEM", "AUCTION_WINNER_REASSIGNED", {
-        previousBuyerId: before.buyerId,
-        buyerId,
-        auctionBidId,
-        price,
-        paymentDeadlineAt,
-      }),
-    });
-    return view(await tx.order.findUnique({ where: { id }, include: INCLUDE }));
-  });
-}
+    if (before.status !== "cancelled" || before.orderType !== "AUCTION") {
+      return null;
+    }
+    if (!before.paymentDeadlineAt) return view(before);
 
-async function finalizeAuctionOrderWithoutWinner({ id, expectedVersion }) {
-  return prisma.$transaction(async (tx) => {
-    const before = await tx.order.findUnique({ where: { id }, include: INCLUDE });
-    if (!before) return null;
     const claimed = await tx.order.updateMany({
       where: {
         id,
         version: expectedVersion ?? before.version,
         status: "cancelled",
         orderType: "AUCTION",
+        paymentDeadlineAt: { not: null },
       },
       data: {
-        auctionBidId: null,
         paymentDeadlineAt: null,
         version: { increment: 1 },
       },
     });
     if (claimed.count !== 1) return null;
     await tx.orderLog.create({
-      data: logData(before, "SYSTEM", "AUCTION_NO_PAYING_BIDDER", {
-        auctionId: before.auctionId,
-      }),
+      data: logData(
+        before,
+        "SYSTEM",
+        successorOrder
+          ? "AUCTION_WINNER_REASSIGNED"
+          : "AUCTION_NO_PAYING_BIDDER",
+        successorOrder
+          ? {
+              previousBuyerId: before.buyerId,
+              nextBuyerId: successorOrder.buyerId,
+              nextOrderId: successorOrder.id,
+              nextAuctionBidId: successorOrder.auctionBidId,
+              price: successorOrder.price,
+              paymentDeadlineAt: successorOrder.paymentDeadlineAt,
+            }
+          : { auctionId: before.auctionId },
+      ),
     });
     return view(await tx.order.findUnique({ where: { id }, include: INCLUDE }));
   });
@@ -439,6 +441,7 @@ async function cleanExpiredOrders(productClient) {
 }
 module.exports = {
   create,
+  createAuctionOrder,
   findById,
   findByReservationId,
   listByBuyer,
@@ -448,8 +451,7 @@ module.exports = {
   cleanExpiredOrders,
   findAuctionOrdersDueForSettlement,
   claimExpiredAuctionOrder,
-  reassignAuctionOrder,
-  finalizeAuctionOrderWithoutWinner,
+  finalizeExpiredAuctionOrder,
   transitionStatusWithProductSync,
   VALID_STATUSES,
   INCLUDE,

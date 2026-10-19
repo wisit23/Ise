@@ -71,7 +71,10 @@ function createAuctionRepository(prismaClient) {
     const [items, total] = await Promise.all([
       prismaClient.auctionItem.findMany({
         where,
-        include: { ...WITH_PRODUCT, bids: { orderBy: { amount: "desc" } } },
+        include: {
+          ...WITH_PRODUCT,
+          bids: { orderBy: [{ amount: "desc" }, { createdAt: "asc" }] },
+        },
         orderBy: { createdAt: "desc" },
         skip,
         take,
@@ -82,7 +85,13 @@ function createAuctionRepository(prismaClient) {
   }
 
   async function updateStatus(id, data, txOrOptions = prismaClient, transactionOptions = {}) {
-    const tx = txOrOptions?.auctionItem ? txOrOptions : null;
+    // An explicitly supplied Prisma client is already inside the caller's
+    // transaction, even when a test/repository wrapper passes the same object
+    // that was used to construct this repository. With no third argument we
+    // still open the repository-owned transaction as before.
+    const tx = arguments.length >= 3 && txOrOptions?.auctionItem
+      ? txOrOptions
+      : null;
     const options = tx ? transactionOptions : txOrOptions || {};
     const run = async (client) => {
       if (options.expectedStatus || options.requireUnmoderatedProduct || options.startDueAt) {
@@ -101,13 +110,21 @@ function createAuctionRepository(prismaClient) {
       }
       return writeItem(client, "update", { where: { id }, data, include: WITH_PRODUCT });
     };
-    return tx && tx !== prismaClient ? run(tx) : prismaClient.$transaction(run);
+    return tx ? run(tx) : prismaClient.$transaction(run);
   }
 
   function highestBid(auctionId, tx = prismaClient) {
     return tx.bid.findFirst({
       where: { auctionId },
       orderBy: [{ amount: "desc" }, { createdAt: "asc" }],
+    });
+  }
+
+  function latestBidByBidder(auctionId, bidderId, tx = prismaClient) {
+    if (typeof tx.bid?.findFirst !== "function") return null;
+    return tx.bid.findFirst({
+      where: { auctionId, bidderId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
   }
 
@@ -175,7 +192,14 @@ function createAuctionRepository(prismaClient) {
     const rows = await prismaClient.auctionRound.findMany({
       where: {
         auctionStartsAt: { lte: now },
-        auctionEndsAt: { gt: now },
+        OR: [
+          { auctionEndsAt: { gt: now } },
+          {
+            auctions: {
+              some: { status: "open", scheduledEndAt: { gt: now } },
+            },
+          },
+        ],
       },
       orderBy: [
         { auctionEndsAt: "asc" },
@@ -246,7 +270,13 @@ function createAuctionRepository(prismaClient) {
       const rows = await prismaClient.auctionRound.findMany({
         orderBy: { submissionStartsAt: "desc" },
         include: {
-          _count: { select: { auctions: true } },
+          _count: {
+            select: {
+              auctions: {
+                where: { status: { notIn: ["rejected", "cancelled"] } },
+              },
+            },
+          },
         },
       });
       return Promise.all(rows.map((round) => hydrateRound(prismaClient, round)));
@@ -256,7 +286,13 @@ function createAuctionRepository(prismaClient) {
       prismaClient.auctionRound.findMany({
         orderBy: { submissionStartsAt: "desc" },
         include: {
-          _count: { select: { auctions: true } },
+          _count: {
+            select: {
+              auctions: {
+                where: { status: { notIn: ["rejected", "cancelled"] } },
+              },
+            },
+          },
         },
         skip,
         take,
@@ -382,6 +418,7 @@ function createAuctionRepository(prismaClient) {
     list,
     updateStatus,
     highestBid,
+    latestBidByBidder,
     createBid,
     withAuctionLock,
     withProductLock,

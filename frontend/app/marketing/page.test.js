@@ -30,8 +30,26 @@ jest.mock("../../components/marketing/sections/DashboardSection", () => {
 });
 
 jest.mock("../../components/marketing/sections/CampaignsSection", () => {
-  return function MockCampaignsSection() {
-    return <div data-testid="campaigns-section">Mock Campaigns Section</div>;
+  return function MockCampaignsSection({ audienceSeed }) {
+    return (
+      <div data-testid="campaigns-section">
+        Mock Campaigns Section
+        {audienceSeed?.brand ? ` ${audienceSeed.brand}` : ""}
+      </div>
+    );
+  };
+});
+
+jest.mock("../../components/marketing/sections/CustomerInsightsSection", () => {
+  return function MockCustomerInsightsSection({ onCreateCampaign }) {
+    return (
+      <div data-testid="customer-insights-section">
+        Mock Customer Insights Section
+        <button onClick={() => onCreateCampaign({ brand: "Nike" })}>
+          Create Nike Campaign
+        </button>
+      </div>
+    );
   };
 });
 
@@ -109,6 +127,10 @@ describe("MarketingPanelPage (Responsive Layout & Navigation)", () => {
 
     render(<MarketingPanelPage />);
 
+    const insightsBtn = screen.getByRole("button", { name: /ความสนใจลูกค้า/i });
+    fireEvent.click(insightsBtn);
+    expect(screen.getByTestId("customer-insights-section")).toBeInTheDocument();
+
     // Switch to campaigns
     const campaignBtn = screen.getByRole("button", { name: /แคมเปญและคูปอง/i });
     fireEvent.click(campaignBtn);
@@ -130,6 +152,17 @@ describe("MarketingPanelPage (Responsive Layout & Navigation)", () => {
     });
     fireEvent.click(auditBtn);
     expect(screen.getByTestId("audit-section")).toBeInTheDocument();
+  });
+
+  test("carries the selected insight into a new campaign", () => {
+    getAccessToken.mockReturnValue("valid-token");
+    getStoredUser.mockReturnValue({ id: "marketing-1", role: "MARKETING" });
+
+    render(<MarketingPanelPage />);
+    fireEvent.click(screen.getByRole("button", { name: /ความสนใจลูกค้า/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Nike Campaign" }));
+
+    expect(screen.getByTestId("campaigns-section")).toHaveTextContent("Nike");
   });
 
   test("switches section via onNavigate callback from dashboard", () => {

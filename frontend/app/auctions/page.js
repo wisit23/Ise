@@ -127,6 +127,12 @@ export default function AuctionsBrowsePage() {
               รายการ
             </div>
 
+            {round.isSoftCloseActive && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800">
+                ⏱️ มีสินค้าที่ยังประมูลต่อในช่วงต่อเวลา 5 นาที
+              </div>
+            )}
+
             {isCancelled && (
               <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800">
                 <span className="font-semibold">เหตุผลที่ยกเลิก:</span>{" "}

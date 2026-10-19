@@ -83,6 +83,14 @@ const STYLE_TAG_OPTIONS = [
   { value: "workwear", label: "Workwear" },
 ];
 
+const SCORE_BAND_PLACEHOLDERS = [
+  { key: "none", min: 0, max: 0 },
+  { key: "emerging", min: 1, max: 6 },
+  { key: "moderate", min: 7, max: 14 },
+  { key: "high", min: 15, max: 24 },
+  { key: "very_high", min: 25, max: 33 },
+];
+
 function formatThaiDateTime(dateString) {
   if (!dateString) return "-";
   const d = new Date(dateString);
@@ -120,6 +128,19 @@ function formatSegmentSummary(rules) {
   const label = fieldLabels[r.field] || r.field;
   const val = Array.isArray(r.value) ? r.value.join(", ") : r.value;
   return `${label}: ${val}`;
+}
+
+function formatAudienceSummary(criteria) {
+  if (!criteria) return "ทุกคน";
+  const dimensions = [
+    ["category", "หมวดหมู่"],
+    ["brand", "แบรนด์"],
+    ["style", "สไตล์"],
+    ["size", "ไซซ์"],
+  ]
+    .filter(([key]) => criteria[key])
+    .map(([key, label]) => `${label}: ${criteria[key]}`);
+  return `${dimensions.join(" · ")} · คะแนน ${criteria.minScore ?? 1}–${criteria.maxScore ?? 33}`;
 }
 
 function campaignEndLabel(campaign, isExpired) {
@@ -174,7 +195,12 @@ function CampaignCouponPreview({ campaign }) {
             ลดสูงสุด ฿{Number(campaign.maxDiscount).toLocaleString("th-TH")}
           </div>
         ) : null}
-        <div>กลุ่มเป้าหมาย: {formatSegmentSummary(campaign.targetSegment)}</div>
+        <div>
+          กลุ่มเป้าหมาย:{" "}
+          {campaign.audienceCriteria
+            ? formatAudienceSummary(campaign.audienceCriteria)
+            : formatSegmentSummary(campaign.targetSegment)}
+        </div>
       </div>
       {campaign.description ? (
         <p className="mt-3 border-t border-brand-100 pt-2 text-[11px] text-slate-500">
@@ -185,7 +211,11 @@ function CampaignCouponPreview({ campaign }) {
   );
 }
 
-export default function CampaignsSection({ token }) {
+export default function CampaignsSection({
+  token,
+  audienceSeed,
+  onAudienceSeedConsumed,
+}) {
   const [campaigns, setCampaigns] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -214,7 +244,7 @@ export default function CampaignsSection({ token }) {
   const [endsAt, setEndsAt] = useState("");
 
   // Target Segment state
-  const [segmentMode, setSegmentMode] = useState("all"); // "all" | "targeted"
+  const [segmentMode, setSegmentMode] = useState("all"); // "all" | "score" | "legacy"
   const [segmentField, setSegmentField] = useState("brandPreference");
   const [segmentOp, setSegmentOp] = useState("in");
   const [segmentValue, setSegmentValue] = useState("");
@@ -223,6 +253,18 @@ export default function CampaignsSection({ token }) {
   const [brandsError, setBrandsError] = useState("");
   const [selectedBrands, setSelectedBrands] = useState([]);
   const [brandSearch, setBrandSearch] = useState("");
+  const [audienceOptions, setAudienceOptions] = useState(null);
+  const [audienceCategory, setAudienceCategory] = useState("");
+  const [audienceBrand, setAudienceBrand] = useState("");
+  const [audienceStyle, setAudienceStyle] = useState("");
+  const [audienceMinScore, setAudienceMinScore] = useState("15");
+  const [audienceMaxScore, setAudienceMaxScore] = useState("33");
+  const [audienceFrom, setAudienceFrom] = useState("");
+  const [audienceTo, setAudienceTo] = useState("");
+  const [audiencePreview, setAudiencePreview] = useState(null);
+  const [audiencePreviewStale, setAudiencePreviewStale] = useState(false);
+  const [audiencePreviewLoading, setAudiencePreviewLoading] = useState(false);
+  const [audiencePreviewError, setAudiencePreviewError] = useState("");
 
   const trimmedSearch = brandSearch.trim();
   const isBrandSelectDisabled =
@@ -340,9 +382,31 @@ export default function CampaignsSection({ token }) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/products/campaigns/audience/options", { token })
+      .then((result) => {
+        if (!cancelled) setAudienceOptions(result);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error("Could not load audience options:", err);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  useEffect(() => {
     setPage(1);
     loadCampaigns(1);
   }, [token, statusFilter]);
+
+  useEffect(() => {
+    if (!audienceSeed) return;
+    openCreateModal(audienceSeed);
+    onAudienceSeedConsumed?.();
+  }, [audienceSeed]);
 
   function handleSearchSubmit(e) {
     e.preventDefault();
@@ -375,7 +439,32 @@ export default function CampaignsSection({ token }) {
     );
   }
 
-  function openCreateModal() {
+  function resetAudienceEditor(criteria = null) {
+    const to = new Date();
+    const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const normalized = (value) =>
+      typeof value === "string" ? value.trim().toLowerCase() : "";
+    setAudienceCategory(normalized(criteria?.category));
+    setAudienceBrand(normalized(criteria?.brand));
+    setAudienceStyle(normalized(criteria?.style));
+    setAudienceMinScore(String(criteria?.minScore ?? 15));
+    setAudienceMaxScore(String(Math.min(Number(criteria?.maxScore ?? 33), 33)));
+    setAudienceFrom(
+      criteria?.from ? toLocalDatetimeInput(criteria.from) : toLocalDatetimeInput(from),
+    );
+    setAudienceTo(
+      criteria?.to ? toLocalDatetimeInput(criteria.to) : toLocalDatetimeInput(to),
+    );
+    setAudiencePreview(null);
+    setAudiencePreviewStale(false);
+    setAudiencePreviewError("");
+  }
+
+  function openCreateModal(prefilledAudience = null) {
+    const audienceCriteria =
+      prefilledAudience && !prefilledAudience.nativeEvent
+        ? prefilledAudience
+        : null;
     setEditingCampaign(null);
     setCode("");
     setName("");
@@ -387,12 +476,13 @@ export default function CampaignsSection({ token }) {
     setApplicableCategory("");
     setUsageLimit("100");
     setBudget("");
-    setSegmentMode("all");
+    setSegmentMode(audienceCriteria ? "score" : "all");
     setSegmentField("brandPreference");
     setSegmentOp("in");
     setSelectedBrands([]);
     setBrandSearch("");
     setSegmentValue("");
+    resetAudienceEditor(audienceCriteria);
 
     const now = new Date();
     const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -418,12 +508,19 @@ export default function CampaignsSection({ token }) {
     setStartsAt(toLocalDatetimeInput(camp.startsAt));
     setEndsAt(toLocalDatetimeInput(camp.endsAt));
 
+    resetAudienceEditor(camp.audienceCriteria || null);
     const rule =
       Array.isArray(camp.targetSegment) && camp.targetSegment.length > 0
         ? camp.targetSegment[0]
         : null;
-    if (rule && rule.field) {
-      setSegmentMode("targeted");
+    if (camp.audienceCriteria) {
+      setSegmentMode("score");
+      setSegmentField("brandPreference");
+      setSegmentOp("in");
+      setSelectedBrands([]);
+      setSegmentValue("");
+    } else if (rule && rule.field) {
+      setSegmentMode("legacy");
       setSegmentField(rule.field);
       const rawOp = rule.operator || rule.op;
       let op = rawOp;
@@ -487,6 +584,64 @@ export default function CampaignsSection({ token }) {
     const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     setStartsAt(toLocalDatetimeInput(now));
     setEndsAt(toLocalDatetimeInput(nextMonth));
+  }
+
+  function buildAudienceCriteria() {
+    const criteria = {
+      category: audienceCategory.trim() || undefined,
+      brand: audienceBrand.trim() || undefined,
+      style: audienceStyle.trim() || undefined,
+      minScore: Number(audienceMinScore),
+      maxScore: Number(audienceMaxScore),
+      from: audienceFrom ? new Date(audienceFrom).toISOString() : undefined,
+      to: audienceTo ? new Date(audienceTo).toISOString() : undefined,
+    };
+    if (!criteria.category && !criteria.brand && !criteria.style) {
+      throw new Error("กรุณาเลือกอย่างน้อย 1 เป้าหมายจากหมวดหมู่ แบรนด์ หรือสไตล์");
+    }
+    if (
+      !Number.isFinite(criteria.minScore) ||
+      !Number.isFinite(criteria.maxScore) ||
+      !Number.isInteger(criteria.minScore) ||
+      !Number.isInteger(criteria.maxScore) ||
+      criteria.minScore < 0 ||
+      criteria.maxScore > 33 ||
+      criteria.minScore > criteria.maxScore
+    ) {
+      throw new Error("ช่วงคะแนนต้องอยู่ระหว่าง 0–33 และคะแนนเริ่มต้นต้องไม่มากกว่าคะแนนสิ้นสุด");
+    }
+    if (!criteria.from || !criteria.to || new Date(criteria.from) >= new Date(criteria.to)) {
+      throw new Error("ช่วงเวลาที่ใช้คำนวณคะแนนไม่ถูกต้อง");
+    }
+    return criteria;
+  }
+
+  async function handlePreviewAudience() {
+    setAudiencePreviewError("");
+    let criteria;
+    try {
+      criteria = buildAudienceCriteria();
+    } catch (validationError) {
+      setAudiencePreviewError(validationError.message);
+      return;
+    }
+    setAudiencePreviewLoading(true);
+    try {
+      const result = await apiFetch("/api/products/campaigns/audience/preview", {
+        method: "POST",
+        token,
+        body: criteria,
+      });
+      setAudiencePreview(result);
+      setAudiencePreviewStale(false);
+    } catch (requestError) {
+      setAudiencePreviewStale(Boolean(audiencePreview));
+      setAudiencePreviewError(
+        requestError.message || "ไม่สามารถคำนวณกลุ่มเป้าหมายได้",
+      );
+    } finally {
+      setAudiencePreviewLoading(false);
+    }
   }
 
   async function handleSaveCampaign(e) {
@@ -558,7 +713,15 @@ export default function CampaignsSection({ token }) {
     }
 
     let targetSegment = null;
-    if (segmentMode === "targeted") {
+    let audienceCriteria = null;
+    if (segmentMode === "score") {
+      try {
+        audienceCriteria = buildAudienceCriteria();
+      } catch (validationError) {
+        setFormError(validationError.message);
+        return;
+      }
+    } else if (segmentMode === "legacy") {
       if (segmentField === "brandPreference") {
         if (!selectedBrands || selectedBrands.length === 0) {
           setFormError("กรุณาระบุหรือเลือกอย่างน้อย 1 แบรนด์เป้าหมาย");
@@ -611,6 +774,7 @@ export default function CampaignsSection({ token }) {
         usageLimit: usageLimit ? Number(usageLimit) : null,
         budget: budget ? Number(budget) : null,
         targetSegment,
+        audienceCriteria,
         startsAt: new Date(startsAt).toISOString(),
         endsAt: new Date(endsAt).toISOString(),
       };
@@ -650,12 +814,17 @@ export default function CampaignsSection({ token }) {
   ) {
     setActionLoading(true);
     try {
-      await apiFetch(endpoint, {
+      const result = await apiFetch(endpoint, {
         method,
         token,
         ...(body ? { body } : {}),
       });
-      showToast(successMsg);
+      const warnings = result?.notificationWarnings || result?.chatWarnings;
+      showToast(
+        Array.isArray(warnings) && warnings.length
+          ? `${successMsg} แต่ ${warnings.join(" · ")}`
+          : successMsg,
+      );
       setConfirmAction(null);
       loadCampaigns();
     } catch (err) {
@@ -664,6 +833,30 @@ export default function CampaignsSection({ token }) {
     } finally {
       setActionLoading(false);
     }
+  }
+
+  function openEndCampaignConfirmation(campaign, { cancellation = false } = {}) {
+    const actionLabel = cancellation ? "ยกเลิกแคมเปญ" : "ปิดแคมเปญ";
+    setConfirmAction({
+      title: cancellation
+        ? "ยืนยันยกเลิกแคมเปญ"
+        : "ยืนยันสิ้นสุดแคมเปญ",
+      message: cancellation
+        ? `คุณต้องการยกเลิกแคมเปญ "${campaign.name}" (${campaign.code}) ใช่หรือไม่? แคมเปญนี้จะไม่สามารถเผยแพร่ได้อีก`
+        : `คุณต้องการสั่งปิดแคมเปญ "${campaign.name}" (${campaign.code}) ทันทีใช่หรือไม่? ผู้ซื้อจะไม่สามารถกดเก็บสิทธิ์เพิ่มได้`,
+      confirmLabel: actionLabel,
+      tone: "danger",
+      reason: "required",
+      reasonLabel: `เหตุผลที่${actionLabel}`,
+      reasonHint: "เหตุผลนี้จะถูกบันทึกใน Audit Log",
+      actionFn: (reason) =>
+        triggerAction(
+          `/api/products/campaigns/${campaign.id}/end`,
+          `${actionLabel}เรียบร้อยแล้ว`,
+          "POST",
+          { reason },
+        ),
+    });
   }
 
   async function handleConfirmReject() {
@@ -714,7 +907,7 @@ export default function CampaignsSection({ token }) {
     (!maxDiscount ||
       Number(budget) < Number(usageLimit) * Number(maxDiscount));
   const previewTargetSegment =
-    segmentMode !== "targeted"
+    segmentMode !== "legacy"
       ? null
       : [
           {
@@ -735,7 +928,37 @@ export default function CampaignsSection({ token }) {
     maxDiscount,
     applicableCategory,
     targetSegment: previewTargetSegment,
+    audienceCriteria:
+      segmentMode === "score"
+        ? {
+            category: audienceCategory,
+            brand: audienceBrand,
+            style: audienceStyle,
+            minScore: audienceMinScore,
+            maxScore: audienceMaxScore,
+          }
+        : null,
   };
+  const audienceDimensionFields = [
+    ["หมวดหมู่", audienceCategory, setAudienceCategory, audienceOptions?.dimensions?.categories || []],
+    ["แบรนด์", audienceBrand, setAudienceBrand, audienceOptions?.dimensions?.brands || []],
+    ["สไตล์", audienceStyle, setAudienceStyle, audienceOptions?.dimensions?.styles || []],
+  ];
+  const audiencePreviewStats = [
+    ["ได้สิทธิ์", audiencePreview ? `${audiencePreview.eligibleCustomers} คน` : "—"],
+    ["คะแนนต่ำสุด", audiencePreview?.minimumObserved ?? "—"],
+    ["คะแนนสูงสุด", audiencePreview?.maximumObserved ?? "—"],
+    ["คะแนนเฉลี่ย", audiencePreview?.averageScore ?? "—"],
+    ["ค่ากลาง", audiencePreview?.medianScore ?? "—"],
+    [
+      "สูงสุดที่เป็นไปได้",
+      audiencePreview
+        ? `${audiencePreview.maximumPossible} / ${audiencePreview.globalMaximum}`
+        : `— / ${audienceOptions?.globalMaximum || 33}`,
+    ],
+  ];
+  const audienceDistribution = audiencePreview?.distribution ||
+    audienceOptions?.scoreBands || SCORE_BAND_PLACEHOLDERS;
 
   return (
     <div className="space-y-6">
@@ -970,14 +1193,17 @@ export default function CampaignsSection({ token }) {
                             {camp.applicableCategory || "ทุกหมวดหมู่"}
                           </span>
                         </div>
-                        {Array.isArray(camp.targetSegment) &&
-                        camp.targetSegment.length > 0 ? (
+                        {camp.audienceCriteria ||
+                        (Array.isArray(camp.targetSegment) &&
+                          camp.targetSegment.length > 0) ? (
                           <div className="mt-1">
                             <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700">
                               <span className="material-symbols-outlined text-[12px]">
                                 group
                               </span>
-                              {formatSegmentSummary(camp.targetSegment)}
+                              {camp.audienceCriteria
+                                ? `${formatAudienceSummary(camp.audienceCriteria)} · ${camp.audienceSize ?? 0} สิทธิ์`
+                                : formatSegmentSummary(camp.targetSegment)}
                             </span>
                           </div>
                         ) : (
@@ -1182,46 +1408,40 @@ export default function CampaignsSection({ token }) {
                           )}
 
                           {camp.status === "approved" && !isExpired && (
-                            <button
-                              onClick={() =>
-                                setConfirmAction({
-                                  title: "ยืนยันเผยแพร่แคมเปญ",
-                                  message: `เมื่อเผยแพร่แคมเปญ "${camp.name}" (${camp.code}) ผู้ซื้อจะสามารถเห็นและเริ่มกดเก็บคูปองได้ตามวันเวลาที่กำหนด`,
-                                  confirmLabel: "เผยแพร่แคมเปญ",
-                                  actionFn: () =>
-                                    triggerAction(
-                                      `/api/products/campaigns/${camp.id}/publish`,
-                                      "เผยแพร่แคมเปญเปิดให้ใช้งานแล้ว",
-                                    ),
-                                })
-                              }
-                              className="rounded-lg bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition shadow-xs"
-                            >
-                              เผยแพร่ (Publish)
-                            </button>
+                            <>
+                              <button
+                                onClick={() =>
+                                  setConfirmAction({
+                                    title: "ยืนยันเผยแพร่แคมเปญ",
+                                    message: `เมื่อเผยแพร่แคมเปญ "${camp.name}" (${camp.code}) ผู้ซื้อจะสามารถเห็นและเริ่มกดเก็บคูปองได้ตามวันเวลาที่กำหนด`,
+                                    confirmLabel: "เผยแพร่แคมเปญ",
+                                    actionFn: () =>
+                                      triggerAction(
+                                        `/api/products/campaigns/${camp.id}/publish`,
+                                        "เผยแพร่แคมเปญเปิดให้ใช้งานแล้ว",
+                                      ),
+                                  })
+                                }
+                                className="rounded-lg bg-emerald-600 px-3 py-1 text-[11px] font-semibold text-white hover:bg-emerald-700 transition shadow-xs"
+                              >
+                                เผยแพร่ (Publish)
+                              </button>
+                              <button
+                                onClick={() =>
+                                  openEndCampaignConfirmation(camp, {
+                                    cancellation: true,
+                                  })
+                                }
+                                className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 transition shadow-xs"
+                              >
+                                ยกเลิกแคมเปญ
+                              </button>
+                            </>
                           )}
 
                           {camp.status === "published" && !isExpired && (
                             <button
-                              onClick={() =>
-                                setConfirmAction({
-                                  title: "ยืนยันสิ้นสุดแคมเปญ",
-                                  message: `คุณต้องการสั่งปิดแคมเปญ "${camp.name}" (${camp.code}) ทันทีใช่หรือไม่? ผู้ซื้อจะไม่สามารถกดเก็บสิทธิ์เพิ่มได้`,
-                                  confirmLabel: "ปิดแคมเปญ",
-                                  tone: "danger",
-                                  reason: "required",
-                                  reasonLabel: "เหตุผลที่ปิดแคมเปญ",
-                                  reasonHint:
-                                    "เหตุผลนี้จะถูกบันทึกใน Audit Log",
-                                  actionFn: (reason) =>
-                                    triggerAction(
-                                      `/api/products/campaigns/${camp.id}/end`,
-                                      "ปิดแคมเปญเรียบร้อยแล้ว",
-                                      "POST",
-                                      { reason },
-                                    ),
-                                })
-                              }
+                              onClick={() => openEndCampaignConfirmation(camp)}
                               className="rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition shadow-xs"
                             >
                               ปิดแคมเปญ
@@ -1493,6 +1713,9 @@ export default function CampaignsSection({ token }) {
                 onChange={(e) => setUsageLimit(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
               />
+              <p className="mt-1 text-[10px] text-slate-500">
+                จำกัดจำนวนครั้งที่ใช้คูปอง ไม่ใช่จำนวนลูกค้าที่อยู่ในกลุ่มเป้าหมาย
+              </p>
             </div>
 
             <div>
@@ -1552,25 +1775,33 @@ export default function CampaignsSection({ token }) {
                   <input
                     type="radio"
                     name="segmentMode"
-                    value="targeted"
-                    checked={segmentMode === "targeted"}
+                    value="score"
+                    checked={segmentMode === "score"}
                     onChange={() => {
-                      setSegmentMode("targeted");
-                      if (segmentField === "brandPreference") {
-                        if (segmentOp !== "in" && segmentOp !== "nin") {
-                          setSegmentOp("in");
-                        }
-                      }
+                      setSegmentMode("score");
                     }}
                     className="text-indigo-600 focus:ring-indigo-500"
                   />
                   <span
                     className={
-                      segmentMode === "targeted"
+                      segmentMode === "score"
                         ? "font-bold text-indigo-700"
                         : "text-slate-600"
                     }
                   >
+                    ตามคะแนนความสนใจ
+                  </span>
+                </label>
+                <label className="inline-flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="segmentMode"
+                    value="legacy"
+                    checked={segmentMode === "legacy"}
+                    onChange={() => setSegmentMode("legacy")}
+                    className="text-slate-600 focus:ring-slate-400"
+                  />
+                  <span className={segmentMode === "legacy" ? "font-bold text-slate-700" : "text-slate-500"}>
                     เฉพาะกลุ่มเป้าหมาย
                   </span>
                 </label>
@@ -1582,7 +1813,85 @@ export default function CampaignsSection({ token }) {
               ไม่ใช่การกำหนดว่าสินค้าแบรนด์ใดใช้คูปองได้
             </p>
 
-            {segmentMode === "targeted" && (
+            {segmentMode === "score" && (
+              <div className="space-y-3 border-t border-slate-200/80 pt-3">
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-[11px] text-indigo-800">
+                  ระบบรวมสัญญาณจากโปรไฟล์ การค้นหา การกดใจ และการซื้อจริง จากนั้นบันทึกสิทธิ์ของผู้ที่อยู่ในช่วงคะแนนตอนเผยแพร่แคมเปญ
+                </div>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {audienceDimensionFields.map(([label, value, setter, values]) => (
+                    <label key={label} className="text-[11px] font-semibold text-slate-700">
+                      {label}
+                      <select
+                        value={value}
+                        onChange={(event) => {
+                          setter(event.target.value);
+                          setAudiencePreviewStale(Boolean(audiencePreview));
+                        }}
+                        className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100"
+                      >
+                        <option value="">ไม่กำหนด</option>
+                        {values.map((option) => <option key={option} value={option.toLowerCase()}>{option}</option>)}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  <label className="text-[11px] font-semibold text-slate-700">
+                    คะแนนเริ่มต้น
+                    <input type="number" min="0" max="33" step="1" value={audienceMinScore} onChange={(event) => { setAudienceMinScore(event.target.value); setAudiencePreviewStale(Boolean(audiencePreview)); }} className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs" />
+                  </label>
+                  <label className="text-[11px] font-semibold text-slate-700">
+                    คะแนนสิ้นสุด
+                    <input type="number" min="0" max="33" step="1" value={audienceMaxScore} onChange={(event) => { setAudienceMaxScore(event.target.value); setAudiencePreviewStale(Boolean(audiencePreview)); }} className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs" />
+                  </label>
+                  <label className="text-[11px] font-semibold text-slate-700">
+                    เริ่มเก็บสัญญาณ
+                    <input type="datetime-local" value={audienceFrom} onChange={(event) => { setAudienceFrom(event.target.value); setAudiencePreviewStale(Boolean(audiencePreview)); }} className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs" />
+                  </label>
+                  <label className="text-[11px] font-semibold text-slate-700">
+                    สิ้นสุดสัญญาณ
+                    <input type="datetime-local" value={audienceTo} onChange={(event) => { setAudienceTo(event.target.value); setAudiencePreviewStale(Boolean(audiencePreview)); }} className="mt-1 h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs" />
+                  </label>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-slate-500">ช่วงคะแนนที่ใช้: 0, 1–6, 7–14, 15–24 และ 25–33</p>
+                  <button type="button" onClick={handlePreviewAudience} disabled={audiencePreviewLoading} className="rounded-xl bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-60">
+                    {audiencePreviewLoading ? "กำลังคำนวณ..." : "คำนวณสิทธิ์และสถิติ"}
+                  </button>
+                </div>
+                {audiencePreviewError ? <p className="rounded-lg bg-rose-50 px-3 py-2 text-[11px] text-rose-700">{audiencePreviewError}</p> : null}
+                <div className="space-y-2 rounded-xl border border-indigo-100 bg-white p-3">
+                    {!audiencePreview ? (
+                      <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                        ยังไม่ได้คำนวณ เลือกกลุ่มและช่วงคะแนนแล้วกด “คำนวณสิทธิ์และสถิติ”
+                      </p>
+                    ) : audiencePreviewStale ? (
+                      <p className="rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                        เงื่อนไขเปลี่ยนแล้ว ผลด้านล่างเป็นผลก่อนหน้า กรุณาคำนวณใหม่
+                      </p>
+                    ) : null}
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                      {audiencePreviewStats.map(([label, value]) => (
+                        <div key={label} className="rounded-lg bg-slate-50 p-2 text-center">
+                          <div className="text-[9px] text-slate-500">{label}</div>
+                          <div className="mt-0.5 text-sm font-bold text-slate-800">{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {audienceDistribution.map((band) => (
+                        <div key={band.key} className="rounded-lg border border-slate-100 px-1.5 py-2 text-center">
+                          <div className="text-[9px] text-slate-500">{band.min === band.max ? "0" : `${band.min}–${band.max}`}</div>
+                          <div className="text-xs font-bold text-slate-800">{band.count ?? "—"}{band.count === undefined ? "" : " คน"}</div>
+                        </div>
+                      ))}
+                    </div>
+                </div>
+              </div>
+            )}
+
+            {segmentMode === "legacy" && (
               <div className="pt-2 border-t border-slate-200/80 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>

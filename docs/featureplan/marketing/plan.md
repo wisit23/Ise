@@ -446,3 +446,25 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 - [x] **Step 3: Implement atomic DB-idempotent read-only `"ระบบฝ่ายการตลาด"` chat notifications (`notifyItemCancelled` & `notifyRoundCancelled`) and idempotent notification retry**
 - [x] **Step 4: Implement Marketing Round Filter (`"ทุกรอบประมูล"`), distinct Reject/Cancel Item/Cancel Round buttons & confirmation modals, `"ลองส่งแจ้งเตือนอีกครั้ง"` retry button, Public Auction cancelled visibility (including upcoming cancelled rounds until `auctionEndsAt`), and Seller Recovery UI**
 - [x] **Step 5: Verify unit tests (`auctionService.test.js` 102/102, `productRelist.test.js` 5/5, `contextKey.test.js` 9/9, `internalController.test.js` 5/5, `messageModel.test.js` 4/4, `attachmentService.test.js` 4/4), real PostgreSQL & Redis integration tests (`auction.integration.test.js`, `REQUIRE_INTEGRATION=1`, 22/22 pass, 0 skips), real MongoDB & cross-service chat integration tests (`internal-api.integration.test.js`, `REQUIRE_INTEGRATION=1`, 17/17 pass, 0 skips), and frontend Jest suite (54/54 suites, 359/359 pass, 0 skips)**
+
+### TC_AUC10 Payment Rollover Follow-up (MKT-DEC-027)
+
+- [x] Preserve each expired winner's cancelled Order and create a deterministic new Order for the next distinct bidder.
+- [x] Replace `Order.auctionId` uniqueness with indexed history plus unique `(auctionId, auctionBidId)`.
+- [x] Update `winningBidId` and `winningOrderId` together under the Auction lock.
+- [x] Move final Product to `auction_action_required` and reuse `/seller/auctions` recovery actions.
+- [x] Add read-only Auction Chat notifications and action links for expired winner, promoted winner, and seller.
+- [x] Add focused unit/component test coverage.
+- [ ] Run unit, integration, migration, and live browser verification after the user-provided follow-up is included.
+
+### Interest-score Campaign Targeting & Customer Insights (MKT-DEC-028)
+
+- [x] Extract reusable interest scoring from the existing Recommendation weights with integer score bands `0`, `1–6`, `7–14`, `15–24`, `25–38`.
+- [x] Add internal-only Auth profile and Order paid-purchase read APIs; keep ownership boundaries intact.
+- [x] Add Marketing-only audience options, preview, and insight endpoints in Product Service.
+- [x] Persist score criteria on Campaign and immutable `(campaignId, userId, score)` rights at publish time.
+- [x] Enforce saved membership on discovery, detail, claim, and applicable-voucher evaluation.
+- [x] Send individual `DISCOUNT` Notifications only for score-targeted Campaigns; universal Campaigns stay silent.
+- [x] Add Customer Insights as a separate Marketing tab and hand selected criteria/date range into Campaign creation.
+- [x] Add focused backend and frontend tests.
+- [ ] Run Docker migrations, backend suites, frontend suites/build, and browser flow after verification is authorized.

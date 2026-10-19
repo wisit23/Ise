@@ -397,15 +397,34 @@ model Campaign {
   endReason          String?        @map("end_reason")
   version            Int            @default(1)
   targetSegment      Json?          @map("target_segment")
+  audienceCriteria   Json?          @map("audience_criteria")
+  audienceSnapshotAt DateTime?      @map("audience_snapshot_at")
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")
 
   vouchers UserVoucher[]
+  audience CampaignAudience[]
 
   @@index([status])
   @@index([code])
   @@index([startsAt, endsAt])
   @@map("campaigns")
+}
+
+// Immutable eligibility snapshot created when a score-targeted campaign is
+// published. A later preference or behavior change cannot revoke the right.
+model CampaignAudience {
+  campaignId String   @map("campaign_id")
+  userId     String   @map("user_id")
+  score      Float
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@id([campaignId, userId])
+  @@index([campaignId, score])
+  @@index([userId])
+  @@map("campaign_audience")
 }
 
 // Buyer Voucher Wallet (Claimed vouchers per user)

@@ -1,4 +1,11 @@
-const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
+const {
+  AppError,
+  badRequest,
+  forbidden,
+  notFound,
+  conflict,
+  AUCTION_PAYMENT_TTL_MS,
+} = require("@reloop/shared");
 const auctionRepository = require("./auctionRepository");
 const defaultPrisma = require("../../models/prismaClient");
 const { hydrateRound, hydrateItem, writeRound, saveFields } = require("./auctionAuditState");
@@ -10,6 +17,7 @@ const { getDisplayNames: getBidderNames, maskBidderName } = require("./authClien
 const auctionRealtime = require("./auctionRealtime");
 const MAX_CANCELLATION_REASON_LENGTH = 500;
 const MAX_BID_AMOUNT = 1_000_000;
+const BID_COOLDOWN_MS = 2_000;
 const { requireRoundCapacity, assertRoundHasCapacity } = require("./roundCapacity");
 
 const {
@@ -39,6 +47,14 @@ const AUCTION_STATUSES = new Set([
 ]);
 const MAX_AUCTION_FILTER_VALUES = 100;
 const MAX_AUCTION_SEARCH_LENGTH = 100;
+
+function maskBidderDisplayName(displayName, userId) {
+  const clean = typeof displayName === "string" ? displayName.trim() : "";
+  if (!clean) return maskBidderName(userId);
+  const characters = Array.from(clean);
+  if (characters.length === 1) return `${characters[0]}***`;
+  return `${characters[0]}***${characters[characters.length - 1]}`;
+}
 
 function isCategoryAllowedInRound(round, category) {
   if (!round) return false;
@@ -161,6 +177,7 @@ async function maybeAdvance(auction, now = new Date()) {
 
 async function closeAuction(auction, now = new Date()) {
   const auctionId = typeof auction === "string" ? auction : auction?.id;
+  let winnerNotification = null;
 
   const result = await runWithAuctionLock(auctionId, async (tx) => {
     let current = null;
@@ -202,9 +219,26 @@ async function closeAuction(auction, now = new Date()) {
         sellerId: current.sellerId,
         buyerId: winningBid.bidderId,
         price: winningBid.amount,
-        paymentDeadlineAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        paymentDeadlineAt: new Date(now.getTime() + AUCTION_PAYMENT_TTL_MS),
       });
       winningOrderId = order.id;
+      await auctionRepository.setProductStatus(current.productId, "reserved", tx);
+      winnerNotification = {
+        auction: {
+          id: current.id,
+          roundId: current.roundId,
+          sellerId: current.sellerId,
+          productId: current.productId,
+          productTitle: current.product?.title,
+        },
+        order: {
+          id: order.id,
+          buyerId: winningBid.bidderId,
+          auctionBidId: winningBid.id,
+          price: winningBid.amount,
+          paymentDeadlineAt: order.paymentDeadlineAt,
+        },
+      };
     } else {
       // If no bids were placed, release product back to "auction_action_required" (never auto-revert to "available")
       await auctionRepository.setProductStatus(
@@ -241,6 +275,15 @@ async function closeAuction(auction, now = new Date()) {
 
     return updated;
   });
+  if (winnerNotification) {
+    const names = await getBidderNames([winnerNotification.order.buyerId]);
+    await chatClient.notifyAuctionWinnerAssigned({
+      ...winnerNotification,
+      winnerName:
+        names.get(winnerNotification.order.buyerId) ||
+        maskBidderName(winnerNotification.order.buyerId),
+    });
+  }
   auctionRealtime.publish(auctionId, "auction.closed");
   return result;
 }
@@ -250,19 +293,45 @@ async function advanceWinnerAfterPaymentTimeout({
   currentBidId,
   orderId,
   expiredBuyerId,
+  now = new Date(),
 }) {
   if (!auctionId || !orderId) {
     throw badRequest("auctionId and orderId are required");
   }
 
-  return runWithAuctionLock(auctionId, async (tx) => {
+  const result = await runWithAuctionLock(auctionId, async (tx) => {
     const current = await auctionRepository.findById(auctionId, tx);
     if (!current) throw notFound("ไม่พบข้อมูลรายการประมูลที่ระบุ");
-    if (current.status !== "closed" || current.winningOrderId !== orderId) {
+    if (current.status !== "closed") {
       throw conflict("รายการประมูลไม่อยู่ในสถานะรอจัดสรรผู้ชนะ");
     }
 
     const rankedBids = Array.isArray(current.bids) ? current.bids : [];
+    if (current.winningOrderId !== orderId) {
+      const assigned = rankedBids.find((bid) => bid.id === current.winningBidId);
+      if (!assigned && !current.winningBidId) {
+        return {
+          outcome: "released",
+          auctionId,
+          productId: current.productId,
+          alreadyAdvanced: true,
+        };
+      }
+      if (!assigned || !current.winningOrderId) {
+        throw conflict("รายการประมูลไม่อยู่ในสถานะรอจัดสรรผู้ชนะ");
+      }
+      return {
+        outcome: "reassigned",
+        auctionId,
+        bidId: assigned.id,
+        buyerId: assigned.bidderId,
+        price: assigned.amount,
+        productId: current.productId,
+        orderId: current.winningOrderId,
+        alreadyAdvanced: true,
+      };
+    }
+
     if (!current.winningBidId) {
       return { outcome: "released", auctionId, productId: current.productId };
     }
@@ -283,6 +352,7 @@ async function advanceWinnerAfterPaymentTimeout({
           buyerId: assigned.bidderId,
           price: assigned.amount,
           productId: current.productId,
+          orderId: current.winningOrderId,
           alreadyAdvanced: true,
         };
       }
@@ -303,6 +373,7 @@ async function advanceWinnerAfterPaymentTimeout({
         buyerId: assigned.bidderId,
         price: assigned.amount,
         productId: current.productId,
+        orderId: current.winningOrderId,
         alreadyAdvanced: true,
       };
     }
@@ -326,10 +397,14 @@ async function advanceWinnerAfterPaymentTimeout({
     if (!nextBid) {
       const released = await auctionRepository.updateStatus(
         current.id,
-        { winningBidId: null },
+        { winningBidId: null, winningOrderId: null },
         tx,
       );
-      await auctionRepository.setProductStatus(current.productId, "available", tx);
+      await auctionRepository.setProductStatus(
+        current.productId,
+        "auction_action_required",
+        tx,
+      );
       await recordMarketingAudit(
         {
           actorId: "SYSTEM",
@@ -351,9 +426,24 @@ async function advanceWinnerAfterPaymentTimeout({
       return { outcome: "released", auctionId, productId: current.productId };
     }
 
+    const paymentDeadlineAt = new Date(
+      now.getTime() + AUCTION_PAYMENT_TTL_MS,
+    );
+    const nextOrder = await orderClient.createOrderFromAuction({
+      auctionId: current.id,
+      auctionBidId: nextBid.id,
+      productId: current.productId,
+      productTitle: current.product?.title,
+      sellerId: current.sellerId,
+      buyerId: nextBid.bidderId,
+      price: nextBid.amount,
+      paymentDeadlineAt,
+      previousOrderId: orderId,
+    });
+
     const updated = await auctionRepository.updateStatus(
       current.id,
-      { winningBidId: nextBid.id },
+      { winningBidId: nextBid.id, winningOrderId: nextOrder.id },
       tx,
     );
     await auctionRepository.setProductStatus(current.productId, "reserved", tx);
@@ -371,7 +461,8 @@ async function advanceWinnerAfterPaymentTimeout({
           expiredBidId: effectiveCurrentBidId,
           nextBuyerId: nextBid.bidderId,
           nextBidId: nextBid.id,
-          orderId,
+          previousOrderId: orderId,
+          nextOrderId: nextOrder.id,
         },
         idempotencyKey: `AUCTION_WINNER_ADVANCE:${current.id}:${effectiveCurrentBidId}:${nextBid.id}`,
       },
@@ -385,8 +476,55 @@ async function advanceWinnerAfterPaymentTimeout({
       buyerId: nextBid.bidderId,
       price: nextBid.amount,
       productId: current.productId,
+      orderId: nextOrder.id,
+      paymentDeadlineAt,
     };
   });
+
+  const notificationAuction = await auctionRepository.findById(auctionId);
+  if (!notificationAuction) return result;
+  if (
+    result?.outcome === "reassigned" &&
+    result.orderId &&
+    notificationAuction?.sellerId
+  ) {
+    const names = await getBidderNames([result.buyerId]);
+    await chatClient.notifyAuctionWinnerAssigned({
+      auction: {
+        id: notificationAuction.id,
+        roundId: notificationAuction.roundId,
+        sellerId: notificationAuction.sellerId,
+        productId: notificationAuction.productId,
+        productTitle: notificationAuction.product?.title,
+      },
+      order: {
+        id: result.orderId,
+        buyerId: result.buyerId,
+        auctionBidId: result.bidId,
+        price: result.price,
+        paymentDeadlineAt: result.paymentDeadlineAt,
+      },
+      winnerName:
+        names.get(result.buyerId) || maskBidderName(result.buyerId),
+      previousWinnerId: expiredBuyerId,
+      previousBidId: currentBidId,
+      previousOrderId: orderId,
+    });
+  } else if (result?.outcome === "released") {
+    await chatClient.notifyAuctionExhausted({
+      auction: {
+        id: notificationAuction.id,
+        roundId: notificationAuction.roundId,
+        sellerId: notificationAuction.sellerId,
+        productId: notificationAuction.productId,
+        productTitle: notificationAuction.product?.title,
+      },
+      expiredBuyerId,
+      expiredBidId: currentBidId,
+      expiredOrderId: orderId,
+    });
+  }
+  return result;
 }
 
 /** Seller submits a new product or one of their own available products for auction. */
@@ -962,22 +1100,32 @@ async function browseRounds(now = new Date()) {
       : [],
   ]);
 
-  const isBeforeAuctionEnd = (r) =>
-    !r.cancelledAt && (!r.auctionEndsAt || new Date(r.auctionEndsAt) > now);
+  const isVisibleRound = (r) =>
+    !r.cancelledAt &&
+    (!r.auctionEndsAt ||
+      new Date(r.auctionEndsAt) > now ||
+      (r.visibleItemCount ?? r._count?.auctions ?? 0) > 0);
+
+  const presentRound = (r) => {
+    const visibleItemCount = r.visibleItemCount ?? r._count?.auctions ?? 0;
+    const basePhase = deriveRoundPhase(r, now);
+    return {
+      ...r,
+      visibleItemCount,
+      phase:
+        basePhase === "ended" && visibleItemCount > 0 ? "auction" : basePhase,
+      isSoftCloseActive:
+        Boolean(r.auctionEndsAt) &&
+        new Date(r.auctionEndsAt) <= now &&
+        visibleItemCount > 0,
+    };
+  };
 
   return {
     activeAuctionRounds: activeAuctionRounds
-      .filter(isBeforeAuctionEnd)
-      .map((r) => ({
-        ...r,
-        visibleItemCount: r.visibleItemCount ?? r._count?.auctions ?? 0,
-        phase: deriveRoundPhase(r, now),
-      })),
-    upcomingRounds: upcomingRounds.filter(isBeforeAuctionEnd).map((r) => ({
-      ...r,
-      visibleItemCount: r.visibleItemCount ?? r._count?.auctions ?? 0,
-      phase: deriveRoundPhase(r, now),
-    })),
+      .filter(isVisibleRound)
+      .map(presentRound),
+    upcomingRounds: upcomingRounds.filter(isVisibleRound).map(presentRound),
   };
 }
 
@@ -1269,7 +1417,7 @@ async function cancel({ user, auctionId, reason, cancellationReason }) {
 function enrichBids(bids, nameMap = new Map()) {
   if (!Array.isArray(bids)) return [];
   return bids.map((b) => {
-    const name = nameMap.get(b.bidderId) || maskBidderName(b.bidderId);
+    const name = maskBidderDisplayName(nameMap.get(b.bidderId), b.bidderId);
     return {
       ...b,
       bidderName: name,
@@ -1392,10 +1540,15 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
   }
 
   let targetAuction = null;
+  let extendedUntil = null;
   const createdBid = await auctionRepository.withAuctionLock(auctionId, async (tx) => {
     const auction = await hydrateItem(tx, await tx.auctionItem.findUnique({
       where: { id: auctionId },
-      include: { round: true, product: { select: { id: true, title: true, status: true, moderatedAt: true } } },
+      include: {
+        round: true,
+        product: { select: { id: true, title: true, status: true, moderatedAt: true } },
+        bids: { select: { bidderId: true } },
+      },
     }));
     if (!auction) throw notFound("ไม่พบข้อมูลรายการประมูลที่ระบุ");
     targetAuction = auction;
@@ -1429,6 +1582,25 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
     }
     if (auction.scheduledEndAt && auction.scheduledEndAt <= now) {
       throw conflict("การประมูลนี้สิ้นสุดลงแล้ว ไม่สามารถเสนอราคาเพิ่มได้");
+    }
+
+    const latestBid = await auctionRepository.latestBidByBidder(
+      auctionId,
+      user.id,
+      tx,
+    );
+    if (latestBid?.createdAt) {
+      const retryAfterMs =
+        BID_COOLDOWN_MS -
+        (now.getTime() - new Date(latestBid.createdAt).getTime());
+      if (retryAfterMs > 0) {
+        const error = new AppError(
+          429,
+          `กรุณารออีก ${Math.ceil(retryAfterMs / 1000)} วินาทีก่อนเสนอราคาครั้งถัดไป`,
+        );
+        error.code = "AUCTION_BID_COOLDOWN";
+        throw error;
+      }
     }
 
     const current = await auctionRepository.highestBid(auctionId, tx);
@@ -1483,6 +1655,7 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
           },
         });
         await auctionCloseQueue.scheduleClose(auctionId, newScheduledEndAt);
+        extendedUntil = newScheduledEndAt;
       }
     }
 
@@ -1498,6 +1671,25 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
       })
       .catch((err) => {
         console.warn("[auctionService] Failed to notify seller about bid:", err.message);
+      });
+  }
+  if (
+    createdBid &&
+    targetAuction &&
+    extendedUntil &&
+    typeof chatClient?.notifyAuctionExtended === "function"
+  ) {
+    chatClient
+      .notifyAuctionExtended({
+        auction: targetAuction,
+        extendedUntil,
+        bidderIds: [
+          ...(targetAuction.bids || []).map((bid) => bid.bidderId),
+          createdBid.bidderId,
+        ],
+      })
+      .catch((err) => {
+        console.warn("[auctionService] Failed to notify auction extension:", err.message);
       });
   }
 
@@ -1745,6 +1937,7 @@ module.exports = {
   listRoundItems,
   listRounds,
   deriveRoundPhase,
+  maskBidderDisplayName,
   cancelRound,
   isCategoryAllowedInRound,
 };
