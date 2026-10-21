@@ -122,9 +122,19 @@ async function markRead(conversationId, userId) {
  * fine at this app's conversation-per-user scale, not attempted to be
  * cleverer than that.
  */
+// The chat inbox (/chat) hides support and dispute rooms — those are read on
+// the support ticket / case pages — so counting them here left a badge the
+// user could never clear from the inbox it points to.
+const INBOX_HIDDEN_CONTEXT_TYPES = [
+  "SUPPORT",
+  "DISPUTE",
+  "DISPUTE_BUYER",
+  "DISPUTE_SELLER",
+];
+
 async function unreadCount(userId) {
   const conversations = await conversationModel.listForParticipant(userId, {
-    excludeContextType: "SUPPORT",
+    excludeContextTypes: INBOX_HIDDEN_CONTEXT_TYPES,
   });
   const counts = await Promise.all(
     conversations.map(async (c) => {

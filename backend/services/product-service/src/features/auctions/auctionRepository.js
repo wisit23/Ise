@@ -111,6 +111,13 @@ function createAuctionRepository(prismaClient) {
     });
   }
 
+  function lastBidBy(auctionId, bidderId, tx = prismaClient) {
+    return tx.bid.findFirst({
+      where: { auctionId, bidderId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   function createBid(data, tx = prismaClient) {
     return tx.bid.create({ data });
   }
@@ -382,6 +389,7 @@ function createAuctionRepository(prismaClient) {
     list,
     updateStatus,
     highestBid,
+    lastBidBy,
     createBid,
     withAuctionLock,
     withProductLock,

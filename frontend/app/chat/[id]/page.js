@@ -23,6 +23,7 @@ import {
   isReadOnlyAuctionConversation,
   getCachedConversations,
   setCachedConversations,
+  sendErrorMessage,
 } from "../../../lib/chat";
 import {
   useChatSocket,
@@ -608,7 +609,7 @@ export default function ChatRoomPage() {
       }
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      setError(err.message);
+      setError(sendErrorMessage(err));
     }
   }
 

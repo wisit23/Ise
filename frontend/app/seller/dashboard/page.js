@@ -461,6 +461,7 @@ export default function SellerDashboardPage() {
                     type="button"
                     onClick={() => {
                       setOrderStatusFilter("disputed");
+                      setHighlightOrderId(null);
                       setSection("orders");
                     }}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-red-700 shadow-xs transition shrink-0"

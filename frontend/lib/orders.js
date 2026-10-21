@@ -2,6 +2,15 @@
  * Formats order ID for concise, clean display across the UI.
  * Prevents excessively long order numbers (e.g., 36-char UUIDs, sha256 hashes) from cluttering screens.
  */
+// Same rule as order-service's shippingService (TRACKING_NUMBER_PATTERN).
+const TRACKING_NUMBER_PATTERN = /^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{8,20}$/;
+export const TRACKING_NUMBER_MESSAGE =
+  "เลขพัสดุต้องมีทั้งตัวอักษรและตัวเลข ยาว 8–20 ตัว และไม่มีเว้นวรรคหรือสัญลักษณ์";
+
+export function isValidTrackingNumber(value) {
+  return TRACKING_NUMBER_PATTERN.test(String(value ?? "").trim());
+}
+
 export function formatOrderId(id) {
   if (!id || typeof id !== "string") return "";
   if (id.startsWith("ORD-") || id.startsWith("AUC-")) {

@@ -45,6 +45,41 @@ test("createAndTouch updates preview and lastMessageAt for public messages", asy
   }
 });
 
+test("createAndTouch retries a burst-send write conflict instead of failing the send", async () => {
+  const origTransaction = prisma.$transaction;
+  const origMessageCreate = prisma.message.create;
+  const origConversationUpdate = prisma.conversation.update;
+
+  let transactionCalls = 0;
+  prisma.message.create = (args) => Promise.resolve({ id: "msg-retry", ...args.data });
+  prisma.conversation.update = (args) => Promise.resolve({ id: args.where.id });
+  prisma.$transaction = async (ops) => {
+    transactionCalls += 1;
+    if (transactionCalls < 3) {
+      throw Object.assign(new Error("Transaction failed due to a write conflict"), {
+        code: "P2034",
+      });
+    }
+    return Promise.all(ops);
+  };
+
+  try {
+    const msg = await createAndTouch({
+      conversationId: "conv-1",
+      senderId: "user-1",
+      senderRole: "BUYER",
+      type: "TEXT",
+      body: "e",
+    });
+    assert.equal(msg.id, "msg-retry");
+    assert.equal(transactionCalls, 3);
+  } finally {
+    prisma.$transaction = origTransaction;
+    prisma.message.create = origMessageCreate;
+    prisma.conversation.update = origConversationUpdate;
+  }
+});
+
 test("createAndTouch does NOT update lastMessagePreview or lastMessageAt for INTERNAL messages", async () => {
   const origTransaction = prisma.$transaction;
   const origMessageCreate = prisma.message.create;

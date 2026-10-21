@@ -173,6 +173,22 @@ async function issueTokenPair(user, loginContext = null) {
   });
 }
 
+// Thai mobile/landline as typed into the forms: 10 digits starting with 0.
+// Spaces and dashes are accepted on input ("081-234-5678") and stripped so
+// what's stored is always the bare digits. Blank means "no phone" — the
+// field is optional everywhere it's collected.
+const PHONE_PATTERN = /^0[0-9]{9}$/;
+
+function normalizePhone(phone) {
+  if (phone === undefined || phone === null) return phone;
+  const digits = String(phone).replace(/[\s-]/g, "");
+  if (!digits) return null;
+  if (!PHONE_PATTERN.test(digits)) {
+    throw badRequest("เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0");
+  }
+  return digits;
+}
+
 async function register({ email, password, firstName, lastName, phone }) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
@@ -180,6 +196,7 @@ async function register({ email, password, firstName, lastName, phone }) {
   if (password.length < 8) {
     throw badRequest("password must be at least 8 characters");
   }
+  phone = normalizePhone(phone);
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw conflict("email is already registered");
@@ -284,7 +301,7 @@ async function updateProfile(userId, { firstName, lastName, phone }) {
     if (!lastName) throw badRequest("lastName cannot be empty");
     patch.lastName = lastName;
   }
-  if (phone !== undefined) patch.phone = phone;
+  if (phone !== undefined) patch.phone = normalizePhone(phone);
 
   const user = await prisma.user.update({ where: { id: userId }, data: patch });
   return toPublicUser(user);

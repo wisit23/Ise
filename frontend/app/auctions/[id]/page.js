@@ -17,6 +17,9 @@ import {
 } from "../../../lib/auth";
 
 const MAX_BID_AMOUNT = 1_000_000;
+// Matches product-service's BID_COOLDOWN_MS; the server is what enforces it,
+// this only stops the button from inviting a bid it would refuse.
+const BID_COOLDOWN_SECONDS = 3;
 const BID_CONFIRMATION_INCREASE = 10_000;
 
 const STATUS_LABEL = {
@@ -50,6 +53,13 @@ export default function AuctionDetailPage() {
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
   const [bidding, setBidding] = useState(false);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+
+  useEffect(() => {
+    if (cooldownLeft <= 0) return undefined;
+    const timer = setTimeout(() => setCooldownLeft((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldownLeft]);
   const [pendingBid, setPendingBid] = useState(null);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [viewer, setViewer] = useState({
@@ -147,8 +157,10 @@ export default function AuctionDetailPage() {
         },
       });
       setAmount("");
+      setCooldownLeft(BID_COOLDOWN_SECONDS);
       load();
     } catch (err) {
+      if (err.code === "BID_COOLDOWN") setCooldownLeft(BID_COOLDOWN_SECONDS);
       setError(
         err.message || "เกิดข้อผิดพลาดในการเสนอราคา กรุณาลองใหม่อีกครั้ง",
       );
@@ -417,12 +429,14 @@ export default function AuctionDetailPage() {
                 </div>
                 <button
                   type="submit"
-                  disabled={bidding}
+                  disabled={bidding || cooldownLeft > 0}
                   className="sm:mt-6 rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 shadow-sm text-center"
                 >
                   {bidding
                     ? "กำลังส่ง..."
-                    : Number.isInteger(Number(amount)) && Number(amount) > 0
+                    : cooldownLeft > 0
+                      ? `รอ ${cooldownLeft} วินาที`
+                      : Number.isInteger(Number(amount)) && Number(amount) > 0
                       ? `เสนอราคา ${baht(Number(amount))}`
                       : "เสนอราคา"}
                 </button>

@@ -1,4 +1,4 @@
-const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
+const { AppError, badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const auctionRepository = require("./auctionRepository");
 const defaultPrisma = require("../../models/prismaClient");
 const { hydrateRound, hydrateItem, writeRound, saveFields } = require("./auctionAuditState");
@@ -10,6 +10,11 @@ const { getDisplayNames: getBidderNames, maskBidderName } = require("./authClien
 const auctionRealtime = require("./auctionRealtime");
 const MAX_CANCELLATION_REASON_LENGTH = 500;
 const MAX_BID_AMOUNT = 1_000_000;
+// Minimum gap between two bids from the same bidder on the same item, so the
+// bid button can't be hammered. Checked inside the auction lock, so it holds
+// even for requests fired in parallel. Mirrored by the countdown on
+// frontend/app/auctions/[id]/page.js.
+const BID_COOLDOWN_MS = 3_000;
 const { requireRoundCapacity, assertRoundHasCapacity } = require("./roundCapacity");
 
 const {
@@ -1429,6 +1434,18 @@ async function placeBid({ user, auctionId, amount, idempotencyKey }) {
     }
     if (auction.scheduledEndAt && auction.scheduledEndAt <= now) {
       throw conflict("การประมูลนี้สิ้นสุดลงแล้ว ไม่สามารถเสนอราคาเพิ่มได้");
+    }
+
+    const lastOwnBid = await auctionRepository.lastBidBy(auctionId, user.id, tx);
+    const sinceLastOwnBid = lastOwnBid?.createdAt
+      ? now.getTime() - new Date(lastOwnBid.createdAt).getTime()
+      : Infinity;
+    if (lastOwnBid?.bidderId === user.id && sinceLastOwnBid < BID_COOLDOWN_MS) {
+      const waitSeconds = Math.ceil((BID_COOLDOWN_MS - sinceLastOwnBid) / 1000);
+      throw Object.assign(
+        new AppError(429, `กรุณารอ ${waitSeconds} วินาทีก่อนเสนอราคาครั้งถัดไป`),
+        { code: "BID_COOLDOWN" },
+      );
     }
 
     const current = await auctionRepository.highestBid(auctionId, tx);

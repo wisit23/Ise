@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import QuietLink from "./ui/QuietLink";
 import { mediaUrl } from "../lib/api";
 import { fetchConditions } from "../lib/catalog";
 import { fetchSellerRating, fetchSellerSummary } from "../lib/sellers";
@@ -229,12 +229,12 @@ export default function ProductCard({ product, showSeller = true }) {
           {/* Stretched link: the whole card is clickable, but only the title
               is in the tab order — a keyboard user gets one stop per card,
               not one per decorative element. */}
-          <Link
+          <QuietLink
             href={`/products/${product.id}`}
             className="focus-ring rounded before:absolute before:inset-0 before:content-['']"
           >
             {product.title}
-          </Link>
+          </QuietLink>
         </h3>
 
         {meta.length > 0 && (
