@@ -44,6 +44,7 @@ model User {
   loginLogs          LoginLog[]
   buyerActivityLogs  BuyerActivityLog[]
   refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
   reports            Report[]
   roles              UserRole[]
   kycApplications    KycApplication[]
@@ -182,6 +183,28 @@ model RefreshToken {
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@map("refresh_tokens")
+}
+
+// Single-use, short-lived credentials for the forgot-password flow. Only a
+// SHA-256 digest of the token is stored: the raw value exists solely in the
+// email link, so a database leak cannot be replayed as a reset. Rows are kept
+// after use (usedAt / revokedAt) as an audit trail until the cleanup job
+// prunes them.
+model PasswordResetToken {
+  id                 String    @id @default(uuid())
+  userId             String    @map("user_id")
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash          String    @unique @map("token_hash")
+  expiresAt          DateTime  @map("expires_at")
+  usedAt             DateTime? @map("used_at")
+  revokedAt          DateTime? @map("revoked_at")
+  requestedIp        String?   @map("requested_ip")
+  requestedUserAgent String?   @map("requested_user_agent")
+  usedIp             String?   @map("used_ip")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("password_reset_tokens")
 }
 
 // ER: Reports — table created now per plan (no tables cut from ER); report/moderation UI is a later phase.

@@ -71,13 +71,32 @@ export function PasswordInput(props) {
   );
 }
 
+const HEADINGS = {
+  login: {
+    title: "Welcome back",
+    subtitle: "Sign in to discover your next favorite find.",
+  },
+  register: {
+    title: "Make it yours",
+    subtitle: "Create an account. Find a style all your own.",
+  },
+};
+
+/**
+ * `mode` is "login", "register" or "recovery". Recovery screens (forgot /
+ * reset password) pass their own title and subtitle and get no tabs.
+ */
 export default function AuthLayout({
   mode,
+  title,
+  subtitle,
   children,
   onModeChange,
   departing = false,
 }) {
   const register = mode === "register";
+  const recovery = mode === "recovery";
+  const heading = HEADINGS[mode] || {};
   const { phase, markAuthReady } = useAuthTransition();
   const [arriving, setArriving] = useState(true);
   const center = useRef(null);
@@ -91,8 +110,8 @@ export default function AuthLayout({
     if (mode !== initialMode.current) setHasSwitched(true);
   }, [mode]);
   useLayoutEffect(() => {
-    markAuthReady(mode === "register" ? "/register" : "/login");
-  }, [mode, markAuthReady]);
+    if (!recovery) markAuthReady(register ? "/register" : "/login");
+  }, [register, recovery, markAuthReady]);
   useEffect(() => {
     if (!arriving || phase === "covering") return;
     const timer = setTimeout(() => setArriving(false), AUTH_ENTRANCE_MS);
@@ -137,49 +156,57 @@ export default function AuthLayout({
           >
             <div className={styles.formHeading}>
               <h1 id="auth-title">
-                {register ? "Make it yours" : "Welcome back"}
+                {title || heading.title}
                 <span>.</span>
               </h1>
-              <p>
-                {register
-                  ? "Create an account. Find a style all your own."
-                  : "Sign in to discover your next favorite find."}
-              </p>
+              <p>{subtitle || heading.subtitle}</p>
             </div>
-            <nav className={styles.tabs} aria-label="Account">
-              <Link
-                href="/login"
-                onClick={(event) => onModeChange?.(event, "login")}
-                aria-current={!register ? "page" : undefined}
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/register"
-                onClick={(event) => onModeChange?.(event, "register")}
-                aria-current={register ? "page" : undefined}
-              >
-                Sign up
-              </Link>
-            </nav>
+            {!recovery && (
+              <nav className={styles.tabs} aria-label="Account">
+                <Link
+                  href="/login"
+                  onClick={(event) => onModeChange?.(event, "login")}
+                  aria-current={!register ? "page" : undefined}
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/register"
+                  onClick={(event) => onModeChange?.(event, "register")}
+                  aria-current={register ? "page" : undefined}
+                >
+                  Sign up
+                </Link>
+              </nav>
+            )}
             <div
               key={mode}
               className={`${styles.formTransition} ${!hasSwitched ? styles.initialForm : ""}`}
             >
               {children}
             </div>
-            <p className={styles.switchAccount}>
-              {register ? "Already have an account?" : "New to RE-LOOP?"}{" "}
-              <Link
-                href={register ? "/login" : "/register"}
-                onClick={(event) =>
-                  onModeChange?.(event, register ? "login" : "register")
-                }
-              >
-                {register ? "Sign in" : "Sign up"}
-                <AuthIcon name="arrow" />
-              </Link>
-            </p>
+            {recovery ? (
+              <p className={styles.switchAccount}>
+                Remembered your password?{" "}
+                <Link href="/login">
+                  Sign in
+                  <AuthIcon name="arrow" />
+                </Link>
+              </p>
+            ) : (
+              <p className={styles.switchAccount}>
+                {register ? "Already have an account?" : "New to RE-LOOP?"}{" "}
+                <Link
+                  href={register ? "/login" : "/register"}
+                  onClick={(event) =>
+                    onModeChange?.(event, register ? "login" : "register")
+                  }
+                >
+                  {register ? "Sign in" : "Sign up"}
+                  <AuthIcon name="arrow" />
+                </Link>
+              </p>
+            )}
           </section>
         </div>
       </div>

@@ -14,6 +14,7 @@ const {
 } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
 const { assertActive, revokedSession, lockUser } = require("./sessionService");
+const { assertPasswordPolicy, hashPassword } = require("./passwordPolicy");
 const shopChangeRequests = require("./shopChangeRequestService");
 const { ROLE_CATALOG } = require("../../prisma/roleCatalog");
 
@@ -193,15 +194,13 @@ async function register({ email, password, firstName, lastName, phone }) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
   }
-  if (password.length < 8) {
-    throw badRequest("password must be at least 8 characters");
-  }
+  assertPasswordPolicy(password);
   phone = normalizePhone(phone);
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw conflict("email is already registered");
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await hashPassword(password);
   const user = await prisma.user.create({
     data: {
       email,

@@ -15,6 +15,9 @@ const SERVICES = {
 // Routes that don't require a valid access token (register/login/refresh, public feed reads).
 const PUBLIC_PATHS = [
   /^\/api\/auth\/(register|login|refresh)/,
+  // Forgot-password must work for someone who can't sign in. auth-service
+  // rate limits these itself (per IP and per email).
+  /^\/api\/auth\/password\/(forgot|reset|reset\/verify)$/,
   /^\/api\/auth\/users\/[^/]+\/public/,
   /^\/api\/auth\/users\/[^/]+\/auto-messages/,
   /^\/api\/products\/feed/,
@@ -108,7 +111,9 @@ app.use((req, res, next) => {
 
 app.use(
   "/api/auth",
-  createProxyMiddleware({ target: SERVICES.auth, changeOrigin: true }),
+  // xfwd passes the caller's address on, so auth-service's login history and
+  // per-IP rate limits see the real client instead of the gateway.
+  createProxyMiddleware({ target: SERVICES.auth, changeOrigin: true, xfwd: true }),
 );
 app.use(
   "/api/products",

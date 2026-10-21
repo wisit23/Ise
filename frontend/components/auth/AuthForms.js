@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Alert from "../ui/Alert";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
@@ -10,7 +11,12 @@ import { resolvePostLoginPath, saveSession } from "../../lib/auth";
 import { AuthIcon, PasswordInput } from "./AuthLayout";
 import styles from "./AuthLayout.module.css";
 import { authError } from "./authError";
-import { PHONE_HINT, PHONE_MAX_LENGTH, PHONE_PATTERN, phoneDigits } from "../../lib/phone";
+import {
+  PHONE_HINT,
+  PHONE_MAX_LENGTH,
+  PHONE_PATTERN,
+  phoneDigits,
+} from "../../lib/phone";
 
 export function LoginPage({ onAuthenticated } = {}) {
   const router = useRouter();
@@ -45,7 +51,9 @@ export function LoginPage({ onAuthenticated } = {}) {
         accessToken: data.accessToken,
         user: data.user,
         requestedDestination:
-          search.get("next") || search.get("returnTo") || search.get("redirect"),
+          search.get("next") ||
+          search.get("returnTo") ||
+          search.get("redirect"),
       });
       if (onAuthenticated) await onAuthenticated(destination);
       else router.push(destination);
@@ -83,6 +91,9 @@ export function LoginPage({ onAuthenticated } = {}) {
           value={form.password}
           onChange={update("password")}
         />
+        <Link href="/forgot-password" className={styles.forgotLink}>
+          Forgot password?
+        </Link>
         {error && <Alert>{error}</Alert>}
         <Button
           type="submit"
@@ -183,7 +194,9 @@ export function RegisterPage({ onAuthenticated } = {}) {
           pattern={PHONE_PATTERN}
           title={PHONE_HINT}
           value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: phoneDigits(e.target.value) })}
+          onChange={(e) =>
+            setForm({ ...form, phone: phoneDigits(e.target.value) })
+          }
         />
         <PasswordInput
           required
