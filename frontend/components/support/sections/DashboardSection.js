@@ -317,7 +317,7 @@ function SafetyDashboardSection({ token, userRole, onNavigate }) {
               }
               icon="report"
               color="red"
-              onClick={() => onNavigate("admin_inbox", "")}
+              onClick={() => onNavigate("reports", "")}
               sub={
                 sourceErrors.auth
                   ? "โหลดข้อมูลไม่สำเร็จ"

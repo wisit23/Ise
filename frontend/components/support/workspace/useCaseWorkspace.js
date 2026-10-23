@@ -34,6 +34,7 @@ function writeLocation(domain, state, replace = false) {
     "q",
   ].forEach((key) => params.delete(key));
   params.set("section", domain);
+  if (domain !== "reports") params.delete("reportId");
   if (["tickets", "disputes"].includes(domain)) {
     [
       "view",

@@ -1,0 +1,29 @@
+{
+  "storeUrl": "/store/10000000-0000-0000-0000-000000000004",
+  "cases": [
+    {
+      "scenario": "เคสตัวอย่างที่สร้างต่อจากรอบก่อน",
+      "reviewId": "f25c0ea0-0900-4fd8-819f-c6de6b326778",
+      "reportId": "df8b804a-cacc-422b-ab68-20aada225109",
+      "url": "/workspace?section=reports&reportId=df8b804a-cacc-422b-ab68-20aada225109"
+    },
+    {
+      "scenario": "สแปมโฆษณา",
+      "reviewId": "05cdbc62-1ce8-4134-8db5-7eb7984fe2e7",
+      "reportId": "62801919-0504-4c44-bbe4-507c800ebbb9",
+      "url": "/workspace?section=reports&reportId=62801919-0504-4c44-bbe4-507c800ebbb9"
+    },
+    {
+      "scenario": "ข้อความไม่เหมาะสม",
+      "reviewId": "4ea3a615-56d8-409f-9060-05f1fdacd1fa",
+      "reportId": "d250a047-91e6-4d1f-9436-d78a8afc357f",
+      "url": "/workspace?section=reports&reportId=d250a047-91e6-4d1f-9436-d78a8afc357f"
+    },
+    {
+      "scenario": "รีวิวปกติสำหรับลองยกเลิกรายงาน",
+      "reviewId": "17c5a409-560d-4b29-a860-c273f8d84c7b",
+      "reportId": "1b713a47-992d-46e4-a9fe-03612e5256ba",
+      "url": "/workspace?section=reports&reportId=1b713a47-992d-46e4-a9fe-03612e5256ba"
+    }
+  ]
+}

@@ -64,8 +64,9 @@ async function decideKyc({
   if (!ALLOWED_DECISIONS.includes(decision)) {
     throw badRequest("decision must be VERIFIED or REJECTED");
   }
-  const trimmedReason = reason?.trim();
-  if (!trimmedReason) throw badRequest("reason is required");
+  if (reason != null && typeof reason !== "string") throw badRequest("reason must be a string");
+  const trimmedReason = reason?.trim() || "";
+  if (decision === "REJECTED" && !trimmedReason) throw badRequest("reason is required");
   if (typeof version !== "number") throw badRequest("version is required");
 
   const outcome = await prisma.$transaction(async (tx) => {

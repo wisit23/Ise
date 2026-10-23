@@ -82,4 +82,19 @@ async function restoreProduct(productId, reason, idempotencyKey) {
   return res.json();
 }
 
-module.exports = { getProduct, removeProduct, restoreProduct };
+async function removeReview(reviewId, command, idempotencyKey) {
+  let res;
+  try {
+    res = await fetch(`${PRODUCT_SERVICE_URL}/internal/moderation/reviews/${encodeURIComponent(reviewId)}/remove`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-token": INTERNAL_TOKEN, "x-idempotency-key": idempotencyKey },
+      body: JSON.stringify(command), signal: moderationRequestSignal(),
+    });
+  } catch { throw new AppError(502, "product-service is unreachable"); }
+  if (res.status === 404) throw new AppError(404, "review not found");
+  if (res.status === 409) throw new AppError(409, "review does not match the report or command");
+  if (!res.ok) throw new AppError(502, "failed to remove review");
+  return res.json();
+}
+
+module.exports = { getProduct, removeProduct, restoreProduct, removeReview };

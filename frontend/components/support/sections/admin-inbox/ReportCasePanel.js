@@ -10,6 +10,7 @@ import Select from "../../../ui/Select";
 import Textarea from "../../../ui/Textarea";
 import Modal from "../../../ui/Modal";
 import ReportProductDetails from "./ReportProductDetails";
+import CaseDate from "../case/CaseDate";
 import { safetyActionLabel } from "../../../../lib/supportConstants";
 
 function Row({ label, children, mono, danger }) {
@@ -112,17 +113,20 @@ export default function ReportCasePanel({
   }
 
   const decisionOptions = [
+    report.targetId && /\[รายงานรีวิว\s*#[^\]]+\]/.test(report.reason || "") && {
+      value: "REMOVE_REVIEW", label: "ลบรีวิวที่ถูกรายงาน",
+    },
     report.targetId && {
       value: "SUSPEND_USER",
-      label: "Suspend Account",
+      label: "ระงับบัญชีผู้ใช้ (SUSPEND_USER)",
     },
     report.targetId && {
       value: "WARN_USER",
-      label: "Warn User",
+      label: "ตักเตือนผู้ใช้ ไม่ระงับบัญชี (WARN_USER)",
     },
-    report.targetId && { value: "RESTRICT_BUYER", label: "Restrict Buying" },
-    report.targetId && { value: "RESTRICT_SELLER", label: "Restrict Selling" },
-    { value: "DISMISS", label: "Dismiss Report" },
+    report.targetId && { value: "RESTRICT_BUYER", label: "เพิกถอนสิทธิ์ซื้อ" },
+    report.targetId && { value: "RESTRICT_SELLER", label: "เพิกถอนสิทธิ์ขาย" },
+    { value: "DISMISS", label: "ยกเลิกรายงาน / ไม่พบความผิด (DISMISS)" },
   ].filter(Boolean);
 
   return (
@@ -168,6 +172,9 @@ export default function ReportCasePanel({
             </Row>
           )}
           <Row label="ประเภทปัญหา:">{reportCategoryLabel(report.category)}</Row>
+          <Row label="วันที่แจ้งรายงาน:"><CaseDate value={report.reportedAt} /></Row>
+          <Row label="วันที่รับงาน:"><CaseDate value={report.reviewedAt} /></Row>
+          {settled && <Row label="วันที่ตัดสิน:"><CaseDate value={report.decidedAt || report.decision?.decidedAt} /></Row>}
           <div className="mt-3 border-t border-slate-100 pt-3">
             <Row label="รายละเอียด:">{report.reason}</Row>
           </div>
@@ -175,7 +182,7 @@ export default function ReportCasePanel({
       </div>
 
       <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h4 className="font-bold text-slate-900">Report Evidence</h4>
+        <h4 className="font-bold text-slate-900">รูปหลักฐานจากผู้รายงาน</h4>
         {report.evidence?.length ? report.evidence.map((item) => (
           <button key={item.id} type="button" onClick={() => openEvidence(item.id)} className="mt-3 block rounded-lg border px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50">
             เปิดรูป: {item.originalName}
@@ -205,7 +212,7 @@ export default function ReportCasePanel({
 
       {settled ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h4 className="font-bold text-slate-900">Decision Summary</h4>
+          <h4 className="font-bold text-slate-900">ผลการพิจารณา</h4>
           {report.decision ? (
             <div className="mt-4 space-y-3">
               <Row label="คำตัดสิน:">{safetyActionLabel(report.decision.action)}</Row>
@@ -238,10 +245,10 @@ export default function ReportCasePanel({
           onSubmit={onSubmit}
           className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
         >
-          <h4 className="font-bold text-slate-900">Review & Action</h4>
+          <h4 className="font-bold text-slate-900">พิจารณาและจัดการ</h4>
 
           <Select
-            label="Decision"
+            label="การตัดสินใจ"
             placeholder="-- เลือกการตัดสินใจ --"
             options={decisionOptions}
             value={decision}
@@ -249,12 +256,16 @@ export default function ReportCasePanel({
           />
 
           <Textarea
-            label="Reason"
+            label="หมายเหตุ (ภายใน / ส่งให้ผู้ใช้)"
             rows={3}
             placeholder="ระบุเหตุผลในการตัดสินใจ..."
             value={reason}
             onChange={(e) => onReasonChange(e.target.value)}
           />
+
+          {decision === "REMOVE_REVIEW" && (
+            <Alert tone="warning">รีวิวนี้จะถูกลบออกจากหน้าร้านและการคำนวณคะแนน โดยเก็บประวัติการดำเนินการไว้ กรุณาตรวจสอบก่อนยืนยัน</Alert>
+          )}
 
           {error && <Alert>{error}</Alert>}
 

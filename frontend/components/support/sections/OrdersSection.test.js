@@ -43,6 +43,21 @@ const emptySafetyHistory = {
 
 beforeEach(() => jest.clearAllMocks());
 
+it("opens a banned account's details from its ID in the search-page history", async () => {
+  apiFetch.mockImplementation((url) => {
+    if (url.includes("/admin/users/ban-history?")) return Promise.resolve({
+      items: [{ id: "ban-1", targetId: user.id, reason: "test ban", createdAt: "2026-10-23T00:00:00Z", actor: {}, account: { ...user, status: "SUSPENDED" } }],
+      total: 1, totalPages: 1,
+    });
+    if (url.includes("/history?")) return Promise.resolve(emptySafetyHistory);
+    return Promise.resolve(user);
+  });
+  render(<OrdersSection token="token" canModerate />);
+  fireEvent.click(await screen.findByRole("button", { name: user.id }));
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/users/user-1", { token: "token" }));
+  expect(await screen.findByText("บัญชีปกติ")).toBeInTheDocument();
+});
+
 it("shows an order-service failure as unavailable rather than no history", async () => {
   apiFetch.mockImplementation((url) => {
     if (url.includes("/admin/users/user-1/history")) {

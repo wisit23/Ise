@@ -6,6 +6,7 @@ const {
   paginatedResponse,
 } = require("@reloop/shared");
 const reportService = require("./reportService");
+const { listBannedAccountHistory } = require("./bannedAccountHistory");
 const prisma = require("../../models/prismaClient");
 const { upload } = require("./reportEvidenceStorage");
 
@@ -129,6 +130,7 @@ router.get(
         status: req.query.status,
         search: req.query.q,
         scope: req.query.scope,
+        type: req.query.type,
         staffId: req.userId,
       });
       res.json(paginatedResponse(items, total, pagination));
@@ -249,6 +251,21 @@ router.post(
     } catch (err) {
       next(err);
     }
+  },
+);
+
+router.get(
+  "/admin/users/ban-history",
+  requireAuth,
+  requirePermission("admin:report:read"),
+  async (req, res, next) => {
+    try {
+      const pagination = parsePagination(req.query, 10);
+      const { items, total } = await listBannedAccountHistory({
+        ...pagination, role: req.query.role, search: req.query.q,
+      });
+      res.json(paginatedResponse(items, total, pagination));
+    } catch (error) { next(error); }
   },
 );
 
