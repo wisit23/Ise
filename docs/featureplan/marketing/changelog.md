@@ -1082,7 +1082,7 @@
 
 ## 2026-10-18 — Interest-score Campaigns & Customer Insights (MKT-DEC-028)
 
-- เพิ่มโมดูลคำนวณคะแนนความสนใจที่ reuse Recommendation rules เดิมและช่วง `0`, `1–6`, `7–14`, `15–24`, `25–38`
+- เพิ่มโมดูลคำนวณคะแนนความสนใจที่ reuse Recommendation rules เดิมหลังตัด Size และใช้ช่วง `0`, `1–6`, `7–14`, `15–24`, `25–33`
 - เพิ่ม Internal Auth buyer-profile และ Order paid-purchase APIs พร้อม Product clients แบบ pagination/fail-closed
 - เพิ่ม Campaign audience options/preview, immutable publish snapshot และ membership enforcement ทุกจุดที่แจก/ใช้คูปอง
 - ป้องกัน publish race: หลังล็อก Campaign จะตรวจว่าเกณฑ์กลุ่มเป้าหมายยังตรงกับ snapshot ที่คำนวณไว้ หากถูกแก้พร้อมกันจะยกเลิกและให้ลองใหม่แทนการเผยแพร่สิทธิ์ผิดกลุ่ม
@@ -1102,3 +1102,31 @@
 - mirror Auction system messages ไป Notification Bell และเพิ่ม bell notification สำหรับ Soft Close
 - แก้จำนวนสินค้าในรอบไม่ให้นับ rejected/cancelled พร้อมเรียง active/manageable ก่อน history และแสดงราคาสูงสุดจริงใน Marketing
 - Docker targeted verification ผ่าน Backend 126/126 และ Frontend 69/69; ยังไม่ได้รัน browser/integration E2E ในรอบนี้
+
+## 2026-10-21 — Marketing Dashboard date, Campaign comparison, and adaptive Heatmap (MKT-DEC-030)
+
+- กรอง Campaign Comparison ด้วย active-window overlap ของช่วง Dashboard โดยไม่จำกัดสถานะ
+- เปลี่ยนการแสดงวันที่ Campaign เป็นปฏิทิน Gregorian/ค.ศ.
+- ปรับ Usage Heatmap ให้ใช้ตัวกรอง Dashboard ชุดเดียวและเปลี่ยนความละเอียดตาม day/week/month/year/custom
+- แก้เอกสารคะแนนจากข้อมูลเดิม 38 เป็นคะแนนเต็ม 33 และช่วงสูงสุด `25–33` ตาม Requirement ที่ตัด Size ออกแล้ว
+- เพิ่ม compatibility display สำหรับ Campaign เก่าที่เก็บ `maxScore: 38` ให้แสดงเพดานปัจจุบัน 33 โดยไม่แก้ immutable audience snapshot เดิม
+- Verification รอบปัจจุบันผ่าน Product Campaign Metrics 18/18, Frontend focused tests 67/67 และ Next.js production build 28/28 pages
+- Live browser acceptance ผ่าน preset/custom Heatmap, Campaign overlap, Gregorian dates และ legacy score display โดยไม่มี console warning/error
+
+## 2026-10-21 — Auction round item details (MKT-DEC-031)
+
+- เพิ่มรายการสินค้าทุกสถานะใน Modal รายละเอียดรอบประมูล โดยไม่เปิดหน้าใหม่
+- เพิ่มการเรียง 4 กลุ่มตาม Requirement และสี Badge แยกสถานะ
+- แสดงรูป ชื่อ ร้านค้า ราคาเริ่มต้น/ปัจจุบัน จำนวน Bid และเหตุผลปฏิเสธหรือยกเลิก
+- รายการปิดประมูลแสดงราคาสุดท้ายและผู้ชนะจาก `winningBidId`; ถ้าไม่มี Bid แสดง `ไม่มีผู้เสนอราคา`
+- เพิ่ม loading, empty, error/retry และพื้นที่เลื่อนสำหรับรายการจำนวนมาก พร้อมโหลดข้อมูลทุกหน้าของรอบ
+- ปรับวันที่ fixture เดิมใน `AuctionScheduleSection.test.js` ให้เป็นอนาคตเพื่อไม่ให้ tests หมดอายุตามเวลาปฏิทิน
+- Verification: focused Frontend 59/59, production build 28/28 pages, browser 1440×900 และ `git diff --check` ผ่าน
+
+## 2026-10-23 — Auction round search and status filters (MKT-DEC-032)
+
+- เพิ่ม `search` และ `phases` ให้ API รายการรอบประมูลของ Marketing โดยกรองก่อน pagination
+- เพิ่มช่องค้นหาชื่อรอบ ตัวกรองสถานะหลายค่า และปุ่มล้างตัวกรอง
+- แยกรายการที่แสดงเป็น `รอบที่ยังจัดการได้` และ `ประวัติรอบประมูล`
+- ไม่มี schema/migration ใหม่
+- Verification: Product Auction controller/service 130/130 และ Frontend AuctionScheduleSection 60/60 ผ่านใน Docker

@@ -1,6 +1,15 @@
 const { parsePagination, paginatedResponse } = require("@reloop/shared");
 const auctionService = require("./auctionService");
 
+function splitFilterValues(value) {
+  return (Array.isArray(value) ? value : [value])
+    .flatMap((entry) =>
+      typeof entry === "string" ? entry.split(",") : [],
+    )
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function currentUser(req) {
   return {
     id: req.userId,
@@ -88,13 +97,6 @@ async function list(req, res, next) {
   try {
     const pagination = parsePagination(req.query, 10);
     const { status, roundId, search } = req.query;
-    const splitFilterValues = (value) =>
-      (Array.isArray(value) ? value : [value])
-        .flatMap((entry) =>
-          typeof entry === "string" ? entry.split(",") : [],
-        )
-        .map((entry) => entry.trim())
-        .filter(Boolean);
     const statuses = splitFilterValues(req.query.statuses);
     const roundIds = splitFilterValues(req.query.roundIds);
     const { items, total } = await auctionService.list({
@@ -185,6 +187,8 @@ async function createRound(req, res, next) {
 
 async function listRounds(req, res, next) {
   try {
+    const phases = splitFilterValues(req.query.phases);
+    const search = typeof req.query.search === "string" ? req.query.search : "";
     const isPaginated =
       req.query.page !== undefined || req.query.limit !== undefined;
 
@@ -194,12 +198,16 @@ async function listRounds(req, res, next) {
         user: currentUser(req),
         skip: pagination.skip,
         take: pagination.take,
+        phases,
+        search,
       });
       return res.json(paginatedResponse(items, total, pagination));
     }
 
     const rounds = await auctionService.listRounds({
       user: currentUser(req),
+      phases,
+      search,
     });
     const items = Array.isArray(rounds) ? rounds : rounds?.items || [];
     const total = Array.isArray(rounds)

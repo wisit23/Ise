@@ -24,12 +24,27 @@ jest.mock("../../charts/TrendLineChart", () => {
 });
 
 jest.mock("./UsageHeatmap", () => {
-  return function MockUsageHeatmap({ hourlyUsage }) {
-    return (
-      <div data-testid="mock-usage-heatmap">
-        UsageHeatmap ({hourlyUsage ? hourlyUsage.length : 0} items)
-      </div>
-    );
+  const actual = jest.requireActual("./UsageHeatmap");
+  return {
+    ...actual,
+    __esModule: true,
+    default: function MockUsageHeatmap({
+      hourlyUsage,
+      mode,
+      fromDate,
+      toDate,
+    }) {
+      return (
+        <div
+          data-testid="mock-usage-heatmap"
+          data-mode={mode}
+          data-from={fromDate}
+          data-to={toDate}
+        >
+          UsageHeatmap ({hourlyUsage ? hourlyUsage.length : 0} items)
+        </div>
+      );
+    },
   };
 });
 
@@ -126,30 +141,29 @@ describe("DashboardSection date & time helper utilities", () => {
     });
   });
 
-  test("builds Bangkok calendar presets and restores a safe filter from URL", () => {
+  test("builds Bangkok dashboard ranges and restores a safe filter from URL", () => {
     const now = new Date("2026-10-15T17:30:00.000Z");
     expect(getCalendarDateRange("day", now)).toEqual({
       fromDate: "2026-10-16",
       toDate: "2026-10-16",
     });
     expect(getCalendarDateRange("week", now)).toEqual({
-      fromDate: "2026-10-12",
-      toDate: "2026-10-18",
+      fromDate: "2026-10-10",
+      toDate: "2026-10-16",
     });
     expect(
-      readDashboardFilter(
-        "?range=custom&from=2026-06-01&to=2026-06-07",
-        now,
-      ),
+      readDashboardFilter("?range=custom&from=2026-06-01&to=2026-06-07", now),
     ).toMatchObject({
       preset: "custom",
       fromDate: "2026-06-01",
       toDate: "2026-06-07",
     });
-    expect(readDashboardFilter("?range=custom&from=https://evil.test", now)).toMatchObject({
+    expect(
+      readDashboardFilter("?range=custom&from=https://evil.test", now),
+    ).toMatchObject({
       preset: "week",
-      fromDate: "2026-10-12",
-      toDate: "2026-10-18",
+      fromDate: "2026-10-10",
+      toDate: "2026-10-16",
     });
   });
 });
@@ -236,7 +250,11 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
         auction: {
           sales: 10000,
           completedOrders: 2,
-          comparison: { difference: 1000, percentChange: 11.1, direction: "up" },
+          comparison: {
+            difference: 1000,
+            percentChange: 11.1,
+            direction: "up",
+          },
         },
       },
       refreshedAt: "2026-10-17T04:30:00.000Z",
@@ -275,9 +293,7 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
     render(<DashboardSection token={mockToken} onNavigate={mockNavigate} />);
 
     // Initially shows filter bar
-    expect(
-      screen.getByText("ช่วงเวลาของข้อมูล Dashboard"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("ช่วงเวลาของข้อมูล Dashboard")).toBeInTheDocument();
 
     // Wait for data to load
     await waitFor(() => {
@@ -332,7 +348,9 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
     await waitFor(() => {
       expect(screen.getByText("Dashboard API unavailable")).toBeInTheDocument();
     });
-    const completedOrdersCard = screen.getByText("คำสั่งซื้อสำเร็จทั้งหมด").closest("div");
+    const completedOrdersCard = screen
+      .getByText("คำสั่งซื้อสำเร็จทั้งหมด")
+      .closest("div");
     expect(completedOrdersCard).toHaveTextContent("—");
     expect(completedOrdersCard).not.toHaveTextContent("0");
   });
@@ -358,7 +376,9 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
     render(<DashboardSection token={mockToken} onNavigate={mockNavigate} />);
 
     await waitFor(() => {
-      expect(screen.getByText("สถิติผู้ใช้งานและช่วงเวลาการใช้งาน")).toBeInTheDocument();
+      expect(
+        screen.getByText("สถิติผู้ใช้งานและช่วงเวลาการใช้งาน"),
+      ).toBeInTheDocument();
       expect(
         screen.getByText("ผู้ใช้งานที่มีการใช้งาน (Active Users)"),
       ).toBeInTheDocument();
@@ -371,10 +391,15 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
       expect(
         screen.getByText(/18 ผู้ใช้งาน active ในชั่วโมงนี้/),
       ).toBeInTheDocument();
-      expect(screen.getByText("Heatmap การใช้งาน: วันในสัปดาห์ × ชั่วโมง")).toBeInTheDocument();
+      expect(
+        screen.getByText("Heatmap การใช้งาน: 7 วัน × 24 ชั่วโมง"),
+      ).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("mock-usage-heatmap")).toBeInTheDocument();
+    expect(screen.getByTestId("mock-usage-heatmap")).toHaveAttribute(
+      "data-mode",
+      "weekday-hour",
+    );
     expect(
       screen.getByLabelText("ตารางสถิติการใช้งานรายชั่วโมง"),
     ).toBeInTheDocument();
@@ -473,7 +498,7 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
     expect(getMarketingUserAnalytics).not.toHaveBeenCalled();
   });
 
-  test("restores the default week preset and synchronizes it to URL", async () => {
+  test("restores the default latest-seven-days preset and synchronizes it to URL", async () => {
     setupApiFetch();
 
     render(<DashboardSection token={mockToken} onNavigate={mockNavigate} />);
@@ -483,11 +508,15 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "เดือน" }));
-    const resetBtn = screen.getByRole("button", { name: "กลับไปดูสัปดาห์นี้" });
+    const resetBtn = screen.getByRole("button", {
+      name: "กลับไปดู 7 วันล่าสุด",
+    });
     fireEvent.click(resetBtn);
 
     await waitFor(() => {
-      expect(new URLSearchParams(window.location.search).get("range")).toBe("week");
+      expect(new URLSearchParams(window.location.search).get("range")).toBe(
+        "week",
+      );
     });
   });
 

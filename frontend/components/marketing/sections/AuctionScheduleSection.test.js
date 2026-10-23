@@ -1,4 +1,5 @@
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -196,11 +197,42 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     render(<RoundManagementSection token={mockToken} />);
 
     expect(
-      await screen.findByText(/ประวัติและรายการรอบการประมูลทั้งหมด \(3\)/),
+      await screen.findByText(/รอบประมูลที่ค้นพบ \(3\)/),
     ).toBeInTheDocument();
+    expect(screen.getByText(/รอบที่ยังจัดการได้ \(2 รายการในหน้านี้\)/)).toBeInTheDocument();
+    expect(screen.getByText(/ประวัติรอบประมูล \(1 รายการในหน้านี้\)/)).toBeInTheDocument();
     expect(screen.getByText("รอบประมูลปฐมฤกษ์")).toBeInTheDocument();
-    expect(screen.getByText("ปิดรอบแล้ว")).toBeInTheDocument();
+    expect(screen.getAllByText("ปิดรอบแล้ว").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("12")).toBeInTheDocument();
+  });
+
+  it("searches and filters auction rounds before pagination", async () => {
+    render(<RoundManagementSection token={mockToken} />);
+    await screen.findByText("รอบประมูลปฐมฤกษ์");
+
+    fireEvent.change(screen.getByPlaceholderText("ค้นหาจากชื่อรอบประมูล"), {
+      target: { value: "แบรนด์เนม" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "ค้นหารอบประมูล" }));
+
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/products\/auctions\/rounds\?.*search=.*%E0%B9%81%E0%B8%9A%E0%B8%A3%E0%B8%99%E0%B8%94%E0%B9%8C%E0%B9%80%E0%B8%99%E0%B8%A1/),
+        expect.anything(),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "ปิดรอบแล้ว" }));
+    await waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/products\/auctions\/rounds\?.*phases=ended/),
+        expect.anything(),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "ล้างตัวกรอง" }));
+    expect(screen.getByPlaceholderText("ค้นหาจากชื่อรอบประมูล")).toHaveValue("");
+    expect(screen.getByRole("checkbox", { name: "ปิดรอบแล้ว" })).not.toBeChecked();
   });
 
   it("renders empty state when no rounds are returned", async () => {
@@ -392,16 +424,16 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
     });
 
     fireEvent.change(screen.getByLabelText(/วัน-เวลาเริ่มเปิดรับ/), {
-      target: { value: "2026-10-20T00:00" },
+      target: { value: "2035-10-20T00:00" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาปิดรับสินค้า/), {
-      target: { value: "2026-10-22T00:00" },
+      target: { value: "2035-10-22T00:00" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาเริ่มเปิดประมูล/), {
-      target: { value: "2026-10-22T12:00" },
+      target: { value: "2035-10-22T12:00" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาสิ้นสุดการประมูล/), {
-      target: { value: "2026-10-25T12:00" },
+      target: { value: "2035-10-25T12:00" },
     });
 
     fireEvent.change(screen.getByLabelText("จำนวนสินค้าสูงสุดต่อรอบ"), { target: { value: "20" } });
@@ -581,16 +613,16 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
       target: { value: "รอบเฉพาะหมวด" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาเริ่มเปิดรับ/), {
-      target: { value: "2026-10-20T00:00" },
+      target: { value: "2035-10-20T00:00" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาปิดรับสินค้า/), {
-      target: { value: "2026-10-22T00:00" },
+      target: { value: "2035-10-22T00:00" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาเริ่มเปิดประมูล/), {
-      target: { value: "2026-10-22T12:00" },
+      target: { value: "2035-10-22T12:00" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาสิ้นสุดการประมูล/), {
-      target: { value: "2026-10-25T12:00" },
+      target: { value: "2035-10-25T12:00" },
     });
 
     // Select specific categories radio without checking any checkbox
@@ -641,16 +673,16 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
       target: { value: "รอบรองเท้าเท่านั้น" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาเริ่มเปิดรับ/), {
-      target: { value: "2026-10-20T00:00" },
+      target: { value: "2035-10-20T00:00" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาปิดรับสินค้า/), {
-      target: { value: "2026-10-22T00:00" },
+      target: { value: "2035-10-22T00:00" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาเริ่มเปิดประมูล/), {
-      target: { value: "2026-10-22T12:00" },
+      target: { value: "2035-10-22T12:00" },
     });
     fireEvent.change(screen.getByLabelText(/วัน-เวลาสิ้นสุดการประมูล/), {
-      target: { value: "2026-10-25T12:00" },
+      target: { value: "2035-10-25T12:00" },
     });
 
     const specificRadio = screen.getByLabelText(/เลือกเฉพาะบางหมวดหมู่/);
@@ -671,6 +703,167 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
       expect(capturedBody.categories).toEqual(["รองเท้า"]);
       expect(capturedBody.maxItems).toBe(20);
     });
+  });
+});
+
+describe("RoundManagementSection - Round item details", () => {
+  const token = "round-detail-token";
+  const detailRound = {
+    id: "round-detail-1",
+    title: "รอบรายละเอียดสินค้า",
+    phase: "ended",
+    submissionStartsAt: "2026-10-01T00:00:00.000Z",
+    submissionEndsAt: "2026-10-02T00:00:00.000Z",
+    auctionStartsAt: "2026-10-03T00:00:00.000Z",
+    auctionEndsAt: "2026-10-04T00:00:00.000Z",
+    categories: ["กระเป๋า"],
+    _count: { auctions: 4 },
+  };
+
+  function mockRoundDetails(detailsResponse) {
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/api/products/categories")) {
+        return Promise.resolve({ items: ["กระเป๋า"] });
+      }
+      if (url.includes("/api/products/auctions/rounds/current")) {
+        return Promise.resolve(null);
+      }
+      if (url.includes("/api/products/auctions/rounds")) {
+        return Promise.resolve({ items: [detailRound], total: 1, totalPages: 1 });
+      }
+      if (url.includes("/api/products/auctions?")) {
+        return typeof detailsResponse === "function"
+          ? detailsResponse(url)
+          : Promise.resolve(detailsResponse);
+      }
+      return Promise.resolve({});
+    });
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("loads every item in the round, groups statuses in the required order, and shows the closed result", async () => {
+    mockRoundDetails({
+      items: [
+        {
+          id: "rejected-item",
+          productId: "rejected-product",
+          product: { title: "สินค้าถูกปฏิเสธ", photos: [] },
+          sellerDisplayName: "ร้านสี่",
+          status: "rejected",
+          startingPrice: 400,
+          cancellationReason: "ข้อมูลสินค้าไม่ครบ",
+          bids: [],
+          createdAt: "2026-10-04T00:00:00.000Z",
+        },
+        {
+          id: "closed-item",
+          productId: "closed-product",
+          product: { title: "สินค้าปิดประมูล", photos: [{ url: "/closed.jpg" }] },
+          sellerDisplayName: "ร้านสาม",
+          status: "closed",
+          startingPrice: 500,
+          winningBidId: "bid-winner",
+          bids: [
+            { id: "bid-highest", amount: 1000, bidderName: "ผู้เสนอ A" },
+            { id: "bid-winner", amount: 900, bidderName: "ผู้ชนะ B" },
+          ],
+          createdAt: "2026-10-03T00:00:00.000Z",
+        },
+        {
+          id: "open-item",
+          productId: "open-product",
+          product: { title: "สินค้ากำลังประมูล", photos: [] },
+          sellerDisplayName: "ร้านสอง",
+          status: "open",
+          startingPrice: 300,
+          bids: [{ id: "bid-open", amount: 350, bidderName: "ผู้เสนอ C" }],
+          createdAt: "2026-10-02T00:00:00.000Z",
+        },
+        {
+          id: "pending-item",
+          productId: "pending-product",
+          product: { title: "สินค้ารออนุมัติ", photos: [] },
+          sellerDisplayName: "ร้านหนึ่ง",
+          status: "pending_approval",
+          startingPrice: 200,
+          bids: [],
+          createdAt: "2026-10-01T00:00:00.000Z",
+        },
+      ],
+      total: 4,
+      totalPages: 1,
+    });
+
+    render(<RoundManagementSection token={token} />);
+    fireEvent.click(await screen.findByRole("button", { name: "ดูรายละเอียดรอบ รอบรายละเอียดสินค้า" }));
+
+    const dialog = screen.getByRole("dialog", { name: "รายละเอียดรอบการประมูล" });
+    const cards = await within(dialog).findAllByTestId("round-detail-auction-item");
+    expect(cards.map((card) => card.textContent)).toEqual([
+      expect.stringContaining("สินค้ารออนุมัติ"),
+      expect.stringContaining("สินค้ากำลังประมูล"),
+      expect.stringContaining("สินค้าปิดประมูล"),
+      expect.stringContaining("สินค้าถูกปฏิเสธ"),
+    ]);
+
+    const closedCard = cards[2];
+    expect(within(closedCard).getByText("฿900")).toBeInTheDocument();
+    expect(within(closedCard).getByText("ผู้ชนะ B")).toBeInTheDocument();
+    expect(within(closedCard).getByText("2")).toBeInTheDocument();
+    expect(within(closedCard).getByAltText("")).toHaveAttribute("src", "/closed.jpg");
+    expect(within(cards[3]).getByText(/ข้อมูลสินค้าไม่ครบ/)).toBeInTheDocument();
+  });
+
+  it("shows loading and empty states inside the existing modal", async () => {
+    let resolveDetails;
+    const pendingDetails = new Promise((resolve) => {
+      resolveDetails = resolve;
+    });
+    mockRoundDetails(() => pendingDetails);
+
+    render(<RoundManagementSection token={token} />);
+    fireEvent.click(await screen.findByRole("button", { name: "ดูรายละเอียดรอบ รอบรายละเอียดสินค้า" }));
+    const dialog = screen.getByRole("dialog", { name: "รายละเอียดรอบการประมูล" });
+    expect(within(dialog).getByText("กำลังโหลดสินค้าในรอบประมูล...")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveDetails({ items: [], total: 0, totalPages: 1 });
+      await pendingDetails;
+    });
+    expect(await within(dialog).findByText("ยังไม่มีสินค้าในรอบประมูลนี้")).toBeInTheDocument();
+  });
+
+  it("shows an API error, retries, and labels a closed item with no bids", async () => {
+    let attempts = 0;
+    mockRoundDetails(() => {
+      attempts += 1;
+      if (attempts === 1) return Promise.reject(new Error("โหลดรายการไม่สำเร็จ"));
+      return Promise.resolve({
+        items: [{
+          id: "closed-no-bid",
+          productId: "no-bid-product",
+          product: { title: "สินค้าไม่มีผู้เสนอราคา", photos: [] },
+          status: "closed",
+          startingPrice: 700,
+          bids: [],
+        }],
+        total: 1,
+        totalPages: 1,
+      });
+    });
+
+    render(<RoundManagementSection token={token} />);
+    fireEvent.click(await screen.findByRole("button", { name: "ดูรายละเอียดรอบ รอบรายละเอียดสินค้า" }));
+    const dialog = screen.getByRole("dialog", { name: "รายละเอียดรอบการประมูล" });
+    expect(await within(dialog).findByText("โหลดรายการไม่สำเร็จ")).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "ลองโหลดสินค้าอีกครั้ง" }));
+    expect(await within(dialog).findByText("สินค้าไม่มีผู้เสนอราคา")).toBeInTheDocument();
+    expect(within(dialog).getByText("ไม่มีผู้เสนอราคา")).toBeInTheDocument();
+    expect(attempts).toBe(2);
   });
 });
 
