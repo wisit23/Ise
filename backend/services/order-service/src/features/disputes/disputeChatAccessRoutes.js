@@ -2,6 +2,7 @@ const { Router } = require("express");
 const { requireInternalToken } = require("@reloop/shared");
 const disputeModel = require("./disputeModel");
 const orderModel = require("../../models/orderModel");
+const { isSellerVisible } = require("./sellerVisibility");
 
 const router = Router();
 router.use(requireInternalToken);
@@ -20,9 +21,9 @@ router.get("/disputes/:id/chat-access/:userId", async (req, res, next) => {
     const isLegacyRoom = channel === "DISPUTE";
     const validRoom = isBuyerRoom || isSellerRoom || isLegacyRoom;
     const party = (isBuyerRoom && role === "BUYER" && order.buyerId === userId) ||
-      (isSellerRoom && role === "SELLER" && order.sellerId === userId) ||
+      (isSellerRoom && role === "SELLER" && order.sellerId === userId && isSellerVisible(dispute)) ||
       (isLegacyRoom && ((role === "BUYER" && order.buyerId === userId) ||
-        (role === "SELLER" && order.sellerId === userId)));
+        (role === "SELLER" && order.sellerId === userId && isSellerVisible(dispute))));
     const agent = role === "AGENT" && dispute.assignedTo === userId &&
       dispute.assignedRole === "CUSTOMER_SERVICE";
     // The CS agent who escalated may read, not write, while T&S reviews.

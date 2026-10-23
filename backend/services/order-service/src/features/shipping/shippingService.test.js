@@ -12,6 +12,17 @@ const ADDRESS = {
   postalCode: "10110",
 };
 
+for (const trackingNumber of ["LETTERS", "พัสดุ", "AB 123", "AB-123", "123!", "A".repeat(121) + "1"]) {
+  test(`invalid tracking number ${trackingNumber} is rejected before any write`, async () => {
+    const { service, writes } = fixture({ status: "ready_to_ship" });
+    await assert.rejects(service.markShipped({
+      orderId: "order-1", actorId: "seller-1", version: 3,
+      company: "Test Express", trackingNumber,
+    }), (error) => error.status === 400);
+    assert.equal(writes.length, 0);
+  });
+}
+
 function fixture(overrides = {}, changed = 1) {
   const order = {
     id: "order-1",
@@ -209,20 +220,22 @@ test("markShipped: rejects if the order is not ready to ship yet (status is paid
   );
 });
 
-test("markShipped: succeeds when seller ships a ready-to-ship order", async () => {
+for (const trackingNumber of ["TH12345", "1234567890"]) {
+test(`markShipped: accepts tracking ${trackingNumber} for a ready-to-ship order`, async () => {
   const { service, writes } = fixture({ status: "ready_to_ship" });
   const result = await service.markShipped({
     orderId: "order-1",
     actorId: "seller-1",
     version: 3,
     company: "Flash Express",
-    trackingNumber: "TH12345",
+    trackingNumber,
   });
   assert.ok(result);
   const orderWrite = writes.find((w) => w.table === "order");
   assert.equal(orderWrite.query.data.status, "shipped");
   const shippingUpdate = writes.find((w) => w.table === "shipping_update");
   assert.equal(shippingUpdate.query.data.company, "Flash Express");
-  assert.equal(shippingUpdate.query.data.trackingNumber, "TH12345");
+  assert.equal(shippingUpdate.query.data.trackingNumber, trackingNumber);
 });
+}
 

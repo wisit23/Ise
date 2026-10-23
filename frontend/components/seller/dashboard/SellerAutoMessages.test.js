@@ -32,7 +32,7 @@ describe("SellerAutoMessages", () => {
       expect(screen.getByTestId("auto-message-msg-2")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("เปิดใช้งานอยู่ 1 / 2 ข้อ")).toBeInTheDocument();
+    expect(screen.getByText("เปิดใช้งานอยู่ 1 / 2 ข้อ (สูงสุด 20 ข้อ)")).toBeInTheDocument();
     expect(screen.getByText("✓ เปิดใช้งาน")).toBeInTheDocument();
     expect(screen.getByText("✕ ปิดใช้งาน")).toBeInTheDocument();
 
@@ -69,6 +69,23 @@ describe("SellerAutoMessages", () => {
       });
       expect(screen.getByTestId("auto-message-msg-3")).toBeInTheDocument();
     });
+  });
+
+  it("disables new questions when the shop has 20", async () => {
+    apiFetch.mockResolvedValueOnce(Array.from({ length: 20 }, (_, index) => ({
+      id: `msg-${index}`,
+      messageText: `คำถาม ${index + 1}`,
+      isActive: true,
+    })));
+
+    render(<SellerAutoMessages />);
+
+    await waitFor(() => {
+      expect(screen.getByText("ทั้งหมด 20 รายการ")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /เพิ่มคำถาม/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /สินค้ายังอยู่ไหมครับ/ })).toBeDisabled();
+    expect(apiFetch).toHaveBeenCalledTimes(1);
   });
 
   it("toggles active/inactive status", async () => {

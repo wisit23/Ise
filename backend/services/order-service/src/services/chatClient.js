@@ -244,7 +244,7 @@ async function notifyOrderPaid(order) {
       type: "ORDER",
       title: "ผู้ซื้อชำระเงินแล้ว",
       message: `💰 ผู้ซื้อชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว กรุณาดำเนินการตรวจสอบและยืนยันออเดอร์ | หมายเลขคำสั่งซื้อ: #${order.id}`,
-      link: `/seller/dashboard?orderId=${order.id}`,
+      link: `/seller/dashboard?section=orders&orderId=${order.id}`,
       metadata: {
         orderId: order.id,
         productId: order.productId,
@@ -263,7 +263,7 @@ async function notifyOrderPaid(order) {
         type: "ORDER",
         title: "ชำระเงินสำเร็จ",
         message: `✅ คุณได้ชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว รอผู้ขายยืนยันคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: #${order.id}`,
-        link: "/orders",
+        link: `/orders?orderId=${order.id}`,
         metadata: {
           orderId: order.id,
           productId: order.productId,
@@ -287,7 +287,7 @@ async function notifyOrderConfirmed(order) {
       type: "ORDER",
       title: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
       message: `📦 ผู้ขายยืนยันคำสั่งซื้อ #${order.id} ('${title}') แล้ว กำลังเตรียมการจัดส่งสินค้า`,
-      link: "/orders",
+      link: `/orders?orderId=${order.id}`,
       metadata: {
         orderId: order.id,
         productId: order.productId,
@@ -305,7 +305,7 @@ async function notifyOrderConfirmed(order) {
         type: "ORDER",
         title: "ยืนยันคำสั่งซื้อสำเร็จ",
         message: `✅ คุณได้ยืนยันคำสั่งซื้อ #${order.id} ('${title}') แล้ว กรุณาดำเนินการจัดส่งสินค้า`,
-        link: `/seller/dashboard?orderId=${order.id}`,
+        link: `/seller/dashboard?section=orders&orderId=${order.id}`,
         metadata: {
           orderId: order.id,
           productId: order.productId,
@@ -333,7 +333,7 @@ async function notifyOrderRejected(order, reason) {
       type: "ORDER",
       title: "คำสั่งซื้อถูกปฏิเสธและคืนเงินเต็มจำนวน",
       message: `❌ ผู้ขายได้ปฏิเสธออเดอร์ #${order.id} ('${title}')${reasonText} — ระบบได้ทำการคืนเงินเต็มจำนวน ฿${amount} ให้กับคุณเรียบร้อยแล้ว`,
-      link: "/orders",
+      link: `/orders?orderId=${order.id}`,
       metadata: {
         orderId: order.id,
         productId: order.productId,
@@ -410,7 +410,7 @@ async function notifyOrderStatusChanged(order, status, { reason } = {}) {
                 ? "คำสั่งซื้อถูกยกเลิก"
                 : `อัปเดตสถานะคำสั่งซื้อ #${order.id}`,
         message: buyerBody,
-        link: "/orders",
+        link: `/orders?orderId=${order.id}`,
         metadata: {
           orderId: order.id,
           productId: order.productId,
@@ -425,7 +425,7 @@ async function notifyOrderStatusChanged(order, status, { reason } = {}) {
   if (order.sellerId && order.sellerId !== order.buyerId) {
     let sellerTitle = null;
     let sellerBody = null;
-    let sellerLink = `/products/${order.productId}`;
+    let sellerLink = `/seller/dashboard?section=orders&orderId=${order.id}`;
 
     if (status === "shipped") {
       sellerTitle = "จัดส่งสินค้าแล้ว";
@@ -469,28 +469,6 @@ async function notifyDisputeOpened(dispute, order) {
   if (!order || !order.id) return;
 
   const title = order.productTitle || "สินค้า";
-  const reasonText = dispute.reason ? ` — เหตุผล: ${dispute.reason}` : "";
-
-  if (order.sellerId) {
-    await sendSystemNotification({
-      userId: order.sellerId,
-      type: "DISPUTE",
-      title: "สินค้าโดนเปิดข้อพิพาท",
-      message: `⚠️ สินค้าของคุณ '${title}' สำหรับคำสั่งซื้อ #${order.id} ถูกเปิดข้อพิพาท (${dispute.disputeType || "ข้อพิพาท"})${reasonText}`,
-      link: "/orders",
-      entityId: order.id,
-      metadata: {
-        orderId: order.id,
-        disputeId: dispute.id,
-        productId: order.productId,
-        disputeType: dispute.disputeType,
-        reason: dispute.reason,
-        decision: "DISPUTE_OPENED",
-        decisionLabel: "เปิดข้อพิพาทแล้ว",
-        role: "seller",
-      },
-    });
-  }
 
   if (order.buyerId) {
     await sendSystemNotification({
@@ -498,7 +476,7 @@ async function notifyDisputeOpened(dispute, order) {
       type: "DISPUTE",
       title: "เปิดข้อพิพาทสำเร็จ",
       message: `⚠️ คำสั่งซื้อ #${order.id} ('${title}') เปิดข้อพิพาทเรียบร้อยแล้ว อยู่ระหว่างการพิจารณาตรวจสอบของเจ้าหน้าที่`,
-      link: "/orders",
+      link: `/orders?orderId=${order.id}`,
       entityId: order.id,
       metadata: {
         orderId: order.id,
@@ -535,7 +513,8 @@ async function broadcastOrderRealtime(order, action = "updated") {
         completed: "sold",
         paid: "reserved",
         confirmed: "reserved",
-        shipped: "reserved",
+        shipped: "sold",
+        delivered: "sold",
         cancelled: "available",
       };
       const effectiveStatus = order.status || action;

@@ -5,6 +5,7 @@ export const PRODUCT_STATUS_LABEL = {
   reserved: "อยู่ในตะกร้าลูกค้า",
   sold: "ขายแล้ว",
   auction: "กำลังประมูล",
+  auction_action_required: "รอเลือกขายปกติหรือประมูลใหม่",
   hidden: "ซ่อนอยู่",
   removed: "ถูกระงับโดย Trust & Safety",
 };
@@ -14,6 +15,7 @@ export const PRODUCT_STATUS_STYLE = {
   reserved: "bg-amber-50 text-amber-700",
   sold: "bg-gray-100 text-gray-600",
   auction: "bg-sky-50 text-sky-700",
+  auction_action_required: "bg-amber-50 text-amber-800",
   hidden: "bg-yellow-50 text-yellow-800",
   removed: "bg-red-50 text-red-700",
 };
@@ -50,6 +52,19 @@ export function baht(v) {
   return `฿${v.toLocaleString("th-TH")}`;
 }
 
+export function sellerProductPrice(product) {
+  if (product.auctionStatus === "closed" && Number.isFinite(product.auctionWinningPrice)) {
+    return { amount: product.auctionWinningPrice, label: "ราคาที่ชนะประมูล" };
+  }
+  if (product.auctionStatus === "open" && Number.isFinite(product.auctionCurrentBid)) {
+    return { amount: product.auctionCurrentBid, label: "ราคาบิดสูงสุด" };
+  }
+  if (product.status === "auction") {
+    return { amount: product.auctionStartingPrice ?? product.price, label: "ราคาเริ่มต้น" };
+  }
+  return { amount: product.price, label: null };
+}
+
 /**
  * Checks whether an order is currently in an active, unresolved dispute.
  * Returns false once the dispute has been decided or resolved.
@@ -57,11 +72,19 @@ export function baht(v) {
 export function isOrderDisputed(order) {
   if (!order) return false;
   if (order.dispute) {
+    if (!isSellerDisputeVisible(order.dispute)) return false;
     if (order.dispute.decision) return false;
     if (["DECIDED", "RESOLVED", "CLOSED"].includes(order.dispute.status)) return false;
     return true;
   }
-  return order.status === "disputed";
+  return false;
+}
+
+export function isSellerDisputeVisible(dispute) {
+  return Boolean(dispute && !dispute.deletedAt && (
+    dispute.sellerVisible || dispute.decision ||
+    ["NEEDS_INFO", "DECIDED", "RESOLVED", "CLOSED"].includes(dispute.status)
+  ));
 }
 
 export function StatusPill({ label, style }) {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken } from "../../../lib/auth";
 import ConfirmDialog from "../../ui/ConfirmDialog";
+import useSellerLiveRefresh from "../../../lib/useSellerLiveRefresh";
 
 const DEFAULT_SUGGESTIONS = [
   "สินค้ายังอยู่ไหมครับ?",
@@ -13,6 +14,7 @@ const DEFAULT_SUGGESTIONS = [
   "สะดวกจัดส่งวันไหนครับ?",
   "มีตำหนิตรงไหนเพิ่มเติมไหมครับ?",
 ];
+const MAX_AUTO_MESSAGES = 20;
 
 export default function SellerAutoMessages() {
   const [messages, setMessages] = useState([]);
@@ -28,16 +30,18 @@ export default function SellerAutoMessages() {
 
   const token = getAccessToken();
 
-  async function loadMessages() {
-    setLoading(true);
-    setError("");
+  async function loadMessages({ silent = false } = {}) {
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
-      const data = await apiFetch("/api/auth/shop/auto-messages", { token });
+      const data = await apiFetch("/api/auth/shop/auto-messages", { token: getAccessToken() });
       setMessages(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.message || "ไม่สามารถโหลดข้อมูลคำถามอัตโนมัติได้");
+      if (!silent) setError(err.message || "ไม่สามารถโหลดข้อมูลคำถามอัตโนมัติได้");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -45,9 +49,15 @@ export default function SellerAutoMessages() {
     loadMessages();
   }, []);
 
+  useSellerLiveRefresh(() => loadMessages({ silent: true }));
+
   async function handleCreate(textToAdd) {
     const text = (textToAdd || newText).trim();
     if (!text) return;
+    if (messages.length >= MAX_AUTO_MESSAGES) {
+      setError(`เพิ่มคำถามอัตโนมัติได้ไม่เกิน ${MAX_AUTO_MESSAGES} ข้อต่อร้าน`);
+      return;
+    }
     setSubmitting(true);
     setError("");
     setSuccess("");
@@ -128,6 +138,7 @@ export default function SellerAutoMessages() {
   }
 
   const activeMessages = messages.filter((m) => m.isActive);
+  const atLimit = messages.length >= MAX_AUTO_MESSAGES;
 
   return (
     <div className="space-y-6">
@@ -144,7 +155,7 @@ export default function SellerAutoMessages() {
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/60">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            เปิดใช้งานอยู่ {activeMessages.length} / {messages.length} ข้อ
+            เปิดใช้งานอยู่ {activeMessages.length} / {messages.length} ข้อ (สูงสุด {MAX_AUTO_MESSAGES} ข้อ)
           </span>
         </div>
       </div>
@@ -187,7 +198,7 @@ export default function SellerAutoMessages() {
           />
           <button
             type="submit"
-            disabled={submitting || !newText.trim()}
+            disabled={submitting || atLimit || !newText.trim()}
             className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition"
           >
             <span className="material-symbols-outlined text-[16px]">add</span>
@@ -207,10 +218,10 @@ export default function SellerAutoMessages() {
                 <button
                   key={sug}
                   type="button"
-                  disabled={alreadyExists}
+                  disabled={submitting || atLimit || alreadyExists}
                   onClick={() => handleCreate(sug)}
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] transition ${
-                    alreadyExists
+                    alreadyExists || atLimit
                       ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
                       : "bg-slate-50 text-slate-700 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer"
                   }`}
@@ -278,6 +289,7 @@ export default function SellerAutoMessages() {
                             type="text"
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
+                            maxLength={100}
                             className="flex-1 rounded border border-emerald-500 px-2 py-1 text-xs text-slate-800 focus:outline-none"
                             autoFocus
                           />

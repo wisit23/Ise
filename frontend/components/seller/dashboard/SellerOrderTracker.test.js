@@ -111,6 +111,17 @@ describe("SellerOrderTracker", () => {
     expect(screen.queryByRole("button", { name: /ได้รับสินค้า|ยืนยันการรับ/ })).toBeNull();
   });
 
+  it("hides cases and counts before the workflow reaches the seller", () => {
+    render(<SellerOrderTracker orders={[{
+      ...mockOrders[0], status: "disputed",
+      dispute: { id: "hidden", status: "OPEN", sellerVisible: false },
+    }]} />);
+    expect(screen.queryByRole("link", { name: "ดูข้อพิพาท" })).toBeNull();
+    expect(screen.getByText("อยู่ระหว่างตรวจสอบ")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "ข้อพิพาท" }));
+    expect(screen.queryByText(mockOrders[0].productTitle)).toBeNull();
+  });
+
   it("decreases disputeCount when disputes are decided/completed", () => {
     const ordersWithDisputes = [
       {
@@ -121,6 +132,7 @@ describe("SellerOrderTracker", () => {
         createdAt: "2026-10-15T15:00:00.000Z",
         dispute: {
           id: "disp-1",
+          sellerVisible: true,
           status: "OPEN",
           decision: null,
         },

@@ -10,11 +10,31 @@ const WITH_MEDIA = {
   countViews: { select: { count: true } },
   auctions: {
     where: {
-      status: { in: ["open", "scheduled", "approved", "pending_approval", "closed"] },
+      status: {
+        in: ["open", "scheduled", "approved", "pending_approval", "closed"],
+      },
     },
     orderBy: { createdAt: "desc" },
     take: 1,
     select: { id: true, status: true, startingPrice: true },
+  },
+};
+
+// The seller's inventory needs the latest bid, while a closed auction needs
+// its assigned winner (which can differ from the historical highest bid).
+const WITH_SELLER_MEDIA = {
+  ...WITH_MEDIA,
+  auctions: {
+    ...WITH_MEDIA.auctions,
+    select: {
+      ...WITH_MEDIA.auctions.select,
+      winningBidId: true,
+      bids: {
+        orderBy: [{ amount: "desc" }, { createdAt: "asc" }],
+        take: 1,
+        select: { amount: true },
+      },
+    },
   },
 };
 
@@ -30,13 +50,22 @@ async function lockProduct(client, id) {
 async function categoryNames(client, id, fields, categories) {
   if (fields.category === undefined && categories === undefined) return null;
   if (categories !== undefined || !id) {
-    return [...new Set([fields.category, ...(categories || [])].filter((v) => v !== undefined))];
+    return [
+      ...new Set(
+        [fields.category, ...(categories || [])].filter((v) => v !== undefined),
+      ),
+    ];
   }
   const current = await client.product.findUnique({
     where: { id },
-    select: { category: true, categoryLinks: { select: { category: { select: { name: true } } } } },
+    select: {
+      category: true,
+      categoryLinks: { select: { category: { select: { name: true } } } },
+    },
   });
-  const kept = (current?.categoryLinks || []).map((link) => link.category.name).filter((name) => name !== current.category);
+  const kept = (current?.categoryLinks || [])
+    .map((link) => link.category.name)
+    .filter((name) => name !== current.category);
   return [...new Set([...kept, fields.category])];
 }
 
@@ -44,7 +73,11 @@ async function categoryData(client, names) {
   if (!names) return {};
   const links = [];
   for (const name of names) {
-    const category = await client.category.upsert({ where: { name }, update: {}, create: { name } });
+    const category = await client.category.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
     links.push({ categoryId: category.id });
   }
   return { categoryLinks: { create: links } };
@@ -55,10 +88,11 @@ async function categoryData(client, names) {
 function toApiShape(product) {
   if (!product) return product;
   const { photos, videos, categoryLinks, countViews, ...rest } = product;
-  if (categoryLinks) rest.categories = categoryLinks.map((link) => link.category.name).sort();
+  if (categoryLinks)
+    rest.categories = categoryLinks.map((link) => link.category.name).sort();
   const viewCount = Array.isArray(countViews)
     ? countViews.reduce((acc, cv) => acc + (cv.count || 0), 0)
-    : (product.viewCount || 0);
+    : product.viewCount || 0;
   rest.viewCount = viewCount;
   const moderationActive = Boolean(
     rest.moderatedAt || rest.status === "removed",
@@ -235,10 +269,14 @@ async function list({
         : includeModerated
           ? {}
           : {
-              status: { notIn: ["removed", "hidden", "auction_action_required"] },
+              status: {
+                notIn: ["removed", "hidden", "auction_action_required"],
+              },
               moderatedAt: null,
             }),
-    ...(category ? { categoryLinks: { some: { category: { name: category } } } } : {}),
+    ...(category
+      ? { categoryLinks: { some: { category: { name: category } } } }
+      : {}),
   };
   const [items, total] = await Promise.all([
     prisma.product.findMany({
@@ -271,14 +309,39 @@ async function listBySeller(
   const [items, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: WITH_MEDIA,
+      include: WITH_SELLER_MEDIA,
       orderBy: { createdAt: "desc" },
       skip,
       take,
     }),
     prisma.product.count({ where }),
   ]);
-  return { items: items.map(toApiShape), total };
+  const winnerIds = items
+    .map((product) => product.auctions?.[0]?.winningBidId)
+    .filter(Boolean);
+  const winningBids = winnerIds.length
+    ? await prisma.bid.findMany({
+        where: { id: { in: winnerIds } },
+        select: { id: true, amount: true },
+      })
+    : [];
+  const winningAmounts = new Map(
+    winningBids.map((bid) => [bid.id, bid.amount]),
+  );
+  return {
+    items: items.map((product) => {
+      const shaped = toApiShape(product);
+      const auction = product.auctions?.[0];
+      if (!auction) return shaped;
+      return {
+        ...shaped,
+        auctionStartingPrice: auction.startingPrice,
+        auctionCurrentBid: auction.bids?.[0]?.amount ?? null,
+        auctionWinningPrice: winningAmounts.get(auction.winningBidId) ?? null,
+      };
+    }),
+    total,
+  };
 }
 
 async function findById(id, tx = prisma) {
@@ -293,11 +356,20 @@ async function findById(id, tx = prisma) {
 async function create(data, tx = prisma) {
   const client = tx || prisma;
   const { media, categories, ...fields } = data;
-  const run = async (db) => db.product.create({
-    data: { ...fields, ...(await categoryData(db, await categoryNames(db, null, fields, categories))), ...mediaToNestedCreate(media) },
-    include: WITH_MEDIA,
-  });
-  const product = client === prisma ? await prisma.$transaction(run) : await run(client);
+  const run = async (db) =>
+    db.product.create({
+      data: {
+        ...fields,
+        ...(await categoryData(
+          db,
+          await categoryNames(db, null, fields, categories),
+        )),
+        ...mediaToNestedCreate(media),
+      },
+      include: WITH_MEDIA,
+    });
+  const product =
+    client === prisma ? await prisma.$transaction(run) : await run(client);
   return toApiShape(product);
 }
 
@@ -309,10 +381,15 @@ async function update(id, patch, tx = null) {
         await client.photo.deleteMany({ where: { productId: id } });
         await client.video.deleteMany({ where: { productId: id } });
       }
-      const changesCategories = fields.category !== undefined || categories !== undefined;
+      const changesCategories =
+        fields.category !== undefined || categories !== undefined;
       if (changesCategories) await lockProduct(client, id);
-      const links = await categoryData(client, await categoryNames(client, id, fields, categories));
-      if (links.categoryLinks) await client.productCategory.deleteMany({ where: { productId: id } });
+      const links = await categoryData(
+        client,
+        await categoryNames(client, id, fields, categories),
+      );
+      if (links.categoryLinks)
+        await client.productCategory.deleteMany({ where: { productId: id } });
       return client.product.update({
         where: { id },
         data: {
@@ -337,14 +414,20 @@ async function updateBySeller(id, patch) {
   const { media, categories, ...fields } = patch;
   return prisma.$transaction(async (tx) => {
     // Lock and read memberships before updateMany overwrites the primary column.
-    const changesCategories = fields.category !== undefined || categories !== undefined;
+    const changesCategories =
+      fields.category !== undefined || categories !== undefined;
     if (changesCategories) await lockProduct(tx, id);
     const names = await categoryNames(tx, id, fields, categories);
     const claimed = await tx.product.updateMany({
       where: {
         id,
         moderatedAt: null,
-        status: { not: "removed" },
+        status: { notIn: ["removed", "reserved", "auction", "sold"] },
+        OR: [
+          { status: { not: "hidden" } },
+          { preRemovalStatus: null },
+          { preRemovalStatus: { notIn: ["reserved", "sold"] } },
+        ],
       },
       data: { ...fields, updatedAt: new Date() },
     });
@@ -383,10 +466,15 @@ async function remove(id) {
 async function removeBySeller(id, sellerId) {
   const removed = await prisma.product.deleteMany({
     where: {
-      id, sellerId,
+      id,
+      sellerId,
       moderatedAt: null,
-      status: { notIn: ["removed","reserved","auction"] },
-      OR: [{status:{not:"hidden"}},{preRemovalStatus:null},{preRemovalStatus:{not:"reserved"}}],
+      status: { notIn: ["removed", "reserved", "auction", "sold"] },
+      OR: [
+        { status: { not: "hidden" } },
+        { preRemovalStatus: null },
+        { preRemovalStatus: { notIn: ["reserved", "sold"] } },
+      ],
     },
   });
   return removed.count === 1;
@@ -404,14 +492,17 @@ async function setVisibility(id, visible) {
     // Restore to whatever status it had before hiding (default: available).
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return null;
-    if (product.moderatedAt || product.status === "removed") {
+    if (
+      product.moderatedAt || product.status === "removed" ||
+      product.status === "sold" || product.preRemovalStatus === "sold"
+    ) {
       return toApiShape(
         await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
       );
     }
     const restored = product.preRemovalStatus || "available";
     await prisma.product.updateMany({
-      where: { id, status: product.status, moderatedAt: null },
+      where: { id, status: product.status, preRemovalStatus: product.preRemovalStatus || null, moderatedAt: null },
       data: { status: restored, preRemovalStatus: null },
     });
     return toApiShape(
@@ -424,14 +515,16 @@ async function setVisibility(id, visible) {
     if (
       product.moderatedAt ||
       product.status === "hidden" ||
-      product.status === "removed"
+      product.status === "removed" ||
+      product.status === "sold" ||
+      product.preRemovalStatus === "sold"
     ) {
       return toApiShape(
         await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
       );
     }
     await prisma.product.updateMany({
-      where: { id, status: product.status, moderatedAt: null },
+      where: { id, status: product.status, preRemovalStatus: product.preRemovalStatus || null, moderatedAt: null },
       data: { status: "hidden", preRemovalStatus: product.status },
     });
     return toApiShape(

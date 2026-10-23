@@ -247,6 +247,7 @@ export default function EmbeddedChat({
   async function handleSend(text) {
     if (!text?.trim() || !conversationId || readOnly || locked)
       throw new Error("ไม่สามารถส่งข้อความในห้องนี้ได้");
+    setError("");
     const token = tokenRef.current || getAccessToken();
     const optimisticId = `optimistic-${Date.now()}`;
     const optimistic = {

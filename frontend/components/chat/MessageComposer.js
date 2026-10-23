@@ -55,6 +55,7 @@ export default function MessageComposer({
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
   const sendButtonRef = useRef(null);
+  const sendingRef = useRef(false);
 
   useEffect(() => {
     if (!sending && !disabled && restoreFocusRef.current) {
@@ -145,8 +146,9 @@ export default function MessageComposer({
 
   async function submit() {
     const trimmed = value.trim();
-    if ((!trimmed && !pendingFile) || sending || disabled) return;
+    if ((!trimmed && !pendingFile) || sendingRef.current || disabled) return;
 
+    sendingRef.current = true;
     stopTypingNow();
     restoreFocusRef.current = true;
     setSending(true);
@@ -162,6 +164,7 @@ export default function MessageComposer({
       } catch {
         // Keep file and caption on failure so user can retry
       } finally {
+        sendingRef.current = false;
         setSending(false);
       }
     } else {
@@ -181,6 +184,7 @@ export default function MessageComposer({
         if (!draftKey)
           setValue((draft) => (draft ? `${value}\n${draft}` : value));
       } finally {
+        sendingRef.current = false;
         setSending(false);
       }
     }
@@ -239,6 +243,11 @@ export default function MessageComposer({
         </p>
       )}
       {/* Upload Progress Bar (when uploading an attachment) */}
+      {sending && !pendingFile && (
+        <p role="status" className="px-3 pb-2 text-xs text-slate-600">
+          กำลังส่งข้อความ… หากส่งถี่ ระบบจะรอแล้วส่งให้อัตโนมัติ
+        </p>
+      )}
       {sending && pendingFile && (
         <div className="mb-2 animate-fade-in">
           <p

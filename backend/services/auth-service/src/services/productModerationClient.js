@@ -32,6 +32,34 @@ async function getProduct(productId) {
   return res.json();
 }
 
+async function getReview(reviewId) {
+  let res;
+  try {
+    res = await fetch(`${PRODUCT_SERVICE_URL}/internal/moderation/reviews/${encodeURIComponent(reviewId)}`, {
+      headers: { "x-internal-token": INTERNAL_TOKEN },
+      signal: moderationRequestSignal(),
+    });
+  } catch { throw new AppError(502, "product-service is unreachable"); }
+  if (res.status === 404) throw new AppError(404, "review not found");
+  if (!res.ok) throw new AppError(502, "failed to load review");
+  return res.json();
+}
+
+async function removeReview(reviewId, reason) {
+  let res;
+  try {
+    res = await fetch(`${PRODUCT_SERVICE_URL}/internal/moderation/reviews/${encodeURIComponent(reviewId)}/remove`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-token": INTERNAL_TOKEN },
+      body: JSON.stringify({ reason }),
+      signal: moderationRequestSignal(),
+    });
+  } catch { throw new AppError(502, "product-service is unreachable"); }
+  if (res.status === 404) throw new AppError(404, "review not found");
+  if (!res.ok) throw new AppError(502, "failed to remove review");
+  return res.json();
+}
+
 async function removeProduct(productId, reason, idempotencyKey) {
   let res;
   try {
@@ -82,4 +110,4 @@ async function restoreProduct(productId, reason, idempotencyKey) {
   return res.json();
 }
 
-module.exports = { getProduct, removeProduct, restoreProduct };
+module.exports = { getProduct, getReview, removeReview, removeProduct, restoreProduct };

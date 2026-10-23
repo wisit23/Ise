@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Pagination from "../Pagination";
 import { StarInput, StarDisplay } from "../StarRating";
@@ -24,7 +24,7 @@ import {
   disputeDeadline,
 } from "../../lib/orderLifecycle";
 
-const STATUS_LABEL = {
+export const STATUS_LABEL = {
   pending: "อยู่ในตะกร้า",
   pending_payment: "อยู่ในตะกร้า",
   paid: "ชำระแล้ว รอผู้ขายยืนยัน",
@@ -132,6 +132,11 @@ export default function MyOrders({
   headingAs: Heading = "h2",
 }) {
   const router = useRouter();
+  let searchParams = null;
+  try {
+    searchParams = typeof useSearchParams === "function" ? useSearchParams() : null;
+  } catch (_) {}
+  const urlOrderId = searchParams?.get("orderId");
   const [items, setItems] = useState([]);
   const [tab, setTab] = useState(initialTab);
   const [page, setPage] = useState(1);
@@ -143,8 +148,38 @@ export default function MyOrders({
   const [openDisputeFor, setOpenDisputeFor] = useState(null);
   const [justDisputedIds, setJustDisputedIds] = useState(new Set());
   const [confirmingOrderId, setConfirmingOrderId] = useState(null);
-  const [detailOrderId, setDetailOrderId] = useState(null);
-  const detailOrder = items.find((o) => o.id === detailOrderId);
+  const [detailOrderId, setDetailOrderId] = useState(() => urlOrderId || null);
+  const detailOrder =
+    items.find((o) => o.id === detailOrderId) ||
+    (detailOrderId ? { id: detailOrderId } : null);
+
+  useEffect(() => {
+    if (urlOrderId) {
+      setDetailOrderId(urlOrderId);
+    }
+  }, [urlOrderId]);
+
+  useEffect(() => {
+    function handleOpenDetail(e) {
+      if (e.detail?.orderId) {
+        setDetailOrderId(e.detail.orderId);
+      }
+    }
+    window.addEventListener("reloop:open-order-detail", handleOpenDetail);
+    return () => {
+      window.removeEventListener("reloop:open-order-detail", handleOpenDetail);
+    };
+  }, []);
+
+  function handleCloseDetail() {
+    setDetailOrderId(null);
+    if (searchParams?.get("orderId")) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("orderId");
+      const qs = params.toString();
+      router.replace(qs ? `/orders?${qs}` : "/orders");
+    }
+  }
 
   async function handleConfirmReceived(orderId) {
     const token = getAccessToken();
@@ -471,12 +506,20 @@ export default function MyOrders({
       {detailOrder && (
         <BuyerOrderDetailModal
           order={detailOrder}
-          statusLabel={STATUS_LABEL[detailOrder.status] || detailOrder.status}
-          onClose={() => setDetailOrderId(null)}
+          statusLabel={
+            detailOrder.status
+              ? STATUS_LABEL[detailOrder.status] || detailOrder.status
+              : ""
+          }
+          onClose={handleCloseDetail}
           onOrderChange={(fresh) =>
-            setItems((prev) =>
-              prev.map((o) => (o.id === fresh.id ? { ...o, ...fresh } : o)),
-            )
+            setItems((prev) => {
+              const exists = prev.some((o) => o.id === fresh.id);
+              if (exists) {
+                return prev.map((o) => (o.id === fresh.id ? { ...o, ...fresh } : o));
+              }
+              return [fresh, ...prev];
+            })
           }
         />
       )}

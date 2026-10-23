@@ -99,6 +99,18 @@ const validSubmission = {
   },
 };
 
+test("KYC reports expired and malformed ID card dates in Thai without writing data", async () => {
+  for (const [idCardExpiry, message] of [
+    ["2005-06-21", "วันหมดอายุบัตรประชาชนต้องเป็นวันที่ในอนาคต"],
+    ["not-a-date", "กรุณากรอกวันหมดอายุบัตรประชาชนให้ถูกต้อง"],
+  ]) {
+    await assert.rejects(
+      service.submitKyc({ ...validSubmission, idCardExpiry }),
+      (error) => error.status === 400 && error.message === message,
+    );
+  }
+});
+
 test("KYC submission commits role, profile and application in one transaction", async () => {
   failTransaction = false;
   const result = await service.submitKyc(validSubmission);

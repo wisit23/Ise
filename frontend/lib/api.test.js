@@ -12,6 +12,15 @@ function response(status, data) {
   return { status, ok: status < 400, json: async () => data };
 }
 
+test("preserves Retry-After for rate-limited chat callers", async () => {
+  const limited = response(429, { error: "slow down" });
+  limited.headers = new Headers({ "Retry-After": "4" });
+  global.fetch = jest.fn().mockResolvedValue(limited);
+  await expect(apiFetch("/api/chat/conversations/room/messages", {
+    method: "POST", body: { body: "hello" },
+  })).rejects.toMatchObject({ status: 429, retryAfterSeconds: 4 });
+});
+
 beforeEach(() => {
   // Avoid navigation in jsdom; the login form also uses these helpers.
   window.history.replaceState({}, "", "/login");

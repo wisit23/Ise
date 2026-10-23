@@ -19,6 +19,19 @@ const { ROLE_CATALOG } = require("../../prisma/roleCatalog");
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches JWT_REFRESH_EXPIRES
 const ROLE_ID_BY_CODE = new Map(ROLE_CATALOG.map(([id, code]) => [code, id]));
+const MAX_AUTO_MESSAGES = 20;
+const MAX_AUTO_MESSAGE_LENGTH = 100;
+
+function validAutoMessageText(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw badRequest("กรุณากรอกคำถามอัตโนมัติ");
+  }
+  const text = value.trim();
+  if (text.length > MAX_AUTO_MESSAGE_LENGTH) {
+    throw badRequest(`คำถามอัตโนมัติต้องไม่เกิน ${MAX_AUTO_MESSAGE_LENGTH} ตัวอักษร`);
+  }
+  return text;
+}
 
 async function ensureRoleCatalogEntry(db, role) {
   const id = ROLE_ID_BY_CODE.get(role);
@@ -396,20 +409,27 @@ async function listMyAutoMessages(sellerId) {
   });
 }
 
-async function createAutoMessage(sellerId, { messageText, isActive = true }) {
-  if (!messageText || !messageText.trim()) {
-    throw badRequest("messageText is required");
+async function createAutoMessage(sellerId, { messageText, isActive = true } = {}) {
+  const text = validAutoMessageText(messageText);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const count = await tx.autoMessage.count({ where: { userId: sellerId } });
+        if (count >= MAX_AUTO_MESSAGES) {
+          throw conflict(`เพิ่มคำถามอัตโนมัติได้ไม่เกิน ${MAX_AUTO_MESSAGES} ข้อต่อร้าน`);
+        }
+        return tx.autoMessage.create({
+          data: { userId: sellerId, messageText: text, isActive: Boolean(isActive) },
+        });
+      }, { isolationLevel: "Serializable" });
+    } catch (error) {
+      if (error?.code !== "P2034") throw error;
+    }
   }
-  return prisma.autoMessage.create({
-    data: {
-      userId: sellerId,
-      messageText: messageText.trim(),
-      isActive: Boolean(isActive),
-    },
-  });
+  throw conflict("มีการเพิ่มคำถามพร้อมกัน กรุณาลองอีกครั้ง");
 }
 
-async function updateAutoMessage(sellerId, messageId, { messageText, isActive }) {
+async function updateAutoMessage(sellerId, messageId, { messageText, isActive } = {}) {
   const existing = await prisma.autoMessage.findFirst({
     where: { id: messageId, userId: sellerId },
   });
@@ -417,8 +437,7 @@ async function updateAutoMessage(sellerId, messageId, { messageText, isActive })
 
   const data = {};
   if (messageText !== undefined) {
-    if (!messageText.trim()) throw badRequest("messageText cannot be empty");
-    data.messageText = messageText.trim();
+    data.messageText = validAutoMessageText(messageText);
   }
   if (isActive !== undefined) {
     data.isActive = Boolean(isActive);
@@ -446,10 +465,12 @@ async function getPublicAutoMessages(sellerId) {
   const messages = await prisma.autoMessage.findMany({
     where: { userId: sellerId, isActive: true },
     orderBy: { id: "asc" },
+    take: MAX_AUTO_MESSAGES,
+    select: { id: true, messageText: true },
   });
   return messages.map((m) => ({
     id: m.id,
-    messageText: m.messageText,
+    messageText: m.messageText.slice(0, MAX_AUTO_MESSAGE_LENGTH),
   }));
 }
 

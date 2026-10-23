@@ -9,6 +9,7 @@ import KpiCard from "../../panel/ui/KpiCard";
 import { CATEGORICAL } from "../../charts/palette";
 import { baht, ORDER_STATUS_LABEL, ORDER_STATUS_STYLE, StatusPill } from "./sellerStatus";
 import { formatOrderId } from "../../../lib/orders";
+import { PLATFORM_FEE_RATE, netRevenueForOrder } from "../../../lib/sellerRevenue";
 
 /** Thai month abbreviations (index 0 = January). */
 const MONTH_LABELS = [
@@ -40,8 +41,6 @@ const FULL_MONTH_LABELS = [
   "พฤศจิกายน",
   "ธันวาคม",
 ];
-
-export const PLATFORM_FEE_RATE = 0.03;
 
 /**
  * Helper to get ISO date string (YYYY-MM-DD) in local time.
@@ -115,28 +114,39 @@ function getDaysBetween(startKey, endKey, maxDays = 60) {
   return days;
 }
 
-const HOURLY_SLOTS = [
-  { label: "00-04น.", startHour: 0, endHour: 4 },
-  { label: "04-08น.", startHour: 4, endHour: 8 },
-  { label: "08-12น.", startHour: 8, endHour: 12 },
-  { label: "12-16น.", startHour: 12, endHour: 16 },
-  { label: "16-20น.", startHour: 16, endHour: 20 },
-  { label: "20-24น.", startHour: 20, endHour: 24 },
-];
+const BANGKOK_DATE_HOUR = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Asia/Bangkok",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  hourCycle: "h23",
+});
+
+function bangkokDateHour(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = Object.fromEntries(
+    BANGKOK_DATE_HOUR.formatToParts(date).map(({ type, value: part }) => [type, part]),
+  );
+  return {
+    dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour),
+  };
+}
 
 function buildHourlyRevenue(orders, dateKey) {
-  const slots = HOURLY_SLOTS.map((s) => ({
-    label: s.label,
-    fullLabel: `${formatThaiDateFull(dateKey)} (${s.label})`,
+  const slots = Array.from({ length: 24 }, (_, hour) => ({
+    label: `${String(hour).padStart(2, "0")}:00`,
+    fullLabel: `${formatThaiDateFull(dateKey)} (${String(hour).padStart(2, "0")}:00–${String(hour).padStart(2, "0")}:59 น.)`,
     value: 0,
   }));
   orders
-    .filter((o) => o.status === "completed" && o.createdAt && o.createdAt.slice(0, 10) === dateKey)
+    .filter((o) => o.status === "completed" && o.createdAt)
     .forEach((o) => {
-      const h = new Date(o.createdAt).getHours();
-      const slotIndex = Math.min(Math.floor(h / 4), 5);
-      const gross = o.finalPrice ?? o.price ?? 0;
-      slots[slotIndex].value += Math.round(gross * (1 - PLATFORM_FEE_RATE));
+      const dateHour = bangkokDateHour(o.createdAt);
+      if (!dateHour || dateHour.dateKey !== dateKey) return;
+      slots[dateHour.hour].value += netRevenueForOrder(o);
     });
   return slots;
 }
@@ -147,10 +157,9 @@ function buildDailyRangeRevenue(orders, startKey, endKey) {
   orders
     .filter((o) => o.status === "completed")
     .forEach((o) => {
-      const key = o.createdAt ? o.createdAt.slice(0, 10) : "";
+      const key = o.createdAt ? bangkokDateHour(o.createdAt)?.dateKey : "";
       if (key && key in map) {
-        const gross = o.finalPrice ?? o.price ?? 0;
-        map[key] += Math.round(gross * (1 - PLATFORM_FEE_RATE));
+        map[key] += netRevenueForOrder(o);
       }
     });
   return days.map((d) => ({
@@ -185,8 +194,7 @@ function buildMonthlyRevenue(orders) {
     .forEach((o) => {
       const d = new Date(o.createdAt);
       if (d.getFullYear() === year) {
-        const gross = o.finalPrice ?? o.price ?? 0;
-        monthly[d.getMonth()].value += Math.round(gross * (1 - PLATFORM_FEE_RATE));
+        monthly[d.getMonth()].value += netRevenueForOrder(o);
       }
     });
   return monthly;
@@ -235,8 +243,7 @@ function buildCategoryOrderData(orders, products) {
     .filter((o) => o.status === "completed")
     .forEach((o) => {
       const cat = catById[o.productId] || o.productCategory || "ไม่ระบุ";
-      const gross = o.finalPrice ?? o.price ?? 0;
-      const net = Math.round(gross * (1 - PLATFORM_FEE_RATE));
+      const net = netRevenueForOrder(o);
       if (!catStats[cat]) {
         catStats[cat] = { count: 0, revenue: 0 };
       }
@@ -438,20 +445,16 @@ export default function SellerDashboardCharts({
 
   const chart1Subtitle = useMemo(() => {
     if (chart1View === "monthly") {
-      return `ยอดรวมปีนี้: ${baht(Math.round(stats.totalRevenue ?? chart1Total))}`;
+      return `ยอดรวมปีนี้: ${baht(chart1Total)}`;
     }
     if (chart1View === "daily") {
-      return `ยอดรวม 7 วัน: ${baht(
-        Math.round(
-          stats.trend?.reduce((s, t) => s + (t.value || 0), 0) ?? chart1Total,
-        ),
-      )}`;
+      return `ยอดรวม 7 วัน: ${baht(chart1Total)}`;
     }
     if (chart1Single || chart1Start === chart1End) {
       return `ยอดรวมวันที่ ${formatThaiDateFull(chart1Start)}: ${baht(chart1Total)}`;
     }
     return `ยอดรวมช่วงที่เลือก: ${baht(chart1Total)}`;
-  }, [chart1View, stats, chart1Total, chart1Single, chart1Start, chart1End]);
+  }, [chart1View, chart1Total, chart1Single, chart1Start, chart1End]);
 
   const hasMonthlyData = monthlyRevenue.some((m) => m.value > 0);
 
@@ -567,8 +570,8 @@ export default function SellerDashboardCharts({
   }, [completedOnDate]);
 
   const netOnDate = useMemo(() => {
-    return Math.round(grossOnDate * (1 - PLATFORM_FEE_RATE));
-  }, [grossOnDate]);
+    return completedOnDate.reduce((sum, o) => sum + netRevenueForOrder(o), 0);
+  }, [completedOnDate]);
 
   const formattedSelectedDate = useMemo(() => {
     const d = new Date(selectedDate);
@@ -707,11 +710,19 @@ export default function SellerDashboardCharts({
               />
             )}
             {hasChart1Data ? (
-              <TrendBarChart
-                data={chart1Data}
-                formatValue={(v) => baht(Math.round(v))}
-                height={190}
-              />
+              <>
+                {chart1View === "custom" && (chart1Single || chart1Start === chart1End) && (
+                  <p className="mb-1 text-[11px] text-slate-500">เลื่อนกราฟแนวนอนเพื่อดูครบ 24 ชั่วโมง</p>
+                )}
+                <TrendBarChart
+                  key={chart1View === "custom" && (chart1Single || chart1Start === chart1End)
+                    ? `hourly-${chart1Start}` : chart1View}
+                  data={chart1Data}
+                  formatValue={(v) => baht(Math.round(v))}
+                  height={190}
+                  showAllLabels={chart1View === "custom" && (chart1Single || chart1Start === chart1End)}
+                />
+              </>
             ) : (
               <div className="flex h-[190px] items-center justify-center text-xs text-gray-400">
                 ยังไม่มียอดขายในช่วงเวลาที่เลือก
@@ -724,7 +735,7 @@ export default function SellerDashboardCharts({
         <div className="col-span-1">
           <ChartCard
             title="รายรับสะสมตลอดปี"
-            subtitle={`สะสมสุทธิล่าสุด: ${baht(Math.round(stats.totalRevenue || 0))}`}
+            subtitle={`สะสมสุทธิล่าสุด: ${baht(cumulativeProfit.filter((point) => point.y !== null).at(-1)?.y ?? 0)}`}
             icon="trending_up"
           >
             {hasMonthlyData ? (

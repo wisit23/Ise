@@ -12,6 +12,8 @@ import ConfirmDialog from "../../../../components/ui/ConfirmDialog";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 import { fetchCategories, fetchConditions } from "../../../../lib/catalog";
+import useSellerLiveRefresh from "../../../../lib/useSellerLiveRefresh";
+import { useChatSocketEvent } from "../../../../components/chat/ChatSocketProvider";
 
 const MIN_MEDIA_COUNT = 4;
 const MAX_MEDIA_COUNT = 8;
@@ -85,6 +87,31 @@ export default function EditProductPage() {
       .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, [id]);
 
+  useChatSocketEvent("product:updated", (payload) => {
+    if (payload?.product?.id !== id) return;
+    setProduct((current) => current ? { ...current, ...payload.product } : current);
+  });
+
+  useChatSocketEvent("product:deleted", (payload) => {
+    if ((payload?.productId || payload?.product?.id || payload?.id) === id) {
+      setNotFound(true);
+    }
+  });
+
+  useSellerLiveRefresh(async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    const data = await apiFetch("/api/products/mine?limit=100", { token });
+    const latest = data.items?.find((item) => item.id === id);
+    if (latest) setProduct(latest);
+    const [categoryResult, conditionResult] = await Promise.allSettled([
+      fetchCategories(),
+      fetchConditions(),
+    ]);
+    if (categoryResult.status === "fulfilled") setCategories(categoryResult.value);
+    if (conditionResult.status === "fulfilled") setConditions(conditionResult.value);
+  }, { enabled: user?.id != null && Boolean(product), events: ["notification:new"] });
+
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });
   }
@@ -96,6 +123,24 @@ export default function EditProductPage() {
       router.push("/login");
       return;
     }
+
+    if (isSold) {
+      setError("ไม่สามารถแก้ไขสินค้าที่ขายแล้วได้");
+      return;
+    }
+
+    if (deletionBlocked) {
+      const isPriceChange =
+        product &&
+        Math.round(Number(form.price)) !== Math.round(Number(product.price));
+      if (isPriceChange) {
+        setError("ไม่สามารถเปลี่ยนราคาสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+        return;
+      }
+      setError("ไม่สามารถแก้ไขสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+      return;
+    }
+
     if (form.media.length < MIN_MEDIA_COUNT) {
       setError(
         `กรุณาอัปโหลดรูปภาพหรือวิดีโอสินค้าอย่างน้อย ${MIN_MEDIA_COUNT} รูป (ปัจจุบันมี ${form.media.length} รูป)`,
@@ -130,6 +175,7 @@ export default function EditProductPage() {
     }
   }
 
+  const isSold = product?.status === "sold" || product?.preRemovalStatus === "sold";
   const deletionBlocked =
     product?.status === "reserved" ||
     (product?.status === "hidden" && product?.preRemovalStatus === "reserved");
@@ -143,6 +189,10 @@ export default function EditProductPage() {
   }
 
   async function handleConfirmDelete() {
+    if (isSold) {
+      setError("ไม่สามารถลบสินค้าที่ขายแล้วได้");
+      return;
+    }
     const token = getAccessToken();
     if (!token) {
       router.push("/login");
@@ -166,6 +216,7 @@ export default function EditProductPage() {
   }
 
   async function handleToggleVisibility() {
+    if (isSold) return;
     const token = getAccessToken();
     if (!token) {
       router.push("/login");
@@ -221,6 +272,23 @@ export default function EditProductPage() {
             href={`/products/${id}`}
             className="mt-4 inline-block rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
           >
+            กลับไปดูสินค้า
+          </Link>
+        </section>
+        <Footer />
+      </main>
+    );
+  }
+
+  if (isSold) {
+    return (
+      <main className="flex min-h-screen flex-col bg-gray-50">
+        <NavBar />
+        <section className="mx-auto w-full max-w-lg flex-1 px-4 py-10">
+          <p className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            สินค้านี้ขายแล้ว ไม่สามารถแก้ไขหรือลบได้
+          </p>
+          <Link href={`/products/${id}`} className="mt-4 inline-block text-emerald-700">
             กลับไปดูสินค้า
           </Link>
         </section>
@@ -323,10 +391,11 @@ export default function EditProductPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
+              <label htmlFor="product-price" className="mb-1 block text-sm font-medium text-gray-700">
                 ราคา (บาท)
               </label>
               <input
+                id="product-price"
                 required
                 type="number"
                 min="1"
@@ -335,6 +404,11 @@ export default function EditProductPage() {
                 onChange={update("price")}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
               />
+              {deletionBlocked && (
+                <p className="mt-1 text-xs text-amber-700">
+                  สินค้านี้อยู่ในตะกร้าหรืออยู่ระหว่างการสั่งซื้อ ไม่สามารถเปลี่ยนราคาได้
+                </p>
+              )}
             </div>
             <div>
               <Select

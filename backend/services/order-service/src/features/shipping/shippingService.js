@@ -140,6 +140,9 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
         "company and trackingNumber are required to ship an order",
       );
     }
+    if (!/^(?=.*[0-9])[A-Za-z0-9]{1,120}$/.test(trackingNumber.trim())) {
+      throw badRequest("เลขพัสดุต้องมีตัวเลข และใช้ได้เฉพาะตัวเลขหรือตัวอักษรภาษาอังกฤษเท่านั้น");
+    }
     return db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },

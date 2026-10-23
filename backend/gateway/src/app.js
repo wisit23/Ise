@@ -58,7 +58,7 @@ function isPublic(path) {
 }
 
 const app = express();
-app.use(cors());
+app.use(cors({ exposedHeaders: ["Retry-After"] }));
 
 // Strip untrusted inbound x-user-* headers so external clients cannot spoof user identity
 app.use((req, res, next) => {

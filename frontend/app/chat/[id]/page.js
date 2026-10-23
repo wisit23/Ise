@@ -568,6 +568,7 @@ export default function ChatRoomPage() {
 
   async function handleSend(body) {
     if (!activeRoomId) return;
+    setError("");
     const currentRoom = activeRoomId;
     const optimisticId = `optimistic-${Date.now()}`;
     const optimisticMessage = {
@@ -606,6 +607,7 @@ export default function ChatRoomPage() {
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setError(err.message);
+      throw err;
     }
   }
 

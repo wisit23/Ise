@@ -61,7 +61,7 @@ export const ORDER_STATUS_LABEL = {
 
 export const REPORT_STATUS_LABEL = { OPEN: "รายงานใหม่", REVIEWED: "กำลังตรวจสอบ", ACTIONED: "จัดการแล้ว", DISMISSED: "ยกเลิกแล้ว" };
 export const SAFETY_ACTION_LABEL = {
-  SUSPEND_USER: "ระงับบัญชี", WARN_USER: "ตักเตือน", DISMISS: "ยกเลิกรายงาน", REMOVE_PRODUCT: "ระงับสินค้า", RESTORE_PRODUCT: "คืนสถานะสินค้า",
+  SUSPEND_USER: "ระงับบัญชี", WARN_USER: "ตักเตือน", DISMISS: "ยกเลิกรายงาน", REMOVE_PRODUCT: "ระงับสินค้า", REMOVE_REVIEW: "นำรีวิวออกจากหน้าสาธารณะ", RESTORE_PRODUCT: "คืนสถานะสินค้า",
   RESTRICT_BUYER: "เพิกถอนสิทธิ์ซื้อ", RESTRICT_SELLER: "เพิกถอนสิทธิ์ขาย",
   USER_SUSPENDED: "ระงับบัญชี", USER_WARNED: "ตักเตือน", USER_RESTORED: "ปลดระงับบัญชี",
   COMMERCE_RESTRICTED_BUYER: "เพิกถอนสิทธิ์ซื้อ", COMMERCE_RESTRICTED_SELLER: "เพิกถอนสิทธิ์ขาย", COMMERCE_RESTRICTED_ALL: "เพิกถอนสิทธิ์ซื้อขาย", COMMERCE_RESTRICTION_REVOKED: "คืนสิทธิ์ซื้อขาย",

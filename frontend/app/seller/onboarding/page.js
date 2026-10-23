@@ -18,6 +18,7 @@ import {
   validateBankAccount,
 } from "../../../components/seller/BankAccountInput";
 import { apiFetch, submitKyc } from "../../../lib/api";
+import useSellerLiveRefresh from "../../../lib/useSellerLiveRefresh";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 
 const STATUS_LABEL = {
@@ -162,6 +163,15 @@ export default function SellerOnboardingPage() {
   }, [router]);
 
   useEffect(load, [load]);
+
+  // Approval can happen while this page is open. Update the status without
+  // replacing any details the seller is currently typing into the form.
+  useSellerLiveRefresh(async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    const data = await apiFetch("/api/auth/kyc/mine", { token });
+    setStatus(data);
+  }, { enabled: user?.role === "SELLER", events: ["notification:new"] });
 
   // ---- Handlers วิธีที่ 1 ----
   function handleFileSelect(e) {

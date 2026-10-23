@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const sentNotifications = [];
+const removedReviewIds = [];
 const prismaCalls = {
   reports: [],
   audits: [],
@@ -102,6 +103,13 @@ const chatClient = {
 };
 
 const productModerationClient = {
+  getReview: async (id) => ({
+    id,
+    buyerId: id === "rev-123" ? "target-user-2" : "reviewer-88",
+    productId: id === "rev-123" ? "prod-300" : "prod-100",
+    removed: false,
+  }),
+  removeReview: async (id) => { removedReviewIds.push(id); return { removed: true }; },
   getProduct: async (id) => ({
     id,
     title: "เสื้อยืดวินเทจ",
@@ -221,6 +229,37 @@ test("Requirement 2: cannot report the same review/comment if pending admin deci
   });
   assert.equal(check.hasPendingReport, true);
   assert.equal(check.type, "review");
+});
+
+test("a review report cannot accuse a different reviewer or product", async () => {
+  mockReports.length = 0;
+  await assert.rejects(
+    reportService.createReport({
+      reporterId: "reporter-1", targetId: "wrong-user", productId: "prod-100",
+      reviewId: "rev-999", reason: "[รายงานรีวิว #rev-999] ข้อมูลไม่ถูกต้อง",
+    }),
+    (error) => error.status === 400 && /ไม่ตรงกัน/.test(error.message),
+  );
+  assert.equal(mockReports.length, 0);
+});
+
+test("staff can remove a reported review without removing its product", async () => {
+  mockReports.length = 0;
+  removedReviewIds.length = 0;
+  const report = await reportService.createReport({
+    reporterId: "seller-1", targetId: "reviewer-88", productId: "prod-100",
+    reviewId: "rev-999", reason: "[รายงานรีวิว #rev-999] เนื้อหาไม่เหมาะสม",
+  });
+  await reportService.reviewReport({ reportId: report.id, adminId: "admin-1" });
+  await assert.rejects(
+    reportService.actionReport({ reportId: report.id, adminId: "admin-1", decision: "REMOVE_PRODUCT", reason: "ทดสอบ" }),
+    (error) => error.status === 400,
+  );
+  const result = await reportService.actionReport({
+    reportId: report.id, adminId: "admin-1", decision: "REMOVE_REVIEW", reason: "พบเนื้อหาไม่เหมาะสม",
+  });
+  assert.equal(result.actionTaken, "REMOVE_REVIEW");
+  assert.deepEqual(removedReviewIds, ["rev-999"]);
 });
 
 test("Requirement 2: user CAN report again once admin has decided (ACTIONED or DISMISSED)", async () => {

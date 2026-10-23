@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
-import SellerDashboardCharts, { PLATFORM_FEE_RATE } from "../../../components/seller/dashboard/SellerDashboardCharts";
+import SellerDashboardCharts from "../../../components/seller/dashboard/SellerDashboardCharts";
+import { netRevenueForOrder } from "../../../lib/sellerRevenue";
 import SellerOrderTracker from "../../../components/seller/dashboard/SellerOrderTracker";
 import SellerProductList from "../../../components/seller/dashboard/SellerProductList";
 import SellerAutoMessages from "../../../components/seller/dashboard/SellerAutoMessages";
@@ -20,8 +21,23 @@ import RadioSelect from "../../../components/ui/RadioSelect";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
 import { useChatSocketEvent } from "../../../components/chat/ChatSocketProvider";
+import useSellerLiveRefresh from "../../../lib/useSellerLiveRefresh";
 
 const TREND_DAYS = 7;
+
+async function loadAllPages(path, token) {
+  const first = await apiFetch(`${path}?page=1&limit=50`, { token });
+  const items = [...(first.items || [])];
+  const pages = first.totalPages || 1;
+  for (let start = 2; start <= pages; start += 4) {
+    const batch = Array.from({ length: Math.min(4, pages - start + 1) }, (_, index) =>
+      apiFetch(`${path}?page=${start + index}&limit=50`, { token }),
+    );
+    const results = await Promise.all(batch);
+    results.forEach((result) => items.push(...(result.items || [])));
+  }
+  return [...new Map(items.map((item) => [item.id, item])).values()];
+}
 
 /** Last N days as { key: "YYYY-MM-DD", label: "D/M" }, oldest first. */
 function lastNDays(n) {
@@ -44,18 +60,40 @@ const SECTIONS = [
   { key: "auto_messages", label: "คำถามอัตโนมัติ", icon: "chat_bubble" },
 ];
 
-export default function SellerDashboardPage() {
+function SellerDashboardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const orderIdParam = searchParams.get("orderId");
+  const sectionParam = searchParams.get("section");
+  const statusParam = searchParams.get("status");
+
   const [user, setUser] = useState(undefined);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [kycStatus, setKycStatus] = useState(null);
-  const [section, setSection] = useState("dashboard");
-  const [highlightOrderId, setHighlightOrderId] = useState(null);
+  const [section, setSection] = useState(() => {
+    if (orderIdParam) return "orders";
+    if (sectionParam && SECTIONS.some((s) => s.key === sectionParam)) return sectionParam;
+    return "dashboard";
+  });
+  const [highlightOrderId, setHighlightOrderId] = useState(() => orderIdParam || null);
   const [productStatusFilter, setProductStatusFilter] = useState("");
-  const [orderStatusFilter, setOrderStatusFilter] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState(() => statusParam || "");
+
+  useEffect(() => {
+    const oId = searchParams.get("orderId");
+    const sec = searchParams.get("section");
+    const st = searchParams.get("status");
+    if (oId) {
+      setSection("orders");
+      setHighlightOrderId(oId);
+      setOrderStatusFilter(st || "");
+    } else if (sec && SECTIONS.some((s) => s.key === sec)) {
+      setSection(sec);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -74,20 +112,32 @@ export default function SellerDashboardPage() {
       .then((data) => setKycStatus(data.kycStatus))
       .catch(() => setKycStatus("NONE"));
 
-    // The stat cards/charts below need the full recent picture, not one page of
-    // it — capped at 100 rather than truly unbounded (a real pagination UI
-    // wouldn't make sense mixed into aggregate stats/charts).
     Promise.all([
-      apiFetch("/api/products/mine?limit=100", { token }),
-      apiFetch("/api/orders/selling?limit=100", { token }),
+      loadAllPages("/api/products/mine", token),
+      loadAllPages("/api/orders/selling", token),
     ])
-      .then(([productData, orderData]) => {
-        setProducts(productData.items);
-        setOrders(orderData.items);
+      .then(([productItems, orderItems]) => {
+        setProducts(productItems);
+        setOrders(orderItems);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [router]);
+
+  // Socket events update rows immediately below. A background reconciliation
+  // also picks up auction bids and changes missed while the tab was offline.
+  useSellerLiveRefresh(async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    const [productResult, orderResult, kycResult] = await Promise.allSettled([
+      loadAllPages("/api/products/mine", token),
+      loadAllPages("/api/orders/selling", token),
+      apiFetch("/api/auth/kyc/mine", { token }),
+    ]);
+    if (productResult.status === "fulfilled") setProducts(productResult.value);
+    if (orderResult.status === "fulfilled") setOrders(orderResult.value);
+    if (kycResult.status === "fulfilled") setKycStatus(kycResult.value.kycStatus);
+  }, { enabled: user?.role === "SELLER", events: ["notification:new"] });
 
   // ── Real-time WebSocket Listeners ──────────────────────────────────────────
   useChatSocketEvent("product:created", (payload) => {
@@ -126,6 +176,16 @@ export default function SellerDashboardPage() {
       if (sellerId && user?.id && sellerId !== user.id) return prev;
       return [updatedOrder, ...prev];
     });
+    if (
+      ["shipped", "delivered", "completed"].includes(updatedOrder.status) &&
+      updatedOrder.productId
+    ) {
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === updatedOrder.productId ? { ...p, status: "sold" } : p,
+        ),
+      );
+    }
   });
 
   const stats = useMemo(() => {
@@ -134,9 +194,8 @@ export default function SellerDashboardPage() {
       (sum, o) => sum + (o.finalPrice ?? o.price ?? 0),
       0,
     );
-    // Net sales after platform fee deduction (PLATFORM_FEE_RATE = 3%)
-    const platformFee = totalGrossRevenue * PLATFORM_FEE_RATE;
-    const totalRevenue = totalGrossRevenue - platformFee;
+    const totalRevenue = completed.reduce((sum, o) => sum + netRevenueForOrder(o), 0);
+    const platformFee = totalGrossRevenue - totalRevenue;
 
     // Separate regular sales vs auction sales
     const regularCompleted = completed.filter(
@@ -150,13 +209,13 @@ export default function SellerDashboardPage() {
       (sum, o) => sum + (o.finalPrice ?? o.price ?? 0),
       0,
     );
-    const regularRevenue = regularGrossRevenue * (1 - PLATFORM_FEE_RATE);
+    const regularRevenue = regularCompleted.reduce((sum, o) => sum + netRevenueForOrder(o), 0);
 
     const auctionGrossRevenue = auctionCompleted.reduce(
       (sum, o) => sum + (o.finalPrice ?? o.price ?? 0),
       0,
     );
-    const auctionRevenue = auctionGrossRevenue * (1 - PLATFORM_FEE_RATE);
+    const auctionRevenue = auctionCompleted.reduce((sum, o) => sum + netRevenueForOrder(o), 0);
 
     const pendingRevenue = orders
       .filter((o) => ["pending", "pending_payment"].includes(o.status))
@@ -166,8 +225,7 @@ export default function SellerDashboardPage() {
     const revenueByDay = Object.fromEntries(days14.map((d) => [d.key, 0]));
     completed.forEach((o) => {
       const key = o.createdAt.slice(0, 10);
-      const gross = o.finalPrice ?? o.price ?? 0;
-      const net = gross * (1 - PLATFORM_FEE_RATE);
+      const net = netRevenueForOrder(o);
       if (key in revenueByDay) revenueByDay[key] += net;
     });
 
@@ -238,6 +296,36 @@ export default function SellerDashboardPage() {
   const disputedOrders = useMemo(() => {
     return orders.filter(isOrderDisputed);
   }, [orders]);
+
+  const mobileSectionOptions = useMemo(() => {
+    const opts = SECTIONS.map((s) => ({
+      value: s.key,
+      label: s.label,
+      icon: s.icon,
+    }));
+    if (user?.id) {
+      opts.push({
+        value: "my_store",
+        label: "ร้านค้าของฉัน",
+        icon: "storefront",
+        divider: true,
+      });
+    }
+    return opts;
+  }, [user?.id]);
+
+  const handleMobileSectionChange = useCallback(
+    (val) => {
+      if (val === "my_store") {
+        if (user?.id) {
+          router.push(`/store/${user.id}`);
+        }
+        return;
+      }
+      setSection(val);
+    },
+    [user?.id, router],
+  );
 
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (user === undefined || loading) {
@@ -384,11 +472,11 @@ export default function SellerDashboardPage() {
                 </span>
               )}
 
-              {/* View Store Button */}
+              {/* View Store Button (desktop only) */}
               {user?.id && (
                 <Link
                   href={`/store/${user.id}`}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                  className="hidden sm:flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
                 >
                   <span className="material-symbols-outlined text-[16px] text-emerald-600">
                     storefront
@@ -397,16 +485,12 @@ export default function SellerDashboardPage() {
                 </Link>
               )}
 
-              {/* Mobile section switcher */}
+              {/* Mobile section switcher (includes ร้านค้าของฉัน) */}
               <div className="sm:hidden">
                 <RadioSelect
                   value={section}
-                  onChange={setSection}
-                  options={SECTIONS.map((s) => ({
-                    value: s.key,
-                    label: s.label,
-                    icon: s.icon,
-                  }))}
+                  onChange={handleMobileSectionChange}
+                  options={mobileSectionOptions}
                   size="sm"
                   variant="panel"
                   align="right"
@@ -460,6 +544,7 @@ export default function SellerDashboardPage() {
                   <button
                     type="button"
                     onClick={() => {
+                      setHighlightOrderId(null);
                       setOrderStatusFilter("disputed");
                       setSection("orders");
                     }}
@@ -505,6 +590,16 @@ export default function SellerDashboardPage() {
                   setOrders((prev) =>
                     prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)),
                   );
+                  if (
+                    ["shipped", "delivered", "completed"].includes(updated.status) &&
+                    updated.productId
+                  ) {
+                    setProducts((prev) =>
+                      prev.map((p) =>
+                        p.id === updated.productId ? { ...p, status: "sold" } : p,
+                      ),
+                    );
+                  }
                 }}
               />
             )}
@@ -523,6 +618,16 @@ export default function SellerDashboardPage() {
                   setOrders((prev) =>
                     prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)),
                   );
+                  if (
+                    ["shipped", "delivered", "completed"].includes(updated.status) &&
+                    updated.productId
+                  ) {
+                    setProducts((prev) =>
+                      prev.map((p) =>
+                        p.id === updated.productId ? { ...p, status: "sold" } : p,
+                      ),
+                    );
+                  }
                 }}
               />
             )}
@@ -535,5 +640,22 @@ export default function SellerDashboardPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function SellerDashboardPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-slate-50/50">
+          <NavBar />
+          <section className="mx-auto w-full max-w-6xl px-4 py-8">
+            <Skeleton className="h-7 w-48" />
+          </section>
+        </main>
+      }
+    >
+      <SellerDashboardContent />
+    </Suspense>
   );
 }

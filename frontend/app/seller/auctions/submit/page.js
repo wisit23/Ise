@@ -11,6 +11,7 @@ import Select from "../../../../components/ui/Select";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 import { fetchCategories, fetchConditions } from "../../../../lib/catalog";
+import useSellerLiveRefresh from "../../../../lib/useSellerLiveRefresh";
 
 function fmt(dt) {
   if (!dt) return "—";
@@ -105,45 +106,63 @@ function SellerAuctionSubmitContent() {
       });
   }, [productId]);
 
-  useEffect(() => {
+  function refreshRound({ silent = false } = {}) {
     if (!roundId) {
       setRoundError("กรุณาเลือกรอบประมูลก่อนส่งสินค้าเข้าร่วม");
       setLoadingRound(false);
       return;
     }
 
-    setLoadingRound(true);
+    if (!silent) setLoadingRound(true);
     setRoundError("");
 
-    apiFetch(`/api/products/auctions/rounds/${roundId}`)
+    return apiFetch(`/api/products/auctions/rounds/${roundId}`)
       .then((data) => {
         const now = new Date();
         const start = new Date(data.submissionStartsAt);
         const end = new Date(data.submissionEndsAt);
 
         if (data.cancelledAt || data.phase === "cancelled") {
+          setRound(null);
           setRoundError(
             "รอบประมูลนี้ถูกยกเลิกแล้ว ไม่สามารถส่งสินค้าเข้าร่วมได้",
           );
         } else if (start > now) {
+          setRound(null);
           setRoundError(
             "รอบประมูลนี้ยังไม่เปิดรับสินค้า กรุณาเลือกรอบที่กำลังเปิดรับ",
           );
         } else if (end <= now) {
+          setRound(null);
           setRoundError("รอบประมูลนี้ปิดรับสินค้าแล้ว กรุณาเลือกรอบอื่น");
         } else {
           setRound(data);
         }
       })
       .catch((err) => {
+        setRound(null);
         setRoundError(
           err.message?.includes("ไม่พบ") || err.status === 404
             ? "ไม่พบรอบประมูลที่เลือก กรุณากลับไปเลือกรอบใหม่"
             : err.message || "เกิดข้อผิดพลาดในการตรวจสอบรอบประมูล",
         );
       })
-      .finally(() => setLoadingRound(false));
+      .finally(() => { if (!silent) setLoadingRound(false); });
+  }
+
+  useEffect(() => {
+    refreshRound();
   }, [roundId]);
+
+  useSellerLiveRefresh(async () => {
+    const token = getAccessToken();
+    const requests = [refreshRound({ silent: true })];
+    if (token) {
+      requests.push(apiFetch("/api/auth/kyc/mine", { token })
+        .then((data) => setKycStatus(data.kycStatus)));
+    }
+    await Promise.allSettled(requests);
+  }, { enabled: user?.role === "SELLER" && Boolean(roundId), events: ["notification:new"] });
 
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });

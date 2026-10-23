@@ -19,6 +19,7 @@ const {
   requireSellerRole,
   requireVerifiedSeller,
   validateCreateRequest,
+  validatePrice,
   requireValidMediaCount,
   requireKnownCondition,
 } = require("../services/productValidation");
@@ -172,6 +173,9 @@ async function toggleVisibility(req, res, next) {
   try {
     await requireProductOwner(req.params.id, req.userId, "hide/show");
     const current = await productModel.findById(req.params.id);
+    if (current.status === "sold" || current.preRemovalStatus === "sold") {
+      throw conflict("ไม่สามารถเปลี่ยนการแสดงสินค้าที่ขายแล้วได้");
+    }
     if (current.status === "removed") {
       throw forbidden(
         "a moderated listing can only be restored by Trust & Safety",
@@ -270,12 +274,32 @@ async function update(req, res, next) {
       req.userId,
       "edit",
     );
+    if (product.status === "sold" || product.preRemovalStatus === "sold") {
+      throw conflict("ไม่สามารถแก้ไขสินค้าที่ขายแล้วได้");
+    }
     if (product.status === "auction") {
       throw forbidden("cannot edit a product that is currently in an auction");
     }
-    if (product.status === "reserved" || (product.status === "hidden" && product.preRemovalStatus === "reserved")) throw conflict("ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+    if (
+      product.status === "reserved" ||
+      (product.status === "hidden" && product.preRemovalStatus === "reserved")
+    ) {
+      const isPriceChange =
+        req.body?.price !== undefined &&
+        Math.round(Number(req.body.price)) !==
+          Math.round(Number(product.price));
+      if (isPriceChange) {
+        throw conflict(
+          "ไม่สามารถเปลี่ยนราคาสินค้าที่อยู่ระหว่างการสั่งซื้อได้",
+        );
+      }
+      throw conflict("ไม่สามารถแก้ไขสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+    }
     if (product.status === "removed") {
       throw forbidden("cannot edit a listing removed by Trust & Safety");
+    }
+    if (req.body?.price !== undefined) {
+      validatePrice(req.body.price);
     }
     await requireKnownCondition(req.body.condition);
     if (req.body.media !== undefined) requireValidMediaCount(req.body.media);
@@ -288,7 +312,9 @@ async function update(req, res, next) {
       buildProductPatch(req.body),
     );
     if (!updated) {
-      throw forbidden("listing changed or was removed by Trust & Safety");
+      throw conflict(
+        "listing changed, was reserved or was moderated; reload before editing",
+      );
     }
     // Fire-and-forget: refreshes lastActiveAt so the inactivity job doesn't
     // flag an active seller who edits rather than creates listings.
@@ -307,7 +333,15 @@ async function remove(req, res, next) {
       req.userId,
       "remove",
     );
-    if (product.status === "reserved" || (product.status === "hidden" && product.preRemovalStatus === "reserved")) throw conflict("ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+    if (product.status === "sold" || product.preRemovalStatus === "sold") {
+      throw conflict("ไม่สามารถลบสินค้าที่ขายแล้วได้");
+    }
+    if (
+      product.status === "reserved" ||
+      (product.status === "hidden" && product.preRemovalStatus === "reserved")
+    ) {
+      throw conflict("ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
+    }
     if (product.status === "auction") {
       throw forbidden(
         "cannot remove a product that is currently in an auction",
@@ -316,9 +350,14 @@ async function remove(req, res, next) {
     if (product.status === "removed") {
       throw forbidden("cannot delete a listing removed by Trust & Safety");
     }
-    const removed = await productModel.removeBySeller(req.params.id, req.userId);
+    const removed = await productModel.removeBySeller(
+      req.params.id,
+      req.userId,
+    );
     if (!removed) {
-      throw conflict("listing changed, was reserved or was moderated; reload before deleting");
+      throw conflict(
+        "listing changed, was reserved or was moderated; reload before deleting",
+      );
     }
     realtimeClient.broadcastProductDeleted(req.params.id, req.userId);
     res.status(204).send();
@@ -426,6 +465,7 @@ module.exports = {
   requireSellerRole,
   requireVerifiedSeller,
   validateCreateRequest,
+  validatePrice,
   requireValidMediaCount,
   requireKnownCondition,
   recordView,

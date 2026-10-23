@@ -153,6 +153,9 @@ async function apiFetchRequest(path, { method = "GET", body, token, signal, head
     }
     throw Object.assign(new Error(errorMsg || `Request failed (${res.status})`), {
       status: res.status,
+      retryAfterSeconds: res.headers?.get("Retry-After")
+        ? Math.max(1, Number(res.headers.get("Retry-After")) || 1)
+        : undefined,
       code: data?.code || data?.error?.code,
       details: data?.details,
       data,
@@ -319,7 +322,7 @@ export async function submitKyc(fields, documentFile, token) {
     if (typeof errorMsg === "object" && errorMsg !== null) {
       errorMsg = errorMsg.message || JSON.stringify(errorMsg);
     }
-    throw new Error(errorMsg || `KYC submission failed (${res.status})`);
+    throw new Error(errorMsg || `ส่งข้อมูลยืนยันตัวตนไม่สำเร็จ (${res.status})`);
   }
   return data;
 }

@@ -418,6 +418,165 @@ describe("NotificationBell", () => {
     expect(screen.getByText("สินค้าชำรุดเสียหายจริงตามหลักฐาน")).toBeInTheDocument();
     expect(screen.getByText("คุณเป็นผู้ซื้อในคำสั่งซื้อนี้")).toBeInTheDocument();
   });
+
+  it("navigates seller directly to order tracking with highlighted order", async () => {
+    const sellerUser = { id: "seller-1", firstName: "แม่ค้า", role: "SELLER" };
+    getNotifications.mockResolvedValueOnce({
+      items: [
+        {
+          id: "n-seller-1",
+          type: "ORDER",
+          title: "ผู้ซื้อชำระเงินแล้ว",
+          message: "ผู้ซื้อชำระเงินเรียบร้อยแล้ว",
+          link: "/seller/dashboard?orderId=order-999",
+          metadata: { orderId: "order-999" },
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+    render(<NotificationBell user={sellerUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    const notifItem = await screen.findByText("ผู้ซื้อชำระเงินแล้ว");
+    await act(async () => {
+      fireEvent.click(notifItem.closest('[role="button"]') || notifItem.closest("button"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/seller/dashboard?section=orders&orderId=order-999");
+  });
+
+  it("renders cancelled auction notification with gavel icon, action button and routes seller to /seller/auctions", async () => {
+    const sellerUser = { id: "seller-1", firstName: "แม่ค้า", role: "SELLER" };
+    getNotifications.mockResolvedValueOnce({
+      items: [
+        {
+          id: "n-auction-cancelled-1",
+          type: "AUCTION",
+          title: "สินค้าถูกยกเลิกการประมูล",
+          message: "สินค้าของคุณ เสื้อแจ็กเก็ต ถูกยกเลิกการประมูลเนื่องจาก: สินค้าไม่พร้อม",
+          link: "/auctions/item-cancelled-1",
+          metadata: {
+            event: "auction.item_cancelled",
+            itemId: "item-cancelled-1",
+          },
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+    });
+
+    render(<NotificationBell user={sellerUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    const notifTitle = await screen.findByText("สินค้าถูกยกเลิกการประมูล");
+    expect(notifTitle).toBeInTheDocument();
+
+    // Check that button text is "ไปที่หน้าจัดการประมูล" for seller
+    const actionBtn = screen.getByText("ไปที่หน้าจัดการประมูล");
+    expect(actionBtn).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(notifTitle.closest('[role="button"]') || notifTitle.closest("button"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/seller/auctions");
+  });
+
+  it("renders normal auction notification for buyer with ดูรายละเอียด and routes to auction link", async () => {
+    const buyerUser = { id: "buyer-1", firstName: "ผู้ซื้อ", role: "BUYER" };
+    getNotifications.mockResolvedValueOnce({
+      items: [
+        {
+          id: "n-auction-round-1",
+          type: "AUCTION",
+          title: "รอบประมูลเปิดแล้ว",
+          message: "รอบประมูลเปิดให้เสนอราคาแล้ว",
+          link: "/auctions/rounds/round-1",
+          metadata: {
+            event: "auction.round_started",
+            roundId: "round-1",
+          },
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+    });
+
+    render(<NotificationBell user={buyerUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    const notifTitle = await screen.findByText("รอบประมูลเปิดแล้ว");
+    expect(notifTitle).toBeInTheDocument();
+
+    // For buyer, action text is "ดูรายละเอียด"
+    const actionBtn = screen.getByText("ดูรายละเอียด");
+    expect(actionBtn).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(notifTitle.closest('[role="button"]') || notifTitle.closest("button"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/auctions/rounds/round-1");
+  });
+
+  it("renders dropdown with responsive fixed/max-width classes so it does not overflow mobile screen bounds", async () => {
+    render(<NotificationBell user={mockUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    const dialog = screen.getByRole("dialog", { name: "หน้าต่างการแจ้งเตือน" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveClass("fixed", "inset-x-3", "sm:absolute", "sm:right-0");
+  });
+  it("navigates buyer order notification to /orders?orderId=... and dispatches custom event", async () => {
+    const buyerUser = { id: "buyer-1", firstName: "ลูกค้า", role: "BUYER" };
+    getNotifications.mockResolvedValueOnce({
+      items: [
+        {
+          id: "n-order-paid-1",
+          type: "ORDER",
+          title: "ชำระเงินสำเร็จ",
+          message: "คุณได้ชำระเงินสำหรับสินค้า เสื้อยืดโอเวอร์ไซส์ ไซส์ XL เรียบร้อยแล้ว",
+          link: "/orders",
+          metadata: { orderId: "order-123" },
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+    });
+
+    const dispatchSpy = jest.spyOn(window, "dispatchEvent");
+
+    render(<NotificationBell user={buyerUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    const notifItem = await screen.findByText("ชำระเงินสำเร็จ");
+    await act(async () => {
+      fireEvent.click(notifItem.closest('[role="button"]') || notifItem.closest("button"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/orders?orderId=order-123");
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "reloop:open-order-detail",
+        detail: { orderId: "order-123" },
+      }),
+    );
+    dispatchSpy.mockRestore();
+  });
 });
-
-

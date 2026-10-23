@@ -16,6 +16,10 @@ const authService = require("../../services/authService");
 const reportEvidenceStorage = require("./reportEvidenceStorage");
 const chatClient = require("../../services/chatClient");
 
+function reviewIdForReport(report) {
+  return report?.reason?.match(/\[รายงานรีวิว\s*#?([^\]]+)\]/)?.[1]?.trim() || null;
+}
+
 function toPublicUser(user) {
   return {
     id: user.id,
@@ -157,6 +161,10 @@ async function createReport({ reporterId, targetId, productId, category, reason,
     throw badRequest("invalid report category");
   }
 
+  const reasonReviewId = reviewIdForReport({ reason: trimmedReason });
+  if (reviewId && reasonReviewId && reviewId !== reasonReviewId) {
+    throw badRequest("รหัสรีวิวในข้อมูลรายงานไม่ตรงกัน");
+  }
   let extractedReviewId = reviewId || null;
   if (!extractedReviewId) {
     const match = trimmedReason.match(/\[รายงานรีวิว\s*#?([^\]]+)\]/);
@@ -168,6 +176,17 @@ async function createReport({ reporterId, targetId, productId, category, reason,
     trimmedReason.includes("[รายงานรีวิว") ||
     trimmedReason.includes("เนื้อหารีวิว")
   );
+  if (isReviewReport) {
+    if (!extractedReviewId) throw badRequest("กรุณาระบุรีวิวที่ต้องการรายงาน");
+    const review = await productModerationClient.getReview(extractedReviewId);
+    if (review.removedAt || review.removed) throw badRequest("รีวิวนี้ถูกนำออกแล้ว");
+    if (review.buyerId !== targetId || (review.productId || null) !== (productId || null)) {
+      throw badRequest("ข้อมูลรีวิว ผู้เขียน หรือสินค้าไม่ตรงกัน");
+    }
+  }
+  const storedReason = isReviewReport && !reasonReviewId
+    ? `[รายงานรีวิว #${extractedReviewId}] ${trimmedReason}`
+    : trimmedReason;
   // Review reports carry their topic in the reason; other reports need a category.
   if (!category && !isReviewReport) throw badRequest("category is required");
 
@@ -246,7 +265,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
         targetId: targetId || null,
         productId: productId || null,
         category: category || null,
-        reason: trimmedReason,
+        reason: storedReason,
         ...(file ? { evidence: { create: { storageKey, fileType: file.mimetype, originalName: file.originalname || "evidence" } } } : {}),
       },
     });
@@ -392,11 +411,18 @@ async function getReportDetail(reportId) {
         .catch((error) => ({ available: false, error: error.message }))
     : Promise.resolve(null);
 
-  const [decision, target, productDetail, reporterSafety, targetSafety] =
+  const reviewId = reviewIdForReport(report);
+  const reviewPromise = reviewId
+    ? productModerationClient.getReview(reviewId)
+        .then((review) => ({ available: true, review }))
+        .catch((error) => ({ available: false, error: error.message }))
+    : Promise.resolve(null);
+  const [decision, target, productDetail, reviewDetail, reporterSafety, targetSafety] =
     await Promise.all([
       decisionPromise,
       targetPromise,
       productPromise,
+      reviewPromise,
       getUserSafetySummary(report.reporterId),
       report.targetId
         ? getUserSafetySummary(report.targetId)
@@ -419,6 +445,7 @@ async function getReportDetail(reportId) {
     reporter: { ...report.reporter, safetySummary: reporterSafety },
     target: target ? { ...target, safetySummary: targetSafety } : null,
     productDetail,
+    reviewDetail,
     decision: decision
       ? {
           action: report.actionTaken || decision.action.replace(/^REPORT_/, ""),
@@ -503,6 +530,7 @@ const VALID_DECISIONS = [
   "RESTRICT_BUYER",
   "RESTRICT_SELLER",
   "REMOVE_PRODUCT",
+  "REMOVE_REVIEW",
   "DISMISS",
 ];
 
@@ -510,6 +538,7 @@ const DECISION_LABELS = {
   SUSPEND_USER: "ระงับการใช้งานบัญชีผู้ใช้",
   WARN_USER: "ตักเตือนผู้ใช้",
   REMOVE_PRODUCT: "ลบสินค้าออกจากระบบ",
+  REMOVE_REVIEW: "นำรีวิวออกจากหน้าสาธารณะ",
   DISMISS: "ยกเลิกรายงาน / ไม่พบการกระทำผิด",
 };
 
@@ -575,6 +604,9 @@ async function sendReportDecisionNotifications({ report, decision, reason }) {
     } else if (decision === "WARN_USER") {
       targetTitle = "แจ้งเตือนคำเตือนจากผู้ดูแลระบบ";
       targetMsg = `⚠️ คุณได้รับการตักเตือนจากผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`;
+    } else if (decision === "REMOVE_REVIEW") {
+      targetTitle = "รีวิวของคุณถูกนำออก";
+      targetMsg = `รีวิวของคุณถูกนำออกจากหน้าสาธารณะโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`;
     } else if (decision === "REMOVE_PRODUCT") {
       targetTitle = "ผลการพิจารณารายงาน";
       targetMsg = isReviewReport
@@ -680,6 +712,7 @@ async function actionReport({
   }
 
   if (decision === "REMOVE_PRODUCT") {
+    if (reviewIdForReport(report)) throw badRequest("ไม่สามารถลบสินค้าจากรายงานรีวิว");
     if (!report.productId) {
       throw badRequest("report has no target product to remove");
     }
@@ -696,6 +729,15 @@ async function actionReport({
       requestId,
       idempotencyKey: idempotencyKey || `report:${reportId}:REMOVE_PRODUCT`,
     });
+  }
+
+  if (decision === "REMOVE_REVIEW") {
+    const reviewId = reviewIdForReport(report);
+    if (!reviewId) throw badRequest("report has no review to remove");
+    if (report.status !== "REVIEWED" && !(report.status === "ACTIONED" && report.actionTaken === decision)) {
+      throw conflict("report must be reviewed before it can be actioned");
+    }
+    return actionReviewReport({ report, reviewId, actorId, reason: trimmedReason, requestId });
   }
 
   if (report.status !== "REVIEWED") {
@@ -771,6 +813,32 @@ async function actionReport({
     console.error("[reportService] notify report decision error:", err.message);
   }
 
+  return actioned;
+}
+
+async function actionReviewReport({ report, reviewId, actorId, reason, requestId }) {
+  const latest = await prisma.report.findUnique({ where: { id: report.id } });
+  if (latest?.status === "ACTIONED" && latest.actionTaken === "REMOVE_REVIEW") return latest;
+  if (latest?.status !== "REVIEWED") throw conflict("report must be reviewed before it can be actioned");
+  const review = await productModerationClient.getReview(reviewId);
+  if (review.buyerId !== report.targetId || (review.productId || null) !== (report.productId || null)) {
+    throw conflict("report no longer matches the review");
+  }
+  await productModerationClient.removeReview(reviewId, reason);
+  const actioned = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.report.updateMany({
+      where: { id: report.id, status: "REVIEWED" },
+      data: { status: "ACTIONED", actionTaken: "REMOVE_REVIEW" },
+    });
+    if (claimed.count !== 1) throw conflict("report was already actioned or modified");
+    await recordAdminAction({ actorId, action: "REPORT_REMOVE_REVIEW", targetId: report.id, reason, requestId, tx });
+    return tx.report.findUnique({ where: { id: report.id } });
+  });
+  try {
+    await sendReportDecisionNotifications({ report: actioned, decision: "REMOVE_REVIEW", reason });
+  } catch (error) {
+    console.error("[reportService] notify report decision error:", error.message);
+  }
   return actioned;
 }
 

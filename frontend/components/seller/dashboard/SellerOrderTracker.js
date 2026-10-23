@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import EmptyState from "../../ui/EmptyState";
 import Modal from "../../ui/Modal";
@@ -12,6 +12,7 @@ import {
   StatusPill,
   baht,
   isOrderDisputed,
+  isSellerDisputeVisible,
 } from "./sellerStatus";
 import { formatOrderId } from "../../../lib/orders";
 import { apiFetch } from "../../../lib/api";
@@ -58,8 +59,23 @@ export default function SellerOrderTracker({
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
   const [search, setSearch] = useState(
-    highlightOrderId ? highlightOrderId.slice(0, 8) : "",
+    highlightOrderId && propStatusFilter !== "disputed" ? highlightOrderId.slice(0, 8) : "",
   );
+
+  useEffect(() => {
+    if (highlightOrderId) {
+      setSearch(propStatusFilter !== "disputed" ? highlightOrderId.slice(0, 8) : "");
+      if (typeof document !== "undefined") {
+        const timer = setTimeout(() => {
+          const row = document.getElementById(`order-row-${highlightOrderId}`);
+          if (row) {
+            row.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        }, 150);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [highlightOrderId, propStatusFilter]);
 
   async function prepareOrder(order) {
     if (actionLoading) return;
@@ -102,6 +118,7 @@ export default function SellerOrderTracker({
 
   const filtered = orders
     .filter((o) => {
+      if (highlightOrderId && o.id === highlightOrderId) return true;
       if (!statusFilter) return true;
       if (statusFilter === "disputed") return isOrderDisputed(o);
       if (statusFilter === "pending")
@@ -113,12 +130,16 @@ export default function SellerOrderTracker({
       const isAuction = Boolean(o.auctionId) || o.orderType === "AUCTION" || o.id?.startsWith("AUC-");
       return orderTypeFilter === "auction" ? isAuction : !isAuction;
     })
-    .filter(
-      (o) =>
-        !search ||
-        o.productTitle?.toLowerCase().includes(search.toLowerCase()) ||
-        o.id?.toLowerCase().includes(search.toLowerCase()),
-    )
+    .filter((o) => {
+      if (highlightOrderId && o.id === highlightOrderId) return true;
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return (
+        o.productTitle?.toLowerCase().includes(q) ||
+        o.id?.toLowerCase().includes(q) ||
+        formatOrderId(o.id)?.toLowerCase().includes(q)
+      );
+    })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const disputeCount = orders.filter(isOrderDisputed).length;
@@ -288,9 +309,10 @@ export default function SellerOrderTracker({
               {filtered.map((o) => (
                 <tr
                   key={o.id}
+                  id={`order-row-${o.id}`}
                   className={`group transition-colors ${
                     highlightOrderId === o.id
-                      ? "bg-emerald-50/90 font-medium border-l-4 border-emerald-600"
+                      ? "bg-emerald-50/90 font-medium border-l-4 border-emerald-600 shadow-xs ring-1 ring-emerald-500/30"
                       : "hover:bg-slate-50/70"
                   }`}
                 >
@@ -330,7 +352,9 @@ export default function SellerOrderTracker({
                   </td>
                   <td className="px-4 py-3 text-center">
                     <StatusPill
-                      label={ORDER_STATUS_LABEL[o.status] || o.status}
+                      label={o.status === "disputed" && !isSellerDisputeVisible(o.dispute)
+                        ? "อยู่ระหว่างตรวจสอบ"
+                        : ORDER_STATUS_LABEL[o.status] || o.status}
                       style={ORDER_STATUS_STYLE[o.status]}
                     />
                   </td>
@@ -429,7 +453,7 @@ export default function SellerOrderTracker({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {o.dispute ? (
+                    {isSellerDisputeVisible(o.dispute) ? (
                       <div className="flex flex-col items-center gap-1">
                         <span
                           className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${

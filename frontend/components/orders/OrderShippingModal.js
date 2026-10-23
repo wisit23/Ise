@@ -15,6 +15,8 @@ import {
 } from "../seller/dashboard/sellerStatus";
 import { formatOrderId } from "../../lib/orders";
 
+const validTrackingNumber = (value) => /^(?=.*[0-9])[A-Za-z0-9]{1,120}$/.test(value.trim());
+
 export const SHIPPING_COMPANIES = [
   "Thailand Post",
   "Kerry Express",
@@ -160,6 +162,10 @@ export default function OrderShippingModal({
 
   async function handleMarkShipped() {
     if (!order?.id) return;
+    if (!company.trim() || !validTrackingNumber(trackingNumber)) {
+      setError("กรุณาเลือกบริษัทขนส่งและกรอกเลขพัสดุที่มีตัวเลข ใช้ได้เฉพาะตัวเลขหรือตัวอักษรภาษาอังกฤษเท่านั้น");
+      return;
+    }
     if (order.status !== "ready_to_ship") {
       setError("ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องเตรียมสินค้าให้พร้อมจัดส่งก่อน");
       return;
@@ -515,9 +521,14 @@ export default function OrderShippingModal({
                     value={trackingNumber}
                     onChange={(e) => setTrackingNumber(e.target.value)}
                     maxLength={120}
+                    aria-describedby="shipping-tracking-help"
+                    aria-invalid={Boolean(trackingNumber) && !validTrackingNumber(trackingNumber)}
                     placeholder="เช่น TH123456789TH"
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
                   />
+                  <p id="shipping-tracking-help" className="text-xs text-slate-500">
+                    ต้องมีตัวเลข ใช้ตัวเลขล้วนหรือผสมตัวอักษรอังกฤษได้ ไม่เว้นวรรค
+                  </p>
                 </div>
               </div>
             )}
@@ -656,7 +667,7 @@ export default function OrderShippingModal({
                       variant="primary"
                       icon="local_shipping"
                       loading={updating}
-                      disabled={!company.trim() || !trackingNumber.trim() || rejecting}
+                      disabled={!company.trim() || !validTrackingNumber(trackingNumber) || rejecting}
                       onClick={handleMarkShipped}
                       className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
                     >
