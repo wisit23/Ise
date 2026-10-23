@@ -68,16 +68,17 @@ it("supports pause and disposes the renderer when switching to mobile", async ()
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 
-it("renders a still scene for reduced motion and cleans up on navigation", async () => {
+it("animates even with OS reduced motion and still supports pause and cleanup", async () => {
   window.matchMedia("(prefers-reduced-motion: reduce)").matches = true;
   const { unmount } = render(<AuthScene />);
   await waitFor(() =>
     expect(createAuthScene).toHaveBeenCalledWith(
       expect.any(HTMLElement),
-      expect.objectContaining({ reducedMotion: true }),
+      expect.objectContaining({ reducedMotion: false }),
     ),
   );
-  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Pause 3D animation" }));
+  expect(engine.setPaused).toHaveBeenLastCalledWith(true);
   unmount();
   expect(engine.dispose).toHaveBeenCalledTimes(1);
   expect(media.get("(prefers-reduced-motion: reduce)").listener).toBeNull();

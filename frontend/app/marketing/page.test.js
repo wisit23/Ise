@@ -30,8 +30,26 @@ jest.mock("../../components/marketing/sections/DashboardSection", () => {
 });
 
 jest.mock("../../components/marketing/sections/CampaignsSection", () => {
-  return function MockCampaignsSection() {
-    return <div data-testid="campaigns-section">Mock Campaigns Section</div>;
+  return function MockCampaignsSection({ audienceSeed }) {
+    return (
+      <div data-testid="campaigns-section">
+        Mock Campaigns Section
+        {audienceSeed?.brand ? ` ${audienceSeed.brand}` : ""}
+      </div>
+    );
+  };
+});
+
+jest.mock("../../components/marketing/sections/CustomerInsightsSection", () => {
+  return function MockCustomerInsightsSection({ onCreateCampaign }) {
+    return (
+      <div data-testid="customer-insights-section">
+        Mock Customer Insights Section
+        <button onClick={() => onCreateCampaign({ brand: "Nike" })}>
+          Create Nike Campaign
+        </button>
+      </div>
+    );
   };
 });
 
@@ -109,6 +127,10 @@ describe("MarketingPanelPage (Responsive Layout & Navigation)", () => {
 
     render(<MarketingPanelPage />);
 
+    const insightsBtn = screen.getByRole("button", { name: /ความสนใจลูกค้า/i });
+    fireEvent.click(insightsBtn);
+    expect(screen.getByTestId("customer-insights-section")).toBeInTheDocument();
+
     // Switch to campaigns
     const campaignBtn = screen.getByRole("button", { name: /แคมเปญและคูปอง/i });
     fireEvent.click(campaignBtn);
@@ -130,6 +152,17 @@ describe("MarketingPanelPage (Responsive Layout & Navigation)", () => {
     });
     fireEvent.click(auditBtn);
     expect(screen.getByTestId("audit-section")).toBeInTheDocument();
+  });
+
+  test("carries the selected insight into a new campaign", () => {
+    getAccessToken.mockReturnValue("valid-token");
+    getStoredUser.mockReturnValue({ id: "marketing-1", role: "MARKETING" });
+
+    render(<MarketingPanelPage />);
+    fireEvent.click(screen.getByRole("button", { name: /ความสนใจลูกค้า/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Nike Campaign" }));
+
+    expect(screen.getByTestId("campaigns-section")).toHaveTextContent("Nike");
   });
 
   test("switches section via onNavigate callback from dashboard", () => {
@@ -196,5 +229,54 @@ describe("MarketingPanelPage (Responsive Layout & Navigation)", () => {
 
     // Verify section switched to audit
     expect(screen.getByTestId("audit-section")).toBeInTheDocument();
+  });
+
+  test("constrains outer and workspace flex containers so sidebar stays stationary and main scrolls independently", () => {
+    getAccessToken.mockReturnValue("valid-token");
+    getStoredUser.mockReturnValue({ id: "marketing-1", role: "MARKETING" });
+
+    const { container } = render(<MarketingPanelPage />);
+
+    const outerWrapper = container.firstElementChild;
+    const aside = container.querySelector("aside");
+    const bodyFlexWrapper = aside.parentElement;
+    const main = container.querySelector("main");
+
+    expect(outerWrapper).toHaveClass("flex", "h-dvh", "flex-col", "overflow-hidden");
+    expect(bodyFlexWrapper).toHaveClass("isolate", "flex", "min-h-0", "flex-1", "overflow-hidden");
+    expect(aside).toHaveClass("min-h-0", "shrink-0", "overflow-y-auto");
+    expect(main).toHaveClass("min-h-0", "min-w-0", "flex-1", "overflow-y-auto");
+  });
+
+  test("resets main content scroll position to top when switching sections", () => {
+    getAccessToken.mockReturnValue("valid-token");
+    getStoredUser.mockReturnValue({ id: "marketing-1", role: "MARKETING" });
+
+    const { container } = render(<MarketingPanelPage />);
+    const main = container.querySelector("main");
+    main.scrollTo = jest.fn();
+
+    main.scrollTop = 420;
+    const campaignBtn = screen.getByRole("button", { name: /แคมเปญและคูปอง/i });
+    fireEvent.click(campaignBtn);
+
+    expect(main.scrollTop).toBe(0);
+    expect(main.scrollTo).toHaveBeenCalledWith({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
+
+    main.scrollTop = 280;
+    const dashboardBtn = screen.getByRole("button", { name: /Dashboard/i });
+    fireEvent.click(dashboardBtn);
+    expect(main.scrollTop).toBe(0);
+
+    main.scrollTop = 310;
+    const navigateBtn = screen.getByRole("button", {
+      name: /Go to Campaigns/i,
+    });
+    fireEvent.click(navigateBtn);
+    expect(main.scrollTop).toBe(0);
   });
 });

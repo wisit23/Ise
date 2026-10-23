@@ -18,10 +18,86 @@ async function eligibleStaff(req, res, next) {
     if (!Array.isArray(roles) || !roles.length || roles.some(role => !allowed.includes(role))) throw badRequest('invalid staff roles');
     const pagination = parsePagination(req.body,20);
     const q = typeof req.body.q === 'string' ? req.body.q.trim().slice(0,100) : '';
+    const excludeIds = req.body.excludeIds ?? [];
+    if (!Array.isArray(excludeIds) || excludeIds.length > 20 || excludeIds.some(id => typeof id !== 'string' || !id || id.length > 128)) throw badRequest('invalid excluded staff');
     const where = { status:'ACTIVE', AND:[{ OR:[{ roles:{none:{}},role:{in:roles} },{ roles:{some:{role:{in:roles}}} }] }] };
+    if (excludeIds.length) where.AND.push({id:{notIn:excludeIds}});
     if(q) where.AND.push({OR:[{firstName:{contains:q,mode:'insensitive'}},{id:{contains:q,mode:'insensitive'}}]});
     const [rows,total] = await Promise.all([prisma.user.findMany({where,skip:pagination.skip,take:pagination.take,orderBy:[{firstName:'asc'},{id:'asc'}],select:{id:true,firstName:true,role:true,roles:{select:{role:true}}}}),prisma.user.count({where})]);
     res.json(paginatedResponse(rows.map(row=>({id:row.id,displayName:row.firstName,roles:[...new Set(row.roles.length ? row.roles.map(item=>item.role) : [row.role])].filter(role=>allowed.includes(role))})),total,pagination));
   } catch(err) { next(err); }
 }
-module.exports = { displayNames, eligibleStaff };
+async function searchShops(req, res, next) {
+  try {
+    const { badRequest } = require("@reloop/shared");
+    const prisma = require("../../models/prismaClient");
+    const q = typeof req.body?.q === "string" ? req.body.q.trim() : "";
+    if (!q) throw badRequest("q must be a non-empty string");
+    // Treat SQL wildcard characters as literal parts of a shop name.
+    const query = q.replace(/[\\%_]/g, "\\$&");
+    const shops = await prisma.sellerProfile.findMany({
+      where: {
+        shopName: { contains: query, mode: "insensitive" },
+        user: { status: "ACTIVE" },
+      },
+      select: { userId: true },
+      orderBy: { userId: "asc" },
+    });
+    // Only seller ids cross the boundary; KYC/contact data stays in auth.
+    res.json({ sellerIds: shops.map((shop) => shop.userId) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function searchUsers(req, res, next) {
+  try {
+    const q = typeof req.body?.q === "string" ? req.body.q.trim().slice(0, 100) : "";
+    if (!q) {
+      return res.json([]);
+    }
+    const prisma = require("../../models/prismaClient");
+
+    const orConditions = [
+      { id: { contains: q, mode: "insensitive" } },
+      { firstName: { contains: q, mode: "insensitive" } },
+      { lastName: { contains: q, mode: "insensitive" } },
+      { sellerProfile: { shopName: { contains: q, mode: "insensitive" } } },
+    ];
+
+    const parts = q.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      orConditions.push({
+        AND: parts.map((part) => ({
+          OR: [
+            { firstName: { contains: part, mode: "insensitive" } },
+            { lastName: { contains: part, mode: "insensitive" } },
+            { sellerProfile: { shopName: { contains: part, mode: "insensitive" } } },
+          ],
+        })),
+      });
+    }
+
+    const users = await prisma.user.findMany({
+      where: { OR: orConditions },
+      take: 100,
+      select: {
+        id: true,
+        firstName: true,
+        sellerProfile: { select: { shopName: true } },
+      },
+    });
+
+    res.json(
+      users.map((u) => ({
+        id: u.id,
+        userId: u.id,
+        displayName: u.sellerProfile?.shopName || u.firstName,
+      })),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { displayNames, eligibleStaff, searchShops, searchUsers };

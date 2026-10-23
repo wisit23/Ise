@@ -3,20 +3,30 @@
 import { useState } from "react";
 import Link from "next/link";
 import EmptyState from "../../ui/EmptyState";
+import Modal from "../../ui/Modal";
 import OrderShippingModal from "../../orders/OrderShippingModal";
+import OrderConfirmationModal from "../../orders/OrderConfirmationModal";
 import {
   ORDER_STATUS_LABEL,
   ORDER_STATUS_STYLE,
   StatusPill,
   baht,
+  isOrderDisputed,
 } from "./sellerStatus";
+import { formatOrderId } from "../../../lib/orders";
+import { apiFetch } from "../../../lib/api";
+import { getAccessToken } from "../../../lib/auth";
+import { SELLER_NEXT_STEP } from "../../../lib/orderLifecycle";
 
 const ALL_STATUSES = [
   { value: "", label: "ทั้งหมด" },
   { value: "pending", label: "รอชำระเงิน" },
   { value: "pending_payment", label: "รอชำระเงิน (PP)" },
-  { value: "confirmed", label: "รอขนส่ง" },
+  { value: "paid", label: "รอยืนยันคำสั่งซื้อ" },
+  { value: "confirmed", label: "ต้องเตรียมสินค้า" },
+  { value: "ready_to_ship", label: "รอขนส่งมารับ" },
   { value: "shipped", label: "อยู่ระหว่างการขนส่ง" },
+  { value: "delivered", label: "ส่งถึงผู้ซื้อแล้ว" },
   { value: "completed", label: "ขายสำเร็จ" },
   { value: "cancelled", label: "ยกเลิกแล้ว" },
   { value: "disputed", label: "ข้อพิพาท" },
@@ -33,8 +43,17 @@ export default function SellerOrderTracker({
   onOrderUpdated,
 }) {
   const [localStatusFilter, setLocalStatusFilter] = useState("");
+  const [orderTypeFilter, setOrderTypeFilter] = useState("all"); // "all" | "regular" | "auction"
   const [selectedOrderForShipping, setSelectedOrderForShipping] = useState(null);
   const [shippingModalOpen, setShippingModalOpen] = useState(false);
+  const [selectedOrderForConfirm, setSelectedOrderForConfirm] = useState(null);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [selectedOrderForReject, setSelectedOrderForReject] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState("");
+
   const statusFilter =
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
@@ -42,8 +61,58 @@ export default function SellerOrderTracker({
     highlightOrderId ? highlightOrderId.slice(0, 8) : "",
   );
 
+  async function prepareOrder(order) {
+    if (actionLoading) return;
+    setActionLoading(true);
+    try {
+      const updated = await apiFetch(`/api/orders/${order.id}/status`, {
+        method: "PATCH",
+        token: getAccessToken(),
+        body: { status: SELLER_NEXT_STEP.confirmed.status },
+      });
+      onOrderUpdated?.(updated);
+    } catch (err) {
+      alert(err.message || "อัปเดตคำสั่งซื้อไม่สำเร็จ");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleRejectOrder() {
+    if (!selectedOrderForReject || actionLoading) return;
+    setActionLoading(true);
+    setActionError("");
+    try {
+      const token = getAccessToken();
+      const updated = await apiFetch(`/api/orders/${selectedOrderForReject.id}/reject`, {
+        method: "POST",
+        token,
+        body: { reason: rejectReason || "ผู้ขายไม่สะดวกจัดส่งสินค้า" },
+      });
+      setRejectModalOpen(false);
+      setSelectedOrderForReject(null);
+      setRejectReason("");
+      onOrderUpdated?.(updated);
+    } catch (err) {
+      setActionError(err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   const filtered = orders
-    .filter((o) => !statusFilter || o.status === statusFilter)
+    .filter((o) => {
+      if (!statusFilter) return true;
+      if (statusFilter === "disputed") return isOrderDisputed(o);
+      if (statusFilter === "pending")
+        return o.status === "pending" || o.status === "pending_payment";
+      return o.status === statusFilter;
+    })
+    .filter((o) => {
+      if (orderTypeFilter === "all") return true;
+      const isAuction = Boolean(o.auctionId) || o.orderType === "AUCTION" || o.id?.startsWith("AUC-");
+      return orderTypeFilter === "auction" ? isAuction : !isAuction;
+    })
     .filter(
       (o) =>
         !search ||
@@ -51,6 +120,8 @@ export default function SellerOrderTracker({
         o.id?.toLowerCase().includes(search.toLowerCase()),
     )
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const disputeCount = orders.filter(isOrderDisputed).length;
 
   return (
     <div className="animate-fade-in-up space-y-4">
@@ -93,21 +164,76 @@ export default function SellerOrderTracker({
           />
         </div>
 
+        {/* Order Type Toggle (ทุกประเภท / ขายปกติ / ประมูล) */}
+        <div className="flex items-center rounded-lg bg-slate-100 p-1 text-xs">
+          <button
+            type="button"
+            onClick={() => setOrderTypeFilter("all")}
+            className={`rounded-md px-3 py-1 font-medium transition ${
+              orderTypeFilter === "all"
+                ? "bg-white text-slate-900 shadow-2xs font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            ทุกประเภท
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrderTypeFilter("regular")}
+            className={`rounded-md px-3 py-1 font-medium transition ${
+              orderTypeFilter === "regular"
+                ? "bg-white text-emerald-700 shadow-2xs font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            ขายปกติ
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrderTypeFilter("auction")}
+            className={`rounded-md px-3 py-1 font-medium transition ${
+              orderTypeFilter === "auction"
+                ? "bg-white text-sky-700 shadow-2xs font-semibold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            ประมูล
+          </button>
+        </div>
+
         {/* Status filter pills */}
         <div className="flex flex-wrap gap-1.5">
-          {ALL_STATUSES.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => setStatusFilter(s.value)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                statusFilter === s.value
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
+          {ALL_STATUSES.map((s) => {
+            const isDisputedPill = s.value === "disputed";
+            return (
+              <button
+                key={s.value}
+                onClick={() => setStatusFilter(s.value)}
+                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  statusFilter === s.value
+                    ? isDisputedPill
+                      ? "bg-red-600 text-white shadow-sm"
+                      : "bg-emerald-600 text-white shadow-sm"
+                    : isDisputedPill && disputeCount > 0
+                      ? "bg-red-50 border border-red-300 text-red-700 hover:bg-red-100"
+                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <span>{s.label}</span>
+                {isDisputedPill && disputeCount > 0 && (
+                  <span
+                    className={`ml-1.5 rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                      statusFilter === s.value
+                        ? "bg-white text-red-700"
+                        : "bg-red-600 text-white"
+                    }`}
+                  >
+                    {disputeCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -120,12 +246,15 @@ export default function SellerOrderTracker({
           </span>{" "}
           รายการ จากทั้งหมด {orders.length} คำสั่งซื้อ
         </p>
-        {statusFilter && (
+        {(statusFilter || orderTypeFilter !== "all") && (
           <button
-            onClick={() => setStatusFilter("")}
+            onClick={() => {
+              setStatusFilter("");
+              setOrderTypeFilter("all");
+            }}
             className="font-medium text-emerald-600 hover:underline"
           >
-            (ล้างตัวกรองสถานะ)
+            (ล้างตัวกรองทั้งหมด)
           </button>
         )}
       </div>
@@ -165,12 +294,28 @@ export default function SellerOrderTracker({
                       : "hover:bg-slate-50/70"
                   }`}
                 >
-                  <td className="max-w-[220px] px-4 py-3">
-                    <p className="truncate font-medium text-slate-800">
-                      {o.productTitle || "(ไม่มีชื่อสินค้า)"}
-                    </p>
-                    <p className="mt-0.5 truncate font-mono text-[10px] text-slate-400">
-                      #{o.id}
+                  <td className="max-w-[240px] px-4 py-3">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span
+                        className={`inline-flex shrink-0 items-center rounded px-1.5 py-0.2 text-[10px] font-semibold ${
+                          Boolean(o.auctionId) || o.orderType === "AUCTION" || o.id?.startsWith("AUC-")
+                            ? "bg-sky-50 text-sky-700 border border-sky-200"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        }`}
+                      >
+                        {Boolean(o.auctionId) || o.orderType === "AUCTION" || o.id?.startsWith("AUC-")
+                          ? "ประมูล"
+                          : "ขายปกติ"}
+                      </span>
+                      <p className="truncate font-medium text-slate-800">
+                        {o.productTitle || "(ไม่มีชื่อสินค้า)"}
+                      </p>
+                    </div>
+                    <p
+                      className="truncate font-mono text-[10px] text-slate-400"
+                      title={`Order ID: ${o.id}`}
+                    >
+                      #{formatOrderId(o.id)}
                     </p>
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-700">
@@ -191,9 +336,59 @@ export default function SellerOrderTracker({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      {o.status === "paid" && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={actionLoading}
+                            onClick={() => {
+                              setSelectedOrderForConfirm(o);
+                              setConfirmModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-700 transition disabled:opacity-50"
+                            title="ยืนยันรับออเดอร์เพื่อดำเนินการจัดส่งสินค้า"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">
+                              check_circle
+                            </span>
+                            <span>ยืนยันรับออเดอร์</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actionLoading}
+                            onClick={() => {
+                              setSelectedOrderForReject(o);
+                              setRejectReason("");
+                              setActionError("");
+                              setRejectModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition disabled:opacity-50"
+                            title="ปฏิเสธออเดอร์และคืนเงินเต็มจำนวนให้ผู้ซื้อ"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">
+                              cancel
+                            </span>
+                            <span>ปฏิเสธออเดอร์</span>
+                          </button>
+                        </>
+                      )}
                       {o.status === "confirmed" && (
                         <button
                           type="button"
+                          disabled={actionLoading}
+                          onClick={() => prepareOrder(o)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          <span className="material-symbols-outlined text-[15px]" aria-hidden="true">
+                            inventory_2
+                          </span>
+                          <span>{SELLER_NEXT_STEP.confirmed.label}</span>
+                        </button>
+                      )}
+                      {o.status === "ready_to_ship" && (
+                        <button
+                          type="button"
+                          aria-label="จัดส่งสินค้า"
                           onClick={() => {
                             setSelectedOrderForShipping(o);
                             setShippingModalOpen(true);
@@ -201,7 +396,7 @@ export default function SellerOrderTracker({
                           className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-700 transition"
                           title="ดูที่อยู่และดำเนินการจัดส่ง"
                         >
-                          <span className="material-symbols-outlined text-[15px]">
+                          <span className="material-symbols-outlined text-[15px]" aria-hidden="true">
                             local_shipping
                           </span>
                           <span>จัดส่งสินค้า</span>
@@ -235,11 +430,28 @@ export default function SellerOrderTracker({
                   </td>
                   <td className="px-4 py-3 text-center">
                     {o.dispute ? (
-                      <Link href={`/support/cases/${o.id}`}
-                        className="font-semibold text-emerald-700 underline underline-offset-2">
-                        ดูข้อพิพาท / แชท
-                      </Link>
-                    ) : "—"}
+                      <div className="flex flex-col items-center gap-1">
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            o.dispute.decision || o.dispute.status === "DECIDED"
+                              ? "bg-slate-100 text-slate-600"
+                              : "bg-red-50 text-red-700 border border-red-200"
+                          }`}
+                        >
+                          {o.dispute.decision || o.dispute.status === "DECIDED"
+                            ? "พิจารณาแล้ว"
+                            : "อยู่ระหว่างพิจารณา"}
+                        </span>
+                        <Link
+                          href={`/support/cases/${o.id}`}
+                          className="text-[11px] font-semibold text-emerald-700 hover:underline"
+                        >
+                          ดูข้อพิพาท
+                        </Link>
+                      </div>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                 </tr>
               ))}
@@ -248,6 +460,90 @@ export default function SellerOrderTracker({
         </div>
       )}
 
+      {/* Reject Order Modal */}
+      <Modal
+        open={rejectModalOpen}
+        onClose={() => {
+          if (!actionLoading) {
+            setRejectModalOpen(false);
+            setSelectedOrderForReject(null);
+          }
+        }}
+        title="ปฏิเสธคำสั่งซื้อและคืนเงินเต็มจำนวน"
+        description={`คำสั่งซื้อ #${selectedOrderForReject?.id ? formatOrderId(selectedOrderForReject.id) : ""}`}
+        size="md"
+        footer={
+          <div className="flex w-full items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={() => {
+                setRejectModalOpen(false);
+                setSelectedOrderForReject(null);
+              }}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-50"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              disabled={actionLoading}
+              onClick={handleRejectOrder}
+              className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-4 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-red-700 transition disabled:opacity-50"
+            >
+              {actionLoading ? "กำลังดำเนินการ..." : "ยืนยันปฏิเสธออเดอร์"}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4 py-2">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-800 space-y-1">
+            <p className="font-bold flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[18px] text-amber-600">
+                info
+              </span>
+              <span>คำเตือนเกี่ยวกับการปฏิเสธออเดอร์</span>
+            </p>
+            <p>
+              เมื่อปฏิเสธคำสั่งซื้อ ระบบจะดำเนินการ<strong>คืนเงินเต็มจำนวน (฿{Number(selectedOrderForReject?.price || selectedOrderForReject?.ordersAmount || 0).toLocaleString("th-TH")})</strong> ให้แก่ผู้ซื้อทันที และสินค้าจะถูกนำกลับมาวางจำหน่ายในสถานะพร้อมขาย
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              เหตุผลในการปฏิเสธออเดอร์ <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="ระบุเหตุผล เช่น สินค้าชำรุดก่อนส่ง, สินค้าหมดสต็อก, ไม่สะดวกจัดส่ง ฯลฯ"
+              className="w-full rounded-lg border border-slate-200 p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            <span className="text-[11px] text-slate-500">เหตุผลยอดนิยม:</span>
+            {["สินค้าหมดสต็อก", "สินค้าชำรุดก่อนจัดส่ง", "ที่อยู่จัดส่งอยู่นอกพื้นที่บริการ"].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setRejectReason(preset)}
+                className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] text-slate-700 hover:bg-slate-200 transition"
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+
+          {actionError && (
+            <p className="text-xs font-semibold text-red-600 bg-red-50 p-2 rounded-lg border border-red-200">
+              {actionError}
+            </p>
+          )}
+        </div>
+      </Modal>
+
       {/* Shipping Address & Fulfillment Modal */}
       <OrderShippingModal
         orderId={selectedOrderForShipping?.id}
@@ -255,6 +551,32 @@ export default function SellerOrderTracker({
         isOpen={shippingModalOpen}
         onClose={() => setShippingModalOpen(false)}
         onShipped={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+        onRejected={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+        onOrderUpdated={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+      />
+
+      {/* Order Confirmation & Details Modal */}
+      <OrderConfirmationModal
+        orderId={selectedOrderForConfirm?.id}
+        initialOrder={selectedOrderForConfirm}
+        isOpen={confirmModalOpen}
+        onClose={() => {
+          setConfirmModalOpen(false);
+          setSelectedOrderForConfirm(null);
+        }}
+        onConfirmed={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+        onRejected={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+        onOrderUpdated={(updated) => {
           onOrderUpdated?.(updated);
         }}
       />

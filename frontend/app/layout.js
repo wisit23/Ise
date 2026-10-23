@@ -1,6 +1,7 @@
 import localFont from "next/font/local";
 import "./globals.css";
 import ChatSocketProvider from "../components/chat/ChatSocketProvider";
+import AuctionNotificationCenter from "../components/chat/AuctionNotificationCenter";
 import CommerceRestrictionBanner from "../components/CommerceRestrictionBanner";
 import AuthArrival from "../components/auth/AuthArrival";
 
@@ -53,6 +54,7 @@ export default function RootLayout({ children }) {
           See ChatSocketProvider's comment. */}
       <body className="font-sans">
         <ChatSocketProvider>
+          <AuctionNotificationCenter />
           <CommerceRestrictionBanner />
           <AuthArrival>{children}</AuthArrival>
         </ChatSocketProvider>

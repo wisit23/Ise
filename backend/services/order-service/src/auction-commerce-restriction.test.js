@@ -36,6 +36,7 @@ function request() {
   return {
     body: {
       auctionId: "auction-1",
+      auctionBidId: "bid-1",
       productId: "product-1",
       productTitle: "Product",
       sellerId: "seller-1",

@@ -6,6 +6,9 @@ const mockReplace = jest.fn();
 const mockRouter = { replace: mockReplace };
 jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
 jest.mock("../../lib/api", () => ({ apiFetch: jest.fn() }));
+jest.mock("../support/hooks/useCustomerServiceConfig", () => () =>
+  require("../../../backend/shared/config/customer-service-client.json"),
+);
 jest.mock("../../lib/auth", () => ({
   getStoredUser: jest.fn(),
   getAccessToken: jest.fn(),

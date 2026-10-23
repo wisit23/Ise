@@ -1,8 +1,8 @@
 const { wrapClient: wrapDisputes } = require("./disputeWorkflowClient");
 const { wrapClient: wrapHistory } = require("./orderHistoryClient");
 
-// Keep both projections on the same client and interactive transaction.
-// History must be outermost to hydrate orders included through dispute reads.
+// Preserve historical audit formatting and address API shapes on the same
+// client/transaction. Operational state is stored in columns and dedicated tables.
 function wrapClient(prisma) {
   return wrapHistory(wrapDisputes(prisma));
 }

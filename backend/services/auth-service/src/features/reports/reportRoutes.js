@@ -7,6 +7,7 @@ const {
 } = require("@reloop/shared");
 const reportService = require("./reportService");
 const prisma = require("../../models/prismaClient");
+const { upload } = require("./reportEvidenceStorage");
 
 const router = Router();
 
@@ -34,22 +35,85 @@ router.get(
   },
 );
 
+router.get(
+  "/reports/pending-check",
+  requireAuth,
+  async (req, res, next) => {
+    try {
+      const result = await reportService.checkPendingReport({
+        reporterId: req.userId,
+        productId: req.query.productId,
+        reviewId: req.query.reviewId,
+        targetId: req.query.targetId,
+      });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+router.get(
+  "/reports/my-reported-reviews",
+  requireAuth,
+  async (req, res, next) => {
+    try {
+      const reviewIds = await reportService.getMyReportedReviewIds(
+        req.userId,
+        req.query.productId,
+      );
+      res.json({ reportedReviewIds: reviewIds });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+
 router.post(
   "/reports",
   requireAuth,
   requirePermission("report:create"),
+  upload.single("file"),
   async (req, res, next) => {
     try {
       const report = await reportService.createReport({
         reporterId: req.userId,
         targetId: req.body.targetId,
-        productId: req.body.productId,
+        category: req.body.category,
         reason: req.body.reason,
+        productId: req.body.productId,
+        file: req.file,
+        reviewId: req.body.reviewId,
       });
       res.status(201).json(report);
     } catch (err) {
       next(err);
     }
+  },
+);
+
+router.get(
+  "/admin/reports/:id/evidence/:evidenceId",
+  requireAuth,
+  requirePermission("admin:report:read"),
+  async (req, res, next) => {
+    try {
+      const evidence = await reportService.viewReportEvidence({ reportId: req.params.id, evidenceId: req.params.evidenceId });
+      res.setHeader("Content-Type", evidence.fileType);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.sendFile(evidence.path);
+    } catch (error) { next(error); }
+  },
+);
+
+router.get(
+  "/admin/reports/:id/chat",
+  requireAuth,
+  requirePermission("admin:report:read"),
+  async (req, res, next) => {
+    try { res.json(await reportService.getReportChat({ reportId: req.params.id, before: req.query.before })); }
+    catch (error) { next(error); }
   },
 );
 
@@ -64,6 +128,8 @@ router.get(
         ...pagination,
         status: req.query.status,
         search: req.query.q,
+        scope: req.query.scope,
+        staffId: req.userId,
       });
       res.json(paginatedResponse(items, total, pagination));
     } catch (err) {

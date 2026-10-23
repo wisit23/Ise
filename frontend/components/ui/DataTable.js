@@ -16,6 +16,8 @@ export default function DataTable({
   rowKey = (row) => row.id,
   minWidth = "min-w-[750px]",
   className = "",
+  // Fixed layout keeps column widths stable regardless of row content.
+  fixed = false,
 }) {
   const align = (a) =>
     a === "center" ? "text-center" : a === "right" ? "text-right" : "text-left";
@@ -24,14 +26,14 @@ export default function DataTable({
     <div
       className={`overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] ${className}`}
     >
-      <table className={`w-full ${minWidth} border-collapse text-sm`}>
+      <table className={`w-full ${minWidth} border-collapse text-sm ${fixed ? "table-fixed" : ""}`}>
         <thead>
-          <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          <tr className="border-b border-slate-200 bg-slate-50/70 text-xs font-semibold text-slate-500 [&>th:first-child]:pl-5 [&>th:last-child]:pr-5">
             {columns.map((c) => (
               <th
                 key={c.key}
                 scope="col"
-                className={`px-5 py-4 ${align(c.align)} ${c.headerClassName || ""}`}
+                className={`whitespace-nowrap px-3 py-3 align-middle ${align(c.align)} ${c.headerClassName || ""}`}
               >
                 {c.header}
               </th>
@@ -61,16 +63,16 @@ export default function DataTable({
               <tr
                 key={rowKey(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
-                className={`group transition-all duration-200 ${
+                className={`group transition-all duration-200 [&>td:first-child]:pl-5 [&>td:last-child]:pr-5 ${
                   onRowClick
-                    ? "cursor-pointer hover:bg-slate-50/80 hover:shadow-sm"
+                    ? "cursor-pointer hover:bg-slate-50/80"
                     : ""
                 }`}
               >
                 {columns.map((c) => (
                   <td
                     key={c.key}
-                    className={`px-5 py-4 ${align(c.align)} ${c.className || ""}`}
+                    className={`px-3 py-3.5 align-middle ${align(c.align)} ${c.className || ""}`}
                   >
                     {c.render ? c.render(row) : row[c.key]}
                   </td>

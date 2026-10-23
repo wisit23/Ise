@@ -429,3 +429,199 @@ test("marketingAuditRepository - handles idempotencyKey collision via createMany
     /DB connection lost/,
   );
 });
+
+test("marketingAuditService - operator search and enrichment", async (t) => {
+  const { AppError } = require("@reloop/shared");
+
+  let recordedListOpts = null;
+  const mockLogs = [
+    {
+      id: "log-1",
+      actorId: "u-123",
+      actorRole: "MARKETING",
+      action: "CAMPAIGN_UPDATE",
+      entityType: "CAMPAIGN",
+      entityId: "camp-001",
+      previousState: { name: "แคมเปญก่อนแก้" },
+      newState: { name: "แคมเปญหลังแก้" },
+    },
+    {
+      id: "log-2",
+      actorId: "SYSTEM",
+      actorRole: "SYSTEM",
+      action: "ARTICLE_PUBLISH",
+      entityType: "ARTICLE",
+      entityId: "art-001",
+      previousState: null,
+      newState: { title: "บทความแฟชั่นยั่งยืน" },
+    },
+    {
+      id: "log-3",
+      actorId: "u-deleted",
+      actorRole: "MARKETING",
+      action: "AUCTION_ROUND_CREATE",
+      entityType: "AUCTION_ROUND",
+      entityId: "rnd-001",
+      previousState: null,
+      newState: null,
+    },
+    {
+      id: "log-4",
+      actorId: "audit-test-mkt-01",
+      actorRole: "MARKETING",
+      action: "CAMPAIGN_CREATE",
+      entityType: "CAMPAIGN",
+      entityId: "camp-custom-01",
+      previousState: null,
+      newState: { name: "Reject Test Campaign" },
+    },
+  ];
+
+  const mockRepo = {
+    listAuditLogs: async (opts) => {
+      recordedListOpts = opts;
+      let items = [...mockLogs];
+      if (opts.actorIds && Array.isArray(opts.actorIds)) {
+        items = items.filter((item) => opts.actorIds.includes(item.actorId));
+      } else if (opts.actorId) {
+        items = items.filter((item) => item.actorId === opts.actorId);
+      }
+      return {
+        items,
+        total: items.length,
+      };
+    },
+  };
+
+  const mockAuthClient = {
+    searchUsers: async (q) => {
+      if (q === "fail-auth") throw new AppError(502, "Auth service unreachable");
+      if (q === "สมชาย") return [{ id: "u-123", userId: "u-123", displayName: "สมชาย" }];
+      if (q === "not-found") return [];
+      return [];
+    },
+    getDisplayNames: async (ids) => {
+      return ids.includes("u-123") ? [{ userId: "u-123", displayName: "สมชาย การตลาด" }] : [];
+    },
+  };
+
+  const mockPrisma = {
+    auctionRound: {
+      findMany: async () => [{ id: "rnd-001", title: "รอบประมูลวินเทจ (ปัจจุบัน)" }],
+    },
+  };
+
+  const service = createMarketingAuditService(mockRepo, mockAuthClient, mockPrisma);
+
+  await t.test("operator search by name filters by resolved actor IDs and enriches", async () => {
+    const res = await service.getAuditLogs({ q: "สมชาย" });
+    assert.ok(recordedListOpts.actorIds.includes("u-123"));
+    assert.equal(res.items.length, 1);
+
+    // Operator enrichment
+    assert.equal(res.items[0].actorName, "สมชาย การตลาด");
+    assert.equal(res.items[0].isCurrentName, true);
+
+    // Entity enrichment & rename detection
+    assert.equal(res.items[0].entityName, "แคมเปญหลังแก้");
+    assert.equal(res.items[0].previousEntityName, "แคมเปญก่อนแก้");
+    assert.equal(res.items[0].newEntityName, "แคมเปญหลังแก้");
+  });
+
+  await t.test("operator search by full custom non-UUID ID without Auth account succeeds", async () => {
+    const res = await service.getAuditLogs({ actorQuery: "audit-test-mkt-01" });
+    assert.ok(recordedListOpts.actorIds.includes("audit-test-mkt-01"));
+    assert.equal(res.total, 1);
+    assert.equal(res.items[0].actorId, "audit-test-mkt-01");
+    assert.equal(res.items[0].actorName, "audit-test-mkt-01"); // fallback to ID
+    assert.equal(res.items[0].actorNameSource, "fallback_id");
+  });
+
+  await t.test("operator search by deleted user ID finds historical records", async () => {
+    const res = await service.getAuditLogs({ q: "u-deleted" });
+    assert.ok(recordedListOpts.actorIds.includes("u-deleted"));
+    assert.equal(res.total, 1);
+    assert.equal(res.items[0].actorId, "u-deleted");
+    assert.equal(res.items[0].actorName, "u-deleted"); // fallback to ID
+    assert.equal(res.items[0].actorNameSource, "fallback_id");
+  });
+
+  await t.test("operator search for ระบบอัตโนมัติ includes SYSTEM", async () => {
+    const res = await service.getAuditLogs({ q: "ระบบอัตโนมัติ" });
+    assert.ok(recordedListOpts.actorIds.includes("SYSTEM"));
+    assert.equal(res.total, 1);
+    assert.equal(res.items[0].actorName, "ระบบอัตโนมัติ");
+  });
+
+  await t.test("operator search with no matching users returns empty result", async () => {
+    const res = await service.getAuditLogs({ q: "not-found" });
+    assert.equal(res.total, 0);
+    assert.deepEqual(res.items, []);
+  });
+
+  await t.test("operator search does not pass search text as exact actorId", async () => {
+    await service.getAuditLogs({ q: "สมชาย", actorId: "สมชาย" });
+    assert.equal(recordedListOpts.actorId, undefined);
+    assert.ok(recordedListOpts.actorIds.includes("u-123"));
+  });
+
+  await t.test("operator search fail-closed on auth failure", async () => {
+    await assert.rejects(
+      () => service.getAuditLogs({ q: "fail-auth" }),
+      /Auth service unreachable/i,
+    );
+  });
+
+  await t.test("article editor differs from author: actorName must be editor, never authorName", async () => {
+    const authorServiceMockRepo = {
+      listAuditLogs: async () => ({
+        items: [
+          {
+            id: "log-art-1",
+            actorId: "u-editor-01",
+            actorRole: "MARKETING",
+            action: "ARTICLE_UPDATE",
+            entityType: "ARTICLE",
+            entityId: "art-100",
+            previousState: { title: "บทความเดิม", authorName: "สมคิด นักเขียน (เจ้าของ)" },
+            newState: { title: "บทความใหม่", authorName: "สมคิด นักเขียน (เจ้าของ)" },
+          },
+          {
+            id: "log-art-2",
+            actorId: "u-editor-unknown",
+            actorRole: "MARKETING",
+            action: "ARTICLE_UPDATE",
+            entityType: "ARTICLE",
+            entityId: "art-200",
+            previousState: { title: "บทความเดิม", authorName: "วิชัย นักเขียน" },
+            newState: { title: "บทความใหม่", authorName: "วิชัย นักเขียน" },
+          },
+        ],
+        total: 2,
+      }),
+    };
+
+    const authorServiceMockAuth = {
+      searchUsers: async () => [],
+      getDisplayNames: async (ids) => {
+        if (ids.includes("u-editor-01")) {
+          return [{ userId: "u-editor-01", displayName: "พิมพ์ชนก (ผู้แก้ไขจริง)" }];
+        }
+        return [];
+      },
+    };
+
+    const testService = createMarketingAuditService(authorServiceMockRepo, authorServiceMockAuth, mockPrisma);
+    const res = await testService.getAuditLogs({});
+
+    // log-art-1: Must show editor's name from auth directory, NOT the article author
+    assert.equal(res.items[0].actorName, "พิมพ์ชนก (ผู้แก้ไขจริง)");
+    assert.notEqual(res.items[0].actorName, "สมคิด นักเขียน (เจ้าของ)");
+    assert.equal(res.items[0].actorNameSource, "auth_directory");
+
+    // log-art-2: When editor is unknown, must fallback to actorId, NOT the article author
+    assert.equal(res.items[1].actorName, "u-editor-unknown");
+    assert.notEqual(res.items[1].actorName, "วิชัย นักเขียน");
+    assert.equal(res.items[1].actorNameSource, "fallback_id");
+  });
+});

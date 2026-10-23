@@ -8,10 +8,10 @@ import Badge from "../../panel/ui/Badge";
 import DropdownFilter from "../../panel/ui/DropdownFilter";
 
 const SOURCES = [
-  { value: "auth", label: "บัญชี / KYC / Report", owner: "Auth" },
-  { value: "holds", label: "Hold / Release", owner: "Order" },
-  { value: "disputes", label: "ข้อพิพาท / หลักฐาน", owner: "Order" },
-  { value: "support", label: "สถานะ Ticket", owner: "Support" },
+  { value: "auth", label: "Accounts / KYC / Reports", owner: "บัญชีผู้ใช้" },
+  { value: "holds", label: "Escrow", owner: "คำสั่งซื้อ" },
+  { value: "disputes", label: "Disputes / Evidence", owner: "ข้อพิพาท" },
+  { value: "support", label: "Tickets", owner: "คำร้อง" },
 ];
 
 const ACTION_OPTIONS = {
@@ -170,7 +170,7 @@ export default function AuditSection({ token }) {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err.message || `โหลด Audit จาก ${source} ไม่สำเร็จ`);
+        setError(err.message || `โหลดประวัติจาก ${source} ไม่สำเร็จ`);
         setEntries([]);
         setTotal(0);
       })
@@ -208,17 +208,17 @@ export default function AuditSection({ token }) {
     <div className="animate-fade-in-up flex min-h-full flex-col">
       <div className="mb-5">
         <h1 className="text-xl font-bold tracking-tight text-slate-900">
-          Audit Log ของ Trust & Safety
+          Audit Logs
         </h1>
         <p className="mt-1 text-sm font-medium text-slate-500">
-          แสดงข้อมูลจากฐานเจ้าของแต่ละ service โดยไม่รวมแล้วแบ่งหน้าข้ามระบบ
+          ตรวจสอบผู้ดำเนินการ เวลา และเหตุผลย้อนหลัง โดยเลือกประเภทข้อมูลที่ต้องการ
         </p>
       </div>
 
       <div
         className="mb-4 flex flex-wrap gap-2"
         role="tablist"
-        aria-label="แหล่ง Audit"
+        aria-label="ประเภทประวัติ"
       >
         {SOURCES.map((item) => (
           <button
@@ -243,25 +243,25 @@ export default function AuditSection({ token }) {
         className="mb-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-3 xl:grid-cols-6"
       >
         <input
-          aria-label="Actor ID"
+          aria-label="รหัสผู้ดำเนินการ"
           value={draft.actorId}
           onChange={(e) =>
             setDraft((value) => ({ ...value, actorId: e.target.value }))
           }
-          placeholder="Actor ID"
+          placeholder="รหัสผู้ดำเนินการ"
           className="rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs"
         />
         <input
-          aria-label="Target ID"
+          aria-label="รหัสรายการที่เกี่ยวข้อง"
           value={draft.targetId}
           onChange={(e) =>
             setDraft((value) => ({ ...value, targetId: e.target.value }))
           }
-          placeholder="Target / Order / Ticket ID"
+          placeholder="รหัสบัญชี คำสั่งซื้อ หรือคำร้อง"
           className="rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs"
         />
         <input
-          aria-label="Request ID"
+          aria-label="รหัสอ้างอิง"
           value={draft.requestId}
           disabled={!["auth", "support"].includes(source)}
           onChange={(e) =>
@@ -269,31 +269,35 @@ export default function AuditSection({ token }) {
           }
           placeholder={
             source === "auth"
-              ? "Request ID"
+              ? "รหัสอ้างอิง"
               : source === "support"
-                ? "Operation / dedupe key"
-                : "ไม่มี reference field"
+                ? "รหัสอ้างอิงการดำเนินการ"
+                : "ไม่มีรหัสอ้างอิงสำหรับประเภทนี้"
           }
           className="rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs disabled:bg-slate-100 disabled:text-slate-400"
         />
-        <input
-          aria-label="วันที่เริ่มต้น"
-          type="date"
-          value={draft.from}
-          onChange={(e) =>
-            setDraft((value) => ({ ...value, from: e.target.value }))
-          }
-          className="rounded-lg border border-slate-300 px-3 py-2 text-xs"
-        />
-        <input
-          aria-label="วันที่สิ้นสุด"
-          type="date"
-          value={draft.to}
-          onChange={(e) =>
-            setDraft((value) => ({ ...value, to: e.target.value }))
-          }
-          className="rounded-lg border border-slate-300 px-3 py-2 text-xs"
-        />
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600">
+          วันที่เริ่มต้น
+          <input
+            type="date"
+            value={draft.from}
+            onChange={(e) =>
+              setDraft((value) => ({ ...value, from: e.target.value }))
+            }
+            className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-xs"
+          />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600">
+          วันที่สิ้นสุด
+          <input
+            type="date"
+            value={draft.to}
+            onChange={(e) =>
+              setDraft((value) => ({ ...value, to: e.target.value }))
+            }
+            className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-xs"
+          />
+        </label>
         <button
           type="submit"
           className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white"
@@ -320,7 +324,7 @@ export default function AuditSection({ token }) {
       {error && (
         <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           <p>
-            โหลด Audit จาก {activeSource.owner} ไม่สำเร็จ: {error}
+            โหลดประวัติจาก {activeSource.owner} ไม่สำเร็จ: {error}
           </p>
           <button
             type="button"
@@ -334,24 +338,24 @@ export default function AuditSection({ token }) {
 
       {loading ? (
         <div className="flex h-48 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm text-slate-500">
-          กำลังโหลด Audit...
+          กำลังโหลดประวัติ...
         </div>
       ) : !error && entries.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-12 text-center text-sm font-semibold text-slate-600">
-          ไม่มี Audit ที่ตรงกับเงื่อนไขในแหล่งข้อมูลนี้
+          ไม่พบประวัติที่ตรงกับเงื่อนไข
         </div>
       ) : !error ? (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full min-w-[1000px] border-collapse text-left text-xs text-slate-700">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/70">
-                <th className="p-3.5">เวลา</th>
+                <th className="p-3.5">Time</th>
                 <th className="p-3.5">Source</th>
                 <th className="p-3.5">Actor</th>
                 <th className="p-3.5">Action</th>
                 <th className="p-3.5">Target / Case</th>
-                <th className="p-3.5">เหตุผล / การเปลี่ยนแปลง</th>
-                <th className="p-3.5">อ้างอิง</th>
+                <th className="p-3.5">Reason / Change</th>
+                <th className="p-3.5">Reference</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -370,11 +374,11 @@ export default function AuditSection({ token }) {
                     <td className="p-3.5 whitespace-nowrap text-slate-500">
                       {new Date(log.occurredAt).toLocaleString("th-TH")}
                     </td>
-                    <td className="p-3.5 font-bold">{log.source}</td>
+                    <td className="p-3.5 font-bold">{activeSource.label}</td>
                     <td className="p-3.5 font-mono">{log.actorId}</td>
                     <td className="p-3.5">
                       <Badge
-                        text={log.action}
+                        text={actionOptions.find((option) => option.value === log.action)?.label || log.action}
                         style={
                           ACTION_STYLE[log.action] ||
                           "bg-slate-100 text-slate-700"
@@ -383,11 +387,11 @@ export default function AuditSection({ token }) {
                     </td>
                     <td className="p-3.5 font-mono">
                       <div>
-                        {log.targetType}: {log.targetId}
+                        {({ USER: "บัญชี", REPORT: "รายงาน", PRODUCT: "สินค้า", ORDER: "คำสั่งซื้อ", TICKET: "คำร้อง", DISPUTE: "ข้อพิพาท", KYC_APPLICATION: "คำขอยืนยันตัวตน" })[log.targetType] || "รายการ"}: {log.targetId}
                       </div>
                       {log.caseId && (
                         <div className="mt-1 text-[10px] text-slate-400">
-                          case: {log.caseNumber || log.caseId}
+                          เคส: {log.caseNumber || log.caseId}
                         </div>
                       )}
                     </td>

@@ -52,11 +52,20 @@ test("absolutePath refuses to escape the storage directory", () => {
     "../../../../etc/passwd",
     "..\\..\\windows\\system32\\config\\sam",
     "subdir/../../escape.txt",
+    "subdir\\../../escape.txt",
+    "/etc/passwd",
+    "C:\\windows\\system32\\config\\sam",
   ]) {
     assert.throws(
       () => absolutePath(evil),
       /invalid attachment key/,
       `${evil} must be rejected`,
     );
+  }
+});
+
+test("absolutePath rejects nested keys with either path separator", () => {
+  for (const key of ["subdir/photo.png", "subdir\\photo.png"]) {
+    assert.throws(() => absolutePath(key), /invalid attachment key/);
   }
 });

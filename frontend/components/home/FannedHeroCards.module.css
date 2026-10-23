@@ -11,9 +11,3 @@
   box-shadow: none;
   transition: border-color 240ms ease-out;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .card {
-    will-change: auto;
-  }
-}

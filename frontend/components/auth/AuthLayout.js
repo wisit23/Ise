@@ -1,9 +1,11 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Input from "../ui/Input";
 import AuthScene from "./AuthScene";
+import { useAuthTransition } from "./AuthArrival";
+import { AUTH_ENTRANCE_MS } from "./authMotion";
 import BrandLogo from "../BrandLogo";
 import styles from "./AuthLayout.module.css";
 
@@ -76,11 +78,30 @@ export default function AuthLayout({
   departing = false,
 }) {
   const register = mode === "register";
+  const { phase, markAuthReady } = useAuthTransition();
+  const [arriving, setArriving] = useState(true);
+  const center = useRef(null);
+  const initialMode = useRef(mode);
+  const [hasSwitched, setHasSwitched] = useState(false);
+  useLayoutEffect(() => {
+    // Set the HTML attribute directly for both React 18 and React 19.
+    center.current?.toggleAttribute("inert", departing);
+  }, [departing]);
+  useLayoutEffect(() => {
+    if (mode !== initialMode.current) setHasSwitched(true);
+  }, [mode]);
+  useLayoutEffect(() => {
+    markAuthReady(mode === "register" ? "/register" : "/login");
+  }, [mode, markAuthReady]);
+  useEffect(() => {
+    if (!arriving || phase === "covering") return;
+    const timer = setTimeout(() => setArriving(false), AUTH_ENTRANCE_MS);
+    return () => clearTimeout(timer);
+  }, [arriving, phase]);
   const card = useRef(null);
   const [height, setHeight] = useState(null);
   useLayoutEffect(() => {
-    const measure = () =>
-      setHeight(card.current.getBoundingClientRect().height);
+    const measure = () => setHeight(card.current.offsetHeight);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(card.current);
@@ -88,7 +109,7 @@ export default function AuthLayout({
   }, []);
   return (
     <main
-      className={`${styles.page} ${departing ? styles.departing : ""}`}
+      className={`${styles.page} ${departing ? styles.departing : ""} ${arriving ? styles.arriving : ""} ${phase === "covering" ? styles.arrivalPaused : ""}`}
       lang="en"
       aria-busy={departing}
     >
@@ -104,7 +125,7 @@ export default function AuthLayout({
           Back to shopping
         </Link>
       </header>
-      <div className={styles.center} inert={departing}>
+      <div ref={center} className={styles.center}>
         <div
           className={styles.cardFrame}
           style={height ? { height } : undefined}
@@ -141,7 +162,10 @@ export default function AuthLayout({
                 Sign up
               </Link>
             </nav>
-            <div key={mode} className={styles.formTransition}>
+            <div
+              key={mode}
+              className={`${styles.formTransition} ${!hasSwitched ? styles.initialForm : ""}`}
+            >
               {children}
             </div>
             <p className={styles.switchAccount}>

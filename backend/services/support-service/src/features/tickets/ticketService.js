@@ -1,5 +1,4 @@
 const {
-  STAFF_ROLES,
   badRequest,
   forbidden,
   notFound,
@@ -19,7 +18,7 @@ const riskClient = require("../../services/riskClient");
 
 const { ticketCapabilities } = require("./workspacePolicy");
 
-const AGENT_ROLES = new Set(STAFF_ROLES);
+const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "TRUST_AND_SAFETY", "ADMIN"]);
 
 function isAgent(role) {
   return AGENT_ROLES.has(role);
@@ -36,6 +35,7 @@ function toRequesterView(ticket) {
 async function assertAccess({ ticketId, userId, role }) {
   const ticket = await ticketModel.findById(ticketId);
   if (!ticket) throw notFound("ticket not found");
+  if (ticket.deletedAt && !["ADMIN", "TRUST_AND_SAFETY"].includes(role)) throw notFound("ticket not found");
 
   if (ticket.requesterId === userId) return ticket;
   // Trust & Safety / Admin is the escalation and safety authority; they can inspect
@@ -193,15 +193,17 @@ async function listQueue({
   userId,
   scope,
   work,
+  retention,
   status,
   priority,
   search,
   ...pagination
 }) {
   if (!isAgent(role)) throw forbidden("only support agents can view the queue");
+  retention = require("@reloop/shared/src/caseRetention").retentionView(retention, role);
   if (work && !["open", "overdue", "soon", "reply"].includes(work))
     throw badRequest("invalid work filter");
-  if (scope && !["mine", "unassigned", "all"].includes(scope))
+  if (scope && !["mine", "unassigned", "escalated", "closed", "all", "history"].includes(scope))
     throw badRequest("invalid scope");
   if (status && !STATUSES.includes(status)) throw badRequest("invalid status");
   if (
@@ -221,6 +223,7 @@ async function listQueue({
       : undefined;
   const queue = await ticketModel.listQueue({
     replyIds,
+    retention,
     role,
     scope,
     work,
@@ -230,6 +233,7 @@ async function listQueue({
     search,
     ...pagination,
   });
+  const ratings = await ticketModel.ratingsFor(queue.items.map((ticket) => ticket.id));
   return {
     ...queue,
     items: await enrichStaffRows(
@@ -244,6 +248,7 @@ async function listQueue({
         return {
           ...ticket,
           capabilities: ticketCapabilities(ticket, userId, role),
+          csat: ratings.get(ticket.id) || [],
           queuePriority: ticket.priority,
           priorityScore: score.priorityScore,
         };
@@ -332,7 +337,7 @@ async function changeStatus({
     throw forbidden("only support agents can change ticket status");
   const ticket = await assertAccess({ ticketId, userId, role });
 
-  if (role === "CUSTOMER_SERVICE" && (ticket.assigneeId !== userId || ticket.status === "ESCALATED"))
+  if (ticket.assigneeId !== userId || (role === "CUSTOMER_SERVICE" && ticket.status === "ESCALATED"))
     throw forbidden("only the case owner can change this ticket status");
   if (version !== undefined && version !== ticket.version)
     throw conflict("ticket was modified, reload before changing status");

@@ -6,6 +6,8 @@ import NavBar from "../../../../components/NavBar";
 import Footer from "../../../../components/Footer";
 import ConfirmDialog from "../../../../components/ui/ConfirmDialog";
 import EmbeddedChat from "../../../../components/support/EmbeddedChat";
+import CsatRating from "../../../../components/support/CsatRating";
+import useCustomerServiceConfig from "../../../../components/support/hooks/useCustomerServiceConfig";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 import { TICKET_STATUS_STYLE } from "../../../../lib/supportConstants";
@@ -21,6 +23,7 @@ const STATUS_LABEL = {
 };
 
 export default function TicketThreadPage() {
+  const { timing } = useCustomerServiceConfig();
   const { id } = useParams();
   const router = useRouter();
   const [user, setUser] = useState(undefined);
@@ -53,6 +56,38 @@ export default function TicketThreadPage() {
     setUser(getStoredUser());
     load();
   }, [id, router]);
+
+  // Pick up an agent's resolution while the customer is still reading the chat.
+  useEffect(() => {
+    if (!ticket || ticket.status === "CLOSED") return;
+    let active = true;
+    let inFlight = false;
+    const controller = new AbortController();
+    const refresh = async () => {
+      if (document.hidden || inFlight) return;
+      inFlight = true;
+      try {
+        const latest = await apiFetch(`/api/support/tickets/${id}`, {
+          token: getAccessToken(),
+          signal: controller.signal,
+          timeoutMs: timing.requestTimeoutMs,
+        });
+        if (active) setTicket(latest);
+      } catch {
+        // Keep the conversation and draft available during a temporary outage.
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(refresh, timing.dashboardRefreshMs);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      active = false;
+      controller.abort();
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [id, ticket?.status, timing.dashboardRefreshMs, timing.requestTimeoutMs]);
 
   async function handleReply(e) {
     e.preventDefault();
@@ -191,6 +226,14 @@ export default function TicketThreadPage() {
 
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0">
+            {ticket.requesterId === user?.id &&
+              ["RESOLVED", "CLOSED"].includes(ticket.status) && (
+                <CsatRating
+                  key={`${id}:${user.id}`}
+                  endpoint={`/api/support/tickets/${id}/csat`}
+                  caseLabel="คำร้องนี้"
+                />
+              )}
             {ticket.conversationId ? (
               <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
                 <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-3">
@@ -394,8 +437,8 @@ export default function TicketThreadPage() {
       <ConfirmDialog
         open={escalating}
         busy={busyAction}
-        title="ส่งต่อให้ Admin?"
-        description="ตั๋วจะออกจากคิวของคุณและไปอยู่ในคิวของ Admin"
+        title="ส่งต่อให้ Trust and Safety?"
+        description="ตั๋วจะออกจากคิวของคุณและไปอยู่ในคิว Trust and Safety"
         confirmLabel="ส่งต่อ"
         tone="primary"
         reason="optional"

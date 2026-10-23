@@ -9,6 +9,8 @@ const productClient = require("./services/productClient");
 const checkoutSessionService = require("./features/checkoutSessions/checkoutSessionService");
 const productSyncService = require("./services/productSyncService");
 const attributionOutboxService = require("./services/attributionOutboxService");
+const auctionSettlementService = require("./features/auctionSettlements/auctionSettlementService");
+const orderLifecycleService = require("./services/orderLifecycleService");
 
 const PORT = process.env.ORDER_PORT || 3003;
 app.listen(PORT, () => {
@@ -22,4 +24,9 @@ app.listen(PORT, () => {
   checkoutSessionService.startExpiryWorker();
   productSyncService.startWorker();
   attributionOutboxService.startWorker();
+  require("@reloop/shared/src/caseRetention").startCaseRetention(
+    require("./models/prismaClient"), require("./generated/prisma-client").Prisma, "disputes",
+  );
+  auctionSettlementService.startWorker();
+  orderLifecycleService.startWorker();
 });

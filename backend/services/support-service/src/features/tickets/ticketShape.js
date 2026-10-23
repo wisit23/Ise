@@ -16,8 +16,7 @@ const ticketInclude = {
     include: { toStatus: true },
     orderBy: { createdAt: "desc" },
   },
-  slaTargets: true,
-  auditLog: { where: { action: { in: events.STATE_EVENTS } } },
+  slaTargets: { include: { round: true } },
   chatLink: true,
 };
 
@@ -34,6 +33,9 @@ function toTicket(row) {
     auditLog = [],
     ...core
   } = row;
+  delete core.classificationReasonCodes;
+  delete core.classificationPolicyVersion;
+  delete core.riskLookupAvailable;
   const latestTargets = events.effectiveTargets(slaTargets, auditLog);
   const response = latestTargets.find((t) => t.metricType === "FIRST_RESPONSE");
   const resolution = latestTargets.find((t) => t.metricType === "RESOLUTION");
@@ -43,7 +45,6 @@ function toTicket(row) {
   const latest = (code) => statusHistory.find((h) => h.toStatus.code === code);
   return {
     ...core,
-    ...events.state(auditLog),
     sla:
       currentStatus?.code === "CLOSED" || currentStatus?.code === "RESOLVED"
         ? { state: "complete", dueAt: null, metric: null }
@@ -72,7 +73,7 @@ function toTicket(row) {
     slaDueAt: pending[0]?.dueAt ?? resolution?.dueAt ?? response?.dueAt ?? null,
     firstResponseAt: response?.achievedAt ?? null,
     resolvedAt: latest("RESOLVED")?.createdAt ?? null,
-    closedAt: latest("CLOSED")?.createdAt ?? null,
+    closedAt: core.closedAt ?? latest("CLOSED")?.createdAt ?? null,
     escalatedAt: latest("ESCALATED")?.createdAt ?? null,
     escalationNote: latest("ESCALATED")?.reason ?? null,
   };

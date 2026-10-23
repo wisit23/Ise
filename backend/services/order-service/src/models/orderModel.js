@@ -3,11 +3,15 @@ const prisma = require("./prismaClient");
 const { money } = require("./money");
 const evidenceModel = require("../features/disputes/evidenceView");
 const { assertCanCancelOrder } = require("../services/orderTransitionService");
+const { isRefundingCancellation } = require("../services/orderLifecycle");
 const VALID_STATUSES = [
   "pending",
   "pending_payment",
+  "paid",
   "confirmed",
+  "ready_to_ship",
   "shipped",
+  "delivered",
   "completed",
   "cancelled",
   "disputed",
@@ -47,9 +51,11 @@ function view(row) {
     checkoutSession: row.checkout ? {...row.checkout,shippingAddress:row.shipping?.addressSnapshot || row.checkout.addressSnapshot} : null,
     shippingAddress:row.shipping?.addressSnapshot || row.checkout?.addressSnapshot || null,
     reservationId: row.basketId,
-    reservationExpiresAt: row.basket?.unlockAt || null,
+    reservationExpiresAt:
+      row.basket?.unlockAt ||
+      (row.orderType === "AUCTION" ? row.paymentDeadlineAt : null),
     auctionId: row.auctionId || (row.orderType === "AUCTION" ? row.id : null),
-    dispute: disputeView(row.dispute),
+    dispute: row.dispute?.deletedAt ? null : disputeView(row.dispute),
     holds,
     heldBy: active[0]?.holdBy || null,
     heldAt: active[0]?.holdAt || null,
@@ -60,6 +66,27 @@ function view(row) {
 }
 async function create(data) {
   return view(await prisma.order.create({ data, include: INCLUDE }));
+}
+
+async function createAuctionOrder(data, { previousOrderId = null } = {}) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.order.findUnique({
+      where: { id: data.id },
+      include: INCLUDE,
+    });
+    if (existing) return { order: view(existing), created: false };
+
+    const created = await tx.order.create({ data, include: INCLUDE });
+    await tx.orderLog.create({
+      data: logData(created, "SYSTEM", "AUCTION_ORDER_CREATED", {
+        auctionId: created.auctionId,
+        auctionBidId: created.auctionBidId,
+        previousOrderId,
+        paymentDeadlineAt: created.paymentDeadlineAt,
+      }),
+    });
+    return { order: view(created), created: true };
+  });
 }
 async function findById(id) {
   return view(
@@ -98,7 +125,10 @@ function listByBuyer(buyerId, options = {}) {
       ...(status === "pending_payment"
         ? {
             OR: [
-              { basketId: null },
+              {
+                orderType: "AUCTION",
+                paymentDeadlineAt: { gt: new Date() },
+              },
               { basket: { unlockAt: { gt: new Date() } } },
             ],
           }
@@ -115,6 +145,111 @@ function listBySeller(sellerId, options = {}) {
     },
     options,
   );
+}
+
+async function findAuctionOrdersDueForSettlement(now = new Date(), take = 50) {
+  const rows = await prisma.order.findMany({
+    where: {
+      orderType: "AUCTION",
+      OR: [
+        {
+          status: { in: ["pending", "pending_payment"] },
+          paymentDeadlineAt: { lte: now },
+        },
+        {
+          status: "cancelled",
+          paymentDeadlineAt: { not: null },
+        },
+      ],
+    },
+    include: INCLUDE,
+    orderBy: [{ paymentDeadlineAt: "asc" }, { createdAt: "asc" }],
+    take,
+  });
+  return rows.map(view);
+}
+
+async function claimExpiredAuctionOrder({ id, expectedVersion, now = new Date() }) {
+  return prisma.$transaction(async (tx) => {
+    const before = await tx.order.findUnique({ where: { id }, include: INCLUDE });
+    if (!before) return null;
+    if (
+      !["pending", "pending_payment"].includes(before.status) ||
+      before.orderType !== "AUCTION" ||
+      !before.paymentDeadlineAt ||
+      before.paymentDeadlineAt > now
+    ) {
+      return view(before);
+    }
+    const claimed = await tx.order.updateMany({
+      where: {
+        id,
+        version: expectedVersion ?? before.version,
+        status: { in: ["pending", "pending_payment"] },
+        paymentDeadlineAt: { lte: now },
+      },
+      data: { status: "cancelled", version: { increment: 1 } },
+    });
+    if (claimed.count !== 1) return null;
+    await tx.orderLog.create({
+      data: logData(before, "SYSTEM", "AUCTION_PAYMENT_EXPIRED", {
+        buyerId: before.buyerId,
+        auctionBidId: before.auctionBidId,
+        paymentDeadlineAt: before.paymentDeadlineAt,
+      }),
+    });
+    return view(await tx.order.findUnique({ where: { id }, include: INCLUDE }));
+  });
+}
+
+async function finalizeExpiredAuctionOrder({
+  id,
+  expectedVersion,
+  successorOrder = null,
+}) {
+  return prisma.$transaction(async (tx) => {
+    const before = await tx.order.findUnique({ where: { id }, include: INCLUDE });
+    if (!before) return null;
+    if (before.status !== "cancelled" || before.orderType !== "AUCTION") {
+      return null;
+    }
+    if (!before.paymentDeadlineAt) return view(before);
+
+    const claimed = await tx.order.updateMany({
+      where: {
+        id,
+        version: expectedVersion ?? before.version,
+        status: "cancelled",
+        orderType: "AUCTION",
+        paymentDeadlineAt: { not: null },
+      },
+      data: {
+        paymentDeadlineAt: null,
+        version: { increment: 1 },
+      },
+    });
+    if (claimed.count !== 1) return null;
+    await tx.orderLog.create({
+      data: logData(
+        before,
+        "SYSTEM",
+        successorOrder
+          ? "AUCTION_WINNER_REASSIGNED"
+          : "AUCTION_NO_PAYING_BIDDER",
+        successorOrder
+          ? {
+              previousBuyerId: before.buyerId,
+              nextBuyerId: successorOrder.buyerId,
+              nextOrderId: successorOrder.id,
+              nextAuctionBidId: successorOrder.auctionBidId,
+              price: successorOrder.price,
+              paymentDeadlineAt: successorOrder.paymentDeadlineAt,
+            }
+          : { auctionId: before.auctionId },
+      ),
+    });
+    return view(await tx.order.findUnique({ where: { id }, include: INCLUDE }));
+  });
 }
 function logData(order, actorId, action, detail) {
   return {
@@ -154,6 +289,15 @@ async function updateCampaign(id, { campaignId, finalPrice }) {
     }),
   );
 }
+const STATUS_TIMESTAMP = {
+  shipped: "shippedAt",
+  delivered: "deliveredAt",
+  completed: "completedAt",
+};
+function statusData(status, now = new Date()) {
+  const field = STATUS_TIMESTAMP[status];
+  return { status, version: { increment: 1 }, ...(field ? { [field]: now } : {}) };
+}
 async function transitionStatusWithProductSync({
   id,
   status,
@@ -168,35 +312,43 @@ async function transitionStatusWithProductSync({
       include: INCLUDE,
     });
     if (!before) return { order: null, event: null };
-    if (status === "cancelled") assertCanCancelOrder(before);
+    const refunding = isRefundingCancellation(before, status);
+    if (status === "cancelled" && !refunding) assertCanCancelOrder(before);
+    const now = new Date();
     const claimed = await tx.order.updateMany({
       where: {
         id,
         version: expectedVersion,
         ...(expectedStatuses ? { status: { in: expectedStatuses } } : {}),
       },
-      data: { status, version: { increment: 1 } },
+      data: statusData(status, now),
     });
     if (claimed.count !== 1)
       throw conflict("order was modified concurrently — reload and retry");
-    if (status === "confirmed")
+    // Simulated refund: no money moves, the payment history records it.
+    if (refunding)
       await tx.payment.create({
         data: {
           orderId: id,
-          paymentType: "SIMULATED",
-          paymentStatus: "paid",
+          paymentType: "SIMULATED_REFUND",
+          paymentStatus: "refunded",
           paymentAmount: before.ordersAmount,
-          paidAt: new Date(),
+          paidAt: now,
         },
       });
-    const event = await tx.orderLog.create({
-      data: logData(
-        before,
-        actorId || before.buyerId,
-        "PRODUCT_SYNC_REQUESTED",
-        productSync,
-      ),
-    });
+    if (status === "delivered" && before.shipping)
+      await tx.shipping.update({
+        where: { orderId: id },
+        data: { status: "delivered" },
+      });
+    const event = productSync
+      ? await require("../services/productSyncService").createRequest(
+          tx,
+          before,
+          actorId || before.buyerId,
+          productSync,
+        )
+      : null;
     if (status === "cancelled" && before.basketId)
       await tx.basket.update({
         where: { id: before.basketId },
@@ -208,17 +360,42 @@ async function transitionStatusWithProductSync({
         to: status,
       }),
     });
-    let attributionEvent=null;
-    if(status === "completed" && before.campaignId){
-      attributionEvent = await tx.attributionJob.findUnique({ where: { orderId: id } });
+    let attributionEvent = null;
+    if (status === "completed" && before.campaignId) {
+      attributionEvent = await tx.attributionJob.findUnique({
+        where: { orderId: id },
+      });
       if (!attributionEvent) {
-        const job = await tx.orderLog.create({ data: logData(before, actorId || before.buyerId, "ATTRIBUTION_REQUESTED", {
-          schema_version: 1, campaignId: before.campaignId,
-          grossAmount: before.originalAmount.toString(),
-          discountAmount: money(before.originalAmount).minus(before.ordersAmount).toString(),
-          netAmount: before.ordersAmount.toString(), completedAt: new Date(),
-        }) });
-        attributionEvent = await tx.attributionJob.findUnique({ where: { id: job.id } });
+        attributionEvent = await tx.attributionJob.create({
+          data: {
+            orderId: id,
+            campaignId: before.campaignId,
+            grossAmount: before.originalAmount,
+            discountAmount: money(before.originalAmount).minus(
+              before.ordersAmount,
+            ),
+            netAmount: before.ordersAmount,
+            completedAt: new Date(),
+            attempts: 0,
+            nextAttemptAt: new Date(),
+            createdAt: new Date(),
+          },
+        });
+        await tx.orderLog.create({
+          data: logData(
+            before,
+            actorId || before.buyerId,
+            "ATTRIBUTION_REQUESTED",
+            {
+              eventId: attributionEvent.id,
+              campaignId: before.campaignId,
+              grossAmount: before.originalAmount.toString(),
+              discountAmount: attributionEvent.discountAmount.toString(),
+              netAmount: before.ordersAmount.toString(),
+              completedAt: attributionEvent.completedAt,
+            },
+          ),
+        });
       }
     }
     return {
@@ -264,6 +441,7 @@ async function cleanExpiredOrders(productClient) {
 }
 module.exports = {
   create,
+  createAuctionOrder,
   findById,
   findByReservationId,
   listByBuyer,
@@ -271,10 +449,14 @@ module.exports = {
   updateStatus,
   updateCampaign,
   cleanExpiredOrders,
+  findAuctionOrdersDueForSettlement,
+  claimExpiredAuctionOrder,
+  finalizeExpiredAuctionOrder,
   transitionStatusWithProductSync,
   VALID_STATUSES,
   INCLUDE,
   view,
   disputeView,
   logData,
+  statusData,
 };

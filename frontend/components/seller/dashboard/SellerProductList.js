@@ -4,7 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import Button from "../../ui/Button";
 import EmptyState from "../../ui/EmptyState";
+import ConfirmDialog from "../../ui/ConfirmDialog";
 import OrderShippingModal from "../../orders/OrderShippingModal";
+import OrderConfirmationModal from "../../orders/OrderConfirmationModal";
+import { apiFetch } from "../../../lib/api";
+import { getAccessToken } from "../../../lib/auth";
 import {
   PRODUCT_STATUS_LABEL,
   PRODUCT_STATUS_STYLE,
@@ -26,15 +30,39 @@ export default function SellerProductList({
   orders = [],
   statusFilter: propStatusFilter,
   onStatusFilterChange,
+  onProductDeleted,
   onOrderUpdated,
 }) {
   const [localStatusFilter, setLocalStatusFilter] = useState("");
   const [selectedOrderForShipping, setSelectedOrderForShipping] = useState(null);
   const [shippingModalOpen, setShippingModalOpen] = useState(false);
+  const [selectedOrderForConfirm, setSelectedOrderForConfirm] = useState(null);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [deleteProductTarget, setDeleteProductTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const statusFilter =
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
   const [search, setSearch] = useState("");
+
+  async function handleConfirmDeleteProduct() {
+    if (!deleteProductTarget) return;
+    const token = getAccessToken();
+    if (!token) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/products/${deleteProductTarget.id}`, {
+        method: "DELETE",
+        token,
+      });
+      onProductDeleted?.(deleteProductTarget.id);
+      setDeleteProductTarget(null);
+    } catch (err) {
+      alert(err.message || "เกิดข้อผิดพลาดในการลบสินค้า");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const filtered = products
     .filter((p) => !statusFilter || p.status === statusFilter)
@@ -182,13 +210,16 @@ export default function SellerProductList({
                   </td>
                   {(() => {
                     const awaitingOrder = (orders || []).find(
-                      (o) => o.productId === p.id && o.status === "confirmed",
+                      (o) => o.productId === p.id && o.status === "ready_to_ship",
+                    );
+                    const paidOrder = (orders || []).find(
+                      (o) => o.productId === p.id && o.status === "paid",
                     );
 
                     return (
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {awaitingOrder && p.status!=="removed" && (
+                          {awaitingOrder && p.status !== "removed" && (
                             <button
                               type="button"
                               onClick={() => {
@@ -204,13 +235,41 @@ export default function SellerProductList({
                               <span>จัดส่งสินค้า</span>
                             </button>
                           )}
-                          {!["sold","removed"].includes(p.status) ? (
-                            <Link
-                              href={`/products/${p.id}/edit`}
-                              className="focus-ring rounded text-xs font-medium text-slate-500 hover:text-emerald-700 hover:underline"
+                          {!awaitingOrder && paidOrder && p.status !== "removed" && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedOrderForConfirm(paidOrder);
+                                setConfirmModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-xs font-semibold shadow-2xs transition"
+                              title="เปิดดูรายละเอียดผู้ซื้อเพื่อยืนยันหรือปฏิเสธออเดอร์"
                             >
-                              แก้ไข
-                            </Link>
+                              <span className="material-symbols-outlined text-[15px]">
+                                check_circle
+                              </span>
+                              <span>ยืนยันรับออเดอร์</span>
+                            </button>
+                          )}
+                          {!["sold", "removed"].includes(p.status) ? (
+                            <div className="flex items-center justify-end gap-2.5">
+                              <Link
+                                href={`/products/${p.id}/edit`}
+                                className="focus-ring rounded text-xs font-medium text-slate-500 hover:text-emerald-700 hover:underline"
+                              >
+                                แก้ไข
+                              </Link>
+                              <span className="text-slate-200">|</span>
+                              <button
+                                type="button"
+                                disabled={p.status === "reserved"}
+                                onClick={() => setDeleteProductTarget(p)}
+                                className="focus-ring rounded text-xs font-medium text-red-500 hover:text-red-700 hover:underline disabled:opacity-40 disabled:hover:text-red-500 disabled:no-underline"
+                                title={p.status === "reserved" ? "ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้" : "ลบสินค้านี้"}
+                              >
+                                ลบ
+                              </button>
+                            </div>
                           ) : (
                             <span className="text-xs text-slate-500">{p.status === "removed" ? "ดูได้อย่างเดียว" : "—"}</span>
                           )}
@@ -234,6 +293,49 @@ export default function SellerProductList({
         onShipped={(updated) => {
           onOrderUpdated?.(updated);
         }}
+        onRejected={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+        onOrderUpdated={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+      />
+
+      {/* Order Confirmation & Details Modal */}
+      <OrderConfirmationModal
+        orderId={selectedOrderForConfirm?.id}
+        initialOrder={selectedOrderForConfirm}
+        isOpen={confirmModalOpen}
+        onClose={() => {
+          setConfirmModalOpen(false);
+          setSelectedOrderForConfirm(null);
+        }}
+        onConfirmed={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+        onRejected={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+        onOrderUpdated={(updated) => {
+          onOrderUpdated?.(updated);
+        }}
+      />
+
+      {/* Product Deletion Confirmation Modal */}
+      <ConfirmDialog
+        open={Boolean(deleteProductTarget)}
+        title="ยืนยันการลบสินค้า"
+        description={
+          deleteProductTarget
+            ? `คุณแน่ใจว่าต้องการลบสินค้า "${deleteProductTarget.title}" ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`
+            : ""
+        }
+        confirmLabel="ยืนยันการลบ"
+        cancelLabel="ยกเลิก"
+        tone="danger"
+        busy={deleting}
+        onConfirm={handleConfirmDeleteProduct}
+        onCancel={() => !deleting && setDeleteProductTarget(null)}
       />
     </div>
   );

@@ -290,6 +290,48 @@ async function getAttachment(req, res, next) {
   }
 }
 
+async function deleteByContext(req, res, next) {
+  try {
+    const { type, id } = req.params;
+    const matching = await prisma.conversation.findMany({
+      where: {
+        contextId: id,
+        contextType: { in: [type, `${type}_BUYER`, `${type}_SELLER`] },
+      },
+      include: { participants: true },
+    });
+
+    for (const conv of matching) {
+      await prisma.message.deleteMany({ where: { conversationId: conv.id } });
+      await prisma.conversation.delete({ where: { id: conv.id } });
+      broadcast.broadcastConversationDeleted(
+        conv.id,
+        (conv.participants || []).map((p) => p.userId)
+      );
+    }
+
+    res.json({ deletedCount: matching.length });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function broadcastRealtime(req, res, next) {
+  try {
+    const { event, data, rooms, broadcastGlobal } = req.body;
+    if (!event) throw badRequest("event is required");
+    broadcast.broadcastRealtime({
+      event,
+      data,
+      rooms: Array.isArray(rooms) ? rooms : [],
+      broadcastGlobal: Boolean(broadcastGlobal),
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getAttachment,
   createConversation,
@@ -298,4 +340,6 @@ module.exports = {
   addParticipant,
   updateStatus,
   getTranscript,
+  deleteByContext,
+  broadcastRealtime,
 };

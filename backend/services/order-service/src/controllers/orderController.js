@@ -1,4 +1,3 @@
-const attributionOutboxService = require("../services/attributionOutboxService");
 const crypto = require("crypto");
 const {
   badRequest,
@@ -9,6 +8,7 @@ const {
   paginatedResponse,
   restrictionsForStatus,
   CAPABILITY,
+  AUCTION_PAYMENT_TTL_MS,
 } = require("@reloop/shared");
 const orderModel = require("../models/orderModel");
 const productClient = require("../services/productClient");
@@ -16,29 +16,15 @@ const chatClient = require("../services/chatClient");
 const buyerActivityClient = require("../services/buyerActivityClient");
 const authClient = require("../services/authClient");
 const { reserveOrder } = require("../features/checkout/checkoutService");
+const { authorizeReservation } = require("../services/reservationAuthorization");
 const orderTransitionService = require("../services/orderTransitionService");
+const orderLifecycle = require("../services/orderLifecycle");
+const orderLifecycleService = require("../services/orderLifecycleService");
 const productSyncService = require("../services/productSyncService");
 const { money } = require("../models/money");
 const prisma = require("../models/prismaClient");
 const shippingService =
   require("../features/shipping/shippingService").createShippingService(prisma);
-
-function productSyncFor(order, status, purpose) {
-  if (status === "cancelled" && order.reservationId) {
-    return {
-      dedupeKey: `${purpose}:${order.id}:${order.version}`,
-      action: productSyncService.ACTIONS.RELEASE_RESERVATION,
-      productId: order.productId,
-      reservationId: order.reservationId,
-    };
-  }
-  return {
-    dedupeKey: `${purpose}:${order.id}:${order.version}`,
-    action: productSyncService.ACTIONS.SET_STATUS,
-    productId: order.productId,
-    targetStatus: status === "completed" ? "sold" : "available",
-  };
-}
 
 async function respondAfterProductSync(res, order, event) {
   try {
@@ -60,18 +46,7 @@ async function create(req, res, next) {
         campaignId: req.body.campaignId,
       },
       {
-        authorizeReservation: async (reservation) => {
-          const seller = await authClient.getUser(reservation.product.sellerId);
-          if (!seller) throw badRequest("product seller account was not found");
-          if (
-            restrictionsForStatus(seller.status).includes(CAPABILITY.SELLER)
-          ) {
-            throw forbidden("product seller's selling rights are restricted");
-          }
-          if (seller.status !== "ACTIVE") {
-            throw forbidden("product seller account is not active");
-          }
-        },
+        authorizeReservation,
       },
     );
     await buyerActivityClient.recordOrderActivity(order, "ORDER_PLACED", {
@@ -140,10 +115,21 @@ async function getOne(req, res, next) {
   }
 }
 
-// disputed/refunded are set only through the dispute flow (CSS-003's
-// disputeService), never by a buyer/seller PATCHing status directly.
-const USER_SETTABLE_STATUSES = ["pending", "shipped", "completed", "cancelled"];
+// Only the transitions in orderLifecycle.PARTICIPANT_TRANSITIONS can be
+// requested here. paid/delivered/timeouts come from the system, and
+// disputed/refunded only through the dispute flow (CSS-003's disputeService).
 
+/** Seller accepts a paid order; same rules as PATCH status "confirmed". */
+function confirmOrder(req, res, next) {
+  req.body = { ...req.body, status: "confirmed" };
+  return updateStatus(req, res, next);
+}
+
+/** Seller rejects a paid order (refunded by the lifecycle) with a reason. */
+function rejectOrder(req, res, next) {
+  req.body = { ...req.body, status: "cancelled" };
+  return updateStatus(req, res, next);
+}
 async function updateStatus(req, res, next) {
   try {
     const order = await orderModel.findById(req.params.id);
@@ -153,58 +139,16 @@ async function updateStatus(req, res, next) {
     }
 
     const { status } = req.body;
-    if (!USER_SETTABLE_STATUSES.includes(status)) {
-      throw badRequest(
-        `status must be one of ${USER_SETTABLE_STATUSES.join(", ")}`,
-      );
-    }
-
-    if (status === "cancelled")
+    if (status === "cancelled" && !orderLifecycle.isRefundingCancellation(order, status))
       orderTransitionService.assertCanCancelOrder(order);
+    orderLifecycle.assertParticipantTransition(order, req.userId, status);
     // TSR-02: Prevent participant updating status while order has open dispute or hold
     orderTransitionService.assertCanParticipantUpdateStatus(order);
 
-    if (["cancelled", "completed"].includes(status)) {
-      const { order: updated, event, attributionEvent } =
-        await orderModel.transitionStatusWithProductSync({
-          id: req.params.id,
-          status,
-          expectedVersion: order.version,
-          expectedStatuses: [order.status],
-          productSync: productSyncFor(order, status, "ORDER_STATUS"),
-          actorId: req.userId,
-        });
-
-      if (order.campaignId) {
-        const voucherAction =
-          status === "cancelled" ? "releaseVoucher" : "completeVoucher";
-        await productClient[voucherAction](order.campaignId, {
-          userId: order.buyerId,
-          orderId: order.id,
-        });
-      }
-      if (status === "completed") {
-        if(attributionEvent)attributionOutboxService.processEvent(attributionEvent.id).catch(err=>console.warn("attribution deferred to outbox worker:",err.message));
-        await buyerActivityClient.recordOrderActivity(updated,"ORDER_COMPLETED",{initiatedBy:req.userId});
-      } else {
-        await buyerActivityClient.recordOrderActivity(
-          updated,
-          "ORDER_CANCELLED",
-          { initiatedBy: req.userId },
-        );
-      }
-      await chatClient.notifyOrderStatusChanged(order, status);
-      await respondAfterProductSync(res, updated, event);
-      return;
-    }
-
-    // Best-effort — chatClient swallows its own errors internally (see its
-    // comment) so a chat-service outage can never fail this status update.
-    // Awaited anyway, not fire-and-forget: this is a low-traffic path
-    // (one call per status change, not per page view), and awaiting makes
-    // "the SYSTEM message exists by the time this request returns" an
-    // actual guarantee instead of a race a test would have to poll for.
     if (status === "shipped") {
+      if (order.sellerId !== req.userId) {
+        throw forbidden("only the seller can mark this order as shipped");
+      }
       const shipped = await shippingService.markShipped({
         orderId: order.id,
         actorId: req.userId,
@@ -212,16 +156,19 @@ async function updateStatus(req, res, next) {
         company: req.body.company,
         trackingNumber: req.body.trackingNumber,
       });
+      // Best-effort — chatClient swallows its own errors internally so a
+      // chat-service outage can never fail this status update.
       await chatClient.notifyOrderStatusChanged(order, status);
       return res.json(shipped);
     }
-    const updated = await orderModel.updateStatus(
-      req.params.id,
+
+    const { order: updated, event } = await orderLifecycleService.transition({
+      order,
       status,
-      order.version,
-      req.userId,
-    );
-    await chatClient.notifyOrderStatusChanged(order, status);
+      actorId: req.userId,
+      reason: req.body.reason?.trim() || undefined,
+    });
+    if (event) return respondAfterProductSync(res, updated, event);
     res.json(updated);
   } catch (err) {
     next(err);
@@ -247,6 +194,15 @@ async function pay(req, res, next) {
     if (!order) throw notFound("order not found");
     if (order.buyerId !== req.userId)
       throw forbidden("only the buyer can pay for this order");
+    if (
+      order.orderType === "AUCTION" &&
+      order.paymentDeadlineAt &&
+      new Date(order.paymentDeadlineAt) <= new Date()
+    ) {
+      throw conflict(
+        "auction payment deadline has expired; the right to purchase is being reassigned",
+      );
+    }
     orderTransitionService.assertCanParticipantUpdateStatus(order);
     if (!order.checkoutId)
       throw badRequest(
@@ -279,6 +235,24 @@ async function pay(req, res, next) {
     next(err);
   }
 }
+function validateAuctionOrderRetry(existingOrder, input) {
+  const matchesOriginalWinningBid =
+    existingOrder.auctionId === String(input.auctionId) &&
+    existingOrder.auctionBidId === String(input.auctionBidId) &&
+    existingOrder.productId === input.productId &&
+    existingOrder.sellerId === input.sellerId &&
+    existingOrder.buyerId === input.buyerId &&
+    Number(existingOrder.price) === Number(input.price);
+
+  if (!matchesOriginalWinningBid) {
+    throw conflict(
+      "auction order retry does not match the original winning bid",
+    );
+  }
+
+  return existingOrder;
+}
+
 /**
  * Called by product-service (internal token) once an auction closes with a
  * winning bid. Creates the same shape of Order a normal "buy now" checkout
@@ -287,20 +261,37 @@ async function pay(req, res, next) {
  */
 async function createFromAuction(req, res, next) {
   try {
-    const { auctionId, productId, sellerId, buyerId, price } = req.body;
-    if (!auctionId || !productId || !sellerId || !buyerId || !price) {
+    const {
+      auctionId,
+      auctionBidId,
+      productId,
+      sellerId,
+      buyerId,
+      price,
+      paymentDeadlineAt,
+      previousOrderId,
+    } = req.body;
+    if (!auctionId || !auctionBidId || !productId || !sellerId || !buyerId || !price) {
       throw badRequest(
-        "auctionId, productId, sellerId, buyerId, price are required",
+        "auctionId, auctionBidId, productId, sellerId, buyerId, price are required",
       );
     }
 
-    // Idempotency: if an order was already created for this auction (e.g. race between BullMQ worker and page visit), return it.
+    // Each winning bid owns an immutable Order. A retry for the same bid
+    // resolves to the same deterministic ID instead of creating a duplicate.
     const stableId =
-      "auction-" +
-      crypto.createHash("sha256").update(String(auctionId)).digest("hex");
+      "AUC-" +
+      crypto
+        .createHash("sha256")
+        .update(`${auctionId}:${auctionBidId}`)
+        .digest("hex")
+        .slice(0, 10)
+        .toUpperCase();
     const existing = await orderModel.findById(stableId);
     if (existing) {
-      return res.status(200).json(existing);
+      return res
+        .status(200)
+        .json(validateAuctionOrderRetry(existing, req.body));
     }
 
     const [buyer, seller] = await Promise.all([
@@ -320,34 +311,50 @@ async function createFromAuction(req, res, next) {
       throw forbidden("auction buyer and seller accounts must be active");
     }
 
-    const order = await orderModel.create({
-      id: stableId,
-      buyerId,
-      sellerId,
-      productId,
-      originalAmount: money(price),
-      ordersAmount: money(price),
-      orderType: "AUCTION",
-      auctionId: String(auctionId),
-      productTitle: req.body.productTitle || null,
-      status: "pending_payment",
-    });
+    const { order, created } = await orderModel.createAuctionOrder(
+      {
+        id: stableId,
+        buyerId,
+        sellerId,
+        productId,
+        originalAmount: money(price),
+        ordersAmount: money(price),
+        orderType: "AUCTION",
+        auctionId: String(auctionId),
+        auctionBidId: String(auctionBidId),
+        paymentDeadlineAt: paymentDeadlineAt
+          ? new Date(paymentDeadlineAt)
+          : new Date(Date.now() + AUCTION_PAYMENT_TTL_MS),
+        productTitle: req.body.productTitle || null,
+        status: "pending_payment",
+      },
+      { previousOrderId: previousOrderId || null },
+    );
 
-    await productClient.setProductStatus(productId, "reserved");
-    await chatClient.notifyOrderPlaced(order);
+    if (created) {
+      await chatClient.notifyOrderPlaced(order);
+    }
 
-    res.status(201).json(order);
+    res.status(created ? 201 : 200).json(order);
   } catch (err) {
     if (err.code === "P2002") {
       const stableId =
-        "auction-" +
+        "AUC-" +
         crypto
           .createHash("sha256")
-          .update(String(req.body.auctionId))
-          .digest("hex");
+          .update(`${req.body.auctionId}:${req.body.auctionBidId}`)
+          .digest("hex")
+          .slice(0, 10)
+          .toUpperCase();
       const existing = await orderModel.findById(stableId);
       if (existing) {
-        return res.status(200).json(existing);
+        try {
+          return res
+            .status(200)
+            .json(validateAuctionOrderRetry(existing, req.body));
+        } catch (validationError) {
+          return next(validationError);
+        }
       }
     }
     next(err);
@@ -370,13 +377,36 @@ async function updateShippingAddress(req, res, next) {
     next(err);
   }
 }
+async function getByProductInternal(req, res, next) {
+  try {
+    const order = await prisma.order.findFirst({
+      where: {
+        productId: req.params.productId,
+        status: { notIn: ["cancelled", "refunded"] },
+      },
+      select: {
+        id: true,
+        buyerId: true,
+        sellerId: true,
+        status: true,
+      },
+    });
+    res.json(order || null);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   create,
   mine,
   selling,
   getOne,
   getOneInternal,
+  getByProductInternal,
   updateStatus,
+  confirmOrder,
+  rejectOrder,
   pay,
   createFromAuction,
   updateShippingAddress,

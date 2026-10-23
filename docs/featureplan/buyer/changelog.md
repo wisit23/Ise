@@ -2,6 +2,49 @@
 
 > แต่ละรายการเป็น historical snapshot ณ วันนั้น; ใช้รายการล่าสุดและ `progress.md` เป็นสถานะปัจจุบัน
 
+## 2026-10-17 — Shared My Orders UI in profile
+
+- แยก UI/behavior เดิมจาก `/orders` เป็น `frontend/components/orders/MyOrders.js` ให้ `/orders` และแท็บสถานะสินค้าใน `/profile` ใช้ร่วมกัน ไม่แสดง Navbar/Footer ซ้อน
+- แทนรายการคำสั่งซื้อแบบเก่าในหน้า “ฉัน” ด้วยรูปสินค้า ตัวกรอง pagination ปุ่มติดต่อผู้ขาย รายละเอียดคำสั่งซื้อ ยืนยันรับ รีวิว และข้อพิพาทชุดเดียวกับ `/orders`
+- เปิด Buyer detail modal ในหน้า “ฉัน” ได้โดยไม่เปลี่ยนหน้า และคง shipping/shop/product details ที่ทำไว้แล้ว
+- Quick shortcuts ใช้สถานะตรงกับ shared filters; กด shortcut ซ้ำหลังสลับ filter ภายในจะกลับไป filter ที่เลือกและเริ่มหน้าแรก ส่วนข้อมูลส่วนตัว/ที่อยู่/Voucher ยังคงอยู่
+- เพิ่ม profile integration tests สำหรับ shared list/photos/details, filtering/pagination และ shortcuts; ปรับ NavBar test expectations ให้ตรงกับชื่อเมนู “ฉัน” ที่อนุมัติไว้ก่อนหน้า
+- Browser DOM check บน dev server ด้วย intercepted fixture responses: อยู่ `/profile`, มี 7 filters/2 order cards/2 images, ไม่พบปุ่ม panel เก่า และไม่พบ horizontal overflow ที่ viewport 1280px; ไม่ใช่ live-database acceptance
+- Screenshot และ browser detail-click checks ทำต่อไม่สำเร็จเพราะ preview automation timeout; ไม่อ้างว่า visual/mobile E2E ผ่าน
+- Frontend full suite: 105 suites / 616 tests ผ่านทั้งหมด; targeted ESLint และ diff check ผ่าน มี Next.js workspace-root warning ที่ยังไม่ได้แก้ใน scope นี้
+
+## 2026-10-17 — Buyer order product photo and shop name
+
+- เพิ่มรูปสินค้าและชื่อร้านด้านบน Buyer order detail โดยใช้ existing Product/Auth loaders และ `ProductThumb`
+- ใช้ชื่อสินค้าจาก Order เดิมและเลือกเฉพาะ image media เป็น thumbnail; หากสินค้า/ชื่อร้านไม่พร้อมยังเปิดรายละเอียดและข้อมูลขนส่งได้
+- เพิ่ม component tests สำหรับชื่อร้าน/รูปหลังโหลด, สินค้าหรือร้านไม่พร้อม และสินค้าไม่มีรูป
+- Frontend focused tests 17/17, targeted ESLint และ diff check ผ่าน; ไม่ได้รัน browser E2E หรือ deployment
+
+## 2026-10-17 — Buyer order shipping details UI
+
+- เพิ่มบริษัทขนส่งและเลขพัสดุใน Buyer order detail จาก `order.shipping` พร้อมแสดงค่าหลัง reload API และตัดบรรทัดเลขพัสดุยาว
+- ก่อนส่งแสดง “รอผู้ขายระบุข้อมูลการจัดส่ง”; หากส่งแล้วแต่ข้อมูลหายแสดง “ไม่พบข้อมูลการจัดส่ง” ไม่สร้างเลขพัสดุจำลองใน UI
+- คงกฎเดิมว่าผู้ขายต้องกรอก company/trackingNumber ก่อนส่ง และเพิ่ม regression tests สำหรับ missing/empty/whitespace fields
+- Frontend focused tests 14/14, backend shipping unit tests 14/14, targeted ESLint และ diff check ผ่าน; มี Next.js workspace-root warning
+- ไม่ได้รัน browser E2E/PostgreSQL integration หรือ deployment และไม่เพิ่ม real-carrier integration
+
+## 2026-10-17 — Clarify simulation acceptance scope
+
+- ผู้ใช้ยืนยันว่าการจัดส่งเป็น test simulation ของผู้จัดส่ง ไม่ต้องติดต่อหรือเชื่อมสถานะจากขนส่งจริง; การไม่มี real-carrier integration ไม่ใช่งานค้างของ `ST-BUY-05`
+- หน้ารายละเอียดผู้ซื้อต้องแสดงบริษัทขนส่งและเลขพัสดุที่ผู้ขายกรอกใน simulation; source ที่ตรวจยังไม่แสดงสองรายการนี้ จึงคงเป็น UI gap ไม่ใช่ carrier integration gap
+- ใช้ buyer simulation ที่กำหนด profile/พฤติกรรม/ผลคาดหวังในการทดสอบ discovery ไม่ใช้ผลความพึงพอใจของผู้ซื้อจริงเป็น acceptance gate
+- อัปเดต progress/handoff เท่านั้น ไม่ได้แก้ UI หรือรันทดสอบระบบ
+
+## 2026-10-17 — Reconcile ST-BUY-01–05 with current source
+
+- อัปเดต `progress.md` ด้วย coverage ของ `ST-BUY-01`–`ST-BUY-05`, source locations และ remaining work โดยไม่ยก overall Buyer เป็น Done
+- แก้สถานะที่ล้าหลัง: Contact Seller, Style Profile, behavioral recommendations, Swipe choose/unchoose/read-back และ participant transition table มี implementation แล้ว
+- ระบุ tracking gap: ผู้ขายกรอกบริษัทขนส่ง/เลขพัสดุได้ แต่ Buyer order detail ยังไม่แสดงสองรายการนี้; delivery ยังเป็น simulation โดย `ORDER_DELIVERY_DELAY_MS` fallback 10 วินาที ไม่ใช่ carrier integration
+- แยก Wishlist สินค้าโดยตรงออกจากหัวใจ Swipe และ reservation; Wishlist/real-carrier integration ต้องตกลง scope ก่อนเพิ่ม
+- บันทึกว่า choose role ปัจจุบันรองรับ `BUYER`/`SELLER`; ต้องทบทวน contract แทนการสั่ง Buyer-only enforcement จากแผนเก่าโดยอัตโนมัติ
+- ปรับ `handoff.md` ให้ทำต่อจาก current implementation และไม่สั่งสร้างฟีเจอร์ที่มีแล้วซ้ำ
+- รอบนี้ตรวจ source และแก้เอกสารเท่านั้น ไม่ได้แก้ application code, รัน tests/build/browser E2E/PostgreSQL acceptance หรือ deployment; ผลทดสอบเดิมยังเป็น historical evidence
+
 ## 2026-09-07 — Buyer review, review media and Swipe reconciliation
 
 - `BUY-004` มี Buyer review flow บน `/orders`: ส่งคะแนน/ข้อความได้เฉพาะ Order ที่ `completed`,

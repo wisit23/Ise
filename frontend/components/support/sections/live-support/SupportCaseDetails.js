@@ -323,7 +323,7 @@ export default function SupportCaseDetails({
                 disabled={actionBusy}
                 className="w-full justify-center bg-red-50 text-red-600 hover:bg-red-100 font-bold"
               >
-                ส่งต่อให้ Admin
+                ส่งต่อให้ Trust and Safety
               </Button>
             )}
           </div>
@@ -331,7 +331,7 @@ export default function SupportCaseDetails({
       </div>
       <Modal
         open={showEscalate}
-        title="ส่งเรื่องต่อให้ Admin"
+        title="ส่งเรื่องต่อให้ Trust and Safety"
         onClose={() => setShowEscalate(false)}
         footer={
           <div className="flex justify-end gap-2">

@@ -67,4 +67,4 @@ FKs and the existing no-history baseline helper are retained, not silently
 strengthened.
 
 See `backend/services/auth-service/prisma/ER_MIGRATION.md` and
-`log/loger/auth-service/implementation.md` for the actual rehearsal results.
+`log/evidence/auth-service/implementation.md` for the actual rehearsal results.

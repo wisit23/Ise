@@ -179,6 +179,7 @@ async function listQueue(
     scope,
     work,
     replyIds,
+    retention = "active",
     now = new Date(),
     userId,
     restricted,
@@ -187,7 +188,7 @@ async function listQueue(
   },
   db = prisma,
 ) {
-  const where = {};
+  const where = require("@reloop/shared/src/caseRetention").retentionWhere(retention);
   const filters = [];
   if (work === "reply") filters.push({ id: { in: replyIds || [] } });
   if (work) {
@@ -210,21 +211,38 @@ async function listQueue(
         },
       });
   }
-  if (restricted)
+  if (scope === "escalated")
+    // Cases this agent handed to Trust & Safety and is waiting on.
     filters.push(
-      { OR: [{ assignedRole: null }, { assignedRole: { not: "ADMIN" } }] },
+      { assignedRole: { in: ["ADMIN", "TRUST_AND_SAFETY"] } },
+      restricted ? { escalatedBy: userId } : { escalatedBy: { not: null } },
+    );
+  else if (scope === "closed")
+    // Decided cases; CS sees the ones it handled or escalated.
+    filters.push(
+      { decision: { not: null } },
+      ...(restricted
+        ? [{ OR: [{ escalatedBy: userId }, { caseLog: { some: { toAssignedTo: userId } } }] }]
+        : []),
+    );
+  else if (restricted)
+    filters.push(
+      { OR: [{ assignedRole: null }, { assignedRole: { notIn: ["ADMIN", "TRUST_AND_SAFETY"] } }] },
       { OR: [{ assignedTo: null }, { assignedTo: userId }] },
     );
-  if (scope === "mine") filters.push({ assignedTo: userId });
+  if (scope === "mine" || scope === "history") filters.push({ assignedTo: userId });
+  if (scope === "returned")
+    filters.push({ assignedTo: userId }, { returnedAt: { not: null } });
   if (scope === "unassigned") filters.push({ assignedTo: null });
-  if (scope && scope !== "all" && !status)
+  if (scope && !["all", "closed", "history"].includes(scope) && !status)
     filters.push({ status: { not: "DECIDED" } });
   if (filters.length) where.AND = filters;
   if (priority) where.priority = priority;
-  if (assignedRole) where.assignedRole = assignedRole;
+  if (assignedRole) where.assignedRole = assignedRole === "SAFETY" ? { in: ["ADMIN", "TRUST_AND_SAFETY"] } : assignedRole;
   if (status) {
     where.status = status;
   }
+  if (scope === "history") where.status = "DECIDED";
   if (search) {
     where.OR = [
       { reason: { contains: search, mode: "insensitive" } },
@@ -235,6 +253,8 @@ async function listQueue(
 
   const sorts = {
     sla: [
+      // Work returned by Trust & Safety stays on top of the agent's inbox.
+      ...(scope === "mine" ? [{ returnedAt: { sort: "desc", nulls: "last" } }] : []),
       { slaExpiresAt: { sort: "asc", nulls: "last" } },
       { priorityScore: "desc" },
       { id: "asc" },
@@ -368,7 +388,7 @@ async function openDispute({
       where: {
         id: orderId,
         version: expectedVersion ?? order.version,
-        status: { in: ["completed", "disputed"] },
+        status: { in: ["delivered", "completed", "disputed"] },
       },
       data: {
         status: "disputed",
@@ -438,7 +458,7 @@ async function changeAssignment({
     }
     if (action === "REQUEST_MORE_EVIDENCE") {
       where.assignedTo = actorId;
-      where.assignedRole = "ADMIN";
+      where.assignedRole = { in: ["ADMIN", "TRUST_AND_SAFETY"] };
     }
     const firstReview =
       ["CLAIM", "REASSIGN", "ESCALATE"].includes(action) &&
@@ -499,10 +519,12 @@ function escalate({ id, version, actorId, toUserId, reason }) {
     detail: reason,
     data: {
       assignedTo: toUserId || null,
-      assignedRole: "ADMIN",
+      assignedRole: "TRUST_AND_SAFETY",
       escalatedBy: actorId,
       escalationNote: reason,
       assignedAt: toUserId ? new Date() : null,
+      // Answering a return closes it; the checklist stays for T&S to review.
+      returnedAt: null,
     },
   });
 }
@@ -524,7 +546,7 @@ async function decide({
         version,
         decision: null,
         assignedTo: decidedBy,
-        assignedRole: "ADMIN",
+        assignedRole: { in: ["ADMIN", "TRUST_AND_SAFETY"] },
       },
       data: {
         decision,
@@ -572,7 +594,7 @@ async function decide({
     return caseView(after);
   });
 }
-async function requestMoreEvidence({ id, version, actorId, reason }) {
+async function requestMoreEvidence({ id, version, actorId, reason, tasks = [] }) {
   const before = await prisma.disputeCase.findUnique({ where: { id } });
   if (!before || before.decision) return null;
   return changeAssignment({
@@ -586,9 +608,64 @@ async function requestMoreEvidence({ id, version, actorId, reason }) {
       assignedTo: before.escalatedBy,
       assignedRole: "CUSTOMER_SERVICE",
       assignedAt: before.escalatedBy ? new Date() : null,
-      escalationNote: reason,
+      returnReason: reason,
+      returnTasks: tasks.map((text) => ({
+        id: require("node:crypto").randomUUID(),
+        text,
+        done: false,
+        note: "",
+        doneBy: null,
+        doneAt: null,
+      })),
+      returnedBy: actorId,
+      returnedAt: new Date(),
     },
   });
+}
+/** CS ticks one returned task; does not bump the case version. */
+async function updateReturnTask({ id, taskId, actorId, done, note }) {
+  return prisma.$transaction(async (tx) => {
+    // Lock the row: two quick ticks must not overwrite each other's list.
+    await tx.$queryRaw`SELECT 1 FROM dispute_case WHERE dispute_case_id = ${id} FOR UPDATE`;
+    const before = await tx.disputeCase.findUnique({ where: { id } });
+    if (!before?.returnedAt) return null;
+    const tasks = Array.isArray(before.returnTasks) ? before.returnTasks : [];
+    const index = tasks.findIndex((task) => task.id === taskId);
+    if (index < 0) return null;
+    const current = tasks[index];
+    const nextDone = done ?? current.done;
+    const next = {
+      ...current,
+      done: nextDone,
+      note: note ?? current.note,
+      doneBy: nextDone ? current.doneBy || actorId : null,
+      doneAt: nextDone ? current.doneAt || new Date().toISOString() : null,
+    };
+    const returnTasks = tasks.map((task, i) => (i === index ? next : task));
+    const changed = await tx.disputeCase.updateMany({
+      where: { id, returnedAt: before.returnedAt, assignedTo: actorId, decision: null },
+      data: { returnTasks },
+    });
+    if (changed.count !== 1) return null;
+    const after = await tx.disputeCase.findUnique({ where: { id }, include: INCLUDE });
+    await tx.disputeCaseLog.create({
+      data: caseLogData(before, after, actorId, "RETURN_TASK",
+        `${next.done ? "done" : "open"}: ${next.text}${next.note ? " — " + next.note : ""}`),
+    });
+    return caseView(after);
+  });
+}
+/** CSAT responses for queue rows, keyed by dispute id. */
+async function ratingsFor(ids) {
+  if (!ids.length) return new Map();
+  const rows = await prisma.customerSatisfaction.findMany({
+    where: { caseId: { in: ids } },
+    select: { caseId: true, respondentSide: true, rating: true, comment: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const byCase = new Map();
+  for (const row of rows) byCase.set(row.caseId, [...(byCase.get(row.caseId) || []), row]);
+  return byCase;
 }
 async function dashboardMetrics() {
   const rows = await prisma.disputeCase.groupBy({
@@ -605,6 +682,8 @@ async function dashboardMetrics() {
 module.exports = {
   dashboardMetrics,
   requestMoreEvidence,
+  updateReturnTask,
+  ratingsFor,
   findByOrderId,
   findById,
   findEvidence,

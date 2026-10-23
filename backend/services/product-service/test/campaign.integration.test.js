@@ -256,7 +256,8 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
       // End: published -> ended
       const endRes = await request(app)
         .post(`/campaigns/${lifecycleCampaignId}/end`)
-        .set("Authorization", `Bearer ${marketingToken}`);
+        .set("Authorization", `Bearer ${marketingToken}`)
+        .send({ reason: "สิ้นสุดแคมเปญทดสอบตามแผน" });
       assert.equal(endRes.status, 200);
       assert.equal(endRes.body.status, "ended");
     },
@@ -275,6 +276,7 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
           name: "แคมเปญที่จะถูกปฏิเสธ",
           discountType: "FIXED",
           discountValue: 100,
+          minOrderPrice: 200,
           startsAt: new Date().toISOString(),
           endsAt: new Date(Date.now() + 86400000).toISOString(),
         });
@@ -731,6 +733,7 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
           name: "Fixed Campaign",
           discountType: "FIXED",
           discountValue: 200,
+          minOrderPrice: 300,
           startsAt: new Date().toISOString(),
           endsAt: new Date(Date.now() + 86400000).toISOString(),
         });
@@ -835,7 +838,7 @@ test("Campaign Domain, State Machine & Voucher Wallet Integration Suite", async 
         .post(`/campaigns/${limitCampId}/claim`)
         .set("Authorization", `Bearer ${buyer2Token}`);
       assert.equal(claim2Res.status, 409);
-      assert.match(claim2Res.body.error, /usage limit reached/i);
+      assert.equal(claim2Res.body.error, "สิทธิ์คูปองถูกใช้ครบแล้ว");
 
       // Buyer 1 tries to claim again -> 409 Conflict (already claimed)
       const duplicateClaimRes = await request(app)

@@ -7,13 +7,13 @@ datasource db {
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma-client"
-  previewFeatures = ["views"]
 }
 
 model Basket {
   id        String   @id @default(uuid()) @map("basket_id")
   buyerId   String   @map("buyer_id")
   productId String   @map("product_id")
+  campaignId String? @map("campaign_id")
   status    String
   lockAt    DateTime @map("lock_at")
   unlockAt  DateTime @map("unlock_at")
@@ -33,6 +33,7 @@ model Checkout {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
   orders          Order[]
+  addressSnapshotRow CheckoutAddressSnapshot?
 
   @@index([buyerId, status])
   @@index([status, cancelAt])
@@ -46,13 +47,21 @@ model Order {
   buyerId          String                  @map("buyer_id")
   sellerId         String                  @map("seller_id")
   productId        String                  @map("product_id")
+  productTitle     String?                 @map("product_title")
+  campaignCode     String?                 @map("campaign_code")
+  preDisputeStatus String?                 @map("pre_dispute_status")
   campaignId       String?                 @map("campaign_id")
-  auctionId        String?                 @unique @map("auction_id")
+  auctionId        String?                 @map("auction_id")
+  auctionBidId     String?                 @map("auction_bid_id")
+  paymentDeadlineAt DateTime?              @map("payment_deadline_at")
   orderType        String                  @map("order_type")
   originalAmount   Decimal                 @map("original_amount") @db.Decimal(18, 2)
   ordersAmount     Decimal                 @map("orders_amount") @db.Decimal(18, 2)
   status           String                  @default("pending_payment")
   version          Int                     @default(1)
+  shippedAt        DateTime?               @map("shipped_at")
+  deliveredAt      DateTime?               @map("delivered_at")
+  completedAt      DateTime?               @map("completed_at")
   createdAt        DateTime                @default(now()) @map("created_at")
   updatedAt        DateTime                @updatedAt @map("updated_at")
   checkout         Checkout?               @relation(fields: [checkoutId], references: [id])
@@ -62,10 +71,17 @@ model Order {
   dispute          DisputeCase?
   logs             OrderLog[]
   safetyEvidence   SafetyDisputeEvidence[]
+  attributionJob   AttributionJob?
+  productSyncJobs  ProductSyncJob[]
 
   @@index([buyerId])
   @@index([sellerId])
   @@index([checkoutId])
+  @@unique([auctionId, auctionBidId])
+  @@index([auctionId, createdAt])
+  @@index([orderType, status, paymentDeadlineAt])
+  @@index([status, shippedAt])
+  @@index([status, deliveredAt])
   @@index([createdAt, status])
   @@map("orders")
 }
@@ -94,6 +110,7 @@ model Shipping {
   status          String
   updatedAt       DateTime @updatedAt @map("updated_at")
   order           Order    @relation(fields: [orderId], references: [id])
+  addressSnapshotRow ShippingAddressSnapshot?
 
   @@map("shipping")
 }
@@ -133,6 +150,10 @@ model OrderLog {
 }
 
 model DisputeCase {
+  satisfaction CustomerSatisfaction[]
+  archivedAt DateTime? @map("archived_at")
+  deletedAt DateTime? @map("deleted_at")
+  retentionUntil DateTime? @map("retention_until")
   id               String            @id @default(uuid()) @map("dispute_case_id")
   orderId          String            @unique @map("order_id")
   createdBy        String            @map("created_by")
@@ -145,8 +166,33 @@ model DisputeCase {
   order            Order             @relation(fields: [orderId], references: [id])
   evidence         DisputeEvidence[]
   caseLog          DisputeCaseLog[]
+  status           String            @default("OPEN")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  assignedRole     String?           @map("assigned_role")
+  decisionReason   String?           @map("decision_reason")
+  decidedBy        String?           @map("decided_by")
+  decidedAt        DateTime?         @map("decided_at")
+  verdictKey       String?           @unique @map("verdict_key")
+  escalationNote   String?           @map("escalation_note")
+  escalatedBy      String?           @map("escalated_by")
+  returnReason     String?           @map("return_reason")
+  returnTasks      Json              @default("[]") @map("return_tasks")
+  returnedBy       String?           @map("returned_by")
+  returnedAt       DateTime?         @map("returned_at")
+  priority         String            @default("NORMAL")
+  priorityScore    Int               @default(0) @map("priority_score")
+  riskReportCount  Int               @default(0) @map("risk_report_count")
+  slaExpiresAt     DateTime?         @map("sla_expires_at")
+  slaPolicyVersion String?           @map("sla_policy_version")
+  firstReviewDueAt DateTime?         @map("first_review_due_at")
+  firstReviewedAt  DateTime?         @map("first_reviewed_at")
+  decisionDueAt    DateTime?         @map("decision_due_at")
+
+  @@index([status, assignedRole, slaExpiresAt])
+  @@index([escalatedBy])
 
   @@map("dispute_case")
+  @@index([archivedAt, deletedAt, decidedAt])
 }
 
 model DisputeCaseLog {
@@ -236,52 +282,78 @@ model SafetyLog {
 }
 
 
-// Read-only queue projection; jobs, retries and ACKs live only in order_log.
-view AttributionJob {
-  id             String    @unique
+// Durable delivery queue, committed with the order transition.
+model AttributionJob {
+  id             String    @id @default(uuid())
   orderId        String    @unique @map("order_id")
   campaignId     String    @map("campaign_id")
   grossAmount    Decimal   @map("gross_amount") @db.Decimal(18, 2)
   discountAmount Decimal   @map("discount_amount") @db.Decimal(18, 2)
   netAmount      Decimal   @map("net_amount") @db.Decimal(18, 2)
   completedAt    DateTime  @map("completed_at")
-  attempts       Int
+  attempts       Int       @default(0)
   lastError      String?   @map("last_error")
   nextAttemptAt  DateTime  @map("next_attempt_at")
   processedAt    DateTime? @map("processed_at")
   createdAt      DateTime  @map("created_at")
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  @@index([processedAt, nextAttemptAt])
   @@map("order_attribution_jobs")
 }
 
-// Read-only projection, not another storage table. Operational fields come
-// from the latest versioned WORKFLOW_STATE event in dispute_case_log.
-view DisputeWorkflow {
-  id               String    @unique @map("dispute_case_id")
-  orderId          String    @unique @map("order_id")
-  createdBy        String    @map("created_by")
-  reason           String
-  decision         String?
-  disputeType      String    @map("dispute_type")
-  version          Int       @map("dispute_case_version")
-  assignedTo       String?   @map("assigned_to")
-  assignedAt       DateTime? @map("assigned_at")
-  status           String
-  createdAt        DateTime  @map("created_at")
-  assignedRole     String?   @map("assigned_role")
-  decisionReason   String?   @map("decision_reason")
-  decidedBy        String?   @map("decided_by")
-  decidedAt        DateTime? @map("decided_at")
-  verdictKey       String?   @unique @map("verdict_key")
-  escalationNote   String?   @map("escalation_note")
-  escalatedBy      String?   @map("escalated_by")
-  priority         String
-  priorityScore    Int       @map("priority_score")
-  riskReportCount  Int       @map("risk_report_count")
-  slaExpiresAt     DateTime? @map("sla_expires_at")
-  slaPolicyVersion String?   @map("sla_policy_version")
-  firstReviewDueAt DateTime? @map("first_review_due_at")
-  firstReviewedAt  DateTime? @map("first_reviewed_at")
-  decisionDueAt    DateTime? @map("decision_due_at")
 
-  @@map("dispute_case_state")
+model CheckoutAddressSnapshot {
+  checkoutId String @id @map("checkout_id")
+  recipientName String @map("recipient_name")
+  phone String
+  addressLine String @map("address_line")
+  subdistrict String
+  district String
+  province String
+  postalCode String @map("postal_code")
+  checkout Checkout @relation(fields: [checkoutId], references: [id], onDelete: Cascade)
+  @@map("checkout_address_snapshots")
+}
+
+model ShippingAddressSnapshot {
+  shippingId String @id @map("shipping_id")
+  recipientName String @map("recipient_name")
+  phone String
+  addressLine String @map("address_line")
+  subdistrict String
+  district String
+  province String
+  postalCode String @map("postal_code")
+  shipping Shipping @relation(fields: [shippingId], references: [id], onDelete: Cascade)
+  @@map("shipping_address_snapshots")
+}
+
+model ProductSyncJob {
+  id String @id @default(uuid()) @map("event_id")
+  orderId String @map("order_id")
+  productId String @map("product_id")
+  action String
+  reservationId String? @map("reservation_id")
+  targetStatus String? @map("target_status")
+  actorId String @map("actor_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  processedAt DateTime? @map("processed_at")
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  @@index([processedAt, createdAt])
+  @@index([orderId])
+  @@map("order_product_sync_jobs")
+}
+
+model CustomerSatisfaction {
+  caseId String @map("case_id")
+  respondentId String @map("respondent_id")
+  respondentSide String @map("respondent_side")
+  agentId String? @map("agent_id")
+  rating Int @db.SmallInt
+  comment String @default("")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  case DisputeCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  @@id([caseId, respondentId])
+  @@index([agentId, createdAt])
+  @@map("customer_satisfaction")
 }

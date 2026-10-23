@@ -89,11 +89,13 @@ async function readAgentDashboard(
     my_cases AS (SELECT * FROM cases WHERE assignee_id = ${userId}),
     activity_events AS (${activityBase}),
     dates AS (
-      SELECT ((${now}::timestamptz AT TIME ZONE ${dashboard.timeZone})::date - (${days}::int - 1) + n) AS day
-      FROM generate_series(0, ${days}::int - 1) n
+      SELECT ((${now}::timestamptz AT TIME ZONE ${dashboard.timeZone})::date - (${days}::int - 1))::timestamp
+        + n * CASE WHEN ${days}::int = 1 THEN interval '1 hour' ELSE interval '1 day' END AS day
+      FROM generate_series(0, CASE WHEN ${days}::int = 1 THEN 23 ELSE ${days}::int - 1 END) n
     ),
     daily AS (
-      SELECT (happened_at AT TIME ZONE ${dashboard.timeZone})::date AS day,
+      SELECT date_trunc(CASE WHEN ${days}::int = 1 THEN 'hour' ELSE 'day' END,
+        happened_at AT TIME ZONE ${dashboard.timeZone}) AS day,
         count(DISTINCT id) FILTER (WHERE kind = 'RECEIVED')::int AS received,
         count(DISTINCT id) FILTER (WHERE kind = 'COMPLETED')::int AS completed
       FROM activity_events WHERE happened_at <= ${now}::timestamptz
@@ -111,7 +113,7 @@ async function readAgentDashboard(
       'warningMinutes', ${WARNING_MINUTES}::int,
       'timeZone', ${dashboard.timeZone}::text,
       'days', ${days}::int,
-      'trend', (SELECT jsonb_agg(jsonb_build_object('date', dates.day,
+      'trend', (SELECT jsonb_agg(jsonb_build_object('date', to_char(dates.day, CASE WHEN ${days}::int = 1 THEN 'YYYY-MM-DD"T"HH24:MI:SS' ELSE 'YYYY-MM-DD' END),
         'received', COALESCE(daily.received, 0), 'completed', COALESCE(daily.completed, 0)) ORDER BY dates.day)
         FROM dates LEFT JOIN daily ON daily.day = dates.day),
       'priorities', COALESCE((SELECT jsonb_agg(jsonb_build_object('label', priority, 'value', total) ORDER BY rank DESC, priority ASC)

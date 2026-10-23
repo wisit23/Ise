@@ -95,12 +95,29 @@ test.each([
   },
 );
 
-test("an available product can still be deleted after confirmation", async () => {
+test("an available product can still be deleted after confirmation in pop-up", async () => {
   setup("available");
   fireEvent.click(await screen.findByRole("button", { name: "ลบสินค้า" }));
+  expect(screen.getByText("ยืนยันการลบสินค้า")).toBeInTheDocument();
+
+  // Click confirm inside pop-up
+  fireEvent.click(await screen.findByRole("button", { name: "ยืนยันการลบ" }));
   await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/store/seller"));
   expect(apiFetch).toHaveBeenCalledWith("/api/products/p", {
     method: "DELETE",
     token: "token",
   });
+});
+
+test("canceling in the delete pop-up does not delete product", async () => {
+  setup("available");
+  fireEvent.click(await screen.findByRole("button", { name: "ลบสินค้า" }));
+  expect(screen.getByText("ยืนยันการลบสินค้า")).toBeInTheDocument();
+
+  // Click cancel inside pop-up
+  fireEvent.click(screen.getByRole("button", { name: "ยกเลิก" }));
+  expect(
+    apiFetch.mock.calls.some(([, options]) => options?.method === "DELETE"),
+  ).toBe(false);
+  expect(mockPush).not.toHaveBeenCalled();
 });

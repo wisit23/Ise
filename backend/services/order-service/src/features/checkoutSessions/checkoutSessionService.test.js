@@ -50,6 +50,7 @@ function fixture(extra = {}) {
     payments: [],
     logs: [],
     shipping: [],
+    syncJobs: [],
     ...extra,
   };
   let externalFailure = false;
@@ -80,6 +81,26 @@ function fixture(extra = {}) {
         .map(orderView),
     };
   const db = {
+    productSyncJob: {
+      create: async ({ data }) => {
+        const row = {
+          id: "sync" + state.syncJobs.length,
+          processedAt: null,
+          ...data,
+        };
+        state.syncJobs.push(row);
+        return row;
+      },
+      findMany: async ({ where }) =>
+        state.syncJobs.filter((j) => matches(j, where)),
+      findUnique: async ({ where }) =>
+        state.syncJobs.find((j) => j.id === where.id),
+      updateMany: async ({ where, data }) => {
+        const rows = state.syncJobs.filter((j) => matches(j, where));
+        rows.forEach((j) => apply(j, data));
+        return { count: rows.length };
+      },
+    },
     checkout: {
       create: async ({ data }) => {
         state.checkout = {
@@ -91,7 +112,10 @@ function fixture(extra = {}) {
         };
         return state.checkout;
       },
-      update: async ({ data }) => { apply(state.checkout, data); return checkoutView(); },
+      update: async ({ data }) => {
+        apply(state.checkout, data);
+        return checkoutView();
+      },
       findUnique: async () => checkoutView(),
       findMany: async ({ where }) =>
         state.checkout && matches(state.checkout, where)
@@ -105,6 +129,7 @@ function fixture(extra = {}) {
       },
     },
     order: {
+      findUnique: async ({where}) => orderView(state.orders.find(o => o.id === where.id)),
       findMany: async () => state.orders.map(orderView),
       updateMany: async ({ where, data }) => {
         const rows = state.orders.filter((o) => matches(o, where));
@@ -170,10 +195,16 @@ function fixture(extra = {}) {
       calls.products.push(args);
     },
     setProductStatus: async (...args) => calls.products.push(args),
+    releaseProductReservation: async (...args) => calls.products.push(args),
     releaseVoucher: async (...args) => calls.released.push(args),
     completeVoucher: async (...args) => calls.vouchers.push(args),
   };
-  const service = createCheckoutSessionService(db, products, undefined, async () => normalizeAddress(ADDRESS));
+  const service = createCheckoutSessionService(
+    db,
+    products,
+    undefined,
+    async () => normalizeAddress(ADDRESS),
+  );
   const create = (overrides) =>
     service.create({
       buyerId: "b1",
@@ -252,6 +283,16 @@ test("payment retry after external failure does not charge or confirm orders twi
   assert.equal(result.status, "paid");
   assert.equal(f.state.payments.length, 2);
   assert.equal(f.calls.products.length, 2);
+  assert.deepEqual(f.calls.vouchers, [
+    [
+      "v1",
+      {
+        userId: "b1",
+        orderId: "o1",
+        discountAmount: 100.25,
+      },
+    ],
+  ]);
   await f.service.confirm(input);
   assert.equal(f.calls.products.length, 2);
   assert.equal(f.state.payments.length, 2);
@@ -277,6 +318,91 @@ test("expiry cancels orders and durably requests release without marking payment
     .map((l) => JSON.parse(l.detail).action);
   assert.deepEqual(actions, ["RELEASE_RESERVATION", "SET_STATUS"]);
 });
+test("buyer cancellation releases all reservations, records logs and cannot be paid", async () => {
+  const f = fixture();
+  await f.create();
+  const input = { buyerId: "b1", sessionId: "c1", now: NOW };
+  const result = await f.service.cancel(input);
+  assert.equal(result.status, "cancelled");
+  assert.ok(f.state.orders.every((o) => o.status === "cancelled"));
+  assert.equal(f.state.orders[0].basket.status, "cancelled");
+  assert.equal(f.state.payments.length, 0);
+  assert.equal(f.calls.products.length, 2);
+  assert.equal(f.calls.released.length, 1);
+  assert.equal(f.state.logs.filter((l) => l.action === "CHECKOUT_CANCELLED").length, 2);
+  await f.service.cancel(input);
+  assert.equal(f.calls.products.length, 2);
+  assert.equal(f.state.logs.filter((l) => l.action === "CHECKOUT_CANCELLED").length, 2);
+  await assert.rejects(f.service.confirm(input), /no longer payable/);
+});
+
+test("cancellation rejects foreign buyers, paid/processing sessions and expired QR", async () => {
+  const f = fixture();
+  await f.create();
+  await assert.rejects(f.service.cancel({ buyerId: "other", sessionId: "c1", now: NOW }), (err) => err.status === 403);
+  for (const status of ["paid", "processing"]) {
+    f.state.checkout.status = status;
+    await assert.rejects(f.service.cancel({ buyerId: "b1", sessionId: "c1", now: NOW }), /only pending/);
+  }
+  assert.equal(f.calls.products.length, 0);
+  f.state.checkout.status = "pending";
+  await assert.rejects(f.service.cancel({ buyerId: "b1", sessionId: "c1", now: new Date(NOW.getTime() + PAYMENT_TTL_MS) }), /expired/);
+  assert.equal(f.state.checkout.status, "expired");
+});
+
+test("cancellation CAS conflict cannot override a payment claim", async () => {
+  const f = fixture();
+  await f.create();
+  const update = f.db.checkout.updateMany;
+  f.db.checkout.updateMany = async (args) => {
+    if (args.data.status === "cancelled") {
+      f.state.checkout.status = "processing";
+      return { count: 0 };
+    }
+    return update(args);
+  };
+  await assert.rejects(f.service.cancel({ buyerId: "b1", sessionId: "c1", now: NOW }), /changed during cancellation/);
+  assert.ok(f.state.orders.every((o) => o.status === "pending_payment"));
+  assert.equal(f.calls.products.length, 0);
+});
+
+test("cancellation rejects a checkout containing an already-paid order", async () => {
+  const f = fixture();
+  await f.create();
+  f.state.orders[1].status = "paid";
+  await assert.rejects(f.service.cancel({ buyerId: "b1", sessionId: "c1", now: NOW }), /no longer cancellable/);
+  assert.equal(f.state.checkout.status, "pending");
+  assert.equal(f.state.orders[0].status, "pending_payment");
+  assert.equal(f.calls.products.length, 0);
+});
+
+test("cancellation rolls back all orders if one order changed", async () => {
+  const f = fixture();
+  await f.create();
+  const update = f.db.order.updateMany;
+  f.db.order.updateMany = async (args) => args.where.id === "o2" ? { count: 0 } : update(args);
+  await assert.rejects(f.service.cancel({ buyerId: "b1", sessionId: "c1", now: NOW }), /order changed/);
+  assert.equal(f.state.checkout.status, "pending");
+  assert.ok(f.state.orders.every((o) => o.status === "pending_payment"));
+  assert.equal(f.calls.products.length, 0);
+});
+
+test("pending address change updates every shipping snapshot without extending expiry", async () => {
+  const f = fixture();
+  const now = new Date();
+  f.state.orders[0].basket.unlockAt = new Date(now.getTime() + 300000);
+  await f.create({ now });
+  const expiresAt = f.state.checkout.cancelAt.getTime();
+  const result = await f.service.updateAddress({ buyerId: "b1", sessionId: "c1", addressId: "a2" });
+  assert.equal(result.addressId, "a2");
+  assert.equal(result.expiresAt.getTime(), expiresAt);
+  assert.ok(f.state.shipping.every((row) => row.addressId === "a2"));
+  assert.equal(f.state.logs.filter((l) => l.action === "SHIPPING_ADDRESS_CHANGED").length, 2);
+  f.state.checkout.status = "processing";
+  await assert.rejects(f.service.updateAddress({ buyerId: "b1", sessionId: "c1", addressId: "a3" }), /only pending/);
+  assert.ok(f.state.shipping.every((row) => row.addressId === "a2"));
+});
+
 test("payment CAS conflict rolls back every local payment", async () => {
   const f = fixture();
   await f.create();

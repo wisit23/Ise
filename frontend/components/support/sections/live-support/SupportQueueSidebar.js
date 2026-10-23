@@ -4,12 +4,19 @@ import Badge from "../../../panel/ui/Badge";
 import QueueIcon from "./QueueIcon";
 import SlaIndicator from "../../workspace/SlaIndicator";
 import motion from "../supportMotion.module.css";
+import styles from "./SupportQueueSidebar.module.css";
 import {
   TICKET_STATUS_LABEL,
   TICKET_STATUS_STYLE,
   PRIORITY_LABEL,
   PRIORITY_STYLE,
 } from "../../../../lib/supportConstants";
+
+const DEFAULT_SCOPES = [
+  { value: "mine", label: "งานของฉัน" },
+  { value: "unassigned", label: "รอรับเรื่อง" },
+  { value: "all", label: "ทุกงาน" },
+];
 
 export default function SupportQueueSidebar({
   tickets = [],
@@ -27,14 +34,23 @@ export default function SupportQueueSidebar({
   domain = "tickets",
   filters,
   pagination,
+  unreadCounts,
+  unreadError = false,
+  scopes = DEFAULT_SCOPES,
 }) {
+  const unreadById = new Map((unreadCounts?.items || []).map(item => [item.id, item.count]));
+  const unreadBadge = (value, variant) => value > 0 ? (
+    <span aria-label={`ข้อความยังไม่อ่าน ${value} ข้อความ`} title={`ข้อความยังไม่อ่าน ${value} ข้อความ`} className={`${styles.unreadBadge} ${variant === "scope" ? styles.scopeBadge : styles.caseBadge}`}>
+      {value > 99 ? "99+" : value}
+    </span>
+  ) : null;
   const statusLabels =
     domain === "disputes"
       ? { OPEN: "รอตรวจสอบ", NEEDS_INFO: "รอข้อมูล", DECIDED: "ตัดสินแล้ว" }
       : TICKET_STATUS_LABEL;
   return (
     <aside
-      className={`h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-200 bg-white md:w-80 lg:w-[22rem] ${className}`}
+      className={`${styles.sidebar} h-full min-h-0 w-full shrink-0 flex-col border-r border-slate-200 bg-white md:w-80 lg:w-[22rem] ${className}`}
     >
       <div className="shrink-0 border-b border-slate-200 bg-white px-3 pb-3 pt-2">
         <div className="flex min-h-11 items-center justify-between gap-3">
@@ -43,35 +59,37 @@ export default function SupportQueueSidebar({
           </h2>
           {toolbar}
         </div>
+        {unreadError && <p role="status" className="text-xs text-amber-700">อัปเดตจำนวนข้อความยังไม่อ่านไม่สำเร็จ</p>}
         <div
-          className="relative mt-2 flex border-b border-slate-200"
+          className={`${styles.scopeTabs} relative mt-2 border-b border-slate-200`}
+          style={{ gridTemplateColumns: `repeat(${scopes.length}, minmax(0, 1fr))` }}
           role="group"
           aria-label="เลือกคิวงาน"
         >
-          <span
-            aria-hidden="true"
-            className={motion.indicator}
-            style={{
-              transform: `translateX(${Math.max(0, ["mine", "unassigned", "all"].indexOf(scope)) * 100}%)`,
-            }}
-          />
-          {[
-            { value: "mine", label: "งานของฉัน" },
-            { value: "unassigned", label: "รอรับเรื่อง" },
-            { value: "all", label: "ทุกงาน" },
-          ].map((item) => (
+          {scopes.some((item) => item.value === scope) && (
+            <span
+              aria-hidden="true"
+              className={motion.indicator}
+              style={{
+                width: `${100 / scopes.length}%`,
+                transform: `translateX(${scopes.findIndex((item) => item.value === scope) * 100}%)`,
+              }}
+            />
+          )}
+          {scopes.map((item) => (
             <button
               key={item.value}
               type="button"
               onClick={() => onScopeChange(item.value)}
               aria-pressed={scope === item.value}
-              className={`min-h-11 flex-1 border-b-2 px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 ${
+              className={`${styles.scopeTab} border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600 ${
                 scope === item.value
                   ? "border-transparent font-semibold text-emerald-800"
                   : "border-transparent font-medium text-slate-600 hover:text-slate-900"
               }`}
             >
-              {item.label}
+              <span className={styles.scopeLabel}>{item.label}</span>
+              {unreadBadge(unreadCounts?.scopes?.[item.value], "scope")}
             </button>
           ))}
         </div>
@@ -150,7 +168,7 @@ export default function SupportQueueSidebar({
       )}
 
       <div
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain divide-y divide-slate-100"
+        className={`${styles.ticketList} min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain`}
         aria-label={domain === "disputes" ? "รายการข้อพิพาท" : "รายการ Ticket"}
         aria-busy={loading}
       >
@@ -197,14 +215,18 @@ export default function SupportQueueSidebar({
                   ? "ยังไม่มีงานในความดูแล"
                   : scope === "unassigned"
                     ? "ไม่มีงานรอรับเรื่อง"
-                    : "ยังไม่มี Ticket"}
+                    : scope === "escalated"
+                      ? "ไม่มีเคสที่รอผลตรวจ"
+                      : "ยังไม่มี Ticket"}
             </p>
             <p className="mt-2 text-sm leading-relaxed text-slate-500">
               {search.trim()
                 ? "ลองใช้เลข Ticket หรือคำค้นที่สั้นลง"
                 : scope === "mine"
                   ? "เลือกงานที่รอรับเรื่องเพื่อเริ่มดูแลลูกค้า"
-                  : "รายการใหม่จะแสดงที่นี่เมื่อโหลดคิวอีกครั้ง"}
+                  : scope === "escalated"
+                    ? "เคสที่คุณส่งต่อจะแสดงที่นี่จนกว่าจะได้ผลตรวจ"
+                    : "รายการใหม่จะแสดงที่นี่เมื่อโหลดคิวอีกครั้ง"}
             </p>
             {search.trim() ? (
               <button
@@ -239,10 +261,10 @@ export default function SupportQueueSidebar({
                 type="button"
                 onClick={() => onSelectTicket(t)}
                 aria-current={isSelected ? "true" : undefined}
-                className={`w-full min-h-[92px] text-left px-4 py-4 transition-colors flex flex-col gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 ${
+                className={`${styles.ticketCard} w-full min-h-[92px] text-left flex flex-col gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 ${
                   isSelected
-                    ? "bg-emerald-50/80 border-l-4 border-l-emerald-600 pl-3"
-                    : "hover:bg-slate-50/80 border-l-4 border-l-transparent"
+                    ? styles.selectedCard
+                    : ""
                 }`}
               >
                 <div className="flex w-full items-center justify-between gap-3 text-xs text-slate-500">
@@ -256,10 +278,25 @@ export default function SupportQueueSidebar({
                       : "—"}
                   </span>
                 </div>
-                <p className="line-clamp-2 break-words text-sm font-semibold leading-6 text-slate-900">
-                  {t.subject || "ไม่ระบุหัวข้อ"}
-                </p>
-                <div className="mt-1 flex w-full flex-wrap items-center gap-1.5">
+                <div className={styles.caseTitleRow}>
+                  <p className={`${styles.caseTitle} line-clamp-2 break-words text-sm font-semibold leading-6 text-slate-900`}>
+                    {t.subject || "ไม่ระบุหัวข้อ"}
+                  </p>
+                  {unreadBadge(unreadById.get(t.id), "case")}
+                </div>
+                {t.capabilities?.isReturned && (
+                  <span className={styles.returnedFlag}>
+                    <span aria-hidden="true" className="material-symbols-outlined">assignment_return</span>
+                    ตีกลับจาก T&S · ทำแล้ว {(t.returnTasks || []).filter((task) => task.done).length}/{t.returnTasks?.length || 0}
+                  </span>
+                )}
+                {(t.capabilities?.isWatching || (scope === "escalated" && domain === "tickets")) && (
+                  <span className={styles.waitingFlag}>
+                    <span aria-hidden="true" className="material-symbols-outlined">hourglass_top</span>
+                    {domain === "disputes" ? "รอ T&S ตรวจ" : "รอ Admin ตรวจ · ยังคุยกับลูกค้าได้"}
+                  </span>
+                )}
+                <div className={`${styles.cardStatus} mt-1 flex w-full flex-wrap items-center gap-1.5`}>
                   <Badge
                     text={statusLabels[t.status] || t.status}
                     style={statusStyle}

@@ -8,7 +8,6 @@ const {
 const { Prisma } = require("../../generated/prisma-client");
 const prisma = require("../../models/prismaClient");
 const { queueFilter } = require("./ticketModel");
-const { stateJoins } = require("./ticketEvents");
 
 async function readTicketTrend(
   { role, userId, days },
@@ -24,8 +23,9 @@ async function readTicketTrend(
   // Aggregate all visible cases, including empty dates, rather than sampling a queue page.
   return db.$queryRaw(Prisma.sql`
     WITH dates AS (
-      SELECT ((${now}::timestamptz AT TIME ZONE ${timeZone})::date - (${days}::int - 1) + n) AS day
-      FROM generate_series(0, ${days}::int - 1) n
+      SELECT ((${now}::timestamptz AT TIME ZONE ${timeZone})::date - (${days}::int - 1))::timestamp
+        + n * CASE WHEN ${days}::int = 1 THEN interval '1 hour' ELSE interval '1 day' END AS day
+      FROM generate_series(0, CASE WHEN ${days}::int = 1 THEN 23 ELSE ${days}::int - 1 END) n
     ), visible AS (
       SELECT t.ticket_id AS id, t.created_at FROM support_tickets t
       JOIN ticket_statuses s ON s.ticket_status_id = t.current_status_id
@@ -33,12 +33,12 @@ async function readTicketTrend(
       LEFT JOIN LATERAL (SELECT assignment_id, assignee_id FROM ticket_assignments
         WHERE ticket_id=t.ticket_id AND (ended_at IS NULL OR s.code='CLOSED')
         ORDER BY assigned_at DESC LIMIT 1) a ON true
-      ${stateJoins}
+
       ${filter}
     )
-    SELECT dates.day::text AS date, count(v.id)::int AS value
+    SELECT to_char(dates.day, CASE WHEN ${days}::int = 1 THEN 'YYYY-MM-DD"T"HH24:MI:SS' ELSE 'YYYY-MM-DD' END) AS date, count(v.id)::int AS value
     FROM dates LEFT JOIN visible v ON
-      (v.created_at AT TIME ZONE ${timeZone})::date = dates.day AND v.created_at <= ${now}::timestamptz
+      date_trunc(CASE WHEN ${days}::int = 1 THEN 'hour' ELSE 'day' END, v.created_at AT TIME ZONE ${timeZone}) = dates.day AND v.created_at <= ${now}::timestamptz
     GROUP BY dates.day ORDER BY dates.day
   `);
 }

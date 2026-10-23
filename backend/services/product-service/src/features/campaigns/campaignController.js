@@ -1,6 +1,7 @@
 const { parsePagination, paginatedResponse } = require("@reloop/shared");
 const campaignService = require("./campaignService");
 const campaignMetrics = require("./campaignMetrics");
+const { resolveBuyerProfile } = require("./campaignBuyerProfile");
 
 function currentUser(req) {
   return {
@@ -89,6 +90,7 @@ async function end(req, res, next) {
     const campaign = await campaignService.endCampaign({
       user: currentUser(req),
       campaignId: req.params.id,
+      reason: req.body?.reason,
     });
     res.json(campaign);
   } catch (err) {
@@ -98,9 +100,11 @@ async function end(req, res, next) {
 
 async function getOne(req, res, next) {
   try {
+    const profile = await resolveBuyerProfile(req);
     const campaign = await campaignService.getCampaign({
       user: currentUser(req),
       campaignId: req.params.id,
+      profile,
     });
     res.json(campaign);
   } catch (err) {
@@ -111,14 +115,17 @@ async function getOne(req, res, next) {
 async function list(req, res, next) {
   try {
     const { page, limit, skip, take } = parsePagination(req.query);
-    const { items, total } = await campaignService.listCampaigns({
+    const { items, total, summary } = await campaignService.listCampaigns({
       user: currentUser(req),
       status: req.query.status,
       search: req.query.search,
       skip,
       take,
     });
-    res.json(paginatedResponse(items, total, { page, limit }));
+    res.json({
+      ...paginatedResponse(items, total, { page, limit }),
+      summary,
+    });
   } catch (err) {
     next(err);
   }
@@ -126,28 +133,12 @@ async function list(req, res, next) {
 
 async function listAvailable(req, res, next) {
   try {
-    let profile = null;
-    if (req.query.profile) {
-      try {
-        profile =
-          typeof req.query.profile === "string"
-            ? JSON.parse(req.query.profile)
-            : req.query.profile;
-      } catch {
-        profile = null;
-      }
-    } else if (req.headers["x-buyer-preferences"]) {
-      try {
-        profile = JSON.parse(
-          decodeURIComponent(req.headers["x-buyer-preferences"]),
-        );
-      } catch {
-        profile = null;
-      }
-    }
+    const profile = await resolveBuyerProfile(req);
     const campaigns = await campaignService.listAvailablePublicCampaigns({
+      userId: req.userId,
       profile,
     });
+    res.set("Cache-Control", "private, no-store");
     res.json(campaigns);
   } catch (err) {
     next(err);
@@ -156,9 +147,11 @@ async function listAvailable(req, res, next) {
 
 async function claim(req, res, next) {
   try {
+    const profile = await resolveBuyerProfile(req);
     const voucher = await campaignService.claimVoucher({
       user: currentUser(req),
       campaignId: req.params.id,
+      profile,
     });
     res.status(201).json(voucher);
   } catch (err) {
@@ -180,11 +173,13 @@ async function myVouchers(req, res, next) {
 
 async function applicable(req, res, next) {
   try {
+    const profile = await resolveBuyerProfile(req);
     const vouchers = await campaignService.getApplicableVouchers({
       user: currentUser(req),
       price: req.body.price,
       category: req.body.category,
-      profile: req.body.profile || null,
+      profile,
+      includeUnavailable: req.body.includeUnavailable === true,
     });
     res.json(vouchers);
   } catch (err) {
@@ -245,6 +240,7 @@ async function complete(req, res, next) {
       user,
       campaignId: req.params.id,
       orderId: req.body.orderId,
+      discountAmount: req.body.discountAmount,
     });
     res.json({ success: true, voucher });
   } catch (err) {
@@ -291,6 +287,7 @@ async function recordOrderCompletedEvent(req, res, next) {
           user: { id: req.body.userId || "" },
           campaignId: req.body.campaignId,
           orderId: req.body.orderId,
+          discountAmount: req.body.discountAmount,
         });
       } catch {
         // Continue even if voucher wasn't held or completed previously
@@ -340,6 +337,18 @@ async function getSalesTrends(req, res, next) {
   }
 }
 
+async function getAuctionActivityMetrics(req, res, next) {
+  try {
+    const result = await campaignMetrics.getAuctionActivityMetrics({
+      from: req.query.from,
+      to: req.query.to,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getCampaignComparison(req, res, next) {
   try {
     const result = await campaignMetrics.getCampaignComparison({
@@ -377,5 +386,6 @@ module.exports = {
   getCampaignMetrics,
   getOverviewMetrics,
   getSalesTrends,
+  getAuctionActivityMetrics,
   getCampaignComparison,
 };

@@ -1,4 +1,25 @@
-import { smoothLinePath } from "./AgentDashboardCharts";
+import { lineTickIndices, smoothLinePath } from "./AgentDashboardCharts";
+
+test.each([14, 24, 30])(
+  "date labels for %s points keep the last date clear at every chart width",
+  (count) => {
+    for (const width of [260, 380, 640, 1100]) {
+      const indices = lineTickIndices(count, width);
+      expect(indices[0]).toBe(0);
+      expect(indices.at(-1)).toBe(count - 1);
+      for (let i = 1; i < indices.length; i++) {
+        const distance =
+          ((indices[i] - indices[i - 1]) * (width - 65)) / (count - 1);
+        expect(distance).toBeGreaterThanOrEqual(70 - 1e-6);
+      }
+    }
+  },
+);
+
+test("empty and single-day axes have no invalid indices", () => {
+  expect(lineTickIndices(0, 400)).toEqual([]);
+  expect(lineTickIndices(1, 400)).toEqual([0]);
+});
 test("smooth curve visits every daily value without overshooting peaks or zero baselines", () => {
   const points = [
     { x: 0, y: 100 },

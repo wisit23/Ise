@@ -1,0 +1,18 @@
+✔ access-aware dispute queue paginates more than 50 cases with terminal SLA last (1181.1164ms)
+[order-service] chat notification failed for PRODUCT:er-test-1791991369043-p1 (order 5aef91d4-86a2-4efd-b436-beebff6e423e): fetch failed
+[order-service] chat notification failed for PRODUCT:er-test-1791991369043-p2 (order b91ecf34-654a-48dc-b0af-e51905867d8a): fetch failed
+✔ ER checkout API: multiple sellers, exact totals, immutable paidAt, address snapshots and shipment guards (5263.7986ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+✔ ER evidence API: buyer uploads before claim, staff chooses deadline, audits isolate evidence and safety review stays unique (3631.1518ms)
+[order-service] chat notification failed for PRODUCT:er-test-1791991369043-auction-product (order auction-cf0a31641699f8332657cca1edf6266b4c361262f24aa5734689b271243bf866): fetch failed
+✔ auction callback retries create one pending order and no basket (2822.2478ms)
+[disputeService] risk lookup unavailable: auth-service is unreachable
+✔ dispute evidence: private storage, authz on view, audit trail (3860.0442ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19466.9582

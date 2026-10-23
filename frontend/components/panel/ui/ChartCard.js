@@ -1,8 +1,10 @@
 export default function ChartCard({
   title,
+  subtitle,
   icon,
   children,
   actions,
+  action,
   align = "center",
   className = "",
 }) {
@@ -14,13 +16,24 @@ export default function ChartCard({
       className={`flex h-full flex-col ${className} rounded-xl border border-slate-200/60 bg-white p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)] transition-shadow hover:shadow-[0_8px_20px_-6px_rgba(6,81,237,0.08)]`}
     >
       <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <span className="material-symbols-outlined text-[18px] text-emerald-600">
-            {icon}
-          </span>
-          {title}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            {icon && (
+              <span className="material-symbols-outlined text-[18px] text-emerald-600 shrink-0">
+                {icon}
+              </span>
+            )}
+            <span className="truncate">{title}</span>
+          </div>
+          {subtitle && (
+            <p className="mt-0.5 text-xs text-slate-500 font-normal">
+              {subtitle}
+            </p>
+          )}
         </div>
-        {actions}
+        {(actions || action) && (
+          <div className="shrink-0">{actions || action}</div>
+        )}
       </div>
       {/* Centered by default; "start" keeps a short body at the top when a
           taller neighbour stretches the card. */}

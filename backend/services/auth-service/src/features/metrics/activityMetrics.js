@@ -4,7 +4,7 @@ const defaultPrisma = require("../../models/prismaClient");
 const SUPPORTED_TIMEZONES = ["Asia/Bangkok"];
 const DEFAULT_TIMEZONE = "Asia/Bangkok";
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
-const MAX_HOURLY_DAYS = 31;
+const MAX_HOURLY_DAYS = 366;
 const MAX_HOURLY_HOURS = MAX_HOURLY_DAYS * 24;
 
 /**
@@ -53,7 +53,7 @@ function parseDateInput(val) {
  * - Boundary: half-open interval [from, to)
  * - from >= to is rejected with 400
  * - Invalid ISO format is rejected with 400
- * - Range exceeding 31 days is rejected with 400
+ * - Range exceeding one calendar year is rejected with 400
  * - Default: last 7 days aligned to Bangkok hours
  */
 function parseAndValidateRange(query = {}) {

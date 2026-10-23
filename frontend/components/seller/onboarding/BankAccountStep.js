@@ -3,6 +3,10 @@
 import Alert from "../../ui/Alert";
 import Button from "../../ui/Button";
 import Input from "../../ui/Input";
+import BankAccountInput, {
+  parseBankAccount,
+  formatBankAccount,
+} from "../BankAccountInput";
 
 /**
  * LockedInfoRow — แสดงข้อมูลล็อคจาก Thai ID แบบ summary
@@ -56,6 +60,7 @@ export default function BankAccountStep({
   onSubmit,
   onBack,
 }) {
+  const { bank, accountNumber } = parseBankAccount(bankAccount);
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5">
       {/* Header */}
@@ -115,19 +120,19 @@ export default function BankAccountStep({
       {/* บัญชีธนาคาร */}
       <div className="border-t border-line pt-4">
         <h3 className="mb-3 text-sm font-semibold text-gray-900">
-          บัญชีธนาคาร / พร้อมเพย์{" "}
+          บัญชีธนาคาร{" "}
           <span className="font-normal text-ink-muted">(แก้ไขได้)</span>
         </h3>
-        <Input
-          label="เลขบัญชีธนาคาร / พร้อมเพย์"
-          hint="เช่น กสิกรไทย 123-4-56789-0 หรือเบอร์พร้อมเพย์"
-          placeholder="กสิกรไทย 123-4-56789-0"
-          value={bankAccount}
-          onChange={(e) => onChange(e.target.value)}
+        <BankAccountInput
+          bank={bank}
+          accountNumber={accountNumber}
+          onBankChange={(newBank) => onChange(formatBankAccount(newBank, accountNumber))}
+          onAccountNumberChange={(newAcc) => onChange(formatBankAccount(bank, newAcc))}
+          required={true}
         />
-        <p className="mt-1.5 flex items-center gap-1 text-xs text-ink-muted">
+        <p className="mt-2 flex items-center gap-1 text-xs text-ink-muted">
           <span className="material-symbols-outlined text-[14px]">info</span>
-          บัญชีธนาคารสามารถแก้ไขได้ภายหลังในหน้าการตั้งค่า
+          บัญชีธนาคารสามารถแก้ไขได้ภายหลังในหน้าการตั้งค่าร้านค้า
         </p>
       </div>
 

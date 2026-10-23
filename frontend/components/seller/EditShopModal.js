@@ -6,6 +6,11 @@ import Button from "../ui/Button";
 import Alert from "../ui/Alert";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
+import BankAccountInput, {
+  parseBankAccount,
+  formatBankAccount,
+  validateBankAccount,
+} from "./BankAccountInput";
 
 export default function EditShopModal({
   open,
@@ -15,7 +20,8 @@ export default function EditShopModal({
 }) {
   const [shopName, setShopName] = useState("");
   const [address, setAddress] = useState("");
-  const [bankAccount, setBankAccount] = useState("");
+  const [bank, setBank] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [comment, setComment] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -47,9 +53,13 @@ export default function EditShopModal({
         if (prof) {
           setShopName(prof.shopName || currentShopName || "");
           setAddress(prof.address || "");
-          setBankAccount(prof.bankAccount || "");
+          const parsed = parseBankAccount(prof.bankAccount || "");
+          setBank(parsed.bank);
+          setAccountNumber(parsed.accountNumber);
         } else {
           setShopName(currentShopName || "");
+          setBank("");
+          setAccountNumber("");
         }
 
         const pending = (reqs?.items || []).find((r) => r.status === "PENDING");
@@ -64,8 +74,14 @@ export default function EditShopModal({
 
     if (!comment.trim()) {
       setError(
-        "กรุณากรอกเหตุผลว่าต้องการเปลี่ยนอะไรและเพราะอะไร เพื่อให้แอดมินตรวจสอบ",
+        "กรุณากรอกเหตุผลว่าต้องการเปลี่ยนอะไรและเพราะอะไร เพื่อให้ Trust and Safety ตรวจสอบ",
       );
+      return;
+    }
+
+    const bankError = validateBankAccount(bank, accountNumber, { required: false });
+    if (bankError) {
+      setError(bankError);
       return;
     }
 
@@ -77,10 +93,11 @@ export default function EditShopModal({
 
     setSubmitting(true);
     try {
+      const formattedBank = formatBankAccount(bank, accountNumber);
       const payload = {
         shopName: shopName.trim() || undefined,
         address: address.trim() || undefined,
-        bankAccount: bankAccount.trim() || undefined,
+        bankAccount: formattedBank || undefined,
         comment: comment.trim(),
       };
 
@@ -110,7 +127,7 @@ export default function EditShopModal({
       open={open}
       onClose={handleClose}
       title="แก้ไขข้อมูลร้านค้า"
-      description="ส่งคำขอเปลี่ยนแปลงข้อมูลร้านค้าเพื่อให้แอดมินตรวจสอบและอนุมัติ"
+      description="ส่งคำขอเปลี่ยนแปลงข้อมูลร้านค้าเพื่อให้ Trust and Safety ตรวจสอบและอนุมัติ"
       size="md"
     >
       {loading ? (
@@ -126,7 +143,7 @@ export default function EditShopModal({
             ส่งคำขอสำเร็จเรียบร้อย
           </h3>
           <p className="text-sm text-slate-500 max-w-sm mx-auto">
-            คำขอของคุณถูกส่งไปยังแอดมินแล้ว พร้อมความคิดเห็นประกอบการพิจารณา
+            คำขอของคุณถูกส่งไปยัง Trust and Safety แล้ว พร้อมความคิดเห็นประกอบการพิจารณา
             ระบบจะอัปเดตข้อมูลร้านทันทีที่ได้รับการอนุมัติ
           </p>
           <div className="pt-2">
@@ -141,7 +158,7 @@ export default function EditShopModal({
             <Alert tone="warning">
               <div className="text-xs space-y-1">
                 <p className="font-semibold">
-                  คุณมีคำขอแก้ไขข้อมูลที่อยู่ระหว่างรอการตรวจสอบจากแอดมิน
+                  คุณมีคำขอแก้ไขข้อมูลที่อยู่ระหว่างรอการตรวจสอบจาก Trust and Safety
                 </p>
                 <p className="text-amber-800">
                   ยื่นเมื่อ:{" "}
@@ -185,22 +202,19 @@ export default function EditShopModal({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              เลขบัญชีธนาคาร
-            </label>
-            <input
-              type="text"
-              value={bankAccount}
-              onChange={(e) => setBankAccount(e.target.value)}
+            <BankAccountInput
+              bank={bank}
+              accountNumber={accountNumber}
+              onBankChange={setBank}
+              onAccountNumberChange={setAccountNumber}
               disabled={submitting || Boolean(pendingRequest)}
-              placeholder="เช่น กสิกรไทย 123-4-56789-0"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 font-mono"
+              required={false}
             />
           </div>
 
           <div className="border-t border-slate-100 pt-3">
             <label className="block text-xs font-semibold text-slate-800 mb-1">
-              ความคิดเห็นถึงแอดมิน (เปลี่ยนอะไร เพราะอะไร){" "}
+              ความคิดเห็นถึง Trust and Safety (เปลี่ยนอะไร เพราะอะไร){" "}
               <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -209,11 +223,11 @@ export default function EditShopModal({
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               disabled={submitting || Boolean(pendingRequest)}
-              placeholder="กรุณาระบุรายละเอียดให้แอดมินทราบ เช่น: ขอเปลี่ยนชื่อร้านเนื่องจากเปลี่ยนแบรนด์เป็น... และอัปเดตที่อยู่จัดส่งใหม่"
+              placeholder="กรุณาระบุรายละเอียดให้ Trust and Safety ทราบ เช่น: ขอเปลี่ยนชื่อร้านเนื่องจากเปลี่ยนแบรนด์เป็น... และอัปเดตที่อยู่จัดส่งใหม่"
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:bg-slate-100 disabled:text-slate-400 resize-none"
             />
             <p className="mt-1 text-[11px] text-slate-500">
-              ทุกครั้งที่ขอเปลี่ยนข้อมูล แอดมินต้องตรวจสอบและอนุมัติก่อน
+              ทุกครั้งที่ขอเปลี่ยนข้อมูล Trust and Safety ต้องตรวจสอบและอนุมัติก่อน
               ข้อมูลจึงจะเปลี่ยน
             </p>
           </div>
@@ -234,7 +248,7 @@ export default function EditShopModal({
                 submitting || Boolean(pendingRequest) || !comment.trim()
               }
             >
-              {submitting ? "กำลังส่งคำขอ..." : "ส่งให้แอดมินตรวจสอบ"}
+              {submitting ? "กำลังส่งคำขอ..." : "ส่งให้ Trust and Safety ตรวจสอบ"}
             </Button>
           </div>
         </form>

@@ -30,7 +30,7 @@ export default function KycStatusCard({ status, statusLabel }) {
         <div>
           <h2 className="text-lg font-bold text-gray-900">
             {pending
-              ? "ข้อมูลอยู่ระหว่างการตรวจสอบโดยแอดมิน"
+              ? "ข้อมูลอยู่ระหว่างการตรวจสอบโดย Trust and Safety"
               : "คุณได้รับการยืนยันตัวตนเป็นผู้ขายแล้ว"}
           </h2>
           <p
@@ -79,7 +79,7 @@ export default function KycStatusCard({ status, statusLabel }) {
             variant="secondary"
             icon="storefront"
           >
-            แดชบอร์ดผู้ขาย
+            My Store
           </Button>
         </div>
       )}

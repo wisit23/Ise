@@ -20,6 +20,28 @@ describe("MessageList", () => {
     expect(onPromptClick).toHaveBeenCalledWith("สินค้ายังอยู่ไหมครับ?");
   });
 
+  it("renders custom automated questions when provided by seller", () => {
+    const onPromptClick = jest.fn();
+    const customPrompts = [
+      { id: "q-1", messageText: "มีของพร้อมส่งไหมครับ?" },
+      { id: "q-2", messageText: "สามารถนัดรับได้ไหมครับ?" },
+    ];
+    render(
+      <MessageList
+        messages={[]}
+        currentUserId="user-1"
+        onPromptClick={onPromptClick}
+        prompts={customPrompts}
+      />,
+    );
+
+    expect(screen.getByText("มีของพร้อมส่งไหมครับ?")).toBeInTheDocument();
+    expect(screen.getByText("สามารถนัดรับได้ไหมครับ?")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("มีของพร้อมส่งไหมครับ?"));
+    expect(onPromptClick).toHaveBeenCalledWith("มีของพร้อมส่งไหมครับ?");
+  });
+
   it("marks historical messages with none and animates the latest message on initial load", () => {
     const messages = [
       {
@@ -216,6 +238,56 @@ describe("MessageList", () => {
     );
 
     expect(screen.getByText("การสนทนาเริ่มต้นขึ้นแล้ว")).toBeInTheDocument();
+  });
+
+  it("renders a safe auction detail link in the system chat message", () => {
+    render(
+      <MessageList
+        currentUserId="seller-1"
+        activeRoomId="auction-room"
+        messages={[
+          {
+            id: "auction-system-1",
+            type: "SYSTEM",
+            body: "รายการประมูลถูกยกเลิก",
+            createdAt: "2026-10-15T09:00:00.000Z",
+            payload: {
+              event: "auction.item_cancelled",
+              actionUrl: "/auctions/item-1",
+              actionLabel: "ดูรายละเอียดรายการ",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /ดูรายละเอียดรายการ/ }),
+    ).toHaveAttribute("href", "/auctions/item-1");
+  });
+
+  it("does not render an external action URL from a message payload", () => {
+    render(
+      <MessageList
+        currentUserId="seller-1"
+        activeRoomId="auction-room"
+        messages={[
+          {
+            id: "auction-system-unsafe",
+            type: "SYSTEM",
+            body: "รายการประมูลถูกยกเลิก",
+            createdAt: "2026-10-15T09:00:00.000Z",
+            payload: {
+              event: "auction.item_cancelled",
+              actionUrl: "https://evil.example/auction",
+              actionLabel: "ลิงก์ไม่ปลอดภัย",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("separates messages from different calendar days", () => {

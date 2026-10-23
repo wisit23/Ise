@@ -3,6 +3,8 @@ import DashboardSection, {
   convertThaiDateFilterToRange,
   formatPeakHour,
   formatHourLabel,
+  getCalendarDateRange,
+  readDashboardFilter,
 } from "./DashboardSection";
 import { apiFetch, getMarketingUserAnalytics } from "../../../lib/api";
 
@@ -11,17 +13,21 @@ jest.mock("../../../lib/api", () => ({
   getMarketingUserAnalytics: jest.fn(),
 }));
 
-jest.mock("../../charts/DonutChart", () => {
-  return function MockDonutChart() {
-    return <div data-testid="mock-donut-chart">DonutChart</div>;
+jest.mock("../../charts/TrendLineChart", () => {
+  return function MockTrendLineChart({ data }) {
+    return (
+      <div data-testid="mock-trend-chart">
+        TrendLineChart ({data ? data.length : 0} items)
+      </div>
+    );
   };
 });
 
-jest.mock("../../charts/TrendBarChart", () => {
-  return function MockTrendBarChart({ data }) {
+jest.mock("./UsageHeatmap", () => {
+  return function MockUsageHeatmap({ hourlyUsage }) {
     return (
-      <div data-testid="mock-trend-chart">
-        TrendBarChart ({data ? data.length : 0} items)
+      <div data-testid="mock-usage-heatmap">
+        UsageHeatmap ({hourlyUsage ? hourlyUsage.length : 0} items)
       </div>
     );
   };
@@ -119,6 +125,33 @@ describe("DashboardSection date & time helper utilities", () => {
       expect(formatHourLabel("")).toBe("—");
     });
   });
+
+  test("builds Bangkok calendar presets and restores a safe filter from URL", () => {
+    const now = new Date("2026-10-15T17:30:00.000Z");
+    expect(getCalendarDateRange("day", now)).toEqual({
+      fromDate: "2026-10-16",
+      toDate: "2026-10-16",
+    });
+    expect(getCalendarDateRange("week", now)).toEqual({
+      fromDate: "2026-10-12",
+      toDate: "2026-10-18",
+    });
+    expect(
+      readDashboardFilter(
+        "?range=custom&from=2026-06-01&to=2026-06-07",
+        now,
+      ),
+    ).toMatchObject({
+      preset: "custom",
+      fromDate: "2026-06-01",
+      toDate: "2026-06-07",
+    });
+    expect(readDashboardFilter("?range=custom&from=https://evil.test", now)).toMatchObject({
+      preset: "week",
+      fromDate: "2026-10-12",
+      toDate: "2026-10-18",
+    });
+  });
 });
 
 describe("DashboardSection (Responsive Layout & Functionality)", () => {
@@ -127,6 +160,7 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    window.history.replaceState({}, "", "/marketing");
   });
 
   const mockOverview = {
@@ -181,6 +215,34 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
     ],
   };
 
+  const mockSalesOverview = {
+    data: {
+      total: {
+        sales: 60000,
+        completedOrders: 30,
+        comparison: { difference: 10000, percentChange: 20, direction: "up" },
+      },
+      byType: {
+        standard: {
+          sales: 30000,
+          completedOrders: 18,
+          comparison: { difference: 5000, percentChange: 20, direction: "up" },
+        },
+        campaign: {
+          sales: 20000,
+          completedOrders: 10,
+          comparison: { difference: 4000, percentChange: 25, direction: "up" },
+        },
+        auction: {
+          sales: 10000,
+          completedOrders: 2,
+          comparison: { difference: 1000, percentChange: 11.1, direction: "up" },
+        },
+      },
+      refreshedAt: "2026-10-17T04:30:00.000Z",
+    },
+  };
+
   function setupApiFetch() {
     getMarketingUserAnalytics.mockResolvedValue(mockUserAnalytics);
     apiFetch.mockImplementation((url) => {
@@ -193,8 +255,15 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
       if (url.includes("/api/products/campaigns/metrics/compare")) {
         return Promise.resolve(mockCompare);
       }
-      if (url.includes("/api/products/auctions")) {
-        return Promise.resolve({ total: 5 });
+      if (url.includes("/api/products/campaigns/metrics/auction-activity")) {
+        return Promise.resolve({
+          distinctBidders: 8,
+          activeStores: 3,
+          statusCounts: { pending_approval: 2, approved: 1, open: 2 },
+        });
+      }
+      if (url.includes("/api/orders/marketing/sales-dashboard")) {
+        return Promise.resolve(mockSalesOverview);
       }
       return Promise.resolve({});
     });
@@ -207,21 +276,65 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
 
     // Initially shows filter bar
     expect(
-      screen.getByText("ช่วงเวลาการวัดผล (Attribution Window)"),
+      screen.getByText("ช่วงเวลาของข้อมูล Dashboard"),
     ).toBeInTheDocument();
 
     // Wait for data to load
     await waitFor(() => {
-      expect(screen.getByText("ยอดขายสุทธิ (Net)")).toBeInTheDocument();
-      expect(screen.getByText("คำสั่งซื้อสำเร็จ")).toBeInTheDocument();
+      expect(screen.getByText("ยอดขายสุทธิรวม")).toBeInTheDocument();
+      expect(screen.getByText("คำสั่งซื้อสำเร็จทั้งหมด")).toBeInTheDocument();
       expect(screen.getByText("Mid Year Sale")).toBeInTheDocument();
     });
 
     // Check responsive table and charts
-    expect(screen.getByTestId("mock-donut-chart")).toBeInTheDocument();
     expect(
       screen.getAllByTestId("mock-trend-chart").length,
     ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("ยอดขายสุทธิแยกตามประเภท")).toBeInTheDocument();
+    expect(screen.getByText("จำนวนรอบประมูลแยกตามสถานะ")).toBeInTheDocument();
+    expect(screen.getByText("ผู้เข้าร่วมประมูล")).toBeInTheDocument();
+    expect(screen.getByText("ร้านค้าที่มีกิจกรรม")).toBeInTheDocument();
+  });
+
+  test("uses one selected calendar range for every dashboard endpoint and URL", async () => {
+    setupApiFetch();
+    render(<DashboardSection token={mockToken} onNavigate={mockNavigate} />);
+
+    await waitFor(() => expect(screen.getByText("42")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "วัน" }));
+
+    await waitFor(() => {
+      const params = new URLSearchParams(window.location.search);
+      expect(params.get("range")).toBe("day");
+      expect(params.get("from")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(params.get("to")).toBe(params.get("from"));
+    });
+
+    const latestProductCalls = apiFetch.mock.calls.slice(-5);
+    expect(latestProductCalls).toHaveLength(5);
+    const queryStrings = latestProductCalls.map(([url]) => url.split("?")[1]);
+    expect(new Set(queryStrings).size).toBe(1);
+    expect(getMarketingUserAnalytics).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        from: expect.stringContaining("T00:00:00+07:00"),
+        to: expect.stringContaining("T00:00:00+07:00"),
+        timezone: "Asia/Bangkok",
+      }),
+      mockToken,
+    );
+  });
+
+  test("does not replace a dashboard API error with fabricated zero metrics", async () => {
+    setupApiFetch();
+    apiFetch.mockRejectedValue(new Error("Dashboard API unavailable"));
+    render(<DashboardSection token={mockToken} onNavigate={mockNavigate} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dashboard API unavailable")).toBeInTheDocument();
+    });
+    const completedOrdersCard = screen.getByText("คำสั่งซื้อสำเร็จทั้งหมด").closest("div");
+    expect(completedOrdersCard).toHaveTextContent("—");
+    expect(completedOrdersCard).not.toHaveTextContent("0");
   });
 
   test("triggers onNavigate when clicking on auction pipeline KPI card", async () => {
@@ -245,11 +358,7 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
     render(<DashboardSection token={mockToken} onNavigate={mockNavigate} />);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          "สถิติผู้ใช้งานและช่วงเวลาการใช้งาน (User & Peak-Usage Analytics)",
-        ),
-      ).toBeInTheDocument();
+      expect(screen.getByText("สถิติผู้ใช้งานและช่วงเวลาการใช้งาน")).toBeInTheDocument();
       expect(
         screen.getByText("ผู้ใช้งานที่มีการใช้งาน (Active Users)"),
       ).toBeInTheDocument();
@@ -262,11 +371,10 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
       expect(
         screen.getByText(/18 ผู้ใช้งาน active ในชั่วโมงนี้/),
       ).toBeInTheDocument();
-      expect(
-        screen.getByText("กราฟแสดงการใช้งานรายชั่วโมง (Hourly Usage)"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Heatmap การใช้งาน: วันในสัปดาห์ × ชั่วโมง")).toBeInTheDocument();
     });
 
+    expect(screen.getByTestId("mock-usage-heatmap")).toBeInTheDocument();
     expect(
       screen.getByLabelText("ตารางสถิติการใช้งานรายชั่วโมง"),
     ).toBeInTheDocument();
@@ -283,6 +391,8 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
       expect(screen.getByText("42")).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "กำหนดเอง" }));
+
     const dateInputs = container.querySelectorAll('input[type="date"]');
     const fromInput = dateInputs[0];
     const toInput = dateInputs[1];
@@ -290,7 +400,7 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
     fireEvent.change(fromInput, { target: { value: "2026-06-01" } });
     fireEvent.change(toInput, { target: { value: "2026-06-07" } });
 
-    const searchBtn = screen.getByRole("button", { name: /ค้นหา \/ รีเฟรช/i });
+    const searchBtn = screen.getByRole("button", { name: "ใช้ช่วงเวลานี้" });
     fireEvent.click(searchBtn);
 
     await waitFor(() => {
@@ -316,14 +426,17 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
       expect(screen.getByText("42")).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "กำหนดเอง" }));
+
     const dateInputs = container.querySelectorAll('input[type="date"]');
     const fromInput = dateInputs[0];
 
     fireEvent.change(fromInput, { target: { value: "2026-06-01" } });
+    fireEvent.change(dateInputs[1], { target: { value: "" } });
 
     getMarketingUserAnalytics.mockClear();
 
-    const searchBtn = screen.getByRole("button", { name: /ค้นหา \/ รีเฟรช/i });
+    const searchBtn = screen.getByRole("button", { name: "ใช้ช่วงเวลานี้" });
     fireEvent.click(searchBtn);
 
     expect(
@@ -343,13 +456,15 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
       expect(screen.getByText("42")).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "กำหนดเอง" }));
+
     const dateInputs = container.querySelectorAll('input[type="date"]');
     fireEvent.change(dateInputs[0], { target: { value: "2026-06-10" } });
     fireEvent.change(dateInputs[1], { target: { value: "2026-06-01" } });
 
     getMarketingUserAnalytics.mockClear();
 
-    const searchBtn = screen.getByRole("button", { name: /ค้นหา \/ รีเฟรช/i });
+    const searchBtn = screen.getByRole("button", { name: "ใช้ช่วงเวลานี้" });
     fireEvent.click(searchBtn);
 
     expect(
@@ -358,31 +473,21 @@ describe("DashboardSection (Responsive Layout & Functionality)", () => {
     expect(getMarketingUserAnalytics).not.toHaveBeenCalled();
   });
 
-  test("resets filters and restores default range when reset button is clicked", async () => {
+  test("restores the default week preset and synchronizes it to URL", async () => {
     setupApiFetch();
 
-    const { container } = render(
-      <DashboardSection token={mockToken} onNavigate={mockNavigate} />,
-    );
+    render(<DashboardSection token={mockToken} onNavigate={mockNavigate} />);
 
     await waitFor(() => {
       expect(screen.getByText("42")).toBeInTheDocument();
     });
 
-    const dateInputs = container.querySelectorAll('input[type="date"]');
-    const fromInput = dateInputs[0];
-    fireEvent.change(fromInput, { target: { value: "2026-06-01" } });
-
-    const resetBtn = screen.getByRole("button", { name: /ล้างตัวกรอง/i });
+    fireEvent.click(screen.getByRole("button", { name: "เดือน" }));
+    const resetBtn = screen.getByRole("button", { name: "กลับไปดูสัปดาห์นี้" });
     fireEvent.click(resetBtn);
 
-    expect(fromInput.value).toBe("");
-
     await waitFor(() => {
-      expect(getMarketingUserAnalytics).toHaveBeenCalledWith(
-        { timezone: "Asia/Bangkok" },
-        mockToken,
-      );
+      expect(new URLSearchParams(window.location.search).get("range")).toBe("week");
     });
   });
 

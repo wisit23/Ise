@@ -14,5 +14,6 @@ module.exports = {
   ...require("./casePriority"),
   ...require("./servicePolicy"),
   ...require("./commerceRestrictions"),
+  ...require("./auction"),
   events: require("./events").EVENTS,
 };

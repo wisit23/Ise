@@ -207,6 +207,7 @@ export default function SellerAuctionsPage() {
   const [relistPrice, setRelistPrice] = useState("");
   const [relistLoading, setRelistLoading] = useState(false);
   const [relistError, setRelistError] = useState("");
+  const [viewBidsAuction, setViewBidsAuction] = useState(null);
 
   const load = useCallback((currentUser) => {
     if (!currentUser) return;
@@ -389,9 +390,9 @@ export default function SellerAuctionsPage() {
               </span>
             </div>
             <p className="mt-2 text-xs text-amber-800">
-              สินค้าเหล่านี้ถูกยกเลิกรอบประมูลหรือปิดประมูลโดยไม่มีผู้เสนอราคา
-              กรุณาเลือกดำเนินการต่อโดยส่งเข้ารอบประมูลใหม่
-              หรือนำกลับไปขายแบบปกติ
+              สินค้าเหล่านี้ถูกยกเลิก ปิดประมูลโดยไม่มีผู้เสนอราคา
+              หรือไม่มีผู้ชนะชำระเงินภายในกำหนด
+              กรุณาเลือกส่งเข้ารอบประมูลใหม่หรือนำกลับไปขายแบบปกติ
             </p>
 
             <ul className="mt-4 space-y-3">
@@ -447,36 +448,82 @@ export default function SellerAuctionsPage() {
           ) : (
             <ul className="flex flex-col gap-3">
               {myAuctions.map((a) => {
-                const cancelReason =
+                const decisionReason =
                   a.cancellationReason || a.round?.cancellationReason || "";
+                const bids = Array.isArray(a.bids) ? a.bids : [];
+                const highestBid = bids[0];
                 return (
                   <li
                     key={a.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
                   >
                     <div className="min-w-0 flex-1">
-                      <Link
-                        href={`/auctions/${a.id}`}
-                        className="block truncate font-medium text-gray-900 hover:text-emerald-600"
-                      >
-                        {a.product?.title || a.productId}
-                      </Link>
-                      <p className="text-xs text-gray-500">
-                        ราคาเริ่มต้น {baht(a.startingPrice)}
-                      </p>
-                      {a.status === "cancelled" && cancelReason && (
-                        <p className="mt-1 text-xs font-medium text-rose-700">
-                          เหตุผลที่ยกเลิก: {cancelReason}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/auctions/${a.id}`}
+                          className="truncate font-semibold text-gray-900 hover:text-emerald-600 text-sm"
+                        >
+                          {a.product?.title || a.productId}
+                        </Link>
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                            STATUS_STYLE[a.status] || "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          {STATUS_LABEL[a.status] || a.status}
+                        </span>
+                      </div>
+
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                        <span className="text-gray-500">
+                          ราคาเริ่มต้น {baht(a.startingPrice)}
+                        </span>
+                        {highestBid ? (
+                          <span className="text-emerald-700 font-medium">
+                            บิดสูงสุดตอนนี้:{" "}
+                            <strong className="text-emerald-800 font-bold">
+                              {baht(highestBid.amount)}
+                            </strong>{" "}
+                            (โดย {highestBid.bidderName || (highestBid.bidderId ? `ผู้ใช้ ${highestBid.bidderId.slice(-6)}` : "ผู้ใช้นิรนาม")})
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">
+                            ยังไม่มีผู้เสนอราคา
+                          </span>
+                        )}
+                        <span className="text-gray-500">
+                          มีผู้เสนอราคาแล้ว:{" "}
+                          <strong className="text-gray-700">
+                            {bids.length} ครั้ง
+                          </strong>
+                        </span>
+                      </div>
+
+                      {["rejected", "cancelled"].includes(a.status) && decisionReason && (
+                        <p className="mt-1.5 text-xs font-medium text-rose-700">
+                          {a.status === "rejected" ? "เหตุผลที่ปฏิเสธ" : "เหตุผลที่ยกเลิก"}: {decisionReason}
                         </p>
                       )}
                     </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs ${
-                        STATUS_STYLE[a.status] || "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {STATUS_LABEL[a.status] || a.status}
-                    </span>
+
+                    <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => setViewBidsAuction(a)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 hover:text-emerald-600"
+                      >
+                        <span className="material-symbols-outlined text-sm">
+                          history
+                        </span>
+                        ดูประวัติการบิด ({bids.length})
+                      </button>
+                      <Link
+                        href={`/auctions/${a.id}`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                      >
+                        ดูหน้ารายละเอียด
+                      </Link>
+                    </div>
                   </li>
                 );
               })}
@@ -568,6 +615,115 @@ export default function SellerAuctionsPage() {
                 </button>
               </div>
             </form>
+          )}
+        </Modal>
+
+        {/* Modal แสดงประวัติการเสนอราคา (Bids) สำหรับผู้ขาย */}
+        <Modal
+          open={Boolean(viewBidsAuction)}
+          onClose={() => setViewBidsAuction(null)}
+          title="ประวัติการเสนอราคา (Bid History)"
+          description={`รายการบิดสำหรับสินค้า "${viewBidsAuction?.product?.title || viewBidsAuction?.id || ""}"`}
+          size="lg"
+        >
+          {viewBidsAuction && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-xl bg-slate-50 p-3 border border-slate-200 text-xs">
+                <div>
+                  <span className="text-gray-500 block">ราคาเริ่มต้น</span>
+                  <strong className="text-gray-800 text-sm">{baht(viewBidsAuction.startingPrice)}</strong>
+                </div>
+                <div>
+                  <span className="text-gray-500 block">ราคาสูงสุด</span>
+                  <strong className="text-emerald-700 text-sm">
+                    {viewBidsAuction.bids && viewBidsAuction.bids.length > 0
+                      ? baht(viewBidsAuction.bids[0].amount)
+                      : "—"}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-gray-500 block">จำนวนการบิด</span>
+                  <strong className="text-gray-800 text-sm">{viewBidsAuction.bids?.length || 0} ครั้ง</strong>
+                </div>
+                <div>
+                  <span className="text-gray-500 block">สถานะสินค้า</span>
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[viewBidsAuction.status] || "bg-gray-100 text-gray-600"}`}>
+                    {STATUS_LABEL[viewBidsAuction.status] || viewBidsAuction.status}
+                  </span>
+                </div>
+              </div>
+
+              {!viewBidsAuction.bids || viewBidsAuction.bids.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
+                  <span className="material-symbols-outlined text-3xl text-gray-400 block mb-1">
+                    gavel
+                  </span>
+                  ยังไม่มีผู้เสนอราคาสินค้านี้ในขณะนี้
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-gray-200">
+                  <table className="min-w-full divide-y divide-gray-200 text-left text-xs">
+                    <thead className="bg-gray-50 text-gray-600 font-semibold">
+                      <tr>
+                        <th className="px-3 py-2.5">ลำดับ</th>
+                        <th className="px-3 py-2.5">ผู้เสนอราคา</th>
+                        <th className="px-3 py-2.5 text-right">จำนวนเงินที่บิด</th>
+                        <th className="px-3 py-2.5">วันและเวลาที่เสนอ</th>
+                        <th className="px-3 py-2.5 text-center">สถานะ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {viewBidsAuction.bids.map((b, idx) => {
+                        const isHighest = idx === 0;
+                        const isWinning =
+                          viewBidsAuction.winningBidId === b.id ||
+                          (viewBidsAuction.status === "closed" && isHighest);
+                        return (
+                          <tr key={b.id || idx} className={isHighest ? "bg-emerald-50/50" : "hover:bg-gray-50"}>
+                            <td className="px-3 py-2.5 text-gray-500 font-medium">#{idx + 1}</td>
+                            <td className="px-3 py-2.5 font-medium text-gray-900">
+                              <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-sm text-gray-400">person</span>
+                                <span>{b.bidderName || (b.bidderId ? `ผู้ใช้ ${b.bidderId.slice(-6)}` : "ผู้ใช้นิรนาม")}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-bold text-gray-900 text-sm">
+                              {baht(b.amount)}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-500">
+                              {fmt(b.createdAt)}
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              {isWinning ? (
+                                <span className="rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
+                                  🏆 ชนะการประมูล
+                                </span>
+                              ) : isHighest ? (
+                                <span className="rounded-full bg-sky-100 border border-sky-300 px-2 py-0.5 text-[11px] font-bold text-sky-800">
+                                  สูงสุดตอนนี้
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 text-[11px]">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setViewBidsAuction(null)}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  ปิด
+                </button>
+              </div>
+            </div>
           )}
         </Modal>
       </section>

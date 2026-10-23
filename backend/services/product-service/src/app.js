@@ -6,6 +6,7 @@ const moderationRoutes = require("./features/moderation/moderationRoutes");
 const metricsRoutes = require("./features/metrics/metricsRoutes");
 const reservationRoutes = require("./features/reservations/reservationRoutes");
 const internalCampaignRoutes = require("./features/campaigns/internalCampaignRoutes");
+const internalAuctionRoutes = require("./features/auctions/internalAuctionRoutes");
 const { UPLOAD_DIR } = require("./middleware/upload");
 const reviewRoutes = require("./features/reviews/routes/reviewRoutes");
 const reviewUploadRoutes = require("./features/reviews/routes/uploadRoutes");
@@ -31,6 +32,7 @@ app.use("/reviews", reviewRoutes);
 
 app.use("/internal/products", reservationRoutes);
 app.use("/internal/campaigns", internalCampaignRoutes);
+app.use("/internal/auctions", internalAuctionRoutes);
 app.use("/", productRoutes);
 app.use("/internal/moderation", moderationRoutes);
 

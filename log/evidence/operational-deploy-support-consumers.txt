@@ -1,0 +1,16 @@
+✔ log-backed queue/responder works through queue, trend and chat-access consumers (2522.3527ms)
+✔ reopen preserves target IDs, exact policy snapshot and old outcomes under concurrent retry (662.4761ms)
+✔ Chat message metadata duplicate delivery is atomic; requester INTERNAL API output is filtered (451.2702ms)
+✔ independent tickets can be created concurrently without cross-ticket round conflicts (207.007ms)
+✔ public audit pagination excludes storage state and migration receipts (135.5778ms)
+✔ sla monitor escalates overdue tickets exactly once, even run twice (568.5549ms)
+✔ support ticket lifecycle against a real database (2271.7867ms)
+✔ Trust & Safety can take over an escalated ticket with versioned handoff audit (1049.1653ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10110.8499

@@ -23,6 +23,7 @@
     "seed:local:verify": "node scripts/verify-local-dataset.cjs",
     "seed:local:inventory": "node scripts/local-dataset-inventory.cjs",
     "smoke:customer-dispute": "node scripts/smoke-customer-dispute.cjs",
+    "smoke:csat": "node scripts/verify-csat.cjs",
     "down": "docker compose down",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

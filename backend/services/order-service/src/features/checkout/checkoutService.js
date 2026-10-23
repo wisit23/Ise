@@ -5,7 +5,7 @@ const defaultProductClient = require("../../services/productClient");
 const { money } = require("../../models/money");
 
 async function reserveOrder(
-  { buyerId, productId, campaignId },
+  { buyerId, productId, campaignId, basketId },
   {
     orderModel = defaultOrderModel,
     productClient = defaultProductClient,
@@ -16,6 +16,14 @@ async function reserveOrder(
 
   // 1. Reserve Product first
   const reservation = await productClient.reserveProduct(productId, buyerId);
+  if (basketId && reservation.reservationId !== basketId) {
+    if (reservation.created)
+      await productClient.releaseProductReservation(
+        productId,
+        reservation.reservationId,
+      );
+    throw badRequest("cart reservation has expired; select the product again");
+  }
 
   // If existing order already created from this reservation: return it immediately without updating price
   const existing = await orderModel.findByReservationId(
@@ -41,8 +49,8 @@ async function reserveOrder(
     throw error;
   }
 
-  // 2. Pre-generate orderId
-  const orderId = crypto.randomUUID();
+  // 2. Pre-generate concise orderId (e.g. ORD-A1B2C3D4E5)
+  const orderId = `ORD-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
 
   // 3. Server-side Voucher Validation & Discount Calculation via quoteAndHold
   let verifiedCampaignId = null;
@@ -132,14 +140,18 @@ async function reserveOrder(
       productTitle: reservation.product.title,
       status: "pending_payment",
       basket: {
-        create: {
-          id: reservation.reservationId,
-          buyerId,
-          productId: reservation.product.id,
-          status: "locked",
-          lockAt: new Date(),
-          unlockAt: new Date(reservation.expiresAt),
-        },
+        ...(basketId
+          ? { connect: { id: basketId } }
+          : {
+              create: {
+                id: reservation.reservationId,
+                buyerId,
+                productId: reservation.product.id,
+                status: "locked",
+                lockAt: new Date(),
+                unlockAt: new Date(reservation.expiresAt),
+              },
+            }),
       },
     });
     return {

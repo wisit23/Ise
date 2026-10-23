@@ -58,4 +58,27 @@ describe("ChatProductHeader", () => {
       expect(screen.getByText("ถูกจองแล้ว")).toBeInTheDocument();
     });
   });
+
+  it("renders auction badge and links directly to /auctions/[auctionId] when product is in auction", async () => {
+    fetchProduct.mockResolvedValueOnce({
+      id: "prod-3",
+      title: "รองเท้าผ้าใบประมูล",
+      price: 2500,
+      status: "auction",
+      auctionId: "auc-123",
+      media: [],
+    });
+
+    render(<ChatProductHeader productId="prod-3" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("รองเท้าผ้าใบประมูล")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("สินค้าประมูล")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /ดูสินค้าประมูล/ })).toHaveAttribute(
+      "href",
+      "/auctions/auc-123",
+    );
+  });
 });

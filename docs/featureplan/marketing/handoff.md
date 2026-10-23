@@ -1,5 +1,22 @@
 # Marketing Feature Handoff
 
+## 2026-10-14 addendum: Round capacity
+
+See [round-capacity.md](round-capacity.md) for the approved `max_items` migration,
+occupancy rules, API change, concurrency/regression evidence and verified Browser
+acceptance (including immediate quota refresh after rejection/cancellation).
+Migration applied locally; old rounds remain unlimited. No capacity
+editing feature or commit/push. Preserve all existing Working Tree work.
+
+## 2026-10-14 addendum: Round time editing
+
+`PATCH /auctions/rounds/:roundId` and the Marketing edit-time modal are implemented.
+The user approved one nullable `auction_items.soft_close_ends_at` column; its migration
+has been applied locally. Read [round-time-editing.md](round-time-editing.md) for the
+agreed rules, exact test evidence, legacy-row handling, explicit retry behavior and
+verified isolated Browser saves/live Chat delivery, and remaining full-project
+acceptance. Test fixtures were removed. No commit/push or max-round-capacity work done.
+
 > อัปเดตล่าสุด: 2026-10-09
 
 ## Ownership
@@ -441,3 +458,48 @@
   - Desktop-only Web (ความกว้างตั้งแต่ 1024px ขึ้นไป) ไม่ทำ Mobile UI
   - Browser E2E บน Browser จริงอยู่ในสถานะ `Pending`
   - ห้าม Commit หรือ Push และรักษา Working Tree เดิมทั้งหมดรวมถึง `docker-compose.yml`
+
+### 2026-10-17 Handoff — TC_AUC10 Payment Rollover (MKT-DEC-027)
+
+- Working branch: local `marketing` fast-forwarded from `origin/marketing` to current `main`; no commit/push performed
+- Database contract: หลาย Order ใช้ `auctionId` เดียวกันได้ แต่ `(auctionId, auctionBidId)` ต้อง unique; migration `20261023000000_auction_order_attempts`
+- Runtime contract:
+  - Expired Order คงเจ้าของเดิมและเป็น `cancelled`
+  - Product Service เลือกผู้ประมูลบัญชีถัดไปภายใต้ Auction lock และสร้าง Order ใหม่แบบ deterministic
+  - `winningBidId` และ `winningOrderId` เลื่อนพร้อมกัน; ผู้ชนะใหม่ได้เวลา 24 ชั่วโมงใหม่
+  - เมื่อหมดผู้ประมูล Order สุดท้ายเป็น `cancelled`, Product เป็น `auction_action_required` และล้างทั้ง `winningBidId`/`winningOrderId`
+- Notification contract:
+  - Auction Chat เป็น 1-on-1 read-only พร้อม deterministic message keys
+  - expired buyer → history; promoted winner → `/checkout?orders=<orderId>`; seller rollover → auction detail; seller exhaustion → `/seller/auctions`
+- Docker migration `20261023000000_auction_order_attempts` deploy สำเร็จ; targeted Product/Auction/Campaign tests ผ่าน 131/131 และ Order settlement/restriction ผ่าน 9/9
+- ยังไม่ได้ทำ browser time-advance E2E ของ rollover 24 ชั่วโมงหรือ full integration suite
+
+### 2026-10-18 Handoff — Interest-score Campaigns & Customer Insights (MKT-DEC-028)
+
+- Product migration ที่ต้อง deploy: `backend/services/product-service/prisma/migrations/20261024000000_campaign_interest_audience/migration.sql`
+- Score contract: reuse Recommendation weights, integer total, bands `0`, `1–6`, `7–14`, `15–24`, `25–38`, global maximum 38
+- Campaign contract:
+  - `audienceCriteria` และ legacy `targetSegment` ใช้พร้อมกันไม่ได้
+  - preview คืน aggregate เท่านั้น; publish fail เมื่อกลุ่มว่าง
+  - publish ล็อก Campaign row, บันทึก audience snapshot + Campaign state + Audit ใน transaction เดียว
+  - หลังได้ row lock จะเทียบเกณฑ์ล่าสุดกับ snapshot; ถ้ามี concurrent edit จะตอบ conflict โดยยังไม่ publish
+  - discovery/detail/claim/applicable ตรวจ snapshot membership; profile/behavior ที่เปลี่ยนหลัง publish ไม่ถอนสิทธิ์
+  - universal Campaign ไม่ส่ง Notification; score-targeted Campaign ส่งรายบัญชีไป `/campaigns`
+- Dashboard contract: Marketing-only, custom date-time สูงสุด 180 วัน, shortcut 7/30/90, filter ทั้งหน้าตาม category/brand/style/size/signal, compare equal previous period, aggregate only
+- Cross-service data: Auth profiles และ Order paid purchases ผ่าน internal-token APIs; ไม่มี cross-service database read
+- Verification status:
+  - Product migration deploy บน Docker สำเร็จ
+  - Docker targeted tests ผ่าน Product/Auction/Campaign 131/131, Auth audience 2/2, Order purchase signal 3/3 และ Frontend 24/24
+  - Browser จริงผ่าน Marketing → Customer Insights → Campaign prefill → audience preview โดยไม่บันทึก Campaign
+  - แก้และยืนยัน regression กราฟข้อมูลค่าน้อย: แกนเหลือ 0/1 ตามข้อมูลและไม่มี duplicate-key warning ใหม่
+  - Full integration suite และ responsive acceptance ทุก viewport ยังไม่ได้รัน
+
+### 2026-10-19 Handoff — Auction follow-up (MKT-DEC-029)
+
+- Backend contract: cooldown 2 วินาทีถูกตรวจภายใต้ Auction lock หลัง exact idempotency replay และก่อนตรวจ/สร้างราคาใหม่; เกินเพดาน 1,000,000 บาทตอบ 400
+- Soft-close contract: Bid ใน 5 นาทีสุดท้ายเพิ่มเส้นตายปัจจุบันอีก 5 นาทีทุกครั้ง; repository ค้นรอบจาก AuctionItem ที่ยัง `open` และ `scheduledEndAt > now` ได้แม้เวลาหลักของรอบจบแล้ว
+- Privacy contract: bid history ยังมีครบทุก Bid แต่ `bidderName` ถูกปิดบังบางส่วนและเรียงราคาสูงสุดก่อน
+- Notification contract: Auction chat message สำคัญถูก mirror ไป bell แบบ upsert และ soft-close แจ้งผู้ขาย/ผู้เสนอราคาที่เกี่ยวข้อง
+- Marketing UI: active/manageable อยู่ก่อน history, count ไม่รวม rejected/cancelled และแสดง highest Bid จริงเมื่อมี
+- Verification รอบนี้: Docker Product Auction 126/126, Frontend targeted 69/69, backend syntax checks และ `git diff --check` ผ่าน; warning `act(...)` เดิมใน AuctionScheduleSection tests ยังมีแต่ suite ผ่าน
+- ยังไม่ได้ commit/push, ไม่ได้ stage ไฟล์ และยังไม่ได้รัน browser E2E หรือ database integration suite รอบใหม่

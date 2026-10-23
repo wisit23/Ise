@@ -1,3 +1,4 @@
+const dashboardHourlyTrend = require("./dashboardHourlyTrend");
 const {
   serializableTransaction,
   badRequest,
@@ -63,35 +64,46 @@ async function create(data, client = prisma) {
   // Initial rows have no shared read-check-write state: unique keys and the sequence
   // arbitrate concurrent creates. READ COMMITTED keeps the snapshot atomic without
   // false SSI conflicts between unrelated new ticket/audit index entries.
-  return client.$transaction(async (db) => {
-    const at = data.createdAt ?? new Date();
-    const { cat, pri, state, policy } = await setup(db, { ...data, at });
-    const ticket = await db.supportTicket.create({
-      data: {
-        id: data.id ?? randomUUID(),
-        ...(data.ticketNumber ? { ticketNumber: data.ticketNumber } : {}),
-        requesterId: data.requesterId,
-        subject: data.subject,
-        description: data.description ?? "",
-        categoryId: cat.id,
-        priorityId: pri.id,
-        currentStatusId: state.id,
-        orderId: data.orderId ?? null,
-        targetId: data.targetId ?? null,
-        createdAt: at,
-      },
-    });
-    const opened = await db.ticketStatusHistory.create({
-      data: {
-        ticketId: ticket.id,
-        toStatusId: state.id,
-        changedById: data.requesterId,
-        createdAt: at,
-      },
-    });
-    const targets = [
+  return client.$transaction(
+    async (db) => {
+      const at = data.createdAt ?? new Date();
+      const { cat, pri, state, policy } = await setup(db, { ...data, at });
+      const ticket = await db.supportTicket.create({
+        data: {
+          id: data.id ?? randomUUID(),
+          ...(data.ticketNumber ? { ticketNumber: data.ticketNumber } : {}),
+          requesterId: data.requesterId,
+          subject: data.subject,
+          description: data.description ?? "",
+          categoryId: cat.id,
+          priorityId: pri.id,
+          currentStatusId: state.id,
+          closedAt: data.status === "CLOSED" ? (data.closedAt ?? at) : null,
+          orderId: data.orderId ?? null,
+          targetId: data.targetId ?? null,
+          createdAt: at,
+          priorityScore: data.priorityScore ?? 0,
+          riskReportCount: data.riskReportCount ?? 0,
+          chatResponderId: data.chatResponderId ?? null,
+          classificationReasonCodes: data.classification?.reasonCodes,
+          classificationPolicyVersion:
+            data.classification?.policyVersion ?? null,
+          riskLookupAvailable: data.classification?.riskLookupAvailable ?? null,
+        },
+      });
+      const opened = await db.ticketStatusHistory.create({
+        data: {
+          ticketId: ticket.id,
+          toStatusId: state.id,
+          changedById: data.requesterId,
+          createdAt: at,
+        },
+      });
+      const roundId = randomUUID();
+      const targets = [
         {
           id: randomUUID(),
+          roundId,
           ticketId: ticket.id,
           policyId: policy.id,
           metricType: "FIRST_RESPONSE",
@@ -102,6 +114,7 @@ async function create(data, client = prisma) {
         },
         {
           id: randomUUID(),
+          roundId,
           ticketId: ticket.id,
           policyId: policy.id,
           metricType: "RESOLUTION",
@@ -110,90 +123,137 @@ async function create(data, client = prisma) {
           achievedAt: data.resolvedAt ?? data.closedAt ?? null,
         },
       ];
-    await db.ticketSlaTarget.createMany({ data: targets });
-    const auditLog = [];
-    auditLog.push(await events.recordRound(db, { ticketId: ticket.id, actorId: data.requesterId,
-      at, cycle: 1, targets, policy, sourceHistoryId: opened.id }));
-    auditLog.push(await audit.record({ ticketId: ticket.id, actorId: data.requesterId,
-      action: "QUEUE_CLASSIFIED", createdAt: at,
-      payload: { schemaVersion: 1, ticketVersion: 0, priorityScore: data.priorityScore ?? 0,
-        riskReportCount: data.riskReportCount ?? 0, classification: data.classification ?? null,
-        slaPolicyId: policy.id, source: data.classification ? "scoreCase" : "import" } }, db));
-    if (data.chatResponderId !== undefined)
-      auditLog.push(await events.recordResponder(db, { ticketId: ticket.id, actorId: data.requesterId,
-        responderId: data.chatResponderId, at, ticketVersion: 0 }));
-    const assignments = [];
-    if (data.assigneeId) {
-      assignments.push(await db.ticketAssignment.create({
-        data: {
-          ticketId: ticket.id,
-          assigneeId: data.assigneeId,
-          assignedById: data.assignedById ?? data.assigneeId,
-          assignedAt: at,
-          endedAt: data.status === "CLOSED" ? (data.closedAt ?? at) : null,
-          endReason: data.status === "CLOSED" ? "Imported closed ticket" : null,
-        },
-      }));
-    }
-    if (data.conversationId)
-      await db.ticketChatLink.create({
-        data: {
-          ticketId: ticket.id,
-          conversationId: data.conversationId,
-        },
-      });
-    const statusHistory = [ { ...opened, toStatus: state } ];
-    // Explicit timestamps are accepted for fixtures/imports, never exposed as public create input.
-    for (const [code, date] of [
-      ["RESOLVED", data.resolvedAt],
-      ["CLOSED", data.closedAt],
-      ["ESCALATED", data.escalatedAt],
-    ]) {
-      if (!date) continue;
-      const status = await db.ticketStatus.findUnique({ where: { code } });
-      const history = await db.ticketStatusHistory.create({
-        data: {
-          ticketId: ticket.id,
-          toStatusId: status.id,
-          changedById: "fixture",
-          createdAt: date,
-          reason: code === "ESCALATED" ? (data.escalationNote ?? null) : null,
-        },
-      });
-      statusHistory.push({ ...history, toStatus: status });
-    }
-    await audit.record(
-      {
+      await db.ticketSlaTarget.createMany({ data: targets });
+      const auditLog = [];
+      const round = await events.recordRound(db, {
         ticketId: ticket.id,
         actorId: data.requesterId,
-        action: "STATUS_CHANGE",
-        fromValue: null,
-        toValue: state.code,
-        createdAt: at,
-      },
-      db,
-    );
-    if (data.classification)
+        at,
+        cycle: 1,
+        targets,
+        policy,
+        sourceHistoryId: opened.id,
+      });
+      targets.forEach((target) => {
+        target.round = round;
+      });
+      auditLog.push(
+        await audit.record(
+          {
+            ticketId: ticket.id,
+            actorId: data.requesterId,
+            action: "QUEUE_CLASSIFIED",
+            createdAt: at,
+            payload: {
+              schemaVersion: 1,
+              ticketVersion: 0,
+              priorityScore: data.priorityScore ?? 0,
+              riskReportCount: data.riskReportCount ?? 0,
+              classification: data.classification ?? null,
+              slaPolicyId: policy.id,
+              source: data.classification ? "scoreCase" : "import",
+            },
+          },
+          db,
+        ),
+      );
+      if (data.chatResponderId !== undefined)
+        auditLog.push(
+          await events.recordResponder(db, {
+            ticketId: ticket.id,
+            actorId: data.requesterId,
+            responderId: data.chatResponderId,
+            at,
+            ticketVersion: 0,
+          }),
+        );
+      const assignments = [];
+      if (data.assigneeId) {
+        assignments.push(
+          await db.ticketAssignment.create({
+            data: {
+              ticketId: ticket.id,
+              assigneeId: data.assigneeId,
+              assignedById: data.assignedById ?? data.assigneeId,
+              assignedAt: at,
+              endedAt: data.status === "CLOSED" ? (data.closedAt ?? at) : null,
+              endReason:
+                data.status === "CLOSED" ? "Imported closed ticket" : null,
+            },
+          }),
+        );
+      }
+      if (data.conversationId)
+        await db.ticketChatLink.create({
+          data: {
+            ticketId: ticket.id,
+            conversationId: data.conversationId,
+          },
+        });
+      const statusHistory = [{ ...opened, toStatus: state }];
+      // Explicit timestamps are accepted for fixtures/imports, never exposed as public create input.
+      for (const [code, date] of [
+        ["RESOLVED", data.resolvedAt],
+        ["CLOSED", data.closedAt],
+        ["ESCALATED", data.escalatedAt],
+      ]) {
+        if (!date) continue;
+        const status = await db.ticketStatus.findUnique({ where: { code } });
+        const history = await db.ticketStatusHistory.create({
+          data: {
+            ticketId: ticket.id,
+            toStatusId: status.id,
+            changedById: "fixture",
+            createdAt: date,
+            reason: code === "ESCALATED" ? (data.escalationNote ?? null) : null,
+          },
+        });
+        statusHistory.push({ ...history, toStatus: status });
+      }
       await audit.record(
         {
           ticketId: ticket.id,
           actorId: data.requesterId,
-          action: "CLASSIFY",
-          toValue: pri.code,
-          payload: { ...data.classification, slaPolicyId: policy.id },
+          action: "STATUS_CHANGE",
+          fromValue: null,
+          toValue: state.code,
           createdAt: at,
         },
         db,
       );
-    // Project rows already created by this transaction. Re-reading empty child relations
-    // causes relation-wide SSI predicate locks on small databases and conflicts between
-    // independent ticket creates; no read-back is needed for these known persisted values.
-    return toTicket({ ...ticket, category: cat, priority: pri, currentStatus: state,
-      assignments, statusHistory: statusHistory.sort((a,b) => +b.createdAt - +a.createdAt),
-      slaTargets: targets, auditLog,
-      chatLink: data.conversationId ? { conversationId: data.conversationId } : null,
-    });
-  }, { isolationLevel: "ReadCommitted" });
+      if (data.classification)
+        await audit.record(
+          {
+            ticketId: ticket.id,
+            actorId: data.requesterId,
+            action: "CLASSIFY",
+            toValue: pri.code,
+            payload: { ...data.classification, slaPolicyId: policy.id },
+            createdAt: at,
+          },
+          db,
+        );
+      // Project rows already created by this transaction. Re-reading empty child relations
+      // causes relation-wide SSI predicate locks on small databases and conflicts between
+      // independent ticket creates; no read-back is needed for these known persisted values.
+      return toTicket({
+        ...ticket,
+        category: cat,
+        priority: pri,
+        currentStatus: state,
+        assignments,
+        statusHistory: statusHistory.sort(
+          (a, b) => +b.createdAt - +a.createdAt,
+        ),
+        slaTargets: targets,
+        auditLog,
+        chatLink: data.conversationId
+          ? { conversationId: data.conversationId }
+          : null,
+      });
+    },
+    { isolationLevel: "ReadCommitted" },
+  );
 }
 
 async function findById(id, db = prisma) {
@@ -206,7 +266,7 @@ async function findById(id, db = prisma) {
 }
 
 async function listByRequester(requesterId, { skip = 0, take = 20 } = {}) {
-  const where = { requesterId };
+  const where = { requesterId, deletedAt: null };
   const [items, total] = await Promise.all([
     prisma.supportTicket.findMany({
       where,
@@ -229,9 +289,12 @@ function queueFilter({
   search,
   work,
   replyIds,
+  retention = "active",
   now = new Date(),
 }) {
-  const clauses = [];
+  const clauses = retention === "all" ? [] : retention === "deleted"
+    ? [Prisma.sql`t.deleted_at IS NOT NULL`]
+    : [Prisma.sql`t.deleted_at IS NULL`, retention === "archived" ? Prisma.sql`t.archived_at IS NOT NULL` : Prisma.sql`t.archived_at IS NULL`];
   if (work === "reply")
     clauses.push(
       Prisma.sql`t.ticket_id IN (${replyIds?.length ? Prisma.join(replyIds) : Prisma.sql`NULL`})`,
@@ -249,17 +312,43 @@ function queueFilter({
       );
   }
   if (scope === "unassigned") clauses.push(Prisma.sql`a.assignment_id IS NULL`);
-  else if (scope === "mine")
-    clauses.push(Prisma.sql`(a.assignee_id = ${assigneeId} OR cr.responder_id = ${assigneeId})`);
+  else if (scope === "mine" || scope === "history")
+    clauses.push(
+      Prisma.sql`(a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
+    );
+  else if (scope === "escalated")
+    // Escalated cases; CS sees only those it handed off and still chats on.
+    clauses.push(
+      role === "CUSTOMER_SERVICE"
+        ? Prisma.sql`s.code = 'ESCALATED' AND t.chat_responder_id = ${assigneeId}`
+        : Prisma.sql`s.code = 'ESCALATED'`,
+    );
+  else if (scope === "closed")
+    // Finished work this agent handled at any point (assignment or chat).
+    clauses.push(
+      Prisma.sql`s.code IN ('RESOLVED','CLOSED')`,
+      ...(role === "CUSTOMER_SERVICE"
+        ? [Prisma.sql`(t.chat_responder_id = ${assigneeId} OR EXISTS (SELECT 1 FROM ticket_assignments ha WHERE ha.ticket_id = t.ticket_id AND ha.assignee_id = ${assigneeId}))`]
+        : []),
+    );
   else if (scope === "all" && role === "CUSTOMER_SERVICE")
     clauses.push(
-      Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId} OR cr.responder_id = ${assigneeId})`,
+      Prisma.sql`(a.assignment_id IS NULL OR a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
     );
-  if (status) clauses.push(Prisma.sql`s.code = ${status}`);
-  else if (scope !== "all")
-    clauses.push(Prisma.sql`(s.code NOT IN ('CLOSED', 'ESCALATED') OR (s.code='ESCALATED' AND cr.responder_id=${assigneeId}))`);
+  if (scope === "history") clauses.push(Prisma.sql`s.code IN ('RESOLVED', 'CLOSED')`);
+  else if (status) clauses.push(Prisma.sql`s.code = ${status}`);
+  else if (scope === "mine")
+    clauses.push(Prisma.sql`s.code NOT IN ('CLOSED', 'ESCALATED')`);
+  else if (scope === "escalated" || scope === "closed") {
+    // already constrained above
+  } else if (scope !== "all")
+    clauses.push(
+      Prisma.sql`(s.code NOT IN ('CLOSED', 'ESCALATED') OR (s.code='ESCALATED' AND t.chat_responder_id=${assigneeId}))`,
+    );
   else if (!["ADMIN", "TRUST_AND_SAFETY"].includes(role))
-    clauses.push(Prisma.sql`(s.code <> 'ESCALATED' OR cr.responder_id=${assigneeId})`);
+    clauses.push(
+      Prisma.sql`(s.code <> 'ESCALATED' OR t.chat_responder_id=${assigneeId})`,
+    );
   if (priority) clauses.push(Prisma.sql`p.code = ${priority}`);
   if (search) {
     const pattern = "%" + search.replace(/[\\%_]/g, "\\$&") + "%";
@@ -278,10 +367,10 @@ async function listQueue(options = {}) {
   if (!["sla", "newest", "oldest", "priority"].includes(options.sort || "sla"))
     throw require("@reloop/shared").badRequest("invalid sort");
   const ordering = {
-    sla: Prisma.sql`sla.due_at ASC NULLS LAST, COALESCE((q.payload->>'priorityScore')::int,0) DESC, t.ticket_id ASC`,
+    sla: Prisma.sql`sla.due_at ASC NULLS LAST, t.priority_score DESC, t.ticket_id ASC`,
     newest: Prisma.sql`t.created_at DESC, t.ticket_id ASC`,
     oldest: Prisma.sql`t.created_at ASC, t.ticket_id ASC`,
-    priority: Prisma.sql`p.rank DESC, sla.due_at ASC NULLS LAST, COALESCE((q.payload->>'priorityScore')::int,0) DESC, t.ticket_id ASC`,
+    priority: Prisma.sql`p.rank DESC, sla.due_at ASC NULLS LAST, t.priority_score DESC, t.ticket_id ASC`,
   }[options.sort || "sla"];
   const filter = queueFilter(options);
   const from = Prisma.sql`FROM support_tickets t
@@ -290,7 +379,7 @@ async function listQueue(options = {}) {
     LEFT JOIN LATERAL (SELECT assignment_id,assignee_id FROM ticket_assignments
       WHERE ticket_id=t.ticket_id AND (ended_at IS NULL OR s.code='CLOSED')
       ORDER BY assigned_at DESC LIMIT 1) a ON true
-    ${events.stateJoins}`;
+    `;
   const [ids, counts] = await Promise.all([
     prisma.$queryRaw`SELECT t.ticket_id AS id ${from}
       LEFT JOIN LATERAL (SELECT min(st.due_at) AS due_at FROM ticket_sla_targets st
@@ -311,9 +400,27 @@ async function listQueue(options = {}) {
   };
 }
 
+/** CSAT responses for queue rows, keyed by ticket id. */
+async function ratingsFor(ids) {
+  if (!ids.length) return new Map();
+  const rows = await prisma.customerSatisfaction.findMany({
+    where: { caseId: { in: ids } },
+    select: { caseId: true, respondentSide: true, rating: true, comment: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const byCase = new Map();
+  for (const row of rows) byCase.set(row.caseId, [...(byCase.get(row.caseId) || []), row]);
+  return byCase;
+}
+
 async function markAchieved(db, ticketId, metricType, at) {
-  const row = await db.supportTicket.findUnique({ where: { id: ticketId }, include: ticketInclude });
-  const target = events.effectiveTargets(row.slaTargets, row.auditLog).find(t => t.metricType === metricType);
+  const row = await db.supportTicket.findUnique({
+    where: { id: ticketId },
+    include: ticketInclude,
+  });
+  const target = events
+    .effectiveTargets(row.slaTargets, row.auditLog)
+    .find((t) => t.metricType === metricType);
   if (!target) return;
   await db.ticketSlaTarget.updateMany({
     where: { id: target.id, achievedAt: null },
@@ -407,11 +514,19 @@ async function transitionTx(
   if (!next) throw badRequest("Unknown ticket status");
   const { count } = await db.supportTicket.updateMany({
     where: { id, version },
-    data: { currentStatusId: next.id, version: { increment: 1 } },
+    data: { currentStatusId: next.id, version: { increment: 1 },
+      ...(status === "CLOSED" ? { closedAt: at } : { closedAt: null, archivedAt: null, deletedAt: null, retentionUntil: null }),
+    },
   });
   if (!count) return false;
   if (chatResponderId !== undefined)
-    await events.recordResponder(db, { ticketId: id, actorId, responderId: chatResponderId, at, ticketVersion: version + 1 });
+    await events.recordResponder(db, {
+      ticketId: id,
+      actorId,
+      responderId: chatResponderId,
+      at,
+      ticketVersion: version + 1,
+    });
   const history = await db.ticketStatusHistory.create({
     data: {
       ticketId: id,
@@ -423,17 +538,35 @@ async function transitionTx(
     },
   });
   if (current.currentStatus.code === "RESOLVED" && status === "IN_PROGRESS") {
-    const previous = events.effectiveTargets(current.slaTargets, current.auditLog)
-      .find(t => t.metricType === "RESOLUTION");
-    if (!previous) throw new AppError(503, "Ticket SLA round is missing; repair history before reopening");
-    const policy = previous.round.targets.find(t => t.id === previous.id).policy;
-    const target = await db.ticketSlaTarget.create({ data: {
-      ticketId: id, policyId: previous.policyId, metricType: "RESOLUTION",
-      dueAt: new Date(+at + policy.resolutionMinutes * 60000),
-    } });
-    await events.recordRound(db, { ticketId: id, actorId, at,
-      cycle: events.rounds(current.auditLog)[0].cycle + 1, targets: [target],
-      policy, sourceHistoryId: history.id });
+    const previous = events
+      .effectiveTargets(current.slaTargets, current.auditLog)
+      .find((t) => t.metricType === "RESOLUTION");
+    if (!previous)
+      throw new AppError(
+        503,
+        "Ticket SLA round is missing; repair history before reopening",
+      );
+    const policy = events.policyFromRound(previous.round);
+    if (!Number.isInteger(policy.resolutionMinutes))
+      throw new AppError(503, "Historical SLA duration is unknown");
+    const target = await db.ticketSlaTarget.create({
+      data: {
+        roundId: randomUUID(),
+        ticketId: id,
+        policyId: previous.policyId,
+        metricType: "RESOLUTION",
+        dueAt: new Date(+at + policy.resolutionMinutes * 60000),
+      },
+    });
+    await events.recordRound(db, {
+      ticketId: id,
+      actorId,
+      at,
+      cycle: events.rounds(current.slaTargets)[0].cycle + 1,
+      targets: [target],
+      policy,
+      sourceHistoryId: history.id,
+    });
   }
   if (["RESOLVED", "CLOSED"].includes(status))
     await markAchieved(db, id, "RESOLUTION", at);
@@ -529,13 +662,20 @@ async function recordChatMessage(
     if (conversationId && !row.chatLink)
       await setConversationId(row.id, conversationId, db);
     const dedupeKey = "chat:" + chatMessageId;
-    const existing = await db.ticketAuditLog.findUnique({
-      where: { dedupeKey },
+    const existing = await db.ticketChatMessageReceipt.findUnique({
+      where: { messageId: chatMessageId },
     });
     if (existing) {
       if (existing.ticketId !== row.id)
         throw badRequest("Chat message belongs to another ticket");
-      return { event: existing, alreadyRecorded: true };
+      // The receipt decides deduplication. Fetch the historical audit only to
+      // preserve the internal API's existing event response, never for state.
+      const event = await db.ticketAuditLog.findUnique({
+        where: { dedupeKey },
+      });
+      if (!event)
+        throw new AppError(503, "Chat receipt audit history is unavailable");
+      return { event, alreadyRecorded: true };
     }
     const role = (authorRole ?? "").toUpperCase();
     const resolvedRole =
@@ -549,6 +689,17 @@ async function recordChatMessage(
             ? "AGENT"
             : null;
     if (!resolvedRole) throw badRequest("Unknown chat author role");
+    await db.ticketChatMessageReceipt.create({
+      data: {
+        messageId: chatMessageId,
+        ticketId: row.id,
+        conversationId: row.chatLink?.conversationId || conversationId,
+        authorId: authorId || null,
+        authorRole: resolvedRole,
+        isInternal: Boolean(isInternal),
+        messageCreatedAt: date,
+      },
+    });
     const event = await audit.record(
       {
         ticketId: row.id,
@@ -567,15 +718,21 @@ async function recordChatMessage(
     );
     if (resolvedRole === "AGENT" && !isInternal) {
       // Deliveries may arrive out of order; retain the earliest public staff reply.
-      const snapshot = await db.supportTicket.findUnique({ where: { id: row.id }, include: ticketInclude });
-      const response = events.effectiveTargets(snapshot.slaTargets, snapshot.auditLog).find(t => t.metricType === "FIRST_RESPONSE");
-      if (response && date >= new Date(response.round.startedAt)) await db.ticketSlaTarget.updateMany({
-        where: {
-          id: response.id,
-          OR: [{ achievedAt: null }, { achievedAt: { gt: date } }],
-        },
-        data: { achievedAt: date },
+      const snapshot = await db.supportTicket.findUnique({
+        where: { id: row.id },
+        include: ticketInclude,
       });
+      const response = events
+        .effectiveTargets(snapshot.slaTargets, snapshot.auditLog)
+        .find((t) => t.metricType === "FIRST_RESPONSE");
+      if (response && date >= new Date(response.round.startedAt))
+        await db.ticketSlaTarget.updateMany({
+          where: {
+            id: response.id,
+            OR: [{ achievedAt: null }, { achievedAt: { gt: date } }],
+          },
+          data: { achievedAt: date },
+        });
     }
     return { event, alreadyRecorded: false };
   };
@@ -596,8 +753,9 @@ async function escalateOverdue(ticketId, now) {
     });
     if (!ticket || ["CLOSED", "RESOLVED"].includes(ticket.currentStatus.code))
       return false;
-    const overdue = events.effectiveTargets(ticket.slaTargets, ticket.auditLog)
-      .filter(t => !t.achievedAt && !t.breachedAt && t.dueAt <= now);
+    const overdue = events
+      .effectiveTargets(ticket.slaTargets, ticket.auditLog)
+      .filter((t) => !t.achievedAt && !t.breachedAt && t.dueAt <= now);
     if (!overdue.length) return false;
     await db.ticketSlaTarget.updateMany({
       where: {
@@ -632,32 +790,109 @@ async function escalateOverdue(ticketId, now) {
     return changed;
   });
 }
-async function reassign({id,version,assigneeId,assignedById=assigneeId,reason}) {
-  return transaction(async db=>{
-    const before=await db.supportTicket.findUnique({where:{id},include:ticketInclude});
-    if(!before || before.currentStatus.code !== "ESCALATED") return false;
-    const changed=await db.supportTicket.updateMany({where:{id,version},data:{version:{increment:1}}});
-    if(!changed.count)return false;
-    const now=new Date();
-    const previous=before.assignments.find(a=>!a.endedAt)?.assigneeId || null;
-    await db.ticketAssignment.updateMany({where:{ticketId:id,endedAt:null},data:{endedAt:now,endReason:"TAKEOVER"}});
-    await db.ticketAssignment.create({data:{ticketId:id,assigneeId,assignedById,assignedAt:now}});
-    await audit.record({ticketId:id,actorId:assignedById,action:"HANDOFF",fromValue:previous,toValue:assigneeId,reason,createdAt:now},db);
+async function reassign({
+  id,
+  version,
+  assigneeId,
+  assignedById = assigneeId,
+  reason,
+}) {
+  return transaction(async (db) => {
+    const before = await db.supportTicket.findUnique({
+      where: { id },
+      include: ticketInclude,
+    });
+    if (!before || before.currentStatus.code !== "ESCALATED") return false;
+    const changed = await db.supportTicket.updateMany({
+      where: { id, version },
+      data: { version: { increment: 1 } },
+    });
+    if (!changed.count) return false;
+    const now = new Date();
+    const previous =
+      before.assignments.find((a) => !a.endedAt)?.assigneeId || null;
+    await db.ticketAssignment.updateMany({
+      where: { ticketId: id, endedAt: null },
+      data: { endedAt: now, endReason: "TAKEOVER" },
+    });
+    await db.ticketAssignment.create({
+      data: { ticketId: id, assigneeId, assignedById, assignedAt: now },
+    });
+    await audit.record(
+      {
+        ticketId: id,
+        actorId: assignedById,
+        action: "HANDOFF",
+        fromValue: previous,
+        toValue: assigneeId,
+        reason,
+        createdAt: now,
+      },
+      db,
+    );
     return true;
   });
 }
-async function dashboardMetrics({includeEscalated,days}) {
-  const where=includeEscalated?{}:{currentStatus:{code:{not:"ESCALATED"}}};
-  const since=new Date();since.setUTCHours(0,0,0,0);since.setUTCDate(since.getUTCDate()-(days-1));
-  const [total,statusRows,priorityRows,statuses,priorities,created]=await Promise.all([
-    prisma.supportTicket.count({where}),prisma.supportTicket.groupBy({by:["currentStatusId"],where,_count:{_all:true}}),prisma.supportTicket.groupBy({by:["priorityId"],where,_count:{_all:true}}),prisma.ticketStatus.findMany(),prisma.ticketPriority.findMany(),prisma.supportTicket.findMany({where:{...where,createdAt:{gte:since}},select:{createdAt:true}})
-  ]);
-  const buckets=new Map(Array.from({length:days},(_,i)=>{const d=new Date(since);d.setUTCDate(d.getUTCDate()+i);return [d.toISOString().slice(0,10),0];}));
-  for(const r of created){const key=r.createdAt.toISOString().slice(0,10);if(buckets.has(key))buckets.set(key,buckets.get(key)+1);}
-  return {total,status:Object.fromEntries(statusRows.map(r=>[statuses.find(s=>s.id===r.currentStatusId)?.code,r._count._all])),priority:Object.fromEntries(priorityRows.map(r=>[priorities.find(p=>p.id===r.priorityId)?.code,r._count._all])),trend:[...buckets].map(([date,count])=>({date,count}))};
+async function dashboardMetrics({ includeEscalated, days }) {
+  const where = includeEscalated
+    ? {}
+    : { currentStatus: { code: { not: "ESCALATED" } } };
+  const since = new Date();
+  since.setUTCHours(0, 0, 0, 0);
+  since.setUTCDate(since.getUTCDate() - (days - 1));
+  const [total, statusRows, priorityRows, statuses, priorities, created] =
+    await Promise.all([
+      prisma.supportTicket.count({ where }),
+      prisma.supportTicket.groupBy({
+        by: ["currentStatusId"],
+        where,
+        _count: { _all: true },
+      }),
+      prisma.supportTicket.groupBy({
+        by: ["priorityId"],
+        where,
+        _count: { _all: true },
+      }),
+      prisma.ticketStatus.findMany(),
+      prisma.ticketPriority.findMany(),
+      prisma.supportTicket.findMany({
+        where: { ...where, createdAt: { gte: since } },
+        select: { createdAt: true },
+      }),
+    ]);
+  const buckets = new Map(
+    Array.from({ length: days }, (_, i) => {
+      const d = new Date(since);
+      d.setUTCDate(d.getUTCDate() + i);
+      return [d.toISOString().slice(0, 10), 0];
+    }),
+  );
+  for (const r of created) {
+    const key = r.createdAt.toISOString().slice(0, 10);
+    if (buckets.has(key)) buckets.set(key, buckets.get(key) + 1);
+  }
+  return {
+    total,
+    status: Object.fromEntries(
+      statusRows.map((r) => [
+        statuses.find((s) => s.id === r.currentStatusId)?.code,
+        r._count._all,
+      ]),
+    ),
+    priority: Object.fromEntries(
+      priorityRows.map((r) => [
+        priorities.find((p) => p.id === r.priorityId)?.code,
+        r._count._all,
+      ]),
+    ),
+    trend: [...buckets].map(([date, count]) => ({ date, count })),
+    hourlyTrend: dashboardHourlyTrend(created),
+  };
 }
 module.exports = {
-  reassign,dashboardMetrics,
+  ratingsFor,
+  reassign,
+  dashboardMetrics,
   create,
   findById,
   listByRequester,

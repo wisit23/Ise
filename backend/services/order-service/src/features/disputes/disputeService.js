@@ -1,6 +1,5 @@
 const {AppError} = require("@reloop/shared");
 const {
-  STAFF_ROLES,
   badRequest,
   forbidden,
   notFound,
@@ -13,12 +12,15 @@ const {
 
 const orderModel = require("../../models/orderModel");
 const disputeModel = require("./disputeModel");
+const orderLifecycle = require("../../services/orderLifecycle");
+
+const DISPUTABLE_STATUSES = ["delivered", "completed"];
 const authClient = require("../../services/authClient");
 const chatClient = require("../../services/chatClient");
 const { absolutePath } = require("./evidenceStorage");
 
 const { disputeCapabilities } = require("./workspacePolicy");
-const AGENT_ROLES = new Set(STAFF_ROLES);
+const AGENT_ROLES = new Set(["CUSTOMER_SERVICE", "TRUST_AND_SAFETY", "ADMIN"]);
 const DECISIONS = ["APPROVE_REFUND", "RELEASE_ESCROW", "REJECT"];
 
 function normalizedRoles(role, roles) {
@@ -45,12 +47,16 @@ function actingAgentRole(role, roles, requiredRole) {
   return null;
 }
 
-async function assertAccess({ dispute, userId, role, roles }) {
+async function assertAccess({ dispute, userId, role, roles, allowWatcher = false }) {
+  if (dispute.deletedAt && !hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
+    throw notFound("dispute not found");
   if (hasRole(role, roles, "ADMIN") || hasRole(role, roles, "TRUST_AND_SAFETY"))
     return dispute;
   if (hasRole(role, roles, "CUSTOMER_SERVICE")) {
-    if (dispute.assignedRole === "ADMIN")
-      throw forbidden("this dispute is in the Admin queue");
+    if (allowWatcher && disputeCapabilities(dispute, userId, role, roles).isWatching)
+      return dispute;
+    if (["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole))
+      throw forbidden(`this dispute is in the ${dispute.assignedRole === "ADMIN" ? "Admin" : "Trust & Safety"} queue`);
     if (!dispute.assignedTo || dispute.assignedTo === userId) return dispute;
     throw forbidden("only the assigned agent can inspect this dispute");
   }
@@ -59,7 +65,19 @@ async function assertAccess({ dispute, userId, role, roles }) {
   throw forbidden("you do not have access to this dispute");
 }
 
-/** WF-08 step 1-2: buyer opens a dispute on a completed order. */
+/** Internal to-do list T&S attaches when returning a case to CS. */
+function normalizeReturnTasks(tasks) {
+  if (tasks === undefined || tasks === null) return [];
+  if (!Array.isArray(tasks) || tasks.some((task) => typeof task !== "string"))
+    throw badRequest("tasks must be a list of text items");
+  const items = tasks.map((task) => task.trim()).filter(Boolean);
+  if (items.length > 10) throw badRequest("tasks must not exceed 10 items");
+  if (items.some((task) => task.length > 300))
+    throw badRequest("each task must not exceed 300 characters");
+  return items;
+}
+
+/** WF-08 step 1-2: buyer opens a dispute on a received (delivered/completed) order. */
 async function open({ orderId, userId, reason, disputeType }) {
   if (typeof disputeType !== "string" || !disputeType.trim())
     throw badRequest("disputeType is required");
@@ -77,12 +95,16 @@ async function open({ orderId, userId, reason, disputeType }) {
     );
   }
 
-  const isCompleted =
-    order.status === "completed" ||
-    (order.status === "disputed" && order.preDisputeStatus === "completed");
-  if (!isCompleted) {
+  const receivedStatus =
+    order.status === "disputed" ? order.preDisputeStatus : order.status;
+  if (!DISPUTABLE_STATUSES.includes(receivedStatus)) {
     throw badRequest(
-      "a dispute can only be opened on a completed order (already-disputed orders can't be reopened)",
+      "a dispute can only be opened on a delivered or completed order (already-disputed orders can't be reopened)",
+    );
+  }
+  if (!orderLifecycle.isWithinDisputeWindow(order)) {
+    throw badRequest(
+      "the dispute window has closed (14 days after delivery)",
     );
   }
 
@@ -100,8 +122,9 @@ async function open({ orderId, userId, reason, disputeType }) {
   const startedAt = new Date();
   const deadlines = disputeDeadlines(initial.priority, startedAt);
 
+  let dispute;
   try {
-    return await disputeModel.openDispute({
+    dispute = await disputeModel.openDispute({
       orderId,
       openedBy: userId,
       reason: reason.trim(),
@@ -119,17 +142,32 @@ async function open({ orderId, userId, reason, disputeType }) {
       throw conflict("this order already has an open dispute");
     throw err;
   }
+
+  try {
+    const freshOrder = await orderModel.findById(orderId);
+    if (chatClient?.notifyDisputeOpened) {
+      await chatClient.notifyDisputeOpened(dispute, freshOrder || order);
+    }
+  } catch (noticeErr) {
+    console.error(
+      `[disputeService] dispute open notification failed for order ${orderId}:`,
+      noticeErr.message,
+    );
+  }
+
+  return dispute;
 }
 
 async function getById({ disputeId, userId, role, roles }) {
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
-  await assertAccess({ dispute, userId, role, roles });
+  await assertAccess({ dispute, userId, role, roles, allowWatcher: true });
   if (isAgent(role, roles)) {
     const order = await orderModel.findById(dispute.orderId);
     const summary = order
       ? {
           id: order.id,
+          productId: order.productId,
           buyerId: order.buyerId,
           sellerId: order.sellerId,
           price: order.price,
@@ -153,15 +191,42 @@ async function getById({ disputeId, userId, role, roles }) {
       ],
       ["buyerId", "sellerId", "assigneeId"],
     );
+    const logs = dispute.auditLog || [];
+    const buyerId = summary?.buyerId;
+    const sellerId = summary?.sellerId;
+    const buyerAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === buyerId);
+    const sellerAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === sellerId);
+    const bothAcknowledged = buyerAcknowledged && sellerAcknowledged;
+    const currentUserAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === userId);
+
     return {
       ...row,
       order: summary,
       shipping: withShippingFacts({...dispute,order}).shipping,
       capabilities: disputeCapabilities(dispute, userId, role, roles),
       sla: disputeSla(dispute),
+      buyerAcknowledged,
+      sellerAcknowledged,
+      bothAcknowledged,
+      currentUserAcknowledged,
     };
   }
-  return dispute;
+
+  const logs = dispute.auditLog || [];
+  const buyerId = dispute.order?.buyerId;
+  const sellerId = dispute.order?.sellerId;
+  const buyerAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === buyerId);
+  const sellerAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === sellerId);
+  const bothAcknowledged = buyerAcknowledged && sellerAcknowledged;
+  const currentUserAcknowledged = logs.some((l) => l.action === "DECISION_ACKNOWLEDGED" && l.actorId === userId);
+
+  return {
+    ...dispute,
+    buyerAcknowledged,
+    sellerAcknowledged,
+    bothAcknowledged,
+    currentUserAcknowledged,
+  };
 }
 
 /** Convenience lookup for the frontend: a CSS-002 order-search result only
@@ -227,6 +292,8 @@ async function joinConversation({ disputeId, userId, role, roles, side }) {
     hasRole(role, roles, "TRUST_AND_SAFETY")
   ) {
     chatRole = "ADMIN";
+  } else if (dispute.capabilities?.isWatching) {
+    chatRole = "AGENT";
   } else if (hasRole(role, roles, "CUSTOMER_SERVICE")) {
     if (
       dispute.assignedRole === "TRUST_AND_SAFETY" ||
@@ -253,7 +320,10 @@ async function joinConversation({ disputeId, userId, role, roles, side }) {
   return {
     conversationId,
     side,
-    readOnly: chatRole === "ADMIN" || dispute.status === "DECIDED",
+    readOnly:
+      chatRole === "ADMIN" ||
+      dispute.status === "DECIDED" ||
+      Boolean(dispute.capabilities?.isWatching),
   };
 }
 
@@ -267,6 +337,7 @@ async function listQueue({
   take,
   scope,
   work,
+  retention,
   userId,
   priority,
   sort,
@@ -274,9 +345,11 @@ async function listQueue({
   if (!isAgent(role, roles)) {
     throw forbidden("only support agents can view the dispute queue");
   }
+  retention = require("@reloop/shared/src/caseRetention").retentionView(retention,
+    hasRole(role, roles, "ADMIN") ? "ADMIN" : hasRole(role, roles, "TRUST_AND_SAFETY") ? "TRUST_AND_SAFETY" : role);
   if (work && !["open", "overdue", "soon", "reply"].includes(work))
     throw badRequest("invalid work filter");
-  if (scope && !["mine", "unassigned", "all"].includes(scope))
+  if (scope && !["mine", "unassigned", "escalated", "returned", "closed", "all", "history"].includes(scope))
     throw badRequest("invalid scope");
   if (status && !["OPEN", "NEEDS_INFO", "DECIDED"].includes(status))
     throw badRequest("invalid status");
@@ -300,6 +373,7 @@ async function listQueue({
         )
       : undefined;
   const queue = await disputeModel.listQueue({
+    retention,
     replyIds,
     status,
     assignedRole,
@@ -322,10 +396,12 @@ async function listQueue({
     })),
     ["buyerId", "sellerId", "assigneeId"],
   );
+  const ratings = await disputeModel.ratingsFor(items.map((item) => item.id));
   return {
     ...queue,
     items: items.map((item) => ({
       ...item,
+      csat: ratings.get(item.id) || [],
       capabilities: disputeCapabilities(item, userId, role, roles),
       queuePriority: item.priority,
       sla: disputeSla(item),
@@ -388,7 +464,7 @@ async function addEvidence({ disputeId, userId, role, roles, file }) {
 async function viewEvidence({ disputeId, evidenceId, userId, role, roles }) {
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
-  await assertAccess({ dispute, userId, role, roles });
+  await assertAccess({ dispute, userId, role, roles, allowWatcher: true });
 
   const evidence = await disputeModel.findEvidence(disputeId, evidenceId);
   if (!evidence) throw notFound("evidence not found");
@@ -431,7 +507,7 @@ async function claim({ disputeId, userId, role, roles, version }) {
   if (dispute.assignedTo) {
     throw conflict(`dispute is already claimed by ${dispute.assignedTo}`);
   }
-  if (hasRole(role, roles, "ADMIN") && dispute.assignedRole !== "ADMIN") {
+  if (hasRole(role, roles, "ADMIN") && !["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole)) {
     throw forbidden("Admin can claim only escalated disputes");
   }
   if (dispute.assignedRole === "ADMIN" && !hasRole(role, roles, "ADMIN")) {
@@ -439,7 +515,7 @@ async function claim({ disputeId, userId, role, roles, version }) {
   }
   if (
     dispute.assignedRole === "TRUST_AND_SAFETY" &&
-    !hasRole(role, roles, "TRUST_AND_SAFETY")
+    !hasRole(role, roles, "TRUST_AND_SAFETY") && !hasRole(role, roles, "ADMIN")
   ) {
     throw forbidden(
       "only Trust & Safety staff can claim this escalated dispute",
@@ -479,6 +555,7 @@ async function reassign({
     throw badRequest("version is required and must be a number");
   }
   if (!toUserId?.trim()) throw badRequest("toUserId is required");
+  if (toUserId.trim() === userId) throw badRequest("cannot reassign a dispute to yourself");
   if (!reason?.trim()) throw badRequest("reason is required");
 
   const dispute = await disputeModel.findById(disputeId);
@@ -487,6 +564,7 @@ async function reassign({
   if (dispute.status === "DECIDED") {
     throw badRequest("cannot reassign a decided dispute");
   }
+  if (toUserId.trim() === dispute.assignedTo) throw badRequest("target already owns this dispute");
 
   const isCurrentAssignee = dispute.assignedTo === userId;
   const isTrustAndSafety = hasRole(role, roles, "TRUST_AND_SAFETY");
@@ -497,7 +575,7 @@ async function reassign({
     );
   }
 
-  if (dispute.assignedRole === "TRUST_AND_SAFETY" && !isTrustAndSafety) {
+  if (dispute.assignedRole === "TRUST_AND_SAFETY" && !isTrustAndSafety && !isAdmin) {
     throw forbidden(
       "only Trust & Safety staff can reassign this escalated dispute",
     );
@@ -588,6 +666,8 @@ async function escalate({
   if (dispute.status === "DECIDED") {
     throw badRequest("cannot escalate a decided dispute");
   }
+  if (!disputeCapabilities(dispute, userId, role, roles).canEscalate)
+    throw forbidden("only the assigned CS agent can escalate this dispute");
 
   const isCurrentAssignee = dispute.assignedTo === userId;
   const isTrustAndSafety = hasRole(role, roles, "TRUST_AND_SAFETY");
@@ -609,8 +689,8 @@ async function escalate({
       throw badRequest("target user account is not active");
     }
     const targetRoles = targetUser.roles || [targetUser.role];
-    if (!targetRoles.includes("ADMIN")) {
-      throw badRequest("target user must be Admin staff");
+    if (!targetRoles.includes("TRUST_AND_SAFETY")) {
+      throw badRequest("target user must be Trust & Safety staff");
     }
     verifiedToUserId = targetUser.id;
   }
@@ -639,8 +719,8 @@ async function decide({
   version,
   idempotencyKey,
 }) {
-  if (!hasRole(role, roles, "ADMIN"))
-    throw forbidden("only Admin can decide a dispute");
+  if (!hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
+    throw forbidden("only Trust & Safety can decide a dispute");
   if (typeof version !== "number") {
     throw badRequest("version is required and must be a number");
   }
@@ -674,8 +754,9 @@ async function decide({
   }
 
   // TSR-02 / ADM-DEC-025: Escalated dispute can only be decided by Trust & Safety
-  if (dispute.assignedRole !== "ADMIN")
-    throw forbidden("dispute must be escalated to Admin before a verdict");
+  if (!["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) ||
+      (dispute.assignedRole === "ADMIN" && !hasRole(role, roles, "ADMIN")))
+    throw forbidden("dispute must be escalated to Trust & Safety before a verdict");
 
   // Must be claimed by current user before deciding
   if (!dispute.assignedTo) {
@@ -730,6 +811,46 @@ async function deliverVerdictNotice(dispute, order) {
       `ผลการตัดสิน: ${outcome} — ${dispute.decisionReason}`,
     );
     await chatClient.lockDisputeConversation(dispute, order);
+
+    if (chatClient?.sendSystemNotification) {
+      const title = order.productTitle || "สินค้า";
+      if (order.sellerId) {
+        chatClient.sendSystemNotification({
+          userId: order.sellerId,
+          type: "DISPUTE",
+          title: "ผลการตัดสินข้อพิพาท",
+          message: `⚖️ สินค้าของคุณ '${title}' สำหรับคำสั่งซื้อ #${order.id} ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
+          link: "/orders",
+          entityId: order.id,
+          metadata: {
+            orderId: order.id,
+            disputeId: dispute.id,
+            decision: dispute.decision,
+            reason: dispute.decisionReason,
+            role: "seller",
+            outcome,
+          },
+        }).catch(() => {});
+      }
+      if (order.buyerId) {
+        chatClient.sendSystemNotification({
+          userId: order.buyerId,
+          type: "DISPUTE",
+          title: "ผลการตัดสินข้อพิพาท",
+          message: `⚖️ คำสั่งซื้อ #${order.id} ('${title}') ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
+          link: "/orders",
+          entityId: order.id,
+          metadata: {
+            orderId: order.id,
+            disputeId: dispute.id,
+            decision: dispute.decision,
+            reason: dispute.decisionReason,
+            role: "buyer",
+            outcome,
+          },
+        }).catch(() => {});
+      }
+    }
   } catch (err) {
     // The decision is committed in PostgreSQL. A later chat open retries the
     // lock; expose the failed side effect so operators can reconcile it.
@@ -748,32 +869,76 @@ async function requestMoreEvidence({
   roles,
   reason,
   version,
+  tasks,
 }) {
-  if (!hasRole(role, roles, "ADMIN"))
-    throw forbidden("only Admin can request more evidence");
+  if (!hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
+    throw forbidden("only Trust & Safety can request more evidence");
   if (!reason?.trim()) throw badRequest("reason is required");
+  const checklist = normalizeReturnTasks(tasks);
   if (typeof version !== "number") throw badRequest("version is required");
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
   if (dispute.status === "DECIDED") throw conflict("dispute already decided");
-  if (dispute.assignedRole !== "ADMIN" || dispute.assignedTo !== userId) {
-    throw forbidden("only the assigned Admin can return this dispute");
+  if (!["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) || dispute.assignedTo !== userId ||
+      (dispute.assignedRole === "ADMIN" && !hasRole(role, roles, "ADMIN"))) {
+    throw forbidden("only the assigned safety officer can return this dispute");
   }
   const updated = await disputeModel.requestMoreEvidence({
     id: disputeId,
     version,
     actorId: userId,
     reason: reason.trim(),
+    tasks: checklist,
   });
   if (!updated) throw conflict("dispute changed; reload and retry");
   const order = await orderModel.findById(updated.orderId);
   if (order) {
+    // Bell notifications are fire-and-forget; the chat notice below reports failures.
+    if (chatClient?.sendSystemNotification) {
+      const title = order.productTitle || "สินค้า";
+      if (order.buyerId) {
+        chatClient.sendSystemNotification({
+          userId: order.buyerId,
+          type: "DISPUTE",
+          title: "เจ้าหน้าที่ขอหลักฐานเพิ่มเติมสำหรับข้อพิพาท",
+          message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): เจ้าหน้าที่ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
+          link: "/orders",
+          entityId: order.id,
+          metadata: {
+            orderId: order.id,
+            disputeId: updated.id,
+            reason: reason.trim(),
+            decision: "REQUEST_EVIDENCE",
+            decisionLabel: "ขอหลักฐานเพิ่มเติม",
+            role: "buyer",
+          },
+        }).catch(() => {});
+      }
+      if (order.sellerId) {
+        chatClient.sendSystemNotification({
+          userId: order.sellerId,
+          type: "DISPUTE",
+          title: "อัปเดตข้อพิพาท: ขอหลักฐานเพิ่มเติม",
+          message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): มีการขอข้อมูล/หลักฐานเพิ่มเติมสำหรับข้อพิพาท: ${reason.trim()}`,
+          link: "/orders",
+          entityId: order.id,
+          metadata: {
+            orderId: order.id,
+            disputeId: updated.id,
+            reason: reason.trim(),
+            decision: "REQUEST_EVIDENCE",
+            decisionLabel: "ขอหลักฐานเพิ่มเติม",
+            role: "seller",
+          },
+        }).catch(() => {});
+      }
+    }
     try {
       await chatClient.sendDisputeNotice(
         updated,
         order,
         `request-evidence:${updated.version}`,
-        `Admin ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
+        `Trust & Safety ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
       );
     } catch (err) {
       console.error(
@@ -785,6 +950,29 @@ async function requestMoreEvidence({
   return updated;
 }
 
+/** The CS owner records progress on a task T&S asked for. */
+async function updateReturnTask({ disputeId, taskId, userId, role, roles, done, note }) {
+  if (done !== undefined && typeof done !== "boolean")
+    throw badRequest("done must be true or false");
+  if (note !== undefined && typeof note !== "string")
+    throw badRequest("note must be text");
+  if (note && note.trim().length > 500)
+    throw badRequest("note must not exceed 500 characters");
+  const dispute = await disputeModel.findById(disputeId);
+  if (!dispute) throw notFound("dispute not found");
+  if (!disputeCapabilities(dispute, userId, role, roles).isReturned || dispute.assignedTo !== userId)
+    throw forbidden("only the assigned CS agent can update returned tasks");
+  const updated = await disputeModel.updateReturnTask({
+    id: disputeId,
+    taskId,
+    actorId: userId,
+    done,
+    note: note === undefined ? undefined : note.trim(),
+  });
+  if (!updated) throw conflict("task not found or case changed; reload and retry");
+  return { returnTasks: updated.returnTasks, returnedAt: updated.returnedAt };
+}
+
 async function getAuditTranscript({
   disputeId,
   userId,
@@ -793,8 +981,8 @@ async function getAuditTranscript({
   side,
   before,
 }) {
-  if (!hasRole(role, roles, "ADMIN"))
-    throw forbidden("only Admin can read dispute audit logs");
+  if (!hasRole(role, roles, "ADMIN") && !hasRole(role, roles, "TRUST_AND_SAFETY"))
+    throw forbidden("only Trust & Safety can read dispute audit logs");
   if (!["buyer", "seller", "legacy"].includes(side))
     throw badRequest("invalid transcript side");
   const dispute = await disputeModel.findById(disputeId);
@@ -1013,7 +1201,70 @@ async function getDashboardMetrics({ role, roles }) {
 }
 
 
+async function acknowledge({ disputeId, userId, role, roles }) {
+  const dispute = await disputeModel.findById(disputeId);
+  if (!dispute) throw notFound("dispute not found");
+  if (dispute.status !== "DECIDED") {
+    throw badRequest("ข้อพิพาทนี้ยังไม่มีผลการตัดสิน");
+  }
+  const order = await orderModel.findById(dispute.orderId);
+  if (!order) throw notFound("order not found");
+  if (order.buyerId !== userId && order.sellerId !== userId) {
+    throw forbidden("you are not part of this dispute");
+  }
+
+  const prisma = require("../../models/prismaClient");
+  const existing = await prisma.disputeCaseLog.findFirst({
+    where: {
+      disputeCaseId: dispute.id,
+      actorId: userId,
+      action: "DECISION_ACKNOWLEDGED",
+    },
+  });
+
+  if (!existing) {
+    await prisma.disputeCaseLog.create({
+      data: {
+        disputeCaseId: dispute.id,
+        actorId: userId,
+        action: "DECISION_ACKNOWLEDGED",
+        detail: JSON.stringify({
+          role: order.buyerId === userId ? "BUYER" : "SELLER",
+          acknowledgedAt: new Date(),
+        }),
+      },
+    });
+  }
+
+  const logs = await prisma.disputeCaseLog.findMany({
+    where: { disputeCaseId: dispute.id, action: "DECISION_ACKNOWLEDGED" },
+  });
+  const hasBuyerAck = logs.some((l) => l.actorId === order.buyerId);
+  const hasSellerAck = logs.some((l) => l.actorId === order.sellerId);
+  const bothAcknowledged = hasBuyerAck && hasSellerAck;
+
+  let chatDeleted = false;
+  if (bothAcknowledged) {
+    try {
+      await chatClient.deleteDisputeConversation(dispute.id);
+      chatDeleted = true;
+    } catch (err) {
+      console.error("[disputeService] error deleting dispute conversation:", err.message);
+    }
+  }
+
+  return {
+    disputeId: dispute.id,
+    acknowledged: true,
+    hasBuyerAck,
+    hasSellerAck,
+    bothAcknowledged,
+    chatDeleted,
+  };
+}
+
 module.exports = {
+  updateReturnTask,
   getDashboardMetrics, getChatHistory, getChatAttachment,
   setEvidenceDeadline,
   async eligibleStaff({ disputeId, userId, role, roles, q, page, limit }) {
@@ -1026,7 +1277,7 @@ module.exports = {
         : dispute.assignedRole === "TRUST_AND_SAFETY"
           ? ["TRUST_AND_SAFETY"]
           : ["CUSTOMER_SERVICE", "TRUST_AND_SAFETY"];
-    return authClient.searchStaff({ roles: targetRoles, q, page, limit });
+    return authClient.searchStaff({ roles: targetRoles, q, page, limit, excludeIds: [userId, dispute.assignedTo].filter(Boolean) });
   },
   open,
   getById,
@@ -1038,6 +1289,7 @@ module.exports = {
   reassign,
   escalate,
   decide,
+  acknowledge,
   requestMoreEvidence,
   getAuditTranscript,
   listQueue,

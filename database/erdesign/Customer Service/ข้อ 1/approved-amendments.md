@@ -1,5 +1,13 @@
 # Customer ER ข้อ 1 — approved alignment, 2026-10-14
 
+## Current approved operational storage amendment (2026-10-14)
+
+The user approved the new typed operational storage design in the current thread. It supersedes the earlier log-backed state direction recorded below for the affected fields. The editable ER has a new `Approved operational storage - current amendment` page. Original diagram pages and original PDF archives are retained; their old storage notes are historical, not the current direction.
+
+See [the complete current storage dictionary](../../../operational-storage.md) and [implementation evidence](../../../../log/evidence/operational-storage.md). New PDF exports are in `output/pdf/*-operational-storage-er.pdf`. Audit logs continue to record actions and preserve old events; operational readers use columns/dedicated tables. Shipping snapshots are a separate table keyed by shipping_id. Auth/Chat ownership and API behavior remain unchanged.
+
+
+
 Canonical editable diagram: `customer-service-คน-er.drawio`. The adjacent PDF remains the original archived export; it has not been regenerated and must not be used as this amended revision.
 
 ## Physical names and preserved public names
@@ -29,4 +37,4 @@ Redundant pre-normalization ticket/help column projections, duplicate `ticket_au
 
 Parent review found that `help_articles.published_at` exists in the current backend but **not** in the original ER or recorded user approvals. Active callers are not permission to add an ER attribute. The worker's unapproved oval/edge was removed again; existing backend data and publication behavior remain untouched pending a decision. Keeping this column and adding it to ER needs explicit approval. Removing it without an approved lossless representation would discard exact publication times; revision creation time is not an equivalent replacement. Strict ER completion therefore remains blocked on this one attribute, in addition to the separately recorded Auth archives. Earlier thirteen-table attribute parity was measured against the worker-amended drawing, not the authorized original; it is not proof of approval.
 
-See `log/loger/support-service/implementation.md` and `log/loger/chat-service/implementation.md` for executed evidence, deployment sequencing and limits.
+See `log/evidence/support-service/implementation.md` and `log/evidence/chat-service/implementation.md` for executed evidence, deployment sequencing and limits.

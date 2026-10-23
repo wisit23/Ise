@@ -7,6 +7,7 @@ const { requireAuth } = require("@reloop/shared");
 const disputeController = require("./disputeController");
 
 const router = Router();
+router.get("/unread-summary", requireAuth, require("./unreadSummary").unreadSummary);
 router.get(
   "/agent-dashboard",
   requireAuth,
@@ -26,6 +27,8 @@ router.get(
   disputeController.chatAttachment,
 );
 router.get("/:id", requireAuth, disputeController.getOne);
+router.get("/:id/csat", requireAuth, require("./csat").get);
+router.post("/:id/csat", requireAuth, require("./csat").post);
 router.get("/:id/eligible-staff", requireAuth, async (req, res, next) => {
   try {
     res.json(
@@ -59,9 +62,19 @@ router.post("/:id/reassign", requireAuth, disputeController.reassign);
 router.post("/:id/escalate", requireAuth, disputeController.escalate);
 router.post("/:id/decision", requireAuth, disputeController.decide);
 router.post(
+  "/:id/acknowledge",
+  requireAuth,
+  disputeController.acknowledge,
+);
+router.post(
   "/:id/request-evidence",
   requireAuth,
   disputeController.requestMoreEvidence,
+);
+router.patch(
+  "/:id/return-tasks/:taskId",
+  requireAuth,
+  disputeController.updateReturnTask,
 );
 router.get(
   "/:id/audit-transcript",

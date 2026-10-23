@@ -54,7 +54,7 @@ function createProductVideoRepository(prismaClient) {
     return prismaClient.productVideo.findUnique({
       where: { id },
       include: {
-        product: { select: { status: true, moderatedAt: true } },
+        product: { select: { id: true, status: true, moderatedAt: true, title: true } },
       },
     });
   }
@@ -80,6 +80,24 @@ function createProductVideoRepository(prismaClient) {
     });
   }
 
+  function createComment({ productVideoId, userId, userName, comment }) {
+    return prismaClient.productVideoComment.create({
+      data: {
+        productVideoId,
+        userId,
+        userName: userName || null,
+        comment,
+      },
+    });
+  }
+
+  function listComments(productVideoId) {
+    return prismaClient.productVideoComment.findMany({
+      where: { productVideoId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   return {
     listAvailable,
     findProductOwner,
@@ -87,8 +105,11 @@ function createProductVideoRepository(prismaClient) {
     create,
     upsertChoice,
     deleteChoice,
+    createComment,
+    listComments,
   };
 }
+
 
 module.exports = createProductVideoRepository(prisma);
 module.exports.createProductVideoRepository = createProductVideoRepository;

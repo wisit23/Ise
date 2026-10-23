@@ -50,6 +50,9 @@ async function resolveSelectedAddress({ buyerId, addressId, authorization }) {
   return normalizeAddress(selected);
 }
 
+// Once the seller has packed the parcel the address is printed on it.
+const ADDRESS_EDITABLE_STATUSES = ["paid", "confirmed"];
+
 function createShippingService(db, addresses = resolveSelectedAddress) {
   async function updateAddress({
     orderId,
@@ -72,12 +75,12 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
       if (order.buyerId !== buyerId)
         throw forbidden("only the buyer can change the shipping address");
       if (
-        order.status !== "confirmed" ||
+        !ADDRESS_EDITABLE_STATUSES.includes(order.status) ||
         !order.shipping ||
         ["shipped", "delivered"].includes(order.shipping.status)
       ) {
         throw conflict(
-          "only confirmed orders awaiting shipment can change address",
+          "the address can only change before the seller prepares the parcel",
         );
       }
       if (version !== undefined && version !== order.version) {
@@ -88,7 +91,7 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
         where: {
           id: orderId,
           buyerId,
-          status: "confirmed",
+          status: { in: ADDRESS_EDITABLE_STATUSES },
           version: order.version,
         },
         data: { version: { increment: 1 } },
@@ -143,12 +146,14 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
         include: { shipping: true },
       });
       if (!order) throw notFound("order not found");
-      if (order.buyerId !== actorId && order.sellerId !== actorId)
-        throw forbidden("you are not part of this order");
+      if (order.sellerId !== actorId)
+        throw forbidden("only the seller can ship this order");
       if (!order.shipping) throw conflict("shipping address is missing");
+      if (order.status !== "ready_to_ship")
+        throw conflict("ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องเตรียมสินค้าให้พร้อมจัดส่งก่อน");
       const changed = await tx.order.updateMany({
-        where: { id: orderId, version, status: "confirmed" },
-        data: { status: "shipped", version: { increment: 1 } },
+        where: { id: orderId, version, status: "ready_to_ship" },
+        data: { status: "shipped", shippedAt: new Date(), version: { increment: 1 } },
       });
       if (changed.count !== 1)
         throw conflict("order changed or is not awaiting shipment");

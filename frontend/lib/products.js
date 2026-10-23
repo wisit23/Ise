@@ -12,7 +12,7 @@ export function fetchProduct(productId) {
   if (!productPromises.has(productId)) {
     productPromises.set(
       productId,
-      apiFetch(`/api/products/${productId}`).catch((err) => {
+      apiFetch(`/api/products/${productId}?noTrack=1`).catch((err) => {
         // A sold or removed listing is a normal outcome here: the order
         // outlives the product. Callers render a placeholder rather than
         // an error, so this resolves instead of rejecting.

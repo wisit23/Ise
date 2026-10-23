@@ -6,6 +6,12 @@ const ticketModel = require("./ticketModel");
 const chatClient = require("../../services/chatClient");
 const auditLog = require("../audit/auditLog");
 
+test("soft deleted tickets are hidden from the requester and CS", async t => {
+  t.mock.method(ticketModel, "findById", async () => ({ id: "gone", requesterId: "buyer", assigneeId: "cs", status: "CLOSED", deletedAt: new Date() }));
+  await assert.rejects(ticketService.getTicket({ ticketId: "gone", userId: "buyer", role: "BUYER" }), { status: 404 });
+  await assert.rejects(ticketService.getTicket({ ticketId: "gone", userId: "cs", role: "CUSTOMER_SERVICE" }), { status: 404 });
+});
+
 test('CS cannot mutate unassigned tickets and closed tickets cannot be claimed', async (t) => {
   t.mock.method(ticketModel,'findById',async()=>({id:'unassigned',requesterId:'buyer',assigneeId:null,status:'NEW',version:1}));
   await assert.rejects(ticketService.reply({ticketId:'unassigned',userId:'cs',role:'CUSTOMER_SERVICE',body:'hello'}),{status:403});

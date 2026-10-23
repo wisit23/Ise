@@ -1,0 +1,173 @@
+.card {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(0, 1fr) minmax(150px, auto);
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid rgb(226 232 240 / 0.8);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 10px -3px rgb(6 81 237 / 0.05);
+}
+
+.card > div {
+  padding: 16px 24px;
+}
+
+.card > div + div {
+  border-left: 1px solid #f1f5f9;
+}
+
+.eyebrow {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.score,
+.response {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.response {
+  align-items: center;
+  text-align: center;
+}
+
+.big {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+}
+
+.outOf {
+  margin-left: 2px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.caption {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.none {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+.distribution {
+  min-width: 0;
+}
+
+.bars {
+  display: flex;
+  max-width: 560px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.barLabel {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #475569;
+}
+
+.barStar {
+  margin-left: 1px;
+  color: #f59e0b;
+}
+
+.track {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f1f5f9;
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: #f59e0b;
+  transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.barCount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
+
+.ringWrap {
+  position: relative;
+  height: 64px;
+  width: 64px;
+}
+
+.ring {
+  height: 64px;
+  width: 64px;
+  transform: rotate(-90deg);
+}
+
+.ringTrack {
+  fill: none;
+  stroke: #f1f5f9;
+  stroke-width: 7;
+}
+
+.ringFill {
+  fill: none;
+  stroke: #059669;
+  stroke-linecap: round;
+  stroke-width: 7;
+  transition: stroke-dashoffset 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ringValue {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #0f172a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill,
+  .ringFill {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .card {
+    grid-template-columns: 1fr 1fr;
+  }
+  .distribution {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    border-left: 0 !important;
+    border-top: 1px solid #f1f5f9;
+  }
+}

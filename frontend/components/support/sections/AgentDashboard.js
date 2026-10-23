@@ -1,4 +1,5 @@
 "use client";
+import CsatGauge from "./CsatGauge";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import { PRIORITY_LABEL } from "../../../lib/supportConstants";
@@ -12,6 +13,7 @@ import AnimatedNumber from "./AnimatedNumber";
 
 import defaults from "../../../lib/customerServiceConfig";
 import useCustomerServiceConfig from "../hooks/useCustomerServiceConfig";
+import { useChatSocketEvent } from "../../chat/ChatSocketProvider";
 
 const SOURCES = [
   {
@@ -53,14 +55,6 @@ const WORKFLOW = [
   { code: "ACCEPTED", label: "รับเรื่องแล้ว" },
   { code: "WAITING_INFO", label: "รอข้อมูลเพิ่ม" },
 ];
-const time = (value, timeZone = defaults.dashboard.timeZone) =>
-  new Date(value).toLocaleString("th-TH", {
-    timeZone,
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
 function validDashboard(payload) {
   const count = (value) => Number.isInteger(value) && value >= 0;
@@ -193,6 +187,9 @@ export default function AgentDashboard({ token, currentUserId }) {
     }
   }, [destination]);
   const [revision, setRevision] = useState(0);
+  const refreshDashboard = useRef(() => {});
+  useChatSocketEvent("conversation:activity", () => refreshDashboard.current());
+  useChatSocketEvent("connect", () => refreshDashboard.current());
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showLoadingHint, setShowLoadingHint] = useState(false);
@@ -275,20 +272,29 @@ export default function AgentDashboard({ token, currentUserId }) {
         if (alive) setLoading(false);
       }
     }
+    refreshDashboard.current = () => {
+      if (!document.hidden) void refresh();
+    };
     refresh();
-    const timer = setInterval(() => {
-      if (!document.hidden) refresh();
-    }, config.timing.dashboardRefreshMs);
+    const timer = setInterval(
+      () => {
+        if (!document.hidden) refresh();
+      },
+      config.timing.dashboardRefreshMs,
+    );
     const onVisible = () => {
       if (!document.hidden) refresh();
     };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
     return () => {
       alive = false;
       clearInterval(timer);
       clearTimeout(timeout);
       controller?.abort();
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      refreshDashboard.current = () => {};
     };
   }, [
     token,
@@ -370,32 +376,7 @@ export default function AgentDashboard({ token, currentUserId }) {
     <div
       className={`${styles.dashboard} ${entrance ? styles.entering : ""} ${entrance && phase !== "idle" ? styles.entrancePaused : ""}`}
     >
-      <div className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>CUSTOMER SERVICE / OVERVIEW</p>
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">
-            งานของฉัน
-          </h1>
-        </div>
-        <div className={`${styles.toolbar} flex items-center gap-2`}>
-          <button
-            type="button"
-            title={
-              data
-                ? `Ticket: ${time(data.tickets.asOf, config.dashboard.timeZone)} · Dispute: ${time(data.disputes.asOf, config.dashboard.timeZone)}`
-                : undefined
-            }
-            disabled={loading}
-            onClick={() => setRevision((value) => value + 1)}
-            className="min-h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">
-              refresh
-            </span>
-            อัปเดตข้อมูล
-          </button>
-        </div>
-      </div>
+      <h1 className="sr-only">งานของฉัน</h1>
       {destination && (
         <dialog
           ref={destinationRef}
@@ -464,55 +445,61 @@ export default function AgentDashboard({ token, currentUserId }) {
         </div>
       ) : (
         <>
-          <div className={styles.metrics}>
-            {CARDS.map((card) => (
-              <button
-                type="button"
-                key={card.key}
-                disabled={sumCard(card) === null}
-                title={
-                  sumCard(card) === null
-                    ? "ยังโหลดข้อความที่รอตอบไม่ได้ กดอัปเดตข้อมูลเพื่อลองใหม่"
-                    : undefined
-                }
-                onClick={() => visit(card.key)}
-                className={`${styles.metric} ${card.key === "mine_reply" ? styles.replyCard : card.key === "mine_overdue" && sumCard(card) > 0 ? styles.attentionCard : ""}`}
-              >
-                <div className={styles.metricHeading}>
-                  <span>{card.label}</span>
-                  <span aria-hidden="true" className={styles.metricIcon}>
-                    <MetricIcon name={card.icon} />
-                  </span>
-                </div>
-                <p
-                  className={`${styles.metricValue} ${card.key === "mine_overdue" && sumCard(card) > 0 ? styles.overdue : card.key === "mine_soon" && sumCard(card) > 0 ? styles.soon : ""}`}
+          <div className={styles.summaryRow}>
+            <div className={styles.metrics}>
+              {CARDS.map((card) => (
+                <button
+                  type="button"
+                  key={card.key}
+                  disabled={sumCard(card) === null}
+                  title={
+                    sumCard(card) === null
+                      ? "ยังโหลดข้อความที่รอตอบไม่ได้ ระบบจะลองอัปเดตให้อัตโนมัติ"
+                      : undefined
+                  }
+                  onClick={() => visit(card.key)}
+                  className={`${styles.metric} ${card.key === "mine_reply" ? styles.replyCard : card.key === "mine_overdue" && sumCard(card) > 0 ? styles.attentionCard : ""}`}
                 >
-                  <AnimatedNumber
-                    value={sumCard(card)}
-                    animate={entrance && phase === "idle"}
-                  />
-                  <span> เคส</span>
-                </p>
-                <div className={styles.metricFooter}>
-                  <p className={styles.metricSources}>
-                    <span className={styles.ticketSource}>
-                      Ticket {fmt(cardCount("tickets", card))}
-                    </span>{" "}
-                    <span className={styles.disputeSource}>
-                      Dispute {fmt(cardCount("disputes", card))}
+                  <div className={styles.metricHeading}>
+                    <span>{card.label}</span>
+                    <span aria-hidden="true" className={styles.metricIcon}>
+                      <MetricIcon name={card.icon} />
                     </span>
+                  </div>
+                  <p
+                    className={`${styles.metricValue} ${card.key === "mine_overdue" && sumCard(card) > 0 ? styles.overdue : card.key === "mine_soon" && sumCard(card) > 0 ? styles.soon : ""}`}
+                  >
+                    <AnimatedNumber
+                      value={sumCard(card)}
+                      animate={entrance && phase === "idle"}
+                    />
+                    <span> เคส</span>
                   </p>
+                  <div className={styles.metricFooter}>
+                    <p className={styles.metricSources}>
+                      <span className={styles.ticketSource}>
+                        Ticket {fmt(cardCount("tickets", card))}
+                      </span>{" "}
+                      <span className={styles.disputeSource}>
+                        Dispute {fmt(cardCount("disputes", card))}
+                      </span>
+                    </p>
 
-                  <span className={styles.cardArrow} aria-hidden="true">
-                    ↗
-                  </span>
-                </div>
-              </button>
-            ))}
+                    <span className={styles.cardArrow} aria-hidden="true">
+                      ↗
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
           <div className={`${styles.chartRow} ${styles.personalCharts}`}>
             <Panel
-              title={`รับงานรายวัน · ${displayDays} วัน`}
+              title={
+                displayDays === 1
+                  ? "รับงานรายชั่วโมง · วันนี้"
+                  : `รับงานรายวัน · ${displayDays} วัน`
+              }
               className={styles.trendPanel}
               action={
                 <div
@@ -538,7 +525,7 @@ export default function AgentDashboard({ token, currentUserId }) {
                       aria-pressed={days === value}
                       onClick={() => setDays(value)}
                     >
-                      {value} วัน
+                      {value === 1 ? "วันนี้" : `${value} วัน`}
                     </button>
                   ))}
                 </div>
@@ -554,6 +541,7 @@ export default function AgentDashboard({ token, currentUserId }) {
               <ComparisonChart
                 rows={trend}
                 kind="line"
+                hourly={displayDays === 1}
                 hideLegend
                 visible={visible}
               />
@@ -567,6 +555,16 @@ export default function AgentDashboard({ token, currentUserId }) {
                 onSelect={(code) => visit("mine", code)}
               />
             </Panel>
+            <CsatGauge
+              compact
+              entering={entrance}
+              paused={phase !== "idle"}
+              className={styles.widget}
+              headerClassName={styles.widgetHeader}
+              tickets={data.tickets.csat}
+              disputes={data.disputes.csat}
+              days={displayDays}
+            />
           </div>
         </>
       )}

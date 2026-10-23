@@ -39,6 +39,7 @@ async function reject(req, res, next) {
     const auction = await auctionService.reject({
       user: currentUser(req),
       auctionId: req.params.id,
+      reason: req.body?.reason ?? req.body?.cancellationReason,
     });
     res.json(auction);
   } catch (err) {
@@ -86,10 +87,22 @@ async function getOne(req, res, next) {
 async function list(req, res, next) {
   try {
     const pagination = parsePagination(req.query, 10);
-    const { status, roundId } = req.query;
+    const { status, roundId, search } = req.query;
+    const splitFilterValues = (value) =>
+      (Array.isArray(value) ? value : [value])
+        .flatMap((entry) =>
+          typeof entry === "string" ? entry.split(",") : [],
+        )
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+    const statuses = splitFilterValues(req.query.statuses);
+    const roundIds = splitFilterValues(req.query.roundIds);
     const { items, total } = await auctionService.list({
       status,
       roundId,
+      statuses,
+      roundIds,
+      search,
       skip: pagination.skip,
       take: pagination.take,
     });
@@ -108,6 +121,15 @@ async function bid(req, res, next) {
       idempotencyKey: req.body.idempotencyKey,
     });
     res.status(201).json(created);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getBids(req, res, next) {
+  try {
+    const bids = await auctionService.getBids(req.params.id);
+    res.json({ items: bids });
   } catch (err) {
     next(err);
   }
@@ -163,10 +185,27 @@ async function createRound(req, res, next) {
 
 async function listRounds(req, res, next) {
   try {
+    const isPaginated =
+      req.query.page !== undefined || req.query.limit !== undefined;
+
+    if (isPaginated) {
+      const pagination = parsePagination(req.query, 20);
+      const { items, total } = await auctionService.listRounds({
+        user: currentUser(req),
+        skip: pagination.skip,
+        take: pagination.take,
+      });
+      return res.json(paginatedResponse(items, total, pagination));
+    }
+
     const rounds = await auctionService.listRounds({
       user: currentUser(req),
     });
-    res.json({ items: rounds });
+    const items = Array.isArray(rounds) ? rounds : rounds?.items || [];
+    const total = Array.isArray(rounds)
+      ? rounds.length
+      : rounds?.total ?? items.length;
+    res.json({ items, total });
   } catch (err) {
     next(err);
   }
@@ -186,6 +225,12 @@ async function cancelRound(req, res, next) {
 }
 
 module.exports = {
+  updateRound: async (req, res, next) => {
+    try {
+      const service = require("./roundScheduleService");
+      res.json(await service.updateRound({ user: currentUser(req), roundId: req.params.roundId, input: req.body }));
+    } catch (err) { next(err); }
+  },
   submit,
   approve,
   reject,
@@ -194,6 +239,7 @@ module.exports = {
   getOne,
   list,
   bid,
+  getBids,
   getCurrentRound,
   browseRounds,
   getRoundDetails,

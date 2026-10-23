@@ -18,6 +18,7 @@ import Button from "./ui/Button";
 import { fetchActiveCategories } from "../lib/catalog";
 import { getUnreadCount } from "../lib/chat";
 import { useChatSocket, useChatSocketEvent } from "./chat/ChatSocketProvider";
+import NotificationBell from "./notifications/NotificationBell";
 
 // Only used while the shared socket is down — the badge's normal path is a
 // pushed "conversation:activity" event (see the effects below). 15s keeps
@@ -62,14 +63,7 @@ const WORK_MENU_ITEMS = [
   },
   {
     href: "/seller/dashboard",
-    label: "แดชบอร์ดผู้ขาย",
-    icon: "storefront",
-    roles: ["SELLER"],
-    requiresVerifiedSeller: true,
-  },
-  {
-    href: ({ userId }) => `/store/${userId}`,
-    label: "ร้านค้าของฉัน",
+    label: "My Store",
     icon: "storefront",
     roles: ["SELLER"],
     requiresVerifiedSeller: true,
@@ -115,7 +109,7 @@ const CUSTOMER_ACCOUNT_MENU_ITEMS = [
     icon: "confirmation_number",
   },
   { href: "/help", label: "ศูนย์ช่วยเหลือ", icon: "help" },
-  { href: "/profile", label: "ตั้งค่าโปรไฟล์", icon: "person" },
+  { href: "/profile", label: "ฉัน", icon: "person" },
 ];
 
 function resolveMenuHref(item, context) {
@@ -179,7 +173,7 @@ export default function NavBar() {
       setKycStatus(claims?.kycStatus || null);
 
       if (isCustomerAccountRoles(getCurrentRoles())) {
-        apiFetch("/api/orders/mine?status=pending_payment&limit=1", { token })
+        apiFetch("/api/orders/cart", { token })
           .then((data) => setCartCount(data.total))
           .catch((err) =>
             console.error("โหลดจำนวนสินค้าในตะกร้าไม่สำเร็จ:", err),
@@ -355,7 +349,7 @@ export default function NavBar() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               aria-label="ค้นหาสินค้า"
-              placeholder="ค้นหาแบรนด์ หมวดหมู่ หรือสไตล์..."
+              placeholder="ค้นหาสินค้า แบรนด์ หรือชื่อร้าน..."
               className="placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent text-sm outline-none"
             />
             <button
@@ -368,6 +362,8 @@ export default function NavBar() {
         </form>
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {canUseCart && <NotificationBell user={user} />}
+
           {canUseCart && (
             <Link
               href="/chat"
@@ -684,7 +680,7 @@ export default function NavBar() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             aria-label="ค้นหาสินค้า"
-            placeholder="ค้นหาสินค้า..."
+            placeholder="ค้นหาสินค้าหรือชื่อร้าน..."
             className="placeholder:text-ink-subtle min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
         </div>

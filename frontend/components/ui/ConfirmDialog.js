@@ -13,24 +13,31 @@ import Textarea from "./Textarea";
 export default function ConfirmDialog({
   open,
   title,
-  description,
+  description: propDescription,
+  message,
   confirmLabel = "ยืนยัน",
   cancelLabel = "ยกเลิก",
   tone = "danger",
+  danger,
   reason = "none",
   reasonLabel = "เหตุผล",
   reasonHint,
+  note,
   busy = false,
+  loading,
   onConfirm,
   onCancel,
 }) {
+  const description = propDescription ?? message;
+  const isBusy = busy || Boolean(loading);
+  const effectiveTone = danger ? "danger" : tone;
   const [text, setText] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (open) {
-      setText("");
-      setError("");
+      setText((prev) => (prev ? "" : prev));
+      setError((prev) => (prev ? "" : prev));
     }
   }, [open]);
 
@@ -45,25 +52,23 @@ export default function ConfirmDialog({
   return (
     <Modal
       open={open}
-      onClose={busy ? () => {} : onCancel}
+      onClose={isBusy ? () => {} : onCancel}
       title={title}
       description={description}
       size="sm"
       footer={
         <>
-          <Button variant="secondary" onClick={onCancel} disabled={busy}>
+          <Button variant="secondary" onClick={onCancel} disabled={isBusy}>
             {cancelLabel}
           </Button>
-          <Button variant={tone} onClick={handleConfirm} loading={busy}>
+          <Button variant={effectiveTone} onClick={handleConfirm} loading={isBusy}>
             {confirmLabel}
           </Button>
         </>
       }
     >
       {reason === "none" ? (
-        <p className="text-sm text-ink-muted">
-          การกระทำนี้จะถูกบันทึกไว้ใน Audit Log
-        </p>
+        note ? <p className="text-sm text-ink-muted">{note}</p> : null
       ) : (
         <Textarea
           label={reasonLabel}

@@ -52,14 +52,8 @@ export default function AuctionsBrowsePage() {
     load();
   }, [load]);
 
-  const nowMs = Date.now();
-  const isVisibleRound = (r) => {
-    const isCancelled = Boolean(r?.cancelledAt || r?.phase === "cancelled");
-    if (isCancelled && r?.auctionEndsAt) {
-      return new Date(r.auctionEndsAt).getTime() > nowMs;
-    }
-    return true;
-  };
+  const isVisibleRound = (round) =>
+    !round?.cancelledAt && round?.phase !== "cancelled";
   const activeRounds = data.activeAuctionRounds.filter(isVisibleRound);
   const upcomingRounds = data.upcomingRounds.filter(isVisibleRound);
   const hasNoRounds = activeRounds.length === 0 && upcomingRounds.length === 0;
@@ -132,6 +126,12 @@ export default function AuctionsBrowsePage() {
               <span className="font-bold text-gray-900">{itemCount}</span>{" "}
               รายการ
             </div>
+
+            {round.isSoftCloseActive && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800">
+                ⏱️ มีสินค้าที่ยังประมูลต่อในช่วงต่อเวลา 5 นาที
+              </div>
+            )}
 
             {isCancelled && (
               <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-800">

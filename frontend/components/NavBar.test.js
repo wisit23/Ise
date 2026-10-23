@@ -128,7 +128,7 @@ describe("NavBar role permissions", () => {
       "คูปองส่วนลดของฉัน",
       "ตั๋วแจ้งปัญหาของฉัน",
       "ศูนย์ช่วยเหลือ",
-      "ตั้งค่าโปรไฟล์",
+      "ฉัน",
     ]) {
       expect(
         screen.queryByRole("link", { name: customerMenu }),
@@ -149,6 +149,7 @@ describe("NavBar role permissions", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^ตะกร้า/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^ข้อความ/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^การแจ้งเตือน/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "เมนูโปรไฟล์" }));
 
     for (const customerMenu of [
@@ -157,7 +158,7 @@ describe("NavBar role permissions", () => {
       "คูปองส่วนลดของฉัน",
       "ตั๋วแจ้งปัญหาของฉัน",
       "ศูนย์ช่วยเหลือ",
-      "ตั้งค่าโปรไฟล์",
+      "ฉัน",
     ]) {
       expect(
         screen.getByRole("link", { name: customerMenu }),
@@ -179,8 +180,7 @@ describe("NavBar role permissions", () => {
     fireEvent.click(await screen.findByRole("button", { name: "เมนูโปรไฟล์" }));
 
     for (const sellerMenu of [
-      "แดชบอร์ดผู้ขาย",
-      "ร้านค้าของฉัน",
+      "My Store",
       "อัปโหลดคลิปรีวิว",
       "ส่งสินค้าประมูล",
       "ลงขายสินค้า",
@@ -191,6 +191,9 @@ describe("NavBar role permissions", () => {
         screen.getByRole("link", { name: sellerMenu }),
       ).toBeInTheDocument();
     }
+    expect(
+      screen.queryByRole("link", { name: "ร้านค้าของฉัน" }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -379,9 +382,7 @@ describe("NavBar responsive navigation and dropdowns", () => {
     expect(
       screen.getByRole("link", { name: "ศูนย์ช่วยเหลือ" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "ตั้งค่าโปรไฟล์" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "ฉัน" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "ออกจากระบบ" }),
     ).toBeInTheDocument();

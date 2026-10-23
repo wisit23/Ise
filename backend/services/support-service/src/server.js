@@ -9,3 +9,6 @@ const slaMonitor = require("./features/sla/slaMonitor");
 const PORT = process.env.SUPPORT_PORT || 3006;
 app.listen(PORT, () => console.log(`[support-service] listening on ${PORT}`));
 slaMonitor.start();
+require("@reloop/shared/src/caseRetention").startCaseRetention(
+  require("./models/prismaClient"), require("./generated/prisma-client").Prisma, "tickets",
+);

@@ -3,10 +3,27 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "../../../lib/api";
 import Badge from "../../panel/ui/Badge";
-import DropdownFilter from "../../panel/ui/DropdownFilter";
 import Modal from "../../ui/Modal";
 import AuctionReviewModal from "./AuctionReviewModal";
 import { STATUS_LABEL, STATUS_STYLE, baht } from "./auctionPresentation";
+import { MARKETING_PAGE_SIZE } from "../marketingConstants";
+import MarketingPagination from "./MarketingPagination";
+import RoundEditModal from "./RoundEditModal";
+import AuctionItemFilters from "./AuctionItemFilters";
+
+const HIDDEN_MARKETING_FILTER_STATUSES = new Set(["approved"]);
+const DATE_TIME_INPUT_MINUTE_MS = 60_000;
+
+function getNextMinuteLocalInputValue(now = new Date()) {
+  const nextMinute = new Date(
+    (Math.floor(now.getTime() / DATE_TIME_INPUT_MINUTE_MS) + 1) *
+      DATE_TIME_INPUT_MINUTE_MS,
+  );
+  const localDate = new Date(
+    nextMinute.getTime() - nextMinute.getTimezoneOffset() * DATE_TIME_INPUT_MINUTE_MS,
+  );
+  return localDate.toISOString().slice(0, 16);
+}
 
 function fmt(dt) {
   if (!dt) return "—";
@@ -17,6 +34,105 @@ function fmt(dt) {
     dateStyle: "medium",
     timeStyle: "short",
   });
+}
+
+function DateTimeRange({
+  start,
+  end,
+  startLabel = "เริ่ม",
+  endLabel = "สิ้นสุด",
+  compact = false,
+}) {
+  return (
+    <dl className="grid gap-1.5 text-xs text-slate-600">
+      <div
+        className={
+          compact
+            ? "min-w-0"
+            : "grid min-w-0 grid-cols-[3.25rem_minmax(0,1fr)] gap-2"
+        }
+      >
+        <dt className="font-medium text-slate-500">{startLabel}</dt>
+        <dd
+          className={`min-w-0 font-medium leading-5 text-slate-700 ${
+            compact ? "mt-0.5" : ""
+          }`}
+        >
+          {fmt(start)}
+        </dd>
+      </div>
+      <div
+        className={
+          compact
+            ? "min-w-0 border-t border-slate-100 pt-1.5"
+            : "grid min-w-0 grid-cols-[3.25rem_minmax(0,1fr)] gap-2"
+        }
+      >
+        <dt className="font-medium text-slate-500">{endLabel}</dt>
+        <dd
+          className={`min-w-0 font-medium leading-5 text-slate-700 ${
+            compact ? "mt-0.5" : ""
+          }`}
+        >
+          {fmt(end)}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+function RoundCategories({ categories, tone = "emerald" }) {
+  const hasCategories = Array.isArray(categories) && categories.length > 0;
+  const categoryStyle =
+    tone === "slate"
+      ? "border-slate-200 bg-slate-100 text-slate-700"
+      : "border-emerald-200 bg-emerald-50 text-emerald-800";
+
+  return (
+    <div className="flex min-w-0 flex-wrap gap-1.5">
+      {hasCategories ? (
+        categories.map((category) => (
+          <span
+            key={category}
+            className={`max-w-full rounded-md border px-2 py-0.5 text-[11px] font-medium leading-5 break-words ${categoryStyle}`}
+            title={category}
+          >
+            {category}
+          </span>
+        ))
+      ) : (
+        <span className="whitespace-nowrap rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium leading-5 text-slate-700">
+          ทุกหมวดหมู่
+        </span>
+      )}
+    </div>
+  );
+}
+
+function RoundItemCount({ round, align = "left" }) {
+  const isUnlimited = round.maxItems == null;
+  const submittedCount = isUnlimited
+    ? (round._count?.auctions ?? 0)
+    : (round.submittedItemCount ?? 0);
+  const isFull = !isUnlimited && submittedCount >= round.maxItems;
+
+  return (
+    <div className={align === "right" ? "text-right" : "text-left"}>
+      <span className="whitespace-nowrap font-semibold text-slate-800">
+        <span>
+          {isUnlimited ? submittedCount : `${submittedCount} / ${round.maxItems}`}
+        </span>{" "}
+        รายการ
+      </span>
+      <span
+        className={`mt-0.5 block whitespace-nowrap text-[11px] ${
+          isFull ? "font-semibold text-amber-700" : "text-slate-500"
+        }`}
+      >
+        {isUnlimited ? "ไม่จำกัดจำนวน" : isFull ? "เต็มแล้ว" : "ยังรับเพิ่มได้"}
+      </span>
+    </div>
+  );
 }
 
 const ROUND_PHASE_LABEL = {
@@ -39,13 +155,47 @@ const ROUND_PHASE_STYLE = {
 };
 
 const ROUND_CANCEL_FORM_ID = "cancel-auction-round-form";
+// PostgreSQL INTEGER bound; no arbitrary business quota limit.
+const MAX_ROUND_CAPACITY = 2147483647;
+const ROUND_MANAGEMENT_PRIORITY = {
+  auction: 0,
+  submission: 1,
+  waiting: 2,
+  upcoming: 3,
+  ended: 4,
+  cancelled: 5,
+};
+const ITEM_MANAGEMENT_PRIORITY = {
+  open: 0,
+  scheduled: 1,
+  pending_approval: 2,
+  approved: 3,
+  draft: 4,
+  closed: 5,
+  rejected: 6,
+  cancelled: 7,
+};
 
-export function RoundManagementSection({ token, onRoundCreated }) {
-  const [roundInfo, setRoundInfo] = useState(null);
+function sortByManagementPriority(items, priority) {
+  return [...items].sort(
+    (a, b) =>
+      (priority[a.status || a.phase] ?? 99) -
+        (priority[b.status || b.phase] ?? 99) ||
+      new Date(b.createdAt || b.submissionStartsAt || 0) -
+        new Date(a.createdAt || a.submissionStartsAt || 0),
+  );
+}
+
+export function RoundManagementSection({ token, onRoundCreated, refreshRevision = 0 }) {
+  const [editingRound, setEditingRound] = useState(null);
+  const [, setRoundInfo] = useState(null);
   const [allRounds, setAllRounds] = useState([]);
   const [availableCategories, setAvailableCategories] = useState([]);
   const [categoryMode, setCategoryMode] = useState("all");
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [roundPage, setRoundPage] = useState(1);
+  const [roundTotal, setRoundTotal] = useState(0);
+  const [roundTotalPages, setRoundTotalPages] = useState(1);
 
   useEffect(() => {
     apiFetch("/api/products/categories")
@@ -57,6 +207,7 @@ export function RoundManagementSection({ token, onRoundCreated }) {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [title, setTitle] = useState("");
+  const [maxItems, setMaxItems] = useState("");
   const [subStartsAt, setSubStartsAt] = useState("");
   const [subEndsAt, setSubEndsAt] = useState("");
   const [aucStartsAt, setAucStartsAt] = useState("");
@@ -70,28 +221,83 @@ export function RoundManagementSection({ token, onRoundCreated }) {
   const [roundCancelWarning, setRoundCancelWarning] = useState(null);
   const [roundRetrying, setRoundRetrying] = useState(false);
   const [roundCancelFeedback, setRoundCancelFeedback] = useState("");
+  const [roundError, setRoundError] = useState("");
+  const [viewingRound, setViewingRound] = useState(null);
 
-  function loadRounds() {
+  function loadRounds(pageToLoad = roundPage) {
     setLoading(true);
+    setRoundError("");
+    const params = new URLSearchParams();
+    params.set("page", String(pageToLoad));
+    params.set("limit", String(MARKETING_PAGE_SIZE));
+
     Promise.all([
       apiFetch("/api/products/auctions/rounds/current", { token }).catch(
         () => null,
       ),
-      apiFetch("/api/products/auctions/rounds", { token }).catch(() => ({
-        items: [],
-      })),
+      apiFetch(`/api/products/auctions/rounds?${params.toString()}`, {
+        token,
+      }),
     ])
       .then(([currentData, listData]) => {
         setRoundInfo(currentData);
-        setAllRounds(listData?.items || []);
+        const items = Array.isArray(listData?.items) ? listData.items : [];
+        const nextTotal = Number.isFinite(listData?.total)
+          ? listData.total
+          : items.length;
+        const nextTotalPages = Number.isFinite(listData?.totalPages)
+          ? Math.max(1, listData.totalPages)
+          : Math.max(1, Math.ceil(nextTotal / MARKETING_PAGE_SIZE));
+
+        setAllRounds(items);
+        setRoundTotal(nextTotal);
+        setRoundTotalPages(nextTotalPages);
+
+        if (pageToLoad > nextTotalPages) {
+          setRoundPage(nextTotalPages);
+          const clampParams = new URLSearchParams();
+          clampParams.set("page", String(nextTotalPages));
+          clampParams.set("limit", String(MARKETING_PAGE_SIZE));
+          apiFetch(`/api/products/auctions/rounds?${clampParams.toString()}`, {
+            token,
+          })
+            .then((clampedData) => {
+              setAllRounds(
+                Array.isArray(clampedData?.items) ? clampedData.items : [],
+              );
+              setRoundTotal(
+                Number.isFinite(clampedData?.total)
+                  ? clampedData.total
+                  : nextTotal,
+              );
+              setRoundTotalPages(
+                Number.isFinite(clampedData?.totalPages)
+                  ? Math.max(1, clampedData.totalPages)
+                  : nextTotalPages,
+              );
+            })
+            .catch(() => {});
+        } else {
+          setRoundPage(pageToLoad);
+        }
       })
-      .catch((err) => console.error(err))
+      .catch((err) => {
+        console.error(err);
+        setRoundError(
+          err.message || "เกิดข้อผิดพลาดในการโหลดรอบประมูล กรุณาลองใหม่อีกครั้ง",
+        );
+      })
       .finally(() => setLoading(false));
   }
 
   useEffect(() => {
-    loadRounds();
+    setRoundPage(1);
+    loadRounds(1);
   }, [token]);
+
+  useEffect(() => {
+    if (refreshRevision > 0) loadRounds();
+  }, [refreshRevision]);
 
   async function handleCreateRound(e) {
     e.preventDefault();
@@ -106,9 +312,18 @@ export function RoundManagementSection({ token, onRoundCreated }) {
       );
       return;
     }
+    if (new Date(subStartsAt).getTime() < Date.now()) {
+      setFormError("เวลาเริ่มเปิดรับสินค้าต้องเป็นเวลาปัจจุบันหรืออนาคต");
+      return;
+    }
 
     if (categoryMode === "specific" && selectedCategories.length === 0) {
       setFormError("กรุณาเลือกอย่างน้อย 1 หมวดหมู่ หรือเลือกรับทุกหมวดหมู่");
+      return;
+    }
+    const capacity = Number(maxItems);
+    if (!Number.isInteger(capacity) || capacity <= 0 || capacity > MAX_ROUND_CAPACITY) {
+      setFormError("กรุณาระบุจำนวนสินค้าสูงสุดเป็นจำนวนเต็มบวก");
       return;
     }
     setSaving(true);
@@ -118,6 +333,7 @@ export function RoundManagementSection({ token, onRoundCreated }) {
         token,
         body: {
           title: title.trim(),
+          maxItems: capacity,
           submissionStartsAt: new Date(subStartsAt).toISOString(),
           submissionEndsAt: new Date(subEndsAt).toISOString(),
           auctionStartsAt: new Date(aucStartsAt).toISOString(),
@@ -127,12 +343,14 @@ export function RoundManagementSection({ token, onRoundCreated }) {
       });
       setShowCreateForm(false);
       setTitle("");
+      setMaxItems("");
       setSubStartsAt("");
       setSubEndsAt("");
       setAucStartsAt("");
       setAucEndsAt("");
       setCategoryMode("all");
       setSelectedCategories([]);
+      setRoundPage(1);
       loadRounds();
       if (onRoundCreated) onRoundCreated();
     } catch (err) {
@@ -310,6 +528,13 @@ export function RoundManagementSection({ token, onRoundCreated }) {
               />
             </div>
 
+            <div className="md:col-span-2">
+              <label htmlFor="round-max-items" className="block text-slate-700 font-medium mb-1">จำนวนสินค้าสูงสุดต่อรอบ</label>
+              <input id="round-max-items" type="number" required min="1" step="1" max={MAX_ROUND_CAPACITY}
+                value={maxItems} onChange={event => setMaxItems(event.target.value)}
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-emerald-500" />
+              <p className="mt-1 text-slate-500">นับตั้งแต่ส่งสำเร็จ รวมรายการรออนุมัติ ปฏิเสธหรือยกเลิกแล้วคืนช่องว่าง</p>
+            </div>
             <div className="space-y-3 rounded-lg bg-white p-3 border border-emerald-100">
               <span className="font-semibold text-emerald-800 block text-xs">
                 📅 ช่วงเวลารับสินค้าจากผู้ขาย
@@ -325,6 +550,7 @@ export function RoundManagementSection({ token, onRoundCreated }) {
                   id="subStartsAt"
                   required
                   type="datetime-local"
+                  min={getNextMinuteLocalInputValue()}
                   value={subStartsAt}
                   onChange={(e) => setSubStartsAt(e.target.value)}
                   className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs"
@@ -484,139 +710,6 @@ export function RoundManagementSection({ token, onRoundCreated }) {
         </form>
       )}
 
-      {/* รอบปัจจุบัน / รอบถัดไป / หลายรอบที่กำลังดำเนินงาน */}
-      <div className="mt-4">
-        {loading ? (
-          <p className="text-xs text-slate-400">กำลังโหลดสถานะรอบประมูล...</p>
-        ) : (
-          (() => {
-            const activeSubmissionRounds =
-              roundInfo?.activeSubmissionRounds || [];
-            const activeAuctionRounds = roundInfo?.activeAuctionRounds || [];
-            const nextRound = roundInfo?.nextRound;
-            const legacyRound = roundInfo?.round;
-
-            const activeRoundsList = [
-              ...activeSubmissionRounds,
-              ...activeAuctionRounds,
-            ];
-            const displayRounds =
-              activeRoundsList.length > 0
-                ? activeRoundsList
-                : legacyRound
-                  ? [
-                      {
-                        ...legacyRound,
-                        phase: roundInfo?.phase || legacyRound.phase,
-                      },
-                    ]
-                  : nextRound
-                    ? [{ ...nextRound, phase: nextRound.phase || "upcoming" }]
-                    : [];
-
-            if (displayRounds.length === 0) {
-              return (
-                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">
-                  ยังไม่มีรอบการประมูลที่กำลังดำเนินอยู่หรือกำลังจะมาถึง กรุณากด
-                  &ldquo;สร้างรอบประมูลใหม่&rdquo;
-                  ด้านบนเพื่อกำหนดช่วงเวลารับสินค้า
-                </div>
-              );
-            }
-
-            return (
-              <div className="space-y-3">
-                {displayRounds.map((r) => {
-                  const rPhase = r.phase || roundInfo?.phase;
-                  return (
-                    <div
-                      key={r.id || r.title}
-                      className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-xl bg-slate-50 p-4 border border-slate-200/70"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="text-sm font-bold text-slate-900 break-words">
-                            {r.title}
-                          </span>
-                          {rPhase && (
-                            <span
-                              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
-                                ROUND_PHASE_STYLE[rPhase] ||
-                                "bg-slate-100 text-slate-600 border-slate-200"
-                              }`}
-                            >
-                              {ROUND_PHASE_LABEL[rPhase] || rPhase}
-                            </span>
-                          )}
-                          {rPhase === "upcoming" && (
-                            <span className="text-xs text-sky-600 font-medium">
-                              (รอบที่กำลังจะมาถึง)
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
-                          <span>
-                            <strong>รับสินค้า:</strong>{" "}
-                            {fmt(r.submissionStartsAt)} —{" "}
-                            {fmt(r.submissionEndsAt)}
-                          </span>
-                          <span>
-                            <strong>เคาะประมูลจริง:</strong>{" "}
-                            {fmt(r.auctionStartsAt)} — {fmt(r.auctionEndsAt)}
-                          </span>
-                          <span className="w-full mt-1 flex items-center gap-1.5 flex-wrap">
-                            <strong>หมวดหมู่ที่เปิดรับ:</strong>{" "}
-                            {Array.isArray(r.categories) &&
-                            r.categories.length > 0 ? (
-                              r.categories.map((c) => (
-                                <span
-                                  key={c}
-                                  className="inline-block rounded bg-emerald-100/70 border border-emerald-200 px-2 py-0.2 text-[11px] text-emerald-800 font-medium"
-                                >
-                                  {c}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="inline-block rounded bg-slate-200/70 px-2 py-0.2 text-[11px] text-slate-700 font-medium">
-                                ทุกหมวดหมู่
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
-                        <div className="text-xs text-slate-500 font-medium">
-                          สินค้าในรอบนี้:{" "}
-                          <span className="font-bold text-slate-800">
-                            {r._count?.auctions ?? 0}
-                          </span>{" "}
-                          รายการ
-                        </div>
-                        {rPhase !== "cancelled" &&
-                          rPhase !== "ended" &&
-                          !r.cancelledAt && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCancellingRound(r);
-                                setCancelReason("");
-                                setCancelError("");
-                              }}
-                              className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition shadow-sm"
-                            >
-                              ยกเลิกรอบประมูล
-                            </button>
-                          )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()
-        )}
-      </div>
-
       {/* Modal ยืนยันการยกเลิกรอบประมูล */}
       <Modal
         open={Boolean(cancellingRound)}
@@ -732,36 +825,56 @@ export function RoundManagementSection({ token, onRoundCreated }) {
       </Modal>
 
       {/* ตารางรายการรอบประมูลทั้งหมด (All Auction Rounds) */}
-      {allRounds.length > 0 && (
-        <div className="mt-5 border-t border-slate-100 pt-4">
-          <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-sm text-slate-400">
-              history
-            </span>
-            ประวัติและรายการรอบการประมูลทั้งหมด ({allRounds.length})
-          </h4>
-          <div className="overflow-x-auto -mx-1">
-            <table className="w-full min-w-[640px] text-left text-xs">
+      <div className="mt-5 border-t border-slate-100 pt-4">
+        <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-sm text-slate-400">
+            history
+          </span>
+          ประวัติและรายการรอบการประมูลทั้งหมด ({roundError ? "—" : roundTotal})
+        </h4>
+
+        {loading ? (
+          <p className="text-xs text-slate-400 py-3">กำลังโหลดประวัติรอบประมูล...</p>
+        ) : roundError ? (
+          <p className="text-xs text-red-600 py-3">{roundError}</p>
+        ) : allRounds.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500 my-2">
+            ยังไม่มีประวัติรอบการประมูล
+          </div>
+        ) : (
+          <div className="min-w-0 rounded-xl border border-slate-200">
+            <table className="w-full table-fixed text-left text-xs">
+              <colgroup>
+                <col className="w-[17%]" />
+                <col className="w-[11%]" />
+                <col className="w-[16%]" />
+                <col className="w-[16%]" />
+                <col className="w-[14%]" />
+                <col className="w-[11%]" />
+                <col className="w-[15%]" />
+              </colgroup>
               <thead>
-                <tr className="border-b border-slate-200 text-slate-400 font-medium">
-                  <th className="pb-2 font-medium">ชื่อรอบ</th>
-                  <th className="pb-2 font-medium">สถานะ</th>
-                  <th className="pb-2 font-medium">ช่วงเวลารับสินค้า</th>
-                  <th className="pb-2 font-medium">ช่วงเวลาประมูลจริง</th>
-                  <th className="pb-2 font-medium">หมวดหมู่ที่รับ</th>
-                  <th className="pb-2 font-medium text-right">จำนวนสินค้า</th>
-                  <th className="pb-2 font-medium text-right">จัดการ</th>
+                <tr className="border-b border-slate-200 bg-slate-50 text-slate-600">
+                  <th className="px-2 py-2.5 font-semibold">ชื่อรอบ</th>
+                  <th className="px-2 py-2.5 font-semibold">สถานะ</th>
+                  <th className="px-2 py-2.5 font-semibold">ช่วงรับสินค้า</th>
+                  <th className="px-2 py-2.5 font-semibold">ช่วงประมูล</th>
+                  <th className="px-2 py-2.5 font-semibold">หมวดหมู่</th>
+                  <th className="px-2 py-2.5 text-right font-semibold">จำนวนสินค้า</th>
+                  <th className="px-2 py-2.5 text-right font-semibold">จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {allRounds.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50/50">
-                    <td className="py-2.5 font-semibold text-slate-900">
-                      {r.title}
+                {sortByManagementPriority(allRounds, ROUND_MANAGEMENT_PRIORITY).map((r) => (
+                  <tr key={r.id} className="align-top hover:bg-slate-50/50">
+                    <td className="min-w-0 px-2 py-3 font-semibold leading-5 text-slate-900">
+                      <span className="line-clamp-2 break-words" title={r.title}>
+                        {r.title}
+                      </span>
                     </td>
-                    <td className="py-2.5">
+                    <td className="px-2 py-3">
                       <span
-                        className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                        className={`inline-flex max-w-full whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium ${
                           ROUND_PHASE_STYLE[r.phase] ||
                           "bg-slate-100 text-slate-600 border-slate-200"
                         }`}
@@ -769,35 +882,47 @@ export function RoundManagementSection({ token, onRoundCreated }) {
                         {ROUND_PHASE_LABEL[r.phase] || r.phase || "—"}
                       </span>
                     </td>
-                    <td className="py-2.5 text-slate-600">
-                      {fmt(r.submissionStartsAt)} — {fmt(r.submissionEndsAt)}
+                    <td className="min-w-0 px-2 py-3">
+                      <DateTimeRange
+                        start={r.submissionStartsAt}
+                        end={r.submissionEndsAt}
+                        endLabel="ปิดรับ"
+                        compact
+                      />
                     </td>
-                    <td className="py-2.5 text-slate-600">
-                      {fmt(r.auctionStartsAt)} — {fmt(r.auctionEndsAt)}
+                    <td className="min-w-0 px-2 py-3">
+                      <DateTimeRange
+                        start={r.auctionStartsAt}
+                        end={r.auctionEndsAt}
+                        endLabel="ปิดรอบ"
+                        compact
+                      />
                     </td>
-                    <td className="py-2.5 text-slate-600">
-                      {Array.isArray(r.categories) &&
-                      r.categories.length > 0 ? (
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {r.categories.map((c) => (
-                            <span
-                              key={c}
-                              className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700"
-                            >
-                              {c}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-slate-500">
-                          ทุกหมวดหมู่
+                    <td className="min-w-0 px-2 py-3 text-slate-600">
+                      <RoundCategories categories={r.categories} tone="slate" />
+                    </td>
+                    <td className="px-2 py-3 text-right text-slate-700">
+                      <RoundItemCount round={r} align="right" />
+                    </td>
+                    <td className="px-2 py-3 text-right">
+                      <div className="ml-auto flex max-w-32 flex-col items-stretch gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setViewingRound(r)}
+                        className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                        aria-label={`ดูรายละเอียดรอบ ${r.title}`}
+                      >
+                        <span className="material-symbols-outlined text-[15px] leading-none" aria-hidden="true">
+                          search
                         </span>
+                        ดูรายละเอียด
+                      </button>
+                      {!r.cancelledAt && !["ended", "cancelled"].includes(r.phase) && (
+                        <button type="button" onClick={() => setEditingRound(r)}
+                          className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+                          แก้ไขเวลา
+                        </button>
                       )}
-                    </td>
-                    <td className="py-2.5 text-right font-medium text-slate-700">
-                      {r._count?.auctions ?? 0}
-                    </td>
-                    <td className="py-2.5 text-right">
                       {r.phase !== "cancelled" &&
                         r.phase !== "ended" &&
                         !r.cancelledAt && (
@@ -808,19 +933,76 @@ export function RoundManagementSection({ token, onRoundCreated }) {
                               setCancelReason("");
                               setCancelError("");
                             }}
-                            className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 transition"
+                            className="w-full rounded-md border border-rose-200 bg-rose-50 px-2 py-1.5 text-[11px] font-semibold leading-4 text-rose-700 transition hover:bg-rose-100"
                           >
                             ยกเลิกรอบประมูล
                           </button>
                         )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+
+        {editingRound && <RoundEditModal key={editingRound.id} round={editingRound} token={token}
+          onClose={() => setEditingRound(null)} onSaved={() => { loadRounds(); onRoundCreated?.(); }} />}
+        <Modal
+          open={Boolean(viewingRound)}
+          onClose={() => setViewingRound(null)}
+          title="รายละเอียดรอบการประมูล"
+          description="ข้อมูลแบบอ่านอย่างเดียวจากประวัติรอบการประมูล"
+          size="md"
+        >
+          {viewingRound && (
+            <div className="space-y-4 text-sm text-slate-700">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-medium text-slate-500">ชื่อรอบ</p>
+                <p className="mt-1 break-words font-semibold text-slate-900">{viewingRound.title}</p>
+                <div className="mt-3">
+                  <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold ${ROUND_PHASE_STYLE[viewingRound.phase] || "border-slate-200 bg-slate-100 text-slate-600"}`}>
+                    {ROUND_PHASE_LABEL[viewingRound.phase] || viewingRound.phase || "—"}
+                  </span>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <section className="rounded-xl border border-slate-200 p-3">
+                  <h5 className="mb-2 text-xs font-semibold text-slate-800">ช่วงรับสินค้า</h5>
+                  <DateTimeRange start={viewingRound.submissionStartsAt} end={viewingRound.submissionEndsAt} endLabel="ปิดรับ" />
+                </section>
+                <section className="rounded-xl border border-slate-200 p-3">
+                  <h5 className="mb-2 text-xs font-semibold text-slate-800">ช่วงประมูล</h5>
+                  <DateTimeRange start={viewingRound.auctionStartsAt} end={viewingRound.auctionEndsAt} endLabel="ปิดรอบ" />
+                </section>
+              </div>
+              <section className="rounded-xl border border-slate-200 p-3">
+                <h5 className="mb-2 text-xs font-semibold text-slate-800">หมวดหมู่ที่เปิดรับ</h5>
+                <RoundCategories categories={viewingRound.categories} tone="slate" />
+              </section>
+              {(viewingRound.cancellationReason || viewingRound.cancelledAt) && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+                  <strong>เหตุผลที่ยกเลิก:</strong>{" "}
+                  {viewingRound.cancellationReason || "ไม่ระบุเหตุผล"}
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
+        <MarketingPagination
+          page={roundPage}
+          totalPages={roundTotalPages}
+          total={roundTotal}
+          loading={loading}
+          error={roundError}
+          onPageChange={(p) => {
+            setRoundPage(p);
+            loadRounds(p);
+          }}
+          className="mt-3 rounded-lg border border-slate-200"
+        />
+      </div>
     </div>
   );
 }
@@ -928,9 +1110,15 @@ function getFriendlyErrorMessage(err, actionName = "ทำรายการ") {
 }
 
 export default function AuctionScheduleSection({ token }) {
+  const [roundCapacityRevision, setRoundCapacityRevision] = useState(0);
   const [auctions, setAuctions] = useState([]);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [roundFilter, setRoundFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [statusFilters, setStatusFilters] = useState([]);
+  const [roundFilters, setRoundFilters] = useState([]);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
   const [allRoundsForFilter, setAllRoundsForFilter] = useState([]);
   const [filterRoundsError, setFilterRoundsError] = useState("");
   const [selected, setSelected] = useState(() => new Set());
@@ -939,6 +1127,9 @@ export default function AuctionScheduleSection({ token }) {
   const [reviewAuction, setReviewAuction] = useState(null);
   const [actionState, setActionState] = useState({ id: null, type: null });
   const [actionError, setActionError] = useState("");
+  const [rejectingItem, setRejectingItem] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectError, setRejectError] = useState("");
 
   // Single-item cancel modal state (MKT-DEC-026)
   const [cancellingItem, setCancellingItem] = useState(null);
@@ -970,14 +1161,56 @@ export default function AuctionScheduleSection({ token }) {
       });
   }
 
-  function load() {
+  function load(pageToLoad = page) {
     setLoading(true);
+    setError("");
     const params = new URLSearchParams();
-    params.set("limit", "50");
-    if (statusFilter) params.set("status", statusFilter);
-    if (roundFilter) params.set("roundId", roundFilter);
+    params.set("page", String(pageToLoad));
+    params.set("limit", String(MARKETING_PAGE_SIZE));
+    if (statusFilters.length) params.set("statuses", statusFilters.join(","));
+    if (roundFilters.length) params.set("roundIds", roundFilters.join(","));
+    if (searchFilter) params.set("search", searchFilter);
     apiFetch(`/api/products/auctions?${params.toString()}`, { token })
-      .then((data) => setAuctions(data.items))
+      .then((data) => {
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const nextTotal = Number.isFinite(data?.total) ? data.total : items.length;
+        const nextTotalPages = Number.isFinite(data?.totalPages)
+          ? Math.max(1, data.totalPages)
+          : Math.max(1, Math.ceil(nextTotal / MARKETING_PAGE_SIZE));
+
+        setAuctions(items);
+        setTotal(nextTotal);
+        setTotalPages(nextTotalPages);
+
+        if (pageToLoad > nextTotalPages) {
+          setPage(nextTotalPages);
+          const clampParams = new URLSearchParams();
+          clampParams.set("page", String(nextTotalPages));
+          clampParams.set("limit", String(MARKETING_PAGE_SIZE));
+          if (statusFilters.length) clampParams.set("statuses", statusFilters.join(","));
+          if (roundFilters.length) clampParams.set("roundIds", roundFilters.join(","));
+          if (searchFilter) clampParams.set("search", searchFilter);
+          apiFetch(`/api/products/auctions?${clampParams.toString()}`, { token })
+            .then((clampedData) => {
+              setAuctions(
+                Array.isArray(clampedData?.items) ? clampedData.items : [],
+              );
+              setTotal(
+                Number.isFinite(clampedData?.total)
+                  ? clampedData.total
+                  : nextTotal,
+              );
+              setTotalPages(
+                Number.isFinite(clampedData?.totalPages)
+                  ? Math.max(1, clampedData.totalPages)
+                  : nextTotalPages,
+              );
+            })
+            .catch(() => {});
+        } else {
+          setPage(pageToLoad);
+        }
+      })
       .catch((err) =>
         setError(
           err.message ||
@@ -991,7 +1224,10 @@ export default function AuctionScheduleSection({ token }) {
     loadFilterRounds();
   }, [token]);
 
-  useEffect(load, [statusFilter, roundFilter, token]);
+  useEffect(() => {
+    setPage(1);
+    load(1);
+  }, [statusFilters, roundFilters, searchFilter, token]);
 
   function toggleSelected(id) {
     setSelected((prev) => {
@@ -1061,27 +1297,48 @@ export default function AuctionScheduleSection({ token }) {
     }
   }
 
-  async function handleReject(id) {
+  function handleOpenReject(auctionItem) {
+    if (reviewAuction?.id === auctionItem.id) {
+      setReviewAuction(null);
+    }
+    setRejectingItem(auctionItem);
+    setRejectReason("");
+    setRejectError("");
+  }
+
+  async function handleReject(e) {
+    e?.preventDefault?.();
+    const id = rejectingItem?.id;
     if (actionState.id) return;
+    const trimmedReason = rejectReason.trim();
+    if (!id || !trimmedReason) {
+      setRejectError("กรุณาระบุเหตุผลในการปฏิเสธสินค้า");
+      return;
+    }
+    if (trimmedReason.length > 500) {
+      setRejectError("เหตุผลในการปฏิเสธต้องมีความยาวไม่เกิน 500 ตัวอักษร");
+      return;
+    }
     setActionState({ id, type: "reject" });
     setError("");
     setActionError("");
+    setRejectError("");
     try {
       await apiFetch(`/api/products/auctions/${id}/reject`, {
         method: "PATCH",
         token,
+        body: { reason: trimmedReason },
       });
       if (reviewAuction?.id === id) {
         setReviewAuction(null);
       }
+      setRejectingItem(null);
+      setRejectReason("");
+      setRoundCapacityRevision(revision => revision + 1);
       load();
     } catch (err) {
       const friendlyMsg = getFriendlyErrorMessage(err, "ปฏิเสธ");
-      if (reviewAuction?.id === id) {
-        setActionError(friendlyMsg);
-      } else {
-        setError(friendlyMsg);
-      }
+      setRejectError(friendlyMsg);
     } finally {
       setActionState({ id: null, type: null });
     }
@@ -1138,6 +1395,7 @@ export default function AuctionScheduleSection({ token }) {
           "ยกเลิกรายการประมูลเรียบร้อยแล้ว (ส่งการแจ้งเตือนให้ผู้ที่เกี่ยวข้องแล้ว)",
         );
       }
+      setRoundCapacityRevision(revision => revision + 1);
       load();
     } catch (err) {
       setItemCancelError(getFriendlyErrorMessage(err, "ยกเลิก"));
@@ -1193,42 +1451,49 @@ export default function AuctionScheduleSection({ token }) {
       {/* ส่วนจัดการรอบการประมูล */}
       <RoundManagementSection
         token={token}
+        refreshRevision={roundCapacityRevision}
         onRoundCreated={() => {
           load();
           loadFilterRounds();
         }}
       />
 
-      <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <p className="text-xs sm:text-sm text-slate-500">
-          ตรวจสอบและอนุมัติสินค้าประมูล หรือเลือกดูตามสถานะเพื่อตั้งเวลา
-        </p>
-        <div className="shrink-0 w-full sm:w-auto flex flex-wrap items-center gap-2">
-          <DropdownFilter
-            value={roundFilter}
-            onChange={setRoundFilter}
-            options={[
-              { value: "", label: "ทุกรอบประมูล" },
-              ...allRoundsForFilter.map((r) => ({
-                value: r.id,
-                label: `[${ROUND_PHASE_LABEL[r.phase] || r.phase || "รอบ"}] ${r.title}`,
-              })),
-            ]}
-          />
-          <DropdownFilter
-            value={statusFilter}
-            onChange={setStatusFilter}
-            align="right"
-            options={[
-              { value: "", label: "ทุกสถานะ" },
-              ...Object.entries(STATUS_LABEL).map(([value, label]) => ({
+      <section className="mb-5 overflow-visible rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+            <span className="material-symbols-outlined text-[22px]" aria-hidden="true">
+              inventory_2
+            </span>
+          </div>
+          <div className="min-w-0 pt-0.5">
+            <h3 className="text-base font-bold text-slate-900 sm:text-lg">
+              รายการสินค้าประมูล
+            </h3>
+            <p className="mt-0.5 text-xs leading-5 text-slate-500 sm:text-sm">
+              ค้นหา ตรวจสอบ และจัดการสินค้าตามรอบประมูลหรือสถานะ
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <AuctionItemFilters
+            rounds={allRoundsForFilter}
+            selectedRoundIds={roundFilters}
+            onRoundIdsChange={setRoundFilters}
+            statusOptions={Object.entries(STATUS_LABEL)
+              .filter(([value]) => !HIDDEN_MARKETING_FILTER_STATUSES.has(value))
+              .map(([value, label]) => ({
                 value,
                 label,
-              })),
-            ]}
+              }))}
+            selectedStatuses={statusFilters}
+            onStatusesChange={setStatusFilters}
+            searchValue={searchInput}
+            onSearchChange={setSearchInput}
+            onSearchSubmit={() => setSearchFilter(searchInput.trim())}
           />
         </div>
-      </div>
+      </section>
 
       {selected.size > 0 && (
         <BulkScheduleBar
@@ -1286,10 +1551,10 @@ export default function AuctionScheduleSection({ token }) {
         </div>
       ) : (
         <ul className="flex flex-col gap-3">
-          {auctions.map((a) => (
+          {sortByManagementPriority(auctions, ITEM_MANAGEMENT_PRIORITY).map((a) => (
             <li
               key={a.id}
-              className="flex items-start gap-3 rounded-xl border border-slate-200/60 bg-white p-3.5 sm:p-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]"
+              className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-200/60 bg-white p-3.5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)] sm:p-4"
             >
               {eligibleIds.has(a.id) && (
                 <input
@@ -1302,50 +1567,92 @@ export default function AuctionScheduleSection({ token }) {
               )}
 
               <div className="flex-1 min-w-0">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/products/${a.productId}`}
-                      className="block truncate font-semibold text-slate-900 hover:text-emerald-600 text-sm sm:text-base"
+                      className="line-clamp-2 break-words text-sm font-semibold leading-5 text-slate-900 hover:text-emerald-600 sm:text-base sm:leading-6"
+                      title={a.product?.title || a.productId}
                     >
                       {a.product?.title || a.productId}
                     </Link>
-                    {a.round && (
-                      <p className="mt-0.5 text-xs font-semibold text-emerald-700 truncate flex items-center gap-1.5">
-                        <span>รอบ: {a.round.title}</span>
-                        {(a.round.cancelledAt ||
-                          a.round.phase === "cancelled") && (
-                          <span className="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-1.5 py-0.2">
-                            (รอบถูกยกเลิกแล้ว)
-                          </span>
-                        )}
-                      </p>
-                    )}
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      ราคาเริ่มต้น {baht(a.startingPrice)} · เพิ่มขั้นต่ำครั้งละ{" "}
-                      {baht(a.bidIncrement)}
+                    <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
+                      <span
+                        className="material-symbols-outlined shrink-0 text-[15px] leading-none text-slate-400"
+                        aria-hidden="true"
+                      >
+                        storefront
+                      </span>
+                      <span className="truncate" title={a.sellerDisplayName || "ไม่พบชื่อร้าน"}>
+                        ร้าน: {a.sellerDisplayName || "ไม่พบชื่อร้าน"}
+                      </span>
                     </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      เปิด {fmt(a.scheduledStartAt)} · ปิด{" "}
-                      {fmt(a.scheduledEndAt)}
-                    </p>
-                    {a.status === "cancelled" &&
-                      (a.cancellationReason || a.round?.cancellationReason) && (
-                        <p className="mt-1.5 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1 inline-block">
-                          เหตุผลที่ยกเลิก:{" "}
-                          {a.cancellationReason || a.round?.cancellationReason}
-                        </p>
-                      )}
                   </div>
                   <div className="shrink-0 self-start">
                     <Badge
                       text={STATUS_LABEL[a.status] || a.status}
                       style={
-                        STATUS_STYLE[a.status] || "bg-slate-100 text-slate-600"
+                        `${STATUS_STYLE[a.status] || "bg-slate-100 text-slate-600"} whitespace-nowrap`
                       }
                     />
                   </div>
                 </div>
+
+                <dl className="mt-3 grid min-w-0 gap-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="min-w-0">
+                    <dt className="font-medium text-slate-500">รอบประมูล</dt>
+                    <dd
+                      className="mt-1 break-words font-semibold leading-5 text-emerald-700"
+                      title={a.round?.title || "ไม่ระบุรอบ"}
+                    >
+                      {a.round?.title || "ไม่ระบุรอบ"}
+                    </dd>
+                    {(a.round?.cancelledAt || a.round?.phase === "cancelled") && (
+                      <span className="mt-1 inline-flex whitespace-nowrap rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600">
+                        รอบถูกยกเลิกแล้ว
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="font-medium text-slate-500">หมวดหมู่สินค้า</dt>
+                    <dd className="mt-1 break-words font-medium leading-5 text-slate-700">
+                      {a.product?.category || "ไม่ระบุ"}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="font-medium text-slate-500">ราคาเสนอ</dt>
+                    <dd className="mt-1 leading-5 text-slate-700">
+                      <span className="block font-semibold">
+                        เริ่ม {baht(a.startingPrice)}
+                      </span>
+                      {a.bids?.[0]?.amount != null && (
+                        <span className="block font-bold text-emerald-700">
+                          สูงสุดจริง {baht(a.bids[0].amount)}
+                        </span>
+                      )}
+                      <span className="block text-slate-500">
+                        เพิ่มขั้นต่ำ {baht(a.bidIncrement)}
+                      </span>
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="mb-1 font-medium text-slate-500">ช่วงประมูล</dt>
+                    <DateTimeRange
+                      start={a.scheduledStartAt}
+                      end={a.scheduledEndAt}
+                      endLabel="ปิดรอบ"
+                      compact
+                    />
+                  </div>
+                </dl>
+
+                {a.status === "cancelled" &&
+                  (a.cancellationReason || a.round?.cancellationReason) && (
+                    <p className="mt-2 inline-block max-w-full break-words rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-medium text-rose-700">
+                      เหตุผลที่ยกเลิก:{" "}
+                      {a.cancellationReason || a.round?.cancellationReason}
+                    </p>
+                  )}
 
                 {/* ปุ่มตรวจสอบ อนุมัติ และปฏิเสธสำหรับ Marketing */}
                 {a.status === "pending_approval" && (
@@ -1381,7 +1688,7 @@ export default function AuctionScheduleSection({ token }) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleReject(a.id)}
+                      onClick={() => handleOpenReject(a)}
                       disabled={Boolean(actionState.id)}
                       className="flex-1 sm:flex-initial rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition text-center disabled:opacity-50"
                     >
@@ -1394,7 +1701,15 @@ export default function AuctionScheduleSection({ token }) {
 
                 {["approved", "scheduled", "open"].includes(a.status) &&
                   !a.winningOrderId && (
-                    <div className="mt-3 border-t border-slate-100 pt-3">
+                    <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenReview(a)}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">search</span>
+                        ดูรายละเอียด
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleOpenCancelItem(a)}
@@ -1404,11 +1719,37 @@ export default function AuctionScheduleSection({ token }) {
                       </button>
                     </div>
                   )}
+
+                {["rejected", "cancelled", "closed"].includes(a.status) && (
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenReview(a)}
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">search</span>
+                      ดูรายละเอียด
+                    </button>
+                  </div>
+                )}
               </div>
             </li>
           ))}
         </ul>
       )}
+
+      <MarketingPagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        loading={loading}
+        error={error}
+        onPageChange={(newPage) => {
+          setPage(newPage);
+          load(newPage);
+        }}
+        className="mt-3 rounded-xl border border-slate-200"
+      />
 
       {/* Modal ยืนยันการยกเลิกเฉพาะรายการประมูล (MKT-DEC-026) */}
       <Modal
@@ -1492,15 +1833,57 @@ export default function AuctionScheduleSection({ token }) {
         )}
       </Modal>
 
+      <Modal
+        open={Boolean(rejectingItem)}
+        onClose={() => !actionState.id && setRejectingItem(null)}
+        title="ปฏิเสธสินค้าเข้าประมูล"
+        description="ระบุเหตุผลที่ชัดเจนเพื่อเก็บไว้ในประวัติและแจ้งให้ผู้ขายทราบ"
+        size="md"
+      >
+        {rejectingItem && (
+          <form onSubmit={handleReject} className="space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-700">
+              <p><strong>ชื่อสินค้า:</strong> {rejectingItem.product?.title || rejectingItem.productId}</p>
+              <p className="mt-1"><strong>รอบประมูล:</strong> {rejectingItem.round?.title || "ไม่ระบุ"}</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700">
+                เหตุผลในการปฏิเสธสินค้า <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                required
+                rows={3}
+                maxLength={500}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="ระบุรายละเอียดที่ผู้ขายต้องแก้ไข (สูงสุด 500 ตัวอักษร)"
+                className="w-full resize-none rounded-lg border border-slate-300 p-2.5 text-xs text-slate-900 focus:border-rose-500 focus:outline-none"
+              />
+              <span className="mt-0.5 block text-right text-[11px] text-slate-400">{rejectReason.length}/500 ตัวอักษร</span>
+            </div>
+            {rejectError && <p role="alert" className="text-xs font-medium text-rose-600">{rejectError}</p>}
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+              <button type="button" onClick={() => setRejectingItem(null)} disabled={Boolean(actionState.id)} className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                กลับ
+              </button>
+              <button type="submit" disabled={Boolean(actionState.id) || !rejectReason.trim()} className="rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50">
+                {actionState.id === rejectingItem.id && actionState.type === "reject" ? "กำลังปฏิเสธ..." : "ยืนยันการปฏิเสธสินค้า"}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
       {/* Modal ตรวจสอบรายละเอียดสินค้าก่อนอนุมัติเข้าประมูล */}
       <AuctionReviewModal
         isOpen={Boolean(reviewAuction)}
         auction={reviewAuction}
         onClose={handleCloseReview}
         onApprove={() => reviewAuction && handleApprove(reviewAuction.id)}
-        onReject={() => reviewAuction && handleReject(reviewAuction.id)}
+        onReject={() => reviewAuction && handleOpenReject(reviewAuction)}
         actionLoading={actionState}
         errorMessage={actionError}
+        readOnly={reviewAuction?.status !== "pending_approval"}
       />
     </div>
   );

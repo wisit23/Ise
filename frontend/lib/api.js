@@ -7,6 +7,10 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
+export function apiUrl(path) {
+  return `${API_URL}${path}`;
+}
+
 // Access tokens expire after 15 minutes (JWT_ACCESS_EXPIRES). Rather than
 // force a re-login every 15 minutes, a 401 triggers one silent refresh (via
 // the 7-day refresh token) and the original request is retried once. If the
@@ -65,7 +69,43 @@ function rejectSuspended(data) {
   });
 }
 
-export async function apiFetch(path, { method = "GET", body, token, signal } = {}) {
+// Opt-in deadline covers fetch, authentication refresh, and response decoding.
+// Callers without a deadline retain the existing cancellation behavior.
+export async function apiFetch(path, { timeoutMs, ...options } = {}) {
+  if (timeoutMs === undefined) return apiFetchRequest(path, options);
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+    throw new RangeError("timeoutMs must be a positive number");
+  const controller = new AbortController();
+  const { signal } = options;
+  const cancel = () => controller.abort(signal.reason);
+  let timer;
+  let onAbort;
+  if (signal?.aborted) cancel();
+  else signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    const cancelled = new Promise((_, reject) => {
+      onAbort = () => reject(controller.signal.reason);
+      controller.signal.addEventListener("abort", onAbort, { once: true });
+      if (controller.signal.aborted) onAbort();
+      timer = setTimeout(() => {
+        controller.abort(Object.assign(
+          new Error("การเชื่อมต่อใช้เวลานานเกินไป กรุณาลองใหม่"),
+          { code: "REQUEST_TIMEOUT" },
+        ));
+      }, timeoutMs);
+    });
+    return await Promise.race([
+      apiFetchRequest(path, { ...options, signal: controller.signal }),
+      cancelled,
+    ]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
+    controller.signal.removeEventListener("abort", onAbort);
+  }
+}
+
+async function apiFetchRequest(path, { method = "GET", body, token, signal, headers = {} } = {}) {
   const authToken = token ?? getAccessToken();
 
   let res = await fetch(`${API_URL}${path}`, {
@@ -74,12 +114,15 @@ export async function apiFetch(path, { method = "GET", body, token, signal } = {
     headers: {
       "Content-Type": "application/json",
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
 
   if (res.status === 401 && authToken) {
+    signal?.throwIfAborted();
     const newToken = await refreshAccessToken();
+    signal?.throwIfAborted();
     if (newToken) {
       res = await fetch(`${API_URL}${path}`, {
         signal,
@@ -87,6 +130,7 @@ export async function apiFetch(path, { method = "GET", body, token, signal } = {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${newToken}`,
+          ...headers,
         },
         body: body ? JSON.stringify(body) : undefined,
       });
@@ -113,6 +157,35 @@ export async function apiFetch(path, { method = "GET", body, token, signal } = {
       details: data?.details,
       data,
     });
+  }
+  return data;
+}
+
+export async function createReportWithEvidence({ targetId, productId, reviewId, category, reason, file }, token) {
+  const form = new FormData();
+  if (targetId) form.append("targetId", targetId);
+  if (productId) form.append("productId", productId);
+  if (reviewId) form.append("reviewId", reviewId);
+  if (category) form.append("category", category);
+  form.append("reason", reason);
+  if (file) form.append("file", file);
+  const path = "/api/auth/reports";
+  const send = (accessToken) => fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  let response = await send(token ?? getAccessToken());
+  if (response.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) response = await send(refreshed);
+  }
+  const data = await response.json().catch(() => null);
+  rejectSuspended(data);
+  if (!response.ok) {
+    if (response.status === 401) forceLogout();
+    const message = typeof data?.error === "object" ? data.error.message : data?.error;
+    throw new Error(message || `ส่งรายงานไม่สำเร็จ (${response.status})`);
   }
   return data;
 }
@@ -365,6 +438,8 @@ export async function getMarketingAuditLogs(params = {}, token) {
   if (params.entityId) query.set("entityId", params.entityId);
   if (params.actorId) query.set("actorId", params.actorId);
   if (params.actorRole) query.set("actorRole", params.actorRole);
+  if (params.actorQuery) query.set("actorQuery", params.actorQuery);
+  if (params.q) query.set("q", params.q);
   if (params.from) query.set("from", params.from);
   if (params.to) query.set("to", params.to);
   const qStr = query.toString() ? `?${query.toString()}` : "";

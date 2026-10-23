@@ -4,9 +4,18 @@ const prisma = require("../../models/prismaClient");
 const model = require("./ticketModel");
 const { toTicket } = require("./ticketShape");
 
+test("personal history selects resolved/closed tickets belonging to the current staff", () => {
+  const filter = model.queueFilter({ role: "TRUST_AND_SAFETY", scope: "history", assigneeId: "safety-1", status: "ESCALATED" });
+  assert.match(filter.sql, /assignee_id = .*responder_id = /);
+  assert.match(filter.sql, /s.code IN \('RESOLVED', 'CLOSED'\)/);
+  assert.ok(filter.values.includes("safety-1"));
+  assert.ok(!filter.values.includes("ESCALATED"));
+});
+
 test("admin queue includes closed/escalated while CS sees only own or unassigned cases", () => {
   const admin = model.queueFilter({ role: "ADMIN", scope: "all" });
-  assert.equal(admin.sql, "");
+  assert.match(admin.sql, /deleted_at IS NULL/);
+  assert.match(admin.sql, /archived_at IS NULL/);
   const staff = model.queueFilter({
     role: "CUSTOMER_SERVICE",
     scope: "all",
@@ -15,7 +24,13 @@ test("admin queue includes closed/escalated while CS sees only own or unassigned
   });
   assert.match(staff.sql, /assignment_id IS NULL OR a.assignee_id/);
   assert.match(staff.sql, /s.code <> 'ESCALATED'/);
-  assert.deepEqual(staff.values, ["agent-1", "agent-1", "agent-1", "%ref\\%und%", "%ref\\%und%"]);
+  assert.deepEqual(staff.values, [
+    "agent-1",
+    "agent-1",
+    "agent-1",
+    "%ref\\%und%",
+    "%ref\\%und%",
+  ]);
 });
 test("conversation repair accepts the same link but never replaces another room", async () => {
   const db = {
@@ -32,17 +47,43 @@ test("conversation repair accepts the same link but never replaces another room"
 });
 
 function chatDb(t, { existing = null } = {}) {
-  const records = { messages: [], audits: [], achieved: [] };
+  const records = { messages: [], receipts: [], audits: [], achieved: [] };
   const db = {
     supportTicket: {
       findUnique: async () => ({
         id: "ticket-1",
         requesterId: "buyer-1",
         chatLink: { conversationId: "conv-1" },
-        slaTargets: [{ id: "response-1", metricType: "FIRST_RESPONSE" }],
-        auditLog: [{ id: "round-1", action: "TICKET_OPENED", payload: {
-          cycle: 1, startedAt: "2026-10-06T00:00:00Z", targets: [{ id: "response-1", metricType: "FIRST_RESPONSE" }] } }],
+        slaTargets: [
+          {
+            id: "response-1",
+            metricType: "FIRST_RESPONSE",
+            round: {
+              id: "round-1",
+              cycle: 1,
+              startedAt: "2026-10-06T00:00:00Z",
+            },
+          },
+        ],
+        auditLog: [
+          {
+            id: "round-1",
+            action: "TICKET_OPENED",
+            payload: {
+              cycle: 1,
+              startedAt: "2026-10-06T00:00:00Z",
+              targets: [{ id: "response-1", metricType: "FIRST_RESPONSE" }],
+            },
+          },
+        ],
       }),
+    },
+    ticketChatMessageReceipt: {
+      findUnique: async () => existing,
+      create: async ({ data }) => {
+        records.receipts.push(data);
+        return data;
+      },
     },
     ticketSlaTarget: {
       updateMany: async (args) => {
@@ -141,21 +182,35 @@ test("API projection derives current assignee, SLA and lifecycle without exposin
     slaTargets: [
       {
         id: "response-1",
+        round: { id: "round-1", cycle: 1 },
         metricType: "FIRST_RESPONSE",
         dueAt: new Date(2000),
         achievedAt: new Date(100),
       },
       {
         id: "resolution-1",
+        round: { id: "round-1", cycle: 1 },
         metricType: "RESOLUTION",
         dueAt: new Date(3000),
         achievedAt: new Date(1000),
       },
     ],
     chatLink: { conversationId: "conv-1" },
-    auditLog: [{ id: "round-1", action: "TICKET_OPENED", payload: { cycle: 1,
-      targets: [{ id: "response-1", metricType: "FIRST_RESPONSE" }, { id: "resolution-1", metricType: "RESOLUTION" }] } }],
+    auditLog: [
+      {
+        id: "round-1",
+        action: "TICKET_OPENED",
+        payload: {
+          cycle: 1,
+          targets: [
+            { id: "response-1", metricType: "FIRST_RESPONSE" },
+            { id: "resolution-1", metricType: "RESOLUTION" },
+          ],
+        },
+      },
+    ],
     messages: [],
+    receipts: [],
   };
   const result = toTicket(row);
   assert.equal(result.status, "RESOLVED");

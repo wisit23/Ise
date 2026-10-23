@@ -25,6 +25,7 @@ const styleProfileRoutes = require("./features/styleProfile/styleProfileRoutes")
 const buyerAuditRoutes = require("./features/buyerAudit/buyerAuditRoutes");
 const restrictionRoutes = require("./features/commerceRestrictions/restrictionRoutes");
 const marketingMetricsRoutes = require("./features/metrics/marketingMetricsRoutes");
+const marketingAudienceRoutes = require("./features/marketingAudience/marketingAudienceRoutes");
 
 const prisma = require("./models/prismaClient");
 const authService = require("./services/authService");
@@ -86,6 +87,7 @@ app.get("/health", (req, res) =>
 app.use("/executive", metricsRoutes);
 app.use("/executive", executiveAuditRoutes);
 app.use("/marketing", marketingMetricsRoutes);
+app.use("/internal/marketing-audience", marketingAudienceRoutes);
 app.use("/internal", internalRoutes);
 app.use("/me/addresses", profileAddressRoutes);
 app.use("/me/style-profile", styleProfileRoutes);

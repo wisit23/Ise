@@ -388,6 +388,71 @@ async function decideChangeRequest(adminId, requestId, payload) {
   return shopChangeRequests.decide(adminId, requestId, payload);
 }
 
+/** Auto Messages (FAQ / Quick questions for buyer chat initiation) */
+async function listMyAutoMessages(sellerId) {
+  return prisma.autoMessage.findMany({
+    where: { userId: sellerId },
+    orderBy: { id: "asc" },
+  });
+}
+
+async function createAutoMessage(sellerId, { messageText, isActive = true }) {
+  if (!messageText || !messageText.trim()) {
+    throw badRequest("messageText is required");
+  }
+  return prisma.autoMessage.create({
+    data: {
+      userId: sellerId,
+      messageText: messageText.trim(),
+      isActive: Boolean(isActive),
+    },
+  });
+}
+
+async function updateAutoMessage(sellerId, messageId, { messageText, isActive }) {
+  const existing = await prisma.autoMessage.findFirst({
+    where: { id: messageId, userId: sellerId },
+  });
+  if (!existing) throw notFound("auto message not found");
+
+  const data = {};
+  if (messageText !== undefined) {
+    if (!messageText.trim()) throw badRequest("messageText cannot be empty");
+    data.messageText = messageText.trim();
+  }
+  if (isActive !== undefined) {
+    data.isActive = Boolean(isActive);
+  }
+
+  return prisma.autoMessage.update({
+    where: { id: messageId },
+    data,
+  });
+}
+
+async function deleteAutoMessage(sellerId, messageId) {
+  const existing = await prisma.autoMessage.findFirst({
+    where: { id: messageId, userId: sellerId },
+  });
+  if (!existing) throw notFound("auto message not found");
+
+  await prisma.autoMessage.delete({
+    where: { id: messageId },
+  });
+  return { success: true };
+}
+
+async function getPublicAutoMessages(sellerId) {
+  const messages = await prisma.autoMessage.findMany({
+    where: { userId: sellerId, isActive: true },
+    orderBy: { id: "asc" },
+  });
+  return messages.map((m) => ({
+    id: m.id,
+    messageText: m.messageText,
+  }));
+}
+
 module.exports = {
   register,
   login,
@@ -402,6 +467,11 @@ module.exports = {
   listMyChangeRequests,
   listPendingChangeRequests,
   decideChangeRequest,
+  listMyAutoMessages,
+  createAutoMessage,
+  updateAutoMessage,
+  deleteAutoMessage,
+  getPublicAutoMessages,
   getUserRoles,
   assignRole,
   removeRole,

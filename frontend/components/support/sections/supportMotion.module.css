@@ -63,15 +63,3 @@
     opacity: 0;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .table,
-  .indicator {
-    transition: none;
-  }
-  .drawer,
-  .drawerClosing,
-  .backdrop,
-  .backdropClosing {
-    animation: none;
-  }
-}

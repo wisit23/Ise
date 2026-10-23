@@ -40,7 +40,7 @@ it("uses the real USER_WARNED action and links back to user history", async () =
   apiFetch.mockResolvedValue({ items: [event], total: 1, totalPages: 1 });
   render(<AuditSection token="token" />);
 
-  expect(await screen.findByText("USER_WARNED")).toBeInTheDocument();
+  expect((await screen.findAllByText("ตักเตือนผู้ใช้")).length).toBeGreaterThan(0);
   expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
     "href",
     "/workspace?section=orders&userId=user-1",
@@ -60,16 +60,16 @@ it("queries each owner source separately and sends actor/target/date filters", a
   apiFetch.mockResolvedValue({ items: [], total: 0, totalPages: 1 });
   render(<AuditSection token="token" />);
 
-  fireEvent.click(screen.getByRole("tab", { name: "Hold / Release" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Escrow" }));
   await waitFor(() =>
     expect(
       apiFetch.mock.calls.some(([url]) => url.includes("kind=holds")),
     ).toBe(true),
   );
-  fireEvent.change(screen.getByLabelText("Actor ID"), {
+  fireEvent.change(screen.getByLabelText("รหัสผู้ดำเนินการ"), {
     target: { value: "staff-2" },
   });
-  fireEvent.change(screen.getByLabelText("Target ID"), {
+  fireEvent.change(screen.getByLabelText("รหัสรายการที่เกี่ยวข้อง"), {
     target: { value: "order-2" },
   });
   fireEvent.change(screen.getByLabelText("วันที่เริ่มต้น"), {
@@ -104,13 +104,13 @@ it("keeps a source failure distinct from an empty audit and retries it", async (
   render(<AuditSection token="token" />);
   expect(await screen.findByText(/auth offline/)).toBeInTheDocument();
   expect(
-    screen.queryByText("ไม่มี Audit ที่ตรงกับเงื่อนไขในแหล่งข้อมูลนี้"),
+    screen.queryByText("ไม่พบประวัติที่ตรงกับเงื่อนไข"),
   ).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "ลองใหม่" }));
   await waitFor(() => expect(calls).toBe(2));
   expect(
-    await screen.findByText("ไม่มี Audit ที่ตรงกับเงื่อนไขในแหล่งข้อมูลนี้"),
+    await screen.findByText("ไม่พบประวัติที่ตรงกับเงื่อนไข"),
   ).toBeInTheDocument();
 });
 
@@ -155,15 +155,15 @@ it("links Order and Support audit rows back to their owner records", async () =>
   });
 
   render(<AuditSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", { name: "Hold / Release" }));
-  expect(await screen.findByText("HOLD")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "Escrow" }));
+  expect((await screen.findAllByText("พักเงิน")).length).toBeGreaterThan(0);
   expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
     "href",
     "/workspace?section=orders&orderId=order-1",
   );
 
-  fireEvent.click(screen.getByRole("tab", { name: "สถานะ Ticket" }));
-  expect(await screen.findByText("STATUS_CHANGE")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "Tickets" }));
+  expect((await screen.findAllByText("เปลี่ยนสถานะ Ticket")).length).toBeGreaterThan(0);
   expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
     "href",
     "/workspace?section=tickets&case=ticket-1",

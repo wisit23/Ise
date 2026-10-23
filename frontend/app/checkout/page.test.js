@@ -31,7 +31,8 @@ jest.mock(
 );
 
 const push = jest.fn();
-const mockRouter = { push };
+const replace = jest.fn();
+const mockRouter = { push, replace };
 jest.mock("next/navigation", () => ({
   useRouter: () => mockRouter,
 }));
@@ -95,6 +96,116 @@ test("shows the Marketing voucher and its server-calculated order summary", asyn
   ).toHaveTextContent("SAVE200");
   expect(screen.getByText("ส่วนลดสินค้าชิ้นนี้ -฿200")).toBeInTheDocument();
   expect(screen.getByText("฿800")).toBeInTheDocument();
+});
+
+test("returns straight to the QR page when the order already has an open payment session", async () => {
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/order-1"
+      ? Promise.resolve({
+          ...ORDER,
+          checkoutSessionId: "session-1",
+          checkoutSession: { id: "session-1", status: "pending" },
+        })
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+  await waitFor(() =>
+    expect(replace).toHaveBeenCalledWith("/payment/session-1"),
+  );
+  expect(screen.queryByText("สมชาย ใจดี")).not.toBeInTheDocument();
+});
+
+test("stays on checkout when the previous payment session is no longer pending", async () => {
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/order-1"
+      ? Promise.resolve({
+          ...ORDER,
+          checkoutSessionId: "session-0",
+          checkoutSession: { id: "session-0", status: "expired" },
+        })
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+  await screen.findByText("สมชาย ใจดี");
+  expect(replace).not.toHaveBeenCalled();
+});
+
+test("shows an expired auction message without a payment action for a cancelled winner order", async () => {
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/order-1"
+      ? Promise.resolve({
+          ...ORDER,
+          orderType: "AUCTION",
+          auctionId: "auction-1",
+          status: "cancelled",
+          reservationExpiresAt: null,
+          checkoutSessionId: "expired-winner-session",
+          checkoutSession: { id: "expired-winner-session", status: "pending" },
+        })
+      : original(path, options),
+  );
+
+  render(<CheckoutPage />);
+
+  expect(
+    await screen.findByRole("heading", {
+      name: "สิทธิ์ในการชำระเงินสิ้นสุดแล้ว",
+    }),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/ไม่ได้ชำระเงินภายใน 24 ชั่วโมง/)).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "ยืนยันและไปสแกน QR" }),
+  ).not.toBeInTheDocument();
+  expect(replace).not.toHaveBeenCalled();
+  expect(screen.getByRole("link", { name: "ดูประวัติคำสั่งซื้อ" })).toHaveAttribute(
+    "href",
+    "/orders",
+  );
+});
+
+test("entering checkout creates orders from cart reservations before confirming payment", async () => {
+  window.history.replaceState(null, "", "/checkout?items=basket-1");
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/cart/prepare"
+      ? Promise.resolve({ items: [ORDER] })
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+  await screen.findByText("สมชาย ใจดี");
+  expect(apiFetch).toHaveBeenCalledWith("/api/orders/cart/prepare", {
+    method: "POST",
+    token: "buyer-token",
+    body: { basketIds: ["basket-1"] },
+  });
+  expect(
+    apiFetch.mock.calls.some(
+      ([path]) => path === "/api/orders/checkout-sessions",
+    ),
+  ).toBe(false);
+});
+
+test("checkout can combine cart reservations with an existing auction order", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/checkout?items=basket-1&orders=order-1",
+  );
+  const original = apiFetch.getMockImplementation();
+  apiFetch.mockImplementation((path, options) =>
+    path === "/api/orders/cart/prepare"
+      ? Promise.resolve({
+          items: [{ ...ORDER, id: "order-new", productTitle: "New cart item" }],
+        })
+      : original(path, options),
+  );
+  render(<CheckoutPage />);
+  await screen.findByText("สมชาย ใจดี");
+  expect(screen.getAllByText("New cart item").length).toBeGreaterThan(0);
+  expect(screen.getAllByText(ORDER.productTitle).length).toBeGreaterThan(0);
 });
 
 test("chooses separate vouchers for two products and totals only the updated item", async () => {

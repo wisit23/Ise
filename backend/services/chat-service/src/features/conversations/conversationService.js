@@ -146,6 +146,7 @@ async function getForParticipant(conversationId, userId, { write = false } = {})
 async function listInbox(userId, filter = {}) {
   const conversations = await conversationModel.listForParticipant(userId, filter);
   const accessible = await Promise.all(conversations.map(async (conversation) => {
+    if (conversation.contextType?.startsWith("DISPUTE")) return null;
     const participant = conversation.participants.find((p) => p.userId === userId && !p.leftAt);
     if (!participant) return null;
     const access = await getCaseAccess(conversation, userId, participant.role);

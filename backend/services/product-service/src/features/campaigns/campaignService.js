@@ -1,16 +1,52 @@
 const { badRequest, forbidden, notFound, conflict } = require("@reloop/shared");
 const defaultRepository = require("./campaignRepository");
 const defaultPrisma = require("../../models/prismaClient");
+const defaultChatClient = require("../auctions/chatClient");
+const defaultAudienceService = require("../interestAudience/interestAudienceService");
+const defaultAudienceRepository = require("../interestAudience/interestAudienceRepository");
+const { lockCampaign } = require("./campaignBudget");
 const { recordMarketingAudit } = require("../audit/marketingAuditService");
 const {
   validateSegmentRule,
   matchesSegment,
 } = require("../segments/segmentRule");
 
+const CAMPAIGN_BUDGET_EXHAUSTED_MESSAGE =
+  "วงเงินส่วนลดของคูปองนี้ถูกใช้ครบแล้ว";
+const CHECKOUT_BUDGET_EXHAUSTED_MESSAGE =
+  "วงเงินส่วนลดของคูปองนี้ถูกใช้ครบแล้ว กรุณาเลือกคูปองอื่นหรือดำเนินการต่อโดยไม่ใช้คูปอง";
+const VOUCHER_BUDGET_INSUFFICIENT_MESSAGE =
+  "โค้ดนี้ใช้ไม่ได้กับสินค้านี้ เพราะวงเงินส่วนลดของแคมเปญคงเหลือไม่เพียงพอ";
+
+function availableCampaignBudget(campaign) {
+  if (campaign.budget === null || campaign.budget === undefined) return null;
+  return Math.max(
+    0,
+    Number(campaign.budget) -
+      Number(campaign.spentBudget || 0) -
+      Number(campaign.reservedBudget || 0),
+  );
+}
+
+function campaignUnavailableMessage(campaign, { checkout = false } = {}) {
+  if (campaign?.endReason === "BUDGET_EXHAUSTED") {
+    return checkout
+      ? CHECKOUT_BUDGET_EXHAUSTED_MESSAGE
+      : CAMPAIGN_BUDGET_EXHAUSTED_MESSAGE;
+  }
+  if (campaign?.endReason === "ADMIN_CLOSED") {
+    return "คูปองถูกปิดโดยผู้ดูแล";
+  }
+  if (campaign?.endReason === "USAGE_LIMIT_REACHED") {
+    return "สิทธิ์คูปองถูกใช้ครบแล้ว";
+  }
+  return "คูปองหมดอายุแล้ว";
+}
+
 const TRANSITIONS = {
   draft: ["pending_approval"],
   pending_approval: ["approved", "rejected"],
-  approved: ["published"],
+  approved: ["published", "ended"],
   published: ["ended"],
   ended: [],
   rejected: [],
@@ -24,6 +60,14 @@ function assertTransition(campaign, to) {
   if (!canTransition(campaign.status, to)) {
     throw conflict(`cannot move campaign from ${campaign.status} to ${to}`);
   }
+}
+
+function audienceCriteriaKey(criteria) {
+  return JSON.stringify(
+    criteria
+      ? defaultAudienceService.normalizeAudienceCriteria(criteria)
+      : null,
+  );
 }
 
 function assertMarketingOrAdmin(user) {
@@ -136,12 +180,54 @@ function validateCampaignInput(input, { isUpdate = false } = {}) {
   if (input.targetSegment !== undefined && input.targetSegment !== null) {
     validateSegmentRule(input.targetSegment);
   }
+  if (input.audienceCriteria !== undefined && input.audienceCriteria !== null) {
+    defaultAudienceService.normalizeAudienceCriteria(input.audienceCriteria);
+  }
+  if (input.targetSegment && input.audienceCriteria) {
+    throw badRequest(
+      "เลือกกลุ่มเป้าหมายได้เพียงแบบโปรไฟล์เดิมหรือแบบคะแนนความสนใจอย่างใดอย่างหนึ่ง",
+    );
+  }
+}
+
+function validateCampaignFinancialRules({
+  discountType,
+  discountValue,
+  minOrderPrice,
+  budget,
+  usageLimit,
+}) {
+  if (
+    discountType === "FIXED" &&
+    Number(discountValue) >= Number(minOrderPrice || 0)
+  ) {
+    throw badRequest(
+      "ส่วนลดคงที่ต้องน้อยกว่ายอดซื้อขั้นต่ำ เพื่อไม่ให้ยอดชำระเป็นศูนย์หรือติดลบ",
+    );
+  }
+  if (
+    discountType === "FIXED" &&
+    budget !== null &&
+    budget !== undefined &&
+    usageLimit !== null &&
+    usageLimit !== undefined &&
+    Number(budget) < Number(usageLimit) * Number(discountValue)
+  ) {
+    throw badRequest(
+      "งบประมาณต้องไม่น้อยกว่าจำนวนสิทธิ์คูณส่วนลดคงที่ต่อครั้ง",
+    );
+  }
 }
 
 function createCampaignService(
   repository = defaultRepository,
   prismaClient = defaultPrisma,
+  dependencies = {},
 ) {
+  const audienceService = dependencies.audienceService || defaultAudienceService;
+  const audienceRepository =
+    dependencies.audienceRepository || defaultAudienceRepository;
+  const chatClient = dependencies.chatClient || defaultChatClient;
   function runInTransaction(fn) {
     if (repository.transaction) {
       return repository.transaction(fn);
@@ -155,9 +241,23 @@ function createCampaignService(
     return campaign;
   }
 
+  async function isAudienceEligible(campaign, userId, profile) {
+    if (campaign.audienceCriteria) {
+      return audienceRepository.isCampaignAudienceMember(campaign.id, userId);
+    }
+    return matchesSegment(profile, campaign.targetSegment);
+  }
+
   async function createDraft({ user, input }) {
     assertMarketingOrAdmin(user);
     validateCampaignInput(input, { isUpdate: false });
+    validateCampaignFinancialRules({
+      discountType: input.discountType || "PERCENT",
+      discountValue: Number(input.discountValue),
+      minOrderPrice: Number(input.minOrderPrice || 0),
+      budget: input.budget ?? null,
+      usageLimit: input.usageLimit ?? null,
+    });
 
     const code = input.code.trim().toUpperCase();
     const existing = await repository.findByCode(code);
@@ -193,6 +293,9 @@ function createCampaignService(
       endsAt: new Date(input.endsAt),
       createdById: user.id,
       targetSegment: input.targetSegment || null,
+      audienceCriteria: input.audienceCriteria
+        ? audienceService.normalizeAudienceCriteria(input.audienceCriteria)
+        : null,
     };
 
     return runInTransaction(async (tx) => {
@@ -257,6 +360,22 @@ function createCampaignService(
     if (input.endsAt !== undefined) data.endsAt = new Date(input.endsAt);
     if (input.targetSegment !== undefined)
       data.targetSegment = input.targetSegment;
+    if (input.audienceCriteria !== undefined) {
+      data.audienceCriteria = input.audienceCriteria
+        ? audienceService.normalizeAudienceCriteria(input.audienceCriteria)
+        : null;
+    }
+    const effectiveTargetSegment = Object.hasOwn(data, "targetSegment")
+      ? data.targetSegment
+      : campaign.targetSegment;
+    const effectiveAudienceCriteria = Object.hasOwn(data, "audienceCriteria")
+      ? data.audienceCriteria
+      : campaign.audienceCriteria;
+    if (effectiveTargetSegment && effectiveAudienceCriteria) {
+      throw badRequest(
+        "เลือกกลุ่มเป้าหมายได้เพียงแบบโปรไฟล์เดิมหรือแบบคะแนนความสนใจอย่างใดอย่างหนึ่ง",
+      );
+    }
 
     // Validate dates combination if either changed
     const newStart = data.startsAt
@@ -296,6 +415,17 @@ function createCampaignService(
     ) {
       throw badRequest("percent discountValue must be between 1 and 100");
     }
+    validateCampaignFinancialRules({
+      discountType: effectiveType,
+      discountValue: effectiveValue,
+      minOrderPrice:
+        data.minOrderPrice !== undefined
+          ? data.minOrderPrice
+          : campaign.minOrderPrice,
+      budget: data.budget !== undefined ? data.budget : campaign.budget,
+      usageLimit:
+        data.usageLimit !== undefined ? data.usageLimit : campaign.usageLimit,
+    });
 
     return runInTransaction(async (tx) => {
       const updated = await repository.updateCampaign(campaignId, data, { tx });
@@ -332,6 +462,7 @@ function createCampaignService(
     assertMarketingOrAdmin(user);
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "pending_approval");
+    validateCampaignFinancialRules(campaign);
 
     return runInTransaction(async (tx) => {
       const updated = await repository.updateCampaign(
@@ -427,26 +558,62 @@ function createCampaignService(
     assertMarketingOrAdmin(user);
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "published");
+    validateCampaignFinancialRules(campaign);
 
     const now = new Date();
     if (new Date(campaign.endsAt) <= now) {
       throw badRequest("ไม่สามารถเผยแพร่แคมเปญได้เนื่องจากแคมเปญหมดอายุแล้ว");
     }
     if (
-      campaign.budget !== null &&
-      campaign.budget !== undefined &&
-      (campaign.spentBudget || 0) >= campaign.budget
+      availableCampaignBudget(campaign) !== null &&
+      availableCampaignBudget(campaign) <= 0
     ) {
       throw badRequest(
         "ไม่สามารถเผยแพร่แคมเปญได้เนื่องจากงบประมาณถูกใช้เต็มจำนวนแล้ว",
       );
     }
 
-    return runInTransaction(async (tx) => {
+    const audienceSnapshot = campaign.audienceCriteria
+      ? await audienceService.snapshot(campaign.audienceCriteria)
+      : null;
+    if (audienceSnapshot && audienceSnapshot.members.length === 0) {
+      throw badRequest(
+        "ไม่สามารถเผยแพร่แคมเปญได้ เนื่องจากไม่พบผู้ซื้อในช่วงคะแนนที่เลือก",
+      );
+    }
+
+    const snapshotAt = audienceSnapshot ? new Date() : null;
+    const result = await runInTransaction(async (tx) => {
+      if (tx?.$queryRaw) {
+        await lockCampaign(tx, campaignId);
+      }
+      const lockedCampaign = await loadCampaign(campaignId, { tx });
+      assertTransition(lockedCampaign, "published");
+      if (
+        audienceCriteriaKey(lockedCampaign.audienceCriteria) !==
+        audienceCriteriaKey(audienceSnapshot?.criteria)
+      ) {
+        throw conflict(
+          "กลุ่มเป้าหมายของแคมเปญถูกแก้ไขระหว่างเผยแพร่ กรุณาลองใหม่อีกครั้ง",
+        );
+      }
+      if (audienceSnapshot) {
+        await audienceRepository.replaceCampaignAudience(
+          campaignId,
+          audienceSnapshot.members,
+          { tx },
+        );
+      }
       const updated = await repository.updateCampaign(
         campaignId,
         {
           status: "published",
+          ...(audienceSnapshot
+            ? {
+                audienceCriteria: audienceSnapshot.criteria,
+                audienceSnapshotAt: snapshotAt,
+              }
+            : {}),
         },
         { tx },
       );
@@ -457,17 +624,54 @@ function createCampaignService(
           action: "CAMPAIGN_PUBLISH",
           entityType: "CAMPAIGN",
           entityId: campaignId,
-          previousState: campaign,
+          previousState: lockedCampaign,
           newState: updated,
+          metadata: audienceSnapshot
+            ? {
+                audienceSize: audienceSnapshot.members.length,
+                scoreRange: {
+                  min: audienceSnapshot.criteria.minScore,
+                  max: audienceSnapshot.criteria.maxScore,
+                },
+              }
+            : null,
         },
         { tx },
       );
       return updated;
     });
+
+    let notificationResult = null;
+    if (audienceSnapshot && chatClient?.notifyCampaignAudience) {
+      try {
+        notificationResult = await chatClient.notifyCampaignAudience({
+          campaign: result,
+          userIds: audienceSnapshot.members.map((member) => member.userId),
+        });
+      } catch {
+        notificationResult = {
+          deliveredCount: 0,
+          failedCount: audienceSnapshot.members.length,
+          warnings: ["ไม่สามารถส่งการแจ้งเตือนแคมเปญได้ในขณะนี้"],
+        };
+      }
+    }
+
+    return notificationResult
+      ? {
+          ...result,
+          notifiedAudienceCount: notificationResult.deliveredCount,
+          notificationWarnings: notificationResult.warnings,
+        }
+      : result;
   }
 
-  async function endCampaign({ user, campaignId }) {
+  async function endCampaign({ user, campaignId, reason }) {
     assertMarketingOrAdmin(user);
+    const normalizedReason = typeof reason === "string" ? reason.trim() : "";
+    if (!normalizedReason) {
+      throw badRequest("กรุณาระบุเหตุผลที่ปิดแคมเปญ");
+    }
     const campaign = await loadCampaign(campaignId);
     assertTransition(campaign, "ended");
 
@@ -476,6 +680,8 @@ function createCampaignService(
         campaignId,
         {
           status: "ended",
+          endedAt: new Date(),
+          endReason: "ADMIN_CLOSED",
         },
         { tx },
       );
@@ -496,6 +702,7 @@ function createCampaignService(
           entityId: campaignId,
           previousState: campaign,
           newState: updated,
+          metadata: { reason: normalizedReason },
         },
         { tx },
       );
@@ -503,7 +710,7 @@ function createCampaignService(
     });
   }
 
-  async function getCampaign({ user, campaignId }) {
+  async function getCampaign({ user, campaignId, profile = null }) {
     const campaign = await loadCampaign(campaignId);
 
     const isMarketing = Boolean(
@@ -515,7 +722,8 @@ function createCampaignService(
       if (
         campaign.status !== "published" ||
         now < new Date(campaign.startsAt) ||
-        now > new Date(campaign.endsAt)
+        now > new Date(campaign.endsAt) ||
+        !(await isAudienceEligible(campaign, user?.id, profile))
       ) {
         throw notFound("campaign not found");
       }
@@ -529,19 +737,30 @@ function createCampaignService(
     return repository.listCampaigns({ status, search, skip, take });
   }
 
-  async function listAvailablePublicCampaigns({ profile } = {}) {
+  async function listAvailablePublicCampaigns({ userId, profile } = {}) {
     const campaigns = await repository.listAvailableCampaigns();
-    return campaigns.filter((c) => matchesSegment(profile, c.targetSegment));
+    const scoreTargetedIds = campaigns
+      .filter((campaign) => campaign.audienceCriteria)
+      .map((campaign) => campaign.id);
+    const eligibleIds = await audienceRepository.eligibleCampaignIds(
+      scoreTargetedIds,
+      userId,
+    );
+    return campaigns.filter((campaign) =>
+      campaign.audienceCriteria
+        ? eligibleIds.has(campaign.id)
+        : matchesSegment(profile, campaign.targetSegment),
+    );
   }
 
-  async function claimVoucher({ user, campaignId }) {
+  async function claimVoucher({ user, campaignId, profile = null }) {
     if (!user || !user.id) {
       throw badRequest("user authentication required");
     }
 
     const campaign = await loadCampaign(campaignId);
     if (campaign.status !== "published") {
-      throw conflict("campaign is not published");
+      throw conflict(campaignUnavailableMessage(campaign));
     }
 
     const now = new Date();
@@ -549,15 +768,17 @@ function createCampaignService(
       throw badRequest("campaign has not started yet");
     }
     if (now > new Date(campaign.endsAt)) {
-      throw badRequest("campaign has expired");
+      throw badRequest("คูปองหมดอายุแล้ว");
+    }
+    if (!(await isAudienceEligible(campaign, user.id, profile))) {
+      throw forbidden("บัญชีนี้ไม่อยู่ในกลุ่มเป้าหมายของคูปอง");
     }
 
     if (
-      campaign.budget !== null &&
-      campaign.budget !== undefined &&
-      (campaign.spentBudget || 0) >= campaign.budget
+      availableCampaignBudget(campaign) !== null &&
+      availableCampaignBudget(campaign) <= 0
     ) {
-      throw conflict("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
+      throw conflict(CAMPAIGN_BUDGET_EXHAUSTED_MESSAGE);
     }
 
     const existing = await repository.findVoucher(user.id, campaignId);
@@ -570,7 +791,7 @@ function createCampaignService(
       campaign.usageLimit !== undefined &&
       campaign.usedCount >= campaign.usageLimit
     ) {
-      throw conflict("campaign usage limit reached");
+      throw conflict("สิทธิ์คูปองถูกใช้ครบแล้ว");
     }
 
     try {
@@ -607,7 +828,13 @@ function createCampaignService(
     return repository.listUserVouchers(user.id, { status });
   }
 
-  async function getApplicableVouchers({ user, price, category, profile }) {
+  async function getApplicableVouchers({
+    user,
+    price,
+    category,
+    profile,
+    includeUnavailable = false,
+  }) {
     if (!user || !user.id) {
       throw badRequest("user authentication required");
     }
@@ -626,22 +853,72 @@ function createCampaignService(
 
     const now = new Date();
     const applicable = [];
+    const unavailable = [];
+
+    function addUnavailable(voucher, reasonCode, reasonMessage) {
+      if (!includeUnavailable) return;
+      unavailable.push({
+        ...voucher,
+        eligible: false,
+        reasonCode,
+        reasonMessage,
+      });
+    }
 
     for (const v of vouchers) {
-      if (v.usedOrderId) continue;
-      const camp = v.campaign;
-      if (!camp) continue;
-      if (camp.status !== "published") continue;
-      if (camp.startsAt > now || camp.endsAt < now) continue;
-      if (
-        camp.budget !== null &&
-        camp.budget !== undefined &&
-        (camp.spentBudget || 0) >= camp.budget
-      ) {
+      if (v.usedOrderId) {
+        addUnavailable(
+          v,
+          "VOUCHER_HELD",
+          "โค้ดนี้ถูกใช้กับรายการสินค้าอื่นที่รอชำระเงินอยู่",
+        );
         continue;
       }
-      if (orderPrice < camp.minOrderPrice) continue;
-      if (!matchesSegment(profile, camp.targetSegment)) continue;
+      const camp = v.campaign;
+      if (!camp) continue;
+      if (camp.status !== "published") {
+        addUnavailable(
+          v,
+          "CAMPAIGN_INACTIVE",
+          campaignUnavailableMessage(camp),
+        );
+        continue;
+      }
+      if (camp.startsAt > now) {
+        addUnavailable(v, "CAMPAIGN_NOT_STARTED", "คูปองยังไม่เริ่มใช้งาน");
+        continue;
+      }
+      if (camp.endsAt < now) {
+        addUnavailable(v, "CAMPAIGN_EXPIRED", "คูปองหมดอายุแล้ว");
+        continue;
+      }
+      if (
+        availableCampaignBudget(camp) !== null &&
+        availableCampaignBudget(camp) <= 0
+      ) {
+        addUnavailable(
+          v,
+          "BUDGET_EXHAUSTED",
+          CAMPAIGN_BUDGET_EXHAUSTED_MESSAGE,
+        );
+        continue;
+      }
+      if (orderPrice < camp.minOrderPrice) {
+        addUnavailable(
+          v,
+          "MIN_ORDER_NOT_MET",
+          `ต้องมียอดซื้อขั้นต่ำ ฿${Number(camp.minOrderPrice).toLocaleString("th-TH")} จึงจะใช้โค้ดนี้ได้`,
+        );
+        continue;
+      }
+      if (!(await isAudienceEligible(camp, user.id, profile))) {
+        addUnavailable(
+          v,
+          "SEGMENT_MISMATCH",
+          "บัญชีนี้ไม่อยู่ในกลุ่มเป้าหมายของคูปอง",
+        );
+        continue;
+      }
 
       if (camp.applicableCategory) {
         if (
@@ -649,6 +926,11 @@ function createCampaignService(
           camp.applicableCategory.trim().toLowerCase() !==
             category.trim().toLowerCase()
         ) {
+          addUnavailable(
+            v,
+            "CATEGORY_MISMATCH",
+            `โค้ดนี้ใช้ได้เฉพาะหมวด ${camp.applicableCategory}`,
+          );
           continue;
         }
       }
@@ -663,17 +945,32 @@ function createCampaignService(
         estimatedDiscount = Math.min(camp.discountValue, orderPrice);
       }
 
-      applicable.push({
+      const availableBudget = availableCampaignBudget(camp);
+      if (availableBudget !== null && estimatedDiscount > availableBudget) {
+        addUnavailable(
+          v,
+          "BUDGET_INSUFFICIENT",
+          VOUCHER_BUDGET_INSUFFICIENT_MESSAGE,
+        );
+        continue;
+      }
+
+      const applicableVoucher = {
         ...v,
         estimatedDiscount,
         finalPrice: Math.max(0, orderPrice - estimatedDiscount),
-      });
+      };
+      applicable.push(
+        includeUnavailable
+          ? { ...applicableVoucher, eligible: true }
+          : applicableVoucher,
+      );
     }
 
     // Sort highest discount first
     applicable.sort((a, b) => b.estimatedDiscount - a.estimatedDiscount);
 
-    return applicable;
+    return includeUnavailable ? { applicable, unavailable } : applicable;
   }
 
   async function holdVoucher({ user, campaignId, orderId }) {
@@ -697,13 +994,23 @@ function createCampaignService(
     return repository.releaseVoucher({ userId: user.id, campaignId, orderId });
   }
 
-  async function completeVoucher({ user, campaignId, orderId }) {
+  async function completeVoucher({
+    user,
+    campaignId,
+    orderId,
+    discountAmount = 0,
+  }) {
     if (!user || !user.id) throw badRequest("user authentication required");
     if (!campaignId) throw badRequest("campaignId is required");
     const voucher = await repository.findVoucher(user.id, campaignId);
     if (!voucher) throw notFound("voucher not found in user wallet");
     if (voucher.status === "USED") return voucher;
-    return repository.completeVoucher({ userId: user.id, campaignId, orderId });
+    return repository.completeVoucher({
+      userId: user.id,
+      campaignId,
+      orderId,
+      discountAmount,
+    });
   }
 
   async function validateAndCalculateDiscount({
@@ -725,17 +1032,19 @@ function createCampaignService(
 
     const now = new Date();
     if (campaign.status !== "published") {
-      throw badRequest(`campaign is not active (status: ${campaign.status})`);
+      throw badRequest(campaignUnavailableMessage(campaign));
     }
-    if (now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) {
-      throw badRequest("campaign is outside of its active date window");
+    if (now < new Date(campaign.startsAt)) {
+      throw badRequest("คูปองยังไม่เริ่มใช้งาน");
+    }
+    if (now > new Date(campaign.endsAt)) {
+      throw badRequest("คูปองหมดอายุแล้ว");
     }
     if (
-      campaign.budget !== null &&
-      campaign.budget !== undefined &&
-      (campaign.spentBudget || 0) >= campaign.budget
+      availableCampaignBudget(campaign) !== null &&
+      availableCampaignBudget(campaign) <= 0
     ) {
-      throw badRequest("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
+      throw badRequest(CHECKOUT_BUDGET_EXHAUSTED_MESSAGE);
     }
 
     if (userId) {
@@ -780,6 +1089,11 @@ function createCampaignService(
       discountAmount = Math.min(campaign.discountValue, numericPrice);
     }
 
+    const availableBudget = availableCampaignBudget(campaign);
+    if (availableBudget !== null && discountAmount > availableBudget) {
+      throw conflict(CHECKOUT_BUDGET_EXHAUSTED_MESSAGE);
+    }
+
     const finalPrice = Math.max(0, numericPrice - discountAmount);
 
     return {
@@ -803,6 +1117,11 @@ function createCampaignService(
       throw badRequest("user has not claimed this voucher");
     }
     if (voucher.status !== "CLAIMED") {
+      if (voucher.status === "EXPIRED") {
+        throw badRequest(
+          campaignUnavailableMessage(voucher.campaign, { checkout: true }),
+        );
+      }
       throw badRequest(`voucher is already ${voucher.status}`);
     }
     if (voucher.usedOrderId && voucher.usedOrderId !== orderId) {
@@ -837,17 +1156,21 @@ function createCampaignService(
       throw notFound("campaign not found");
     }
     if (campaign.status !== "published") {
-      throw badRequest(`campaign is not active (status: ${campaign.status})`);
+      throw badRequest(
+        campaignUnavailableMessage(campaign, { checkout: true }),
+      );
     }
-    if (now < new Date(campaign.startsAt) || now > new Date(campaign.endsAt)) {
-      throw badRequest("campaign is outside of its active date window");
+    if (now < new Date(campaign.startsAt)) {
+      throw badRequest("คูปองยังไม่เริ่มใช้งาน");
+    }
+    if (now > new Date(campaign.endsAt)) {
+      throw badRequest("คูปองหมดอายุแล้ว");
     }
     if (
-      campaign.budget !== null &&
-      campaign.budget !== undefined &&
-      (campaign.spentBudget || 0) >= campaign.budget
+      availableCampaignBudget(campaign) !== null &&
+      availableCampaignBudget(campaign) <= 0
     ) {
-      throw badRequest("งบประมาณแคมเปญถูกใช้เต็มจำนวนแล้ว");
+      throw badRequest(CHECKOUT_BUDGET_EXHAUSTED_MESSAGE);
     }
     if (campaign.minOrderPrice && product.price < campaign.minOrderPrice) {
       throw badRequest(
@@ -856,8 +1179,11 @@ function createCampaignService(
     }
     if (campaign.applicableCategory && product.category) {
       if (
-        !(product.categories || [product.category]).some((name) =>
-          name.trim().toLowerCase() === campaign.applicableCategory.trim().toLowerCase())
+        !(product.categories || [product.category]).some(
+          (name) =>
+            name.trim().toLowerCase() ===
+            campaign.applicableCategory.trim().toLowerCase(),
+        )
       ) {
         throw badRequest(
           `voucher is only applicable for category: ${campaign.applicableCategory}`,
@@ -879,13 +1205,30 @@ function createCampaignService(
     }
     const finalPrice = Math.max(0, product.price - discountAmount);
 
+    const availableBudget = availableCampaignBudget(campaign);
+    if (availableBudget !== null && discountAmount > availableBudget) {
+      throw conflict(CHECKOUT_BUDGET_EXHAUSTED_MESSAGE);
+    }
+
     // 5. Concurrency protection: Atomic Hold
-    const held = await repository.holdVoucherWithLock({
-      userId,
-      campaignId,
-      orderId,
-    });
-    if (!held) {
+    const reservation = repository.reserveVoucherBudget
+      ? await repository.reserveVoucherBudget({
+          userId,
+          campaignId,
+          orderId,
+          discountAmount,
+        })
+      : {
+          held: await repository.holdVoucherWithLock({
+            userId,
+            campaignId,
+            orderId,
+          }),
+        };
+    if (!reservation.held) {
+      if (reservation.reason === "BUDGET_EXHAUSTED") {
+        throw conflict(CHECKOUT_BUDGET_EXHAUSTED_MESSAGE);
+      }
       throw conflict(
         "voucher is currently held by another order or already used",
       );

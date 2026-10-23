@@ -2,6 +2,7 @@ const repository = require("./recommendationRepository");
 const styleProfileClient = require("./styleProfileClient");
 const behaviorRepository = require("./behaviorRepository");
 const purchaseHistoryClient = require("./purchaseHistoryClient");
+const shopSearchClient = require("../../services/shopSearchClient");
 const { normalizeProfile, hasPreferences } = require("./recommendationRules");
 const { isCustomerAccount } = require("@reloop/shared");
 
@@ -10,6 +11,7 @@ function createRecommendationService({
   profiles = styleProfileClient,
   behaviors = behaviorRepository,
   purchases = purchaseHistoryClient,
+  shops = shopSearchClient,
 } = {}) {
   async function list({
     userId,
@@ -52,13 +54,23 @@ function createRecommendationService({
     } else if (userId) {
       fallbackReason = "non-customer";
     }
+    // Resolve shop names before SQL filtering/pagination, not on the returned page.
+    let matchingSellerIds = [];
+    if (filters.q) {
+      try {
+        matchingSellerIds = await shops.findSellerIds(filters.q);
+      } catch (err) {
+        unavailableSources.push("shops");
+        console.warn("[shopSearch] Shop lookup failed:", err.message);
+      }
+    }
     const result = await products.list({
       profile,
       behavior,
       userId,
       skip,
       take,
-      filters,
+      filters: { ...filters, matchingSellerIds },
       seed,
     });
     if (!fallbackReason && result.matchedTotal === 0)

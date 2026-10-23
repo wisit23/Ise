@@ -15,6 +15,9 @@ async function createOrderFromAuction({
   sellerId,
   buyerId,
   price,
+  auctionBidId,
+  paymentDeadlineAt,
+  previousOrderId,
 }) {
   let res;
   try {
@@ -31,6 +34,9 @@ async function createOrderFromAuction({
         sellerId,
         buyerId,
         price,
+        auctionBidId,
+        paymentDeadlineAt,
+        previousOrderId,
       }),
     });
   } catch {

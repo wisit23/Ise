@@ -31,7 +31,15 @@ async function changeHold(
     const order = await tx.order.findUnique({ where: { id: orderId } });
     if (!order) throw notFound("order not found");
     if (
-      !["confirmed", "shipped", "completed", "disputed"].includes(order.status)
+      ![
+        "paid",
+        "confirmed",
+        "ready_to_ship",
+        "shipped",
+        "delivered",
+        "completed",
+        "disputed",
+      ].includes(order.status)
     )
       throw conflict("order cannot be placed on hold");
     const changed = await tx.order.updateMany({

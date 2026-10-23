@@ -8,6 +8,7 @@ import Footer from "../../../../components/Footer";
 import MediaUploader from "../../../../components/MediaUploader";
 import TagInput from "../../../../components/TagInput";
 import Select from "../../../../components/ui/Select";
+import ConfirmDialog from "../../../../components/ui/ConfirmDialog";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 import { fetchCategories, fetchConditions } from "../../../../lib/catalog";
@@ -28,6 +29,7 @@ export default function EditProductPage() {
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     if (!getAccessToken()) {
@@ -132,18 +134,15 @@ export default function EditProductPage() {
     product?.status === "reserved" ||
     (product?.status === "hidden" && product?.preRemovalStatus === "reserved");
 
-  async function handleDelete() {
+  function handleDeleteClick() {
     if (deletionBlocked) {
       setError("ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้");
       return;
     }
-    if (
-      !confirm(
-        "คุณต้องการลบสินค้านี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้",
-      )
-    ) {
-      return;
-    }
+    setShowDeleteModal(true);
+  }
+
+  async function handleConfirmDelete() {
     const token = getAccessToken();
     if (!token) {
       router.push("/login");
@@ -156,10 +155,13 @@ export default function EditProductPage() {
         method: "DELETE",
         token,
       });
-      router.push(`/store/${user.id}`);
+      setShowDeleteModal(false);
+      const sellerId = user?.id || product?.sellerId;
+      router.push(sellerId ? `/store/${sellerId}` : "/seller/dashboard");
     } catch (err) {
       setError(err.message);
       setLoading(false);
+      setShowDeleteModal(false);
     }
   }
 
@@ -249,7 +251,7 @@ export default function EditProductPage() {
             href="/seller/dashboard"
             className="mt-4 inline-block rounded-md bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
           >
-            กลับไปแดชบอร์ดผู้ขาย
+            กลับไป My Store
           </Link>
         </section>
         <Footer />
@@ -421,7 +423,7 @@ export default function EditProductPage() {
             <button
               type="button"
               disabled={loading || deletionBlocked}
-              onClick={handleDelete}
+              onClick={handleDeleteClick}
               className="rounded-md border border-red-200 bg-red-50 px-4 py-2.5 text-center font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
             >
               ลบสินค้า
@@ -457,6 +459,20 @@ export default function EditProductPage() {
           </div>
         </form>
       </section>
+
+      {/* ── Confirmation Modal for Deleting Product ── */}
+      <ConfirmDialog
+        open={showDeleteModal}
+        title="ยืนยันการลบสินค้า"
+        description={`คุณแน่ใจว่าต้องการลบสินค้า "${form?.title || product?.title || ""}" ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
+        confirmLabel="ยืนยันการลบ"
+        cancelLabel="ยกเลิก"
+        tone="danger"
+        busy={loading}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => !loading && setShowDeleteModal(false)}
+      />
+
       <Footer />
     </main>
   );

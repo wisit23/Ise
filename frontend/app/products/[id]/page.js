@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../../components/NavBar";
@@ -13,7 +13,9 @@ import ReportModal from "../../../components/ReportModal";
 import ContactSellerButton from "../../../components/chat/ContactSellerButton";
 import Alert from "../../../components/ui/Alert";
 import Modal from "../../../components/ui/Modal";
+import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import OrderShippingModal from "../../../components/orders/OrderShippingModal";
+import OrderConfirmationModal from "../../../components/orders/OrderConfirmationModal";
 import { apiFetch } from "../../../lib/api";
 import {
   getAccessToken,
@@ -24,6 +26,7 @@ import {
   canPurchaseProduct,
 } from "../../../lib/auth";
 import { fetchConditions } from "../../../lib/catalog";
+import { useChatSocketEvent } from "../../../components/chat/ChatSocketProvider";
 
 const STATUS_LABEL = {
   available: "พร้อมขาย",
@@ -58,6 +61,20 @@ function baht(v) {
   return `฿${Number(v || 0).toLocaleString("th-TH")}`;
 }
 
+function getVisitorId() {
+  if (typeof window === "undefined") return null;
+  try {
+    let vid = localStorage.getItem("reloop_visitor_id");
+    if (!vid) {
+      vid = `guest-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 11)}`;
+      localStorage.setItem("reloop_visitor_id", vid);
+    }
+    return vid;
+  } catch {
+    return null;
+  }
+}
+
 export default function ProductDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -70,17 +87,24 @@ export default function ProductDetailPage() {
   const [conditionLabels, setConditionLabels] = useState({});
   const [reviewSummary, setReviewSummary] = useState(null);
   const [showReport, setShowReport] = useState(false);
+  const [reportReviewTarget, setReportReviewTarget] = useState(null);
+  const [reportedReviewIds, setReportedReviewIds] = useState([]);
   const [myPendingOrder, setMyPendingOrder] = useState(null);
+
   const [reviews, setReviews] = useState([]);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewTotalPages, setReviewTotalPages] = useState(1);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [applicableVouchers, setApplicableVouchers] = useState([]);
+  const [unavailableVouchers, setUnavailableVouchers] = useState([]);
   const [availableCampaigns, setAvailableCampaigns] = useState([]);
   const [selectedVoucher, setSelectedVoucher] = useState(null);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [sellerActiveOrder, setSellerActiveOrder] = useState(null);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [shippingModalOpen, setShippingModalOpen] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingProduct, setDeletingProduct] = useState(false);
   const [viewer, setViewer] = useState({
     ready: false,
     isAuthenticated: false,
@@ -88,34 +112,105 @@ export default function ProductDetailPage() {
     roles: [],
   });
 
+  const campaignRequestIdRef = useRef(0);
+  const lastIdentityRef = useRef({
+    initialized: false,
+    userId: null,
+    isAuthenticated: false,
+  });
+
+  useEffect(() => {
+    function syncViewer() {
+      const token = getAccessToken();
+      const user = getStoredUser();
+      const claims = getAccessTokenClaims();
+      const roles = getCurrentRoles();
+      const nextUserId = claims?.sub || user?.id || null;
+      const nextIsAuth = Boolean(token);
+
+      const isInitialized = lastIdentityRef.current.initialized;
+      const identityChanged =
+        isInitialized &&
+        (lastIdentityRef.current.userId !== nextUserId ||
+          lastIdentityRef.current.isAuthenticated !== nextIsAuth);
+
+      lastIdentityRef.current = {
+        initialized: true,
+        userId: nextUserId,
+        isAuthenticated: nextIsAuth,
+      };
+
+      if (identityChanged) {
+        campaignRequestIdRef.current += 1;
+        setSelectedVoucher(null);
+        setApplicableVouchers([]);
+        setUnavailableVouchers([]);
+        setAvailableCampaigns([]);
+        setVoucherModalOpen(false);
+        setMyPendingOrder(null);
+      }
+
+      setViewer({
+        ready: true,
+        isAuthenticated: nextIsAuth,
+        userId: nextUserId,
+        roles,
+      });
+    }
+
+    syncViewer();
+    if (typeof window !== "undefined") {
+      window.addEventListener("reloop:auth", syncViewer);
+      return () => {
+        window.removeEventListener("reloop:auth", syncViewer);
+      };
+    }
+  }, []);
+
   useEffect(() => {
     const token = getAccessToken();
-    const user = getStoredUser();
-    const claims = getAccessTokenClaims();
     const roles = getCurrentRoles();
-    setViewer({
-      ready: true,
-      isAuthenticated: Boolean(token),
-      userId: claims?.sub || user?.id || null,
-      roles,
-    });
-
     if (token && id && isCustomerAccountRoles(roles)) {
-      apiFetch("/api/orders/mine?status=pending_payment&limit=100", { token })
+      apiFetch("/api/orders/cart", { token })
         .then((data) => {
           const match = data.items?.find((o) => o.productId === id);
           if (match) setMyPendingOrder(match);
+          else setMyPendingOrder(null);
         })
-        .catch(() => {});
+        .catch(() => setMyPendingOrder(null));
+    } else {
+      setMyPendingOrder(null);
     }
-  }, [id]);
+  }, [id, viewer.isAuthenticated, viewer.userId]);
 
   useEffect(() => {
-    apiFetch(`/api/products/${id}`)
+    campaignRequestIdRef.current += 1;
+    setProduct(null);
+    setSeller(null);
+    setReviewSummary(null);
+    setSelectedVoucher(null);
+    setApplicableVouchers([]);
+    setUnavailableVouchers([]);
+    setAvailableCampaigns([]);
+    setVoucherModalOpen(false);
+    setError("");
+    setNotice("");
+    setAdded(false);
+
+
+    const token = getAccessToken();
+    const visitorId = getVisitorId();
+    const headers = {};
+    if (visitorId) headers["x-visitor-id"] = visitorId;
+
+    apiFetch(`/api/products/${id}`, {
+      ...(token ? { token } : {}),
+      headers,
+    })
       .then(setupProduct)
       .catch((err) => {
         // Fallback for owners if gateway stripped the token
-        apiFetch(`/api/products/mine?limit=100`)
+        apiFetch(`/api/products/mine?limit=100`, token ? { token } : {})
           .then((data) => {
             const p = data.items.find((item) => item.id === id);
             if (p) setupProduct(p);
@@ -132,42 +227,6 @@ export default function ProductDetailPage() {
       apiFetch(`/api/reviews/by-seller/${p.sellerId}/summary`)
         .then(setReviewSummary)
         .catch((err) => console.error("โหลดคะแนนรีวิวผู้ขายไม่สำเร็จ:", err));
-
-      const token = getAccessToken();
-      if (token && p?.price) {
-        apiFetch("/api/products/campaigns/applicable", {
-          method: "POST",
-          token,
-          body: { price: p.price, category: p.category },
-        })
-          .then((data) => {
-            const list = Array.isArray(data) ? data : [];
-            setApplicableVouchers(list);
-            if (list.length > 0) {
-              setSelectedVoucher(list[0]);
-            } else {
-              setSelectedVoucher(null);
-            }
-          })
-          .catch(() => {});
-      }
-
-      apiFetch("/api/products/campaigns/available")
-        .then((data) => {
-          const items = Array.isArray(data) ? data : data?.items || [];
-          const matched = items.filter((c) => {
-            if (c.minOrderPrice && p.price < c.minOrderPrice) return false;
-            if (
-              c.applicableCategory &&
-              c.applicableCategory.trim().toLowerCase() !==
-                (p.category || "").trim().toLowerCase()
-            )
-              return false;
-            return true;
-          });
-          setAvailableCampaigns(matched);
-        })
-        .catch(() => {});
     }
     fetchConditions()
       .then((items) =>
@@ -177,6 +236,125 @@ export default function ProductDetailPage() {
       )
       .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, [id]);
+
+  // ── Real-time WebSocket Listeners ──────────────────────────────────────────
+  useChatSocketEvent("product:updated", (payload) => {
+    if (!payload?.product?.id || String(payload.product.id) !== String(id)) return;
+    setProduct((prev) => (prev ? { ...prev, ...payload.product } : prev));
+  });
+
+  useChatSocketEvent("order:updated", (payload) => {
+    const order = payload?.order;
+    if (!order) return;
+    if (order.productId && String(order.productId) === String(id)) {
+      if (
+        payload.action === "paid" ||
+        payload.action === "confirmed" ||
+        payload.action === "shipped"
+      ) {
+        setProduct((prev) => (prev ? { ...prev, status: "reserved" } : prev));
+      } else if (payload.action === "completed") {
+        setProduct((prev) => (prev ? { ...prev, status: "sold" } : prev));
+      } else if (payload.action === "cancelled" || payload.action === "rejected") {
+        setProduct((prev) => (prev ? { ...prev, status: "available" } : prev));
+      }
+    }
+  });
+
+  useEffect(() => {
+    if (!viewer.ready || !product) {
+      return;
+    }
+
+    const isOwn = Boolean(
+      viewer.userId &&
+      product.sellerId &&
+      viewer.userId === product.sellerId
+    );
+
+    // If visitor is product owner: clear voucher states, close modal, and do not make coupon requests
+    if (isOwn) {
+      setSelectedVoucher(null);
+      setApplicableVouchers([]);
+      setUnavailableVouchers([]);
+      setAvailableCampaigns([]);
+      setVoucherModalOpen(false);
+      return;
+    }
+
+    let cancelled = false;
+    const requestId = ++campaignRequestIdRef.current;
+    const token = getAccessToken();
+
+    if (token && product.price) {
+      apiFetch("/api/products/campaigns/applicable", {
+        method: "POST",
+        token,
+        body: {
+          price: product.price,
+          category: product.category,
+          includeUnavailable: true,
+        },
+      })
+        .then((data) => {
+          if (cancelled || campaignRequestIdRef.current !== requestId) return;
+          const list = Array.isArray(data) ? data : data?.applicable || [];
+          const unavailableList = Array.isArray(data)
+            ? []
+            : data?.unavailable || [];
+          setApplicableVouchers(list);
+          setUnavailableVouchers(unavailableList);
+          if (list.length > 0) {
+            setSelectedVoucher(list[0]);
+          } else {
+            setSelectedVoucher(null);
+          }
+        })
+        .catch(() => {
+          if (cancelled || campaignRequestIdRef.current !== requestId) return;
+          setApplicableVouchers([]);
+          setUnavailableVouchers([]);
+          setSelectedVoucher(null);
+        });
+    } else {
+      setApplicableVouchers([]);
+      setUnavailableVouchers([]);
+      setSelectedVoucher(null);
+    }
+
+    apiFetch("/api/products/campaigns/available")
+      .then((data) => {
+        if (cancelled || campaignRequestIdRef.current !== requestId) return;
+        const items = Array.isArray(data) ? data : data?.items || [];
+        const matched = items.filter((c) => {
+          if (c.minOrderPrice && product.price < c.minOrderPrice) return false;
+          if (
+            c.applicableCategory &&
+            c.applicableCategory.trim().toLowerCase() !==
+              (product.category || "").trim().toLowerCase()
+          )
+            return false;
+          return true;
+        });
+        setAvailableCampaigns(matched);
+      })
+      .catch(() => {
+        if (cancelled || campaignRequestIdRef.current !== requestId) return;
+        setAvailableCampaigns([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    viewer.ready,
+    viewer.userId,
+    viewer.isAuthenticated,
+    product?.id,
+    product?.sellerId,
+    product?.price,
+    product?.category,
+  ]);
 
   useEffect(() => {
     if (!product?.sellerId) return;
@@ -217,6 +395,20 @@ export default function ProductDetailPage() {
   }, [product?.sellerId, reviewPage]);
 
   useEffect(() => {
+    if (!product?.id || !viewer.isAuthenticated) return;
+    const token = getAccessToken();
+    if (!token) return;
+    apiFetch(`/api/auth/reports/my-reported-reviews?productId=${product.id}`, { token })
+      .then((res) => {
+        if (res?.reportedReviewIds) {
+          setReportedReviewIds(res.reportedReviewIds);
+        }
+      })
+      .catch((err) => console.error("โหลดสถานะรีวิวที่รายงานแล้วไม่สำเร็จ:", err));
+  }, [product?.id, viewer.isAuthenticated]);
+
+  useEffect(() => {
+
     if (!viewer.isAuthenticated || !product || viewer.userId !== product.sellerId) {
       setSellerActiveOrder(null);
       return;
@@ -228,12 +420,58 @@ export default function ProductDetailPage() {
         const orderForThisProduct = (data.items || []).find(
           (o) =>
             o.productId === product.id &&
-            ["confirmed", "shipped"].includes(o.status),
+            ["paid", "confirmed", "ready_to_ship", "shipped"].includes(
+              o.status,
+            ),
         );
         setSellerActiveOrder(orderForThisProduct || null);
+        const shouldOpenShip =
+          typeof window !== "undefined" &&
+          (new URLSearchParams(window.location.search).get("ship") === "1" ||
+            Boolean(new URLSearchParams(window.location.search).get("orderId")));
+        if (orderForThisProduct && shouldOpenShip) {
+          setShippingModalOpen(true);
+        }
       })
       .catch(() => {});
   }, [viewer, product]);
+
+  async function handleConfirmDeleteProduct() {
+    const token = getAccessToken();
+    if (!token || !product?.id) return;
+    setDeletingProduct(true);
+    try {
+      await apiFetch(`/api/products/${product.id}`, {
+        method: "DELETE",
+        token,
+      });
+      setShowDeleteModal(false);
+      const currentUser = getStoredUser();
+      const sellerId = currentUser?.id || product?.sellerId;
+      router.push(sellerId ? `/store/${sellerId}` : "/seller/dashboard");
+    } catch (err) {
+      alert(err.message || "เกิดข้อผิดพลาดในการลบสินค้า");
+      setShowDeleteModal(false);
+    } finally {
+      setDeletingProduct(false);
+    }
+  }
+
+  const isOwnProduct = Boolean(
+    viewer.userId &&
+    product?.sellerId &&
+    viewer.userId === product.sellerId
+  );
+  const showCouponUI = viewer.ready && !isOwnProduct;
+  const activeVoucher = showCouponUI ? selectedVoucher : null;
+  const ownedCampaignIds = new Set(
+    [...applicableVouchers, ...unavailableVouchers]
+      .map((voucher) => voucher.campaignId || voucher.campaign?.id)
+      .filter(Boolean),
+  );
+  const claimableCampaigns = availableCampaigns.filter(
+    (campaign) => !ownedCampaignIds.has(campaign.id),
+  );
 
   async function addToCart() {
     const token = getAccessToken();
@@ -241,7 +479,7 @@ export default function ProductDetailPage() {
       router.push("/login");
       return null;
     }
-    if (viewer.userId === product.sellerId) {
+    if (isOwnProduct) {
       setNotice("คุณไม่สามารถซื้อสินค้าของตัวเองได้");
       return null;
     }
@@ -249,12 +487,12 @@ export default function ProductDetailPage() {
     setBusy(true);
     setNotice("");
     try {
-      await apiFetch("/api/orders", {
+      await apiFetch("/api/orders/cart", {
         method: "POST",
         token,
         body: {
           productId: product.id,
-          campaignId: selectedVoucher ? selectedVoucher.campaignId : null,
+          campaignId: activeVoucher ? activeVoucher.campaignId : null,
         },
       });
       setAdded(true);
@@ -298,7 +536,6 @@ export default function ProductDetailPage() {
   }
 
   const available = product.status === "available";
-  const isOwnProduct = viewer.userId === product.sellerId;
   // Guests keep the existing login CTA. Logged-in staff are read-only.
   const canPurchase =
     viewer.ready &&
@@ -339,18 +576,18 @@ export default function ProductDetailPage() {
           <h1 className="text-2xl font-bold text-gray-900">{product.title}</h1>
           {/* Price display with interactive voucher */}
           <div className="mt-3">
-            {selectedVoucher ? (
+            {activeVoucher ? (
               <div>
                 <div className="flex items-baseline gap-2.5">
                   <span className="text-3xl font-bold text-emerald-600">
-                    ฿{selectedVoucher.finalPrice.toLocaleString("th-TH")}
+                    ฿{activeVoucher.finalPrice.toLocaleString("th-TH")}
                   </span>
                   <span className="text-base text-gray-400 line-through">
                     ฿{product.price.toLocaleString("th-TH")}
                   </span>
                   <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
                     ลดไป ฿
-                    {selectedVoucher.estimatedDiscount.toLocaleString("th-TH")}
+                    {activeVoucher.estimatedDiscount.toLocaleString("th-TH")}
                   </span>
                 </div>
 
@@ -362,15 +599,15 @@ export default function ProductDetailPage() {
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="font-mono text-xs font-bold text-emerald-900 bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200">
-                          {selectedVoucher.campaign?.code}
+                          {activeVoucher.campaign?.code}
                         </span>
                         <span className="text-xs font-bold text-emerald-800">
-                          {selectedVoucher.campaign?.name}
+                          {activeVoucher.campaign?.name}
                         </span>
                       </div>
                       <p className="text-[11px] text-emerald-700 mt-0.5">
                         ลดทันที ฿
-                        {selectedVoucher.estimatedDiscount.toLocaleString(
+                        {activeVoucher.estimatedDiscount.toLocaleString(
                           "th-TH",
                         )}{" "}
                         จากราคาปกติ
@@ -381,7 +618,9 @@ export default function ProductDetailPage() {
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
-                      onClick={() => setVoucherModalOpen(true)}
+                      onClick={() => {
+                        if (showCouponUI) setVoucherModalOpen(true);
+                      }}
                       className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 hover:underline"
                     >
                       เปลี่ยนโค้ด
@@ -403,7 +642,7 @@ export default function ProductDetailPage() {
                   ฿{product.price.toLocaleString("th-TH")}
                 </p>
 
-                {applicableVouchers.length > 0 ? (
+                {showCouponUI && applicableVouchers.length > 0 ? (
                   <div className="mt-2.5 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-xs">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-emerald-600 text-[20px]">
@@ -424,13 +663,38 @@ export default function ProductDetailPage() {
                     </div>
                     <button
                       type="button"
+                      onClick={() => {
+                        if (showCouponUI) setVoucherModalOpen(true);
+                      }}
+                      className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition"
+                    >
+                      เลือกโค้ดส่วนลด
+                    </button>
+                  </div>
+                ) : showCouponUI && unavailableVouchers.length > 0 ? (
+                  <div className="mt-2.5 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-emerald-600 text-[20px]">
+                        sell
+                      </span>
+                      <div>
+                        <p className="text-xs font-bold text-emerald-900">
+                          คุณมีโค้ดส่วนลดในกระเป๋า ({unavailableVouchers.length} ใบ)
+                        </p>
+                        <p className="text-[11px] text-emerald-700">
+                          กดเพื่อดูโค้ดและเงื่อนไขการใช้
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
                       onClick={() => setVoucherModalOpen(true)}
                       className="shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition"
                     >
                       เลือกโค้ดส่วนลด
                     </button>
                   </div>
-                ) : availableCampaigns.length > 0 ? (
+                ) : showCouponUI && claimableCampaigns.length > 0 ? (
                   <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-3 shadow-xs">
                     <div className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-amber-600 text-[20px]">
@@ -441,9 +705,9 @@ export default function ProductDetailPage() {
                           มีแคมเปญส่วนลดสำหรับสินค้านี้
                         </p>
                         <p className="text-xs text-amber-700">
-                          {availableCampaigns[0].discountType === "PERCENT"
-                            ? `ลด ${availableCampaigns[0].discountValue}%${availableCampaigns[0].maxDiscount ? ` สูงสุด ฿${availableCampaigns[0].maxDiscount.toLocaleString("th-TH")}` : ""}`
-                            : `ลด ฿${availableCampaigns[0].discountValue.toLocaleString("th-TH")}`}
+                          {claimableCampaigns[0].discountType === "PERCENT"
+                            ? `ลด ${claimableCampaigns[0].discountValue}%${claimableCampaigns[0].maxDiscount ? ` สูงสุด ฿${claimableCampaigns[0].maxDiscount.toLocaleString("th-TH")}` : ""}`
+                            : `ลด ฿${claimableCampaigns[0].discountValue.toLocaleString("th-TH")}`}
                         </p>
                       </div>
                     </div>
@@ -486,6 +750,13 @@ export default function ProductDetailPage() {
               }`}
             >
               {STATUS_LABEL[product.status] || product.status}
+            </span>
+            <span
+              data-testid="product-view-count"
+              className="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600 flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-[14px]">visibility</span>
+              เข้าชม {product.viewCount ?? 0} ครั้ง
             </span>
           </div>
 
@@ -549,20 +820,30 @@ export default function ProductDetailPage() {
           </div>
 
           {isOwnProduct ? (
-            <div className="flex items-center gap-3 mt-3">
+            <div className="flex items-center gap-2.5 mt-3">
               <Link
                 href={`/products/${product.id}/edit`}
                 className="inline-block text-xs font-medium text-gray-500 hover:text-emerald-600 hover:underline"
               >
                 แก้ไขสินค้านี้
               </Link>
+              <span className="text-gray-300">|</span>
+              <button
+                type="button"
+                disabled={product.status === "reserved" || busy || deletingProduct}
+                onClick={() => setShowDeleteModal(true)}
+                className="text-xs font-medium text-red-500 hover:text-red-700 hover:underline disabled:opacity-40 disabled:hover:text-red-500 disabled:no-underline"
+                title={product.status === "reserved" ? "ไม่สามารถลบสินค้าที่อยู่ระหว่างการสั่งซื้อได้" : "ลบสินค้านี้"}
+              >
+                ลบสินค้านี้
+              </button>
             </div>
           ) : (
             <button
               onClick={() => setShowReport(true)}
               className="mt-3 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
             >
-              รายงานสินค้า/ผู้ขายรายนี้
+              รายงานผู้ขายรายนี้
             </button>
           )}
 
@@ -570,33 +851,59 @@ export default function ProductDetailPage() {
             <div className="mt-4 animate-slide-up rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-emerald-600 text-[24px] shrink-0">
-                  local_shipping
+                  {sellerActiveOrder.status === "paid"
+                    ? "receipt_long"
+                    : "local_shipping"}
                 </span>
                 <div>
                   <p className="font-bold">
-                    {sellerActiveOrder.status === "confirmed"
-                      ? "📦 สินค้านี้มีคำสั่งซื้อรอจัดส่ง!"
-                      : "🚚 สินค้านี้อยู่ระหว่างการขนส่ง"}
+                    {sellerActiveOrder.status === "paid"
+                      ? "🛒 สินค้านี้มีคำสั่งซื้อใหม่ รอคุณยืนยันภายใน 1 วัน"
+                      : sellerActiveOrder.status === "confirmed"
+                        ? "📦 กรุณาเตรียมสินค้าสำหรับคำสั่งซื้อนี้"
+                        : sellerActiveOrder.status === "ready_to_ship"
+                          ? "📦 สินค้านี้มีคำสั่งซื้อรอจัดส่ง!"
+                          : "🚚 สินค้านี้อยู่ระหว่างการขนส่ง"}
                   </p>
                   <p className="text-xs text-emerald-700 font-mono mt-0.5">
                     Order ID: #{sellerActiveOrder.id}
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setShippingModalOpen(true)}
-                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold text-xs shadow-sm transition active:scale-95"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  local_shipping
-                </span>
-                <span>
-                  {sellerActiveOrder.status === "confirmed"
-                    ? "จัดส่งสินค้า"
-                    : "ดูรายละเอียดการจัดส่ง"}
-                </span>
-              </button>
+              {sellerActiveOrder.status === "paid" ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmModalOpen(true)}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold text-xs shadow-sm transition active:scale-95"
+                  title="เปิดดูรายละเอียดผู้ซื้อเพื่อยืนยันหรือปฏิเสธออเดอร์"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    check_circle
+                  </span>
+                  <span>ยืนยันรับออเดอร์</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    sellerActiveOrder.status === "confirmed"
+                      ? router.push("/seller/dashboard")
+                      : setShippingModalOpen(true)
+                  }
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold text-xs shadow-sm transition active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    local_shipping
+                  </span>
+                  <span>
+                    {sellerActiveOrder.status === "confirmed"
+                      ? "จัดการคำสั่งซื้อ"
+                      : sellerActiveOrder.status === "ready_to_ship"
+                        ? "จัดส่งสินค้า"
+                        : "ดูรายละเอียดการจัดส่ง"}
+                  </span>
+                </button>
+              )}
             </div>
           )}
 
@@ -703,8 +1010,8 @@ export default function ProductDetailPage() {
                     className="flex-1 rounded-md bg-emerald-600 py-3 font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300 transition"
                   >
                     {available
-                      ? selectedVoucher
-                        ? `ซื้อเลย (฿${selectedVoucher.finalPrice.toLocaleString("th-TH")})`
+                      ? activeVoucher
+                        ? `ซื้อเลย (฿${activeVoucher.finalPrice.toLocaleString("th-TH")})`
                         : `ซื้อเลย (฿${product.price.toLocaleString("th-TH")})`
                       : product.status === "auction"
                         ? "อยู่ในระบบประมูล"
@@ -766,9 +1073,49 @@ export default function ProductDetailPage() {
                       </div>
                     </div>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    {new Date(r.createdAt).toLocaleDateString("th-TH")}
-                  </span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs text-gray-500">
+                      {new Date(r.createdAt).toLocaleDateString("th-TH")}
+                    </span>
+                    {viewer.isAuthenticated && viewer.userId !== r.buyerId && (
+                      (() => {
+                        const isReported = reportedReviewIds.includes(r.id);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setReportReviewTarget(r)}
+                            className={`inline-flex items-center gap-1 text-[11px] transition ${
+                              isReported
+                                ? "text-red-600 font-medium"
+                                : "text-gray-400 hover:text-red-600"
+                            }`}
+                            title={
+                              isReported
+                                ? "คุณได้รายงานความคิดเห็นนี้แล้ว (อยู่ระหว่างรอผลการตัดสิน)"
+                                : "รายงานรีวิวนี้ (เช่น รีวิวปั่น, ข้อมูลเท็จ)"
+                            }
+                          >
+                            <span
+                              className={`material-symbols-outlined text-[14px] ${
+                                isReported
+                                  ? "text-red-600 [font-variation-settings:'FILL'_1]"
+                                  : ""
+                              }`}
+                              style={
+                                isReported
+                                  ? { fontVariationSettings: "'FILL' 1" }
+                                  : undefined
+                              }
+                            >
+                              flag
+                            </span>
+                            <span>{isReported ? "รายงานแล้ว" : "รายงาน"}</span>
+                          </button>
+                        );
+                      })()
+                    )}
+
+                  </div>
                 </div>
                 {r.comment && (
                   <p className="mt-2.5 pl-10.5 text-sm text-gray-700">
@@ -794,7 +1141,7 @@ export default function ProductDetailPage() {
 
       {/* Voucher Selector Modal */}
       <Modal
-        open={voucherModalOpen}
+        open={showCouponUI && voucherModalOpen}
         onClose={() => setVoucherModalOpen(false)}
         title="เลือกโค้ดส่วนลด"
         size="md"
@@ -905,6 +1252,37 @@ export default function ProductDetailPage() {
               </div>
             );
           })}
+
+          {unavailableVouchers.length > 0 && (
+            <>
+              <div className="border-t border-slate-100 my-2" />
+              <p className="text-xs font-semibold text-slate-600 mb-1">
+                โค้ดที่ใช้กับสินค้านี้ไม่ได้ ({unavailableVouchers.length} ใบ):
+              </p>
+              {unavailableVouchers.map((voucher) => (
+                <div
+                  key={voucher.id}
+                  className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-slate-500"
+                >
+                  <div className="min-w-0">
+                    <span className="font-mono text-xs font-bold text-slate-700">
+                      {voucher.campaign?.code}
+                    </span>
+                    <p className="mt-1 text-[11px] text-amber-700">
+                      {voucher.reasonMessage}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled
+                    className="shrink-0 cursor-not-allowed rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-500"
+                  >
+                    ใช้ไม่ได้
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </Modal>
 
@@ -916,6 +1294,32 @@ export default function ProductDetailPage() {
         onShipped={(updated) => {
           setSellerActiveOrder(updated);
         }}
+        onRejected={(updated) => {
+          setSellerActiveOrder(updated);
+          setNotice("ปฏิเสธคำสั่งซื้อเรียบร้อยแล้ว สินค้านี้กลับมาพร้อมขายอีกครั้ง");
+          setProduct((prev) => (prev ? { ...prev, status: "available" } : prev));
+        }}
+        onOrderUpdated={(updated) => {
+          setSellerActiveOrder(updated);
+        }}
+      />
+
+      <OrderConfirmationModal
+        orderId={sellerActiveOrder?.id}
+        initialOrder={sellerActiveOrder}
+        isOpen={confirmModalOpen}
+        onClose={() => setConfirmModalOpen(false)}
+        onConfirmed={(updated) => {
+          setSellerActiveOrder(updated);
+        }}
+        onRejected={(updated) => {
+          setSellerActiveOrder(updated);
+          setNotice("ปฏิเสธคำสั่งซื้อเรียบร้อยแล้ว สินค้านี้กลับมาพร้อมขายอีกครั้ง");
+          setProduct((prev) => (prev ? { ...prev, status: "available" } : prev));
+        }}
+        onOrderUpdated={(updated) => {
+          setSellerActiveOrder(updated);
+        }}
       />
 
       <ReportModal
@@ -923,8 +1327,44 @@ export default function ProductDetailPage() {
         onClose={() => setShowReport(false)}
         targetId={product.sellerId}
         targetLabel={sellerName}
-        productId={product.id}
-        productLabel={product.title}
+      />
+
+      <ReportModal
+        open={Boolean(reportReviewTarget)}
+        onClose={() => setReportReviewTarget(null)}
+        onSuccess={({ reviewId }) => {
+          if (reviewId) {
+            setReportedReviewIds((prev) =>
+              Array.from(new Set([...prev, reviewId])),
+            );
+          }
+        }}
+        title="รายงานรีวิวที่ไม่เหมาะสม"
+
+        targetId={reportReviewTarget?.buyerId}
+        targetLabel={
+          reportReviewTarget?.reviewerName ||
+          (reportReviewTarget?.buyerId
+            ? `ผู้ใช้ #${reportReviewTarget.buyerId.slice(0, 8)}`
+            : null)
+        }
+        productId={product?.id}
+        productLabel={product?.title}
+        reviewId={reportReviewTarget?.id}
+        reviewComment={reportReviewTarget?.comment}
+      />
+
+      {/* ── Product Deletion Confirmation Modal ── */}
+      <ConfirmDialog
+        open={showDeleteModal}
+        title="ยืนยันการลบสินค้า"
+        description={`คุณแน่ใจว่าต้องการลบสินค้า "${product?.title || ""}" ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`}
+        confirmLabel="ยืนยันการลบ"
+        cancelLabel="ยกเลิก"
+        tone="danger"
+        busy={deletingProduct}
+        onConfirm={handleConfirmDeleteProduct}
+        onCancel={() => !deletingProduct && setShowDeleteModal(false)}
       />
 
       <Footer />

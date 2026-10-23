@@ -435,3 +435,56 @@
     - Frontend Component Tests (Jest): ผ่านครบ **54/54 suites, 359/359 tests (0 fail, 0 skip)**
     - Quality Gates: `npm --prefix frontend run build`, `npm run lint`, `npm run format:check`, `git diff --check` ผ่านครบ
     - Browser E2E: **Pending** (ยังไม่ได้รันบนเบราว์เซอร์จริง)
+
+## MKT-DEC-027 — Immutable Auction Winner Orders, Payment Rollover Notifications & Seller Recovery
+
+- Date: 2026-10-17
+- Status: Accepted — implementation complete, live/integration verification pending
+- Context:
+  - TC_AUC10 เดิมเปลี่ยนเจ้าของ ราคา และ Bid บน Order เดิมเมื่อผู้ชนะไม่ชำระเงิน ทำให้ประวัติและ Checkout Session ของหลายบัญชีปะปนกัน
+  - เมื่อผู้ประมูลที่ไม่ซ้ำกันหมดทุกคน ระบบเดิมเปลี่ยน Product เป็น `available` ทั้งที่ Seller Recovery กำหนดให้ผู้ขายต้องตัดสินใจ
+- Decision:
+  1. Order ของผู้ชนะเป็น immutable ต่อหนึ่ง Bid: Order ที่หมดเวลาคงผู้ซื้อ ราคา และ Bid เดิมในสถานะ `cancelled`; ผู้ชนะลำดับถัดไปได้รับ Order ใหม่
+  2. เปลี่ยน `Order.auctionId` จาก unique เป็น non-unique index และบังคับ unique คู่ `(auctionId, auctionBidId)` เพื่อให้หนึ่ง Auction มีหลาย Order โดย retry ของ Bid เดิมสร้างซ้ำไม่ได้
+  3. Order ID คำนวณแบบ deterministic จาก `auctionId + auctionBidId`; การสร้าง Order และ `AUCTION_ORDER_CREATED` OrderLog อยู่ใน transaction เดียวกัน
+  4. ข้าม Bid ทั้งหมดของบัญชีที่หมดสิทธิ์แล้ว ใช้ราคา Bid จริง และให้ผู้ชนะใหม่ 24 ชั่วโมงจาก constant กลาง `AUCTION_PAYMENT_TTL_MS`
+  5. เมื่อไม่มีผู้ประมูลที่มีสิทธิ์เหลือ Product เป็น `auction_action_required`; Order สุดท้ายคง `cancelled` และบันทึก `AUCTION_NO_PAYING_BIDDER`
+  6. ใช้ Auction Chat เดิมแบบ 1-on-1 read-only พร้อม deterministic idempotency key แจ้งผู้ชนะเดิม ผู้ชนะใหม่ และผู้ขาย พร้อม Checkout/Seller Recovery links
+  7. ผู้ชนะเดิมที่เปิด Checkout link หลังหมดสิทธิ์เห็นข้อความภาษาไทยและไม่มีปุ่มชำระเงิน
+- Consequence:
+  - มี migration เฉพาะ Order index/constraint โดยไม่เพิ่ม column, enum หรือ status ใหม่ และไม่กระทบ Order ปกติที่ `auctionId = null`
+  - `AuctionItem.winningOrderId` ชี้ Order ปัจจุบันระหว่างที่ยังมีผู้ชนะ และถูกล้างพร้อม `winningBidId` เมื่อหมดผู้ประมูลที่มีสิทธิ์ ส่วน Order ที่ยกเลิกยังคงเป็นประวัติของเจ้าของเดิม
+  - Live/Integration/Browser verification ถูกเลื่อนไปรวมกับงานถัดไปตามคำสั่งผู้ใช้; ห้ามบันทึกผลว่า pass จนกว่าจะรันจริง
+
+## MKT-DEC-028 — Snapshot-based Interest-score Campaign Rights
+
+- Date: 2026-10-18
+- Status: Accepted — implementation complete, Docker/live verification pending
+- Decision:
+  1. ใช้น้ำหนักจาก Recommendation ที่มีอยู่เป็นแหล่งเดียว: category 4, style 3, brand 2, size 5, search 6, like 8, purchase 10; ไม่สร้างตัวนับคะแนนชุดใหม่
+  2. คะแนนรวมปัดเป็นจำนวนเต็มและแบ่งเป็น `0`, `1–6`, `7–14`, `15–24`, `25–38`; UI แสดงทั้งคะแนนเต็มตามมิติที่เลือกและคะแนนเต็มรวม 38
+  3. Marketing เลือกมิติเป้าหมายและช่วงคะแนน แล้วดูเฉพาะสถิติรวมก่อนสร้าง Campaign; API ไม่คืนรายชื่อหรือข้อมูลส่วนบุคคล
+  4. เมื่อ Publish ระบบคำนวณและบันทึกสิทธิ์เป็น snapshot ใน transaction เดียวกับสถานะ Campaign และ Marketing Audit เพื่อให้คะแนนวันถัดไปไม่ถอนสิทธิ์ที่มอบแล้ว
+  5. Campaign ทั่วไปไม่ส่ง Notification; Campaign ตามคะแนนส่ง Notification รายบัญชีเฉพาะผู้มีสิทธิ์ โดยกดไป `/campaigns` เพื่อดูและเก็บคูปอง
+  6. Auth Service เป็นเจ้าของ profile, Order Service เป็นเจ้าของ paid purchases, Product Service เป็นเจ้าของ search/like/product dimensions และประกอบคะแนนผ่าน internal-token APIs เท่านั้น
+  7. Customer Insights แยกเป็นแท็บของ Marketing; ฟิลเตอร์เดียวควบคุม KPI, ranking, trend และการเทียบช่วงก่อนหน้าทั้งหน้า
+- Consequence:
+  - ต้องเพิ่ม Product migration สำหรับ `campaigns.audience_criteria`, `campaigns.audience_snapshot_at` และ `campaign_audience`; Campaign เดิมยังเป็น universal/legacy ได้ตามเดิม
+  - สิทธิ์ของกลุ่มคะแนนและ `usageLimit` เป็นคนละค่า: ค่าแรกคือผู้มีสิทธิ์เห็น/เก็บ ส่วนค่าหลังคือจำนวนครั้งรวมที่คูปองถูกใช้ได้
+  - ยังไม่บันทึกผล test suites ว่าผ่าน เพราะ Docker/Browser verification ยังไม่ได้รันในรอบนี้
+
+## MKT-DEC-029 — Auction bid cooldown, repeatable soft close, and public bidder privacy
+
+- Date: 2026-10-19
+- Status: Accepted — targeted unit/component verification complete
+- Decision:
+  1. จำกัดการเสนอราคาของบัญชีเดิมใน AuctionItem เดิมไว้หนึ่งครั้งต่อ 2 วินาทีภายใต้ Auction advisory lock; บัญชีอื่นไม่ถูกล็อก และ exact idempotent retry ไม่ถูก cooldown ขวาง
+  2. ราคาต่อ Bid สูงสุด 1,000,000 บาทแบบ inclusive
+  3. Bid ในช่วงเวลาคงเหลือไม่เกิน 5 นาทีเพิ่ม `scheduledEndAt` จากเส้นตายปัจจุบันอีก 5 นาทีทุกครั้ง จึงต่อซ้ำได้ และ AuctionItem ที่ถูกต่อเวลายังคงเข้าถึง/เสนอราคาได้แม้ `AuctionRound.auctionEndsAt` ผ่านไปแล้ว
+  4. ประวัติ Bid เปิดให้ผู้ซื้อเห็นแต่ใช้ชื่อที่ปิดบังบางส่วน และเรียงจำนวนเงินมากไปน้อย โดยเวลาเก่าก่อนเป็นตัวตัดสินกรณีราคาเท่ากัน
+  5. Auction system chat ถูก mirror ไป Notification Bell แบบ upsert ตาม `userId + entityId`; Soft Close แจ้งผู้ขายและผู้ที่เคยเสนอราคา
+  6. รอบ/รายการที่ยังจัดการได้แสดงก่อนประวัติในหน้า Marketing; จำนวนสินค้าในรอบไม่นับ `rejected`/`cancelled` แต่ข้อมูลรายการเดิมยังเก็บเพื่อ Audit และเปิดดูรายละเอียดได้
+- Consequence:
+  - ไม่มี schema หรือ migration ใหม่สำหรับชุดนี้
+  - Product เดิมยังใช้ ID เดิมเมื่อ Recovery; การส่งเข้ารอบใหม่สร้าง AuctionItem/Bid/Order ชุดใหม่ตาม MKT-DEC-026/027
+  - Public buyer browse ซ่อนรอบที่ยกเลิก และคงแสดงเฉพาะรอบปกติที่เวลาหลักยังไม่จบหรือมี AuctionItem อยู่ใน Soft Close

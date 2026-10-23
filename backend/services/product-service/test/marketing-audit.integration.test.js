@@ -87,13 +87,56 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
   const createdAuditLogIds = [];
 
   t.after(async () => {
-    // Clean up created entities and audit logs using specific IDs and runId scoping
+    // 1. Clean up audit logs by specific tracked audit log IDs
     const validAuditLogIds = createdAuditLogIds.filter(Boolean);
     if (validAuditLogIds.length > 0) {
       await prisma.marketingAuditLog.deleteMany({
         where: { id: { in: validAuditLogIds } },
       });
     }
+
+    // 2. Clean up audit logs associated with entities created in this test run by entityId
+    const validCampaignIds = createdCampaignIds.filter(Boolean);
+    if (validCampaignIds.length > 0) {
+      await prisma.marketingAuditLog.deleteMany({
+        where: {
+          entityType: "CAMPAIGN",
+          entityId: { in: validCampaignIds },
+        },
+      });
+    }
+
+    const validArticleIds = createdArticleIds.filter(Boolean);
+    if (validArticleIds.length > 0) {
+      await prisma.marketingAuditLog.deleteMany({
+        where: {
+          entityType: "ARTICLE",
+          entityId: { in: validArticleIds },
+        },
+      });
+    }
+
+    const validRoundIds = createdRoundIds.filter(Boolean);
+    if (validRoundIds.length > 0) {
+      await prisma.marketingAuditLog.deleteMany({
+        where: {
+          entityType: "AUCTION_ROUND",
+          entityId: { in: validRoundIds },
+        },
+      });
+    }
+
+    const validAuctionIds = createdAuctionIds.filter(Boolean);
+    if (validAuctionIds.length > 0) {
+      await prisma.marketingAuditLog.deleteMany({
+        where: {
+          entityType: "AUCTION_ITEM",
+          entityId: { in: validAuctionIds },
+        },
+      });
+    }
+
+    // 3. Fallback scoped cleanup by runId in entityId or idempotencyKey
     await prisma.marketingAuditLog.deleteMany({
       where: {
         OR: [
@@ -103,7 +146,6 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
       },
     });
 
-    const validCampaignIds = createdCampaignIds.filter(Boolean);
     if (validCampaignIds.length > 0) {
       await prisma.userVoucher.deleteMany({
         where: { campaignId: { in: validCampaignIds } },
@@ -112,19 +154,16 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
         where: { id: { in: validCampaignIds } },
       });
     }
-    const validArticleIds = createdArticleIds.filter(Boolean);
     if (validArticleIds.length > 0) {
       await prisma.article.deleteMany({
         where: { id: { in: validArticleIds } },
       });
     }
-    const validAuctionIds = createdAuctionIds.filter(Boolean);
     if (validAuctionIds.length > 0) {
       await prisma.auctionItem.deleteMany({
         where: { id: { in: validAuctionIds } },
       });
     }
-    const validRoundIds = createdRoundIds.filter(Boolean);
     if (validRoundIds.length > 0) {
       await prisma.auctionRound.deleteMany({
         where: { id: { in: validRoundIds } },
@@ -391,9 +430,27 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
       const campaignId2 = create2Res.body.id;
       createdCampaignIds.push(campaignId2);
 
+      const create2Audit = await prisma.marketingAuditLog.findFirst({
+        where: {
+          entityType: "CAMPAIGN",
+          entityId: campaignId2,
+          action: "CAMPAIGN_CREATE",
+        },
+      });
+      if (create2Audit) createdAuditLogIds.push(create2Audit.id);
+
       await request(app)
         .post(`/campaigns/${campaignId2}/submit`)
         .set("Authorization", `Bearer ${marketingToken}`);
+
+      const submit2Audit = await prisma.marketingAuditLog.findFirst({
+        where: {
+          entityType: "CAMPAIGN",
+          entityId: campaignId2,
+          action: "CAMPAIGN_SUBMIT",
+        },
+      });
+      if (submit2Audit) createdAuditLogIds.push(submit2Audit.id);
 
       // Reject campaign -> CAMPAIGN_REJECT
       const rejectRes = await request(app)
@@ -669,6 +726,7 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
         .set("Authorization", `Bearer ${marketingToken}`)
         .send({
           title: `Audit Round ${runId}`,
+          maxItems: 20,
           submissionStartsAt: new Date(testBaseMs).toISOString(),
           submissionEndsAt: new Date(testBaseMs + 2 * 3600000).toISOString(),
           auctionStartsAt: new Date(testBaseMs + 3 * 3600000).toISOString(),
@@ -982,6 +1040,33 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
       for (const item of actorRes.body.items) {
         assert.equal(item.actorId, "SYSTEM");
       }
+
+      // Query by actorQuery=ระบบอัตโนมัติ (operator search parameter path)
+      const actorQueryRes = await request(app)
+        .get(`/marketing/audit-logs?actorQuery=${encodeURIComponent("ระบบอัตโนมัติ")}`)
+        .set("Authorization", `Bearer ${marketingToken}`);
+      assert.equal(actorQueryRes.status, 200);
+      for (const item of actorQueryRes.body.items) {
+        assert.equal(item.actorId, "SYSTEM");
+      }
+
+      // Query by actorQuery=audit-test-mkt-01 (custom non-UUID ID without Auth account)
+      const customActorRes = await request(app)
+        .get("/marketing/audit-logs?actorQuery=audit-test-mkt-01")
+        .set("Authorization", `Bearer ${marketingToken}`);
+      assert.equal(customActorRes.status, 200);
+      assert.ok(customActorRes.body.total >= 1, "Must find records for non-UUID actorId");
+      for (const item of customActorRes.body.items) {
+        assert.equal(item.actorId, "audit-test-mkt-01");
+      }
+
+      // Query by actorQuery with non-existent actor
+      const notFoundQueryRes = await request(app)
+        .get("/marketing/audit-logs?actorQuery=non_existent_actor_query_xyz")
+        .set("Authorization", `Bearer ${marketingToken}`);
+      assert.equal(notFoundQueryRes.status, 200);
+      assert.equal(notFoundQueryRes.body.total, 0);
+      assert.deepEqual(notFoundQueryRes.body.items, []);
 
       // Query by pagination limit
       const pageRes = await request(app)

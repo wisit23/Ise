@@ -8,7 +8,10 @@ export default function useCustomerServiceConfig() {
   const [config, setConfig] = useState(defaults);
   useEffect(() => {
     const controller = new AbortController();
-    apiFetch("/api/support/help/config", { signal: controller.signal })
+    apiFetch("/api/support/help/config", {
+      signal: controller.signal,
+      timeoutMs: defaults.timing.requestTimeoutMs,
+    })
       .then((data) => {
         if (!controller.signal.aborted) setConfig(validateClientConfig(data));
       })

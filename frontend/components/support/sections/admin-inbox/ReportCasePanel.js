@@ -1,18 +1,25 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { fetchAuthedBlobUrl } from "../../../../lib/api";
+import { reportCategoryLabel } from "../../../../lib/reportCategories";
+
 import Alert from "../../../ui/Alert";
 import Button from "../../../ui/Button";
 import Select from "../../../ui/Select";
 import Textarea from "../../../ui/Textarea";
+import Modal from "../../../ui/Modal";
+import ReportProductDetails from "./ReportProductDetails";
+import { safetyActionLabel } from "../../../../lib/supportConstants";
 
 function Row({ label, children, mono, danger }) {
   return (
     <div className="flex gap-4">
-      <span className="w-24 shrink-0 text-sm font-medium text-slate-500">
+      <span className="w-20 shrink-0 sm:w-28 text-sm font-medium text-slate-500">
         {label}
       </span>
       <span
-        className={`text-sm ${mono ? "font-mono" : "font-medium text-slate-800"} ${
+        className={`min-w-0 break-words text-sm ${mono ? "font-mono" : "font-medium text-slate-800"} ${
           danger ? "text-red-600" : ""
         }`}
       >
@@ -47,7 +54,7 @@ function UserCard({ label, person, fallbackId, onOpenHistory }) {
       )}
       {person?.safetySummary && (
         <p className="mt-2 text-xs text-slate-600">
-          รายงาน {person.safetySummary.reportCount} · คำสั่งก่อนหน้า{" "}
+          รายงาน {person.safetySummary.reportCount} · การดำเนินการก่อนหน้า{" "}
           {person.safetySummary.priorActions}
         </p>
       )}
@@ -78,31 +85,51 @@ export default function ReportCasePanel({
   error,
   busy,
   onSubmit,
+  onClaim,
+  currentUserId,
   detailLoading = false,
   detailError = "",
   onRetryDetail,
   onOpenUserHistory,
 }) {
+  const [evidenceError, setEvidenceError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState(null);
   const settled = report.status === "ACTIONED" || report.status === "DISMISSED";
+
+  useEffect(() => {
+    setEvidenceError("");
+    setPreviewUrl(null);
+  }, [report.id]);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  async function openEvidence(evidenceId) {
+    setEvidenceError("");
+    try {
+      const url = await fetchAuthedBlobUrl(`/api/auth/admin/reports/${report.id}/evidence/${evidenceId}`);
+      setPreviewUrl(url);
+    } catch (error) { setEvidenceError(error.message); }
+  }
 
   const decisionOptions = [
     report.targetId && {
       value: "SUSPEND_USER",
-      label: "ระงับบัญชีผู้ใช้ (SUSPEND_USER)",
+      label: "Suspend Account",
     },
     report.targetId && {
       value: "WARN_USER",
-      label: "ตักเตือนผู้ใช้ ไม่ระงับบัญชี (WARN_USER)",
+      label: "Warn User",
     },
-    report.productId && {
-      value: "REMOVE_PRODUCT",
-      label: "ลบสินค้า (REMOVE_PRODUCT)",
-    },
-    { value: "DISMISS", label: "ยกเลิกรายงาน / ไม่พบความผิด (DISMISS)" },
+    report.targetId && { value: "RESTRICT_BUYER", label: "Restrict Buying" },
+    report.targetId && { value: "RESTRICT_SELLER", label: "Restrict Selling" },
+    { value: "DISMISS", label: "Dismiss Report" },
   ].filter(Boolean);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 p-7">
+    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5 lg:p-8">
+      <Modal open={Boolean(previewUrl)} onClose={() => setPreviewUrl(null)} title="รูปหลักฐาน" size="lg">
+        {previewUrl && <img src={previewUrl} alt="รูปหลักฐานที่แนบกับรายงาน" className="max-h-[70vh] w-full object-contain p-4" />}
+      </Modal>
       {detailLoading && (
         <Alert tone="info" className="mb-4">
           กำลังโหลดรายละเอียดล่าสุด...
@@ -140,15 +167,21 @@ export default function ReportCasePanel({
               {report.targetId}
             </Row>
           )}
-          {report.productId && (
-            <Row label="สินค้าเป้าหมาย:" mono danger>
-              {report.productId}
-            </Row>
-          )}
+          <Row label="ประเภทปัญหา:">{reportCategoryLabel(report.category)}</Row>
           <div className="mt-3 border-t border-slate-100 pt-3">
             <Row label="รายละเอียด:">{report.reason}</Row>
           </div>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h4 className="font-bold text-slate-900">Report Evidence</h4>
+        {report.evidence?.length ? report.evidence.map((item) => (
+          <button key={item.id} type="button" onClick={() => openEvidence(item.id)} className="mt-3 block rounded-lg border px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50">
+            เปิดรูป: {item.originalName}
+          </button>
+        )) : <p className="mt-2 text-sm text-slate-500">ผู้รายงานไม่ได้แนบรูปหลักฐาน</p>}
+        {evidenceError && <Alert className="mt-3">{evidenceError}</Alert>}
       </div>
 
       <div className="mb-6 grid gap-3 md:grid-cols-2">
@@ -168,39 +201,14 @@ export default function ReportCasePanel({
         )}
       </div>
 
-      {report.productId && (
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h4 className="font-bold text-slate-900">รายละเอียดสินค้า</h4>
-          {report.productDetail?.available ? (
-            <div className="mt-3 space-y-2">
-              <Row label="ชื่อสินค้า:">
-                {report.productDetail.product.title}
-              </Row>
-              <Row label="ผู้ขาย:" mono>
-                {report.productDetail.product.sellerId}
-              </Row>
-              <Row label="สถานะ:">{report.productDetail.product.status}</Row>
-              <Row label="ราคา:">
-                {Number(report.productDetail.product.price || 0).toLocaleString(
-                  "th-TH",
-                )}{" "}
-                บาท
-              </Row>
-            </div>
-          ) : (
-            <Alert tone="warning" className="mt-3">
-              {report.productDetail?.error || "ยังโหลดข้อมูลสินค้าล่าสุดไม่ได้"}
-            </Alert>
-          )}
-        </div>
-      )}
+      <ReportProductDetails key={report.id} productId={report.productId} detail={report.productDetail} onRetry={onRetryDetail} />
 
       {settled ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h4 className="font-bold text-slate-900">ผลการพิจารณา</h4>
+          <h4 className="font-bold text-slate-900">Decision Summary</h4>
           {report.decision ? (
             <div className="mt-4 space-y-3">
-              <Row label="คำตัดสิน:">{report.decision.action}</Row>
+              <Row label="คำตัดสิน:">{safetyActionLabel(report.decision.action)}</Row>
               <Row label="เหตุผล:">{report.decision.reason}</Row>
               <Row label="ผู้ตัดสิน:">
                 {personName(report.decision.decidedBy)} (
@@ -212,19 +220,28 @@ export default function ReportCasePanel({
             </div>
           ) : (
             <Alert tone="warning" className="mt-3">
-              ไม่พบ Audit ที่บันทึกเหตุผลและผู้ตัดสินของเคสนี้
+              ไม่พบบันทึกเหตุผลและผู้ตัดสินของเคสนี้
             </Alert>
           )}
         </div>
+      ) : report.status === "OPEN" ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h4 className="font-bold text-slate-900">รอเจ้าหน้าที่รับงาน</h4>
+          <p className="mt-2 text-sm text-slate-600">รับรายงานนี้ก่อน จึงจะตัดสินหรือใช้คำสั่งกับผู้ใช้ได้</p>
+          {error && <Alert className="mt-3">{error}</Alert>}
+          <Button type="button" onClick={onClaim} loading={busy} className="mt-4">รับงานนี้</Button>
+        </div>
+      ) : report.reviewedBy !== currentUserId ? (
+        <Alert tone="info">รายงานนี้มีเจ้าหน้าที่คนอื่นรับผิดชอบแล้ว</Alert>
       ) : (
         <form
           onSubmit={onSubmit}
           className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
         >
-          <h4 className="font-bold text-slate-900">พิจารณาและจัดการ</h4>
+          <h4 className="font-bold text-slate-900">Review & Action</h4>
 
           <Select
-            label="การตัดสินใจ"
+            label="Decision"
             placeholder="-- เลือกการตัดสินใจ --"
             options={decisionOptions}
             value={decision}
@@ -232,7 +249,7 @@ export default function ReportCasePanel({
           />
 
           <Textarea
-            label="หมายเหตุ (ภายใน / ส่งให้ผู้ใช้)"
+            label="Reason"
             rows={3}
             placeholder="ระบุเหตุผลในการตัดสินใจ..."
             value={reason}

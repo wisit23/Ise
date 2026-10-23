@@ -1,10 +1,11 @@
+const productSync = require("../../services/productSyncService");
 const chatClient = require("../../services/chatClient");
 const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const productClient = require("../../services/productClient");
 const buyerActivityClient = require("../../services/buyerActivityClient");
 const orderModel = require("../../models/orderModel");
-const { calculateOrderTotals, money } = require("../../models/money");
+const { calculateOrderTotals } = require("../../models/money");
 const { resolveSelectedAddress } = require("../shipping/shippingService");
 const PAYMENT_TTL_MS = 10 * 60 * 1000;
 const INCLUDE = {
@@ -46,7 +47,6 @@ function createCheckoutSessionService(
     buyerId,
     orderIds,
     addressId,
-    shippingAddress,
     authorization,
     couponCode,
     now = new Date(),
@@ -63,7 +63,11 @@ function createCheckoutSessionService(
       throw badRequest("addressId is required");
     if (couponCode)
       throw badRequest("apply voucher codes per order, not per checkout");
-    const addressSnapshot = await addresses({ buyerId, addressId: addressId.trim(), authorization });
+    const addressSnapshot = await addresses({
+      buyerId,
+      addressId: addressId.trim(),
+      authorization,
+    });
     const orders = await db.order.findMany({
       where: { id: { in: ids }, buyerId },
       include: orderModel.INCLUDE,
@@ -146,7 +150,10 @@ function createCheckoutSessionService(
           });
         }
         // Address history is attached only after orders have checkout_id.
-        await tx.checkout.update({ where: { id: checkout.id }, data: { addressSnapshot } });
+        await tx.checkout.update({
+          where: { id: checkout.id },
+          data: { addressSnapshot },
+        });
         return tx.checkout.findUnique({
           where: { id: checkout.id },
           include: INCLUDE,
@@ -154,11 +161,15 @@ function createCheckoutSessionService(
       }),
     );
   }
-  async function expire(checkout, { now = new Date() } = {}) {
+  async function expire(checkout, { now = new Date(), cancelled = false } = {}) {
     const row = await db.$transaction(async (tx) => {
       const claimed = await tx.checkout.updateMany({
-        where: { id: checkout.id, status: "pending", cancelAt: { lte: now } },
-        data: { status: "expired" },
+        where: {
+          id: checkout.id,
+          status: "pending",
+          cancelAt: cancelled ? { gt: now } : { lte: now },
+        },
+        data: { status: cancelled ? "cancelled" : "expired" },
       });
       if (claimed.count !== 1)
         return tx.checkout.findUnique({
@@ -166,7 +177,10 @@ function createCheckoutSessionService(
           include: INCLUDE,
         });
       for (const order of checkout.orders) {
-        if (!["pending", "pending_payment"].includes(order.status)) continue;
+        if (!["pending", "pending_payment"].includes(order.status)) {
+          if (cancelled) throw conflict("order is no longer cancellable");
+          continue;
+        }
         const changed = await tx.order.updateMany({
           where: {
             id: order.id,
@@ -176,34 +190,35 @@ function createCheckoutSessionService(
           data: { status: "cancelled", version: { increment: 1 } },
         });
         if (changed.count !== 1)
-          throw conflict("order changed during checkout expiry");
+          throw conflict(cancelled ? "order changed during cancellation" : "order changed during checkout expiry");
         if (order.basketId)
           await tx.basket.update({
             where: { id: order.basketId },
-            data: { status: "expired" },
+            data: { status: cancelled ? "cancelled" : "expired" },
           });
+        await productSync.createRequest(
+          tx,
+          order,
+          order.buyerId,
+          order.basketId
+            ? {
+                action: "RELEASE_RESERVATION",
+                productId: order.productId,
+                reservationId: order.basketId,
+              }
+            : {
+                action: "SET_STATUS",
+                productId: order.productId,
+                targetStatus: "available",
+              },
+        );
         await tx.orderLog.create({
           data: orderModel.logData(
             order,
             order.buyerId,
-            "PRODUCT_SYNC_REQUESTED",
-            order.basketId
-              ? {
-                  action: "RELEASE_RESERVATION",
-                  productId: order.productId,
-                  reservationId: order.basketId,
-                }
-              : {
-                  action: "SET_STATUS",
-                  productId: order.productId,
-                  targetStatus: "available",
-                },
+            cancelled ? "CHECKOUT_CANCELLED" : "CHECKOUT_EXPIRED",
+            { checkoutId: checkout.id },
           ),
-        });
-        await tx.orderLog.create({
-          data: orderModel.logData(order, order.buyerId, "CHECKOUT_EXPIRED", {
-            checkoutId: checkout.id,
-          }),
         });
       }
       return tx.checkout.findUnique({
@@ -219,6 +234,24 @@ function createCheckoutSessionService(
         });
     }
     return row;
+  }
+  async function cancel({ buyerId, sessionId, now = new Date() }) {
+    let checkout = await findOwnedSession(sessionId, buyerId);
+    if (checkout.status === "pending" && checkout.cancelAt <= now) {
+      await expire(checkout, { now });
+      throw conflict("QR payment time has expired");
+    }
+    if (!["pending", "cancelled"].includes(checkout.status))
+      throw conflict("only pending checkout sessions can be cancelled");
+    // The same pending-status claim as payment makes cancel/confirm mutually exclusive.
+    checkout = await expire(checkout, { now, cancelled: true });
+    if (checkout.status !== "cancelled")
+      throw conflict("checkout changed during cancellation");
+    for (const order of checkout.orders) {
+      const event = await productSync.findPendingForOrder(order.id, db);
+      if (event) await productSync.processEvent(event.id, { db, client: products });
+    }
+    return sessionView(checkout);
   }
   async function get({ buyerId, sessionId, now = new Date() }) {
     let row = await findOwnedSession(sessionId, buyerId);
@@ -252,7 +285,7 @@ function createCheckoutSessionService(
               version: order.version,
               status: { in: ["pending", "pending_payment"] },
             },
-            data: { status: "confirmed", version: { increment: 1 } },
+            data: { status: "paid", version: { increment: 1 } },
           });
           if (changed.count !== 1)
             throw conflict("order changed during payment");
@@ -270,24 +303,22 @@ function createCheckoutSessionService(
               where: { id: order.basketId },
               data: { status: "purchased" },
             });
-          await tx.orderLog.create({
-            data: orderModel.logData(
-              order,
-              buyerId,
-              "PRODUCT_SYNC_REQUESTED",
-              order.basketId
-                ? {
-                    action: "COMPLETE_RESERVATION",
-                    productId: order.productId,
-                    reservationId: order.basketId,
-                  }
-                : {
-                    action: "SET_STATUS",
-                    productId: order.productId,
-                    targetStatus: "sold",
-                  },
-            ),
-          });
+          await productSync.createRequest(
+            tx,
+            order,
+            buyerId,
+            order.basketId
+              ? {
+                  action: "COMPLETE_RESERVATION",
+                  productId: order.productId,
+                  reservationId: order.basketId,
+                }
+              : {
+                  action: "SET_STATUS",
+                  productId: order.productId,
+                  targetStatus: "sold",
+                },
+          );
           await tx.orderLog.create({
             data: orderModel.logData(order, buyerId, "PAYMENT_COMPLETED", {
               checkoutId: checkout.id,
@@ -316,6 +347,8 @@ function createCheckoutSessionService(
         await products.completeVoucher(order.campaignId, {
           userId: buyerId,
           orderId: order.id,
+          discountAmount:
+            Number(order.originalAmount) - Number(order.ordersAmount),
         });
     }
     const paidAt = checkout.orders[0]?.payments?.find(
@@ -342,19 +375,26 @@ function createCheckoutSessionService(
         ),
       ),
     );
-    await Promise.all(paid.orders.map(order=>chatClient.notifyOrderPaid(orderModel.view(order)).catch(()=>{})));
+    await Promise.all(
+      paid.orders.map((order) =>
+        chatClient.notifyOrderPaid(orderModel.view(order)).catch(() => {}),
+      ),
+    );
     return sessionView(paid);
   }
   async function updateAddress({
     buyerId,
     sessionId,
     addressId,
-    shippingAddress,
     authorization,
   }) {
     if (typeof addressId !== "string" || !addressId.trim())
       throw badRequest("addressId is required");
-    const addressSnapshot = await addresses({ buyerId, addressId: addressId.trim(), authorization });
+    const addressSnapshot = await addresses({
+      buyerId,
+      addressId: addressId.trim(),
+      authorization,
+    });
     return sessionView(
       await db.$transaction(async (tx) => {
         const checkout = await findOwnedSession(sessionId, buyerId, tx);
@@ -432,7 +472,7 @@ function createCheckoutSessionService(
     timer.unref();
     return timer;
   }
-  return { create, get, confirm, updateAddress, expireDue, startExpiryWorker };
+  return { create, get, confirm, cancel, updateAddress, expireDue, startExpiryWorker };
 }
 const service = createCheckoutSessionService(
   prisma,

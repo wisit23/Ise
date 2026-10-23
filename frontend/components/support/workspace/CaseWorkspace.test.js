@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import CaseWorkspace from "./CaseWorkspace";
 import { apiFetch } from "../../../lib/api";
+import { navigateWorkspaceSection } from "./useCaseWorkspace";
 
 jest.mock("../../../lib/api", () => ({
   apiFetch: jest.fn(),
@@ -78,6 +79,61 @@ function defaultApi(url, options) {
 beforeEach(() => {
   window.history.replaceState(null, "", "/workspace");
   apiFetch.mockReset().mockImplementation(defaultApi);
+});
+
+test.each([
+  ["tickets", /Ticket A/, "ticket-room:false"],
+  ["disputes", /Dispute A/, "buyer-room:false"],
+])(
+  "re-entering %s starts without selecting the previous chat",
+  async (domain, label, room) => {
+    navigateWorkspaceSection(domain, "cs", "", {
+      view: "workspace",
+      search: "",
+    });
+    const props = {
+      domain,
+      token: "token",
+      currentUser: { id: "cs", role: "CUSTOMER_SERVICE" },
+    };
+    const first = render(<CaseWorkspace {...props} />);
+    fireEvent.click(await screen.findByRole("button", { name: label }));
+    await waitFor(() =>
+      expect(screen.getByTestId("room")).toHaveTextContent(room),
+    );
+    first.unmount();
+    navigateWorkspaceSection("dashboard", "cs");
+    navigateWorkspaceSection(domain, "cs");
+    apiFetch.mockClear();
+    render(<CaseWorkspace {...props} />);
+    await screen.findByRole("button", { name: label });
+    expect(
+      screen.getByText("เลือกเคสจากคิวเพื่อเริ่มทำงาน"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("room")).not.toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).has("case")).toBe(false);
+    expect(apiFetch.mock.calls.some(([url]) => /\/(t-a|d-a)$/.test(url))).toBe(
+      false,
+    );
+  },
+);
+
+test("an explicit case link still opens the requested chat", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    "/workspace?section=tickets&case=t-a&view=workspace",
+  );
+  render(
+    <CaseWorkspace
+      domain="tickets"
+      token="token"
+      currentUser={{ id: "cs", role: "CUSTOMER_SERVICE" }}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByTestId("room")).toHaveTextContent("ticket-room:false"),
+  );
 });
 
 test("table and conversation share filters and open the exact same case", async () => {
@@ -227,7 +283,7 @@ test("financial confirmation retry keeps the exact verdict key and frozen payloa
   );
   fireEvent.click(await screen.findByRole("button", { name: /Dispute A/ }));
   fireEvent.click(
-    await screen.findByRole("button", { name: "ข้อมูลบริบท", exact: true }),
+    await screen.findByRole("button", { name: "ข้อมูลเคส", exact: true }),
   );
   fireEvent.change(screen.getByLabelText("เหตุผลประกอบคำตัดสิน"), {
     target: { value: "reviewed evidence" },
@@ -246,4 +302,19 @@ test("financial confirmation retry keeps the exact verdict key and frozen payloa
     reason: "reviewed evidence",
     idempotencyKey: "verdict-key-test",
   });
+});
+
+
+test("context copies a complete requester ID for support lookup", async () => {
+  const requesterId = "7123412d-a123-4567-8901-123456789abc";
+  const writeText = jest.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  apiFetch.mockImplementation((url, options) => url.endsWith("/t-a")
+    ? Promise.resolve({ ...ticket, requesterId })
+    : defaultApi(url, options));
+  render(<CaseWorkspace domain="tickets" token="token" currentUser={{ id: "cs", role: "CUSTOMER_SERVICE" }} />);
+  fireEvent.click(await screen.findByRole("button", { name: /Ticket A/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "ข้อมูลเคส", exact: true }));
+  fireEvent.click(await screen.findByRole("button", { name: `คัดลอกรหัสผู้ใช้เต็ม ${requesterId}` }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(requesterId));
 });

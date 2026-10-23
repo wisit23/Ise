@@ -10,10 +10,10 @@ import ConfirmDialog from "../../ui/ConfirmDialog";
 import { useToast } from "../../ui/ToastProvider";
 
 const STATUS_OPTIONS = [
-  { value: "PENDING", label: "รอตรวจสอบ (PENDING)" },
-  { value: "VERIFIED", label: "อนุมัติแล้ว (VERIFIED)" },
-  { value: "REJECTED", label: "ปฏิเสธแล้ว (REJECTED)" },
-  { value: "ALL", label: "ทั้งหมด (ALL)" },
+  { value: "PENDING", label: "Pending" },
+  { value: "VERIFIED", label: "Verified" },
+  { value: "REJECTED", label: "Rejected" },
+  { value: "ALL", label: "All" },
 ];
 
 const STATUS_BADGE = {
@@ -178,7 +178,7 @@ export default function KycSection({ token }) {
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            คิวตรวจยืนยันตัวตนผู้ขาย (KYC)
+            KYC Review
           </h1>
           <p className="mt-1 text-sm font-medium text-slate-500">
             {statusFilter === "PENDING"

@@ -14,5 +14,7 @@ router.use(requireInternalToken);
 
 router.post("/users/display-names", internalController.displayNames);
 router.post('/staff/search', internalController.eligibleStaff);
+router.post("/shops/search", internalController.searchShops);
+router.post('/users/search', internalController.searchUsers);
 
 module.exports = router;

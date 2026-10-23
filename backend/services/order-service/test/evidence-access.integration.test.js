@@ -69,6 +69,8 @@ test("dispute evidence: private storage, authz on view, audit trail", async (t) 
       ordersAmount: 800,
       orderType: "BUY_NOW",
       status: "completed",
+      deliveredAt: new Date(),
+      completedAt: new Date(),
     },
   });
   const openRes = await request(app)

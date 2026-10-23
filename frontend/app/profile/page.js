@@ -13,8 +13,7 @@ import Alert from "../../components/ui/Alert";
 import EmptyState from "../../components/ui/EmptyState";
 import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import StyleProfileForm from "../../components/profile/StyleProfileForm";
-import OrderReviewForm from "../../components/orders/OrderReviewForm";
-import OrderDisputeForm from "../../components/orders/OrderDisputeForm";
+import MyOrders from "../../components/orders/MyOrders";
 import { apiFetch } from "../../lib/api";
 import { validateAddressContact } from "../../lib/addressValidation";
 import {
@@ -43,16 +42,16 @@ const ORDER_STATUSES = [
     badgeColor: "bg-amber-100 text-amber-800",
   },
   {
-    key: "confirmed",
-    statuses: ["confirmed"],
-    label: "รอยืนยัน",
+    key: "paid",
+    statuses: ["paid"],
+    label: "รอผู้ขายยืนยัน",
     icon: "inventory_2",
     badgeColor: "bg-sky-100 text-sky-800",
   },
   {
     key: "shipped",
     statuses: ["shipped"],
-    label: "จัดส่งแล้ว",
+    label: "กำลังจัดส่ง",
     icon: "local_shipping",
     badgeColor: "bg-indigo-100 text-indigo-800",
   },
@@ -64,32 +63,6 @@ const ORDER_STATUSES = [
     badgeColor: "bg-emerald-100 text-emerald-800",
   },
 ];
-
-const ORDER_STATUS_META = {
-  pending: ORDER_STATUSES[0],
-  pending_payment: ORDER_STATUSES[0],
-  confirmed: ORDER_STATUSES[1],
-  shipped: ORDER_STATUSES[2],
-  completed: ORDER_STATUSES[3],
-  cancelled: {
-    label: "ยกเลิกแล้ว",
-    badgeColor: "bg-gray-100 text-gray-600",
-  },
-  disputed: {
-    label: "อยู่ระหว่างตรวจสอบข้อพิพาท",
-    badgeColor: "bg-red-50 text-red-700",
-  },
-  refunded: {
-    label: "คืนเงินแล้ว",
-    badgeColor: "bg-emerald-50 text-emerald-700",
-  },
-};
-
-function matchesOrderFilter(order, filterKey) {
-  if (filterKey === "all") return true;
-  const option = ORDER_STATUSES.find((item) => item.key === filterKey);
-  return option?.statuses.includes(order.status) || false;
-}
 
 function toCouponView(voucher) {
   const campaign = voucher.campaign || {};
@@ -139,14 +112,8 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("profile");
 
   // Orders state — loaded from order-service PostgreSQL through the gateway.
-  const [orderFilter, setOrderFilter] = useState("all");
+  const [orderView, setOrderView] = useState({ tab: "all", key: 0 });
   const [orders, setOrders] = useState([]);
-  const [ordersLoading, setOrdersLoading] = useState(true);
-  const [ordersError, setOrdersError] = useState("");
-  const [reviewsByOrderId, setReviewsByOrderId] = useState({});
-  const [reviewsLoading, setReviewsLoading] = useState(true);
-  const [reviewOrder, setReviewOrder] = useState(null);
-  const [disputeOrder, setDisputeOrder] = useState(null);
 
   // Address state — persisted by auth-service in Docker PostgreSQL.
   const [addresses, setAddresses] = useState([]);
@@ -178,32 +145,7 @@ export default function ProfilePage() {
 
     apiFetch("/api/orders/mine?limit=50", { token })
       .then((data) => setOrders(Array.isArray(data?.items) ? data.items : []))
-      .catch((err) => setOrdersError(err.message || "โหลดคำสั่งซื้อไม่สำเร็จ"))
-      .finally(() => setOrdersLoading(false));
-
-    apiFetch("/api/reviews/mine?limit=50", { token })
-      .then(async (firstPage) => {
-        const remainingPages = Array.from(
-          { length: Math.max(0, (firstPage?.totalPages || 1) - 1) },
-          (_, index) => index + 2,
-        );
-        const remaining = await Promise.all(
-          remainingPages.map((page) =>
-            apiFetch(`/api/reviews/mine?limit=50&page=${page}`, { token }),
-          ),
-        );
-        const reviews = [
-          ...(Array.isArray(firstPage?.items) ? firstPage.items : []),
-          ...remaining.flatMap((page) =>
-            Array.isArray(page?.items) ? page.items : [],
-          ),
-        ];
-        setReviewsByOrderId(
-          Object.fromEntries(reviews.map((review) => [review.orderId, review])),
-        );
-      })
-      .catch(() => setReviewsByOrderId({}))
-      .finally(() => setReviewsLoading(false));
+      .catch((err) => console.error("โหลดสรุปคำสั่งซื้อไม่สำเร็จ:", err));
 
     apiFetch("/api/products/campaigns/my-vouchers", { token })
       .then((data) => {
@@ -379,12 +321,8 @@ export default function ProfilePage() {
   // Order status click shortcut
   function handleStatusShortcutClick(statusKey) {
     setActiveTab("orders");
-    setOrderFilter(statusKey);
+    setOrderView((current) => ({ tab: statusKey, key: current.key + 1 }));
   }
-
-  const filteredOrders = orders.filter((order) =>
-    matchesOrderFilter(order, orderFilter),
-  );
 
   const filteredCoupons =
     couponFilter === "all"
@@ -513,7 +451,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Main Tab Bar Navigation */}
-        <div className="mb-6 flex overflow-x-auto border-b border-line bg-white px-2 shadow-1 rounded-t-lg">
+        <div className="flex overflow-x-auto border-b border-line bg-white px-2 shadow-1 rounded-t-lg">
           <button
             type="button"
             onClick={() => setActiveTab("profile")}
@@ -530,7 +468,10 @@ export default function ProfilePage() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("orders")}
+            onClick={() => {
+              setOrderView((current) => ({ tab: "all", key: current.key + 1 }));
+              setActiveTab("orders");
+            }}
             className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-5 py-3.5 text-sm font-medium transition ${
               activeTab === "orders"
                 ? "border-brand-600 text-brand-700"
@@ -652,188 +593,7 @@ export default function ProfilePage() {
         {/* Tab 2: สถานะสินค้า (Order Status Tracking) */}
         {activeTab === "orders" && (
           <section className="rounded-b-lg border border-t-0 border-line bg-white p-6 shadow-1">
-            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">
-                  สถานะสินค้าและคำสั่งซื้อ
-                </h2>
-                <p className="mt-1 text-sm text-ink-muted">
-                  ข้อมูลสถานะล่าสุดจากระบบคำสั่งซื้อ
-                </p>
-              </div>
-              <Button
-                href="/orders"
-                variant="secondary"
-                icon="receipt_long"
-                size="sm"
-              >
-                หน้าคำสั่งซื้อเต็มรูปแบบ
-              </Button>
-            </div>
-
-            {ordersError && (
-              <Alert tone="error" className="mb-4">
-                {ordersError}
-              </Alert>
-            )}
-
-            {/* Filter Tabs for Orders */}
-            <div className="mb-6 flex flex-wrap gap-2 border-b border-line pb-3">
-              <button
-                type="button"
-                onClick={() => setOrderFilter("all")}
-                className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
-                  orderFilter === "all"
-                    ? "bg-brand-600 text-white"
-                    : "bg-surface-subtle text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                ทั้งหมด ({orders.length})
-              </button>
-              {ORDER_STATUSES.map((st) => (
-                <button
-                  key={st.key}
-                  type="button"
-                  onClick={() => setOrderFilter(st.key)}
-                  className={`flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
-                    orderFilter === st.key
-                      ? "bg-brand-600 text-white"
-                      : "bg-surface-subtle text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[15px]">
-                    {st.icon}
-                  </span>
-                  {st.label} ({statusCounts[st.key] || 0})
-                </button>
-              ))}
-            </div>
-
-            {/* Order Items List */}
-            {ordersLoading ? (
-              <p className="py-10 text-center text-sm text-ink-muted">
-                กำลังโหลดคำสั่งซื้อ...
-              </p>
-            ) : filteredOrders.length === 0 ? (
-              <EmptyState
-                icon="shopping_bag"
-                title="ไม่มีรายการคำสั่งซื้อในหมวดนี้"
-                description="คุณยังไม่มีรายการสินค้าในสถานะที่เลือก เลือกช้อปสินค้ามือสองคุณภาพได้เลย"
-                action={
-                  <Button href="/products" icon="storefront">
-                    เลือกซื้อสินค้า
-                  </Button>
-                }
-              />
-            ) : (
-              <div className="flex flex-col gap-4">
-                {filteredOrders.map((ord) => {
-                  const statusInfo = ORDER_STATUS_META[ord.status] || {
-                    label: ord.status,
-                    badgeColor: "bg-gray-100 text-gray-700",
-                  };
-                  return (
-                    <div
-                      key={ord.id}
-                      className="overflow-hidden rounded-lg border border-line bg-white transition hover:border-gray-300 hover:shadow-1"
-                    >
-                      {/* Order Header */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-surface-subtle px-4 py-2.5 text-xs">
-                        <div className="flex items-center gap-2 text-ink-muted">
-                          <span className="material-symbols-outlined text-[16px] text-brand-600">
-                            receipt_long
-                          </span>
-                          <span className="font-semibold text-gray-900">
-                            คำสั่งซื้อ #{ord.id.slice(0, 8).toUpperCase()}
-                          </span>
-                          <span>
-                            (
-                            {new Date(ord.createdAt).toLocaleDateString(
-                              "th-TH",
-                            )}
-                            )
-                          </span>
-                        </div>
-                        <span
-                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            statusInfo.badgeColor || "bg-gray-100 text-gray-700"
-                          }`}
-                        >
-                          {statusInfo.label}
-                        </span>
-                      </div>
-
-                      {/* Order Body */}
-                      <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-start gap-3.5">
-                          <div className="grid h-16 w-16 shrink-0 place-items-center rounded-lg bg-surface-subtle text-ink-muted border border-line">
-                            <span className="material-symbols-outlined text-[30px] text-brand-600">
-                              shopping_bag
-                            </span>
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-semibold text-gray-900">
-                              {ord.productTitle}
-                            </h3>
-                            <p className="mt-2 text-sm font-bold text-brand-700">
-                              ฿{ord.price.toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Status Actions */}
-                        <div className="flex shrink-0 items-center gap-2 border-t border-line pt-3 sm:border-t-0 sm:pt-0">
-                          {["pending", "pending_payment"].includes(
-                            ord.status,
-                          ) && (
-                            <Button
-                              href={
-                                ord.checkoutSessionId
-                                  ? `/payment/${ord.checkoutSessionId}`
-                                  : `/checkout?orders=${ord.id}`
-                              }
-                              size="sm"
-                              icon="qr_code_2"
-                            >
-                              ไปชำระเงิน
-                            </Button>
-                          )}
-                          {ord.status === "completed" &&
-                            !reviewsLoading &&
-                            !reviewsByOrderId[ord.id] && (
-                              <Button
-                                size="sm"
-                                icon="star"
-                                onClick={() => setReviewOrder(ord)}
-                              >
-                                รีวิว
-                              </Button>
-                            )}
-                          {ord.status === "completed" && !ord.dispute && (
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              icon="report"
-                              onClick={() => setDisputeOrder(ord)}
-                            >
-                              รายงาน
-                            </Button>
-                          )}
-                          <Button
-                            href={ord.dispute ? `/support/cases/${ord.id}` : "/orders"}
-                            variant="secondary"
-                            size="sm"
-                            icon="open_in_new"
-                          >
-                            {ord.dispute ? "ติดตามข้อพิพาท" : "ดูรายละเอียด"}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <MyOrders key={orderView.key} initialTab={orderView.tab} />
           </section>
         )}
 
@@ -1289,51 +1049,6 @@ export default function ProfilePage() {
         onConfirm={handleDeleteAddress}
         onCancel={() => setAddressToDelete(null)}
       />
-
-      <Modal
-        open={Boolean(reviewOrder)}
-        onClose={() => setReviewOrder(null)}
-        title="รีวิวสินค้าและร้านค้า"
-        description={reviewOrder?.productTitle}
-        size="md"
-      >
-        {reviewOrder && (
-          <OrderReviewForm
-            order={reviewOrder}
-            onSubmitted={(review) => {
-              setReviewsByOrderId((current) => ({
-                ...current,
-                [reviewOrder.id]: review,
-              }));
-              setReviewOrder(null);
-            }}
-          />
-        )}
-      </Modal>
-
-      <Modal
-        open={Boolean(disputeOrder)}
-        onClose={() => setDisputeOrder(null)}
-        title="รายงานปัญหาคำสั่งซื้อ"
-        description={disputeOrder?.productTitle}
-        size="md"
-      >
-        {disputeOrder && (
-          <OrderDisputeForm
-            order={disputeOrder}
-            onSubmitted={(dispute) => {
-              setOrders((current) =>
-                current.map((order) =>
-                  order.id === disputeOrder.id
-                    ? { ...order, status: "disputed", dispute }
-                    : order,
-                ),
-              );
-              setDisputeOrder(null);
-            }}
-          />
-        )}
-      </Modal>
 
       <Footer />
     </main>

@@ -164,7 +164,7 @@ router.post(
 - Status: Completed, verified with Jest tests (41/41 passing) and Next.js static build (24/24 pages)
 
 **Part B: Buyer Segmentation Rules (UR-13 / FR-5.1.4)**
-**Status note:** Source implementation exists in `backend/services/product-service/src/features/segments/segmentRule.js`, unit tested via `segmentRule.test.js` (7/7 passing), and integrated into public campaign listings (`listAvailablePublicCampaigns`, `getApplicableVouchers`). End-to-end buyer profile persistence hardening is scheduled for Part 4.
+**Status note:** Completed. Campaign discovery, direct detail, claim, and applicable-voucher evaluation load the authenticated buyer's persisted multi-value style profile from Auth Service. Client-supplied profile query/header/body values are ignored, and targeted campaigns fail closed when no trusted profile is available.
 
 **Files:**
 
@@ -174,11 +174,11 @@ router.post(
 
 **Interfaces:** Produces deterministic `matchesSegment(profile, rule)`
 
-- [x] **Step 1: Write segment rule unit tests** (`segmentRule.test.js`, 7/7 passing)
+- [x] **Step 1: Write segment rule unit tests** (`segmentRule.test.js`, 8/8 passing)
 - [x] **Step 2: Verify source implementation exists** (`segmentRule.js` matching whitelist fields and operators)
 - [x] **Step 3: Implement deterministic fields and evaluation** (`favoriteCategory`, `preferredSize`, `styleTag`, `brandPreference`)
-- [ ] **Step 4: Verify end-to-end Buyer profile persistence hardening** (Pending Part 4)
-- [ ] **Step 5: Update docs and commit `feat(marketing): add segmentation`** (Pending Part 4)
+- [x] **Step 4: Verify end-to-end Buyer profile persistence hardening** (`campaign-profile-persistence.integration.test.js`: Auth profile update -> targeted discovery -> anti-spoofing -> claim -> applicable voucher, 1/1 passing against live Docker PostgreSQL services)
+- [x] **Step 5: Update docs** (implementation and verification documented; commit remains a repository workflow action)
 
 ### Task MKT-005: Extended Auction and Swipe Contracts
 
@@ -189,7 +189,7 @@ route/controller/service/repository, feed แสดง Product `available` เ�
 Buyer-only authorization (403 Forbidden สำหรับ Role อื่น, 401 Unauthorized สำหรับผู้ไม่ล็อกอิน),
 Server-side persistence พร้อม Batch Query relation บน `reloop_product` (ไม่มีปัญหา N+1 query),
 User isolation (แยกสถานะ chosen รายบุคคล, Guest คืน chosen: false),
-Anti-spoofing บน API Gateway และ Public route (ห้ามเชื่อถือ client x-user-* header เมื่อไม่มี Bearer token),
+Anti-spoofing บน API Gateway และ Public route (ห้ามเชื่อถือ client x-user-\* header เมื่อไม่มี Bearer token),
 Idempotent choose, ป้องกัน 500 error ใน safe unchoose, และ Frontend optimistic rollback
 ผ่านการทดสอบ Backend/Gateway (29/29 tests), Frontend Swipe (3/3 suites, 42/42 tests), และ PostgreSQL Integration (`REQUIRE_INTEGRATION=1`, 1/1 suite);
 ทั้งนี้ Browser E2E / Responsive UI verification บนเบราว์เซอร์จริงยังไม่ได้ดำเนินการและคงสถานะเป็น Final Acceptance ที่รอดำเนินการ
@@ -446,3 +446,25 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 - [x] **Step 3: Implement atomic DB-idempotent read-only `"ระบบฝ่ายการตลาด"` chat notifications (`notifyItemCancelled` & `notifyRoundCancelled`) and idempotent notification retry**
 - [x] **Step 4: Implement Marketing Round Filter (`"ทุกรอบประมูล"`), distinct Reject/Cancel Item/Cancel Round buttons & confirmation modals, `"ลองส่งแจ้งเตือนอีกครั้ง"` retry button, Public Auction cancelled visibility (including upcoming cancelled rounds until `auctionEndsAt`), and Seller Recovery UI**
 - [x] **Step 5: Verify unit tests (`auctionService.test.js` 102/102, `productRelist.test.js` 5/5, `contextKey.test.js` 9/9, `internalController.test.js` 5/5, `messageModel.test.js` 4/4, `attachmentService.test.js` 4/4), real PostgreSQL & Redis integration tests (`auction.integration.test.js`, `REQUIRE_INTEGRATION=1`, 22/22 pass, 0 skips), real MongoDB & cross-service chat integration tests (`internal-api.integration.test.js`, `REQUIRE_INTEGRATION=1`, 17/17 pass, 0 skips), and frontend Jest suite (54/54 suites, 359/359 pass, 0 skips)**
+
+### TC_AUC10 Payment Rollover Follow-up (MKT-DEC-027)
+
+- [x] Preserve each expired winner's cancelled Order and create a deterministic new Order for the next distinct bidder.
+- [x] Replace `Order.auctionId` uniqueness with indexed history plus unique `(auctionId, auctionBidId)`.
+- [x] Update `winningBidId` and `winningOrderId` together under the Auction lock.
+- [x] Move final Product to `auction_action_required` and reuse `/seller/auctions` recovery actions.
+- [x] Add read-only Auction Chat notifications and action links for expired winner, promoted winner, and seller.
+- [x] Add focused unit/component test coverage.
+- [ ] Run unit, integration, migration, and live browser verification after the user-provided follow-up is included.
+
+### Interest-score Campaign Targeting & Customer Insights (MKT-DEC-028)
+
+- [x] Extract reusable interest scoring from the existing Recommendation weights with integer score bands `0`, `1–6`, `7–14`, `15–24`, `25–38`.
+- [x] Add internal-only Auth profile and Order paid-purchase read APIs; keep ownership boundaries intact.
+- [x] Add Marketing-only audience options, preview, and insight endpoints in Product Service.
+- [x] Persist score criteria on Campaign and immutable `(campaignId, userId, score)` rights at publish time.
+- [x] Enforce saved membership on discovery, detail, claim, and applicable-voucher evaluation.
+- [x] Send individual `DISCOUNT` Notifications only for score-targeted Campaigns; universal Campaigns stay silent.
+- [x] Add Customer Insights as a separate Marketing tab and hand selected criteria/date range into Campaign creation.
+- [x] Add focused backend and frontend tests.
+- [ ] Run Docker migrations, backend suites, frontend suites/build, and browser flow after verification is authorized.

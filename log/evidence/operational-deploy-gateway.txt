@@ -1,0 +1,5 @@
+PASS /health
+PASS /api/products/feed
+PASS /api/products/auctions/rounds/browse
+PASS /api/products/auctions/rounds/current
+PASS /api/support/help/categories

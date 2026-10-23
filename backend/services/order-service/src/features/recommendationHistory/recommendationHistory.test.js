@@ -35,8 +35,11 @@ test("purchase history is private, scoped to bearer buyer, paid and excludes can
   assert.equal(res.status, 200);
   assert.equal(query.where.buyerId, "buyer");
   assert.deepEqual(query.where.status.in, [
+    "paid",
     "confirmed",
+    "ready_to_ship",
     "shipped",
+    "delivered",
     "completed",
   ]);
   assert.equal(query.where.payments.some.paymentStatus, "paid");

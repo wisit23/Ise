@@ -74,17 +74,20 @@ export function attachmentUrl(conversationId, messageId) {
   return `/api/chat/conversations/${conversationId}/attachments/${messageId}`;
 }
 
-export function markRead(conversationId, token) {
-  return apiFetch(`/api/chat/conversations/${conversationId}/read`, {
+export async function markRead(conversationId, token) {
+  const result = await apiFetch(`/api/chat/conversations/${conversationId}/read`, {
     method: "POST",
     token,
   });
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("case-chat:read"));
+  return result;
 }
 
 export function getUnreadCount(token) {
   return apiFetch("/api/chat/unread-count", { token });
 }
 
+/** Accept only same-origin paths supplied by trusted chat event payloads. */
 /** True if `conversation` has a message the current user hasn't read yet —
  * computed from the embedded participant list (Conversation.participants),
  * not a separate call, since the inbox already has this data. */

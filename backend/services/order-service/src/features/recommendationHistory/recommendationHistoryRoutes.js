@@ -14,7 +14,16 @@ function createRecommendationHistoryRoutes(db = prisma) {
         const rows = await db.order.findMany({
           where: {
             buyerId: req.userId,
-            status: { in: ["confirmed", "shipped", "completed"] },
+            status: {
+              in: [
+                "paid",
+                "confirmed",
+                "ready_to_ship",
+                "shipped",
+                "delivered",
+                "completed",
+              ],
+            },
             payments: {
               some: { paymentStatus: "paid", paidAt: { gte: since } },
             },

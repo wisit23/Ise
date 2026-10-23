@@ -15,6 +15,10 @@ const checkoutSessionRoutes = require("../features/checkoutSessions/checkoutSess
 const router = Router();
 router.use(require("../features/orderVouchers/orderVoucherRoutes"));
 router.use("/recommendation-history", require("../features/recommendationHistory/recommendationHistoryRoutes"));
+router.use(
+  "/internal/marketing-audience",
+  require("../features/marketingAudience/marketingAudienceRoutes"),
+);
 
 // Feature routers must come before "/:id" so Express doesn't read "disputes"
 // or "support" as an order id.
@@ -22,6 +26,7 @@ router.use("/disputes", disputeRoutes);
 router.use("/support", supportRoutes);
 router.use("/checkout-sessions", checkoutSessionRoutes);
 router.use("/checkouts", checkoutSessionRoutes);
+router.use("/cart", require("../features/cart/cartRoutes"));
 
 router.post(
   "/",
@@ -37,6 +42,11 @@ router.get(
   requireInternalToken,
   orderController.getOneInternal,
 );
+router.get(
+  "/internal/by-product/:productId",
+  requireInternalToken,
+  orderController.getByProductInternal,
+);
 // Called by product-service when an auction closes with a winning bid.
 router.post(
   "/internal/from-auction",
@@ -44,6 +54,10 @@ router.post(
   orderController.createFromAuction,
 );
 router.get("/:id", requireAuth, orderController.getOne);
+router.patch("/:id/confirm", requireAuth, orderController.confirmOrder);
+router.post("/:id/confirm", requireAuth, orderController.confirmOrder);
+router.patch("/:id/reject", requireAuth, orderController.rejectOrder);
+router.post("/:id/reject", requireAuth, orderController.rejectOrder);
 router.patch("/:id/status", requireAuth, orderController.updateStatus);
 router.patch(
   "/:id/shipping-address",

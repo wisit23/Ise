@@ -14,6 +14,7 @@ model Basket {
   id        String   @id @default(uuid()) @map("basket_id")
   buyerId   String   @map("buyer_id")
   productId String   @map("product_id")
+  campaignId String? @map("campaign_id")
   status    String
   lockAt    DateTime @map("lock_at")
   unlockAt  DateTime @map("unlock_at")

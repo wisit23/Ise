@@ -17,16 +17,26 @@ function withAuditState(tx) {
   tx.marketingAuditLog = {
     ...log,
     async findFirst(args) {
-      const matches = snapshots.filter((row) =>
-        row.entityType === args.where.entityType &&
-        row.entityId === args.where.entityId &&
-        args.where.action.in.includes(row.action));
-      matches.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt) || b.id.localeCompare(a.id));
+      const matches = snapshots.filter(
+        (row) =>
+          row.entityType === args.where.entityType &&
+          row.entityId === args.where.entityId &&
+          args.where.action.in.includes(row.action),
+      );
+      matches.sort(
+        (a, b) =>
+          new Date(b.createdAt) - new Date(a.createdAt) ||
+          b.id.localeCompare(a.id),
+      );
       return matches[0] || (findFirst ? await findFirst(args) : null);
     },
     async create(args) {
       const returned = create ? await create(args) : null;
-      const row = { id: `snapshot-${snapshots.length}`, ...args.data, ...returned };
+      const row = {
+        id: `snapshot-${snapshots.length}`,
+        ...args.data,
+        ...returned,
+      };
       snapshots.push(row);
       return row;
     },
@@ -40,6 +50,10 @@ beforeEach((t) => {
   t.mock.method(auctionCloseQueue, "scheduleClose", async () => {});
   t.mock.method(auctionCloseQueue, "cancelClose", async () => {});
   t.mock.method(repository, "setProductStatus", async () => {});
+  t.mock.method(orderClient, "createOrderFromAuction", async (input) => ({
+    id: `order-${input.auctionBidId}`,
+    paymentDeadlineAt: input.paymentDeadlineAt,
+  }));
   const defaultRound = {
     id: "round-1",
     title: "Round 1",
@@ -101,6 +115,81 @@ test("submit rejects a buyer before querying the database", async () => {
     }),
     (err) => err.status === 403,
   );
+});
+
+test("list forwards deduplicated multi-value filters to the repository", async (t) => {
+  const list = t.mock.method(repository, "list", async (filters) => {
+    assert.deepEqual(filters, {
+      statuses: ["pending_approval", "approved"],
+      roundIds: ["round-1", "round-2"],
+      search: "",
+      sellerIds: [],
+      skip: 0,
+      take: 20,
+    });
+    return { items: [], total: 0 };
+  });
+
+  const result = await service.list({
+    statuses: ["pending_approval", "approved", "approved"],
+    roundIds: ["round-1", "round-2", "round-1"],
+    skip: 0,
+    take: 20,
+  });
+
+  assert.deepEqual(result, { items: [], total: 0 });
+  assert.equal(list.mock.callCount(), 1);
+});
+
+test("list rejects unknown auction statuses before querying the repository", async (t) => {
+  const list = t.mock.method(repository, "list", async () => ({ items: [], total: 0 }));
+
+  await assert.rejects(
+    service.list({ statuses: ["not-a-real-status"], skip: 0, take: 20 }),
+    (err) => err.status === 400,
+  );
+  assert.equal(list.mock.callCount(), 0);
+});
+
+test("list resolves matching shop names through auth-service and combines seller ids with product title search", async (t) => {
+  t.mock.method(global, "fetch", async (url, options) => {
+    assert.match(url, /\/internal\/users\/search$/);
+    assert.deepEqual(JSON.parse(options.body), { q: "ร้านวินเทจ" });
+    return {
+      ok: true,
+      json: async () => [
+        { userId: "seller-1", displayName: "ร้านวินเทจ" },
+        { id: "seller-2", displayName: "Vintage Store" },
+      ],
+    };
+  });
+  const list = t.mock.method(repository, "list", async (filters) => {
+    assert.equal(filters.search, "ร้านวินเทจ");
+    assert.deepEqual(filters.sellerIds, ["seller-1", "seller-2"]);
+    return { items: [], total: 0 };
+  });
+
+  await service.list({ search: " ร้านวินเทจ ", skip: 0, take: 20 });
+  assert.equal(list.mock.callCount(), 1);
+});
+
+test("list enriches auction items with seller display names", async (t) => {
+  t.mock.method(global, "fetch", async (url, options) => {
+    assert.match(url, /\/internal\/users\/display-names$/);
+    assert.deepEqual(JSON.parse(options.body), { userIds: ["seller-1"] });
+    return {
+      ok: true,
+      json: async () => [{ userId: "seller-1", displayName: "ร้านวินเทจ" }],
+    };
+  });
+  t.mock.method(repository, "list", async () => ({
+    items: [{ id: "auction-1", sellerId: "seller-1" }],
+    total: 1,
+  }));
+
+  const result = await service.list({ skip: 0, take: 20 });
+
+  assert.equal(result.items[0].sellerDisplayName, "ร้านวินเทจ");
 });
 
 test("submit rejects a non-positive starting price", async () => {
@@ -171,7 +260,12 @@ test("submit rejects a product under Trust & Safety moderation", async (t) => {
   await assert.rejects(
     service.submit({
       user: { id: "seller-1", role: "SELLER" },
-      input: { roundId:"round-1", productId: "p1", startingPrice: 100, bidIncrement: 10 },
+      input: {
+        roundId: "round-1",
+        productId: "p1",
+        startingPrice: 100,
+        bidIncrement: 10,
+      },
     }),
     (err) => err.status === 403,
   );
@@ -307,16 +401,31 @@ test("schedule accepts a valid window for an approved auction", async (t) => {
 /** A minimal fake Prisma transaction client for placeBid's tx-scoped queries. */
 function fakeTx({ auction, existingBid = null, bids = [] }) {
   return {
-    marketingAuditLog: { findFirst: async () => null, create: async ({ data }) => ({ id: "audit-snapshot", ...data }) },
+    marketingAuditLog: {
+      findFirst: async () => null,
+      create: async ({ data }) => ({ id: "audit-snapshot", ...data }),
+    },
     auctionItem: {
       findUnique: async () => auction,
       update: async ({ data }) => Object.assign(auction, data),
     },
     bid: {
-      findFirst: async () =>
-        bids.length
-          ? bids.reduce((a, b) => (b.amount > a.amount ? b : a))
-          : null,
+      findFirst: async ({ where, orderBy } = {}) => {
+        const matching = bids.filter(
+          (bid) =>
+            (!where?.auctionId ||
+              !bid.auctionId ||
+              bid.auctionId === where.auctionId) &&
+            (!where?.bidderId || bid.bidderId === where.bidderId),
+        );
+        if (!matching.length) return null;
+        if (orderBy?.[0]?.createdAt === "desc") {
+          return [...matching].sort(
+            (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+          )[0];
+        }
+        return matching.reduce((a, b) => (b.amount > a.amount ? b : a));
+      },
       create: async ({ data }) => ({ id: "bid-new", ...data }),
       findUnique: async () => existingBid,
     },
@@ -469,6 +578,121 @@ test("placeBid accepts a valid raise and returns the created bid", async (t) => 
 
   assert.equal(bid.amount, 110);
   assert.equal(bid.bidderId, "buyer-1");
+});
+
+test("placeBid accepts the maximum bid amount", async (t) => {
+  const auction = {
+    id: "a1",
+    sellerId: "seller-1",
+    status: "open",
+    startingPrice: 100,
+    bidIncrement: 10,
+    scheduledEndAt: new Date(Date.now() + 60_000),
+  };
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(fakeTx({ auction, bids: [{ amount: 900_000 }] })),
+  );
+
+  const bid = await service.placeBid({
+    user: { id: "buyer-1" },
+    auctionId: "a1",
+    amount: 1_000_000,
+    idempotencyKey: "maximum-bid",
+  });
+
+  assert.equal(bid.amount, 1_000_000);
+});
+
+test("placeBid enforces a 2-second cooldown per bidder and auction", async (t) => {
+  const now = Date.now();
+  const auction = {
+    id: "a1",
+    sellerId: "seller-1",
+    status: "open",
+    startingPrice: 100,
+    bidIncrement: 10,
+    scheduledEndAt: new Date(now + 60_000),
+  };
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(
+      fakeTx({
+        auction,
+        bids: [
+          {
+            id: "recent-bid",
+            auctionId: "a1",
+            bidderId: "buyer-1",
+            amount: 100,
+            createdAt: new Date(now - 500),
+          },
+        ],
+      }),
+    ),
+  );
+
+  await assert.rejects(
+    service.placeBid({
+      user: { id: "buyer-1" },
+      auctionId: "a1",
+      amount: 110,
+      idempotencyKey: "cooldown-bid",
+    }),
+    (err) =>
+      err.status === 429 &&
+      err.code === "AUCTION_BID_COOLDOWN" &&
+      err.message.includes("กรุณารอ"),
+  );
+});
+
+test("placeBid cooldown does not block a different bidder", async (t) => {
+  const now = Date.now();
+  const auction = {
+    id: "a1",
+    sellerId: "seller-1",
+    status: "open",
+    startingPrice: 100,
+    bidIncrement: 10,
+    scheduledEndAt: new Date(now + 60_000),
+  };
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(
+      fakeTx({
+        auction,
+        bids: [
+          {
+            id: "recent-bid",
+            auctionId: "a1",
+            bidderId: "buyer-1",
+            amount: 100,
+            createdAt: new Date(now - 500),
+          },
+        ],
+      }),
+    ),
+  );
+
+  const bid = await service.placeBid({
+    user: { id: "buyer-2" },
+    auctionId: "a1",
+    amount: 110,
+    idempotencyKey: "other-bidder",
+  });
+  assert.equal(bid.bidderId, "buyer-2");
+});
+
+test("placeBid rejects an amount above the per-bid maximum", async () => {
+  await assert.rejects(
+    service.placeBid({
+      user: { id: "buyer-1" },
+      auctionId: "a1",
+      amount: 1_000_001,
+      idempotencyKey: "over-maximum-bid",
+    }),
+    (err) =>
+      err.status === 400 &&
+      err.message.includes("ต้องไม่เกิน") &&
+      err.message.includes("1,000,000"),
+  );
 });
 
 test("placeBid returns existing bid on exact retry with matching parameters", async (t) => {
@@ -655,7 +879,9 @@ test("placeBid P2002 race recovery validates existing bid and returns on match",
       },
     },
   };
-  t.mock.method(repository, "withAuctionLock", (id, fn) => fn(withAuditState(tx)));
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(withAuditState(tx)),
+  );
   t.mock.method(repository, "highestBid", async () => null);
   t.mock.method(repository, "createBid", async () => {
     const err = new Error("P2002");
@@ -701,7 +927,9 @@ test("placeBid P2002 race recovery throws 409 Conflict if race-created bid has d
       },
     },
   };
-  t.mock.method(repository, "withAuctionLock", (id, fn) => fn(withAuditState(tx)));
+  t.mock.method(repository, "withAuctionLock", (id, fn) =>
+    fn(withAuditState(tx)),
+  );
   t.mock.method(repository, "highestBid", async () => null);
   t.mock.method(repository, "createBid", async () => {
     const err = new Error("P2002");
@@ -747,6 +975,202 @@ test("closing an auction with no bids never calls order-service", async (t) => {
   assert.equal(called, false);
 });
 
+test("TC_AUC10 advances an expired winner to the next distinct bidder", async (t) => {
+  const bids = [
+    { id: "bid-a-100", bidderId: "buyer-a", amount: 100 },
+    { id: "bid-b-90", bidderId: "buyer-b", amount: 90 },
+    { id: "bid-a-80", bidderId: "buyer-a", amount: 80 },
+    { id: "bid-c-70", bidderId: "buyer-c", amount: 70 },
+  ];
+  const current = {
+    id: "auction-1",
+    status: "closed",
+    productId: "product-1",
+    winningBidId: "bid-a-100",
+    winningOrderId: "order-1",
+    bids,
+  };
+  const updates = [];
+  t.mock.method(repository, "findById", async () => current);
+  t.mock.method(repository, "updateStatus", async (_id, data) => {
+    updates.push(data);
+    return { ...current, ...data };
+  });
+  t.mock.method(repository, "setProductStatus", async () => {});
+
+  const result = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: "auction-1",
+    currentBidId: "bid-a-100",
+    orderId: "order-1",
+    expiredBuyerId: "buyer-a",
+  });
+
+  assert.equal(result.outcome, "reassigned");
+  assert.equal(result.bidId, "bid-b-90");
+  assert.equal(result.buyerId, "buyer-b");
+  assert.equal(result.price, 90);
+  assert.deepEqual(updates[0], {
+    winningBidId: "bid-b-90",
+    winningOrderId: "order-bid-b-90",
+  });
+  assert.equal(result.orderId, "order-bid-b-90");
+});
+
+test("TC_AUC10 releases the product when every distinct bidder has timed out", async (t) => {
+  const current = {
+    id: "auction-1",
+    status: "closed",
+    productId: "product-1",
+    winningBidId: "bid-b-90",
+    winningOrderId: "order-1",
+    bids: [
+      { id: "bid-a-100", bidderId: "buyer-a", amount: 100 },
+      { id: "bid-b-90", bidderId: "buyer-b", amount: 90 },
+      { id: "bid-a-80", bidderId: "buyer-a", amount: 80 },
+    ],
+  };
+  let productStatus = null;
+  t.mock.method(repository, "findById", async () => current);
+  t.mock.method(repository, "updateStatus", async (_id, data) => ({ ...current, ...data }));
+  t.mock.method(repository, "setProductStatus", async (_id, status) => {
+    productStatus = status;
+  });
+
+  const result = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: "auction-1",
+    currentBidId: "bid-b-90",
+    orderId: "order-1",
+    expiredBuyerId: "buyer-b",
+  });
+
+  assert.equal(result.outcome, "released");
+  assert.equal(productStatus, "auction_action_required");
+});
+
+test("TC_AUC10 advances legacy auction orders that do not yet store auctionBidId", async (t) => {
+  const current = {
+    id: "auction-legacy",
+    status: "closed",
+    productId: "product-legacy",
+    winningBidId: "bid-a-100",
+    winningOrderId: "order-legacy",
+    bids: [
+      { id: "bid-a-100", bidderId: "buyer-a", amount: 100 },
+      { id: "bid-b-90", bidderId: "buyer-b", amount: 90 },
+    ],
+  };
+  t.mock.method(repository, "findById", async () => current);
+  t.mock.method(repository, "updateStatus", async (_id, data) => ({
+    ...current,
+    ...data,
+  }));
+  t.mock.method(repository, "setProductStatus", async () => {});
+  const result = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: current.id,
+    currentBidId: null,
+    orderId: current.winningOrderId,
+    expiredBuyerId: "buyer-a",
+  });
+
+  assert.equal(result.outcome, "reassigned");
+  assert.equal(result.bidId, "bid-b-90");
+  assert.equal(result.buyerId, "buyer-b");
+});
+
+test("TC_AUC10 advances A to B to C, skips duplicate bidders, gives each winner 24 hours, and releases only after C", async (t) => {
+  const bids = [
+    { id: "bid-a-1000", bidderId: "buyer-a", amount: 1000 },
+    { id: "bid-b-900", bidderId: "buyer-b", amount: 900 },
+    { id: "bid-a-800", bidderId: "buyer-a", amount: 800 },
+    { id: "bid-b-700", bidderId: "buyer-b", amount: 700 },
+    { id: "bid-c-500", bidderId: "buyer-c", amount: 500 },
+  ];
+  const current = {
+    id: "auction-chain",
+    status: "closed",
+    productId: "product-chain",
+    winningBidId: "bid-a-1000",
+    winningOrderId: "order-a",
+    bids,
+  };
+  const createdOrders = [];
+  const productStatuses = [];
+  t.mock.method(repository, "findById", async () => current);
+  t.mock.method(repository, "updateStatus", async (_id, data) => {
+    Object.assign(current, data);
+    return { ...current };
+  });
+  t.mock.method(repository, "setProductStatus", async (_id, status) => {
+    productStatuses.push(status);
+  });
+  t.mock.method(orderClient, "createOrderFromAuction", async (input) => {
+    createdOrders.push(input);
+    return {
+      id: `order-${input.auctionBidId}`,
+      paymentDeadlineAt: input.paymentDeadlineAt,
+    };
+  });
+
+  const firstTimeoutAt = new Date("2026-10-17T00:00:00.000Z");
+  const promotedB = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: current.id,
+    currentBidId: "bid-a-1000",
+    orderId: "order-a",
+    expiredBuyerId: "buyer-a",
+    now: firstTimeoutAt,
+  });
+  assert.equal(promotedB.bidId, "bid-b-900");
+  assert.equal(promotedB.price, 900);
+  assert.equal(
+    promotedB.paymentDeadlineAt.getTime(),
+    firstTimeoutAt.getTime() + 24 * 60 * 60 * 1000,
+  );
+
+  const retryA = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: current.id,
+    currentBidId: "bid-a-1000",
+    orderId: "order-a",
+    expiredBuyerId: "buyer-a",
+    now: firstTimeoutAt,
+  });
+  assert.equal(retryA.orderId, promotedB.orderId);
+  assert.equal(retryA.alreadyAdvanced, true);
+  assert.equal(createdOrders.length, 1);
+
+  const secondTimeoutAt = new Date("2026-10-18T03:00:00.000Z");
+  const promotedC = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: current.id,
+    currentBidId: "bid-b-900",
+    orderId: promotedB.orderId,
+    expiredBuyerId: "buyer-b",
+    now: secondTimeoutAt,
+  });
+  assert.equal(promotedC.bidId, "bid-c-500");
+  assert.equal(promotedC.buyerId, "buyer-c");
+  assert.equal(promotedC.price, 500);
+  assert.equal(
+    promotedC.paymentDeadlineAt.getTime(),
+    secondTimeoutAt.getTime() + 24 * 60 * 60 * 1000,
+  );
+
+  const finalResult = await service.advanceWinnerAfterPaymentTimeout({
+    auctionId: current.id,
+    currentBidId: "bid-c-500",
+    orderId: promotedC.orderId,
+    expiredBuyerId: "buyer-c",
+    now: new Date("2026-10-19T04:00:00.000Z"),
+  });
+  assert.equal(finalResult.outcome, "released");
+  assert.equal(current.winningBidId, null);
+  assert.equal(current.winningOrderId, null);
+  assert.equal(createdOrders.length, 2);
+  assert.deepEqual(
+    createdOrders.map((order) => order.auctionBidId),
+    ["bid-b-900", "bid-c-500"],
+  );
+  assert.equal(productStatuses.at(-1), "auction_action_required");
+});
+
 test("automatic close has no side effects after Trust & Safety moderation", async (t) => {
   const endedAt = new Date(Date.now() - 1000);
   const moderatedAuction = {
@@ -775,6 +1199,16 @@ test("automatic close has no side effects after Trust & Safety moderation", asyn
   assert.equal(result, moderatedAuction);
 });
 
+test("stale close job rechecks the latest deadline under lock before deciding a winner", async (t) => {
+  const now = new Date();
+  const current = { id: "extended-item", status: "open", scheduledEndAt: new Date(now.getTime() + 60000) };
+  t.mock.method(repository, "withAuctionLock", async (_id, fn) => fn({
+    $executeRaw: async () => {}, auctionItem: { findUnique: async () => current },
+  }));
+  t.mock.method(repository, "highestBid", async () => { throw new Error("must not decide winner early"); });
+  assert.equal(await service.closeAuction({ id: current.id, status: "open", scheduledEndAt: now }, now), current);
+});
+
 test("scheduled auction opening uses a moderation-aware CAS", async (t) => {
   const now = new Date();
   const auction = {
@@ -794,6 +1228,7 @@ test("scheduled auction opening uses a moderation-aware CAS", async (t) => {
   assert.deepEqual(options, {
     expectedStatus: "scheduled",
     requireUnmoderatedProduct: true,
+    startDueAt: now,
   });
 });
 
@@ -854,8 +1289,9 @@ test("submit accepts a product already created with 'auction' status without re-
   assert.equal(setCalled, false);
 });
 
-test("reject resets product status back to 'available'", async (t) => {
+test("reject requires and records a reason before resetting product status", async (t) => {
   let revertedStatus = null;
+  let updatedData = null;
   t.mock.method(repository, "findById", async () => ({
     id: "a1",
     productId: "p1",
@@ -864,17 +1300,29 @@ test("reject resets product status back to 'available'", async (t) => {
   t.mock.method(repository, "setProductStatus", async (productId, status) => {
     revertedStatus = status;
   });
-  t.mock.method(repository, "updateStatus", async (id, data) => ({
-    id,
-    ...data,
-  }));
+  t.mock.method(repository, "updateStatus", async (id, data) => {
+    updatedData = data;
+    return { id, ...data };
+  });
+
+  await assert.rejects(
+    service.reject({
+      user: { id: "mkt-1", role: "MARKETING" },
+      auctionId: "a1",
+      reason: "   ",
+    }),
+    (err) => err.status === 400 && err.message.includes("ระบุเหตุผล"),
+  );
 
   const result = await service.reject({
     user: { id: "mkt-1", role: "MARKETING" },
     auctionId: "a1",
+    reason: "  รูปภาพไม่ชัดเจน  ",
   });
 
   assert.equal(result.status, "rejected");
+  assert.equal(result.cancellationReason, "รูปภาพไม่ชัดเจน");
+  assert.equal(updatedData.cancellationReason, "รูปภาพไม่ชัดเจน");
   assert.equal(revertedStatus, "available");
 });
 
@@ -1075,20 +1523,42 @@ test("createRound rejects invalid or inverted dates", async () => {
   );
 });
 
+test("createRound rejects a submission start in the past", async () => {
+  const now = Date.now();
+  await assert.rejects(
+    service.createRound({
+      user: { id: "mkt-1", role: "MARKETING" },
+      input: {
+        title: "Past Round",
+        maxItems: 20,
+        submissionStartsAt: new Date(now - 60_000).toISOString(),
+        submissionEndsAt: new Date(now + 60 * 60_000).toISOString(),
+        auctionStartsAt: new Date(now + 2 * 60 * 60_000).toISOString(),
+        auctionEndsAt: new Date(now + 3 * 60 * 60_000).toISOString(),
+      },
+    }),
+    (err) =>
+      err.status === 400 &&
+      err.message.includes("เวลาเริ่มเปิดรับสินค้าต้องเป็นเวลาปัจจุบันหรืออนาคต"),
+  );
+});
+
 test("createRound creates round for Marketing user", async (t) => {
   t.mock.method(repository, "createRound", async (data) => ({
     id: "round-1",
     ...data,
   }));
 
+  const now = Date.now();
   const round = await service.createRound({
     user: { id: "mkt-1", role: "MARKETING" },
     input: {
       title: "Round 1",
-      submissionStartsAt: "2026-09-01T10:00:00Z",
-      submissionEndsAt: "2026-09-05T10:00:00Z",
-      auctionStartsAt: "2026-09-06T10:00:00Z",
-      auctionEndsAt: "2026-09-08T10:00:00Z",
+      maxItems: 20,
+      submissionStartsAt: new Date(now + 60 * 60_000).toISOString(),
+      submissionEndsAt: new Date(now + 2 * 60 * 60_000).toISOString(),
+      auctionStartsAt: new Date(now + 3 * 60 * 60_000).toISOString(),
+      auctionEndsAt: new Date(now + 4 * 60 * 60_000).toISOString(),
     },
   });
 
@@ -1120,6 +1590,7 @@ test("getCurrentRound correctly returns flags when active", async (t) => {
 test("placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and reschedules close job", async (t) => {
   const initialEnd = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes remaining
   let updatedEndAt = null;
+  let softCloseEndsAt = null;
   let rescheduledAt = null;
 
   t.mock.method(repository, "withAuctionLock", async (auctionId, fn) => {
@@ -1135,6 +1606,7 @@ test("placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and res
         }),
         update: async ({ data }) => {
           if (data.scheduledEndAt) updatedEndAt = data.scheduledEndAt;
+          if (data.softCloseEndsAt) softCloseEndsAt = data.softCloseEndsAt;
         },
       },
       bid: {
@@ -1170,6 +1642,7 @@ test("placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and res
     "should add exactly 5 minutes",
   );
   assert.equal(rescheduledAt.getTime(), updatedEndAt.getTime());
+  assert.equal(softCloseEndsAt.getTime(), updatedEndAt.getTime());
 });
 
 test("placeBid outside the last 5 minutes does NOT extend scheduledEndAt", async (t) => {
@@ -1384,10 +1857,11 @@ test("createRound succeeds when overlapping round exists (MKT-DEC-025 overlap pe
     user,
     input: {
       title: "Overlapping Round",
-      submissionStartsAt: "2026-10-04T00:00:00.000Z",
-      submissionEndsAt: "2026-10-06T00:00:00.000Z",
-      auctionStartsAt: "2026-10-06T00:00:00.000Z",
-      auctionEndsAt: "2026-10-08T00:00:00.000Z",
+      maxItems: 20,
+      submissionStartsAt: "2035-10-04T00:00:00.000Z",
+      submissionEndsAt: "2035-10-06T00:00:00.000Z",
+      auctionStartsAt: "2035-10-06T00:00:00.000Z",
+      auctionEndsAt: "2035-10-08T00:00:00.000Z",
     },
   });
 
@@ -1408,10 +1882,11 @@ test("createRound succeeds and passes tx when no conflict exists", async (t) => 
     user,
     input: {
       title: "Clean Round",
-      submissionStartsAt: "2026-10-10T00:00:00.000Z",
-      submissionEndsAt: "2026-10-12T00:00:00.000Z",
-      auctionStartsAt: "2026-10-12T00:00:00.000Z",
-      auctionEndsAt: "2026-10-15T00:00:00.000Z",
+      maxItems: 20,
+      submissionStartsAt: "2035-10-10T00:00:00.000Z",
+      submissionEndsAt: "2035-10-12T00:00:00.000Z",
+      auctionStartsAt: "2035-10-12T00:00:00.000Z",
+      auctionEndsAt: "2035-10-15T00:00:00.000Z",
     },
   });
 
@@ -1653,6 +2128,7 @@ test("createRound accepts empty categories array or omitted as all categories", 
     user: { id: "mkt-1", role: "MARKETING" },
     input: {
       title: "All Categories Round",
+      maxItems: 20,
       submissionStartsAt: "2026-11-01T00:00:00.000Z",
       submissionEndsAt: "2026-11-02T00:00:00.000Z",
       auctionStartsAt: "2026-11-03T00:00:00.000Z",
@@ -1666,6 +2142,7 @@ test("createRound accepts empty categories array or omitted as all categories", 
     user: { id: "mkt-1", role: "MARKETING" },
     input: {
       title: "Omitted Categories Round",
+      maxItems: 20,
       submissionStartsAt: "2026-11-05T00:00:00.000Z",
       submissionEndsAt: "2026-11-06T00:00:00.000Z",
       auctionStartsAt: "2026-11-07T00:00:00.000Z",
@@ -1689,6 +2166,7 @@ test("createRound accepts one valid category", async (t) => {
     user: { id: "mkt-1", role: "MARKETING" },
     input: {
       title: "Shoes Round",
+      maxItems: 20,
       submissionStartsAt: "2026-11-01T00:00:00.000Z",
       submissionEndsAt: "2026-11-02T00:00:00.000Z",
       auctionStartsAt: "2026-11-03T00:00:00.000Z",
@@ -1714,6 +2192,7 @@ test("createRound accepts multiple valid categories", async (t) => {
     user: { id: "mkt-1", role: "MARKETING" },
     input: {
       title: "Shoes and Bags Round",
+      maxItems: 20,
       submissionStartsAt: "2026-11-01T00:00:00.000Z",
       submissionEndsAt: "2026-11-02T00:00:00.000Z",
       auctionStartsAt: "2026-11-03T00:00:00.000Z",
@@ -2383,6 +2862,31 @@ test("browseRounds returns active and upcoming rounds with derived phases", asyn
   assert.equal(result.upcomingRounds[0].phase, "upcoming");
 });
 
+test("browseRounds keeps a base-ended round visible while an item is in soft close", async (t) => {
+  const fakeNow = new Date("2026-10-02T12:05:00.000Z");
+  t.mock.method(repository, "findActiveAuctionRounds", async () => [
+    {
+      id: "r-overtime",
+      submissionStartsAt: new Date("2026-10-01T00:00:00.000Z"),
+      submissionEndsAt: new Date("2026-10-02T00:00:00.000Z"),
+      auctionStartsAt: new Date("2026-10-02T10:00:00.000Z"),
+      auctionEndsAt: new Date("2026-10-02T12:00:00.000Z"),
+      _count: { auctions: 1 },
+    },
+  ]);
+  t.mock.method(repository, "findUpcomingRounds", async () => []);
+
+  const result = await service.browseRounds(fakeNow);
+  assert.equal(result.activeAuctionRounds.length, 1);
+  assert.equal(result.activeAuctionRounds[0].phase, "auction");
+  assert.equal(result.activeAuctionRounds[0].isSoftCloseActive, true);
+});
+
+test("maskBidderDisplayName partially hides resolved account names", () => {
+  assert.equal(service.maskBidderDisplayName("สมชาย", "buyer-1"), "ส***ย");
+  assert.equal(service.maskBidderDisplayName("A", "buyer-1"), "A***");
+});
+
 test("getRound returns round with phase and rejects invalid roundId", async (t) => {
   const fakeNow = new Date("2026-10-02T12:00:00.000Z");
   await assert.rejects(
@@ -2590,10 +3094,11 @@ test("createRound supports concurrent round creation with overlapping times and 
     user,
     input: {
       title: "Round A",
-      submissionStartsAt: "2026-10-01T00:00:00.000Z",
-      submissionEndsAt: "2026-10-05T00:00:00.000Z",
-      auctionStartsAt: "2026-10-05T00:00:00.000Z",
-      auctionEndsAt: "2026-10-10T00:00:00.000Z",
+      maxItems: 20,
+      submissionStartsAt: "2035-10-01T00:00:00.000Z",
+      submissionEndsAt: "2035-10-05T00:00:00.000Z",
+      auctionStartsAt: "2035-10-05T00:00:00.000Z",
+      auctionEndsAt: "2035-10-10T00:00:00.000Z",
     },
   });
 
@@ -2601,10 +3106,11 @@ test("createRound supports concurrent round creation with overlapping times and 
     user,
     input: {
       title: "Round B (Overlapping)",
-      submissionStartsAt: "2026-10-02T00:00:00.000Z",
-      submissionEndsAt: "2026-10-06T00:00:00.000Z",
-      auctionStartsAt: "2026-10-06T00:00:00.000Z",
-      auctionEndsAt: "2026-10-11T00:00:00.000Z",
+      maxItems: 20,
+      submissionStartsAt: "2035-10-02T00:00:00.000Z",
+      submissionEndsAt: "2035-10-06T00:00:00.000Z",
+      auctionStartsAt: "2035-10-06T00:00:00.000Z",
+      auctionEndsAt: "2035-10-11T00:00:00.000Z",
     },
   });
 
@@ -2840,6 +3346,10 @@ test("cancelRound atomically transitions items and products, logs audit, and not
         }),
       },
       auctionItem: {
+        update: async ({ where, data }) => {
+          updatedItems.push({ where, data });
+          return { id: where.id, ...data };
+        },
         updateMany: async ({ where, data }) => {
           updatedItems.push({ where, data });
           return { count: 2 };
@@ -2878,24 +3388,23 @@ test("cancelRound atomically transitions items and products, logs audit, and not
   assert.equal(result.cancellationReason, "เกิดเหตุขัดข้องทางเทคนิค");
   assert.equal(result.cancelledBy, "mkt-1");
 
-  assert.equal(updatedItems.length, 1);
+  assert.equal(updatedItems.length, 3);
   assert.equal(updatedItems[0].data.status, "cancelled");
 
   assert.equal(updatedProducts.length, 1);
   assert.equal(updatedProducts[0].data.status, "auction_action_required");
 
-  const commandAudits = auditLogs.filter((row) => row.action === "AUCTION_ROUND_CANCEL");
+  const commandAudits = auditLogs.filter(
+    (row) => row.action === "AUCTION_ROUND_CANCEL",
+  );
   assert.equal(commandAudits.length, 1);
   assert.equal(commandAudits[0].metadata.affectedItemCount, 2);
   assert.equal(commandAudits[0].metadata.affectedSellerCount, 2);
-  const snapshots = auditLogs.filter((row) => row.action === "ER_STATE_SNAPSHOT");
-  assert.equal(auditLogs.length, 4);
-  assert.equal(snapshots.length, 3);
-  assert.deepEqual(snapshots.map((row) => row.entityId).sort(), ["item-1", "item-2", "round-1"]);
-  for (const row of snapshots) {
-    assert.equal(row.metadata.erFields.cancellationReason, "เกิดเหตุขัดข้องทางเทคนิค");
-    assert.equal(row.metadata.erFields.cancelledBy, "mkt-1");
-    assert.ok(!Number.isNaN(new Date(row.metadata.erFields.cancelledAt).getTime()));
+  assert.equal(auditLogs.length, 1);
+  for (const change of updatedItems.slice(1)) {
+    assert.equal(change.data.cancellationReason, result.cancellationReason);
+    assert.equal(change.data.cancelledBy, "mkt-1");
+    assert.ok(change.data.cancelledAt instanceof Date);
   }
 
   assert.deepEqual(cancelledJobs.sort(), ["item-1", "item-2"]);
@@ -3337,8 +3846,8 @@ test("chatClient.notifyItemCancelled notifies only seller before open, and notif
 
   assert.equal(preOpenRes.deliveredCount, 1);
   assert.equal(preOpenRes.failedCount, 0);
-  // 2 fetch calls: 1 conversation + 1 message for seller-A only
-  assert.equal(calls.length, 2);
+  // 3 fetch calls: 1 conversation + 1 message + 1 notification-bell item.
+  assert.equal(calls.length, 3);
   assert.equal(calls[0].body.contextType, "AUCTION");
   assert.equal(calls[0].body.contextId, "round-pre:seller-A");
   assert.deepEqual(calls[0].body.participants, [
@@ -3349,6 +3858,8 @@ test("chatClient.notifyItemCancelled notifies only seller before open, and notif
     calls[1].body.idempotencyKey,
     "auction.item_cancelled:item-pre:seller-A",
   );
+  assert.ok(calls[2].url.endsWith("/internal/notifications"));
+  assert.equal(calls[2].body.userId, "seller-A");
 
   // 2. Open cancellation: notifies seller + deduplicated bidders, each in their own isolated 1-on-1 room
   calls.length = 0;
@@ -3371,8 +3882,12 @@ test("chatClient.notifyItemCancelled notifies only seller before open, and notif
     c.url.endsWith("/internal/conversations"),
   );
   const msgCalls = calls.filter((c) => c.url.includes("/messages"));
+  const bellCalls = calls.filter((c) =>
+    c.url.endsWith("/internal/notifications"),
+  );
   assert.equal(convCalls.length, 3);
   assert.equal(msgCalls.length, 3);
+  assert.equal(bellCalls.length, 3);
 
   // Verify user isolation: each conversation has only 1 human recipient + system-marketing
   const contextIds = convCalls.map((c) => c.body.contextId).sort();
@@ -3602,7 +4117,7 @@ test("submit re-reads round inside withRoundMutationLock and rejects without cre
   assert.equal(createdItems, 0);
 });
 
-test("browseRounds includes cancelled upcoming round until auctionEndsAt and hides it after auctionEndsAt", async (t) => {
+test("browseRounds excludes cancelled rounds from the current buyer lists", async (t) => {
   let upcomingOpts = null;
   const now = Date.now();
 
@@ -3640,14 +4155,8 @@ test("browseRounds includes cancelled upcoming round until auctionEndsAt and hid
 
   const res = await service.browseRounds();
 
-  assert.deepEqual(upcomingOpts, { includeCancelled: true });
-  assert.equal(res.upcomingRounds.length, 1);
-  assert.equal(res.upcomingRounds[0].id, "round-up-cancelled-valid");
-  assert.equal(res.upcomingRounds[0].phase, "cancelled");
-  assert.equal(
-    res.upcomingRounds[0].cancellationReason,
-    "ปรับตารางรอบประมูลใหม่",
-  );
+  assert.equal(upcomingOpts, undefined);
+  assert.equal(res.upcomingRounds.length, 0);
 });
 
 test("chatClient.notifyRoundCancelled partial failure followed by retry delivers missing recipient and deduplicates already-delivered recipients", async (t) => {
@@ -3720,4 +4229,23 @@ test("chatClient.notifyRoundCancelled partial failure followed by retry delivers
     3,
     "Retry must deliver missing buyer-2 without duplicating seller-1 or buyer-1",
   );
+});
+
+test("service.getBids returns enriched bids with bidder names", async (t) => {
+  const auction = {
+    id: "a-bids-test",
+    status: "open",
+    bids: [
+      { id: "b1", amount: 1200, bidderId: "user-alpha", createdAt: new Date() },
+      { id: "b2", amount: 1000, bidderId: "user-beta", createdAt: new Date() },
+    ],
+  };
+  t.mock.method(repository, "findById", async (id) => auction);
+
+  const bids = await service.getBids("a-bids-test");
+  assert.equal(bids.length, 2);
+  assert.equal(bids[0].amount, 1200);
+  assert.ok(bids[0].bidderName);
+  assert.equal(bids[1].amount, 1000);
+  assert.ok(bids[1].bidderName);
 });

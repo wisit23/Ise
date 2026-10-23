@@ -19,6 +19,7 @@ backend/services/auth-service/private-kyc-documents/*
 .DS_Store
 coverage/
 backend/services/*/src/generated/
+docs/diagrams/
 
 # AI coding-assistant skill tooling — installed locally per-agent, not part
 # of the application; never commit it.

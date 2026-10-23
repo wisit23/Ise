@@ -1,8 +1,22 @@
 const prisma = require("./prismaClient");
 const { Prisma } = require("../generated/prisma-client");
 const { buildCatalogWhere } = require("../features/catalog/catalogQuery");
+const shopSearchClient = require("../services/shopSearchClient");
 
-const WITH_MEDIA = { photos: true, videos: true, categoryLinks: { include: { category: true } } };
+const WITH_MEDIA = {
+  photos: true,
+  videos: true,
+  categoryLinks: { include: { category: true } },
+  countViews: { select: { count: true } },
+  auctions: {
+    where: {
+      status: { in: ["open", "scheduled", "approved", "pending_approval", "closed"] },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    select: { id: true, status: true, startingPrice: true },
+  },
+};
 
 /** Row lock so concurrent category rewrites of one product cannot both
  * delete and re-insert the same (product_id, category_id) pair. */
@@ -40,8 +54,12 @@ async function categoryData(client, names) {
  * shape the API/frontend expects, ordered by `position` (index 0 = cover). */
 function toApiShape(product) {
   if (!product) return product;
-  const { photos, videos, categoryLinks, ...rest } = product;
+  const { photos, videos, categoryLinks, countViews, ...rest } = product;
   if (categoryLinks) rest.categories = categoryLinks.map((link) => link.category.name).sort();
+  const viewCount = Array.isArray(countViews)
+    ? countViews.reduce((acc, cv) => acc + (cv.count || 0), 0)
+    : (product.viewCount || 0);
+  rest.viewCount = viewCount;
   const moderationActive = Boolean(
     rest.moderatedAt || rest.status === "removed",
   );
@@ -61,6 +79,11 @@ function toApiShape(product) {
   delete rest.reservationId;
   delete rest.reservedBy;
   delete rest.reservationExpiresAt;
+  if (Array.isArray(product.auctions) && product.auctions[0]) {
+    rest.auctionId = product.auctions[0].id;
+    rest.auctionStatus = product.auctions[0].status;
+  }
+  delete rest.auctions;
   const media = [
     ...(photos || []).map((p) => ({ ...p, type: "image" })),
     ...(videos || []).map((v) => ({ ...v, type: "video" })),
@@ -105,14 +128,26 @@ function mediaToNestedCreate(media) {
  */
 async function searchProducts(filters) {
   const { skip = 0, take = 20, q } = filters;
-  const where = buildCatalogWhere(filters, { PrismaClient: Prisma });
+  let matchingSellerIds = [];
+  if (q) {
+    try {
+      matchingSellerIds = await shopSearchClient.findSellerIds(q);
+    } catch (err) {
+      // Keep product keyword search available during an auth-service outage.
+      console.warn("[shopSearch] Shop lookup failed:", err.message);
+    }
+  }
+  const where = buildCatalogWhere(
+    { ...filters, matchingSellerIds },
+    { PrismaClient: Prisma },
+  );
   const order = q
     ? Prisma.sql`
         ts_rank_cd(search_vector, plainto_tsquery('simple', ${q})) DESC,
         GREATEST(word_similarity(${q}, search_text), similarity(${q}, search_text)) DESC,
-        created_at DESC
+        created_at DESC, id ASC
       `
-    : Prisma.sql`created_at DESC`;
+    : Prisma.sql`created_at DESC, id ASC`;
 
   const [rows, countRows] = await Promise.all([
     prisma.$queryRaw`
@@ -465,6 +500,67 @@ async function listFilterOptions() {
   }
 }
 
+/**
+ * Records a view for a product in count_views table.
+ * Rules:
+ * - Count only when the product is available and has not been purchased / reserved by a buyer.
+ * - Do NOT count if the product is sold or reserved (status !== "available").
+ * - Do NOT count if the product has a buyer (reservedBy is set).
+ * - Do NOT count the seller of the product (viewerId === product.sellerId).
+ * - Do NOT count the buyer of the product (viewerId === product.reservedBy or viewer is order.buyerId).
+ * - Do NOT count if there is an active order in order-service.
+ * Returns true if a view was counted/incremented, false otherwise.
+ */
+async function recordView(productId, viewerId, { tx = null } = {}) {
+  if (!productId || !viewerId) return false;
+  const client = tx || prisma;
+
+  const product = await client.product.findUnique({
+    where: { id: productId },
+    select: { id: true, sellerId: true, status: true, reservedBy: true },
+  });
+
+  if (!product) return false;
+
+  // 1. Only count if product has not been purchased yet (not sold)
+  if (product.status === "sold") {
+    return false;
+  }
+
+  // 2. Do NOT count the seller of that product (count only buyers / visitors)
+  if (product.sellerId === viewerId) {
+    return false;
+  }
+
+  await client.countView.upsert({
+    where: {
+      viewerId_productId: {
+        viewerId,
+        productId,
+      },
+    },
+    update: {
+      count: { increment: 1 },
+    },
+    create: {
+      viewerId,
+      productId,
+      count: 1,
+    },
+  });
+
+  return true;
+}
+
+async function getViewCount(productId, { tx = null } = {}) {
+  const client = tx || prisma;
+  const sumResult = await client.countView.aggregate({
+    where: { productId },
+    _sum: { count: true },
+  });
+  return sumResult._sum.count || 0;
+}
+
 module.exports = {
   toApiShape,
   list,
@@ -480,4 +576,6 @@ module.exports = {
   ensureCategory,
   listConditions,
   listFilterOptions,
+  recordView,
+  getViewCount,
 };

@@ -2,12 +2,14 @@ const { Router } = require("express");
 const {
   requireAuth,
   requireRole,
+  requireCustomerAccount,
   fromGatewayHeaders,
   verifyAccessToken,
   requireCommerceCapability,
   CAPABILITY,
 } = require("@reloop/shared");
 const campaignController = require("./campaignController");
+const interestAudienceController = require("../interestAudience/interestAudienceController");
 
 const router = Router();
 
@@ -36,8 +38,18 @@ router.get("/available", optionalAuth, campaignController.listAvailable);
 router.get("/published", optionalAuth, campaignController.listAvailable);
 
 // Buyer wallet & smart filter
-router.get("/my-vouchers", requireAuth, campaignController.myVouchers);
-router.post("/applicable", requireAuth, campaignController.applicable);
+router.get(
+  "/my-vouchers",
+  requireAuth,
+  requireCustomerAccount,
+  campaignController.myVouchers,
+);
+router.post(
+  "/applicable",
+  requireAuth,
+  requireCustomerAccount,
+  campaignController.applicable,
+);
 
 // Marketing / Admin list & create
 router.get("/", requireAuth, requireRole("MARKETING"), campaignController.list);
@@ -48,10 +60,30 @@ router.post(
   campaignController.createDraft,
 );
 
+router.get(
+  "/audience/options",
+  requireAuth,
+  requireRole("MARKETING"),
+  interestAudienceController.options,
+);
+router.post(
+  "/audience/preview",
+  requireAuth,
+  requireRole("MARKETING"),
+  interestAudienceController.preview,
+);
+router.get(
+  "/interest-insights",
+  requireAuth,
+  requireRole("MARKETING"),
+  interestAudienceController.insights,
+);
+
 // Buyer claiming (hold/release/complete are internal only)
 router.post(
   "/:id/claim",
   requireAuth,
+  requireCustomerAccount,
   requireCommerceCapability(CAPABILITY.BUYER),
   campaignController.claim,
 );
@@ -134,6 +166,12 @@ router.get(
   requireAuth,
   requireRole("MARKETING"),
   campaignController.getSalesTrends,
+);
+router.get(
+  "/metrics/auction-activity",
+  requireAuth,
+  requireRole("MARKETING"),
+  campaignController.getAuctionActivityMetrics,
 );
 router.get(
   "/metrics/compare",

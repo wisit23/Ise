@@ -1,8 +1,30 @@
 # Marketing Feature Progress
 
+## Current addendum — 2026-10-14: Round capacity
+
+Implemented user-approved nullable `auction_rounds.max_items`, required capacity
+on new-round creation, atomic slot checks for both submission flows, and Marketing
+capacity display. Pending items reserve slots; rejected/cancelled items free them.
+See [rules and verification](round-capacity.md). Automated checks passed; real
+Browser create/full/reject-release acceptance and four Desktop sizes now verified
+after the user reopened the tab. Fixed immediate count refresh after rejection or
+cancellation; Frontend regression now 163 tests. Disposable fixtures removed.
+No commit/push; historical progress below is retained.
+
+## Current addendum — 2026-10-14: Round time editing
+
+Implemented Marketing round time editing and the user-approved nullable
+`auction_items.soft_close_ends_at` floor. See [rules, migration and acceptance
+evidence](round-time-editing.md). Latest rerun: Backend 121 tests (no skips),
+Frontend 160 tests, targeted lint and diff check. Earlier existing Marketing
+integration: 16 tests (no skips). Browser modal layout checked at four Desktop
+sizes; isolated real save/shortening, soft-close retention, Redis deadlines and
+live Chat delivery/retry were verified and fixtures removed. Full-project final
+regression/production build remains pending. Historical records below are retained.
+
 > Owner: ศิวกร วรวัฒน์อมรชัย · Reviewer: อัสนัย เมืองรอด · Updated: 2026-10-08
 
-**Status:** `MKT-001` (Campaign Lifecycle & Voucher Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-003` / `MKT-007` (Durable Campaign Attribution & Conversion Metrics Dashboard), `MKT-004 Part A` (Knowledge Base & Articles System), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling), `UR-11` (Swipe-to-Choose Hardening: Buyer Authorization, Persistence, User Isolation & Anti-Spoofing), `UR-08` (User/Peak-Usage Analytics สำหรับ Marketing: Active Users, New Users, Hourly Usage, Peak Hour & Date Range Filtering), `Marketing Audit Trail` (Append-Only Audit Log for Campaigns, Auctions, and Articles with Atomic Mutation Contracts & SYSTEM Idempotency), และ `Campaign Date Validation & Budget Tracking with Auto-End` (`MKT-DEC-023`: Server-side date boundaries, Atomic spentBudget tracking, auto-end after completed attribution processing, CLAIMED voucher expiry, and Marketing UI budget progress) ตรวจสอบผ่านการทดสอบอัตโนมัติครบถ้วน (Verified with automated tests; รอ commit; ER Diagram update pending); และ `MKT-004 Part B` (Buyer Segmentation Rules) อยู่ระหว่างเตรียม Buyer profile persistence hardening (Part 4)
+**Status:** `MKT-001` (Campaign Lifecycle & Voucher Wallet), `MKT-002` (Campaign Workspace & Buyer Hub), `MKT-003` / `MKT-007` (Durable Campaign Attribution & Conversion Metrics Dashboard), `MKT-004 Part A` (Knowledge Base & Articles System), `MKT-004 Part B` / `UR-13` (Buyer Segmentation with persisted Auth profile and anti-spoofing), `MKT-005` (Auction Core, Rounds, Soft Close, BullMQ Worker & Idempotency), `MKT-006` (Server-Side Voucher Quote-and-Hold, Concurrency Guard & Admin Decoupling), `UR-11` (Swipe-to-Choose Hardening: Buyer Authorization, Persistence, User Isolation & Anti-Spoofing), `UR-08` (User/Peak-Usage Analytics สำหรับ Marketing: Active Users, New Users, Hourly Usage, Peak Hour & Date Range Filtering), `Marketing Audit Trail` (Append-Only Audit Log for Campaigns, Auctions, and Articles with Atomic Mutation Contracts & SYSTEM Idempotency), และ `Campaign Date Validation & Budget Tracking with Auto-End` (`MKT-DEC-023`: Server-side date boundaries, Atomic spentBudget tracking, auto-end after completed attribution processing, CLAIMED voucher expiry, and Marketing UI budget progress) ตรวจสอบผ่านการทดสอบอัตโนมัติครบถ้วน (Verified with automated tests; รอ commit; ER Diagram update pending)
 
 **Plan coverage:** Explicit trace rows cover `UR-08`–`UR-16` through FR, active/deferred NFR,
 `WF-03`, `WF-11`, documented Workflow gaps and `MKT-001`–`MKT-007`
@@ -77,7 +99,7 @@
 - `MKT-006`: Implementation and automated tests are complete (quote-and-hold, concurrency guard, admin decoupling). Waiting only for commit (pending explicit user instruction).
 - `UR-08`: User & Peak-Usage Analytics completed & verified across unit, cross-service, PostgreSQL integration, and frontend tests; waiting for commit.
 - `Marketing Audit Trail`: Completed & verified across unit, component, and PostgreSQL integration tests (`REQUIRE_INTEGRATION=1` without skips); waiting for commit.
-- `MKT-004 Part B`: Source implementation and unit tests exist; buyer profile persistence hardening belongs to Part 4.
+- `MKT-004 Part B`: Completed and verified. Product Service reads the signed-in buyer's persisted multi-value profile from Auth Service for discovery, direct detail, claim, and applicable-voucher checks; client profile spoofing is ignored and Auth outages fail closed for targeted campaigns.
 
 **Deferred:** Production campaign authorization, privacy and push-notification security hardening
 (Deferred Security Phase)
@@ -572,3 +594,42 @@ approved by Admin shows up here as "approved, ready to schedule" immediately.
     - `npm --prefix frontend test -- --watchAll=false`: ผ่านครบ **54/54 suites (359/359 tests passed, 0 fail, 0 skip)**
   - **Quality Gates:** `npm --prefix frontend run build`, `npm run lint`, `npm run format:check`, `git diff --check` ผ่านครบ
   - **Browser E2E:** **Pending** (ยังไม่ได้รันบนเบราว์เซอร์จริง)
+
+## 2026-10-17 — TC_AUC10 immutable winner orders and notifications
+
+- [x] เปลี่ยน exhausted payment rollover ให้ Product เป็น `auction_action_required` และ reuse Seller Recovery เดิม
+- [x] แยก Order ต่อ winning Bid; Order เดิมถูกยกเลิกและไม่เปลี่ยนเจ้าของ
+- [x] เพิ่ม migration เปลี่ยน `auctionId` จาก unique เป็น index และเพิ่ม unique `(auctionId, auctionBidId)` โดยไม่เพิ่ม column/status
+- [x] รวมค่าเวลา 24 ชั่วโมงไว้ที่ shared `AUCTION_PAYMENT_TTL_MS`
+- [x] สร้าง Order ใหม่แบบ deterministic/idempotent พร้อม OrderLog และ Marketing Audit เดิม
+- [x] เพิ่ม Auction Chat notification สำหรับผู้ชนะเดิม ผู้ชนะใหม่ และผู้ขาย พร้อม Checkout/Seller Recovery links
+- [x] เพิ่ม Checkout expired state สำหรับลิงก์เดิมของผู้หมดสิทธิ์
+- [x] เพิ่ม/ปรับ test cases สำหรับ A → B → C, duplicate-bid skipping, ราคา, 24 ชั่วโมง, exhausted state, retry, OrderLog และ notification payload
+- [x] รัน Docker targeted tests: Product/Auction/Campaign 131/131, Order settlement/restriction 9/9, Auth audience 2/2, Order purchase signal 3/3 และ Frontend 24/24
+- [x] เปิด Browser จริงยืนยัน Customer Insights, ตัวกรอง/ข้อมูลสรุป, Dashboard-to-Campaign prefill และ audience preview โดยไม่บันทึก Campaign
+- [ ] Full integration suite และ browser time-advance E2E ของ Auction rollover 24 ชั่วโมงยังไม่ได้รัน
+
+## 2026-10-18 — Interest-score Campaign Targeting & Customer Insights Dashboard
+
+- [x] Reuse คะแนน Recommendation เดิม: profile `4/3/2/5`, search `6`, like `8`, purchase `10`, คะแนนเต็มรวม `38`
+- [x] กำหนดช่วงคะแนน `0`, `1–6`, `7–14`, `15–24`, `25–38` และปัดคะแนนรวมเป็นจำนวนเต็มก่อนจัดช่วง
+- [x] เพิ่ม Internal Auth audience profile API และ Internal Order paid-purchase signal API โดยไม่อ่านฐานข้อมูลข้าม service
+- [x] เพิ่ม Campaign audience preview: ต่ำสุด/สูงสุด/เฉลี่ย/ค่ากลาง/คะแนนเต็มตามมิติ/คะแนนเต็มรวม/จำนวนผู้ได้สิทธิ์/การกระจายคะแนน
+- [x] Snapshot สิทธิ์ผู้ซื้อใน transaction เดียวกับ Campaign publish และ Audit; คะแนนที่เปลี่ยนภายหลังไม่ถอนสิทธิ์เดิม
+- [x] Campaign ทั่วไปไม่ส่ง Notification; Campaign ตามคะแนนส่ง Notification รายบัญชีพร้อมลิงก์ `/campaigns`
+- [x] เพิ่มแท็บ `ความสนใจลูกค้า` พร้อมช่วงวันเวลา 7/30/90 วันและกำหนดเอง, filter หมวดหมู่/แบรนด์/สไตล์/ไซซ์/แหล่งสัญญาณ, KPI, ranking, trend และเทียบช่วงก่อนหน้า
+- [x] เชื่อม Dashboard → สร้าง Campaign พร้อม prefill มิติและช่วงข้อมูล
+- [x] เพิ่ม migration `20261024000000_campaign_interest_audience` สำหรับ criteria และ immutable audience snapshot
+- [x] เพิ่ม unit/component tests สำหรับ scoring, snapshot, service boundary, publish/notification และ Dashboard UI
+- [ ] รัน test suites ผ่าน Docker และ Browser verification (ยังรอตามคำสั่งผู้ใช้; host ไม่มี backend dependencies และ frontend `node_modules` ไม่มี executable)
+
+## 2026-10-19 — Auction bidding, soft close, privacy, and management follow-up
+
+- [x] บังคับ cooldown 2 วินาทีต่อบัญชีต่อ AuctionItem ที่ backend; retry ด้วย idempotency key เดิมยังคืน Bid เดิม
+- [x] รับราคาได้สูงสุดตรง 1,000,000 บาท และปฏิเสธค่าที่สูงกว่า
+- [x] ปิดบังชื่อผู้เสนอราคาบางส่วนในประวัติ และเรียงราคาสูงสุดก่อนอย่างคงที่
+- [x] ต่อเวลา 5 นาทีทุกครั้งที่มี Bid สำเร็จใน 5 นาทีสุดท้าย และคงรอบไว้ในหน้าผู้ซื้อเมื่อพ้นเวลาหลักแต่ยังมี AuctionItem ที่ต่อเวลา
+- [x] ส่งเหตุการณ์ Auction ที่เป็น system chat ไป Notification Bell ด้วย โดยใช้ `userId + entityId` ป้องกันรายการซ้ำ และแจ้งผู้เกี่ยวข้องเมื่อ Soft Close ต่อเวลา
+- [x] จำนวนสินค้าในประวัติรอบไม่รวมรายการ `rejected`/`cancelled`; หน้าจัดการเรียงรอบ/รายการที่ยังดำเนินการได้ก่อนประวัติ และแสดงราคาสูงสุดจริง
+- [x] Docker targeted tests รอบปัจจุบัน: Product Auction repository/service 126/126 และ Frontend Auction/Marketing 69/69; `git diff --check` ผ่าน
+- [ ] ยังไม่ได้รัน browser E2E และ integration test ที่ใช้ฐานข้อมูล/เวลาเดินจริงในรอบนี้

@@ -56,7 +56,7 @@ describe("SupportCaseDetails", () => {
   it("requires a three-part CS memo before escalation", () => {
     const onStatusChange = jest.fn();
     render(<SupportCaseDetails ticket={ticket} onClose={jest.fn()} onAssign={jest.fn()} onStatusChange={onStatusChange} onAddInternalNote={jest.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "ส่งต่อให้ Admin" }));
+    fireEvent.click(screen.getByRole("button", { name: "ส่งต่อให้ Trust and Safety" }));
     const submit = screen.getByRole("button", { name: "ส่งเรื่องต่อ" });
     expect(submit).toBeDisabled();
     fireEvent.change(screen.getByRole("textbox", { name: "ปัญหาคืออะไร" }), { target: { value: "สินค้าไม่ตรงปก" } });

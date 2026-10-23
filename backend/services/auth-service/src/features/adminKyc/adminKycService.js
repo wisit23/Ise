@@ -1,5 +1,6 @@
 const { badRequest, conflict, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
+const chatClient = require("../../services/chatClient");
 
 const ALLOWED_DECISIONS = ["VERIFIED", "REJECTED"];
 
@@ -67,7 +68,7 @@ async function decideKyc({
   if (!trimmedReason) throw badRequest("reason is required");
   if (typeof version !== "number") throw badRequest("version is required");
 
-  return prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx) => {
     const application = await tx.kycApplication.findUnique({
       where: { id: applicationId },
     });
@@ -116,6 +117,30 @@ async function decideKyc({
       },
     };
   });
+
+  if (decision === "VERIFIED") {
+    chatClient.sendSystemNotification({
+      userId: outcome.application.userId,
+      type: "SYSTEM",
+      title: "การยืนยันตัวตน (KYC) ได้รับการอนุมัติ",
+      message: `✅ การยืนยันตัวตนผู้ขายของคุณได้รับการอนุมัติเรียบร้อยแล้ว${trimmedReason ? ` (หมายเหตุ: ${trimmedReason})` : ""}`,
+      link: "/seller/dashboard",
+      entityId: `kyc:decision:${applicationId}`,
+      metadata: { applicationId, decision, reason: trimmedReason },
+    }).catch(() => {});
+  } else if (decision === "REJECTED") {
+    chatClient.sendSystemNotification({
+      userId: outcome.application.userId,
+      type: "SYSTEM",
+      title: "การยืนยันตัวตน (KYC) ไม่ผ่านการอนุมัติ",
+      message: `⚠️ การยืนยันตัวตนผู้ขายของคุณถูกปฏิเสธ เนื่องจาก: ${trimmedReason}`,
+      link: "/seller/onboarding",
+      entityId: `kyc:decision:${applicationId}`,
+      metadata: { applicationId, decision, reason: trimmedReason },
+    }).catch(() => {});
+  }
+
+  return outcome;
 }
 
 module.exports = { listQueue, decideKyc };

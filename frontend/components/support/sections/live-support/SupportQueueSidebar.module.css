@@ -1,0 +1,186 @@
+.sidebar {
+  container-type: inline-size;
+}
+
+.scopeTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.scopeTab {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 1px;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.scopeLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unreadBadge {
+  display: inline-flex;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  height: 18px;
+  min-width: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0 5px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.scopeBadge {
+  height: 16px;
+  min-width: 16px;
+  padding: 0 4px;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.caseTitleRow {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.caseTitle {
+  min-width: 0;
+  flex: 1;
+}
+
+.caseBadge {
+  margin-top: 3px;
+}
+
+@container (max-width: 300px) {
+  .scopeTab {
+    gap: 3px;
+    padding-inline: 0;
+    font-size: 11px;
+  }
+
+  .scopeBadge {
+    padding-inline: 3px;
+    font-size: 9px;
+  }
+}
+
+/* A complete boundary and gutter keep adjacent cases visually separate. */
+.ticketList {
+  padding: 12px;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+}
+
+.ticketCard {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 3px 0 0 transparent, 0 1px 2px rgb(15 23 42 / 4%);
+  transform: translateY(0) scale(1);
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 240ms ease;
+}
+
+.ticketCard + .ticketCard {
+  margin-top: 12px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ticketCard:hover {
+    transform: translateY(-2px);
+    border-color: #94a3b8;
+    background: #f8fafc;
+    box-shadow: inset 3px 0 0 transparent, 0 4px 12px rgb(15 23 42 / 8%);
+  }
+
+  .ticketCard.selectedCard:hover {
+    background: #e5f8ee;
+    box-shadow: inset 3px 0 0 #059669, 0 4px 12px rgb(15 23 42 / 8%);
+  }
+}
+
+.ticketCard:active {
+  transform: translateY(0) scale(0.99);
+  transition-duration: 90ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticketCard {
+    transition: none;
+  }
+
+  .ticketCard:hover,
+  .ticketCard:active {
+    transform: none;
+  }
+}
+
+.ticketCard.selectedCard {
+  border-color: #059669;
+  background: #ecfdf5;
+  box-shadow: inset 3px 0 0 #059669, 0 1px 2px rgb(15 23 42 / 4%);
+}
+
+.cardStatus {
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+@container (max-width: 300px) {
+  .ticketList { padding: 10px; }
+  .ticketCard { padding: 12px; }
+}
+.returnedFlag,
+.waitingFlag {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.returnedFlag {
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.waitingFlag {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.returnedFlag :global(.material-symbols-outlined),
+.waitingFlag :global(.material-symbols-outlined) {
+  font-size: 14px;
+}

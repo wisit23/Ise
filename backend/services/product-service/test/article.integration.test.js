@@ -91,7 +91,53 @@ test("articles API permissions, search, and CRUD", async (t) => {
     "Search should find newly created article using trigram search",
   );
 
-  // 5. MARKETING can update article
+  // 5. A guest read is counted once only after the server-observed dwell time.
+  const guestSessionId = `article-reader-${Date.now()}`;
+  const startViewRes = await request(app)
+    .post(`/articles/${created.id}/views/start`)
+    .send({ guestSessionId });
+  assert.equal(startViewRes.status, 200);
+  assert.equal(startViewRes.body.alreadyCounted, false);
+
+  const earlyCompleteRes = await request(app)
+    .post(`/articles/${created.id}/views/complete`)
+    .send({ guestSessionId });
+  assert.equal(earlyCompleteRes.status, 400);
+  assert.equal(earlyCompleteRes.body.code, "ARTICLE_VIEW_DWELL_REQUIRED");
+
+  await prisma.articleView.updateMany({
+    where: { articleId: created.id, guestSessionId },
+    data: { startedAt: new Date(Date.now() - 21_000) },
+  });
+  const completeViewRes = await request(app)
+    .post(`/articles/${created.id}/views/complete`)
+    .send({ guestSessionId });
+  assert.equal(completeViewRes.status, 200);
+  assert.equal(completeViewRes.body.counted, true);
+  assert.equal(completeViewRes.body.viewCount, 1);
+
+  const repeatStartRes = await request(app)
+    .post(`/articles/${created.id}/views/start`)
+    .send({ guestSessionId });
+  assert.equal(repeatStartRes.status, 200);
+  assert.equal(repeatStartRes.body.alreadyCounted, true);
+  assert.equal(repeatStartRes.body.viewCount, 1);
+
+  const detailRes = await request(app).get(`/articles/${created.id}`);
+  assert.equal(detailRes.status, 200);
+  assert.equal(detailRes.body.article.viewCount, 1);
+
+  // 6. MARKETING sees the same per-article reader total.
+  const marketingListRes = await request(app)
+    .get(`/articles/marketing/all?q=${encodeURIComponent(uniqueTitle)}`)
+    .set("Authorization", `Bearer ${marketingToken}`);
+  assert.equal(marketingListRes.status, 200);
+  const marketingArticle = marketingListRes.body.items.find(
+    (item) => item.id === created.id,
+  );
+  assert.equal(marketingArticle.viewCount, 1);
+
+  // 7. MARKETING can update article
   const updateRes = await request(app)
     .put(`/articles/${created.id}`)
     .set("Authorization", `Bearer ${marketingToken}`)
@@ -102,13 +148,17 @@ test("articles API permissions, search, and CRUD", async (t) => {
   assert.equal(updateRes.status, 200);
   assert.equal(updateRes.body.article.category, "styling");
 
-  // 6. MARKETING can delete article
+  // 8. MARKETING can delete article
   const deleteRes = await request(app)
     .delete(`/articles/${created.id}`)
     .set("Authorization", `Bearer ${marketingToken}`);
   assert.equal(deleteRes.status, 204);
 
-  // 7. Verify deletion
+  // 9. Verify deletion and cascading view cleanup
   const getAfterDelete = await request(app).get(`/articles/${created.id}`);
   assert.equal(getAfterDelete.status, 404);
+  assert.equal(
+    await prisma.articleView.count({ where: { articleId: created.id } }),
+    0,
+  );
 });

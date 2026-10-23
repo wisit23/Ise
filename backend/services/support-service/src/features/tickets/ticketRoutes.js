@@ -9,6 +9,7 @@ router.get(
   require("../reference/referenceController").ticketCategories,
 );
 router.get("/trend", requireAuth, require("./ticketTrend").trend);
+router.get("/unread-summary", requireAuth, require("./unreadSummary").unreadSummary);
 router.get(
   "/agent-dashboard",
   requireAuth,
@@ -21,6 +22,8 @@ router.get("/queue", requireAuth, ticketController.queue);
 router.get("/dashboard", requireAuth, ticketController.dashboard);
 
 router.post("/", requireAuth, ticketController.create);
+router.get("/:id/csat", requireAuth, require("./csat").get);
+router.post("/:id/csat", requireAuth, require("./csat").post);
 router.get("/:id", requireAuth, ticketController.getOne);
 router.get("/:id/conversation", requireAuth, ticketController.getConversation);
 router.post("/:id/conversation", requireAuth, ticketController.joinChat);
@@ -29,6 +32,16 @@ router.post("/:id/continue", requireAuth, ticketController.joinChat);
 router.post("/:id/messages", requireAuth, ticketController.reply);
 router.post("/:id/assign", requireAuth, ticketController.assign);
 router.post("/:id/takeover", requireAuth, ticketController.takeover);
+router.post("/:id/moderation", requireAuth, async (req, res, next) => {
+  try {
+    res.json(await require("./ticketModeration").moderateTicket({
+      ticketId: req.params.id, userId: req.userId,
+      role: require("../staffRole").effectiveStaffRole(req),
+      version: req.body.version, action: req.body.action, targetId: req.body.targetId,
+      reason: req.body.reason, authorization: req.headers.authorization,
+    }));
+  } catch (err) { next(err); }
+});
 router.patch("/:id/status", requireAuth, ticketController.changeStatus);
 
 module.exports = router;

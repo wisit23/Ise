@@ -5,15 +5,6 @@ const request = require("supertest");
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
 process.env.INTERNAL_SERVICE_TOKEN ||= "test-internal-token";
-if (
-  process.env.DATABASE_URL_PRODUCT &&
-  process.env.DATABASE_URL_PRODUCT.includes("@postgres:")
-) {
-  process.env.DATABASE_URL_PRODUCT = process.env.DATABASE_URL_PRODUCT.replace(
-    "@postgres:",
-    "@localhost:",
-  );
-}
 if (!process.env.DATABASE_URL_PRODUCT) {
   process.env.DATABASE_URL_PRODUCT =
     "postgresql://reloop:reloop_dev_password@localhost:5432/reloop_product";
@@ -41,6 +32,7 @@ const buyer3Token = signAccessToken({
 const TEST_CAMPAIGN_ID = "bgt-int-camp-001";
 const CONCURRENT_CAMPAIGN_ID = "bgt-int-camp-conc";
 const TEST_PRODUCT_ID = "bgt-int-prod-001";
+const TEST_PRODUCT_ID_2 = "bgt-int-prod-002";
 
 async function databaseIsReachable() {
   if (!process.env.DATABASE_URL) return false;
@@ -121,7 +113,8 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
         discountType: "FIXED",
         discountValue: 100,
         minOrderPrice: 200,
-        budget: 500,
+        budget: 200,
+        spentBudget: 0,
         status: "published",
         startsAt: new Date(Date.now() - 3600_000),
         endsAt: new Date(Date.now() + 86400_000),
@@ -135,6 +128,16 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
         id: "bgt-vch-001",
         campaignId: TEST_CAMPAIGN_ID,
         userId: "bgt-buyer-001",
+        status: "CLAIMED",
+        claimedAt: new Date(),
+      },
+    });
+
+    await prisma.userVoucher.create({
+      data: {
+        id: "bgt-vch-003",
+        campaignId: TEST_CAMPAIGN_ID,
+        userId: "bgt-buyer-003",
         status: "CLAIMED",
         claimedAt: new Date(),
       },
@@ -163,6 +166,18 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
         reservationExpiresAt: new Date(Date.now() + 3600_000),
       },
     });
+    await prisma.product.create({
+      data: {
+        id: TEST_PRODUCT_ID_2,
+        sellerId: "bgt-seller-002",
+        title: "Second Reserved Budget Test Item",
+        price: 1000,
+        category: "Clothing",
+        status: "reserved",
+        reservedBy: "bgt-buyer-002",
+        reservationExpiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
   });
 
   t.after(async () => {
@@ -187,34 +202,54 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
   };
 
   await t.test(
-    "1. Ingestion below budget: increments spentBudget and campaign remains published",
+    "1. Quote reserves budget and payment completion commits it once",
     async () => {
-      const res = await request(app)
-        .post("/internal/campaigns/events/order-completed")
+      const quote = await request(app)
+        .post(`/internal/campaigns/${TEST_CAMPAIGN_ID}/quote-and-hold`)
         .set("x-internal-token", process.env.INTERNAL_SERVICE_TOKEN)
-        .send(event1);
+        .send({
+          userId: "bgt-buyer-001",
+          orderId: "bgt-ord-001",
+          productId: TEST_PRODUCT_ID,
+        });
+      assert.equal(quote.status, 200);
+      assert.equal(quote.body.discountAmount, 100);
 
-      assert.equal(res.status, 200);
-      assert.equal(res.body.success, true);
-      assert.equal(res.body.recorded, true);
+      let campaign = await prisma.campaign.findUnique({
+        where: { id: TEST_CAMPAIGN_ID },
+      });
+      assert.equal(Number(campaign.spentBudget), 0);
+      assert.equal(Number(campaign.reservedBudget), 100);
 
-      // Verify the public repository projection derives the real database SUM.
-      const campaign = await campaignRepository.findById(TEST_CAMPAIGN_ID);
-      assert.ok(campaign);
-      assert.equal(Number(campaign.spentBudget), 200);
+      const completed = await request(app)
+        .post(`/internal/campaigns/${TEST_CAMPAIGN_ID}/complete`)
+        .set("x-internal-token", process.env.INTERNAL_SERVICE_TOKEN)
+        .send({ userId: "bgt-buyer-001", orderId: "bgt-ord-001" });
+      assert.equal(completed.status, 200);
+
+      campaign = await prisma.campaign.findUnique({
+        where: { id: TEST_CAMPAIGN_ID },
+      });
+      assert.equal(Number(campaign.spentBudget), 100);
+      assert.equal(Number(campaign.reservedBudget), 0);
       assert.equal(campaign.status, "published");
 
-      // Verify vouchers still CLAIMED
       const v1 = await prisma.userVoucher.findUnique({
         where: { id: "bgt-vch-001" },
       });
-      assert.equal(v1.status, "CLAIMED");
+      assert.equal(v1.status, "USED");
     },
   );
 
   await t.test(
-    "2. Idempotency: duplicate event delivery does NOT increment spentBudget again",
+    "2. Payment retry and later attribution do not charge budget twice",
     async () => {
+      const retry = await request(app)
+        .post(`/internal/campaigns/${TEST_CAMPAIGN_ID}/complete`)
+        .set("x-internal-token", process.env.INTERNAL_SERVICE_TOKEN)
+        .send({ userId: "bgt-buyer-001", orderId: "bgt-ord-001" });
+      assert.equal(retry.status, 200);
+
       const res = await request(app)
         .post("/internal/campaigns/events/order-completed")
         .set("x-internal-token", process.env.INTERNAL_SERVICE_TOKEN)
@@ -222,59 +257,52 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
 
       assert.equal(res.status, 200);
       assert.equal(res.body.success, true);
-      assert.equal(res.body.deduplicated, true);
+      assert.equal(res.body.recorded, true);
 
-      // Duplicate delivery leaves the SUM unchanged.
-      const campaign = await campaignRepository.findById(TEST_CAMPAIGN_ID);
-      assert.equal(Number(campaign.spentBudget), 200);
+      const campaign = await prisma.campaign.findUnique({
+        where: { id: TEST_CAMPAIGN_ID },
+      });
+      assert.equal(Number(campaign.spentBudget), 100);
       assert.equal(campaign.status, "published");
     },
   );
 
   await t.test(
-    "3. Budget threshold reached: transitions campaign to ended, expires CLAIMED vouchers, and writes SYSTEM audit log",
+    "3. Second paid reservation exhausts budget and closes the campaign",
     async () => {
-      // Second completed event with discountAmount 300 -> total spentBudget = 200 + 300 = 500 >= budget 500
-      const event2 = {
-        eventId: "bgt-evt-002",
-        eventType: "order.completed.v1",
-        occurredAt: new Date().toISOString(),
-        aggregateId: "bgt-ord-002",
-        payload: {
+      const quote = await request(app)
+        .post(`/internal/campaigns/${TEST_CAMPAIGN_ID}/quote-and-hold`)
+        .set("x-internal-token", process.env.INTERNAL_SERVICE_TOKEN)
+        .send({
+          userId: "bgt-buyer-002",
           orderId: "bgt-ord-002",
-          campaignId: TEST_CAMPAIGN_ID,
-          grossAmount: 1500,
-          discountAmount: 300,
-          netAmount: 1200,
-          completedAt: new Date().toISOString(),
-        },
-      };
+          productId: TEST_PRODUCT_ID_2,
+        });
+      assert.equal(quote.status, 200);
 
       const res = await request(app)
-        .post("/internal/campaigns/events/order-completed")
+        .post(`/internal/campaigns/${TEST_CAMPAIGN_ID}/complete`)
         .set("x-internal-token", process.env.INTERNAL_SERVICE_TOKEN)
-        .send(event2);
+        .send({ userId: "bgt-buyer-002", orderId: "bgt-ord-002" });
 
       assert.equal(res.status, 200);
       assert.equal(res.body.success, true);
-      assert.equal(res.body.recorded, true);
+      assert.equal(res.body.voucher.status, "USED");
 
-      // Threshold transitions remain atomic with the attribution SUM.
-      const campaign = await campaignRepository.findById(TEST_CAMPAIGN_ID);
-      assert.equal(Number(campaign.spentBudget), 500);
+      const campaign = await prisma.campaign.findUnique({
+        where: { id: TEST_CAMPAIGN_ID },
+      });
+      assert.equal(Number(campaign.spentBudget), 200);
+      assert.equal(Number(campaign.reservedBudget), 0);
       assert.equal(campaign.status, "ended");
+      assert.equal(campaign.endReason, "BUDGET_EXHAUSTED");
 
       // Verify CLAIMED vouchers transitioned to EXPIRED
-      const v1 = await prisma.userVoucher.findUnique({
-        where: { id: "bgt-vch-001" },
+      const v3 = await prisma.userVoucher.findUnique({
+        where: { id: "bgt-vch-003" },
       });
-      const v2 = await prisma.userVoucher.findUnique({
-        where: { id: "bgt-vch-002" },
-      });
-      assert.equal(v1.status, "EXPIRED");
-      assert.equal(v2.status, "EXPIRED");
+      assert.equal(v3.status, "EXPIRED");
 
-      // Verify SYSTEM MarketingAuditLog: action = CAMPAIGN_END, metadata.reason = BUDGET_REACHED, exactly 1 entry
       const auditLogs = await prisma.marketingAuditLog.findMany({
         where: {
           entityType: "CAMPAIGN",
@@ -284,7 +312,7 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
       });
       assert.equal(auditLogs.length, 1);
       assert.equal(auditLogs[0].actorRole, "SYSTEM");
-      assert.equal(auditLogs[0].metadata?.reason, "BUDGET_REACHED");
+      assert.equal(auditLogs[0].metadata?.reason, "BUDGET_EXHAUSTED");
     },
   );
 
@@ -333,7 +361,7 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
   );
 
   await t.test(
-    "5. Real PostgreSQL Concurrency: concurrent completed events perform atomic increment of spentBudget",
+    "5. Concurrent attribution events record facts without charging budget",
     async () => {
       // Create a separate campaign for concurrency test
       await prisma.campaign.create({
@@ -382,9 +410,11 @@ test("Product Service Campaign Budget Enforcement & Auto-End PostgreSQL Integrat
         assert.equal(res.body.success, true);
       }
 
-      // Concurrent completed events must sum to exactly 5 * 150 = 750.
-      const campaign = await campaignRepository.findById(CONCURRENT_CAMPAIGN_ID);
-      assert.equal(Number(campaign.spentBudget), 750);
+      const campaign = await prisma.campaign.findUnique({
+        where: { id: CONCURRENT_CAMPAIGN_ID },
+      });
+      assert.equal(Number(campaign.spentBudget), 0);
+      assert.equal(campaign.status, "published");
 
       // Verify all 5 attribution facts are persisted
       const attributions = await prisma.campaignAttribution.count({

@@ -9,8 +9,36 @@ const ADDRESS = {
   postalCode: "10110",
 };
 async function createOrder(prisma, { data }) {
-  const {price,finalPrice,productTitle,campaignCode,discountAmount,payoutHeld,paymentSimulationStatus,disputedAt,holdReason,heldAt,heldBy,reservationId,reservationExpiresAt,auctionId,checkoutSessionId,...fields}=data;
-  data={...fields,originalAmount:fields.originalAmount ?? price,ordersAmount:fields.ordersAmount ?? finalPrice ?? price,orderType:fields.orderType || "BUY_NOW"};
+  const { price, finalPrice, ...fields } = data;
+  for (const key of [
+    "productTitle",
+    "campaignCode",
+    "discountAmount",
+    "payoutHeld",
+    "paymentSimulationStatus",
+    "disputedAt",
+    "holdReason",
+    "heldAt",
+    "heldBy",
+    "reservationId",
+    "reservationExpiresAt",
+    "auctionId",
+    "checkoutSessionId",
+  ])
+    delete fields[key];
+  data = {
+    ...fields,
+    originalAmount: fields.originalAmount ?? price,
+    ordersAmount: fields.ordersAmount ?? finalPrice ?? price,
+    orderType: fields.orderType || "BUY_NOW",
+  };
+  // Mirror the timestamps a real transition stamps; dispute windows use them.
+  const now = new Date();
+  if (["shipped", "delivered", "completed"].includes(data.status))
+    data.shippedAt ??= now;
+  if (["delivered", "completed"].includes(data.status))
+    data.deliveredAt ??= now;
+  if (data.status === "completed") data.completedAt ??= now;
   const pending = ["pending", "pending_payment"].includes(data.status);
   return prisma.order.create({
     data: {
@@ -70,6 +98,8 @@ async function deleteOrder(prisma, orderId) {
   await prisma.payment.deleteMany({ where: { orderId } });
   await prisma.shipping.deleteMany({ where: { orderId } });
   await prisma.orderLog.deleteMany({ where: { orderId } });
+  await prisma.attributionJob.deleteMany({ where: { orderId } });
+  await prisma.productSyncJob.deleteMany({ where: { orderId } });
   await prisma.order.delete({ where: { id: orderId } });
 }
 module.exports = { createOrder, findOrder, deleteOrder, ADDRESS };

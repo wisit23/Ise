@@ -71,6 +71,7 @@ async function queue(req, res, next) {
       search: req.query.q,
       scope: req.query.scope,
       work: req.query.work,
+      retention: req.query.retention,
       userId: req.userId,
       priority: req.query.priority,
       sort: req.query.sort,
@@ -194,6 +195,25 @@ async function requestMoreEvidence(req, res, next) {
         roles: req.userRoles,
         reason: req.body.reason,
         version: req.body.version,
+        tasks: req.body.tasks,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateReturnTask(req, res, next) {
+  try {
+    res.json(
+      await disputeService.updateReturnTask({
+        disputeId: req.params.id,
+        taskId: req.params.taskId,
+        userId: req.userId,
+        role: req.userRole,
+        roles: req.userRoles,
+        done: req.body.done,
+        note: req.body.note,
       }),
     );
   } catch (err) {
@@ -286,7 +306,22 @@ async function chatAttachment(req, res, next) {
   }
 }
 
+async function acknowledge(req, res, next) {
+  try {
+    const result = await disputeService.acknowledge({
+      disputeId: req.params.id,
+      userId: req.userId,
+      role: req.userRole,
+      roles: req.userRoles,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  updateReturnTask,
   chatAttachment,
   chatHistory,
   dashboard,
@@ -302,6 +337,7 @@ module.exports = {
   reassign,
   escalate,
   decide,
+  acknowledge,
   requestMoreEvidence,
   auditTranscript,
 };

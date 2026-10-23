@@ -37,6 +37,7 @@ describe("SwipeVideoCard", () => {
     localStorage.clear();
     originalClipboard = navigator.clipboard;
     originalPlay = window.HTMLMediaElement.prototype.play;
+    apiFetch.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -759,16 +760,21 @@ describe("SwipeVideoCard", () => {
     expect(actionRail).toHaveClass("right-3");
   });
 
-  it("opens honest comment affordance dialog with link to product reviews and closes on Esc", () => {
-    render(<SwipeVideoCard video={mockVideo} isActive={true} />);
+  it("opens honest comment affordance dialog with link to product reviews and closes on Esc", async () => {
+    apiFetch.mockResolvedValue([]);
+    await act(async () => {
+      render(<SwipeVideoCard video={mockVideo} isActive={true} />);
+    });
 
     const commentBtn = screen.getByRole("button", { name: "ความคิดเห็น" });
-    fireEvent.click(commentBtn);
+    await act(async () => {
+      fireEvent.click(commentBtn);
+    });
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toBeInTheDocument();
     expect(
-      screen.getByText("ยังไม่มีระบบความคิดเห็นบนคลิปวิดีโอ"),
+      screen.getByText("ยังไม่มีความคิดเห็น"),
     ).toBeInTheDocument();
 
     const productReviewLink = screen.getByRole("link", {
@@ -780,8 +786,53 @@ describe("SwipeVideoCard", () => {
     );
 
     // Press Escape to close dialog
-    fireEvent.keyDown(window, { key: "Escape" });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("allows submitting a comment on the review clip", async () => {
+    apiFetch.mockImplementation((url, opts) => {
+      if (opts?.method === "POST") {
+        return Promise.resolve({
+          id: "new-c",
+          userName: "Test User",
+          comment: "คลิปมีประโยชน์มากครับ",
+          createdAt: new Date().toISOString(),
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    await act(async () => {
+      render(<SwipeVideoCard video={mockVideo} isActive={true} />);
+    });
+
+    const commentBtn = screen.getByRole("button", { name: "ความคิดเห็น" });
+    await act(async () => {
+      fireEvent.click(commentBtn);
+    });
+
+    const input = screen.getByPlaceholderText("เขียนความคิดเห็น...");
+    const submitBtn = screen.getByRole("button", { name: "ส่ง" });
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "คลิปมีประโยชน์มากครับ" } });
+    });
+
+    await act(async () => {
+      fireEvent.click(submitBtn);
+    });
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      `/api/products/videos/${mockVideo.id}/comments`,
+      expect.objectContaining({
+        method: "POST",
+        body: { comment: "คลิปมีประโยชน์มากครับ" },
+      }),
+    );
+    expect(screen.getByText("คลิปมีประโยชน์มากครับ")).toBeInTheDocument();
   });
 
   it("allows toggling like on and off (like and unlike)", async () => {

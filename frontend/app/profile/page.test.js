@@ -33,6 +33,19 @@ jest.mock("next/navigation", () => ({
 
 jest.mock("../../lib/api", () => ({
   apiFetch: jest.fn(),
+  mediaUrl: (url) => url,
+}));
+
+jest.mock("../../lib/products", () => ({
+  fetchProduct: jest.fn((id) =>
+    Promise.resolve({
+      id,
+      media: [{ type: "image", url: `/uploads/${id}.jpg` }],
+    }),
+  ),
+}));
+jest.mock("../../lib/sellers", () => ({
+  fetchSellerSummary: jest.fn(() => Promise.resolve({ shopName: "ร้านทดสอบ" })),
 }));
 
 jest.mock("../../lib/auth", () => ({
@@ -69,6 +82,7 @@ const ORDERS_RESPONSE = {
       price: 1290,
       status: "completed",
       dispute: null,
+      deliveredAt: new Date().toISOString(),
       createdAt: "2025-04-11T00:00:00.000Z",
     },
   ],
@@ -142,10 +156,26 @@ describe("ProfilePage", () => {
       if (path === "/api/auth/me/addresses") {
         return Promise.resolve(SAVED_ADDRESSES);
       }
-      if (path === "/api/orders/mine?limit=50") {
-        return Promise.resolve(ORDERS_RESPONSE);
+      if (path === "/api/products/conditions") {
+        return Promise.resolve({ items: [] });
       }
-      if (path === "/api/reviews/mine?limit=50") {
+      if (path.startsWith("/api/orders/mine?")) {
+        const status = new URLSearchParams(path.split("?")[1]).get("status");
+        return Promise.resolve({
+          ...ORDERS_RESPONSE,
+          items: ORDERS_RESPONSE.items.filter(
+            (order) => !status || order.status === status,
+          ),
+        });
+      }
+      if (path.startsWith("/api/orders/order-")) {
+        return Promise.resolve(
+          ORDERS_RESPONSE.items.find(
+            (order) => path === `/api/orders/${order.id}`,
+          ),
+        );
+      }
+      if (path.startsWith("/api/reviews/mine?")) {
         return Promise.resolve({ items: [], totalPages: 1 });
       }
       if (path === "/api/products/campaigns/my-vouchers") {
@@ -240,8 +270,8 @@ describe("ProfilePage", () => {
 
     // 4 statuses provided by order-service
     expect(screen.getByText("รอชำระเงิน")).toBeInTheDocument();
-    expect(screen.getByText("รอยืนยัน")).toBeInTheDocument();
-    expect(screen.getByText("จัดส่งแล้ว")).toBeInTheDocument();
+    expect(screen.getByText("รอผู้ขายยืนยัน")).toBeInTheDocument();
+    expect(screen.getByText("กำลังจัดส่ง")).toBeInTheDocument();
     expect(screen.getByText("สำเร็จ")).toBeInTheDocument();
     await screen.findByRole("button", { name: /บันทึกความสนใจ/ });
   });
@@ -254,7 +284,9 @@ describe("ProfilePage", () => {
     });
     fireEvent.click(pendingPaymentButton);
 
-    expect(screen.getByText("สถานะสินค้าและคำสั่งซื้อ")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "คำสั่งซื้อของฉัน" }),
+    ).toBeInTheDocument();
     expect(
       await screen.findByText("เสื้อเชิ้ตจากฐานข้อมูล"),
     ).toBeInTheDocument();
@@ -271,9 +303,147 @@ describe("ProfilePage", () => {
     fireEvent.click(screen.getByRole("button", { name: /สำเร็จ/i }));
 
     expect(await screen.findByText("กระเป๋าที่ซื้อสำเร็จ")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "รีวิว" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "รายงาน" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "ให้คะแนนร้านค้า" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "ขอคืนเงิน/คืนสินค้า" }),
+    ).toBeInTheDocument();
   });
+
+  it("embeds the full orders UI with product photos and opens details without leaving profile", async () => {
+    render(<ProfilePage />);
+    const ordersTab = screen.getByRole("button", { name: /สถานะสินค้า/ });
+    expect(ordersTab.parentElement).not.toHaveClass("mb-6");
+    fireEvent.click(ordersTab);
+    const orders = within(
+      screen.getByRole("region", { name: "คำสั่งซื้อของฉัน" }),
+    );
+    expect(
+      await orders.findByRole("img", { name: "เสื้อเชิ้ตจากฐานข้อมูล" }),
+    ).toHaveAttribute("src", "/uploads/product-1.jpg");
+    expect(
+      orders.getAllByRole("button", { name: "ติดต่อผู้ขาย" }),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByText("หน้าคำสั่งซื้อเต็มรูปแบบ"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getAllByRole("navigation", { name: "main navigation" }),
+    ).toHaveLength(1);
+    fireEvent.click(orders.getAllByRole("button", { name: "ดูรายละเอียด" })[0]);
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(
+      dialog.getByRole("heading", { name: "รายละเอียดคำสั่งซื้อ" }),
+    ).toBeInTheDocument();
+    expect(await dialog.findByText("ร้านทดสอบ")).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("uses the shared status filters and resets pagination when the filter changes", async () => {
+    const previous = apiFetch.getMockImplementation();
+    apiFetch.mockImplementation((path, options) => {
+      if (path.startsWith("/api/orders/mine?page=")) {
+        const status = new URLSearchParams(path.split("?")[1]).get("status");
+        return Promise.resolve({
+          ...ORDERS_RESPONSE,
+          items: ORDERS_RESPONSE.items.filter(
+            (order) => !status || order.status === status,
+          ),
+          totalPages: 2,
+        });
+      }
+      return previous(path, options);
+    });
+    render(<ProfilePage />);
+    fireEvent.click(screen.getByRole("button", { name: /สถานะสินค้า/ }));
+    const orders = within(
+      screen.getByRole("region", { name: "คำสั่งซื้อของฉัน" }),
+    );
+    fireEvent.click(await orders.findByRole("button", { name: "ถัดไป" }));
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith("/api/orders/mine?page=2&limit=8", {
+        token: "test-token",
+      }),
+    );
+    fireEvent.click(orders.getByRole("button", { name: "สำเร็จ" }));
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/api/orders/mine?page=1&limit=8&status=completed",
+        { token: "test-token" },
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        orders.queryByText("เสื้อเชิ้ตจากฐานข้อมูล"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(orders.getByText("กระเป๋าที่ซื้อสำเร็จ")).toBeInTheDocument();
+    expect(orders.getByRole("button", { name: "สำเร็จ" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("reopens the requested shortcut after changing the embedded filter", async () => {
+    render(<ProfilePage />);
+    fireEvent.click(screen.getByRole("button", { name: /สำเร็จ/ }));
+    let orders = within(
+      screen.getByRole("region", { name: "คำสั่งซื้อของฉัน" }),
+    );
+    await orders.findByText("กระเป๋าที่ซื้อสำเร็จ");
+    fireEvent.click(orders.getByRole("button", { name: "ทั้งหมด" }));
+    await orders.findByText("เสื้อเชิ้ตจากฐานข้อมูล");
+    fireEvent.click(screen.getAllByRole("button", { name: /สำเร็จ/ })[0]);
+    orders = within(screen.getByRole("region", { name: "คำสั่งซื้อของฉัน" }));
+    expect(orders.getByRole("button", { name: "สำเร็จ" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await orders.findByText("กระเป๋าที่ซื้อสำเร็จ");
+    expect(
+      orders.queryByText("เสื้อเชิ้ตจากฐานข้อมูล"),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["รอชำระเงิน", "pending_payment"],
+    ["รอผู้ขายยืนยัน", "paid"],
+    ["กำลังจัดส่ง", "shipped"],
+    ["สำเร็จ", "completed"],
+  ])(
+    "opens the matching shared filter from the %s shortcut",
+    async (label, status) => {
+      render(<ProfilePage />);
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(label) }));
+      await waitFor(() =>
+        expect(apiFetch).toHaveBeenCalledWith(
+          `/api/orders/mine?page=1&limit=8&status=${status}`,
+          { token: "test-token" },
+        ),
+      );
+      const orders = within(
+        screen.getByRole("region", { name: "คำสั่งซื้อของฉัน" }),
+      );
+      expect(orders.getByRole("button", { name: label })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      if (status === "pending_payment") {
+        expect(
+          await orders.findByText("เสื้อเชิ้ตจากฐานข้อมูล"),
+        ).toBeInTheDocument();
+      } else if (status === "completed") {
+        expect(
+          await orders.findByText("กระเป๋าที่ซื้อสำเร็จ"),
+        ).toBeInTheDocument();
+      } else {
+        expect(
+          await orders.findByText("ไม่มีคำสั่งซื้อในหมวดนี้"),
+        ).toBeInTheDocument();
+      }
+    },
+  );
 
   it("switches to addresses tab and shows address list and allows adding address", async () => {
     render(<ProfilePage />);

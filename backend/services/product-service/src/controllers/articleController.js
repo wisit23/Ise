@@ -10,6 +10,7 @@ const {
   recordMarketingAudit,
 } = require("../features/audit/marketingAuditService");
 const articleModel = require("../models/articleModel");
+const articleViewService = require("../features/articles/articleViewService");
 
 function getActor(req) {
   return {
@@ -61,19 +62,48 @@ async function getOne(req, res, next) {
   }
 }
 
+async function startView(req, res, next) {
+  try {
+    const result = await articleViewService.start({
+      articleId: req.params.id,
+      userId: req.userId || null,
+      guestSessionId: req.body?.guestSessionId,
+    });
+    return res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function completeView(req, res, next) {
+  try {
+    const result = await articleViewService.complete({
+      articleId: req.params.id,
+      userId: req.userId || null,
+      guestSessionId: req.body?.guestSessionId,
+    });
+    return res.json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function listMarketing(req, res, next) {
   try {
     requireMarketingRole(req);
     const pagination = parsePagination(req.query, 20);
     const { status, category, q } = req.query;
-    const { items, total } = await articleModel.listAllForMarketing({
+    const { items, total, summary } = await articleModel.listAllForMarketing({
       status,
       category,
       q,
       skip: pagination.skip,
       take: pagination.take,
     });
-    return res.json(paginatedResponse(items, total, pagination));
+    return res.json({
+      ...paginatedResponse(items, total, pagination),
+      summary,
+    });
   } catch (err) {
     next(err);
   }
@@ -300,6 +330,8 @@ async function remove(req, res, next) {
 module.exports = {
   listPublic,
   getOne,
+  startView,
+  completeView,
   listMarketing,
   create,
   update,

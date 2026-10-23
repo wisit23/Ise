@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import AuctionDetailPage from "./page";
 import { apiFetch } from "../../../lib/api";
 import { useParams } from "next/navigation";
@@ -15,6 +15,7 @@ jest.mock("next/navigation", () => ({
 
 jest.mock("../../../lib/api", () => ({
   apiFetch: jest.fn(),
+  apiUrl: jest.fn((path) => path),
   mediaUrl: jest.fn((url) => url || ""),
 }));
 
@@ -121,5 +122,144 @@ describe("AuctionDetailPage - Navigation to Round", () => {
     });
     expect(backLink).toBeInTheDocument();
     expect(backLink).toHaveAttribute("href", "/auctions");
+  });
+
+  it("rejects an amount above 1,000,000 baht before calling the bid API", async () => {
+    render(<AuctionDetailPage />);
+
+    const input = await screen.findByRole("spinbutton");
+    expect(input).toHaveAttribute("max", "1000000");
+    fireEvent.change(input, { target: { value: "1000001" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "เสนอราคา ฿1,000,001" }),
+    );
+
+    expect(
+      screen.getByText("ราคาเสนอประมูลต่อครั้งต้องไม่เกิน 1,000,000 บาท"),
+    ).toBeInTheDocument();
+    expect(
+      apiFetch.mock.calls.some(([, options]) => options?.method === "POST"),
+    ).toBe(false);
+  });
+
+  it("submits a raise below 10,000 baht without opening confirmation", async () => {
+    apiFetch.mockImplementation((url, options) => {
+      if (options?.method === "POST") {
+        return Promise.resolve({ id: "bid-1", amount: options.body.amount });
+      }
+      return Promise.resolve(sampleAuctionWithRound);
+    });
+    render(<AuctionDetailPage />);
+
+    const input = await screen.findByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "11499" } });
+    fireEvent.click(screen.getByRole("button", { name: "เสนอราคา ฿11,499" }));
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/api/products/auctions/auc-101/bids",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.objectContaining({ amount: 11_499 }),
+        }),
+      ),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("locks the bid button for 2 seconds after a successful bid", async () => {
+    apiFetch.mockImplementation((url, options) => {
+      if (options?.method === "POST") {
+        return Promise.resolve({ id: "bid-1", amount: options.body.amount });
+      }
+      return Promise.resolve(sampleAuctionWithRound);
+    });
+    render(<AuctionDetailPage />);
+
+    const input = await screen.findByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "1600" } });
+    fireEvent.click(screen.getByRole("button", { name: "เสนอราคา ฿1,600" }));
+
+    const cooldownButton = await screen.findByRole("button", {
+      name: "รอ 2 วินาที",
+    });
+    expect(cooldownButton).toBeDisabled();
+  });
+
+  it("requires confirmation when the raise is at least 10,000 baht and submits the displayed amount", async () => {
+    apiFetch.mockImplementation((url, options) => {
+      if (options?.method === "POST") {
+        return Promise.resolve({ id: "bid-1", amount: options.body.amount });
+      }
+      return Promise.resolve(sampleAuctionWithRound);
+    });
+    render(<AuctionDetailPage />);
+
+    const input = await screen.findByRole("spinbutton");
+    fireEvent.change(input, { target: { value: "11500" } });
+    fireEvent.click(screen.getByRole("button", { name: "เสนอราคา ฿11,500" }));
+
+    const dialog = screen.getByRole("dialog", { name: "ยืนยันยอดเสนอราคา" });
+    expect(dialog).toHaveTextContent("ราคาปัจจุบัน ฿1,500");
+    expect(dialog).toHaveTextContent("เพิ่มขึ้น ฿10,000");
+    expect(
+      screen.getByRole("button", { name: "ยืนยันเสนอราคา ฿11,500" }),
+    ).toBeInTheDocument();
+    expect(
+      apiFetch.mock.calls.some(([, options]) => options?.method === "POST"),
+    ).toBe(false);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "ยืนยันเสนอราคา ฿11,500" }),
+    );
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/api/products/auctions/auc-101/bids",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.objectContaining({ amount: 11_500 }),
+        }),
+      ),
+    );
+  });
+
+  it("TC_AUC15 reloads the committed auction immediately when SSE reports a bid", async () => {
+    const originalEventSource = global.EventSource;
+    let source;
+    class MockEventSource {
+      constructor(url) {
+        this.url = url;
+        this.listeners = new Map();
+        source = this;
+      }
+      addEventListener(type, listener) {
+        this.listeners.set(type, listener);
+      }
+      removeEventListener(type) {
+        this.listeners.delete(type);
+      }
+      close() {}
+    }
+    global.EventSource = MockEventSource;
+
+    try {
+      render(<AuctionDetailPage />);
+      await screen.findByText("รองเท้าผ้าใบ Air Jordan 1");
+      expect(source.url).toBe("/api/products/auctions/auc-101/events");
+      apiFetch.mockClear();
+
+      await act(async () => {
+        source.listeners.get("auction-update")?.({ type: "auction-update" });
+      });
+
+      await waitFor(() =>
+        expect(apiFetch).toHaveBeenCalledWith(
+          "/api/products/auctions/auc-101",
+        ),
+      );
+    } finally {
+      global.EventSource = originalEventSource;
+    }
   });
 });

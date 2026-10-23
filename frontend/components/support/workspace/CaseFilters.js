@@ -9,6 +9,7 @@ export default function CaseFilters({
   priorities,
   onChange,
   searchSlot,
+  canViewDeleted = false,
 }) {
   const [open, setOpen] = useState(false);
   const [settled, setSettled] = useState(false);
@@ -20,7 +21,7 @@ export default function CaseFilters({
   const count =
     Number(Boolean(state.status)) +
     Number(Boolean(state.priority)) +
-    Number(Boolean(state.work));
+    Number(Boolean(state.work)) + Number(Boolean(state.retention && state.retention !== "active"));
   const groups = [
     [
       "work",
@@ -64,6 +65,11 @@ export default function CaseFilters({
         { value: "priority", label: "ความสำคัญสูงก่อน" },
       ],
     ],
+    ["retention", "การเก็บข้อมูล", [
+      { value: "active", label: "เคสปกติ" },
+      { value: "archived", label: "Archive (ปิดครบ 90 วัน)" },
+      ...(canViewDeleted ? [{ value: "deleted", label: "ลบแบบ Soft delete" }, { value: "all", label: "รวมทุกประวัติ" }] : []),
+    ]],
   ];
   return (
     <div

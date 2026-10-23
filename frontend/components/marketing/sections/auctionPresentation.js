@@ -3,7 +3,7 @@ export const STATUS_LABEL = {
   pending_approval: "รออนุมัติจาก Marketing",
   rejected: "ถูกปฏิเสธ",
   approved: "อนุมัติแล้ว รอกำหนดเวลา",
-  scheduled: "ตั้งเวลาแล้ว รอเปิด",
+  scheduled: "อนุมัติแล้ว (รอเปิดประมูล)",
   open: "กำลังประมูล",
   closed: "ปิดประมูลแล้ว",
   cancelled: "ยกเลิกแล้ว",

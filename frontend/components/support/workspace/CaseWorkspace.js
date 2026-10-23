@@ -2,14 +2,16 @@
 import SafetyOrderChatPanel from "../sections/disputes/SafetyOrderChatPanel";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { createPortal } from "react-dom";
 import { apiFetch } from "../../../lib/api";
 import { getStoredUser } from "../../../lib/auth";
 import {
   TICKET_STATUS_LABEL,
+  TICKET_STATUS_STYLE,
   DISPUTE_STATUS_LABEL,
+  DISPUTE_STATUS_STYLE,
   PRIORITY_LABEL,
+  PRIORITY_STYLE,
   ORDER_STATUS_LABEL,
   STAFF_ROLE_LABEL,
 } from "../../../lib/supportConstants";
@@ -22,13 +24,19 @@ import Pagination from "../../Pagination";
 import EmbeddedChat from "../EmbeddedChat";
 import SupportQueueSidebar from "../sections/live-support/SupportQueueSidebar";
 import useCaseWorkspace from "./useCaseWorkspace";
+import useCaseUnread from "./useCaseUnread";
 import SlaIndicator from "./SlaIndicator";
 import CaseFilters from "./CaseFilters";
 import CaseContextPanel from "./CaseContextPanel";
 import EscalationMemoDialog from "./EscalationMemoDialog";
 import EvidenceInspector from "./EvidenceInspector";
 import StaffReassignDialog from "./StaffReassignDialog";
+import ReturnToCsDialog from "./ReturnToCsDialog";
+import CaseHandoffBanner from "./CaseHandoffBanner";
+import CsatCell from "./CsatCell";
+import CsatSummary from "./CsatSummary";
 import layoutStyles from "./workspace.module.css";
+import contextStyles from "./CaseContextPanel.module.css";
 
 const ROLE_LABEL = STAFF_ROLE_LABEL;
 const ACTION_LABEL = {
@@ -56,8 +64,33 @@ export default function CaseWorkspace({
   const user = currentUser || getStoredUser() || {};
   const dispute = domain === "disputes";
   const w = useCaseWorkspace(domain, token, user.id);
+  const unread = useCaseUnread(domain, token, user.id);
   const { state, detail, queue, busy } = w;
   const toast = useToast();
+  const personIdentity = (name, id) => (
+    <span>
+      <span>{name || (id ? "ผู้ใช้" : "ยังไม่มี")}</span>
+      {id && (
+        <button
+          type="button"
+          className={contextStyles.personId}
+          aria-label={`คัดลอกรหัสผู้ใช้เต็ม ${id}`}
+          title="คัดลอกรหัสผู้ใช้เต็มสำหรับค้นหา"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(id);
+              toast.success("คัดลอกรหัสผู้ใช้เต็มแล้ว");
+            } catch {
+              toast.error("คัดลอกไม่ได้ กรุณาเลือกรหัสเต็มด้านล่างเพื่อคัดลอก");
+            }
+          }}
+        >
+          <span>{id}</span>
+          <span className="material-symbols-outlined" aria-hidden="true">content_copy</span>
+        </button>
+      )}
+    </span>
+  );
   const [context, setContext] = useState(false);
   const [memo, setMemo] = useState(false);
   const [note, setNote] = useState("");
@@ -70,8 +103,8 @@ export default function CaseWorkspace({
   const [decision, setDecision] = useState(null);
   const [reason, setReason] = useState("");
   const [decisionError, setDecisionError] = useState("");
-  const [infoReason, setInfoReason] = useState("");
-  const [infoError, setInfoError] = useState("");
+  const [returnDialog, setReturnDialog] = useState(false);
+  const deniedRoom = useRef(null);
   const [modeHost, setModeHost] = useState(null);
   useEffect(() => {
     setModeHost(document.getElementById("workspace-view-control"));
@@ -92,6 +125,30 @@ export default function CaseWorkspace({
   const elevated = [user.role, ...(user.roles || [])].some((role) =>
     ["ADMIN", "TRUST_AND_SAFETY"].includes(role),
   );
+  // The chat inbox keeps three tabs; the table view carries the full set.
+  const sidebarScopes = elevated
+    ? [
+        { value: "mine", label: "งานของฉัน" },
+        { value: "unassigned", label: "รอรับเรื่อง" },
+        { value: "all", label: "ทุกงาน" },
+      ]
+    : [
+        { value: "mine", label: "งานของฉัน" },
+        { value: "unassigned", label: "รอรับเรื่อง" },
+        { value: "escalated", label: "ส่งต่อแล้ว" },
+      ];
+  const tableScopes = [
+    { value: "mine", label: "งานของฉัน" },
+    ...(dispute && !elevated ? [{ value: "returned", label: "ตีกลับจาก T&S" }] : []),
+    { value: "unassigned", label: "รอรับเรื่อง" },
+    {
+      value: "escalated",
+      label: elevated ? "เคสที่ถูกส่งต่อ" : `ส่งต่อแล้ว (รอ T&S)`,
+    },
+    { value: "closed", label: "ปิดแล้ว" },
+    { value: "all", label: "ทุกงาน" },
+  ];
+  const closedView = state.scope === "closed";
   const setView = (value) => {
     if (!chatBusy && !busy) w.update({ view: value });
   };
@@ -108,6 +165,11 @@ export default function CaseWorkspace({
     setViewMode?.(state.view);
   }, [state.view, setViewMode]);
   useEffect(() => {
+    // Table-only tabs fold back into "mine" in the compact chat inbox.
+    if (state.view === "workspace" && !sidebarScopes.some((item) => item.value === state.scope))
+      w.update({ scope: "mine", page: 1 }, true);
+  }, [state.view, state.scope, elevated, w.update]);
+  useEffect(() => {
     setRoom(null);
     setJoining(false);
     setRoomError("");
@@ -117,8 +179,7 @@ export default function CaseWorkspace({
     setDecision(null);
     setNote("");
     setReason("");
-    setInfoReason("");
-    setInfoError("");
+    setReturnDialog(false);
     setChatBusy(false);
     roomGeneration.current++;
   }, [state.selectedId]);
@@ -158,6 +219,7 @@ export default function CaseWorkspace({
     if (
       !dispute ||
       caps.canReply ||
+      caps.isWatching ||
       (selected.status === "DECIDED" && selected.assignedTo === user.id) ||
       elevated
     ) {
@@ -195,8 +257,10 @@ export default function CaseWorkspace({
     else
       toast.success(
         action === "escalate" || body?.status === "ESCALATED"
-          ? "ส่งต่อให้ Admin แล้ว"
-          : "บันทึกเรียบร้อย",
+          ? "ส่งต่อให้ Trust and Safety แล้ว ติดตามได้ที่แท็บ “ส่งต่อแล้ว”"
+          : action === "request-evidence"
+            ? "ส่งกลับให้ CS แล้ว"
+            : "บันทึกเรียบร้อย",
       );
     if (
       action === "escalate" ||
@@ -206,6 +270,16 @@ export default function CaseWorkspace({
       setContext(false);
       w.update({ selectedId: null });
     }
+    return result;
+  }
+  async function updateReturnTask(taskId, patch) {
+    const id = selected.id;
+    const result = await apiFetch(
+      `${base}/${encodeURIComponent(id)}/return-tasks/${encodeURIComponent(taskId)}`,
+      { method: "PATCH", token, body: patch },
+    );
+    w.patchDetail(id, result);
+    w.refreshQueue();
     return result;
   }
   async function claim() {
@@ -222,8 +296,10 @@ export default function CaseWorkspace({
   const filter = (key, value) =>
     w.update(
       key === "resetFilters"
-        ? { status: "", priority: "", work: "", page: 1 }
-        : { [key]: value, page: 1 },
+        ? { status: "", priority: "", work: "", retention: "active", page: 1 }
+        : key === "retention"
+          ? { retention: value, scope: "all", work: "", status: "", selectedId: null, page: 1 }
+          : { [key]: value, page: 1 },
       key === "search",
     );
   const select = (row) => {
@@ -233,6 +309,7 @@ export default function CaseWorkspace({
   };
   const filters = (
     <CaseFilters
+      canViewDeleted={elevated}
       state={state}
       labels={labels}
       priorities={
@@ -260,6 +337,13 @@ export default function CaseWorkspace({
       }
     />
   );
+  const thaiDate = (value) =>
+    value
+      ? new Date(value).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })
+      : "—";
+  const TEAM_SHORT = { CUSTOMER_SERVICE: "ทีม CS", TRUST_AND_SAFETY: "ทีม T&S", ADMIN: "Admin" };
+  const statusStyle = dispute ? DISPUTE_STATUS_STYLE : TICKET_STATUS_STYLE;
+  const pill = "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium";
   const columns = [
     {
       key: "id",
@@ -268,22 +352,22 @@ export default function CaseWorkspace({
         <button
           type="button"
           aria-label={`คัดลอกเลขเคส ${row.ticketNumber || row.id}`}
-          title={row.ticketNumber || row.id}
-          className="min-h-11 whitespace-nowrap font-mono text-xs text-slate-700 hover:text-emerald-700"
+          title={`${row.ticketNumber || row.id} · คลิกเพื่อคัดลอก`}
+          className="group/id -ml-1.5 inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 font-mono text-xs text-slate-600 hover:bg-slate-100 hover:text-emerald-700"
           onClick={async (event) => {
             event.stopPropagation();
             try {
               await navigator.clipboard.writeText(row.ticketNumber || row.id);
               toast.success("คัดลอกเลขเคสแล้ว");
             } catch {
-              toast.error("คัดลอกไม่ได้ คุณเปิดข้อมูลบริบทเพื่อดูเลขเต็มได้");
+              toast.error("คัดลอกไม่ได้ คุณเปิดข้อมูลเคสเพื่อดูเลขเต็มได้");
             }
           }}
         >
-          {row.ticketNumber || `#${row.id.slice(0, 8)}…${row.id.slice(-4)}`}{" "}
+          {row.ticketNumber || `#…${row.id.slice(-6)}`}
           <span
             aria-hidden="true"
-            className="material-symbols-outlined align-middle text-[14px]"
+            className="material-symbols-outlined text-[14px] text-slate-300 group-hover/id:text-emerald-600"
           >
             content_copy
           </span>
@@ -292,104 +376,165 @@ export default function CaseWorkspace({
     },
     {
       key: "subject",
-      header: dispute ? "เหตุผล / ออเดอร์" : "หัวข้อ / ผู้แจ้ง",
+      header: dispute ? (closedView ? "เหตุผล / ออเดอร์" : "เหตุผล / คู่กรณี") : "หัวข้อ / ผู้แจ้ง",
       render: (row) => (
-        <div className="min-w-[190px] max-w-[320px]">
-          <p className="line-clamp-2 font-medium">
+        <div className="min-w-0">
+          <p className="truncate font-medium text-slate-900" title={row.subject || row.reason}>
             {row.subject || row.reason}
           </p>
-          <p className="mt-1 text-xs text-slate-500">
-            {dispute
-              ? row.orderId
-              : fallback(row.requesterName, row.requesterId)}
+          <p
+            className="mt-0.5 truncate text-xs text-slate-500"
+            title={dispute ? `ออเดอร์ ${row.orderId}` : undefined}
+          >
+            {dispute && !closedView
+              ? `ซื้อ ${fallback(row.buyerName, row.order?.buyerId)} · ขาย ${fallback(row.sellerName, row.order?.sellerId)}`
+              : dispute
+                ? `ออเดอร์ #${String(row.orderId).slice(0, 8)}…${String(row.orderId).slice(-4)}`
+                : fallback(row.requesterName, row.requesterId)}
           </p>
         </div>
       ),
     },
-    ...(dispute
+    ...(dispute && !closedView
       ? [
           {
-            key: "parties",
-            header: "ผู้ซื้อ / ร้านค้า",
+            key: "amount",
+            header: "ยอดเงิน",
             render: (row) => (
-              <div className="text-xs">
-                <p>{fallback(row.buyerName, row.order?.buyerId)}</p>
-                <p>{fallback(row.sellerName, row.order?.sellerId)}</p>
+              <span className="whitespace-nowrap font-medium tabular-nums text-slate-900">
+                {currency(row.order?.finalPrice ?? row.order?.price)}
+              </span>
+            ),
+          },
+        ]
+      : []),
+    ...(closedView
+      ? []
+      : [
+          {
+            key: "status",
+            header: "สถานะ",
+            // One badge per row: a handoff state replaces the raw status.
+            render: (row) =>
+              row.capabilities?.isReturned ? (
+                <span className={`${pill} gap-1 border border-amber-300 bg-amber-50 text-amber-800`}>
+                  <span aria-hidden="true" className="material-symbols-outlined !text-[14px]">assignment_return</span>
+                  ตีกลับจาก T&amp;S
+                </span>
+              ) : row.capabilities?.isWatching || (!dispute && row.status === "ESCALATED") ? (
+                <span className={`${pill} border border-blue-300 bg-blue-50 text-blue-800`}>
+                  รอ T&S ตรวจ
+                </span>
+              ) : (
+                <span className={`${pill} ${statusStyle[row.status] || "border border-slate-200 bg-slate-50 text-slate-600"}`}>
+                  {labels[row.status] || row.status}
+                </span>
+              ),
+          },
+          {
+            key: "priority",
+            header: "ความสำคัญ",
+            render: (row) => {
+              const level = row.queuePriority || row.priority;
+              return level ? (
+                <span className={`${pill} ${PRIORITY_STYLE[level] || "border border-slate-200 bg-slate-50 text-slate-600"}`}>
+                  {PRIORITY_LABEL[level] || level}
+                </span>
+              ) : (
+                "—"
+              );
+            },
+          },
+          {
+            key: "sla",
+            header: "SLA",
+            render: (row) => (
+              <div className="text-xs leading-5">
+                <SlaIndicator sla={row.sla} />
               </div>
             ),
           },
           {
-            key: "amount",
-            header: "ยอดเงินในเคส",
-            render: (row) =>
-              currency(row.order?.finalPrice ?? row.order?.price),
+            key: "owner",
+            header: "ผู้รับผิดชอบ",
+            render: (row) => {
+              const mine = (row.assigneeId || row.assignedTo) === user.id;
+              const name = mine ? "คุณ" : fallback(row.assigneeName, row.assigneeId || row.assignedTo);
+              return (
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${mine ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}
+                  >
+                    {String(name).replace(/^ผู้ใช้\s*#?/, "").charAt(0).toUpperCase() || "?"}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-slate-800">{name}</p>
+                    {dispute && (
+                      <p className="truncate text-xs text-slate-500">
+                        {TEAM_SHORT[row.assignedRole] || "ไม่ทราบทีม"}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            },
+          },
+        ]),
+    ...(closedView
+      ? [
+          {
+            key: "closedAt",
+            header: "ปิดเมื่อ",
+            render: (row) => (
+              <span className="whitespace-nowrap tabular-nums text-slate-600">
+                {thaiDate(row.decidedAt || row.closedAt || row.resolvedAt || row.updatedAt)}
+              </span>
+            ),
+          },
+          {
+            key: "csat",
+            header: "ความพึงพอใจ",
+            render: (row) => <CsatCell ratings={row.csat} />,
           },
         ]
       : []),
     {
-      key: "status",
-      header: "สถานะ",
-      render: (row) => labels[row.status] || row.status,
-    },
-    {
-      key: "priority",
-      header: "ความสำคัญ",
-      render: (row) =>
-        PRIORITY_LABEL[row.queuePriority || row.priority] ||
-        row.queuePriority ||
-        row.priority ||
-        "—",
-    },
-    {
-      key: "sla",
-      header: "SLA",
-      render: (row) => <SlaIndicator sla={row.sla} />,
-    },
-    {
-      key: "owner",
-      header: "ผู้รับผิดชอบ",
-      render: (row) => (
-        <div>
-          {(row.assigneeId || row.assignedTo) === user.id
-            ? "คุณ"
-            : fallback(row.assigneeName, row.assigneeId || row.assignedTo)}
-          {dispute && (
-            <p className="text-xs text-slate-500">
-              {ROLE_LABEL[row.assignedRole] || "ไม่ทราบทีม"}
-            </p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "createdAt",
-      header: "วันที่เปิด",
-      render: (row) =>
-        row.createdAt
-          ? new Date(row.createdAt).toLocaleDateString("th-TH", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })
-          : "—",
-    },
-    {
       key: "open",
-      header: "เปิดเคส",
+      header: <span className="sr-only">เปิดเคส</span>,
+      align: "right",
       render: (row) => (
-        <Button
-          size="sm"
+        <button
+          type="button"
+          aria-label="เปิดเคส"
+          title="เปิดเคส"
           disabled={busy || chatBusy}
           onClick={(e) => {
             e.stopPropagation();
             select(row);
           }}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
         >
-          เปิดเคส
-        </Button>
+          <span aria-hidden="true" className="material-symbols-outlined text-[18px]">arrow_forward</span>
+        </button>
       ),
     },
   ];
+  // Fixed widths (Tailwind literals) keep column rhythm stable across tabs
+  // and row counts; the open action keeps a fixed 64px.
+  const COLUMN_WIDTH = closedView
+    ? { id: "w-[13%]", subject: "w-[35%]", closedAt: "w-[12%]", csat: "w-[34%]" }
+    : dispute
+      ? { id: "w-[11%]", subject: "w-[23%]", amount: "w-[10%]", status: "w-[14%]", priority: "w-[11%]", sla: "w-[13%]", owner: "w-[12%]" }
+      : { id: "w-[12%]", subject: "w-[29%]", status: "w-[14%]", priority: "w-[11%]", sla: "w-[16%]", owner: "w-[12%]" };
+  // Text reads left-aligned; badge-like UI (status, priority, stars, the
+  // open action) is centred in its column.
+  const CENTERED = new Set(["status", "priority", "csat", "open"]);
+  const tableColumns = columns.map((column) => ({
+    ...column,
+    align: CENTERED.has(column.key) ? "center" : "left",
+    headerClassName: column.key === "open" ? "w-16" : COLUMN_WIDTH[column.key],
+  }));
   const mapped = (queue.items || []).map((row) => ({
     ...row,
     ticketNumber:
@@ -435,12 +580,8 @@ export default function CaseWorkspace({
         <div
           className={`min-h-0 flex-1 overflow-auto p-4 sm:p-6 ${layoutStyles.surfaceEnter}`}
         >
-          <div className="mb-4 flex gap-5 border-b border-slate-200">
-            {[
-              ["mine", "งานของฉัน"],
-              ["unassigned", "รอรับเรื่อง"],
-              ["all", "ทุกงาน"],
-            ].map(([value, label]) => (
+          <div className="mb-4 flex gap-5 overflow-x-auto border-b border-slate-200">
+            {tableScopes.map(({ value, label }) => (
               <Button
                 key={value}
                 variant="ghost"
@@ -458,11 +599,13 @@ export default function CaseWorkspace({
               <Button onClick={w.refresh}>ลองใหม่</Button>
             </Alert>
           )}
+          {closedView && <CsatSummary rows={queue.items || []} />}
           <p className="mb-2 text-xs text-slate-600">
             ทั้งหมด {queue.total || 0} รายการ
           </p>
           <DataTable
-            columns={columns}
+            columns={tableColumns}
+            fixed
             rows={queue.items || []}
             loading={w.loading}
             onRowClick={select}
@@ -480,10 +623,13 @@ export default function CaseWorkspace({
             className={`${layoutStyles.queue} ${state.selectedId ? layoutStyles.queueSelected : ""} flex min-h-0 w-full shrink-0 flex-col md:w-72 lg:w-[19rem]`}
           >
             <SupportQueueSidebar
+              unreadCounts={unread.summary}
+              unreadError={unread.error}
               tickets={mapped}
               selectedTicketId={state.selectedId}
               onSelectTicket={select}
               scope={state.scope}
+              scopes={sidebarScopes}
               onScopeChange={(value) => filter("scope", value)}
               search={state.search}
               onSearchChange={(value) => filter("search", value)}
@@ -572,17 +718,10 @@ export default function CaseWorkspace({
                     >
                       กลับคิว
                     </Button>
-                    {!dispute && (
-                      <Link
-                        href={`/support/tickets/${selected.id}`}
-                        target="_blank"
-                        className="rounded-lg border px-3 py-2 text-sm"
-                      >
-                        เปิดหน้าเคส ↗
-                      </Link>
-                    )}
                     <Button
                       variant="secondary"
+                      icon="article"
+                      className={contextStyles.contextToggle}
                       onClick={(event) => {
                         contextTrigger.current = event.currentTarget;
                         event.currentTarget.focus();
@@ -590,10 +729,19 @@ export default function CaseWorkspace({
                       }}
                       aria-expanded={context}
                     >
-                      ข้อมูลบริบท
+                      ข้อมูลเคส
+                      <span className={`material-symbols-outlined ${contextStyles.toggleChevron}`} aria-hidden="true">chevron_right</span>
                     </Button>
                   </div>
                 </header>
+                <CaseHandoffBanner
+                  key={selected.id}
+                  caseItem={selected}
+                  caps={caps}
+                  busy={busy || chatBusy}
+                  onEscalate={() => setMemo(true)}
+                  onTaskChange={updateReturnTask}
+                />
                 {!mapped.some((row) => row.id === selected.id) &&
                   !w.loading && (
                     <p className="border-b bg-amber-50 px-4 py-2 text-xs text-amber-800">
@@ -695,6 +843,7 @@ export default function CaseWorkspace({
                   )}
                   {room?.id === selected.id ? (
                     <EmbeddedChat
+                      framed={false}
                       recipientLabel={`ผู้รับ: ${dispute ? (room.side === "buyer" ? "ผู้ซื้อ · " + fallback(selected.buyerName, selected.order?.buyerId) : "ร้านค้า · " + fallback(selected.sellerName, selected.order?.sellerId)) : fallback(selected.requesterName, selected.requesterId)}${dispute ? " เท่านั้น" : ""}`}
                       hideInternal={!dispute}
                       onCommitted={w.refreshAfterReply}
@@ -721,7 +870,12 @@ export default function CaseWorkspace({
                               selected.requesterId,
                             )
                       }
-                      onAccessDenied={w.refresh}
+                      onAccessDenied={() => {
+                        // Refresh once per room; a persistent 403 must not remount-loop.
+                        if (deniedRoom.current === room.conversationId) return;
+                        deniedRoom.current = room.conversationId;
+                        w.refresh();
+                      }}
                       key={room.conversationId}
                       conversationId={room.conversationId}
                       maxHeight="100%"
@@ -739,7 +893,7 @@ export default function CaseWorkspace({
                     <div className="flex flex-1 items-center justify-center p-6 text-sm text-slate-500">
                       {joining
                         ? "กำลังโหลดแชท"
-                        : "ยังเปิดห้องสนทนาไม่ได้ คุณตรวจสอบข้อมูลบริบทได้"}
+                        : "ยังเปิดห้องสนทนาไม่ได้ คุณตรวจสอบข้อมูลเคสได้"}
                     </div>
                   )}
                   {!dispute && caps.canTakeover && <Button onClick={()=>run("takeover",{version:selected.version,reason:"รับผิดชอบการตรวจสอบเคสที่ส่งต่อ"})} disabled={busy}>รับผิดชอบเคสที่ส่งต่อ</Button>}
@@ -765,65 +919,185 @@ export default function CaseWorkspace({
           <CaseContextPanel
             open={context && Boolean(selected)}
             onClose={closeContext}
+            footer={selected ? (
+              <section aria-label="การจัดการเคส" className={`${contextStyles.contextSection} ${contextStyles.management}`}>
+                    <h3 className={contextStyles.sectionHeading}><span className="material-symbols-outlined" aria-hidden="true">tune</span>การจัดการเคส</h3>
+                    <div className={contextStyles.actions}>
+                    {caps.canClaim && (
+                      <Button className={contextStyles.actionPrimary} icon="assignment_ind" disabled={busy || chatBusy} onClick={claim}>
+                        รับเคสนี้
+                      </Button>
+                    )}
+                    {!dispute &&
+                      (caps.allowedNextStatuses || [])
+                        .filter((status) => status !== "ESCALATED")
+                        .map((status) => (
+                          <Button
+                            key={status}
+                            variant="secondary"
+                            className={status === "CLOSED" ? contextStyles.actionClose : status === "PENDING_USER" ? contextStyles.actionInfo : contextStyles.actionPrimary}
+                            icon={status === "CLOSED" ? "task_alt" : status === "PENDING_USER" ? "hourglass_top" : status === "RESOLVED" ? "check_circle" : "play_arrow"}
+                            disabled={busy || chatBusy}
+                            onClick={async () => {
+                              if (status === "CLOSED") {
+                                setDecision({
+                                  ticketClose: true,
+                                  id: selected.id,
+                                  version: selected.version,
+                                });
+                                return;
+                              }
+                              try {
+                                await run("status", { status }, "PATCH");
+                              } catch (err) {
+                                toast.error(err.message);
+                              }
+                            }}
+                          >
+                            {status === "IN_PROGRESS" &&
+                            selected.status === "RESOLVED"
+                              ? "กลับมาดำเนินการ"
+                              : ACTION_LABEL[status] || status}
+                          </Button>
+                        ))}
+                    {caps.canEscalate && (
+                      <Button
+                        variant="secondary"
+                        disabled={busy || chatBusy}
+                        className={contextStyles.actionWarning}
+                        icon="forward_to_inbox"
+                        onClick={() => setMemo(true)}
+                      >
+                        ส่งต่อให้ Trust and Safety
+                      </Button>
+                    )}
+                    {caps.canReassign && (
+                      <Button
+                        variant="secondary"
+                        disabled={busy || chatBusy}
+                        className={contextStyles.actionInfo}
+                        icon="manage_accounts"
+                        onClick={() => setReassign(true)}
+                      >
+                        เปลี่ยนผู้รับผิดชอบ
+                      </Button>
+                    )}
+                    {caps.canDecide && (
+                      <>
+                        <textarea
+                          aria-label="เหตุผลประกอบคำตัดสิน"
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                          rows={3}
+                          className="w-full rounded border p-2 text-sm"
+                          placeholder="เหตุผลประกอบคำตัดสิน"
+                        />
+                        <Button
+                          className={contextStyles.actionWarning}
+                          disabled={busy || !reason.trim()}
+                          onClick={() =>
+                            setDecision({
+                              outcome: "APPROVE_REFUND",
+                              reason: reason.trim(),
+                              version: selected.version,
+                              id: selected.id,
+                              key: crypto.randomUUID(),
+                            })
+                          }
+                        >
+                          พิจารณาคืนเงิน
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          className={contextStyles.actionWarning}
+                          disabled={busy || !reason.trim()}
+                          onClick={() =>
+                            setDecision({
+                              outcome: "RELEASE_ESCROW",
+                              reason: reason.trim(),
+                              version: selected.version,
+                              id: selected.id,
+                              key: crypto.randomUUID(),
+                            })
+                          }
+                        >
+                          พิจารณาปล่อยเงินให้ร้านค้า
+                        </Button>
+                      </>
+                    )}
+                    {caps.canRequestEvidence && (
+                      <Button
+                        variant="secondary"
+                        className={contextStyles.actionInfo}
+                        icon="assignment_return"
+                        disabled={busy}
+                        onClick={() => setReturnDialog(true)}
+                      >
+                        ส่งกลับให้ CS ดำเนินการเพิ่ม
+                      </Button>
+                    )}
+                    {selected.status === "DECIDED" && (
+                      <div className="rounded bg-emerald-50 p-3 text-sm">
+                        <p>
+                          ผลการตัดสิน:{" "}
+                          {selected.decision === "APPROVE_REFUND"
+                            ? "คืนเงินให้ผู้ซื้อ"
+                            : selected.decision === "RELEASE_ESCROW"
+                              ? "ปล่อยเงินให้ร้านค้า"
+                              : selected.decision}
+                        </p>
+                        <p className="whitespace-pre-wrap">
+                          {selected.decisionReason}
+                        </p>
+                      </div>
+                    )}
+                    </div>
+                  </section>
+            ) : null}
           >
             {selected && (
-              <div className="min-h-0 flex-1 overflow-auto p-4">
-                <div className="space-y-5">
-                  <section>
-                    <h3 className="font-semibold">รายละเอียดเคส</h3>
-                    <p className="mt-2 break-all font-mono text-xs text-slate-500">
-                      เลขเคส: {selected.ticketNumber || selected.id}
-                    </p>
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm">
-                      {selected.description ||
-                        selected.reason ||
-                        selected.subject}
-                    </p>
+              <div className={contextStyles.contextBody}>
+                <div className={contextStyles.sections}>
+                  <section className={contextStyles.caseSummary}>
+                    <div className={contextStyles.summaryTop}>
+                      <span className={contextStyles.caseType}>{dispute ? "ข้อพิพาท" : "Ticket"}</span>
+                      <span className={contextStyles.status}>{labels[selected.status] || selected.status}</span>
+                    </div>
+                    <p className={contextStyles.caseNumber}>{selected.ticketNumber || selected.id}</p>
+                    <h3 className={contextStyles.subject}>{(dispute ? selected.reason || selected.subject : selected.subject) || "รายละเอียดเคส"}</h3>
+                    {selected.description && selected.description !== selected.subject && (
+                      <p className={contextStyles.description}>{selected.description}</p>
+                    )}
                     {selected.category && (
-                      <p className="mt-2 text-sm text-slate-600">
-                        หมวดหมู่: {selected.categoryLabel || selected.category}
-                      </p>
+                      <div className={contextStyles.category}><span>หมวดหมู่</span><span>{selected.categoryLabel || selected.category}</span></div>
                     )}
+                    <div className={contextStyles.sla}>
+                      <span className="material-symbols-outlined" aria-hidden="true">schedule</span>
+                      <SlaIndicator sla={selected.sla} />
+                    </div>
                   </section>
-                  <section>
-                    <h3 className="font-semibold">ผู้เกี่ยวข้อง</h3>
-                    {dispute ? (
-                      <>
-                        <p className="mt-2 text-sm">
-                          ผู้ซื้อ:{" "}
-                          {fallback(
-                            selected.buyerName,
-                            selected.order?.buyerId,
-                          )}
-                        </p>
-                        <p className="text-sm">
-                          ร้านค้า:{" "}
-                          {fallback(
-                            selected.sellerName,
-                            selected.order?.sellerId,
-                          )}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="mt-2 text-sm">
-                        ผู้แจ้ง:{" "}
-                        {fallback(selected.requesterName, selected.requesterId)}
-                      </p>
-                    )}
-                    <p className="mt-2 break-all text-xs text-slate-500">
-                      เจ้าหน้าที่:{" "}
-                      {(selected.assigneeId || selected.assignedTo) === user.id
-                        ? "คุณ"
-                        : fallback(
-                            selected.assigneeName,
-                            selected.assigneeId || selected.assignedTo,
-                          )}{" "}
-                      {dispute ? ROLE_LABEL[selected.assignedRole] || "" : ""}
-                    </p>
+                  <section className={contextStyles.contextSection}>
+                    <h3 className={contextStyles.sectionHeading}><span className="material-symbols-outlined" aria-hidden="true">group</span>ผู้เกี่ยวข้อง</h3>
+                    <dl className={contextStyles.people}>
+                      {dispute ? (
+                        <>
+                          <div><dt>ผู้ซื้อ</dt><dd>{personIdentity(selected.buyerName, selected.order?.buyerId)}</dd></div>
+                          <div><dt>ร้านค้า</dt><dd>{personIdentity(selected.sellerName, selected.order?.sellerId)}</dd></div>
+                        </>
+                      ) : (
+                        <div><dt>ผู้แจ้ง</dt><dd>{personIdentity(selected.requesterName, selected.requesterId)}</dd></div>
+                      )}
+                      <div><dt>เจ้าหน้าที่</dt><dd>
+                        {(selected.assigneeId || selected.assignedTo) === user.id
+                          ? <span className={contextStyles.you}>คุณ</span>
+                          : fallback(selected.assigneeName, selected.assigneeId || selected.assignedTo)}
+                        {dispute && ROLE_LABEL[selected.assignedRole] && <span className={contextStyles.role}>{ROLE_LABEL[selected.assignedRole]}</span>}
+                      </dd></div>
+                    </dl>
                   </section>
                   {selected.orderId && (
-                    <section>
-                      <h3 className="font-semibold">คำสั่งซื้อ</h3>
+                    <section className={`${contextStyles.contextSection} ${contextStyles.orderSection}`}>
+                      <h3 className={contextStyles.sectionHeading}><span className="material-symbols-outlined" aria-hidden="true">shopping_bag</span>คำสั่งซื้อ</h3>
                       <p className="mt-2 break-all text-sm">
                         {selected.orderId}
                       </p>
@@ -857,12 +1131,9 @@ export default function CaseWorkspace({
                       )}
                     </section>
                   )}
-                  <section>
-                    <SlaIndicator sla={selected.sla} />
-                  </section>
                   {selected.escalationNote && (
-                    <section>
-                      <h3 className="font-semibold">สรุปส่งต่อ</h3>
+                    <section className={contextStyles.contextSection}>
+                      <h3 className={contextStyles.sectionHeading}><span className="material-symbols-outlined" aria-hidden="true">forward_to_inbox</span>สรุปส่งต่อ</h3>
                       <p className="whitespace-pre-line text-sm">
                         {selected.escalationNote}
                       </p>
@@ -871,8 +1142,9 @@ export default function CaseWorkspace({
                   {dispute ? (
                     <><EvidenceInspector key={selected.id} dispute={selected} />{["ADMIN","TRUST_AND_SAFETY"].includes(user.role) && <Button variant="secondary" onClick={()=>setSafetyChat(selected)}>ประวัติผู้ซื้อกับร้านค้า</Button>}</>
                   ) : (
-                    <section>
-                      <h3 className="font-semibold">โน้ตภายใน</h3>
+                    <section className={contextStyles.contextSection}>
+                      <h3 className={contextStyles.sectionHeading}><span className="material-symbols-outlined" aria-hidden="true">edit_note</span>โน้ตภายใน</h3>
+                      <p className={contextStyles.hint}>สำหรับเจ้าหน้าที่เท่านั้น ลูกค้าจะไม่เห็นโน้ตนี้</p>
                       {selected.chatAvailable === false ? (
                         <Alert>ประวัติโน้ตไม่พร้อมใช้งาน กรุณาลองใหม่</Alert>
                       ) : (
@@ -881,7 +1153,7 @@ export default function CaseWorkspace({
                           .map((message) => (
                             <p
                               key={message.id}
-                              className="my-2 whitespace-pre-wrap rounded border bg-amber-50 p-2 text-sm"
+                              className={contextStyles.savedNote}
                             >
                               {message.body}
                             </p>
@@ -901,16 +1173,21 @@ export default function CaseWorkspace({
                       {w.notesError && <Alert>{w.notesError}</Alert>}
                       {caps.canAddNote && (
                         <>
+                          <label className="sr-only" htmlFor="case-internal-note">บันทึกภายใน</label>
                           <textarea
+                            id="case-internal-note"
                             aria-label="บันทึกภายใน"
                             value={note}
                             onChange={(e) => setNote(e.target.value)}
-                            placeholder="ลูกค้าจะไม่เห็นโน้ตนี้"
-                            className="mt-2 w-full rounded border p-2 text-sm"
+                            placeholder="เพิ่มรายละเอียดหรือสรุปการติดตามเคส…"
+                            className={contextStyles.noteInput}
                             rows={3}
                           />
                           {noteError && <Alert>{noteError}</Alert>}
                           <Button
+                            size="sm"
+                            icon="note_add"
+                            className={contextStyles.saveNote}
                             disabled={busy || chatBusy || !note.trim()}
                             onClick={async () => {
                               setNoteError("");
@@ -931,149 +1208,7 @@ export default function CaseWorkspace({
                       )}
                     </section>
                   )}
-                  <section className="space-y-2 border-t pt-4">
-                    <h3 className="font-semibold">การจัดการเคส</h3>
-                    {caps.canClaim && (
-                      <Button disabled={busy || chatBusy} onClick={claim}>
-                        รับเคสนี้
-                      </Button>
-                    )}
-                    {!dispute &&
-                      (caps.allowedNextStatuses || [])
-                        .filter((status) => status !== "ESCALATED")
-                        .map((status) => (
-                          <Button
-                            key={status}
-                            variant="secondary"
-                            disabled={busy || chatBusy}
-                            onClick={async () => {
-                              if (status === "CLOSED") {
-                                setDecision({
-                                  ticketClose: true,
-                                  id: selected.id,
-                                  version: selected.version,
-                                });
-                                return;
-                              }
-                              try {
-                                await run("status", { status }, "PATCH");
-                              } catch (err) {
-                                toast.error(err.message);
-                              }
-                            }}
-                          >
-                            {status === "IN_PROGRESS" &&
-                            selected.status === "RESOLVED"
-                              ? "กลับมาดำเนินการ"
-                              : ACTION_LABEL[status] || status}
-                          </Button>
-                        ))}
-                    {caps.canEscalate && (
-                      <Button
-                        variant="secondary"
-                        disabled={busy || chatBusy}
-                        onClick={() => setMemo(true)}
-                      >
-                        ส่งต่อให้ Admin
-                      </Button>
-                    )}
-                    {caps.canReassign && (
-                      <Button
-                        variant="secondary"
-                        disabled={busy || chatBusy}
-                        onClick={() => setReassign(true)}
-                      >
-                        เปลี่ยนผู้รับผิดชอบ
-                      </Button>
-                    )}
-                    {caps.canDecide && (
-                      <>
-                        <textarea
-                          aria-label="เหตุผลประกอบคำตัดสิน"
-                          value={reason}
-                          onChange={(e) => setReason(e.target.value)}
-                          rows={3}
-                          className="w-full rounded border p-2 text-sm"
-                          placeholder="เหตุผลประกอบคำตัดสิน"
-                        />
-                        <Button
-                          disabled={busy || !reason.trim()}
-                          onClick={() =>
-                            setDecision({
-                              outcome: "APPROVE_REFUND",
-                              reason: reason.trim(),
-                              version: selected.version,
-                              id: selected.id,
-                              key: crypto.randomUUID(),
-                            })
-                          }
-                        >
-                          พิจารณาคืนเงิน
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          disabled={busy || !reason.trim()}
-                          onClick={() =>
-                            setDecision({
-                              outcome: "RELEASE_ESCROW",
-                              reason: reason.trim(),
-                              version: selected.version,
-                              id: selected.id,
-                              key: crypto.randomUUID(),
-                            })
-                          }
-                        >
-                          พิจารณาปล่อยเงินให้ร้านค้า
-                        </Button>
-                      </>
-                    )}
-                    {caps.canRequestEvidence && (
-                      <div className="space-y-2">
-                        <textarea
-                          aria-label="เหตุผลขอหลักฐานเพิ่มเติม"
-                          value={infoReason}
-                          onChange={(e) => setInfoReason(e.target.value)}
-                          rows={2}
-                          className="w-full rounded border p-2 text-sm"
-                          placeholder="ระบุข้อมูลที่ต้องการเพิ่มเติม"
-                        />
-                        {infoError && <Alert>{infoError}</Alert>}
-                        <Button
-                          variant="secondary"
-                          disabled={busy || !infoReason.trim()}
-                          onClick={async () => {
-                            setInfoError("");
-                            try {
-                              await run("request-evidence", {
-                                version: selected.version,
-                                reason: infoReason.trim(),
-                              });
-                              setInfoReason("");
-                            } catch (err) {
-                              setInfoError(err.message);
-                            }
-                          }}
-                        >
-                          ขอหลักฐานเพิ่มเติม
-                        </Button>
-                      </div>
-                    )}
-                    {selected.status === "DECIDED" && (
-                      <div className="rounded bg-emerald-50 p-3 text-sm">
-                        <p>
-                          ผลการตัดสิน:{" "}
-                          {selected.decision === "APPROVE_REFUND"
-                            ? "คืนเงินให้ผู้ซื้อ"
-                            : selected.decision === "RELEASE_ESCROW"
-                              ? "ปล่อยเงินให้ร้านค้า"
-                              : selected.decision}
-                        </p>
-                        <p className="whitespace-pre-wrap">
-                          {selected.decisionReason}
-                        </p>
-                      </div>
-                    )}
-                  </section>
+
                 </div>
               </div>
             )}
@@ -1081,7 +1216,22 @@ export default function CaseWorkspace({
         </div>
       )}
       <Modal open={Boolean(safetyChat)} onClose={()=>setSafetyChat(null)} title="ประวัติผู้ซื้อกับร้านค้า" size="lg">{safetyChat && <SafetyOrderChatPanel dispute={safetyChat} token={token} onClose={()=>setSafetyChat(null)}/>}</Modal>
+      <ReturnToCsDialog
+        key={`return-${selected?.id || "empty"}`}
+        open={returnDialog}
+        onClose={() => setReturnDialog(false)}
+        onSubmit={({ reason: text, tasks }) =>
+          run("request-evidence", {
+            version: selected.version,
+            reason: text,
+            tasks,
+          })
+        }
+      />
       <EscalationMemoDialog
+        dispute={dispute}
+        returnTasks={caps.isReturned ? selected?.returnTasks : undefined}
+        onTaskChange={updateReturnTask}
         key={selected?.id || "empty"}
         open={memo}
         onClose={() => setMemo(false)}

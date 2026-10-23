@@ -172,7 +172,7 @@ export default function SellerChangeRequestsSection({ token }) {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
                   type="text"
-                  placeholder="หมายเหตุถึงผู้ขาย (optional)"
+                  placeholder="หมายเหตุถึงผู้ขาย (ไม่บังคับ)"
                   value={noteById[req.id] || ""}
                   onChange={(e) =>
                     setNoteById((prev) => ({
