@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import { takeTokenFromUrl } from "./urlToken";
 
 // Mirrors auth-service's passwordPolicy so the form can explain a problem
 // before the round trip; the server still enforces the same rules.
@@ -46,23 +47,8 @@ export function resetPassword(token, password) {
   });
 }
 
-/**
- * The emailed link carries the token in the URL fragment (#token=...), which
- * browsers never send to a server. Read it once, then strip it from the
- * address bar and history so it can't leak through a shared screen,
- * a bookmark or browser sync.
- */
-export function takeResetTokenFromUrl() {
-  const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
-  if (window.location.hash) {
-    window.history.replaceState(
-      null,
-      "",
-      window.location.pathname + window.location.search,
-    );
-  }
-  return token || null;
-}
+/** Reads the reset token from the emailed link; see takeTokenFromUrl. */
+export const takeResetTokenFromUrl = takeTokenFromUrl;
 
 export function isInvalidTokenError(error) {
   return error?.code === "RESET_TOKEN_INVALID";

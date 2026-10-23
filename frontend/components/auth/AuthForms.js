@@ -11,6 +11,8 @@ import { resolvePostLoginPath, saveSession } from "../../lib/auth";
 import { AuthIcon, PasswordInput } from "./AuthLayout";
 import styles from "./AuthLayout.module.css";
 import { authError } from "./authError";
+import { CheckYourEmail, ResendConfirmationButton } from "./EmailVerification";
+import { isUnverifiedSignInError } from "../../lib/emailVerification";
 import {
   PHONE_HINT,
   PHONE_MAX_LENGTH,
@@ -22,6 +24,9 @@ export function LoginPage({ onAuthenticated } = {}) {
   const router = useRouter();
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
+  // The email of an account that needs confirming, so the user can ask for
+  // a new link right where sign-in told them so.
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -39,6 +44,7 @@ export function LoginPage({ onAuthenticated } = {}) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    setUnconfirmedEmail("");
     setLoading(true);
     try {
       const data = await apiFetch("/api/auth/login", {
@@ -59,6 +65,7 @@ export function LoginPage({ onAuthenticated } = {}) {
       else router.push(destination);
     } catch (err) {
       setError(authError(err));
+      if (isUnverifiedSignInError(err)) setUnconfirmedEmail(form.email.trim());
     } finally {
       setLoading(false);
     }
@@ -95,6 +102,9 @@ export function LoginPage({ onAuthenticated } = {}) {
           Forgot password?
         </Link>
         {error && <Alert>{error}</Alert>}
+        {unconfirmedEmail && (
+          <ResendConfirmationButton email={unconfirmedEmail} />
+        )}
         <Button
           type="submit"
           size="lg"
@@ -120,6 +130,8 @@ export function RegisterPage({ onAuthenticated } = {}) {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Set when the server wants the email confirmed before the first sign-in.
+  const [pending, setPending] = useState(null);
 
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });
@@ -134,6 +146,10 @@ export function RegisterPage({ onAuthenticated } = {}) {
         method: "POST",
         body: { ...form, role: "BUYER" },
       });
+      if (data.verificationRequired) {
+        setPending({ email: data.email, expiresInHours: data.expiresInHours });
+        return;
+      }
       saveSession(data);
       if (onAuthenticated) await onAuthenticated("/");
       else router.push("/");
@@ -143,6 +159,8 @@ export function RegisterPage({ onAuthenticated } = {}) {
       setLoading(false);
     }
   }
+
+  if (pending) return <CheckYourEmail {...pending} />;
 
   return (
     <>

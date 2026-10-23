@@ -18,6 +18,8 @@ const PUBLIC_PATHS = [
   // Forgot-password must work for someone who can't sign in. auth-service
   // rate limits these itself (per IP and per email).
   /^\/api\/auth\/password\/(forgot|reset|reset\/verify)$/,
+  // Confirming a sign-up happens before the user has a session.
+  /^\/api\/auth\/email\/(verify|resend)$/,
   /^\/api\/auth\/users\/[^/]+\/public/,
   /^\/api\/auth\/users\/[^/]+\/auto-messages/,
   /^\/api\/products\/feed/,

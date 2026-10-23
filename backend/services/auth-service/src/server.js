@@ -16,5 +16,5 @@ require("./jobs/kycExpiryJob").start();
 // as INACTIVE_EXPIRED so they must re-submit KYC before listing again.
 require("./jobs/sellerInactivityJob").start();
 
-// Daily job: prunes password-reset tokens past their retention period.
-require("./jobs/passwordResetCleanupJob").start();
+// Daily job: prunes emailed one-time tokens past their retention period.
+require("./jobs/oneTimeTokenCleanupJob").start();

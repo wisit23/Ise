@@ -1,5 +1,5 @@
-// In-memory stand-ins for Prisma and the mailer, shared by the password-reset
-// tests. Only the query shapes the feature actually uses are supported.
+// In-memory stand-ins for Prisma and the mailer, shared by the emailed-link
+// feature tests. Only the query shapes those features use are supported.
 
 function matches(row, where = {}) {
   return Object.entries(where).every(([field, condition]) => {
@@ -33,6 +33,9 @@ function table(rows) {
       hit.forEach((row) => Object.assign(row, data));
       return { count: hit.length };
     },
+    async count({ where }) {
+      return rows.filter((row) => matches(row, where)).length;
+    },
     async deleteMany({ where }) {
       const keep = rows.filter((row) => !matches(row, where));
       const count = rows.length - keep.length;
@@ -42,10 +45,17 @@ function table(rows) {
   };
 }
 
-function fakeDb({ users = [], tokens = [], sessions = [], loginLogs = [] } = {}) {
+function fakeDb({
+  users = [],
+  tokens = [],
+  verificationTokens = [],
+  sessions = [],
+  loginLogs = [],
+} = {}) {
   const db = {
     user: table(users),
     passwordResetToken: table(tokens),
+    emailVerificationToken: table(verificationTokens),
     refreshToken: table(sessions),
     loginLog: table(loginLogs),
     async $queryRaw() {
@@ -68,7 +78,7 @@ function fakeMailer() {
   };
 }
 
-const enabledConfig = {
+const resetConfig = {
   enabled: true,
   appBaseUrl: "https://shop.example",
   tokenTtlMinutes: 30,
@@ -86,4 +96,32 @@ function inlineScheduler() {
   };
 }
 
-module.exports = { fakeDb, fakeMailer, enabledConfig, inlineScheduler };
+const verificationConfig = {
+  required: true,
+  appBaseUrl: "https://shop.example",
+  tokenTtlHours: 24,
+  retentionDays: 30,
+  resend: { windowSeconds: 3600, perEmail: 3, perIp: 10 },
+  submit: { windowSeconds: 900, perIp: 20 },
+};
+
+/** Counts like Redis INCR, keyed exactly as the rate limiter keys them. */
+function fakeRedis() {
+  const counts = new Map();
+  return {
+    keys: () => [...counts.keys()],
+    async eval(_script, _numKeys, key) {
+      counts.set(key, (counts.get(key) || 0) + 1);
+      return counts.get(key);
+    },
+  };
+}
+
+module.exports = {
+  fakeDb,
+  fakeMailer,
+  fakeRedis,
+  resetConfig,
+  verificationConfig,
+  inlineScheduler,
+};

@@ -15,6 +15,7 @@ const {
 const prisma = require("../models/prismaClient");
 const { assertActive, revokedSession, lockUser } = require("./sessionService");
 const { assertPasswordPolicy, hashPassword } = require("./passwordPolicy");
+const { service: emailVerification } = require("../features/emailVerification");
 const shopChangeRequests = require("./shopChangeRequestService");
 const { ROLE_CATALOG } = require("../../prisma/roleCatalog");
 
@@ -190,7 +191,12 @@ function normalizePhone(phone) {
   return digits;
 }
 
-async function register({ email, password, firstName, lastName, phone }) {
+/**
+ * With verification required, the account starts unverified and the
+ * response carries no session: the user signs in after confirming the
+ * emailed link. With verification off, sign-up signs them straight in.
+ */
+async function register({ email, password, firstName, lastName, phone, ipAddress }) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
   }
@@ -198,20 +204,23 @@ async function register({ email, password, firstName, lastName, phone }) {
   phone = normalizePhone(phone);
 
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw conflict("email is already registered");
+  if (existing && !(await emailVerification.canReclaim(existing))) {
+    throw conflict("email is already registered");
+  }
 
-  const passwordHash = await hashPassword(password);
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      firstName,
-      lastName,
-      phone,
-      role: "BUYER",
-    },
-  });
+  const profile = { passwordHash: await hashPassword(password), firstName, lastName, phone };
+  const user = existing
+    ? await prisma.user.update({ where: { id: existing.id }, data: profile })
+    : await prisma.user.create({ data: { email, ...profile, role: "BUYER" } });
 
+  if (emailVerification.isRequired()) {
+    emailVerification.sendForNewAccount(user, { ipAddress });
+    return {
+      verificationRequired: true,
+      email: user.email,
+      expiresInHours: emailVerification.linkLifetimeHours(),
+    };
+  }
   const tokens = await issueTokenPair(user);
   return { user: toPublicUser(user), ...tokens };
 }
@@ -225,6 +234,7 @@ async function login({ email, password, ipAddress, userAgent }) {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw badRequest("invalid email or password");
   assertActive(user);
+  emailVerification.assertVerifiedForSignIn(user);
 
   const tokens = await issueTokenPair(user, { ipAddress, userAgent });
   return { user: toPublicUser(user), ...tokens };

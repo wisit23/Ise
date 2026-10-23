@@ -1,23 +1,10 @@
-const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { AppError, badRequest, isRestrictedStatus } = require("@reloop/shared");
 const { assertPasswordPolicy, hashPassword } = require("../../services/passwordPolicy");
 const { assertActive, lockUser } = require("../../services/sessionService");
+const { hashToken, newToken, isPlausibleToken, tokenLink } = require("../../services/oneTimeToken");
+const { normalizeEmail } = require("../../services/emailAddress");
 const { resetLinkEmail, passwordChangedEmail } = require("./passwordResetEmails");
-
-const TOKEN_BYTES = 32; // 256 bits: unguessable, so no per-token attempt counter is needed
-const MAX_EMAIL_LENGTH = 254;
-const MAX_TOKEN_LENGTH = 128;
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function hashToken(token) {
-  return crypto.createHash("sha256").update(token).digest("hex");
-}
-
-function newToken() {
-  const token = crypto.randomBytes(TOKEN_BYTES).toString("base64url");
-  return { token, tokenHash: hashToken(token) };
-}
 
 /** Same rule login uses (sessionService.assertActive): who may sign in may reset. */
 function canSignIn(user) {
@@ -33,19 +20,8 @@ function invalidToken() {
   );
 }
 
-function normalizeEmail(email) {
-  if (typeof email !== "string") throw badRequest("A valid email is required.");
-  const trimmed = email.trim();
-  if (trimmed.length > MAX_EMAIL_LENGTH || !EMAIL_SHAPE.test(trimmed)) {
-    throw badRequest("A valid email is required.");
-  }
-  return trimmed;
-}
-
 function readToken(token) {
-  if (typeof token !== "string" || !token || token.length > MAX_TOKEN_LENGTH) {
-    throw invalidToken();
-  }
+  if (!isPlausibleToken(token)) throw invalidToken();
   return token;
 }
 
@@ -66,11 +42,9 @@ function createPasswordResetService({
   schedule = (task) => setImmediate(task),
   logger = console,
 }) {
-  function resetUrl(token) {
-    // The token rides in the URL fragment, which browsers never send to any
-    // server: it stays out of access logs, proxies and Referer headers.
-    return `${config.appBaseUrl}/reset-password#token=${token}`;
-  }
+  // The token rides in the URL fragment, which browsers never send to any
+  // server: it stays out of access logs, proxies and Referer headers.
+  const resetUrl = (token) => tokenLink(config.appBaseUrl, "/reset-password", token);
 
   function assertEnabled() {
     if (!config.enabled) {
@@ -168,7 +142,12 @@ function createPasswordResetService({
       });
       if (consumed.count !== 1) throw invalidToken();
 
-      await tx.user.update({ where: { id: locked.id }, data: { passwordHash } });
+      await tx.user.update({
+        where: { id: locked.id },
+        // Completing a reset proves the user controls the address, so it
+        // also confirms an email that was still waiting for verification.
+        data: { passwordHash, ...(locked.emailVerifiedAt ? {} : { emailVerifiedAt: changedAt }) },
+      });
       await tx.passwordResetToken.updateMany({
         where: { userId: locked.id, usedAt: null, revokedAt: null },
         data: { revokedAt: changedAt },
@@ -208,4 +187,4 @@ function createPasswordResetService({
   return { requestReset, verifyToken, resetPassword, pruneExpired, deliverResetLink };
 }
 
-module.exports = { createPasswordResetService, hashToken };
+module.exports = { createPasswordResetService };

@@ -414,6 +414,7 @@ async function seedFixtures({ auth, order, support, chat }) {
         lastName,
         role,
         status: "ACTIVE",
+        emailVerifiedAt: new Date(),
       },
     });
     await auth.userRole.upsert({

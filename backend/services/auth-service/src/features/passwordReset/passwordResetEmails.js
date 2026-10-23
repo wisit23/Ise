@@ -1,38 +1,6 @@
 // Email content for the forgot-password flow, in Thai and English.
-// Every interpolated value goes through escapeHtml: a user's first name is
-// user-controlled input and must not be able to inject markup into mail.
 
-const BRAND = "RE-LOOP";
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function layout({ heading, paragraphs, action, footnote }) {
-  const body = paragraphs
-    .map((p) => `<p style="margin:0 0 16px;line-height:1.6">${p}</p>`)
-    .join("");
-  const button = action
-    ? `<p style="margin:24px 0"><a href="${escapeHtml(action.url)}" style="display:inline-block;padding:12px 24px;background:#059669;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">${escapeHtml(action.label)}</a></p>
-<p style="margin:0 0 16px;font-size:13px;color:#64748b;line-height:1.6">If the button doesn't work, copy this link into your browser / หากปุ่มใช้งานไม่ได้ ให้คัดลอกลิงก์นี้ไปเปิดในเบราว์เซอร์:<br><span style="word-break:break-all">${escapeHtml(action.url)}</span></p>`
-    : "";
-  return `<!doctype html>
-<html><body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
-<div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;padding:32px">
-<h1 style="margin:0 0 24px;font-size:20px">${escapeHtml(heading)}</h1>
-${body}${button}${footnote ? `<p style="margin:16px 0 0;font-size:13px;color:#64748b;line-height:1.6">${footnote}</p>` : ""}
-<p style="margin:24px 0 0;font-size:12px;color:#94a3b8">${BRAND}</p>
-</div></body></html>`;
-}
-
-function greeting(firstName) {
-  return firstName ? escapeHtml(firstName) : "there";
-}
+const { BRAND, escapeHtml, greeting, renderEmail } = require("../../services/emailLayout");
 
 function resetLinkEmail({ firstName, resetUrl, expiresInMinutes }) {
   const name = greeting(firstName);
@@ -55,7 +23,7 @@ function resetLinkEmail({ firstName, resetUrl, expiresInMinutes }) {
       "",
       "If you didn't ask for this, you can ignore this email; your current password still works.",
     ].join("\n"),
-    html: layout({
+    html: renderEmail({
       heading: "ตั้งรหัสผ่านใหม่ / Reset your password",
       paragraphs: [
         `สวัสดีคุณ ${name} มีคำขอตั้งรหัสผ่านใหม่สำหรับบัญชี ${BRAND} ของคุณ ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุใน ${expiresInMinutes} นาที`,
@@ -86,7 +54,7 @@ function passwordChangedEmail({ firstName, changedAt, supportUrl }) {
       `The password for your ${BRAND} account was changed at ${when} (UTC), and every device was signed out.`,
       `If this wasn't you, contact support right away: ${supportUrl}`,
     ].join("\n"),
-    html: layout({
+    html: renderEmail({
       heading: "รหัสผ่านถูกเปลี่ยนแล้ว / Your password was changed",
       paragraphs: [
         `สวัสดีคุณ ${name} รหัสผ่านบัญชี ${BRAND} ของคุณถูกเปลี่ยนเมื่อ ${escapeHtml(when)} (UTC) และอุปกรณ์ทั้งหมดถูกออกจากระบบแล้ว หากคุณไม่ได้เปลี่ยนเอง กรุณาติดต่อฝ่ายช่วยเหลือทันที`,
@@ -97,4 +65,4 @@ function passwordChangedEmail({ firstName, changedAt, supportUrl }) {
   };
 }
 
-module.exports = { resetLinkEmail, passwordChangedEmail, escapeHtml };
+module.exports = { resetLinkEmail, passwordChangedEmail };

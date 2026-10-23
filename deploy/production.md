@@ -40,6 +40,18 @@ and is rejected unless `APP_BASE_URL` is localhost.
 This release adds the `password_reset_tokens` table, so deploy it with
 `bash deploy.sh --migrate`.
 
+## Sign-up email confirmation
+
+With mail configured, new accounts must confirm their email before they can
+sign in (`EMAIL_VERIFICATION=required`, the default whenever mail can be
+sent). Set `EMAIL_VERIFICATION=off` to keep the old instant sign-in. Asking for
+`required` without a working `MAIL_TRANSPORT` stops auth-service at boot.
+
+The `add_email_verification` migration marks every existing account as
+verified (from its creation date), so nobody already registered is locked
+out; deploy it with `bash deploy.sh --migrate`. Demo seeds create verified
+accounts too.
+
 ## Database changes
 
 Without `--migrate`, changed Prisma/DB infrastructure files stop deployment before

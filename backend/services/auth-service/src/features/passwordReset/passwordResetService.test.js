@@ -1,13 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const bcrypt = require("bcryptjs");
-const { createPasswordResetService, hashToken } = require("./passwordResetService");
-const { fakeDb, fakeMailer, enabledConfig, inlineScheduler } = require("./testSupport");
+const { createPasswordResetService } = require("./passwordResetService");
+const { hashToken } = require("../../services/oneTimeToken");
+const { fakeDb, fakeMailer, resetConfig, inlineScheduler } = require("../../test/fakes");
 
 const NOW = new Date("2026-10-21T10:00:00.000Z");
 const OLD_PASSWORD = "old-password-123";
 
-async function setup({ status = "ACTIVE", config = enabledConfig, ...seed } = {}) {
+async function setup({ status = "ACTIVE", config = resetConfig, ...seed } = {}) {
   const user = {
     id: "user-1",
     email: "buyer@example.com",
@@ -182,7 +183,7 @@ test("a mail failure is logged, never surfaced to the requester", async () => {
   const service = createPasswordResetService({
     db: ctx.db,
     mailer: { send: async () => { throw new Error("smtp down"); } },
-    config: enabledConfig,
+    config: resetConfig,
     now: () => NOW,
     schedule: ctx.scheduler.schedule,
     logger: { error: (...args) => errors.push(args.join(" ")) },
@@ -193,7 +194,7 @@ test("a mail failure is logged, never surfaced to the requester", async () => {
 });
 
 test("every endpoint answers 503 while the feature is disabled", async () => {
-  const ctx = await setup({ config: { ...enabledConfig, enabled: false } });
+  const ctx = await setup({ config: { ...resetConfig, enabled: false } });
   await assert.rejects(ctx.service.requestReset({ email: "buyer@example.com" }), { status: 503 });
   await assert.rejects(ctx.service.verifyToken("x"), { status: 503 });
   await assert.rejects(ctx.service.resetPassword({ token: "x", password: "whatever-123" }), {
@@ -211,4 +212,21 @@ test("pruneExpired deletes only rows older than the retention period", async () 
   });
   assert.equal(await ctx.service.pruneExpired(), 1);
   assert.deepEqual(ctx.db.passwordResetToken.rows.map((r) => r.id), ["recent"]);
+});
+
+test("completing a reset also confirms an email still waiting for verification", async () => {
+  const ctx = await setup();
+  ctx.user.emailVerifiedAt = null;
+  const token = await requestLink(ctx);
+  await ctx.service.resetPassword({ token, password: "brand-new-pass-1" });
+  assert.equal(+ctx.user.emailVerifiedAt, +NOW);
+});
+
+test("a reset never moves an existing verification date", async () => {
+  const ctx = await setup();
+  const verifiedAt = new Date("2026-01-01T00:00:00.000Z");
+  ctx.user.emailVerifiedAt = verifiedAt;
+  const token = await requestLink(ctx);
+  await ctx.service.resetPassword({ token, password: "brand-new-pass-1" });
+  assert.equal(ctx.user.emailVerifiedAt, verifiedAt);
 });

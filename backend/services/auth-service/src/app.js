@@ -26,6 +26,7 @@ const buyerAuditRoutes = require("./features/buyerAudit/buyerAuditRoutes");
 const restrictionRoutes = require("./features/commerceRestrictions/restrictionRoutes");
 const marketingMetricsRoutes = require("./features/metrics/marketingMetricsRoutes");
 const passwordReset = require("./features/passwordReset");
+const emailVerification = require("./features/emailVerification");
 
 const prisma = require("./models/prismaClient");
 const authService = require("./services/authService");
@@ -107,6 +108,7 @@ app.use("/me/style-profile", styleProfileRoutes);
 app.use("/", buyerAuditRoutes);
 app.use("/", restrictionRoutes);
 app.use("/password", passwordReset.router);
+app.use("/email", emailVerification.router);
 app.use("/", authRoutes);
 app.use("/admin/kyc", adminKycRoutes);
 app.use("/kyc", kycRoutes);

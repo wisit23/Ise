@@ -5,21 +5,9 @@ const request = require("supertest");
 const { errorHandler } = require("@reloop/shared");
 const { createPasswordResetRouter } = require("./passwordResetRoutes");
 const { REQUEST_ACCEPTED_MESSAGE } = require("./passwordResetController");
-const { enabledConfig } = require("./testSupport");
+const { resetConfig, fakeRedis } = require("../../test/fakes");
 
-/** Counts like Redis INCR, keyed exactly as the limiter keys them. */
-function fakeRedis() {
-  const counts = new Map();
-  return {
-    keys: () => [...counts.keys()],
-    async eval(_script, _numKeys, key) {
-      counts.set(key, (counts.get(key) || 0) + 1);
-      return counts.get(key);
-    },
-  };
-}
-
-function buildApp({ service = {}, config = enabledConfig, rateLimitClient = fakeRedis() } = {}) {
+function buildApp({ service = {}, config = resetConfig, rateLimitClient = fakeRedis() } = {}) {
   const calls = [];
   const fullService = {
     requestReset: async (input) => calls.push(["requestReset", input]),
@@ -48,17 +36,17 @@ test("forgot is limited per email, case-insensitively, across IPs", async () => 
   const send = (email, ip) =>
     request(app).post("/password/forgot").set("X-Forwarded-For", ip).send({ email });
 
-  for (let i = 0; i < enabledConfig.request.perEmail; i++) {
+  for (let i = 0; i < resetConfig.request.perEmail; i++) {
     assert.equal((await send("Victim@Example.com", `203.0.113.${i}`)).status, 202);
   }
   const blocked = await send("victim@example.com ", "203.0.113.99");
   assert.equal(blocked.status, 429);
-  assert.equal(blocked.headers["retry-after"], String(enabledConfig.request.windowSeconds));
+  assert.equal(blocked.headers["retry-after"], String(resetConfig.request.windowSeconds));
 });
 
 test("forgot is limited per client IP across many emails", async () => {
   const { app } = buildApp();
-  for (let i = 0; i < enabledConfig.request.perIp; i++) {
+  for (let i = 0; i < resetConfig.request.perIp; i++) {
     const res = await request(app)
       .post("/password/forgot")
       .set("X-Forwarded-For", "198.51.100.7")
@@ -110,7 +98,7 @@ test("verify returns the expiry and reset returns 204", async () => {
 
 test("verify and reset share one per-IP attempt budget", async () => {
   const { app } = buildApp();
-  for (let i = 0; i < enabledConfig.submit.perIp; i++) {
+  for (let i = 0; i < resetConfig.submit.perIp; i++) {
     await request(app).post(i % 2 ? "/password/reset" : "/password/reset/verify").send({ token: "t" });
   }
   const res = await request(app).post("/password/reset/verify").send({ token: "t" });
