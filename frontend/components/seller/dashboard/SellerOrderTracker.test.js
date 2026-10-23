@@ -40,6 +40,20 @@ describe("SellerOrderTracker", () => {
     expect(screen.getAllByText("ประมูล").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("labels and filters payment_expired separately from pending_payment", () => {
+    render(<SellerOrderTracker orders={[
+      { ...mockOrders[0], status: "payment_expired" },
+      { ...mockOrders[1], status: "pending_payment" },
+    ]} />);
+    expect(screen.getAllByText("หมดเวลาชำระเงิน").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "หมดเวลาชำระเงิน" }));
+    expect(screen.getByText("เสื้อยืดวินเทจ")).toBeInTheDocument();
+    expect(screen.queryByText("นาฬิกาสะสมประมูล")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "รอชำระเงิน" }));
+    expect(screen.queryByText("เสื้อยืดวินเทจ")).not.toBeInTheDocument();
+    expect(screen.getByText("นาฬิกาสะสมประมูล")).toBeInTheDocument();
+  });
+
   it("filters orders by order type (regular vs auction)", () => {
     render(<SellerOrderTracker orders={mockOrders} />);
 

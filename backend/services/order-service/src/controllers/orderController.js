@@ -349,7 +349,7 @@ async function getByProductInternal(req, res, next) {
     const order = await prisma.order.findFirst({
       where: {
         productId: req.params.productId,
-        status: { notIn: ["cancelled", "refunded"] },
+        status: { notIn: ["cancelled", "refunded", "payment_expired", "seller_confirmation_expired"] },
       },
       select: {
         id: true,

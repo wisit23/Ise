@@ -255,7 +255,7 @@ export default function ProductDetailPage() {
         setProduct((prev) => (prev ? { ...prev, status: "reserved" } : prev));
       } else if (payload.action === "completed") {
         setProduct((prev) => (prev ? { ...prev, status: "sold" } : prev));
-      } else if (payload.action === "cancelled" || payload.action === "rejected") {
+      } else if (["cancelled", "rejected", "payment_expired", "seller_confirmation_expired"].includes(payload.action)) {
         setProduct((prev) => (prev ? { ...prev, status: "available" } : prev));
       }
     }

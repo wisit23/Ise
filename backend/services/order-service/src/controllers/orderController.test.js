@@ -48,7 +48,36 @@ function cancellationFixture(t, status, payments = [], checkout = null) {
   return { app, transitions };
 }
 
-for (const status of ["confirmed", "shipped", "completed", "refunded"]) {
+for (const [handler, listMethod] of [["mine", "listByBuyer"], ["selling", "listBySeller"]]) {
+  test(`${handler} accepts pending_payment filtering and rejects legacy pending`, async (t) => {
+    const calls = [];
+    t.mock.method(orderModel, "cleanExpiredOrders", async () => 0);
+    t.mock.method(orderModel, listMethod, async (userId, options) => {
+      calls.push({ userId, status: options.status });
+      return { items: [{ id: "order-1", status: "pending_payment" }], total: 1 };
+    });
+    const app = express();
+    app.get("/", (req, res, next) => {
+      req.userId = "user";
+      controller[handler](req, res, next);
+    });
+    app.use((err, req, res, next) => {
+      if (res.headersSent) return next(err);
+      res.status(err.status || 500).json({ error: err.message });
+    });
+    const accepted = await request(app).get("/?status=pending_payment");
+    assert.equal(accepted.status, 200);
+    assert.equal(accepted.body.items[0].status, "pending_payment");
+    assert.deepEqual(calls, [{ userId: "user", status: "pending_payment" }]);
+    for (const legacy of ["pending", "inbasket"]) {
+      const rejected = await request(app).get(`/?status=${legacy}`);
+      assert.equal(rejected.status, 400);
+    }
+    assert.equal(calls.length, 1);
+  });
+}
+
+for (const status of ["confirmed", "shipped", "completed", "refunded", "payment_expired", "seller_confirmation_expired"]) {
   test(`TC10: direct cancellation of ${status} is rejected before any side effect`, async (t) => {
     const { app, transitions } = cancellationFixture(t, status);
     const res = await request(app)
@@ -86,7 +115,7 @@ for (const status of ["processing", "paid"]) {
   });
 }
 
-for (const status of ["pending", "pending_payment"]) {
+for (const status of ["pending_payment"]) {
   test(`unpaid ${status} cancellation still succeeds`, async (t) => {
     const { app, transitions } = cancellationFixture(t, status);
     const res = await request(app)

@@ -569,7 +569,7 @@ test(
           now: new Date(expires.cancelAt.getTime() + 1),
         });
         assert.equal(expired.status, "expired");
-        assert.equal(expired.orders[0].status, "cancelled");
+        assert.equal(expired.orders[0].status, "payment_expired");
         assert.equal(expired.originalAmount.toString(), "100.15");
         assert.equal(expired.ordersAmount.toString(), "100.05");
         assert.equal(

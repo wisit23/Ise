@@ -155,7 +155,7 @@ test("order lifecycle: delivered orders auto-complete after 14 days", async (t) 
   assert.equal(log.actorId, "system");
 });
 
-test("order lifecycle: seller silence for a day cancels, refunds and relists", async (t) => {
+test("order lifecycle: seller silence for a day expires, refunds and relists", async (t) => {
   if (!(await reachable(t))) return;
   const late = await paidOrder();
   await prisma.payment.updateMany({
@@ -169,7 +169,9 @@ test("order lifecycle: seller silence for a day cancels, refunds and relists", a
     where: { id: late.id },
     include: { payments: true },
   });
-  assert.equal(lateRow.status, "cancelled");
+  assert.equal(lateRow.status, "seller_confirmation_expired");
+  await lifecycle.cancelUnconfirmedOrders(new Date(), scope);
+  assert.equal(await prisma.payment.count({ where: { orderId: late.id, paymentType: "SIMULATED_REFUND" } }), 1);
   assert.ok(lateRow.payments.some((p) => p.paymentStatus === "refunded"));
   assert.ok(
     productStatuses.some((p) => p.productId === late.productId && p.status === "available"),
@@ -183,7 +185,6 @@ test("order lifecycle: seller silence for a day cancels, refunds and relists", a
 test("order lifecycle: seller can reject a paid order immediately", async (t) => {
   if (!(await reachable(t))) return;
   const order = await paidOrder();
-  assert.equal((await patch(order.id, buyer, { status: "cancelled" })).status, 409);
   const res = await patch(order.id, seller, { status: "cancelled" });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   assert.equal(res.body.status, "cancelled");

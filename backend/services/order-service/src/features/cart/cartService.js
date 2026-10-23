@@ -133,7 +133,7 @@ function createCartService({
           unlockAt: { gt: now },
           OR: [
             { order: null },
-            { order: { status: { in: ["pending", "pending_payment"] } } },
+            { order: { status: "pending_payment" } },
           ],
         },
         include: { order: { include: orderModel.INCLUDE } },
@@ -143,7 +143,7 @@ function createCartService({
         where: {
           buyerId,
           basketId: null,
-          status: { in: ["pending", "pending_payment"] },
+          status: "pending_payment",
         },
         include: orderModel.INCLUDE,
         orderBy: { createdAt: "desc" },
@@ -213,7 +213,7 @@ function createCartService({
             include: { order: { include: orderModel.INCLUDE } },
           });
           if (basket.order) {
-            if (!["pending", "pending_payment"].includes(basket.order.status))
+            if (basket.order.status !== "pending_payment")
               throw conflict("order is no longer awaiting payment");
             return { order: orderModel.view(basket.order), created: false };
           }

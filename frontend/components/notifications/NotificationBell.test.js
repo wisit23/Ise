@@ -207,7 +207,7 @@ describe("NotificationBell", () => {
     expect(screen.getByText("3")).toBeInTheDocument();
   });
 
-  it("supersedes previous notification for the same entity and does not increase unread count if already unread", async () => {
+  it("preserves earlier unread stages for the same entity and deduplicates only socket replays", async () => {
     getNotifications.mockResolvedValue({
       items: [
         {
@@ -235,10 +235,9 @@ describe("NotificationBell", () => {
     });
     expect(await screen.findByText("มีคำสั่งซื้อใหม่")).toBeInTheDocument();
 
-    // Customer completes payment: socket event arrives with updated status for the same order
-    await act(async () => {
-      socketHandler?.({
-        id: "n-order-1",
+    // Payment is a distinct notification, even for the same order.
+    const paidNotice = {
+        id: "n-order-paid",
         entityId: "order-100",
         type: "ORDER",
         title: "ผู้ซื้อชำระเงินแล้ว",
@@ -246,16 +245,22 @@ describe("NotificationBell", () => {
         link: "/seller/dashboard?orderId=order-100",
         metadata: { orderId: "order-100", status: "paid" },
         createdAt: new Date().toISOString(),
-      });
-    });
-
-    // Unread count should remain 1 (NOT 2) because it replaced the existing unread stage
-    expect(screen.getByText("1")).toBeInTheDocument();
+    };
+    await act(async () => socketHandler?.(paidNotice));
+    expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("ผู้ซื้อชำระเงินแล้ว")).toBeInTheDocument();
-    expect(screen.queryByText("มีคำสั่งซื้อใหม่")).not.toBeInTheDocument();
+    expect(screen.getByText("มีคำสั่งซื้อใหม่")).toBeInTheDocument();
+    await act(async () => socketHandler?.(paidNotice));
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getAllByText("ผู้ซื้อชำระเงินแล้ว")).toHaveLength(1);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /อ่านทั้งหมด/i })));
+    await act(async () => socketHandler?.(paidNotice));
+    expect(screen.queryByText("2")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^ยังไม่อ่าน/ }));
+    expect(screen.queryByText("ผู้ซื้อชำระเงินแล้ว")).not.toBeInTheDocument();
   });
 
-  it("supersedes read notification for the same entity and increments unread count by 1", async () => {
+  it("retains a read notification when a new stage arrives for the same entity", async () => {
     getNotifications.mockResolvedValue({
       items: [
         {
@@ -281,10 +286,10 @@ describe("NotificationBell", () => {
     });
     expect(await screen.findByText("ผู้ซื้อชำระเงินแล้ว")).toBeInTheDocument();
 
-    // Order status changes to confirmed: socket event arrives
+    // Order confirmation has its own notification ID.
     await act(async () => {
       socketHandler?.({
-        id: "n-order-read",
+        id: "n-order-confirmed",
         entityId: "order-200",
         type: "ORDER",
         title: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
@@ -298,7 +303,7 @@ describe("NotificationBell", () => {
     // Unread count should now be 1
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("ผู้ขายยืนยันคำสั่งซื้อแล้ว")).toBeInTheDocument();
-    expect(screen.queryByText("ชำระเงินสำเร็จ #order-200")).not.toBeInTheDocument();
+    expect(screen.getByText("ชำระเงินสำเร็จ #order-200")).toBeInTheDocument();
   });
 
   it("dismisses dropdown when Escape is pressed", async () => {

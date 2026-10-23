@@ -97,7 +97,7 @@ const CUSTOMER_ACCOUNT_MENU_ITEMS = [
     icon: "add_circle",
     accent: true,
   },
-  { href: "/orders", label: "คำสั่งซื้อของฉัน", icon: "receipt_long" },
+  { href: "/profile?tab=orders", label: "คำสั่งซื้อของฉัน", icon: "receipt_long" },
   {
     href: "/campaigns?tab=mine",
     label: "คูปองส่วนลดของฉัน",

@@ -27,8 +27,8 @@ const PARTICIPANT_TRANSITIONS = {
   shipped: { seller: ["ready_to_ship"] },
   completed: { buyer: ["delivered"] },
   cancelled: {
-    buyer: ["pending", "pending_payment"],
-    seller: ["pending", "pending_payment", "paid"],
+    buyer: ["pending_payment", "paid"],
+    seller: ["pending_payment", "paid"],
   },
 };
 const USER_SETTABLE_STATUSES = Object.keys(PARTICIPANT_TRANSITIONS);
@@ -54,9 +54,9 @@ function assertParticipantTransition(order, userId, status) {
   return role;
 }
 
-/** A seller rejecting (or timing out on) a paid order refunds the buyer. */
+/** Cancelling before seller preparation refunds an already paid order. */
 function isRefundingCancellation(order, status) {
-  return status === "cancelled" && order.status === "paid";
+  return ["cancelled", "seller_confirmation_expired"].includes(status) && order.status === "paid";
 }
 
 /** Buyers may dispute a received order until the window after delivery closes. */

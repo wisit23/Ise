@@ -11,11 +11,7 @@ function clampLimit(raw) {
   return Math.min(n, MAX_LIMIT);
 }
 
-/**
- * Creates or updates a notification in-place across stages and broadcasts it in real-time.
- * When a new status arrives for an entity (e.g. order paid), it replaces the old status notification,
- * and any previous notifications for that entity are marked as read so they are not counted together.
- */
+/** Each event is a separate notification; entityId links history, not identity. */
 async function createNotification({
   userId = "ALL",
   type = "SYSTEM",
@@ -29,69 +25,7 @@ async function createNotification({
     throw new AppError(400, "Title and message are required for notification");
   }
 
-  // Look up any existing notification for this user and entity
-  let existing = null;
   const targetEntityId = entityId || metadata?.orderId || metadata?.auctionId || null;
-
-  if (targetEntityId && userId !== "ALL") {
-    existing = await prisma.notification.findFirst({
-      where: { userId, entityId: targetEntityId },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (!existing && metadata?.orderId && metadata.orderId !== targetEntityId) {
-      existing = await prisma.notification.findFirst({
-        where: { userId, entityId: metadata.orderId },
-        orderBy: { createdAt: "desc" },
-      });
-    }
-
-    if (!existing && metadata?.auctionId && metadata.auctionId !== targetEntityId) {
-      existing = await prisma.notification.findFirst({
-        where: { userId, entityId: metadata.auctionId },
-        orderBy: { createdAt: "desc" },
-      });
-    }
-  }
-
-  if (existing) {
-    // Update existing notification in-place across stages!
-    const updated = await prisma.notification.update({
-      where: { id: existing.id },
-      data: {
-        type,
-        title,
-        message,
-        link,
-        metadata,
-        entityId: targetEntityId || existing.entityId,
-        read: false, // Reset to unread so user notices the new stage
-        readAt: null,
-        createdAt: new Date(), // Bump time to show at top of notifications
-      },
-    });
-
-    // Mark any other older notifications for this entity as read ("แจ้งเตือนสถานะเก่าแล้ว")
-    // so they are not counted together with the new status
-    if (targetEntityId) {
-      try {
-        await prisma.notification.updateMany({
-          where: {
-            userId,
-            entityId: targetEntityId,
-            read: false,
-            id: { not: existing.id },
-          },
-          data: { read: true, readAt: new Date() },
-        });
-      } catch {
-        // Safe fallback if updateMany with compound criteria is not supported by mock
-      }
-    }
-
-    broadcast.broadcastNotification(updated);
-    return updated;
-  }
 
   const created = await prisma.notification.create({
     data: {
@@ -107,30 +41,13 @@ async function createNotification({
     },
   });
 
-  // Ensure any prior notifications for this entity are marked as read
-  if (targetEntityId && userId !== "ALL") {
-    try {
-      await prisma.notification.updateMany({
-        where: {
-          userId,
-          entityId: targetEntityId,
-          read: false,
-          id: { not: created.id },
-        },
-        data: { read: true, readAt: new Date() },
-      });
-    } catch {
-      // Safe fallback
-    }
-  }
-
   broadcast.broadcastNotification(created);
   return created;
 }
 
 /**
  * Lists notifications for a given user, including platform broadcast notifications.
- * Older notifications for the same entity that have been superseded are marked as read.
+ * Read state belongs to each notification, independent of later entity updates.
  */
 async function listNotifications(userId, { limit = DEFAULT_LIMIT, unreadOnly = false } = {}) {
   const take = clampLimit(limit);
@@ -145,20 +62,10 @@ async function listNotifications(userId, { limit = DEFAULT_LIMIT, unreadOnly = f
     take: take * 2,
   });
 
-  const seenEntities = new Set();
   const mapped = [];
 
   for (const n of notifications) {
-    let isRead = n.userId === "ALL" ? (n.readBy || []).includes(userId) : Boolean(n.read);
-
-    if (n.entityId && n.userId !== "ALL") {
-      if (seenEntities.has(n.entityId)) {
-        // Older notification for the same entity is superseded and treated as already read
-        isRead = true;
-      } else {
-        seenEntities.add(n.entityId);
-      }
-    }
+    const isRead = n.userId === "ALL" ? (n.readBy || []).includes(userId) : Boolean(n.read);
 
     mapped.push({
       id: n.id,
@@ -180,7 +87,7 @@ async function listNotifications(userId, { limit = DEFAULT_LIMIT, unreadOnly = f
 
 /**
  * Calculates total unread notification count for a user (personal + broadcast).
- * Groups by entityId so multiple status notifications for the same entity only count as 1.
+ * Every unread status notification counts, even for the same order.
  */
 async function unreadCount(userId) {
   const userUnreadNotifs = await prisma.notification.findMany({
@@ -188,18 +95,7 @@ async function unreadCount(userId) {
     select: { id: true, entityId: true },
   });
 
-  const seenEntities = new Set();
-  let userUnread = 0;
-  for (const n of userUnreadNotifs) {
-    if (n.entityId) {
-      if (!seenEntities.has(n.entityId)) {
-        seenEntities.add(n.entityId);
-        userUnread++;
-      }
-    } else {
-      userUnread++;
-    }
-  }
+  const userUnread = userUnreadNotifs.length;
 
   const broadcastNotifications = await prisma.notification.findMany({
     where: { userId: "ALL" },

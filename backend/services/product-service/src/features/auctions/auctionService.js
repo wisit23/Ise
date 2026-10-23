@@ -148,10 +148,21 @@ async function loadAuction(id) {
 async function maybeAdvance(auction, now = new Date()) {
   if(auction.product?.moderatedAt || auction.product?.status === "removed")return auction;
   if (auction.status === "scheduled" && auction.scheduledStartAt <= now) {
-    auction = await auctionRepository.updateStatus(auction.id, {
-      status: "open",
-      openedAt: now,
-    },{expectedStatus:"scheduled",requireUnmoderatedProduct:true,startDueAt:now});
+    try {
+      auction = await auctionRepository.updateStatus(auction.id, {
+        status: "open",
+        openedAt: now,
+      }, { expectedStatus: "scheduled", strictStatus: true, requireUnmoderatedProduct: true, startDueAt: now });
+    } catch (err) {
+      // A delayed job and a page visit may race; only the transition winner notifies.
+      if (err.status !== 409) throw err;
+      return loadAuction(auction.id);
+    }
+    if (auction.status === "open") {
+      await chatClient.notifyItemOpened(auction).catch((err) =>
+        console.warn("[auctionService] opening notification failed:", err.message),
+      );
+    }
   }
   if (auction.status === "open" && auction.scheduledEndAt <= now) {
     auction = await closeAuction(auction, now);
@@ -651,7 +662,7 @@ async function approve({ user, auctionId }) {
       );
       return res;
     });
-    await auctionCloseQueue.scheduleClose(auctionId, auction.scheduledEndAt);
+    await auctionCloseQueue.scheduleClose(auctionId, auction.scheduledEndAt, auction.scheduledStartAt);
     return updated;
   }
 
@@ -1101,8 +1112,8 @@ async function schedule({ user, auctionId, startsAt, endsAt }) {
     return res;
   });
 
-  // Books the exact-time close job now, not lazily — see auctionCloseQueue.js.
-  await auctionCloseQueue.scheduleClose(auctionId, end);
+  // Both boundaries must fire even when nobody visits the auction page.
+  await auctionCloseQueue.scheduleClose(auctionId, end, start);
 
   return updated;
 }
@@ -1724,7 +1735,25 @@ async function cancelRound({ user, roundId, reason }) {
   };
 }
 
+// Existing Redis schedules predate opening jobs. Rebook on startup so those
+// auctions also open without a page visit; stable job IDs replace pending jobs.
+async function restoreScheduledJobs() {
+  const take = 100;
+  const scheduled = [];
+  // Read the pages before enqueueing due openings, which remove rows from this list.
+  for (let skip = 0; ; skip += take) {
+    const { items } = await auctionRepository.list({ status: "scheduled", skip, take });
+    scheduled.push(...items);
+    if (items.length < take) break;
+  }
+  for (const item of scheduled) {
+    if (item.product?.moderatedAt || item.product?.status === "removed" || item.round?.cancelledAt) continue;
+    await auctionCloseQueue.scheduleClose(item.id, item.scheduledEndAt, item.scheduledStartAt);
+  }
+}
+
 module.exports = {
+  restoreScheduledJobs,
   canTransition,
   submit,
   approve,

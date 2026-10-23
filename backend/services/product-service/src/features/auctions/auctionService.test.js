@@ -6,6 +6,7 @@ const orderClient = require("./orderClient");
 const auctionCloseQueue = require("../../jobs/auctionCloseQueue");
 const service = require("./auctionService");
 const productModel = require("../../models/productModel");
+const chatClient = require("./chatClient");
 
 // Transaction fixtures retain audit snapshots so read-after-write projection
 // and command-audit assertions exercise the same state boundary as PostgreSQL.
@@ -48,6 +49,7 @@ function withAuditState(tx) {
 // stubs the queue calls it makes.
 beforeEach((t) => {
   t.mock.method(auctionCloseQueue, "scheduleClose", async () => {});
+  t.mock.method(chatClient, "notifyItemOpened", async () => {});
   t.mock.method(auctionCloseQueue, "cancelClose", async () => {});
   t.mock.method(repository, "setProductStatus", async () => {});
   const defaultRound = {
@@ -91,6 +93,18 @@ beforeEach((t) => {
     ...defaultRound,
     id: id || "round-1",
   }));
+});
+
+test("startup restores both boundary jobs for existing scheduled auctions", async (t) => {
+  const item = { id: "existing", scheduledStartAt: new Date(), scheduledEndAt: new Date(Date.now() + 60000) };
+  t.mock.method(repository, "list", async ({ status }) => {
+    assert.equal(status, "scheduled");
+    return { items: [item, { ...item, id: "removed", product: { status: "removed" } }] };
+  });
+  await service.restoreScheduledJobs();
+  assert.equal(auctionCloseQueue.scheduleClose.mock.callCount(), 1);
+  assert.deepEqual(auctionCloseQueue.scheduleClose.mock.calls[0].arguments,
+    [item.id, item.scheduledEndAt, item.scheduledStartAt]);
 });
 
 test("canTransition allows only the documented lifecycle edges", () => {
@@ -1037,9 +1051,29 @@ test("scheduled auction opening uses a moderation-aware CAS", async (t) => {
 
   assert.deepEqual(options, {
     expectedStatus: "scheduled",
+    strictStatus: true,
     requireUnmoderatedProduct: true,
     startDueAt: now,
   });
+  assert.equal(chatClient.notifyItemOpened.mock.callCount(), 1);
+  assert.equal(chatClient.notifyItemOpened.mock.calls[0].arguments[0].status, "open");
+});
+
+test("a losing scheduled-open race does not send another start notification", async (t) => {
+  const now = new Date();
+  const auction = { id: "race", status: "scheduled", scheduledStartAt: now, scheduledEndAt: new Date(+now + 60000) };
+  t.mock.method(repository, "updateStatus", async () => { throw Object.assign(new Error("changed"), { status: 409 }); });
+  t.mock.method(repository, "findById", async () => ({ ...auction, status: "open" }));
+  assert.equal((await service.maybeAdvance(auction, now)).status, "open");
+  assert.equal(chatClient.notifyItemOpened.mock.callCount(), 0);
+});
+
+test("notification outage does not prevent the scheduled auction opening", async (t) => {
+  const now = new Date();
+  const auction = { id: "outage", status: "scheduled", scheduledStartAt: now, scheduledEndAt: new Date(+now + 60000) };
+  t.mock.method(repository, "updateStatus", async (_id, data) => ({ ...auction, ...data }));
+  chatClient.notifyItemOpened.mock.mockImplementation(async () => { throw new Error("chat offline"); });
+  assert.equal((await service.maybeAdvance(auction, now)).status, "open");
 });
 
 test("submit transitions available product to 'auction' status", async (t) => {
@@ -4019,7 +4053,7 @@ test("service.getBids returns enriched bids with bidder names", async (t) => {
       { id: "b2", amount: 1000, bidderId: "user-beta", createdAt: new Date() },
     ],
   };
-  t.mock.method(repository, "findById", async (id) => auction);
+  t.mock.method(repository, "findById", async () => auction);
 
   const bids = await service.getBids("a-bids-test");
   assert.equal(bids.length, 2);

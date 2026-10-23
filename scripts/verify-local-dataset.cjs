@@ -63,7 +63,7 @@ async function main() {
       assert.ok(row.shipping.addressSnapshot.recipientName);
     } else
       assert.ok(
-        ["pending_payment", "pending", "cancelled"].includes(row.status),
+        ["pending_payment", "payment_expired", "seller_confirmation_expired", "cancelled"].includes(row.status),
         "Paid order needs checkout",
       );
     if (row.payments.length) {

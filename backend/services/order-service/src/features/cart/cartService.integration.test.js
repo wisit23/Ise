@@ -331,4 +331,16 @@ test("cart to checkout persists reservations separately and serializes order cre
       }
     },
   );
+  for (const status of ["payment_expired", "seller_confirmation_expired"]) {
+    await t.test(`${status} orders are excluded from the cart even if their basket remains locked`, async () => {
+      const item = await service.add({ buyerId: "buyer", productId: `terminal-${status}` });
+      const prepared = await service.prepare({ buyerId: "buyer", basketIds: [item.id] });
+      const orderId = prepared.items[0].id;
+      await db.order.update({ where: { id: orderId }, data: { status } });
+      const cart = await service.list({ buyerId: "buyer" });
+      assert.ok(!cart.items.some((row) => row.orderId === orderId));
+      await assert.rejects(service.prepare({ buyerId: "buyer", basketIds: [item.id] }),
+        (error) => error.status === 409);
+    });
+  }
 });

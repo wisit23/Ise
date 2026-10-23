@@ -73,7 +73,8 @@ function createRoundScheduleService(deps = {}) {
           await repo.withAuctionLock(item.id, async tx => {
             const current = await tx.auctionItem.findUnique({ where: { id: item.id } });
             if (current && ["scheduled", "open"].includes(current.status)) {
-              await closeQueue.scheduleClose(current.id, current.scheduledEndAt);
+              await closeQueue.scheduleClose(current.id, current.scheduledEndAt,
+                current.status === "scheduled" ? current.scheduledStartAt : undefined);
             }
           });
         } catch {

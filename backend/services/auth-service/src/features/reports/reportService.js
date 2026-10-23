@@ -271,7 +271,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
         userId: targetId,
         type: "REPORT",
         title: "ความคิดเห็นของคุณถูกรายงาน",
-        message: `⚠️ ความคิดเห็น/รีวิวของคุณในสินค้า '${productTitle}' ถูกรายงานและอยู่ระหว่างการตรวจสอบโดยทีมงาน`,
+        message: `⚠️ ความคิดเห็น/รีวิวของคุณในสินค้า '${productTitle}' ถูกรายงานและอยู่ระหว่างการตรวจสอบโดยทีมงาน เหตุผลที่รายงาน: ${report.reason}`,
         link: productId ? `/products/${productId}` : "/orders",
         entityId: `report:review:${reviewId || report.id}`,
         metadata: {
@@ -279,6 +279,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
           targetId,
           productId,
           reviewId: reviewId || null,
+          reportReason: report.reason,
         },
       }).catch(() => {});
     } catch (notifyErr) {

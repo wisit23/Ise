@@ -39,7 +39,7 @@ async function createOrder(prisma, { data }) {
   if (["delivered", "completed"].includes(data.status))
     data.deliveredAt ??= now;
   if (data.status === "completed") data.completedAt ??= now;
-  const pending = ["pending", "pending_payment"].includes(data.status);
+  const pending = data.status === "pending_payment";
   return prisma.order.create({
     data: {
       ...data,

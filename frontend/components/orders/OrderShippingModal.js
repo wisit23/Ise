@@ -323,7 +323,7 @@ export default function OrderShippingModal({
               )}
             </div>
 
-            {canShip && ["paid", "pending", "pending_payment"].includes(order.status) && (
+            {canShip && ["paid", "pending_payment"].includes(order.status) && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-xs text-amber-900 shadow-xs">
                 <div className="flex items-start gap-2.5">
                   <span className="material-symbols-outlined text-[20px] text-amber-600 shrink-0 mt-0.5">
@@ -609,7 +609,7 @@ export default function OrderShippingModal({
                   ปิด
                 </Button>
 
-                {canShip && ["paid", "pending", "pending_payment"].includes(order.status) && (
+                {canShip && ["paid", "pending_payment"].includes(order.status) && (
                   <>
                     <button
                       type="button"

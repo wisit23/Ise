@@ -74,6 +74,9 @@ test("executive order status breakdown against a real database", async (t) => {
     // Never paid: a cart abandoned at the payment step is not a sale.
     ["pending_payment", null, inWindow],
     ["cancelled", null, inWindow],
+    ["payment_expired", null, inWindow],
+    // A simulated refund on seller timeout is not a completed sale.
+    ["seller_confirmation_expired", "paid", inWindow],
     // A status that normally follows payment, but whose payment never cleared.
     ["completed", "pending", inWindow],
     // Boundary: belongs to March in Bangkok even though UTC says February.

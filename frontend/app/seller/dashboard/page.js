@@ -159,7 +159,7 @@ export default function SellerDashboardPage() {
     const auctionRevenue = auctionGrossRevenue * (1 - PLATFORM_FEE_RATE);
 
     const pendingRevenue = orders
-      .filter((o) => ["pending", "pending_payment"].includes(o.status))
+      .filter((o) => o.status === "pending_payment")
       .reduce((sum, o) => sum + (o.finalPrice ?? o.price ?? 0), 0);
 
     const days14 = lastNDays(14);

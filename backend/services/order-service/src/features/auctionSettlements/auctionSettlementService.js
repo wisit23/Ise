@@ -15,14 +15,14 @@ function createAuctionSettlementService({
 
   async function settleOne(order, settledAt = now()) {
     let claimed = order;
-    if (["pending", "pending_payment"].includes(order.status)) {
+    if (order.status === "pending_payment") {
       claimed = await orders.claimExpiredAuctionOrder({
         id: order.id,
         expectedVersion: order.version,
         now: settledAt,
       });
-      if (!claimed || claimed.status !== "cancelled") return null;
-      await chat.notifyOrderStatusChanged(claimed, "cancelled");
+      if (!claimed || claimed.status !== "payment_expired") return null;
+      await chat.notifyOrderStatusChanged(claimed, "payment_expired");
     }
 
     const result = await products.advanceAuctionWinner(order.auctionId, {

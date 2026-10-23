@@ -19,7 +19,6 @@ export const PRODUCT_STATUS_STYLE = {
 };
 
 export const ORDER_STATUS_LABEL = {
-  pending: "รอลูกค้าชำระเงิน",
   pending_payment: "รอลูกค้าชำระเงิน",
   paid: "รอยืนยันคำสั่งซื้อ",
   confirmed: "ต้องเตรียมสินค้า",
@@ -28,12 +27,13 @@ export const ORDER_STATUS_LABEL = {
   delivered: "ส่งถึงผู้ซื้อแล้ว",
   completed: "ขายสำเร็จ",
   cancelled: "ยกเลิกแล้ว",
+  payment_expired: "หมดเวลาชำระเงิน",
+  seller_confirmation_expired: "หมดเวลายืนยันคำสั่งซื้อ (คืนเงินแล้ว)",
   disputed: "อยู่ระหว่างข้อพิพาท",
   refunded: "คืนเงินแล้ว",
 };
 
 export const ORDER_STATUS_STYLE = {
-  pending: "bg-amber-50 text-amber-700",
   pending_payment: "bg-amber-50 text-amber-700",
   paid: "bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200",
   confirmed: "bg-sky-50 text-sky-700",
@@ -42,6 +42,8 @@ export const ORDER_STATUS_STYLE = {
   delivered: "bg-violet-50 text-violet-700",
   completed: "bg-emerald-50 text-emerald-700",
   cancelled: "bg-gray-100 text-gray-600",
+  payment_expired: "bg-gray-100 text-gray-600",
+  seller_confirmation_expired: "bg-gray-100 text-gray-600",
   disputed: "bg-red-50 text-red-700",
   refunded: "bg-purple-50 text-purple-700",
 };

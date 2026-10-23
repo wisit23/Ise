@@ -7,7 +7,7 @@ const {
 
 const NOW = new Date("2026-10-16T12:00:00.000Z");
 
-test("TC_AUC10: expired winner is cancelled and the next distinct bidder receives a fresh 24-hour deadline", async () => {
+test("TC_AUC10: expired winner becomes payment_expired and the next distinct bidder receives a fresh 24-hour deadline", async () => {
   const calls = [];
   const due = {
     id: "order-1",
@@ -19,7 +19,7 @@ test("TC_AUC10: expired winner is cancelled and the next distinct bidder receive
   };
   const orders = {
     findAuctionOrdersDueForSettlement: async () => [due],
-    claimExpiredAuctionOrder: async () => ({ ...due, status: "cancelled", version: 2 }),
+    claimExpiredAuctionOrder: async () => ({ ...due, status: "payment_expired", version: 2 }),
     reassignAuctionOrder: async (input) => {
       calls.push(input);
       return { ...due, ...input, status: "pending_payment", version: 3 };
@@ -58,7 +58,7 @@ test("TC_AUC10: expired winner is cancelled and the next distinct bidder receive
   assert.equal(calls[0].buyerId, "buyer-b");
   assert.equal(calls[0].auctionBidId, "bid-b-90");
   assert.equal(calls[0].paymentDeadlineAt.getTime(), NOW.getTime() + AUCTION_PAYMENT_TTL_MS);
-  assert.deepEqual(notices, [["cancelled", "buyer-a"], ["placed", "buyer-b"]]);
+  assert.deepEqual(notices, [["payment_expired", "buyer-a"], ["placed", "buyer-b"]]);
 });
 
 test("TC_AUC10: exhausted ranking releases the product and permanently closes settlement", async () => {

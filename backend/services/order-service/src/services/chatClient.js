@@ -14,7 +14,7 @@ const CHAT_SERVICE_URL =
 const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 
 // Only order statuses worth telling both parties about in the room get a
-// SYSTEM message — "pending" (still in the cart) isn't chat-worthy.
+// SYSTEM message — awaiting payment isn't chat-worthy.
 const STATUS_MESSAGE_TH = {
   confirmed: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
   ready_to_ship: "ผู้ขายเตรียมสินค้าแล้ว รอขนส่งมารับ",
@@ -22,6 +22,8 @@ const STATUS_MESSAGE_TH = {
   delivered: "ขนส่งส่งสินค้าถึงผู้ซื้อแล้ว",
   completed: "คำสั่งซื้อเสร็จสมบูรณ์แล้ว",
   cancelled: "คำสั่งซื้อนี้ถูกยกเลิกแล้ว",
+  payment_expired: "หมดเวลาชำระเงินแล้ว",
+  seller_confirmation_expired: "หมดเวลายืนยันคำสั่งซื้อของผู้ขาย ระบบบันทึกคืนเงินเต็มจำนวนแล้ว",
 };
 
 async function internalPost(path, body) {
@@ -218,6 +220,17 @@ async function sendSystemNotification({ userId, type, title, message, link, meta
  */
 async function notifyOrderPlaced(order) {
   if (order && order.buyerId) {
+    if (order.auctionId) {
+      await sendSystemNotification({
+        userId: order.buyerId,
+        type: "AUCTION",
+        title: "คุณชนะการประมูลแล้ว",
+        message: `🏆 คุณชนะการประมูล '${order.productTitle || "สินค้า"}' กรุณาชำระเงินคำสั่งซื้อ #${order.id} ภายในเวลาที่กำหนด`,
+        link: "/orders",
+        entityId: order.id,
+        metadata: { orderId: order.id, auctionId: order.auctionId, status: "won", paymentDeadlineAt: order.paymentDeadlineAt },
+      });
+    }
     try {
       await internalPost("/internal/realtime/broadcast", {
         event: "order:updated",
@@ -225,14 +238,16 @@ async function notifyOrderPlaced(order) {
         rooms: [`user:${order.buyerId}`],
         broadcastGlobal: false,
       });
-    } catch (_) {}
+    } catch {
+      // Realtime delivery is best-effort; the order remains available by API.
+    }
   }
 }
 
 /**
  * Notifies both seller and buyer in the Notification Center when payment is completed.
  * For seller: links directly to the product page with ?ship=1 to fulfill shipment.
- * Uses entityId: order.id to update stages in-place.
+ * Uses entityId: order.id to link separate stage notifications to the order.
  */
 async function notifyOrderPaid(order) {
   if (!order || !order.id || !order.buyerId || !order.sellerId) return;
@@ -366,15 +381,30 @@ async function deleteDisputeConversation(disputeId) {
   }
 }
 
-/**
- * Updates the existing notification in-place for each stage (e.g. จาก "ผู้ซื้อชำระสินค้า" ไป "ลูกค้าได้รับสินค้าแล้ว")
- */
-async function notifyOrderStatusChanged(order, status, { reason } = {}) {
+/** Sends a separate notification for each order stage. */
+async function notifyOrderStatusChanged(order, status, { reason, actorId } = {}) {
   // Seller accept/reject have their own two-sided messages and realtime push.
   if (status === "confirmed" && order?.status === "paid")
     return notifyOrderConfirmed({ ...order, status });
-  if (status === "cancelled" && order?.status === "paid")
-    return notifyOrderRejected(order, reason);
+  if (status === "cancelled" && order?.status === "paid") {
+    if (actorId !== order.buyerId) return notifyOrderRejected(order, reason);
+    const amount = Number(order.ordersAmount || order.price || 0).toLocaleString("th-TH");
+    await Promise.all([
+      ...[order.buyerId, order.sellerId].filter(Boolean).map((userId) =>
+        sendSystemNotification({
+          userId,
+          type: "ORDER",
+          title: "ผู้ซื้อยกเลิกคำสั่งซื้อและคืนเงินแล้ว",
+          message: `คำสั่งซื้อ #${order.id} ถูกยกเลิกโดยผู้ซื้อก่อนผู้ขายเริ่มเตรียมสินค้า ระบบบันทึกคืนเงินเต็มจำนวน ฿${amount} แล้ว`,
+          link: userId === order.buyerId ? "/orders" : `/products/${order.productId}`,
+          entityId: order.id,
+          metadata: { orderId: order.id, productId: order.productId, status, refundAmount: amount, reason },
+        }),
+      ),
+      broadcastOrderRealtime({ ...order, status }, "cancelled"),
+    ]);
+    return;
+  }
   broadcastOrderRealtime({ ...order, status }, status).catch(() => {});
 
   const statusLabel = STATUS_MESSAGE_TH[status];
@@ -436,6 +466,9 @@ async function notifyOrderStatusChanged(order, status, { reason } = {}) {
     } else if (status === "cancelled") {
       sellerTitle = "คำสั่งซื้อถูกยกเลิก";
       sellerBody = `⚠️ คำสั่งซื้อ #${order.id} ('${title}') ถูกยกเลิกแล้ว`;
+    } else {
+      sellerTitle = `อัปเดตสถานะคำสั่งซื้อ #${order.id}`;
+      sellerBody = `คำสั่งซื้อ #${order.id}: ${statusLabel}`;
     }
 
     if (sellerTitle && sellerBody) {
@@ -537,6 +570,8 @@ async function broadcastOrderRealtime(order, action = "updated") {
         confirmed: "reserved",
         shipped: "reserved",
         cancelled: "available",
+        payment_expired: "available",
+        seller_confirmation_expired: "available",
       };
       const effectiveStatus = order.status || action;
       const productStatus = statusMap[effectiveStatus];

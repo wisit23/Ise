@@ -46,7 +46,6 @@ export const DISPUTE_STATUS_STYLE = {
 };
 
 export const ORDER_STATUS_LABEL = {
-  pending: "รอชำระเงิน",
   pending_payment: "รอชำระเงิน",
   paid: "ชำระแล้ว รอผู้ขายยืนยัน",
   confirmed: "ยืนยันแล้ว",
@@ -55,6 +54,8 @@ export const ORDER_STATUS_LABEL = {
   delivered: "ส่งถึงแล้ว",
   completed: "สำเร็จ",
   cancelled: "ยกเลิก",
+  payment_expired: "หมดเวลาชำระเงิน",
+  seller_confirmation_expired: "หมดเวลายืนยันคำสั่งซื้อ (คืนเงินแล้ว)",
   disputed: "อยู่ระหว่างพิพาท",
   refunded: "คืนเงินแล้ว",
 };

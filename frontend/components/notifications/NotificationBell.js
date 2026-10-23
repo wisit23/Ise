@@ -155,34 +155,9 @@ export default function NotificationBell({ user }) {
         createdAt: newNotif.createdAt || new Date().toISOString(),
       };
 
-      const isSameEntity = (n) => {
-        if (!n) return false;
-        if (newNotif.id && n.id === newNotif.id) return true;
-        const targetIds = [
-          newNotif.entityId,
-          newNotif.metadata?.orderId,
-          newNotif.metadata?.auctionId,
-        ].filter(Boolean);
-        const currentIds = [
-          n.entityId,
-          n.metadata?.orderId,
-          n.metadata?.auctionId,
-        ].filter(Boolean);
-        return targetIds.some((id) => currentIds.includes(id));
-      };
-
-      const existingIndex = prev.findIndex(isSameEntity);
-
-      if (existingIndex >= 0) {
-        const wasRead = prev[existingIndex].read;
-        if (wasRead) {
-          setUnreadCount((c) => c + 1);
-        }
-        const updated = prev.filter(
-          (n, idx) => idx !== existingIndex && !isSameEntity(n),
-        );
-        return [incoming, ...updated];
-      }
+      // Same-ID deliveries are replays, not a new stage. Preserve local read
+      // state; a new status has its own ID even when it shares an order ID.
+      if (newNotif.id && prev.some((n) => n.id === newNotif.id)) return prev;
 
       setUnreadCount((prev) => prev + 1);
       return [incoming, ...prev];

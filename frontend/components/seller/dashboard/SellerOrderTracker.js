@@ -20,8 +20,7 @@ import { SELLER_NEXT_STEP } from "../../../lib/orderLifecycle";
 
 const ALL_STATUSES = [
   { value: "", label: "ทั้งหมด" },
-  { value: "pending", label: "รอชำระเงิน" },
-  { value: "pending_payment", label: "รอชำระเงิน (PP)" },
+  { value: "pending_payment", label: "รอชำระเงิน" },
   { value: "paid", label: "รอยืนยันคำสั่งซื้อ" },
   { value: "confirmed", label: "ต้องเตรียมสินค้า" },
   { value: "ready_to_ship", label: "รอขนส่งมารับ" },
@@ -29,6 +28,8 @@ const ALL_STATUSES = [
   { value: "delivered", label: "ส่งถึงผู้ซื้อแล้ว" },
   { value: "completed", label: "ขายสำเร็จ" },
   { value: "cancelled", label: "ยกเลิกแล้ว" },
+  { value: "payment_expired", label: "หมดเวลาชำระเงิน" },
+  { value: "seller_confirmation_expired", label: "หมดเวลายืนยันคำสั่งซื้อ" },
   { value: "disputed", label: "ข้อพิพาท" },
   { value: "refunded", label: "คืนเงินแล้ว" },
 ];
@@ -104,8 +105,6 @@ export default function SellerOrderTracker({
     .filter((o) => {
       if (!statusFilter) return true;
       if (statusFilter === "disputed") return isOrderDisputed(o);
-      if (statusFilter === "pending")
-        return o.status === "pending" || o.status === "pending_payment";
       return o.status === statusFilter;
     })
     .filter((o) => {

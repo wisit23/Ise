@@ -33,6 +33,29 @@ async function create(data) {
   return toApiShape(review);
 }
 
+async function findById(id) {
+  const review = await prisma.review.findUnique({
+    where: { id },
+    include: WITH_MEDIA,
+  });
+  return toApiShape(review);
+}
+
+async function update(id, buyerId, { rating, comment, media }) {
+  const { mediaEntries } = mediaToNestedCreate(media);
+  // One nested write keeps the edited text, score and ordered media atomic.
+  const review = await prisma.review.update({
+    where: { id, buyerId },
+    data: {
+      rating,
+      comment,
+      mediaEntries: { deleteMany: {}, create: mediaEntries?.create || [] },
+    },
+    include: WITH_MEDIA,
+  });
+  return toApiShape(review);
+}
+
 async function findByOrderId(orderId) {
   const review = await prisma.review.findUnique({
     where: { orderId },
@@ -90,6 +113,8 @@ async function listByBuyer(buyerId, { skip, take } = {}) {
 
 module.exports = {
   create,
+  findById,
+  update,
   findByOrderId,
   listBySeller,
   summaryBySeller,

@@ -32,7 +32,9 @@ const allowed = [
   ["seller", "confirmed", "ready_to_ship"],
   ["seller", "ready_to_ship", "shipped"],
   ["buyer", "delivered", "completed"],
+  ["seller", "pending_payment", "cancelled"],
   ["buyer", "pending_payment", "cancelled"],
+  ["buyer", "paid", "cancelled"],
 ];
 for (const [actor, from, to] of allowed) {
   test(`${actor} may move an order from ${from} to ${to}`, () => {
@@ -52,7 +54,9 @@ const rejected = [
   ["buyer", "paid", "completed", 409],
   ["buyer", "pending_payment", "completed", 409],
   ["buyer", "paid", "confirmed", 403],
-  ["buyer", "paid", "cancelled", 409],
+  ["buyer", "confirmed", "cancelled", 409],
+  ["buyer", "ready_to_ship", "cancelled", 409],
+  ["buyer", "shipped", "cancelled", 409],
   // The seller must follow paid -> confirmed -> ready_to_ship -> shipped.
   ["seller", "paid", "shipped", 409],
   ["seller", "confirmed", "shipped", 409],
@@ -61,7 +65,11 @@ const rejected = [
   // System-only statuses.
   ["seller", "shipped", "delivered", 400],
   ["buyer", "pending_payment", "paid", 400],
-  ["buyer", "completed", "pending", 400],
+  ["buyer", "pending_payment", "payment_expired", 400],
+  ["seller", "paid", "seller_confirmation_expired", 400],
+  ["buyer", "payment_expired", "cancelled", 409],
+  ["seller", "seller_confirmation_expired", "confirmed", 409],
+  ["buyer", "pending", "cancelled", 409],
   ["buyer", "completed", "refunded", 400],
 ];
 for (const [actor, from, to, status] of rejected) {
@@ -172,7 +180,7 @@ test("delivered orders older than 14 days are completed like a buyer confirmatio
   assert.equal(productSync.processEvent.mock.callCount(), 1);
 });
 
-test("paid orders the seller ignored for a day are cancelled and relisted", async (t) => {
+test("paid orders the seller ignored for a day expire and are relisted", async (t) => {
   const now = new Date("2026-10-16T00:00:00Z");
   const { queries, transitions } = sweepFixture(t, [order("paid")]);
   assert.equal(await lifecycleService.cancelUnconfirmedOrders(now), 1);
@@ -181,8 +189,11 @@ test("paid orders the seller ignored for a day are cancelled and relisted", asyn
     queries[0].where.AND[0].payments.some.paidAt.lte.toISOString(),
     "2026-10-15T00:00:00.000Z",
   );
-  assert.equal(transitions[0].status, "cancelled");
+  assert.equal(transitions[0].status, "seller_confirmation_expired");
+  assert.deepEqual(transitions[0].expectedStatuses, ["paid"]);
+  assert.equal(transitions[0].productSync.action, "SET_STATUS");
   assert.equal(transitions[0].productSync.targetStatus, "available");
+  assert.equal(chat.notifyOrderStatusChanged.mock.calls[0].arguments[1], "seller_confirmation_expired");
   assert.equal(activities.recordOrderActivity.mock.calls[0].arguments[1], "ORDER_CANCELLED");
 });
 
@@ -246,6 +257,35 @@ test("PATCH: seller rejects a paid order, which relists the product", async (t) 
   const res = await request(app).patch("/order-1/status").send({ status: "cancelled" });
   assert.equal(res.status, 200);
   assert.equal(transitions[0].productSync.targetStatus, "available");
+});
+
+test("PATCH: buyer cancels a paid order before preparation using refund and relist flow", async (t) => {
+  const { app, transitions } = controllerApp(t, order("paid", {
+    payments: [{ paymentStatus: "paid" }],
+  }), "buyer");
+  const res = await request(app).patch("/order-1/status").send({ status: "cancelled" });
+  assert.equal(res.status, 200);
+  assert.equal(transitions[0].status, "cancelled");
+  assert.deepEqual(transitions[0].expectedStatuses, ["paid"]);
+  assert.equal(transitions[0].expectedVersion, 4);
+  assert.equal(transitions[0].productSync.targetStatus, "available");
+  assert.equal(chat.notifyOrderStatusChanged.mock.calls[0].arguments[2].actorId, "buyer");
+});
+
+for (const state of ["confirmed", "ready_to_ship", "shipped", "disputed"]) {
+  test(`PATCH: buyer cancellation is rejected after preparation or hold (${state})`, async (t) => {
+    const { app, transitions } = controllerApp(t, order(state), "buyer");
+    const res = await request(app).patch("/order-1/status").send({ status: "cancelled" });
+    assert.equal(res.status, 409);
+    assert.equal(transitions.length, 0);
+  });
+}
+
+test("PATCH: a held paid order cannot be cancelled by the buyer", async (t) => {
+  const { app, transitions } = controllerApp(t, order("paid", { payoutHeld: true }), "buyer");
+  const res = await request(app).patch("/order-1/status").send({ status: "cancelled" });
+  assert.equal(res.status, 409);
+  assert.equal(transitions.length, 0);
 });
 
 test("PATCH: a held order cannot be accepted", async (t) => {
