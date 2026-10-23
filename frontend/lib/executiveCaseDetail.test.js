@@ -1,0 +1,78 @@
+import { apiFetch } from "./api";
+import {
+  fetchCaseDetail,
+  hasCaseDetail,
+  isOverdue,
+  personLabel,
+} from "./executiveCaseDetail";
+
+jest.mock("./api", () => ({ apiFetch: jest.fn() }));
+
+describe("fetchCaseDetail", () => {
+  beforeEach(() => apiFetch.mockReset());
+
+  it("asks the service that owns the case, through the gateway", async () => {
+    apiFetch.mockResolvedValue({ data: { id: "d/1" }, meta: {} });
+    await fetchCaseDetail("dispute", "d/1", "t");
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/orders/executive/disputes/d%2F1",
+      { token: "t" },
+    );
+
+    apiFetch.mockResolvedValue({ data: { id: "t1", actions: [] }, meta: {} });
+    await fetchCaseDetail("ticket", "t1", "t");
+    expect(apiFetch).toHaveBeenLastCalledWith(
+      "/api/support/executive/tickets/t1",
+      { token: "t" },
+    );
+  });
+
+  it("refuses an answer it cannot show", async () => {
+    apiFetch.mockResolvedValue({ nope: true });
+    await expect(fetchCaseDetail("dispute", "d1", "t")).rejects.toThrow();
+    apiFetch.mockResolvedValue({ data: { id: "t1" } });
+    await expect(fetchCaseDetail("ticket", "t1", "t")).rejects.toThrow();
+  });
+
+  it("has details for tickets and disputes only", () => {
+    expect(hasCaseDetail("ticket")).toBe(true);
+    expect(hasCaseDetail("dispute")).toBe(true);
+    expect(hasCaseDetail("report")).toBe(false);
+    expect(hasCaseDetail("toString")).toBe(false);
+  });
+});
+
+describe("personLabel", () => {
+  it("tells a missing directory apart from an unknown person", () => {
+    expect(personLabel({ id: "u1", name: "มาลี" }, true)).toBe("มาลี");
+    expect(personLabel({ id: "u1", name: null }, true)).toBe("ไม่ทราบชื่อ");
+    expect(personLabel({ id: "u1", name: null }, false)).toBe("ไม่พร้อมใช้งาน");
+    expect(personLabel(null, true)).toBe("-");
+  });
+});
+
+describe("isOverdue", () => {
+  const now = new Date("2026-10-20T05:00:00.000Z");
+
+  it("is overdue only while undecided and past the due time", () => {
+    expect(
+      isOverdue(
+        { decision: null, decisionDueAt: "2026-10-20T04:00:00.000Z" },
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      isOverdue(
+        { decision: null, decisionDueAt: "2026-10-20T06:00:00.000Z" },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      isOverdue(
+        { decision: "REJECT", decisionDueAt: "2026-10-20T04:00:00.000Z" },
+        now,
+      ),
+    ).toBe(false);
+    expect(isOverdue({ decision: null, decisionDueAt: null }, now)).toBe(false);
+  });
+});

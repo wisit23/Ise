@@ -11,4 +11,11 @@ router.get(
   executiveController.getTickets,
 );
 
+router.get(
+  "/tickets/:id",
+  requireAuth,
+  requireRole("EXECUTIVE"),
+  executiveController.getTicket,
+);
+
 module.exports = router;

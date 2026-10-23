@@ -49,4 +49,4 @@ async function enrichStaffRows(items, fields) {
     return items;
   }
 }
-module.exports = { enrichStaffRows };
+module.exports = { enrichStaffRows, displayNames };

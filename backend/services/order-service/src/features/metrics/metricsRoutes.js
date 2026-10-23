@@ -39,4 +39,11 @@ router.get(
   metricsController.getDisputes,
 );
 
+router.get(
+  "/disputes/:id",
+  requireAuth,
+  requireRole("EXECUTIVE"),
+  metricsController.getDispute,
+);
+
 module.exports = router;

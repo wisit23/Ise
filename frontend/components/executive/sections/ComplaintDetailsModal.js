@@ -1,8 +1,5 @@
 "use client";
-import { useLayoutEffect, useRef } from "react";
-import { createPortal } from "react-dom";
-import Modal from "../../ui/Modal";
-import Button from "../../ui/Button";
+import DetailsModal from "./DetailsModal";
 import { TIMEZONE } from "../../../lib/executive";
 import {
   actionLabel,
@@ -12,52 +9,11 @@ import {
 
 /** @param {{report: import('../../../lib/executiveComplaints').ExecutiveReport|null, onClose: () => void}} props */
 export default function ComplaintDetailsModal({ report, onClose }) {
-  const anchorRef = useRef(null);
-  const open = Boolean(report);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    const locked = [];
-    // Executive scrolls inside its panel, not the body. Lock those ancestors
-    // too; the shared Modal already locks body scrolling and manages focus.
-    for (
-      let node = anchorRef.current?.parentElement;
-      node && node !== document.body;
-      node = node.parentElement
-    ) {
-      const computed = getComputedStyle(node);
-      if (
-        ![computed.overflowX, computed.overflowY].some((value) =>
-          /^(auto|scroll)$/.test(value),
-        )
-      )
-        continue;
-      locked.push({
-        node,
-        overflowX: node.style.overflowX,
-        overflowY: node.style.overflowY,
-      });
-      node.style.overflowX = "hidden";
-      node.style.overflowY = "hidden";
-    }
-    return () => {
-      for (const { node, overflowX, overflowY } of locked) {
-        node.style.overflowX = overflowX;
-        node.style.overflowY = overflowY;
-      }
-    };
-  }, [open]);
-
-  const dialog = (
-    <Modal
+  return (
+    <DetailsModal
       open={Boolean(report)}
       onClose={onClose}
       title="รายละเอียดคำร้อง"
-      footer={
-        <Button variant="secondary" onClick={onClose}>
-          ปิด
-        </Button>
-      }
     >
       {report && (
         <dl className="space-y-4 text-sm">
@@ -139,17 +95,6 @@ export default function ComplaintDetailsModal({ report, onClose }) {
           </div>
         </dl>
       )}
-    </Modal>
-  );
-
-  // Rendering under body escapes the section's animated transform/stacking
-  // context, so fixed inset-0 covers the navbar, sidebar and content together.
-  return (
-    <>
-      <span ref={anchorRef} hidden />
-      {open &&
-        typeof document !== "undefined" &&
-        createPortal(dialog, document.body)}
-    </>
+    </DetailsModal>
   );
 }
