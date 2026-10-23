@@ -1,7 +1,10 @@
-const { AppError, isRestrictedStatus } = require("@reloop/shared");
+const { AppError, conflict, isRestrictedStatus } = require("@reloop/shared");
 const { hashToken, newToken, isPlausibleToken, tokenLink } = require("../../services/oneTimeToken");
+const { newReferenceCode } = require("../../services/referenceCode");
 const { normalizeEmail } = require("../../services/emailAddress");
 const { verificationEmail } = require("./emailVerificationEmails");
+
+const PURPOSE = Object.freeze({ SIGNUP: "SIGNUP", EMAIL_CHANGE: "EMAIL_CHANGE" });
 
 function invalidToken() {
   return Object.assign(
@@ -17,13 +20,26 @@ function emailNotVerified() {
   );
 }
 
+function emailTaken() {
+  return Object.assign(conflict("That email is already used by another account."), {
+    code: "EMAIL_TAKEN",
+  });
+}
+
+const canSignIn = (user) => user.status === "ACTIVE" || isRestrictedStatus(user.status);
+
 /**
- * Sign-up email verification. Dependencies are injected so the flow can be
- * tested without Postgres, SMTP or the wall clock.
+ * Proves a user controls an email address, through a single-use link sent
+ * to that address. One mechanism serves both purposes:
+ *   SIGNUP       - the address a new account registered with
+ *   EMAIL_CHANGE - an address the user wants to switch to; confirming it
+ *                  replaces their email
+ * Dependencies are injected so the flow can be tested without Postgres,
+ * SMTP or the wall clock.
  *
- * Mail goes out through `schedule`, after the HTTP response: resend answers
- * identically (body and timing) whether or not the address has an account,
- * so the endpoint can't be used to discover who is registered.
+ * Every send returns a reference code at once and mails in the background
+ * (`schedule`). Resend therefore answers identically — body, reference
+ * format and timing — whether or not the address has an account.
  */
 function createEmailVerificationService({
   db,
@@ -47,18 +63,22 @@ function createEmailVerificationService({
     }
   }
 
-  async function issueAndSend(user, { ipAddress } = {}) {
+  async function issueAndSend(user, { purpose, email, referenceCode, ipAddress }) {
     const issuedAt = now();
     const { token, tokenHash } = newToken();
     await db.$transaction([
-      // Only the newest link works: sending again cancels the earlier ones.
+      // Only the newest link for a purpose works: sending again cancels the
+      // earlier ones (a pending email change doesn't touch sign-up links).
       db.emailVerificationToken.updateMany({
-        where: { userId: user.id, usedAt: null, revokedAt: null },
+        where: { userId: user.id, purpose, usedAt: null, revokedAt: null },
         data: { revokedAt: issuedAt },
       }),
       db.emailVerificationToken.create({
         data: {
           userId: user.id,
+          purpose,
+          email,
+          referenceCode,
           tokenHash,
           expiresAt: new Date(+issuedAt + config.tokenTtlHours * 3_600_000),
           requestedIp: ipAddress || null,
@@ -67,18 +87,42 @@ function createEmailVerificationService({
       }),
     ]);
     await mailer.send({
-      to: user.email,
+      to: email,
       ...verificationEmail({
+        purpose,
         firstName: user.firstName,
         verifyUrl: verifyUrl(token),
         expiresInHours: config.tokenTtlHours,
+        referenceCode,
       }),
     });
   }
 
-  /** Called right after sign-up creates (or reclaims) an unverified account. */
-  function sendForNewAccount(user, context) {
-    runInBackground("verification email", () => issueAndSend(user, context));
+  /** Sends `purpose`'s link to `email` in the background; returns its reference. */
+  function send(user, { purpose, email, ipAddress }) {
+    const referenceCode = newReferenceCode();
+    runInBackground(`${purpose.toLowerCase()} email`, () =>
+      issueAndSend(user, { purpose, email, referenceCode, ipAddress }),
+    );
+    return referenceCode;
+  }
+
+  /** Right after sign-up creates (or reclaims) an unverified account. */
+  function sendForNewAccount(user, { ipAddress } = {}) {
+    return send(user, { purpose: PURPOSE.SIGNUP, email: user.email, ipAddress });
+  }
+
+  /**
+   * Starts switching a signed-in user to `newEmail`. Nothing changes until
+   * the link sent to the new address is opened, so a typo or someone else's
+   * address can never take over the account's email.
+   */
+  async function startEmailChange({ user, newEmail, ipAddress }) {
+    assertEnabled();
+    const email = normalizeEmail(newEmail);
+    if (email === user.email) throw conflict("That is already your email.");
+    if (await db.user.findUnique({ where: { email } })) throw emailTaken();
+    return send(user, { purpose: PURPOSE.EMAIL_CHANGE, email, ipAddress });
   }
 
   /**
@@ -101,22 +145,50 @@ function createEmailVerificationService({
     if (config.required && !user.emailVerifiedAt) throw emailNotVerified();
   }
 
-  /** Always resolves the same way for any well-formed email. */
+  /** Same response for any well-formed email; mails only an unconfirmed sign-up. */
   async function resend({ email, ipAddress }) {
     assertEnabled();
     const normalized = normalizeEmail(email);
-    runInBackground("verification resend", async () => {
+    const referenceCode = newReferenceCode();
+    runInBackground("signup resend", async () => {
       const user = await db.user.findUnique({ where: { email: normalized } });
-      const signInAllowed = user && (user.status === "ACTIVE" || isRestrictedStatus(user.status));
-      if (!signInAllowed || user.emailVerifiedAt) return;
-      await issueAndSend(user, { ipAddress });
+      if (!user || !canSignIn(user) || user.emailVerifiedAt) return;
+      await issueAndSend(user, {
+        purpose: PURPOSE.SIGNUP,
+        email: user.email,
+        referenceCode,
+        ipAddress,
+      });
     });
+    return referenceCode;
+  }
+
+  /** What a confirmed link does to the account, by purpose. */
+  async function applyConfirmation(tx, record, user, confirmedAt) {
+    if (record.purpose === PURPOSE.SIGNUP) {
+      // A sign-up link only ever confirms the address it was sent to.
+      if (record.email !== user.email) throw invalidToken();
+      if (!user.emailVerifiedAt) {
+        await tx.user.update({ where: { id: user.id }, data: { emailVerifiedAt: confirmedAt } });
+      }
+      return;
+    }
+    try {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { email: record.email, emailVerifiedAt: confirmedAt },
+      });
+    } catch (err) {
+      // Someone else registered the address after the link was sent.
+      if (err.code === "P2002") throw emailTaken();
+      throw err;
+    }
   }
 
   async function verify(token) {
     assertEnabled();
     if (!isPlausibleToken(token)) throw invalidToken();
-    const verifiedAt = now();
+    const confirmedAt = now();
     await db.$transaction(async (tx) => {
       const record = await tx.emailVerificationToken.findUnique({
         where: { tokenHash: hashToken(token) },
@@ -125,17 +197,18 @@ function createEmailVerificationService({
       // Conditional update = the link is spent exactly once, even when two
       // tabs open it at the same moment.
       const consumed = await tx.emailVerificationToken.updateMany({
-        where: { id: record.id, usedAt: null, revokedAt: null, expiresAt: { gt: verifiedAt } },
-        data: { usedAt: verifiedAt },
+        where: { id: record.id, usedAt: null, revokedAt: null, expiresAt: { gt: confirmedAt } },
+        data: { usedAt: confirmedAt },
       });
       if (consumed.count !== 1) throw invalidToken();
-      await tx.user.updateMany({
-        where: { id: record.userId, emailVerifiedAt: null },
-        data: { emailVerifiedAt: verifiedAt },
-      });
+
+      const user = await tx.user.findUnique({ where: { id: record.userId } });
+      if (!user || !canSignIn(user)) throw invalidToken();
+      await applyConfirmation(tx, record, user, confirmedAt);
+
       await tx.emailVerificationToken.updateMany({
-        where: { userId: record.userId, usedAt: null, revokedAt: null },
-        data: { revokedAt: verifiedAt },
+        where: { userId: user.id, purpose: record.purpose, usedAt: null, revokedAt: null },
+        data: { revokedAt: confirmedAt },
       });
     });
   }
@@ -152,6 +225,7 @@ function createEmailVerificationService({
     isRequired: () => config.required,
     linkLifetimeHours: () => config.tokenTtlHours,
     sendForNewAccount,
+    startEmailChange,
     canReclaim,
     assertVerifiedForSignIn,
     resend,
@@ -160,4 +234,4 @@ function createEmailVerificationService({
   };
 }
 
-module.exports = { createEmailVerificationService };
+module.exports = { createEmailVerificationService, PURPOSE };

@@ -214,11 +214,12 @@ async function register({ email, password, firstName, lastName, phone, ipAddress
     : await prisma.user.create({ data: { email, ...profile, role: "BUYER" } });
 
   if (emailVerification.isRequired()) {
-    emailVerification.sendForNewAccount(user, { ipAddress });
+    const reference = emailVerification.sendForNewAccount(user, { ipAddress });
     return {
       verificationRequired: true,
       email: user.email,
       expiresInHours: emailVerification.linkLifetimeHours(),
+      reference,
     };
   }
   const tokens = await issueTokenPair(user);

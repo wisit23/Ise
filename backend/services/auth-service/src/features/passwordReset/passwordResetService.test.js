@@ -230,3 +230,16 @@ test("a reset never moves an existing verification date", async () => {
   await ctx.service.resetPassword({ token, password: "brand-new-pass-1" });
   assert.equal(ctx.user.emailVerifiedAt, verifiedAt);
 });
+
+test("every reset request returns a reference, printed in the email when one is sent", async () => {
+  const ctx = await setup();
+  const reference = await ctx.service.requestReset({ email: "buyer@example.com" });
+  await ctx.scheduler.flush();
+  assert.match(reference, /^[A-HJ-NP-Z2-9]{3}-[A-HJ-NP-Z2-9]{2}$/);
+  assert.equal(ctx.db.passwordResetToken.rows[0].referenceCode, reference);
+  assert.ok(ctx.mailer.sent[0].text.includes(reference));
+  assert.ok(ctx.mailer.sent[0].subject.includes(`[${reference}]`));
+
+  const unknown = await ctx.service.requestReset({ email: "nobody@example.com" });
+  assert.match(unknown, /^[A-HJ-NP-Z2-9]{3}-[A-HJ-NP-Z2-9]{2}$/);
+});

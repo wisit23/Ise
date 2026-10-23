@@ -13,19 +13,33 @@ import {
 import AuthLayout, { AuthIcon } from "./AuthLayout";
 import styles from "./AuthLayout.module.css";
 import { authError } from "./authError";
+import EmailReference from "./EmailReference";
 
-/** Sends a fresh confirmation link to `email` and reports the outcome inline. */
-export function ResendConfirmationButton({ email }) {
-  const [status, setStatus] = useState({ tone: null, message: "" });
+/**
+ * Sends a fresh confirmation link to `email` and reports the outcome inline.
+ * A parent that already shows a reference passes `onSent` to replace it with
+ * the new one; otherwise the new reference is shown here.
+ */
+export function ResendConfirmationButton({ email, onSent }) {
+  const [status, setStatus] = useState({
+    tone: null,
+    message: "",
+    reference: "",
+  });
   const [loading, setLoading] = useState(false);
 
   async function resend() {
     setLoading(true);
     try {
-      const { message } = await resendConfirmation(email);
-      setStatus({ tone: "success", message });
+      const { message, reference } = await resendConfirmation(email);
+      if (onSent) onSent(reference);
+      setStatus({
+        tone: "success",
+        message,
+        reference: onSent ? "" : reference,
+      });
     } catch (err) {
-      setStatus({ tone: "error", message: authError(err) });
+      setStatus({ tone: "error", message: authError(err), reference: "" });
     } finally {
       setLoading(false);
     }
@@ -41,21 +55,29 @@ export function ResendConfirmationButton({ email }) {
       >
         {loading ? "Sending..." : "Send me a new confirmation link"}
       </button>
-      {status.message && <Alert tone={status.tone}>{status.message}</Alert>}
+      {status.message && (
+        <Alert tone={status.tone}>
+          {status.message}
+          {status.reference && <EmailReference code={status.reference} />}
+        </Alert>
+      )}
     </>
   );
 }
 
 /** Shown after sign-up when the account still has to be confirmed. */
-export function CheckYourEmail({ email, expiresInHours }) {
+export function CheckYourEmail({ email, expiresInHours, reference }) {
+  // Follows the newest email: a resend replaces the code shown here.
+  const [latestReference, setLatestReference] = useState(reference);
   return (
     <div className={styles.form}>
       <Alert tone="success" title="Check your email">
         We sent a confirmation link to <strong>{email}</strong>. Open it to
         activate your account, then sign in.
         {expiresInHours ? ` The link expires in ${expiresInHours} hours.` : ""}
+        {latestReference && <EmailReference code={latestReference} />}
       </Alert>
-      <ResendConfirmationButton email={email} />
+      <ResendConfirmationButton email={email} onSent={setLatestReference} />
     </div>
   );
 }

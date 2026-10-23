@@ -147,7 +147,11 @@ export function RegisterPage({ onAuthenticated } = {}) {
         body: { ...form, role: "BUYER" },
       });
       if (data.verificationRequired) {
-        setPending({ email: data.email, expiresInHours: data.expiresInHours });
+        setPending({
+          email: data.email,
+          expiresInHours: data.expiresInHours,
+          reference: data.reference,
+        });
         return;
       }
       saveSession(data);

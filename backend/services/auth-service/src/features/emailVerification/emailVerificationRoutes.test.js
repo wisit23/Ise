@@ -16,7 +16,10 @@ function buildApp({ service = {}, rateLimitClient = fakeRedis() } = {}) {
     "/email",
     createEmailVerificationRouter({
       service: {
-        resend: async (input) => calls.push(["resend", input]),
+        resend: async (input) => {
+          calls.push(["resend", input]);
+          return "K7Q-29";
+        },
         verify: async (token) => calls.push(["verify", token]),
         ...service,
       },
@@ -32,7 +35,7 @@ test("resend answers 202 with the same message for any email", async () => {
   const { app, calls } = buildApp();
   const res = await request(app).post("/email/resend").send({ email: "a@example.com" });
   assert.equal(res.status, 202);
-  assert.deepEqual(res.body, { message: RESEND_ACCEPTED_MESSAGE });
+  assert.deepEqual(res.body, { message: RESEND_ACCEPTED_MESSAGE, reference: "K7Q-29" });
   assert.equal(calls[0][1].email, "a@example.com");
 });
 

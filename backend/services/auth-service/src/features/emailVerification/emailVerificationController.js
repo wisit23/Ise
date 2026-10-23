@@ -6,8 +6,8 @@ function createEmailVerificationController(service) {
   return {
     async resend(req, res, next) {
       try {
-        await service.resend({ email: req.body?.email, ipAddress: req.ip });
-        res.status(202).json({ message: RESEND_ACCEPTED_MESSAGE });
+        const reference = await service.resend({ email: req.body?.email, ipAddress: req.ip });
+        res.status(202).json({ message: RESEND_ACCEPTED_MESSAGE, reference });
       } catch (err) {
         next(err);
       }

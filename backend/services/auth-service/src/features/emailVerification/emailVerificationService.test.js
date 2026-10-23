@@ -1,4 +1,5 @@
 const test = require("node:test");
+const { describe } = test;
 const assert = require("node:assert/strict");
 const { createEmailVerificationService } = require("./emailVerificationService");
 const { hashToken } = require("../../services/oneTimeToken");
@@ -175,4 +176,106 @@ test("pruneExpired deletes only rows past the retention period", async () => {
     ctx.db.emailVerificationToken.rows.map((r) => r.id),
     ["recent"],
   );
+});
+
+const REFERENCE_SHAPE = /^[A-HJ-NP-Z2-9]{3}-[A-HJ-NP-Z2-9]{2}$/;
+
+test("the reference returned to the page is the one stored and printed in the email", async () => {
+  const ctx = setup();
+  const reference = ctx.service.sendForNewAccount(ctx.user);
+  await ctx.scheduler.flush();
+
+  assert.match(reference, REFERENCE_SHAPE);
+  assert.equal(ctx.db.emailVerificationToken.rows[0].referenceCode, reference);
+  const [mail] = ctx.mailer.sent;
+  assert.ok(mail.subject.includes(`[${reference}]`));
+  assert.ok(mail.text.includes(reference));
+  assert.ok(mail.html.includes(reference));
+});
+
+test("resend returns a reference even for an unknown email, so it reveals nothing", async () => {
+  const ctx = setup();
+  const reference = await ctx.service.resend({ email: "nobody@example.com" });
+  await ctx.scheduler.flush();
+  assert.match(reference, REFERENCE_SHAPE);
+  assert.equal(ctx.mailer.sent.length, 0);
+});
+
+test("each send gets its own reference", async () => {
+  const ctx = setup();
+  const first = ctx.service.sendForNewAccount(ctx.user);
+  const second = await ctx.service.resend({ email: "new@example.com" });
+  await ctx.scheduler.flush();
+  assert.notEqual(first, second);
+  assert.ok(ctx.mailer.sent.at(-1).text.includes(second));
+});
+
+describe("email change", () => {
+  const verified = { emailVerifiedAt: new Date("2026-01-01T00:00:00.000Z") };
+
+  test("sends the link to the NEW address and changes nothing yet", async () => {
+    const ctx = setup({ user: verified });
+    const reference = await ctx.service.startEmailChange({
+      user: ctx.user,
+      newEmail: " moved@example.com ",
+    });
+    await ctx.scheduler.flush();
+
+    const [mail] = ctx.mailer.sent;
+    assert.equal(mail.to, "moved@example.com");
+    assert.match(mail.subject, /Confirm your new email/);
+    assert.ok(mail.text.includes(reference));
+    const [row] = ctx.db.emailVerificationToken.rows;
+    assert.equal(row.purpose, "EMAIL_CHANGE");
+    assert.equal(row.email, "moved@example.com");
+    assert.equal(ctx.user.email, "new@example.com");
+  });
+
+  test("confirming the link switches the account to the new address", async () => {
+    const ctx = setup({ user: verified });
+    await ctx.service.startEmailChange({ user: ctx.user, newEmail: "moved@example.com" });
+    await ctx.scheduler.flush();
+
+    await ctx.service.verify(tokenFrom(ctx.mailer.sent[0]));
+    assert.equal(ctx.user.email, "moved@example.com");
+    assert.equal(+ctx.user.emailVerifiedAt, +NOW);
+  });
+
+  test("refuses an address another account already uses", async () => {
+    const ctx = setup({ user: verified });
+    ctx.db.user.rows.push({ id: "user-2", email: "taken@example.com", status: "ACTIVE" });
+    await assert.rejects(
+      ctx.service.startEmailChange({ user: ctx.user, newEmail: "taken@example.com" }),
+      { status: 409, code: "EMAIL_TAKEN" },
+    );
+  });
+
+  test("refuses if someone registers the address before the link is opened", async () => {
+    const ctx = setup({ user: verified });
+    await ctx.service.startEmailChange({ user: ctx.user, newEmail: "moved@example.com" });
+    await ctx.scheduler.flush();
+    ctx.db.user.update = async () => {
+      throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+    };
+
+    await assert.rejects(ctx.service.verify(tokenFrom(ctx.mailer.sent[0])), {
+      code: "EMAIL_TAKEN",
+    });
+  });
+
+  test("a pending change doesn't cancel an outstanding sign-up link", async () => {
+    const ctx = setup();
+    const signupToken = await signUp(ctx);
+    await ctx.service.startEmailChange({ user: ctx.user, newEmail: "moved@example.com" });
+    await ctx.scheduler.flush();
+
+    await assert.doesNotReject(ctx.service.verify(signupToken));
+  });
+
+  test("an old sign-up link can't confirm an address the account no longer has", async () => {
+    const ctx = setup();
+    const signupToken = await signUp(ctx);
+    ctx.user.email = "moved@example.com";
+    await assert.rejects(ctx.service.verify(signupToken), { code: "VERIFICATION_TOKEN_INVALID" });
+  });
 });

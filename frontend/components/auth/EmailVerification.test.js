@@ -168,3 +168,30 @@ describe("confirmation link", () => {
     expect(apiFetch).not.toHaveBeenCalled();
   });
 });
+
+describe("reference code", () => {
+  it("shows the sign-up email's reference and swaps it for the newest after a resend", async () => {
+    apiFetch
+      .mockResolvedValueOnce({ verificationRequired: true, email: "mali@example.com", reference: "K7Q-29" })
+      .mockResolvedValueOnce({ message: RESENT, reference: "W3M-8P" });
+    signUp();
+
+    expect(await screen.findByText("K7Q-29")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /new confirmation link/i }));
+    expect(await screen.findByText("W3M-8P")).toBeInTheDocument();
+    expect(screen.queryByText("K7Q-29")).toBeNull();
+  });
+
+  it("shows the reference of a link re-sent from the sign-in page", async () => {
+    apiFetch
+      .mockRejectedValueOnce(Object.assign(new Error("confirm"), { status: 403, code: "EMAIL_NOT_VERIFIED" }))
+      .mockResolvedValueOnce({ message: RESENT, reference: "W3M-8P" });
+    render(<LoginPage />);
+    fireEvent.change(screen.getByLabelText(/^email/i), { target: { value: "mali@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^password/i), { target: { value: "long-enough-1" } });
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /new confirmation link/i }));
+
+    expect(await screen.findByText("W3M-8P")).toBeInTheDocument();
+  });
+});

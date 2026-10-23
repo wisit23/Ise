@@ -18,6 +18,7 @@ import {
 import AuthLayout, { AuthIcon, PasswordInput } from "./AuthLayout";
 import styles from "./AuthLayout.module.css";
 import { authError } from "./authError";
+import EmailReference from "./EmailReference";
 
 function SubmitButton({ loading, idleLabel, busyLabel }) {
   return (
@@ -30,7 +31,7 @@ function SubmitButton({ loading, idleLabel, busyLabel }) {
 
 function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
-  const [sentMessage, setSentMessage] = useState("");
+  const [sent, setSent] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -39,8 +40,8 @@ function ForgotPasswordForm() {
     setError("");
     setLoading(true);
     try {
-      const { message } = await requestPasswordReset(email.trim());
-      setSentMessage(message);
+      const { message, reference } = await requestPasswordReset(email.trim());
+      setSent({ message, reference });
     } catch (err) {
       setError(authError(err));
     } finally {
@@ -48,16 +49,17 @@ function ForgotPasswordForm() {
     }
   }
 
-  if (sentMessage) {
+  if (sent) {
     return (
       <div className={styles.form}>
         <Alert tone="success" title="Check your email">
-          {sentMessage}
+          {sent.message}
+          {sent.reference && <EmailReference code={sent.reference} />}
         </Alert>
         <button
           type="button"
           className={styles.inlineAction}
-          onClick={() => setSentMessage("")}
+          onClick={() => setSent(null)}
         >
           Didn&apos;t get it? Send another link
         </button>

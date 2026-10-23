@@ -30,7 +30,7 @@ function requireVerification(t, { reclaimable = false } = {}) {
   t.mock.method(emailVerification, "isRequired", () => true);
   t.mock.method(emailVerification, "linkLifetimeHours", () => 24);
   t.mock.method(emailVerification, "canReclaim", async () => reclaimable);
-  return t.mock.method(emailVerification, "sendForNewAccount", () => {});
+  return t.mock.method(emailVerification, "sendForNewAccount", () => "K7Q-29");
 }
 
 test("sign-up creates an unverified account, emails it, and returns no session", async (t) => {
@@ -52,6 +52,7 @@ test("sign-up creates an unverified account, emails it, and returns no session",
     verificationRequired: true,
     email: "new@example.com",
     expiresInHours: 24,
+    reference: "K7Q-29",
   });
   assert.equal(created[0].role, "BUYER");
   assert.ok(await bcrypt.compare("long-enough-1", created[0].passwordHash));

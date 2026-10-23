@@ -160,3 +160,15 @@ describe("passwordProblem", () => {
     expect(passwordProblem("long-enough-1", "long-enough-1")).toBeNull();
   });
 });
+
+describe("forgot password reference", () => {
+  it("shows the reference printed in the reset email", async () => {
+    apiFetch.mockResolvedValue({ message: SENT, reference: "K7Q-29" });
+    render(<ForgotPage />);
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: "me@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /send reset link/i }));
+
+    expect(await screen.findByText("K7Q-29")).toBeInTheDocument();
+    expect(screen.getByText(/same code/i)).toBeInTheDocument();
+  });
+});

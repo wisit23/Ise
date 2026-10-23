@@ -10,8 +10,11 @@ function createPasswordResetController(service) {
   return {
     async forgot(req, res, next) {
       try {
-        await service.requestReset({ email: req.body?.email, ...requestContext(req) });
-        res.status(202).json({ message: REQUEST_ACCEPTED_MESSAGE });
+        const reference = await service.requestReset({
+          email: req.body?.email,
+          ...requestContext(req),
+        });
+        res.status(202).json({ message: REQUEST_ACCEPTED_MESSAGE, reference });
       } catch (err) {
         next(err);
       }

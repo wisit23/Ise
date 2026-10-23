@@ -2,14 +2,15 @@
 
 const { BRAND, escapeHtml, greeting, renderEmail } = require("../../services/emailLayout");
 
-function resetLinkEmail({ firstName, resetUrl, expiresInMinutes }) {
+function resetLinkEmail({ firstName, resetUrl, expiresInMinutes, referenceCode }) {
   const name = greeting(firstName);
   return {
-    subject: `${BRAND}: ตั้งรหัสผ่านใหม่ / Reset your password`,
+    subject: `${BRAND}: ตั้งรหัสผ่านใหม่ / Reset your password [${referenceCode}]`,
     text: [
       `สวัสดีคุณ ${firstName || ""}`.trim(),
       "",
       `มีคำขอตั้งรหัสผ่านใหม่สำหรับบัญชี ${BRAND} ของคุณ เปิดลิงก์ด้านล่างเพื่อตั้งรหัสผ่านใหม่ ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุใน ${expiresInMinutes} นาที`,
+      `รหัสอ้างอิง: ${referenceCode} (ตรวจสอบให้ตรงกับรหัสที่แสดงบนหน้าเว็บ ${BRAND})`,
       "",
       resetUrl,
       "",
@@ -20,6 +21,7 @@ function resetLinkEmail({ firstName, resetUrl, expiresInMinutes }) {
       `Hi ${firstName || "there"},`,
       "",
       `Someone asked to reset the password for your ${BRAND} account. Open the link above to choose a new one. It works once and expires in ${expiresInMinutes} minutes.`,
+      `Reference: ${referenceCode} (it should match the code shown on the ${BRAND} page)`,
       "",
       "If you didn't ask for this, you can ignore this email; your current password still works.",
     ].join("\n"),
@@ -29,6 +31,7 @@ function resetLinkEmail({ firstName, resetUrl, expiresInMinutes }) {
         `สวัสดีคุณ ${name} มีคำขอตั้งรหัสผ่านใหม่สำหรับบัญชี ${BRAND} ของคุณ ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุใน ${expiresInMinutes} นาที`,
         `Hi ${name}, someone asked to reset the password for your ${BRAND} account. The link works once and expires in ${expiresInMinutes} minutes.`,
       ],
+      reference: referenceCode,
       action: { url: resetUrl, label: "ตั้งรหัสผ่านใหม่ / Reset password" },
       footnote:
         "หากคุณไม่ได้ขอตั้งรหัสผ่านใหม่ ไม่ต้องทำอะไร รหัสผ่านเดิมยังใช้งานได้ตามปกติ<br>If you didn't ask for this, ignore this email; your current password still works.",

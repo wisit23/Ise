@@ -10,7 +10,10 @@ const { resetConfig, fakeRedis } = require("../../test/fakes");
 function buildApp({ service = {}, config = resetConfig, rateLimitClient = fakeRedis() } = {}) {
   const calls = [];
   const fullService = {
-    requestReset: async (input) => calls.push(["requestReset", input]),
+    requestReset: async (input) => {
+      calls.push(["requestReset", input]);
+      return "K7Q-29";
+    },
     verifyToken: async () => ({ expiresAt: "2026-10-21T10:30:00.000Z" }),
     resetPassword: async (input) => calls.push(["resetPassword", input]),
     ...service,
@@ -27,7 +30,7 @@ test("forgot answers 202 with the same message for any email", async () => {
   const { app, calls } = buildApp();
   const res = await request(app).post("/password/forgot").send({ email: "a@example.com" });
   assert.equal(res.status, 202);
-  assert.deepEqual(res.body, { message: REQUEST_ACCEPTED_MESSAGE });
+  assert.deepEqual(res.body, { message: REQUEST_ACCEPTED_MESSAGE, reference: "K7Q-29" });
   assert.equal(calls[0][1].email, "a@example.com");
 });
 

@@ -18,6 +18,14 @@ enum KycStatus {
   INACTIVE_EXPIRED
 }
 
+// Why an EmailVerificationToken was issued: confirming the address a new
+// account signed up with, or proving a user owns an address they want to
+// switch to (the token then carries that new address).
+enum EmailVerificationPurpose {
+  SIGNUP
+  EMAIL_CHANGE
+}
+
 enum ReportStatus {
   OPEN
   REVIEWED
@@ -205,19 +213,27 @@ model PasswordResetToken {
   requestedIp        String?   @map("requested_ip")
   requestedUserAgent String?   @map("requested_user_agent")
   usedIp             String?   @map("used_ip")
+  // Short, non-secret code shown on the page that asked for the link and
+  // printed in the email, so the user can tell which email is the right one.
+  referenceCode      String?   @map("reference_code")
   createdAt          DateTime  @default(now()) @map("created_at")
 
   @@index([userId, createdAt])
   @@map("password_reset_tokens")
 }
 
-// Single-use sign-up confirmation links. Same storage rules as
-// PasswordResetToken: only the SHA-256 digest is kept, and rows stay as an
-// audit trail until the cleanup job prunes them.
+// Single-use links proving a user controls an email address. Same storage
+// rules as PasswordResetToken: only the SHA-256 digest is kept, and rows stay
+// as an audit trail until the cleanup job prunes them. `email` is the
+// address the link proves, which differs from the user's current one for
+// an EMAIL_CHANGE.
 model EmailVerificationToken {
-  id          String    @id @default(uuid())
-  userId      String    @map("user_id")
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String                   @id @default(uuid())
+  userId        String                   @map("user_id")
+  user          User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose       EmailVerificationPurpose @default(SIGNUP)
+  email         String
+  referenceCode String?                  @map("reference_code")
   tokenHash   String    @unique @map("token_hash")
   expiresAt   DateTime  @map("expires_at")
   usedAt      DateTime? @map("used_at")
@@ -225,7 +241,7 @@ model EmailVerificationToken {
   requestedIp String?   @map("requested_ip")
   createdAt   DateTime  @default(now()) @map("created_at")
 
-  @@index([userId, createdAt])
+  @@index([userId, purpose, createdAt])
   @@map("email_verification_tokens")
 }
 

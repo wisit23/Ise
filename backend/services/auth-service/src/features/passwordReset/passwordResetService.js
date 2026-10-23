@@ -4,6 +4,7 @@ const { assertPasswordPolicy, hashPassword } = require("../../services/passwordP
 const { assertActive, lockUser } = require("../../services/sessionService");
 const { hashToken, newToken, isPlausibleToken, tokenLink } = require("../../services/oneTimeToken");
 const { normalizeEmail } = require("../../services/emailAddress");
+const { newReferenceCode } = require("../../services/referenceCode");
 const { resetLinkEmail, passwordChangedEmail } = require("./passwordResetEmails");
 
 /** Same rule login uses (sessionService.assertActive): who may sign in may reset. */
@@ -60,7 +61,7 @@ function createPasswordResetService({
     return record;
   }
 
-  async function deliverResetLink({ email, ipAddress, userAgent }) {
+  async function deliverResetLink({ email, referenceCode, ipAddress, userAgent }) {
     const user = await db.user.findUnique({ where: { email } });
     if (!user || !canSignIn(user)) return;
 
@@ -79,6 +80,7 @@ function createPasswordResetService({
           expiresAt: new Date(+issuedAt + config.tokenTtlMinutes * 60_000),
           requestedIp: ipAddress || null,
           requestedUserAgent: userAgent ? userAgent.slice(0, 512) : null,
+          referenceCode,
           createdAt: issuedAt,
         },
       }),
@@ -90,6 +92,7 @@ function createPasswordResetService({
         firstName: user.firstName,
         resetUrl: resetUrl(token),
         expiresInMinutes: config.tokenTtlMinutes,
+        referenceCode,
       }),
     });
   }
@@ -100,13 +103,19 @@ function createPasswordResetService({
     );
   }
 
-  /** Always resolves the same way for any well-formed email. */
+  /**
+   * Always resolves the same way for any well-formed email, including a
+   * fresh reference code: it is generated here, before anyone knows whether
+   * an email will actually go out.
+   */
   async function requestReset({ email, ipAddress, userAgent }) {
     assertEnabled();
     const normalized = normalizeEmail(email);
+    const referenceCode = newReferenceCode();
     runInBackground("reset email delivery", () =>
-      deliverResetLink({ email: normalized, ipAddress, userAgent }),
+      deliverResetLink({ email: normalized, referenceCode, ipAddress, userAgent }),
     );
+    return referenceCode;
   }
 
   async function verifyToken(token) {
