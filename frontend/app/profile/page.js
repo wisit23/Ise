@@ -49,8 +49,15 @@ const ORDER_STATUSES = [
     badgeColor: "bg-sky-100 text-sky-800",
   },
   {
-    key: "shipped",
-    statuses: ["shipped"],
+    key: "pickup_in_progress",
+    statuses: ["pickup_in_progress"],
+    label: "ขนส่งกำลังเข้ารับสินค้า",
+    icon: "inventory_2",
+    badgeColor: "bg-indigo-100 text-indigo-800",
+  },
+  {
+    key: "in_transit",
+    statuses: ["in_transit"],
     label: "กำลังจัดส่ง",
     icon: "local_shipping",
     badgeColor: "bg-indigo-100 text-indigo-800",

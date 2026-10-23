@@ -2,6 +2,14 @@
 
 # RE-LOOP — Database change log (vs. `docs/erdatabase.png`)
 
+## 2026-10-25 — Compact pickup and carrier handoff
+
+Order and Shipping now distinguish `pickup_in_progress` from `in_transit`. Forward migration `20261025000000_compact_pickup_transit` maps legacy `shipped` current/pre-dispute/Shipping states to `in_transit` without rewriting historical logs or handoff timestamps. Status columns remain strings; no schema columns are added. See [current flow and migration contract](../docs/order-pickup-transit.md).
+
+## 2026-10-23 — Product favorites for approved buyer testcase fixes
+
+Added Product-owned `product_favorites` with `(user_id, product_id)` as its primary key and `created_at` for wishlist pagination. This supports the user-approved heart buttons, saved-product list and seller wishlist count. Auth owns the user identity; the user ID is not a cross-database foreign key. Product deletion cascades only its favorites. The migration creates a new table and indexes without changing existing listings, orders or reviews. This is separate from `swipe_choices`, which bookmarks video clips rather than products.
+
 ## 2026-10-14 — Approved operational storage amendment
 
 The user approved separating current state, address snapshots, delivery queues and moderation/Chat receipts from audit logs in Order/Product/Support. Shipping uses a dedicated `shipping_address_snapshots` table keyed to Shipping. See [the current storage dictionary](operational-storage.md) and [implementation evidence](../log/evidence/operational-storage.md). The editable ER item 1 files retain their original pages and now contain an `Approved operational storage - current amendment` page. Original PDF archives are unchanged; new exports are under `output/pdf/`.

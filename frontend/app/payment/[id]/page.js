@@ -146,7 +146,7 @@ export default function PaymentPage() {
       });
       setSession(updated);
       setCancelOpen(false);
-      router.push("/cart");
+      router.push("/");
     } catch (err) {
       setError(err.message || "ยกเลิกการชำระเงินไม่สำเร็จ กรุณาลองอีกครั้ง");
       setCancelOpen(false);

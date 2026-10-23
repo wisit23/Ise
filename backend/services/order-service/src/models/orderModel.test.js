@@ -173,12 +173,12 @@ test("seller confirmation winning the race prevents buyer refund or relisting", 
 });
 
 test("delivered and completed transitions stamp their time and need no product sync", async (t) => {
-  const { writes } = fixture(t, { status: "shipped" });
+  const { writes } = fixture(t, { status: "in_transit" });
   const result = await model.transitionStatusWithProductSync({
     id: "o",
     status: "delivered",
     expectedVersion: 1,
-    expectedStatuses: ["shipped"],
+    expectedStatuses: ["in_transit"],
     actorId: "system",
   });
   assert.equal(result.event, null);

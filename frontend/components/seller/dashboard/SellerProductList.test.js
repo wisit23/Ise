@@ -87,3 +87,15 @@ test("disables delete button when product is reserved in cart/order", () => {
 
   expect(screen.getByRole("button", { name: "ลบ" })).toBeDisabled();
 });
+
+test.each([
+  ["ready_to_ship", "เรียกขนส่ง"],
+  ["pickup_in_progress", "ส่งมอบให้ขนส่งแล้ว"],
+])("reserved listing offers the %s shipping step", (status, label) => {
+  render(<SellerProductList
+    products={[{ ...removedProduct, id: "p1", status: "reserved", moderationReason: null }]}
+    orders={[{ id: "o1", productId: "p1", status }]}
+  />);
+  expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "ลบ" })).toBeDisabled();
+});

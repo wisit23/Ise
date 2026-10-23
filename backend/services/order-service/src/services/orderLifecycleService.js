@@ -119,12 +119,12 @@ function ago(ms, now) {
   return new Date(now.getTime() - ms);
 }
 
-/** No real carrier exists, so a shipped parcel is delivered after a delay. */
-function deliverShippedOrders(now = new Date(), scope) {
+/** No real carrier exists; only parcels handed to a carrier start the delay. */
+function deliverInTransitOrders(now = new Date(), scope) {
   return sweep({
     scope,
     where: {
-      status: "shipped",
+      status: "in_transit",
       shippedAt: { lte: ago(timing.deliveryDelayMs(), now) },
     },
     status: "delivered",
@@ -165,7 +165,7 @@ function cancelUnconfirmedOrders(now = new Date(), scope) {
 
 async function runSweeps(now = new Date(), scope) {
   return {
-    delivered: await deliverShippedOrders(now, scope),
+    delivered: await deliverInTransitOrders(now, scope),
     completed: await completeDeliveredOrders(now, scope),
     seller_confirmation_expired: await cancelUnconfirmedOrders(now, scope),
   };
@@ -192,7 +192,7 @@ module.exports = {
   SYSTEM_ACTOR,
   productSyncFor,
   transition,
-  deliverShippedOrders,
+  deliverInTransitOrders,
   completeDeliveredOrders,
   cancelUnconfirmedOrders,
   runSweeps,

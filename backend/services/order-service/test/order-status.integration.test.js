@@ -66,9 +66,9 @@ test("executive order status breakdown against a real database", async (t) => {
     ["completed", "paid", inWindow],
     ["completed", "paid", inWindow],
     ["confirmed", "paid", inWindow],
-    ["shipped", "paid", inWindow],
-    ["shipped", "paid", inWindow],
-    ["shipped", "paid", inWindow],
+    ["ready_to_ship", "paid", inWindow],
+    ["pickup_in_progress", "paid", inWindow],
+    ["in_transit", "paid", inWindow],
     ["disputed", "paid", inWindow],
     ["refunded", "paid", inWindow],
     // Never paid: a cart abandoned at the payment step is not a sale.

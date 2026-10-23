@@ -328,10 +328,15 @@ test(
             row.checkout.addressSnapshot.addressLine,
             "Updated Book Road",
           );
-          await shipping.markShipped({
+          await restarted.order.update({ where: { id: first.id }, data: { status: "ready_to_ship" } });
+          const pickup = await shipping.advanceShipping({
+            orderId: first.id, actorId: "seller-p1", version: row.version, status: "pickup_in_progress",
+          });
+          await shipping.advanceShipping({
             orderId: first.id,
             actorId: "seller-p1",
-            version: row.version,
+            status: "in_transit",
+            version: pickup.version,
             company: "Carrier",
             trackingNumber: "TRK",
           });
@@ -342,7 +347,7 @@ test(
               addressId: "selected",
               authorization: "Bearer buyer-token",
             }),
-            /awaiting shipment/,
+            /before the seller prepares/,
           );
         } finally {
           await restartedRaw.$disconnect();
@@ -662,7 +667,7 @@ test(
           id: before.id,
           status: "completed",
           expectedVersion: before.version,
-          expectedStatuses: ["shipped"],
+          expectedStatuses: ["in_transit"],
           actorId: before.buyerId,
           productSync: {
             action: "SET_STATUS",
@@ -851,7 +856,7 @@ test(
             originalAmount: "10",
             ordersAmount: "9",
             campaignId: "campaign",
-            status: "shipped",
+            status: "in_transit",
           },
         });
         await assert.rejects(
@@ -881,7 +886,7 @@ test(
         );
         assert.equal(
           (await db.order.findUnique({ where: { id: failedOrder.id } })).status,
-          "shipped",
+          "in_transit",
         );
         assert.equal(
           await db.attributionJob.count({ where: { orderId: failedOrder.id } }),
@@ -914,7 +919,7 @@ test(
         });
         assert.equal(row.productTitle, "Historical Title");
         assert.equal(row.campaignCode, "Historical Code");
-        assert.equal(row.preDisputeStatus, "shipped");
+        assert.equal(row.preDisputeStatus, "in_transit");
         assert.equal(
           row.checkout.addressSnapshot.addressLine,
           ADDRESS.addressLine,

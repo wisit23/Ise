@@ -146,7 +146,8 @@ test("buyer confirms receipt only after delivery and disputes only within 14 day
       url.startsWith("/api/orders/mine")
         ? {
             items: [
-              { ...base, id: "shipped-order", status: "shipped" },
+              { ...base, id: "pickup-order", status: "pickup_in_progress" },
+              { ...base, id: "transit-order", status: "in_transit" },
               {
                 ...base,
                 id: "delivered-order",

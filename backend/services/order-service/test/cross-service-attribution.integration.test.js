@@ -190,7 +190,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
   await t.test(
     "Step 1: Order completion in reloop_order atomically creates AttributionOutboxEvent",
     async () => {
-      // Create shipped order in reloop_order
+      // Create in-transit order in reloop_order
       campaignOrder = await createOrder(orderPrisma,{
         data: {
           buyerId: TEST_BUYER_ID,
@@ -202,12 +202,12 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
           campaignCode: "CROSS_SVC_PROMO",
           discountAmount: 500,
           finalPrice: 2000,
-          status: "shipped",
+          status: "in_transit",
         },
       });
 
       assert.ok(campaignOrder.id);
-      assert.equal(campaignOrder.status, "shipped");
+      assert.equal(campaignOrder.status, "in_transit");
 
       // Atomically transition status to "completed" in reloop_order
       const transitionResult = await orderModel.transitionStatusWithProductSync(
@@ -215,7 +215,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
           id: campaignOrder.id,
           status: "completed",
           expectedVersion: campaignOrder.version,
-          expectedStatuses: ["shipped"],
+          expectedStatuses: ["in_transit"],
           productSync: {
             dedupeKey: `sync:${campaignOrder.id}:1`,
             action: "SET_STATUS",
@@ -407,7 +407,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
           campaignCode: "CROSS_SVC_PROMO",
           discountAmount: 300,
           finalPrice: 1200,
-          status: "shipped",
+          status: "in_transit",
         },
       });
 
@@ -415,7 +415,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
         id: order2.id,
         status: "completed",
         expectedVersion: order2.version,
-        expectedStatuses: ["shipped"],
+        expectedStatuses: ["in_transit"],
         productSync: {
           dedupeKey: `sync:${order2.id}:1`,
           action: "SET_STATUS",
@@ -514,7 +514,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
           productId: TEST_PRODUCT_ID,
           productTitle: "Non-Campaign Product",
           price: 999,
-          status: "shipped",
+          status: "in_transit",
         },
       });
 
@@ -522,7 +522,7 @@ test("Genuine Cross-Service Campaign Attribution & Durable Outbox PostgreSQL Sui
         id: noCampOrder.id,
         status: "completed",
         expectedVersion: noCampOrder.version,
-        expectedStatuses: ["shipped"],
+        expectedStatuses: ["in_transit"],
         productSync: {
           dedupeKey: `sync:${noCampOrder.id}:1`,
           action: "SET_STATUS",

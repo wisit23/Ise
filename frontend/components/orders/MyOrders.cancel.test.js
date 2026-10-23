@@ -75,7 +75,7 @@ test("held paid orders do not offer buyer cancellation", async () => {
   expect(screen.queryByRole("button", { name: "ยกเลิกคำสั่งซื้อ" })).not.toBeInTheDocument();
 });
 
-for (const state of ["confirmed", "ready_to_ship", "shipped", "payment_expired", "seller_confirmation_expired"]) {
+for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit", "payment_expired", "seller_confirmation_expired"]) {
   test(`buyer cannot pay or cancel inactive order state (${state})`, async () => {
     order.status = state;
     render(<MyOrders />);

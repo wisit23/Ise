@@ -8,8 +8,8 @@ test("Buyer satang survive atomic completion, Product attribution, audit and dup
  const orders=[];
  try{
   for(const [gross,net] of [["100.75","100.50"],["0.30","0.20"]]){
-   const order=await createOrder(orderDb,{data:{buyerId:"money-buyer",sellerId:"money-seller",productId:"money-product",price:gross,finalPrice:net,campaignId:campaign.id,status:"shipped"}});orders.push(order.id);
-   const {attributionEvent}=await orderModel.transitionStatusWithProductSync({id:order.id,status:"completed",expectedVersion:order.version,expectedStatuses:["shipped"],productSync:{action:"SET_STATUS",productId:order.productId,targetStatus:"sold"}});
+   const order=await createOrder(orderDb,{data:{buyerId:"money-buyer",sellerId:"money-seller",productId:"money-product",price:gross,finalPrice:net,campaignId:campaign.id,status:"in_transit"}});orders.push(order.id);
+   const {attributionEvent}=await orderModel.transitionStatusWithProductSync({id:order.id,status:"completed",expectedVersion:order.version,expectedStatuses:["in_transit"],productSync:{action:"SET_STATUS",productId:order.productId,targetStatus:"sold"}});
    assert.equal(attributionEvent.grossAmount.toFixed(2),gross);
    const client={recordOrderCompleted:payload=>metrics.recordOrderCompletedEvent(payload)};
    await outbox.deliver(attributionEvent,client);const replay=await outbox.deliver(attributionEvent,client);assert.equal(replay.deduplicated,true);

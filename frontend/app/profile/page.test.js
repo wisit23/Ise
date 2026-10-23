@@ -458,7 +458,8 @@ describe("ProfilePage", () => {
   it.each([
     ["รอชำระเงิน", "pending_payment"],
     ["รอผู้ขายยืนยัน", "paid"],
-    ["กำลังจัดส่ง", "shipped"],
+    ["ขนส่งกำลังเข้ารับสินค้า", "pickup_in_progress"],
+    ["กำลังจัดส่ง", "in_transit"],
     ["สำเร็จ", "completed"],
   ])(
     "opens the matching shared filter from the %s shortcut",

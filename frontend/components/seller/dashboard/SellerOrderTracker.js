@@ -23,8 +23,9 @@ const ALL_STATUSES = [
   { value: "pending_payment", label: "รอชำระเงิน" },
   { value: "paid", label: "รอยืนยันคำสั่งซื้อ" },
   { value: "confirmed", label: "ต้องเตรียมสินค้า" },
-  { value: "ready_to_ship", label: "รอขนส่งมารับ" },
-  { value: "shipped", label: "อยู่ระหว่างการขนส่ง" },
+  { value: "ready_to_ship", label: "พร้อมเรียกขนส่ง" },
+  { value: "pickup_in_progress", label: "ขนส่งกำลังเข้ารับสินค้า" },
+  { value: "in_transit", label: "อยู่ระหว่างการขนส่ง" },
   { value: "delivered", label: "ส่งถึงผู้ซื้อแล้ว" },
   { value: "completed", label: "ขายสำเร็จ" },
   { value: "cancelled", label: "ยกเลิกแล้ว" },
@@ -384,10 +385,10 @@ export default function SellerOrderTracker({
                           <span>{SELLER_NEXT_STEP.confirmed.label}</span>
                         </button>
                       )}
-                      {o.status === "ready_to_ship" && (
+                      {["ready_to_ship", "pickup_in_progress"].includes(o.status) && (
                         <button
                           type="button"
-                          aria-label="จัดส่งสินค้า"
+                          aria-label={SELLER_NEXT_STEP[o.status].label}
                           onClick={() => {
                             setSelectedOrderForShipping(o);
                             setShippingModalOpen(true);
@@ -398,7 +399,7 @@ export default function SellerOrderTracker({
                           <span className="material-symbols-outlined text-[15px]" aria-hidden="true">
                             local_shipping
                           </span>
-                          <span>จัดส่งสินค้า</span>
+                          <span>{SELLER_NEXT_STEP[o.status].label}</span>
                         </button>
                       )}
                       <button

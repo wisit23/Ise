@@ -7,6 +7,7 @@ import NavBar from "../../../components/NavBar";
 import Footer from "../../../components/Footer";
 import MediaGallery from "../../../components/MediaGallery";
 import ReviewMediaGallery from "../../../components/ReviewMediaGallery";
+import WishlistButton from "../../../components/WishlistButton";
 import { StarDisplay } from "../../../components/StarRating";
 import Pagination from "../../../components/Pagination";
 import ReportModal from "../../../components/ReportModal";
@@ -250,7 +251,8 @@ export default function ProductDetailPage() {
       if (
         payload.action === "paid" ||
         payload.action === "confirmed" ||
-        payload.action === "shipped"
+        payload.action === "pickup_in_progress" ||
+        payload.action === "in_transit"
       ) {
         setProduct((prev) => (prev ? { ...prev, status: "reserved" } : prev));
       } else if (payload.action === "completed") {
@@ -420,7 +422,7 @@ export default function ProductDetailPage() {
         const orderForThisProduct = (data.items || []).find(
           (o) =>
             o.productId === product.id &&
-            ["paid", "confirmed", "ready_to_ship", "shipped"].includes(
+            ["paid", "confirmed", "ready_to_ship", "pickup_in_progress", "in_transit"].includes(
               o.status,
             ),
         );
@@ -574,6 +576,7 @@ export default function ProductDetailPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{product.title}</h1>
+          <WishlistButton productId={product.id} title={product.title} className="mt-3" />
           {/* Price display with interactive voucher */}
           <div className="mt-3">
             {activeVoucher ? (
@@ -862,8 +865,10 @@ export default function ProductDetailPage() {
                       : sellerActiveOrder.status === "confirmed"
                         ? "📦 กรุณาเตรียมสินค้าสำหรับคำสั่งซื้อนี้"
                         : sellerActiveOrder.status === "ready_to_ship"
-                          ? "📦 สินค้านี้มีคำสั่งซื้อรอจัดส่ง!"
-                          : "🚚 สินค้านี้อยู่ระหว่างการขนส่ง"}
+                          ? "📦 สินค้าพร้อมเรียกขนส่ง"
+                          : sellerActiveOrder.status === "pickup_in_progress"
+                            ? "📦 ขนส่งกำลังเข้ารับสินค้า"
+                            : "🚚 สินค้านี้อยู่ระหว่างการขนส่ง"}
                   </p>
                   <p className="text-xs text-emerald-700 font-mono mt-0.5">
                     Order ID: #{sellerActiveOrder.id}
@@ -899,8 +904,10 @@ export default function ProductDetailPage() {
                     {sellerActiveOrder.status === "confirmed"
                       ? "จัดการคำสั่งซื้อ"
                       : sellerActiveOrder.status === "ready_to_ship"
-                        ? "จัดส่งสินค้า"
-                        : "ดูรายละเอียดการจัดส่ง"}
+                        ? "เรียกขนส่ง"
+                        : sellerActiveOrder.status === "pickup_in_progress"
+                          ? "ส่งมอบให้ขนส่งแล้ว"
+                          : "ดูรายละเอียดการจัดส่ง"}
                   </span>
                 </button>
               )}

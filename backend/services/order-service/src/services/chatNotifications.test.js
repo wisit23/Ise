@@ -41,7 +41,7 @@ test("buyer cancellation notifies both parties of refund without blaming the sel
   }
 });
 
-for (const status of ["ready_to_ship", "shipped", "delivered", "completed", "payment_expired", "seller_confirmation_expired"]) {
+for (const status of ["ready_to_ship", "pickup_in_progress", "in_transit", "delivered", "completed", "payment_expired", "seller_confirmation_expired"]) {
   test(`both participants receive the ${status} notification`, async (t) => {
     const requests = capture(t);
     await chat.notifyOrderStatusChanged(order, status);

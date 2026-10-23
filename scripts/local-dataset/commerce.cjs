@@ -96,9 +96,9 @@ module.exports = function utilities(ctx) {
           {},
         ),
       );
-    // Seller accepts and packs before shipping (paid -> confirmed -> ready_to_ship).
-    if (["shipped", "completed"].includes(stage))
-      for (const status of ["confirmed", "ready_to_ship"])
+    // Carrier handoff follows preparation and a separate pickup request.
+    if (["in_transit", "completed"].includes(stage))
+      for (const status of ["confirmed", "ready_to_ship", "pickup_in_progress"])
         await step("full-" + key + "-" + status, () =>
           request(
             "/api/orders/" + order.id + "/status",
@@ -107,14 +107,14 @@ module.exports = function utilities(ctx) {
             "PATCH",
           ),
         );
-    if (["shipped", "completed"].includes(stage))
+    if (["in_transit", "completed"].includes(stage))
       await step("full-" + key + "-ship", async () => {
         const current = await request("/api/orders/" + order.id, token(seller));
         return request(
           "/api/orders/" + order.id + "/status",
           token(seller),
           {
-            status: "shipped",
+            status: "in_transit",
             version: current.version,
             company: "Demo Express",
             trackingNumber: "DEMO-" + label + "-" + key,
@@ -124,7 +124,7 @@ module.exports = function utilities(ctx) {
       });
     if (stage === "completed")
       await step("full-" + key + "-receive", async () => {
-        // order-service simulates the carrier: shipped becomes delivered
+        // order-service simulates the carrier: in_transit becomes delivered
         // after ORDER_DELIVERY_DELAY_MS (10s by default).
         let current = await request("/api/orders/" + order.id, token(buyer));
         for (let i = 0; i < 30 && current.status !== "delivered"; i++) {

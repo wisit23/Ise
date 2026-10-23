@@ -130,24 +130,34 @@ test("Seller checkout, paid notification, shipping and T&S trading transcript sh
       current.shipping.addressSnapshot.recipientName,
       ADDRESS.recipientName,
     );
+    let prepared = current;
+    for (const status of ["confirmed", "ready_to_ship", "pickup_in_progress"]) {
+      prepared = await call(orderBase, "/" + orderId + "/status", seller.accessToken, { status, version: prepared.version }, "PATCH");
+    }
     const shipped = await call(
       orderBase,
       "/" + orderId + "/status",
       seller.accessToken,
       {
-        status: "shipped",
+        status: "in_transit",
         company: "Kerry",
         trackingNumber: "LIVE123",
-        version: current.version,
+        version: prepared.version,
       },
       "PATCH",
     );
     assert.equal(shipped.shipping.trackingNumber, "LIVE123");
+    let delivered = shipped;
+    for (let attempt = 0; attempt < 30 && delivered.status !== "delivered"; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      delivered = await call(orderBase, "/" + orderId, buyer.accessToken);
+    }
+    assert.equal(delivered.status, "delivered");
     await call(
       orderBase,
       "/" + orderId + "/status",
       buyer.accessToken,
-      { status: "completed", version: shipped.version },
+      { status: "completed", version: delivered.version },
       "PATCH",
     );
     const dispute = await call(

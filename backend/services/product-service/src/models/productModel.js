@@ -4,6 +4,7 @@ const { buildCatalogWhere } = require("../features/catalog/catalogQuery");
 const shopSearchClient = require("../services/shopSearchClient");
 
 const WITH_MEDIA = {
+  _count: { select: { favorites: true } },
   photos: true,
   videos: true,
   categoryLinks: { include: { category: true } },
@@ -55,6 +56,8 @@ async function categoryData(client, names) {
 function toApiShape(product) {
   if (!product) return product;
   const { photos, videos, categoryLinks, countViews, ...rest } = product;
+  rest.favoriteCount = product._count?.favorites || 0;
+  delete rest._count;
   if (categoryLinks) rest.categories = categoryLinks.map((link) => link.category.name).sort();
   const viewCount = Array.isArray(countViews)
     ? countViews.reduce((acc, cv) => acc + (cv.count || 0), 0)

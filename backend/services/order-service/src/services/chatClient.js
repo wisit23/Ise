@@ -17,8 +17,9 @@ const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 // SYSTEM message — awaiting payment isn't chat-worthy.
 const STATUS_MESSAGE_TH = {
   confirmed: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
-  ready_to_ship: "ผู้ขายเตรียมสินค้าแล้ว รอขนส่งมารับ",
-  shipped: "ผู้ขายจัดส่งสินค้าแล้ว",
+  ready_to_ship: "ผู้ขายเตรียมสินค้าแล้ว พร้อมเรียกขนส่ง",
+  pickup_in_progress: "ผู้ขายเรียกขนส่งแล้ว รอขนส่งมารับ",
+  in_transit: "ผู้ขายส่งมอบสินค้าให้ขนส่งแล้ว",
   delivered: "ขนส่งส่งสินค้าถึงผู้ซื้อแล้ว",
   completed: "คำสั่งซื้อเสร็จสมบูรณ์แล้ว",
   cancelled: "คำสั่งซื้อนี้ถูกยกเลิกแล้ว",
@@ -415,8 +416,8 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
 
   if (order.buyerId) {
     const buyerBody =
-      status === "shipped"
-        ? `📦 ผู้ขายจัดส่งสินค้าแล้ว | หมายเลขคำสั่งซื้อ: #${order.id}`
+      status === "in_transit"
+        ? `📦 ผู้ขายส่งมอบสินค้าให้ขนส่งแล้ว | หมายเลขคำสั่งซื้อ: #${order.id}`
         : status === "delivered"
           ? `📬 สินค้าถึงผู้ซื้อแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า (ระบบจะยืนยันให้อัตโนมัติใน 14 วัน) | หมายเลขคำสั่งซื้อ: #${order.id}`
           : status === "completed"
@@ -430,8 +431,8 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
         userId: order.buyerId,
         type: "ORDER",
         title:
-          status === "shipped"
-            ? "ผู้ขายจัดส่งสินค้าแล้ว"
+          status === "in_transit"
+            ? "ผู้ขายส่งมอบให้ขนส่งแล้ว"
             : status === "delivered"
               ? "สินค้าถึงแล้ว กรุณายืนยันการรับสินค้า"
               : status === "completed"
@@ -457,9 +458,9 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
     let sellerBody = null;
     let sellerLink = `/products/${order.productId}`;
 
-    if (status === "shipped") {
-      sellerTitle = "จัดส่งสินค้าแล้ว";
-      sellerBody = `🚚 คุณได้จัดส่งสินค้า '${title}' แล้ว รอลูกค้ายืนยันการรับสินค้า | หมายเลขคำสั่งซื้อ: #${order.id}`;
+    if (status === "in_transit") {
+      sellerTitle = "ส่งมอบให้ขนส่งแล้ว";
+      sellerBody = `🚚 คุณส่งมอบสินค้า '${title}' ให้ขนส่งแล้ว อยู่ระหว่างการขนส่ง | หมายเลขคำสั่งซื้อ: #${order.id}`;
     } else if (status === "completed") {
       sellerTitle = "ลูกค้าได้รับสินค้าแล้ว";
       sellerBody = `🎉 ลูกค้าได้รับสินค้าแล้ว คำสั่งซื้อ #${order.id} ('${title}') เสร็จสมบูรณ์`;
@@ -568,7 +569,9 @@ async function broadcastOrderRealtime(order, action = "updated") {
         completed: "sold",
         paid: "reserved",
         confirmed: "reserved",
-        shipped: "reserved",
+        ready_to_ship: "reserved",
+        pickup_in_progress: "reserved",
+        in_transit: "reserved",
         cancelled: "available",
         payment_expired: "available",
         seller_confirmation_expired: "available",

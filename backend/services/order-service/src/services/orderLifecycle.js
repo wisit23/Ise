@@ -8,7 +8,7 @@ function durationMs(name, fallback) {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 const timing = {
-  // No real carrier: a shipped order is treated as delivered after this delay.
+  // No real carrier: delivery delay starts only after carrier handoff.
   deliveryDelayMs: () => durationMs("ORDER_DELIVERY_DELAY_MS", 10 * 1000),
   autoCompleteMs: () => durationMs("ORDER_AUTO_COMPLETE_MS", 14 * DAY_MS),
   sellerConfirmTimeoutMs: () =>
@@ -24,7 +24,8 @@ const timing = {
 const PARTICIPANT_TRANSITIONS = {
   confirmed: { seller: ["paid"] },
   ready_to_ship: { seller: ["confirmed"] },
-  shipped: { seller: ["ready_to_ship"] },
+  pickup_in_progress: { seller: ["ready_to_ship"] },
+  in_transit: { seller: ["pickup_in_progress"] },
   completed: { buyer: ["delivered"] },
   cancelled: {
     buyer: ["pending_payment", "paid"],

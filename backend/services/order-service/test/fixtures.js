@@ -34,7 +34,7 @@ async function createOrder(prisma, { data }) {
   };
   // Mirror the timestamps a real transition stamps; dispute windows use them.
   const now = new Date();
-  if (["shipped", "delivered", "completed"].includes(data.status))
+  if (["in_transit", "delivered", "completed"].includes(data.status))
     data.shippedAt ??= now;
   if (["delivered", "completed"].includes(data.status))
     data.deliveredAt ??= now;

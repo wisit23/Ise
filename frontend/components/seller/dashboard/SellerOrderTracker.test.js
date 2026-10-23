@@ -98,7 +98,10 @@ describe("SellerOrderTracker", () => {
     expect(screen.getByRole("button", { name: /เตรียมสินค้าเรียบร้อย/ })).toBeInTheDocument();
 
     rerender(<SellerOrderTracker orders={[{ ...paidOrder[0], status: "ready_to_ship" }]} />);
-    expect(screen.getByRole("button", { name: "จัดส่งสินค้า" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "เรียกขนส่ง" })).toBeInTheDocument();
+    rerender(<SellerOrderTracker orders={[{ ...paidOrder[0], status: "pickup_in_progress" }]} />);
+    expect(screen.getByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "เรียกขนส่ง" })).not.toBeInTheDocument();
   });
 
   it("marks a confirmed order as packed through the lifecycle status", async () => {

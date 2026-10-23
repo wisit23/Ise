@@ -11,7 +11,8 @@ const VALID_STATUSES = [
   "paid",
   "confirmed",
   "ready_to_ship",
-  "shipped",
+  "pickup_in_progress",
+  "in_transit",
   "delivered",
   "completed",
   "cancelled",
@@ -287,7 +288,7 @@ async function updateCampaign(id, { campaignId, finalPrice }) {
   );
 }
 const STATUS_TIMESTAMP = {
-  shipped: "shippedAt",
+  in_transit: "shippedAt",
   delivered: "deliveredAt",
   completed: "completedAt",
 };

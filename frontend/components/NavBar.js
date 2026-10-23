@@ -91,6 +91,7 @@ const WORK_MENU_ITEMS = [
 ];
 
 const CUSTOMER_ACCOUNT_MENU_ITEMS = [
+  { href: "/wishlist", label: "รายการโปรดของฉัน", icon: "favorite" },
   {
     href: "/sell",
     label: "ลงขายสินค้า",

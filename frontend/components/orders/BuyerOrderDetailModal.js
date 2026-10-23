@@ -9,6 +9,7 @@ import { fetchProduct } from "../../lib/products";
 import { fetchSellerSummary } from "../../lib/sellers";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
+import OrderDeliveryTimeline from "./OrderDeliveryTimeline";
 
 // Mirrors shippingService.ADDRESS_EDITABLE_STATUSES: once the seller marks the
 // parcel ready, the address is printed on it and the backend refuses changes.
@@ -189,6 +190,15 @@ export default function BuyerOrderDetailModal({
           </dd>
         </dl>
 
+        <OrderDeliveryTimeline
+          order={order}
+          statusLabels={{
+            ready_to_ship: "เตรียมสินค้าเสร็จแล้ว",
+            pickup_in_progress: "ขนส่งกำลังเข้ารับสินค้า",
+            in_transit: "กำลังจัดส่ง",
+          }}
+        />
+
         <section
           aria-labelledby="buyer-shipping-details-heading"
           className="rounded-lg border border-line p-4"
@@ -213,7 +223,7 @@ export default function BuyerOrderDetailModal({
           ) : (
             <p className="text-sm text-ink-muted">
               {order.shippedAt ||
-              ["shipped", "delivered", "completed"].includes(order.status)
+              ["in_transit", "delivered", "completed"].includes(order.status)
                 ? "ไม่พบข้อมูลการจัดส่ง"
                 : "รอผู้ขายระบุข้อมูลการจัดส่ง"}
             </p>
@@ -274,7 +284,7 @@ export default function BuyerOrderDetailModal({
                 </Button>
               ) : (
                 address &&
-                ["ready_to_ship", "shipped", "delivered", "completed"].includes(
+                ["ready_to_ship", "pickup_in_progress", "in_transit", "delivered", "completed"].includes(
                   order.status,
                 ) && (
                   <p className="text-xs text-ink-subtle">

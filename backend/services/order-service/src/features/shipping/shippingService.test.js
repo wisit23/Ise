@@ -3,111 +3,85 @@ const assert = require("node:assert/strict");
 const { createShippingService, normalizeAddress } = require("./shippingService");
 
 const ADDRESS = {
-  recipientName: "Buyer",
-  phone: "0812345678",
-  addressLine: "99 Main Road",
-  subdistrict: "A",
-  district: "B",
-  province: "Bangkok",
-  postalCode: "10110",
+  recipientName: "Buyer", phone: "0812345678", addressLine: "99 Main Road",
+  subdistrict: "A", district: "B", province: "Bangkok", postalCode: "10110",
 };
 
 function fixture(overrides = {}, changed = 1) {
-  const order = {
-    id: "order-1",
-    buyerId: "buyer-1",
-    sellerId: "seller-1",
-    status: "confirmed",
-    version: 3,
-    ordersAmount: 100,
-    originalAmount: 100,
-    shipping: {
-      status: "pending",
-      addressId: "old",
-      addressSnapshot: { ...ADDRESS, addressLine: "Old Road" },
-    },
+  let order = {
+    id: "order-1", buyerId: "buyer-1", sellerId: "seller-1", status: "confirmed",
+    version: 3, ordersAmount: 100, originalAmount: 100,
+    shipping: { status: "pending", addressId: "old", addressSnapshot: { ...ADDRESS, addressLine: "Old Road" } },
     ...overrides,
   };
   const writes = [];
-  const tx = {
-    order: {
-      findUnique: async () => order,
-      updateMany: async (query) => {
-        writes.push({ table: "order", query });
-        return { count: changed };
-      },
-    },
-    shipping: {
-      updateMany: async (query) => {
-        writes.push({ table: "shipping", query });
-        return { count: 1 };
-      },
-      update: async (query) => {
-        writes.push({ table: "shipping_update", query });
-        return { count: 1 };
-      },
-      findUnique: async () => ({ orderId: order.id, addressSnapshot: ADDRESS }),
-    },
-    orderLog: {
-      create: async ({ data }) => {
-        writes.push({ table: "log", data });
-      },
-    },
-  };
   let selectedAddress = ADDRESS;
+  let failShipping = false;
   const service = createShippingService({
-    $transaction: async (callback) => callback(tx),
+    $transaction: async (callback) => {
+      const pending = structuredClone(order);
+      const tx = {
+        order: {
+          findUnique: async () => structuredClone(pending),
+          updateMany: async (query) => {
+            writes.push({ table: "order", query });
+            if (changed) {
+              const { version, ...data } = query.data;
+              Object.assign(pending, data);
+              pending.version += version?.increment || 0;
+            }
+            return { count: changed };
+          },
+        },
+        shipping: {
+          updateMany: async (query) => {
+            writes.push({ table: "shipping", query });
+            pending.shipping = { ...pending.shipping, ...query.data };
+            return { count: 1 };
+          },
+          update: async (query) => {
+            if (failShipping) throw new Error("shipping write failed");
+            writes.push({ table: "shipping_update", query });
+            Object.assign(pending.shipping, query.data);
+            return pending.shipping;
+          },
+          findUnique: async () => pending.shipping,
+        },
+        orderLog: { create: async ({ data }) => { writes.push({ table: "log", data }); } },
+      };
+      const result = await callback(tx);
+      order = pending;
+      return result;
+    },
   }, async () => normalizeAddress(selectedAddress));
-  const request = {
-    orderId: order.id,
-    buyerId: "buyer-1",
-    addressId: "new",
-    shippingAddress: ADDRESS,
+  return {
+    service, writes, request: { orderId: order.id, buyerId: "buyer-1", addressId: "new", shippingAddress: ADDRESS },
+    getOrder: () => order,
+    setSelectedAddress: (value) => { selectedAddress = value; },
+    failShipping: () => { failShipping = true; },
   };
-  return { service, request, writes, order, setSelectedAddress: (value) => { selectedAddress = value; } };
 }
+const step = (status, extra = {}) => ({ orderId: "order-1", actorId: "seller-1", version: 3, status, ...extra });
+const handoff = (extra = {}) => step("in_transit", { company: " Flash Express ", trackingNumber: " TH12345 ", ...extra });
 
 for (const [company, trackingNumber] of [
-  [undefined, "SIM123"],
-  ["", "SIM123"],
-  ["   ", "SIM123"],
-  ["Test Express", undefined],
-  ["Test Express", ""],
-  ["Test Express", "   "],
+  [undefined, "SIM123"], ["", "SIM123"], ["   ", "SIM123"],
+  ["Test Express", undefined], ["Test Express", ""], ["Test Express", "   "],
 ]) {
-  test(`shipment requires both company (${JSON.stringify(company)}) and tracking (${JSON.stringify(trackingNumber)})`, async () => {
-    const { service, writes } = fixture({ status: "ready_to_ship" });
-    await assert.rejects(
-      service.markShipped({
-        orderId: "order-1",
-        actorId: "seller-1",
-        version: 3,
-        company,
-        trackingNumber,
-      }),
-      (error) =>
-        error.status === 400 &&
-        error.message === "company and trackingNumber are required to ship an order",
-    );
+  test(`handoff requires company (${JSON.stringify(company)}) and tracking (${JSON.stringify(trackingNumber)})`, async () => {
+    const { service, writes } = fixture({ status: "pickup_in_progress" });
+    await assert.rejects(service.advanceShipping(handoff({ company, trackingNumber })), (e) => e.status === 400);
     assert.equal(writes.length, 0);
   });
 }
-
-for (const [field, value] of [
-  ["phone", "12345"],
-  ["postalCode", "ABCDE"],
-]) {
-  test(`TC05: invalid shipping ${field} is rejected without writes`, async () => {
-    const { service, request, writes, setSelectedAddress } = fixture();
-    setSelectedAddress({ ...ADDRESS, [field]: value });
-    await assert.rejects(
-      service.updateAddress(request),
-      (err) => err.status === 400,
-    );
-    assert.equal(writes.length, 0);
+for (const [field, value] of [["phone", "12345"], ["phone", "1111111111"], ["postalCode", "ABCDE"]]) {
+  test(`TC05: invalid shipping ${field} ${value} is rejected without writes`, async () => {
+    const f = fixture();
+    f.setSelectedAddress({ ...ADDRESS, [field]: value });
+    await assert.rejects(f.service.updateAddress(f.request), (e) => e.status === 400);
+    assert.equal(f.writes.length, 0);
   });
 }
-
 test("buyer changes only this order's address and records both address snapshots", async () => {
   const { service, request, writes } = fixture();
   await service.updateAddress(request);
@@ -121,108 +95,94 @@ test("buyer changes only this order's address and records both address snapshots
   assert.equal(detail.before.addressSnapshot.addressLine, "Old Road");
   assert.equal(detail.after.addressSnapshot.addressLine, "99 Main Road");
 });
-
 test("another buyer cannot change the order's delivery address", async () => {
   const { service, request, writes } = fixture();
-  await assert.rejects(
-    service.updateAddress({ ...request, buyerId: "other" }),
-    (error) => error.status === 403,
-  );
+  await assert.rejects(service.updateAddress({ ...request, buyerId: "other" }), (e) => e.status === 403);
   assert.equal(writes.length, 0);
 });
-
-test("shipped orders cannot change address even if shipping has not caught up", async () => {
-  const { service, request, writes } = fixture({ status: "shipped" });
-  await assert.rejects(
-    service.updateAddress(request),
-    (error) => error.status === 409,
-  );
-  assert.equal(writes.length, 0);
-});
-
-test("shipped parcels cannot change address even if Order still says confirmed", async () => {
-  const { service, request, writes } = fixture({
-    shipping: { status: "shipped" },
+for (const status of ["ready_to_ship", "pickup_in_progress", "in_transit"]) {
+  test(`${status} orders cannot change address`, async () => {
+    const { service, request, writes } = fixture({ status });
+    await assert.rejects(service.updateAddress(request), (e) => e.status === 409);
+    assert.equal(writes.length, 0);
   });
-  await assert.rejects(
-    service.updateAddress(request),
-    (error) => error.status === 409,
-  );
-  assert.equal(writes.length, 0);
-});
-
-test("a concurrent shipment prevents the address write and its audit log", async () => {
+}
+for (const status of ["pickup_in_progress", "in_transit"]) {
+  test(`${status} parcels cannot change address even if Order still says confirmed`, async () => {
+    const { service, request, writes } = fixture({ shipping: { status } });
+    await assert.rejects(service.updateAddress(request), (e) => e.status === 409);
+    assert.equal(writes.length, 0);
+  });
+}
+test("a concurrent shipment prevents the address write and audit log", async () => {
   const { service, request, writes } = fixture({}, 0);
-  await assert.rejects(
-    service.updateAddress(request),
-    (error) => error.status === 409,
-  );
-  assert.deepEqual(
-    writes.map((entry) => entry.table),
-    ["order"],
-  );
+  await assert.rejects(service.updateAddress(request), (e) => e.status === 409);
+  assert.deepEqual(writes.map((entry) => entry.table), ["order"]);
 });
-
 test("stale client version and incomplete selected addresses are rejected before writes", async () => {
-  const { service, request, writes, setSelectedAddress } = fixture();
-  await assert.rejects(
-    service.updateAddress({ ...request, version: 2 }),
-    (error) => error.status === 409,
-  );
-  setSelectedAddress({ ...ADDRESS, phone: "" });
-  await assert.rejects(
-    service.updateAddress(request),
-    (error) => error.status === 400,
-  );
-  assert.equal(writes.length, 0);
+  const f = fixture();
+  await assert.rejects(f.service.updateAddress({ ...f.request, version: 2 }), (e) => e.status === 409);
+  f.setSelectedAddress({ ...ADDRESS, phone: "" });
+  await assert.rejects(f.service.updateAddress(f.request), (e) => e.status === 400);
+  assert.equal(f.writes.length, 0);
 });
-
-test("markShipped: rejects if caller is not the seller", async () => {
-  const { service } = fixture({ status: "ready_to_ship" });
-  await assert.rejects(
-    service.markShipped({
-      orderId: "order-1",
-      actorId: "buyer-1",
-      version: 3,
-      company: "Flash Express",
-      trackingNumber: "TH12345",
-    }),
-    (error) => error.status === 403,
-  );
-});
-
-test("markShipped: rejects if the order is not ready to ship yet (status is paid)", async () => {
-  const { service } = fixture({ status: "paid" });
-  await assert.rejects(
-    service.markShipped({
-      orderId: "order-1",
-      actorId: "seller-1",
-      version: 3,
-      company: "Flash Express",
-      trackingNumber: "TH12345",
-    }),
-    (error) => {
-      assert.equal(error.status, 409);
-      assert.match(error.message, /ต้องเตรียมสินค้าให้พร้อมจัดส่งก่อน/);
-      return true;
-    },
-  );
-});
-
-test("markShipped: succeeds when seller ships a ready-to-ship order", async () => {
-  const { service, writes } = fixture({ status: "ready_to_ship" });
-  const result = await service.markShipped({
-    orderId: "order-1",
-    actorId: "seller-1",
-    version: 3,
-    company: "Flash Express",
-    trackingNumber: "TH12345",
+for (const [from, to] of [["paid", "pickup_in_progress"], ["confirmed", "pickup_in_progress"], ["ready_to_ship", "in_transit"], ["pickup_in_progress", "pickup_in_progress"]]) {
+  test(`reject shipping skip/repeat ${from} -> ${to}`, async () => {
+    const f = fixture({ status: from });
+    await assert.rejects(f.service.advanceShipping(handoff({ status: to })), (e) => e.status === 409);
+    assert.equal(f.writes.length, 0);
   });
-  assert.ok(result);
-  const orderWrite = writes.find((w) => w.table === "order");
-  assert.equal(orderWrite.query.data.status, "shipped");
-  const shippingUpdate = writes.find((w) => w.table === "shipping_update");
-  assert.equal(shippingUpdate.query.data.company, "Flash Express");
-  assert.equal(shippingUpdate.query.data.trackingNumber, "TH12345");
+}
+for (const status of ["pickup_in_progress", "in_transit"]) {
+  const from = status === "in_transit" ? "pickup_in_progress" : "ready_to_ship";
+  test(`buyer cannot enter ${status}`, async () => {
+    const f = fixture({ status: from });
+    await assert.rejects(f.service.advanceShipping(handoff({ status, actorId: "buyer-1" })), (e) => e.status === 403);
+    assert.equal(f.writes.length, 0);
+  });
+  for (const blocked of [{ payments: [{ holds: [{ releaseAt: null }] }] }, { dispute: { decision: null } }, { status: "disputed" }]) {
+    test(`${status} blocked by ${JSON.stringify(blocked)}`, async () => {
+      const f = fixture({ status: from, ...blocked });
+      await assert.rejects(f.service.advanceShipping(handoff({ status })), (e) => e.status === 409);
+      assert.equal(f.writes.length, 0);
+    });
+  }
+}
+test("pickup requires no carrier/tracking, stamps no handoff time and retains shipping facts", async () => {
+  const f = fixture({ status: "ready_to_ship" });
+  const before = structuredClone(f.getOrder().shipping);
+  const updated = await f.service.advanceShipping(step("pickup_in_progress"));
+  assert.equal(updated.status, "pickup_in_progress");
+  assert.equal(updated.shippedAt, undefined);
+  assert.deepEqual(updated.shipping, { ...before, status: "pickup_in_progress" });
+  assert.equal(updated.version, 4);
 });
-
+test("handoff updates both statuses, trims tracking, stamps shippedAt and retains address facts", async () => {
+  const f = fixture({ status: "pickup_in_progress" });
+  const before = structuredClone(f.getOrder().shipping);
+  const updated = await f.service.advanceShipping(handoff());
+  assert.equal(updated.status, "in_transit");
+  assert.ok(updated.shippedAt instanceof Date);
+  assert.equal(updated.version, 4);
+  assert.deepEqual(updated.shipping, { ...before, status: "in_transit", company: "Flash Express", trackingNumber: "TH12345" });
+  assert.equal(f.writes.find((w) => w.table === "log").data.action, "IN_TRANSIT");
+});
+test("failed Shipping write rolls back Order handoff", async () => {
+  const f = fixture({ status: "pickup_in_progress" });
+  f.failShipping();
+  await assert.rejects(f.service.advanceShipping(handoff()), /shipping write failed/);
+  assert.equal(f.getOrder().status, "pickup_in_progress");
+  assert.equal(f.getOrder().shippedAt, undefined);
+  assert.equal(f.writes.filter((w) => w.table === "log").length, 0);
+});
+test("stale or concurrently changed Order cannot hand off", async () => {
+  for (const [f, version] of [[fixture({ status: "pickup_in_progress" }), 2], [fixture({ status: "pickup_in_progress" }, 0), 3]]) {
+    await assert.rejects(f.service.advanceShipping(handoff({ version })), (e) => e.status === 409);
+    assert.equal(f.getOrder().status, "pickup_in_progress");
+  }
+});
+test("legacy shipped is not accepted as an API shipping transition", async () => {
+  const f = fixture({ status: "ready_to_ship" });
+  await assert.rejects(f.service.advanceShipping(step("shipped")), (e) => e.status === 400);
+  assert.equal(f.writes.length, 0);
+});
