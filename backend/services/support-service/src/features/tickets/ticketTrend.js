@@ -43,24 +43,33 @@ async function readTicketTrend(
   `);
 }
 
+/** Staff-only ticket trend for a permitted day range. `rawDays` is the query value. */
+async function getTicketTrend({ userRole, userRoles, role, userId, days: rawDays }) {
+  if (!isStaff(userRole, userRoles))
+    throw forbidden("Only staff can read ticket trends");
+  const dashboard = customerServiceClientConfig.dashboard;
+  const days = Number(rawDays ?? dashboard.defaultDays);
+  if (!dashboard.dayRanges.includes(days))
+    throw badRequest("Invalid trend range");
+  const items = await readTicketTrend({ role, userId, days });
+  return { items, days, timeZone: dashboard.timeZone };
+}
+
+// HTTP layer for GET /tickets/trend.
 async function trend(req, res, next) {
   try {
-    if (!isStaff(req.userRole, req.userRoles))
-      throw forbidden("Only staff can read ticket trends");
-    const dashboard = customerServiceClientConfig.dashboard;
-    const days = Number(req.query.days ?? dashboard.defaultDays);
-    if (!dashboard.dayRanges.includes(days))
-      throw badRequest("Invalid trend range");
-    const items = await readTicketTrend({
+    const result = await getTicketTrend({
+      userRole: req.userRole,
+      userRoles: req.userRoles,
       role: effectiveStaffRole(req),
       userId: req.userId,
-      days,
+      days: req.query.days,
     });
     res.set("Cache-Control", "no-store");
-    res.json({ items, days, timeZone: dashboard.timeZone });
+    res.json(result);
   } catch (error) {
     next(error);
   }
 }
 
-module.exports = { trend, readTicketTrend };
+module.exports = { trend, getTicketTrend, readTicketTrend };

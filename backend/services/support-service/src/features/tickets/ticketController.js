@@ -1,5 +1,6 @@
 const { parsePagination, paginatedResponse } = require("@reloop/shared");
 const ticketService = require("./ticketService");
+const ticketModeration = require("./ticketModeration");
 const { effectiveStaffRole } = require("../staffRole");
 
 async function create(req, res, next) {
@@ -168,7 +169,19 @@ async function joinChat(req, res, next) {
   }
 }
 
+async function moderate(req, res, next) {
+  try {
+    res.json(await ticketModeration.moderateTicket({
+      ticketId: req.params.id, userId: req.userId,
+      role: effectiveStaffRole(req),
+      version: req.body.version, action: req.body.action, targetId: req.body.targetId,
+      reason: req.body.reason, authorization: req.headers.authorization,
+    }));
+  } catch (err) { next(err); }
+}
+
 module.exports = {
+  moderate,
   create,
   mine,
   queue,

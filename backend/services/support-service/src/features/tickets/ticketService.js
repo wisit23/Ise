@@ -588,6 +588,80 @@ async function recordChatMessage(payload) {
   return ticketModel.recordChatMessage(payload);
 }
 
+/** Records a chat-service delivery event (POST /internal/chat-events). */
+async function recordChatEvent(data) {
+  if (!data || typeof data !== "object") {
+    throw badRequest("body is required");
+  }
+
+  // Accept the current flat contract and the original nested contract so
+  // queued events created during a rolling deployment remain deliverable.
+  const message = data.message || {};
+  const chatMessageId =
+    data.chatMessageId || data.messageId || message.id || data.id;
+  const ticketId =
+    data.ticketId || data.contextId || message.ticketId || message.contextId;
+  const conversationId = data.conversationId || message.conversationId;
+  const authorId =
+    data.authorId || data.senderId || message.senderId || message.authorId;
+  const authorRole =
+    data.authorRole ||
+    data.senderRole ||
+    message.senderRole ||
+    message.authorRole;
+  const isInternal = Boolean(
+    data.isInternal ??
+    (data.visibility === "INTERNAL" || message.visibility === "INTERNAL"),
+  );
+  const createdAt = data.createdAt || message.createdAt;
+
+  if (typeof chatMessageId !== "string" || !chatMessageId.trim()) {
+    throw badRequest("chatMessageId is required");
+  }
+  if (!ticketId && !conversationId) {
+    throw badRequest("ticketId or conversationId is required");
+  }
+  if (typeof authorId !== "string" || !authorId.trim()) {
+    throw badRequest("authorId is required");
+  }
+  if (typeof authorRole !== "string" || !authorRole.trim()) {
+    throw badRequest("authorRole is required");
+  }
+  if (createdAt != null && Number.isNaN(new Date(createdAt).getTime())) {
+    throw badRequest("createdAt must be a valid date");
+  }
+
+  return ticketModel.recordChatMessage({
+    ticketId,
+    conversationId,
+    chatMessageId: chatMessageId.trim(),
+    authorId: authorId.trim(),
+    authorRole: authorRole.trim(),
+    isInternal,
+    createdAt,
+  });
+}
+
+/** Who may read/write a ticket's chat room — asked by chat-service
+ * (GET /internal/tickets/:id/chat-access/:userId). */
+async function getChatAccess({ ticketId, userId, role }) {
+  const ticket = await ticketModel.findById(ticketId);
+  if (!ticket || (ticket.deletedAt && role !== "ADMIN")) return { allowed: false, writable: false };
+  const isRequester = role === "BUYER" && ticket.requesterId === userId;
+  const isAdmin = role === "ADMIN";
+  const isCaseAgent =
+    role === "AGENT" &&
+    (ticket.chatResponderId === userId || (ticket.status !== "ESCALATED" &&
+    (ticket.assigneeId === null || ticket.assigneeId === userId)));
+  const allowed = isRequester || isAdmin || isCaseAgent;
+  const writable =
+    allowed &&
+    !isAdmin &&
+    ticket.status !== "CLOSED" &&
+    (!isCaseAgent || ticket.assigneeId === userId || ticket.chatResponderId === userId);
+  return { allowed, writable };
+}
+
 async function getDashboardMetrics({role,days}) {
  if(!isAgent(role))throw forbidden("only support agents can view dashboard metrics");
  const count=Number(days || 8);if(!Number.isInteger(count)||count<1||count>31)throw badRequest("days must be an integer between 1 and 31");
@@ -614,4 +688,6 @@ module.exports = {
   joinTicketChat,
   getTicketConversation,
   recordChatMessage,
+  recordChatEvent,
+  getChatAccess,
 };
