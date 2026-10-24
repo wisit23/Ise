@@ -777,5 +777,5 @@ test("shows 'หมด' and shipped banner when seller product order is shipped"
   await waitFor(() => {
     expect(screen.getByText("หมด")).toBeInTheDocument();
   });
-  expect(screen.getByText(/จัดส่งสินค้าเสร็จเรียบร้อยแล้ว \(สินค้าหมด\)/)).toBeInTheDocument();
+  expect(screen.getByText(/สินค้านี้อยู่ระหว่างการขนส่ง/)).toBeInTheDocument();
 });

@@ -1,3 +1,6 @@
+// These flows sign in right after /register, so run with email verification off
+// (it is read once when the app is required).
+process.env.EMAIL_VERIFICATION = "off";
 // Integration test against a real, disposable Postgres database. Never runs
 // against dev/prod data: it requires DATABASE_URL to point at a database
 // created solely for this test run (see the CI workflow's postgres service

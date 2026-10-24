@@ -9,6 +9,7 @@ const router = Router();
 // Every route here requires x-internal-token (see product-service's
 // lock/unlock/sold endpoints for the same pattern) — this is how another
 // service opens a room or sends a SYSTEM message without a user's JWT.
+router.use(requireInternalToken);
 router.post("/awaiting-reply", require("./awaitingReply").awaitingReply);
 router.post("/case-unread", require("./caseUnread").caseUnread);
 

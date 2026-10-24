@@ -169,7 +169,7 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
       version: order.version,
       status: "in_transit",
       company: "Carrier",
-      trackingNumber: "TRACK-0",
+      trackingNumber: "TRACK0000",
     }),
     (err) => err.status === 409,
   );
@@ -199,7 +199,7 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
     actorId: "seller1",
     version: order.version,
     company: "Carrier",
-    trackingNumber: "TRACK-1",
+    trackingNumber: "TRACK0001",
   });
   await assert.rejects(
     shippingService.updateAddress({

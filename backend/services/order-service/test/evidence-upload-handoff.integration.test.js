@@ -72,6 +72,13 @@ test("multipart buyer/seller images survive CS escalation and stream unchanged t
     });
   assert.equal(opened.status, 201, JSON.stringify(opened.body));
   const id = opened.body.id;
+  // Sellers only see a dispute once staff contact them (sellerVisibility).
+  await require("../src/features/disputes/disputeModel").auditLog({
+    disputeId: id,
+    actorId: cs,
+    action: "SELLER_CONTACTED",
+    detail: "Integration: staff contacted the seller",
+  });
   // Valid PNG bytes travel through multipart middleware and private disk storage.
   const image = process.env.EVIDENCE_TEST_IMAGE
     ? await fs.readFile(process.env.EVIDENCE_TEST_IMAGE)

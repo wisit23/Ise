@@ -1,3 +1,6 @@
+// These flows sign in right after /register, so run with email verification off
+// (it is read once when the app is required).
+process.env.EMAIL_VERIFICATION = "off";
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");

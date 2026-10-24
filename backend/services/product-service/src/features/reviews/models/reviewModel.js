@@ -5,7 +5,9 @@ const WITH_MEDIA = { mediaEntries: { orderBy: [{ position: "asc" }, { mediaType:
 /** Keep the public ordered { url, type } contract over the unified ER table. */
 function toApiShape(review) {
   if (!review) return review;
-  const { mediaEntries, removalReason, ...rest } = review;
+  // removalReason is staff-only; never expose it on the public shape.
+  const { mediaEntries, ...rest } = review;
+  delete rest.removalReason;
   const media = [...(mediaEntries || [])]
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.mediaType.localeCompare(b.mediaType) || a.id.localeCompare(b.id))
     .map((m) => ({ url: m.url, type: m.mediaType === "VIDEO" ? "video" : "image" }));

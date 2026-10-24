@@ -95,7 +95,7 @@ test("order lifecycle: seller steps, simulated delivery, buyer receipt", async (
   const order = await paidOrder();
 
   // Seller cannot skip ahead and the buyer cannot complete before delivery.
-  assert.equal((await patch(order.id, seller, { status: "in_transit", company: "K", trackingNumber: "1" })).status, 409);
+  assert.equal((await patch(order.id, seller, { status: "in_transit", company: "K", trackingNumber: "TH12345678" })).status, 409);
   assert.equal((await patch(order.id, buyer, { status: "completed" })).status, 409);
   assert.equal((await patch(order.id, seller, { status: "completed" })).status, 403);
 
@@ -104,7 +104,7 @@ test("order lifecycle: seller steps, simulated delivery, buyer receipt", async (
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.equal(res.body.status, status);
   }
-  assert.equal((await patch(order.id, seller, { status: "in_transit", company: "K", trackingNumber: "1" })).status, 409);
+  assert.equal((await patch(order.id, seller, { status: "in_transit", company: "K", trackingNumber: "TH12345678" })).status, 409);
   assert.equal((await patch(order.id, buyer, { status: "pickup_in_progress" })).status, 403);
   const pickup = await patch(order.id, seller, { status: "pickup_in_progress" });
   assert.equal(pickup.status, 200, JSON.stringify(pickup.body));
@@ -117,13 +117,13 @@ test("order lifecycle: seller steps, simulated delivery, buyer receipt", async (
   const shipped = await patch(order.id, seller, {
     status: "in_transit",
     company: "Kerry",
-    trackingNumber: "TH123",
+    trackingNumber: "TH123456789TH",
   });
   assert.equal(shipped.status, 200, JSON.stringify(shipped.body));
   assert.equal(shipped.body.status, "in_transit");
   assert.equal(shipped.body.shipping.status, "in_transit");
   assert.equal(shipped.body.shipping.company, "Kerry");
-  assert.equal(shipped.body.shipping.trackingNumber, "TH123");
+  assert.equal(shipped.body.shipping.trackingNumber, "TH123456789TH");
   assert.deepEqual(shipped.body.shipping.addressSnapshot, pickup.body.shipping.addressSnapshot);
   assert.ok(shipped.body.shippedAt);
   assert.equal((await patch(order.id, buyer, { status: "completed" })).status, 409);

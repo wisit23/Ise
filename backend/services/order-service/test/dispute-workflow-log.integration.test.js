@@ -90,8 +90,9 @@ test("17 dispute workflow fields round-trip through logs, CAS and rollback", asy
   const columns =
     await db.$queryRaw`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='dispute_case'`;
   // operational_storage moved the 17 workflow fields back onto dispute_case
-  // (9 core columns + 17), so they are real columns now.
-  assert.equal(columns.length, 26);
+  // (9 core + 17); case_retention (+3), dispute_return_to_cs (+3 of its 4 adds)
+  // and dispute_return_checklist (+1) bring it to 33.
+  assert.equal(columns.length, 33);
   assert.ok(columns.some((column) => column.column_name === "dispute_case_id"));
   assert.ok(columns.some((column) => column.column_name === "status"));
 

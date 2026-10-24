@@ -10,9 +10,14 @@ jest.mock("next/navigation", () => ({
   redirect: jest.fn(),
 }));
 
-test("legacy orders route redirects to the orders section in profile", () => {
-  LegacyOrdersPage();
+test("legacy orders route redirects to the orders section in profile", async () => {
+  await LegacyOrdersPage({ searchParams: Promise.resolve({}) });
   expect(redirect).toHaveBeenCalledWith("/profile?tab=orders");
+});
+
+test("legacy orders route keeps the orderId from notification links", async () => {
+  await LegacyOrdersPage({ searchParams: Promise.resolve({ orderId: "ord-9" }) });
+  expect(redirect).toHaveBeenCalledWith("/profile?tab=orders&orderId=ord-9");
 });
 jest.mock("../../lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock("../../lib/auth", () => ({ getAccessToken: () => "token" }));

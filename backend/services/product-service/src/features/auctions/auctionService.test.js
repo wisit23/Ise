@@ -4273,6 +4273,11 @@ test("chatClient.notifyRoundCancelled partial failure followed by retry delivers
         json: async () => ({ id: `conv-${body.contextId}` }),
       };
     }
+    // The bell notification is a separate best-effort mirror; only chat
+    // messages count as delivered here.
+    if (url.endsWith("/internal/notifications")) {
+      return { ok: true, status: 201, json: async () => ({ id: `notif-${body.idempotencyKey}` }) };
+    }
     const key = body.idempotencyKey;
     if (key.endsWith(":buyer-2") && failBidder2Once) {
       failBidder2Once = false;

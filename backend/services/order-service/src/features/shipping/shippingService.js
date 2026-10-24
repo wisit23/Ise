@@ -69,7 +69,6 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
     orderId,
     buyerId,
     addressId,
-    shippingAddress,
     authorization,
     version,
   }) {

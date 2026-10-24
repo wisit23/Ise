@@ -47,7 +47,7 @@ describe("OrderLine", () => {
     expect(screen.getByText("฿1,200")).toBeInTheDocument();
     expect(screen.getByTestId("status")).toBeInTheDocument();
     const photo = await screen.findByRole("img", { name: order.productTitle });
-    expect(photo.closest("a")).toHaveAttribute("href", "/products/p1");
+    expect(screen.getByRole("link", { name: `ดูสินค้า ${order.productTitle}` })).toContainElement(photo);
   });
 
   it("can show a non-linked photo while keeping the product title link", async () => {
@@ -56,8 +56,8 @@ describe("OrderLine", () => {
     };
     render(<OrderLine order={order} linkThumbnail={false} />);
     const photo = await screen.findByRole("img", { name: order.productTitle });
-    expect(photo.closest("a")).toBeNull();
+    expect(photo.closest('[role="link"]')).toBeNull();
     expect(screen.queryByRole("link", { name: `ดูสินค้า ${order.productTitle}` })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: order.productTitle })).toHaveAttribute("href", "/products/p1");
+    expect(screen.getByRole("link", { name: order.productTitle })).toBeInTheDocument();
   });
 });

@@ -157,7 +157,9 @@ export default function MyOrders({
   let searchParams = null;
   try {
     searchParams = typeof useSearchParams === "function" ? useSearchParams() : null;
-  } catch (_) {}
+  } catch {
+    searchParams = null;
+  }
   const urlOrderId = searchParams?.get("orderId");
   const [items, setItems] = useState([]);
   const [tab, setTab] = useState(initialTab);

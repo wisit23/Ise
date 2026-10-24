@@ -1,3 +1,6 @@
+// These flows sign in right after /register, so run with email verification off
+// (it is read once when the app is required).
+process.env.EMAIL_VERIFICATION = "off";
 // Integration test against a real, disposable Postgres database — same
 // skip/REQUIRE_INTEGRATION=1 convention as register-login.integration.test.js.
 const test = require("node:test");

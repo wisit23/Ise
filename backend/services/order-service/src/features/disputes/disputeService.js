@@ -1221,7 +1221,7 @@ async function getDashboardMetrics({ role, roles }) {
 }
 
 
-async function acknowledge({ disputeId, userId, role, roles }) {
+async function acknowledge({ disputeId, userId }) {
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
   if (dispute.status !== "DECIDED") {

@@ -28,7 +28,8 @@ test('log-backed queue/responder works through queue, trend and chat-access cons
   const current=await model.findById(row.id);
   assert.equal(current.assigneeId,'er-safety');assert.equal(current.chatResponderId,'er-responder');
   assert.equal(current.priorityScore,81);assert.equal(current.riskReportCount,12);
-  const queue=await model.listQueue({role:'CUSTOMER_SERVICE',scope:'mine',assigneeId:'er-responder',search:row.ticketNumber});
+  // Escalated cases leave CS's 'mine' list; the responder still sees them under 'escalated'.
+  const queue=await model.listQueue({role:'CUSTOMER_SERVICE',scope:'escalated',assigneeId:'er-responder',search:row.ticketNumber});
   assert.equal(queue.items[0].id,row.id);
   assert.equal((await model.listQueue({role:'CUSTOMER_SERVICE',scope:'mine',assigneeId:'er-owner',search:row.ticketNumber})).total,0);
   const access=await request(app).get(`/internal/tickets/${row.id}/chat-access/er-responder`).query({role:'AGENT'}).set('x-internal-token',process.env.INTERNAL_SERVICE_TOKEN);

@@ -300,18 +300,18 @@ test("PATCH: seller requests pickup then hands off through the transactional shi
   const missingTracking = await request(app).patch("/order-1/status").send({ status: "in_transit", version: 5 });
   assert.equal(missingTracking.status, 400);
   assert.equal(transactions, 1);
-  const handoff = await request(app).patch("/order-1/status").send({ status: "in_transit", version: 5, company: " Carrier ", trackingNumber: " TRK " });
+  const handoff = await request(app).patch("/order-1/status").send({ status: "in_transit", version: 5, company: " Carrier ", trackingNumber: " TRK12345 " });
   assert.equal(handoff.status, 200, JSON.stringify(handoff.body));
   assert.equal(handoff.body.status, "in_transit");
   assert.equal(handoff.body.shipping.status, "in_transit");
   assert.equal(handoff.body.shipping.company, "Carrier");
-  assert.equal(handoff.body.shipping.trackingNumber, "TRK");
+  assert.equal(handoff.body.shipping.trackingNumber, "TRK12345");
   assert.deepEqual(handoff.body.shipping.addressSnapshot, { recipientName: "Buyer" });
   assert.ok(handoff.body.shippedAt);
   assert.equal(transactions, 2);
   assert.deepEqual(logs.map((log) => log.action), ["PICKUP_REQUESTED", "IN_TRANSIT"]);
   assert.equal(transitions.length, 0, "shipping uses its atomic service, not a status-only update");
-  assert.equal(chat.notifyOrderStatusChanged.mock.calls[1].arguments[0].shipping.trackingNumber, "TRK");
+  assert.equal(chat.notifyOrderStatusChanged.mock.calls[1].arguments[0].shipping.trackingNumber, "TRK12345");
 });
 
 test("PATCH: buyer confirms receipt of a delivered order", async (t) => {

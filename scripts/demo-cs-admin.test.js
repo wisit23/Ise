@@ -9,7 +9,7 @@ test("CS/Admin demo has distinct, linked case scenarios", () => {
   assert.equal(DISPUTES.length, 4);
   assert.deepEqual(TICKETS.map((ticket) => ticket.status), ["NEW", "IN_PROGRESS", "ESCALATED", "CLOSED"]);
   assert.deepEqual(DISPUTES.map((dispute) => dispute.status), ["OPEN", "OPEN", "OPEN", "DECIDED"]);
-  assert.equal(DISPUTES[2].assignedRole, "ADMIN");
+  assert.equal(DISPUTES[2].assignedRole, "TRUST_AND_SAFETY");
   assert.equal(TICKETS[1].orderId, ID.orders[1]);
   assert.equal(DISPUTES[1].orderId, ID.orders[1]);
   assert.equal(new Set([...ID.tickets, ...LEGACY.tickets]).size, ID.tickets.length + LEGACY.tickets.length);

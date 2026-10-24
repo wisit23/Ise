@@ -34,7 +34,11 @@ function forSeller(order) {
     holds: [],
     holdReason: null,
     heldBy: null,
-    payments: order.payments?.map(({ holds, ...payment }) => payment),
+    payments: order.payments?.map((payment) => {
+      const withoutHolds = { ...payment };
+      delete withoutHolds.holds;
+      return withoutHolds;
+    }),
   };
 }
 

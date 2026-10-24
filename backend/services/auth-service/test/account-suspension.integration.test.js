@@ -1,3 +1,6 @@
+// These flows sign in right after /register, so run with email verification off
+// (it is read once when the app is required).
+process.env.EMAIL_VERIFICATION = "off";
 // Real Auth/PostgreSQL sessions, real HTTP introspection, gateway and direct
 // service middleware. No validator overrides or signed identity fixture bypass.
 const test = require("node:test");
