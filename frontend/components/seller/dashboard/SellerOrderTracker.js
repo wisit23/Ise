@@ -57,8 +57,9 @@ export default function SellerOrderTracker({
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  const statusFilter =
+  const selectedStatusFilter =
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
+  const statusFilter = selectedStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
   const [search, setSearch] = useState(
     highlightOrderId && propStatusFilter !== "disputed" ? highlightOrderId.slice(0, 8) : "",

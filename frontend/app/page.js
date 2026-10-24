@@ -12,6 +12,7 @@ import FannedHeroCards from "../components/home/FannedHeroCards";
 import RecommendedProducts from "../components/home/RecommendedProducts";
 import { apiFetch } from "../lib/api";
 import { fetchActiveCategories } from "../lib/catalog";
+import useCatalogLiveRefresh from "../lib/useCatalogLiveRefresh";
 
 const NEW_ARRIVALS_COUNT = 8;
 
@@ -104,25 +105,42 @@ export default function HomePage() {
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const railRef = useRef(null);
   const entranceRef = useRef(null);
+  const requestRef = useRef(null);
   useHomeEntrance(entranceRef);
 
   /* This used to be `.catch(() => {})`, which meant a backend outage rendered
      the landing page as a hero over empty space with nothing to click and no
      hint that anything had gone wrong. */
-  const load = useCallback(() => {
-    setLoading(true);
-    setError("");
-    apiFetch(`/api/products/feed?limit=${NEW_ARRIVALS_COUNT}`)
+  const load = useCallback(({ silent = false } = {}) => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
+    return apiFetch(`/api/products/feed?limit=${NEW_ARRIVALS_COUNT}`, {
+      signal: controller.signal,
+    })
       .then((feed) => {
+        if (controller.signal.aborted) return;
         setItems(feed.items);
         setTotal(feed.total);
+        setError("");
       })
-      .catch((err) => setError(String(err?.message || err)))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!controller.signal.aborted && !silent) setError(String(err?.message || err));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
   }, []);
+
+  useCatalogLiveRefresh(() => load({ silent: true }));
 
   useEffect(() => {
     load();
+    return () => requestRef.current?.abort();
   }, [load]);
 
   useEffect(() => {

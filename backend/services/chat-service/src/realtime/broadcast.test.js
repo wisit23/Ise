@@ -49,6 +49,7 @@ test("broadcastRealtime emits to targeted rooms and globally", () => {
   broadcast.setIo({
     to: (room) => ({ emit: (event, payload) => events.push({ room, event, payload }) }),
     emit: (event, payload) => events.push({ room: "GLOBAL", event, payload }),
+    of: (namespace) => ({ emit: (event, payload) => events.push({ room: namespace, event, payload }) }),
   });
 
   broadcast.broadcastRealtime({
@@ -58,15 +59,68 @@ test("broadcastRealtime emits to targeted rooms and globally", () => {
     broadcastGlobal: true,
   });
 
-  assert.equal(events.length, 2);
+  assert.equal(events.length, 3);
   assert.deepEqual(events[0], {
     room: "GLOBAL",
     event: "product:updated",
     payload: { id: "p-1", title: "Shirt" },
   });
   assert.deepEqual(events[1], {
+    room: "/catalog", event: "catalog:changed", payload: undefined,
+  });
+  assert.deepEqual(events[2], {
     room: "user:seller-1",
     event: "product:updated",
     payload: { id: "p-1", title: "Shirt" },
   });
+});
+
+test("public catalog receives only invalidations for global product changes", (t) => {
+  const events = [];
+  t.after(() => broadcast.setIo(null));
+  broadcast.setIo({
+    emit() {},
+    to: () => ({ emit() {} }),
+    of: (namespace) => ({ emit: (...args) => events.push({ namespace, args }) }),
+  });
+  for (const event of ["product:created", "product:updated", "product:deleted"]) {
+    broadcast.broadcastRealtime({ event, data: { privateData: "seller data" }, broadcastGlobal: true });
+  }
+  broadcast.broadcastRealtime({ event: "notification:new", data: { privateData: "message" }, broadcastGlobal: true });
+  broadcast.broadcastRealtime({ event: "product:updated", rooms: ["user:seller-1"] });
+  assert.deepEqual(events, Array.from({ length: 3 }, () => ({ namespace: "/catalog", args: ["catalog:changed"] })));
+});
+
+test("guest sockets receive product invalidations while the chat namespace stays protected", async (t) => {
+  const http = require("node:http");
+  const { Server } = require("socket.io");
+  const { io: connect } = require("socket.io-client");
+  const server = http.createServer();
+  const io = new Server(server, { path: "/api/chat/socket.io" });
+  io.of("/catalog");
+  io.use((_socket, next) => next(new Error("Unauthorized")));
+  broadcast.setIo(io);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const options = { path: "/api/chat/socket.io", transports: ["websocket"], forceNew: true, reconnection: false };
+  const guest = connect(`${url}/catalog`, options);
+  const chat = connect(url, options);
+  t.after(() => {
+    guest.close();
+    chat.close();
+    io.close();
+    broadcast.setIo(null);
+  });
+  const once = (socket, event) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timed out waiting for ${event}`)), 3000);
+    if (event === "connect") socket.once("connect_error", (error) => { clearTimeout(timer); reject(error); });
+    socket.once(event, (...args) => { clearTimeout(timer); resolve(args); });
+  });
+  const [, [error]] = await Promise.all([once(guest, "connect"), once(chat, "connect_error")]);
+  assert.equal(error.message, "Unauthorized");
+  for (const event of ["product:created", "product:updated", "product:deleted"]) {
+    const received = once(guest, "catalog:changed");
+    broadcast.broadcastRealtime({ event, data: { product: { id: "p1", privateData: "never sent to guests" } }, broadcastGlobal: true });
+    assert.deepEqual(await received, []);
+  }
 });

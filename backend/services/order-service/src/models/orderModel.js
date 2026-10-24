@@ -3,7 +3,7 @@ const prisma = require("./prismaClient");
 const { money } = require("./money");
 const evidenceModel = require("../features/disputes/evidenceView");
 const { isSellerVisible } = require("../features/disputes/sellerVisibility");
-const { assertCanCancelOrder } = require("../services/orderTransitionService");
+const { assertCanCancelOrder, assertCanParticipantUpdateStatus } = require("../services/orderTransitionService");
 const { isRefundingCancellation } = require("../services/orderLifecycle");
 const VALID_STATUSES = [
   "pending_payment",
@@ -26,6 +26,7 @@ const INCLUDE = {
   shipping: true,
   dispute: { include: { evidence: { include: evidenceModel.INCLUDE }, caseLog: true } },
   payments: { include: { holds: true } },
+  logs: { where: { action: "STATUS_CHANGED" }, orderBy: { createdAt: "desc" }, take: 1, select: { detail: true } },
 };
 function disputeView(row) {
   if (!row) return null;
@@ -46,10 +47,22 @@ function disputeView(row) {
 }
 function view(row) {
   if (!row) return null;
+  const { logs, ...fields } = row;
+  let cancellationReason = null;
+  if (row.status === "cancelled" && logs?.[0]?.detail) {
+    try {
+      const detail = JSON.parse(logs[0].detail);
+      if (detail.to === "cancelled" && typeof detail.reason === "string")
+        cancellationReason = detail.reason.trim() || null;
+    } catch {
+      // Legacy audit entries may not contain structured cancellation details.
+    }
+  }
   const holds = (row.payments || []).flatMap((p) => p.holds || []);
   const active = holds.filter((h) => !h.releaseAt);
   return {
-    ...row,
+    ...fields,
+    cancellationReason,
     price: Number(row.originalAmount),
     finalPrice: Number(row.ordersAmount),
     discountAmount: Number(money(row.originalAmount).minus(row.ordersAmount)),
@@ -312,6 +325,7 @@ async function transitionStatusWithProductSync({
   expectedStatuses,
   productSync,
   actorId,
+  reason,
 }) {
   return prisma.$transaction(async (tx) => {
     const before = await tx.order.findUnique({
@@ -319,9 +333,13 @@ async function transitionStatusWithProductSync({
       include: INCLUDE,
     });
     if (!before) return { order: null, event: null };
-    const refunding = isRefundingCancellation(before, status);
+    const refunding = isRefundingCancellation(before, status) &&
+      (actorId === before.sellerId ||
+        (actorId === before.buyerId && before.status === "paid") ||
+        (actorId === "system" && before.status === "paid"));
     if (["cancelled", "payment_expired"].includes(status) && !refunding)
       assertCanCancelOrder(before);
+    if (refunding) assertCanParticipantUpdateStatus(view(before));
     const now = new Date();
     const claimed = await tx.order.updateMany({
       where: {
@@ -366,6 +384,7 @@ async function transitionStatusWithProductSync({
       data: logData(before, actorId || before.buyerId, "STATUS_CHANGED", {
         from: before.status,
         to: status,
+        ...(status === "cancelled" && reason?.trim() ? { reason: reason.trim() } : {}),
       }),
     });
     let attributionEvent = null;

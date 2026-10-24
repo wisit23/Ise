@@ -172,6 +172,7 @@ model Condition {
 // denormalized seller name so the feed doesn't need to join out per card.
 model ProductVideo {
   id          String   @id @default(uuid())
+  title       String?
   videoUrl    String
   description String?
   sellerId    String   @map("seller_id")

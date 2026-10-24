@@ -29,7 +29,7 @@ const PARTICIPANT_TRANSITIONS = {
   completed: { buyer: ["delivered"] },
   cancelled: {
     buyer: ["pending_payment", "paid"],
-    seller: ["pending_payment", "paid"],
+    seller: ["pending_payment", "paid", "confirmed", "ready_to_ship"],
   },
 };
 const USER_SETTABLE_STATUSES = Object.keys(PARTICIPANT_TRANSITIONS);
@@ -55,9 +55,13 @@ function assertParticipantTransition(order, userId, status) {
   return role;
 }
 
-/** Cancelling before seller preparation refunds an already paid order. */
+/** Cancellations before dispatch and seller-confirmation expiry can refund the buyer. */
 function isRefundingCancellation(order, status) {
-  return ["cancelled", "seller_confirmation_expired"].includes(status) && order.status === "paid";
+  return (
+    (status === "cancelled" &&
+      ["paid", "confirmed", "ready_to_ship"].includes(order.status)) ||
+    (status === "seller_confirmation_expired" && order.status === "paid")
+  );
 }
 
 /** Buyers may dispute a received order until the window after delivery closes. */

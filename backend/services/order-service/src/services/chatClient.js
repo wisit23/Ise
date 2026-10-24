@@ -387,8 +387,7 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
   // Seller accept/reject have their own two-sided messages and realtime push.
   if (status === "confirmed" && order?.status === "paid")
     return notifyOrderConfirmed({ ...order, status });
-  if (status === "cancelled" && order?.status === "paid") {
-    if (actorId !== order.buyerId) return notifyOrderRejected(order, reason);
+  if (status === "cancelled" && order?.status === "paid" && actorId === order.buyerId) {
     const amount = Number(order.ordersAmount || order.price || 0).toLocaleString("th-TH");
     await Promise.all([
       ...[order.buyerId, order.sellerId].filter(Boolean).map((userId) =>
@@ -406,6 +405,9 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
     ]);
     return;
   }
+  if (status === "cancelled" && order && actorId === order.sellerId &&
+      require("./orderLifecycle").isRefundingCancellation(order, status))
+    return notifyOrderRejected(order, reason);
   broadcastOrderRealtime({ ...order, status }, status).catch(() => {});
 
   const statusLabel = STATUS_MESSAGE_TH[status];

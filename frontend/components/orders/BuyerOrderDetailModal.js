@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Modal from "../ui/Modal";
+import OrderCancellationReason from "./OrderCancellationReason";
 import Button from "../ui/Button";
 import Alert from "../ui/Alert";
 import { ProductThumb } from "../OrderLine";
@@ -161,6 +162,8 @@ export default function BuyerOrderDetailModal({
         {loadError && <Alert tone="error">{loadError}</Alert>}
         {error && <Alert tone="error">{error}</Alert>}
         {success && <Alert tone="success">{success}</Alert>}
+
+        <OrderCancellationReason order={order} />
 
         <section
           aria-label="สินค้าและร้านค้า"
