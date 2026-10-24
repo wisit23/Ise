@@ -29,6 +29,8 @@ const order = (status, extra = {}) => ({
 const allowed = [
   ["seller", "paid", "confirmed"],
   ["seller", "paid", "cancelled"],
+  ["seller", "confirmed", "cancelled"],
+  ["seller", "ready_to_ship", "cancelled"],
   ["seller", "confirmed", "ready_to_ship"],
   ["seller", "ready_to_ship", "shipped"],
   ["buyer", "delivered", "completed"],
@@ -57,7 +59,10 @@ const rejected = [
   ["seller", "paid", "shipped", 409],
   ["seller", "confirmed", "shipped", 409],
   ["seller", "pending_payment", "confirmed", 409],
-  ["seller", "confirmed", "cancelled", 409],
+  ["seller", "shipped", "cancelled", 409],
+  ["seller", "delivered", "cancelled", 409],
+  ["buyer", "confirmed", "cancelled", 409],
+  ["buyer", "ready_to_ship", "cancelled", 409],
   // System-only statuses.
   ["seller", "shipped", "delivered", 400],
   ["buyer", "pending_payment", "paid", 400],
@@ -102,6 +107,11 @@ test("timing defaults are configurable through the environment", (t) => {
 });
 
 test("a refunded cancellation relists the sold product instead of releasing the reservation", () => {
+  for (const status of ["confirmed", "ready_to_ship"]) {
+    const sync = lifecycleService.productSyncFor(order(status), "cancelled", "X");
+    assert.equal(sync.action, "SET_STATUS");
+    assert.equal(sync.targetStatus, "available");
+  }
   assert.equal(
     lifecycleService.productSyncFor(order("paid"), "cancelled", "X").action,
     "SET_STATUS",
@@ -204,6 +214,10 @@ function controllerApp(t, current, userId) {
     req.userId = userId;
     controller.updateStatus(req, res, next);
   });
+  app.post("/:id/reject", (req, res, next) => {
+    req.userId = userId;
+    controller.rejectOrder(req, res, next);
+  });
   app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
     res.status(err.status || 500).json({ error: err.message });
@@ -254,3 +268,26 @@ test("PATCH: a held order cannot be accepted", async (t) => {
   assert.equal(res.status, 409);
   assert.equal(transitions.length, 0);
 });
+
+for (const status of ["paid", "confirmed", "ready_to_ship"]) {
+  test(`POST: seller may reject ${status} and relist with the refund lifecycle`, async (t) => {
+    const { app, transitions } = controllerApp(t, order(status, { payments: [{ paymentStatus: "paid" }] }), "seller");
+    const res = await request(app).post("/order-1/reject").send({ reason: "สินค้าชำรุดก่อนจัดส่ง" });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.status, "cancelled");
+    assert.equal(transitions[0].productSync.action, "SET_STATUS");
+    assert.equal(transitions[0].productSync.targetStatus, "available");
+    assert.deepEqual(transitions[0].expectedStatuses, [status]);
+    assert.equal(transitions[0].reason, "สินค้าชำรุดก่อนจัดส่ง");
+    assert.equal(chat.notifyOrderStatusChanged.mock.calls[0].arguments[2].reason, "สินค้าชำรุดก่อนจัดส่ง");
+  });
+}
+
+for (const extra of [{ payoutHeld: true }, { paymentSimulationStatus: "ON_HOLD" }, { status: "disputed" }]) {
+  test(`POST: seller rejection respects hold or dispute ${JSON.stringify(extra)}`, async (t) => {
+    const { app, transitions } = controllerApp(t, order("ready_to_ship", extra), "seller");
+    const res = await request(app).post("/order-1/reject").send({});
+    assert.equal(res.status, 409);
+    assert.equal(transitions.length, 0);
+  });
+}

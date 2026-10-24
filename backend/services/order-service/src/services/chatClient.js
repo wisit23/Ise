@@ -373,7 +373,7 @@ async function notifyOrderStatusChanged(order, status, { reason } = {}) {
   // Seller accept/reject have their own two-sided messages and realtime push.
   if (status === "confirmed" && order?.status === "paid")
     return notifyOrderConfirmed({ ...order, status });
-  if (status === "cancelled" && order?.status === "paid")
+  if (order && require("./orderLifecycle").isRefundingCancellation(order, status))
     return notifyOrderRejected(order, reason);
   broadcastOrderRealtime({ ...order, status }, status).catch(() => {});
 

@@ -20,12 +20,14 @@ export default function SwipeFeed() {
 
   useEffect(() => {
     let isMounted = true;
+    let targetVideoId = null;
     setUser(getStoredUser());
 
     if (typeof window !== "undefined") {
       try {
         const params = new URLSearchParams(window.location.search);
         const vid = params.get("video") || params.get("videoId");
+        targetVideoId = vid;
         if (vid) setInitialVideoId(vid);
       } catch {
         // Safe fallback
@@ -33,8 +35,22 @@ export default function SwipeFeed() {
     }
 
     apiFetch("/api/products/videos/feed?limit=20")
-      .then((data) => {
-        if (isMounted) setVideos(data.items || []);
+      .then(async (data) => {
+        let items = data.items || [];
+        if (
+          targetVideoId &&
+          !items.some((clip) => String(clip.id) === targetVideoId)
+        ) {
+          const target = await apiFetch(
+            `/api/products/videos/feed?videoId=${encodeURIComponent(targetVideoId)}&limit=1`,
+          );
+          if (!target.items?.length)
+            throw new Error(
+              "คลิปนี้ยังไม่พร้อมแสดงในหน้าปัดสินค้า หรือถูกลบแล้ว",
+            );
+          items = [target.items[0], ...items];
+        }
+        if (isMounted) setVideos(items);
       })
       .catch((err) => {
         if (isMounted) setError(err.message);

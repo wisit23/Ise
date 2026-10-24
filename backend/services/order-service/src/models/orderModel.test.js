@@ -108,20 +108,49 @@ test("a concurrent payment/version change prevents cancellation and event creati
   assert.equal(writes.length, 1);
 });
 
-test("a paid order cancelled by the seller records a simulated refund", async (t) => {
+for (const status of ["paid", "confirmed", "ready_to_ship"]) {
+test(`a ${status} order cancelled by the seller records one full simulated refund`, async (t) => {
   const { writes } = fixture(t, {
-    status: "paid",
+    status,
     payments: [{ paymentStatus: "paid" }],
   });
   const result = await model.transitionStatusWithProductSync({
     ...cancellation,
-    expectedStatuses: ["paid"],
+    expectedStatuses: [status],
     actorId: "seller",
+    reason: "สินค้าหมดสต็อก",
   });
   assert.equal(result.order.status, "cancelled");
   const refund = writes.find((w) => w.payment)?.payment;
   assert.equal(refund.paymentStatus, "refunded");
   assert.equal(refund.paymentAmount, "100");
+  assert.equal(writes.filter((w) => w.payment).length, 1);
+  const audit = writes.find((w) => w.action === "STATUS_CHANGED");
+  assert.equal(JSON.parse(audit.detail).reason, "สินค้าหมดสต็อก");
+});
+}
+
+test("cancelled order details expose the saved reason without exposing audit logs", () => {
+  const result = model.view({ status: "cancelled", originalAmount: "100", ordersAmount: "100", logs: [{ detail: JSON.stringify({ to: "cancelled", reason: "สินค้าหมดสต็อก" }) }] });
+  assert.equal(result.cancellationReason, "สินค้าหมดสต็อก");
+  assert.equal(result.logs, undefined);
+});
+
+test("legacy cancellation details without a reason remain readable", () => {
+  const result = model.view({ status: "cancelled", originalAmount: "100", ordersAmount: "100", logs: [{ detail: "legacy" }] });
+  assert.equal(result.cancellationReason, null);
+});
+
+test("a hold appearing before the transaction blocks seller refund and relisting", async (t) => {
+  const { writes } = fixture(t, { status: "ready_to_ship", payments: [{ paymentStatus: "paid", holds: [{ releaseAt: null }] }] });
+  await assert.rejects(model.transitionStatusWithProductSync({ ...cancellation, actorId: "seller", expectedStatuses: ["ready_to_ship"] }), (err) => err.status === 409);
+  assert.equal(writes.length, 0);
+});
+
+test("a concurrent shipment or duplicate rejection creates no refund", async (t) => {
+  const { writes } = fixture(t, { status: "ready_to_ship", claimCount: 0 });
+  await assert.rejects(model.transitionStatusWithProductSync({ ...cancellation, actorId: "seller", expectedStatuses: ["ready_to_ship"] }), (err) => err.status === 409);
+  assert.equal(writes.some((w) => w.payment || w.job), false);
 });
 
 test("delivered and completed transitions stamp their time and need no product sync", async (t) => {

@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import HomePage from "./page";
 
+jest.mock("../lib/useCatalogLiveRefresh", () => jest.fn());
+
 // Recommendation loading/error behavior has its own component suite.
 jest.mock(
   "../components/home/RecommendedProducts",

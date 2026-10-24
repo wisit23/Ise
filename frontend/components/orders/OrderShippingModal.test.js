@@ -3,6 +3,12 @@ import {apiFetch} from "../../lib/api";import {getStoredUser} from "../../lib/au
 jest.mock("../../lib/api",()=>({apiFetch:jest.fn()}));jest.mock("../../lib/auth",()=>({getAccessToken:()=>"token",getStoredUser:jest.fn()}));
 const order={id:"o1",sellerId:"seller",status:"ready_to_ship",version:7,price:100,shipping:{addressSnapshot:{recipientName:"Buyer",phone:"0812345678",addressLine:"Test Road",postalCode:"10110"}}};
 beforeEach(()=>{jest.clearAllMocks();apiFetch.mockImplementation((url,options)=>Promise.resolve(options?.method?{...order,status:"shipped"}:order));});
+it("shows the saved cancellation reason in seller order details", async () => {
+  getStoredUser.mockReturnValue({ id: "seller", role: "SELLER" });
+  apiFetch.mockResolvedValue({ ...order, status: "cancelled", cancellationReason: "สินค้าหมดสต็อก" });
+  render(<OrderShippingModal orderId="o1" initialOrder={order} isOpen onClose={() => {}} />);
+  expect(await screen.findByRole("region", { name: "เหตุผลในการยกเลิกคำสั่งซื้อ" })).toHaveTextContent("สินค้าหมดสต็อก");
+});
 it("rejects letters-only tracking and permits numeric or alphanumeric tracking", async () => {
   getStoredUser.mockReturnValue({ id: "seller", role: "SELLER" });
   render(<OrderShippingModal orderId="o1" initialOrder={order} isOpen onClose={() => {}} />);
@@ -121,14 +127,15 @@ it("seller must confirm and prepare a paid order before shipping controls appear
   );
 });
 
-it("seller can reject confirmed order directly from shipping modal", async () => {
+it.each(["confirmed", "ready_to_ship"])("seller can reject %s order directly from shipping modal", async (status) => {
+  const currentOrder = { ...order, status, price: 150, finalPrice: 100 };
   getStoredUser.mockReturnValue({ id: "seller", role: "SELLER" });
   const cancelledOrder = { ...order, status: "cancelled" };
   apiFetch.mockImplementation((url, options) => {
     if (options?.method === "POST" && url === "/api/orders/o1/reject") {
       return Promise.resolve(cancelledOrder);
     }
-    return Promise.resolve(order);
+    return Promise.resolve(currentOrder);
   });
   const onRejected = jest.fn();
   const onOrderUpdated = jest.fn();
@@ -136,7 +143,7 @@ it("seller can reject confirmed order directly from shipping modal", async () =>
   render(
     <OrderShippingModal
       orderId="o1"
-      initialOrder={order}
+      initialOrder={currentOrder}
       isOpen
       onClose={() => {}}
       onRejected={onRejected}
@@ -148,6 +155,8 @@ it("seller can reject confirmed order directly from shipping modal", async () =>
   fireEvent.click(rejectBtn);
 
   expect(screen.getByText("คำเตือนเกี่ยวกับการปฏิเสธออเดอร์")).toBeInTheDocument();
+  expect(screen.getByText(/เมื่อปฏิเสธคำสั่งซื้อ/)).toHaveTextContent("฿100");
+  expect(screen.getByText(/เมื่อปฏิเสธคำสั่งซื้อ/)).not.toHaveTextContent("฿150");
   fireEvent.click(screen.getByText("สินค้าชำรุดก่อนจัดส่ง"));
 
   const confirmReject = screen.getByRole("button", { name: "ยืนยันการปฏิเสธออเดอร์" });

@@ -151,7 +151,7 @@ async function updateStatus(req, res, next) {
     }
 
     const { status } = req.body;
-    if (status === "cancelled" && !orderLifecycle.isRefundingCancellation(order, status))
+    if (status === "cancelled" && !(order.sellerId === req.userId && orderLifecycle.isRefundingCancellation(order, status)))
       orderTransitionService.assertCanCancelOrder(order);
     orderLifecycle.assertParticipantTransition(order, req.userId, status);
     // TSR-02: Prevent participant updating status while order has open dispute or hold

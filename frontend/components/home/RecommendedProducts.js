@@ -7,6 +7,7 @@ import ErrorState from "../ui/ErrorState";
 import Skeleton from "../ui/Skeleton";
 import { apiFetch } from "../../lib/api";
 import { createFeedSeed } from "../../lib/recommendationFeed";
+import useCatalogLiveRefresh from "../../lib/useCatalogLiveRefresh";
 
 const FALLBACK_COPY = {
   guest:
@@ -27,28 +28,35 @@ export default function RecommendedProducts() {
   const requestRef = useRef(null);
   const seedRef = useRef(null);
 
-  const load = useCallback(() => {
+  const load = useCallback(({ silent = false } = {}) => {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
-    setData(null);
-    setLoading(true);
-    setError("");
+    if (!silent) {
+      setData(null);
+      setLoading(true);
+      setError("");
+    }
     seedRef.current ||= createFeedSeed();
-    apiFetch(`/api/products/recommendations?limit=8&seed=${seedRef.current}`, {
+    return apiFetch(`/api/products/recommendations?limit=8&seed=${seedRef.current}`, {
       signal: controller.signal,
     })
       .then((result) => {
-        if (!controller.signal.aborted) setData(result);
+        if (!controller.signal.aborted) {
+          setData(result);
+          setError("");
+        }
       })
       .catch((err) => {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted && !silent)
           setError(err.message || "โหลดสินค้าแนะนำไม่สำเร็จ");
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
   }, []);
+
+  useCatalogLiveRefresh(() => load({ silent: true }));
 
   useEffect(() => {
     load();

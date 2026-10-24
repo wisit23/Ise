@@ -22,7 +22,6 @@ import { SELLER_NEXT_STEP } from "../../../lib/orderLifecycle";
 const ALL_STATUSES = [
   { value: "", label: "ทั้งหมด" },
   { value: "pending", label: "รอชำระเงิน" },
-  { value: "pending_payment", label: "รอชำระเงิน (PP)" },
   { value: "paid", label: "รอยืนยันคำสั่งซื้อ" },
   { value: "confirmed", label: "ต้องเตรียมสินค้า" },
   { value: "ready_to_ship", label: "รอขนส่งมารับ" },
@@ -55,8 +54,9 @@ export default function SellerOrderTracker({
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  const statusFilter =
+  const selectedStatusFilter =
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
+  const statusFilter = selectedStatusFilter === "pending_payment" ? "pending" : selectedStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
   const [search, setSearch] = useState(
     highlightOrderId && propStatusFilter !== "disputed" ? highlightOrderId.slice(0, 8) : "",
