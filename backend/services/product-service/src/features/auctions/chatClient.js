@@ -198,8 +198,8 @@ async function notifyItemCancelled({
           roundTitle,
           reason: cleanReason,
           role: "SELLER",
-          actionUrl: auctionItemUrl(itemId),
-          actionLabel: "ดูรายละเอียดรายการ",
+          actionUrl: "/seller/auctions",
+          actionLabel: "จัดการสินค้าประมูล",
         },
       }),
     );

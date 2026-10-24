@@ -532,3 +532,30 @@
 - Consequence:
   - ไม่มี schema หรือ migration ใหม่ และ pagination contract เดิมยังคงอยู่
   - Verification: Product Auction controller/service 130/130 และ Frontend AuctionScheduleSection 60/60 ผ่านใน Docker
+
+## MKT-DEC-033 — Payment-aware auction result labels in round history
+
+- Date: 2026-10-24
+- Status: Accepted and implemented
+- Decision:
+  1. รายการที่กำลังประมูลและมี Bid แสดง `ผู้เสนอราคาสูงสุดปัจจุบัน`
+  2. รายการที่ปิดประมูลแล้วแต่ยังรอชำระเงินแสดง `ผู้ได้รับสิทธิ์` จาก `winningBidId`
+  3. เมื่อชำระเงินสำเร็จและ Product เป็น `sold` จึงแสดง `ผู้ชนะ`
+  4. เมื่อผู้มีสิทธิ์หมดทุกคนและระบบล้าง `winningBidId` แต่ยังมีประวัติ Bid ให้แสดง `ไม่มีผู้ชนะ` พร้อมราคาสูงสุดที่เคยเสนอ
+  5. รายการที่ไม่มี Bid แสดง `ไม่มีผู้เสนอราคา`
+- Consequence:
+  - ไม่เปลี่ยน TC_AUC10: ระบบยังเลื่อนสิทธิ์ สร้าง Order ใหม่ และให้เวลา 24 ชั่วโมงแก่ผู้ประมูลคนถัดไปตามเดิม
+  - ไม่เปลี่ยน notification, audit, database schema หรือ migration และไม่เปิดเผยชื่อผู้เสนอราคาที่ backend ไม่ได้ส่งมา
+  - Verification รอบปัจจุบัน: focused Frontend AuctionScheduleSection 61/61 ผ่านใน Docker; warning `act(...)` เดิมยังปรากฏแต่ suite ผ่าน
+
+## MKT-DEC-034 — Auction chat actions use product detail and seller management
+
+- Date: 2026-10-24
+- Status: Accepted and implemented
+- Decision:
+  1. Auction Chat product header always opens `/products/:productId`; the AuctionItem detail route is not used as the product-detail shortcut.
+  2. A seller-facing `auction.item_cancelled` system message opens `/seller/auctions` so the seller can choose a new auction round or relist normally.
+  3. The frontend normalizes the seller cancellation action so already-stored messages with the former AuctionItem URL also use the new destination.
+- Consequence:
+  - No database/schema change and no change to bidding, winner rollover, payment, Order, audit, or notification-recipient contracts.
+  - Verification: Frontend Chat 14/14 and Product Auction 130/130 passed in Docker.

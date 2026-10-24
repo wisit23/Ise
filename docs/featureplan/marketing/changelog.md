@@ -1130,3 +1130,20 @@
 - แยกรายการที่แสดงเป็น `รอบที่ยังจัดการได้` และ `ประวัติรอบประมูล`
 - ไม่มี schema/migration ใหม่
 - Verification: Product Auction controller/service 130/130 และ Frontend AuctionScheduleSection 60/60 ผ่านใน Docker
+
+## 2026-10-24 — Auction history payment-aware result labels (MKT-DEC-033)
+
+- เปลี่ยนรายการกำลังประมูลให้ระบุ `ผู้เสนอราคาสูงสุดปัจจุบัน`
+- เปลี่ยนรายการปิดประมูลที่ยังรอจ่ายให้ระบุ `ผู้ได้รับสิทธิ์` จาก `winningBidId`
+- ใช้ `ผู้ชนะ` หลัง Product เปลี่ยนเป็น `sold` จากการชำระเงินสำเร็จเท่านั้น
+- ถ้ามี Bid แต่ผู้มีสิทธิ์หมดและ `winningBidId` ถูกล้าง แสดง `ไม่มีผู้ชนะ` โดยยังแสดงราคาสูงสุดและจำนวน Bid เดิม
+- ไม่แก้ Backend rollover, Order, เวลา 24 ชั่วโมง, notification, audit หรือ schema
+- Verification: focused Frontend AuctionScheduleSection 61/61 ผ่านใน Docker
+
+## 2026-10-24 — Auction chat navigation (MKT-DEC-034)
+
+- ปุ่มส่วนหัวสินค้าใน Auction Chat เปิดหน้ารายละเอียดสินค้า `/products/:productId` และใช้ข้อความ `ดูรายละเอียดสินค้า`
+- ปุ่มของข้อความยกเลิกรายการที่ส่งถึงผู้ขายเปิด `/seller/auctions` และใช้ข้อความ `จัดการสินค้าประมูล`
+- หน้าแชทแปลง action ของข้อความยกเลิกเดิมที่เก็บในฐานข้อมูลให้ใช้ปลายทางใหม่ด้วย
+- ไม่เปลี่ยน Auction rollover, Order, payment window, notification recipients หรือ schema
+- Verification: Frontend Chat focused tests 14/14 และ Product Auction tests 130/130 ผ่านใน Docker

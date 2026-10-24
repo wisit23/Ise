@@ -684,9 +684,10 @@ export default function SellerAuctionsPage() {
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {viewBidsAuction.bids.map((b, idx) => {
                         const isHighest = idx === 0;
-                        const isWinning =
-                          viewBidsAuction.winningBidId === b.id ||
-                          (viewBidsAuction.status === "closed" && isHighest);
+                        const isWinning = Boolean(
+                          viewBidsAuction.winningBidId &&
+                            viewBidsAuction.winningBidId === b.id,
+                        );
                         return (
                           <tr key={b.id || idx} className={isHighest ? "bg-emerald-50/50" : "hover:bg-gray-50"}>
                             <td className="px-3 py-2.5 text-gray-500 font-medium">#{idx + 1}</td>
@@ -706,6 +707,10 @@ export default function SellerAuctionsPage() {
                               {isWinning ? (
                                 <span className="rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
                                   🏆 ชนะการประมูล
+                                </span>
+                              ) : isHighest && viewBidsAuction.status === "closed" ? (
+                                <span className="rounded-full bg-rose-100 border border-rose-300 px-2 py-0.5 text-[11px] font-bold text-rose-700">
+                                  เสียสิทธิ์
                                 </span>
                               ) : isHighest ? (
                                 <span className="rounded-full bg-sky-100 border border-sky-300 px-2 py-0.5 text-[11px] font-bold text-sky-800">

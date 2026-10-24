@@ -1008,12 +1008,15 @@ test("TC_AUC10 advances an expired winner to the next distinct bidder", async (t
     bids,
   };
   const updates = [];
+  let productStatusCall = null;
   t.mock.method(repository, "findById", async () => current);
   t.mock.method(repository, "updateStatus", async (_id, data) => {
     updates.push(data);
     return { ...current, ...data };
   });
-  t.mock.method(repository, "setProductStatus", async () => {});
+  t.mock.method(repository, "setProductStatus", async (id, status, _tx, extraData) => {
+    productStatusCall = { id, status, extraData };
+  });
 
   const result = await service.advanceWinnerAfterPaymentTimeout({
     auctionId: "auction-1",
@@ -1031,6 +1034,13 @@ test("TC_AUC10 advances an expired winner to the next distinct bidder", async (t
     winningOrderId: "order-bid-b-90",
   });
   assert.equal(result.orderId, "order-bid-b-90");
+  // The promoted bidder's amount (90), not the original forfeited bid (100),
+  // must become the Product's sale price.
+  assert.deepEqual(productStatusCall, {
+    id: "product-1",
+    status: "reserved",
+    extraData: { price: 90 },
+  });
 });
 
 test("TC_AUC10 releases the product when every distinct bidder has timed out", async (t) => {
@@ -3746,6 +3756,66 @@ test("closeAuction transitions product to auction_action_required when there are
   assert.equal(updatedProductStatus, "auction_action_required");
 });
 
+test("closeAuction updates Product.price to the winning bid amount, not the listing's starting price", async (t) => {
+  let productStatusCall = null;
+  t.mock.method(repository, "findById", async () => ({
+    id: "item-win",
+    status: "open",
+    productId: "prod-win",
+    sellerId: "seller-1",
+    round: { id: "round-1", cancelledAt: null },
+    product: { title: "Item Win", photos: [] },
+  }));
+  t.mock.method(repository, "highestBid", async () => ({
+    id: "bid-winner",
+    amount: 1800,
+    bidderId: "buyer-1",
+  }));
+  t.mock.method(repository, "setProductStatus", async (id, status, _tx, extraData) => {
+    productStatusCall = { id, status, extraData };
+  });
+  t.mock.method(orderClient, "createOrderFromAuction", async () => ({
+    id: "order-win",
+    paymentDeadlineAt: new Date(),
+  }));
+  t.mock.method(repository, "transaction", async (fn) => {
+    const tx = {
+      auctionItem: {
+        findUnique: async () => ({
+          id: "item-win",
+          status: "open",
+          productId: "prod-win",
+          sellerId: "seller-1",
+          round: { id: "round-1", cancelledAt: null },
+          product: { photos: [] },
+        }),
+        update: async ({ data }) => ({
+          id: "item-win",
+          status: data.status,
+          winningBidId: data.winningBidId,
+          winningOrderId: data.winningOrderId,
+          bids: [],
+        }),
+      },
+      marketingAuditLog: {
+        create: async () => ({ id: "audit-1" }),
+        createMany: async () => ({ count: 1 }),
+        findUnique: async () => ({ id: "audit-1" }),
+      },
+    };
+    return fn(withAuditState(tx));
+  });
+
+  const result = await service.closeAuction("item-win");
+
+  assert.equal(result.status, "closed");
+  assert.deepEqual(productStatusCall, {
+    id: "prod-win",
+    status: "reserved",
+    extraData: { price: 1800 },
+  });
+});
+
 // ==========================================
 // Single-Item Cancellation (MKT-DEC-026)
 // ==========================================
@@ -3958,6 +4028,8 @@ test("chatClient.notifyItemCancelled notifies only seller before open, and notif
     calls[1].body.idempotencyKey,
     "auction.item_cancelled:item-pre:seller-A",
   );
+  assert.equal(calls[1].body.payload.actionUrl, "/seller/auctions");
+  assert.equal(calls[1].body.payload.actionLabel, "จัดการสินค้าประมูล");
   assert.ok(calls[2].url.endsWith("/internal/notifications"));
   assert.equal(calls[2].body.userId, "seller-A");
 

@@ -241,7 +241,9 @@ async function closeAuction(auction, now = new Date()) {
         paymentDeadlineAt: new Date(now.getTime() + AUCTION_PAYMENT_TTL_MS),
       });
       winningOrderId = order.id;
-      await auctionRepository.setProductStatus(current.productId, "reserved", tx);
+      await auctionRepository.setProductStatus(current.productId, "reserved", tx, {
+        price: winningBid.amount,
+      });
       winnerNotification = {
         auction: {
           id: current.id,
@@ -465,7 +467,9 @@ async function advanceWinnerAfterPaymentTimeout({
       { winningBidId: nextBid.id, winningOrderId: nextOrder.id },
       tx,
     );
-    await auctionRepository.setProductStatus(current.productId, "reserved", tx);
+    await auctionRepository.setProductStatus(current.productId, "reserved", tx, {
+      price: nextBid.amount,
+    });
     await recordMarketingAudit(
       {
         actorId: "SYSTEM",
