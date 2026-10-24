@@ -3,7 +3,7 @@ const conversationService = require("./conversationService");
 
 async function create(req, res, next) {
   try {
-    const { contextType, productId } = req.body;
+    const { contextType, productId, orderId } = req.body;
     // PRODUCT is the only client-createable context this round (CHAT-002) —
     // ORDER/SUPPORT/DIRECT rooms are opened by other services through the
     // Internal API (CHAT-005), not directly by a browser.
@@ -15,6 +15,7 @@ async function create(req, res, next) {
     const conversation =
       await conversationService.createOrOpenProductConversation({
         productId,
+        orderId,
         buyerId: req.userId,
       });
     res.status(201).json(conversation);

@@ -4,7 +4,8 @@ const PAID_ORDER_STATUSES = Object.freeze([
   "paid",
   "confirmed",
   "ready_to_ship",
-  "shipped",
+  "pickup_in_progress",
+  "in_transit",
   "delivered",
   "completed",
 ]);

@@ -82,6 +82,13 @@ test("only case participants may rate a completed case and see their own respons
   await csat.submit("case", "buyer", { rating: 5, comment: "great" });
   assert.equal((await csat.read("case", "buyer")).response.rating, 5);
   assert.equal((await csat.read("case", "seller")).response, null);
+  item.complete = false;
+  const reopened = await csat.read("case", "buyer");
+  assert.equal(reopened.complete, false);
+  assert.equal(reopened.eligible, false);
+  assert.equal(reopened.response.rating, 5);
+  assert.equal(reopened.response.comment, "great");
+  await assert.rejects(csat.submit("case", "buyer", { rating: 1 }), { status: 409 });
   item.deleted = true;
   await assert.rejects(csat.read("case", "buyer"), { status: 404 });
 });

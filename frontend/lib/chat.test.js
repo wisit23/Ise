@@ -1,4 +1,15 @@
-import { participantRoleLabel, otherParticipant } from "./chat";
+import { participantRoleLabel, otherParticipant, contactSeller } from "./chat";
+import { apiFetch } from "./api";
+
+jest.mock("./api", () => ({ apiFetch: jest.fn() }));
+
+test("contacting an available listing keeps the existing request shape", () => {
+  contactSeller("product", "token");
+  expect(apiFetch).toHaveBeenCalledWith("/api/chat/conversations", {
+    method: "POST", token: "token",
+    body: { contextType: "PRODUCT", productId: "product" },
+  });
+});
 
 describe("participantRoleLabel", () => {
   it("labels every role the Participant schema documents", () => {

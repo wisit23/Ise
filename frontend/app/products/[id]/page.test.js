@@ -759,7 +759,7 @@ test("shows 'หมด' and shipped banner when seller product order is shipped"
         items: [{
           id: "order-1",
           productId: "p",
-          status: "shipped",
+          status: "in_transit",
         }],
       });
     }

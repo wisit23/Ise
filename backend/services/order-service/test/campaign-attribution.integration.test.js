@@ -154,12 +154,12 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
           campaignCode: "ATTR_PROMO_500",
           discountAmount: 500,
           finalPrice: 2000,
-          status: "shipped",
+          status: "in_transit",
         },
       });
 
       assert.ok(campaignOrder.id);
-      assert.equal(campaignOrder.status, "shipped");
+      assert.equal(campaignOrder.status, "in_transit");
 
       // Atomically transition status to "completed"
       const transitionResult = await orderModel.transitionStatusWithProductSync(
@@ -167,7 +167,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
           id: campaignOrder.id,
           status: "completed",
           expectedVersion: campaignOrder.version,
-          expectedStatuses: ["shipped"],
+          expectedStatuses: ["in_transit"],
           productSync: {
             dedupeKey: `sync:${campaignOrder.id}:1`,
             action: "SET_STATUS",
@@ -217,7 +217,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
           campaignId: null,
           discountAmount: 0,
           finalPrice: 1000,
-          status: "shipped",
+          status: "in_transit",
         },
       });
 
@@ -226,7 +226,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
           id: nonCampOrder.id,
           status: "completed",
           expectedVersion: nonCampOrder.version,
-          expectedStatuses: ["shipped"],
+          expectedStatuses: ["in_transit"],
           productSync: {
             dedupeKey: `sync:${nonCampOrder.id}:1`,
             action: "SET_STATUS",
@@ -317,7 +317,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
           campaignCode: "ATTR_PROMO_500",
           discountAmount: 500,
           finalPrice: 2500,
-          status: "shipped",
+          status: "in_transit",
         },
       });
 
@@ -326,7 +326,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
           id: order2.id,
           status: "completed",
           expectedVersion: order2.version,
-          expectedStatuses: ["shipped"],
+          expectedStatuses: ["in_transit"],
           productSync: {
             dedupeKey: `sync:${order2.id}:1`,
             action: "SET_STATUS",
@@ -433,7 +433,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
           campaignCode: "ATTR_PROMO_500",
           discountAmount: 100,
           finalPrice: 900,
-          status: "shipped",
+          status: "in_transit",
         },
       });
 
@@ -442,7 +442,7 @@ test("Order Service Campaign Attribution Outbox Integration Suite (UR-09, UR-12,
           id: order3.id,
           status: "completed",
           expectedVersion: order3.version,
-          expectedStatuses: ["shipped"],
+          expectedStatuses: ["in_transit"],
           productSync: {
             dedupeKey: `sync:${order3.id}:1`,
             action: "SET_STATUS",

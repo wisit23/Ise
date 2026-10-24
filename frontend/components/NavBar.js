@@ -91,13 +91,14 @@ const WORK_MENU_ITEMS = [
 ];
 
 const CUSTOMER_ACCOUNT_MENU_ITEMS = [
+  { href: "/wishlist", label: "รายการโปรดของฉัน", icon: "favorite" },
   {
     href: "/sell",
     label: "ลงขายสินค้า",
     icon: "add_circle",
     accent: true,
   },
-  { href: "/orders", label: "คำสั่งซื้อของฉัน", icon: "receipt_long" },
+  { href: "/profile?tab=orders", label: "คำสั่งซื้อของฉัน", icon: "receipt_long" },
   {
     href: "/campaigns?tab=mine",
     label: "คูปองส่วนลดของฉัน",

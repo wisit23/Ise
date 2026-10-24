@@ -4,11 +4,19 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const DISPUTE_WINDOW_DAYS = 14;
 export const AUTO_COMPLETE_DAYS = 14;
 
+/** Seller confirmation starts preparation, so buyer cancellation stops there. */
+export function canBuyerCancel(order) {
+  return Boolean(order) &&
+    ["pending_payment", "paid"].includes(order.status) &&
+    !order.dispute && !order.payoutHeld && order.paymentSimulationStatus !== "ON_HOLD";
+}
+
 /** Seller action that moves an order to its next step, if any. */
 export const SELLER_NEXT_STEP = {
   paid: { status: "confirmed", label: "ยอมรับคำสั่งซื้อ" },
   confirmed: { status: "ready_to_ship", label: "เตรียมสินค้าเรียบร้อย" },
-  ready_to_ship: { status: "shipped", label: "ส่งสินค้าแล้ว" },
+  ready_to_ship: { status: "pickup_in_progress", label: "เรียกขนส่ง" },
+  pickup_in_progress: { status: "in_transit", label: "ส่งมอบให้ขนส่งแล้ว" },
 };
 
 function receivedAt(order) {

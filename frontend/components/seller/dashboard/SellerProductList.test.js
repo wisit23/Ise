@@ -155,7 +155,7 @@ test("displays 'ขายแล้ว' and 'หมด' for a sold product", () =
   expect(screen.getByText("หมด")).toBeInTheDocument();
 });
 
-test("displays 'หมด' for a product that has been shipped", () => {
+test("displays 'หมด' for a product handed to the carrier", () => {
   render(
     <SellerProductList
       products={[{
@@ -167,10 +167,22 @@ test("displays 'หมด' for a product that has been shipped", () => {
       orders={[{
         id: "order-1",
         productId: "prod-shipped",
-        status: "shipped",
+        status: "in_transit",
       }]}
     />,
   );
   expect(screen.getAllByText("ขายแล้ว").length).toBeGreaterThan(0);
   expect(screen.getByText("หมด")).toBeInTheDocument();
+});
+
+test.each([
+  ["ready_to_ship", "เรียกขนส่ง"],
+  ["pickup_in_progress", "ส่งมอบให้ขนส่งแล้ว"],
+])("reserved listing offers the %s shipping step", (status, label) => {
+  render(<SellerProductList
+    products={[{ ...removedProduct, id: "p1", status: "reserved", moderationReason: null }]}
+    orders={[{ id: "o1", productId: "p1", status }]}
+  />);
+  expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "ลบ" })).toBeDisabled();
 });

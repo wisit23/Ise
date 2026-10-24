@@ -6,12 +6,14 @@ const { isSellerVisible } = require("../features/disputes/sellerVisibility");
 const { assertCanCancelOrder } = require("../services/orderTransitionService");
 const { isRefundingCancellation } = require("../services/orderLifecycle");
 const VALID_STATUSES = [
-  "pending",
   "pending_payment",
+  "payment_expired",
+  "seller_confirmation_expired",
   "paid",
   "confirmed",
   "ready_to_ship",
-  "shipped",
+  "pickup_in_progress",
+  "in_transit",
   "delivered",
   "completed",
   "cancelled",
@@ -116,9 +118,7 @@ async function list(where, { skip, take } = {}) {
   return { items: items.map(view), total };
 }
 function statusFilter(status) {
-  return status === "pending_payment"
-    ? { in: ["pending", "pending_payment"] }
-    : status;
+  return status;
 }
 function listByBuyer(buyerId, options = {}) {
   const { status } = options;
@@ -157,11 +157,11 @@ async function findAuctionOrdersDueForSettlement(now = new Date(), take = 50) {
       orderType: "AUCTION",
       OR: [
         {
-          status: { in: ["pending", "pending_payment"] },
+          status: "pending_payment",
           paymentDeadlineAt: { lte: now },
         },
         {
-          status: "cancelled",
+          status: { in: ["payment_expired", "cancelled"] },
           paymentDeadlineAt: { not: null },
         },
       ],
@@ -178,7 +178,7 @@ async function claimExpiredAuctionOrder({ id, expectedVersion, now = new Date() 
     const before = await tx.order.findUnique({ where: { id }, include: INCLUDE });
     if (!before) return null;
     if (
-      !["pending", "pending_payment"].includes(before.status) ||
+      before.status !== "pending_payment" ||
       before.orderType !== "AUCTION" ||
       !before.paymentDeadlineAt ||
       before.paymentDeadlineAt > now
@@ -189,10 +189,10 @@ async function claimExpiredAuctionOrder({ id, expectedVersion, now = new Date() 
       where: {
         id,
         version: expectedVersion ?? before.version,
-        status: { in: ["pending", "pending_payment"] },
+        status: "pending_payment",
         paymentDeadlineAt: { lte: now },
       },
-      data: { status: "cancelled", version: { increment: 1 } },
+      data: { status: "payment_expired", version: { increment: 1 } },
     });
     if (claimed.count !== 1) return null;
     await tx.orderLog.create({
@@ -214,7 +214,10 @@ async function finalizeExpiredAuctionOrder({
   return prisma.$transaction(async (tx) => {
     const before = await tx.order.findUnique({ where: { id }, include: INCLUDE });
     if (!before) return null;
-    if (before.status !== "cancelled" || before.orderType !== "AUCTION") {
+    if (
+      !["payment_expired", "cancelled"].includes(before.status) ||
+      before.orderType !== "AUCTION"
+    ) {
       return null;
     }
     if (!before.paymentDeadlineAt) return view(before);
@@ -223,7 +226,7 @@ async function finalizeExpiredAuctionOrder({
       where: {
         id,
         version: expectedVersion ?? before.version,
-        status: "cancelled",
+        status: { in: ["payment_expired", "cancelled"] },
         orderType: "AUCTION",
         paymentDeadlineAt: { not: null },
       },
@@ -294,7 +297,7 @@ async function updateCampaign(id, { campaignId, finalPrice }) {
   );
 }
 const STATUS_TIMESTAMP = {
-  shipped: "shippedAt",
+  in_transit: "shippedAt",
   delivered: "deliveredAt",
   completed: "completedAt",
 };
@@ -317,7 +320,8 @@ async function transitionStatusWithProductSync({
     });
     if (!before) return { order: null, event: null };
     const refunding = isRefundingCancellation(before, status);
-    if (status === "cancelled" && !refunding) assertCanCancelOrder(before);
+    if (["cancelled", "payment_expired"].includes(status) && !refunding)
+      assertCanCancelOrder(before);
     const now = new Date();
     const claimed = await tx.order.updateMany({
       where: {
@@ -353,10 +357,10 @@ async function transitionStatusWithProductSync({
           productSync,
         )
       : null;
-    if (status === "cancelled" && before.basketId)
+    if (["cancelled", "payment_expired", "seller_confirmation_expired"].includes(status) && before.basketId)
       await tx.basket.update({
         where: { id: before.basketId },
-        data: { status: "cancelled" },
+        data: { status: status === "cancelled" ? "cancelled" : "expired" },
       });
     await tx.orderLog.create({
       data: logData(before, actorId || before.buyerId, "STATUS_CHANGED", {
@@ -414,7 +418,7 @@ async function transitionStatusWithProductSync({
 async function cleanExpiredOrders(productClient) {
   const expired = await prisma.order.findMany({
     where: {
-      status: { in: ["pending", "pending_payment"] },
+      status: "pending_payment",
       basket: { unlockAt: { lte: new Date() } },
     },
     include: INCLUDE,
@@ -424,9 +428,10 @@ async function cleanExpiredOrders(productClient) {
     const order = view(row);
     const { event } = await transitionStatusWithProductSync({
       id: order.id,
-      status: "cancelled",
+      status: "payment_expired",
       expectedVersion: order.version,
-      expectedStatuses: ["pending", "pending_payment"],
+      expectedStatuses: ["pending_payment"],
+      actorId: "system",
       productSync: {
         action: "RELEASE_RESERVATION",
         productId: order.productId,

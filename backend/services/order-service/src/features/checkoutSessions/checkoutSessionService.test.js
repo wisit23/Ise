@@ -237,6 +237,47 @@ test("multi-seller checkout sums baht exactly; vouchers remain per order; auctio
   assert.equal(result.paidAt, null);
   assert.equal(result.cancelAt.getTime(), NOW.getTime() + PAYMENT_TTL_MS);
 });
+test("pending_payment orders pay without renaming checkout or shipping states", async () => {
+  const f = fixture();
+  const checkout = await f.create();
+  assert.equal(checkout.status, "pending");
+  assert.ok(f.state.shipping.every((shipping) => shipping.status === "pending"));
+
+  const input = { buyerId: "b1", sessionId: checkout.id, now: NOW };
+  const paid = await f.service.confirm(input);
+  assert.equal(paid.status, "paid");
+  assert.ok(f.state.orders.every((order) => order.status === "paid"));
+  assert.ok(f.state.shipping.every((shipping) => shipping.status === "pending"));
+  assert.equal(f.state.payments.length, 2);
+  assert.ok(f.state.payments.every((payment) => payment.paymentStatus === "paid"));
+  await f.service.confirm(input);
+  assert.equal(f.state.payments.length, 2);
+});
+
+test("checkout cancellation still cancels every unpaid order", async () => {
+  const f = fixture();
+  const checkout = await f.create();
+  await f.service.cancel({ buyerId: "b1", sessionId: checkout.id, now: NOW });
+  assert.equal(f.state.checkout.status, "cancelled");
+  assert.ok(f.state.orders.every((order) => order.status === "cancelled"));
+  assert.equal(f.state.payments.length, 0);
+});
+
+test("payment rolls back with the rest of the checkout on a concurrent order change", async () => {
+  const f = fixture();
+  const checkout = await f.create();
+  const update = f.db.order.updateMany;
+  f.db.order.updateMany = async (args) => args.where.id === "o2" ? { count: 0 } : update(args);
+  await assert.rejects(
+    f.service.confirm({ buyerId: "b1", sessionId: checkout.id, now: NOW }),
+    /order changed/,
+  );
+  assert.equal(f.state.checkout.status, "pending");
+  assert.equal(f.state.orders[0].status, "pending_payment");
+  assert.equal(f.state.orders[1].status, "pending_payment");
+  assert.equal(f.state.payments.length, 0);
+});
+
 test("repeat creation returns the same checkout", async () => {
   const f = fixture();
   await f.create();
@@ -305,12 +346,16 @@ test("foreign buyer cannot read or confirm checkout", async () => {
     (err) => err.status === 403,
   );
 });
-test("expiry cancels orders and durably requests release without marking payment paid", async () => {
+test("expiry sets payment_expired and durably requests release without marking payment paid", async () => {
   const f = fixture();
   await f.create();
   await f.service.expireDue({ now: new Date(NOW.getTime() + PAYMENT_TTL_MS) });
   assert.equal(f.state.checkout.status, "expired");
-  assert.ok(f.state.orders.every((o) => o.status === "cancelled"));
+  assert.ok(f.state.orders.every((o) => o.status === "payment_expired"));
+  assert.equal(f.state.orders[0].basket.status, "expired");
+  await assert.rejects(f.service.confirm({ buyerId: "b1", sessionId: "c1", now: NOW }), /no longer payable/);
+  await f.service.expireDue({ now: new Date(NOW.getTime() + PAYMENT_TTL_MS) });
+  assert.equal(f.state.syncJobs.length, 2);
   assert.equal(f.state.payments.length, 0);
   assert.equal(f.calls.released.length, 1);
   const actions = f.state.logs

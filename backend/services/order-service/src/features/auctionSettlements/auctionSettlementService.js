@@ -1,10 +1,12 @@
 const orderModel = require("../../models/orderModel");
 const productClient = require("../../services/productClient");
+const chatClient = require("../../services/chatClient");
 const { AUCTION_PAYMENT_TTL_MS } = require("@reloop/shared");
 
 function createAuctionSettlementService({
   orders = orderModel,
   products = productClient,
+  chat = chatClient,
   now = () => new Date(),
 } = {}) {
   let workerTimer = null;
@@ -12,13 +14,14 @@ function createAuctionSettlementService({
 
   async function settleOne(order, settledAt = now()) {
     let claimed = order;
-    if (["pending", "pending_payment"].includes(order.status)) {
+    if (order.status === "pending_payment") {
       claimed = await orders.claimExpiredAuctionOrder({
         id: order.id,
         expectedVersion: order.version,
         now: settledAt,
       });
-      if (!claimed || claimed.status !== "cancelled") return null;
+      if (!claimed || claimed.status !== "payment_expired") return null;
+      await chat.notifyOrderStatusChanged(claimed, "payment_expired");
     }
 
     const result = await products.advanceAuctionWinner(order.auctionId, {

@@ -10,12 +10,12 @@ const { timing, isRefundingCancellation } = require("./orderLifecycle");
 const SYSTEM_ACTOR = "system";
 
 function productSyncFor(order, status, purpose) {
-  if (!["cancelled", "completed"].includes(status)) return null;
+  if (!["cancelled", "payment_expired", "seller_confirmation_expired", "completed"].includes(status)) return null;
   const dedupeKey = `${purpose}:${order.id}:${order.version}`;
   // An unpaid reservation is released; a paid order already marked the
   // product sold, so a refunded cancellation relists it directly.
   if (
-    status === "cancelled" &&
+    ["cancelled", "payment_expired"].includes(status) &&
     order.reservationId &&
     !isRefundingCancellation(order, status)
   ) {
@@ -50,7 +50,7 @@ async function transition({ order, status, actorId, purpose = "ORDER_STATUS", re
       actorId,
     });
 
-  if (order.campaignId && status === "cancelled")
+  if (order.campaignId && ["cancelled", "payment_expired", "seller_confirmation_expired"].includes(status))
     await productClient.releaseVoucher(order.campaignId, {
       userId: order.buyerId,
       orderId: order.id,
@@ -72,12 +72,12 @@ async function transition({ order, status, actorId, purpose = "ORDER_STATUS", re
     await buyerActivityClient.recordOrderActivity(updated, "ORDER_COMPLETED", {
       initiatedBy: actorId,
     });
-  } else if (status === "cancelled") {
+  } else if (["cancelled", "payment_expired", "seller_confirmation_expired"].includes(status)) {
     await buyerActivityClient.recordOrderActivity(updated, "ORDER_CANCELLED", {
       initiatedBy: actorId,
     });
   }
-  await chatClient.notifyOrderStatusChanged(order, status, { reason });
+  await chatClient.notifyOrderStatusChanged(order, status, { reason, actorId });
   return { order: updated, event };
 }
 
@@ -119,12 +119,12 @@ function ago(ms, now) {
   return new Date(now.getTime() - ms);
 }
 
-/** No real carrier exists, so a shipped parcel is delivered after a delay. */
-function deliverShippedOrders(now = new Date(), scope) {
+/** No real carrier exists; only parcels handed to a carrier start the delay. */
+function deliverInTransitOrders(now = new Date(), scope) {
   return sweep({
     scope,
     where: {
-      status: "shipped",
+      status: "in_transit",
       shippedAt: { lte: ago(timing.deliveryDelayMs(), now) },
     },
     status: "delivered",
@@ -145,7 +145,7 @@ function completeDeliveredOrders(now = new Date(), scope) {
   });
 }
 
-/** The seller did not accept a paid order in time; cancel and refund it. */
+/** The seller did not accept a paid order in time; expire and refund it. */
 function cancelUnconfirmedOrders(now = new Date(), scope) {
   return sweep({
     scope,
@@ -158,16 +158,16 @@ function cancelUnconfirmedOrders(now = new Date(), scope) {
         },
       },
     },
-    status: "cancelled",
+    status: "seller_confirmation_expired",
     purpose: "SELLER_CONFIRM_TIMEOUT",
   });
 }
 
 async function runSweeps(now = new Date(), scope) {
   return {
-    delivered: await deliverShippedOrders(now, scope),
+    delivered: await deliverInTransitOrders(now, scope),
     completed: await completeDeliveredOrders(now, scope),
-    cancelled: await cancelUnconfirmedOrders(now, scope),
+    seller_confirmation_expired: await cancelUnconfirmedOrders(now, scope),
   };
 }
 
@@ -192,7 +192,7 @@ module.exports = {
   SYSTEM_ACTOR,
   productSyncFor,
   transition,
-  deliverShippedOrders,
+  deliverInTransitOrders,
   completeDeliveredOrders,
   cancelUnconfirmedOrders,
   runSweeps,

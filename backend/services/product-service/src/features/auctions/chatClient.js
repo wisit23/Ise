@@ -439,6 +439,19 @@ async function notifyAuctionExtended({ auction, extendedUntil, bidderIds = [] })
 /**
  * Sends a platform-wide notification when an auction round opens.
  */
+async function notifyItemOpened(item) {
+  if (!item) return;
+  return sendSystemNotification({
+    userId: "ALL",
+    type: "AUCTION",
+    title: "เริ่มประมูลสินค้าแล้ว",
+    message: `🔨 '${item.product?.title || "สินค้า"}' เปิดให้เสนอราคาแล้ว`,
+    link: auctionItemUrl(item.id),
+    entityId: item.id,
+    metadata: { auctionId: item.id, roundId: item.roundId, status: "open" },
+  });
+}
+
 async function notifyRoundOpened(round) {
   if (!round) return;
   return sendSystemNotification({
@@ -701,4 +714,5 @@ module.exports = {
   notifyAuctionWinnerAssigned,
   notifyAuctionExhausted,
   sendSystemNotification,
+  notifyItemOpened,
 };

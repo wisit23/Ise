@@ -5,7 +5,7 @@ const prisma = require("./prismaClient");
 
 function fixture(
   t,
-  { status = "pending_payment", payments = [], claimCount = 1 } = {},
+  { status = "pending_payment", payments = [], claimCount = 1, basketId = null } = {},
 ) {
   const order = {
     id: "o",
@@ -13,6 +13,7 @@ function fixture(
     sellerId: "seller",
     productId: "p",
     status,
+    basketId,
     version: 1,
     originalAmount: "100",
     ordersAmount: "100",
@@ -20,6 +21,9 @@ function fixture(
   };
   const writes = [];
   const tx = {
+    basket: {
+      update: async ({ data }) => { writes.push({ basket: data }); return data; },
+    },
     payment: {
       create: async ({ data }) => {
         writes.push({ payment: data });
@@ -55,7 +59,33 @@ function fixture(
     },
   };
   t.mock.method(prisma, "$transaction", async (callback) => callback(tx));
-  return { writes };
+  return { writes, order };
+}
+
+test("the order vocabulary separates expiry from explicit cancellation", () => {
+  assert.equal(model.VALID_STATUSES.includes("inbasket"), false);
+  assert.ok(model.VALID_STATUSES.includes("payment_expired"));
+  assert.ok(model.VALID_STATUSES.includes("seller_confirmation_expired"));
+  assert.ok(model.VALID_STATUSES.includes("pending_payment"));
+  assert.equal(model.VALID_STATUSES.includes("pending"), false);
+});
+
+for (const method of ["listByBuyer", "listBySeller"]) {
+  test(`${method} filters by pending_payment without including terminal orders`, async (t) => {
+    const queries = [];
+    t.mock.method(prisma.order, "findMany", async (args) => {
+      queries.push(args.where);
+      return [];
+    });
+    // count is forwarded by the Prisma delegate proxy, not an own method.
+    const delegate = prisma.order;
+    Object.defineProperty(delegate, "count", { value: async () => 0, configurable: true });
+    t.after(() => delete delegate.count);
+    await model[method]("user", { status: "pending_payment" });
+    assert.equal(queries[0].status, "pending_payment");
+    await model[method]("user", { status: "payment_expired" });
+    assert.equal(queries[1].status, "payment_expired");
+  });
 }
 
 const cancellation = {
@@ -124,13 +154,31 @@ test("a paid order cancelled by the seller records a simulated refund", async (t
   assert.equal(refund.paymentAmount, "100");
 });
 
+test("buyer paid cancellation records one full simulated refund with product sync and audit", async (t) => {
+  const { writes } = fixture(t, { status: "paid", payments: [{ paymentStatus: "paid" }] });
+  const result = await model.transitionStatusWithProductSync({ ...cancellation, expectedStatuses: ["paid"] });
+  assert.equal(result.order.status, "cancelled");
+  const refunds = writes.filter((w) => w.payment).map((w) => w.payment);
+  assert.equal(refunds.length, 1);
+  assert.equal(refunds[0].paymentType, "SIMULATED_REFUND");
+  assert.equal(refunds[0].paymentAmount, "100");
+  assert.equal(refunds[0].paymentStatus, "refunded");
+  assert.equal(writes.find((w) => w.job).job.targetStatus, "available");
+});
+
+test("seller confirmation winning the race prevents buyer refund or relisting", async (t) => {
+  const { writes } = fixture(t, { status: "paid", claimCount: 0, payments: [{ paymentStatus: "paid" }] });
+  await assert.rejects(model.transitionStatusWithProductSync({ ...cancellation, expectedStatuses: ["paid"] }), { status: 409 });
+  assert.equal(writes.some((w) => w.payment || w.job), false);
+});
+
 test("delivered and completed transitions stamp their time and need no product sync", async (t) => {
-  const { writes } = fixture(t, { status: "shipped" });
+  const { writes } = fixture(t, { status: "in_transit" });
   const result = await model.transitionStatusWithProductSync({
     id: "o",
     status: "delivered",
     expectedVersion: 1,
-    expectedStatuses: ["shipped"],
+    expectedStatuses: ["in_transit"],
     actorId: "system",
   });
   assert.equal(result.event, null);
@@ -138,4 +186,83 @@ test("delivered and completed transitions stamp their time and need no product s
   assert.equal(writes.some((w) => w.job), false);
   assert.equal(model.statusData("completed").completedAt instanceof Date, true);
   assert.equal(model.statusData("confirmed").completedAt, undefined);
+});
+
+for (const claimCount of [1, 0]) {
+  test(`seller timeout atomically refunds a paid order only after a successful claim (${claimCount})`, async (t) => {
+    const { writes } = fixture(t, { status: "paid", claimCount, payments: [{ paymentStatus: "paid" }] });
+    const change = { ...cancellation, status: "seller_confirmation_expired", expectedStatuses: ["paid"], actorId: "system" };
+    if (!claimCount) {
+      await assert.rejects(model.transitionStatusWithProductSync(change), { status: 409 });
+      assert.equal(writes.some((w) => w.payment || w.job), false);
+      return;
+    }
+    const result = await model.transitionStatusWithProductSync(change);
+    assert.equal(result.order.status, "seller_confirmation_expired");
+    const refunds = writes.filter((w) => w.payment).map((w) => w.payment);
+    assert.equal(refunds.length, 1);
+    assert.equal(refunds[0].paymentType, "SIMULATED_REFUND");
+    assert.equal(refunds[0].paymentStatus, "refunded");
+    assert.equal(refunds[0].paymentAmount, "100");
+    assert.equal(writes.find((w) => w.job).job.targetStatus, "available");
+  });
+}
+
+test("unpaid expiration releases inventory without a simulated refund", async (t) => {
+  const { writes } = fixture(t);
+  const result = await model.transitionStatusWithProductSync({
+    ...cancellation, status: "payment_expired", actorId: "system",
+    productSync: { action: "RELEASE_RESERVATION", productId: "p", reservationId: "basket" },
+  });
+  assert.equal(result.order.status, "payment_expired");
+  assert.equal(writes.some((w) => w.payment), false);
+  assert.equal(writes.find((w) => w.job).job.action, "RELEASE_RESERVATION");
+  const log = writes.find((w) => w.action === "STATUS_CHANGED");
+  assert.equal(JSON.parse(log.detail).to, "payment_expired");
+});
+
+test("basket expiry sweep expires both order and basket and processes inventory release", async (t) => {
+  const { writes, order } = fixture(t, { basketId: "basket" });
+  order.campaignId = "voucher";
+  t.mock.method(prisma.order, "findMany", async ({ where }) => {
+    assert.equal(where.status, "pending_payment");
+    assert.ok(where.basket.unlockAt.lte instanceof Date);
+    return [order];
+  });
+  const sync = require("../services/productSyncService");
+  const processed = [];
+  t.mock.method(sync, "processEvent", async (id) => processed.push(id));
+  const released = [];
+  assert.equal(await model.cleanExpiredOrders({ releaseVoucher: async (...args) => released.push(args) }), 1);
+  assert.equal(order.status, "payment_expired");
+  assert.deepEqual(writes.find((w) => w.basket).basket, { status: "expired" });
+  assert.equal(writes.find((w) => w.job).job.action, "RELEASE_RESERVATION");
+  assert.equal(writes.some((w) => w.payment), false);
+  assert.equal(processed.length, 1);
+  assert.equal(released[0][0], "voucher");
+});
+
+test("auction payment expires exactly at the deadline with a version guard", async (t) => {
+  const { writes, order } = fixture(t);
+  const now = new Date("2026-10-23T12:00:00Z");
+  Object.assign(order, { orderType: "AUCTION", paymentDeadlineAt: now });
+  assert.equal((await model.claimExpiredAuctionOrder({ id: order.id, expectedVersion: 1, now: new Date(now.getTime() - 1) })).status, "pending_payment");
+  assert.equal(writes.length, 0);
+  const expired = await model.claimExpiredAuctionOrder({ id: order.id, expectedVersion: 1, now });
+  assert.equal(expired.status, "payment_expired");
+  assert.equal(writes[0].where.version, 1);
+  assert.equal(writes[0].where.status, "pending_payment");
+  assert.equal(writes.some((w) => w.payment), false);
+  const count = writes.length;
+  await model.claimExpiredAuctionOrder({ id: order.id, expectedVersion: 1, now });
+  assert.equal(writes.length, count, "retry does not expire twice");
+});
+
+test("auction expiration losing the payment race does not log or refund", async (t) => {
+  const { writes, order } = fixture(t, { claimCount: 0 });
+  const now = new Date();
+  Object.assign(order, { orderType: "AUCTION", paymentDeadlineAt: now });
+  assert.equal(await model.claimExpiredAuctionOrder({ id: order.id, expectedVersion: 1, now }), null);
+  assert.equal(writes.length, 1);
+  assert.equal(writes.some((w) => w.payment || w.action), false);
 });

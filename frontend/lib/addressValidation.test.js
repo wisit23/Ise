@@ -34,3 +34,9 @@ test.each(["ABCDE", "1234", "123456", ""])(
     );
   },
 );
+
+test("a ten-digit phone must start with zero", () => {
+  expect(validateAddressContact({ ...valid, phone: "1111111111" }).phone).toBe(
+    "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก และต้องขึ้นต้นด้วย 0",
+  );
+});

@@ -284,6 +284,13 @@ export default function StorePage() {
                 key={r.id}
                 className="rounded-lg border border-gray-200 bg-white p-4"
               >
+                <p className="mb-2 text-sm font-medium text-ink">
+                  {r.reviewerName || r.buyerName || (
+                    r.buyerId
+                      ? `ผู้ซื้อ (${r.buyerId.slice(0, 4)}***${r.buyerId.slice(-4)})`
+                      : "ผู้ซื้อทั่วไป"
+                  )}
+                </p>
                 <div className="flex items-center justify-between">
                   <StarDisplay value={r.rating} />
                   <div className="flex items-center gap-2.5">

@@ -157,26 +157,25 @@ async function updateStatus(req, res, next) {
     // TSR-02: Prevent participant updating status while order has open dispute or hold
     orderTransitionService.assertCanParticipantUpdateStatus(order);
 
-    if (status === "shipped") {
-      if (order.sellerId !== req.userId) {
-        throw forbidden("only the seller can mark this order as shipped");
-      }
-      const shipped = await shippingService.markShipped({
+    if (["pickup_in_progress", "in_transit"].includes(status)) {
+      const updated = await shippingService.advanceShipping({
         orderId: order.id,
         actorId: req.userId,
-        version: order.version,
+        version: req.body.version ?? order.version,
+        status,
         company: req.body.company,
         trackingNumber: req.body.trackingNumber,
       });
       // Best-effort — chatClient swallows its own errors internally so a
       // chat-service outage can never fail this status update.
-      if (order.productId) {
+      // Seller dashboard treats a parcel handed to the carrier as sold.
+      if (status === "in_transit" && order.productId) {
         await productClient.setProductStatus(order.productId, "sold").catch((err) => {
-          console.warn("product status sync to sold on shipping failed:", err.message);
+          console.warn("product status sync to sold on handoff failed:", err.message);
         });
       }
-      await chatClient.notifyOrderStatusChanged(order, status);
-      return res.json(shipped);
+      await chatClient.notifyOrderStatusChanged(updated, status);
+      return res.json(updated);
     }
 
     const { order: updated, event } = await orderLifecycleService.transition({
@@ -399,7 +398,7 @@ async function getByProductInternal(req, res, next) {
     const order = await prisma.order.findFirst({
       where: {
         productId: req.params.productId,
-        status: { notIn: ["cancelled", "refunded"] },
+        status: { notIn: ["cancelled", "refunded", "payment_expired", "seller_confirmation_expired"] },
       },
       select: {
         id: true,

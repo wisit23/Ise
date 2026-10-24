@@ -60,6 +60,7 @@ export default function OrderLine({
   actions,
   note,
   highlight = false,
+  linkThumbnail = true,
 }) {
   const [product, setProduct] = useState(undefined);
   const [conditionLabels, setConditionLabels] = useState({});
@@ -94,6 +95,10 @@ export default function OrderLine({
         .trim()
     : null;
 
+  const thumbnail = (
+    <ProductThumb product={product} size={72} title={order.productTitle} />
+  );
+
   return (
     <div
       className={`grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto] items-start gap-x-3 sm:gap-x-5 gap-y-3 p-3.5 sm:p-4 transition-colors ${
@@ -102,17 +107,17 @@ export default function OrderLine({
     >
       <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
         {lead}
-        <QuietLink
-          href={`/products/${order.productId}`}
-          className="focus-ring rounded-md shrink-0"
-          aria-label={`ดูสินค้า ${order.productTitle}`}
-        >
-          <ProductThumb
-            product={product}
-            size={72}
-            title={order.productTitle}
-          />
-        </QuietLink>
+        {linkThumbnail ? (
+          <QuietLink
+            href={`/products/${order.productId}`}
+            className="focus-ring rounded-md shrink-0"
+            aria-label={`ดูสินค้า ${order.productTitle}`}
+          >
+            {thumbnail}
+          </QuietLink>
+        ) : (
+          thumbnail
+        )}
       </div>
 
       <div className="min-w-0">

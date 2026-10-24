@@ -1,8 +1,19 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import OrdersPage from "./page";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+// Order actions now render inside ProfilePage; retain coverage of the shared view.
+import OrdersPage from "../../components/orders/MyOrders";
+import LegacyOrdersPage from "./page";
+import { redirect } from "next/navigation";
 import { apiFetch } from "../../lib/api";
 const mockRouter = { push: jest.fn() };
-jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
+jest.mock("next/navigation", () => ({
+  useRouter: () => mockRouter,
+  redirect: jest.fn(),
+}));
+
+test("legacy orders route redirects to the orders section in profile", () => {
+  LegacyOrdersPage();
+  expect(redirect).toHaveBeenCalledWith("/profile?tab=orders");
+});
 jest.mock("../../lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock("../../lib/auth", () => ({ getAccessToken: () => "token" }));
 jest.mock(
@@ -21,9 +32,9 @@ jest.mock(
 );
 jest.mock("../../components/OrderLine", () => ({
   __esModule: true,
-  default: function Line({ actions, status }) {
+  default: function Line({ actions, status, linkThumbnail }) {
     return (
-      <div>
+      <div data-testid="order-line" data-link-thumbnail={String(linkThumbnail)}>
         {status}
         {actions}
       </div>
@@ -33,13 +44,52 @@ jest.mock("../../components/OrderLine", () => ({
     return null;
   },
 }));
-jest.mock(
-  "../../components/chat/ContactSellerButton",
-  () =>
-    function Contact() {
-      return null;
-    },
-);
+test("my orders disables thumbnail links and keeps the details action", async () => {
+  apiFetch.mockImplementation((url) => Promise.resolve(
+    url.startsWith("/api/orders/mine")
+      ? { items: [{ id: "order-1", productId: "p1", status: "paid", price: 800 }], totalPages: 1 }
+      : { items: [] },
+  ));
+  render(<OrdersPage />);
+  expect(await screen.findByTestId("order-line")).toHaveAttribute("data-link-thumbnail", "false");
+  expect(screen.getByRole("button", { name: "ดูรายละเอียด" })).toBeEnabled();
+});
+
+test("contact seller from a purchased order sends the order ID and opens the room", async () => {
+  mockRouter.push.mockClear();
+  apiFetch.mockImplementation((url) => {
+    if (url.startsWith("/api/orders/mine")) return Promise.resolve({
+      items: [{ id: "order-1", productId: "sold-product", buyerId: "buyer", status: "paid", price: 800 }],
+      totalPages: 1,
+    });
+    if (url === "/api/chat/conversations") return Promise.resolve({ id: "room-1" });
+    return Promise.resolve({ items: [] });
+  });
+  render(<OrdersPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "ติดต่อผู้ขาย" }));
+  await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith("/chat/room-1"));
+  expect(apiFetch).toHaveBeenCalledWith("/api/chat/conversations", {
+    method: "POST", token: "token",
+    body: { contextType: "PRODUCT", productId: "sold-product", orderId: "order-1" },
+  });
+});
+
+test("failed post-purchase chat shows the error and lets the buyer retry", async () => {
+  mockRouter.push.mockClear();
+  apiFetch.mockImplementation((url) => {
+    if (url.startsWith("/api/orders/mine")) return Promise.resolve({
+      items: [{ id: "order-1", productId: "sold-product", buyerId: "buyer", status: "paid", price: 800 }],
+      totalPages: 1,
+    });
+    if (url === "/api/chat/conversations") return Promise.reject(new Error("ตรวจสอบคำสั่งซื้อไม่สำเร็จ"));
+    return Promise.resolve({ items: [] });
+  });
+  render(<OrdersPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "ติดต่อผู้ขาย" }));
+  expect(await screen.findByText("ตรวจสอบคำสั่งซื้อไม่สำเร็จ")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "ติดต่อผู้ขาย" })).toBeEnabled();
+  expect(mockRouter.push).not.toHaveBeenCalled();
+});
 test("decided completed orders link to their case and cannot open a duplicate; a safety hold does not invent a dispute", async () => {
   const base = {
     buyerId: "buyer",
@@ -96,7 +146,8 @@ test("buyer confirms receipt only after delivery and disputes only within 14 day
       url.startsWith("/api/orders/mine")
         ? {
             items: [
-              { ...base, id: "shipped-order", status: "shipped" },
+              { ...base, id: "pickup-order", status: "pickup_in_progress" },
+              { ...base, id: "transit-order", status: "in_transit" },
               {
                 ...base,
                 id: "delivered-order",

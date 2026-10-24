@@ -95,7 +95,7 @@ test("order lifecycle: seller steps, simulated delivery, buyer receipt", async (
   const order = await paidOrder();
 
   // Seller cannot skip ahead and the buyer cannot complete before delivery.
-  assert.equal((await patch(order.id, seller, { status: "shipped", company: "K", trackingNumber: "1" })).status, 409);
+  assert.equal((await patch(order.id, seller, { status: "in_transit", company: "K", trackingNumber: "1" })).status, 409);
   assert.equal((await patch(order.id, buyer, { status: "completed" })).status, 409);
   assert.equal((await patch(order.id, seller, { status: "completed" })).status, 403);
 
@@ -104,22 +104,36 @@ test("order lifecycle: seller steps, simulated delivery, buyer receipt", async (
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.equal(res.body.status, status);
   }
+  assert.equal((await patch(order.id, seller, { status: "in_transit", company: "K", trackingNumber: "1" })).status, 409);
+  assert.equal((await patch(order.id, buyer, { status: "pickup_in_progress" })).status, 403);
+  const pickup = await patch(order.id, seller, { status: "pickup_in_progress" });
+  assert.equal(pickup.status, 200, JSON.stringify(pickup.body));
+  assert.equal(pickup.body.status, "pickup_in_progress");
+  assert.equal(pickup.body.shipping.status, "pickup_in_progress");
+  assert.equal(pickup.body.shippedAt, null);
+  await lifecycle.deliverInTransitOrders(new Date(Date.now() + 60_000), scope);
+  assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, "pickup_in_progress");
+  assert.equal((await patch(order.id, seller, { status: "in_transit" })).status, 400);
   const shipped = await patch(order.id, seller, {
-    status: "shipped",
+    status: "in_transit",
     company: "Kerry",
     trackingNumber: "TH123",
   });
   assert.equal(shipped.status, 200, JSON.stringify(shipped.body));
-  assert.equal(shipped.body.status, "shipped");
+  assert.equal(shipped.body.status, "in_transit");
+  assert.equal(shipped.body.shipping.status, "in_transit");
+  assert.equal(shipped.body.shipping.company, "Kerry");
+  assert.equal(shipped.body.shipping.trackingNumber, "TH123");
+  assert.deepEqual(shipped.body.shipping.addressSnapshot, pickup.body.shipping.addressSnapshot);
   assert.ok(shipped.body.shippedAt);
   assert.equal((await patch(order.id, buyer, { status: "completed" })).status, 409);
 
-  // Not yet 10 seconds: still shipped.
-  await lifecycle.deliverShippedOrders(new Date(), scope);
+  // Not yet 10 seconds after handoff: still in transit.
+  await lifecycle.deliverInTransitOrders(new Date(), scope);
   let row = await prisma.order.findUnique({ where: { id: order.id }, include: { shipping: true } });
-  assert.equal(row.status, "shipped");
+  assert.equal(row.status, "in_transit");
 
-  await lifecycle.deliverShippedOrders(new Date(Date.now() + 11_000), scope);
+  await lifecycle.deliverInTransitOrders(new Date(Date.now() + 11_000), scope);
   row = await prisma.order.findUnique({ where: { id: order.id }, include: { shipping: true } });
   assert.equal(row.status, "delivered");
   assert.ok(row.deliveredAt);
@@ -155,7 +169,7 @@ test("order lifecycle: delivered orders auto-complete after 14 days", async (t) 
   assert.equal(log.actorId, "system");
 });
 
-test("order lifecycle: seller silence for a day cancels, refunds and relists", async (t) => {
+test("order lifecycle: seller silence for a day expires, refunds and relists", async (t) => {
   if (!(await reachable(t))) return;
   const late = await paidOrder();
   await prisma.payment.updateMany({
@@ -169,7 +183,9 @@ test("order lifecycle: seller silence for a day cancels, refunds and relists", a
     where: { id: late.id },
     include: { payments: true },
   });
-  assert.equal(lateRow.status, "cancelled");
+  assert.equal(lateRow.status, "seller_confirmation_expired");
+  await lifecycle.cancelUnconfirmedOrders(new Date(), scope);
+  assert.equal(await prisma.payment.count({ where: { orderId: late.id, paymentType: "SIMULATED_REFUND" } }), 1);
   assert.ok(lateRow.payments.some((p) => p.paymentStatus === "refunded"));
   assert.ok(
     productStatuses.some((p) => p.productId === late.productId && p.status === "available"),
@@ -183,7 +199,6 @@ test("order lifecycle: seller silence for a day cancels, refunds and relists", a
 test("order lifecycle: seller can reject a paid order immediately", async (t) => {
   if (!(await reachable(t))) return;
   const order = await paidOrder();
-  assert.equal((await patch(order.id, buyer, { status: "cancelled" })).status, 409);
   const res = await patch(order.id, seller, { status: "cancelled" });
   assert.equal(res.status, 200, JSON.stringify(res.body));
   assert.equal(res.body.status, "cancelled");
@@ -198,7 +213,7 @@ test("order lifecycle: disputes open on delivered orders only inside the window"
       .set("Authorization", `Bearer ${buyer}`)
       .send({ reason: "not as described", disputeType: "ITEM_NOT_AS_DESCRIBED" });
 
-  const shipped = await paidOrder({ status: "shipped" });
+  const shipped = await paidOrder({ status: "in_transit" });
   assert.equal((await open(shipped.id)).status, 400);
 
   const delivered = await paidOrder({ status: "delivered" });

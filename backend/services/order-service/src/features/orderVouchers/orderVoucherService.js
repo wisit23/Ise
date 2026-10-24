@@ -28,7 +28,7 @@ function createOrderVoucherService(db = prisma, products = productClient) {
             throw forbidden("this order belongs to another buyer");
           if (
             order.checkoutId ||
-            !["pending", "pending_payment"].includes(order.status)
+            order.status !== "pending_payment"
           )
             throw conflict("ไม่สามารถเปลี่ยนโค้ดหลังยืนยันรายการชำระเงินได้");
           if (!order.basketId || !order.basket || order.basket.unlockAt <= now)

@@ -226,10 +226,9 @@ export default function TicketThreadPage() {
 
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0">
-            {ticket.requesterId === user?.id &&
-              ["RESOLVED", "CLOSED"].includes(ticket.status) && (
+            {ticket.requesterId === user?.id && (
                 <CsatRating
-                  key={`${id}:${user.id}`}
+                  key={`${id}:${user.id}:${ticket.status}`}
                   endpoint={`/api/support/tickets/${id}/csat`}
                   caseLabel="คำร้องนี้"
                 />

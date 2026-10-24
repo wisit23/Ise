@@ -334,6 +334,11 @@ test("Requirement 1: admin decision notifies all relevant parties (reporter, tar
     reason: "[รายงานรีวิว #rev-123] [ข้อความหยาบคาย] ใช้ถ้อยคำคุกคาม",
   });
 
+  const pendingNotice = sentNotifications.find((n) => n.userId === "target-user-2");
+  assert.ok(pendingNotice.message.includes("ใช้ถ้อยคำคุกคาม"));
+  assert.equal(pendingNotice.metadata.reportReason, rep.reason);
+  assert.equal(pendingNotice.metadata.reporterId, undefined);
+
   // Review report
   await reportService.reviewReport({ reportId: rep.id, adminId: "admin-1" });
 

@@ -18,6 +18,17 @@ function captureRequests(t) {
   return requests;
 }
 
+test("auction start reaches the notification center with the item link", async (t) => {
+  const requests = captureRequests(t);
+  await chatClient.notifyItemOpened({ id: "item-start", roundId: "round-1", product: { title: "เสื้อวินเทจ" } });
+  assert.equal(requests.length, 1);
+  assert.ok(requests[0].url.endsWith("/internal/notifications"));
+  assert.equal(requests[0].body.userId, "ALL");
+  assert.equal(requests[0].body.type, "AUCTION");
+  assert.equal(requests[0].body.metadata.status, "open");
+  assert.equal(requests[0].body.link, "/auctions/item-start");
+});
+
 test("rejection notifies only the seller with reason, safe item link and stable key", async (t) => {
   const requests = captureRequests(t);
   const input = {

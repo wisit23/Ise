@@ -40,6 +40,20 @@ describe("SellerOrderTracker", () => {
     expect(screen.getAllByText("ประมูล").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("labels and filters payment_expired separately from pending_payment", () => {
+    render(<SellerOrderTracker orders={[
+      { ...mockOrders[0], status: "payment_expired" },
+      { ...mockOrders[1], status: "pending_payment" },
+    ]} />);
+    expect(screen.getAllByText("หมดเวลาชำระเงิน").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "หมดเวลาชำระเงิน" }));
+    expect(screen.getByText("เสื้อยืดวินเทจ")).toBeInTheDocument();
+    expect(screen.queryByText("นาฬิกาสะสมประมูล")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "รอชำระเงิน" }));
+    expect(screen.queryByText("เสื้อยืดวินเทจ")).not.toBeInTheDocument();
+    expect(screen.getByText("นาฬิกาสะสมประมูล")).toBeInTheDocument();
+  });
+
   it("filters orders by order type (regular vs auction)", () => {
     render(<SellerOrderTracker orders={mockOrders} />);
 
@@ -84,7 +98,10 @@ describe("SellerOrderTracker", () => {
     expect(screen.getByRole("button", { name: /เตรียมสินค้าเรียบร้อย/ })).toBeInTheDocument();
 
     rerender(<SellerOrderTracker orders={[{ ...paidOrder[0], status: "ready_to_ship" }]} />);
-    expect(screen.getByRole("button", { name: "จัดส่งสินค้า" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "เรียกขนส่ง" })).toBeInTheDocument();
+    rerender(<SellerOrderTracker orders={[{ ...paidOrder[0], status: "pickup_in_progress" }]} />);
+    expect(screen.getByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "เรียกขนส่ง" })).not.toBeInTheDocument();
   });
 
   it("marks a confirmed order as packed through the lifecycle status", async () => {
@@ -187,7 +204,7 @@ describe("SellerOrderTracker", () => {
         id: "c58a6037-d5aa-4bbb-8ccc-000000000001",
         productTitle: "สินค้ามีข้อพิพาท",
         price: 900,
-        status: "shipped",
+        status: "in_transit",
         createdAt: "2026-10-15T15:00:00.000Z",
       },
     ];

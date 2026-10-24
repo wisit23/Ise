@@ -28,8 +28,18 @@ function getQueue() {
  * scheduling again — e.g. after a resolved edge case — replaces any prior
  * job instead of stacking a duplicate.
  */
-async function scheduleClose(auctionId, closeAt) {
+async function scheduleClose(auctionId, closeAt, startAt) {
   const q = getQueue();
+  if (startAt) {
+    const startId = `open-${auctionId}`;
+    const previous = await q.getJob(startId);
+    const active = previous && await previous.getState() === "active";
+    if (!active) await q.remove(startId).catch(() => {});
+    await q.add("open", { auctionId }, {
+      jobId: active ? `${startId}-${new Date(startAt).getTime()}` : startId,
+      delay: Math.max(0, new Date(startAt).getTime() - Date.now()),
+    });
+  }
   const existing = await q.getJob(auctionId);
   if (existing && await existing.getState() === "active") {
     // A worker may already be waiting for the auction lock at the old deadline.
@@ -45,9 +55,9 @@ async function scheduleClose(auctionId, closeAt) {
 
 /** Cancelling an auction before it opens must also cancel its close job. */
 async function cancelClose(auctionId) {
-  await getQueue()
-    .remove(auctionId)
-    .catch(() => {});
+  await Promise.all([auctionId, `open-${auctionId}`].map((id) =>
+    getQueue().remove(id).catch(() => {}),
+  ));
 }
 
 /**

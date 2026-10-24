@@ -129,13 +129,13 @@ test("cancel requires confirmation and backing out makes no cancellation request
   expect(apiFetch).not.toHaveBeenCalledWith(expect.stringContaining("/cancel"), expect.anything());
 });
 
-test("confirmed cancellation calls API once and returns to cart", async () => {
+test("confirmed cancellation calls API once and returns home", async () => {
   render(<PaymentPage />);
   fireEvent.click(await screen.findByRole("button", { name: "ยกเลิกการชำระเงิน" }));
   const confirm = screen.getByRole("button", { name: "ยืนยันยกเลิกการชำระเงิน" });
   fireEvent.click(confirm);
   fireEvent.click(confirm);
-  await waitFor(() => expect(push).toHaveBeenCalledWith("/cart"));
+  await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
   expect(apiFetch.mock.calls.filter(([path]) => path.endsWith("/cancel"))).toHaveLength(1);
   expect(apiFetch).toHaveBeenCalledWith("/api/orders/checkout-sessions/session-1/cancel", { method: "POST", token: "buyer-token" });
 });

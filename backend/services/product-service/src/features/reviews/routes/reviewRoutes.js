@@ -11,5 +11,6 @@ router.get("/by-seller/:sellerId/summary", reviewController.summaryBySeller);
 router.get("/mine", requireAuth, reviewController.mine);
 router.get("/by-order/:orderId", requireAuth, reviewController.byOrder);
 router.post("/", requireAuth, reviewController.create);
+router.patch("/:id", requireAuth, reviewController.update);
 
 module.exports = router;

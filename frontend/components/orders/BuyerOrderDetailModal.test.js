@@ -77,7 +77,7 @@ test("shows the full order number without truncation and allows selecting it", a
 });
 
 test("shows the shop name and product photo alongside shipping details", async () => {
-  const current = order("shipped", {
+  const current = order("in_transit", {
     productId: "p1",
     sellerId: "s1",
     shipping: { company: "Test Express", trackingNumber: "SIM123" },
@@ -132,7 +132,7 @@ test("shows the shop without a broken image when a listing has no photos", async
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
 });
 
-test.each(["shipped", "delivered", "completed"])(
+test.each(["in_transit", "delivered", "completed"])(
   "shows the seller's shipping company and tracking number for %s orders after reload",
   async (status) => {
     const fresh = order(status, {
@@ -174,8 +174,8 @@ test("shows a waiting message before the seller ships, without invented tracking
   await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
 });
 
-test("reports missing shipping data on a shipped order instead of claiming it is awaiting shipment", async () => {
-  const current = order("shipped", { shipping: null });
+test("reports missing shipping data on an in-transit order instead of claiming it is awaiting shipment", async () => {
+  const current = order("in_transit", { shipping: null });
   mockApi(current);
   render(
     <BuyerOrderDetailModal order={current} statusLabel="x" onClose={() => {}} />,
@@ -224,7 +224,7 @@ test.each(["paid", "confirmed"])(
   },
 );
 
-test.each(["ready_to_ship", "shipped", "delivered", "completed"])(
+test.each(["ready_to_ship", "pickup_in_progress", "in_transit", "delivered", "completed"])(
   "no change-address button once the order is %s",
   async (status) => {
     mockApi(order(status), { patch: () => Promise.reject(new Error("no")) });

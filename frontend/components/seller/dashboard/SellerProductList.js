@@ -190,6 +190,7 @@ export default function SellerProductList({
                     >
                       {p.title}
                     </Link>
+                    <p className="mt-1 text-xs text-ink-subtle">รายการโปรด {p.favoriteCount || 0} คน</p>
                     {/* Tags */}
                     {Array.isArray(p.tags) && p.tags.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1">
@@ -217,7 +218,7 @@ export default function SellerProductList({
                   <td className="px-4 py-3 text-center">
                     {(() => {
                       const hasCompletedOrShippedOrder = (orders || []).some(
-                        (o) => o.productId === p.id && ["shipped", "delivered", "completed"].includes(o.status),
+                        (o) => o.productId === p.id && ["in_transit", "delivered", "completed"].includes(o.status),
                       );
                       const isSold = p.status === "sold" || hasCompletedOrShippedOrder;
                       return (
@@ -237,7 +238,7 @@ export default function SellerProductList({
                   </td>
                   {(() => {
                     const awaitingOrder = (orders || []).find(
-                      (o) => o.productId === p.id && o.status === "ready_to_ship",
+                      (o) => o.productId === p.id && ["ready_to_ship", "pickup_in_progress"].includes(o.status),
                     );
                     const paidOrder = (orders || []).find(
                       (o) => o.productId === p.id && o.status === "paid",
@@ -249,6 +250,7 @@ export default function SellerProductList({
                           {awaitingOrder && p.status !== "removed" && (
                             <button
                               type="button"
+                              aria-label={awaitingOrder.status === "ready_to_ship" ? "เรียกขนส่ง" : "ส่งมอบให้ขนส่งแล้ว"}
                               onClick={() => {
                                 setSelectedOrderForShipping(awaitingOrder);
                                 setShippingModalOpen(true);
@@ -259,7 +261,7 @@ export default function SellerProductList({
                               <span className="material-symbols-outlined text-[15px]">
                                 local_shipping
                               </span>
-                              <span>จัดส่งสินค้า</span>
+                              <span>{awaitingOrder.status === "ready_to_ship" ? "เรียกขนส่ง" : "ส่งมอบให้ขนส่งแล้ว"}</span>
                             </button>
                           )}
                           {!awaitingOrder && paidOrder && p.status !== "removed" && (
@@ -281,7 +283,7 @@ export default function SellerProductList({
                           {!(
                             ["sold", "removed"].includes(p.status) || p.preRemovalStatus === "sold" ||
                             (orders || []).some(
-                              (o) => o.productId === p.id && ["shipped", "delivered", "completed"].includes(o.status),
+                              (o) => o.productId === p.id && ["in_transit", "delivered", "completed"].includes(o.status),
                             )
                           ) ? (
                             <div className="flex items-center justify-end gap-2.5">

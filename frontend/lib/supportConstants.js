@@ -46,15 +46,17 @@ export const DISPUTE_STATUS_STYLE = {
 };
 
 export const ORDER_STATUS_LABEL = {
-  pending: "รอชำระเงิน",
   pending_payment: "รอชำระเงิน",
   paid: "ชำระแล้ว รอผู้ขายยืนยัน",
   confirmed: "ยืนยันแล้ว",
-  ready_to_ship: "รอขนส่งมารับ",
-  shipped: "จัดส่งแล้ว",
+  ready_to_ship: "พร้อมเรียกขนส่ง",
+  pickup_in_progress: "ขนส่งกำลังเข้ารับสินค้า",
+  in_transit: "อยู่ระหว่างการขนส่ง",
   delivered: "ส่งถึงแล้ว",
   completed: "สำเร็จ",
   cancelled: "ยกเลิก",
+  payment_expired: "หมดเวลาชำระเงิน",
+  seller_confirmation_expired: "หมดเวลายืนยันคำสั่งซื้อ (คืนเงินแล้ว)",
   disputed: "อยู่ระหว่างพิพาท",
   refunded: "คืนเงินแล้ว",
 };

@@ -7,7 +7,7 @@ const prisma = require("../../models/prismaClient");
  */
 const STATUS_GROUPS = {
   completed: ["completed"],
-  inProgress: ["confirmed", "shipped"],
+  inProgress: ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit"],
   disputeRefund: ["disputed", "refunded"],
 };
 const COUNTED_STATUSES = Object.values(STATUS_GROUPS).flat();

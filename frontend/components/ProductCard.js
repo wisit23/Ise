@@ -5,6 +5,7 @@ import QuietLink from "./ui/QuietLink";
 import { mediaUrl } from "../lib/api";
 import { fetchConditions } from "../lib/catalog";
 import { fetchSellerRating, fetchSellerSummary } from "../lib/sellers";
+import WishlistButton from "./WishlistButton";
 
 const CONDITION_STYLE = {
   New: "bg-brand-600 text-white",
@@ -224,6 +225,9 @@ export default function ProductCard({ product, showSeller = true }) {
         </div>
       </div>
 
+      {!["hidden", "removed"].includes(product.status) && (
+        <WishlistButton productId={product.id} title={product.title} className="absolute right-3 top-14" />
+      )}
       <div className="flex flex-1 flex-col p-[.95rem]">
         <h3 className="line-clamp-2 font-sans text-sm font-medium leading-[1.45] text-ink">
           {/* Stretched link: the whole card is clickable, but only the title

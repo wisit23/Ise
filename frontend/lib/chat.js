@@ -20,12 +20,13 @@ export const MAX_MESSAGE_LENGTH = config.chat.maxMessageLength;
 /** create-or-open — server resolves sellerId itself from productId, this
  * never sends sellerId (see backend chat-service's conversationService.js:
  * a client-supplied sellerId would simply be ignored, but not sending it at
- * all keeps that contract obvious from the call site too). */
-export function contactSeller(productId, token) {
+ * all keeps that contract obvious from the call site too). An optional orderId
+ * lets the server verify purchase ownership before opening a sold listing. */
+export function contactSeller(productId, token, orderId) {
   return apiFetch("/api/chat/conversations", {
     method: "POST",
     token,
-    body: { contextType: "PRODUCT", productId },
+    body: { contextType: "PRODUCT", productId, ...(orderId ? { orderId } : {}) },
   });
 }
 

@@ -22,6 +22,9 @@ function normalizeAddressInput(input = {}, { partial = false } = {}) {
     if (field === "phone" && !/^[0-9]{10}$/.test(value)) {
       throw badRequest("เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก");
     }
+    if (field === "phone" && !value.startsWith("0")) {
+      throw badRequest("เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก และต้องขึ้นต้นด้วย 0");
+    }
     if (field === "postalCode" && !/^[0-9]{5}$/.test(value)) {
       throw badRequest("รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก");
     }

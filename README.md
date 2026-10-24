@@ -155,16 +155,22 @@ Not built yet: explicit reservation-expiry job, listing moderation/reports.
 
 | Method | Path                       | Auth                   | Notes                                                                        |
 | ------ | -------------------------- | ---------------------- | ---------------------------------------------------------------------------- |
-| POST   | `/api/orders`              | Bearer                 | lock a listing (`pending`), rejects self-purchase                            |
+| POST   | `/api/orders`              | Bearer                 | lock a listing (`pending_payment`), rejects self-purchase                            |
 | GET    | `/api/orders/mine`         | Bearer                 | paginated orders as buyer, optional `status`                                 |
 | GET    | `/api/orders/selling`      | Bearer                 | paginated orders as seller, optional `status`                                |
 | GET    | `/api/orders/:id`          | Bearer, buyer/seller   | single order                                                                 |
 | GET    | `/api/orders/:id/internal` | internal service token | called by the review feature in `product-service` to check order eligibility |
-| PATCH  | `/api/orders/:id/status`   | Bearer, buyer/seller   | `pending → completed \| cancelled`; releases/sells the product               |
-| PATCH  | `/api/orders/:id/pay`      | Bearer, buyer          | mock checkout: `pending → completed`, marks product `sold`                   |
+| PATCH  | `/api/orders/:id/status`   | Bearer, buyer/seller   | role-checked order transitions; expiry states are system-only               |
+| PATCH  | `/api/orders/:id/pay`      | Bearer, buyer          | mock checkout: unpaid order → `paid`, marks product `sold`                   |
 
-No real cart table yet — a "cart" is `orders` rows with `status='pending'`. No real payment
-provider, dispute flow, or transactional outbox.
+Cart reservations live in `Basket`; new orders start at `pending_payment` (รอชำระเงิน).
+Forward migration `20261024000000_order_payment_and_expiry_states` maps existing
+Order `inbasket` to `pending_payment` (including pre-dispute snapshots). Deploy all
+pending migrations with the updated API and frontend; do not rewrite migration history or logs.
+Unpaid timeouts use `payment_expired`; seller confirmation timeouts use
+`seller_confirmation_expired` and record a simulated refund. `cancelled` means an
+explicit buyer/seller cancellation; historical cancellations are not reclassified.
+Checkout, Shipping and Payment retain their own `pending` states. Payments remain simulated.
 
 ## Review API (implemented)
 

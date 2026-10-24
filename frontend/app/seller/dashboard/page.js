@@ -177,7 +177,7 @@ function SellerDashboardContent() {
       return [updatedOrder, ...prev];
     });
     if (
-      ["shipped", "delivered", "completed"].includes(updatedOrder.status) &&
+      ["in_transit", "delivered", "completed"].includes(updatedOrder.status) &&
       updatedOrder.productId
     ) {
       setProducts((prev) =>
@@ -218,7 +218,7 @@ function SellerDashboardContent() {
     const auctionRevenue = auctionCompleted.reduce((sum, o) => sum + netRevenueForOrder(o), 0);
 
     const pendingRevenue = orders
-      .filter((o) => ["pending", "pending_payment"].includes(o.status))
+      .filter((o) => o.status === "pending_payment")
       .reduce((sum, o) => sum + (o.finalPrice ?? o.price ?? 0), 0);
 
     const days14 = lastNDays(14);
@@ -592,7 +592,7 @@ function SellerDashboardContent() {
                     prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)),
                   );
                   if (
-                    ["shipped", "delivered", "completed"].includes(updated.status) &&
+                    ["in_transit", "delivered", "completed"].includes(updated.status) &&
                     updated.productId
                   ) {
                     setProducts((prev) =>
@@ -620,7 +620,7 @@ function SellerDashboardContent() {
                     prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)),
                   );
                   if (
-                    ["shipped", "delivered", "completed"].includes(updated.status) &&
+                    ["in_transit", "delivered", "completed"].includes(updated.status) &&
                     updated.productId
                   ) {
                     setProducts((prev) =>

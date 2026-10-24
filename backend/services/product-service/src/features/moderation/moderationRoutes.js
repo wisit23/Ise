@@ -15,7 +15,7 @@ router.get("/reviews/:id", async (req, res, next) => {
   try {
     const review = await reviewModel.findById(req.params.id);
     if (!review) throw notFound("review not found");
-    res.json(reviewModel.toApiShape(review));
+    res.json(review);
   } catch (err) { next(err); }
 });
 

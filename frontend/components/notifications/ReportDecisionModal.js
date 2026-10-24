@@ -161,6 +161,13 @@ export default function ReportDecisionModal({ open, onClose, notification }) {
           </div>
         </div>
 
+        {metadata.reportReason && (
+          <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-xs font-semibold text-slate-700">เหตุผลที่รายงานความคิดเห็น:</h3>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{metadata.reportReason}</p>
+          </section>
+        )}
+
         {/* Admin Reason Box */}
         {adminReason && (
           <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
