@@ -461,8 +461,8 @@
 - Date: 2026-10-18
 - Status: Accepted — implementation complete, Docker/live verification pending
 - Decision:
-  1. ใช้น้ำหนักจาก Recommendation ที่มีอยู่เป็นแหล่งเดียว: category 4, style 3, brand 2, size 5, search 6, like 8, purchase 10; ไม่สร้างตัวนับคะแนนชุดใหม่
-  2. คะแนนรวมปัดเป็นจำนวนเต็มและแบ่งเป็น `0`, `1–6`, `7–14`, `15–24`, `25–38`; UI แสดงทั้งคะแนนเต็มตามมิติที่เลือกและคะแนนเต็มรวม 38
+  1. ใช้น้ำหนักจาก Recommendation ที่มีอยู่เป็นแหล่งเดียวหลังตัด Size: category 4, style 3, brand 2, search 6, like 8, purchase 10; ไม่สร้างตัวนับคะแนนชุดใหม่
+  2. คะแนนรวมปัดเป็นจำนวนเต็มและแบ่งเป็น `0`, `1–6`, `7–14`, `15–24`, `25–33`; UI แสดงทั้งคะแนนเต็มตามมิติที่เลือกและคะแนนเต็มรวม 33
   3. Marketing เลือกมิติเป้าหมายและช่วงคะแนน แล้วดูเฉพาะสถิติรวมก่อนสร้าง Campaign; API ไม่คืนรายชื่อหรือข้อมูลส่วนบุคคล
   4. เมื่อ Publish ระบบคำนวณและบันทึกสิทธิ์เป็น snapshot ใน transaction เดียวกับสถานะ Campaign และ Marketing Audit เพื่อให้คะแนนวันถัดไปไม่ถอนสิทธิ์ที่มอบแล้ว
   5. Campaign ทั่วไปไม่ส่ง Notification; Campaign ตามคะแนนส่ง Notification รายบัญชีเฉพาะผู้มีสิทธิ์ โดยกดไป `/campaigns` เพื่อดูและเก็บคูปอง
@@ -488,3 +488,47 @@
   - ไม่มี schema หรือ migration ใหม่สำหรับชุดนี้
   - Product เดิมยังใช้ ID เดิมเมื่อ Recovery; การส่งเข้ารอบใหม่สร้าง AuctionItem/Bid/Order ชุดใหม่ตาม MKT-DEC-026/027
   - Public buyer browse ซ่อนรอบที่ยกเลิก และคงแสดงเฉพาะรอบปกติที่เวลาหลักยังไม่จบหรือมี AuctionItem อยู่ใน Soft Close
+
+## MKT-DEC-030 — Shared Dashboard range for Campaign comparison and adaptive usage heatmap
+
+- Date: 2026-10-21
+- Status: Accepted — implementation and targeted automated verification complete
+- Decision:
+  1. Campaign Comparison ใช้ช่วง Dashboard เดียวกับ metrics และรวม Campaign ทุกสถานะเมื่อช่วงทำงานทับซ้อนแบบมีระยะเวลาจริง: `startsAt < to` และ `endsAt > from`
+  2. วันที่ Campaign แสดงด้วยปฏิทิน Gregorian/ค.ศ. เพื่อให้ตรงกับค่าที่แก้ไขผ่าน `datetime-local`
+  3. Heatmap ไม่มีตัวเลือกช่วงแยก ใช้ตัวกรองหลักเท่านั้น: วันเป็น 24 ชั่วโมง, สัปดาห์เป็น 7 วัน × 24 ชั่วโมง, เดือนเป็นรายวัน และปีเป็น 12 เดือน
+  4. ช่วงกำหนดเองเลือกความละเอียดจากจำนวนวันแบบ inclusive: ไม่เกิน 1 วันเป็นรายชั่วโมง, ไม่เกิน 7 วันเป็นวัน × ชั่วโมง, ไม่เกิน 31 วันเป็นรายวัน และมากกว่า 31 วันเป็นรายเดือน
+  5. คะแนนความสนใจเต็ม 33 และช่วงสูงสุด `25–33` หลัง Size ถูกนำออกจากทั้ง Insights และ Campaign targeting
+- Consequence:
+  - ใช้ hourly analytics API เดิมแล้วรวมข้อมูลใน UI จึงไม่มี schema หรือ migration ใหม่
+  - ช่วง Dashboard เป็น half-open `[from, to)` ที่ API แต่การเลือกรายวันใน UI นับวันเริ่มและวันสิ้นสุดแบบ inclusive เพื่อเลือกหน่วยแสดงผล
+  - Verification: Product Campaign Metrics 18/18, Frontend focused tests 67/67 และ Next.js production build 28/28 pages ผ่าน
+  - Live browser acceptance ผ่าน preset ทั้ง 4 แบบ, custom ที่ 1/7/8/31/32 วัน, Campaign overlap สองช่วงข้อมูลจริง, Gregorian dates และ legacy maxScore 38 ที่แสดงด้วยเพดานปัจจุบัน 33
+
+## MKT-DEC-031 — Round detail modal owns the complete round item history
+
+- Date: 2026-10-21
+- Status: Accepted and implemented
+- Decision:
+  1. รายละเอียดสินค้าเปิดภายใน Modal `รายละเอียดรอบการประมูล` เดิม ไม่ navigate ไปหน้าใหม่
+  2. แสดงทุกรายการของรอบรวม `draft`, `pending_approval`, `approved`, `scheduled`, `open`, `closed`, `rejected`, `cancelled`
+  3. ลำดับกลุ่มคือ `รออนุมัติ → อนุมัติ/กำลังประมูล → ปิดแล้ว → ปฏิเสธ/ยกเลิก`; ภายในกลุ่มเรียงรายการล่าสุดก่อนและ Badge แต่ละสถานะใช้สีต่างกัน
+  4. ผลรายการ `closed` ใช้ Bid ที่ตรง `winningBidId` เป็นราคาสุดท้ายและผู้ชนะ ไม่สมมติว่า Bid สูงสุดยังเป็นผู้ชนะหลัง payment rollover; จำนวน Bid คือจำนวนแถว Bid ทั้งหมด
+  5. ถ้า `closed` ไม่มี Bid แสดงข้อความ `ไม่มีผู้เสนอราคา`
+- Consequence:
+  - Reuse `GET /api/products/auctions?roundId=...` และโหลดทุกหน้าก่อนเรียง จึงไม่แก้ backend, database schema หรือ migration
+  - ชื่อผู้เสนอราคายังคงใช้ `bidderName` ที่ backend ปิดบังตาม privacy contract เดิม
+  - Verification: focused Frontend 59/59, Next.js build 28/28 pages, `git diff --check` และ browser 1440×900 ผ่าน
+
+## MKT-DEC-032 — Server-side auction-round search and phase filters
+
+- Date: 2026-10-23
+- Status: Accepted and implemented
+- Decision:
+  1. หน้า Marketing ค้นหารอบจากชื่อรอบและเลือกกรองสถานะรอบได้หลายค่า โดยตัวกรองชุดเดียวใช้กับทั้งรอบที่ยังจัดการได้และประวัติ
+  2. Product Service กรองจาก phase ที่ derive ณ เวลาปัจจุบันก่อนแบ่งหน้า เพื่อไม่ให้ผลค้นหาตกหล่นเพราะกรองเฉพาะข้อมูลในหน้าปัจจุบัน
+  3. ผลลัพธ์ในตารางแยกกลุ่ม `รอบที่ยังจัดการได้` (`upcoming`, `submission`, `waiting`, `auction`) ออกจาก `ประวัติรอบประมูล` (`ended`, `cancelled`)
+  4. คำค้นหาจำกัด 100 ตัวอักษรและ phase ที่ไม่อยู่ใน contract ถูกปฏิเสธด้วย 400
+- Consequence:
+  - ไม่มี schema หรือ migration ใหม่ และ pagination contract เดิมยังคงอยู่
+  - Verification: Product Auction controller/service 130/130 และ Frontend AuctionScheduleSection 60/60 ผ่านใน Docker

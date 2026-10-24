@@ -47,6 +47,14 @@ const AUCTION_STATUSES = new Set([
 ]);
 const MAX_AUCTION_FILTER_VALUES = 100;
 const MAX_AUCTION_SEARCH_LENGTH = 100;
+const AUCTION_ROUND_PHASES = new Set([
+  "upcoming",
+  "submission",
+  "waiting",
+  "auction",
+  "ended",
+  "cancelled",
+]);
 
 function maskBidderDisplayName(displayName, userId) {
   const clean = typeof displayName === "string" ? displayName.trim() : "";
@@ -1169,7 +1177,7 @@ async function listRoundItems(roundId, now = new Date()) {
 }
 
 /** List all auction rounds with derived phase for Marketing. */
-async function listRounds({ user, skip, take } = {}) {
+async function listRounds({ user, skip, take, phases = [], search = "" } = {}) {
   if (user?.role !== "MARKETING") {
     throw forbidden(
       "เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์ดูรายการรอบการประมูลทั้งหมด",
@@ -1177,6 +1185,43 @@ async function listRounds({ user, skip, take } = {}) {
   }
   const isPaginated = typeof skip === "number" && typeof take === "number";
   const now = new Date();
+  const effectivePhases = [...new Set(Array.isArray(phases) ? phases : [])];
+  const unknownPhase = effectivePhases.find((phase) => !AUCTION_ROUND_PHASES.has(phase));
+  if (unknownPhase) {
+    throw badRequest("สถานะรอบประมูลที่ใช้กรองไม่ถูกต้อง");
+  }
+  const cleanSearch = typeof search === "string" ? search.trim() : "";
+  if (cleanSearch.length > MAX_AUCTION_SEARCH_LENGTH) {
+    throw badRequest(`คำค้นหาต้องไม่เกิน ${MAX_AUCTION_SEARCH_LENGTH} ตัวอักษร`);
+  }
+
+  const hasFilters = effectivePhases.length > 0 || cleanSearch.length > 0;
+
+  if (hasFilters) {
+    const raw = await auctionRepository.listRounds();
+    const hydrated = await auctionRepository.addCapacityCounts(
+      Array.isArray(raw) ? raw : raw?.items || [],
+    );
+    const normalizedSearch = cleanSearch.toLocaleLowerCase("th-TH");
+    const filtered = hydrated
+      .map((round) => ({
+        ...round,
+        phase: deriveRoundPhase(round, now),
+      }))
+      .filter((round) =>
+        effectivePhases.length === 0 || effectivePhases.includes(round.phase),
+      )
+      .filter((round) =>
+        !normalizedSearch ||
+        String(round.title || "").toLocaleLowerCase("th-TH").includes(normalizedSearch),
+      );
+
+    if (!isPaginated) return filtered;
+    return {
+      items: filtered.slice(skip, skip + take),
+      total: filtered.length,
+    };
+  }
 
   if (!isPaginated) {
     const raw = await auctionRepository.listRounds();

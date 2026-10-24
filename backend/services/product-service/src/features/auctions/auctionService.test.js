@@ -2021,6 +2021,64 @@ test("listRounds attaches derived phase to each round", async (t) => {
   assert.equal(result[1].phase, "upcoming");
 });
 
+test("listRounds filters by title and derived phases before pagination", async (t) => {
+  const user = { id: "mkt-1", role: "MARKETING" };
+  const future = (offset) => new Date(Date.now() + offset);
+  const rounds = [
+    {
+      id: "match-1",
+      title: "รอบพิเศษ กระเป๋า",
+      submissionStartsAt: future(3_600_000),
+      submissionEndsAt: future(7_200_000),
+      auctionStartsAt: future(10_800_000),
+      auctionEndsAt: future(14_400_000),
+    },
+    {
+      id: "match-2",
+      title: "รอบพิเศษ รองเท้า",
+      submissionStartsAt: future(18_000_000),
+      submissionEndsAt: future(21_600_000),
+      auctionStartsAt: future(25_200_000),
+      auctionEndsAt: future(28_800_000),
+    },
+    {
+      id: "ended",
+      title: "รอบพิเศษ ปิดแล้ว",
+      submissionStartsAt: future(-14_400_000),
+      submissionEndsAt: future(-10_800_000),
+      auctionStartsAt: future(-7_200_000),
+      auctionEndsAt: future(-3_600_000),
+    },
+  ];
+
+  t.mock.method(repository, "listRounds", async () => rounds);
+  t.mock.method(repository, "addCapacityCounts", async (items) => items);
+
+  const result = await service.listRounds({
+    user,
+    phases: ["upcoming"],
+    search: " พิเศษ ",
+    skip: 1,
+    take: 1,
+  });
+
+  assert.equal(result.total, 2);
+  assert.deepEqual(result.items.map((round) => round.id), ["match-2"]);
+  assert.equal(result.items[0].phase, "upcoming");
+});
+
+test("listRounds rejects an unknown phase filter", async () => {
+  await assert.rejects(
+    service.listRounds({
+      user: { id: "mkt-1", role: "MARKETING" },
+      phases: ["unknown"],
+      skip: 0,
+      take: 20,
+    }),
+    (err) => err.status === 400,
+  );
+});
+
 test("auction error messages do not leak internal status or English technical terms", async (t) => {
   t.mock.method(repository, "findById", async () => ({
     id: "a1",

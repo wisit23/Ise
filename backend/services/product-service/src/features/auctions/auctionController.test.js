@@ -42,6 +42,36 @@ test("public auction detail uses the lifecycle-aware service and propagates erro
   assert.equal(error, missing);
 });
 
+test("listRounds forwards search and multi-value phase filters", async (t) => {
+  const listRounds = t.mock.method(service, "listRounds", async (filters) => {
+    assert.equal(filters.search, "รอบพิเศษ");
+    assert.deepEqual(filters.phases, ["submission", "auction"]);
+    assert.equal(filters.skip, 0);
+    assert.equal(filters.take, 20);
+    return { items: [{ id: "round-1" }], total: 1 };
+  });
+  let body;
+
+  await controller.listRounds(
+    {
+      query: {
+        page: "1",
+        limit: "20",
+        search: "รอบพิเศษ",
+        phases: "submission,auction",
+      },
+      userId: "mkt-1",
+      userRole: "MARKETING",
+    },
+    { json: (value) => { body = value; } },
+    (err) => { throw err; },
+  );
+
+  assert.equal(listRounds.mock.callCount(), 1);
+  assert.equal(body.total, 1);
+  assert.equal(body.items[0].id, "round-1");
+});
+
 test("controller.getBids delegates to service.getBids and returns { items }", async (t) => {
   const bids = [
     { id: "b1", amount: 500, bidderId: "u1", bidderName: "User 1" },

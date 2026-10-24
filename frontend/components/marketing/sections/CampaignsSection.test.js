@@ -1,5 +1,14 @@
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
-import CampaignsSection from "./CampaignsSection";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import CampaignsSection, {
+  formatAudienceSummary,
+  formatThaiDateTime,
+} from "./CampaignsSection";
 import { apiFetch } from "../../../lib/api";
 import { fetchCategories } from "../../../lib/catalog";
 
@@ -10,6 +19,27 @@ jest.mock("../../../lib/api", () => ({
 jest.mock("../../../lib/catalog", () => ({
   fetchCategories: jest.fn(),
 }));
+
+describe("Campaign date formatting", () => {
+  test("shows the Gregorian year consistently with datetime-local inputs", () => {
+    const formatted = formatThaiDateTime("2026-06-01T00:00:00.000Z");
+    expect(formatted).toContain("2026");
+    expect(formatted).not.toContain("2569");
+  });
+});
+
+describe("Campaign audience score formatting", () => {
+  test("clamps legacy score ranges to the current maximum of 33", () => {
+    expect(
+      formatAudienceSummary({
+        category: "รองเท้า",
+        brand: "nike",
+        minScore: 7,
+        maxScore: 38,
+      }),
+    ).toBe("หมวดหมู่: รองเท้า · แบรนด์: nike · คะแนน 7–33");
+  });
+});
 
 describe("CampaignsSection (Marketing Workspace)", () => {
   const mockToken = "mock-jwt-token";
@@ -130,7 +160,9 @@ describe("CampaignsSection (Marketing Workspace)", () => {
 
     render(<CampaignsSection token={mockToken} user={mockUser} />);
 
-    const activeRow = (await screen.findByText("APPROVED-ACTIVE")).closest("tr");
+    const activeRow = (await screen.findByText("APPROVED-ACTIVE")).closest(
+      "tr",
+    );
     const expiredRow = screen.getByText("APPROVED-EXPIRED").closest("tr");
 
     expect(
@@ -142,7 +174,9 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     expect(
       within(expiredRow).queryByRole("button", { name: "เผยแพร่ (Publish)" }),
     ).not.toBeInTheDocument();
-    expect(within(expiredRow).getAllByText("สิ้นสุดแล้ว").length).toBeGreaterThanOrEqual(1);
+    expect(
+      within(expiredRow).getAllByText("สิ้นสุดแล้ว").length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it("cancels an approved campaign through the audited end endpoint", async () => {
@@ -185,21 +219,41 @@ describe("CampaignsSection (Marketing Workspace)", () => {
   });
 
   it("retains all columns and draft actions when names and descriptions are long", async () => {
-    const longName = "แคมเปญสำหรับชื่อที่ยาวมากและต้องไม่ดันปุ่มออกนอกตาราง".repeat(3);
-    const longDescription = "รายละเอียดเงื่อนไขโปรโมชันที่ต้องอ่านได้ครบ".repeat(4);
-    const campaign = { ...sampleCampaigns[1], name: longName, description: longDescription };
+    const longName =
+      "แคมเปญสำหรับชื่อที่ยาวมากและต้องไม่ดันปุ่มออกนอกตาราง".repeat(3);
+    const longDescription =
+      "รายละเอียดเงื่อนไขโปรโมชันที่ต้องอ่านได้ครบ".repeat(4);
+    const campaign = {
+      ...sampleCampaigns[1],
+      name: longName,
+      description: longDescription,
+    };
     apiFetch.mockResolvedValue({ items: [campaign], total: 1 });
     render(<CampaignsSection token={mockToken} user={mockUser} />);
-    expect(await screen.findByText(longName)).toHaveAttribute("title", longName);
-    expect(screen.getByText(longDescription)).toHaveAttribute("title", longDescription);
+    expect(await screen.findByText(longName)).toHaveAttribute(
+      "title",
+      longName,
+    );
+    expect(screen.getByText(longDescription)).toHaveAttribute(
+      "title",
+      longDescription,
+    );
     const table = screen.getByRole("table");
     expect(within(table).getAllByRole("columnheader")).toHaveLength(7);
     const row = within(table).getAllByRole("row")[1];
     for (const name of ["แก้ไข", "ส่งขออนุมัติ", "ลบ"]) {
-      expect(within(row).getByRole("button", { name, exact: true })).toBeEnabled();
+      expect(
+        within(row).getByRole("button", { name, exact: true }),
+      ).toBeEnabled();
     }
-    fireEvent.click(within(row).getByRole("button", { name: "แก้ไข", exact: true }));
-    expect(screen.getByPlaceholderText("เช่น ลดพิเศษต้อนรับซัมเมอร์สำหรับคนรักยีนส์")).toHaveValue(longName);
+    fireEvent.click(
+      within(row).getByRole("button", { name: "แก้ไข", exact: true }),
+    );
+    expect(
+      screen.getByPlaceholderText(
+        "เช่น ลดพิเศษต้อนรับซัมเมอร์สำหรับคนรักยีนส์",
+      ),
+    ).toHaveValue(longName);
   });
 
   it("opens modal when clicking 'สร้างแคมเปญใหม่'", async () => {
@@ -307,9 +361,9 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     expect(
       screen.getAllByText("ให้เฉพาะกลุ่มนี้").length,
     ).toBeGreaterThanOrEqual(1);
-    expect(
-      screen.getAllByText("ยกเว้นกลุ่มนี้").length,
-    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("ยกเว้นกลุ่มนี้").length).toBeGreaterThanOrEqual(
+      1,
+    );
   });
 
   it("loads brands from /api/products/filters, allows searching, adding, preventing duplicates, and removing chips", async () => {
@@ -760,7 +814,12 @@ describe("CampaignsSection (Marketing Workspace)", () => {
       }
       if (typeof url === "string" && url.includes("/audience/options")) {
         return Promise.resolve({
-          dimensions: { categories: ["กระเป๋า"], brands: ["Nike"], styles: [], sizesByCategory: {} },
+          dimensions: {
+            categories: ["กระเป๋า"],
+            brands: ["Nike"],
+            styles: [],
+            sizesByCategory: {},
+          },
           globalMaximum: 33,
         });
       }
@@ -771,7 +830,9 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     });
 
     render(<CampaignsSection token={mockToken} user={mockUser} />);
-    fireEvent.click(await screen.findByRole("button", { name: /สร้างแคมเปญใหม่/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /สร้างแคมเปญใหม่/i }),
+    );
     fireEvent.click(screen.getByLabelText("ตามคะแนนความสนใจ"));
 
     expect(screen.queryByLabelText("ไซซ์")).not.toBeInTheDocument();
@@ -782,7 +843,9 @@ describe("CampaignsSection (Marketing Workspace)", () => {
     fireEvent.change(screen.getByLabelText("หมวดหมู่"), {
       target: { value: "กระเป๋า" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "คำนวณสิทธิ์และสถิติ" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "คำนวณสิทธิ์และสถิติ" }),
+    );
     expect(await screen.findByText("3 คน")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("คะแนนเริ่มต้น"), {
@@ -823,9 +886,7 @@ describe("CampaignsSection (Marketing Workspace)", () => {
       return Promise.resolve({ items: [activeCampaign], total: 1 });
     });
     render(<CampaignsSection token={mockToken} user={mockUser} />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "ปิดแคมเปญ" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "ปิดแคมเปญ" }));
     const closeDialog = screen.getByRole("dialog");
     fireEvent.click(
       within(closeDialog).getByRole("button", { name: "ปิดแคมเปญ" }),
@@ -1076,7 +1137,10 @@ describe("CampaignsSection (Marketing Workspace)", () => {
             },
           });
         }
-        if (typeof url === "string" && url.includes("status=pending_approval")) {
+        if (
+          typeof url === "string" &&
+          url.includes("status=pending_approval")
+        ) {
           return Promise.resolve({
             items: [
               {

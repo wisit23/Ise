@@ -459,7 +459,7 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 
 ### Interest-score Campaign Targeting & Customer Insights (MKT-DEC-028)
 
-- [x] Extract reusable interest scoring from the existing Recommendation weights with integer score bands `0`, `1–6`, `7–14`, `15–24`, `25–38`.
+- [x] Extract reusable interest scoring from the existing Recommendation weights after removing Size, with integer score bands `0`, `1–6`, `7–14`, `15–24`, `25–33`.
 - [x] Add internal-only Auth profile and Order paid-purchase read APIs; keep ownership boundaries intact.
 - [x] Add Marketing-only audience options, preview, and insight endpoints in Product Service.
 - [x] Persist score criteria on Campaign and immutable `(campaignId, userId, score)` rights at publish time.
@@ -468,3 +468,29 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 - [x] Add Customer Insights as a separate Marketing tab and hand selected criteria/date range into Campaign creation.
 - [x] Add focused backend and frontend tests.
 - [ ] Run Docker migrations, backend suites, frontend suites/build, and browser flow after verification is authorized.
+
+### Marketing Dashboard date, comparison, and adaptive heatmap (MKT-DEC-030)
+
+- [x] Filter Campaign Comparison by positive active-window overlap with the shared Dashboard range, without a status filter.
+- [x] Render Campaign dates with the Gregorian calendar.
+- [x] Drive the Heatmap exclusively from the shared Dashboard selector and adapt its unit for day/week/month/year/custom ranges.
+- [x] Add focused backend and frontend tests.
+- [x] Verify Product Campaign Metrics (18/18), focused Frontend suites (67/67), and Next.js production build (28/28 pages).
+- [x] Run live browser acceptance for preset/custom adaptive Heatmap, Campaign overlap, Gregorian dates, and legacy score display.
+
+### Auction round item details (MKT-DEC-031)
+
+- [x] Reuse the existing paginated auction list API filtered by `roundId`; do not expose a new endpoint or change schema.
+- [x] Load every page for the selected round and render all item statuses inside the existing read-only round modal.
+- [x] Sort status groups as pending, approved/live, closed, rejected/cancelled while preserving newest-first order inside each group.
+- [x] Show product/seller/pricing/status/cancellation data and closed-auction final price, Bid count, and winner.
+- [x] Add loading, empty, API error/retry, no-bid, winner, and ordering component coverage.
+- [x] Verify focused Frontend tests (59/59), Next.js production build (28/28 pages), diff check, and live 1440×900 browser rendering.
+
+### Auction round search and phase filters (MKT-DEC-032)
+
+- [x] Add server-side title search and multi-phase filtering before pagination.
+- [x] Add Marketing UI controls shared by manageable rounds and history.
+- [x] Separate the result table into manageable and historical groups.
+- [x] Add controller/service/component regression coverage and run targeted Docker tests.
+- [ ] Complete live browser acceptance with the user.
