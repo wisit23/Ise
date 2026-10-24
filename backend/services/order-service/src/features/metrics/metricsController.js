@@ -9,11 +9,13 @@ const {
   parsePagination,
   paginatedResponse,
   badRequest,
+  notFound,
 } = require("@reloop/shared");
 const platformMetrics = require("./platformMetrics");
 const { getPlatformFeeRate } = require("./feeConfig");
 const orderStatusMetrics = require("./orderStatusMetrics");
 const executiveDisputes = require("./executiveDisputes");
+const { getExecutiveDispute } = require("./executiveDisputeDetail");
 
 async function getMetrics(req, res, next) {
   try {
@@ -137,6 +139,19 @@ async function getDisputes(req, res, next) {
   }
 }
 
+async function getDispute(req, res, next) {
+  try {
+    const detail = await getExecutiveDispute(req.params.id);
+    if (!detail) throw notFound("dispute not found");
+    res.json({
+      data: detail.data,
+      meta: { definitionVersion: METRIC_DEFINITION_VERSION, ...detail.meta },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getFirstSale(req, res, next) {
   try {
     const firstSaleAt = await platformMetrics.getFirstSaleAt();
@@ -153,6 +168,7 @@ async function getFirstSale(req, res, next) {
 
 module.exports = {
   getDisputes,
+  getDispute,
   getMetrics,
   getMetricsSeries,
   getOrderStatus,

@@ -4,7 +4,10 @@ const {
   parsePagination,
   paginatedResponse,
   badRequest,
+  notFound,
+  METRIC_DEFINITION_VERSION,
 } = require("@reloop/shared");
+const { getExecutiveTicket } = require("./executiveTicketDetail");
 const {
   listExecutiveTickets,
   getTicketOptions,
@@ -56,4 +59,17 @@ async function getTickets(req, res, next) {
   }
 }
 
-module.exports = { getTickets };
+async function getTicket(req, res, next) {
+  try {
+    const detail = await getExecutiveTicket(req.params.id);
+    if (!detail) throw notFound("ticket not found");
+    res.json({
+      data: detail.data,
+      meta: { definitionVersion: METRIC_DEFINITION_VERSION, ...detail.meta },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getTickets, getTicket };

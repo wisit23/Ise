@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import ComplaintsSection from "./ComplaintsSection";
 import { apiFetch } from "../../../lib/api";
 
@@ -371,7 +377,123 @@ describe("ComplaintsSection", () => {
     render(<ComplaintsSection token="t" />);
     await screen.findByText("ร้านไม่ส่งของ");
 
-    fireEvent.click(screen.getByRole("button", { name: "รายละเอียด" }));
-    expect(await screen.findByRole("dialog")).toBeVisible();
+    const row = screen.getByText("ร้านไม่ส่งของ").closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("รายละเอียดคำร้อง")).toBeVisible();
+    expect(within(dialog).getByText("มาลี ใจดี")).toBeVisible();
+  });
+
+  it("opens a dispute's details, loaded from order-service when asked", async () => {
+    serve({
+      "/api/orders/executive/disputes/d1": async () => ({
+        data: {
+          ...DISPUTE,
+          createdAt: DISPUTE.createdAt,
+          order: { id: DISPUTE.orderId, amount: 1000, orderType: "BUY_NOW" },
+          product: { id: "p1", title: "กระเป๋าหนัง" },
+          buyer: { id: "u-buyer", name: "สมหญิง" },
+          seller: { id: "u-seller", name: "ร้านของเก่า" },
+          assignee: { id: "u-admin", name: "แอดมินเอ" },
+          assignedRole: "ADMIN",
+          assignedAt: "2026-10-16T05:30:00.000Z",
+          decision: "APPROVE_REFUND",
+          decisionReason: "หลักฐานชัดเจน",
+          decider: { id: "u-admin", name: "แอดมินเอ" },
+          decidedAt: "2026-10-16T06:00:00.000Z",
+          decisionDueAt: null,
+        },
+        meta: { namesAvailable: true, productAvailable: true },
+      }),
+    });
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("กระเป๋าขาด");
+    // Nothing is fetched for a case until its details are asked for.
+    expect(pathsFor("/api/orders/executive/disputes/d1")).toEqual([]);
+
+    const row = screen.getByText("กระเป๋าขาด").closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("ร้านของเก่า")).toBeVisible();
+    expect(within(dialog).getByText("รายละเอียดข้อพิพาท")).toBeVisible();
+    expect(within(dialog).getByText("ผู้ตัดสิน")).toBeVisible();
+    expect(within(dialog).getByText("อนุมัติคืนเงินให้ผู้ซื้อ")).toBeVisible();
+    expect(within(dialog).getByText("หลักฐานชัดเจน")).toBeVisible();
+    expect(within(dialog).getByText("กระเป๋าหนัง")).toBeVisible();
+  });
+
+  it("opens a ticket's details with who handled it and why", async () => {
+    serve({
+      "/api/support/executive/tickets/t1": async () => ({
+        data: {
+          id: "t1",
+          ticketNumber: "TK-0001",
+          subject: TICKET.subject,
+          description: "โอนเงินแล้ว",
+          requester: { id: "u-buyer", name: "สมหญิง" },
+          category: { code: "PAYMENT", name: "การชำระเงิน" },
+          priority: { code: "HIGH", name: "HIGH" },
+          status: { code: "RESOLVED", name: "RESOLVED", isTerminal: false },
+          orderId: null,
+          createdAt: TICKET.createdAt,
+          assignee: {
+            id: "u-agent",
+            name: "เจ้าหน้าที่บี",
+            assignedAt: "2026-10-16T06:10:00.000Z",
+            current: true,
+          },
+          actions: [
+            {
+              at: "2026-10-16T07:00:00.000Z",
+              by: { id: "u-agent", name: "เจ้าหน้าที่บี" },
+              from: "IN_PROGRESS",
+              to: "RESOLVED",
+              reason: "คืนเงินแล้ว",
+            },
+          ],
+        },
+        meta: { namesAvailable: true },
+      }),
+    });
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText(TICKET.subject);
+
+    const row = screen.getByText(TICKET.subject).closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("สมหญิง")).toBeVisible();
+    expect(within(dialog).getByText("รายละเอียด Ticket")).toBeVisible();
+    // No order: a dash, not an empty space.
+    expect(
+      within(dialog).getByText("คำสั่งซื้อที่เกี่ยวข้อง").nextSibling,
+    ).toHaveTextContent("-");
+    expect(
+      within(dialog).getByText("กำลังดำเนินการ → แก้ไขสำเร็จ"),
+    ).toBeVisible();
+    expect(within(dialog).getByText("เหตุผล: คืนเงินแล้ว")).toBeVisible();
+  });
+
+  it("says when a case's details cannot be loaded and can try again", async () => {
+    let calls = 0;
+    serve({
+      "/api/orders/executive/disputes/d1": async () => {
+        calls += 1;
+        throw new Error("order-service down");
+      },
+    });
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("กระเป๋าขาด");
+
+    const row = screen.getByText("กระเป๋าขาด").closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText("โหลดรายละเอียดไม่สำเร็จ"),
+    ).toBeVisible();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "ลองใหม่" }));
+    await waitFor(() => expect(calls).toBe(2));
   });
 });

@@ -82,6 +82,7 @@ model Order {
   @@index([orderType, status, paymentDeadlineAt])
   @@index([status, shippedAt])
   @@index([status, deliveredAt])
+  @@index([createdAt, status])
   @@map("orders")
 }
 

@@ -66,6 +66,7 @@ model User {
   bulkActionRuns     BulkActionRun[]     @relation("BulkActionActor")
   executiveAuditLogs ExecutiveAuditLog[] @relation("ExecutiveAuditActor")
 
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -157,6 +158,7 @@ model LoginLog {
   userAgent String?   @map("user_agent")
 
   @@index([userId, loginAt])
+  @@index([loginAt])
   @@map("login_logs")
 }
 
@@ -264,6 +266,7 @@ model Report {
   actionTaken String?      @map("action_taken")
   evidence    ReportEvidence[]
 
+  @@index([reportedAt])
   @@map("reports")
 }
 

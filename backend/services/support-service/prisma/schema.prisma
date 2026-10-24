@@ -113,6 +113,7 @@ model SupportTicket {
   @@index([requesterId, createdAt])
   @@index([categoryId])
   @@index([priorityId])
+  @@index([createdAt])
   @@map("support_tickets")
   @@index([archivedAt, deletedAt, closedAt])
 }

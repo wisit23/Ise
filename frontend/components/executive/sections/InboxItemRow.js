@@ -1,10 +1,11 @@
 import { INBOX_SOURCES } from "../../../lib/executiveInbox";
 import { formatReportedAt } from "../../../lib/executiveComplaints";
+import Button from "../../ui/Button";
 
 // A ticket or a dispute in the complaints list. Complaints about a user or
-// product have their own row (ComplaintRow); this one reads only what the
-// services send for the page: no requester, no assignee, no chat.
-export default function InboxItemRow({ item }) {
+// product have their own row (ComplaintRow). The row carries only what the
+// list needs; the details dialog loads the rest for one case.
+export default function InboxItemRow({ item, onDetails }) {
   return (
     <li className="px-5 py-4 transition-colors hover:bg-slate-50/50">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
@@ -38,14 +39,19 @@ export default function InboxItemRow({ item }) {
             ))}
           </div>
         </div>
-        <span
-          className={`shrink-0 self-start rounded-full px-2.5 py-1 text-xs font-semibold ${
-            item.status.style ||
-            "border border-slate-300 bg-slate-50 text-slate-600"
-          }`}
-        >
-          {item.status.label}
-        </span>
+        <div className="flex shrink-0 items-center justify-between gap-2 sm:flex-col sm:items-end">
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+              item.status.style ||
+              "border border-slate-300 bg-slate-50 text-slate-600"
+            }`}
+          >
+            {item.status.label}
+          </span>
+          <Button variant="secondary" size="sm" onClick={() => onDetails(item)}>
+            รายละเอียด
+          </Button>
+        </div>
       </div>
     </li>
   );

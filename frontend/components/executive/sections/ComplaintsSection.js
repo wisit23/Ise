@@ -19,6 +19,7 @@ import PeriodTabs from "../PeriodTabs";
 import ComplaintDetailsModal from "./ComplaintDetailsModal";
 import ComplaintRow from "./ComplaintRow";
 import InboxItemRow from "./InboxItemRow";
+import CaseDetailsModal from "./CaseDetailsModal";
 import { defaultCustomDay } from "../../../lib/executive";
 
 const noop = () => {};
@@ -55,6 +56,7 @@ function FilterField({ id, label, value, options, onChange }) {
 export default function ComplaintsSection({ token }) {
   const inbox = useExecutiveInbox(token);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [selectedCase, setSelectedCase] = useState(null);
   const {
     source,
     period,
@@ -304,7 +306,11 @@ export default function ComplaintsSection({ token }) {
                   onSelectTarget={noop}
                 />
               ) : (
-                <InboxItemRow key={item.key} item={item} />
+                <InboxItemRow
+                  key={item.key}
+                  item={item}
+                  onDetails={setSelectedCase}
+                />
               ),
             )}
           </ul>
@@ -318,6 +324,11 @@ export default function ComplaintsSection({ token }) {
           onChange={inbox.setPage}
         />
       )}
+      <CaseDetailsModal
+        item={selectedCase}
+        token={token}
+        onClose={() => setSelectedCase(null)}
+      />
       <ComplaintDetailsModal
         report={selectedReport}
         onClose={() => setSelectedReport(null)}
