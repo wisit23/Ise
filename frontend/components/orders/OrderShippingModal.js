@@ -254,8 +254,8 @@ export default function OrderShippingModal({
               <h2 className="text-base font-bold text-gray-900">
                 รายละเอียดคำสั่งซื้อ & ที่อยู่จัดส่ง
               </h2>
-              <p className="font-mono text-xs text-gray-400" title={orderId}>
-                Order ID: #{formatOrderId(orderId)}
+              <p className="font-mono text-xs text-gray-400" title={formatOrderId(order || initialOrder || orderId)}>
+                Order ID: #{formatOrderId(order || initialOrder || orderId)}
               </p>
             </div>
           </div>

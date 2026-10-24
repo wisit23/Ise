@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 import { useState } from "react";
 import useExecutiveInbox from "../../../lib/useExecutiveInbox";
 import {
@@ -183,7 +185,7 @@ export default function ComplaintsSection({ token }) {
               {anomaly.highRiskTargets
                 .map(
                   (t) =>
-                    `${t.targetShopName || t.targetName || t.targetId.slice(0, 8)} (${t.count} ครั้ง)`,
+                    `${t.targetShopName || t.targetName || formatReferenceCode(t.targetId)} (${t.count} ครั้ง)`,
                 )
                 .join(", ")}
             </p>

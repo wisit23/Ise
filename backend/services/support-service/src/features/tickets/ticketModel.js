@@ -352,8 +352,10 @@ function queueFilter({
   if (priority) clauses.push(Prisma.sql`p.code = ${priority}`);
   if (search) {
     const pattern = "%" + search.replace(/[\\%_]/g, "\\$&") + "%";
+    const reference = require("@reloop/shared").normalizeReferenceCode(search, "TKT");
+    const referenceMatch = reference ? Prisma.sql`OR t.reference_code = ${reference}` : Prisma.empty;
     clauses.push(
-      Prisma.sql`(t.subject ILIKE ${pattern} OR t.ticket_number ILIKE ${pattern})`,
+      Prisma.sql`(t.subject ILIKE ${pattern} OR t.ticket_number ILIKE ${pattern} ${referenceMatch})`,
     );
   }
   return clauses.length

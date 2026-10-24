@@ -1,4 +1,5 @@
 "use client";
+import { formatReferenceCode, formatReferenceText } from "../../../lib/referenceCodes";
 
 import { useEffect, useState, useCallback } from "react";
 import Button from "../../ui/Button";
@@ -283,7 +284,7 @@ function formatBangkokTimestamp(isoString) {
 function ExpandableText({ text }) {
   const [expanded, setExpanded] = useState(false);
   if (!text) return <span className="text-slate-400 italic">-</span>;
-  const str = String(text);
+  const str = formatReferenceText(text);
 
   if (str.length <= 120) {
     return <span className="whitespace-pre-wrap break-words">{str}</span>;
@@ -433,7 +434,7 @@ export function renderDiffValue(key, value, contextObj = null) {
                 ? item
                   ? "ใช่ / เปิดใช้งาน"
                   : "ไม่ใช่ / ปิดใช้งาน"
-                : ENUM_LABELS_THAI[String(item)] || String(item)}
+                : ENUM_LABELS_THAI[String(item)] || formatReferenceText(item)}
           </span>
         ))}
       </div>
@@ -534,7 +535,7 @@ export function renderDiffValue(key, value, contextObj = null) {
     );
   }
 
-  return <span className="text-slate-800">{String(value)}</span>;
+  return <span className="text-slate-800">{formatReferenceText(value)}</span>;
 }
 
 export default function AuditTrailSection({ token }) {
@@ -924,9 +925,9 @@ export default function AuditTrailSection({ token }) {
                             <div className="flex flex-col min-w-0">
                               <span
                                 className="text-slate-900 font-medium truncate block text-xs"
-                                title={operatorDisplayName}
+                                title={formatReferenceText(operatorDisplayName)}
                               >
-                                {operatorDisplayName}
+                                {formatReferenceText(operatorDisplayName)}
                               </span>
                             </div>
                           )}
@@ -960,9 +961,9 @@ export default function AuditTrailSection({ token }) {
                           <div className="flex flex-col min-w-0">
                             <span
                               className="font-medium text-slate-900 truncate block text-xs"
-                              title={entityDisplayName}
+                              title={formatReferenceText(entityDisplayName)}
                             >
-                              {entityDisplayName}
+                              {formatReferenceText(entityDisplayName)}
                             </span>
                             {isRenamed && (
                               <span className="text-[10px] text-violet-600 font-medium">
@@ -1046,7 +1047,7 @@ export default function AuditTrailSection({ token }) {
                     รายการที่เกี่ยวข้อง:
                   </span>
                   <span className="text-slate-900 font-semibold text-sm">
-                    {selectedLog.entityName ||
+                    {formatReferenceText(selectedLog.entityName) ||
                       `รายการ${ENTITY_LABELS_THAI[selectedLog.entityType] || "ที่เกี่ยวข้อง"}`}
                   </span>
                   <span className="text-slate-500 text-[11px] ml-1.5">
@@ -1078,7 +1079,7 @@ export default function AuditTrailSection({ token }) {
                   ) : (
                     <div>
                       <span className="text-slate-900 font-semibold">
-                        {selectedLog.actorName || "ไม่พบชื่อผู้ดำเนินการ"}
+                        {formatReferenceText(selectedLog.actorName) || formatReferenceCode(selectedLog.actorId)}
                       </span>
                       <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 ml-1.5">
                         {ROLE_LABELS_THAI[selectedLog.actorRole] ||

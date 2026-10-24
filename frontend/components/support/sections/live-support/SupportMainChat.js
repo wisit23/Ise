@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 import config from "../../../../lib/customerServiceConfig";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -367,7 +369,7 @@ export default function SupportMainChat({
               </span>
               <span>•</span>
               <span className="truncate font-medium text-slate-600">
-                ผู้แจ้ง #{ticket.requesterId?.slice(0, 12)} ·{" "}
+                ผู้แจ้ง #{formatReferenceCode(ticket.requesterId)} ·{" "}
                 {otherOnline ? "ออนไลน์" : "ออฟไลน์"}
               </span>
             </div>

@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../ui/ReferenceCode";
 import config from "../../../lib/customerServiceConfig";
 
 import { useEffect, useRef, useState } from "react";
@@ -250,6 +251,7 @@ export default function KycSection({ token }) {
                         ({app.user?.email})
                       </span>
                     </div>
+                    {app.referenceCode && <ReferenceCode value={app} className="mt-1 text-xs text-slate-500" />}
                     <p className="mt-1 text-xs font-medium text-slate-500">
                       ยื่นคำขอเมื่อ:{" "}
                       {new Date(app.submittedAt).toLocaleString("th-TH")}

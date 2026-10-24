@@ -1,4 +1,7 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
+import ReferenceCode from "../../ui/ReferenceCode";
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, mediaUrl } from "../../../lib/api";
@@ -1134,6 +1137,7 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                       <span className="line-clamp-2 break-words" title={r.title}>
                         {r.title}
                       </span>
+                      {r.referenceCode && <ReferenceCode value={r} className="text-xs text-slate-500" />}
                     </td>
                     <td className="px-2 py-3">
                       <span
@@ -1315,10 +1319,10 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="min-w-0">
                                   <p className="break-words font-semibold text-slate-900">
-                                    {item.product?.title || item.productId || "ไม่พบชื่อสินค้า"}
+                                    {item.product?.title || formatReferenceCode(item.productId) || "ไม่พบชื่อสินค้า"}
                                   </p>
-                                  <p className="mt-0.5 truncate text-xs text-slate-500" title={item.sellerDisplayName || item.sellerId || "ไม่พบชื่อร้าน"}>
-                                    ร้าน: {item.sellerDisplayName || item.sellerId || "ไม่พบชื่อร้าน"}
+                                  <p className="mt-0.5 truncate text-xs text-slate-500" title={item.sellerDisplayName || formatReferenceCode(item.sellerId) || "ไม่พบชื่อร้าน"}>
+                                    ร้าน: {item.sellerDisplayName || formatReferenceCode(item.sellerId) || "ไม่พบชื่อร้าน"}
                                   </p>
                                 </div>
                                 <Badge
@@ -1988,7 +1992,7 @@ export default function AuctionScheduleSection({ token }) {
                   type="checkbox"
                   checked={selected.has(a.id)}
                   onChange={() => toggleSelected(a.id)}
-                  aria-label={`เลือก ${a.product?.title || a.productId}`}
+                  aria-label={`เลือก ${a.product?.title || formatReferenceCode(a.productId)}`}
                   className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
                 />
               )}
@@ -1999,9 +2003,9 @@ export default function AuctionScheduleSection({ token }) {
                     <Link
                       href={`/products/${a.productId}`}
                       className="line-clamp-2 break-words text-sm font-semibold leading-5 text-slate-900 hover:text-emerald-600 sm:text-base sm:leading-6"
-                      title={a.product?.title || a.productId}
+                      title={a.product?.title || formatReferenceCode(a.productId)}
                     >
-                      {a.product?.title || a.productId}
+                      {a.product?.title || formatReferenceCode(a.productId)}
                     </Link>
                     <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
                       <span
@@ -2191,7 +2195,7 @@ export default function AuctionScheduleSection({ token }) {
             <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200 text-xs text-slate-700 space-y-1.5">
               <p>
                 <strong>ชื่อสินค้า:</strong>{" "}
-                {cancellingItem.product?.title || cancellingItem.productId}
+                {cancellingItem.product?.title || formatReferenceCode(cancellingItem.productId)}
               </p>
               <p>
                 <strong>ชื่อรอบประมูล:</strong>{" "}
@@ -2270,7 +2274,7 @@ export default function AuctionScheduleSection({ token }) {
         {rejectingItem && (
           <form onSubmit={handleReject} className="space-y-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-700">
-              <p><strong>ชื่อสินค้า:</strong> {rejectingItem.product?.title || rejectingItem.productId}</p>
+              <p><strong>ชื่อสินค้า:</strong> {rejectingItem.product?.title || formatReferenceCode(rejectingItem.productId)}</p>
               <p className="mt-1"><strong>รอบประมูล:</strong> {rejectingItem.round?.title || "ไม่ระบุ"}</p>
             </div>
             <div>

@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { fetchAuthedBlobUrl } from "../../../lib/api";
 import Modal from "../../ui/Modal";
@@ -42,7 +43,7 @@ export function PrivateFile({ disputeId, file }) {
   return (
     <div>
       <p className="mb-2 break-words text-sm">
-        {file.fileName || file.originalName || `หลักฐาน ${file.id.slice(0, 8)}`}
+        {file.fileName || file.originalName || "หลักฐานแนบ"}
       </p>
       {type.startsWith("image/") ? (
         <img
@@ -103,7 +104,7 @@ export default function EvidenceInspector({ dispute }) {
                     <span className="min-w-0 flex-1 break-all text-sm">
                       {file.fileName ||
                         file.originalName ||
-                        `ไฟล์ #${file.id.slice(0, 8)}`}
+                        "ไฟล์หลักฐาน"}
                     </span>
                     <span className="text-xs text-slate-500">
                       {file.createdAt

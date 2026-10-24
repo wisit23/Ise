@@ -41,7 +41,8 @@ function noticeKey(status, previousStatus) {
 }
 
 function ticketLabel(ticket) {
-  const number = ticket.ticketNumber ? `#${ticket.ticketNumber}` : "";
+  const code = ticket.referenceCode || ticket.ticketNumber;
+  const number = code ? `#${code}` : "";
   return ticket.subject ? `${number} "${ticket.subject}"`.trim() : number || "ของคุณ";
 }
 
@@ -57,7 +58,7 @@ async function notifyTicketStatus(ticket, status, previousStatus) {
       message: notice.message(ticketLabel(ticket)),
       link: `/support/tickets/${ticket.id}`,
       entityId: ticket.id,
-      metadata: { ticketId: ticket.id, status, previousStatus: previousStatus ?? null },
+      metadata: { ticketId: ticket.id, ...(ticket.referenceCode ? { ticketReferenceCode: ticket.referenceCode } : {}), status, previousStatus: previousStatus ?? null },
     });
   } catch (err) {
     console.error(`[ticketNotifications] ${status} notice for ${ticket.id} failed: ${err.message}`);

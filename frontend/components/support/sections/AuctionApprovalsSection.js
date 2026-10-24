@@ -1,4 +1,7 @@
 "use client";
+
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import Badge from "../../panel/ui/Badge";
@@ -94,14 +97,14 @@ export default function AuctionApprovalsSection({ token }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-slate-900">
-                    {a.product?.title || a.productId}
+                    {a.product?.title || formatReferenceCode(a.productId)}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-500">
                     ราคาเริ่มต้น {baht(a.startingPrice)} · เพิ่มขั้นต่ำครั้งละ{" "}
                     {baht(a.bidIncrement)}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    รหัส {a.id.slice(0, 8)} · ผู้ขาย {a.sellerId?.slice(0, 8)}
+                    รหัส {formatReferenceCode(a)} · ผู้ขาย {formatReferenceCode(a.sellerId)}
                   </p>
                 </div>
                 <Badge text="รออนุมัติ" style="bg-amber-50 text-amber-700" />

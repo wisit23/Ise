@@ -149,13 +149,17 @@ test("executive disputes list against a real database", async (t) => {
     assert.deepEqual(Object.keys(first).sort(), [
       "createdAt",
       "decision",
+      "displayReferences",
       "disputeType",
       "id",
       "orderId",
+      "orderReferenceCode",
       "priority",
       "reason",
+      "referenceCode",
       "status",
     ]);
+    assert.match(first.referenceCode, /^DSP-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/);
     assert.equal(first.createdAt, "2001-05-10T05:00:00.000Z");
 
     // A wider range, then each filter on its own.

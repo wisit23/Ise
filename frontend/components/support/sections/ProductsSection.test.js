@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import ProductsSection from "./ProductsSection";
 import { apiFetch } from "../../../lib/api";
 
@@ -24,7 +24,7 @@ test("lists removed products without a search term and opens owner details", asy
   expect(screen.getByPlaceholderText("ค้นหาในสินค้าที่ถูกลบ...")).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "ดูรายละเอียดสินค้า" }));
-  expect(await screen.findByText(/product-full-id/)).toBeInTheDocument();
+  expect(within(await screen.findByRole("dialog")).getByText(/product-full-id/)).toBeInTheDocument();
   await waitFor(() => expect(screen.getByText(/สมใจ ขายดี/)).toBeInTheDocument());
 });
 

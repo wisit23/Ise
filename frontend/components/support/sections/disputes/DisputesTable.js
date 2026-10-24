@@ -1,5 +1,8 @@
 "use client";
 
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
+
 import Pagination from "../../../Pagination";
 import Badge from "../../../panel/ui/Badge";
 import DropdownFilter from "../../../panel/ui/DropdownFilter";
@@ -44,12 +47,12 @@ export default function DisputesTable({
       render: (d) => (
         <div className="flex flex-col gap-1">
           <CopyableId
-            value={d.id}
-            display={`#${d.id.slice(0, 12).toUpperCase()}`}
+            value={formatReferenceCode(d)}
+            display={formatReferenceCode(d)}
             className="font-mono text-[13px] font-semibold tracking-tight text-slate-800"
           />
           <span className="font-mono text-xs text-slate-500">
-            Ord #{d.orderId.slice(0, 12).toUpperCase()}
+            {formatReferenceCode(d.order || d.orderId)}
           </span>
         </div>
       ),
@@ -66,14 +69,14 @@ export default function DisputesTable({
         d.order ? (
           <div className="flex flex-col gap-0.5 text-[13px] text-slate-500">
             <CopyableId
-              value={d.order.buyerId}
-              display={d.order.buyerId.slice(0, 12)}
+              value={formatReferenceCode(d.order.buyerId)}
+              display={formatReferenceCode(d.order.buyerId)}
               suffix=" (B)"
               revealOnHover
             />
             <CopyableId
-              value={d.order.sellerId}
-              display={d.order.sellerId.slice(0, 12)}
+              value={formatReferenceCode(d.order.sellerId)}
+              display={formatReferenceCode(d.order.sellerId)}
               suffix=" (S)"
               revealOnHover
             />
@@ -123,7 +126,7 @@ export default function DisputesTable({
               }
             />
             <span className="font-mono text-[11px] text-slate-500">
-              {d.assignedTo.slice(0, 8)}
+              {formatReferenceCode(d.assignedTo)}
             </span>
           </div>
         ) : (

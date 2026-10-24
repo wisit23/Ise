@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 
 import Pagination from "../../../Pagination";
 import Badge from "../../../panel/ui/Badge";
@@ -62,7 +64,7 @@ export default function TicketsTable({
       key: "requesterId",
       header: "รหัสลูกค้า (ID)",
       className: "text-sm font-medium text-slate-700",
-      render: (t) => t.requesterId?.slice(0, 12) ?? "—",
+      render: (t) => formatReferenceCode(t.requesterId) ?? "—",
     },
     {
       key: "subject",
@@ -99,7 +101,7 @@ export default function TicketsTable({
       className: "text-xs font-medium text-slate-500",
       render: (t) =>
         t.assigneeId ? (
-          t.assigneeId.slice(0, 12)
+          formatReferenceCode(t.assigneeId)
         ) : (
           <span className="text-slate-500">—</span>
         ),

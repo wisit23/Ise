@@ -7,7 +7,9 @@ const auditRoutes = require("./features/audit/auditRoutes");
 const executiveRoutes = require("./features/executive/executiveRoutes");
 
 const app = express();
+app.use(require("@reloop/shared").referenceAliases(require("./models/prismaClient"), "support"));
 app.use(express.json());
+require("@reloop/shared").installReferenceDisplay(app, require("./models/prismaClient"), "support");
 
 app.get("/health", (req, res) =>
   res.json({ status: "ok", service: "support-service" }),

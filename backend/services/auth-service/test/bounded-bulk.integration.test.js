@@ -136,6 +136,14 @@ test("bounded batch enforces cap, dry-run, permission-per-action and idempotency
     });
     assert.equal(stillActive.status, "ACTIVE");
 
+    const referencePreview = await request(app).post("/admin/bulk")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ action: "SUSPEND_USER", ids: [userA.referenceCode.toLowerCase().replaceAll("-", "")], reason: "reference preview", dryRun: true });
+    assert.equal(referencePreview.status, 200);
+    assert.equal(referencePreview.body.results[0].id, userA.id);
+    assert.equal(referencePreview.body.results[0].referenceCode, userA.referenceCode);
+    assert.equal(referencePreview.body.succeeded, 1);
+
     // Real run: partial failure — one real id succeeds, one bogus id fails,
     // and the batch does not abort because of the bogus one.
     const runRes = await request(app)

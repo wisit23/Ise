@@ -34,6 +34,7 @@ enum ReportStatus {
 }
 
 model User {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String   @map("password_hash")
@@ -252,6 +253,7 @@ model EmailVerificationToken {
 // OPEN -> REVIEWED -> ACTIONED|DISMISSED lifecycle so a decision is never lost
 // once made (append-only AdminAudit below records the same fact independently).
 model Report {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id          String       @id @default(uuid())
   reporterId  String       @map("reporter_id")
   reporter    User         @relation(fields: [reporterId], references: [id])
@@ -306,6 +308,7 @@ model AdminAudit {
 // re-executing (so a retried network call can't double-suspend/double-decide).
 // `results` is a JSON snapshot of the batch summary (see bulkActionService).
 model BulkActionRun {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id             String   @id @default(uuid())
   idempotencyKey String   @unique @map("idempotency_key")
   actorId        String   @map("actor_id")
@@ -354,6 +357,7 @@ model UserRole {
 // and evidence persist even though SellerProfile only reflects the latest state.
 // `version` is an optimistic lock: decideKyc rejects a stale/duplicate decision.
 model KycApplication {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id          String    @id @default(uuid())
   userId      String    @map("user_id")
   user        User      @relation(fields: [userId], references: [id])
@@ -402,6 +406,7 @@ model ExecutiveAuditLog {
 // Admin must approve before the SellerProfile is updated — keeps an
 // audit trail of every change request and its outcome.
 model ShopChangeRequest {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id         String                  @id @default(uuid()) @map("requests_id")
   sellerId   String                  @map("seller_id")
   seller     User                    @relation(fields: [sellerId], references: [id])
@@ -445,4 +450,11 @@ model AutoMessage {
 
   @@index([userId])
   @@map("auto_messages")
+}
+
+// Allocated atomically by the reference-code triggers; never reuse deleted codes.
+model ReferenceCodeAllocation {
+  code String @id
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("_reference_codes")
 }

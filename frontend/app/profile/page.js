@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../components/ui/ReferenceCode";
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -407,6 +408,7 @@ function ProfileContent() {
                   {form.email}
                   {form.phone && <span> · {form.phone}</span>}
                 </p>
+                {form.referenceCode && <ReferenceCode value={form} className="mt-2 text-xs text-ink-muted" />}
               </div>
             </div>
 

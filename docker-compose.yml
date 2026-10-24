@@ -125,6 +125,10 @@ services:
       dockerfile: backend/services/auth-service/Dockerfile
     env_file: .env
     environment:
+      CHAT_SERVICE_URL: http://chat-service:3004
+      SUPPORT_SERVICE_URL: http://support-service:3006
+      ORDER_SERVICE_URL: http://order-service:3003
+      AUTH_SERVICE_URL: http://auth-service:3001
       DATABASE_URL: ${DATABASE_URL_AUTH}
       PRODUCT_SERVICE_URL: http://product-service:3002
       KYC_STORAGE_DIR: /app/services/auth-service/private-kyc-documents
@@ -148,6 +152,10 @@ services:
       dockerfile: backend/services/product-service/Dockerfile
     env_file: .env
     environment:
+      CHAT_SERVICE_URL: http://chat-service:3004
+      SUPPORT_SERVICE_URL: http://support-service:3006
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      AUTH_SERVICE_URL: http://auth-service:3001
       DATABASE_URL: ${DATABASE_URL_PRODUCT}
       ORDER_SERVICE_URL: http://order-service:3003
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
@@ -172,6 +180,9 @@ services:
       dockerfile: backend/services/order-service/Dockerfile
     env_file: .env
     environment:
+      CHAT_SERVICE_URL: http://chat-service:3004
+      SUPPORT_SERVICE_URL: http://support-service:3006
+      ORDER_SERVICE_URL: http://order-service:3003
       DATABASE_URL: ${DATABASE_URL_ORDER}
       PRODUCT_SERVICE_URL: http://product-service:3002
       # Dispute details resolve buyer/seller names through auth-service.
@@ -196,6 +207,7 @@ services:
       dockerfile: backend/services/chat-service/Dockerfile
     env_file: .env
     environment:
+      CHAT_SERVICE_URL: http://chat-service:3004
       DATABASE_URL: ${DATABASE_URL_CHAT}
       REDIS_URL: ${REDIS_URL}
       PRODUCT_SERVICE_URL: http://product-service:3002
@@ -230,6 +242,9 @@ services:
       dockerfile: backend/services/support-service/Dockerfile
     env_file: .env
     environment:
+      SUPPORT_SERVICE_URL: http://support-service:3006
+      ORDER_SERVICE_URL: http://order-service:3003
+      PRODUCT_SERVICE_URL: http://product-service:3002
       DATABASE_URL: ${DATABASE_URL_SUPPORT}
       CHAT_SERVICE_URL: http://chat-service:3004
       # Ticket details resolve requester and staff names through auth-service.

@@ -8,10 +8,11 @@ async function main() {
   const url = new URL(process.env.DATABASE_URL);
   if (!['mongo', 'localhost', '127.0.0.1'].includes(url.hostname)) throw new Error('Local database only');
   for (const side of ['BUYER', 'SELLER']) {
-    const room = await prisma.conversation.upsert({
+    const room = await require('@reloop/shared').createWithReferenceCode('CHT', (referenceCode) => prisma.conversation.upsert({
       where: { contextKey: `DISPUTE_${side}:${disputeId}` },
       update: {},
       create: {
+        referenceCode,
         contextKey: `DISPUTE_${side}:${disputeId}`, contextType: `DISPUTE_${side}`, contextId: disputeId,
         createdBy: '20000000-0000-0000-0000-000000000001',
         participants: [
@@ -19,7 +20,7 @@ async function main() {
           { userId: '20000000-0000-0000-0000-000000000001', role: 'AGENT', joinedAt: new Date() },
         ],
       },
-    });
+    }));
     const party = room?.participants.find((p) => p.role === side && p.userId === (side === 'BUYER' ? '30000000-0000-0000-0000-000000000001' : '10000000-0000-0000-0000-000000000001'));
     const agent = room?.participants.find((p) => p.role === 'AGENT');
     if (!party || !agent) throw new Error(`Expected demo participants missing: ${side}`);

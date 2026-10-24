@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
@@ -296,6 +297,7 @@ export default function AuctionDetailPage() {
                 >
                   {auction.product?.title || auction.productId}
                 </Link>
+                {auction.referenceCode && <ReferenceCode value={auction} className="mt-2 text-xs text-gray-500" />}
                 {auction.round?.title && (
                   <p className="text-xs text-emerald-800 font-medium mt-0.5">
                     รอบประมูล: {auction.round.title}

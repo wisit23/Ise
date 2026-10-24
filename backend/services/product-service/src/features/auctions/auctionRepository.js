@@ -58,6 +58,7 @@ function createAuctionRepository(prismaClient) {
       ...(search
         ? {
             OR: [
+              ...(require("@reloop/shared").normalizeReferenceCode(search, "AUC") ? [{ referenceCode: require("@reloop/shared").normalizeReferenceCode(search, "AUC") }] : []),
               {
                 product: {
                   title: { contains: search, mode: "insensitive" },

@@ -193,7 +193,7 @@ function ticketItem(ticket) {
     id: ticket.id,
     createdAt: ticket.createdAt,
     title: ticket.subject,
-    reference: ticket.ticketNumber,
+    reference: ticket.referenceCode || ticket.ticketNumber,
     status: {
       code: ticket.status.code,
       label: TICKET_STATUS_LABEL[ticket.status.code] || ticket.status.name,
@@ -215,7 +215,7 @@ function disputeItem(dispute) {
     id: dispute.id,
     createdAt: dispute.createdAt,
     title: dispute.reason,
-    reference: dispute.orderId.slice(0, 8),
+    reference: dispute.referenceCode || dispute.orderId,
     status: {
       code: dispute.status,
       label: DISPUTE_STATUS_LABEL[dispute.status] || dispute.status,

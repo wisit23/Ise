@@ -22,6 +22,7 @@ const DISPUTE_TYPES = [
 
 const toItem = (row) => ({
   id: row.id,
+  ...(row.referenceCode ? { referenceCode: row.referenceCode } : {}),
   orderId: row.orderId,
   disputeType: row.disputeType,
   status: row.status,

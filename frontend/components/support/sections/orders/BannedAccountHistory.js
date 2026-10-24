@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../../lib/api";
@@ -30,7 +32,7 @@ export default function BannedAccountHistory({ token, onOpenAccount, refreshKey 
   }, [token, role, search, page, refreshKey, retry]);
 
   const columns = [
-    { key: "targetId", header: "เลขลูกค้า / ร้านค้า", render: (row) => <button type="button" onClick={() => onOpenAccount(row.targetId)} className="break-all text-left font-mono text-xs font-semibold text-emerald-700 underline">{row.targetId}</button> },
+    { key: "targetId", header: "เลขลูกค้า / ร้านค้า", render: (row) => <button type="button" onClick={() => onOpenAccount(row.targetId)} className="break-all text-left font-mono text-xs font-semibold text-emerald-700 underline">{formatReferenceCode(row.targetId)}</button> },
     { key: "account", header: "ลูกค้า / ร้านค้า", render: ({ account }) => <div className="text-left"><p className="font-semibold">{[account.firstName, account.lastName].filter(Boolean).join(" ") || "ไม่ระบุชื่อ"}</p>{account.sellerProfile?.shopName && <p className="text-xs text-slate-500">ร้าน {account.sellerProfile.shopName}</p>}</div> },
     { key: "role", header: "ประเภท", render: ({ account }) => {
       const roles = account.roles?.length ? account.roles.map((item) => item.role) : [account.role];

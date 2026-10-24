@@ -59,6 +59,11 @@ test("executive ticket detail against a real database", async (t) => {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
+      if (req.url === "/internal/reference-codes") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end("{}");
+        return;
+      }
       asked.push({ url: req.url, body: JSON.parse(body || "{}") });
       res.writeHead(200, { "content-type": "application/json" });
       res.end(

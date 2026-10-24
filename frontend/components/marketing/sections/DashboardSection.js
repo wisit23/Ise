@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch, getMarketingUserAnalytics } from "../../../lib/api";
@@ -1060,7 +1062,7 @@ export default function DashboardSection({ token, onNavigate }) {
                   >
                     <td className="px-3 py-3">
                       <div className="font-bold text-slate-900">
-                        {c.campaignCode || c.campaignId}
+                        {c.campaignCode || formatReferenceCode(c.campaignId)}
                       </div>
                       {c.campaignName && (
                         <div className="text-[11px] text-slate-500">

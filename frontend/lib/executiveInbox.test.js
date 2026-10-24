@@ -400,6 +400,7 @@ describe("fetchInbox", () => {
       list([
         {
           ...dispute("d1", "2026-10-16T05:00:00.000Z"),
+          referenceCode: "DSP-7K3M-9X2R-4T6W",
           decision: "REJECT",
           status: "DECIDED",
         },
@@ -413,7 +414,7 @@ describe("fetchInbox", () => {
       token: "t",
     });
     expect(result.items[0]).toMatchObject({
-      reference: "order-d1",
+      reference: "DSP-7K3M-9X2R-4T6W",
       status: { label: "ตัดสินแล้ว" },
       tags: ["สินค้าชำรุดหรือเสียหาย", "ปานกลาง", "ไม่อนุมัติคำร้อง"],
     });

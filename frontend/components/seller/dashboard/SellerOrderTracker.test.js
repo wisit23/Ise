@@ -202,6 +202,7 @@ describe("SellerOrderTracker", () => {
     const orders = [
       {
         id: "c58a6037-d5aa-4bbb-8ccc-000000000001",
+        referenceCode: "ORD-7K3M-9X2R-4T6W",
         productTitle: "สินค้ามีข้อพิพาท",
         price: 900,
         status: "in_transit",
@@ -210,7 +211,7 @@ describe("SellerOrderTracker", () => {
     ];
     render(<SellerOrderTracker orders={orders} />);
     fireEvent.change(screen.getByPlaceholderText(/ค้นหาชื่อสินค้า/), {
-      target: { value: "ORD-C58A" },
+      target: { value: "ord7k3m9x2r4t6w" },
     });
     expect(screen.getByText("สินค้ามีข้อพิพาท")).toBeInTheDocument();
   });

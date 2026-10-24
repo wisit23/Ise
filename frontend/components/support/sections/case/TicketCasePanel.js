@@ -1,4 +1,5 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
 
 import { useState } from "react";
 
@@ -63,7 +64,7 @@ export default function TicketCasePanel({
         <InfoCell label="คู่กรณี (Target)">
           {ticket.targetId ? (
             <span className="font-semibold text-orange-700">
-              {ticket.targetName || `${ticket.targetId.slice(0, 10)}...`}
+              {ticket.targetName || formatReferenceCode(ticket.targetId)}
             </span>
           ) : (
             <span className="italic text-slate-400">ไม่ระบุ</span>
@@ -71,12 +72,12 @@ export default function TicketCasePanel({
         </InfoCell>
         <InfoCell label="ผู้แจ้ง (Requester)">
           <span>
-            {ticket.requesterName || ticket.requesterId?.slice(0, 10) || "—"}
+            {ticket.requesterName || formatReferenceCode(ticket.requesterId) || "—"}
           </span>
         </InfoCell>
         <InfoCell label="ผู้รับผิดชอบ (Agent)">
           {ticket.assigneeId ? (
-            <span>{ticket.assigneeName || ticket.assigneeId.slice(0, 10)}</span>
+            <span>{ticket.assigneeName || formatReferenceCode(ticket.assigneeId)}</span>
           ) : (
             <span className="italic text-slate-500">ยังไม่มอบหมาย</span>
           )}
@@ -100,7 +101,7 @@ export default function TicketCasePanel({
             <span className="text-xs text-slate-500">
               รหัส:{" "}
               <span className="font-semibold text-slate-600">
-                {ticket.ticketNumber}
+                {formatReferenceCode(ticket)}
               </span>
             </span>
             <span className="text-xs text-slate-500">
@@ -124,6 +125,7 @@ export default function TicketCasePanel({
         {ticket.targetId ? (
           <CaseUserCard
             userId={ticket.targetId}
+            referenceCode={ticket.targetReferenceCode}
             userName={ticket.targetName}
             heading="คู่กรณี (Target - ผู้ถูกร้องเรียน)"
             icon="gavel"
@@ -192,6 +194,7 @@ export default function TicketCasePanel({
             Rendered second with distinct labels and caution styling. */}
         <CaseUserCard
           userId={ticket.requesterId}
+          referenceCode={ticket.requesterReferenceCode}
           userName={ticket.requesterName}
           heading="ผู้แจ้ง (Requester - ผู้ส่งคำร้อง)"
           icon="person"
@@ -217,10 +220,10 @@ export default function TicketCasePanel({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-slate-800">
-                  {ticket.assigneeName || `รหัส: ${ticket.assigneeId.slice(0, 16)}`}
+                  {ticket.assigneeName || `รหัส: ${formatReferenceCode(ticket.assigneeId)}`}
                 </p>
                 <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
-                  {ticket.assigneeId}
+                  {formatReferenceCode(ticket.assigneeId)}
                 </p>
               </div>
             </div>
@@ -243,7 +246,7 @@ export default function TicketCasePanel({
             </div>
             <div className="flex-1">
               <p className="text-sm font-bold text-slate-800">
-                {ticket.requesterName || `ผู้ใช้: #${ticket.requesterId?.slice(0, 12)}`}
+                {ticket.requesterName || `ผู้ใช้: #${formatReferenceCode(ticket.requesterId)}`}
               </p>
               <p className="mt-0.5 text-xs text-slate-500">
                 ประวัติการสนทนาของคำร้อง

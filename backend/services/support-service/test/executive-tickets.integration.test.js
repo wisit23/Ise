@@ -118,13 +118,16 @@ test("executive tickets list against a real database", async (t) => {
     assert.deepEqual(Object.keys(day.body.items[1]).sort(), [
       "category",
       "createdAt",
+      "displayReferences",
       "id",
       "orderId",
       "priority",
+      "referenceCode",
       "status",
       "subject",
       "ticketNumber",
     ]);
+    assert.match(day.body.items[1].referenceCode, /^TKT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/);
     assert.deepEqual(day.body.items[1].category, {
       code: "ORDER",
       name: "คำสั่งซื้อ",

@@ -1,5 +1,8 @@
 "use client";
 
+import { matchesReference } from "../../../lib/referenceCodes";
+
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import EmptyState from "../../ui/EmptyState";
@@ -61,9 +64,9 @@ export default function SellerOrderTracker({
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
   const statusFilter = selectedStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
-  const [search, setSearch] = useState(
-    highlightOrderId && propStatusFilter !== "disputed" ? highlightOrderId.slice(0, 8) : "",
-  );
+  const highlightedOrder = orders.find((order) => order.id === highlightOrderId);
+  const highlightedReference = highlightedOrder ? formatOrderId(highlightedOrder) : "";
+  const [search, setSearch] = useState(propStatusFilter !== "disputed" ? highlightedReference : "");
   // The search box is seeded from the highlighted order, so it has to follow
   // that highlight when it changes or is cleared — otherwise a stale order
   // number stays in the box and silently empties every other filter (e.g.
@@ -73,7 +76,7 @@ export default function SellerOrderTracker({
       setSearch("");
       return undefined;
     }
-    setSearch(propStatusFilter !== "disputed" ? highlightOrderId.slice(0, 8) : "");
+    setSearch(propStatusFilter !== "disputed" ? highlightedReference : "");
     if (typeof document === "undefined") return undefined;
     const timer = setTimeout(() => {
       const row = document.getElementById(`order-row-${highlightOrderId}`);
@@ -82,7 +85,7 @@ export default function SellerOrderTracker({
       }
     }, 150);
     return () => clearTimeout(timer);
-  }, [highlightOrderId, propStatusFilter]);
+  }, [highlightOrderId, propStatusFilter, highlightedReference]);
 
   async function prepareOrder(order) {
     if (actionLoading) return;
@@ -144,7 +147,7 @@ export default function SellerOrderTracker({
       return (
         o.productTitle?.toLowerCase().includes(needle) ||
         o.id?.toLowerCase().includes(needle) ||
-        formatOrderId(o.id).toLowerCase().includes(needle)
+        matchesReference(o, search)
       );
     })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -161,7 +164,7 @@ export default function SellerOrderTracker({
             </span>
             <span>
               แสดงรายละเอียดคำสั่งซื้อที่เลือก:{" "}
-              <strong className="font-mono">{highlightOrderId}</strong>
+              <strong className="font-mono">{formatOrderId(highlightedOrder || highlightOrderId)}</strong>
             </span>
           </div>
           <button
@@ -342,9 +345,9 @@ export default function SellerOrderTracker({
                     </div>
                     <p
                       className="truncate font-mono text-[10px] text-slate-400"
-                      title={`Order ID: ${o.id}`}
+                      title={`Order ID: ${formatOrderId(o)}`}
                     >
-                      #{formatOrderId(o.id)}
+                      #{formatOrderId(o)}
                     </p>
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-700">
@@ -501,7 +504,7 @@ export default function SellerOrderTracker({
           }
         }}
         title="ปฏิเสธคำสั่งซื้อและคืนเงินเต็มจำนวน"
-        description={`คำสั่งซื้อ #${selectedOrderForReject?.id ? formatOrderId(selectedOrderForReject.id) : ""}`}
+        description={`คำสั่งซื้อ #${selectedOrderForReject?.id ? formatOrderId(selectedOrderForReject) : ""}`}
         size="md"
         footer={
           <div className="flex w-full items-center justify-end gap-2">

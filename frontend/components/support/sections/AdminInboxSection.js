@@ -1,5 +1,8 @@
 "use client";
 
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
+
 import { useEffect, useRef, useState } from "react";
 
 import Alert from "../../ui/Alert";
@@ -214,7 +217,8 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
             : (data.items || []).map((r) => ({
                 id: r.id,
                 _type: "REPORT",
-                ticketNumber: `REP-${r.id.slice(0, 6).toUpperCase()}`,
+                referenceCode: r.referenceCode,
+                ticketNumber: formatReferenceCode(r),
                 subject: r.reason || "รายงาน",
                 requesterId: r.reporterId,
                 requesterName: [r.reporter?.firstName, r.reporter?.lastName].filter(Boolean).join(" ") || r.reporter?.email,
@@ -408,15 +412,15 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
       ban: isRequester
         ? {
             title: "⚠️ ยืนยันการระงับบัญชีผู้แจ้งปัญหา?",
-            description: `คุณกำลังจะระงับบัญชี ของ "${roleLabel}" (รหัส: ${targetUserId}) ซึ่งเป็นผู้ส่งคำร้องเข้ามา ไม่ใช่คู่กรณี บัญชีนี้จะไม่สามารถเข้าใช้งานระบบได้ทันที`,
+            description: `คุณกำลังจะระงับบัญชี ของ "${roleLabel}" (รหัส: ${formatReferenceCode(targetUserId)}) ซึ่งเป็นผู้ส่งคำร้องเข้ามา ไม่ใช่คู่กรณี บัญชีนี้จะไม่สามารถเข้าใช้งานระบบได้ทันที`,
             confirmLabel: "ยืนยันระงับบัญชีผู้แจ้ง",
             tone: "danger",
             reason: "required",
             reasonLabel: "เหตุผลในการระงับผู้แจ้ง",
           }
         : {
-            title: `ระงับบัญชีคู่กรณี (${targetUserId ? targetUserId.slice(0, 8) : ""}...)?`,
-            description: `ผู้ใช้เป้าหมาย/คู่กรณี (รหัส: ${targetUserId}) จะเข้าสู่ระบบไม่ได้ทันที และจะถูกบันทึกใน ประวัติการดำเนินการ`,
+            title: `ระงับบัญชีคู่กรณี (${targetUserId ? formatReferenceCode(targetUserId) : ""})?`,
+            description: `ผู้ใช้เป้าหมาย/คู่กรณี (รหัส: ${formatReferenceCode(targetUserId)}) จะเข้าสู่ระบบไม่ได้ทันที และจะถูกบันทึกใน ประวัติการดำเนินการ`,
             confirmLabel: "ระงับบัญชีคู่กรณี",
             tone: "danger",
             reason: "required",
@@ -424,7 +428,7 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
           },
       warn: isRequester
         ? {
-            title: `ตักเตือนผู้แจ้งปัญหา (${targetUserId ? targetUserId.slice(0, 8) : ""}...)?`,
+            title: `ตักเตือนผู้แจ้งปัญหา (${targetUserId ? formatReferenceCode(targetUserId) : ""})?`,
             description: `บันทึกคำเตือนไปยังประวัติของ "${roleLabel}" (ผู้ส่งคำร้อง)`,
             confirmLabel: "ตักเตือนผู้แจ้ง",
             tone: "primary",
@@ -432,8 +436,8 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
             reasonLabel: "เหตุผลในการตักเตือนผู้แจ้ง",
           }
         : {
-            title: `ตักเตือนคู่กรณี (${targetUserId ? targetUserId.slice(0, 8) : ""}...)?`,
-            description: `บันทึกคำเตือนไปยังประวัติของคู่กรณี (รหัส: ${targetUserId})`,
+            title: `ตักเตือนคู่กรณี (${targetUserId ? formatReferenceCode(targetUserId) : ""})?`,
+            description: `บันทึกคำเตือนไปยังประวัติของคู่กรณี (รหัส: ${formatReferenceCode(targetUserId)})`,
             confirmLabel: "ตักเตือนคู่กรณี",
             tone: "primary",
             reason: "required",
@@ -449,7 +453,7 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
       },
       restrict: {
         title: `ยืนยันเพิกถอนสิทธิ์${pendingAction?.scope === "BUYER" ? "ซื้อ" : "ขาย"}?`,
-        description: `${roleLabel} (รหัส: ${targetUserId}) จะ${pendingAction?.scope === "BUYER" ? "ซื้อ" : "ขาย"}สินค้าไม่ได้ทันที แต่ยังเข้าสู่ระบบได้`,
+        description: `${roleLabel} (รหัส: ${formatReferenceCode(targetUserId)}) จะ${pendingAction?.scope === "BUYER" ? "ซื้อ" : "ขาย"}สินค้าไม่ได้ทันที แต่ยังเข้าสู่ระบบได้`,
         confirmLabel: "ยืนยันเพิกถอนสิทธิ์",
         tone: "danger",
         reason: "required",
@@ -520,12 +524,12 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
             const amount = item.order?.finalPrice ?? item.order?.price;
             const deadline = item.slaExpiresAt || item.slaDueAt;
             return <button type="button" key={`${item._type || "TICKET"}-${item.id}`} onClick={() => selectCase(item)} className={`grid w-full grid-cols-1 gap-2 rounded-xl border bg-white p-4 text-left shadow-sm hover:border-indigo-300 ${showHistory ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}>
-              <span className="text-sm font-bold"><span className={`mr-2 rounded px-2 py-1 text-[10px] ${isDispute ? "bg-amber-100 text-amber-800" : isReport ? "bg-red-100 text-red-800" : "bg-indigo-100 text-indigo-800"}`}>{isDispute ? "ข้อพิพาท" : isReport ? "รายงาน" : "คำร้อง"}</span>{isDispute ? item.orderId?.slice(0, 10) : item.ticketNumber}</span>
+              <span className="text-sm font-bold"><span className={`mr-2 rounded px-2 py-1 text-[10px] ${isDispute ? "bg-amber-100 text-amber-800" : isReport ? "bg-red-100 text-red-800" : "bg-indigo-100 text-indigo-800"}`}>{isDispute ? "ข้อพิพาท" : isReport ? "รายงาน" : "คำร้อง"}</span>{isDispute ? formatReferenceCode(item.orderId) : item.ticketNumber}</span>
               <span className="min-w-0 break-words text-sm">{isDispute ? item.reason : item.subject}</span>
               {showHistory && <span className="text-xs font-semibold text-emerald-700">{isDispute ? "ตัดสินแล้ว" : isReport ? item.rawReport?.status === "DISMISSED" ? "ยกเลิกรายงานแล้ว" : "จัดการรายงานแล้ว" : item.status === "CLOSED" ? "ปิดแล้ว" : "แก้ไขแล้ว"}</span>}
               <span className="text-xs">Hold: {isDispute && typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</span>
               <span className="flex flex-col gap-1 text-xs"><span className="text-slate-500">กำหนด SLA</span><CaseDate value={deadline} /></span>
-              <span className="min-w-0 break-words text-xs">ผู้รับผิดชอบ: {item.assigneeName || item.assigneeId || item.assignedTo || "ยังไม่มีคนรับ"}</span>
+              <span className="min-w-0 break-words text-xs">ผู้รับผิดชอบ: {item.assigneeName || formatReferenceCode(item.assigneeId || item.assignedTo) || "ยังไม่มีคนรับ"}</span>
               <span className="col-span-full grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
                 <span className="flex flex-col gap-1"><span className="text-slate-500">วันที่แจ้งปัญหา</span><CaseDate value={item.createdAt} /></span>
                 {item.escalatedAt && <span className="flex flex-col gap-1"><span className="text-slate-500">วันที่ส่งต่อ T&S</span><CaseDate value={item.escalatedAt} /></span>}

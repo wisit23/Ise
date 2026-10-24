@@ -9,6 +9,7 @@ const prisma = require("../../models/prismaClient");
 
 const toItem = (ticket) => ({
   id: ticket.id,
+  ...(ticket.referenceCode ? { referenceCode: ticket.referenceCode } : {}),
   ticketNumber: ticket.ticketNumber,
   subject: ticket.subject,
   category: { code: ticket.category.code, name: ticket.category.nameTh },

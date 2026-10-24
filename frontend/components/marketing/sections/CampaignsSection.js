@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../ui/ReferenceCode";
 
 import { useEffect, useState } from "react";
 import Button from "../../ui/Button";
@@ -1203,6 +1204,7 @@ export default function CampaignsSection({
                         >
                           {camp.name}
                         </div>
+                        {camp.referenceCode && <ReferenceCode value={camp} className="text-xs text-slate-500" />}
                         {camp.description && (
                           <div
                             title={camp.description}

@@ -1228,6 +1228,7 @@ async function listRounds({ user, skip, take, phases = [], search = "" } = {}) {
       )
       .filter((round) =>
         !normalizedSearch ||
+        (require("@reloop/shared").normalizeReferenceCode(cleanSearch, "RND") === round.referenceCode && Boolean(round.referenceCode)) ||
         String(round.title || "").toLocaleLowerCase("th-TH").includes(normalizedSearch),
       );
 

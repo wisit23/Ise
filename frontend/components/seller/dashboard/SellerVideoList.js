@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../ui/ReferenceCode";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -259,6 +260,7 @@ export default function SellerVideoList({ products = [] }) {
                 <h2 className="break-words font-semibold text-slate-900">
                   {clip.title || clip.product?.title || "คลิปสินค้า"}
                 </h2>
+                {clip.referenceCode && <ReferenceCode value={clip} className="text-xs text-slate-500" />}
                 <Link
                   href={`/products/${clip.productId}`}
                   className="group flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-emerald-800 transition hover:border-emerald-400 hover:bg-emerald-100 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"

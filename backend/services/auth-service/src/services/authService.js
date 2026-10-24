@@ -48,6 +48,7 @@ async function ensureRoleCatalogEntry(db, role) {
 function toPublicUser(user) {
   return {
     id: user.id,
+    ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
@@ -365,6 +366,7 @@ async function getDisplayNames(userIds) {
     select: {
       id: true,
       firstName: true,
+      referenceCode: true,
       sellerProfile: { select: { shopName: true } },
     },
   });
@@ -372,6 +374,7 @@ async function getDisplayNames(userIds) {
   return users.map((user) => ({
     userId: user.id,
     displayName: user.sellerProfile?.shopName || user.firstName,
+    ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
   }));
 }
 
@@ -385,6 +388,7 @@ async function getPublicSellerProfile(userId) {
 
   return {
     id: user.id,
+    ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
     firstName: user.firstName,
     lastName: user.lastName,
     shopName: user.sellerProfile?.shopName || null,

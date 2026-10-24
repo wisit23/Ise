@@ -1,3 +1,4 @@
+import { rememberReferenceCodes } from "../../../lib/referenceCodes";
 import {
   act,
   fireEvent,
@@ -305,8 +306,10 @@ test("financial confirmation retry keeps the exact verdict key and frozen payloa
 });
 
 
-test("context copies a complete requester ID for support lookup", async () => {
+test("context displays and copies the persisted requester reference for support lookup", async () => {
   const requesterId = "7123412d-a123-4567-8901-123456789abc";
+  const requesterCode = "USR-4K3M-9X2R-4T6W";
+  rememberReferenceCodes({ id: requesterId, referenceCode: requesterCode });
   const writeText = jest.fn().mockResolvedValue(undefined);
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   apiFetch.mockImplementation((url, options) => url.endsWith("/t-a")
@@ -315,6 +318,6 @@ test("context copies a complete requester ID for support lookup", async () => {
   render(<CaseWorkspace domain="tickets" token="token" currentUser={{ id: "cs", role: "CUSTOMER_SERVICE" }} />);
   fireEvent.click(await screen.findByRole("button", { name: /Ticket A/ }));
   fireEvent.click(await screen.findByRole("button", { name: "ข้อมูลเคส", exact: true }));
-  fireEvent.click(await screen.findByRole("button", { name: `คัดลอกรหัสผู้ใช้เต็ม ${requesterId}` }));
-  await waitFor(() => expect(writeText).toHaveBeenCalledWith(requesterId));
+  fireEvent.click(await screen.findByRole("button", { name: `คัดลอกรหัสผู้ใช้เต็ม ${requesterCode}` }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(requesterCode));
 });

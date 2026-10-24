@@ -23,6 +23,7 @@ function reviewIdForReport(report) {
 function toPublicUser(user) {
   return {
     id: user.id,
+    ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
@@ -312,8 +313,10 @@ async function createReport({ reporterId, targetId, productId, category, reason,
 function reportSearchWhere(search) {
   const query = search?.trim();
   if (!query) return {};
+  const referenceCode = require("@reloop/shared").normalizeReferenceCode(query, "RPT");
   return {
     OR: [
+      ...(referenceCode ? [{ referenceCode }] : []),
       { id: { contains: query, mode: "insensitive" } },
       { reporterId: { contains: query, mode: "insensitive" } },
       { targetId: { contains: query, mode: "insensitive" } },

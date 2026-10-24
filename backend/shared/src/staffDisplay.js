@@ -36,6 +36,7 @@ async function enrichStaffRows(items, fields) {
     const names = Object.fromEntries(
       results.map((item) => [item.userId, item.displayName]),
     );
+    const references = new Map(results.filter((item) => item.referenceCode).map((item) => [item.userId, item.referenceCode]));
     return items.map((row) => ({
       ...row,
       ...Object.fromEntries(
@@ -44,6 +45,7 @@ async function enrichStaffRows(items, fields) {
           names[row[field]] || null,
         ]),
       ),
+      ...Object.fromEntries(fields.filter((field) => references.has(row[field])).map((field) => [field.replace(/Id$/, "") + "ReferenceCode", references.get(row[field])])),
     }));
   } catch {
     return items;

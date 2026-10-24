@@ -129,6 +129,7 @@ async function sendDisputeNotice(dispute, order, eventKey, body) {
         disputeId: dispute.id,
         event: eventKey,
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         productId: order.productId,
         productTitle: order.productTitle,
         price: order.price || order.finalPrice,
@@ -226,10 +227,11 @@ async function notifyOrderPlaced(order) {
         userId: order.buyerId,
         type: "AUCTION",
         title: "คุณชนะการประมูลแล้ว",
-        message: `🏆 คุณชนะการประมูล '${order.productTitle || "สินค้า"}' กรุณาชำระเงินคำสั่งซื้อ #${order.id} ภายในเวลาที่กำหนด`,
+        message: `🏆 คุณชนะการประมูล '${order.productTitle || "สินค้า"}' กรุณาชำระเงินคำสั่งซื้อ #${order.referenceCode || order.id} ภายในเวลาที่กำหนด`,
         link: "/orders",
         entityId: order.id,
-        metadata: { orderId: order.id, auctionId: order.auctionId, status: "won", paymentDeadlineAt: order.paymentDeadlineAt },
+        metadata: { orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}), auctionId: order.auctionId, status: "won", paymentDeadlineAt: order.paymentDeadlineAt },
       });
     }
     try {
@@ -259,10 +261,11 @@ async function notifyOrderPaid(order) {
       userId: order.sellerId,
       type: "ORDER",
       title: "ผู้ซื้อชำระเงินแล้ว",
-      message: `💰 ผู้ซื้อชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว กรุณาดำเนินการตรวจสอบและยืนยันออเดอร์ | หมายเลขคำสั่งซื้อ: #${order.id}`,
+      message: `💰 ผู้ซื้อชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว กรุณาดำเนินการตรวจสอบและยืนยันออเดอร์ | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`,
       link: `/seller/dashboard?section=orders&orderId=${order.id}`,
       metadata: {
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         productId: order.productId,
         auctionId: order.auctionId,
         status: "paid",
@@ -278,10 +281,11 @@ async function notifyOrderPaid(order) {
         userId: order.buyerId,
         type: "ORDER",
         title: "ชำระเงินสำเร็จ",
-        message: `✅ คุณได้ชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว รอผู้ขายยืนยันคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: #${order.id}`,
+        message: `✅ คุณได้ชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว รอผู้ขายยืนยันคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`,
         link: `/orders?orderId=${order.id}`,
         metadata: {
           orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
           productId: order.productId,
           auctionId: order.auctionId,
           status: "paid",
@@ -302,10 +306,11 @@ async function notifyOrderConfirmed(order) {
       userId: order.buyerId,
       type: "ORDER",
       title: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
-      message: `📦 ผู้ขายยืนยันคำสั่งซื้อ #${order.id} ('${title}') แล้ว กำลังเตรียมการจัดส่งสินค้า`,
+      message: `📦 ผู้ขายยืนยันคำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') แล้ว กำลังเตรียมการจัดส่งสินค้า`,
       link: `/orders?orderId=${order.id}`,
       metadata: {
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         productId: order.productId,
         auctionId: order.auctionId,
         status: "confirmed",
@@ -320,10 +325,11 @@ async function notifyOrderConfirmed(order) {
         userId: order.sellerId,
         type: "ORDER",
         title: "ยืนยันคำสั่งซื้อสำเร็จ",
-        message: `✅ คุณได้ยืนยันคำสั่งซื้อ #${order.id} ('${title}') แล้ว กรุณาดำเนินการจัดส่งสินค้า`,
+        message: `✅ คุณได้ยืนยันคำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') แล้ว กรุณาดำเนินการจัดส่งสินค้า`,
         link: `/seller/dashboard?section=orders&orderId=${order.id}`,
         metadata: {
           orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
           productId: order.productId,
           auctionId: order.auctionId,
           status: "confirmed",
@@ -348,10 +354,11 @@ async function notifyOrderRejected(order, reason) {
       userId: order.buyerId,
       type: "ORDER",
       title: "คำสั่งซื้อถูกปฏิเสธและคืนเงินเต็มจำนวน",
-      message: `❌ ผู้ขายได้ปฏิเสธออเดอร์ #${order.id} ('${title}')${reasonText} — ระบบได้ทำการคืนเงินเต็มจำนวน ฿${amount} ให้กับคุณเรียบร้อยแล้ว`,
+      message: `❌ ผู้ขายได้ปฏิเสธออเดอร์ #${order.referenceCode || order.id} ('${title}')${reasonText} — ระบบได้ทำการคืนเงินเต็มจำนวน ฿${amount} ให้กับคุณเรียบร้อยแล้ว`,
       link: `/orders?orderId=${order.id}`,
       metadata: {
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         productId: order.productId,
         status: "cancelled",
         refundAmount: amount,
@@ -395,10 +402,11 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
           userId,
           type: "ORDER",
           title: "ผู้ซื้อยกเลิกคำสั่งซื้อและคืนเงินแล้ว",
-          message: `คำสั่งซื้อ #${order.id} ถูกยกเลิกโดยผู้ซื้อก่อนผู้ขายเริ่มเตรียมสินค้า ระบบบันทึกคืนเงินเต็มจำนวน ฿${amount} แล้ว`,
+          message: `คำสั่งซื้อ #${order.referenceCode || order.id} ถูกยกเลิกโดยผู้ซื้อก่อนผู้ขายเริ่มเตรียมสินค้า ระบบบันทึกคืนเงินเต็มจำนวน ฿${amount} แล้ว`,
           link: userId === order.buyerId ? "/orders" : `/products/${order.productId}`,
           entityId: order.id,
-          metadata: { orderId: order.id, productId: order.productId, status, refundAmount: amount, reason },
+          metadata: { orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}), productId: order.productId, status, refundAmount: amount, reason },
         }),
       ),
       broadcastOrderRealtime({ ...order, status }, "cancelled"),
@@ -419,14 +427,14 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
   if (order.buyerId) {
     const buyerBody =
       status === "in_transit"
-        ? `📦 ผู้ขายส่งมอบสินค้าให้ขนส่งแล้ว | หมายเลขคำสั่งซื้อ: #${order.id}`
+        ? `📦 ผู้ขายส่งมอบสินค้าให้ขนส่งแล้ว | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`
         : status === "delivered"
-          ? `📬 สินค้าถึงผู้ซื้อแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า (ระบบจะยืนยันให้อัตโนมัติใน 14 วัน) | หมายเลขคำสั่งซื้อ: #${order.id}`
+          ? `📬 สินค้าถึงผู้ซื้อแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า (ระบบจะยืนยันให้อัตโนมัติใน 14 วัน) | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`
           : status === "completed"
-          ? `🎉 คำสั่งซื้อ #${order.id} ('${title}') เสร็จสมบูรณ์แล้ว ขอบคุณที่ใช้บริการ`
+          ? `🎉 คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') เสร็จสมบูรณ์แล้ว ขอบคุณที่ใช้บริการ`
           : status === "cancelled"
-            ? `⚠️ คำสั่งซื้อ #${order.id} ('${title}') ถูกยกเลิกแล้ว`
-            : `คำสั่งซื้อ #${order.id}: ${statusLabel}`;
+            ? `⚠️ คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') ถูกยกเลิกแล้ว`
+            : `คำสั่งซื้อ #${order.referenceCode || order.id}: ${statusLabel}`;
 
     tasks.push(
       sendSystemNotification({
@@ -441,11 +449,12 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
               ? "คำสั่งซื้อเสร็จสมบูรณ์"
               : status === "cancelled"
                 ? "คำสั่งซื้อถูกยกเลิก"
-                : `อัปเดตสถานะคำสั่งซื้อ #${order.id}`,
+                : `อัปเดตสถานะคำสั่งซื้อ #${order.referenceCode || order.id}`,
         message: buyerBody,
         link: `/orders?orderId=${order.id}`,
         metadata: {
           orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
           productId: order.productId,
           auctionId: order.auctionId,
           status,
@@ -462,16 +471,16 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
 
     if (status === "in_transit") {
       sellerTitle = "ส่งมอบให้ขนส่งแล้ว";
-      sellerBody = `🚚 คุณส่งมอบสินค้า '${title}' ให้ขนส่งแล้ว อยู่ระหว่างการขนส่ง | หมายเลขคำสั่งซื้อ: #${order.id}`;
+      sellerBody = `🚚 คุณส่งมอบสินค้า '${title}' ให้ขนส่งแล้ว อยู่ระหว่างการขนส่ง | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`;
     } else if (status === "completed") {
       sellerTitle = "ลูกค้าได้รับสินค้าแล้ว";
-      sellerBody = `🎉 ลูกค้าได้รับสินค้าแล้ว คำสั่งซื้อ #${order.id} ('${title}') เสร็จสมบูรณ์`;
+      sellerBody = `🎉 ลูกค้าได้รับสินค้าแล้ว คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') เสร็จสมบูรณ์`;
     } else if (status === "cancelled") {
       sellerTitle = "คำสั่งซื้อถูกยกเลิก";
-      sellerBody = `⚠️ คำสั่งซื้อ #${order.id} ('${title}') ถูกยกเลิกแล้ว`;
+      sellerBody = `⚠️ คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') ถูกยกเลิกแล้ว`;
     } else {
-      sellerTitle = `อัปเดตสถานะคำสั่งซื้อ #${order.id}`;
-      sellerBody = `คำสั่งซื้อ #${order.id}: ${statusLabel}`;
+      sellerTitle = `อัปเดตสถานะคำสั่งซื้อ #${order.referenceCode || order.id}`;
+      sellerBody = `คำสั่งซื้อ #${order.referenceCode || order.id}: ${statusLabel}`;
     }
 
     if (sellerTitle && sellerBody) {
@@ -484,6 +493,7 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
           link: sellerLink,
           metadata: {
             orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
             productId: order.productId,
             auctionId: order.auctionId,
             status,
@@ -511,11 +521,12 @@ async function notifyDisputeOpened(dispute, order) {
       userId: order.buyerId,
       type: "DISPUTE",
       title: "เปิดข้อพิพาทสำเร็จ",
-      message: `⚠️ คำสั่งซื้อ #${order.id} ('${title}') เปิดข้อพิพาทเรียบร้อยแล้ว อยู่ระหว่างการพิจารณาตรวจสอบของเจ้าหน้าที่`,
+      message: `⚠️ คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') เปิดข้อพิพาทเรียบร้อยแล้ว อยู่ระหว่างการพิจารณาตรวจสอบของเจ้าหน้าที่`,
       link: `/orders?orderId=${order.id}`,
       entityId: order.id,
       metadata: {
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         disputeId: dispute.id,
         productId: order.productId,
         disputeType: dispute.disputeType,

@@ -33,7 +33,9 @@ async function search({
   }
 
   const where = {
-    ...(orderId ? { id: orderId } : {}),
+    ...(orderId ? (require("@reloop/shared").normalizeReferenceCode(orderId, "ORD")
+      ? { referenceCode: require("@reloop/shared").normalizeReferenceCode(orderId, "ORD") }
+      : { id: orderId }) : {}),
     ...(buyerId ? { buyerId } : {}),
     ...(sellerId ? { sellerId } : {}),
   };

@@ -1,5 +1,8 @@
 "use client";
 
+import ReferenceCode from "../ui/ReferenceCode";
+
+
 import { useEffect, useState } from "react";
 import Modal from "../ui/Modal";
 import OrderCancellationReason from "./OrderCancellationReason";
@@ -183,7 +186,7 @@ export default function BuyerOrderDetailModal({
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
           <dt className="text-ink-muted">หมายเลขคำสั่งซื้อ</dt>
           <dd className="select-text break-all font-mono text-gray-900">
-            {order.id}
+            <ReferenceCode value={order} />
           </dd>
           <dt className="text-ink-muted">ราคา</dt>
           <dd className="text-gray-900">

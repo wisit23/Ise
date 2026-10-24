@@ -6,6 +6,9 @@ Full plan: [`plan/00-master-plan.md`](./plan/00-master-plan.md) · Current DB ta
 [`database/schema.md`](./database/schema.md) · Schema decisions:
 [`database/ER-changes.md`](./database/ER-changes.md) · Work log: [`log/`](./log/)
 
+Readable reference IDs: [design and rollout](docs/uuid-and-reference-id-design.md) ·
+[validation and remaining test-environment requirements](docs/uuid-reference-id-validation.md).
+
 ## Tech stack
 
 - **Frontend:** Next.js 15 (App Router), JavaScript, Tailwind CSS

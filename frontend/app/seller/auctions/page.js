@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -474,6 +475,7 @@ export default function SellerAuctionsPage() {
                         >
                           {a.product?.title || a.productId}
                         </Link>
+                        {a.referenceCode && <ReferenceCode value={a} className="text-xs text-gray-500" />}
                         <span
                           className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
                             STATUS_STYLE[a.status] || "bg-gray-100 text-gray-600"

@@ -113,7 +113,7 @@ async function createTicket({
   try {
     const conversation = await chatClient.createSupportConversation(
       ticket.id,
-      ticket.ticketNumber,
+      ticket.referenceCode || ticket.ticketNumber,
       requesterId,
     );
     if (conversation?.id) {

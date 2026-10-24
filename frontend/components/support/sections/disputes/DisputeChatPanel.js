@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 
 import EmbeddedChat from "../../EmbeddedChat";
 
@@ -89,7 +91,7 @@ export default function DisputeChatPanel({
               {side === "buyer" ? "ผู้ซื้อ" : "ผู้ขาย"}
             </p>
             <p className="font-mono text-[10px] text-slate-500">
-              {partyId.slice(0, 16)}
+              {formatReferenceCode(partyId)}
             </p>
           </div>
         </div>

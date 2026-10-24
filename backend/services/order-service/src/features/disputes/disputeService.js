@@ -170,6 +170,7 @@ async function getById({ disputeId, userId, role, roles }) {
     const summary = order
       ? {
           id: order.id,
+          ...(order.referenceCode ? { referenceCode: order.referenceCode } : {}),
           productId: order.productId,
           buyerId: order.buyerId,
           sellerId: order.sellerId,
@@ -244,6 +245,7 @@ async function getByOrderId({ orderId, userId, role, roles }) {
     const summary = order
       ? {
           id: order.id,
+          ...(order.referenceCode ? { referenceCode: order.referenceCode } : {}),
           buyerId: order.buyerId,
           sellerId: order.sellerId,
           price: order.price,

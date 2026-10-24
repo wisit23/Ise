@@ -68,16 +68,17 @@ test("shows the cancellation reason from the refreshed order details", async () 
   expect(await screen.findByRole("region", { name: "เหตุผลในการยกเลิกคำสั่งซื้อ" })).toHaveTextContent(current.cancellationReason);
 });
 
-test("shows the full order number without truncation and allows selecting it", async () => {
+test("shows the persisted order reference without truncation and allows selecting it", async () => {
   const current = order("paid", {
     id: "550e8400-e29b-41d4-a716-446655440000",
+    referenceCode: "ORD-7K3M-9X2R-4T6W",
   });
   mockApi(current);
   render(
     <BuyerOrderDetailModal order={current} statusLabel="ชำระแล้ว" onClose={() => {}} />,
   );
   expect(screen.getByText("หมายเลขคำสั่งซื้อ")).toBeInTheDocument();
-  expect(screen.getByText(current.id)).toHaveClass("select-text", "break-all");
+  expect(screen.getByText(current.referenceCode)).toHaveClass("select-text", "break-all");
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
     `/api/orders/${current.id}`, { token: "token" },
   ));

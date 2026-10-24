@@ -1,4 +1,6 @@
 "use client";
+import { matchesReference } from "../../../lib/referenceCodes";
+import ReferenceCode from "../../ui/ReferenceCode";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -81,6 +83,7 @@ export default function SellerProductList({
     .filter(
       (p) =>
         !search ||
+        matchesReference(p, search) ||
         p.title?.toLowerCase().includes(search.toLowerCase()) ||
         (p.tags || []).some((t) =>
           t.toLowerCase().includes(search.toLowerCase()),
@@ -190,6 +193,7 @@ export default function SellerProductList({
                     >
                       {p.title}
                     </Link>
+                    {p.referenceCode && <ReferenceCode value={p} className="mt-1 text-xs text-ink-subtle" />}
                     <p className="mt-1 text-xs text-ink-subtle">รายการโปรด {p.favoriteCount || 0} คน</p>
                     {/* Tags */}
                     {Array.isArray(p.tags) && p.tags.length > 0 && (

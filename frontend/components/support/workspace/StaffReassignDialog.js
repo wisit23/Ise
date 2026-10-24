@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 import config from "../../../lib/customerServiceConfig";
 
 import { useEffect, useState } from "react";
@@ -113,7 +115,7 @@ export default function StaffReassignDialog({
                   {person.roles
                     .map((role) => STAFF_ROLE_LABEL[role] || "ไม่ทราบทีม")
                     .join(" · ")}{" "}
-                  · {person.id}
+                  · {formatReferenceCode(person)}
                 </span>
               </span>
             </label>
