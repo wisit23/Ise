@@ -146,5 +146,42 @@ describe("SellerOrderTracker", () => {
     expect(screen.getByText("อยู่ระหว่างพิจารณา")).toBeInTheDocument();
     expect(screen.getByText("พิจารณาแล้ว")).toBeInTheDocument();
   });
-});
 
+  it("clearing the highlighted order also clears its seeded search, so the dispute filter shows disputes", () => {
+    const orders = [
+      mockOrders[0],
+      {
+        id: "c58a6037-d5aa-4bbb-8ccc-000000000001",
+        productTitle: "สินค้ามีข้อพิพาท",
+        price: 900,
+        status: "disputed",
+        createdAt: "2026-10-15T15:00:00.000Z",
+        dispute: { id: "disp-9", status: "OPEN", decision: null },
+      },
+    ];
+    const { rerender } = render(
+      <SellerOrderTracker orders={orders} highlightOrderId="ORD-1111111111" statusFilter="disputed" />,
+    );
+    expect(screen.queryByText("สินค้ามีข้อพิพาท")).toBeNull();
+
+    rerender(<SellerOrderTracker orders={orders} highlightOrderId={null} statusFilter="disputed" />);
+    expect(screen.getByText("สินค้ามีข้อพิพาท")).toBeInTheDocument();
+  });
+
+  it("finds an order by the ORD- number shown on screen", () => {
+    const orders = [
+      {
+        id: "c58a6037-d5aa-4bbb-8ccc-000000000001",
+        productTitle: "สินค้ามีข้อพิพาท",
+        price: 900,
+        status: "shipped",
+        createdAt: "2026-10-15T15:00:00.000Z",
+      },
+    ];
+    render(<SellerOrderTracker orders={orders} />);
+    fireEvent.change(screen.getByPlaceholderText(/ค้นหาชื่อสินค้า/), {
+      target: { value: "ORD-C58A" },
+    });
+    expect(screen.getByText("สินค้ามีข้อพิพาท")).toBeInTheDocument();
+  });
+});

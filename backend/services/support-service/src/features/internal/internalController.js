@@ -1,63 +1,26 @@
-const { badRequest } = require("@reloop/shared");
-const ticketModel = require("../tickets/ticketModel");
+const ticketService = require("../tickets/ticketService");
+
+// HTTP layer for calls from chat-service. The rules live in ticketService.
 
 async function handleChatEvent(req, res, next) {
   try {
-    const data = req.body;
-    if (!data || typeof data !== "object") {
-      throw badRequest("body is required");
-    }
-
-    // Accept the current flat contract and the original nested contract so
-    // queued events created during a rolling deployment remain deliverable.
-    const message = data.message || {};
-    const chatMessageId =
-      data.chatMessageId || data.messageId || message.id || data.id;
-    const ticketId =
-      data.ticketId || data.contextId || message.ticketId || message.contextId;
-    const conversationId = data.conversationId || message.conversationId;
-    const authorId =
-      data.authorId || data.senderId || message.senderId || message.authorId;
-    const authorRole =
-      data.authorRole ||
-      data.senderRole ||
-      message.senderRole ||
-      message.authorRole;
-    const isInternal = Boolean(
-      data.isInternal ??
-      (data.visibility === "INTERNAL" || message.visibility === "INTERNAL"),
-    );
-    const createdAt = data.createdAt || message.createdAt;
-
-    if (typeof chatMessageId !== "string" || !chatMessageId.trim()) {
-      throw badRequest("chatMessageId is required");
-    }
-    if (!ticketId && !conversationId) {
-      throw badRequest("ticketId or conversationId is required");
-    }
-    if (typeof authorId !== "string" || !authorId.trim()) {
-      throw badRequest("authorId is required");
-    }
-    if (typeof authorRole !== "string" || !authorRole.trim()) {
-      throw badRequest("authorRole is required");
-    }
-    if (createdAt != null && Number.isNaN(new Date(createdAt).getTime())) {
-      throw badRequest("createdAt must be a valid date");
-    }
-
-    const result = await ticketModel.recordChatMessage({
-      ticketId,
-      conversationId,
-      chatMessageId: chatMessageId.trim(),
-      authorId: authorId.trim(),
-      authorRole: authorRole.trim(),
-      isInternal,
-      createdAt,
-    });
+    const result = await ticketService.recordChatEvent(req.body);
     res.status(result.alreadyRecorded ? 200 : 201).json(result);
   } catch (error) {
     next(error);
   }
 }
 
-module.exports = { handleChatEvent };
+async function chatAccess(req, res, next) {
+  try {
+    res.json(await ticketService.getChatAccess({
+      ticketId: req.params.id,
+      userId: req.params.userId,
+      role: req.query.role,
+    }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { handleChatEvent, chatAccess };

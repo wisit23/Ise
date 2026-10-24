@@ -18,6 +18,14 @@ enum KycStatus {
   INACTIVE_EXPIRED
 }
 
+// Why an EmailVerificationToken was issued: confirming the address a new
+// account signed up with, or proving a user owns an address they want to
+// switch to (the token then carries that new address).
+enum EmailVerificationPurpose {
+  SIGNUP
+  EMAIL_CHANGE
+}
+
 enum ReportStatus {
   OPEN
   REVIEWED
@@ -36,6 +44,9 @@ model User {
   // the multi-role source of truth once explicit grants exist.
   role         String   @default("BUYER")
   status       String   @default("ACTIVE")
+  // Null until the owner proves they control `email` (sign-up link or a
+  // completed password reset). Sign-in is refused while it is null.
+  emailVerifiedAt DateTime? @map("email_verified_at")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -44,6 +55,8 @@ model User {
   loginLogs          LoginLog[]
   buyerActivityLogs  BuyerActivityLog[]
   refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
   reports            Report[]
   roles              UserRole[]
   kycApplications    KycApplication[]
@@ -182,6 +195,54 @@ model RefreshToken {
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@map("refresh_tokens")
+}
+
+// Single-use, short-lived credentials for the forgot-password flow. Only a
+// SHA-256 digest of the token is stored: the raw value exists solely in the
+// email link, so a database leak cannot be replayed as a reset. Rows are kept
+// after use (usedAt / revokedAt) as an audit trail until the cleanup job
+// prunes them.
+model PasswordResetToken {
+  id                 String    @id @default(uuid())
+  userId             String    @map("user_id")
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash          String    @unique @map("token_hash")
+  expiresAt          DateTime  @map("expires_at")
+  usedAt             DateTime? @map("used_at")
+  revokedAt          DateTime? @map("revoked_at")
+  requestedIp        String?   @map("requested_ip")
+  requestedUserAgent String?   @map("requested_user_agent")
+  usedIp             String?   @map("used_ip")
+  // Short, non-secret code shown on the page that asked for the link and
+  // printed in the email, so the user can tell which email is the right one.
+  referenceCode      String?   @map("reference_code")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("password_reset_tokens")
+}
+
+// Single-use links proving a user controls an email address. Same storage
+// rules as PasswordResetToken: only the SHA-256 digest is kept, and rows stay
+// as an audit trail until the cleanup job prunes them. `email` is the
+// address the link proves, which differs from the user's current one for
+// an EMAIL_CHANGE.
+model EmailVerificationToken {
+  id            String                   @id @default(uuid())
+  userId        String                   @map("user_id")
+  user          User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose       EmailVerificationPurpose @default(SIGNUP)
+  email         String
+  referenceCode String?                  @map("reference_code")
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  revokedAt   DateTime? @map("revoked_at")
+  requestedIp String?   @map("requested_ip")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, purpose, createdAt])
+  @@map("email_verification_tokens")
 }
 
 // ER: Reports — table created now per plan (no tables cut from ER); report/moderation UI is a later phase.

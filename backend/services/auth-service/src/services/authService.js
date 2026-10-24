@@ -14,6 +14,8 @@ const {
 } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
 const { assertActive, revokedSession, lockUser } = require("./sessionService");
+const { assertPasswordPolicy, hashPassword } = require("./passwordPolicy");
+const { service: emailVerification } = require("../features/emailVerification");
 const shopChangeRequests = require("./shopChangeRequestService");
 const { ROLE_CATALOG } = require("../../prisma/roleCatalog");
 
@@ -173,29 +175,53 @@ async function issueTokenPair(user, loginContext = null) {
   });
 }
 
-async function register({ email, password, firstName, lastName, phone }) {
+// Thai mobile/landline as typed into the forms: 10 digits starting with 0.
+// Spaces and dashes are accepted on input ("081-234-5678") and stripped so
+// what's stored is always the bare digits. Blank means "no phone" — the
+// field is optional everywhere it's collected.
+const PHONE_PATTERN = /^0[0-9]{9}$/;
+
+function normalizePhone(phone) {
+  if (phone === undefined || phone === null) return phone;
+  const digits = String(phone).replace(/[\s-]/g, "");
+  if (!digits) return null;
+  if (!PHONE_PATTERN.test(digits)) {
+    throw badRequest("เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0");
+  }
+  return digits;
+}
+
+/**
+ * With verification required, the account starts unverified and the
+ * response carries no session: the user signs in after confirming the
+ * emailed link. With verification off, sign-up signs them straight in.
+ */
+async function register({ email, password, firstName, lastName, phone, ipAddress }) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
   }
-  if (password.length < 8) {
-    throw badRequest("password must be at least 8 characters");
-  }
+  assertPasswordPolicy(password);
+  phone = normalizePhone(phone);
 
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw conflict("email is already registered");
+  if (existing && !(await emailVerification.canReclaim(existing))) {
+    throw conflict("email is already registered");
+  }
 
-  const passwordHash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      firstName,
-      lastName,
-      phone,
-      role: "BUYER",
-    },
-  });
+  const profile = { passwordHash: await hashPassword(password), firstName, lastName, phone };
+  const user = existing
+    ? await prisma.user.update({ where: { id: existing.id }, data: profile })
+    : await prisma.user.create({ data: { email, ...profile, role: "BUYER" } });
 
+  if (emailVerification.isRequired()) {
+    const reference = emailVerification.sendForNewAccount(user, { ipAddress });
+    return {
+      verificationRequired: true,
+      email: user.email,
+      expiresInHours: emailVerification.linkLifetimeHours(),
+      reference,
+    };
+  }
   const tokens = await issueTokenPair(user);
   return { user: toPublicUser(user), ...tokens };
 }
@@ -209,6 +235,7 @@ async function login({ email, password, ipAddress, userAgent }) {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw badRequest("invalid email or password");
   assertActive(user);
+  emailVerification.assertVerifiedForSignIn(user);
 
   const tokens = await issueTokenPair(user, { ipAddress, userAgent });
   return { user: toPublicUser(user), ...tokens };
@@ -284,7 +311,7 @@ async function updateProfile(userId, { firstName, lastName, phone }) {
     if (!lastName) throw badRequest("lastName cannot be empty");
     patch.lastName = lastName;
   }
-  if (phone !== undefined) patch.phone = phone;
+  if (phone !== undefined) patch.phone = normalizePhone(phone);
 
   const user = await prisma.user.update({ where: { id: userId }, data: patch });
   return toPublicUser(user);

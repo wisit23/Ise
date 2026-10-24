@@ -16,6 +16,7 @@ import StyleProfileForm from "../../components/profile/StyleProfileForm";
 import MyOrders from "../../components/orders/MyOrders";
 import { apiFetch } from "../../lib/api";
 import { validateAddressContact } from "../../lib/addressValidation";
+import { PHONE_HINT, PHONE_MAX_LENGTH, PHONE_PATTERN, phoneDigits } from "../../lib/phone";
 import {
   getAccessToken,
   getRefreshToken,
@@ -575,7 +576,13 @@ export default function ProfilePage() {
               <Input
                 label="เบอร์โทรศัพท์"
                 value={form.phone || ""}
-                onChange={update("phone")}
+                onChange={(e) =>
+                  setForm({ ...form, phone: phoneDigits(e.target.value) })
+                }
+                inputMode="numeric"
+                maxLength={PHONE_MAX_LENGTH}
+                pattern={PHONE_PATTERN}
+                title={PHONE_HINT}
                 placeholder="เช่น 0812345678"
                 hint="ใช้สำหรับติดต่อประสานงานการจัดส่งสินค้า"
               />
@@ -938,7 +945,7 @@ export default function ProfilePage() {
               onChange={(e) =>
                 setAddressFormData({
                   ...addressFormData,
-                  phone: e.target.value,
+                  phone: phoneDigits(e.target.value),
                 })
               }
               placeholder="เช่น 0812345678"

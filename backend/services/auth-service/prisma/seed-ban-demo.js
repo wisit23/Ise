@@ -47,6 +47,7 @@ async function resetFixture(fixture) {
         lastName: fixture.lastName,
         role: fixture.role,
         status: "ACTIVE",
+        emailVerifiedAt: new Date(),
       },
     });
 

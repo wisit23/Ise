@@ -10,7 +10,7 @@ import {
   useChatSocketEvent,
 } from "../../../chat/ChatSocketProvider";
 import { mergeMessages, useSocketResync } from "../../../chat/messageSync";
-import { listMessages, sendMessage, markRead } from "../../../../lib/chat";
+import { listMessages, sendMessage, markRead, sendErrorMessage } from "../../../../lib/chat";
 import { uploadChatAttachment } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 import {
@@ -237,7 +237,7 @@ export default function SupportMainChat({
       );
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      setError(`ส่งข้อความไม่สำเร็จ: ${err.message}`);
+      setError(sendErrorMessage(err));
       throw err;
     }
   }

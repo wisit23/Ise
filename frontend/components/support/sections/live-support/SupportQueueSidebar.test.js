@@ -14,12 +14,12 @@ const baseProps = {
   onRefresh: jest.fn(),
 };
 
-test("red unread badges show message totals for scopes and individual cases", () => {
+test("red unread badges show case totals for scopes and message totals per case", () => {
   render(<SupportQueueSidebar {...baseProps}
     tickets={[{ id: "t1", ticketNumber: "CS-1", subject: "Need help", status: "NEW" }]}
     unreadCounts={{ scopes: { mine: 3, unassigned: 101, all: 104 }, items: [{ id: "t1", count: 3 }] }} />);
-  expect(screen.getByRole("button", { name: /งานของฉัน.*ข้อความยังไม่อ่าน 3 ข้อความ/ })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /รอรับเรื่อง.*ข้อความยังไม่อ่าน 101 ข้อความ/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /งานของฉัน.*มีข้อความใหม่ 3 เคส/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /รอรับเรื่อง.*มีข้อความใหม่ 101 เคส/ })).toBeInTheDocument();
   expect(screen.getAllByText("99+")).toHaveLength(2);
   expect(screen.getByRole("button", { name: /CS-1.*ข้อความยังไม่อ่าน 3 ข้อความ/ })).toBeInTheDocument();
 });

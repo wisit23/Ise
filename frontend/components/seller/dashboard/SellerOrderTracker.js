@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import EmptyState from "../../ui/EmptyState";
 import Modal from "../../ui/Modal";
@@ -60,6 +60,13 @@ export default function SellerOrderTracker({
   const [search, setSearch] = useState(
     highlightOrderId ? highlightOrderId.slice(0, 8) : "",
   );
+  // The search box is seeded from the highlighted order, so it has to follow
+  // that highlight when it changes or is cleared — otherwise a stale order
+  // number stays in the box and silently empties every other filter (e.g.
+  // the dispute banner's "ดูรายการข้อพิพาท" showed 0 rows).
+  useEffect(() => {
+    setSearch(highlightOrderId ? highlightOrderId.slice(0, 8) : "");
+  }, [highlightOrderId]);
 
   async function prepareOrder(order) {
     if (actionLoading) return;
@@ -113,12 +120,17 @@ export default function SellerOrderTracker({
       const isAuction = Boolean(o.auctionId) || o.orderType === "AUCTION" || o.id?.startsWith("AUC-");
       return orderTypeFilter === "auction" ? isAuction : !isAuction;
     })
-    .filter(
-      (o) =>
-        !search ||
-        o.productTitle?.toLowerCase().includes(search.toLowerCase()) ||
-        o.id?.toLowerCase().includes(search.toLowerCase()),
-    )
+    .filter((o) => {
+      if (!search) return true;
+      const needle = search.trim().toLowerCase();
+      // Sellers type the number they see on screen ("ORD-C58A…"), which
+      // for most orders is formatOrderId's display form, not the raw id.
+      return (
+        o.productTitle?.toLowerCase().includes(needle) ||
+        o.id?.toLowerCase().includes(needle) ||
+        formatOrderId(o.id).toLowerCase().includes(needle)
+      );
+    })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const disputeCount = orders.filter(isOrderDisputed).length;

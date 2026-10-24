@@ -883,6 +883,7 @@ test("placeBid P2002 race recovery validates existing bid and returns on match",
     fn(withAuditState(tx)),
   );
   t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "latestBidByBidder", async () => null);
   t.mock.method(repository, "createBid", async () => {
     const err = new Error("P2002");
     err.code = "P2002";
@@ -931,6 +932,7 @@ test("placeBid P2002 race recovery throws 409 Conflict if race-created bid has d
     fn(withAuditState(tx)),
   );
   t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "latestBidByBidder", async () => null);
   t.mock.method(repository, "createBid", async () => {
     const err = new Error("P2002");
     err.code = "P2002";
@@ -958,6 +960,7 @@ test("closing an auction with no bids never calls order-service", async (t) => {
     scheduledEndAt: new Date(Date.now() - 1000),
   }));
   t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "latestBidByBidder", async () => null);
   let called = false;
   t.mock.method(orderClient, "createOrderFromAuction", async () => {
     called = true;
@@ -1389,6 +1392,7 @@ test("closing an auction with no bids transitions product status to 'auction_act
     scheduledEndAt: new Date(Date.now() - 1000),
   }));
   t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "latestBidByBidder", async () => null);
   t.mock.method(repository, "setProductStatus", async (productId, status) => {
     revertedStatus = status;
   });
@@ -1616,6 +1620,7 @@ test("placeBid in the last 5 minutes extends scheduledEndAt by 5 minutes and res
     return fn(withAuditState(tx));
   });
   t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "latestBidByBidder", async () => null);
   t.mock.method(repository, "createBid", async (data) => ({
     id: "b1",
     ...data,
@@ -1671,6 +1676,7 @@ test("placeBid outside the last 5 minutes does NOT extend scheduledEndAt", async
     return fn(withAuditState(tx));
   });
   t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "latestBidByBidder", async () => null);
   t.mock.method(repository, "createBid", async (data) => ({
     id: "b1",
     ...data,
@@ -2997,6 +3003,7 @@ test("listRoundItems reconciles scheduled items to open and filters out expired/
   }));
 
   t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "latestBidByBidder", async () => null);
   t.mock.method(repository, "setProductStatus", async () => {});
 
   t.mock.method(repository, "transaction", async (fn) => {
@@ -3613,6 +3620,7 @@ test("closeAuction transitions product to auction_action_required when there are
     product: { title: "Item No Bid", photos: [] },
   }));
   t.mock.method(repository, "highestBid", async () => null);
+  t.mock.method(repository, "latestBidByBidder", async () => null);
   t.mock.method(repository, "setProductStatus", async (id, status) => {
     updatedProductStatus = status;
   });
@@ -4248,4 +4256,50 @@ test("service.getBids returns enriched bids with bidder names", async (t) => {
   assert.ok(bids[0].bidderName);
   assert.equal(bids[1].amount, 1000);
   assert.ok(bids[1].bidderName);
+});
+
+test("placeBid makes the same bidder wait out the cooldown before bidding again", async (t) => {
+  const auction = {
+    id: "a1",
+    sellerId: "seller-1",
+    status: "open",
+    startingPrice: 100,
+    bidIncrement: 10,
+    scheduledEndAt: new Date(Date.now() + 60 * 60_000),
+  };
+  t.mock.method(repository, "withAuctionLock", (id, fn) => fn(fakeTx({ auction })));
+  t.mock.method(repository, "latestBidByBidder", async () => ({
+    bidderId: "buyer-1",
+    amount: 100,
+    createdAt: new Date(Date.now() - 1_000),
+  }));
+  const createBid = t.mock.method(repository, "createBid", async (data) => ({ id: "b", ...data }));
+
+  await assert.rejects(
+    service.placeBid({ user: { id: "buyer-1" }, auctionId: "a1", amount: 110, idempotencyKey: "k-cool" }),
+    (err) => err.status === 429 && err.code === "AUCTION_BID_COOLDOWN",
+  );
+  assert.equal(createBid.mock.callCount(), 0);
+});
+
+test("placeBid accepts the next bid once the cooldown has passed", async (t) => {
+  const auction = {
+    id: "a1",
+    sellerId: "seller-1",
+    status: "open",
+    startingPrice: 100,
+    bidIncrement: 10,
+    scheduledEndAt: new Date(Date.now() + 60 * 60_000),
+  };
+  t.mock.method(repository, "withAuctionLock", (id, fn) => fn(fakeTx({ auction })));
+  t.mock.method(repository, "highestBid", async () => ({ amount: 100 }));
+  t.mock.method(repository, "latestBidByBidder", async () => ({
+    bidderId: "buyer-1",
+    amount: 100,
+    createdAt: new Date(Date.now() - 10_000),
+  }));
+  t.mock.method(repository, "createBid", async (data) => ({ id: "b", ...data }));
+
+  const bid = await service.placeBid({ user: { id: "buyer-1" }, auctionId: "a1", amount: 110, idempotencyKey: "k-ok" });
+  assert.equal(bid.amount, 110);
 });

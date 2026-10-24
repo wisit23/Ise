@@ -13,7 +13,11 @@ import {
   StatusPill,
   baht,
 } from "../seller/dashboard/sellerStatus";
-import { formatOrderId } from "../../lib/orders";
+import {
+  formatOrderId,
+  isValidTrackingNumber,
+  TRACKING_NUMBER_MESSAGE,
+} from "../../lib/orders";
 
 export const SHIPPING_COMPANIES = [
   "Thailand Post",
@@ -162,6 +166,10 @@ export default function OrderShippingModal({
     if (!order?.id) return;
     if (order.status !== "ready_to_ship") {
       setError("ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องเตรียมสินค้าให้พร้อมจัดส่งก่อน");
+      return;
+    }
+    if (!isValidTrackingNumber(trackingNumber)) {
+      setError(TRACKING_NUMBER_MESSAGE);
       return;
     }
     setUpdating(true);
@@ -514,7 +522,7 @@ export default function OrderShippingModal({
                     aria-label="เลขติดตามพัสดุ"
                     value={trackingNumber}
                     onChange={(e) => setTrackingNumber(e.target.value)}
-                    maxLength={120}
+                    maxLength={20}
                     placeholder="เช่น TH123456789TH"
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
                   />

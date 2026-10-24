@@ -1,6 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import OrderLine from "./OrderLine";
 
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn(), prefetch: jest.fn() }),
+}));
+
 jest.mock("../lib/api", () => ({
   mediaUrl: (url) => url,
 }));

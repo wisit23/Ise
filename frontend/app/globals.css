@@ -61,6 +61,13 @@
    switching sections inside /workspace, but it applies to any page whose
    height crosses the viewport — a short search result set versus a long
    one, for instance. */
+/* No rubber-band bounce or swipe-to-navigate when a touchpad drag runs past
+   the top/bottom of the page — it dragged the whole layout out of place. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 html {
   scrollbar-gutter: stable;
 }

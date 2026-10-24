@@ -1,5 +1,12 @@
 const { AppError, badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 
+// Real carrier numbers (TH123456789TH, KER1234567890…) mix letters and
+// digits; this keeps out keyboard mash like "fhfueueduejdeudhe" or "----".
+// Mirrored in frontend/lib/orders.js.
+const TRACKING_NUMBER_PATTERN = /^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{8,20}$/;
+const TRACKING_NUMBER_MESSAGE =
+  "เลขพัสดุต้องมีทั้งตัวอักษรและตัวเลข ยาว 8–20 ตัว และไม่มีเว้นวรรคหรือสัญลักษณ์";
+
 const ADDRESS_FIELDS = [
   "recipientName",
   "phone",
@@ -139,6 +146,9 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
       throw badRequest(
         "company and trackingNumber are required to ship an order",
       );
+    }
+    if (!TRACKING_NUMBER_PATTERN.test(trackingNumber.trim())) {
+      throw badRequest(TRACKING_NUMBER_MESSAGE);
     }
     return db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({

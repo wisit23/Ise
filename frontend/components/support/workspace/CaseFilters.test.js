@@ -14,3 +14,15 @@ test("filters stay collapsed until requested, select via shared dropdown and cle
   fireEvent.click(screen.getByRole("button", { name: "ล้างตัวกรอง" }));
   expect(onChange).toHaveBeenCalledWith("resetFilters", "");
 });
+
+test("each tab only offers the statuses and work filters it can return", () => {
+  const labels = { NEW: "ตั๋วใหม่", IN_PROGRESS: "กำลังดำเนินการ", RESOLVED: "แก้ไขสำเร็จ", CLOSED: "ปิดตั๋วแล้ว", ESCALATED: "ส่งเรื่องต่อ" };
+  const { rerender } = render(<CaseFilters state={{ scope: "closed", status: "", sort: "sla" }} labels={labels} priorities={{}} onChange={() => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: /ตัวกรอง/ }));
+  expect(screen.queryByRole("button", { name: "งานที่แสดง" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "กรองสถานะ" }));
+  expect(screen.getByRole("radio", { name: "ปิดตั๋วแล้ว" })).toBeInTheDocument();
+  expect(screen.queryByRole("radio", { name: "ตั๋วใหม่" })).not.toBeInTheDocument();
+  rerender(<CaseFilters dispute state={{ scope: "closed", status: "", sort: "sla" }} labels={{ OPEN: "รอตรวจสอบ", DECIDED: "ตัดสินแล้ว" }} priorities={{}} onChange={() => {}} />);
+  expect(screen.queryByRole("button", { name: "กรองสถานะ" })).not.toBeInTheDocument();
+});

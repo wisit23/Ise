@@ -15,3 +15,6 @@ require("./jobs/kycExpiryJob").start();
 // Daily job: marks verified sellers with no listing activity for ≥365 days
 // as INACTIVE_EXPIRED so they must re-submit KYC before listing again.
 require("./jobs/sellerInactivityJob").start();
+
+// Daily job: prunes emailed one-time tokens past their retention period.
+require("./jobs/oneTimeTokenCleanupJob").start();

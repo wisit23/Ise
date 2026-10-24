@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import QuietLink from "./ui/QuietLink";
 import { mediaUrl } from "../lib/api";
 import { fetchProduct } from "../lib/products";
 import { fetchConditions } from "../lib/catalog";
@@ -102,7 +102,7 @@ export default function OrderLine({
     >
       <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
         {lead}
-        <Link
+        <QuietLink
           href={`/products/${order.productId}`}
           className="focus-ring rounded-md shrink-0"
           aria-label={`ดูสินค้า ${order.productTitle}`}
@@ -112,7 +112,7 @@ export default function OrderLine({
             size={72}
             title={order.productTitle}
           />
-        </Link>
+        </QuietLink>
       </div>
 
       <div className="min-w-0">
@@ -122,12 +122,12 @@ export default function OrderLine({
               #{formatOrderId(order.id)}
             </span>
           )}
-          <Link
+          <QuietLink
             href={`/products/${order.productId}`}
             className="focus-ring line-clamp-2 rounded font-medium text-ink hover:text-brand-700 text-sm sm:text-base"
           >
             {order.productTitle}
-          </Link>
+          </QuietLink>
         </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">

@@ -35,30 +35,36 @@ function ticketActivityBase(userId) {
   `;
 }
 
+/** The CS agent dashboard for already-parsed options (see dashboardOptions). */
+async function readTicketAgentDashboard(options) {
+  try {
+    options.replyIds =
+      await require("@reloop/shared/src/awaitingReply").awaitingReplyIds(
+        prisma,
+        Prisma,
+        ticketDashboardBase(options.userId),
+        options.userId,
+        "tickets",
+      );
+  } catch {
+    options.replyIds = null;
+  }
+  const data = await readAgentDashboard(
+    prisma,
+    Prisma,
+    ticketDashboardBase(options.userId),
+    options,
+    new Date(),
+    ticketActivityBase(options.userId),
+  );
+  data.csat = await require("./csat").stats(options.userId, options.days);
+  return data;
+}
+
+// HTTP layer for GET /tickets/agent-dashboard.
 async function agentDashboard(req, res, next) {
   try {
-    const options = dashboardOptions(req);
-    try {
-      options.replyIds =
-        await require("@reloop/shared/src/awaitingReply").awaitingReplyIds(
-          prisma,
-          Prisma,
-          ticketDashboardBase(options.userId),
-          options.userId,
-          "tickets",
-        );
-    } catch {
-      options.replyIds = null;
-    }
-    const data = await readAgentDashboard(
-      prisma,
-      Prisma,
-      ticketDashboardBase(options.userId),
-      options,
-      new Date(),
-      ticketActivityBase(options.userId),
-    );
-    data.csat = await require("./csat").stats(options.userId, options.days);
+    const data = await readTicketAgentDashboard(dashboardOptions(req));
     res.set("Cache-Control", "private, no-store");
     res.json(data);
   } catch (error) {
@@ -66,4 +72,4 @@ async function agentDashboard(req, res, next) {
   }
 }
 
-module.exports = { agentDashboard, ticketDashboardBase, ticketActivityBase };
+module.exports = { agentDashboard, readTicketAgentDashboard, ticketDashboardBase, ticketActivityBase };

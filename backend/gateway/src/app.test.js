@@ -41,3 +41,26 @@ test("a public auth route is not blocked by the auth check", async () => {
   const res = await request(app).post("/api/auth/login").send({});
   assert.notEqual(res.status, 401);
 });
+
+test("forgot-password endpoints are reachable without a bearer token", async () => {
+  for (const path of [
+    "/api/auth/password/forgot",
+    "/api/auth/password/reset/verify",
+    "/api/auth/password/reset",
+  ]) {
+    const res = await request(app).post(path).send({});
+    assert.notEqual(res.status, 401, path);
+  }
+});
+
+test("only the exact forgot-password paths are public", async () => {
+  const res = await request(app).post("/api/auth/password/reset/anything-else");
+  assert.equal(res.status, 401);
+});
+
+test("sign-up confirmation endpoints are reachable without a bearer token", async () => {
+  for (const path of ["/api/auth/email/verify", "/api/auth/email/resend"]) {
+    const res = await request(app).post(path).send({});
+    assert.notEqual(res.status, 401, path);
+  }
+});

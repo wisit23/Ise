@@ -79,40 +79,68 @@ async function createAndTouch({
     conversationUpdateData.participants = { set: participants };
   }
 
-  const txOperations = [
-    prisma.message.create({
-      data: {
-        ...((messageId || idempotencyKey) ? {id:messageId || createHash("sha256").update("message:"+idempotencyKey).digest("hex").slice(0,24)} : {}),
-        conversationId,
-        senderId,
-        senderRole,
-        type,
-        body: body || "",
-        payload: payload ?? null,
-        ...(idempotencyKey ? { idempotencyKey } : {}),
-        visibility: visibility || "ALL",
-        syncStatus: syncStatus || null,
-        syncAttempts: 0,
-        // See messageService.sendMessage's comment on this same field —
-        // Prisma's MongoDB connector needs it written explicitly or every
-        // `deletedAt: null` read filter silently excludes this message.
-        deletedAt: null,
-        createdAt: now,
-      },
-    }),
-  ];
-
-  if (Object.keys(conversationUpdateData).length > 0) {
-    txOperations.push(
-      prisma.conversation.update({
-        where: { id: conversationId },
-        data: conversationUpdateData,
+  // Prisma operations are lazy one-shot promises, so a retry has to build a
+  // fresh set rather than re-submit the ones that already failed.
+  const buildOperations = () => {
+    const txOperations = [
+      prisma.message.create({
+        data: {
+          ...((messageId || idempotencyKey) ? {id:messageId || createHash("sha256").update("message:"+idempotencyKey).digest("hex").slice(0,24)} : {}),
+          conversationId,
+          senderId,
+          senderRole,
+          type,
+          body: body || "",
+          payload: payload ?? null,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+          visibility: visibility || "ALL",
+          syncStatus: syncStatus || null,
+          syncAttempts: 0,
+          // See messageService.sendMessage's comment on this same field —
+          // Prisma's MongoDB connector needs it written explicitly or every
+          // `deletedAt: null` read filter silently excludes this message.
+          deletedAt: null,
+          createdAt: now,
+        },
       }),
-    );
-  }
+    ];
 
-  const [message] = await prisma.$transaction(txOperations);
-  return message;
+    if (Object.keys(conversationUpdateData).length > 0) {
+      txOperations.push(
+        prisma.conversation.update({
+          where: { id: conversationId },
+          data: conversationUpdateData,
+        }),
+      );
+    }
+
+    return txOperations;
+  };
+
+  // Every send rewrites the same Conversation document, so a burst of
+  // messages into one room makes MongoDB abort all but one of the
+  // overlapping transactions (P2034). The losers are safe to replay: an
+  // aborted transaction leaves nothing behind.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const [message] = await prisma.$transaction(buildOperations());
+      return message;
+    } catch (err) {
+      if (attempt >= WRITE_CONFLICT_ATTEMPTS || !isWriteConflict(err)) throw err;
+      await new Promise((resolve) =>
+        setTimeout(resolve, 20 * attempt + Math.floor(Math.random() * 30)),
+      );
+    }
+  }
+}
+
+const WRITE_CONFLICT_ATTEMPTS = 5;
+
+function isWriteConflict(err) {
+  return (
+    err?.code === "P2034" ||
+    /write conflict|deadlock/i.test(String(err?.message || ""))
+  );
 }
 
 async function findByIdempotencyKey(conversationId, idempotencyKey) {

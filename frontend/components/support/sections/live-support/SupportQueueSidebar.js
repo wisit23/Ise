@@ -39,8 +39,11 @@ export default function SupportQueueSidebar({
   scopes = DEFAULT_SCOPES,
 }) {
   const unreadById = new Map((unreadCounts?.items || []).map(item => [item.id, item.count]));
+  // Scope tabs count cases with new messages; a case badge counts its messages.
+  const unreadLabel = (value, variant) =>
+    variant === "scope" ? `มีข้อความใหม่ ${value} เคส` : `ข้อความยังไม่อ่าน ${value} ข้อความ`;
   const unreadBadge = (value, variant) => value > 0 ? (
-    <span aria-label={`ข้อความยังไม่อ่าน ${value} ข้อความ`} title={`ข้อความยังไม่อ่าน ${value} ข้อความ`} className={`${styles.unreadBadge} ${variant === "scope" ? styles.scopeBadge : styles.caseBadge}`}>
+    <span aria-label={unreadLabel(value, variant)} title={unreadLabel(value, variant)} className={`${styles.unreadBadge} ${variant === "scope" ? styles.scopeBadge : styles.caseBadge}`}>
       {value > 99 ? "99+" : value}
     </span>
   ) : null;
@@ -293,7 +296,7 @@ export default function SupportQueueSidebar({
                 {(t.capabilities?.isWatching || (scope === "escalated" && domain === "tickets")) && (
                   <span className={styles.waitingFlag}>
                     <span aria-hidden="true" className="material-symbols-outlined">hourglass_top</span>
-                    {domain === "disputes" ? "รอ T&S ตรวจ" : "รอ Admin ตรวจ · ยังคุยกับลูกค้าได้"}
+                    {domain === "disputes" ? "รอ T&S ตรวจ" : "รอ T&S ตรวจ · ยังคุยกับลูกค้าได้"}
                   </span>
                 )}
                 <div className={`${styles.cardStatus} mt-1 flex w-full flex-wrap items-center gap-1.5`}>

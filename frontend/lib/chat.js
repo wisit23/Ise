@@ -70,6 +70,18 @@ export function sendMessage(conversationId, body, token) {
  * message payload because it's fully derivable from ids the client already
  * has — and it must be fetched WITH a bearer token (see fetchAuthedBlobUrl),
  * never used as a bare <img src>, because chat attachments are private. */
+const GENERIC_SEND_ERROR = "ส่งข้อความไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
+
+/** What to show a user whose message didn't go out. A 4xx carries a message
+ * the service wrote for people (locked room, rate limit, too long); a 5xx or
+ * a network failure carries internals (Prisma traces, stack text) that mean
+ * nothing to them, so those collapse to one plain retry hint. */
+export function sendErrorMessage(err) {
+  const status = Number(err?.status);
+  if (status >= 400 && status < 500 && err?.message) return err.message;
+  return GENERIC_SEND_ERROR;
+}
+
 export function attachmentUrl(conversationId, messageId) {
   return `/api/chat/conversations/${conversationId}/attachments/${messageId}`;
 }

@@ -185,7 +185,7 @@ test("markShipped: rejects if caller is not the seller", async () => {
       actorId: "buyer-1",
       version: 3,
       company: "Flash Express",
-      trackingNumber: "TH12345",
+      trackingNumber: "TH123456789TH",
     }),
     (error) => error.status === 403,
   );
@@ -199,7 +199,7 @@ test("markShipped: rejects if the order is not ready to ship yet (status is paid
       actorId: "seller-1",
       version: 3,
       company: "Flash Express",
-      trackingNumber: "TH12345",
+      trackingNumber: "TH123456789TH",
     }),
     (error) => {
       assert.equal(error.status, 409);
@@ -216,13 +216,30 @@ test("markShipped: succeeds when seller ships a ready-to-ship order", async () =
     actorId: "seller-1",
     version: 3,
     company: "Flash Express",
-    trackingNumber: "TH12345",
+    trackingNumber: "TH123456789TH",
   });
   assert.ok(result);
   const orderWrite = writes.find((w) => w.table === "order");
   assert.equal(orderWrite.query.data.status, "shipped");
   const shippingUpdate = writes.find((w) => w.table === "shipping_update");
   assert.equal(shippingUpdate.query.data.company, "Flash Express");
-  assert.equal(shippingUpdate.query.data.trackingNumber, "TH12345");
+  assert.equal(shippingUpdate.query.data.trackingNumber, "TH123456789TH");
 });
 
+
+for (const trackingNumber of ["fhfueueduejdeudhe", "----", "12345678", "TH12", "TH 1234 5678"]) {
+  test(`markShipped: rejects a made-up tracking number ${JSON.stringify(trackingNumber)} without writes`, async () => {
+    const { service, writes } = fixture({ status: "ready_to_ship" });
+    await assert.rejects(
+      service.markShipped({
+        orderId: "order-1",
+        actorId: "seller-1",
+        version: 3,
+        company: "Thailand Post",
+        trackingNumber,
+      }),
+      (error) => error.status === 400,
+    );
+    assert.equal(writes.length, 0);
+  });
+}

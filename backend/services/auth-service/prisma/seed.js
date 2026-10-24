@@ -221,6 +221,7 @@ async function upsertUser({
       firstName,
       lastName,
       role,
+      emailVerifiedAt: new Date(),
       ...(shopName
         ? {
             sellerProfile: {

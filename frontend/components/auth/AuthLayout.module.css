@@ -254,6 +254,38 @@
 .form .submit:hover:not(:disabled) > svg {
   transform: translateX(2px);
 }
+.forgotLink,
+.inlineAction {
+  align-self: flex-end;
+  margin-top: -8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--color-brand-600));
+}
+.inlineAction {
+  align-self: center;
+  margin-top: 4px;
+}
+.forgotLink:hover,
+.inlineAction:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.reference {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.reference strong {
+  margin-left: 6px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 15px;
+  letter-spacing: 2px;
+}
+.reference span {
+  display: block;
+  opacity: 0.8;
+}
 .nameRow {
   display: grid;
   grid-template-columns: 1fr 1fr;

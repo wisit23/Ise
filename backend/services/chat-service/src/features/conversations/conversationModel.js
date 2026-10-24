@@ -37,6 +37,9 @@ function listForParticipant(userId, filter = {}) {
   if (filter.excludeContextType) {
     where.contextType = { not: filter.excludeContextType };
   }
+  if (filter.excludeContextTypes) {
+    where.contextType = { notIn: filter.excludeContextTypes };
+  }
   if (filter.contextType) {
     where.contextType = filter.contextType;
   }
