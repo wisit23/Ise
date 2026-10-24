@@ -229,6 +229,9 @@ export default function AuctionDetailPage() {
 
   const bids = auction.bids || [];
   const highest = bids[0];
+  const winningBid = auction.winningBidId
+    ? bids.find((b) => b.id === auction.winningBidId) || null
+    : null;
   const minNext = highest
     ? highest.amount + auction.bidIncrement
     : auction.startingPrice;
@@ -237,7 +240,7 @@ export default function AuctionDetailPage() {
   const isOpen = auction.status === "open" && !isCancelled;
   const isOwnAuction = viewer.userId === auction.sellerId;
   const isWinner = Boolean(
-    viewer.userId && highest && viewer.userId === highest.bidderId,
+    viewer.userId && winningBid && viewer.userId === winningBid.bidderId,
   );
 
   const productMedia = [
@@ -326,7 +329,11 @@ export default function AuctionDetailPage() {
 
             <div className="mb-4 rounded-lg bg-gray-50 p-4">
               <p className="text-xs text-gray-500">
-                {highest ? "ราคาสูงสุดตอนนี้" : "ราคาเริ่มต้น"}
+                {!highest
+                  ? "ราคาเริ่มต้น"
+                  : auction.status === "closed"
+                    ? "ราคาสูงสุดที่เคยมี"
+                    : "ราคาสูงสุดตอนนี้"}
               </p>
               <p className="text-3xl font-bold text-gray-900">
                 {baht(highest ? highest.amount : auction.startingPrice)}
@@ -365,7 +372,7 @@ export default function AuctionDetailPage() {
                       </div>
                       <p className="mt-1 text-sm text-emerald-800">
                         รายการสินค้านี้ถูกสร้างเป็นคำสั่งซื้อและส่งไปยังตะกร้าของคุณเรียบร้อยแล้ว
-                        ที่ราคา {baht(highest.amount)}
+                        ที่ราคา {baht(winningBid.amount)}
                       </p>
                       <Link
                         href="/cart"
@@ -380,7 +387,7 @@ export default function AuctionDetailPage() {
                   ) : (
                     <p className="text-sm font-semibold text-emerald-800">
                       🏆 การประมูลปิดแล้ว (มีผู้ชนะการประมูลที่ราคา{" "}
-                      {baht(highest?.amount)})
+                      {baht(winningBid?.amount)})
                     </p>
                   )
                 ) : (
@@ -483,11 +490,19 @@ export default function AuctionDetailPage() {
                     <tbody className="divide-y divide-gray-100">
                       {bids.map((b, idx) => {
                         const isHighest = idx === 0;
+                        const isWinningRow =
+                          auction.status === "closed" &&
+                          winningBid &&
+                          b.id === winningBid.id;
+                        const isForfeitedHighest =
+                          auction.status === "closed" &&
+                          isHighest &&
+                          !isWinningRow;
                         return (
                           <tr
                             key={b.id || idx}
                             className={
-                              isHighest
+                              isWinningRow || (isHighest && auction.status !== "closed")
                                 ? "bg-emerald-50/60 font-semibold"
                                 : "hover:bg-gray-50"
                             }
@@ -503,7 +518,17 @@ export default function AuctionDetailPage() {
                                       ? `ผู้ใช้ ${b.bidderId.slice(-6)}`
                                       : "ผู้ใช้นิรนาม")}
                                 </span>
-                                {isHighest && (
+                                {isWinningRow && (
+                                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                                    🏆 ผู้ชนะ
+                                  </span>
+                                )}
+                                {isForfeitedHighest && (
+                                  <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">
+                                    เสียสิทธิ์
+                                  </span>
+                                )}
+                                {isHighest && auction.status !== "closed" && (
                                   <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
                                     สูงสุด
                                   </span>

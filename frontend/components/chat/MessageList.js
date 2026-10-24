@@ -50,6 +50,26 @@ function DateDivider({ value }) {
   );
 }
 
+function systemMessageAction(payload) {
+  if (
+    payload?.event === "auction.item_cancelled" &&
+    payload?.role === "SELLER"
+  ) {
+    return {
+      url: "/seller/auctions",
+      label: "จัดการสินค้าประมูล",
+    };
+  }
+
+  return {
+    url: safeInternalPath(payload?.actionUrl),
+    label:
+      typeof payload?.actionLabel === "string" && payload.actionLabel.trim()
+        ? payload.actionLabel.trim()
+        : "ดูรายละเอียด",
+  };
+}
+
 /** Pure presentation — expects `messages` already sorted oldest-to-newest
  * (callers reverse the backend's newest-first pages before passing them in;
  * see lib/chat.js's listMessages doc comment). */
@@ -136,12 +156,9 @@ export default function MessageList({
           dateKey(m.createdAt) !== dateKey(messages[index - 1]?.createdAt);
 
         if (m.type === "SYSTEM") {
-          const actionUrl = safeInternalPath(m.payload?.actionUrl);
-          const actionLabel =
-            typeof m.payload?.actionLabel === "string" &&
-            m.payload.actionLabel.trim()
-              ? m.payload.actionLabel.trim()
-              : "ดูรายละเอียด";
+          const { url: actionUrl, label: actionLabel } = systemMessageAction(
+            m.payload,
+          );
           return (
             <Fragment key={m.id}>
               {showDate && <DateDivider value={m.createdAt} />}

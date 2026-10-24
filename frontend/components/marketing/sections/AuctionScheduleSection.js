@@ -247,8 +247,15 @@ async function loadAllRoundItems(roundId, token) {
 
 function getWinningBid(item) {
   const bids = Array.isArray(item?.bids) ? item.bids : [];
-  if (bids.length === 0) return null;
-  return bids.find((bid) => bid.id === item.winningBidId) || bids[0];
+  if (!item?.winningBidId || bids.length === 0) return null;
+  return bids.find((bid) => bid.id === item.winningBidId) || null;
+}
+
+function hasCompletedAuctionPayment(item) {
+  return (
+    item?.product?.status === "sold" ||
+    item?.product?.preRemovalStatus === "sold"
+  );
 }
 
 export function RoundManagementSection({ token, onRoundCreated, refreshRevision = 0 }) {
@@ -1289,6 +1296,7 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                       const bids = Array.isArray(item.bids) ? item.bids : [];
                       const highestBid = bids[0] || null;
                       const winningBid = getWinningBid(item);
+                      const paymentCompleted = hasCompletedAuctionPayment(item);
                       const coverUrl = item.product?.photos?.[0]?.url;
                       const reason = item.cancellationReason ||
                         (item.status === "cancelled" ? viewingRound.cancellationReason : null);
@@ -1324,7 +1332,9 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                                   <dd className="mt-0.5 font-semibold text-slate-800">{baht(item.startingPrice)}</dd>
                                 </div>
                                 <div className="rounded-lg bg-slate-50 px-2.5 py-2">
-                                  <dt className="text-slate-500">ราคาปัจจุบัน</dt>
+                                  <dt className="text-slate-500">
+                                    {item.status === "closed" ? "ราคาสูงสุดที่เคยมี" : "ราคาปัจจุบัน"}
+                                  </dt>
                                   <dd className="mt-0.5 font-semibold text-slate-800">
                                     {highestBid ? baht(highestBid.amount) : "ยังไม่มี Bid"}
                                   </dd>
@@ -1335,10 +1345,33 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                                 </div>
                               </dl>
 
+                              {item.status === "open" && (
+                                <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs">
+                                  {highestBid ? (
+                                    <>
+                                      <span className="text-emerald-700">ผู้เสนอราคาสูงสุดปัจจุบัน</span>
+                                      <strong className="ml-1 break-words text-emerald-900">
+                                        {highestBid.bidderName || "ไม่พบข้อมูลผู้เสนอราคา"}
+                                      </strong>
+                                    </>
+                                  ) : (
+                                    <strong className="text-emerald-800">ยังไม่มีผู้เสนอราคา</strong>
+                                  )}
+                                </div>
+                              )}
+
                               {item.status === "closed" && (
                                 <div className="mt-2 grid gap-2 rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-xs sm:grid-cols-2">
                                   {bids.length === 0 ? (
                                     <p className="font-semibold text-violet-800 sm:col-span-2">ไม่มีผู้เสนอราคา</p>
+                                  ) : !winningBid ? (
+                                    <>
+                                      <div>
+                                        <span className="text-violet-600">ราคาสูงสุดที่เสนอ</span>
+                                        <strong className="ml-1 text-violet-900">{baht(highestBid?.amount)}</strong>
+                                      </div>
+                                      <p className="font-semibold text-violet-800">ไม่มีผู้ชนะ</p>
+                                    </>
                                   ) : (
                                     <>
                                       <div>
@@ -1346,11 +1379,23 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                                         <strong className="ml-1 text-violet-900">{baht(winningBid?.amount)}</strong>
                                       </div>
                                       <div className="min-w-0">
-                                        <span className="text-violet-600">ผู้ชนะ</span>
+                                        <span className="text-violet-600">
+                                          {paymentCompleted ? "ผู้ชนะ" : "ผู้ได้รับสิทธิ์"}
+                                        </span>
                                         <strong className="ml-1 break-words text-violet-900">
-                                          {winningBid?.bidderName || "ไม่พบข้อมูลผู้ชนะ"}
+                                          {winningBid?.bidderName ||
+                                            (paymentCompleted
+                                              ? "ไม่พบข้อมูลผู้ชนะ"
+                                              : "ไม่พบข้อมูลผู้ได้รับสิทธิ์")}
                                         </strong>
                                       </div>
+                                      {highestBid && highestBid.id !== winningBid.id && (
+                                        <p className="text-violet-600 sm:col-span-2">
+                                          เคยมีผู้เสนอสูงสุด{" "}
+                                          <strong className="text-violet-900">{baht(highestBid.amount)}</strong>{" "}
+                                          (เสียสิทธิ์)
+                                        </p>
+                                      )}
                                     </>
                                   )}
                                 </div>

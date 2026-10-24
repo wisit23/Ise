@@ -530,3 +530,20 @@ acceptance. Test fixtures were removed. No commit/push or max-round-capacity wor
 - ไม่มี schema/migration ใหม่; Product Service ถูก rebuild เพื่อให้หน้าเว็บใช้ API ใหม่
 - Docker targeted tests ผ่าน Backend 130/130 และ Frontend 60/60; warning `act(...)` เดิมยังปรากฏแต่ suite ผ่าน
 - ยังไม่ได้ commit/push และยังไม่ได้บันทึก browser acceptance ว่าผ่านจนกว่าผู้ใช้จะตรวจหน้าเว็บ
+
+### 2026-10-24 Handoff — Auction result labels (MKT-DEC-033)
+
+- เปลี่ยนเฉพาะ `AuctionScheduleSection.js`, component tests และเอกสาร Marketing; ไม่มี backend/schema/migration change
+- ระหว่างประมูลแสดงผู้เสนอราคาสูงสุดปัจจุบัน; หลังปิดรอจ่ายแสดงผู้ได้รับสิทธิ์; Product `sold` แสดงผู้ชนะ
+- ถ้ามี Bid แต่ `winningBidId` เป็น null แสดง `ไม่มีผู้ชนะ` และไม่ fallback ไปเรียกผู้เสนอราคาสูงสุดว่าเป็นผู้ชนะ
+- TC_AUC10 และ notification เดิมคงอยู่: คนเดิมหมดเวลาแล้วเลื่อนสิทธิ์/สร้าง Order ให้คนถัดไป ผู้ได้รับสิทธิ์ใหม่และผู้ขายได้รับแจ้งเตือน
+- Docker focused Frontend ผ่าน 61/61; warning `act(...)` เดิมยังมีแต่ไม่ทำให้ suite ล้มเหลว
+- ยังไม่ commit/push และยังไม่ได้ทำ live browser acceptance รอบนี้
+
+### 2026-10-24 Handoff — Auction chat navigation (MKT-DEC-034)
+
+- เปลี่ยนเฉพาะ navigation สองจุด: ส่วนหัว Auction Chat ไป `/products/:productId`; seller cancellation CTA ไป `/seller/auctions`
+- `MessageList` normalize ข้อความ `auction.item_cancelled` ที่มี `role: SELLER` จึงแก้ปลายทางของข้อความเก่าได้โดยไม่แก้ข้อมูลในฐานข้อมูล
+- notification ใหม่จาก Product Service ส่ง action URL/label ใหม่ตั้งแต่ต้น
+- ไม่เปลี่ยน TC_AUC10 rollover, Order, เวลา 24 ชั่วโมง, ผู้รับ notification, audit หรือ schema
+- Docker focused tests ผ่าน Frontend 14/14 และ Product Auction 130/130; ยังไม่ commit/push

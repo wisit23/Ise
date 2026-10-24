@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import SellerAuctionsPage from "./page";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
@@ -438,5 +438,78 @@ describe("SellerAuctionsPage - Explicit Round Selection & Empty State", () => {
       "href",
       "/seller/auctions/submit?roundId=round-1&productId=prod-rec-1",
     );
+  });
+});
+
+describe("SellerAuctionsPage - Bid history modal winner badge", () => {
+  const mockUser = { id: "seller-123", role: "SELLER", name: "Seller One" };
+
+  const closedAuctionAfterRollover = {
+    id: "auc-rollover",
+    sellerId: "seller-123",
+    productId: "prod-rollover",
+    product: { title: "เสื้อแจ็คเก็ต" },
+    status: "closed",
+    startingPrice: 500,
+    winningBidId: "bid-promoted",
+    bids: [
+      {
+        id: "bid-expired",
+        amount: 5585,
+        bidderId: "buyer-expired",
+        bidderName: "ผ***อ",
+        createdAt: "2026-10-24T18:01:00.000Z",
+      },
+      {
+        id: "bid-promoted",
+        amount: 5580,
+        bidderId: "buyer-promoted",
+        bidderName: "ส***ย",
+        createdAt: "2026-10-24T18:01:00.000Z",
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useRouter.mockReturnValue({ push: jest.fn() });
+    getAccessToken.mockReturnValue("mock-seller-token");
+    getStoredUser.mockReturnValue(mockUser);
+
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/api/auth/kyc/mine")) {
+        return Promise.resolve({ kycStatus: "VERIFIED" });
+      }
+      if (url.includes("/api/products/auctions/rounds/current")) {
+        return Promise.resolve({
+          activeSubmissionRounds: [],
+          isSubmissionOpen: false,
+          phase: "auction",
+        });
+      }
+      if (url.includes("/api/products/mine")) {
+        return Promise.resolve({ items: [] });
+      }
+      if (url.includes("/api/products/auctions")) {
+        return Promise.resolve({ items: [closedAuctionAfterRollover] });
+      }
+      return Promise.resolve({});
+    });
+  });
+
+  it("marks only the actual payment-right holder as winner, not the forfeited highest bid", async () => {
+    render(<SellerAuctionsPage />);
+
+    const openBidsButton = await screen.findByRole("button", {
+      name: /ดูประวัติการบิด \(2\)/,
+    });
+    fireEvent.click(openBidsButton);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getAllByText("🏆 ชนะการประมูล")).toHaveLength(1);
+    expect(within(dialog).getByText("เสียสิทธิ์")).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("สูงสุดตอนนี้"),
+    ).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import AuctionDetailPage from "./page";
 import { apiFetch } from "../../../lib/api";
 import { useParams } from "next/navigation";
@@ -261,5 +261,94 @@ describe("AuctionDetailPage - Navigation to Round", () => {
     } finally {
       global.EventSource = originalEventSource;
     }
+  });
+});
+
+describe("AuctionDetailPage - Closed auction after payment-rollover", () => {
+  const closedAuctionAfterRollover = {
+    id: "auc-rollover",
+    roundId: "round-rollover",
+    status: "closed",
+    startingPrice: 500,
+    bidIncrement: 10,
+    winningBidId: "bid-promoted",
+    scheduledStartAt: "2026-10-01T12:00:00.000Z",
+    scheduledEndAt: "2026-10-05T12:00:00.000Z",
+    product: { id: "prod-rollover", title: "เสื้อแจ็คเก็ต", photos: [] },
+    round: { id: "round-rollover", title: "รอบเสื้อผ้า" },
+    bids: [
+      { id: "bid-expired", amount: 5585, bidderId: "buyer-expired" },
+      { id: "bid-promoted", amount: 5580, bidderId: "buyer-promoted" },
+    ],
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useParams.mockReturnValue({ id: "auc-rollover" });
+    getAccessToken.mockReturnValue("mock-token");
+    getCurrentRoles.mockReturnValue(["BUYER"]);
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/api/products/auctions/auc-rollover")) {
+        return Promise.resolve(closedAuctionAfterRollover);
+      }
+      return Promise.resolve({});
+    });
+  });
+
+  it("congratulates the promoted winner, not the original highest bidder who forfeited", async () => {
+    getStoredUser.mockReturnValue({ id: "buyer-promoted" });
+    getAccessTokenClaims.mockReturnValue({ sub: "buyer-promoted" });
+
+    render(<AuctionDetailPage />);
+
+    expect(await screen.findByText("เสื้อแจ็คเก็ต")).toBeInTheDocument();
+    expect(
+      screen.getByText("🎉 ยินดีด้วย! คุณเป็นผู้ชนะการประมูลสินค้านี้"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ที่ราคา ฿5,580/)).toBeInTheDocument();
+  });
+
+  it("does not congratulate the original highest bidder once they lose their payment right", async () => {
+    getStoredUser.mockReturnValue({ id: "buyer-expired" });
+    getAccessTokenClaims.mockReturnValue({ sub: "buyer-expired" });
+
+    render(<AuctionDetailPage />);
+
+    expect(await screen.findByText("เสื้อแจ็คเก็ต")).toBeInTheDocument();
+    expect(
+      screen.queryByText("🎉 ยินดีด้วย! คุณเป็นผู้ชนะการประมูลสินค้านี้"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/มีผู้ชนะการประมูลที่ราคา ฿5,580/)).toBeInTheDocument();
+  });
+
+  it("shows the historical highest price label and the actual winning amount to other viewers", async () => {
+    getStoredUser.mockReturnValue({ id: "some-other-buyer" });
+    getAccessTokenClaims.mockReturnValue({ sub: "some-other-buyer" });
+
+    render(<AuctionDetailPage />);
+
+    expect(await screen.findByText("เสื้อแจ็คเก็ต")).toBeInTheDocument();
+    expect(screen.getByText("ราคาสูงสุดที่เคยมี")).toBeInTheDocument();
+    expect(screen.getAllByText("฿5,585").length).toBeGreaterThan(0);
+    expect(screen.getByText(/มีผู้ชนะการประมูลที่ราคา ฿5,580/)).toBeInTheDocument();
+  });
+
+  it("labels the actual winning bid row in the bid history table, not the forfeited highest bid", async () => {
+    getStoredUser.mockReturnValue({ id: "some-other-buyer" });
+    getAccessTokenClaims.mockReturnValue({ sub: "some-other-buyer" });
+
+    render(<AuctionDetailPage />);
+
+    await screen.findByText("เสื้อแจ็คเก็ต");
+
+    expect(screen.getByText("🏆 ผู้ชนะ")).toBeInTheDocument();
+    expect(screen.getByText("เสียสิทธิ์")).toBeInTheDocument();
+    expect(screen.queryByText("สูงสุด")).not.toBeInTheDocument();
+
+    const winningRow = screen.getByText("🏆 ผู้ชนะ").closest("tr");
+    expect(within(winningRow).getByText("ผู้ใช้ omoted")).toBeInTheDocument();
+
+    const forfeitedRow = screen.getByText("เสียสิทธิ์").closest("tr");
+    expect(within(forfeitedRow).getByText("ผู้ใช้ xpired")).toBeInTheDocument();
   });
 });
