@@ -15,7 +15,7 @@ function targetType(action) {
     return "PRODUCT";
   }
   if (action.startsWith("PRODUCT_")) return "PRODUCT";
-  if (action.startsWith("USER_")) return "USER";
+  if (action.startsWith("USER_") || action.startsWith("COMMERCE_")) return "USER";
   return "UNKNOWN";
 }
 
@@ -81,7 +81,19 @@ async function queryAudit({
     }),
     prisma.adminAudit.count({ where }),
   ]);
-  return { items: items.map(normalize), total };
+  const reportIds = [...new Set(items.filter((item) => targetType(item.action) === "REPORT").map((item) => item.targetId))];
+  const reports = reportIds.length ? await prisma.report.findMany({
+    where: { id: { in: reportIds } },
+    select: { id: true, productId: true, reason: true },
+  }) : [];
+  const reportTypes = new Map(reports.map((report) => [report.id,
+    report.reason.includes("[รายงานรีวิว") || report.reason.includes("เนื้อหารีวิว")
+      ? "REVIEW" : report.productId ? "PRODUCT" : "SHOP",
+  ]));
+  return { items: items.map((item) => ({
+    ...normalize(item),
+    ...(targetType(item.action) === "REPORT" ? { reportType: reportTypes.get(item.targetId) || null } : {}),
+  })), total };
 }
 
 module.exports = { queryAudit, normalize };

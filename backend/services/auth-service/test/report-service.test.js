@@ -10,7 +10,10 @@ const prisma = {
       calls.createdReport = data;
       return { id: "new-report", ...data };
     },
-    updateMany: async () => ({ count: 1 }),
+    updateMany: async (query) => {
+      calls.reportUpdate = query;
+      return { count: calls.reportUpdateCount ?? 1 };
+    },
     findMany: async (query) => {
       calls.findMany = query;
       return [{ id: "report-5" }];
@@ -86,10 +89,33 @@ require.cache[productClientPath] = {
   loaded: true,
   exports: {
     getProduct: async (id) => ({ id, title: "Evidence product" }),
+    removeReview: async (...args) => { calls.removedReview = args; },
   },
 };
 
 const reportService = require("../src/features/reports/reportService");
+
+test("review removal requires the claimed review report and dispatches only its referenced review", async () => {
+  const report = { id: "report-1", status: "REVIEWED", reviewedBy: "staff-1", targetId: "buyer-1", productId: "product-1", reason: "[รายงานรีวิว #review-1] spam" };
+  calls.currentReport = report;
+  calls.auditActions = [];
+  calls.removedReview = null;
+  try {
+    const command = { reportId: report.id, staffId: "staff-1", decision: "REMOVE_REVIEW", reason: " spam confirmed " };
+    await assert.rejects(reportService.actionReport({ ...command, staffId: "other-staff" }), (err) => err.status === 403);
+    assert.equal(calls.removedReview, null);
+    report.reason = "ordinary user report";
+    await assert.rejects(reportService.actionReport(command), (err) => err.status === 400);
+    report.reason = "[รายงานรีวิว #review-1] spam";
+    report.status = "OPEN";
+    await assert.rejects(reportService.actionReport(command), (err) => err.status === 409);
+    report.status = "REVIEWED";
+    await reportService.actionReport(command);
+    assert.deepEqual(calls.removedReview, ["review-1", { reason: "spam confirmed", targetId: "buyer-1", productId: "product-1", actorId: "staff-1" }, "report:report-1:REMOVE_REVIEW"]);
+    assert.equal(calls.reportUpdate.data.actionTaken, "REMOVE_REVIEW");
+    assert.ok(calls.auditActions.includes("REPORT_REMOVE_REVIEW"));
+  } finally { calls.currentReport = null; calls.auditActions = []; }
+});
 
 test("new seller reports store their category and the reported product", async () => {
   await reportService.createReport({
@@ -140,6 +166,31 @@ test("report queue separates claimed and unclaimed work", async () => {
   assert.deepEqual(calls.findMany.where.status, { in: ["OPEN", "REVIEWED"] });
   await reportService.listReports({ page: 1, limit: 15, status: "PENDING", scope: "unassigned", staffId: "agent-1" });
   assert.equal(calls.findMany.where.status, "OPEN");
+  assert.equal(calls.findMany.where.reviewedBy, null);
+});
+
+test("the combined report queue excludes work assigned to other staff before pagination", async () => {
+  await reportService.listReports({ page: 2, limit: 15, status: "PENDING", scope: "all", staffId: "agent-1", search: "spam" });
+  assert.deepEqual(calls.findMany.where.AND, [{ OR: [{ reviewedBy: null }, { reviewedBy: "agent-1" }] }]);
+  assert.ok(calls.findMany.where.OR.some((item) => item.reason?.contains === "spam"));
+  assert.deepEqual(calls.findMany.where, calls.reportCount.where);
+  assert.equal(calls.findMany.skip, 15);
+});
+
+test("report types separate comments from products and accounts before counting and paging", async () => {
+  const options = { page: 1, limit: 15, status: "PENDING", scope: "unassigned", staffId: "agent-1" };
+  for (const type of ["USER", "PRODUCT", "COMMENT"]) {
+    await reportService.listReports({ ...options, type });
+    const filter = calls.findMany.where.AND[0];
+    if (type === "COMMENT") assert.equal(filter.OR[0].reason.contains, "[รายงานรีวิว");
+    else {
+      assert.deepEqual(filter.productId, type === "PRODUCT" ? { not: null } : null);
+      assert.ok(filter.NOT.OR.some((entry) => entry.reason.contains === "เนื้อหารีวิว"));
+    }
+    assert.equal(calls.findMany.where.reviewedBy, null);
+    assert.deepEqual(calls.findMany.where, calls.reportCount.where);
+  }
+  await assert.rejects(reportService.listReports({ ...options, type: "UNKNOWN" }), /invalid report type/);
 });
 
 test("a different staff member cannot decide a claimed report", async () => {
@@ -150,6 +201,20 @@ test("a different staff member cannot decide a claimed report", async () => {
       (error) => error.status === 403,
     );
   } finally { calls.currentReport = null; }
+});
+
+test("claim uses an atomic unassigned-only update and rejects a claim lost to another worker", async () => {
+  calls.currentReport = { id: "report-1", status: "OPEN", reviewedBy: null };
+  try {
+    await reportService.reviewReport({ reportId: "report-1", staffId: "agent-1" });
+    assert.deepEqual(calls.reportUpdate.where, { id: "report-1", status: "OPEN", reviewedBy: null });
+    assert.equal(calls.reportUpdate.data.reviewedBy, "agent-1");
+    calls.reportUpdateCount = 0;
+    await assert.rejects(reportService.reviewReport({ reportId: "report-1", staffId: "agent-2" }), (error) => error.status === 409);
+  } finally {
+    calls.currentReport = null;
+    delete calls.reportUpdateCount;
+  }
 });
 
 test("a claimed report can revoke buyer commerce rights in the same decision", async () => {

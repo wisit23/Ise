@@ -61,10 +61,12 @@ test("Auth report actions link to their source report", async (t) => {
   const originals = {
     findMany: prisma.adminAudit.findMany,
     count: prisma.adminAudit.count,
+    reports: prisma.report.findMany,
   };
   t.after(() => {
     prisma.adminAudit.findMany = originals.findMany;
     prisma.adminAudit.count = originals.count;
+    prisma.report.findMany = originals.reports;
   });
   prisma.adminAudit.findMany = async () => [
     {
@@ -78,8 +80,29 @@ test("Auth report actions link to their source report", async (t) => {
     },
   ];
   prisma.adminAudit.count = async () => 1;
+  prisma.report.findMany = async () => [{ id: "report-1", productId: null, reason: "shop complaint" }];
 
   const { items } = await queryAudit({ page: 1, limit: 15 });
   assert.equal(items[0].targetType, "REPORT");
   assert.equal(items[0].caseId, "report-1");
+  assert.equal(items[0].reportType, "SHOP");
+});
+
+test("audit report sources distinguish products and reviews and do not guess missing reports", async (t) => {
+  const originals = { audits: prisma.adminAudit.findMany, count: prisma.adminAudit.count, reports: prisma.report.findMany };
+  t.after(() => { prisma.adminAudit.findMany = originals.audits; prisma.adminAudit.count = originals.count; prisma.report.findMany = originals.reports; });
+  prisma.adminAudit.findMany = async () => ["product", "review", "legacy-review", "missing"].map((id) => ({ id, action: "REPORT_REVIEWED", targetId: id }));
+  prisma.adminAudit.count = async () => 4;
+  let reportQuery;
+  prisma.report.findMany = async (query) => {
+    reportQuery = query;
+    return [
+      { id: "product", productId: "p-1", reason: "สินค้าไม่เหมาะสม" },
+      { id: "review", productId: "p-1", reason: "[รายงานรีวิว #r-1] สแปม" },
+      { id: "legacy-review", productId: null, reason: "เนื้อหารีวิวไม่เหมาะสม" },
+    ];
+  };
+  const { items } = await queryAudit({ page: 1, limit: 15 });
+  assert.deepEqual(items.map((item) => item.reportType), ["PRODUCT", "REVIEW", "REVIEW", null]);
+  assert.deepEqual(reportQuery.select, { id: true, productId: true, reason: true });
 });

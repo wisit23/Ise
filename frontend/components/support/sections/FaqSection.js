@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { apiFetch } from "../../../lib/api";
 import config from "../../../lib/customerServiceConfig";
 import Pagination from "../../Pagination";
@@ -135,7 +136,7 @@ export default function FaqSection({ token }) {
 
   return (
     <div className="animate-fade-in-up flex min-h-full flex-col">
-      <div className="mb-5 flex items-center justify-between gap-3">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <DropdownFilter
           value={status}
           options={STATUS_OPTIONS}
@@ -144,6 +145,11 @@ export default function FaqSection({ token }) {
             setPage(1);
           }}
         />
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/help" className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">
+            <span aria-hidden="true" className="material-symbols-outlined text-[18px]">open_in_new</span>
+            บทความ FAQ
+          </Link>
         <Button
           icon="add"
           onClick={() => {
@@ -154,6 +160,7 @@ export default function FaqSection({ token }) {
         >
           เขียนบทความใหม่
         </Button>
+        </div>
       </div>
       {(state.error || (!editor && !deletingArticle && actionError)) && (
         <p role="alert" className="mb-3 text-sm text-red-700">

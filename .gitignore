@@ -7,6 +7,7 @@ frontend/package-lock.json
 .env.local
 .env.*.local
 tmp/local-dataset-*/
+tmp/review-report-seed.json
 *.log
 backend/services/product-service/uploads/*
 !backend/services/product-service/uploads/.gitkeep

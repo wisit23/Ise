@@ -213,7 +213,7 @@ export default function ProductsSection({ token }) {
               inventory_2
             </span>
             <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-              Product Moderation
+              จัดการสินค้า
             </h2>
             <p className="mt-2 text-sm font-medium text-slate-500">
               ค้นหาสินค้าเพื่อลบออกจากระบบ หรือกู้คืนสินค้าที่เคยลบ
@@ -363,7 +363,7 @@ export default function ProductsSection({ token }) {
         )}
       </div>
 
-      <Modal open={Boolean(selectedProduct)} onClose={() => setSelectedProduct(null)} title="Product Details" size="lg">
+      <Modal open={Boolean(selectedProduct)} onClose={() => setSelectedProduct(null)} title="รายละเอียดสินค้า" size="lg">
         {selectedProduct && <div className="space-y-3 p-5 text-sm text-slate-700">
           <p><strong>ชื่อ:</strong> {selectedProduct.title}</p>
           <p className="break-all"><strong>รหัสสินค้า:</strong> {selectedProduct.id}</p>

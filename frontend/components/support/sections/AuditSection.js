@@ -8,10 +8,10 @@ import Badge from "../../panel/ui/Badge";
 import DropdownFilter from "../../panel/ui/DropdownFilter";
 
 const SOURCES = [
-  { value: "auth", label: "Accounts / KYC / Reports", owner: "บัญชีผู้ใช้" },
-  { value: "holds", label: "Escrow", owner: "คำสั่งซื้อ" },
-  { value: "disputes", label: "Disputes / Evidence", owner: "ข้อพิพาท" },
-  { value: "support", label: "Tickets", owner: "คำร้อง" },
+  { value: "auth", label: "บัญชี / KYC / Report", owner: "บัญชีผู้ใช้" },
+  { value: "holds", label: "Hold / Release", owner: "คำสั่งซื้อ" },
+  { value: "disputes", label: "ข้อพิพาท / หลักฐาน", owner: "ข้อพิพาท" },
+  { value: "support", label: "สถานะ Ticket", owner: "คำร้อง" },
 ];
 
 const ACTION_OPTIONS = {
@@ -100,9 +100,32 @@ function endpointFor(source) {
   return `/api/orders/support/audit?kind=${source}`;
 }
 
+function eventSourceLabel(log) {
+  const action = log.action || "";
+  if (log.source === "AUTH") {
+    if (action.startsWith("KYC_")) return "ยืนยันตัวตนผู้ขาย (KYC)";
+    if (action.startsWith("REPORT_")) return ({ SHOP: "รายงานร้านค้า", PRODUCT: "รายงานสินค้า", REVIEW: "รายงานรีวิว" })[log.reportType] || "รายงาน (ไม่พบประเภทต้นทาง)";
+    if (action.startsWith("COMMERCE_")) return "สิทธิ์การซื้อขาย";
+    if (action.startsWith("USER_")) return "บัญชีผู้ใช้";
+    if (action.startsWith("PRODUCT_") || ["REMOVE_PRODUCT", "RESTORE_PRODUCT"].includes(action)) return "จัดการสินค้า";
+    return "กิจกรรมดูแลระบบ (ไม่ระบุประเภท)";
+  }
+  if (log.source === "ORDER_HOLD") {
+    if (action === "EVIDENCE_VIEWED") return "หลักฐานประกอบการพักเงิน";
+    return action === "RELEASE" ? "ปล่อยเงินคำสั่งซื้อ" : "พักเงินคำสั่งซื้อ";
+  }
+  if (log.source === "ORDER_DISPUTE") {
+    if (action.includes("CHAT")) return "ประวัติแชตข้อพิพาท";
+    if (action.includes("EVIDENCE")) return "หลักฐานข้อพิพาท";
+    return "ข้อพิพาท";
+  }
+  if (log.source === "SUPPORT") return "ทิกเก็ต";
+  return "ไม่ระบุแหล่งที่มา";
+}
+
 function caseLink(log) {
   if (log.source === "AUTH" && log.targetType === "REPORT") {
-    return `/workspace?section=admin_inbox&reportId=${encodeURIComponent(log.caseId)}`;
+    return `/workspace?section=reports&reportId=${encodeURIComponent(log.caseId)}`;
   }
   if (log.source === "AUTH" && log.targetType === "USER") {
     return `/workspace?section=orders&userId=${encodeURIComponent(log.targetId)}`;
@@ -208,7 +231,7 @@ export default function AuditSection({ token }) {
     <div className="animate-fade-in-up flex min-h-full flex-col">
       <div className="mb-5">
         <h1 className="text-xl font-bold tracking-tight text-slate-900">
-          Audit Logs
+          Audit Log ของ Trust & Safety
         </h1>
         <p className="mt-1 text-sm font-medium text-slate-500">
           ตรวจสอบผู้ดำเนินการ เวลา และเหตุผลย้อนหลัง โดยเลือกประเภทข้อมูลที่ต้องการ
@@ -349,13 +372,13 @@ export default function AuditSection({ token }) {
           <table className="w-full min-w-[1000px] border-collapse text-left text-xs text-slate-700">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/70">
-                <th className="p-3.5">Time</th>
-                <th className="p-3.5">Source</th>
+                <th className="p-3.5">เวลา</th>
+                <th className="p-3.5">แหล่งที่มา (Source)</th>
                 <th className="p-3.5">Actor</th>
                 <th className="p-3.5">Action</th>
                 <th className="p-3.5">Target / Case</th>
-                <th className="p-3.5">Reason / Change</th>
-                <th className="p-3.5">Reference</th>
+                <th className="p-3.5">เหตุผล / การเปลี่ยนแปลง</th>
+                <th className="p-3.5">อ้างอิง</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -374,7 +397,7 @@ export default function AuditSection({ token }) {
                     <td className="p-3.5 whitespace-nowrap text-slate-500">
                       {new Date(log.occurredAt).toLocaleString("th-TH")}
                     </td>
-                    <td className="p-3.5 font-bold">{activeSource.label}</td>
+                    <td className="p-3.5 font-bold">{eventSourceLabel(log)}</td>
                     <td className="p-3.5 font-mono">{log.actorId}</td>
                     <td className="p-3.5">
                       <Badge

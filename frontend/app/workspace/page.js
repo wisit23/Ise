@@ -5,7 +5,6 @@ import NavBar from "../../components/NavBar";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 import { ToastProvider } from "../../components/ui/ToastProvider";
 import RadioSelect from "../../components/ui/RadioSelect";
-import Link from "next/link";
 import motion from "./workspaceMotion.module.css";
 import WorkspaceUnreadBadge from "../../components/support/workspace/WorkspaceUnreadBadge";
 import { navigateWorkspaceSection } from '../../components/support/workspace/useCaseWorkspace';
@@ -18,6 +17,7 @@ import FaqSection from "../../components/support/sections/FaqSection";
 import KycSection from "../../components/support/sections/KycSection";
 import AuditSection from "../../components/support/sections/AuditSection";
 import AdminInboxSection from "../../components/support/sections/AdminInboxSection";
+import ReportsSection from "../../components/support/sections/ReportsSection";
 import ProductsSection from "../../components/support/sections/ProductsSection";
 import SellerChangeRequestsSection from "../../components/support/sections/SellerChangeRequestsSection";
 
@@ -25,8 +25,8 @@ const SECTIONS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "tickets", label: "Tickets", icon: "confirmation_number" },
   { key: "disputes", label: "Disputes", icon: "gavel" },
-  { key: "orders", label: "Search", icon: "manage_search" },
-  { key: "faq", label: "FAQ Management", icon: "menu_book" },
+  { key: "orders", label: "ค้นหา", icon: "manage_search" },
+  { key: "faq", label: "จัดการ FAQ", icon: "menu_book" },
 ];
 
 // Escalated tickets, moderation, and every other Admin-only privileged
@@ -34,14 +34,15 @@ const SECTIONS = [
 // anywhere in the CS agent's own tabs (see TicketsSection's dropped
 // ESCALATED filter option).
 const ADMIN_SECTIONS = [
-  { key: "admin_inbox", label: "Escalation Inbox", icon: "assignment_late" },
-  { key: "products", label: "Product Moderation", icon: "inventory_2" },
-  { key: "kyc", label: "KYC Review", icon: "how_to_reg" },
+  { key: "admin_inbox", label: "เคสส่งต่อ", icon: "assignment_late" },
+  { key: "reports", label: "รายงาน", icon: "flag" },
+  { key: "products", label: "จัดการสินค้า", icon: "inventory_2" },
+  { key: "kyc", label: "คิวตรวจ KYC", icon: "how_to_reg" },
   { key: "audit", label: "Audit Logs", icon: "receipt_long" },
 ];
 
 const ADMIN_ONLY_SECTIONS = [
-  { key: "shop_changes", label: "Shop Updates", icon: "storefront" },
+  { key: "shop_changes", label: "ตรวจข้อมูลร้านค้า", icon: "storefront" },
 ];
 const SAFETY_SECTIONS = [
   ...SECTIONS.filter((item) => !["tickets", "disputes"].includes(item.key)),
@@ -56,6 +57,13 @@ export default function SupportPanelPage() {
   useEffect(() => { const sync = () => { const value = new URLSearchParams(window.location.search).get("section"); setSection(SECTION_KEYS.includes(value)?value:'dashboard'); }; window.addEventListener("popstate",sync); return () => window.removeEventListener("popstate",sync); }, []);
   useEffect(() => {
     if (!user) return;
+    const params = new URLSearchParams(window.location.search);
+    if (section === "admin_inbox" && params.get("reportId")) {
+      params.set("section", "reports");
+      window.history.replaceState({}, "", `/workspace?${params}`);
+      setSection("reports");
+      return;
+    }
     const roles = new Set([user.role, ...(user.roles || [])]);
     const isSafety = roles.has("ADMIN") || roles.has("TRUST_AND_SAFETY");
     const allowed = isSafety
@@ -86,12 +94,21 @@ export default function SupportPanelPage() {
   }
 
   useEffect(() => {
-    const token = getAccessToken();
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-    setUser(getStoredUser());
+    const syncUser = () => {
+      if (!getAccessToken()) {
+        setUser(null);
+        router.push("/login");
+        return;
+      }
+      setUser(getStoredUser());
+    };
+    syncUser();
+    window.addEventListener("reloop:auth", syncUser);
+    window.addEventListener("storage", syncUser);
+    return () => {
+      window.removeEventListener("reloop:auth", syncUser);
+      window.removeEventListener("storage", syncUser);
+    };
   }, [router]);
 
   if (user === undefined) {
@@ -119,6 +136,26 @@ export default function SupportPanelPage() {
 
   const token = getAccessToken();
   const isAdminOrSafety = staffRole === "ADMIN" || staffRole === "TRUST_AND_SAFETY";
+  const staffName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim()
+    || user.email || user.id;
+  const staffRoleLabel = isAdminOrSafety ? "T&S" : "CS";
+  const staffIdentity = (
+    <div
+      role="group"
+      aria-label="บัญชีที่เข้าสู่ระบบอยู่"
+      title={[staffName, user.email, `รหัสเจ้าหน้าที่: ${user.id}`].filter(Boolean).join("\n")}
+      className={`flex min-w-0 items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 py-2 ${sidebarCollapsed ? "justify-center px-1" : "px-2.5"}`}
+    >
+      <span aria-hidden="true" className="material-symbols-outlined shrink-0 text-[24px] text-emerald-700">account_circle</span>
+      <div className={sidebarCollapsed ? "sr-only" : "min-w-0"}>
+        <p className="text-[10px] leading-3 font-medium text-emerald-700">เข้าสู่ระบบอยู่ · {staffRoleLabel}</p>
+        <p className="truncate text-xs font-semibold text-slate-800">{staffName}</p>
+        {user.email && user.email !== staffName && (
+          <p className="truncate text-[10px] leading-3 text-slate-500">{user.email}</p>
+        )}
+      </div>
+    </div>
+  );
   const visibleSections = isAdminOrSafety
     ? [
         ...SAFETY_SECTIONS,
@@ -208,18 +245,8 @@ export default function SupportPanelPage() {
             </nav>
 
             {/* Footer */}
-            <div className={`border-t border-slate-100 py-3 bg-slate-50/50 ${sidebarCollapsed ? "px-2" : "px-4"}`}>
-              <Link
-                href="/help"
-                title={sidebarCollapsed ? "บทความ FAQ" : undefined}
-                aria-label="บทความ FAQ"
-                className="flex items-center gap-2 text-xs font-semibold text-slate-500 hover:text-emerald-600 transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  open_in_new
-                </span>
-                <span className={sidebarCollapsed ? "sr-only" : ""}>บทความ FAQ</span>
-              </Link>
+            <div className="shrink-0 border-t border-slate-100 bg-slate-50/50 p-2">
+              {staffIdentity}
             </div>
           </aside>
 
@@ -243,6 +270,9 @@ export default function SupportPanelPage() {
               </div>
               {/* Mobile section switcher */}
               <div className="ml-auto flex items-center gap-2">
+                <div className="max-w-[190px] lg:hidden">
+                  {staffIdentity}
+                </div>
                 <div id="workspace-view-control" />
                 <div className="flex items-center gap-3 lg:hidden">
                   <RadioSelect
@@ -277,7 +307,10 @@ export default function SupportPanelPage() {
                   />
                 )}
                 {visibleSection === "admin_inbox" && (
-                  <AdminInboxSection token={token} currentUserId={user?.id} userRole={staffRole} initialReportId={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("reportId") || "" : ""} />
+                  <AdminInboxSection token={token} currentUserId={user?.id} userRole={staffRole} />
+                )}
+                {visibleSection === "reports" && (
+                  <ReportsSection token={token} currentUserId={user?.id} userRole={staffRole} initialReportId={typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("reportId") || "" : ""} />
                 )}
                 {visibleSection === "orders" && <OrdersSection token={token} canModerate={isAdminOrSafety} initialUserId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("userId") || "" : ""} initialOrderId={typeof window!=="undefined" ? new URLSearchParams(window.location.search).get("orderId") || "" : ""} />}
                 {visibleSection === "faq" && <FaqSection token={token} />}

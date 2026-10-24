@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const { requireInternalToken, badRequest } = require("@reloop/shared");
 const moderationService = require("./moderationService");
+const reviewModerationService = require("./reviewModerationService");
 
 const router = Router();
 
@@ -8,6 +9,14 @@ const router = Router();
 // network with the shared internal token, never a direct DB write
 // (ADM-DEC-001: owner-service command only).
 router.use(requireInternalToken);
+
+router.post("/reviews/:id/remove", async (req, res, next) => {
+  try {
+    res.json(await reviewModerationService.removeReview(req.params.id, {
+      ...req.body, idempotencyKey: req.get("x-idempotency-key"),
+    }));
+  } catch (err) { next(err); }
+});
 
 router.get("/:id", async (req, res, next) => {
   try {

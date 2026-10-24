@@ -223,6 +223,19 @@ test("Requirement 2: cannot report the same review/comment if pending admin deci
   assert.equal(check.type, "review");
 });
 
+test("a review ID remains classifiable and deduplicated when the caller sends plain reason text", async () => {
+  mockReports.length = 0;
+  const report = await reportService.createReport({
+    reporterId: "buyer-1", targetId: "commenter-1", productId: "product-1",
+    reviewId: "review-plain", reason: "ความคิดเห็นไม่เหมาะสม",
+  });
+  assert.equal(report.reason, "[รายงานรีวิว #review-plain] ความคิดเห็นไม่เหมาะสม");
+  await assert.rejects(reportService.createReport({
+    reporterId: "buyer-1", targetId: "commenter-1", productId: "product-1",
+    reviewId: "review-plain", reason: "รายงานซ้ำ",
+  }), (error) => error.status === 409);
+});
+
 test("Requirement 2: user CAN report again once admin has decided (ACTIONED or DISMISSED)", async () => {
   mockReports.length = 0;
   sentNotifications.length = 0;

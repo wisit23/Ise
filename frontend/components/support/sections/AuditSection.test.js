@@ -36,6 +36,23 @@ const event = {
 
 beforeEach(() => jest.clearAllMocks());
 
+it("labels every audit row by its actual event instead of the selected source tab", async () => {
+  const rows = [
+    ["USER_SUSPENDED", null, "บัญชีผู้ใช้"],
+    ["KYC_VERIFIED", null, "ยืนยันตัวตนผู้ขาย (KYC)"],
+    ["REPORT_REVIEWED", "SHOP", "รายงานร้านค้า"],
+    ["REPORT_DISMISS", "REVIEW", "รายงานรีวิว"],
+    ["REPORT_REMOVE_PRODUCT", "PRODUCT", "รายงานสินค้า"],
+    ["PRODUCT_REMOVED", null, "จัดการสินค้า"],
+    ["COMMERCE_RESTRICTED_BUYER", null, "สิทธิ์การซื้อขาย"],
+    ["REPORT_DISMISS", null, "รายงาน (ไม่พบประเภทต้นทาง)"],
+  ];
+  apiFetch.mockResolvedValue({ items: rows.map(([action, reportType], index) => ({ ...event, eventId: `event-${index}`, action, reportType })), total: rows.length, totalPages: 1 });
+  render(<AuditSection token="token" />);
+  for (const [, , label] of rows) expect(await screen.findByRole("cell", { name: label, exact: true })).toBeInTheDocument();
+  expect(screen.queryByRole("cell", { name: "บัญชี / KYC / Report" })).not.toBeInTheDocument();
+});
+
 it("uses the real USER_WARNED action and links back to user history", async () => {
   apiFetch.mockResolvedValue({ items: [event], total: 1, totalPages: 1 });
   render(<AuditSection token="token" />);
@@ -60,7 +77,7 @@ it("queries each owner source separately and sends actor/target/date filters", a
   apiFetch.mockResolvedValue({ items: [], total: 0, totalPages: 1 });
   render(<AuditSection token="token" />);
 
-  fireEvent.click(screen.getByRole("tab", { name: "Escrow" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Hold / Release" }));
   await waitFor(() =>
     expect(
       apiFetch.mock.calls.some(([url]) => url.includes("kind=holds")),
@@ -155,14 +172,14 @@ it("links Order and Support audit rows back to their owner records", async () =>
   });
 
   render(<AuditSection token="token" />);
-  fireEvent.click(screen.getByRole("tab", { name: "Escrow" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Hold / Release" }));
   expect((await screen.findAllByText("พักเงิน")).length).toBeGreaterThan(0);
   expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
     "href",
     "/workspace?section=orders&orderId=order-1",
   );
 
-  fireEvent.click(screen.getByRole("tab", { name: "Tickets" }));
+  fireEvent.click(screen.getByRole("tab", { name: "สถานะ Ticket" }));
   expect((await screen.findAllByText("เปลี่ยนสถานะ Ticket")).length).toBeGreaterThan(0);
   expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
     "href",

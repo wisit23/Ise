@@ -26,10 +26,6 @@ jest.mock("../../panel/ui/DropdownFilter", () => ({
     </select>
   ),
 }));
-jest.mock("../../ui/ConfirmDialog", () => ({
-  __esModule: true,
-  default: () => null,
-}));
 
 const application = {
   id: "kyc-1",
@@ -56,6 +52,75 @@ const application = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+it("approves without an optional note and sends the application version", async () => {
+  apiFetch.mockImplementation((url, options) => Promise.resolve(options?.method === "POST" ? {} : { items: [{ ...application, status: "PENDING", reason: null, version: 3 }], total: 1, totalPages: 1 }));
+  render(<KycSection token="token" />);
+  fireEvent.click(await screen.findByRole("button", { name: /อนุมัติ \(VERIFY\)/ }));
+  expect(screen.getByText("ไม่บังคับ")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "ยืนยันอนุมัติ (VERIFY)" }));
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/kyc/kyc-1/decision", {
+    method: "POST", token: "token", body: { decision: "VERIFIED", reason: "", version: 3 },
+  }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+});
+
+it("still requires a reason when rejecting an application", async () => {
+  apiFetch.mockResolvedValue({ items: [{ ...application, status: "PENDING", reason: null, version: 3 }], total: 1, totalPages: 1 });
+  render(<KycSection token="token" />);
+  fireEvent.click(await screen.findByRole("button", { name: /ปฏิเสธ \(REJECT\)/ }));
+  fireEvent.click(screen.getByRole("button", { name: "ยืนยันปฏิเสธ (REJECT)" }));
+  expect(apiFetch.mock.calls.some(([, options]) => options?.method === "POST")).toBe(false);
+  fireEvent.change(screen.getByRole("textbox", { name: /ระบุเหตุผลในการปฏิเสธ/ }), { target: { value: "เอกสารไม่ชัดเจน" } });
+  fireEvent.click(screen.getByRole("button", { name: "ยืนยันปฏิเสธ (REJECT)" }));
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/kyc/kyc-1/decision", {
+    method: "POST", token: "token", body: { decision: "REJECTED", reason: "เอกสารไม่ชัดเจน", version: 3 },
+  }));
+});
+
+it.each([["อนุมัติ", "VERIFY", "VERIFIED"], ["ปฏิเสธ", "REJECT", "REJECTED"]])(
+  "reuses the card reason in the %s confirmation without asking for it again",
+  async (label, buttonCode, decision) => {
+    apiFetch.mockImplementation((url, options) => Promise.resolve(options?.method === "POST" ? {} : { items: [{ ...application, status: "PENDING", reason: null, version: 3 }], total: 1, totalPages: 1 }));
+    render(<KycSection token="token" />);
+    fireEvent.change(await screen.findByPlaceholderText("เหตุผลหรือหมายเหตุประกอบการตัดสินใจ..."), { target: { value: "ตรวจเอกสารแล้ว" } });
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(`${label} \\(${buttonCode}\\)`) }));
+    expect(screen.getByRole("textbox", { name: decision === "VERIFIED" ? "เหตุผลหรือบันทึกเพิ่มเติม" : /ระบุเหตุผลในการปฏิเสธ/ })).toHaveValue("ตรวจเอกสารแล้ว");
+    fireEvent.click(screen.getByRole("button", { name: `ยืนยัน${label} (${buttonCode})` }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/kyc/kyc-1/decision", {
+      method: "POST", token: "token", body: { decision, reason: "ตรวจเอกสารแล้ว", version: 3 },
+    }));
+  },
+);
+
+it("uses the edited confirmation note, including clearing an optional note", async () => {
+  apiFetch.mockImplementation((url, options) => Promise.resolve(options?.method === "POST" ? {} : { items: [{ ...application, status: "PENDING", reason: null, version: 3 }], total: 1, totalPages: 1 }));
+  render(<KycSection token="token" />);
+  fireEvent.change(await screen.findByPlaceholderText("เหตุผลหรือหมายเหตุประกอบการตัดสินใจ..."), { target: { value: "หมายเหตุเดิม" } });
+  fireEvent.click(screen.getByRole("button", { name: /อนุมัติ \(VERIFY\)/ }));
+  fireEvent.change(screen.getByRole("textbox", { name: "เหตุผลหรือบันทึกเพิ่มเติม" }), { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "ยืนยันอนุมัติ (VERIFY)" }));
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/kyc/kyc-1/decision", {
+    method: "POST", token: "token", body: { decision: "VERIFIED", reason: "", version: 3 },
+  }));
+});
+
+it("keeps the note and dialog open after an API failure so the decision can be retried", async () => {
+  let attempts = 0;
+  apiFetch.mockImplementation((url, options) => {
+    if (options?.method === "POST") return ++attempts === 1 ? Promise.reject(new Error("service unavailable")) : Promise.resolve({});
+    return Promise.resolve({ items: [{ ...application, status: "PENDING", reason: null, version: 3 }], total: 1, totalPages: 1 });
+  });
+  render(<KycSection token="token" />);
+  fireEvent.click(await screen.findByRole("button", { name: /อนุมัติ \(VERIFY\)/ }));
+  fireEvent.change(screen.getByRole("textbox", { name: "เหตุผลหรือบันทึกเพิ่มเติม" }), { target: { value: "ตรวจเอกสารแล้ว" } });
+  fireEvent.click(screen.getByRole("button", { name: "ยืนยันอนุมัติ (VERIFY)" }));
+  expect(await screen.findByText("service unavailable")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "เหตุผลหรือบันทึกเพิ่มเติม" })).toHaveValue("ตรวจเอกสารแล้ว");
+  fireEvent.click(screen.getByRole("button", { name: "ยืนยันอนุมัติ (VERIFY)" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  expect(attempts).toBe(2);
 });
 
 it("sends the explicit ALL status contract", async () => {
