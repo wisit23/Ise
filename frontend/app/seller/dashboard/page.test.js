@@ -1,12 +1,14 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import SellerDashboardPage from "./page";
+import StorePage from "../../store/[sellerId]/page";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
 
 jest.mock("next/navigation", () => ({
   useRouter: jest.fn(),
   useSearchParams: jest.fn(),
+  useParams: jest.fn(),
 }));
 
 jest.mock("../../../lib/auth", () => ({
@@ -24,6 +26,10 @@ jest.mock("../../../components/NavBar", () => function MockNavBar() {
 
 jest.mock("../../../components/Footer", () => function MockFooter() {
   return <div data-testid="mock-footer">Footer</div>;
+});
+
+jest.mock("../../../components/ProductCard", () => function MockProductCard({ product }) {
+  return <div>{product.title}</div>;
 });
 
 jest.mock("../../../components/chat/ChatSocketProvider", () => ({
@@ -73,8 +79,33 @@ describe("SellerDashboardPage", () => {
       if (url.includes("/api/orders/selling")) {
         return Promise.resolve({ items: mockOrders });
       }
+      if (url.includes("/api/auth/users/seller-1/public")) {
+        return Promise.resolve({ shopName: "ร้านทดสอบ" });
+      }
+      if (url.includes("/api/reviews/by-seller/")) {
+        return Promise.resolve({ items: [], total: 0, averageRating: 0, totalPages: 1 });
+      }
+      if (url === "/api/auth/shop/profile") {
+        return Promise.resolve({ shopName: "ร้านทดสอบ", address: "กรุงเทพฯ" });
+      }
       return Promise.resolve({});
     });
+  });
+
+  it("opens product clips from the sidebar and mobile menu", async () => {
+    useSearchParams.mockReturnValue(new URLSearchParams(""));
+    render(<SellerDashboardPage />);
+    const clipsButton = await screen.findByRole("button", { name: /คลิปสินค้า/ });
+    const sidebarButtons = within(clipsButton.closest("nav")).getAllByRole("button");
+    const productIndex = sidebarButtons.findIndex((button) => button.textContent.includes("รายการสินค้า"));
+    expect(sidebarButtons[productIndex + 1]).toBe(clipsButton);
+    fireEvent.click(clipsButton);
+    expect(await screen.findByRole("link", { name: "อัปโหลดคลิปใหม่" })).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith("/api/products/videos/mine?page=1&limit=12", expect.objectContaining({ token: "mock-token" }));
+    fireEvent.click(screen.getByRole("button", { name: /แดชบอร์ด/ }));
+    fireEvent.click(screen.getAllByRole("button").find((button) => button.getAttribute("aria-haspopup") === "listbox"));
+    fireEvent.click(screen.getByRole("radio", { name: "คลิปสินค้า" }));
+    expect(await screen.findByRole("heading", { name: "คลิปสินค้า" })).toBeInTheDocument();
   });
 
   it("renders default dashboard overview when no query params", async () => {
@@ -164,21 +195,69 @@ describe("SellerDashboardPage", () => {
     expect(screen.getByText("กางเกงยีนส์")).toBeInTheDocument();
   });
 
-  it("includes ร้านค้าของฉัน in mobile section dropdown and navigates to seller store when selected", async () => {
+  it("opens the store inside the panel from the mobile section dropdown", async () => {
     useSearchParams.mockReturnValue(new URLSearchParams(""));
     render(<SellerDashboardPage />);
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "แดชบอร์ด" })).toBeInTheDocument();
     });
-    const storeLinks = screen.getAllByRole("link", { name: /ร้านค้าของฉัน/ });
-    const desktopStoreLink = storeLinks.find((l) => l.className.includes("border-slate-200"));
-    expect(desktopStoreLink).toHaveClass("hidden", "sm:flex");
+    expect(screen.queryByRole("link", { name: /ร้านค้าของฉัน/ })).not.toBeInTheDocument();
     const radioSelectTrigger = screen.getAllByRole("button").find(b => b.getAttribute("aria-haspopup") === "listbox");
     expect(radioSelectTrigger).toBeInTheDocument();
     fireEvent.click(radioSelectTrigger);
     const storeOption = screen.getByRole("radio", { name: "ร้านค้าของฉัน" });
     expect(storeOption).toBeInTheDocument();
     fireEvent.click(storeOption);
-    expect(mockPush).toHaveBeenCalledWith("/store/seller-1");
+    expect(await screen.findByRole("heading", { name: "ร้านทดสอบ" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ร้านค้าของฉัน" })).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("keeps the sidebar and one panel shell while viewing and editing the store", async () => {
+    useSearchParams.mockReturnValue(new URLSearchParams(""));
+    render(<SellerDashboardPage />);
+    const storeButton = await screen.findByRole("button", { name: /ร้านค้าของฉัน/ });
+    fireEvent.click(storeButton);
+    expect(await screen.findByRole("heading", { name: "ร้านทดสอบ" })).toBeInTheDocument();
+    expect(screen.getAllByTestId("mock-navbar")).toHaveLength(1);
+    expect(screen.getAllByTestId("mock-footer")).toHaveLength(1);
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    expect(storeButton).toHaveClass("bg-emerald-600");
+    fireEvent.click(screen.getByRole("button", { name: /แก้ไขข้อมูลร้านค้า/ }));
+    const dialog = await screen.findByRole("dialog", { name: "แก้ไขข้อมูลร้านค้า" });
+    expect(await within(dialog).findByDisplayValue("ร้านทดสอบ")).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByDisplayValue("ร้านทดสอบ"), { target: { value: "ชื่อร้านใหม่" } });
+    fireEvent.change(within(dialog).getByPlaceholderText(/กรุณาระบุรายละเอียดให้ Trust and Safety/), { target: { value: "เปลี่ยนชื่อร้าน" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "ส่งให้ Trust and Safety ตรวจสอบ" }));
+    expect(await within(dialog).findByText("ส่งคำขอสำเร็จเรียบร้อย")).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith("/api/auth/shop/change-request", expect.objectContaining({
+      method: "POST", token: "mock-token", body: expect.objectContaining({ shopName: "ชื่อร้านใหม่", comment: "เปลี่ยนชื่อร้าน" }),
+    }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "เข้าใจแล้ว" }));
+    fireEvent.click(screen.getByRole("button", { name: /แดชบอร์ด/ }));
+    expect(screen.getByRole("heading", { name: "แดชบอร์ด" })).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("opens the store section directly from its query parameter", async () => {
+    useSearchParams.mockReturnValue(new URLSearchParams("section=my_store"));
+    render(<SellerDashboardPage />);
+    expect(await screen.findByRole("heading", { name: "ร้านทดสอบ" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ร้านค้าของฉัน" })).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("preserves the standalone public store for visitors", async () => {
+    useParams.mockReturnValue({ sellerId: "seller-1" });
+    getStoredUser.mockReturnValue(null);
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/public")) return Promise.resolve({ shopName: "ร้านสาธารณะ" });
+      return Promise.resolve({ items: [], total: 0, averageRating: 0, totalPages: 1 });
+    });
+    render(<StorePage />);
+    expect(await screen.findByRole("heading", { name: "ร้านสาธารณะ", level: 1 })).toBeInTheDocument();
+    expect(screen.getByTestId("mock-navbar")).toBeInTheDocument();
+    expect(screen.getByTestId("mock-footer")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /แก้ไขข้อมูลร้านค้า/ })).not.toBeInTheDocument();
   });
 });

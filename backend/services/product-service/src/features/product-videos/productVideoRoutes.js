@@ -27,6 +27,15 @@ function optionalAuth(req, res, next) {
 // GET /videos/feed is public so guests can discover products.
 router.get("/feed", optionalAuth, productVideoController.listFeed);
 
+const sellerAccess = [
+  requireAuth,
+  requireRole("SELLER", "ADMIN"),
+  requireCommerceCapability(CAPABILITY.SELLER),
+];
+router.get("/mine", ...sellerAccess, productVideoController.listMine);
+router.patch("/:id", ...sellerAccess, productVideoController.updateClip);
+router.delete("/:id", ...sellerAccess, productVideoController.deleteClip);
+
 // The clip file is written by product-service into its uploads directory.
 // Docker mounts that directory to the persistent product_uploads volume.
 router.post(

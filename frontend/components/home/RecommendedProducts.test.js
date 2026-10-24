@@ -8,6 +8,8 @@ import {
 import RecommendedProducts from "./RecommendedProducts";
 import { apiFetch } from "../../lib/api";
 
+jest.mock("../../lib/useCatalogLiveRefresh", () => jest.fn());
+
 jest.mock("../../lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock(
   "../ProductCard",

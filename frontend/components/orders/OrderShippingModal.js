@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 import Button from "../ui/Button";
+import OrderCancellationReason from "./OrderCancellationReason";
 import Alert from "../ui/Alert";
 import Skeleton from "../ui/Skeleton";
 import {
@@ -547,6 +548,8 @@ export default function OrderShippingModal({
               </div>
             )}
 
+            <OrderCancellationReason order={order} />
+
             {/* Reject Order Reason View */}
             {showRejectForm ? (
               <div className="space-y-3 rounded-xl border border-rose-200 bg-rose-50/60 p-4 animate-fade-in">
@@ -563,7 +566,7 @@ export default function OrderShippingModal({
                     </p>
                     <p className="text-rose-800 leading-relaxed mt-0.5">
                       เมื่อปฏิเสธคำสั่งซื้อ ระบบจะทำการคืนเงินเต็มจำนวน (
-                      {baht(order.price || order.ordersAmount || 0)})
+                      {baht(order.finalPrice ?? order.ordersAmount ?? order.price ?? 0)})
                       ให้แก่ผู้ซื้อทันที และนำสินค้ากลับมาวางขายใหม่
                     </p>
                   </div>

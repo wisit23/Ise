@@ -5,6 +5,51 @@ const {
 } = require("@reloop/shared");
 const productVideoService = require("./productVideoService");
 
+function sellerUser(req) {
+  return { id: req.userId, role: req.userRole };
+}
+
+async function listMine(req, res, next) {
+  try {
+    const pagination = parsePagination(req.query, 12);
+    const { items, total } = await productVideoService.listMine({
+      user: sellerUser(req),
+      skip: pagination.skip,
+      take: pagination.take,
+    });
+    res.json(paginatedResponse(items, total, pagination));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateClip(req, res, next) {
+  try {
+    res.json(
+      await productVideoService.updateClip({
+        user: sellerUser(req),
+        id: req.params.id,
+        input: req.body,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function deleteClip(req, res, next) {
+  try {
+    res.json(
+      await productVideoService.deleteClip({
+        user: sellerUser(req),
+        id: req.params.id,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function listFeed(req, res, next) {
   try {
     const pagination = parsePagination(req.query, 10);
@@ -12,6 +57,9 @@ async function listFeed(req, res, next) {
       skip: pagination.skip,
       take: pagination.take,
       userId: req.userId || null,
+      ...(typeof req.query.videoId === "string" && req.query.videoId
+        ? { videoId: req.query.videoId }
+        : {}),
     });
 
     res.json(paginatedResponse(items, total, pagination));
@@ -119,6 +167,9 @@ async function listComments(req, res, next) {
 }
 
 module.exports = {
+  listMine,
+  updateClip,
+  deleteClip,
   listFeed,
   uploadClip,
   createClip,

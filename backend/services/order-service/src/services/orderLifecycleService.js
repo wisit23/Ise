@@ -48,6 +48,7 @@ async function transition({ order, status, actorId, purpose = "ORDER_STATUS", re
       expectedStatuses: [order.status],
       productSync: productSyncFor(order, status, purpose),
       actorId,
+      reason,
     });
 
   if (order.campaignId && ["cancelled", "payment_expired", "seller_confirmation_expired"].includes(status))

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, Suspense } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../../components/NavBar";
@@ -9,6 +9,8 @@ import SellerDashboardCharts from "../../../components/seller/dashboard/SellerDa
 import { netRevenueForOrder } from "../../../lib/sellerRevenue";
 import SellerOrderTracker from "../../../components/seller/dashboard/SellerOrderTracker";
 import SellerProductList from "../../../components/seller/dashboard/SellerProductList";
+import SellerVideoList from "../../../components/seller/dashboard/SellerVideoList";
+import StoreContent from "../../../components/seller/StoreContent";
 import SellerAutoMessages from "../../../components/seller/dashboard/SellerAutoMessages";
 import {
   ORDER_STATUS_LABEL,
@@ -57,7 +59,9 @@ const SECTIONS = [
   { key: "dashboard", label: "แดชบอร์ด", icon: "dashboard" },
   { key: "orders", label: "ติดตามออเดอร์", icon: "local_shipping" },
   { key: "products", label: "รายการสินค้า", icon: "inventory_2" },
+  { key: "videos", label: "คลิปสินค้า", icon: "video_library" },
   { key: "auto_messages", label: "คำถามอัตโนมัติ", icon: "chat_bubble" },
+  { key: "my_store", label: "ร้านค้าของฉัน", icon: "storefront" },
 ];
 
 function SellerDashboardContent() {
@@ -297,35 +301,11 @@ function SellerDashboardContent() {
     return orders.filter(isOrderDisputed);
   }, [orders]);
 
-  const mobileSectionOptions = useMemo(() => {
-    const opts = SECTIONS.map((s) => ({
-      value: s.key,
-      label: s.label,
-      icon: s.icon,
-    }));
-    if (user?.id) {
-      opts.push({
-        value: "my_store",
-        label: "ร้านค้าของฉัน",
-        icon: "storefront",
-        divider: true,
-      });
-    }
-    return opts;
-  }, [user?.id]);
-
-  const handleMobileSectionChange = useCallback(
-    (val) => {
-      if (val === "my_store") {
-        if (user?.id) {
-          router.push(`/store/${user.id}`);
-        }
-        return;
-      }
-      setSection(val);
-    },
-    [user?.id, router],
-  );
+  const mobileSectionOptions = SECTIONS.map((s) => ({
+    value: s.key,
+    label: s.label,
+    icon: s.icon,
+  }));
 
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (user === undefined || loading) {
@@ -417,17 +397,6 @@ function SellerDashboardContent() {
               );
             })}
 
-            {user?.id && (
-              <Link
-                href={`/store/${user.id}`}
-                className="group flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-xs font-medium text-slate-600 hover:bg-slate-100/70 hover:text-slate-900 transition-colors"
-              >
-                <span className="material-symbols-outlined text-[20px] shrink-0 w-5 text-center text-slate-500 group-hover:text-slate-700">
-                  storefront
-                </span>
-                <span className="truncate">ร้านค้าของฉัน</span>
-              </Link>
-            )}
           </nav>
 
           {/* Footer */}
@@ -472,24 +441,11 @@ function SellerDashboardContent() {
                 </span>
               )}
 
-              {/* View Store Button (desktop only) */}
-              {user?.id && (
-                <Link
-                  href={`/store/${user.id}`}
-                  className="hidden sm:flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                >
-                  <span className="material-symbols-outlined text-[16px] text-emerald-600">
-                    storefront
-                  </span>
-                  <span>ร้านค้าของฉัน</span>
-                </Link>
-              )}
-
               {/* Mobile section switcher (includes ร้านค้าของฉัน) */}
               <div className="sm:hidden">
                 <RadioSelect
                   value={section}
-                  onChange={handleMobileSectionChange}
+                  onChange={setSection}
                   options={mobileSectionOptions}
                   size="sm"
                   variant="panel"
@@ -634,7 +590,11 @@ function SellerDashboardContent() {
             )}
 
             {/* ── Section 4: Auto Messages ── */}
+            {section === "videos" && <SellerVideoList products={products} />}
+
             {section === "auto_messages" && <SellerAutoMessages />}
+
+            {section === "my_store" && <StoreContent sellerId={user.id} embedded />}
           </div>
 
           <Footer />

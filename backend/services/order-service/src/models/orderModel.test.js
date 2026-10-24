@@ -101,8 +101,8 @@ const cancellation = {
   },
 };
 
-test("TC10: cancellation rechecks the current paid status inside its transaction", async (t) => {
-  const { writes } = fixture(t, { status: "confirmed" });
+test("cancellation rechecks carrier handoff inside its transaction", async (t) => {
+  const { writes } = fixture(t, { status: "in_transit" });
   await assert.rejects(
     model.transitionStatusWithProductSync(cancellation),
     (err) => err.status === 409,
@@ -138,25 +138,55 @@ test("a concurrent payment/version change prevents cancellation and event creati
   assert.equal(writes.length, 1);
 });
 
-test("a paid order cancelled by the seller records a simulated refund", async (t) => {
+for (const status of ["paid", "confirmed", "ready_to_ship"]) {
+test(`a ${status} order cancelled by the seller records one full simulated refund`, async (t) => {
   const { writes } = fixture(t, {
-    status: "paid",
+    status,
     payments: [{ paymentStatus: "paid" }],
   });
   const result = await model.transitionStatusWithProductSync({
     ...cancellation,
-    expectedStatuses: ["paid"],
+    expectedStatuses: [status],
     actorId: "seller",
+    reason: "สินค้าหมดสต็อก",
   });
   assert.equal(result.order.status, "cancelled");
   const refund = writes.find((w) => w.payment)?.payment;
   assert.equal(refund.paymentStatus, "refunded");
   assert.equal(refund.paymentAmount, "100");
+  assert.equal(writes.filter((w) => w.payment).length, 1);
+  const audit = writes.find((w) => w.action === "STATUS_CHANGED");
+  assert.equal(JSON.parse(audit.detail).reason, "สินค้าหมดสต็อก");
+});
+}
+
+test("cancelled order details expose the saved reason without exposing audit logs", () => {
+  const result = model.view({ status: "cancelled", originalAmount: "100", ordersAmount: "100", logs: [{ detail: JSON.stringify({ to: "cancelled", reason: "สินค้าหมดสต็อก" }) }] });
+  assert.equal(result.cancellationReason, "สินค้าหมดสต็อก");
+  assert.equal(result.logs, undefined);
 });
 
-test("buyer paid cancellation records one full simulated refund with product sync and audit", async (t) => {
-  const { writes } = fixture(t, { status: "paid", payments: [{ paymentStatus: "paid" }] });
-  const result = await model.transitionStatusWithProductSync({ ...cancellation, expectedStatuses: ["paid"] });
+test("legacy cancellation details without a reason remain readable", () => {
+  const result = model.view({ status: "cancelled", originalAmount: "100", ordersAmount: "100", logs: [{ detail: "legacy" }] });
+  assert.equal(result.cancellationReason, null);
+});
+
+test("a hold appearing before the transaction blocks seller refund and relisting", async (t) => {
+  const { writes } = fixture(t, { status: "ready_to_ship", payments: [{ paymentStatus: "paid", holds: [{ releaseAt: null }] }] });
+  await assert.rejects(model.transitionStatusWithProductSync({ ...cancellation, actorId: "seller", expectedStatuses: ["ready_to_ship"] }), (err) => err.status === 409);
+  assert.equal(writes.length, 0);
+});
+
+test("a concurrent shipment or duplicate rejection creates no refund", async (t) => {
+  const { writes } = fixture(t, { status: "ready_to_ship", claimCount: 0 });
+  await assert.rejects(model.transitionStatusWithProductSync({ ...cancellation, actorId: "seller", expectedStatuses: ["ready_to_ship"] }), (err) => err.status === 409);
+  assert.equal(writes.some((w) => w.payment || w.job), false);
+});
+
+for (const status of ["paid", "confirmed", "ready_to_ship", "pickup_in_progress"]) {
+test(`buyer cancellation of ${status} records one full simulated refund with product sync and audit`, async (t) => {
+  const { writes } = fixture(t, { status, payments: [{ paymentStatus: "paid" }] });
+  const result = await model.transitionStatusWithProductSync({ ...cancellation, expectedStatuses: [status] });
   assert.equal(result.order.status, "cancelled");
   const refunds = writes.filter((w) => w.payment).map((w) => w.payment);
   assert.equal(refunds.length, 1);
@@ -165,6 +195,7 @@ test("buyer paid cancellation records one full simulated refund with product syn
   assert.equal(refunds[0].paymentStatus, "refunded");
   assert.equal(writes.find((w) => w.job).job.targetStatus, "available");
 });
+}
 
 test("seller confirmation winning the race prevents buyer refund or relisting", async (t) => {
   const { writes } = fixture(t, { status: "paid", claimCount: 0, payments: [{ paymentStatus: "paid" }] });

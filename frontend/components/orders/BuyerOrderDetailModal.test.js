@@ -61,6 +61,13 @@ beforeEach(() => {
   fetchSellerSummary.mockReset().mockResolvedValue(null);
 });
 
+test("shows the cancellation reason from the refreshed order details", async () => {
+  const current = order("cancelled", { cancellationReason: "สินค้าหมดสต็อก จึงไม่สามารถจัดส่งได้" });
+  mockApi(current);
+  render(<BuyerOrderDetailModal order={order("cancelled")} statusLabel="ยกเลิกแล้ว" onClose={() => {}} />);
+  expect(await screen.findByRole("region", { name: "เหตุผลในการยกเลิกคำสั่งซื้อ" })).toHaveTextContent(current.cancellationReason);
+});
+
 test("shows the full order number without truncation and allows selecting it", async () => {
   const current = order("paid", {
     id: "550e8400-e29b-41d4-a716-446655440000",

@@ -118,6 +118,34 @@ describe("NotificationBell", () => {
     expect(screen.getByText("มีข้อพิพาทใหม่")).toBeInTheDocument();
   });
 
+  it("shows the complete seller rejection reason outside the clamped summary", async () => {
+    const reason = "สินค้าหมดสต็อก จึงไม่สามารถจัดส่งได้ และขอคืนเงินเต็มจำนวนให้ผู้ซื้อ\nขออภัยในความไม่สะดวก";
+    getNotifications.mockResolvedValue({ items: [{
+      id: "rejected-order", type: "ORDER", title: "คำสั่งซื้อถูกปฏิเสธและคืนเงินเต็มจำนวน",
+      message: "ผู้ขายได้ปฏิเสธออเดอร์และคืนเงินเต็มจำนวนแล้ว", read: false,
+      metadata: { status: "cancelled", orderId: "order-1", reason },
+      createdAt: new Date().toISOString(),
+    }], total: 1 });
+    render(<NotificationBell user={mockUser} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /การแจ้งเตือน/i }));
+    });
+    const label = await screen.findByText("เหตุผล:");
+    const reasonBlock = label.parentElement;
+    expect(reasonBlock).toHaveTextContent(reason.replace(/\s+/g, " "));
+    expect(reasonBlock).toHaveClass("whitespace-pre-wrap", "break-words");
+    expect(reasonBlock.className).not.toMatch(/line-clamp|truncate/);
+  });
+
+  it("does not add an empty reason to ordinary notifications", async () => {
+    render(<NotificationBell user={mockUser} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /การแจ้งเตือน/i }));
+    });
+    expect(await screen.findByText("ลูกค้าสั่งซื้อสินค้า #order-101")).toBeInTheDocument();
+    expect(screen.queryByText("เหตุผล:")).not.toBeInTheDocument();
+  });
+
   it("filters notifications by unread tab", async () => {
     render(<NotificationBell user={mockUser} />);
     const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });

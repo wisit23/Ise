@@ -414,6 +414,9 @@ export default function NotificationBell({ user }) {
               </div>
             ) : (
               displayedNotifications.map((notif) => {
+                const orderReason = notif.type === "ORDER" && typeof notif.metadata?.reason === "string"
+                  ? notif.metadata.reason.trim()
+                  : "";
                 const config =
                   TYPE_CONFIG[notif.type] || TYPE_CONFIG.SYSTEM;
                 const isReportResult =
@@ -471,6 +474,12 @@ export default function NotificationBell({ user }) {
                       <p className="mt-0.5 text-xs text-ink-muted line-clamp-2 leading-relaxed">
                         {notif.message}
                       </p>
+                      {orderReason && (
+                        <p className="mt-1.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-md bg-rose-50 px-2 py-1.5 text-xs leading-relaxed text-rose-800">
+                          <span className="font-semibold">เหตุผล: </span>
+                          {orderReason}
+                        </p>
+                      )}
                       {isReportResult ? (
                         <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md hover:bg-amber-100 transition">
                           <span className="material-symbols-outlined text-[13px]">
