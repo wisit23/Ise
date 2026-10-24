@@ -1,3 +1,5 @@
+import { formatCount } from "../../lib/executive";
+
 /** KPI tile for the executive dashboard. Shows "ไม่พร้อมใช้งาน" instead of a
  * fake zero when its owner service didn't respond (see CEO-DEC-003 — never
  * mask a provider outage as an empty/zero metric).
@@ -17,7 +19,7 @@ export default function MetricCard({
   hint,
   formatValue,
 }) {
-  const fmt = formatValue || ((v) => v.toLocaleString("th-TH"));
+  const fmt = formatValue || formatCount;
 
   // What the line says: `change` is the bold figure, `note` the context.
   let change = null;

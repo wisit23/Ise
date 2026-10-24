@@ -29,7 +29,7 @@ export async function fetchCaseDetail(source, id, token) {
   const response = await apiFetch(DETAIL_PATHS[source](id), { token });
   if (!isObject(response) || !isObject(response.data)) throw invalid();
   const meta = isObject(response.meta) ? response.meta : {};
-  if (source === "ticket" && !Array.isArray(response.data.actions)) {
+  if (source === "ticket" && !("handling" in response.data)) {
     throw invalid();
   }
   return { data: response.data, meta };

@@ -19,7 +19,10 @@ describe("fetchCaseDetail", () => {
       { token: "t" },
     );
 
-    apiFetch.mockResolvedValue({ data: { id: "t1", actions: [] }, meta: {} });
+    apiFetch.mockResolvedValue({
+      data: { id: "t1", handling: null },
+      meta: {},
+    });
     await fetchCaseDetail("ticket", "t1", "t");
     expect(apiFetch).toHaveBeenLastCalledWith(
       "/api/support/executive/tickets/t1",

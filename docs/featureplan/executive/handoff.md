@@ -21,7 +21,7 @@
 - Final build evidence: frontend production build succeeded on an isolated copy;
   auth-service Docker build succeeded. Temporary test schemas/runners were removed.
 
-> อัปเดตล่าสุด: 2026-08-26
+> อัปเดตล่าสุด: 2026-10-24
 
 ## Ownership
 
@@ -29,8 +29,8 @@
 - Reviewer: ศิวกร วรวัฒน์อมรชัย
 - Requirement scope: `UR-27`–`UR-31`
 - Current status: `CEO-001`–`CEO-003` implemented and database-verified; `CEO-004` not delivered
-  (CEO-DEC-011); `CEO-005` partially delivered — see [`progress.md`](progress.md) for the
-  exact scope boundary
+  (CEO-DEC-011); `CEO-005` delivered as rescoped: CSV export + audit log (CEO-DEC-016) — see
+  [`progress.md`](progress.md)
 
 ## Scope to hand off
 
@@ -38,7 +38,7 @@
 - `CEO-002`: Executive Dashboard and Comparisons
 - `CEO-003`: Top Products and Categories
 - `CEO-004`: Extended Anomaly Alerts — in scope but not delivered before the deadline (CEO-DEC-011)
-- `CEO-005`: Extended CSV/PDF Export
+- `CEO-005`: CSV Export with Audit Log (rescoped from CSV/PDF export jobs, CEO-DEC-016)
 
 ## Current evidence
 
@@ -48,10 +48,14 @@
 - บทเรียนจากการตรวจ analytics flow อยู่ใน [`teachme.md`](teachme.md)
 - ข้อตกลงที่มีผลกับ Feature นี้อยู่ใน [`decision.md`](decision.md)
 - `CEO-001`–`CEO-003` มี implementation + PostgreSQL integration test ที่รันผ่านจริงแล้ว
-  (`REQUIRE_INTEGRATION=1`, 49 passed / 0 skipped) — รายละเอียดใน [`progress.md`](progress.md)
+  (`REQUIRE_INTEGRATION=1`) — หลักฐานล่าสุด 2026-10-24 ใน [`progress.md`](progress.md)
+- หน้าข้อร้องเรียนรวมข้อร้องเรียน/Ticket/ข้อพิพาท พร้อมตัวกรองและหน้าต่างรายละเอียด
+  (CEO-DEC-014, CEO-DEC-015); หน้าภาพรวมมีช่วงเวลา 7 วัน/เดือนนี้/ปีนี้/กำหนดเอง (รายชั่วโมง)
+- Index ตามเวลา: auth `20261024100000_executive_time_indexes` (`login_logs.login_at`, `users.created_at`, `reports.reported_at`), order `20261024100000_executive_order_time_index` (`orders(created_at, status)`), support `20261024100000_executive_ticket_time_index` (`support_tickets.created_at`) — ต้องรัน
+  `prisma migrate deploy` ของ 3 service นี้ตอน deploy
 - `CEO-004` ยังอยู่ใน scope แต่ไม่ได้ส่งมอบทันกำหนด (CEO-DEC-011): มีแค่คำเตือนร้องเรียนซ้ำที่คำนวณตอนเรียก
-- `CEO-005` ยังไม่ครบตาม acceptance เดิม: ไม่มี persisted export job/expiry —
-  ห้ามรายงานว่า Done จนกว่าจะทำเพิ่มหรือ rescope อย่างเป็นทางการ
+- `CEO-005` rescope แล้ว (CEO-DEC-016): ดาวน์โหลด CSV จากหน้ารายงาน และบันทึกทุกครั้งใน audit log
+  (`REPORT_EXPORT_CSV`); ไม่มี export job/วันหมดอายุ/PDF ตามที่ Owner ตัดสินใจ
 
 ## Dependencies and contracts
 
@@ -62,11 +66,13 @@
 
 ## Resume from here
 
-1. ยืนยัน Gate 0 และนิยาม KPI/ช่วงเวลากับ Buyer, Seller และ Marketing
-2. เริ่ม `CEO-001` ตาม test-first steps ใน `plan.md`
-3. รัน targeted test และ PostgreSQL integration test โดยห้าม skip
-4. อัปเดต `progress.md`, append `changelog.md` และเพิ่ม `teachme.md` เมื่อมีหลักฐานจริง
-5. ขอ Reviewer ตรวจ acceptance evidence ก่อนเปลี่ยนสถานะเป็น Done
+1. ขอ Reviewer ตรวจ acceptance evidence ของ `CEO-001`–`CEO-003` และ `CEO-005` (rescoped)
+2. ยังเปิดอยู่ (ไม่บล็อกการส่งงาน): ตรวจหน้าจอมือถือของ 3 แท็บ; ให้ gateway ปฏิเสธ
+   `/internal/` (ตอนนี้มี token ภายในกันอยู่ — ไฟล์กลาง ต้องคุยทีมก่อน)
+3. เก็บไว้ก่อนตามที่ Owner ตัด: `CEO-004` (CEO-DEC-011), ดาวของ Ticket, หมวดหมู่ของ report,
+   หน้าดู audit log
+4. แจ้งทีม auth: `POST /internal/users/display-names` ส่ง `staffRoles` เพิ่ม (เพิ่ม field
+   อย่างเดียว, ผู้เรียกเดิมใช้แค่ `userId`/`displayName`)
 
 ## Required handoff evidence
 

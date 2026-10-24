@@ -1,3 +1,4 @@
+const { customerServicePolicy } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 
 /**
@@ -10,7 +11,12 @@ const prisma = require("../../models/prismaClient");
 
 // The stages a dispute can be in (see disputeWorkflowClient / disputeService).
 const DISPUTE_STATUSES = ["OPEN", "NEEDS_INFO", "DECIDED"];
-const DISPUTE_PRIORITIES = ["LOW", "NORMAL", "HIGH", "URGENT", "CRITICAL"];
+// The case priorities from the shared policy, plus CRITICAL, which only an
+// escalated dispute carries.
+const DISPUTE_PRIORITIES = [
+  ...Object.keys(customerServicePolicy.priorities),
+  "CRITICAL",
+];
 // What a buyer can pick when opening one. The server accepts any text, so a
 // case can carry another value; it is shown but not offered as a filter.
 const DISPUTE_TYPES = [

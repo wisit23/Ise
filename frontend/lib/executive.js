@@ -3,6 +3,26 @@ import { apiFetch } from "./api";
 export const TIMEZONE =
   process.env.NEXT_PUBLIC_REPORT_TIMEZONE || "Asia/Bangkok";
 
+// Numbers and dates on the Executive pages are written the Thai way.
+export const LOCALE = "th-TH";
+// The Buddhist era is 543 years ahead of the Gregorian calendar.
+const BUDDHIST_ERA_OFFSET = 543;
+
+/** A Gregorian year as the Buddhist-era year Thai readers expect. */
+export function buddhistYear(year) {
+  return year + BUDDHIST_ERA_OFFSET;
+}
+
+/** A count with Thai digit grouping: 1,234. */
+export function formatCount(n) {
+  return n.toLocaleString(LOCALE);
+}
+
+/** Baht rounded to the satang, so float error never shows up on screen. */
+export function roundMoney(n) {
+  return Math.round(n * 100) / 100;
+}
+
 /**
  * The fee as a percentage for a label ("3", "2.5"), from the fraction the
  * order service sends in `meta.platformFeeRate`. Null when the service did not
@@ -50,7 +70,7 @@ export const MONTH_SHORT = [
 ];
 
 export function baht(v) {
-  return `฿${v.toLocaleString("th-TH")}`;
+  return `฿${v.toLocaleString(LOCALE)}`;
 }
 
 /** Calendar date of `instant` in the report time zone — "today" for a Bangkok
@@ -112,7 +132,7 @@ export function addDays(value, days) {
 /** "16 ต.ค. 2568" for a calendar date. */
 export function thaiDate(value) {
   const { year, monthIndex, day } = parseIsoDate(value);
-  return `${day} ${MONTH_SHORT[monthIndex]} ${year + 543}`;
+  return `${day} ${MONTH_SHORT[monthIndex]} ${buddhistYear(year)}`;
 }
 
 /** "16/10/2569" (day/month/Buddhist year) for a "YYYY-MM-DD" date. */
@@ -121,7 +141,7 @@ export function formatDayField(value) {
   if (!parsed) return "";
   const dd = String(parsed.day).padStart(2, "0");
   const mm = String(parsed.monthIndex + 1).padStart(2, "0");
-  return `${dd}/${mm}/${parsed.year + 543}`;
+  return `${dd}/${mm}/${buddhistYear(parsed.year)}`;
 }
 
 /** Keeps what is typed into the day field to digits laid out as dd/mm/yyyy. */
@@ -137,8 +157,8 @@ export function maskDayField(text) {
 export function parseDayField(text) {
   const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
   if (!match) return null;
-  const [, day, month, buddhistYear] = match.map(Number);
-  const iso = isoDate(buddhistYear - 543, month - 1, day);
+  const [, day, month, beYear] = match.map(Number);
+  const iso = isoDate(beYear - BUDDHIST_ERA_OFFSET, month - 1, day);
   return parseIsoDate(iso) && formatDayField(iso) === text ? iso : null;
 }
 
@@ -150,12 +170,12 @@ export function monthWindow(year, monthIndex) {
     from: isoDate(year, monthIndex, 1),
     to: isoDate(year, monthIndex + 1, 1),
     // A calendar label, not an instant, so it is formatted in UTC on purpose.
-    label: start.toLocaleDateString("th-TH", {
+    label: start.toLocaleDateString(LOCALE, {
       month: "short",
       year: "2-digit",
       timeZone: "UTC",
     }),
-    longLabel: `${MONTH_NAMES[start.getUTCMonth()]} ${start.getUTCFullYear() + 543}`,
+    longLabel: `${MONTH_NAMES[start.getUTCMonth()]} ${buddhistYear(start.getUTCFullYear())}`,
   };
 }
 
@@ -164,7 +184,7 @@ export function yearWindow(year) {
     from: isoDate(year, 0, 1),
     to: isoDate(year + 1, 0, 1),
     label: String(year),
-    longLabel: `ปี ${year + 543}`,
+    longLabel: `ปี ${buddhistYear(year)}`,
   };
 }
 
@@ -214,7 +234,7 @@ export function dayLabel(isoPeriod) {
     day: "2-digit",
     timeZone: TIMEZONE,
   });
-  const monthYear = d.toLocaleDateString("th-TH", {
+  const monthYear = d.toLocaleDateString(LOCALE, {
     month: "short",
     year: "2-digit",
     timeZone: TIMEZONE,
@@ -467,6 +487,13 @@ export function overviewPeriods(mode, instant = new Date(), custom) {
   };
 }
 
+// Reads the hour (0–23) of an instant on the report clock.
+const hourFormat = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIMEZONE,
+  hour: "numeric",
+  hourCycle: "h23",
+});
+
 /**
  * Chart points for one overview mode from the order provider's series rows
  * (each `period` is the instant a TIMEZONE bucket starts). The last point of
@@ -507,11 +534,11 @@ export function buildTrendPoints(mode, rows, instant = new Date()) {
       const t = byYear.get(y);
       const partial = y === today.year;
       return {
-        label: String(y + 543),
+        label: String(buddhistYear(y)),
         subLabel: partial ? `(ถึง ${throughText})` : undefined,
-        fullLabel: `ปี ${y + 543}${partial ? ` · ถึงวันที่ ${throughText}` : " · ทั้งปี"}`,
-        value: Math.round(t.gmv * 100) / 100,
-        detail: detailOf(t.gmv, Math.round(t.platformRevenue * 100) / 100),
+        fullLabel: `ปี ${buddhistYear(y)}${partial ? ` · ถึงวันที่ ${throughText}` : " · ทั้งปี"}`,
+        value: roundMoney(t.gmv),
+        detail: detailOf(t.gmv, roundMoney(t.platformRevenue)),
       };
     });
   }
@@ -523,20 +550,14 @@ export function buildTrendPoints(mode, rows, instant = new Date()) {
     return rows.map((row, i) => {
       const at = new Date(row.period);
       const d = currentDate(at);
-      const hour = Number(
-        new Intl.DateTimeFormat("en-US", {
-          timeZone: TIMEZONE,
-          hour: "numeric",
-          hourCycle: "h23",
-        }).format(at),
-      );
+      const hour = Number(hourFormat.format(at));
       const start = `${String(hour).padStart(2, "0")}:00`;
       const end = `${String(hour).padStart(2, "0")}:59`;
       const named = i % 3 === 0 || i === rows.length - 1;
       return {
         label: start,
         axisLabel: named ? start : "",
-        fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${d.year + 543} · ${start}–${end}`,
+        fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${buddhistYear(d.year)} · ${start}–${end}`,
         value: row.gmv,
         detail: detailOf(row.gmv, row.platformRevenue),
       };
@@ -550,7 +571,7 @@ export function buildTrendPoints(mode, rows, instant = new Date()) {
       return {
         label: String(d.day),
         subLabel: MONTH_SHORT[d.monthIndex],
-        fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${String((d.year + 543) % 100).padStart(2, "0")}`,
+        fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${String(buddhistYear(d.year) % 100).padStart(2, "0")}`,
         value: row.gmv,
         detail: detailOf(row.gmv, row.platformRevenue),
       };
@@ -563,7 +584,7 @@ export function buildTrendPoints(mode, rows, instant = new Date()) {
     return {
       label: MONTH_SHORT[monthIndex],
       subLabel: partial ? `(ถึง ${today.day})` : undefined,
-      fullLabel: `${MONTH_NAMES[monthIndex]} ${year + 543}${partial ? ` · ถึงวันที่ ${throughText}` : " · ทั้งเดือน"}`,
+      fullLabel: `${MONTH_NAMES[monthIndex]} ${buddhistYear(year)}${partial ? ` · ถึงวันที่ ${throughText}` : " · ทั้งเดือน"}`,
       value: row.gmv,
       detail: detailOf(row.gmv, row.platformRevenue),
     };
@@ -641,23 +662,30 @@ export async function fetchOverview(mode, token, instant = new Date(), custom) {
   };
 }
 
-/** Records an append-only executive audit log entry (e.g. on export CSV or moderation). */
-export async function logExecutiveAction(actionData, token) {
-  try {
-    return await apiFetch("/api/auth/executive/audit", {
-      token,
-      method: "POST",
-      body: actionData,
-    });
-  } catch (err) {
-    console.warn("Failed to record executive audit log:", err);
-    return null;
-  }
-}
+export const AUDIT_PATH = "/api/auth/executive/audit";
 
-/** Queries executive audit logs with pagination and filters. */
-export async function fetchExecutiveAuditLogs(params = {}, token) {
-  const query = new URLSearchParams(params).toString();
-  const path = `/api/auth/executive/audit${query ? `?${query}` : ""}`;
-  return apiFetch(path, { token });
+/**
+ * Records a report export in the Executive audit log (CEO-DEC-016). Called
+ * before the file is handed over, and it throws when the entry was not
+ * stored, so no export leaves without a record. The server decides the
+ * category and wording (CEO-DEC-012); only the facts are sent.
+ */
+export async function recordReportExport(
+  { granularity, year, monthIndex, rowCount, slug },
+  token,
+) {
+  return apiFetch(AUDIT_PATH, {
+    token,
+    method: "POST",
+    body: {
+      action: "REPORT_EXPORT_CSV",
+      targetId: slug,
+      metadata: {
+        granularity,
+        year,
+        ...(granularity === "month" ? { monthIndex } : {}),
+        rowCount,
+      },
+    },
+  });
 }

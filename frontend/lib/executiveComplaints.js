@@ -1,5 +1,5 @@
 // @ts-check
-import { TIMEZONE } from "./executive";
+import { LOCALE, TIMEZONE } from "./executive";
 
 /**
  * @typedef {Object} ReportActionDetails
@@ -209,7 +209,7 @@ export function parseComplaintResponse(response) {
 
 /** @param {string} value */
 export function formatReportedAt(value) {
-  return new Date(value).toLocaleString("th-TH", {
+  return new Date(value).toLocaleString(LOCALE, {
     timeZone: TIMEZONE,
     year: "numeric",
     month: "short",

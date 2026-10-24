@@ -24,7 +24,13 @@ function getPlatformFeeRate(env = process.env) {
   return rate;
 }
 
-// Fail at boot, not on the first request.
+// Fail at boot, not on the first request. An unset rate still works, but a
+// server should set it on purpose, so say so in the startup log.
 getPlatformFeeRate();
+if (!String(process.env.PLATFORM_FEE_RATE ?? "").trim()) {
+  console.warn(
+    `[order-service] PLATFORM_FEE_RATE is not set; using the default ${DEFAULT_PLATFORM_FEE_RATE}. Set it in .env for production.`,
+  );
+}
 
 module.exports = { getPlatformFeeRate, DEFAULT_PLATFORM_FEE_RATE };

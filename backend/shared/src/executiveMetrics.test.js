@@ -2,6 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   resolveMetricRange,
+  resolveExecutiveRange,
+  allowedValue,
   buildSeriesPeriods,
   fillSeriesGaps,
 } = require("./executiveMetrics");
@@ -170,4 +172,36 @@ test("day slots are refused unless the endpoint offers them", () => {
     () => buildSeriesPeriods({ from, to, granularity: "hour" }),
     (err) => err.status === 400,
   );
+});
+
+test("an executive range must run forwards", () => {
+  for (const query of [
+    { from: "2025-10-16", to: "2025-10-16" },
+    { from: "2025-10-17", to: "2025-10-16" },
+  ]) {
+    assert.throws(
+      () => resolveExecutiveRange(query),
+      (err) => err.status === 400,
+    );
+    // Other callers of resolveMetricRange keep their behaviour.
+    assert.doesNotThrow(() => resolveMetricRange(query));
+  }
+  const { from, to } = resolveExecutiveRange({
+    from: "2025-10-16",
+    to: "2025-10-17",
+  });
+  assert.ok(from < to);
+});
+
+test("a filter value must be one the page offers", () => {
+  const allowed = ["OPEN", "DECIDED"];
+  assert.equal(allowedValue(undefined, allowed, "status"), undefined);
+  assert.equal(allowedValue("", allowed, "status"), undefined);
+  assert.equal(allowedValue("OPEN", allowed, "status"), "OPEN");
+  for (const bad of ["open", "NOPE", ["OPEN"], {}]) {
+    assert.throws(
+      () => allowedValue(bad, allowed, "status"),
+      (err) => err.status === 400,
+    );
+  }
 });

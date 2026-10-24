@@ -1,77 +1,36 @@
 const { Prisma } = require("@prisma/client");
 
 /** One parameterized predicate shared by the result page and its total count. */
-function reportPredicate(
-  { range, status, targetId, search, reasonCategory },
-  { openStatuses, categoryKeywords },
-) {
-  const statuses = status ? [status] : openStatuses;
+function reportPredicate({ range, status, openStatuses }) {
   const clauses = [
     status === "ALL"
       ? Prisma.sql`TRUE`
-      : Prisma.sql`r.status::text IN (${Prisma.join(statuses)})`,
+      : Prisma.sql`r.status::text IN (${Prisma.join(status ? [status] : openStatuses)})`,
   ];
   if (range) {
     clauses.push(
       Prisma.sql`r.reported_at >= ${range.from} AND r.reported_at < ${range.to}`,
     );
   }
-  if (targetId) clauses.push(Prisma.sql`r.target_id = ${targetId}`);
-  if (search) {
-    // STRPOS treats % and _ as literal text, not user-controlled wildcards.
-    clauses.push(Prisma.sql`(
-      strpos(lower(COALESCE(r.target_id, '')), lower(${search})) > 0
-      OR EXISTS (
-        SELECT 1 FROM users u
-        LEFT JOIN seller_profiles s ON s.user_id = u.id
-        WHERE u.id = r.target_id AND (
-          strpos(lower(COALESCE(s.shop_name, '')), lower(${search})) > 0
-          OR strpos(lower(concat_ws(' ', u.f_name, u.l_name)), lower(${search})) > 0
-        )
-      )
-    )`);
-  }
-  const keywords = categoryKeywords[reasonCategory];
-  if (keywords) {
-    clauses.push(
-      Prisma.sql`(${Prisma.join(
-        keywords.map(
-          (word) => Prisma.sql`strpos(lower(r.reason), lower(${word})) > 0`,
-        ),
-        " OR ",
-      )})`,
-    );
-  }
   return Prisma.join(clauses, " AND ");
 }
 
-async function findReportPage(prisma, filters, definitions) {
-  const { page, limit, sortBy } = filters;
-  const predicate = reportPredicate(filters, definitions);
-  const order =
-    sortBy === "most_reported"
-      ? Prisma.sql`COALESCE(counts.report_count, 1) DESC, r.reported_at DESC, r.id DESC`
-      : sortBy === "oldest"
-        ? Prisma.sql`r.reported_at ASC, r.id ASC`
-        : Prisma.sql`r.reported_at DESC, r.id DESC`;
-  const countJoin =
-    sortBy === "most_reported"
-      ? Prisma.sql`LEFT JOIN (
-        SELECT target_id, count(*) AS report_count FROM reports GROUP BY target_id
-      ) counts ON counts.target_id = r.target_id`
-      : Prisma.empty;
-
-  // Rows and their pagination count must describe the same DB snapshot.
+/**
+ * One page of complaints, newest first, and how many match in all. The rows
+ * and the total are read in one repeatable-read transaction so they describe
+ * the same snapshot.
+ */
+async function findReportPage(prisma, { page, limit, ...filters }) {
+  const predicate = reportPredicate(filters);
   return prisma.$transaction(
     async (tx) => {
       const [ids, totals] = await Promise.all([
         tx.$queryRaw`
-      SELECT r.id FROM reports r
-      ${countJoin}
-      WHERE ${predicate}
-      ORDER BY ${order}
-      LIMIT ${limit} OFFSET ${(page - 1) * limit}
-    `,
+          SELECT r.id FROM reports r
+          WHERE ${predicate}
+          ORDER BY r.reported_at DESC, r.id DESC
+          LIMIT ${limit} OFFSET ${(page - 1) * limit}
+        `,
         tx.$queryRaw`SELECT count(*)::int AS total FROM reports r WHERE ${predicate}`,
       ]);
       const rows = await tx.report.findMany({

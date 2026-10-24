@@ -15,7 +15,7 @@ const productClient = require("../../services/productClient");
 async function namesFor(ids) {
   try {
     const rows = await displayNames(ids);
-    return new Map(rows.map((row) => [row.userId, row.displayName]));
+    return new Map(rows.map((row) => [row.userId, row]));
   } catch {
     return null;
   }
@@ -52,8 +52,16 @@ async function getExecutiveDispute(id) {
       ? titleOf(order.productId)
       : { available: true, title: null },
   ]);
-  const person = (userId) =>
-    userId ? { id: userId, name: names?.get(userId) ?? null } : null;
+  const person = (userId, { withRoles = false } = {}) => {
+    if (!userId) return null;
+    const found = names?.get(userId);
+    return {
+      id: userId,
+      name: found?.displayName ?? null,
+      // Staff roles say which team acted (CS, Trust & Safety, Admin).
+      ...(withRoles ? { roles: found?.staffRoles ?? [] } : {}),
+    };
+  };
 
   return {
     data: {
@@ -76,12 +84,12 @@ async function getExecutiveDispute(id) {
         : null,
       buyer: person(people.buyer),
       seller: person(people.seller),
-      assignee: person(people.assignee),
+      assignee: person(people.assignee, { withRoles: true }),
       assignedRole: row.assignedRole ?? null,
       assignedAt: toIso(row.assignedAt),
       decision: row.decision ?? null,
       decisionReason: row.decisionReason ?? null,
-      decider: person(people.decider),
+      decider: person(people.decider, { withRoles: true }),
       decidedAt: toIso(row.decidedAt),
       decisionDueAt: toIso(row.decisionDueAt),
     },

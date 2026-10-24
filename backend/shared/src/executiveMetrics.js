@@ -130,6 +130,33 @@ function resolveMetricRange(query = {}) {
   return { from, to, timezone };
 }
 
+/**
+ * resolveMetricRange for the Executive endpoints, which also refuse an empty
+ * or backwards window: it would come back as zeros that look like real
+ * figures. Kept separate so other callers of resolveMetricRange keep their
+ * current behaviour.
+ */
+function resolveExecutiveRange(query = {}) {
+  const range = resolveMetricRange(query);
+  if (range.from >= range.to) {
+    throw badRequest("from must be earlier than to");
+  }
+  return range;
+}
+
+/**
+ * One filter value from a query string, checked against the values the page
+ * offers. Missing or empty means "no filter"; anything else unknown is a 400,
+ * because a value that silently matched nothing would read as "no cases".
+ */
+function allowedValue(value, allowed, name) {
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    throw badRequest(`${name} must be one of ${allowed.join(", ")}`);
+  }
+  return value;
+}
+
 function metricMeta({ from, to, timezone }) {
   return {
     definitionVersion: METRIC_DEFINITION_VERSION,
@@ -226,6 +253,8 @@ module.exports = {
   SLOT_MINUTES,
   MAX_SERIES_POINTS,
   resolveMetricRange,
+  resolveExecutiveRange,
+  allowedValue,
   metricMeta,
   buildSeriesPeriods,
   fillSeriesGaps,

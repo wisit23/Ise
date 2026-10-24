@@ -113,7 +113,7 @@ test("executive complaints can be listed for a date window", async (t) => {
     // Without a window it is still the live queue, as before.
     const live = await request(app)
       .get("/executive/reports")
-      .query({ status: "ALL", search: `window-target-${runId}` })
+      .query({ status: "ALL", limit: "100" })
       .set("Authorization", `Bearer ${executiveToken}`);
     assert.equal(live.status, 200);
     assert.equal(live.body.meta.from, undefined);

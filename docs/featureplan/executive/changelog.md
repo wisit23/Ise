@@ -1,5 +1,21 @@
 # Executive Feature Changelog
 
+## 2026-10-24 — Export rescoped, case details, time indexes
+
+- **`CEO-005` rescope (CEO-DEC-016):** export = ดาวน์โหลด CSV ของรายงานที่เห็นบนหน้าจอ + บันทึก audit log `REPORT_EXPORT_CSV` ทุกครั้ง; ตัด export job/วันหมดอายุ/PDF ออกจากแผน
+- **รายละเอียด Ticket/ข้อพิพาท (CEO-DEC-015):** ปุ่ม "รายละเอียด" ทุกแถว; Ticket แสดงผู้เปิด วันที่เปิด สินค้า (เฉพาะที่ผูกคำสั่งซื้อ) สถานะ ผู้รับเคส ผู้ดำเนินการ การดำเนินการ เหตุผล; ชื่อเจ้าหน้าที่มีทีมในวงเล็บจาก `staffRoles` ที่ auth-service ส่งเพิ่มใน display-names; Ticket ที่ถูกเปิดใหม่ไม่แสดงผลการดำเนินการเก่า
+- **Index ตามเวลา:** auth `20261024100000_executive_time_indexes` (`login_logs.login_at`, `users.created_at`, `reports.reported_at`), order `20261024100000_executive_order_time_index` (`orders(created_at, status)`), support `20261024100000_executive_ticket_time_index` (`support_tickets.created_at`) — ปิดข้อจำกัดเรื่อง index ของรอบ 2026-10-17
+- **ตรวจความพร้อม production + refactor (เฉพาะโค้ด Executive):**
+  - ไม่พบการอ่านฐานข้อมูลข้าม service: ทุก query อ่านตารางของ service ตัวเอง; ข้อมูลข้าม service ผ่าน API + `x-internal-token` (ชื่อ/role จาก auth, สินค้าจาก order/product, ยอดขายรายสินค้าจาก order)
+  - ไม่พบ mock หรือข้อมูลตัวอย่างใน runtime; ค่าธรรมเนียมมาจาก `PLATFORM_FEE_RATE` ของ order-service (ถ้าไม่ตั้ง จะเตือนใน log ตอนเริ่ม)
+  - Export CSV: บันทึก audit log ก่อน แล้วจึงให้ไฟล์ — บันทึกไม่ได้ = ไม่มีไฟล์ (CEO-DEC-016); ส่งเฉพาะ action/targetId/metadata
+  - ทุก endpoint ของ Executive ปฏิเสธช่วงเวลาว่างหรือย้อนกลับ (`resolveExecutiveRange`); ตัวกรองที่ไม่รู้จักตอบ 400 ผ่าน `allowedValue` ตัวเดียวกัน
+  - `GET /executive/audit` ตอบ 400 เมื่อวันที่ผิดหรือส่งค่าซ้ำ แทนการข้ามเงียบหรือ 500
+  - API ข้อร้องเรียนตัด search/targetId/reasonCategory/sortBy และหมวดหมู่เดาจากคำ (ไม่มีหน้าไหนใช้แล้ว, CEO-DEC-014)
+  - order-service: สถานะ `completed`/`paid` เป็นค่าคงที่ที่เดียว, series กรอง status ใน WHERE ให้ใช้ index `orders(created_at, status)`, ระดับความเร่งด่วนข้อพิพาทอ่านจาก `customerServicePolicy`
+  - frontend: `LOCALE`, `buddhistYear`, `formatCount`, `roundMoney`, `baht` ใช้ร่วมกัน แทนการเขียนซ้ำในแต่ละ component; ยอดรวมรายงานปัดเป็นสตางค์; ลบ `fetchExecutiveAuditLogs` ที่ไม่ได้ใช้
+- **ยังเปิดอยู่:** gateway ยังไม่ปฏิเสธ `/internal/` (มี token ภายในกันอยู่); ยังไม่ได้ตรวจหน้าจอมือถือ; IP ใน audit log มาจาก `x-forwarded-for` ซึ่ง gateway ไม่ได้ตั้งให้ (ต้องแก้ที่ gateway); `NEXT_PUBLIC_REPORT_SEARCH_DEBOUNCE_MS`/`NEXT_PUBLIC_REPORT_REQUEST_TIMEOUT_MS` ไม่มีโค้ดใช้แล้ว แต่ยังอยู่ใน `.env.example`, `frontend/Dockerfile.prod`, `docker-compose.prod.yml` (ไฟล์กลาง ไม่ได้แก้)
+
 ## 2026-10-17 — Overview redesign, complaints inbox, hardening
 
 ตัดสินใจทั้งหมดอยู่ใน `decision.md` (CEO-DEC-005 ถึง CEO-DEC-014)
@@ -17,7 +33,7 @@
 
 **ข้อจำกัดที่ทราบก่อนใช้งานข้อมูลจริง:**
 
-- ไม่มี index รองรับ `orders(status, created_at)`, `login_logs(login_at)`, `users(created_at)`, `reports(reported_at)`, `support_tickets(created_at)`; ต้องเพิ่ม migration เมื่อข้อมูลมีมาก (ต้องให้เจ้าของบริการเห็นชอบ)
+- ~~ไม่มี index รองรับ `orders(status, created_at)`, `login_logs(login_at)`, `users(created_at)`, `reports(reported_at)`, `support_tickets(created_at)`~~ — เพิ่มแล้ว 2026-10-24
 - gateway ส่งต่อทุกเส้นทางใต้ `/api/orders/*` รวม `/internal/*` (ถูกกันด้วย token ภายใน แต่ควรให้ gateway ปฏิเสธ `/internal/`)
 - Audit log ยังถูกส่งจากเบราว์เซอร์หลังดาวน์โหลด CSV และใช้ IP จาก `x-forwarded-for`
 

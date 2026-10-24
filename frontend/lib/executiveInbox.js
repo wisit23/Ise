@@ -76,7 +76,8 @@ export const INBOX_PERIODS = [
 /** The longest custom range, in days. */
 export const MAX_INBOX_DAYS = 366;
 
-const PRIORITY_NAMES = { ...PRIORITY_LABEL, CRITICAL: "วิกฤต" };
+// Case priorities in Thai. CRITICAL is only ever on an escalated dispute.
+export const PRIORITY_NAMES = { ...PRIORITY_LABEL, CRITICAL: "วิกฤต" };
 
 /** Calendar days `from` to `to` inclusive. */
 function spanDays(from, to) {
@@ -140,7 +141,6 @@ export function buildInboxPath(source, range, filters, page, limit) {
   if (source === "report") {
     // Complaints default to the open queue; this page lists every status.
     query.set("status", filters.status || "ALL");
-    query.set("sortBy", "newest");
   } else {
     for (const name of INBOX_SOURCES[source].filters) {
       if (filters[name]) {
@@ -206,7 +206,7 @@ function ticketItem(ticket) {
   };
 }
 
-const DISPUTE_TYPE_NAMES = Object.fromEntries(DISPUTE_TYPES);
+export const DISPUTE_TYPE_NAMES = Object.fromEntries(DISPUTE_TYPES);
 
 function disputeItem(dispute) {
   return {

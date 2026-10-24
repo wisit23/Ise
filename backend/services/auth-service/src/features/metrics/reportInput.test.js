@@ -5,19 +5,19 @@ const { getReports } = require("./metricsController");
 
 test("invalid report query types fail before a database query", async () => {
   for (const query of [
-    { targetId: ["a", "b"] },
-    { targetId: {} },
-    { targetId: " " },
+    { status: ["OPEN", "ALL"] },
+    { status: "NOT_A_STATUS" },
     { limit: ["1"] },
     { limit: "1e2" },
     { limit: "1.5" },
     { limit: "0" },
-    { search: ["shop", "other"] },
-    { search: "x".repeat(101) },
     { page: ["1"] },
     { page: "0" },
     { page: "1.5" },
     { page: "9007199254740992" },
+    // A window that is empty or backwards would only ever show zeros.
+    { from: "2026-10-10", to: "2026-10-10" },
+    { from: "2026-10-11", to: "2026-10-10" },
   ]) {
     let error;
     await getReports(

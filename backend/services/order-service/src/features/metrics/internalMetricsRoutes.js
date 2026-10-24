@@ -1,7 +1,7 @@
 const { Router } = require("express");
 const {
   requireInternalToken,
-  resolveMetricRange,
+  resolveExecutiveRange,
   metricMeta,
 } = require("@reloop/shared");
 const productSalesMetrics = require("./productSalesMetrics");
@@ -12,7 +12,7 @@ const router = Router();
 // orders the dashboard's GMV is summed from. Service-to-service only.
 router.get("/product-sales", requireInternalToken, async (req, res, next) => {
   try {
-    const { from, to, timezone } = resolveMetricRange(req.query);
+    const { from, to, timezone } = resolveExecutiveRange(req.query);
     const data = await productSalesMetrics.getProductSales({ from, to });
 
     res.json({ data, meta: metricMeta({ from, to, timezone }) });

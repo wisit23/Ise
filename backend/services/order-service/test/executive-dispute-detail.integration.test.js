@@ -85,7 +85,11 @@ test("executive dispute detail against a real database", async (t) => {
       json: [
         { userId: ids.buyer, displayName: "มาลี" },
         { userId: ids.seller, displayName: "ร้านมือสองดี" },
-        { userId: ids.admin, displayName: "แอดมินเอ" },
+        {
+          userId: ids.admin,
+          displayName: "แอดมินเอ",
+          staffRoles: ["ADMIN"],
+        },
       ],
     };
   });
@@ -154,12 +158,12 @@ test("executive dispute detail against a real database", async (t) => {
       product: { id: ids.product, title: "กระเป๋าหนังวินเทจ" },
       buyer: { id: ids.buyer, name: "มาลี" },
       seller: { id: ids.seller, name: "ร้านมือสองดี" },
-      assignee: { id: ids.admin, name: "แอดมินเอ" },
+      assignee: { id: ids.admin, name: "แอดมินเอ", roles: ["ADMIN"] },
       assignedRole: "ADMIN",
       assignedAt: "2001-05-10T06:00:00.000Z",
       decision: "APPROVE_REFUND",
       decisionReason: "รูปที่ส่งยืนยันว่าสินค้าไม่ตรง",
-      decider: { id: ids.admin, name: "แอดมินเอ" },
+      decider: { id: ids.admin, name: "แอดมินเอ", roles: ["ADMIN"] },
       decidedAt: "2001-05-11T03:00:00.000Z",
       decisionDueAt: "2001-05-12T05:00:00.000Z",
     });

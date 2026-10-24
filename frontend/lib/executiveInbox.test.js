@@ -98,10 +98,10 @@ describe("buildInboxPath", () => {
       to: "2026-10-17",
       timezone: "Asia/Bangkok",
       status: "ALL",
-      sortBy: "newest",
       page: "1",
       limit: "20",
     });
+    expect(query(path).sortBy).toBeUndefined();
     expect(
       query(
         buildInboxPath(

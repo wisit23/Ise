@@ -2,40 +2,17 @@ const prisma = require("../../models/prismaClient");
 const { DEFAULT_REPORT_LIMIT, ANOMALY_THRESHOLD } = require("./reportConfig");
 const { findReportPage } = require("./reportSearch");
 
+// The queue a complaint sits in until Trust & Safety closes it.
 const OPEN_STATUSES = ["OPEN", "REVIEWED"];
-const DEFAULT_ANOMALY_THRESHOLD = ANOMALY_THRESHOLD;
-
-const CATEGORY_KEYWORDS = {
-  FRAUD: [
-    "ฉ้อโกง",
-    "หลอก",
-    "โกง",
-    "สลิปปลอม",
-    "ไม่ส่งของ",
-    "ไม่ส่งสินค้า",
-    "ไม่จัดส่ง",
-    "ไม่ส่ง",
-    "มัดจำ",
-  ],
-  COUNTERFEIT: ["ลิขสิทธิ์", "กฎหมาย", "ปลอม", "ละเมิด"],
-  MISMATCH: ["ไม่ตรงปก", "ชำรุด", "เสียหาย", "ผิดขนาด"],
-};
-
-function categorizeReason(reason = "") {
-  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some((kw) => reason.includes(kw))) {
-      return cat;
-    }
-  }
-  return "OTHER";
-}
+// How many of the most-reported targets are checked for the repeat-complaint
+// warning (a target is listed in topReported once it has more than one).
+const MOST_REPORTED_LIMIT = 10;
 
 function toItem(report, targetMap = new Map(), actionMap = {}) {
   const targetInfo = targetMap.get(report.targetId) || {};
   return {
     id: report.id,
     reason: report.reason,
-    category: categorizeReason(report.reason),
     status: report.status,
     actionTaken: ["ACTIONED", "DISMISSED"].includes(report.status)
       ? report.actionTaken
@@ -151,31 +128,27 @@ async function enrichTargets(allTargetIds = []) {
 }
 
 /**
- * `getReportOverview` serves the Executive complaints & risk monitoring tab.
- * Supports:
- * - Status filtering (OPEN, REVIEWED, ACTIONED, DISMISSED)
- * - Reason category filtering (FRAUD, COUNTERFEIT, MISMATCH)
- * - Target filtering (targetId)
- * - Sorting by `most_reported` (puts high-complaint targets at the top) or `newest`/`oldest`
- * - Target enrichment with shop/user name and total report frequency
- * - Anomaly detection flag when a target breaches the risk threshold (>= 3 complaints)
+ * Complaints for the Executive complaints page (CEO-DEC-014), newest first:
+ * - `status` narrows the list (default: the open queue; "ALL" for every one)
+ * - `range` limits it to complaints reported in [from, to)
+ * - each row names its target (user or shop) and how often it was reported
+ * - `anomalySummary` flags targets with at least ANOMALY_THRESHOLD open
+ *   complaints (the repeat-complaint warning)
  */
 async function getReportOverview({
   range = null,
   status,
   limit = DEFAULT_REPORT_LIMIT,
-  sortBy = "newest",
-  reasonCategory,
-  targetId,
-  search,
   page = 1,
 } = {}) {
   const [{ reports, total }, statusGroups, targetGroups] = await Promise.all([
-    findReportPage(
-      prisma,
-      { range, status, targetId, search, page, limit, sortBy, reasonCategory },
-      { openStatuses: OPEN_STATUSES, categoryKeywords: CATEGORY_KEYWORDS },
-    ),
+    findReportPage(prisma, {
+      range,
+      status,
+      page,
+      limit,
+      openStatuses: OPEN_STATUSES,
+    }),
     prisma.report.groupBy({
       by: ["status"],
       ...(range
@@ -188,7 +161,7 @@ async function getReportOverview({
       where: { targetId: { not: null }, status: { in: OPEN_STATUSES } },
       _count: { _all: true },
       orderBy: { _count: { targetId: "desc" } },
-      take: 10,
+      take: MOST_REPORTED_LIMIT,
     }),
   ]);
 
@@ -221,7 +194,7 @@ async function getReportOverview({
     }));
 
   const highRiskTargets = topReported.filter(
-    (t) => t.count >= DEFAULT_ANOMALY_THRESHOLD,
+    (t) => t.count >= ANOMALY_THRESHOLD,
   );
 
   return {
@@ -235,17 +208,10 @@ async function getReportOverview({
     topReported,
     anomalySummary: {
       detected: highRiskTargets.length > 0,
-      threshold: DEFAULT_ANOMALY_THRESHOLD,
+      threshold: ANOMALY_THRESHOLD,
       highRiskTargets,
     },
   };
 }
 
-module.exports = {
-  getReportOverview,
-  enrichTargets,
-  OPEN_STATUSES,
-  CATEGORY_KEYWORDS,
-  categorizeReason,
-  DEFAULT_ANOMALY_THRESHOLD,
-};
+module.exports = { getReportOverview, OPEN_STATUSES };

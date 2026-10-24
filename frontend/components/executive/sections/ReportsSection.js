@@ -4,6 +4,9 @@ import { toCsv, downloadCsv } from "../../../lib/csv";
 import RadioSelect from "../../ui/RadioSelect";
 import {
   baht,
+  buddhistYear,
+  formatCount,
+  roundMoney,
   currentYearMonth,
   dayLabel,
   fetchFirstSaleYear,
@@ -14,7 +17,7 @@ import {
   feePercent,
   reportYears,
   yearWindow,
-  logExecutiveAction,
+  recordReportExport,
 } from "../../../lib/executive";
 
 const UNAVAILABLE = "ไม่พร้อมใช้งาน";
@@ -57,6 +60,9 @@ export default function ReportsSection({ token }) {
   const [series, setSeries] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // The export is recorded in the audit log before the file is handed over.
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
   // Undefined until the order service has said when the first sale was.
   const [firstSaleYear, setFirstSaleYear] = useState(undefined);
   const years = useMemo(() => reportYears(firstSaleYear), [firstSaleYear]);
@@ -77,8 +83,8 @@ export default function ReportsSection({ token }) {
   const seriesGranularity = granularity === "year" ? "month" : "day";
   const periodLabel =
     granularity === "year"
-      ? `ปี ${year + 543}`
-      : `${MONTH_NAMES[monthIndex]} ${year + 543}`;
+      ? `ปี ${buddhistYear(year)}`
+      : `${MONTH_NAMES[monthIndex]} ${buddhistYear(year)}`;
 
   useEffect(() => {
     const win =
@@ -110,10 +116,12 @@ export default function ReportsSection({ token }) {
     return {
       gmv: hasOrderUnavailable
         ? null
-        : rows.reduce((sum, r) => sum + (r.gmv || 0), 0),
+        : roundMoney(rows.reduce((sum, r) => sum + (r.gmv || 0), 0)),
       platformRevenue: hasOrderUnavailable
         ? null
-        : rows.reduce((sum, r) => sum + (r.platformRevenue || 0), 0),
+        : roundMoney(
+            rows.reduce((sum, r) => sum + (r.platformRevenue || 0), 0),
+          ),
       completedOrders: hasOrderUnavailable
         ? null
         : rows.reduce((sum, r) => sum + (r.completedOrders || 0), 0),
@@ -129,8 +137,8 @@ export default function ReportsSection({ token }) {
 
   const bothUnavailable = series && !series.order && !series.auth;
 
-  function handleDownload() {
-    if (rows.length === 0) return;
+  async function handleDownload() {
+    if (rows.length === 0 || exporting) return;
 
     const columns = [
       { key: "label", label: "ช่วงเวลา" },
@@ -167,23 +175,25 @@ export default function ReportsSection({ token }) {
       granularity === "year"
         ? `${year}`
         : `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
-    downloadCsv(`reloop-executive-report-${slug}.csv`, csv);
 
-    logExecutiveAction(
-      {
-        action: "REPORT_EXPORT_CSV",
-        category: "DATA_EXPORT",
-        targetType: "report",
-        targetId: slug,
-        description: `ส่งออกรายงานยอดขายและรายได้ (${
-          granularity === "year"
-            ? `ปี ${year + 543}`
-            : `เดือน ${MONTH_NAMES[monthIndex]} ${year + 543}`
-        })`,
-        metadata: { granularity, year, monthIndex, rowCount: rows.length },
-      },
-      token,
-    );
+    // No record, no file: an export the audit log cannot vouch for is not
+    // handed over (CEO-DEC-016).
+    setExporting(true);
+    setExportError("");
+    try {
+      await recordReportExport(
+        { granularity, year, monthIndex, rowCount: rows.length, slug },
+        token,
+      );
+    } catch {
+      setExportError(
+        "บันทึกประวัติการส่งออกไม่สำเร็จ จึงยังไม่ดาวน์โหลดไฟล์ กรุณาลองใหม่",
+      );
+      return;
+    } finally {
+      setExporting(false);
+    }
+    downloadCsv(`reloop-executive-report-${slug}.csv`, csv);
   }
 
   return (
@@ -244,7 +254,7 @@ export default function ReportsSection({ token }) {
             onChange={setYear}
             options={years.map((y) => ({
               value: y,
-              label: String(y + 543),
+              label: String(buddhistYear(y)),
             }))}
             size="sm"
             variant="panel"
@@ -253,14 +263,19 @@ export default function ReportsSection({ token }) {
 
         <button
           onClick={handleDownload}
-          disabled={loading || rows.length === 0}
+          disabled={loading || exporting || rows.length === 0}
           className="ml-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          ⬇ ดาวน์โหลด CSV
+          {exporting ? "กำลังเตรียมไฟล์..." : "⬇ ดาวน์โหลด CSV"}
         </button>
       </div>
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {exportError && (
+        <p role="alert" className="mb-4 text-sm text-red-600">
+          {exportError}
+        </p>
+      )}
 
       {loading ? (
         <p className="text-slate-500">กำลังโหลด...</p>
@@ -324,12 +339,12 @@ export default function ReportsSection({ token }) {
                     <td className="px-5 py-3 text-center text-slate-900">
                       {r.orderUnavailable
                         ? UNAVAILABLE
-                        : r.completedOrders.toLocaleString("th-TH")}
+                        : formatCount(r.completedOrders)}
                     </td>
                     <td className="px-5 py-3 text-center text-slate-900">
                       {r.authUnavailable
                         ? UNAVAILABLE
-                        : r.activeUsers.toLocaleString("th-TH")}
+                        : formatCount(r.activeUsers)}
                     </td>
                   </tr>
                 ))}
@@ -354,12 +369,12 @@ export default function ReportsSection({ token }) {
                     <td className="px-5 py-3.5 text-center font-bold text-slate-900">
                       {totals.orderUnavailable
                         ? UNAVAILABLE
-                        : totals.completedOrders.toLocaleString("th-TH")}
+                        : formatCount(totals.completedOrders)}
                     </td>
                     <td className="px-5 py-3.5 text-center font-bold text-slate-900">
                       {totals.authUnavailable
                         ? UNAVAILABLE
-                        : totals.activeUsers.toLocaleString("th-TH")}
+                        : formatCount(totals.activeUsers)}
                     </td>
                   </tr>
                 </tfoot>

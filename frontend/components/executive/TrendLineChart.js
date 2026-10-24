@@ -2,10 +2,7 @@
 
 import { useId, useState } from "react";
 import { CHART_COLORS } from "../charts/palette";
-
-function baht(v) {
-  return `฿${v.toLocaleString("th-TH")}`;
-}
+import { baht, formatCount, roundMoney } from "../../lib/executive";
 
 /** The line through the points: straight segments, so a rise or a fall shows
  * as a sharp angle and a run of equal values is exactly flat. */
@@ -22,9 +19,8 @@ export function getLinePath(points) {
  * outgrows the room beside the lines.
  */
 export function formatAxisTick(value) {
-  if (Math.abs(value) < 1_000_000) return value.toLocaleString("th-TH");
-  const millions = Math.round((value / 1_000_000) * 100) / 100;
-  return `${millions.toLocaleString("th-TH")} ล้าน`;
+  if (Math.abs(value) < 1_000_000) return formatCount(value);
+  return `${formatCount(roundMoney(value / 1_000_000))} ล้าน`;
 }
 
 // How much room to leave above the biggest value, so its point never sits on

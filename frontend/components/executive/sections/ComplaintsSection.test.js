@@ -423,37 +423,37 @@ describe("ComplaintsSection", () => {
     expect(within(dialog).getByText("กระเป๋าหนัง")).toBeVisible();
   });
 
-  it("opens a ticket's details with who handled it and why", async () => {
+  it("opens a ticket's details: who opened it, the product, who handled it, as what, and why", async () => {
     serve({
       "/api/support/executive/tickets/t1": async () => ({
         data: {
           id: "t1",
           ticketNumber: "TK-0001",
           subject: TICKET.subject,
-          description: "โอนเงินแล้ว",
           requester: { id: "u-buyer", name: "สมหญิง" },
-          category: { code: "PAYMENT", name: "การชำระเงิน" },
-          priority: { code: "HIGH", name: "HIGH" },
-          status: { code: "RESOLVED", name: "RESOLVED", isTerminal: false },
-          orderId: null,
           createdAt: TICKET.createdAt,
+          orderId: "order-1",
+          product: { id: "p1", title: "กระเป๋าหนังวินเทจ" },
+          status: { code: "RESOLVED", name: "RESOLVED" },
           assignee: {
-            id: "u-agent",
-            name: "เจ้าหน้าที่บี",
+            id: "u-agent-a",
+            name: "เจ้าหน้าที่เอ",
+            roles: ["CUSTOMER_SERVICE"],
             assignedAt: "2026-10-16T06:10:00.000Z",
             current: true,
           },
-          actions: [
-            {
-              at: "2026-10-16T07:00:00.000Z",
-              by: { id: "u-agent", name: "เจ้าหน้าที่บี" },
-              from: "IN_PROGRESS",
-              to: "RESOLVED",
-              reason: "คืนเงินแล้ว",
+          handling: {
+            by: {
+              id: "u-agent-b",
+              name: "เจ้าหน้าที่บี",
+              roles: ["TRUST_AND_SAFETY"],
             },
-          ],
+            at: "2026-10-16T07:00:00.000Z",
+            outcome: "RESOLVED",
+            reason: "คืนเงินแล้ว",
+          },
         },
-        meta: { namesAvailable: true },
+        meta: { namesAvailable: true, productAvailable: true },
       }),
     });
     render(<ComplaintsSection token="t" />);
@@ -465,14 +465,47 @@ describe("ComplaintsSection", () => {
     const dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByText("สมหญิง")).toBeVisible();
     expect(within(dialog).getByText("รายละเอียด Ticket")).toBeVisible();
-    // No order: a dash, not an empty space.
-    expect(
-      within(dialog).getByText("คำสั่งซื้อที่เกี่ยวข้อง").nextSibling,
-    ).toHaveTextContent("-");
-    expect(
-      within(dialog).getByText("กำลังดำเนินการ → แก้ไขสำเร็จ"),
-    ).toBeVisible();
-    expect(within(dialog).getByText("เหตุผล: คืนเงินแล้ว")).toBeVisible();
+    expect(within(dialog).getByText("ผู้เปิด Ticket")).toBeVisible();
+    expect(within(dialog).getByText("กระเป๋าหนังวินเทจ")).toBeVisible();
+    expect(within(dialog).getByText("ผู้รับเคส")).toBeVisible();
+    // Name and, in brackets, the team they act for.
+    expect(within(dialog).getByText("(Trust and Safety)")).toBeVisible();
+    expect(within(dialog).getByText("(Customer Service)")).toBeVisible();
+    expect(within(dialog).getByText("ผู้ดำเนินการ")).toBeVisible();
+    // The status and the action taken both read "แก้ไขสำเร็จ".
+    expect(within(dialog).getAllByText("แก้ไขสำเร็จ")).toHaveLength(2);
+    expect(within(dialog).getByText("คืนเงินแล้ว")).toBeVisible();
+  });
+
+  it("says a ticket has not been handled yet", async () => {
+    serve({
+      "/api/support/executive/tickets/t1": async () => ({
+        data: {
+          id: "t1",
+          ticketNumber: "TK-0001",
+          subject: TICKET.subject,
+          requester: { id: "u-buyer", name: "สมหญิง" },
+          createdAt: TICKET.createdAt,
+          orderId: null,
+          product: null,
+          status: { code: "NEW", name: "NEW" },
+          assignee: null,
+          handling: null,
+        },
+        meta: { namesAvailable: true },
+      }),
+    });
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText(TICKET.subject);
+
+    const row = screen.getByText(TICKET.subject).closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("ยังไม่ได้ดำเนินการ")).toBeVisible();
+    expect(within(dialog).getByText("ยังไม่มีผู้รับเคส")).toBeVisible();
+    // Not about an order: no product line at all.
+    expect(within(dialog).queryByText("สินค้า")).toBeNull();
   });
 
   it("says when a case's details cannot be loaded and can try again", async () => {

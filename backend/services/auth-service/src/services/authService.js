@@ -11,6 +11,7 @@ const {
   badRequest,
   conflict,
   notFound,
+  STAFF_ROLES,
 } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
 const { assertActive, revokedSession, lockUser } = require("./sessionService");
@@ -309,6 +310,10 @@ const MAX_DISPLAY_NAME_IDS = 100;
  * buyer actually recognises. Note this is driven by "does this account have
  * a shop name", NOT by a role check: nothing here gates on BUYER vs SELLER.
  *
+ * `staffRoles` lists only staff roles (ADMIN, TRUST_AND_SAFETY,
+ * CUSTOMER_SERVICE) and is empty for customers, so a screen can say which team
+ * acted on a case without learning anything about a buyer or seller.
+ *
  * Unknown ids are simply absent from the result rather than throwing, so one
  * deleted account can't break a whole conversation's rendering.
  */
@@ -325,14 +330,23 @@ async function getDisplayNames(userIds) {
     select: {
       id: true,
       firstName: true,
+      role: true,
+      roles: { select: { role: true } },
       sellerProfile: { select: { shopName: true } },
     },
   });
 
-  return users.map((user) => ({
-    userId: user.id,
-    displayName: user.sellerProfile?.shopName || user.firstName,
-  }));
+  return users.map((user) => {
+    // Role rows win over the legacy column, as everywhere else in auth.
+    const held = user.roles.length
+      ? user.roles.map((row) => row.role)
+      : [user.role];
+    return {
+      userId: user.id,
+      displayName: user.sellerProfile?.shopName || user.firstName,
+      staffRoles: STAFF_ROLES.filter((role) => held.includes(role)),
+    };
+  });
 }
 
 /** Public store-front info for a seller — no email/phone, only what a buyer needs to see. */
@@ -409,7 +423,11 @@ async function createAutoMessage(sellerId, { messageText, isActive = true }) {
   });
 }
 
-async function updateAutoMessage(sellerId, messageId, { messageText, isActive }) {
+async function updateAutoMessage(
+  sellerId,
+  messageId,
+  { messageText, isActive },
+) {
   const existing = await prisma.autoMessage.findFirst({
     where: { id: messageId, userId: sellerId },
   });
