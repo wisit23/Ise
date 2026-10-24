@@ -447,3 +447,12 @@ test("search filters options, keeps All available and clears when reopened", () 
   );
   expect(screen.getByRole("radio", { name: "Streetwear" })).toBeInTheDocument();
 });
+
+test("renders divider separator above options with divider: true", () => {
+  const options = [
+    { value: "opt1", label: "Option 1" },
+    { value: "opt2", label: "Option 2", divider: true },
+  ];
+  render(<RadioSelect options={options} value="opt1" />);
+  expect(screen.getByRole("separator")).toBeInTheDocument();
+});

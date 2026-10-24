@@ -36,43 +36,84 @@ async function deliverAuctionNotification({
   payload,
   idempotencyKey,
 }) {
-  const conversation = await internalPost("/internal/conversations", {
-    contextType: "AUCTION",
-    contextId,
-    createdBy: MARKETING_SYSTEM_SENDER_ID,
-    participants: [
-      { userId: recipientId, role: recipientRole },
-      { userId: MARKETING_SYSTEM_SENDER_ID, role: "SYSTEM" },
-    ],
-  });
+  let message = null;
+  let chatError = null;
 
-  const message = await internalPost(`/internal/conversations/${conversation.id}/messages`, {
-    senderId: MARKETING_SYSTEM_SENDER_ID,
-    senderRole: "SYSTEM",
-    type: "SYSTEM",
-    body,
-    idempotencyKey,
-    payload: {
-      ...payload,
-      idempotencyKey,
-    },
-  });
+  try {
+    const conversation = await internalPost("/internal/conversations", {
+      contextType: "AUCTION",
+      contextId,
+      createdBy: MARKETING_SYSTEM_SENDER_ID,
+      participants: [
+        { userId: recipientId, role: recipientRole },
+        { userId: MARKETING_SYSTEM_SENDER_ID, role: "SYSTEM" },
+      ],
+    });
+
+    message = await internalPost(
+      `/internal/conversations/${conversation.id}/messages`,
+      {
+        senderId: MARKETING_SYSTEM_SENDER_ID,
+        senderRole: "SYSTEM",
+        type: "SYSTEM",
+        body,
+        idempotencyKey,
+        payload: {
+          ...payload,
+          idempotencyKey,
+        },
+      },
+    );
+  } catch (err) {
+    chatError = err;
+    console.error(
+      `[product-service] chat conversation/message delivery failed for ${contextId}:`,
+      err.message,
+    );
+  }
 
   // Keep the detailed, immutable system message in chat and mirror the same
-  // event to the notification bell. The notification service upserts by
-  // userId + entityId, so retries update the same bell item instead of
-  // creating duplicates.
-  await internalPost("/internal/notifications", {
-    userId: recipientId,
-    type: "AUCTION",
-    title: payload?.summary || "อัปเดตการประมูล",
-    message: body,
-    link: payload?.actionUrl || "/auctions",
-    entityId:
-      payload?.orderId || payload?.auctionId || payload?.roundId || contextId,
-    metadata: { ...payload, idempotencyKey },
-    idempotencyKey,
-  });
+  // event to the notification bell. For sellers, direct action links go to
+  // /seller/auctions so they can take immediate action (re-submit or relist),
+  // while retaining in-chat detail links.
+  const isSellerAuctionAction =
+    recipientRole === "SELLER" &&
+    (payload?.event === "auction.item_cancelled" ||
+      payload?.event === "auction.round_cancelled" ||
+      payload?.event === "auction.item_rejected" ||
+      payload?.event === "auction.action_required");
+
+  const bellLink = isSellerAuctionAction
+    ? "/seller/auctions"
+    : payload?.actionUrl || "/auctions";
+
+  try {
+    await internalPost("/internal/notifications", {
+      userId: recipientId,
+      type: "AUCTION",
+      title: payload?.summary || "อัปเดตการประมูล",
+      message: body,
+      link: bellLink,
+      entityId:
+        payload?.orderId || payload?.auctionId || payload?.roundId || contextId,
+      metadata: { ...payload, link: bellLink, idempotencyKey },
+      idempotencyKey,
+    });
+  } catch (notifErr) {
+    console.error(
+      `[product-service] notification center delivery failed for ${recipientId}:`,
+      notifErr.message,
+    );
+    if (chatError) {
+      throw new Error(
+        `Both chat and notification delivery failed: ${chatError.message} / ${notifErr.message}`,
+      );
+    }
+  }
+
+  if (chatError && !message) {
+    throw chatError;
+  }
 
   return message;
 }
@@ -121,6 +162,7 @@ async function notifyItemCancelled({
   reason,
   wasOpen = false,
   bidderIds = [],
+  sellerId: explicitSellerId,
 }) {
   if (!item) {
     return { deliveredCount: 0, failedCount: 0, warnings: [] };
@@ -128,7 +170,7 @@ async function notifyItemCancelled({
 
   const tasks = [];
   const itemId = item.id;
-  const sellerId = item.sellerId;
+  const sellerId = explicitSellerId || item.sellerId;
   const productTitle = item.product?.title || "สินค้า";
   const roundTitle = round?.title || item.round?.title || "รอบประมูล";
   const roundId = round?.id || item.roundId || item.round?.id || null;
@@ -204,8 +246,9 @@ async function notifyItemCancelled({
 }
 
 /** Sends the required rejection reason to the product owner. */
-async function notifyItemRejected({ item, round, reason }) {
-  if (!item?.sellerId) {
+async function notifyItemRejected({ item, round, reason, sellerId: explicitSellerId }) {
+  const resolvedSellerId = explicitSellerId || item?.sellerId;
+  if (!resolvedSellerId) {
     return { deliveredCount: 0, failedCount: 0, warnings: [] };
   }
 
@@ -218,8 +261,8 @@ async function notifyItemRejected({ item, round, reason }) {
     [
       () =>
         deliverAuctionNotification({
-          contextId: `${item.roundId || round?.id || item.id}:${item.sellerId}`,
-          recipientId: item.sellerId,
+          contextId: `${item.roundId || round?.id || item.id}:${resolvedSellerId}`,
+          recipientId: resolvedSellerId,
           recipientRole: "SELLER",
           idempotencyKey: `auction.item_rejected:${item.id}:${item.sellerId}`,
           body: `รายการประมูลสินค้า "${productTitle}" ในรอบประมูล "${roundTitle}" ถูกปฏิเสธเนื่องจาก: ${cleanReason}`,

@@ -470,6 +470,8 @@ model Review {
   productId String?  @map("product_id")
   rating    Int
   comment   String   @default("")
+  removedAt DateTime? @map("removed_at")
+  removalReason String? @map("removal_reason")
   createdAt DateTime @default(now()) @map("created_at")
 
   mediaEntries ReviewMedia[]

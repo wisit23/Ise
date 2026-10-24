@@ -113,8 +113,15 @@ export default function ReportCasePanel({
   }
 
   const decisionOptions = [
-    report.targetId && /\[รายงานรีวิว\s*#[^\]]+\]/.test(report.reason || "") && {
-      value: "REMOVE_REVIEW", label: "ลบรีวิวที่ถูกรายงาน",
+    report.targetId &&
+      /\[รายงานรีวิว\s*#?[^\]]+\]/.test(report.reason || "") &&
+      !report.reviewDetail?.review?.removed && {
+        value: "REMOVE_REVIEW",
+        label: "ลบรีวิวที่ถูกรายงาน",
+      },
+    report.productId && !report.reviewDetail && {
+      value: "REMOVE_PRODUCT",
+      label: "ระงับสินค้า",
     },
     report.targetId && {
       value: "SUSPEND_USER",
@@ -209,6 +216,16 @@ export default function ReportCasePanel({
       </div>
 
       <ReportProductDetails key={report.id} productId={report.productId} detail={report.productDetail} onRetry={onRetryDetail} />
+      {report.reviewDetail && (
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h4 className="font-bold text-slate-900">รีวิวที่ถูกรายงาน</h4>
+          {report.reviewDetail.available ? (
+            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+              {report.reviewDetail.review.removed ? "รีวิวนี้ถูกลบแล้ว" : report.reviewDetail.review.comment || "ไม่มีข้อความรีวิว"}
+            </p>
+          ) : <Alert className="mt-2">โหลดรีวิวไม่สำเร็จ: {report.reviewDetail.error}</Alert>}
+        </div>
+      )}
 
       {settled ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">

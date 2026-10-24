@@ -8,6 +8,7 @@ import Footer from "../../../components/Footer";
 import Modal from "../../../components/ui/Modal";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
+import useSellerLiveRefresh from "../../../lib/useSellerLiveRefresh";
 
 const STATUS_LABEL = {
   pending_approval: "รออนุมัติจาก Marketing",
@@ -209,36 +210,47 @@ export default function SellerAuctionsPage() {
   const [relistError, setRelistError] = useState("");
   const [viewBidsAuction, setViewBidsAuction] = useState(null);
 
-  const load = useCallback((currentUser) => {
+  const load = useCallback((currentUser, { silent = false } = {}) => {
     if (!currentUser) return;
-    setLoading(true);
-    apiFetch("/api/products/auctions?limit=100")
+    if (!silent) setLoading(true);
+    const auctionsRequest = apiFetch("/api/products/auctions?limit=100")
       .then((data) =>
         setMyAuctions(data.items.filter((a) => a.sellerId === currentUser.id)),
       )
       .catch((err) =>
-        setError(
+        !silent && setError(
           err.message ||
             "เกิดข้อผิดพลาดในการโหลดรายการประมูล กรุณาลองใหม่อีกครั้ง",
         ),
       )
-      .finally(() => setLoading(false));
+      .finally(() => { if (!silent) setLoading(false); });
 
-    setLoadingRound(true);
-    apiFetch("/api/products/auctions/rounds/current")
+    if (!silent) setLoadingRound(true);
+    const roundsRequest = apiFetch("/api/products/auctions/rounds/current")
       .then((data) => setRoundInfo(data))
       .catch((err) => console.error("โหลดข้อมูลรอบประมูลไม่สำเร็จ:", err))
-      .finally(() => setLoadingRound(false));
+      .finally(() => { if (!silent) setLoadingRound(false); });
 
     const token = getAccessToken();
+    let productsRequest;
+    let kycRequest;
     if (token) {
-      apiFetch("/api/products/mine?status=auction_action_required", { token })
+      productsRequest = apiFetch("/api/products/mine?status=auction_action_required", { token })
         .then((data) => setActionRequiredProducts(data?.items || []))
         .catch((err) =>
           console.error("โหลดสินค้าที่รอการดำเนินการไม่สำเร็จ:", err),
         );
+      kycRequest = apiFetch("/api/auth/kyc/mine", { token })
+        .then((data) => setKycStatus(data.kycStatus))
+        .catch(() => { if (!silent) setKycStatus("NONE"); });
     }
+    return Promise.allSettled([auctionsRequest, roundsRequest, productsRequest, kycRequest]);
   }, []);
+
+  useSellerLiveRefresh(() => load(user, { silent: true }), {
+    enabled: user?.role === "SELLER",
+    events: ["notification:new"],
+  });
 
   useEffect(() => {
     const token = getAccessToken();
@@ -252,9 +264,6 @@ export default function SellerAuctionsPage() {
       setLoading(false);
       return;
     }
-    apiFetch("/api/auth/kyc/mine", { token })
-      .then((data) => setKycStatus(data.kycStatus))
-      .catch(() => setKycStatus("NONE"));
     load(storedUser);
   }, [router, load]);
 

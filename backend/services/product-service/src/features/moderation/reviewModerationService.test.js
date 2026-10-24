@@ -6,7 +6,7 @@ const prisma = {
   $executeRaw: async () => {},
   review: {
     findUnique: async () => calls.review,
-    delete: async () => { calls.deleted = true; },
+    update: async ({ data }) => { calls.deleted = true; calls.update = data; },
   },
   marketingAuditLog: {
     findUnique: async () => calls.existing,
@@ -18,7 +18,7 @@ require.cache[prismaPath] = { id: prismaPath, filename: prismaPath, loaded: true
 const { removeReview } = require("./reviewModerationService");
 const command = { reason: "confirmed spam", targetId: "buyer-1", productId: "product-1", actorId: "staff-1", idempotencyKey: "review-command-1" };
 
-test("review removal validates the target, keeps evidence and replays without a second delete", async () => {
+test("review removal validates the target, soft-deletes, keeps evidence and replays without a second write", async () => {
   calls.review = { id: "review-1", buyerId: "buyer-1", productId: "product-1", comment: "spam", rating: 1, mediaEntries: [{ url: "/evidence.jpg" }] };
   await assert.rejects(removeReview("review-1", { ...command, targetId: "other-buyer" }), (err) => err.status === 409);
   assert.equal(calls.deleted, undefined);
@@ -27,6 +27,8 @@ test("review removal validates the target, keeps evidence and replays without a 
   const result = await removeReview("review-1", command);
   assert.deepEqual(result, { id: "review-1", removed: true });
   assert.equal(calls.deleted, true);
+  assert.ok(calls.update.removedAt instanceof Date);
+  assert.equal(calls.update.removalReason, "confirmed spam");
   assert.equal(calls.audit.previousState.comment, "spam");
   assert.equal(calls.audit.previousState.mediaEntries[0].url, "/evidence.jpg");
   calls.existing = calls.audit;

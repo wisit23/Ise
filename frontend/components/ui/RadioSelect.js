@@ -67,18 +67,20 @@ export default function RadioSelect({
   const generatedName = useId();
   const groupName = name || generatedName;
 
-  // Normalize options to [{ value, label, icon }]
+  // Normalize options to [{ value, label, icon, divider }]
   const normalizedOptions = options.map((opt) => {
     if (typeof opt === "object" && opt !== null) {
       return {
         value: opt.value,
         label: opt.label ?? String(opt.value),
         icon: opt.icon,
+        divider: Boolean(opt.divider),
       };
     }
     return {
       value: opt,
       label: String(opt),
+      divider: false,
     };
   });
 
@@ -465,9 +467,16 @@ export default function RadioSelect({
             const optionId = `${groupName}-${String(opt.value)}`;
 
             return (
-              <label
-                key={String(opt.value)}
-                htmlFor={optionId}
+              <React.Fragment key={String(opt.value)}>
+                {opt.divider && (
+                  <div
+                    role="separator"
+                    aria-orientation="horizontal"
+                    className="my-1 border-t border-slate-200/60"
+                  />
+                )}
+                <label
+                  htmlFor={optionId}
                 onClick={() => handleSelect(opt.value)}
                 className={`group/opt flex shrink-0 items-center justify-between cursor-pointer transition-colors duration-200 select-none ${
                   sizeStyles.option
@@ -512,6 +521,7 @@ export default function RadioSelect({
                   <span className="w-1.5 h-1.5 rounded-full bg-transparent group-hover/opt:bg-slate-300 transition-colors shrink-0 ml-1.5" />
                 )}
               </label>
+              </React.Fragment>
             );
           })}
           {query && !filteredOptions.some((option) => option.value !== "") && (

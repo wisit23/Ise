@@ -3,6 +3,7 @@ const productModel = require("../models/productModel");
 
 const MIN_MEDIA_COUNT = 4;
 const MAX_MEDIA_COUNT = 8;
+const MAX_DATABASE_PRICE = 2147483647;
 
 function requireSellerRole(role) {
   if (!["SELLER", "ADMIN"].includes(role)) {
@@ -34,13 +35,25 @@ function requireVerifiedSeller(role, kycVerified, kycStatus) {
   }
 }
 
+function validatePrice(price) {
+  if (
+    typeof price !== "number" ||
+    !Number.isInteger(price) ||
+    price <= 0 ||
+    price > MAX_DATABASE_PRICE
+  ) {
+    throw badRequest(
+      "ราคาต้องเป็นตัวเลขจำนวนเต็มมากกว่า 0 และไม่เกิน 2,147,483,647 บาท",
+    );
+  }
+  return price;
+}
+
 function validateCreateRequest({ title, price, category }) {
-  if (!title || !price || !category) {
+  if (!title || price === undefined || price === null || !category) {
     throw badRequest("title, price, category are required");
   }
-  if (!Number.isInteger(price) || price <= 0) {
-    throw badRequest("price must be a positive whole number");
-  }
+  validatePrice(price);
 }
 
 /**
@@ -69,9 +82,12 @@ async function requireKnownCondition(value) {
 module.exports = {
   MIN_MEDIA_COUNT,
   MAX_MEDIA_COUNT,
+  MAX_DATABASE_PRICE,
   requireSellerRole,
   requireVerifiedSeller,
   validateCreateRequest,
+  validatePrice,
+  requireValidPrice: validatePrice,
   requireValidMediaCount,
   requireKnownCondition,
 };

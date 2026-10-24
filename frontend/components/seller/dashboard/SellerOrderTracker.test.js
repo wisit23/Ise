@@ -111,6 +111,17 @@ describe("SellerOrderTracker", () => {
     expect(screen.queryByRole("button", { name: /ได้รับสินค้า|ยืนยันการรับ/ })).toBeNull();
   });
 
+  it("hides cases and counts before the workflow reaches the seller", () => {
+    render(<SellerOrderTracker orders={[{
+      ...mockOrders[0], status: "disputed",
+      dispute: { id: "hidden", status: "OPEN", sellerVisible: false },
+    }]} />);
+    expect(screen.queryByRole("link", { name: "ดูข้อพิพาท" })).toBeNull();
+    expect(screen.getByText("อยู่ระหว่างตรวจสอบ")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "ข้อพิพาท" }));
+    expect(screen.queryByText(mockOrders[0].productTitle)).toBeNull();
+  });
+
   it("decreases disputeCount when disputes are decided/completed", () => {
     const ordersWithDisputes = [
       {
@@ -121,6 +132,7 @@ describe("SellerOrderTracker", () => {
         createdAt: "2026-10-15T15:00:00.000Z",
         dispute: {
           id: "disp-1",
+          sellerVisible: true,
           status: "OPEN",
           decision: null,
         },
@@ -147,7 +159,7 @@ describe("SellerOrderTracker", () => {
     expect(screen.getByText("พิจารณาแล้ว")).toBeInTheDocument();
   });
 
-  it("clearing the highlighted order also clears its seeded search, so the dispute filter shows disputes", () => {
+  it("the dispute filter never seeds the search from a highlighted order, so disputes stay visible", () => {
     const orders = [
       mockOrders[0],
       {
@@ -156,13 +168,14 @@ describe("SellerOrderTracker", () => {
         price: 900,
         status: "disputed",
         createdAt: "2026-10-15T15:00:00.000Z",
-        dispute: { id: "disp-9", status: "OPEN", decision: null },
+        dispute: { id: "disp-9", status: "OPEN", decision: null, sellerVisible: true },
       },
     ];
     const { rerender } = render(
       <SellerOrderTracker orders={orders} highlightOrderId="ORD-1111111111" statusFilter="disputed" />,
     );
-    expect(screen.queryByText("สินค้ามีข้อพิพาท")).toBeNull();
+    expect(screen.getByPlaceholderText(/ค้นหาชื่อสินค้า/)).toHaveValue("");
+    expect(screen.getByText("สินค้ามีข้อพิพาท")).toBeInTheDocument();
 
     rerender(<SellerOrderTracker orders={orders} highlightOrderId={null} statusFilter="disputed" />);
     expect(screen.getByText("สินค้ามีข้อพิพาท")).toBeInTheDocument();

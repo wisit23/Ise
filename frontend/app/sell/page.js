@@ -11,6 +11,7 @@ import Select from "../../components/ui/Select";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 import { fetchCategories, fetchConditions } from "../../lib/catalog";
+import useSellerLiveRefresh from "../../lib/useSellerLiveRefresh";
 
 const MIN_MEDIA_COUNT = 4;
 const MAX_MEDIA_COUNT = 8;
@@ -64,6 +65,19 @@ export default function SellPage() {
       })
       .catch((err) => console.error("โหลดรายการสภาพสินค้าไม่สำเร็จ:", err));
   }, []);
+
+  useSellerLiveRefresh(async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    const [kycResult, categoryResult, conditionResult] = await Promise.allSettled([
+      apiFetch("/api/auth/kyc/mine", { token }),
+      fetchCategories(),
+      fetchConditions(),
+    ]);
+    if (kycResult.status === "fulfilled") setKycStatus(kycResult.value.kycStatus);
+    if (categoryResult.status === "fulfilled") setCategories(categoryResult.value);
+    if (conditionResult.status === "fulfilled") setConditions(conditionResult.value);
+  }, { enabled: user?.role === "SELLER", events: ["notification:new"] });
 
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });
@@ -173,7 +187,7 @@ export default function SellPage() {
       <section className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
         <h1 className="mb-1 text-xl font-bold text-gray-900">ลงขายสินค้า</h1>
         <p className="mb-6 text-sm text-gray-500">
-          กรอกรายละเอียดให้ครบเพื่อให้ผู้ซื้อตัดสินใจได้ง่ายขึ้น
+          กรอกรายละเอียดให้ครบเพื่อให้ผู้ซื้อตัดสินใจได้ง่ายขึ้น ช่องที่มี <span className="text-red-500">*</span> จำเป็นต้องกรอก
         </p>
         <form
           onSubmit={handleSubmit}
@@ -196,7 +210,7 @@ export default function SellPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              ชื่อสินค้า
+              ชื่อสินค้า <span className="text-red-500" aria-hidden="true">*</span>
             </label>
             <input
               required
@@ -209,9 +223,10 @@ export default function SellPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              รายละเอียดสินค้า
+              รายละเอียดสินค้า <span className="text-red-500" aria-hidden="true">*</span>
             </label>
             <textarea
+              required
               placeholder="สภาพสินค้า ตำหนิ (ถ้ามี) และเหตุผลที่ขาย"
               value={form.description}
               onChange={update("description")}
@@ -223,7 +238,7 @@ export default function SellPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                ราคา (บาท)
+                ราคา (บาท) <span className="text-red-500" aria-hidden="true">*</span>
               </label>
               <input
                 required
@@ -250,7 +265,7 @@ export default function SellPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                หมวดหมู่
+                หมวดหมู่ <span className="text-red-500" aria-hidden="true">*</span>
               </label>
               <input
                 required

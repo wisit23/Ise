@@ -53,7 +53,6 @@ async function main() {
   }
   const result = { storeUrl: `/store/${listing.sellerId}`, cases };
   fs.mkdirSync("tmp", { recursive: true });
-  fs.mkdirSync("tmp", { recursive: true });
   fs.writeFileSync("tmp/review-report-seed.json", JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));
 }

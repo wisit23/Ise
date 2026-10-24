@@ -1,11 +1,12 @@
 const { AppError, badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 
-// Real carrier numbers (TH123456789TH, KER1234567890…) mix letters and
-// digits; this keeps out keyboard mash like "fhfueueduejdeudhe" or "----".
+// Real carrier numbers are 8–20 letters/digits with at least one digit:
+// TH123456789TH, KER1234567890, or all-digit J&T numbers. This keeps out
+// keyboard mash like "fhfueueduejdeudhe", "----" or "TH12".
 // Mirrored in frontend/lib/orders.js.
-const TRACKING_NUMBER_PATTERN = /^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{8,20}$/;
+const TRACKING_NUMBER_PATTERN = /^(?=.*[0-9])[A-Za-z0-9]{8,20}$/;
 const TRACKING_NUMBER_MESSAGE =
-  "เลขพัสดุต้องมีทั้งตัวอักษรและตัวเลข ยาว 8–20 ตัว และไม่มีเว้นวรรคหรือสัญลักษณ์";
+  "เลขพัสดุต้องยาว 8–20 ตัว มีตัวเลขอย่างน้อย 1 ตัว และใช้ได้เฉพาะตัวอักษรภาษาอังกฤษหรือตัวเลข";
 
 const ADDRESS_FIELDS = [
   "recipientName",

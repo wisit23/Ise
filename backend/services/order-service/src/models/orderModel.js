@@ -2,6 +2,7 @@ const { conflict } = require("@reloop/shared");
 const prisma = require("./prismaClient");
 const { money } = require("./money");
 const evidenceModel = require("../features/disputes/evidenceView");
+const { isSellerVisible } = require("../features/disputes/sellerVisibility");
 const { assertCanCancelOrder } = require("../services/orderTransitionService");
 const { isRefundingCancellation } = require("../services/orderLifecycle");
 const VALID_STATUSES = [
@@ -21,13 +22,16 @@ const INCLUDE = {
   basket: true,
   checkout: true,
   shipping: true,
-  dispute: { include: { evidence: { include: evidenceModel.INCLUDE } } },
+  dispute: { include: { evidence: { include: evidenceModel.INCLUDE }, caseLog: true } },
   payments: { include: { holds: true } },
 };
 function disputeView(row) {
   if (!row) return null;
+  const fields = { ...row };
+  delete fields.caseLog;
   return {
-    ...row,
+    ...fields,
+    sellerVisible: isSellerVisible(row),
     ...(row.evidence ? { evidence: row.evidence.map(evidenceModel.view) } : {}),
     openedBy: row.createdBy,
     claimedAt: row.assignedAt,

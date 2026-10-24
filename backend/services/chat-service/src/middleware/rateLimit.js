@@ -65,7 +65,8 @@ function rateLimit(name, { limit, windowSeconds }, { client: injected } = {}) {
     if (count > limit) {
       // Tells a well-behaved client exactly how long to wait instead of
       // making it guess and retry blindly.
-      res.setHeader("Retry-After", windowSeconds);
+      res.setHeader("Retry-After", Math.max(1,
+        Math.ceil((window + 1) * windowSeconds - Date.now() / 1000)));
       return next(
         new AppError(429, "ส่งข้อความถี่เกินไป กรุณารอสักครู่แล้วลองใหม่"),
       );

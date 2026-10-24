@@ -9,6 +9,7 @@ import VideoUploader from "../../../../components/VideoUploader";
 import Select from "../../../../components/ui/Select";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
+import useSellerLiveRefresh from "../../../../lib/useSellerLiveRefresh";
 
 export default function UploadVideoPage() {
   const router = useRouter();
@@ -32,28 +33,35 @@ export default function UploadVideoPage() {
     setUser(getStoredUser());
   }, [router]);
 
-  useEffect(() => {
-    if (user?.role !== "SELLER") {
-      setFetchingProducts(false);
-      return;
-    }
-    apiFetch("/api/products/mine?limit=50", { token: getAccessToken() })
+  function loadProducts({ silent = false } = {}) {
+    if (!silent) setFetchingProducts(true);
+    return apiFetch("/api/products/mine?limit=50", { token: getAccessToken() })
       .then((data) => {
         const eligibleProducts = (data.items || []).filter(
           (product) =>
             product.status !== "removed" && product.status !== "sold",
         );
         setProducts(eligibleProducts);
-        if (eligibleProducts.length > 0) {
-          setForm((prev) => ({
-            ...prev,
-            productId: eligibleProducts[0].id,
-          }));
-        }
+        setForm((prev) => eligibleProducts.some((product) => product.id === prev.productId)
+          ? prev
+          : { ...prev, productId: eligibleProducts[0]?.id || "" });
       })
-      .catch((err) => setError(err.message || "โหลดรายการสินค้าไม่สำเร็จ"))
-      .finally(() => setFetchingProducts(false));
+      .catch((err) => { if (!silent) setError(err.message || "โหลดรายการสินค้าไม่สำเร็จ"); })
+      .finally(() => { if (!silent) setFetchingProducts(false); });
+  }
+
+  useEffect(() => {
+    if (user?.role !== "SELLER") {
+      setFetchingProducts(false);
+      return;
+    }
+    loadProducts();
   }, [user]);
+
+  useSellerLiveRefresh(() => loadProducts({ silent: true }), {
+    enabled: user?.role === "SELLER",
+    events: ["notification:new"],
+  });
 
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });

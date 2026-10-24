@@ -26,6 +26,18 @@ const prisma = require("../models/prismaClient");
 const shippingService =
   require("../features/shipping/shippingService").createShippingService(prisma);
 
+function forSeller(order) {
+  if (!order?.dispute || order.dispute.sellerVisible) return order;
+  return {
+    ...order,
+    dispute: null,
+    holds: [],
+    holdReason: null,
+    heldBy: null,
+    payments: order.payments?.map(({ holds, ...payment }) => payment),
+  };
+}
+
 async function respondAfterProductSync(res, order, event) {
   try {
     await productSyncService.processEvent(event.id);
@@ -96,7 +108,7 @@ async function selling(req, res, next) {
       skip: pagination.skip,
       take: pagination.take,
     });
-    res.json(paginatedResponse(items, total, pagination));
+    res.json(paginatedResponse(items.map(forSeller), total, pagination));
   } catch (err) {
     next(err);
   }
@@ -109,7 +121,7 @@ async function getOne(req, res, next) {
     if (order.buyerId !== req.userId && order.sellerId !== req.userId) {
       throw forbidden("you are not part of this order");
     }
-    res.json(order);
+    res.json(order.sellerId === req.userId ? forSeller(order) : order);
   } catch (err) {
     next(err);
   }
@@ -158,6 +170,11 @@ async function updateStatus(req, res, next) {
       });
       // Best-effort — chatClient swallows its own errors internally so a
       // chat-service outage can never fail this status update.
+      if (order.productId) {
+        await productClient.setProductStatus(order.productId, "sold").catch((err) => {
+          console.warn("product status sync to sold on shipping failed:", err.message);
+        });
+      }
       await chatClient.notifyOrderStatusChanged(order, status);
       return res.json(shipped);
     }

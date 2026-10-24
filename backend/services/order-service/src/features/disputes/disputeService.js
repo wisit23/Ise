@@ -12,6 +12,7 @@ const {
 
 const orderModel = require("../../models/orderModel");
 const disputeModel = require("./disputeModel");
+const { isSellerVisible } = require("./sellerVisibility");
 const orderLifecycle = require("../../services/orderLifecycle");
 
 const DISPUTABLE_STATUSES = ["delivered", "completed"];
@@ -61,7 +62,8 @@ async function assertAccess({ dispute, userId, role, roles, allowWatcher = false
     throw forbidden("only the assigned agent can inspect this dispute");
   }
   const order = await orderModel.findById(dispute.orderId);
-  if (order.buyerId === userId || order.sellerId === userId) return dispute;
+  if (order.buyerId === userId) return dispute;
+  if (order.sellerId === userId && isSellerVisible(dispute)) return dispute;
   throw forbidden("you do not have access to this dispute");
 }
 
@@ -317,6 +319,24 @@ async function joinConversation({ disputeId, userId, role, roles, side }) {
     },
     side,
   );
+  if (side === "seller" && dispute.assignedTo === userId &&
+      !dispute.capabilities?.isWatching && !isSellerVisible(dispute)) {
+    await disputeModel.auditLog({
+      disputeId: dispute.id,
+      actorId: userId,
+      action: "SELLER_CONTACTED",
+      detail: "เจ้าหน้าที่เปิดการติดต่อผู้ขายสำหรับข้อพิพาท",
+    });
+    await chatClient.sendSystemNotification({
+      userId: order.sellerId,
+      type: "DISPUTE",
+      title: "เจ้าหน้าที่ติดต่อเกี่ยวกับข้อพิพาท",
+      message: `กรุณาตรวจสอบและส่งคำชี้แจงสำหรับคำสั่งซื้อ #${order.id}`,
+      link: `/support/cases/${order.id}`,
+      entityId: order.id,
+      metadata: { orderId: order.id, disputeId: dispute.id, role: "seller" },
+    });
+  }
   return {
     conversationId,
     side,
@@ -820,7 +840,7 @@ async function deliverVerdictNotice(dispute, order) {
           type: "DISPUTE",
           title: "ผลการตัดสินข้อพิพาท",
           message: `⚖️ สินค้าของคุณ '${title}' สำหรับคำสั่งซื้อ #${order.id} ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
-          link: "/orders",
+          link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
             orderId: order.id,
@@ -838,7 +858,7 @@ async function deliverVerdictNotice(dispute, order) {
           type: "DISPUTE",
           title: "ผลการตัดสินข้อพิพาท",
           message: `⚖️ คำสั่งซื้อ #${order.id} ('${title}') ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
-          link: "/orders",
+          link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
             orderId: order.id,
@@ -902,7 +922,7 @@ async function requestMoreEvidence({
           type: "DISPUTE",
           title: "เจ้าหน้าที่ขอหลักฐานเพิ่มเติมสำหรับข้อพิพาท",
           message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): เจ้าหน้าที่ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
-          link: "/orders",
+          link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
             orderId: order.id,
@@ -920,7 +940,7 @@ async function requestMoreEvidence({
           type: "DISPUTE",
           title: "อัปเดตข้อพิพาท: ขอหลักฐานเพิ่มเติม",
           message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): มีการขอข้อมูล/หลักฐานเพิ่มเติมสำหรับข้อพิพาท: ${reason.trim()}`,
-          link: "/orders",
+          link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
             orderId: order.id,

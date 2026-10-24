@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken } from "../../../lib/auth";
+import useSellerLiveRefresh from "../../../lib/useSellerLiveRefresh";
 import BankAccountInput, {
   parseBankAccount,
   formatBankAccount,
@@ -52,37 +53,44 @@ export default function SellerShopSettings() {
 
   const token = getAccessToken();
 
-  function loadProfile() {
-    setLoadingProfile(true);
-    apiFetch("/api/auth/shop/profile", { token })
+  function loadProfile({ silent = false } = {}) {
+    if (!silent) setLoadingProfile(true);
+    return apiFetch("/api/auth/shop/profile", { token: getAccessToken() })
       .then((data) => {
         setProfile(data);
-        // Pre-fill form with current values
-        setShopName(data.shopName || "");
-        setAddress(data.address || "");
-        const parsed = parseBankAccount(data.bankAccount || "");
-        setBank(parsed.bank);
-        setAccountNumber(parsed.accountNumber);
+        // Background updates must not overwrite a draft the seller is editing.
+        if (!silent) {
+          setShopName(data.shopName || "");
+          setAddress(data.address || "");
+          const parsed = parseBankAccount(data.bankAccount || "");
+          setBank(parsed.bank);
+          setAccountNumber(parsed.accountNumber);
+        }
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoadingProfile(false));
+      .catch((err) => { if (!silent) setError(err.message); })
+      .finally(() => { if (!silent) setLoadingProfile(false); });
   }
 
-  function loadHistory() {
-    setLoadingHistory(true);
-    apiFetch("/api/auth/shop/change-requests", { token })
+  function loadHistory({ silent = false } = {}) {
+    if (!silent) setLoadingHistory(true);
+    return apiFetch("/api/auth/shop/change-requests", { token: getAccessToken() })
       .then((data) => {
         setHistory(data.items);
         setHasPending(data.items.some((r) => r.status === "PENDING"));
       })
       .catch(() => {})
-      .finally(() => setLoadingHistory(false));
+      .finally(() => { if (!silent) setLoadingHistory(false); });
   }
 
   useEffect(() => {
     loadProfile();
     loadHistory();
   }, []);
+
+  useSellerLiveRefresh(() => Promise.allSettled([
+    loadProfile({ silent: true }),
+    loadHistory({ silent: true }),
+  ]), { events: ["notification:new"] });
 
   async function handleSubmit(e) {
     e.preventDefault();

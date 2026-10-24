@@ -43,6 +43,10 @@ export default function BuyerOrderDetailModal({
   onOrderChange,
 }) {
   const [order, setOrder] = useState(initialOrder);
+
+  useEffect(() => {
+    setOrder(initialOrder);
+  }, [initialOrder]);
   const [loadError, setLoadError] = useState("");
   const [listing, setListing] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -96,7 +100,7 @@ export default function BuyerOrderDetailModal({
     ? { ...product, media: product.media?.filter((item) => item.type === "image") }
     : null;
   const address = order.shippingAddress;
-  const canChange = ADDRESS_EDITABLE_STATUSES.includes(order.status);
+  const canChange = Boolean(order?.status && ADDRESS_EDITABLE_STATUSES.includes(order.status));
 
   async function startEditing() {
     setError("");

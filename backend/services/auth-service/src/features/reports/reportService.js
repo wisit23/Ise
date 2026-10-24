@@ -16,6 +16,10 @@ const authService = require("../../services/authService");
 const reportEvidenceStorage = require("./reportEvidenceStorage");
 const chatClient = require("../../services/chatClient");
 
+function reviewIdForReport(report) {
+  return report?.reason?.match(/\[รายงานรีวิว\s*#?([^\]]+)\]/)?.[1]?.trim() || null;
+}
+
 function toPublicUser(user) {
   return {
     id: user.id,
@@ -157,6 +161,10 @@ async function createReport({ reporterId, targetId, productId, category, reason,
     throw badRequest("invalid report category");
   }
 
+  const reasonReviewId = reviewIdForReport({ reason: trimmedReason });
+  if (reviewId && reasonReviewId && reviewId !== reasonReviewId) {
+    throw badRequest("รหัสรีวิวในข้อมูลรายงานไม่ตรงกัน");
+  }
   let extractedReviewId = reviewId || null;
   if (!extractedReviewId) {
     const match = trimmedReason.match(/\[รายงานรีวิว\s*#?([^\]]+)\]/);
@@ -168,6 +176,17 @@ async function createReport({ reporterId, targetId, productId, category, reason,
     trimmedReason.includes("[รายงานรีวิว") ||
     trimmedReason.includes("เนื้อหารีวิว")
   );
+  if (isReviewReport) {
+    if (!extractedReviewId) throw badRequest("กรุณาระบุรีวิวที่ต้องการรายงาน");
+    const review = await productModerationClient.getReview(extractedReviewId);
+    if (review.removedAt || review.removed) throw badRequest("รีวิวนี้ถูกนำออกแล้ว");
+    if (review.buyerId !== targetId || (review.productId || null) !== (productId || null)) {
+      throw badRequest("ข้อมูลรีวิว ผู้เขียน หรือสินค้าไม่ตรงกัน");
+    }
+  }
+  const storedReason = isReviewReport && !reasonReviewId
+    ? `[รายงานรีวิว #${extractedReviewId}] ${trimmedReason}`
+    : trimmedReason;
   // Review reports carry their topic in the reason; other reports need a category.
   if (!category && !isReviewReport) throw badRequest("category is required");
 
@@ -246,9 +265,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
         targetId: targetId || null,
         productId: productId || null,
         category: category || null,
-        reason: extractedReviewId && !trimmedReason.includes("[รายงานรีวิว")
-          ? `[รายงานรีวิว #${extractedReviewId}] ${trimmedReason}`
-          : trimmedReason,
+        reason: storedReason,
         ...(file ? { evidence: { create: { storageKey, fileType: file.mimetype, originalName: file.originalname || "evidence" } } } : {}),
       },
     });
@@ -421,11 +438,18 @@ async function getReportDetail(reportId) {
         .catch((error) => ({ available: false, error: error.message }))
     : Promise.resolve(null);
 
-  const [decision, target, productDetail, reporterSafety, targetSafety] =
+  const reviewId = reviewIdForReport(report);
+  const reviewPromise = reviewId
+    ? productModerationClient.getReview(reviewId)
+        .then((review) => ({ available: true, review }))
+        .catch((error) => ({ available: false, error: error.message }))
+    : Promise.resolve(null);
+  const [decision, target, productDetail, reviewDetail, reporterSafety, targetSafety] =
     await Promise.all([
       decisionPromise,
       targetPromise,
       productPromise,
+      reviewPromise,
       getUserSafetySummary(report.reporterId),
       report.targetId
         ? getUserSafetySummary(report.targetId)
@@ -448,6 +472,7 @@ async function getReportDetail(reportId) {
     reporter: { ...report.reporter, safetySummary: reporterSafety },
     target: target ? { ...target, safetySummary: targetSafety } : null,
     productDetail,
+    reviewDetail,
     decision: decision
       ? {
           action: report.actionTaken || decision.action.replace(/^REPORT_/, ""),
@@ -714,7 +739,7 @@ async function actionReport({
   }
 
   if (decision === "REMOVE_REVIEW") {
-    const reviewId = report.reason?.match(/\[รายงานรีวิว\s*#([^\]]+)\]/)?.[1]?.trim();
+    const reviewId = reviewIdForReport(report);
     if (!reviewId || !report.targetId) throw badRequest("report has no target review to remove");
     if (report.status === "ACTIONED" && report.actionTaken === decision) return report;
     if (report.status !== "REVIEWED") throw conflict("report must be reviewed before it can be actioned");
@@ -747,6 +772,7 @@ async function actionReport({
   }
 
   if (decision === "REMOVE_PRODUCT") {
+    if (reviewIdForReport(report)) throw badRequest("ไม่สามารถลบสินค้าจากรายงานรีวิว");
     if (!report.productId) {
       throw badRequest("report has no target product to remove");
     }

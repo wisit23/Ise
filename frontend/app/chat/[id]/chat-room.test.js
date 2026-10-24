@@ -143,6 +143,20 @@ describe("ChatRoomPage — live delivery vs. REST response race", () => {
     mockSocketState.connected = true;
   });
 
+  it("restores a failed message draft and clears the error on a successful retry", async () => {
+    sendMessage.mockRejectedValueOnce(Object.assign(new Error("ส่งไม่สำเร็จ"), { status: 400 }))
+      .mockResolvedValueOnce({ id: "saved", body: "ข้อความที่ต้องเก็บ", createdAt: new Date().toISOString(), senderId: "buyer-1", type: "TEXT" });
+    render(<ChatRoomPage />);
+    const input = await screen.findByLabelText("พิมพ์ข้อความ");
+    fireEvent.change(input, { target: { value: "ข้อความที่ต้องเก็บ" } });
+    fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
+    await screen.findByText("ส่งไม่สำเร็จ");
+    await waitFor(() => expect(input).toHaveValue("ข้อความที่ต้องเก็บ"));
+    fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
+    await waitFor(() => expect(input).toHaveValue(""));
+    expect(screen.queryByText("ส่งไม่สำเร็จ")).toBeNull();
+  });
+
   it("shows the other side's role for this room under their name", async () => {
     sendMessage.mockResolvedValue({});
     render(<ChatRoomPage />);

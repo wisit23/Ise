@@ -12,6 +12,17 @@ const ADDRESS = {
   postalCode: "10110",
 };
 
+for (const trackingNumber of ["LETTERS", "พัสดุ", "AB 123", "AB-123", "123!", "A".repeat(121) + "1"]) {
+  test(`invalid tracking number ${trackingNumber} is rejected before any write`, async () => {
+    const { service, writes } = fixture({ status: "ready_to_ship" });
+    await assert.rejects(service.markShipped({
+      orderId: "order-1", actorId: "seller-1", version: 3,
+      company: "Test Express", trackingNumber,
+    }), (error) => error.status === 400);
+    assert.equal(writes.length, 0);
+  });
+}
+
 function fixture(overrides = {}, changed = 1) {
   const order = {
     id: "order-1",
@@ -209,25 +220,27 @@ test("markShipped: rejects if the order is not ready to ship yet (status is paid
   );
 });
 
-test("markShipped: succeeds when seller ships a ready-to-ship order", async () => {
+for (const trackingNumber of ["TH123456789TH", "KER1234567890", "1234567890", "12345678"]) {
+test(`markShipped: accepts tracking ${trackingNumber} for a ready-to-ship order`, async () => {
   const { service, writes } = fixture({ status: "ready_to_ship" });
   const result = await service.markShipped({
     orderId: "order-1",
     actorId: "seller-1",
     version: 3,
     company: "Flash Express",
-    trackingNumber: "TH123456789TH",
+    trackingNumber,
   });
   assert.ok(result);
   const orderWrite = writes.find((w) => w.table === "order");
   assert.equal(orderWrite.query.data.status, "shipped");
   const shippingUpdate = writes.find((w) => w.table === "shipping_update");
   assert.equal(shippingUpdate.query.data.company, "Flash Express");
-  assert.equal(shippingUpdate.query.data.trackingNumber, "TH123456789TH");
+  assert.equal(shippingUpdate.query.data.trackingNumber, trackingNumber);
 });
+}
 
 
-for (const trackingNumber of ["fhfueueduejdeudhe", "----", "12345678", "TH12", "TH 1234 5678"]) {
+for (const trackingNumber of ["fhfueueduejdeudhe", "----", "TH12", "TH12345", "TH 1234 5678", "1".repeat(21)]) {
   test(`markShipped: rejects a made-up tracking number ${JSON.stringify(trackingNumber)} without writes`, async () => {
     const { service, writes } = fixture({ status: "ready_to_ship" });
     await assert.rejects(

@@ -25,6 +25,7 @@ import {
   getStoredUser,
   isCustomerAccountRoles,
 } from "../../../lib/auth";
+import useSellerLiveRefresh from "../../../lib/useSellerLiveRefresh";
 
 const STATUS_LABEL = {
   NONE: "ยังไม่ได้ยืนยันตัวตน",
@@ -175,6 +176,15 @@ export default function SellerOnboardingPage() {
   }, [router]);
 
   useEffect(load, [load]);
+
+  // Approval can happen while this page is open. Update the status without
+  // replacing any details the seller is currently typing into the form.
+  useSellerLiveRefresh(async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    const data = await apiFetch("/api/auth/kyc/mine", { token });
+    setStatus(data);
+  }, { enabled: user?.role === "SELLER", events: ["notification:new"] });
 
   // ---- Handlers วิธีที่ 1 ----
   function handleFileSelect(e) {

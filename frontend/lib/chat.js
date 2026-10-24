@@ -58,12 +58,22 @@ export function listMessages(conversationId, { before, limit } = {}, token) {
   );
 }
 
-export function sendMessage(conversationId, body, token) {
-  return apiFetch(`/api/chat/conversations/${conversationId}/messages`, {
+export async function sendMessage(conversationId, body, token) {
+  const send = () => apiFetch(`/api/chat/conversations/${conversationId}/messages`, {
     method: "POST",
     token,
     body: { body },
   });
+  try {
+    return await send();
+  } catch (error) {
+    // A 429 rejects the write before it reaches message creation, so retrying
+    // it is safe. Never retry an ambiguous network or server failure.
+    if (error.status !== 429) throw error;
+    const seconds = error.retryAfterSeconds ?? config.rateLimits.sendMessage.windowSeconds;
+    await new Promise((resolve) => setTimeout(resolve, Math.max(1, seconds) * 1000));
+    return send();
+  }
 }
 
 /** The authed URL an attachment's bytes are served from. Not stored in the

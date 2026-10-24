@@ -249,11 +249,14 @@ export default function ProductDetailPage() {
     if (order.productId && String(order.productId) === String(id)) {
       if (
         payload.action === "paid" ||
-        payload.action === "confirmed" ||
-        payload.action === "shipped"
+        payload.action === "confirmed"
       ) {
         setProduct((prev) => (prev ? { ...prev, status: "reserved" } : prev));
-      } else if (payload.action === "completed") {
+      } else if (
+        payload.action === "shipped" ||
+        payload.action === "delivered" ||
+        payload.action === "completed"
+      ) {
         setProduct((prev) => (prev ? { ...prev, status: "sold" } : prev));
       } else if (payload.action === "cancelled" || payload.action === "rejected") {
         setProduct((prev) => (prev ? { ...prev, status: "available" } : prev));
@@ -420,11 +423,17 @@ export default function ProductDetailPage() {
         const orderForThisProduct = (data.items || []).find(
           (o) =>
             o.productId === product.id &&
-            ["paid", "confirmed", "ready_to_ship", "shipped"].includes(
+            ["paid", "confirmed", "ready_to_ship", "shipped", "delivered", "completed"].includes(
               o.status,
             ),
         );
         setSellerActiveOrder(orderForThisProduct || null);
+        if (
+          orderForThisProduct &&
+          ["shipped", "delivered", "completed"].includes(orderForThisProduct.status)
+        ) {
+          setProduct((prev) => (prev ? { ...prev, status: "sold" } : prev));
+        }
         const shouldOpenShip =
           typeof window !== "undefined" &&
           (new URLSearchParams(window.location.search).get("ship") === "1" ||
@@ -751,6 +760,11 @@ export default function ProductDetailPage() {
             >
               {STATUS_LABEL[product.status] || product.status}
             </span>
+            {product.status === "sold" && (
+              <span className="rounded-full bg-rose-600 px-2.5 py-1 text-xs font-bold text-white shadow-xs">
+                หมด
+              </span>
+            )}
             <span
               data-testid="product-view-count"
               className="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600 flex items-center gap-1"
@@ -820,6 +834,10 @@ export default function ProductDetailPage() {
           </div>
 
           {isOwnProduct ? (
+            product.status === "sold" || product.preRemovalStatus === "sold" ||
+            ["shipped", "delivered", "completed"].includes(sellerActiveOrder?.status) ? (
+              <p className="mt-3 text-xs text-gray-500">สินค้านี้ขายแล้ว ไม่สามารถแก้ไขหรือลบได้</p>
+            ) : (
             <div className="flex items-center gap-2.5 mt-3">
               <Link
                 href={`/products/${product.id}/edit`}
@@ -838,6 +856,7 @@ export default function ProductDetailPage() {
                 ลบสินค้านี้
               </button>
             </div>
+            )
           ) : (
             <button
               onClick={() => setShowReport(true)}
@@ -863,6 +882,8 @@ export default function ProductDetailPage() {
                         ? "📦 กรุณาเตรียมสินค้าสำหรับคำสั่งซื้อนี้"
                         : sellerActiveOrder.status === "ready_to_ship"
                           ? "📦 สินค้านี้มีคำสั่งซื้อรอจัดส่ง!"
+                          : ["shipped", "delivered", "completed"].includes(sellerActiveOrder.status)
+                          ? "✅ จัดส่งสินค้าเสร็จเรียบร้อยแล้ว (สินค้าหมด)"
                           : "🚚 สินค้านี้อยู่ระหว่างการขนส่ง"}
                   </p>
                   <p className="text-xs text-emerald-700 font-mono mt-0.5">
@@ -1015,7 +1036,9 @@ export default function ProductDetailPage() {
                         : `ซื้อเลย (฿${product.price.toLocaleString("th-TH")})`
                       : product.status === "auction"
                         ? "อยู่ในระบบประมูล"
-                        : "สินค้าไม่พร้อมขาย"}
+                        : product.status === "sold"
+                          ? "หมด"
+                          : "สินค้าไม่พร้อมขาย"}
                   </button>
                 </>
               )}
@@ -1293,6 +1316,7 @@ export default function ProductDetailPage() {
         onClose={() => setShippingModalOpen(false)}
         onShipped={(updated) => {
           setSellerActiveOrder(updated);
+          setProduct((prev) => (prev ? { ...prev, status: "sold" } : prev));
         }}
         onRejected={(updated) => {
           setSellerActiveOrder(updated);

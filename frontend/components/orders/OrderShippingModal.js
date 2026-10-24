@@ -164,6 +164,10 @@ export default function OrderShippingModal({
 
   async function handleMarkShipped() {
     if (!order?.id) return;
+    if (!company.trim() || !isValidTrackingNumber(trackingNumber)) {
+      setError(company.trim() ? TRACKING_NUMBER_MESSAGE : "กรุณาเลือกบริษัทขนส่งและกรอกเลขพัสดุ");
+      return;
+    }
     if (order.status !== "ready_to_ship") {
       setError("ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องเตรียมสินค้าให้พร้อมจัดส่งก่อน");
       return;
@@ -523,9 +527,14 @@ export default function OrderShippingModal({
                     value={trackingNumber}
                     onChange={(e) => setTrackingNumber(e.target.value)}
                     maxLength={20}
+                    aria-describedby="shipping-tracking-help"
+                    aria-invalid={Boolean(trackingNumber) && !isValidTrackingNumber(trackingNumber)}
                     placeholder="เช่น TH123456789TH"
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
                   />
+                  <p id="shipping-tracking-help" className="text-xs text-slate-500">
+                    ยาว 8–20 ตัว ต้องมีตัวเลข ใช้ตัวเลขล้วนหรือผสมตัวอักษรอังกฤษได้ ไม่เว้นวรรค
+                  </p>
                 </div>
               </div>
             )}
@@ -664,7 +673,7 @@ export default function OrderShippingModal({
                       variant="primary"
                       icon="local_shipping"
                       loading={updating}
-                      disabled={!company.trim() || !trackingNumber.trim() || rejecting}
+                      disabled={!company.trim() || !isValidTrackingNumber(trackingNumber) || rejecting}
                       onClick={handleMarkShipped}
                       className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
                     >

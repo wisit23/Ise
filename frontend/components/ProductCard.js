@@ -192,9 +192,9 @@ export default function ProductCard({ product, showSeller = true }) {
           {product.status === "sold" && (
             <span className="flex items-center gap-1 rounded-full bg-rose-600 px-[.75em] py-[.32em] text-xs font-bold text-white shadow-1 backdrop-blur-[8px]">
               <span className="material-symbols-outlined text-[14px]">
-                check_circle
+                block
               </span>
-              ขายแล้ว
+              หมด
             </span>
           )}
         </div>
@@ -202,7 +202,7 @@ export default function ProductCard({ product, showSeller = true }) {
         {product.status === "sold" && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 backdrop-blur-[1px]">
             <span className="rounded-md border border-white/30 bg-black/75 px-3 py-1 text-xs font-bold tracking-wider text-white shadow-lg uppercase">
-              ขายแล้ว
+              สินค้าหมด
             </span>
           </div>
         )}
@@ -212,7 +212,7 @@ export default function ProductCard({ product, showSeller = true }) {
         <div className="pointer-events-none absolute inset-x-[.7rem] bottom-[.7rem] translate-y-2.5 opacity-0 transition-all duration-300 ease-ease group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:translate-y-0 group-hover:opacity-100 max-[560px]:translate-y-0 max-[560px]:opacity-100">
           <span className="flex items-center justify-center gap-1.5 rounded-sm bg-white/[.92] p-[.7em] text-sm font-semibold text-ink shadow-2 backdrop-blur-[10px]">
             {product.status === "sold"
-              ? "ดูรายละเอียด (ขายแล้ว)"
+              ? "ดูรายละเอียด (สินค้าหมด)"
               : "ดูรายละเอียด"}
             <span
               className="material-symbols-outlined text-[16px] leading-none"
@@ -249,7 +249,7 @@ export default function ProductCard({ product, showSeller = true }) {
           </p>
           {product.status === "sold" && (
             <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700 border border-rose-200">
-              ขายแล้ว
+              หมด
             </span>
           )}
         </div>

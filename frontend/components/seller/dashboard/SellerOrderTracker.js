@@ -12,6 +12,7 @@ import {
   StatusPill,
   baht,
   isOrderDisputed,
+  isSellerDisputeVisible,
 } from "./sellerStatus";
 import { formatOrderId } from "../../../lib/orders";
 import { apiFetch } from "../../../lib/api";
@@ -58,15 +59,27 @@ export default function SellerOrderTracker({
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
   const [search, setSearch] = useState(
-    highlightOrderId ? highlightOrderId.slice(0, 8) : "",
+    highlightOrderId && propStatusFilter !== "disputed" ? highlightOrderId.slice(0, 8) : "",
   );
   // The search box is seeded from the highlighted order, so it has to follow
   // that highlight when it changes or is cleared — otherwise a stale order
   // number stays in the box and silently empties every other filter (e.g.
   // the dispute banner's "ดูรายการข้อพิพาท" showed 0 rows).
   useEffect(() => {
-    setSearch(highlightOrderId ? highlightOrderId.slice(0, 8) : "");
-  }, [highlightOrderId]);
+    if (!highlightOrderId) {
+      setSearch("");
+      return undefined;
+    }
+    setSearch(propStatusFilter !== "disputed" ? highlightOrderId.slice(0, 8) : "");
+    if (typeof document === "undefined") return undefined;
+    const timer = setTimeout(() => {
+      const row = document.getElementById(`order-row-${highlightOrderId}`);
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [highlightOrderId, propStatusFilter]);
 
   async function prepareOrder(order) {
     if (actionLoading) return;
@@ -109,6 +122,7 @@ export default function SellerOrderTracker({
 
   const filtered = orders
     .filter((o) => {
+      if (highlightOrderId && o.id === highlightOrderId) return true;
       if (!statusFilter) return true;
       if (statusFilter === "disputed") return isOrderDisputed(o);
       if (statusFilter === "pending")
@@ -121,6 +135,7 @@ export default function SellerOrderTracker({
       return orderTypeFilter === "auction" ? isAuction : !isAuction;
     })
     .filter((o) => {
+      if (highlightOrderId && o.id === highlightOrderId) return true;
       if (!search) return true;
       const needle = search.trim().toLowerCase();
       // Sellers type the number they see on screen ("ORD-C58A…"), which
@@ -300,9 +315,10 @@ export default function SellerOrderTracker({
               {filtered.map((o) => (
                 <tr
                   key={o.id}
+                  id={`order-row-${o.id}`}
                   className={`group transition-colors ${
                     highlightOrderId === o.id
-                      ? "bg-emerald-50/90 font-medium border-l-4 border-emerald-600"
+                      ? "bg-emerald-50/90 font-medium border-l-4 border-emerald-600 shadow-xs ring-1 ring-emerald-500/30"
                       : "hover:bg-slate-50/70"
                   }`}
                 >
@@ -342,7 +358,9 @@ export default function SellerOrderTracker({
                   </td>
                   <td className="px-4 py-3 text-center">
                     <StatusPill
-                      label={ORDER_STATUS_LABEL[o.status] || o.status}
+                      label={o.status === "disputed" && !isSellerDisputeVisible(o.dispute)
+                        ? "อยู่ระหว่างตรวจสอบ"
+                        : ORDER_STATUS_LABEL[o.status] || o.status}
                       style={ORDER_STATUS_STYLE[o.status]}
                     />
                   </td>
@@ -441,7 +459,7 @@ export default function SellerOrderTracker({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {o.dispute ? (
+                    {isSellerDisputeVisible(o.dispute) ? (
                       <div className="flex flex-col items-center gap-1">
                         <span
                           className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${

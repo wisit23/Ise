@@ -14,7 +14,18 @@ import {
   PRODUCT_STATUS_STYLE,
   StatusPill,
   baht,
+  sellerProductPrice,
 } from "./sellerStatus";
+
+function ProductPrice({ product }) {
+  const { amount, label } = sellerProductPrice(product);
+  return (
+    <>
+      <span>{baht(amount)}</span>
+      {label && <span className="block text-[10px] font-normal text-slate-500">{label}</span>}
+    </>
+  );
+}
 
 const STATUS_FILTERS = [
   { value: "", label: "ทั้งหมด" },
@@ -22,6 +33,7 @@ const STATUS_FILTERS = [
   { value: "hidden", label: "ซ่อนอยู่" },
   { value: "sold", label: "ขายแล้ว" },
   { value: "reserved", label: "ในตะกร้า" },
+  { value: "auction_action_required", label: "รอเลือกวิธีขายใหม่" },
   { value: "removed", label: "ถูกระงับ" },
 ];
 
@@ -200,13 +212,28 @@ export default function SellerProductList({
                     )}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-700">
-                    {baht(p.price)}
+                    <ProductPrice product={p} />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <StatusPill
-                      label={PRODUCT_STATUS_LABEL[p.status] || p.status}
-                      style={PRODUCT_STATUS_STYLE[p.status]}
-                    />
+                    {(() => {
+                      const hasCompletedOrShippedOrder = (orders || []).some(
+                        (o) => o.productId === p.id && ["shipped", "delivered", "completed"].includes(o.status),
+                      );
+                      const isSold = p.status === "sold" || hasCompletedOrShippedOrder;
+                      return (
+                        <div className="flex items-center justify-center gap-1">
+                          <StatusPill
+                            label={isSold ? "ขายแล้ว" : (PRODUCT_STATUS_LABEL[p.status] || p.status)}
+                            style={isSold ? PRODUCT_STATUS_STYLE.sold : PRODUCT_STATUS_STYLE[p.status]}
+                          />
+                          {isSold && (
+                            <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                              หมด
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   {(() => {
                     const awaitingOrder = (orders || []).find(
@@ -251,7 +278,12 @@ export default function SellerProductList({
                               <span>ยืนยันรับออเดอร์</span>
                             </button>
                           )}
-                          {!["sold", "removed"].includes(p.status) ? (
+                          {!(
+                            ["sold", "removed"].includes(p.status) || p.preRemovalStatus === "sold" ||
+                            (orders || []).some(
+                              (o) => o.productId === p.id && ["shipped", "delivered", "completed"].includes(o.status),
+                            )
+                          ) ? (
                             <div className="flex items-center justify-end gap-2.5">
                               <Link
                                 href={`/products/${p.id}/edit`}

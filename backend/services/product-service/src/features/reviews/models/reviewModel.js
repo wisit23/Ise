@@ -5,11 +5,26 @@ const WITH_MEDIA = { mediaEntries: { orderBy: [{ position: "asc" }, { mediaType:
 /** Keep the public ordered { url, type } contract over the unified ER table. */
 function toApiShape(review) {
   if (!review) return review;
-  const { mediaEntries, ...rest } = review;
+  const { mediaEntries, removalReason, ...rest } = review;
   const media = [...(mediaEntries || [])]
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.mediaType.localeCompare(b.mediaType) || a.id.localeCompare(b.id))
     .map((m) => ({ url: m.url, type: m.mediaType === "VIDEO" ? "video" : "image" }));
-  return { ...rest, media };
+  return review.removedAt
+    ? { ...rest, comment: "", media: [], removed: true }
+    : { ...rest, media, removed: false };
+}
+
+async function findById(id) {
+  return prisma.review.findUnique({ where: { id }, include: WITH_MEDIA });
+}
+
+async function removeById(id, reason) {
+  const result = await prisma.review.updateMany({
+    where: { id, removedAt: null },
+    data: { removedAt: new Date(), removalReason: reason },
+  });
+  if (!result.count) return findById(id);
+  return findById(id);
 }
 
 function mediaToNestedCreate(media) {
@@ -42,7 +57,7 @@ async function findByOrderId(orderId) {
 }
 
 async function listBySeller(sellerId, { skip, take } = {}) {
-  const where = { sellerId };
+  const where = { sellerId, removedAt: null };
   const [items, total, aggregate] = await Promise.all([
     prisma.review.findMany({
       where,
@@ -64,9 +79,9 @@ async function listBySeller(sellerId, { skip, take } = {}) {
 /** Cheap summary for cards/lists that only need the number, not the review list itself. */
 async function summaryBySeller(sellerId) {
   const [total, aggregate] = await Promise.all([
-    prisma.review.count({ where: { sellerId } }),
+    prisma.review.count({ where: { sellerId, removedAt: null } }),
     prisma.review.aggregate({
-      where: { sellerId },
+      where: { sellerId, removedAt: null },
       _avg: { rating: true },
     }),
   ]);
@@ -90,6 +105,8 @@ async function listByBuyer(buyerId, { skip, take } = {}) {
 
 module.exports = {
   create,
+  findById,
+  removeById,
   findByOrderId,
   listBySeller,
   summaryBySeller,

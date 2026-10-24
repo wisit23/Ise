@@ -2,7 +2,9 @@ const { createHash } = require("node:crypto");
 const { badRequest, conflict, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 
-// Preserve the review as audit evidence before deleting its public row/media.
+// Soft delete: the row stays (removed_at + removal_reason) so the review
+// drops out of every public list and seller score, and the full snapshot
+// is also kept in the audit log as evidence.
 async function removeReview(reviewId, { reason, targetId, productId, actorId, idempotencyKey }) {
   if (!reason?.trim() || !targetId || !actorId || !idempotencyKey) {
     throw badRequest("reason, targetId, actorId and idempotency key are required");
@@ -32,7 +34,12 @@ async function removeReview(reviewId, { reason, targetId, productId, actorId, id
       previousState: JSON.parse(JSON.stringify(review)), newState: result,
       metadata: { payloadHash, reason: reason.trim() },
     } });
-    await tx.review.delete({ where: { id: reviewId } });
+    if (!review.removedAt) {
+      await tx.review.update({
+        where: { id: reviewId },
+        data: { removedAt: new Date(), removalReason: reason.trim() },
+      });
+    }
     return result;
   });
 }

@@ -214,3 +214,42 @@ test("green review and red refund buttons keep their forms and deadline", async 
     screen.getByRole("heading", { name: "แจ้งปัญหาหลังรับสินค้า" }),
   ).toBeInTheDocument();
 });
+
+test("opening order details via reloop:open-order-detail event or url orderId", async () => {
+  const order = {
+    id: "notif-order-1",
+    buyerId: "buyer",
+    productId: "product",
+    productTitle: "เสื้อยืดโอเวอร์ไซส์ ไซส์ XL",
+    price: 350,
+    status: "paid",
+    version: 1,
+    createdAt: "2026-10-23T10:00:00Z",
+    shippingAddress: {
+      recipientName: "คุณลูกค้า",
+      phone: "0899999999",
+      addressLine: "กรุงเทพฯ",
+    },
+  };
+  apiFetch.mockImplementation((url) =>
+    Promise.resolve(
+      url.startsWith("/api/orders/mine")
+        ? { items: [order], totalPages: 1 }
+        : url === "/api/orders/notif-order-1"
+          ? order
+          : { items: [] },
+    ),
+  );
+  render(<OrdersPage />);
+  await screen.findByText(/คำสั่งซื้อของฉัน/);
+
+  fireEvent(
+    window,
+    new CustomEvent("reloop:open-order-detail", {
+      detail: { orderId: "notif-order-1" },
+    }),
+  );
+
+  expect(await screen.findByText("รายละเอียดคำสั่งซื้อ")).toBeInTheDocument();
+  expect(await screen.findByText("คุณลูกค้า")).toBeInTheDocument();
+});
