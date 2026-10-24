@@ -13,6 +13,7 @@ const {
 const orderModel = require("../../models/orderModel");
 const disputeModel = require("./disputeModel");
 const { isSellerVisible } = require("./sellerVisibility");
+const { notifyDisputeStatus } = require("./disputeStatusNotices");
 const orderLifecycle = require("../../services/orderLifecycle");
 
 const DISPUTABLE_STATUSES = ["delivered", "completed"];
@@ -555,6 +556,10 @@ async function claim({ disputeId, userId, role, roles, version }) {
   if (!updated) {
     throw conflict("dispute claim conflict — reload and retry");
   }
+  // Only the first pick-up tells the parties; a T&S claim after escalation
+  // is already covered by the escalation notice.
+  if (!dispute.assignedRole || dispute.assignedRole === "CUSTOMER_SERVICE")
+    await notifyDisputeStatus(updated, "CLAIMED");
   return updated;
 }
 
@@ -725,6 +730,7 @@ async function escalate({
   if (!updated) {
     throw conflict("dispute escalation conflict — reload and retry");
   }
+  await notifyDisputeStatus(updated, "ESCALATED");
   return updated;
 }
 

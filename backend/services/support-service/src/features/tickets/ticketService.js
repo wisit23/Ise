@@ -13,6 +13,7 @@ const ticketModel = require("./ticketModel");
 const { canTransition, STATUSES } = require("./ticketState");
 const auditLog = require("../audit/auditLog");
 const chatClient = require("../../services/chatClient");
+const { notifyTicketStatus } = require("./ticketNotifications");
 const orderClient = require("../../services/orderClient");
 const riskClient = require("../../services/riskClient");
 
@@ -322,6 +323,7 @@ async function assignToSelf({ ticketId, userId, role, version }) {
       assigned.chatJoinError = "Chat membership could not be refreshed";
     }
   }
+  if (assigned && ticket.status === "NEW") await notifyTicketStatus(assigned, "ASSIGNED", "NEW");
   return assigned;
 }
 
@@ -367,6 +369,7 @@ async function changeStatus({
 
   // Best-effort chat notifications for meaningful status changes.
   const updated = await ticketModel.findById(ticketId);
+  await notifyTicketStatus(updated || { ...ticket, status }, status, ticket.status);
   if (updated?.conversationId) {
     if (status === "CLOSED") {
       let chatLocked = false;

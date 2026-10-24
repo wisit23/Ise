@@ -224,6 +224,11 @@ async function sendSystemMessage(conversationId, body, payload, timeoutMs) {
   }
 }
 
+/** Bell notification for one user (chat-service notification centre). */
+function sendNotification(data, timeoutMs) {
+  return internalPost("/internal/notifications", data, timeoutMs);
+}
+
 /**
  * Locks a conversation. Propagates failures so callers never falsely report a locked chat.
  */
@@ -262,6 +267,7 @@ module.exports = {
   addParticipantToConversation,
   addAgentToConversation,
   sendSystemMessage,
+  sendNotification,
   lockConversation,
   DEFAULT_TIMEOUT_MS,
 };
