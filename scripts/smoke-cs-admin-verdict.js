@@ -26,11 +26,12 @@ async function login(email) {
 
 async function run() {
   try {
-    const [admin, cs, buyer] = await Promise.all([login("admin@example.com"), login("cs.nan@example.com"), login("buyer.demo@example.com")]);
+    // Escalated disputes are decided by Trust & Safety.
+    const [admin, cs, buyer] = await Promise.all([login("trust.demo@example.com"), login("cs.nan@example.com"), login("buyer.demo@example.com")]);
     const id = ID.disputes[2];
     const initial = await call(`/api/orders/disputes/${id}`, { token: admin });
     assert.equal(initial.status, 200);
-    assert.equal(initial.data.assignedRole, "ADMIN");
+    assert.equal(initial.data.assignedRole, "TRUST_AND_SAFETY");
     const claimed = await call(`/api/orders/disputes/${id}/claim`, { token: admin, method: "POST", body: { version: initial.data.version } });
     assert.equal(claimed.status, 200);
     const payload = { decision: "RELEASE_ESCROW", reason: "หลักฐานยืนยันสินค้าตรงตามประกาศ", version: claimed.data.version, idempotencyKey: `demo-verdict-${id}-${claimed.data.version}` };
@@ -55,7 +56,7 @@ async function run() {
       assert.equal(notices.length, 1, `${side} must receive exactly one verdict notice`);
       assert.equal(transcript.data.conversation.status, "LOCKED");
     }
-    console.log("Admin verdict smoke passed: CS denied, release applied once, both notices deduplicated, both rooms locked.");
+    console.log("T&S verdict smoke passed: CS denied, release applied once, both notices deduplicated, both rooms locked.");
   } finally {
     const restored = spawnSync(process.execPath, [path.join(__dirname, "demo-cs-admin.js"), "--apply"], { stdio: "inherit" });
     if (restored.status !== 0) throw new Error("Could not restore local CS/Admin demo data");
