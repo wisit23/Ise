@@ -184,7 +184,10 @@ export default function SellerOnboardingPage() {
     if (!token) return;
     const data = await apiFetch("/api/auth/kyc/mine", { token });
     setStatus(data);
-  }, { enabled: user?.role === "SELLER", events: ["notification:new"] });
+  }, {
+    enabled: Boolean(user) && !staffAccount,
+    events: ["notification:new"],
+  });
 
   // ---- Handlers วิธีที่ 1 ----
   function handleFileSelect(e) {

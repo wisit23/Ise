@@ -98,6 +98,17 @@ describe("NavBar role permissions", () => {
     mockBuyer();
   });
 
+  it("shows seller tools after the current session is updated by KYC approval", async () => {
+    await act(async () => { render(<NavBar />); });
+    fireEvent.click(screen.getByRole("button", { name: "เมนูโปรไฟล์" }));
+    expect(screen.queryByRole("link", { name: /My Store/ })).not.toBeInTheDocument();
+    getStoredUser.mockReturnValue({ id: "buyer-1", role: "SELLER", firstName: "ผู้ซื้อ" });
+    getCurrentRoles.mockReturnValue(["BUYER", "SELLER"]);
+    getAccessTokenClaims.mockReturnValue({ kycStatus: "VERIFIED" });
+    act(() => window.dispatchEvent(new Event("reloop:auth")));
+    expect(screen.getByRole("link", { name: /My Store/ })).toBeInTheDocument();
+  });
+
   it("links buyer orders directly to the orders section in profile", async () => {
     await act(async () => {
       render(<NavBar />);

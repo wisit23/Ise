@@ -239,7 +239,7 @@ export default function ThaiIdQrStep({
                 กำลังรับข้อมูล...
               </span>
             ) : (
-              "🔬 จำลองสแกน QR สำเร็จ (Dev)"
+              "จำลองสแกน QR สำเร็จ (Dev)"
             )}
           </button>
         )}

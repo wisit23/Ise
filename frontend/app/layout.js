@@ -4,6 +4,7 @@ import ChatSocketProvider from "../components/chat/ChatSocketProvider";
 import AuctionNotificationCenter from "../components/chat/AuctionNotificationCenter";
 import CommerceRestrictionBanner from "../components/CommerceRestrictionBanner";
 import AuthArrival from "../components/auth/AuthArrival";
+import SellerSessionSync from "../components/auth/SellerSessionSync";
 
 /* Bundled fonts keep builds independent of Google Fonts responses/network.
    Licenses and sources are recorded in ../fonts/README.md. */
@@ -54,6 +55,7 @@ export default function RootLayout({ children }) {
           See ChatSocketProvider's comment. */}
       <body className="font-sans">
         <ChatSocketProvider>
+          <SellerSessionSync />
           <AuctionNotificationCenter />
           <CommerceRestrictionBanner />
           <AuthArrival>{children}</AuthArrival>
