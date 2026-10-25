@@ -20,16 +20,23 @@ spec.loader.exec_module(m)
 def fixture():
     services = {}
     for app in m.APPS:
-        env = {"INTERNAL_SERVICE_TOKEN": "private-fixture", "REDIS_URL": "redis://redis:6379"}
+        env = {"INTERNAL_SERVICE_TOKEN": "private-fixture-" + "i" * 32,
+               "POSTGRES_PASSWORD": "database-fixture-" + "p" * 32,
+               "JWT_ACCESS_SECRET": "access-fixture-" + "a" * 32,
+               "JWT_REFRESH_SECRET": "refresh-fixture-" + "r" * 32,
+               "REDIS_URL": "redis://redis:6379", "APP_BASE_URL": "http://localhost:3000",
+               "NEXT_PUBLIC_API_URL": "http://localhost:8080", "MAIL_TRANSPORT": "log",
+               "MAIL_FROM": "RE-LOOP <no-reply@localhost>"}
         if app not in ("frontend", "gateway"):
             env["DATABASE_URL"] = ("mongodb://mongo:27017/chat?replicaSet=rs0" if app == "chat-service"
                                    else "postgresql://reloop:secret@postgres:5432/" + app.replace("-", "_"))
-        services[app] = {"build": {"dockerfile": "frontend/Dockerfile.prod" if app == "frontend" else "Dockerfile"},
+        services[app] = {"build": {"dockerfile": "frontend/Dockerfile.prod" if app == "frontend" else "Dockerfile",
+                                   "args": {"NEXT_PUBLIC_API_URL": "http://localhost:8080"}},
                          "environment": env,
                          "volumes": [{"target": path} for path in m.FILES.get(app, ())]}
     for app, host in (("frontend", 3000), ("gateway", 8080)):
         services[app]["ports"] = [{"target": m.PORTS[app], "published": str(host), "protocol": "tcp"}]
-    services["postgres"] = {"environment": {"POSTGRES_USER": "reloop", "POSTGRES_PASSWORD": "secret"}}
+    services["postgres"] = {"environment": {"POSTGRES_USER": "reloop", "POSTGRES_PASSWORD": "database-fixture-" + "p" * 32}}
     services["mongo"] = {"command": ["--replSet", "rs0", "--bind_ip_all"]}
     services["redis"] = {}
     return {"services": services, "node": "re-loop"}
@@ -38,6 +45,42 @@ def fixture():
 class ConfigTests(unittest.TestCase):
     def test_existing_config_accepted(self):
         m.validate_config(fixture())
+
+    def test_unsafe_production_secrets_blocked_without_disclosure(self):
+        for key in ("POSTGRES_PASSWORD", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "INTERNAL_SERVICE_TOKEN"):
+            for value in ("", "short", "dev_access_secret_change_me" + "x" * 32):
+                config = fixture()
+                config["services"]["auth-service"]["environment"][key] = value
+                with self.subTest(key=key, value=value), self.assertRaises(m.Blocked) as error:
+                    m.validate_config(config)
+                if value:
+                    self.assertNotIn(value, str(error.exception))
+
+    def test_reused_tokens_blocked(self):
+        values = fixture()["services"]["auth-service"]["environment"]
+        values["JWT_REFRESH_SECRET"] = values["JWT_ACCESS_SECRET"]
+        with self.assertRaisesRegex(m.Blocked, "different"):
+            m.validate_production_environment(values, "auth")
+
+    def test_non_loopback_needs_https_and_real_mail(self):
+        values = fixture()["services"]["auth-service"]["environment"]
+        values["APP_BASE_URL"] = "http://shop.test"
+        with self.assertRaisesRegex(m.Blocked, "HTTPS"):
+            m.validate_production_environment(values, "auth")
+        values["APP_BASE_URL"] = "https://shop.test"
+        with self.assertRaisesRegex(m.Blocked, "smtp"):
+            m.validate_production_environment(values, "auth")
+        values.update(MAIL_TRANSPORT="smtp", SMTP_HOST="mail.test")
+        m.validate_production_environment(values, "auth")
+        values["SMTP_USER"] = "sender"
+        with self.assertRaisesRegex(m.Blocked, "together"):
+            m.validate_production_environment(values, "auth")
+
+    def test_frontend_build_url_mismatch_blocked(self):
+        config = fixture()
+        config["services"]["frontend"]["build"]["args"]["NEXT_PUBLIC_API_URL"] = "https://wrong.test"
+        with self.assertRaisesRegex(m.Blocked, "build NEXT_PUBLIC_API_URL"):
+            m.validate_config(config)
 
     def test_external_database_blocked(self):
         config = fixture()
@@ -97,6 +140,37 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(m.Blocked, "WAL"):
             m.validate_config(config)
 
+    def test_custom_host_ports_do_not_change_internal_listeners(self):
+        config = fixture()
+        config['services']['frontend']['ports'][0]['published'] = '13000'
+        config['services']['gateway']['ports'][0]['published'] = '18080'
+        for name in m.APPS:
+            config['services'][name]['environment'].update(FRONTEND_PORT='13000', GATEWAY_PORT='18080')
+        m.validate_config(config)
+        images = {name: 'test-image' for name in m.APPS + m.DATABASES}
+        items = m.manifests(config, images, Path('/private/state'), apps_enabled=True)['items']
+        deployments = {x['metadata']['name']: x for x in items if x['kind'] == 'Deployment'}
+        for name, external, internal in (('frontend', 13000, 3000), ('gateway', 18080, 8080)):
+            port = deployments[name]['spec']['template']['spec']['containers'][0]['ports'][0]
+            self.assertEqual(port, {'containerPort': internal, 'hostPort': external})
+            secret = next(x for x in items if x['kind'] == 'Secret' and x['metadata']['name'] == name + '-env')
+            self.assertEqual(secret['stringData']['GATEWAY_PORT'], '8080')
+            self.assertEqual(secret['stringData']['FRONTEND_PORT'], '3000')
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value.status = 200
+        with patch.object(m, 'build_opener', return_value=opener):
+            m.check_host_ports(config)
+        self.assertEqual([call.args[0] for call in opener.open.call_args_list],
+                         ['http://127.0.0.1:13000/', 'http://127.0.0.1:18080/health'])
+
+    def test_invalid_published_ports_fail_cleanly(self):
+        for value in ('abc', None, '0', '65536'):
+            with self.subTest(value=value):
+                config = fixture()
+                config['services']['frontend']['ports'][0]['published'] = value
+                with self.assertRaises(m.Blocked):
+                    m.public_ports(config)
+
     def test_host_port_conflict_blocked(self):
         config = fixture()
         config["services"]["gateway"]["ports"][0]["published"] = "6443"
@@ -134,6 +208,7 @@ class ConfigTests(unittest.TestCase):
             pod = item["spec"]["template"]["spec"]
             container = pod["containers"][0]
             self.assertEqual(pod["nodeSelector"], {"kubernetes.io/hostname": "re-loop"})
+            self.assertFalse(pod["automountServiceAccountToken"])
             self.assertEqual(container["image"], images[name])
             self.assertEqual(container["imagePullPolicy"], "Never")
             self.assertNotIn("command", container)
@@ -143,9 +218,14 @@ class ConfigTests(unittest.TestCase):
                 self.assertEqual(volume["hostPath"]["type"], "Directory")
         secrets = {item["metadata"]["name"]: item for item in items if item["kind"] == "Secret"}
         self.assertEqual(secrets["frontend-env"]["stringData"]["NODE_ENV"], "production")
-        self.assertEqual(secrets["auth-service-env"]["stringData"]["INTERNAL_SERVICE_TOKEN"], "private-fixture")
+        self.assertEqual(secrets["auth-service-env"]["stringData"]["INTERNAL_SERVICE_TOKEN"], "private-fixture-" + "i" * 32)
         self.assertNotIn("db push", json.dumps(items))
         self.assertNotIn("npm run dev", json.dumps(items))
+        policy = next(item for item in items if item['kind'] == 'NetworkPolicy')
+        self.assertEqual(policy['apiVersion'], 'networking.k8s.io/v1')
+        self.assertEqual(policy['spec']['podSelector']['matchExpressions'][0]['values'], list(m.DATABASES))
+        self.assertEqual(policy['spec']['ingress'], [{'from': [{'podSelector': {}}]}])
+        self.assertEqual(policy['spec']['policyTypes'], ['Ingress'])
 
 
 class ArchiveTests(unittest.TestCase):
@@ -243,6 +323,7 @@ class FlowTests(unittest.TestCase):
                 "schema": "schema1", "images": {name: "old-image" for name in m.APPS + m.DATABASES},
                 "ports": {"frontend": 3000, "gateway": 8080}, "last_success": "previous-run"})
         instance = m.Deployment(self.root, self.state, migrate)
+        self.assertEqual(instance.compose[:4], ['docker', 'compose', '--env-file', str(self.root / '.env')])
         instance.config = fixture()
         instance.images = {name: "new-image" for name in m.APPS + m.DATABASES}
         return instance
@@ -408,6 +489,7 @@ class FlowTests(unittest.TestCase):
         self.assertEqual(applied[0]["kind"], "Secret")
         job = applied[1]
         container = job["spec"]["template"]["spec"]["containers"][0]
+        self.assertFalse(job['spec']['template']['spec']['automountServiceAccountToken'])
         self.assertEqual(container["image"], "new-image")
         self.assertEqual(container["command"], ["node", "prisma/migrate.js"])
         self.assertNotIn("env", container)

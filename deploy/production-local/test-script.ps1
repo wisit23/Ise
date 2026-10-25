@@ -16,21 +16,33 @@ $global:Mode = 'normal'
 $global:RenderedJobs = New-Object 'Collections.Generic.List[object]'
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ("reloop-test-" + [Guid]::NewGuid().ToString('N') + '.env')
 $envText = @'
-POSTGRES_PASSWORD=ci-test-only-password
-JWT_ACCESS_SECRET=ci-test-only-access
-JWT_REFRESH_SECRET=ci-test-only-refresh
-INTERNAL_SERVICE_TOKEN=ci-test-only-internal
-DATABASE_URL_AUTH=postgresql://reloop:ci-test-only-password@postgres:5432/reloop_auth
-DATABASE_URL_PRODUCT=postgresql://reloop:ci-test-only-password@postgres:5432/reloop_product
-DATABASE_URL_ORDER=postgresql://reloop:ci-test-only-password@postgres:5432/reloop_order
-DATABASE_URL_SUPPORT=postgresql://reloop:ci-test-only-password@postgres:5432/reloop_support
+POSTGRES_PASSWORD=ci-test-only-password-pppppppppppppppppppppppppppppppp
+JWT_ACCESS_SECRET=ci-test-only-access-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+JWT_REFRESH_SECRET=ci-test-only-refresh-rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
+INTERNAL_SERVICE_TOKEN=ci-test-only-internal-iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii
+DATABASE_URL_AUTH=postgresql://reloop:ci-test-only-password-pppppppppppppppppppppppppppppppp@postgres:5432/reloop_auth
+DATABASE_URL_PRODUCT=postgresql://reloop:ci-test-only-password-pppppppppppppppppppppppppppppppp@postgres:5432/reloop_product
+DATABASE_URL_ORDER=postgresql://reloop:ci-test-only-password-pppppppppppppppppppppppppppppppp@postgres:5432/reloop_order
+DATABASE_URL_SUPPORT=postgresql://reloop:ci-test-only-password-pppppppppppppppppppppppppppppppp@postgres:5432/reloop_support
 DATABASE_URL_CHAT=mongodb://mongo:27017/reloop_chat?replicaSet=rs0&directConnection=true
+REDIS_URL=redis://redis:6379
+APP_BASE_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=https://api.test
+MAIL_TRANSPORT=smtp
+SMTP_HOST=smtp.test
+MAIL_FROM="RE-LOOP <no-reply@localhost>"
+FRONTEND_PORT=3000
+GATEWAY_PORT=8080
 '@
 [IO.File]::WriteAllText($fixture, $envText)
 $before = @(Get-ChildItem (Join-Path $PSScriptRoot '.state') -Directory -ErrorAction SilentlyContinue | ForEach-Object Name)
 function global:docker {
     $global:Calls.Add('docker ' + ($args -join ' '))
     $global:LASTEXITCODE = if (($global:Mode -eq 'build-failure' -and $args[0] -eq 'build') -or ($global:Mode -eq 'docker-unavailable' -and $args[0] -eq 'info')) { 7 } else { 0 }
+}
+function global:powershell.exe {
+    $global:Calls.Add('powershell.exe ' + ($args -join ' '))
+    $global:LASTEXITCODE = 0
 }
 function global:kind {
     $global:Calls.Add('kind ' + ($args -join ' '))
@@ -44,6 +56,11 @@ function global:kubectl {
     if ($a[0] -eq 'kustomize') { & $global:RealKubectl @a; return }
     if ($a[0] -ne '--context' -or $a[1] -ne 'kind-reloop-production-local' -or $a[3] -ne 'reloop-production-local') { throw 'Unsafe context or namespace in kubectl call.' }
     $text = $a -join ' '
+    if ($text -match 'apply -f -$') {
+        $document = ($input | Out-String) | ConvertFrom-Json
+        if ($document.kind -eq 'Secret') { $global:RenderedSecret = $document }
+        return
+    }
     if ($text -match 'get namespace') {
         if ($global:Mode -eq 'unmarked-namespace') { '{"metadata":{"labels":{"reloop-mode":"development"}}}' }
         else { '{"metadata":{"labels":{"reloop-mode":"production-local"}}}' }
@@ -59,7 +76,12 @@ function global:kubectl {
         '{"data":{"schemaHash":"' + $hash + '"}}'; return
     }
     if ($text -match 'get secret') {
-        '{"data":{"POSTGRES_PASSWORD":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('test-only-password')) + '"}}'; return
+        '{"data":{"POSTGRES_PASSWORD":"' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('ci-test-only-password-pppppppppppppppppppppppppppppppp')) + '"}}'; return
+    }
+    if ($text -match 'get deployment redis') {
+        if ($global:Mode -eq 'ephemeral-redis') { '{"spec":{"template":{"spec":{}}}}' }
+        else { '{"spec":{"template":{"spec":{"volumes":[{"name":"redis-data","persistentVolumeClaim":{"claimName":"redis-data"}}],"containers":[{"name":"redis","args":["--appendonly","yes"],"volumeMounts":[{"name":"redis-data","mountPath":"/data"}]}]}}}}' }
+        return
     }
     if ($text -match 'get deployments') { '{"items":[]}'; return }
     if ($text -match 'create secret') { '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"reloop-secrets"}}'; return }
@@ -86,6 +108,8 @@ try {
     if (@($global:Calls | Where-Object { $_ -match '^kind |^kubectl ' }).Count) { throw 'Bootstrap or deployment ran before Docker was ready.' }
     Assert-Fails 'unmarked-namespace' 'unmarked existing namespace'
     Assert-Fails 'active-job' 'database Job is still active'
+    Assert-Fails 'ephemeral-redis' 'Existing Redis is ephemeral'
+    if (@($global:Calls | Where-Object { $_ -match 'docker build|kubectl .* apply' }).Count) { throw 'Redis gate mutated the deployment.' }
     Assert-Fails 'schema-change' 'database files changed'
     if (@($global:Calls | Where-Object { $_ -match 'docker build|kubectl .* apply' }).Count) { throw 'Schema gate mutated the deployment.' }
     Assert-Fails 'build-failure' 'docker failed'
@@ -96,6 +120,10 @@ try {
     if (@($global:Calls | Where-Object { $_ -match '^docker build' }).Count -ne 7) { throw 'Expected seven image builds.' }
     if (@($global:Calls | Where-Object { $_ -match '^kind load docker-image' }).Count -ne 7) { throw 'Expected seven image loads.' }
     if ($global:RenderedJobs.Count -ne 4) { throw 'Expected four SQL status Jobs.' }
+    if (@($global:Calls | Where-Object { $_ -match '^powershell.exe .*expose.ps1.*-EnvFile' }).Count -ne 1) { throw 'Deploy did not configure automatic local access.' }
+    if (-not @($global:Calls | Where-Object { $_ -match 'NEXT_PUBLIC_API_URL=https://api.test' }).Count) { throw 'Frontend build ignored .env API URL.' }
+    if ($global:RenderedSecret.stringData.MAIL_FROM -ne 'RE-LOOP <no-reply@localhost>') { throw 'Quoted dotenv value was not decoded.' }
+    if ($global:RenderedSecret.stringData.NODE_ENV -ne 'production' -or $global:RenderedSecret.stringData.NEXT_PUBLIC_API_URL -ne 'https://api.test') { throw 'Runtime settings did not reach the Secret.' }
     foreach ($job in $global:RenderedJobs) {
         $command = $job.spec.template.spec.containers[0].command -join ' '
         if ($command -ne 'npx --no-install prisma migrate status') { throw 'Normal deploy must not migrate.' }
@@ -130,5 +158,5 @@ try {
     Remove-Item $fixture -ErrorAction SilentlyContinue
     # Remove only artifacts produced by this offline test, never existing run data.
     Get-ChildItem (Join-Path $PSScriptRoot '.state') -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin $before } | Remove-Item -Recurse -Force
-    foreach ($name in @('docker', 'kind', 'kubectl')) { Remove-Item "function:global:$name" -ErrorAction SilentlyContinue }
+    foreach ($name in @('docker', 'kind', 'kubectl', 'powershell.exe')) { Remove-Item "function:global:$name" -ErrorAction SilentlyContinue }
 }

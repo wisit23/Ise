@@ -12,6 +12,35 @@ a second server, multi-node Kubernetes, HA or a new empty installation. A single
 VM and its local disks remain single points of failure. Copy backups off the VM
 before a real cutover; local backup files do not protect against VM/disk loss.
 
+## Root `.env` is the deployment configuration
+
+Both production entry points default to **the repository-root `.env`**.
+`.env.example` is a template, not a production configuration; do not deploy its
+example credentials or overwrite an existing server `.env`. The cloud script
+already passes `--env-file <root>/.env` explicitly to Compose, from any working
+directory. It does not require `deploy/secrets.example.env` or a second secrets file.
+Using the same configuration format does **not** share or synchronize local/cloud data.
+Use each machine's own `.env` and keep it out of Git/chat.
+
+Before build/cutover, the resolved configuration is now checked for:
+- `POSTGRES_PASSWORD`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` and
+  `INTERNAL_SERVICE_TOKEN`: at least 32 characters, not example/dev values;
+  access/refresh/internal tokens must be distinct, and application/database
+  PostgreSQL password settings must agree.
+- `APP_BASE_URL`, `NEXT_PUBLIC_API_URL`, `MAIL_FROM` and `MAIL_TRANSPORT` must be set.
+  Non-loopback URLs require HTTPS and SMTP rather than logging account links.
+  SMTP requires `SMTP_HOST`; authentication settings must be supplied as a pair
+  (`SMTP_USER`/`SMTP_PASS`) if used. `SMTP_PORT` defaults to 587.
+- Frontend `NEXT_PUBLIC_API_URL` build argument must match runtime configuration.
+  Public settings are embedded during build: changing `.env` requires rebuilding.
+
+Validation errors name the setting, not its secret value. No credentials are
+created/rotated automatically. For an existing database with a weak password,
+rotate the database role password and update the matching URLs/configuration in a
+reviewed maintenance operation **before** using this deployment; merely changing
+`.env` does not change a password stored in PostgreSQL. Token rotation also affects
+existing login sessions. Offline tests do not validate actual SMTP/TLS access.
+
 ## Before running on re-loop
 
 1. Commit/review the scripts and transfer that reviewed revision to the server.
@@ -104,7 +133,22 @@ in `.env`/Compose before building. This script does not set up mail, DNS or TLS.
 
 Namespace: **`reloop-production`**. Kubernetes app/database Services are ClusterIP.
 Only frontend and gateway use host ports, matching their existing Compose published
-ports. An existing host reverse proxy can continue to use the same upstream ports;
+ports (`FRONTEND_PORT` and `GATEWAY_PORT` in the root `.env`). No port-forward
+terminal is needed. For example, host ports 13000/18080 route to Pod ports
+3000/8080; generated app environments keep internal listeners at 3000/8080,
+regardless of the host-side values. Invalid/non-numeric/overlapping ports fail
+before cutover. Existing journaled deployments still reject port changes until a
+reviewed cutover; do not edit the journal just to bypass that guard.
+
+`http://localhost:<FRONTEND_PORT>` and `http://localhost:<GATEWAY_PORT>/health`
+refer to **the Cloud VM itself**, not your laptop. External clients use the
+reviewed public HTTPS domain/proxy, with `APP_BASE_URL` and `NEXT_PUBLIC_API_URL`
+set to addresses those clients can actually reach. The script checks both host
+HTTP endpoints before success but does not open Cloud firewall/security groups.
+Unlike kind on Docker Desktop, this K3s installation runs directly on Linux, so
+no extra Docker access proxy is needed. Backend and database ports stay internal.
+
+An existing host reverse proxy can continue to use the same upstream ports;
 the script does not edit that proxy, certificates, DNS or Cloud firewall rules.
 TLS must remain terminated by the reviewed existing proxy. Test the real public
 HTTPS domain, WebSockets, login, upload/download permissions and mail after cutover;
@@ -114,6 +158,16 @@ Only one default `0.0.0.0` TCP published binding per frontend/gateway is support
 Private host bindings are rejected rather than silently exposed. Do not run the
 old Compose app containers after cutover: they use stale copies of the data.
 Optional pgAdmin is not started, stopped or migrated by this script.
+
+Generated workloads and migration Jobs do not mount service-account tokens.
+A `data-services-ingress` NetworkPolicy restricts PostgreSQL/MongoDB/Redis ingress
+to pods in `reloop-production`. **Keep the K3s network-policy controller enabled**;
+check actual denied access from another namespace before opening public traffic.
+This policy does not add Mongo/Redis authentication, isolate apps from each other,
+or protect against a compromised host/node. Do not expose database ports publicly.
+Existing Compose containers retain their old published-port definitions: after
+cutover keep them stopped, and verify from outside the VM that old DB/admin ports
+are not reachable. The script does not edit host firewall rules.
 
 Data uses explicit hostPath directories on the selected **single local node**,
 with `Directory` (not `DirectoryOrCreate`) so a missing path fails instead of
@@ -217,7 +271,9 @@ python -B -m unittest discover -s deploy/production-cloud -p 'test_k8s_productio
 python -B deploy/production-cloud/test-k8s-cold-copy.py
 ```
 
-Offline tests cover production generation, configuration/archive safety, migration
+Offline tests cover production generation, root-environment safety gates,
+frontend build/runtime URL consistency, generated data-service NetworkPolicy and
+token-mount settings, configuration/archive safety, migration
 and maintenance ordering, incomplete-run protection and injected failures. The
 Docker test boots and cold-copies disposable PostgreSQL/MongoDB/Redis datasets and
 an upload fixture, verifies restored data, and cleans up only its own resources.

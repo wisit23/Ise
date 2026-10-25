@@ -26,6 +26,7 @@ test('production starts servers, never schema mutations or dev servers', () => {
   for (const name of names) {
     const pod = deployment(prod, name).spec.template.spec;
     assert.equal(pod.securityContext.runAsNonRoot, true);
+    assert.equal(pod.automountServiceAccountToken, false);
     const c = pod.containers[0];
     assert.doesNotMatch([...(c.command || []), ...(c.args || [])].join(' '), /db push|migrate|run dev/);
     if (name.endsWith('-service')) assert.deepEqual(c.command, ['node', 'src/server.js']);
@@ -48,10 +49,15 @@ test('all file-writing services have persistent storage at the new image paths',
   }
 });
 
-test('database init and Redis retain their existing local behavior', () => {
+test('database init is preserved and Redis queues/sessions use persistent AOF storage', () => {
   assert.equal(prod.filter(d => d.kind === 'Job' && d.metadata.name === 'mongo-init').length, 1);
   assert.equal(prod.filter(d => d.kind === 'StatefulSet').length, 2);
-  assert.equal(deployment(prod, 'redis').spec.template.spec.securityContext, undefined);
+  const redis = deployment(prod, 'redis');
+  assert.equal(redis.spec.strategy.type, 'Recreate');
+  assert.deepEqual(redis.spec.template.spec.containers[0].args, ['--appendonly', 'yes', '--appendfsync', 'everysec']);
+  assert.equal(redis.spec.template.spec.volumes[0].persistentVolumeClaim.claimName, 'redis-data');
+  assert.ok(prod.some(d => d.kind === 'PersistentVolumeClaim' && d.metadata.name === 'redis-data'));
+  assert.equal(deployment(dev, 'redis').spec.template.spec.volumes, undefined);
 });
 
 test('development render remains development-only', () => {
@@ -66,7 +72,7 @@ test('rendered documents split into seven apps and infrastructure as the script 
   const documents = text.split(/^---[ \t]*\r?$/m).filter(d => d.trim());
   const apps = documents.filter(d => /^kind: Deployment\s*$/m.test(d) && !/^ {2}name: redis\s*$/m.test(d));
   assert.equal(apps.length, 7);
-  assert.equal(documents.length - apps.length, 22);
+  assert.equal(documents.length - apps.length, 23);
   for (const doc of apps) assert.ok(names.includes(yaml.load(doc).metadata.name));
 });
 
@@ -89,14 +95,42 @@ test('Windows PowerShell -File resolves default secrets after parameter binding'
   try {
     // Execute the real initialization only: never install tools or contact a cluster.
     const probe = path.join(directory, 'deploy.ps1');
+    fs.copyFileSync(path.join(__dirname, 'environment.ps1'), path.join(directory, 'environment.ps1'));
+    fs.copyFileSync(path.join(__dirname, 'ports.ps1'), path.join(directory, 'ports.ps1'));
     fs.writeFileSync(probe, source.slice(0, end) + '\nWrite-Output $SecretsFile\n');
     const invoke = (args) => execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probe, '-CreateCluster', '-Migrate', ...args], { cwd: root, encoding: 'utf8', timeout: 15000 }).trim();
-    assert.equal(invoke([]), path.join(directory, 'secrets.local.env'));
+    assert.equal(invoke([]), path.resolve(directory, '../..', '.env'));
+    const alias = path.join(directory, 'custom.env');
+    assert.equal(invoke(['-EnvFile', alias]), alias);
     const custom = path.join(directory, 'custom secrets.env');
     assert.equal(invoke(['-SecretsFile', custom]), custom);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('only frontend and gateway publish stable NodePorts; data services stay internal', () => {
+  const services = prod.filter(d => d.kind === 'Service');
+  for (const service of services) {
+    const expected = { frontend: 30080, gateway: 30081 }[service.metadata.name];
+    if (expected) {
+      assert.equal(service.spec.type, 'NodePort');
+      assert.equal(service.spec.ports[0].nodePort, expected);
+    } else {
+      assert.notEqual(service.spec.type, 'NodePort');
+      assert.ok(service.spec.ports.every(p => !p.nodePort));
+    }
+  }
+});
+
+test('existing-cluster local exposure is safe and needs no rebuild or migration', { skip: process.platform !== 'win32' }, () => {
+  const output = execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'test-ports.ps1')], { cwd: root, encoding: 'utf8', timeout: 30000 });
+  assert.ok(output.includes('PASS: local ports setup, ownership, reuse, loopback binding and host HTTP checks'));
+});
+
+test('dotenv parsing and production validation run without a cluster', { skip: process.platform !== 'win32' }, () => {
+  const output = execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'test-environment.ps1')], { cwd: root, encoding: 'utf8', timeout: 15000 });
+  assert.ok(output.includes('PASS: dotenv parsing and production environment gates'));
 });
 
 test('kind bootstrap installs only when missing and fails closed offline', { skip: process.platform !== 'win32' }, () => {
@@ -107,7 +141,7 @@ test('kind bootstrap installs only when missing and fails closed offline', { ski
 
 test('PowerShell consumer handles successful update and fail-closed gates offline', { skip: process.platform !== 'win32' }, () => {
   const output = execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'test-script.ps1')], { cwd: root, encoding: 'utf8', timeout: 60000 });
-  for (const scenario of ['docker-unavailable', 'unmarked-namespace', 'active-job', 'schema-change', 'build-failure', 'job-failure']) assert.ok(output.includes(`PASS: ${scenario}`));
+  for (const scenario of ['docker-unavailable', 'unmarked-namespace', 'active-job', 'ephemeral-redis', 'schema-change', 'build-failure', 'job-failure']) assert.ok(output.includes(`PASS: ${scenario}`));
   assert.ok(output.includes('PASS: normal update'));
   assert.ok(output.includes('PASS: five explicit migration Jobs'));
 });

@@ -2,15 +2,18 @@
 param(
     [switch]$Migrate,
     [switch]$CreateCluster,
+    [Alias('EnvFile')]
     [string]$SecretsFile
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-# Windows PowerShell -File may not populate PSScriptRoot in parameter defaults.
-if (-not $PSBoundParameters.ContainsKey('SecretsFile')) {
-    $SecretsFile = Join-Path $PSScriptRoot 'secrets.local.env'
-}
+# Resolve defaults after parameter binding, independently of the caller's directory.
 $Root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+if (-not $PSBoundParameters.ContainsKey('SecretsFile')) {
+    $SecretsFile = Join-Path $Root '.env'
+}
+. (Join-Path $PSScriptRoot 'environment.ps1')
+. (Join-Path $PSScriptRoot 'ports.ps1')
 $Cluster = 'reloop-production-local'
 $Context = "kind-$Cluster"
 $Namespace = 'reloop-production-local'
@@ -120,6 +123,7 @@ function Run-DatabaseJob {
         spec = @{
             backoffLimit = 0; activeDeadlineSeconds = 600; ttlSecondsAfterFinished = 86400
             template = @{spec = @{
+                automountServiceAccountToken = $false
                 restartPolicy = 'Never'; securityContext = @{runAsNonRoot = $true; runAsUser = 1000; runAsGroup = 1000}
                 containers = @($container)
             }}
@@ -142,24 +146,36 @@ try {
     foreach ($tool in @('docker', 'kubectl')) {
         if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Missing command: $tool" }
     }
-    if (-not (Test-Path $SecretsFile -PathType Leaf)) { throw "Create $SecretsFile using ../secrets.example.env first." }
-    $SecretsFile = (Resolve-Path $SecretsFile).Path
-    $secretText = [IO.File]::ReadAllText($SecretsFile)
-    $values = @{}
-    foreach ($line in $secretText -split '\r?\n') {
-        if ($line -match '^([A-Z_]+)=(.*)$') { $values[$matches[1]] = $matches[2].Trim() }
+    $values = Read-DeploymentEnvironment $SecretsFile
+    Assert-DeploymentEnvironment $values
+    $null = Get-LocalPortSettings $values
+    # Ports and service DNS belong to this cluster, not the host/Compose network.
+    $values['NODE_ENV'] = 'production'
+    $values['PORT'] = '3000'
+    $values['FRONTEND_PORT'] = '3000'
+    $values['POSTGRES_USER'] = 'reloop'
+    foreach ($entry in @(@('GATEWAY',8080), @('AUTH',3001), @('PRODUCT',3002), @('ORDER',3003), @('CHAT',3004), @('SUPPORT',3006))) {
+        $values["$($entry[0])_PORT"] = [string]$entry[1]
     }
-    if (@($values.Values | Where-Object { $_ -match 'CHANGE_ME' }).Count) { throw 'Replace all CHANGE_ME secret values.' }
+    foreach ($service in @('AUTH','PRODUCT','ORDER','CHAT','SUPPORT')) {
+        $values["${service}_SERVICE_URL"] = "http://$($service.ToLowerInvariant())-service:$($values["${service}_PORT"])"
+    }
+    $values['FRONTEND_SERVICE_URL'] = 'http://frontend:3000'
+    $values['KYC_STORAGE_DIR'] = '/app/backend/services/auth-service/private-kyc-documents'
+    $values['REPORT_EVIDENCE_STORAGE_DIR'] = $values['KYC_STORAGE_DIR'] + '/report-evidence'
+    if ($values['REDIS_URL'] -ne 'redis://redis:6379') { throw 'REDIS_URL must be redis://redis:6379 for this cluster.' }
     foreach ($key in @('POSTGRES_PASSWORD', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'INTERNAL_SERVICE_TOKEN', 'DATABASE_URL_AUTH', 'DATABASE_URL_PRODUCT', 'DATABASE_URL_ORDER', 'DATABASE_URL_SUPPORT', 'DATABASE_URL_CHAT')) {
         if (-not $values.ContainsKey($key) -or -not $values[$key]) { throw "Missing secret key: $key" }
     }
     # Never accidentally connect this rehearsal to an external or Compose database.
     foreach ($key in @('AUTH', 'PRODUCT', 'ORDER', 'SUPPORT')) {
-        $uri = [Uri]$values["DATABASE_URL_$key"]
+        $uri = $null
+        if (-not [Uri]::TryCreate($values["DATABASE_URL_$key"], [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -notin @('postgresql', 'postgres')) { throw "Invalid DATABASE_URL_$key." }
         if ($uri.Host -ne 'postgres' -or $uri.Port -ne 5432 -or $uri.AbsolutePath -ne "/reloop_$($key.ToLowerInvariant())") { throw "DATABASE_URL_$key must target its internal postgres database." }
         if ([Uri]::UnescapeDataString($uri.UserInfo) -ne "reloop:$($values['POSTGRES_PASSWORD'])") { throw "DATABASE_URL_$key credentials must match POSTGRES_PASSWORD and user reloop." }
     }
-    $mongoUri = [Uri]$values['DATABASE_URL_CHAT']
+    $mongoUri = $null
+    if (-not [Uri]::TryCreate($values['DATABASE_URL_CHAT'], [UriKind]::Absolute, [ref]$mongoUri) -or $mongoUri.Scheme -ne 'mongodb') { throw 'Invalid DATABASE_URL_CHAT.' }
     if ($mongoUri.Host -ne 'mongo' -or $mongoUri.Port -ne 27017 -or $mongoUri.AbsolutePath -ne '/reloop_chat' -or $mongoUri.Query -notmatch 'replicaSet=rs0') { throw 'DATABASE_URL_CHAT must target mongo:27017/reloop_chat with replicaSet=rs0.' }
     Invoke-Native 'docker' @('info', '--format', '{{.ServerVersion}}')
     Ensure-Kind
@@ -178,6 +194,26 @@ try {
     if ($existingNamespace) {
         $ns = $existingNamespace | ConvertFrom-Json
         if (-not $ns.metadata.labels.PSObject.Properties['reloop-mode'] -or $ns.metadata.labels.'reloop-mode' -ne 'production-local') { throw 'Refusing to use an unmarked existing namespace.' }
+    }
+    if ($existingNamespace) {
+        $redis = Read-K @('get', 'deployment', 'redis', '--ignore-not-found', '-o', 'json')
+        if ($redis) {
+            $redisDeployment = $redis | ConvertFrom-Json
+            $redisSpec = $redisDeployment.spec.template.spec
+            $persistentRedis = @()
+            if ($redisSpec.PSObject.Properties['volumes']) {
+                $persistentRedis = @($redisSpec.volumes | Where-Object { $_.PSObject.Properties['persistentVolumeClaim'] -and $_.persistentVolumeClaim.claimName -eq 'redis-data' })
+            }
+            $mountedRedis = @()
+            if ($redisSpec.PSObject.Properties['containers']) {
+                foreach ($container in $redisSpec.containers) {
+                    if ($container.name -eq 'redis' -and $container.PSObject.Properties['volumeMounts'] -and $container.PSObject.Properties['args'] -and ($container.args -join ' ') -match '--appendonly yes(?:\s|$)') {
+                        $mountedRedis = @($container.volumeMounts | Where-Object { $_.mountPath -eq '/data' -and $_.name -in @($persistentRedis | ForEach-Object { $_.name }) })
+                    }
+                }
+            }
+            if (-not $mountedRedis.Count) { throw 'Existing Redis is ephemeral or not AOF-backed. Stop writers, back up and migrate Redis with verified AOF into redis-data before updating; refusing to discard sessions/queues.' }
+        }
     }
     $schemaHash = Get-SchemaHash
     $previousHash = ''
@@ -199,7 +235,12 @@ try {
     foreach ($service in $Apps) {
         $image = "reloop/production-local-${service}:$Tag"
         $arguments = @('build', '-f', (Join-Path $PSScriptRoot 'Dockerfile'), '-t', $image)
-        if ($service -eq 'frontend') { $arguments += @('--target', 'frontend') }
+        if ($service -eq 'frontend') {
+            $arguments += @('--target', 'frontend', '--build-arg', "NEXT_PUBLIC_API_URL=$($values['NEXT_PUBLIC_API_URL'])")
+            foreach ($key in @('NEXT_PUBLIC_REPORT_TIMEZONE', 'NEXT_PUBLIC_REPORT_SEARCH_DEBOUNCE_MS', 'NEXT_PUBLIC_REPORT_REQUEST_TIMEOUT_MS')) {
+                if ($values[$key]) { $arguments += @('--build-arg', "${key}=$($values[$key])") }
+            }
+        }
         else {
             $workspace = if ($service -eq 'gateway') { 'backend/gateway' } else { "backend/services/$service" }
             $arguments += @('--target', 'backend', '--build-arg', "WORKSPACE=$workspace")
@@ -235,8 +276,8 @@ try {
     }
     # Namespace must exist before creating namespaced resources or the Secret.
     K @('apply', '-f', (Join-Path $PSScriptRoot 'namespace.yaml'))
-    $secretYaml = & kubectl --context $Context -n $Namespace create secret generic reloop-secrets "--from-env-file=$SecretsFile" --dry-run=client -o json
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare Secret.' }
+    # Serialize the parsed values once; kubectl's env-file parser handles quotes differently.
+    $secretYaml = @{apiVersion = 'v1'; kind = 'Secret'; metadata = @{name = 'reloop-secrets'; namespace = $Namespace}; type = 'Opaque'; stringData = $values} | ConvertTo-Json -Depth 10
     # Keep secret bytes in memory, never in a generated manifest or log.
     $secretYaml | & kubectl --context $Context -n $Namespace apply -f - | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Cannot apply Secret.' }
@@ -274,6 +315,8 @@ try {
     $Stage = 'smoke'
     K @('exec', 'deployment/frontend', '--', 'node', '-e', "if(process.env.NODE_ENV!=='production')process.exit(1);fetch('http://127.0.0.1:3000',{signal:AbortSignal.timeout(10000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))")
     K @('exec', 'deployment/gateway', '--', 'node', '-e', "fetch('http://127.0.0.1:8080/api/products/feed?limit=1',{signal:AbortSignal.timeout(10000)}).then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);if(!Array.isArray((await r.json()).items))throw Error('Invalid feed');console.log('Product feed smoke passed')}).catch(e=>{console.error(e.message);process.exit(1)})")
+    $Stage = 'local-access'
+    Invoke-Native 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'expose.ps1'), '-EnvFile', $SecretsFile)
     $stateObject = @{apiVersion = 'v1'; kind = 'ConfigMap'; metadata = @{name = 'deployment-state'; namespace = $Namespace}; data = @{schemaHash = $schemaHash; imageTag = $Tag}}
     $stateObject | ConvertTo-Json -Depth 10 | & kubectl --context $Context -n $Namespace apply -f - | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Cannot record successful deployment.' }

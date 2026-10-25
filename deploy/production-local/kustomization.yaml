@@ -5,6 +5,7 @@ resources:
   - ../k8s
   - namespace.yaml
   - auth-storage.yaml
+  - redis-storage.yaml
 # Fail closed if someone applies this overlay without the deployment script.
 images:
   - name: reloop/gateway
@@ -29,6 +30,59 @@ images:
     newName: reloop/production-local-frontend
     newTag: unbuilt
 patches:
+  # Stable NodePorts feed the Docker loopback proxy, including on existing kind clusters.
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: frontend
+      spec:
+        type: NodePort
+        ports:
+          - name: tcp
+            port: 3000
+            targetPort: 3000
+            nodePort: 30080
+  - patch: |-
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: gateway
+      spec:
+        type: NodePort
+        ports:
+          - name: tcp
+            port: 8080
+            targetPort: 8080
+            nodePort: 30081
+  - target:
+      kind: Deployment|StatefulSet|Job
+    patch: |-
+      - op: add
+        path: /spec/template/spec/automountServiceAccountToken
+        value: false
+  # Sessions and queues are not disposable cache. Existing ephemeral Redis needs
+  # a reviewed data copy before this PVC may replace its writable container layer.
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: redis
+      spec:
+        strategy:
+          type: Recreate
+        template:
+          spec:
+            containers:
+              - name: redis
+                args: [--appendonly, 'yes', --appendfsync, everysec]
+                volumeMounts:
+                  - name: redis-data
+                    mountPath: /data
+            volumes:
+              - name: redis-data
+                persistentVolumeClaim:
+                  claimName: redis-data
   # Keep the development namespace untouched.
   - patch: |-
       apiVersion: v1

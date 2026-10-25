@@ -8,6 +8,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import re
 import posixpath
 from pathlib import Path
 import shutil
@@ -131,8 +132,12 @@ def public_ports(config):
         binding = bindings[0]
         need(isinstance(binding, dict) and binding.get("protocol", "tcp") == "tcp",
              "Unsupported published port configuration.")
-        port = int(binding.get("published", 0))
-        need(1 <= port <= 65535 and int(binding["target"]) == PORTS[app],
+        try:
+            port = int(binding.get("published", 0))
+            target = int(binding.get("target", 0))
+        except (TypeError, ValueError):
+            raise Blocked(f"{app}: published and target ports must be integers.") from None
+        need(1 <= port <= 65535 and target == PORTS[app],
              f"{app}: invalid source port mapping.")
         host = binding.get("host_ip", "0.0.0.0")
         need(host == "0.0.0.0", "Non-default host IP binding requires a reviewed network configuration.")
@@ -163,6 +168,43 @@ def validate_storage_env(environment):
     return directory, reports
 
 
+def validate_production_environment(values, label):
+    """Validate resolved Compose values, not shell-evaluated dotenv text."""
+    for key in ("POSTGRES_PASSWORD", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "INTERNAL_SERVICE_TOKEN"):
+        value = values.get(key, "")
+        need(len(value) >= 32 and not re.search(r"change[_-]?me|example|reloop_dev|^dev[_-]", value, re.I),
+             f"{label}: {key} must be at least 32 characters and not an example/development secret.")
+    need(len({values[key] for key in ("JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "INTERNAL_SERVICE_TOKEN")}) == 3,
+         f"{label}: JWT access, refresh and internal tokens must be different.")
+    loopback = True
+    for key in ("APP_BASE_URL", "NEXT_PUBLIC_API_URL"):
+        try:
+            url = urlsplit(values.get(key, ""))
+            need(url.scheme in ("http", "https") and url.hostname and not url.username
+                 and not url.password and not url.query and not url.fragment,
+                 f"{label}: {key} must be an absolute HTTP(S) URL without credentials, query or fragment.")
+            host = url.hostname
+            try:
+                local = ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                local = host == "localhost"
+            if not local:
+                loopback = False
+                need(url.scheme == "https", f"{label}: {key} requires HTTPS for non-loopback use.")
+        except ValueError:
+            raise Blocked(f"{label}: invalid {key} URL.") from None
+    transport = values.get("MAIL_TRANSPORT")
+    need(transport in ("smtp", "log"), f"{label}: MAIL_TRANSPORT must be smtp or log.")
+    need(loopback or transport == "smtp", f"{label}: non-loopback deployments require MAIL_TRANSPORT=smtp.")
+    need(values.get("MAIL_FROM"), f"{label}: MAIL_FROM is required.")
+    if transport == "smtp":
+        need(values.get("SMTP_HOST"), f"{label}: SMTP_HOST is required.")
+        need(bool(values.get("SMTP_USER")) == bool(values.get("SMTP_PASS")),
+             f"{label}: SMTP_USER and SMTP_PASS must be set together.")
+        port = values.get("SMTP_PORT", "587")
+        need(str(port).isdigit() and 1 <= int(port) <= 65535, f"{label}: invalid SMTP_PORT.")
+
+
 def validate_config(config):
     services = config["services"]
     for name in APPS + DATABASES:
@@ -175,14 +217,21 @@ def validate_config(config):
         need(url.hostname == expected, f"{name}: DATABASE_URL must address the local {expected} service.")
     for name in APPS:
         environment = env_of(services[name])
+        validate_production_environment(environment, name)
         if "REDIS_URL" in environment:
             need(urlsplit(environment["REDIS_URL"]).hostname == "redis",
                  "Only the existing local Redis is supported.")
     need(services["frontend"].get("build", {}).get("dockerfile") == "frontend/Dockerfile.prod",
          "Frontend must use Dockerfile.prod.")
     need(not services["frontend"].get("volumes"), "Production frontend cannot have development mounts.")
+    build_args = services["frontend"]["build"].get("args", {})
+    need(build_args.get("NEXT_PUBLIC_API_URL") == env_of(services["frontend"]).get("NEXT_PUBLIC_API_URL"),
+         "Frontend build NEXT_PUBLIC_API_URL must match its runtime environment.")
     pg = env_of(services["postgres"])
     need(pg.get("POSTGRES_USER") and pg.get("POSTGRES_PASSWORD"), "PostgreSQL credentials are missing.")
+    for name in APPS:
+        need(env_of(services[name]).get("POSTGRES_PASSWORD") == pg["POSTGRES_PASSWORD"],
+             f"{name}: POSTGRES_PASSWORD must match the PostgreSQL service.")
     need(not pg.get("POSTGRES_INITDB_WALDIR"), "External PostgreSQL WAL directories need manual migration.")
     pgdata = pg.get("PGDATA", "/var/lib/postgresql/data")
     need((pgdata == "/var/lib/postgresql/data" or pgdata.startswith("/var/lib/postgresql/data/"))
@@ -203,7 +252,7 @@ def validate_config(config):
 
 
 def resource(kind, name, spec=None, **fields):
-    versions = {"Deployment": "apps/v1", "Job": "batch/v1"}
+    versions = {"Deployment": "apps/v1", "Job": "batch/v1", "NetworkPolicy": "networking.k8s.io/v1"}
     item = {"apiVersion": versions.get(kind, "v1"), "kind": kind,
             "metadata": {"name": name, "namespace": NAMESPACE,
                          "labels": {"app.kubernetes.io/managed-by": OWNER}}}
@@ -219,12 +268,23 @@ def environment(name, service):
         result["NODE_ENV"] = "production"
         result.pop("WATCHPACK_POLLING", None)
         result.pop("CHOKIDAR_USEPOLLING", None)
+        # .env *_PORT values publish the host ports. Pod listeners stay fixed to
+        # match Services, probes and inter-service URLs, even with custom host ports.
+        for app, port in PORTS.items():
+            result[app.replace('-service', '').upper() + '_PORT'] = str(port)
+        if name == "frontend":
+            result["PORT"] = "3000"
     return result
 
 
 def manifests(config, images, state, *, apps_enabled):
     """Production resources intentionally do not reuse development startup db-push."""
-    items = []
+    # Mongo/Redis have no authentication in the imported topology. Restrict data
+    # service ingress to this namespace; K3s' network-policy controller must stay enabled.
+    items = [resource("NetworkPolicy", "data-services-ingress", {
+        "podSelector": {"matchExpressions": [{"key": "app", "operator": "In", "values": list(DATABASES)}]},
+        "policyTypes": ["Ingress"], "ingress": [{"from": [{"podSelector": {}}]}],
+    })]
     bindings = public_ports(config)
     for name in APPS + DATABASES:
         service = config["services"][name]
@@ -261,7 +321,8 @@ def manifests(config, images, state, *, apps_enabled):
                 "mongosh --quiet --eval 'quit(db.hello().isWritablePrimary ? 0 : 1)'"]}, "periodSeconds": 5}
         else:
             container["readinessProbe"] = {"exec": {"command": ["redis-cli", "ping"]}, "periodSeconds": 5}
-        pod = {"nodeSelector": {"kubernetes.io/hostname": config["node"]},
+        pod = {"automountServiceAccountToken": False,
+               "nodeSelector": {"kubernetes.io/hostname": config["node"]},
                "terminationGracePeriodSeconds": 180 if name in DATABASES else 60,
                "containers": [container], "volumes": volumes}
         items.append(resource("Deployment", name, {"replicas": int(apps_enabled or name in DATABASES),
@@ -532,7 +593,7 @@ class Deployment:
         container = {"name": "migration", "image": self.images[name], "imagePullPolicy": "Never",
                      "command": command, "envFrom": [{"secretRef": {"name": secret_name}}]}
         job = resource("Job", job_name, {"backoffLimit": 0, "activeDeadlineSeconds": 600,
-            "template": {"spec": {"restartPolicy": "Never",
+            "template": {"spec": {"automountServiceAccountToken": False, "restartPolicy": "Never",
             "nodeSelector": {"kubernetes.io/hostname": self.config["node"]}, "containers": [container]}}})
         self.apply(job)
         try:
