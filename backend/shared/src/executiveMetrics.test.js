@@ -4,6 +4,9 @@ const {
   resolveMetricRange,
   resolveExecutiveRange,
   allowedValue,
+  searchQuery,
+  escapeLike,
+  listSort,
   buildSeriesPeriods,
   fillSeriesGaps,
 } = require("./executiveMetrics");
@@ -204,4 +207,45 @@ test("a filter value must be one the page offers", () => {
       (err) => err.status === 400,
     );
   }
+});
+
+test("a search takes codes, ticket numbers and shop names as plain text", () => {
+  assert.equal(searchQuery(undefined), undefined);
+  assert.equal(searchQuery(""), undefined);
+  assert.equal(searchQuery("   "), undefined);
+  assert.equal(searchQuery(" RPT-8AX4-M8BH-8DDQ "), "RPT-8AX4-M8BH-8DDQ");
+  assert.equal(searchQuery("#CS-000002"), "#CS-000002");
+  assert.equal(searchQuery(" ร้านยีนส์ 50% "), "ร้านยีนส์ 50%");
+  assert.equal(searchQuery("x".repeat(100)).length, 100);
+  for (const bad of [["a"], {}, 5, "x".repeat(101)]) {
+    assert.throws(
+      () => searchQuery(bad),
+      (err) => err.status === 400,
+    );
+  }
+});
+
+test("a list is newest first unless oldest first is asked for", () => {
+  assert.equal(listSort(undefined), "newest");
+  assert.equal(listSort(""), "newest");
+  assert.equal(listSort("newest"), "newest");
+  assert.equal(listSort("oldest"), "oldest");
+  for (const bad of ["latest", "OLDEST", ["oldest"], {}]) {
+    assert.throws(
+      () => listSort(bad),
+      (err) => err.status === 400,
+    );
+  }
+});
+
+test("LIKE characters in a search are escaped so they match themselves", () => {
+  assert.equal(escapeLike("plain text"), "plain text");
+  const backslash = String.fromCharCode(92);
+  assert.equal(escapeLike("50%"), `50${backslash}%`);
+  assert.equal(escapeLike("a_b"), `a${backslash}_b`);
+  assert.equal(escapeLike(`a${backslash}b`), `a${backslash}${backslash}b`);
+  assert.equal(
+    escapeLike(`%_${backslash}`),
+    `${backslash}%${backslash}_${backslash}${backslash}`,
+  );
 });

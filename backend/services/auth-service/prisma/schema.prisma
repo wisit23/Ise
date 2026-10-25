@@ -18,6 +18,14 @@ enum KycStatus {
   INACTIVE_EXPIRED
 }
 
+// Why an EmailVerificationToken was issued: confirming the address a new
+// account signed up with, or proving a user owns an address they want to
+// switch to (the token then carries that new address).
+enum EmailVerificationPurpose {
+  SIGNUP
+  EMAIL_CHANGE
+}
+
 enum ReportStatus {
   OPEN
   REVIEWED
@@ -26,6 +34,7 @@ enum ReportStatus {
 }
 
 model User {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String   @map("password_hash")
@@ -36,6 +45,9 @@ model User {
   // the multi-role source of truth once explicit grants exist.
   role         String   @default("BUYER")
   status       String   @default("ACTIVE")
+  // Null until the owner proves they control `email` (sign-up link or a
+  // completed password reset). Sign-in is refused while it is null.
+  emailVerifiedAt DateTime? @map("email_verified_at")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -44,6 +56,8 @@ model User {
   loginLogs          LoginLog[]
   buyerActivityLogs  BuyerActivityLog[]
   refreshTokens      RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
   reports            Report[]
   roles              UserRole[]
   kycApplications    KycApplication[]
@@ -186,11 +200,60 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+// Single-use, short-lived credentials for the forgot-password flow. Only a
+// SHA-256 digest of the token is stored: the raw value exists solely in the
+// email link, so a database leak cannot be replayed as a reset. Rows are kept
+// after use (usedAt / revokedAt) as an audit trail until the cleanup job
+// prunes them.
+model PasswordResetToken {
+  id                 String    @id @default(uuid())
+  userId             String    @map("user_id")
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash          String    @unique @map("token_hash")
+  expiresAt          DateTime  @map("expires_at")
+  usedAt             DateTime? @map("used_at")
+  revokedAt          DateTime? @map("revoked_at")
+  requestedIp        String?   @map("requested_ip")
+  requestedUserAgent String?   @map("requested_user_agent")
+  usedIp             String?   @map("used_ip")
+  // Short, non-secret code shown on the page that asked for the link and
+  // printed in the email, so the user can tell which email is the right one.
+  referenceCode      String?   @map("reference_code")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("password_reset_tokens")
+}
+
+// Single-use links proving a user controls an email address. Same storage
+// rules as PasswordResetToken: only the SHA-256 digest is kept, and rows stay
+// as an audit trail until the cleanup job prunes them. `email` is the
+// address the link proves, which differs from the user's current one for
+// an EMAIL_CHANGE.
+model EmailVerificationToken {
+  id            String                   @id @default(uuid())
+  userId        String                   @map("user_id")
+  user          User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose       EmailVerificationPurpose @default(SIGNUP)
+  email         String
+  referenceCode String?                  @map("reference_code")
+  tokenHash   String    @unique @map("token_hash")
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  revokedAt   DateTime? @map("revoked_at")
+  requestedIp String?   @map("requested_ip")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, purpose, createdAt])
+  @@map("email_verification_tokens")
+}
+
 // ER: Reports — table created now per plan (no tables cut from ER); report/moderation UI is a later phase.
 // ADM-003 extension: reviewedAt/reviewedBy/actionTaken track the
 // OPEN -> REVIEWED -> ACTIONED|DISMISSED lifecycle so a decision is never lost
 // once made (append-only AdminAudit below records the same fact independently).
 model Report {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id          String       @id @default(uuid())
   reporterId  String       @map("reporter_id")
   reporter    User         @relation(fields: [reporterId], references: [id])
@@ -245,6 +308,7 @@ model AdminAudit {
 // re-executing (so a retried network call can't double-suspend/double-decide).
 // `results` is a JSON snapshot of the batch summary (see bulkActionService).
 model BulkActionRun {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id             String   @id @default(uuid())
   idempotencyKey String   @unique @map("idempotency_key")
   actorId        String   @map("actor_id")
@@ -293,6 +357,7 @@ model UserRole {
 // and evidence persist even though SellerProfile only reflects the latest state.
 // `version` is an optimistic lock: decideKyc rejects a stale/duplicate decision.
 model KycApplication {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id          String    @id @default(uuid())
   userId      String    @map("user_id")
   user        User      @relation(fields: [userId], references: [id])
@@ -341,6 +406,7 @@ model ExecutiveAuditLog {
 // Admin must approve before the SellerProfile is updated — keeps an
 // audit trail of every change request and its outcome.
 model ShopChangeRequest {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id         String                  @id @default(uuid()) @map("requests_id")
   sellerId   String                  @map("seller_id")
   seller     User                    @relation(fields: [sellerId], references: [id])
@@ -384,4 +450,11 @@ model AutoMessage {
 
   @@index([userId])
   @@map("auto_messages")
+}
+
+// Allocated atomically by the reference-code triggers; never reuse deleted codes.
+model ReferenceCodeAllocation {
+  code String @id
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("_reference_codes")
 }

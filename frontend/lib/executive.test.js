@@ -11,6 +11,7 @@ import {
   monthWindow,
   OVERVIEW_MODES,
   overviewPeriods,
+  describeMode,
   yearWindow,
 } from "./executive";
 
@@ -130,9 +131,9 @@ describe("currentDate", () => {
 });
 
 describe("OVERVIEW_MODES", () => {
-  it("offers 7 days, this month, then this year, with 7 days first as the default", () => {
+  it("offers today, this month, then this year, with today first as the default", () => {
     expect(OVERVIEW_MODES.map((m) => [m.value, m.label])).toEqual([
-      ["week", "7 วันล่าสุด"],
+      ["today", "วันนี้"],
       ["month", "เดือนนี้"],
       ["year", "ปีนี้"],
     ]);
@@ -140,7 +141,7 @@ describe("OVERVIEW_MODES", () => {
 
   it("names what each mode is compared with", () => {
     expect(OVERVIEW_MODES.map((m) => m.compareLabel)).toEqual([
-      "เทียบกับ 7 วันก่อนหน้านี้",
+      "เทียบกับวันเดียวกันสัปดาห์ที่แล้ว",
       "เทียบกับวันเดียวกันของเดือนที่แล้ว",
       "เทียบกับวันเดือนเดียวกันของปีที่แล้ว",
     ]);
@@ -182,18 +183,37 @@ describe("overviewPeriods", () => {
     expect(p.previous).toEqual({ from: "2027-01-01", to: "2027-03-01" });
   });
 
-  it("compares the last 7 days with the 7 days before them", () => {
-    expect(overviewPeriods("week", OCT_14)).toEqual({
-      current: { from: "2026-10-08", to: "2026-10-15" },
-      previous: { from: "2026-10-01", to: "2026-10-08" },
-      trend: { from: "2026-10-08", to: "2026-10-15", granularity: "day" },
+  it("compares today with the same weekday last week, up to the same time", () => {
+    // Wednesday 14 October, 12:00 Bangkok, against Wednesday 7 October up
+    // to 12:00 Bangkok.
+    expect(overviewPeriods("today", OCT_14)).toEqual({
+      current: { from: "2026-10-14", to: "2026-10-15" },
+      previous: { from: "2026-10-07", to: "2026-10-07T05:00:00.000Z" },
+      trend: { from: "2026-10-14", to: "2026-10-15", granularity: "hour" },
     });
   });
 
-  it("lets the 7-day windows cross a month boundary", () => {
-    const p = overviewPeriods("week", new Date("2026-10-03T05:00:00.000Z"));
-    expect(p.current).toEqual({ from: "2026-09-27", to: "2026-10-04" });
-    expect(p.previous).toEqual({ from: "2026-09-20", to: "2026-09-27" });
+  it("lets last week's day be in the month before", () => {
+    const p = overviewPeriods("today", new Date("2026-10-01T05:00:00.000Z"));
+    expect(p.current).toEqual({ from: "2026-10-01", to: "2026-10-02" });
+    expect(p.previous).toEqual({
+      from: "2026-09-24",
+      to: "2026-09-24T05:00:00.000Z",
+    });
+  });
+
+  it("says it is compared with the same day last week", () => {
+    expect(describeMode("today")).toMatchObject({
+      compareLabel: "เทียบกับวันเดียวกันสัปดาห์ที่แล้ว",
+      baselineName: "วันเดียวกันสัปดาห์ที่แล้ว",
+      periodName: "วันนี้",
+    });
+  });
+
+  it("changes day at Bangkok midnight, not UTC's", () => {
+    // 01:00 Bangkok on 15 October is still 14 October in UTC.
+    const p = overviewPeriods("today", new Date("2026-10-14T18:00:00.000Z"));
+    expect(p.current).toEqual({ from: "2026-10-15", to: "2026-10-16" });
   });
 });
 
@@ -290,27 +310,30 @@ describe("buildTrendPoints", () => {
     expect(points[0].value).toBe(0);
   });
 
-  it("labels each of the 7 days with its date and month", () => {
-    const rows = [8, 9, 10, 11, 12, 13, 14].map((d) => ({
-      period: bangkokStart(2026, 9, d),
-      gmv: d * 100,
-      platformRevenue: d * 3,
+  it("charts today by the hour, only up to the hour it is now", () => {
+    // All 24 hourly slots of 14 October in Bangkok; it is 12:00 there.
+    const rows = Array.from({ length: 24 }, (_, i) => ({
+      period: new Date(
+        Date.UTC(2026, 9, 13, 17) + i * 3600 * 1000,
+      ).toISOString(),
+      gmv: (i + 1) * 100,
+      platformRevenue: i + 1,
       completedOrders: 1,
     }));
-    const points = buildTrendPoints("week", rows, OCT_14);
+    const points = buildTrendPoints("today", rows, OCT_14);
 
-    expect(points.map((p) => p.label)).toEqual([
-      "8",
-      "9",
-      "10",
-      "11",
-      "12",
-      "13",
-      "14",
+    // 00:00 to 12:00: the hours still to come are not drawn as zero sales.
+    expect(points).toHaveLength(13);
+    expect(points[0].label).toBe("00:00");
+    expect(points[12].label).toBe("12:00");
+    expect(points.map((p) => p.axisLabel).filter(Boolean)).toEqual([
+      "00:00",
+      "03:00",
+      "06:00",
+      "09:00",
+      "12:00",
     ]);
-    expect(points[0].subLabel).toBe("ต.ค.");
-    expect(points[6].fullLabel).toBe("14 ต.ค. 69");
-    expect(points.every((p) => !p.fullLabel.includes("ถึง"))).toBe(true);
-    expect(points[6].detail).toBe("ยอดขาย ฿1,400 · รายได้แพลตฟอร์ม ฿42");
+    expect(points[12].fullLabel).toBe("14 ต.ค. 2569 · 12:00–12:59");
+    expect(points[12].detail).toBe("ยอดขาย ฿1,300 · รายได้แพลตฟอร์ม ฿13");
   });
 });

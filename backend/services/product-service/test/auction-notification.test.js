@@ -18,6 +18,17 @@ function captureRequests(t) {
   return requests;
 }
 
+test("auction start reaches the notification center with the item link", async (t) => {
+  const requests = captureRequests(t);
+  await chatClient.notifyItemOpened({ id: "item-start", roundId: "round-1", product: { title: "เสื้อวินเทจ" } });
+  assert.equal(requests.length, 1);
+  assert.ok(requests[0].url.endsWith("/internal/notifications"));
+  assert.equal(requests[0].body.userId, "ALL");
+  assert.equal(requests[0].body.type, "AUCTION");
+  assert.equal(requests[0].body.metadata.status, "open");
+  assert.equal(requests[0].body.link, "/auctions/item-start");
+});
+
 test("rejection notifies only the seller with reason, safe item link and stable key", async (t) => {
   const requests = captureRequests(t);
   const input = {
@@ -44,6 +55,12 @@ test("rejection notifies only the seller with reason, safe item link and stable 
     "auction.item_rejected:item-rejected-1:seller-1",
   );
   assert.equal(messages[0].body.idempotencyKey, messages[1].body.idempotencyKey);
+
+  const bellNotifs = requests.filter(({ url }) => url.endsWith("/internal/notifications"));
+  assert.equal(bellNotifs.length, 2);
+  assert.equal(bellNotifs[0].body.userId, "seller-1");
+  assert.equal(bellNotifs[0].body.type, "AUCTION");
+  assert.equal(bellNotifs[0].body.link, "/seller/auctions");
 });
 
 test("item, round cancellation and round update include in-chat detail links", async (t) => {
@@ -126,4 +143,51 @@ test("item, round cancellation and round update include in-chat detail links", a
       ),
   );
   assert.ok(payloads.every((payload) => payload.summary));
+
+  const bellNotifs = requests.filter(({ url }) => url.endsWith("/internal/notifications"));
+  const itemCancelledBell = bellNotifs.find((r) => r.body.userId === "seller-2");
+  assert.ok(itemCancelledBell);
+  assert.equal(itemCancelledBell.body.link, "/seller/auctions");
+  assert.equal(itemCancelledBell.body.type, "AUCTION");
+
+  const sellerRoundCancelledBell = bellNotifs.find((r) => r.body.userId === "seller-3");
+  assert.ok(sellerRoundCancelledBell);
+  assert.equal(sellerRoundCancelledBell.body.link, "/seller/auctions");
+
+  const buyerRoundCancelledBell = bellNotifs.find((r) => r.body.userId === "buyer-3");
+  assert.ok(buyerRoundCancelledBell);
+  assert.equal(buyerRoundCancelledBell.body.link, "/auctions/rounds/round-3");
+});
+
+test("auction cancellation notification delivers to notification center even if chat fails", async (t) => {
+  const requests = [];
+  t.mock.method(global, "fetch", async (url, options) => {
+    const body = JSON.parse(options.body);
+    requests.push({ url, body });
+    if (url.endsWith("/internal/conversations")) {
+      throw new Error("Chat service unavailable");
+    }
+    return {
+      ok: true,
+      json: async () => ({ id: "notif-success" }),
+    };
+  });
+
+  await chatClient.notifyItemCancelled({
+    item: {
+      id: "item-cancelled-failover",
+      roundId: "round-99",
+      productId: "product-99",
+      sellerId: "seller-99",
+      product: { title: "กล้องถ่ายรูป" },
+    },
+    round: { id: "round-99", title: "รอบอุปกรณ์" },
+    reason: "ผู้ดูแลยกเลิกรายการ",
+  });
+
+  const bellNotifs = requests.filter(({ url }) => url.endsWith("/internal/notifications"));
+  assert.equal(bellNotifs.length, 1);
+  assert.equal(bellNotifs[0].body.userId, "seller-99");
+  assert.equal(bellNotifs[0].body.link, "/seller/auctions");
+  assert.equal(bellNotifs[0].body.type, "AUCTION");
 });

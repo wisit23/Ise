@@ -1,7 +1,8 @@
 "use client";
+import ReferenceCode from "../../components/ui/ReferenceCode";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import NavBar from "../../components/NavBar";
 import Footer from "../../components/Footer";
@@ -16,6 +17,7 @@ import StyleProfileForm from "../../components/profile/StyleProfileForm";
 import MyOrders from "../../components/orders/MyOrders";
 import { apiFetch } from "../../lib/api";
 import { validateAddressContact } from "../../lib/addressValidation";
+import { PHONE_HINT, PHONE_MAX_LENGTH, PHONE_PATTERN, phoneDigits } from "../../lib/phone";
 import {
   getAccessToken,
   getRefreshToken,
@@ -36,7 +38,7 @@ const ROLE_LABEL = {
 const ORDER_STATUSES = [
   {
     key: "pending_payment",
-    statuses: ["pending", "pending_payment"],
+    statuses: ["pending_payment"],
     label: "รอชำระเงิน",
     icon: "payments",
     badgeColor: "bg-amber-100 text-amber-800",
@@ -49,8 +51,15 @@ const ORDER_STATUSES = [
     badgeColor: "bg-sky-100 text-sky-800",
   },
   {
-    key: "shipped",
-    statuses: ["shipped"],
+    key: "pickup_in_progress",
+    statuses: ["pickup_in_progress"],
+    label: "ขนส่งกำลังเข้ารับสินค้า",
+    icon: "inventory_2",
+    badgeColor: "bg-indigo-100 text-indigo-800",
+  },
+  {
+    key: "in_transit",
+    statuses: ["in_transit"],
     label: "กำลังจัดส่ง",
     icon: "local_shipping",
     badgeColor: "bg-indigo-100 text-indigo-800",
@@ -102,18 +111,37 @@ const BLANK_ADDRESS = {
 };
 
 export default function ProfilePage() {
+  return (
+    <Suspense fallback={<p role="status">กำลังโหลด...</p>}>
+      <ProfileContent />
+    </Suspense>
+  );
+}
+
+function ProfileContent() {
   const router = useRouter();
+  const requestedTab = useSearchParams().get("tab");
+  const selectedTab = ["orders", "address", "coupons"].includes(requestedTab)
+    ? requestedTab
+    : "profile";
   const [form, setForm] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Navigation tab: 'profile' | 'orders' | 'address' | 'coupons'
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState(selectedTab);
 
   // Orders state — loaded from order-service PostgreSQL through the gateway.
   const [orderView, setOrderView] = useState({ tab: "all", key: 0 });
   const [orders, setOrders] = useState([]);
+
+  useEffect(() => {
+    setActiveTab(selectedTab);
+    if (selectedTab === "orders") {
+      setOrderView((current) => ({ tab: "all", key: current.key + 1 }));
+    }
+  }, [selectedTab]);
 
   // Address state — persisted by auth-service in Docker PostgreSQL.
   const [addresses, setAddresses] = useState([]);
@@ -318,6 +346,13 @@ export default function ProfilePage() {
     setTimeout(() => setCopiedCode(null), 2500);
   }
 
+  function selectTab(tab) {
+    setActiveTab(tab);
+    router.replace(`/profile?tab=${tab}`, {
+      scroll: false,
+    });
+  }
+
   // Order status click shortcut
   function handleStatusShortcutClick(statusKey) {
     setActiveTab("orders");
@@ -373,6 +408,7 @@ export default function ProfilePage() {
                   {form.email}
                   {form.phone && <span> · {form.phone}</span>}
                 </p>
+                {form.referenceCode && <ReferenceCode value={form} className="mt-2 text-xs text-ink-muted" />}
               </div>
             </div>
 
@@ -405,7 +441,7 @@ export default function ProfilePage() {
                 สถานะคำสั่งซื้อของฉัน
               </h2>
               <Link
-                href="/orders"
+                href="/profile?tab=orders"
                 className="focus-ring flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline"
               >
                 ดูประวัติทั้งหมด
@@ -454,7 +490,7 @@ export default function ProfilePage() {
         <div className="flex overflow-x-auto border-b border-line bg-white px-2 shadow-1 rounded-t-lg">
           <button
             type="button"
-            onClick={() => setActiveTab("profile")}
+            onClick={() => selectTab("profile")}
             className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-5 py-3.5 text-sm font-medium transition ${
               activeTab === "profile"
                 ? "border-brand-600 text-brand-700"
@@ -470,7 +506,7 @@ export default function ProfilePage() {
             type="button"
             onClick={() => {
               setOrderView((current) => ({ tab: "all", key: current.key + 1 }));
-              setActiveTab("orders");
+              selectTab("orders");
             }}
             className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-5 py-3.5 text-sm font-medium transition ${
               activeTab === "orders"
@@ -481,7 +517,7 @@ export default function ProfilePage() {
             <span className="material-symbols-outlined text-[19px]">
               inventory_2
             </span>
-            สถานะสินค้า
+            คำสั่งซื้อของฉัน
             {orders.length > 0 && (
               <span className="rounded-full bg-gray-100 px-1.5 py-0.2 text-xs font-semibold text-gray-600">
                 {orders.length}
@@ -490,7 +526,7 @@ export default function ProfilePage() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("address")}
+            onClick={() => selectTab("address")}
             className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-5 py-3.5 text-sm font-medium transition ${
               activeTab === "address"
                 ? "border-brand-600 text-brand-700"
@@ -507,7 +543,7 @@ export default function ProfilePage() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("coupons")}
+            onClick={() => selectTab("coupons")}
             className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-5 py-3.5 text-sm font-medium transition ${
               activeTab === "coupons"
                 ? "border-brand-600 text-brand-700"
@@ -575,7 +611,13 @@ export default function ProfilePage() {
               <Input
                 label="เบอร์โทรศัพท์"
                 value={form.phone || ""}
-                onChange={update("phone")}
+                onChange={(e) =>
+                  setForm({ ...form, phone: phoneDigits(e.target.value) })
+                }
+                inputMode="numeric"
+                maxLength={PHONE_MAX_LENGTH}
+                pattern={PHONE_PATTERN}
+                title={PHONE_HINT}
                 placeholder="เช่น 0812345678"
                 hint="ใช้สำหรับติดต่อประสานงานการจัดส่งสินค้า"
               />
@@ -590,7 +632,7 @@ export default function ProfilePage() {
           </section>
         )}
 
-        {/* Tab 2: สถานะสินค้า (Order Status Tracking) */}
+        {/* Tab 2: คำสั่งซื้อของฉัน (Order Status Tracking) */}
         {activeTab === "orders" && (
           <section className="rounded-b-lg border border-t-0 border-line bg-white p-6 shadow-1">
             <MyOrders key={orderView.key} initialTab={orderView.tab} />
@@ -938,7 +980,7 @@ export default function ProfilePage() {
               onChange={(e) =>
                 setAddressFormData({
                   ...addressFormData,
-                  phone: e.target.value,
+                  phone: phoneDigits(e.target.value),
                 })
               }
               placeholder="เช่น 0812345678"

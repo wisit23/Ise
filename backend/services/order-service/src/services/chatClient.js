@@ -14,14 +14,17 @@ const CHAT_SERVICE_URL =
 const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || "";
 
 // Only order statuses worth telling both parties about in the room get a
-// SYSTEM message — "pending" (still in the cart) isn't chat-worthy.
+// SYSTEM message — awaiting payment isn't chat-worthy.
 const STATUS_MESSAGE_TH = {
   confirmed: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
-  ready_to_ship: "ผู้ขายเตรียมสินค้าแล้ว รอขนส่งมารับ",
-  shipped: "ผู้ขายจัดส่งสินค้าแล้ว",
+  ready_to_ship: "ผู้ขายเตรียมสินค้าแล้ว พร้อมเรียกขนส่ง",
+  pickup_in_progress: "ผู้ขายเรียกขนส่งแล้ว รอขนส่งมารับ",
+  in_transit: "ผู้ขายส่งมอบสินค้าให้ขนส่งแล้ว",
   delivered: "ขนส่งส่งสินค้าถึงผู้ซื้อแล้ว",
   completed: "คำสั่งซื้อเสร็จสมบูรณ์แล้ว",
   cancelled: "คำสั่งซื้อนี้ถูกยกเลิกแล้ว",
+  payment_expired: "หมดเวลาชำระเงินแล้ว",
+  seller_confirmation_expired: "หมดเวลายืนยันคำสั่งซื้อของผู้ขาย ระบบบันทึกคืนเงินเต็มจำนวนแล้ว",
 };
 
 async function internalPost(path, body) {
@@ -126,6 +129,7 @@ async function sendDisputeNotice(dispute, order, eventKey, body) {
         disputeId: dispute.id,
         event: eventKey,
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         productId: order.productId,
         productTitle: order.productTitle,
         price: order.price || order.finalPrice,
@@ -218,6 +222,18 @@ async function sendSystemNotification({ userId, type, title, message, link, meta
  */
 async function notifyOrderPlaced(order) {
   if (order && order.buyerId) {
+    if (order.auctionId) {
+      await sendSystemNotification({
+        userId: order.buyerId,
+        type: "AUCTION",
+        title: "คุณชนะการประมูลแล้ว",
+        message: `🏆 คุณชนะการประมูล '${order.productTitle || "สินค้า"}' กรุณาชำระเงินคำสั่งซื้อ #${order.referenceCode || order.id} ภายในเวลาที่กำหนด`,
+        link: "/orders",
+        entityId: order.id,
+        metadata: { orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}), auctionId: order.auctionId, status: "won", paymentDeadlineAt: order.paymentDeadlineAt },
+      });
+    }
     try {
       await internalPost("/internal/realtime/broadcast", {
         event: "order:updated",
@@ -225,14 +241,16 @@ async function notifyOrderPlaced(order) {
         rooms: [`user:${order.buyerId}`],
         broadcastGlobal: false,
       });
-    } catch (_) {}
+    } catch {
+      // Realtime delivery is best-effort; the order remains available by API.
+    }
   }
 }
 
 /**
  * Notifies both seller and buyer in the Notification Center when payment is completed.
  * For seller: links directly to the product page with ?ship=1 to fulfill shipment.
- * Uses entityId: order.id to update stages in-place.
+ * Uses entityId: order.id to link separate stage notifications to the order.
  */
 async function notifyOrderPaid(order) {
   if (!order || !order.id || !order.buyerId || !order.sellerId) return;
@@ -243,10 +261,11 @@ async function notifyOrderPaid(order) {
       userId: order.sellerId,
       type: "ORDER",
       title: "ผู้ซื้อชำระเงินแล้ว",
-      message: `💰 ผู้ซื้อชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว กรุณาดำเนินการตรวจสอบและยืนยันออเดอร์ | หมายเลขคำสั่งซื้อ: #${order.id}`,
-      link: `/seller/dashboard?orderId=${order.id}`,
+      message: `💰 ผู้ซื้อชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว กรุณาดำเนินการตรวจสอบและยืนยันออเดอร์ | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`,
+      link: `/seller/dashboard?section=orders&orderId=${order.id}`,
       metadata: {
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         productId: order.productId,
         auctionId: order.auctionId,
         status: "paid",
@@ -262,10 +281,11 @@ async function notifyOrderPaid(order) {
         userId: order.buyerId,
         type: "ORDER",
         title: "ชำระเงินสำเร็จ",
-        message: `✅ คุณได้ชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว รอผู้ขายยืนยันคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: #${order.id}`,
-        link: "/orders",
+        message: `✅ คุณได้ชำระเงินสำหรับสินค้า '${title}' เรียบร้อยแล้ว รอผู้ขายยืนยันคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`,
+        link: `/orders?orderId=${order.id}`,
         metadata: {
           orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
           productId: order.productId,
           auctionId: order.auctionId,
           status: "paid",
@@ -286,10 +306,11 @@ async function notifyOrderConfirmed(order) {
       userId: order.buyerId,
       type: "ORDER",
       title: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
-      message: `📦 ผู้ขายยืนยันคำสั่งซื้อ #${order.id} ('${title}') แล้ว กำลังเตรียมการจัดส่งสินค้า`,
-      link: "/orders",
+      message: `📦 ผู้ขายยืนยันคำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') แล้ว กำลังเตรียมการจัดส่งสินค้า`,
+      link: `/orders?orderId=${order.id}`,
       metadata: {
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         productId: order.productId,
         auctionId: order.auctionId,
         status: "confirmed",
@@ -304,10 +325,11 @@ async function notifyOrderConfirmed(order) {
         userId: order.sellerId,
         type: "ORDER",
         title: "ยืนยันคำสั่งซื้อสำเร็จ",
-        message: `✅ คุณได้ยืนยันคำสั่งซื้อ #${order.id} ('${title}') แล้ว กรุณาดำเนินการจัดส่งสินค้า`,
-        link: `/seller/dashboard?orderId=${order.id}`,
+        message: `✅ คุณได้ยืนยันคำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') แล้ว กรุณาดำเนินการจัดส่งสินค้า`,
+        link: `/seller/dashboard?section=orders&orderId=${order.id}`,
         metadata: {
           orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
           productId: order.productId,
           auctionId: order.auctionId,
           status: "confirmed",
@@ -332,10 +354,11 @@ async function notifyOrderRejected(order, reason) {
       userId: order.buyerId,
       type: "ORDER",
       title: "คำสั่งซื้อถูกปฏิเสธและคืนเงินเต็มจำนวน",
-      message: `❌ ผู้ขายได้ปฏิเสธออเดอร์ #${order.id} ('${title}')${reasonText} — ระบบได้ทำการคืนเงินเต็มจำนวน ฿${amount} ให้กับคุณเรียบร้อยแล้ว`,
-      link: "/orders",
+      message: `❌ ผู้ขายได้ปฏิเสธออเดอร์ #${order.referenceCode || order.id} ('${title}')${reasonText} — ระบบได้ทำการคืนเงินเต็มจำนวน ฿${amount} ให้กับคุณเรียบร้อยแล้ว`,
+      link: `/orders?orderId=${order.id}`,
       metadata: {
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         productId: order.productId,
         status: "cancelled",
         refundAmount: amount,
@@ -366,14 +389,32 @@ async function deleteDisputeConversation(disputeId) {
   }
 }
 
-/**
- * Updates the existing notification in-place for each stage (e.g. จาก "ผู้ซื้อชำระสินค้า" ไป "ลูกค้าได้รับสินค้าแล้ว")
- */
-async function notifyOrderStatusChanged(order, status, { reason } = {}) {
+/** Sends a separate notification for each order stage. */
+async function notifyOrderStatusChanged(order, status, { reason, actorId } = {}) {
   // Seller accept/reject have their own two-sided messages and realtime push.
   if (status === "confirmed" && order?.status === "paid")
     return notifyOrderConfirmed({ ...order, status });
-  if (status === "cancelled" && order?.status === "paid")
+  if (status === "cancelled" && order?.status === "paid" && actorId === order.buyerId) {
+    const amount = Number(order.ordersAmount || order.price || 0).toLocaleString("th-TH");
+    await Promise.all([
+      ...[order.buyerId, order.sellerId].filter(Boolean).map((userId) =>
+        sendSystemNotification({
+          userId,
+          type: "ORDER",
+          title: "ผู้ซื้อยกเลิกคำสั่งซื้อและคืนเงินแล้ว",
+          message: `คำสั่งซื้อ #${order.referenceCode || order.id} ถูกยกเลิกโดยผู้ซื้อก่อนผู้ขายเริ่มเตรียมสินค้า ระบบบันทึกคืนเงินเต็มจำนวน ฿${amount} แล้ว`,
+          link: userId === order.buyerId ? "/orders" : `/products/${order.productId}`,
+          entityId: order.id,
+          metadata: { orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}), productId: order.productId, status, refundAmount: amount, reason },
+        }),
+      ),
+      broadcastOrderRealtime({ ...order, status }, "cancelled"),
+    ]);
+    return;
+  }
+  if (status === "cancelled" && order && actorId === order.sellerId &&
+      require("./orderLifecycle").isRefundingCancellation(order, status))
     return notifyOrderRejected(order, reason);
   broadcastOrderRealtime({ ...order, status }, status).catch(() => {});
 
@@ -385,34 +426,35 @@ async function notifyOrderStatusChanged(order, status, { reason } = {}) {
 
   if (order.buyerId) {
     const buyerBody =
-      status === "shipped"
-        ? `📦 ผู้ขายจัดส่งสินค้าแล้ว | หมายเลขคำสั่งซื้อ: #${order.id}`
+      status === "in_transit"
+        ? `📦 ผู้ขายส่งมอบสินค้าให้ขนส่งแล้ว | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`
         : status === "delivered"
-          ? `📬 สินค้าถึงผู้ซื้อแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า (ระบบจะยืนยันให้อัตโนมัติใน 14 วัน) | หมายเลขคำสั่งซื้อ: #${order.id}`
+          ? `📬 สินค้าถึงผู้ซื้อแล้ว กรุณากดยืนยันเมื่อได้รับสินค้า (ระบบจะยืนยันให้อัตโนมัติใน 14 วัน) | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`
           : status === "completed"
-          ? `🎉 คำสั่งซื้อ #${order.id} ('${title}') เสร็จสมบูรณ์แล้ว ขอบคุณที่ใช้บริการ`
+          ? `🎉 คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') เสร็จสมบูรณ์แล้ว ขอบคุณที่ใช้บริการ`
           : status === "cancelled"
-            ? `⚠️ คำสั่งซื้อ #${order.id} ('${title}') ถูกยกเลิกแล้ว`
-            : `คำสั่งซื้อ #${order.id}: ${statusLabel}`;
+            ? `⚠️ คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') ถูกยกเลิกแล้ว`
+            : `คำสั่งซื้อ #${order.referenceCode || order.id}: ${statusLabel}`;
 
     tasks.push(
       sendSystemNotification({
         userId: order.buyerId,
         type: "ORDER",
         title:
-          status === "shipped"
-            ? "ผู้ขายจัดส่งสินค้าแล้ว"
+          status === "in_transit"
+            ? "ผู้ขายส่งมอบให้ขนส่งแล้ว"
             : status === "delivered"
               ? "สินค้าถึงแล้ว กรุณายืนยันการรับสินค้า"
               : status === "completed"
               ? "คำสั่งซื้อเสร็จสมบูรณ์"
               : status === "cancelled"
                 ? "คำสั่งซื้อถูกยกเลิก"
-                : `อัปเดตสถานะคำสั่งซื้อ #${order.id}`,
+                : `อัปเดตสถานะคำสั่งซื้อ #${order.referenceCode || order.id}`,
         message: buyerBody,
-        link: "/orders",
+        link: `/orders?orderId=${order.id}`,
         metadata: {
           orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
           productId: order.productId,
           auctionId: order.auctionId,
           status,
@@ -425,17 +467,20 @@ async function notifyOrderStatusChanged(order, status, { reason } = {}) {
   if (order.sellerId && order.sellerId !== order.buyerId) {
     let sellerTitle = null;
     let sellerBody = null;
-    let sellerLink = `/products/${order.productId}`;
+    let sellerLink = `/seller/dashboard?section=orders&orderId=${order.id}`;
 
-    if (status === "shipped") {
-      sellerTitle = "จัดส่งสินค้าแล้ว";
-      sellerBody = `🚚 คุณได้จัดส่งสินค้า '${title}' แล้ว รอลูกค้ายืนยันการรับสินค้า | หมายเลขคำสั่งซื้อ: #${order.id}`;
+    if (status === "in_transit") {
+      sellerTitle = "ส่งมอบให้ขนส่งแล้ว";
+      sellerBody = `🚚 คุณส่งมอบสินค้า '${title}' ให้ขนส่งแล้ว อยู่ระหว่างการขนส่ง | หมายเลขคำสั่งซื้อ: #${order.referenceCode || order.id}`;
     } else if (status === "completed") {
       sellerTitle = "ลูกค้าได้รับสินค้าแล้ว";
-      sellerBody = `🎉 ลูกค้าได้รับสินค้าแล้ว คำสั่งซื้อ #${order.id} ('${title}') เสร็จสมบูรณ์`;
+      sellerBody = `🎉 ลูกค้าได้รับสินค้าแล้ว คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') เสร็จสมบูรณ์`;
     } else if (status === "cancelled") {
       sellerTitle = "คำสั่งซื้อถูกยกเลิก";
-      sellerBody = `⚠️ คำสั่งซื้อ #${order.id} ('${title}') ถูกยกเลิกแล้ว`;
+      sellerBody = `⚠️ คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') ถูกยกเลิกแล้ว`;
+    } else {
+      sellerTitle = `อัปเดตสถานะคำสั่งซื้อ #${order.referenceCode || order.id}`;
+      sellerBody = `คำสั่งซื้อ #${order.referenceCode || order.id}: ${statusLabel}`;
     }
 
     if (sellerTitle && sellerBody) {
@@ -448,6 +493,7 @@ async function notifyOrderStatusChanged(order, status, { reason } = {}) {
           link: sellerLink,
           metadata: {
             orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
             productId: order.productId,
             auctionId: order.auctionId,
             status,
@@ -469,39 +515,18 @@ async function notifyDisputeOpened(dispute, order) {
   if (!order || !order.id) return;
 
   const title = order.productTitle || "สินค้า";
-  const reasonText = dispute.reason ? ` — เหตุผล: ${dispute.reason}` : "";
-
-  if (order.sellerId) {
-    await sendSystemNotification({
-      userId: order.sellerId,
-      type: "DISPUTE",
-      title: "สินค้าโดนเปิดข้อพิพาท",
-      message: `⚠️ สินค้าของคุณ '${title}' สำหรับคำสั่งซื้อ #${order.id} ถูกเปิดข้อพิพาท (${dispute.disputeType || "ข้อพิพาท"})${reasonText}`,
-      link: "/orders",
-      entityId: order.id,
-      metadata: {
-        orderId: order.id,
-        disputeId: dispute.id,
-        productId: order.productId,
-        disputeType: dispute.disputeType,
-        reason: dispute.reason,
-        decision: "DISPUTE_OPENED",
-        decisionLabel: "เปิดข้อพิพาทแล้ว",
-        role: "seller",
-      },
-    });
-  }
 
   if (order.buyerId) {
     await sendSystemNotification({
       userId: order.buyerId,
       type: "DISPUTE",
       title: "เปิดข้อพิพาทสำเร็จ",
-      message: `⚠️ คำสั่งซื้อ #${order.id} ('${title}') เปิดข้อพิพาทเรียบร้อยแล้ว อยู่ระหว่างการพิจารณาตรวจสอบของเจ้าหน้าที่`,
-      link: "/orders",
+      message: `⚠️ คำสั่งซื้อ #${order.referenceCode || order.id} ('${title}') เปิดข้อพิพาทเรียบร้อยแล้ว อยู่ระหว่างการพิจารณาตรวจสอบของเจ้าหน้าที่`,
+      link: `/orders?orderId=${order.id}`,
       entityId: order.id,
       metadata: {
         orderId: order.id,
+        ...(order.referenceCode ? { orderReferenceCode: order.referenceCode } : {}),
         disputeId: dispute.id,
         productId: order.productId,
         disputeType: dispute.disputeType,
@@ -535,8 +560,14 @@ async function broadcastOrderRealtime(order, action = "updated") {
         completed: "sold",
         paid: "reserved",
         confirmed: "reserved",
-        shipped: "reserved",
+        ready_to_ship: "reserved",
+        pickup_in_progress: "reserved",
+        // Seller dashboard treats a parcel handed to the carrier as sold.
+        in_transit: "sold",
+        delivered: "sold",
         cancelled: "available",
+        payment_expired: "available",
+        seller_confirmation_expired: "available",
       };
       const effectiveStatus = order.status || action;
       const productStatus = statusMap[effectiveStatus];

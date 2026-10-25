@@ -6,14 +6,14 @@ import { SEQUENTIAL_BLUE, CHART_INK } from "./palette";
 /** Single-series "trend over time" bar chart (see choosing-a-form: trend job,
  * one categorical hue). Per-bar hover tooltip, no legend needed (one series —
  * the title already names it). */
-export default function TrendBarChart({ data = [], height = 160, formatValue }) {
+export default function TrendBarChart({ data = [], height = 160, formatValue, showAllLabels = false }) {
   const [hover, setHover] = useState(null);
   const [selected, setSelected] = useState(() => {
     if (!data || data.length === 0) return null;
     return data.length - 1;
   });
 
-  const width = Math.max(data.length * 28, 280);
+  const width = Math.max(data.length * (showAllLabels ? 44 : 28), 280);
   const max = Math.max(...data.map((d) => d.value), 1);
   const barWidth = Math.min(24, (data.length > 0 ? width / data.length : width) - 4);
   const chartHeight = height - 28; // leave room for x-axis labels
@@ -93,7 +93,7 @@ export default function TrendBarChart({ data = [], height = 160, formatValue }) 
                 onPointerEnter={() => setHover(i)}
                 onPointerLeave={() => setHover(null)}
               />
-              {i % Math.ceil(data.length / 7 || 1) === 0 && (
+              {(showAllLabels || i % Math.ceil(data.length / 7 || 1) === 0) && (
                 <text
                   x={x + barWidth / 2}
                   y={height - 4}

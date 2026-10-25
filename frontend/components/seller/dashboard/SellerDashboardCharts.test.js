@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import SellerDashboardCharts from "./SellerDashboardCharts";
 
 describe("SellerDashboardCharts", () => {
@@ -90,6 +90,37 @@ describe("SellerDashboardCharts", () => {
     expect(screen.getByText(/ยอดรวม 7 วัน:/)).toBeInTheDocument();
   });
 
+  it("shows each Bangkok hour separately for a single day, including orders around midnight", () => {
+    const orders = [
+      { id: "a", status: "completed", createdAt: "2026-10-17T17:30:00.000Z", finalPrice: 100 },
+      { id: "b", status: "completed", createdAt: "2026-10-17T18:45:00.000Z", finalPrice: 200 },
+      { id: "c", status: "completed", createdAt: "2026-10-18T16:59:00.000Z", finalPrice: 300 },
+      { id: "next-day", status: "completed", createdAt: "2026-10-18T17:01:00.000Z", finalPrice: 400 },
+    ];
+    const { container } = render(
+      <SellerDashboardCharts stats={mockStats} orders={orders} products={[]} orderCount={4} />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: /เลือกวัน/ })[0]);
+    fireEvent.change(container.querySelector('input[type="date"]'), {
+      target: { value: "2026-10-18" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "เลือกวันเดียว" }));
+
+    const hourlyBars = container.querySelectorAll('rect[fill="transparent"]');
+    expect(hourlyBars).toHaveLength(24);
+    expect(screen.getByText("00:00")).toBeInTheDocument();
+    expect(screen.getByText("01:00")).toBeInTheDocument();
+    expect(screen.getByText("23:00")).toBeInTheDocument();
+    expect(screen.getByText(/ยอดรวมวันที่.*฿582/)).toBeInTheDocument();
+
+    fireEvent.click(hourlyBars[0]);
+    expect(screen.getByText(/\(00:00–00:59 น\.\):/)).toBeInTheDocument();
+    fireEvent.click(hourlyBars[1]);
+    expect(screen.getByText(/\(01:00–01:59 น\.\):/)).toBeInTheDocument();
+    fireEvent.click(hourlyBars[23]);
+    expect(screen.getByText(/\(23:00–23:59 น\.\):/)).toBeInTheDocument();
+  });
+
   it("allows selecting custom date range independently for Chart 1 without affecting others", () => {
     const { fireEvent } = require("@testing-library/react");
     render(
@@ -129,7 +160,7 @@ describe("SellerDashboardCharts", () => {
 
     // Chart 2 displays original yearly cumulative line
     expect(screen.getByText("รายรับสะสมตลอดปี")).toBeInTheDocument();
-    expect(screen.getByText(/สะสมสุทธิล่าสุด: ฿5,000/)).toBeInTheDocument();
+    expect(screen.getByText(/สะสมสุทธิล่าสุด: ฿4,850/)).toBeInTheDocument();
 
     // Bottom text shows the month and revenue earned from that month (e.g. ตุลาคม: ฿4,850)
     expect(screen.getByText("ตุลาคม:")).toBeInTheDocument();
@@ -165,6 +196,27 @@ describe("SellerDashboardCharts", () => {
     // Bottom text updates to October in bar chart (now both bar chart and line chart show ตุลาคม:)
     expect(screen.getAllByText("ตุลาคม:").length).toBe(2);
     expect(screen.getAllByText("฿4,850").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("uses the sum of per-order net sales for the yearly bar, cumulative line, and category total", () => {
+    const year = new Date().getFullYear();
+    const orders = [
+      { id: "round-1", status: "completed", createdAt: `${year}-01-15T10:00:00.000Z`, finalPrice: 50, productId: "prod-1" },
+      { id: "round-2", status: "completed", createdAt: `${year}-01-15T11:00:00.000Z`, finalPrice: 50, productId: "prod-2" },
+    ];
+    render(
+      <SellerDashboardCharts
+        stats={{ ...mockStats, totalRevenue: 97, soldCount: 2 }}
+        orders={orders}
+        products={mockProducts}
+        orderCount={2}
+      />,
+    );
+
+    expect(screen.getByText("ยอดรวมปีนี้: ฿98")).toBeInTheDocument();
+    expect(screen.getByText("สะสมสุทธิล่าสุด: ฿98")).toBeInTheDocument();
+    expect(screen.getAllByText("2 ชิ้น").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("฿98").length).toBeGreaterThanOrEqual(1);
   });
 
   it("allows independent date selection for Chart 3 (Product Category Donut)", () => {

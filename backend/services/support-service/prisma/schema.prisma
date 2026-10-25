@@ -54,6 +54,7 @@ model TicketStatus {
 }
 
 model SlaPolicy {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id                   String            @id @default(uuid()) @map("sla_policy_id")
   categoryId           Int?              @map("ticket_category_id") @db.SmallInt
   priorityId           Int               @map("ticket_priority_id") @db.SmallInt
@@ -73,6 +74,7 @@ model SlaPolicy {
 }
 
 model SupportTicket {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   satisfaction CustomerSatisfaction[]
   closedAt DateTime? @map("closed_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
@@ -214,6 +216,7 @@ model HelpCategory {
 }
 
 model HelpArticle {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id                String                @id @default(uuid()) @map("article_id")
   slug              String                @unique
   status            String                @default("DRAFT")
@@ -295,4 +298,11 @@ model CustomerSatisfaction {
   @@id([caseId, respondentId])
   @@index([agentId, createdAt])
   @@map("customer_satisfaction")
+}
+
+// Allocated atomically by the reference-code triggers; never reuse deleted codes.
+model ReferenceCodeAllocation {
+  code String @id
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("_reference_codes")
 }

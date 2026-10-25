@@ -54,6 +54,7 @@ describe("fetchFirstSaleYear", () => {
     expect(await fetchFirstSaleYear("token")).toBe(2024);
     expect(apiFetch).toHaveBeenCalledWith("/api/orders/executive/first-sale", {
       token: "token",
+      timeoutMs: 15000,
     });
   });
 

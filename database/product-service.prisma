@@ -76,6 +76,7 @@ model Product {
   auctions           AuctionItem[]
   categoryLinks      ProductCategory[]
   countViews         CountView[]
+  favorites          ProductFavorite[]
   conditionDefinition Condition @relation(fields: [condition], references: [value])
 
   @@index([sellerId])
@@ -87,6 +88,18 @@ model Product {
 }
 
 // Approved M:N amendment, with no surrogate key or extra columns.
+model ProductFavorite {
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([userId, productId])
+  @@index([productId])
+  @@index([userId, createdAt])
+  @@map("product_favorites")
+}
+
 model ProductCategory {
   productId String @map("product_id")
   categoryId String @map("category_id")

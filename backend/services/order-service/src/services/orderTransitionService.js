@@ -78,7 +78,7 @@ function assertCanCancelOrder(order) {
   const paid =
     order.payments?.some((payment) => payment.paymentStatus === "paid") ||
     ["processing", "paid"].includes(order.checkout?.status);
-  if (paid || !["pending", "pending_payment"].includes(order.status)) {
+  if (paid || order.status !== "pending_payment") {
     throw conflict(
       "ไม่สามารถยกเลิกคำสั่งซื้อที่ชำระเงินแล้ว กรุณาดำเนินการผ่านกระบวนการข้อพิพาท",
     );

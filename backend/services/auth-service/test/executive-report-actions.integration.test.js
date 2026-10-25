@@ -168,6 +168,37 @@ test("executive report decisions resolve the matching audit and actual actor", a
   assert.equal(shopA1.targetShopName, "Search Shop A");
   assert.equal(shopA1.targetReportCount, 6);
 
+  // Search by who the complaint is about: shop name (any case, in part), the
+  // person's name, or their user code. All 6 of Shop A's, none of Shop B's.
+  const byShop = (search, status = "ALL") =>
+    inWindow({ search, status }).then(shopItems);
+  for (const search of ["search shop a", "SHOP A", "Alice Tester", "alice"]) {
+    const found = await byShop(search);
+    assert.equal(found.length, 6, search);
+    assert.ok(
+      found.every((item) => item.targetId === shopA.id),
+      search,
+    );
+  }
+  const alice = await prisma.user.findUniqueOrThrow({
+    where: { id: shopA.id },
+    select: { referenceCode: true },
+  });
+  assert.equal((await byShop(alice.referenceCode)).length, 6);
+  assert.equal((await byShop(alice.referenceCode.slice(4, 8))).length, 6);
+  assert.equal((await byShop("Search Shop B")).length, 1);
+  // The same box finds a complaint by its own code.
+  const aComplaint = all.find((item) => item.targetId === shopA.id);
+  const own = await byShop(aComplaint.referenceCode.toLowerCase());
+  assert.deepEqual(
+    own.map((item) => item.id),
+    [aComplaint.id],
+  );
+  // Text is read literally: no pattern matches everything.
+  for (const text of ["%", "_", "' OR 1=1 --", "no such shop"]) {
+    assert.equal((await byShop(text)).length, 0, text);
+  }
+
   for (const targetId of ["constructor", "__proto__"]) {
     const row = await prisma.report.create({
       data: {

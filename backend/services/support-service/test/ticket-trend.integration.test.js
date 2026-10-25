@@ -32,7 +32,7 @@ test("PostgreSQL trend counts beyond 50, fills empty dates, and keeps CS ownersh
         "INSERT INTO support_tickets SELECT n::text, '2026-10-08T20:00:00Z'::timestamptz, 1, 1 FROM generate_series(1,75) n",
         "INSERT INTO support_tickets VALUES ('private','2026-10-08T20:00:00Z',1,1), ('escalated','2026-10-08T20:00:00Z',2,1)",
         "INSERT INTO ticket_assignments VALUES ('a','private','other','2026-10-08T20:00:00Z',NULL)",
-        "ALTER TABLE support_tickets ADD COLUMN archived_at timestamptz, ADD COLUMN deleted_at timestamptz, ADD COLUMN chat_responder_id text",
+        "ALTER TABLE support_tickets ADD COLUMN archived_at timestamptz, ADD COLUMN deleted_at timestamptz",
       ])
         await tx.$executeRawUnsafe(sql);
       const now = new Date("2026-10-09T05:00:00Z");

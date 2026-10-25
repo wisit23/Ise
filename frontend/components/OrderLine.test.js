@@ -1,6 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import OrderLine from "./OrderLine";
 
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn(), prefetch: jest.fn() }),
+}));
+
 jest.mock("../lib/api", () => ({
   mediaUrl: (url) => url,
 }));
@@ -11,7 +15,7 @@ jest.mock("../lib/products", () => ({
     condition: "Good",
     brand: "Nike",
     size: "L",
-    media: [],
+    media: [{ url: "/product-photo.jpg" }],
   }),
 }));
 
@@ -42,5 +46,18 @@ describe("OrderLine", () => {
     expect(screen.getByText("#ORD-1234567890")).toBeInTheDocument();
     expect(screen.getByText("฿1,200")).toBeInTheDocument();
     expect(screen.getByTestId("status")).toBeInTheDocument();
+    const photo = await screen.findByRole("img", { name: order.productTitle });
+    expect(screen.getByRole("link", { name: `ดูสินค้า ${order.productTitle}` })).toContainElement(photo);
+  });
+
+  it("can show a non-linked photo while keeping the product title link", async () => {
+    const order = {
+      id: "order-1", productId: "p1", productTitle: "เสื้อกีฬา Nike", price: 1200,
+    };
+    render(<OrderLine order={order} linkThumbnail={false} />);
+    const photo = await screen.findByRole("img", { name: order.productTitle });
+    expect(photo.closest('[role="link"]')).toBeNull();
+    expect(screen.queryByRole("link", { name: `ดูสินค้า ${order.productTitle}` })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: order.productTitle })).toBeInTheDocument();
   });
 });

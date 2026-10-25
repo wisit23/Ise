@@ -1,5 +1,8 @@
 "use client";
 
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -221,7 +224,7 @@ export default function MyTicketsPage() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
-                  {t.ticketNumber} ·{" "}
+                  {formatReferenceCode(t)} ·{" "}
                   {new Date(t.createdAt).toLocaleDateString("th-TH")}
                 </p>
               </Link>

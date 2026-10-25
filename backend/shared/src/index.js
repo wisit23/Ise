@@ -1,4 +1,7 @@
 module.exports = {
+  ...require("./referenceDisplay"),
+  ...require("./referenceCodes"),
+  ...require("./referenceAliases"),
   ...require("./serializableTransaction"),
   ...require("./customerServiceConfig"),
   ...require("./staffRoles"),

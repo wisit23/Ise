@@ -29,20 +29,26 @@ async function login(email) {
 }
 
 async function run() {
-  const [admin, cs, otherCs, buyer, seller] = await Promise.all([
+  const [admin, cs, otherCs, buyer, seller, trust] = await Promise.all([
     login("admin@example.com"), login("cs.nan@example.com"),
     login("cs.beam@example.com"), login("buyer.demo@example.com"), login("shop.denim@example.com"),
+    login("trust.demo@example.com"),
   ]);
-  const [ticketQueue, disputeQueue, reports] = await Promise.all([
+  const [ticketQueue, disputeQueue, trustQueue, reports] = await Promise.all([
     request("/api/support/tickets/queue?scope=all&limit=50", { token: admin }),
     request("/api/orders/disputes/queue?limit=50", { token: cs }),
+    request("/api/orders/disputes/queue?limit=50", { token: trust }),
     request("/api/auth/admin/reports?status=ALL&limit=50", { token: admin }),
   ]);
+  assert.equal(trustQueue.status, 200, "T&S dispute queue failed");
   assert.equal(ticketQueue.status, 200, "Admin ticket queue failed");
   assert.equal(disputeQueue.status, 200, "CS dispute queue failed");
   assert.equal(reports.status, 200, "Admin report queue failed");
   assert.ok(ID.tickets.every((id) => ticketQueue.data.items.some((row) => row.id === id)));
-  assert.ok(ID.disputes.every((id) => disputeQueue.data.items.some((row) => row.id === id)));
+  // Escalated disputes sit in the Trust & Safety queue; every demo dispute is
+  // reachable from one of the two queues.
+  assert.ok(ID.disputes.every((id) =>
+    [...disputeQueue.data.items, ...trustQueue.data.items].some((row) => row.id === id)));
   assert.ok(ID.reports.every((id) => reports.data.items.some((row) => row.id === id)));
 
   const adminJoin = await request(`/api/support/tickets/${ID.tickets[1]}/join`, {
@@ -74,11 +80,13 @@ async function run() {
   assert.equal(escalatedHistory.status, 200, "Admin could not read escalated ticket history");
   assert.ok(escalatedHistory.data.items.some((message) => message.body.includes("โอนเงินเพิ่ม")));
 
-  const [csDisputeJoin, buyerDisputeJoin, sellerDisputeJoin, csSellerJoin, decidedJoin] = await Promise.all([
+  // The seller only sees a dispute after the assigned CS opens the seller
+  // chat, so that join must land before the seller's.
+  const csSellerJoin = await request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: cs, method: "POST", body: { side: "seller" } });
+  const [csDisputeJoin, buyerDisputeJoin, sellerDisputeJoin, decidedJoin] = await Promise.all([
     request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: cs, method: "POST" }),
     request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: buyer, method: "POST" }),
     request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: seller, method: "POST" }),
-    request(`/api/orders/disputes/${ID.disputes[1]}/conversation`, { token: cs, method: "POST", body: { side: "seller" } }),
     request(`/api/orders/disputes/${ID.disputes[3]}/conversation`, { token: admin, method: "POST" }),
   ]);
   assert.equal(csDisputeJoin.status, 200, "Assigned CS could not open dispute chat");

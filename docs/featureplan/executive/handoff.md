@@ -1,5 +1,9 @@
 # Executive Feature Handoff
 
+## 2026-10-25 — Continued audit handoff
+
+ดู [`production-audit-2026-10-25.md`](production-audit-2026-10-25.md) สำหรับรายการแก้และผลตรวจล่าสุด: Frontend 233 tests, Backend 57 tests (รวม PostgreSQL integration, ไม่มี skip), scoped ESLint/Prettier และ production build ผ่าน ต้อง deploy Auth/Order ร่วมกันสำหรับ service-token-only `POST /executive/seller-search` ใหม่ และ build Frontend ไม่มี schema/migration ใหม่จากรอบนี้ โค้ดใหม่ของ audit ยังไม่ได้ stage/commit; ไม่แตะ index ที่มีงานเดิมค้างอยู่
+
 ## 2026-10-10 — Complaint feature handoff / pre-Git recheck
 
 - Scope: complaint details with Report/Audit/User action data, full-page modal,
@@ -21,7 +25,7 @@
 - Final build evidence: frontend production build succeeded on an isolated copy;
   auth-service Docker build succeeded. Temporary test schemas/runners were removed.
 
-> อัปเดตล่าสุด: 2026-10-24
+> อัปเดตล่าสุด: 2026-10-25 (ตรวจสอบระดับ Production, แก้ไข Status Counts ตามคำค้นหา, ลบ Dead Code, แยก executiveDates.js, รันเทสผ่าน 100%)
 
 ## Ownership
 
@@ -50,7 +54,7 @@
 - `CEO-001`–`CEO-003` มี implementation + PostgreSQL integration test ที่รันผ่านจริงแล้ว
   (`REQUIRE_INTEGRATION=1`) — หลักฐานล่าสุด 2026-10-24 ใน [`progress.md`](progress.md)
 - หน้าข้อร้องเรียนรวมข้อร้องเรียน/Ticket/ข้อพิพาท พร้อมตัวกรองและหน้าต่างรายละเอียด
-  (CEO-DEC-014, CEO-DEC-015); หน้าภาพรวมมีช่วงเวลา 7 วัน/เดือนนี้/ปีนี้/กำหนดเอง (รายชั่วโมง)
+  (CEO-DEC-014, CEO-DEC-015); หน้าภาพรวมมีช่วงเวลา วันนี้ (ค่าเริ่มต้น)/เดือนนี้/ปีนี้/กำหนดเอง (ตั้งแต่–ถึง, CEO-DEC-018)
 - Index ตามเวลา: auth `20261024100000_executive_time_indexes` (`login_logs.login_at`, `users.created_at`, `reports.reported_at`), order `20261024100000_executive_order_time_index` (`orders(created_at, status)`), support `20261024100000_executive_ticket_time_index` (`support_tickets.created_at`) — ต้องรัน
   `prisma migrate deploy` ของ 3 service นี้ตอน deploy
 - `CEO-004` ยังอยู่ใน scope แต่ไม่ได้ส่งมอบทันกำหนด (CEO-DEC-011): มีแค่คำเตือนร้องเรียนซ้ำที่คำนวณตอนเรียก

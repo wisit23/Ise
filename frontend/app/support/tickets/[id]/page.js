@@ -1,5 +1,8 @@
 "use client";
 
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
+
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import NavBar from "../../../../components/NavBar";
@@ -207,7 +210,7 @@ export default function TicketThreadPage() {
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="font-mono text-xs font-semibold text-indigo-600">
-                {ticket.ticketNumber}
+                {formatReferenceCode(ticket)}
               </p>
               <h1 className="mt-1 text-xl font-bold leading-tight text-slate-900 sm:text-2xl">
                 {ticket.subject}
@@ -226,10 +229,9 @@ export default function TicketThreadPage() {
 
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0">
-            {ticket.requesterId === user?.id &&
-              ["RESOLVED", "CLOSED"].includes(ticket.status) && (
+            {ticket.requesterId === user?.id && (
                 <CsatRating
-                  key={`${id}:${user.id}`}
+                  key={`${id}:${user.id}:${ticket.status}`}
                   endpoint={`/api/support/tickets/${id}/csat`}
                   caseLabel="คำร้องนี้"
                 />
@@ -253,7 +255,7 @@ export default function TicketThreadPage() {
                     </div>
                   </div>
                   <span className="font-mono text-xs text-slate-400">
-                    {ticket.ticketNumber}
+                    {formatReferenceCode(ticket)}
                   </span>
                 </div>
                 <div className="p-2 bg-white">

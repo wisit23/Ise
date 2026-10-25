@@ -16,41 +16,69 @@ const {
 
 const MAX_REVIEW_MEDIA = 8;
 
+function reviewFields({ rating, comment, media }) {
+  const reviewComment = comment ?? "";
+  assertReviewCommentAllowed(reviewComment);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw badRequest("rating must be a whole number from 1 to 5");
+  }
+
+  let normalizedMedia = [];
+  if (media !== undefined) {
+    if (!Array.isArray(media)) {
+      throw badRequest("media must be an array");
+    }
+    if (media.length > MAX_REVIEW_MEDIA) {
+      throw badRequest(`media cannot contain more than ${MAX_REVIEW_MEDIA} items`);
+    }
+    normalizedMedia = media.map((item) => {
+      if (!item || typeof item.url !== "string" || !item.url.trim()) {
+        throw badRequest("each media item must have a valid url");
+      }
+      const url = item.url.trim();
+      if (!url.startsWith("/review-uploads/")) {
+        throw badRequest("review media must be uploaded through the review uploader");
+      }
+      const type = item.type === "video" ? "video" : "image";
+      return { url, type };
+    });
+  }
+
+  return { rating, comment: reviewComment, media: normalizedMedia };
+}
+
+async function update(req, res, next) {
+  try {
+    const existing = await reviewModel.findById(req.params.id);
+    if (!existing) throw notFound("review not found");
+    if (existing.buyerId !== req.userId) {
+      throw forbidden("only the author can edit this review");
+    }
+    // A review taken down by Trust & Safety stays down; editing must not revive it.
+    if (existing.removed) throw conflict("รีวิวนี้ถูกลบโดยทีม Trust & Safety จึงแก้ไขไม่ได้");
+    const fields = reviewFields({
+      rating: req.body.rating === undefined ? existing.rating : req.body.rating,
+      comment:
+        req.body.comment === undefined ? existing.comment : req.body.comment,
+      media: req.body.media === undefined ? existing.media : req.body.media,
+    });
+    const review = await reviewModel.update(existing.id, req.userId, {
+      ...fields,
+      comment: fields.comment.slice(0, 1000),
+    });
+    res.json(review);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function create(req, res, next) {
   try {
     const { orderId, rating, comment, media } = req.body;
-    const reviewComment = comment ?? "";
-    assertReviewCommentAllowed(reviewComment);
+    const { comment: reviewComment, media: normalizedMedia } = reviewFields({
+      rating, comment, media,
+    });
     if (!orderId) throw badRequest("orderId is required");
-    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-      throw badRequest("rating must be a whole number from 1 to 5");
-    }
-
-    let normalizedMedia = [];
-    if (media !== undefined) {
-      if (!Array.isArray(media)) {
-        throw badRequest("media must be an array");
-      }
-      if (media.length > MAX_REVIEW_MEDIA) {
-        throw badRequest(
-          `media cannot contain more than ${MAX_REVIEW_MEDIA} items`,
-        );
-      }
-      normalizedMedia = media.map((item) => {
-        if (!item || typeof item.url !== "string" || !item.url.trim()) {
-          throw badRequest("each media item must have a valid url");
-        }
-        const url = item.url.trim();
-        if (!url.startsWith("/review-uploads/")) {
-          throw badRequest(
-            "review media must be uploaded through the review uploader",
-          );
-        }
-        const type = item.type === "video" ? "video" : "image";
-        return { url, type };
-      });
-    }
-
     const order = await orderClient.getOrder(orderId);
     if (!order) throw notFound("order not found");
     if (order.buyerId !== req.userId) {
@@ -157,4 +185,4 @@ async function mine(req, res, next) {
   }
 }
 
-module.exports = { create, bySeller, summaryBySeller, byOrder, mine };
+module.exports = { create, update, bySeller, summaryBySeller, byOrder, mine };

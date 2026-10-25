@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { executiveFetch as apiFetch } from "./executiveRequest";
 
 /**
  * Details of one ticket or dispute for the Executive dialog, read through the

@@ -163,16 +163,17 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
   // Shipping waits for the seller: paid -> confirmed -> ready_to_ship.
   let order = await prisma.order.findUnique({ where: { id: first.id } });
   await assert.rejects(
-    shippingService.markShipped({
+    shippingService.advanceShipping({
       orderId: first.id,
       actorId: "seller1",
       version: order.version,
+      status: "in_transit",
       company: "Carrier",
-      trackingNumber: "TRACK-0",
+      trackingNumber: "TRACK0000",
     }),
     (err) => err.status === 409,
   );
-  for (const status of ["confirmed", "ready_to_ship"]) {
+  for (const status of ["confirmed", "ready_to_ship", "pickup_in_progress"]) {
     res = await request(app)
       .patch(`/${first.id}/status`)
       .set("Authorization", `Bearer ${token("seller1", "BUYER")}`)
@@ -182,21 +183,23 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
   }
   order = await prisma.order.findUnique({ where: { id: first.id } });
   await assert.rejects(
-    shippingService.markShipped({
+    shippingService.advanceShipping({
       orderId: first.id,
       actorId: "seller1",
       version: order.version,
+      status: "in_transit",
       company: "",
       trackingNumber: "",
     }),
     (err) => err.status === 400,
   );
-  await shippingService.markShipped({
+  await shippingService.advanceShipping({
+    status: "in_transit",
     orderId: first.id,
     actorId: "seller1",
     version: order.version,
     company: "Carrier",
-    trackingNumber: "TRACK-1",
+    trackingNumber: "TRACK0001",
   });
   await assert.rejects(
     shippingService.updateAddress({

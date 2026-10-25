@@ -40,13 +40,15 @@ async function readCaseUnread(rows, userId, domain) {
       throw new AppError(503, "Invalid unread summary");
     payload.items.forEach((row) => counts.set(row.id, row.count));
   }
+  // Scope badges count cases with unread messages; per-case items keep the message count.
   const scopes = { mine: 0, unassigned: 0, all: 0 };
   const items = rows.map((row) => {
     const count = counts.get(row.id) || 0;
-    scopes.all += count;
+    const hasUnread = count > 0 ? 1 : 0;
+    scopes.all += hasUnread;
     if (row.assigneeId === userId || row.chatResponderId === userId)
-      scopes.mine += count;
-    if (!row.assigneeId) scopes.unassigned += count;
+      scopes.mine += hasUnread;
+    if (!row.assigneeId) scopes.unassigned += hasUnread;
     return { id: row.id, count };
   });
   return { items, scopes };

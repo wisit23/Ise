@@ -1,4 +1,6 @@
 "use client";
+import { matchesReference } from "../../../lib/referenceCodes";
+import ReferenceCode from "../../ui/ReferenceCode";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -14,7 +16,18 @@ import {
   PRODUCT_STATUS_STYLE,
   StatusPill,
   baht,
+  sellerProductPrice,
 } from "./sellerStatus";
+
+function ProductPrice({ product }) {
+  const { amount, label } = sellerProductPrice(product);
+  return (
+    <>
+      <span>{baht(amount)}</span>
+      {label && <span className="block text-[10px] font-normal text-slate-500">{label}</span>}
+    </>
+  );
+}
 
 const STATUS_FILTERS = [
   { value: "", label: "ทั้งหมด" },
@@ -22,6 +35,7 @@ const STATUS_FILTERS = [
   { value: "hidden", label: "ซ่อนอยู่" },
   { value: "sold", label: "ขายแล้ว" },
   { value: "reserved", label: "ในตะกร้า" },
+  { value: "auction_action_required", label: "รอเลือกวิธีขายใหม่" },
   { value: "removed", label: "ถูกระงับ" },
 ];
 
@@ -69,6 +83,7 @@ export default function SellerProductList({
     .filter(
       (p) =>
         !search ||
+        matchesReference(p, search) ||
         p.title?.toLowerCase().includes(search.toLowerCase()) ||
         (p.tags || []).some((t) =>
           t.toLowerCase().includes(search.toLowerCase()),
@@ -178,6 +193,8 @@ export default function SellerProductList({
                     >
                       {p.title}
                     </Link>
+                    {p.referenceCode && <ReferenceCode value={p} className="mt-1 text-xs text-ink-subtle" />}
+                    <p className="mt-1 text-xs text-ink-subtle">รายการโปรด {p.favoriteCount || 0} คน</p>
                     {/* Tags */}
                     {Array.isArray(p.tags) && p.tags.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1">
@@ -200,17 +217,32 @@ export default function SellerProductList({
                     )}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-700">
-                    {baht(p.price)}
+                    <ProductPrice product={p} />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <StatusPill
-                      label={PRODUCT_STATUS_LABEL[p.status] || p.status}
-                      style={PRODUCT_STATUS_STYLE[p.status]}
-                    />
+                    {(() => {
+                      const hasCompletedOrShippedOrder = (orders || []).some(
+                        (o) => o.productId === p.id && ["in_transit", "delivered", "completed"].includes(o.status),
+                      );
+                      const isSold = p.status === "sold" || hasCompletedOrShippedOrder;
+                      return (
+                        <div className="flex items-center justify-center gap-1">
+                          <StatusPill
+                            label={isSold ? "ขายแล้ว" : (PRODUCT_STATUS_LABEL[p.status] || p.status)}
+                            style={isSold ? PRODUCT_STATUS_STYLE.sold : PRODUCT_STATUS_STYLE[p.status]}
+                          />
+                          {isSold && (
+                            <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                              หมด
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   {(() => {
                     const awaitingOrder = (orders || []).find(
-                      (o) => o.productId === p.id && o.status === "ready_to_ship",
+                      (o) => o.productId === p.id && ["ready_to_ship", "pickup_in_progress"].includes(o.status),
                     );
                     const paidOrder = (orders || []).find(
                       (o) => o.productId === p.id && o.status === "paid",
@@ -222,6 +254,7 @@ export default function SellerProductList({
                           {awaitingOrder && p.status !== "removed" && (
                             <button
                               type="button"
+                              aria-label={awaitingOrder.status === "ready_to_ship" ? "เรียกขนส่ง" : "ส่งมอบให้ขนส่งแล้ว"}
                               onClick={() => {
                                 setSelectedOrderForShipping(awaitingOrder);
                                 setShippingModalOpen(true);
@@ -232,7 +265,7 @@ export default function SellerProductList({
                               <span className="material-symbols-outlined text-[15px]">
                                 local_shipping
                               </span>
-                              <span>จัดส่งสินค้า</span>
+                              <span>{awaitingOrder.status === "ready_to_ship" ? "เรียกขนส่ง" : "ส่งมอบให้ขนส่งแล้ว"}</span>
                             </button>
                           )}
                           {!awaitingOrder && paidOrder && p.status !== "removed" && (
@@ -251,14 +284,28 @@ export default function SellerProductList({
                               <span>ยืนยันรับออเดอร์</span>
                             </button>
                           )}
-                          {!["sold", "removed"].includes(p.status) ? (
+                          {!(
+                            ["sold", "removed"].includes(p.status) || p.preRemovalStatus === "sold" ||
+                            (orders || []).some(
+                              (o) => o.productId === p.id && ["in_transit", "delivered", "completed"].includes(o.status),
+                            )
+                          ) ? (
                             <div className="flex items-center justify-end gap-2.5">
-                              <Link
-                                href={`/products/${p.id}/edit`}
-                                className="focus-ring rounded text-xs font-medium text-slate-500 hover:text-emerald-700 hover:underline"
-                              >
-                                แก้ไข
-                              </Link>
+                              {p.status === "reserved" ? (
+                                <span
+                                  className="text-xs font-medium text-slate-300"
+                                  title="ไม่สามารถแก้ไขสินค้าที่อยู่ระหว่างการสั่งซื้อได้"
+                                >
+                                  แก้ไข
+                                </span>
+                              ) : (
+                                <Link
+                                  href={`/products/${p.id}/edit`}
+                                  className="focus-ring rounded text-xs font-medium text-slate-500 hover:text-emerald-700 hover:underline"
+                                >
+                                  แก้ไข
+                                </Link>
+                              )}
                               <span className="text-slate-200">|</span>
                               <button
                                 type="button"

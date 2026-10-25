@@ -28,23 +28,25 @@ const UNAVAILABLE = "ไม่พร้อมใช้งาน";
  * row list and the other provider's column reads "ไม่พร้อมใช้งาน" per row
  * (CEO-DEC-003: a provider outage must never render as a silent zero). */
 function buildRows({ order, auth }, granularity) {
-  const backbone = order || auth || [];
+  const periods = [
+    ...new Set([...(order || []), ...(auth || [])].map((row) => row.period)),
+  ].sort();
   const orderByPeriod = new Map((order || []).map((r) => [r.period, r]));
   const authByPeriod = new Map((auth || []).map((r) => [r.period, r]));
   const labelFor = granularity === "month" ? monthLabel : dayLabel;
 
-  return backbone.map((b) => {
-    const o = orderByPeriod.get(b.period);
-    const a = authByPeriod.get(b.period);
+  return periods.map((period) => {
+    const o = orderByPeriod.get(period);
+    const a = authByPeriod.get(period);
     return {
-      period: b.period,
-      label: labelFor(b.period),
+      period,
+      label: labelFor(period),
       gmv: o?.gmv,
       platformRevenue: o?.platformRevenue,
       completedOrders: o?.completedOrders,
       activeUsers: a?.activeUsers,
-      orderUnavailable: !order,
-      authUnavailable: !auth,
+      orderUnavailable: !o,
+      authUnavailable: !a,
     };
   });
 }
@@ -293,9 +295,8 @@ export default function ReportsSection({ token }) {
           </h2>
           <p className="mb-3 text-xs text-slate-500">
             {feePercent(series?.feeRate) === null
-              ? "รายได้แพลตฟอร์มคำนวณจากยอดขายใน"
-              : `รายได้แพลตฟอร์มคำนวณที่ ${feePercent(series.feeRate)}% ของยอดขายใน`}
-            {granularity === "year" ? "แต่ละเดือน" : "แต่ละวัน"}
+              ? "รายได้แพลตฟอร์มคำนวณจากยอดขาย"
+              : `รายได้แพลตฟอร์มคำนวณที่ ${feePercent(series.feeRate)}% ของยอดขาย`}
           </p>
 
           <div className="overflow-x-auto rounded-xl border border-slate-200/60 bg-white shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">

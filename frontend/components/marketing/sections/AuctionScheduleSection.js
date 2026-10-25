@@ -1,7 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
+import ReferenceCode from "../../ui/ReferenceCode";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
-import { apiFetch } from "../../../lib/api";
+import { apiFetch, mediaUrl } from "../../../lib/api";
 import Badge from "../../panel/ui/Badge";
 import Modal from "../../ui/Modal";
 import AuctionReviewModal from "./AuctionReviewModal";
@@ -165,6 +168,12 @@ const ROUND_MANAGEMENT_PRIORITY = {
   ended: 4,
   cancelled: 5,
 };
+const MANAGEABLE_ROUND_PHASES = new Set([
+  "auction",
+  "submission",
+  "waiting",
+  "upcoming",
+]);
 const ITEM_MANAGEMENT_PRIORITY = {
   open: 0,
   scheduled: 1,
@@ -175,6 +184,27 @@ const ITEM_MANAGEMENT_PRIORITY = {
   rejected: 6,
   cancelled: 7,
 };
+const ROUND_DETAIL_ITEM_PRIORITY = {
+  draft: 0,
+  pending_approval: 0,
+  approved: 1,
+  scheduled: 1,
+  open: 1,
+  closed: 2,
+  rejected: 3,
+  cancelled: 3,
+};
+const ROUND_DETAIL_STATUS_STYLE = {
+  draft: "border border-slate-200 bg-slate-100 text-slate-700",
+  pending_approval: "border border-amber-200 bg-amber-50 text-amber-800",
+  approved: "border border-sky-200 bg-sky-50 text-sky-700",
+  scheduled: "border border-indigo-200 bg-indigo-50 text-indigo-700",
+  open: "border border-emerald-200 bg-emerald-50 text-emerald-700",
+  closed: "border border-violet-200 bg-violet-50 text-violet-700",
+  rejected: "border border-red-200 bg-red-50 text-red-700",
+  cancelled: "border border-rose-200 bg-rose-50 text-rose-700",
+};
+const ROUND_DETAIL_PAGE_SIZE = 50;
 
 function sortByManagementPriority(items, priority) {
   return [...items].sort(
@@ -183,6 +213,51 @@ function sortByManagementPriority(items, priority) {
         (priority[b.status || b.phase] ?? 99) ||
       new Date(b.createdAt || b.submissionStartsAt || 0) -
         new Date(a.createdAt || a.submissionStartsAt || 0),
+  );
+}
+
+async function loadAllRoundItems(roundId, token) {
+  const loadPage = (page) => {
+    const params = new URLSearchParams({
+      roundId,
+      page: String(page),
+      limit: String(ROUND_DETAIL_PAGE_SIZE),
+    });
+    return apiFetch(`/api/products/auctions?${params.toString()}`, { token });
+  };
+
+  const firstPage = await loadPage(1);
+  const items = Array.isArray(firstPage?.items) ? [...firstPage.items] : [];
+  const totalPages = Number.isFinite(firstPage?.totalPages)
+    ? Math.max(1, firstPage.totalPages)
+    : 1;
+
+  if (totalPages > 1) {
+    const remainingPages = await Promise.all(
+      Array.from({ length: totalPages - 1 }, (_, index) => loadPage(index + 2)),
+    );
+    for (const page of remainingPages) {
+      if (Array.isArray(page?.items)) items.push(...page.items);
+    }
+  }
+
+  return Array.from(
+    new Map(
+      items.filter((item) => item?.id).map((item) => [item.id, item]),
+    ).values(),
+  );
+}
+
+function getWinningBid(item) {
+  const bids = Array.isArray(item?.bids) ? item.bids : [];
+  if (!item?.winningBidId || bids.length === 0) return null;
+  return bids.find((bid) => bid.id === item.winningBidId) || null;
+}
+
+function hasCompletedAuctionPayment(item) {
+  return (
+    item?.product?.status === "sold" ||
+    item?.product?.preRemovalStatus === "sold"
   );
 }
 
@@ -196,6 +271,9 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
   const [roundPage, setRoundPage] = useState(1);
   const [roundTotal, setRoundTotal] = useState(0);
   const [roundTotalPages, setRoundTotalPages] = useState(1);
+  const [roundSearchInput, setRoundSearchInput] = useState("");
+  const [roundSearchFilter, setRoundSearchFilter] = useState("");
+  const [roundPhaseFilters, setRoundPhaseFilters] = useState([]);
 
   useEffect(() => {
     apiFetch("/api/products/categories")
@@ -223,6 +301,44 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
   const [roundCancelFeedback, setRoundCancelFeedback] = useState("");
   const [roundError, setRoundError] = useState("");
   const [viewingRound, setViewingRound] = useState(null);
+  const [roundDetailItems, setRoundDetailItems] = useState([]);
+  const [roundDetailLoading, setRoundDetailLoading] = useState(false);
+  const [roundDetailError, setRoundDetailError] = useState("");
+  const [roundDetailRefreshRevision, setRoundDetailRefreshRevision] = useState(0);
+
+  useEffect(() => {
+    if (!viewingRound?.id) {
+      setRoundDetailItems([]);
+      setRoundDetailLoading(false);
+      setRoundDetailError("");
+      return undefined;
+    }
+
+    let ignore = false;
+    setRoundDetailItems([]);
+    setRoundDetailLoading(true);
+    setRoundDetailError("");
+
+    loadAllRoundItems(viewingRound.id, token)
+      .then((items) => {
+        if (!ignore) setRoundDetailItems(items);
+      })
+      .catch((err) => {
+        if (!ignore) {
+          setRoundDetailError(
+            err.message ||
+              "เกิดข้อผิดพลาดในการโหลดสินค้าในรอบประมูล กรุณาลองใหม่อีกครั้ง",
+          );
+        }
+      })
+      .finally(() => {
+        if (!ignore) setRoundDetailLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [viewingRound?.id, token, roundDetailRefreshRevision]);
 
   function loadRounds(pageToLoad = roundPage) {
     setLoading(true);
@@ -230,6 +346,10 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
     const params = new URLSearchParams();
     params.set("page", String(pageToLoad));
     params.set("limit", String(MARKETING_PAGE_SIZE));
+    if (roundSearchFilter) params.set("search", roundSearchFilter);
+    if (roundPhaseFilters.length) {
+      params.set("phases", roundPhaseFilters.join(","));
+    }
 
     Promise.all([
       apiFetch("/api/products/auctions/rounds/current", { token }).catch(
@@ -258,6 +378,10 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
           const clampParams = new URLSearchParams();
           clampParams.set("page", String(nextTotalPages));
           clampParams.set("limit", String(MARKETING_PAGE_SIZE));
+          if (roundSearchFilter) clampParams.set("search", roundSearchFilter);
+          if (roundPhaseFilters.length) {
+            clampParams.set("phases", roundPhaseFilters.join(","));
+          }
           apiFetch(`/api/products/auctions/rounds?${clampParams.toString()}`, {
             token,
           })
@@ -293,7 +417,7 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
   useEffect(() => {
     setRoundPage(1);
     loadRounds(1);
-  }, [token]);
+  }, [token, roundSearchFilter, roundPhaseFilters]);
 
   useEffect(() => {
     if (refreshRevision > 0) loadRounds();
@@ -444,6 +568,31 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
       setRoundRetrying(false);
     }
   }
+
+  const manageableRounds = sortByManagementPriority(
+    allRounds.filter((round) => MANAGEABLE_ROUND_PHASES.has(round.phase)),
+    ROUND_MANAGEMENT_PRIORITY,
+  );
+  const historicalRounds = sortByManagementPriority(
+    allRounds.filter((round) => !MANAGEABLE_ROUND_PHASES.has(round.phase)),
+    ROUND_MANAGEMENT_PRIORITY,
+  );
+  const groupedRoundRows = [
+    {
+      key: "manageable",
+      label: "รอบที่ยังจัดการได้",
+      emptyLabel: "ไม่พบรอบที่ยังจัดการได้ตามตัวกรอง",
+      rounds: manageableRounds,
+      className: "bg-emerald-50 text-emerald-800",
+    },
+    {
+      key: "history",
+      label: "ประวัติรอบประมูล",
+      emptyLabel: "ไม่พบประวัติรอบประมูลตามตัวกรอง",
+      rounds: historicalRounds,
+      className: "bg-slate-100 text-slate-700",
+    },
+  ];
 
   return (
     <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
@@ -826,11 +975,113 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
 
       {/* ตารางรายการรอบประมูลทั้งหมด (All Auction Rounds) */}
       <div className="mt-5 border-t border-slate-100 pt-4">
+        <div className="mb-5 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-5">
+          <form
+            className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setRoundSearchFilter(roundSearchInput.trim());
+            }}
+          >
+            <label className="min-w-0">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
+                <span
+                  className="material-symbols-outlined text-[17px] text-emerald-600"
+                  aria-hidden="true"
+                >
+                  manage_search
+                </span>
+                ค้นหารอบประมูล
+              </span>
+              <span className="relative block">
+                <span
+                  className="material-symbols-outlined pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[20px] text-slate-400"
+                  aria-hidden="true"
+                >
+                  search
+                </span>
+                <input
+                  type="search"
+                  value={roundSearchInput}
+                  maxLength={100}
+                  onChange={(event) => setRoundSearchInput(event.target.value)}
+                  placeholder="ค้นหาจากชื่อรอบประมูล"
+                  className="h-11 w-full rounded-xl border border-slate-300 bg-slate-50/60 pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 hover:border-slate-400 hover:bg-white focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-100/80"
+                />
+              </span>
+            </label>
+            <div className="flex gap-2 sm:pb-px">
+              <button
+                type="submit"
+                aria-label="ค้นหารอบประมูล"
+                className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 hover:shadow focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200 sm:min-w-24"
+              >
+                <span
+                  className="material-symbols-outlined text-[18px]"
+                  aria-hidden="true"
+                >
+                  search
+                </span>
+                ค้นหา
+              </button>
+              {(roundSearchFilter || roundPhaseFilters.length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRoundSearchInput("");
+                    setRoundSearchFilter("");
+                    setRoundPhaseFilters([]);
+                  }}
+                  className="h-11 rounded-xl border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-600 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-slate-200"
+                >
+                  ล้างตัวกรอง
+                </button>
+              )}
+            </div>
+          </form>
+
+          <fieldset className="mt-3 border-t border-slate-200 pt-3">
+            <legend className="px-1 text-xs font-semibold text-slate-700">
+              กรองตามสถานะรอบ
+            </legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {Object.entries(ROUND_PHASE_LABEL).map(([value, label]) => {
+                const checked = roundPhaseFilters.includes(value);
+                return (
+                  <label
+                    key={value}
+                    className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                      checked
+                        ? ROUND_PHASE_STYLE[value]
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      value={value}
+                      checked={checked}
+                      onChange={() =>
+                        setRoundPhaseFilters((current) =>
+                          current.includes(value)
+                            ? current.filter((phase) => phase !== value)
+                            : [...current, value],
+                        )
+                      }
+                      className="h-3.5 w-3.5 accent-emerald-600"
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+        </div>
+
         <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-1.5">
           <span className="material-symbols-outlined text-sm text-slate-400">
             history
           </span>
-          ประวัติและรายการรอบการประมูลทั้งหมด ({roundError ? "—" : roundTotal})
+          รอบประมูลที่ค้นพบ ({roundError ? "—" : roundTotal})
         </h4>
 
         {loading ? (
@@ -839,7 +1090,9 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
           <p className="text-xs text-red-600 py-3">{roundError}</p>
         ) : allRounds.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500 my-2">
-            ยังไม่มีประวัติรอบการประมูล
+            {roundSearchFilter || roundPhaseFilters.length > 0
+              ? "ไม่พบรอบประมูลตามคำค้นหาและตัวกรอง"
+              : "ยังไม่มีประวัติรอบการประมูล"}
           </div>
         ) : (
           <div className="min-w-0 rounded-xl border border-slate-200">
@@ -865,12 +1118,26 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {sortByManagementPriority(allRounds, ROUND_MANAGEMENT_PRIORITY).map((r) => (
+                {groupedRoundRows.map((group) => (
+                  <Fragment key={group.key}>
+                    <tr className={group.className}>
+                      <th colSpan={7} className="px-3 py-2 text-left text-xs font-bold">
+                        {group.label} ({group.rounds.length} รายการในหน้านี้)
+                      </th>
+                    </tr>
+                    {group.rounds.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-4 text-center text-xs text-slate-400">
+                          {group.emptyLabel}
+                        </td>
+                      </tr>
+                    ) : group.rounds.map((r) => (
                   <tr key={r.id} className="align-top hover:bg-slate-50/50">
                     <td className="min-w-0 px-2 py-3 font-semibold leading-5 text-slate-900">
                       <span className="line-clamp-2 break-words" title={r.title}>
                         {r.title}
                       </span>
+                      {r.referenceCode && <ReferenceCode value={r} className="text-xs text-slate-500" />}
                     </td>
                     <td className="px-2 py-3">
                       <span
@@ -941,6 +1208,8 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                       </div>
                     </td>
                   </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -954,7 +1223,7 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
           onClose={() => setViewingRound(null)}
           title="รายละเอียดรอบการประมูล"
           description="ข้อมูลแบบอ่านอย่างเดียวจากประวัติรอบการประมูล"
-          size="md"
+          size="xl"
         >
           {viewingRound && (
             <div className="space-y-4 text-sm text-slate-700">
@@ -987,6 +1256,168 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                   {viewingRound.cancellationReason || "ไม่ระบุเหตุผล"}
                 </div>
               )}
+              <section className="rounded-xl border border-slate-200 p-3 sm:p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h5 className="text-sm font-semibold text-slate-900">สินค้าในรอบประมูล</h5>
+                    {!roundDetailLoading && !roundDetailError && (
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        ทั้งหมด {roundDetailItems.length.toLocaleString("th-TH")} รายการ
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1 text-[10px] font-semibold">
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">รออนุมัติ</span>
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700">อนุมัติ/กำลังประมูล</span>
+                    <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-violet-700">ปิดแล้ว</span>
+                    <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-700">ปฏิเสธ/ยกเลิก</span>
+                  </div>
+                </div>
+
+                {roundDetailLoading ? (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500" role="status">
+                    กำลังโหลดสินค้าในรอบประมูล...
+                  </div>
+                ) : roundDetailError ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700" role="alert">
+                    <p>{roundDetailError}</p>
+                    <button
+                      type="button"
+                      onClick={() => setRoundDetailRefreshRevision((value) => value + 1)}
+                      className="mt-3 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                    >
+                      ลองโหลดสินค้าอีกครั้ง
+                    </button>
+                  </div>
+                ) : roundDetailItems.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
+                    <span className="material-symbols-outlined text-3xl text-slate-400" aria-hidden="true">inventory_2</span>
+                    <p className="mt-1 text-sm font-medium text-slate-600">ยังไม่มีสินค้าในรอบประมูลนี้</p>
+                  </div>
+                ) : (
+                  <ul className="max-h-[32rem] space-y-3 overflow-y-auto pr-1">
+                    {sortByManagementPriority(roundDetailItems, ROUND_DETAIL_ITEM_PRIORITY).map((item) => {
+                      const bids = Array.isArray(item.bids) ? item.bids : [];
+                      const highestBid = bids[0] || null;
+                      const winningBid = getWinningBid(item);
+                      const paymentCompleted = hasCompletedAuctionPayment(item);
+                      const coverUrl = item.product?.photos?.[0]?.url;
+                      const reason = item.cancellationReason ||
+                        (item.status === "cancelled" ? viewingRound.cancellationReason : null);
+
+                      return (
+                        <li key={item.id} data-testid="round-detail-auction-item" className="rounded-xl border border-slate-200 bg-white p-3">
+                          <div className="flex min-w-0 gap-3">
+                            <div className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                              {coverUrl ? (
+                                <img src={mediaUrl(coverUrl)} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                <span className="material-symbols-outlined text-2xl text-slate-400" aria-hidden="true">image</span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <p className="break-words font-semibold text-slate-900">
+                                    {item.product?.title || formatReferenceCode(item.productId) || "ไม่พบชื่อสินค้า"}
+                                  </p>
+                                  <p className="mt-0.5 truncate text-xs text-slate-500" title={item.sellerDisplayName || formatReferenceCode(item.sellerId) || "ไม่พบชื่อร้าน"}>
+                                    ร้าน: {item.sellerDisplayName || formatReferenceCode(item.sellerId) || "ไม่พบชื่อร้าน"}
+                                  </p>
+                                </div>
+                                <Badge
+                                  text={STATUS_LABEL[item.status] || item.status}
+                                  style={`${ROUND_DETAIL_STATUS_STYLE[item.status] || "border border-slate-200 bg-slate-100 text-slate-700"} whitespace-nowrap`}
+                                />
+                              </div>
+                              <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                                <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+                                  <dt className="text-slate-500">ราคาเริ่มต้น</dt>
+                                  <dd className="mt-0.5 font-semibold text-slate-800">{baht(item.startingPrice)}</dd>
+                                </div>
+                                <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+                                  <dt className="text-slate-500">
+                                    {item.status === "closed" ? "ราคาสูงสุดที่เคยมี" : "ราคาปัจจุบัน"}
+                                  </dt>
+                                  <dd className="mt-0.5 font-semibold text-slate-800">
+                                    {highestBid ? baht(highestBid.amount) : "ยังไม่มี Bid"}
+                                  </dd>
+                                </div>
+                                <div className="rounded-lg bg-slate-50 px-2.5 py-2">
+                                  <dt className="text-slate-500">จำนวน Bid</dt>
+                                  <dd className="mt-0.5 font-semibold text-slate-800">{bids.length.toLocaleString("th-TH")}</dd>
+                                </div>
+                              </dl>
+
+                              {item.status === "open" && (
+                                <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs">
+                                  {highestBid ? (
+                                    <>
+                                      <span className="text-emerald-700">ผู้เสนอราคาสูงสุดปัจจุบัน</span>
+                                      <strong className="ml-1 break-words text-emerald-900">
+                                        {highestBid.bidderName || "ไม่พบข้อมูลผู้เสนอราคา"}
+                                      </strong>
+                                    </>
+                                  ) : (
+                                    <strong className="text-emerald-800">ยังไม่มีผู้เสนอราคา</strong>
+                                  )}
+                                </div>
+                              )}
+
+                              {item.status === "closed" && (
+                                <div className="mt-2 grid gap-2 rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-xs sm:grid-cols-2">
+                                  {bids.length === 0 ? (
+                                    <p className="font-semibold text-violet-800 sm:col-span-2">ไม่มีผู้เสนอราคา</p>
+                                  ) : !winningBid ? (
+                                    <>
+                                      <div>
+                                        <span className="text-violet-600">ราคาสูงสุดที่เสนอ</span>
+                                        <strong className="ml-1 text-violet-900">{baht(highestBid?.amount)}</strong>
+                                      </div>
+                                      <p className="font-semibold text-violet-800">ไม่มีผู้ชนะ</p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div>
+                                        <span className="text-violet-600">ราคาสุดท้าย</span>
+                                        <strong className="ml-1 text-violet-900">{baht(winningBid?.amount)}</strong>
+                                      </div>
+                                      <div className="min-w-0">
+                                        <span className="text-violet-600">
+                                          {paymentCompleted ? "ผู้ชนะ" : "ผู้ได้รับสิทธิ์"}
+                                        </span>
+                                        <strong className="ml-1 break-words text-violet-900">
+                                          {winningBid?.bidderName ||
+                                            (paymentCompleted
+                                              ? "ไม่พบข้อมูลผู้ชนะ"
+                                              : "ไม่พบข้อมูลผู้ได้รับสิทธิ์")}
+                                        </strong>
+                                      </div>
+                                      {highestBid && highestBid.id !== winningBid.id && (
+                                        <p className="text-violet-600 sm:col-span-2">
+                                          เคยมีผู้เสนอสูงสุด{" "}
+                                          <strong className="text-violet-900">{baht(highestBid.amount)}</strong>{" "}
+                                          (เสียสิทธิ์)
+                                        </p>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              )}
+
+                              {["rejected", "cancelled"].includes(item.status) && (
+                                <p className="mt-2 break-words rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-2 text-xs font-medium text-rose-800">
+                                  เหตุผล: {reason || "ไม่ระบุเหตุผล"}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
             </div>
           )}
         </Modal>
@@ -1561,7 +1992,7 @@ export default function AuctionScheduleSection({ token }) {
                   type="checkbox"
                   checked={selected.has(a.id)}
                   onChange={() => toggleSelected(a.id)}
-                  aria-label={`เลือก ${a.product?.title || a.productId}`}
+                  aria-label={`เลือก ${a.product?.title || formatReferenceCode(a.productId)}`}
                   className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
                 />
               )}
@@ -1572,9 +2003,9 @@ export default function AuctionScheduleSection({ token }) {
                     <Link
                       href={`/products/${a.productId}`}
                       className="line-clamp-2 break-words text-sm font-semibold leading-5 text-slate-900 hover:text-emerald-600 sm:text-base sm:leading-6"
-                      title={a.product?.title || a.productId}
+                      title={a.product?.title || formatReferenceCode(a.productId)}
                     >
-                      {a.product?.title || a.productId}
+                      {a.product?.title || formatReferenceCode(a.productId)}
                     </Link>
                     <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
                       <span
@@ -1764,7 +2195,7 @@ export default function AuctionScheduleSection({ token }) {
             <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200 text-xs text-slate-700 space-y-1.5">
               <p>
                 <strong>ชื่อสินค้า:</strong>{" "}
-                {cancellingItem.product?.title || cancellingItem.productId}
+                {cancellingItem.product?.title || formatReferenceCode(cancellingItem.productId)}
               </p>
               <p>
                 <strong>ชื่อรอบประมูล:</strong>{" "}
@@ -1843,7 +2274,7 @@ export default function AuctionScheduleSection({ token }) {
         {rejectingItem && (
           <form onSubmit={handleReject} className="space-y-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-700">
-              <p><strong>ชื่อสินค้า:</strong> {rejectingItem.product?.title || rejectingItem.productId}</p>
+              <p><strong>ชื่อสินค้า:</strong> {rejectingItem.product?.title || formatReferenceCode(rejectingItem.productId)}</p>
               <p className="mt-1"><strong>รอบประมูล:</strong> {rejectingItem.round?.title || "ไม่ระบุ"}</p>
             </div>
             <div>

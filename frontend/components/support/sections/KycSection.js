@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../ui/ReferenceCode";
 import config from "../../../lib/customerServiceConfig";
 
 import { useEffect, useRef, useState } from "react";
@@ -10,10 +11,10 @@ import ConfirmDialog from "../../ui/ConfirmDialog";
 import { useToast } from "../../ui/ToastProvider";
 
 const STATUS_OPTIONS = [
-  { value: "PENDING", label: "Pending" },
-  { value: "VERIFIED", label: "Verified" },
-  { value: "REJECTED", label: "Rejected" },
-  { value: "ALL", label: "All" },
+  { value: "PENDING", label: "รอตรวจสอบ (PENDING)" },
+  { value: "VERIFIED", label: "อนุมัติแล้ว (VERIFIED)" },
+  { value: "REJECTED", label: "ปฏิเสธแล้ว (REJECTED)" },
+  { value: "ALL", label: "ทั้งหมด (ALL)" },
 ];
 
 const STATUS_BADGE = {
@@ -114,14 +115,13 @@ export default function KycSection({ token }) {
   async function confirmDecision(reason) {
     if (!pendingDecision) return;
     const { application, decision } = pendingDecision;
-    const finalReason = (reason || reasonById[application.id] || "").trim();
+    const finalReason = (reason ?? reasonById[application.id] ?? "").trim();
 
-    if (!finalReason) {
+    if (decision === "REJECTED" && !finalReason) {
       toast.error("กรุณาระบุเหตุผลในการตัดสินใจ");
       return;
     }
 
-    setPendingDecision(null);
     setDecidingId(application.id);
     setError("");
     try {
@@ -130,6 +130,7 @@ export default function KycSection({ token }) {
         token,
         body: { decision, reason: finalReason, version: application.version },
       });
+      setPendingDecision(null);
 
       const applicantName =
         `${application.user?.firstName || ""} ${application.user?.lastName || ""}`.trim() ||
@@ -178,7 +179,7 @@ export default function KycSection({ token }) {
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900">
-            KYC Review
+            คิวตรวจยืนยันตัวตนผู้ขาย (KYC)
           </h1>
           <p className="mt-1 text-sm font-medium text-slate-500">
             {statusFilter === "PENDING"
@@ -250,6 +251,7 @@ export default function KycSection({ token }) {
                         ({app.user?.email})
                       </span>
                     </div>
+                    {app.referenceCode && <ReferenceCode value={app} className="mt-1 text-xs text-slate-500" />}
                     <p className="mt-1 text-xs font-medium text-slate-500">
                       ยื่นคำขอเมื่อ:{" "}
                       {new Date(app.submittedAt).toLocaleString("th-TH")}
@@ -410,6 +412,7 @@ export default function KycSection({ token }) {
 
       <ConfirmDialog
         open={Boolean(pendingDecision)}
+        initialReason={reasonById[pendingDecision?.application?.id] || ""}
         busy={decidingId === pendingDecision?.application?.id}
         onCancel={() => setPendingDecision(null)}
         onConfirm={confirmDecision}

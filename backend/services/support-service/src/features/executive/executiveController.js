@@ -1,6 +1,8 @@
 const {
   resolveExecutiveRange,
   allowedValue,
+  searchQuery,
+  listSort,
   metricMeta,
   parsePagination,
   paginatedResponse,
@@ -33,6 +35,8 @@ async function getTickets(req, res, next) {
         codes(options.priorities),
         "priority",
       ),
+      search: searchQuery(req.query.q),
+      sort: listSort(req.query.sort),
       skip: pagination.skip,
       take: pagination.take,
     });

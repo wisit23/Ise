@@ -14,6 +14,44 @@ The script does not install tools, provision databases, seed demo accounts, dele
 volumes, or remove obsolete services automatically. New services/configuration
 need a reviewed update to the script/config before deployment.
 
+## Password reset email
+
+auth-service sends forgot-password links by SMTP and **refuses to start** if
+`MAIL_TRANSPORT=smtp` is set with incomplete settings. Without `MAIL_TRANSPORT`
+the feature is disabled and its endpoints answer 503. Add to the server `.env`:
+
+```
+MAIL_TRANSPORT=smtp
+APP_BASE_URL=https://re-loop.cskmitl.com   # site origin used in the emailed link; must be https
+MAIL_FROM="RE-LOOP <sender@gmail.com>"
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=sender@gmail.com
+SMTP_PASS=<16-character Google App Password>
+```
+
+For Gmail, use a dedicated sender account with 2-Step Verification on, then
+create the App Password at https://myaccount.google.com/apppasswords. Never use
+the account's real password, and never commit these values. Gmail allows about
+500 messages a day; mail from a gmail.com sender may land in spam, which only a
+sending domain with SPF/DKIM fixes. `MAIL_TRANSPORT=log` prints live reset links
+and is rejected unless `APP_BASE_URL` is localhost.
+
+This release adds the `password_reset_tokens` table, so deploy it with
+`bash deploy.sh --migrate`.
+
+## Sign-up email confirmation
+
+With mail configured, new accounts must confirm their email before they can
+sign in (`EMAIL_VERIFICATION=required`, the default whenever mail can be
+sent). Set `EMAIL_VERIFICATION=off` to keep the old instant sign-in. Asking for
+`required` without a working `MAIL_TRANSPORT` stops auth-service at boot.
+
+The `add_email_verification` migration marks every existing account as
+verified (from its creation date), so nobody already registered is locked
+out; deploy it with `bash deploy.sh --migrate`. Demo seeds create verified
+accounts too.
+
 ## Database changes
 
 Without `--migrate`, changed Prisma/DB infrastructure files stop deployment before

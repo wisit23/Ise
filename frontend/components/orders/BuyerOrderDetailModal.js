@@ -1,7 +1,11 @@
 "use client";
 
+import ReferenceCode from "../ui/ReferenceCode";
+
+
 import { useEffect, useState } from "react";
 import Modal from "../ui/Modal";
+import OrderCancellationReason from "./OrderCancellationReason";
 import Button from "../ui/Button";
 import Alert from "../ui/Alert";
 import { ProductThumb } from "../OrderLine";
@@ -9,6 +13,7 @@ import { fetchProduct } from "../../lib/products";
 import { fetchSellerSummary } from "../../lib/sellers";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
+import OrderDeliveryTimeline from "./OrderDeliveryTimeline";
 
 // Mirrors shippingService.ADDRESS_EDITABLE_STATUSES: once the seller marks the
 // parcel ready, the address is printed on it and the backend refuses changes.
@@ -43,6 +48,10 @@ export default function BuyerOrderDetailModal({
   onOrderChange,
 }) {
   const [order, setOrder] = useState(initialOrder);
+
+  useEffect(() => {
+    setOrder(initialOrder);
+  }, [initialOrder]);
   const [loadError, setLoadError] = useState("");
   const [listing, setListing] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -96,7 +105,7 @@ export default function BuyerOrderDetailModal({
     ? { ...product, media: product.media?.filter((item) => item.type === "image") }
     : null;
   const address = order.shippingAddress;
-  const canChange = ADDRESS_EDITABLE_STATUSES.includes(order.status);
+  const canChange = Boolean(order?.status && ADDRESS_EDITABLE_STATUSES.includes(order.status));
 
   async function startEditing() {
     setError("");
@@ -157,6 +166,8 @@ export default function BuyerOrderDetailModal({
         {error && <Alert tone="error">{error}</Alert>}
         {success && <Alert tone="success">{success}</Alert>}
 
+        <OrderCancellationReason order={order} />
+
         <section
           aria-label="สินค้าและร้านค้า"
           className="flex items-start gap-4 rounded-lg border border-line p-4"
@@ -175,7 +186,7 @@ export default function BuyerOrderDetailModal({
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
           <dt className="text-ink-muted">หมายเลขคำสั่งซื้อ</dt>
           <dd className="select-text break-all font-mono text-gray-900">
-            {order.id}
+            <ReferenceCode value={order} />
           </dd>
           <dt className="text-ink-muted">ราคา</dt>
           <dd className="text-gray-900">
@@ -188,6 +199,15 @@ export default function BuyerOrderDetailModal({
             {new Date(order.createdAt).toLocaleDateString("th-TH")}
           </dd>
         </dl>
+
+        <OrderDeliveryTimeline
+          order={order}
+          statusLabels={{
+            ready_to_ship: "เตรียมสินค้าเสร็จแล้ว",
+            pickup_in_progress: "ขนส่งกำลังเข้ารับสินค้า",
+            in_transit: "กำลังจัดส่ง",
+          }}
+        />
 
         <section
           aria-labelledby="buyer-shipping-details-heading"
@@ -213,7 +233,7 @@ export default function BuyerOrderDetailModal({
           ) : (
             <p className="text-sm text-ink-muted">
               {order.shippedAt ||
-              ["shipped", "delivered", "completed"].includes(order.status)
+              ["in_transit", "delivered", "completed"].includes(order.status)
                 ? "ไม่พบข้อมูลการจัดส่ง"
                 : "รอผู้ขายระบุข้อมูลการจัดส่ง"}
             </p>
@@ -274,7 +294,7 @@ export default function BuyerOrderDetailModal({
                 </Button>
               ) : (
                 address &&
-                ["ready_to_ship", "shipped", "delivered", "completed"].includes(
+                ["ready_to_ship", "pickup_in_progress", "in_transit", "delivered", "completed"].includes(
                   order.status,
                 ) && (
                   <p className="text-xs text-ink-subtle">

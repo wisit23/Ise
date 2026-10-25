@@ -141,6 +141,17 @@ test("TC19: sold listing keeps its sold badge but has no new-chat button", async
   expect(screen.queryByRole("button", { name: "ติดต่อผู้ขาย" })).not.toBeInTheDocument();
 });
 
+test("seller cannot edit or delete a sold product from the board", async () => {
+  currentAuth.user = { id: "seller" };
+  currentAuth.claims = { sub: "seller" };
+  currentAuth.roles = ["SELLER"];
+  mockApiResponses({ status: "sold" });
+  render(<ProductDetailPage />);
+  expect(await screen.findByText("สินค้านี้ขายแล้ว ไม่สามารถแก้ไขหรือลบได้")).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "แก้ไขสินค้านี้" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "ลบสินค้านี้" })).not.toBeInTheDocument();
+});
+
 test("available listing still offers contact seller", async () => {
   mockApiResponses({ status: "available" });
   render(<ProductDetailPage />);
@@ -718,4 +729,53 @@ test("displays 0 views when viewCount is 0", async () => {
   render(<ProductDetailPage />);
   expect(await screen.findByTestId("product-view-count")).toBeInTheDocument();
   expect(screen.getByText(/เข้าชม 0 ครั้ง/)).toBeInTheDocument();
+});
+
+test("shows 'หมด' and shipped banner when seller product order is shipped", async () => {
+  currentAuth = {
+    token: "seller-token",
+    claims: { sub: "user-1" },
+    user: { id: "user-1" },
+    roles: ["SELLER"],
+    isCustomerAccountRoles: false,
+    canPurchase: false,
+  };
+
+  apiFetch.mockImplementation((path) => {
+    if (path === "/api/products/p") {
+      return Promise.resolve({
+        id: "p",
+        title: "Listing p",
+        sellerId: "user-1",
+        status: "available",
+        price: 100,
+        media: [],
+        tags: [],
+        category: "Clothing",
+      });
+    }
+    if (path.includes("/orders/selling")) {
+      return Promise.resolve({
+        items: [{
+          id: "order-1",
+          productId: "p",
+          status: "in_transit",
+        }],
+      });
+    }
+    if (path.includes("/public")) {
+      return Promise.resolve({ firstName: "Seller", lastName: "Test", shopName: "Best Shop" });
+    }
+    if (path.includes("/summary")) {
+      return Promise.resolve({ total: 0, averageRating: 0 });
+    }
+    return Promise.resolve({ items: [], totalPages: 1 });
+  });
+
+  render(<ProductDetailPage />);
+  await screen.findByRole("heading", { name: "Listing p" });
+  await waitFor(() => {
+    expect(screen.getByText("หมด")).toBeInTheDocument();
+  });
+  expect(screen.getByText(/สินค้านี้อยู่ระหว่างการขนส่ง/)).toBeInTheDocument();
 });

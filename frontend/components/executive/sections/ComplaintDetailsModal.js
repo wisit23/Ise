@@ -1,4 +1,9 @@
 "use client";
+import {
+  formatReferenceCode,
+  formatReferenceText,
+} from "../../../lib/referenceCodes";
+
 import DetailsModal from "./DetailsModal";
 import { TIMEZONE } from "../../../lib/executive";
 import {
@@ -20,7 +25,7 @@ export default function ComplaintDetailsModal({ report, onClose }) {
           <div>
             <dt className="font-medium text-slate-500">เหตุผลของคำร้อง</dt>
             <dd className="mt-1 whitespace-pre-wrap break-words text-slate-900">
-              {report.reason}
+              {formatReferenceText(report.reason)}
             </dd>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -49,12 +54,14 @@ export default function ComplaintDetailsModal({ report, onClose }) {
               {report.targetName && <p>ชื่อผู้ใช้: {report.targetName}</p>}
               {report.targetId && (
                 <p className="text-xs text-slate-600">
-                  รหัสผู้ใช้: {report.targetId}
+                  รหัสผู้ใช้:{" "}
+                  {report.targetReferenceCode ||
+                    formatReferenceCode(report.targetId)}
                 </p>
               )}
               {report.productId && (
                 <p className="text-xs text-slate-600">
-                  รหัสสินค้า: {report.productId}
+                  รหัสสินค้า: {formatReferenceCode(report.productId)}
                 </p>
               )}
               {!report.targetId &&
@@ -76,7 +83,7 @@ export default function ComplaintDetailsModal({ report, onClose }) {
               </dt>
               <dd className="mt-1 break-words text-slate-900">
                 {report.actionDetails?.actorName ||
-                  report.actionDetails?.actorId ||
+                  formatReferenceCode(report.actionDetails?.actorId) ||
                   "-"}
               </dd>
             </div>

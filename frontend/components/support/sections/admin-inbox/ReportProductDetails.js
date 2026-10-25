@@ -37,10 +37,10 @@ export default function ReportProductDetails({ productId, detail, onRetry }) {
   return (
     <section
       className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-      aria-label="Product Details"
+      aria-label="รายละเอียดสินค้า"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h4 className="font-bold text-slate-900">Product Details</h4>
+        <h4 className="font-bold text-slate-900">รายละเอียดสินค้า</h4>
         <a
           href={`/products/${encodeURIComponent(id)}`}
           target="_blank"

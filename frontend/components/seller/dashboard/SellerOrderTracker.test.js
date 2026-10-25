@@ -40,6 +40,20 @@ describe("SellerOrderTracker", () => {
     expect(screen.getAllByText("ประมูล").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("labels and filters payment_expired separately from pending_payment", () => {
+    render(<SellerOrderTracker orders={[
+      { ...mockOrders[0], status: "payment_expired" },
+      { ...mockOrders[1], status: "pending_payment" },
+    ]} />);
+    expect(screen.getAllByText("หมดเวลาชำระเงิน").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "หมดเวลาชำระเงิน" }));
+    expect(screen.getByText("เสื้อยืดวินเทจ")).toBeInTheDocument();
+    expect(screen.queryByText("นาฬิกาสะสมประมูล")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "รอชำระเงิน" }));
+    expect(screen.queryByText("เสื้อยืดวินเทจ")).not.toBeInTheDocument();
+    expect(screen.getByText("นาฬิกาสะสมประมูล")).toBeInTheDocument();
+  });
+
   it("filters orders by order type (regular vs auction)", () => {
     render(<SellerOrderTracker orders={mockOrders} />);
 
@@ -84,7 +98,10 @@ describe("SellerOrderTracker", () => {
     expect(screen.getByRole("button", { name: /เตรียมสินค้าเรียบร้อย/ })).toBeInTheDocument();
 
     rerender(<SellerOrderTracker orders={[{ ...paidOrder[0], status: "ready_to_ship" }]} />);
-    expect(screen.getByRole("button", { name: "จัดส่งสินค้า" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "เรียกขนส่ง" })).toBeInTheDocument();
+    rerender(<SellerOrderTracker orders={[{ ...paidOrder[0], status: "pickup_in_progress" }]} />);
+    expect(screen.getByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "เรียกขนส่ง" })).not.toBeInTheDocument();
   });
 
   it("marks a confirmed order as packed through the lifecycle status", async () => {
@@ -111,6 +128,17 @@ describe("SellerOrderTracker", () => {
     expect(screen.queryByRole("button", { name: /ได้รับสินค้า|ยืนยันการรับ/ })).toBeNull();
   });
 
+  it("hides cases and counts before the workflow reaches the seller", () => {
+    render(<SellerOrderTracker orders={[{
+      ...mockOrders[0], status: "disputed",
+      dispute: { id: "hidden", status: "OPEN", sellerVisible: false },
+    }]} />);
+    expect(screen.queryByRole("link", { name: "ดูข้อพิพาท" })).toBeNull();
+    expect(screen.getByText("อยู่ระหว่างตรวจสอบ")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "ข้อพิพาท" }));
+    expect(screen.queryByText(mockOrders[0].productTitle)).toBeNull();
+  });
+
   it("decreases disputeCount when disputes are decided/completed", () => {
     const ordersWithDisputes = [
       {
@@ -121,6 +149,7 @@ describe("SellerOrderTracker", () => {
         createdAt: "2026-10-15T15:00:00.000Z",
         dispute: {
           id: "disp-1",
+          sellerVisible: true,
           status: "OPEN",
           decision: null,
         },
@@ -146,5 +175,44 @@ describe("SellerOrderTracker", () => {
     expect(screen.getByText("อยู่ระหว่างพิจารณา")).toBeInTheDocument();
     expect(screen.getByText("พิจารณาแล้ว")).toBeInTheDocument();
   });
-});
 
+  it("the dispute filter never seeds the search from a highlighted order, so disputes stay visible", () => {
+    const orders = [
+      mockOrders[0],
+      {
+        id: "c58a6037-d5aa-4bbb-8ccc-000000000001",
+        productTitle: "สินค้ามีข้อพิพาท",
+        price: 900,
+        status: "disputed",
+        createdAt: "2026-10-15T15:00:00.000Z",
+        dispute: { id: "disp-9", status: "OPEN", decision: null, sellerVisible: true },
+      },
+    ];
+    const { rerender } = render(
+      <SellerOrderTracker orders={orders} highlightOrderId="ORD-1111111111" statusFilter="disputed" />,
+    );
+    expect(screen.getByPlaceholderText(/ค้นหาชื่อสินค้า/)).toHaveValue("");
+    expect(screen.getByText("สินค้ามีข้อพิพาท")).toBeInTheDocument();
+
+    rerender(<SellerOrderTracker orders={orders} highlightOrderId={null} statusFilter="disputed" />);
+    expect(screen.getByText("สินค้ามีข้อพิพาท")).toBeInTheDocument();
+  });
+
+  it("finds an order by the ORD- number shown on screen", () => {
+    const orders = [
+      {
+        id: "c58a6037-d5aa-4bbb-8ccc-000000000001",
+        referenceCode: "ORD-7K3M-9X2R-4T6W",
+        productTitle: "สินค้ามีข้อพิพาท",
+        price: 900,
+        status: "in_transit",
+        createdAt: "2026-10-15T15:00:00.000Z",
+      },
+    ];
+    render(<SellerOrderTracker orders={orders} />);
+    fireEvent.change(screen.getByPlaceholderText(/ค้นหาชื่อสินค้า/), {
+      target: { value: "ord7k3m9x2r4t6w" },
+    });
+    expect(screen.getByText("สินค้ามีข้อพิพาท")).toBeInTheDocument();
+  });
+});

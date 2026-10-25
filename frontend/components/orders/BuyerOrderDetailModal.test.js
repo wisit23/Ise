@@ -61,23 +61,31 @@ beforeEach(() => {
   fetchSellerSummary.mockReset().mockResolvedValue(null);
 });
 
-test("shows the full order number without truncation and allows selecting it", async () => {
+test("shows the cancellation reason from the refreshed order details", async () => {
+  const current = order("cancelled", { cancellationReason: "สินค้าหมดสต็อก จึงไม่สามารถจัดส่งได้" });
+  mockApi(current);
+  render(<BuyerOrderDetailModal order={order("cancelled")} statusLabel="ยกเลิกแล้ว" onClose={() => {}} />);
+  expect(await screen.findByRole("region", { name: "เหตุผลในการยกเลิกคำสั่งซื้อ" })).toHaveTextContent(current.cancellationReason);
+});
+
+test("shows the persisted order reference without truncation and allows selecting it", async () => {
   const current = order("paid", {
     id: "550e8400-e29b-41d4-a716-446655440000",
+    referenceCode: "ORD-7K3M-9X2R-4T6W",
   });
   mockApi(current);
   render(
     <BuyerOrderDetailModal order={current} statusLabel="ชำระแล้ว" onClose={() => {}} />,
   );
   expect(screen.getByText("หมายเลขคำสั่งซื้อ")).toBeInTheDocument();
-  expect(screen.getByText(current.id)).toHaveClass("select-text", "break-all");
+  expect(screen.getByText(current.referenceCode)).toHaveClass("select-text", "break-all");
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
     `/api/orders/${current.id}`, { token: "token" },
   ));
 });
 
 test("shows the shop name and product photo alongside shipping details", async () => {
-  const current = order("shipped", {
+  const current = order("in_transit", {
     productId: "p1",
     sellerId: "s1",
     shipping: { company: "Test Express", trackingNumber: "SIM123" },
@@ -132,7 +140,7 @@ test("shows the shop without a broken image when a listing has no photos", async
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
 });
 
-test.each(["shipped", "delivered", "completed"])(
+test.each(["in_transit", "delivered", "completed"])(
   "shows the seller's shipping company and tracking number for %s orders after reload",
   async (status) => {
     const fresh = order(status, {
@@ -174,8 +182,8 @@ test("shows a waiting message before the seller ships, without invented tracking
   await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
 });
 
-test("reports missing shipping data on a shipped order instead of claiming it is awaiting shipment", async () => {
-  const current = order("shipped", { shipping: null });
+test("reports missing shipping data on an in-transit order instead of claiming it is awaiting shipment", async () => {
+  const current = order("in_transit", { shipping: null });
   mockApi(current);
   render(
     <BuyerOrderDetailModal order={current} statusLabel="x" onClose={() => {}} />,
@@ -224,7 +232,7 @@ test.each(["paid", "confirmed"])(
   },
 );
 
-test.each(["ready_to_ship", "shipped", "delivered", "completed"])(
+test.each(["ready_to_ship", "pickup_in_progress", "in_transit", "delivered", "completed"])(
   "no change-address button once the order is %s",
   async (status) => {
     mockApi(order(status), { patch: () => Promise.reject(new Error("no")) });

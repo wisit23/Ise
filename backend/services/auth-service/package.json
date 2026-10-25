@@ -9,6 +9,7 @@
     "start": "node src/server.js",
     "migrate:deploy": "node prisma/migrate.js",
     "seed:kyc-demo": "node prisma/seed-kyc-demo.js",
+    "seed:kyc-qa": "node prisma/seed-kyc-qa.js",
     "seed:ban-demo": "node prisma/seed-ban-demo.js",
     "kyc:inventory": "node scripts/inventoryKycDocuments.js"
   },
@@ -21,7 +22,9 @@
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "ioredis": "^5.11.1",
     "multer": "^1.4.5-lts.2",
+    "nodemailer": "10.0.13",
     "prisma": "^5.18.0"
   }
 }

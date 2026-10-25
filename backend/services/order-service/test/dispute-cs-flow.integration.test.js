@@ -108,11 +108,10 @@ test("CS investigates, T&S requests information and decides, expired disputes ar
   });
   assert.equal(escalated.status, 200, escalated.text);
   assert.equal(escalated.body.assignedRole, "TRUST_AND_SAFETY");
-  assert.equal(
-    (await request(app).get(path).set("Authorization", `Bearer ${csToken}`))
-      .status,
-    403,
-  );
+  // After escalation CS keeps watching the case but can no longer decide it.
+  const watched = await request(app).get(path).set("Authorization", `Bearer ${csToken}`);
+  assert.equal(watched.status, 200, watched.text);
+  assert.ok(!watched.body.capabilities?.canDecide);
   let safety = await post("claim", tsToken, {
     version: escalated.body.version,
   });

@@ -8,7 +8,7 @@ jest.mock("./case/CaseDrawer", () => ({ __esModule: true, default: ({ children }
 
 beforeEach(() => jest.clearAllMocks());
 
-it.each([["user-1", "SUSPEND_USER", "Suspend Account"], [null, "DISMISS", "Dismiss Report"]])(
+it.each([["user-1", "SUSPEND_USER", "ระงับบัญชีผู้ใช้ (SUSPEND_USER)"], [null, "DISMISS", "ยกเลิกรายงาน / ไม่พบความผิด (DISMISS)"]])(
   "submits the displayed default decision without reselecting it (target=%s)",
   async (targetId, expectedDecision, label) => {
     apiFetch.mockImplementation((url) => {

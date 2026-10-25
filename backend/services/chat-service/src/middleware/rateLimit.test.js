@@ -37,7 +37,7 @@ test("allows requests under the limit and rejects the one over it", async () => 
   const { err, res } = await run(limiter, "user-1");
   assert.equal(err.status, 429);
   // A client shouldn't have to guess how long to back off.
-  assert.equal(res.headers["Retry-After"], 60);
+  assert.ok(res.headers["Retry-After"] >= 1 && res.headers["Retry-After"] <= 60);
 });
 
 test("counts per user, so one noisy account can't lock out everyone", async () => {

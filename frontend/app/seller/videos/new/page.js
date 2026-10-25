@@ -9,6 +9,7 @@ import VideoUploader from "../../../../components/VideoUploader";
 import Select from "../../../../components/ui/Select";
 import { apiFetch } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
+import useSellerLiveRefresh from "../../../../lib/useSellerLiveRefresh";
 
 export default function UploadVideoPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function UploadVideoPage() {
   const [products, setProducts] = useState([]);
   const [fetchingProducts, setFetchingProducts] = useState(true);
   const [form, setForm] = useState({
+    title: "",
     productId: "",
     videoUrl: "",
     description: "",
@@ -32,28 +34,51 @@ export default function UploadVideoPage() {
     setUser(getStoredUser());
   }, [router]);
 
+  function loadProducts({ silent = false } = {}) {
+    if (!silent) setFetchingProducts(true);
+    return apiFetch("/api/products/mine?limit=50", { token: getAccessToken() })
+      .then(async (data) => {
+        const items = [...(data.items || [])];
+        for (let page = 2; page <= (data.totalPages || 1); page += 1) {
+          const next = await apiFetch(
+            `/api/products/mine?page=${page}&limit=50`,
+            { token: getAccessToken() },
+          );
+          items.push(...(next.items || []));
+        }
+        const eligibleProducts = items.filter(
+          (product) =>
+            !product.moderatedAt &&
+            product.status !== "removed" &&
+            product.status !== "sold",
+        );
+        setProducts(eligibleProducts);
+        setForm((prev) =>
+          eligibleProducts.some((product) => product.id === prev.productId)
+            ? prev
+            : { ...prev, productId: eligibleProducts[0]?.id || "" },
+        );
+      })
+      .catch((err) => {
+        if (!silent) setError(err.message || "โหลดรายการสินค้าไม่สำเร็จ");
+      })
+      .finally(() => {
+        if (!silent) setFetchingProducts(false);
+      });
+  }
+
   useEffect(() => {
     if (user?.role !== "SELLER") {
       setFetchingProducts(false);
       return;
     }
-    apiFetch("/api/products/mine?limit=50", { token: getAccessToken() })
-      .then((data) => {
-        const eligibleProducts = (data.items || []).filter(
-          (product) =>
-            product.status !== "removed" && product.status !== "sold",
-        );
-        setProducts(eligibleProducts);
-        if (eligibleProducts.length > 0) {
-          setForm((prev) => ({
-            ...prev,
-            productId: eligibleProducts[0].id,
-          }));
-        }
-      })
-      .catch((err) => setError(err.message || "โหลดรายการสินค้าไม่สำเร็จ"))
-      .finally(() => setFetchingProducts(false));
+    loadProducts();
   }, [user]);
+
+  useSellerLiveRefresh(() => loadProducts({ silent: true }), {
+    enabled: user?.role === "SELLER",
+    events: ["notification:new"],
+  });
 
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });
@@ -76,12 +101,13 @@ export default function UploadVideoPage() {
         method: "POST",
         token: getAccessToken(),
         body: {
+          title: form.title,
           videoUrl: form.videoUrl,
           description: form.description,
           productId: form.productId,
         },
       });
-      router.push("/swipe");
+      router.push("/seller/dashboard?section=videos");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -148,7 +174,8 @@ export default function UploadVideoPage() {
               <p className="text-sm text-gray-500">กำลังโหลดรายการสินค้า...</p>
             ) : products.length === 0 ? (
               <p className="text-sm text-red-600">
-                คุณยังไม่มีสินค้าที่พร้อมให้รีวิว (หรือสินค้าที่มีขายหมดแล้ว) กรุณา
+                คุณยังไม่มีสินค้าที่พร้อมให้รีวิว (หรือสินค้าที่มีขายหมดแล้ว)
+                กรุณา
                 <Link href="/sell" className="mx-1 underline">
                   ลงขายสินค้า
                 </Link>
@@ -166,6 +193,22 @@ export default function UploadVideoPage() {
                 required
               />
             )}
+          </div>
+
+          <div>
+            <label
+              className="mb-1 block text-sm font-medium text-gray-700"
+              htmlFor="clip-title"
+            >
+              ชื่อคลิป
+            </label>
+            <input
+              id="clip-title"
+              value={form.title}
+              onChange={update("title")}
+              placeholder="ตั้งชื่อคลิปสินค้า"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 outline-none focus:border-emerald-500"
+            />
           </div>
 
           <div>

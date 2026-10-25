@@ -15,11 +15,26 @@ const {
 } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
 const { assertActive, revokedSession, lockUser } = require("./sessionService");
+const { assertPasswordPolicy, hashPassword } = require("./passwordPolicy");
+const { service: emailVerification } = require("../features/emailVerification");
 const shopChangeRequests = require("./shopChangeRequestService");
 const { ROLE_CATALOG } = require("../../prisma/roleCatalog");
 
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches JWT_REFRESH_EXPIRES
 const ROLE_ID_BY_CODE = new Map(ROLE_CATALOG.map(([id, code]) => [code, id]));
+const MAX_AUTO_MESSAGES = 20;
+const MAX_AUTO_MESSAGE_LENGTH = 100;
+
+function validAutoMessageText(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw badRequest("กรุณากรอกคำถามอัตโนมัติ");
+  }
+  const text = value.trim();
+  if (text.length > MAX_AUTO_MESSAGE_LENGTH) {
+    throw badRequest(`คำถามอัตโนมัติต้องไม่เกิน ${MAX_AUTO_MESSAGE_LENGTH} ตัวอักษร`);
+  }
+  return text;
+}
 
 async function ensureRoleCatalogEntry(db, role) {
   const id = ROLE_ID_BY_CODE.get(role);
@@ -34,6 +49,7 @@ async function ensureRoleCatalogEntry(db, role) {
 function toPublicUser(user) {
   return {
     id: user.id,
+    ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
@@ -174,29 +190,53 @@ async function issueTokenPair(user, loginContext = null) {
   });
 }
 
-async function register({ email, password, firstName, lastName, phone }) {
+// Thai mobile/landline as typed into the forms: 10 digits starting with 0.
+// Spaces and dashes are accepted on input ("081-234-5678") and stripped so
+// what's stored is always the bare digits. Blank means "no phone" — the
+// field is optional everywhere it's collected.
+const PHONE_PATTERN = /^0[0-9]{9}$/;
+
+function normalizePhone(phone) {
+  if (phone === undefined || phone === null) return phone;
+  const digits = String(phone).replace(/[\s-]/g, "");
+  if (!digits) return null;
+  if (!PHONE_PATTERN.test(digits)) {
+    throw badRequest("เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก ขึ้นต้นด้วย 0");
+  }
+  return digits;
+}
+
+/**
+ * With verification required, the account starts unverified and the
+ * response carries no session: the user signs in after confirming the
+ * emailed link. With verification off, sign-up signs them straight in.
+ */
+async function register({ email, password, firstName, lastName, phone, ipAddress }) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
   }
-  if (password.length < 8) {
-    throw badRequest("password must be at least 8 characters");
-  }
+  assertPasswordPolicy(password);
+  phone = normalizePhone(phone);
 
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw conflict("email is already registered");
+  if (existing && !(await emailVerification.canReclaim(existing))) {
+    throw conflict("email is already registered");
+  }
 
-  const passwordHash = await bcrypt.hash(password, 10);
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      firstName,
-      lastName,
-      phone,
-      role: "BUYER",
-    },
-  });
+  const profile = { passwordHash: await hashPassword(password), firstName, lastName, phone };
+  const user = existing
+    ? await prisma.user.update({ where: { id: existing.id }, data: profile })
+    : await prisma.user.create({ data: { email, ...profile, role: "BUYER" } });
 
+  if (emailVerification.isRequired()) {
+    const reference = emailVerification.sendForNewAccount(user, { ipAddress });
+    return {
+      verificationRequired: true,
+      email: user.email,
+      expiresInHours: emailVerification.linkLifetimeHours(),
+      reference,
+    };
+  }
   const tokens = await issueTokenPair(user);
   return { user: toPublicUser(user), ...tokens };
 }
@@ -210,6 +250,7 @@ async function login({ email, password, ipAddress, userAgent }) {
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw badRequest("invalid email or password");
   assertActive(user);
+  emailVerification.assertVerifiedForSignIn(user);
 
   const tokens = await issueTokenPair(user, { ipAddress, userAgent });
   return { user: toPublicUser(user), ...tokens };
@@ -285,7 +326,7 @@ async function updateProfile(userId, { firstName, lastName, phone }) {
     if (!lastName) throw badRequest("lastName cannot be empty");
     patch.lastName = lastName;
   }
-  if (phone !== undefined) patch.phone = phone;
+  if (phone !== undefined) patch.phone = normalizePhone(phone);
 
   const user = await prisma.user.update({ where: { id: userId }, data: patch });
   return toPublicUser(user);
@@ -310,10 +351,6 @@ const MAX_DISPLAY_NAME_IDS = 100;
  * buyer actually recognises. Note this is driven by "does this account have
  * a shop name", NOT by a role check: nothing here gates on BUYER vs SELLER.
  *
- * `staffRoles` lists only staff roles (ADMIN, TRUST_AND_SAFETY,
- * CUSTOMER_SERVICE) and is empty for customers, so a screen can say which team
- * acted on a case without learning anything about a buyer or seller.
- *
  * Unknown ids are simply absent from the result rather than throwing, so one
  * deleted account can't break a whole conversation's rendering.
  */
@@ -330,12 +367,16 @@ async function getDisplayNames(userIds) {
     select: {
       id: true,
       firstName: true,
+      referenceCode: true,
       role: true,
       roles: { select: { role: true } },
       sellerProfile: { select: { shopName: true } },
     },
   });
 
+  // `staffRoles` lists only staff roles (ADMIN, TRUST_AND_SAFETY,
+  // CUSTOMER_SERVICE) and is empty for customers, so a screen can say which
+  // team acted on a case without learning anything about a buyer or seller.
   return users.map((user) => {
     // Role rows win over the legacy column, as everywhere else in auth.
     const held = user.roles.length
@@ -344,6 +385,7 @@ async function getDisplayNames(userIds) {
     return {
       userId: user.id,
       displayName: user.sellerProfile?.shopName || user.firstName,
+      ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
       staffRoles: STAFF_ROLES.filter((role) => held.includes(role)),
     };
   });
@@ -359,6 +401,7 @@ async function getPublicSellerProfile(userId) {
 
   return {
     id: user.id,
+    ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
     firstName: user.firstName,
     lastName: user.lastName,
     shopName: user.sellerProfile?.shopName || null,
@@ -410,24 +453,27 @@ async function listMyAutoMessages(sellerId) {
   });
 }
 
-async function createAutoMessage(sellerId, { messageText, isActive = true }) {
-  if (!messageText || !messageText.trim()) {
-    throw badRequest("messageText is required");
+async function createAutoMessage(sellerId, { messageText, isActive = true } = {}) {
+  const text = validAutoMessageText(messageText);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const count = await tx.autoMessage.count({ where: { userId: sellerId } });
+        if (count >= MAX_AUTO_MESSAGES) {
+          throw conflict(`เพิ่มคำถามอัตโนมัติได้ไม่เกิน ${MAX_AUTO_MESSAGES} ข้อต่อร้าน`);
+        }
+        return tx.autoMessage.create({
+          data: { userId: sellerId, messageText: text, isActive: Boolean(isActive) },
+        });
+      }, { isolationLevel: "Serializable" });
+    } catch (error) {
+      if (error?.code !== "P2034") throw error;
+    }
   }
-  return prisma.autoMessage.create({
-    data: {
-      userId: sellerId,
-      messageText: messageText.trim(),
-      isActive: Boolean(isActive),
-    },
-  });
+  throw conflict("มีการเพิ่มคำถามพร้อมกัน กรุณาลองอีกครั้ง");
 }
 
-async function updateAutoMessage(
-  sellerId,
-  messageId,
-  { messageText, isActive },
-) {
+async function updateAutoMessage(sellerId, messageId, { messageText, isActive } = {}) {
   const existing = await prisma.autoMessage.findFirst({
     where: { id: messageId, userId: sellerId },
   });
@@ -435,8 +481,7 @@ async function updateAutoMessage(
 
   const data = {};
   if (messageText !== undefined) {
-    if (!messageText.trim()) throw badRequest("messageText cannot be empty");
-    data.messageText = messageText.trim();
+    data.messageText = validAutoMessageText(messageText);
   }
   if (isActive !== undefined) {
     data.isActive = Boolean(isActive);
@@ -464,10 +509,12 @@ async function getPublicAutoMessages(sellerId) {
   const messages = await prisma.autoMessage.findMany({
     where: { userId: sellerId, isActive: true },
     orderBy: { id: "asc" },
+    take: MAX_AUTO_MESSAGES,
+    select: { id: true, messageText: true },
   });
   return messages.map((m) => ({
     id: m.id,
-    messageText: m.messageText,
+    messageText: m.messageText.slice(0, MAX_AUTO_MESSAGE_LENGTH),
   }));
 }
 

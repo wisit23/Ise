@@ -1,7 +1,9 @@
 import { act, render, screen } from "@testing-library/react";
 import SwipePage from "./page";
 import { apiFetch } from "../../lib/api";
-jest.mock("next/navigation", () => ({ useRouter: () => ({ replace: jest.fn() }) }));
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: jest.fn() }),
+}));
 
 jest.mock("../../lib/api", () => ({
   apiFetch: jest.fn(),
@@ -11,6 +13,7 @@ jest.mock("../../lib/api", () => ({
 describe("SwipePage", () => {
   beforeEach(() => {
     apiFetch.mockReset();
+    window.history.replaceState(null, "", "/swipe");
   });
 
   it("shows a clear empty state when the feed has no clips", async () => {
@@ -76,7 +79,7 @@ describe("SwipePage", () => {
     expect(screen.getByText("Second target clip")).toBeInTheDocument();
   });
 
-  it("falls back to first clip when deep link query param is not found in feed items", async () => {
+  it("loads the target clip separately when it is outside the first feed page", async () => {
     window.history.replaceState(null, "", "/swipe?video=missing-id");
 
     apiFetch.mockResolvedValueOnce({
@@ -96,12 +99,37 @@ describe("SwipePage", () => {
       ],
     });
 
+    apiFetch.mockResolvedValueOnce({
+      items: [
+        {
+          id: "missing-id",
+          videoUrl: "/uploads/target.mp4",
+          description: "Target outside first page",
+        },
+      ],
+    });
+
     await act(async () => {
       render(<SwipePage />);
     });
 
-    expect(await screen.findByText("@Seller One")).toBeInTheDocument();
-    expect(screen.getByText("First fallback clip")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Target outside first page"),
+    ).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/products/videos/feed?videoId=missing-id&limit=1",
+    );
+  });
+
+  it("explains when the linked clip is unavailable instead of opening a different clip", async () => {
+    window.history.replaceState(null, "", "/swipe?video=removed");
+    apiFetch.mockResolvedValue({ items: [] });
+    render(<SwipePage />);
+    expect(
+      await screen.findByText(
+        "คลิปนี้ยังไม่พร้อมแสดงในหน้าปัดสินค้า หรือถูกลบแล้ว",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("shows the API error instead of an empty feed", async () => {

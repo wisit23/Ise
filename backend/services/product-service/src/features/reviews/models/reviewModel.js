@@ -5,11 +5,15 @@ const WITH_MEDIA = { mediaEntries: { orderBy: [{ position: "asc" }, { mediaType:
 /** Keep the public ordered { url, type } contract over the unified ER table. */
 function toApiShape(review) {
   if (!review) return review;
+  // removalReason is staff-only; never expose it on the public shape.
   const { mediaEntries, ...rest } = review;
+  delete rest.removalReason;
   const media = [...(mediaEntries || [])]
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.mediaType.localeCompare(b.mediaType) || a.id.localeCompare(b.id))
     .map((m) => ({ url: m.url, type: m.mediaType === "VIDEO" ? "video" : "image" }));
-  return { ...rest, media };
+  return review.removedAt
+    ? { ...rest, comment: "", media: [], removed: true }
+    : { ...rest, media, removed: false };
 }
 
 function mediaToNestedCreate(media) {
@@ -33,6 +37,29 @@ async function create(data) {
   return toApiShape(review);
 }
 
+async function findById(id) {
+  const review = await prisma.review.findUnique({
+    where: { id },
+    include: WITH_MEDIA,
+  });
+  return toApiShape(review);
+}
+
+async function update(id, buyerId, { rating, comment, media }) {
+  const { mediaEntries } = mediaToNestedCreate(media);
+  // One nested write keeps the edited text, score and ordered media atomic.
+  const review = await prisma.review.update({
+    where: { id, buyerId },
+    data: {
+      rating,
+      comment,
+      mediaEntries: { deleteMany: {}, create: mediaEntries?.create || [] },
+    },
+    include: WITH_MEDIA,
+  });
+  return toApiShape(review);
+}
+
 async function findByOrderId(orderId) {
   const review = await prisma.review.findUnique({
     where: { orderId },
@@ -42,7 +69,7 @@ async function findByOrderId(orderId) {
 }
 
 async function listBySeller(sellerId, { skip, take } = {}) {
-  const where = { sellerId };
+  const where = { sellerId, removedAt: null };
   const [items, total, aggregate] = await Promise.all([
     prisma.review.findMany({
       where,
@@ -64,9 +91,9 @@ async function listBySeller(sellerId, { skip, take } = {}) {
 /** Cheap summary for cards/lists that only need the number, not the review list itself. */
 async function summaryBySeller(sellerId) {
   const [total, aggregate] = await Promise.all([
-    prisma.review.count({ where: { sellerId } }),
+    prisma.review.count({ where: { sellerId, removedAt: null } }),
     prisma.review.aggregate({
-      where: { sellerId },
+      where: { sellerId, removedAt: null },
       _avg: { rating: true },
     }),
   ]);
@@ -90,6 +117,8 @@ async function listByBuyer(buyerId, { skip, take } = {}) {
 
 module.exports = {
   create,
+  findById,
+  update,
   findByOrderId,
   listBySeller,
   summaryBySeller,

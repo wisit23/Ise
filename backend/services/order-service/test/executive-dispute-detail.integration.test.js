@@ -75,6 +75,8 @@ test("executive dispute detail against a real database", async (t) => {
 
   const nameAsks = [];
   const auth = await fakeService((req, body) => {
+    if (req.url === "/internal/reference-codes")
+      return { status: 200, json: {} };
     nameAsks.push({
       url: req.url,
       token: req.headers["x-internal-token"],
@@ -106,7 +108,7 @@ test("executive dispute detail against a real database", async (t) => {
   let closed = false;
 
   try {
-    await prisma.order.create({
+    const order = await prisma.order.create({
       data: {
         id: ids.order,
         buyerId: ids.buyer,
@@ -116,7 +118,7 @@ test("executive dispute detail against a real database", async (t) => {
         ordersAmount: 1000,
         orderType: "BUY_NOW",
         status: "disputed",
-        createdAt: new Date("2001-05-10T05:00:00.000Z"),
+        createdAt: new Date("2001-07-10T05:00:00.000Z"),
       },
     });
     const dispute = await prisma.disputeCase.create({
@@ -130,13 +132,13 @@ test("executive dispute detail against a real database", async (t) => {
         priority: "HIGH",
         assignedTo: ids.admin,
         assignedRole: "ADMIN",
-        assignedAt: new Date("2001-05-10T06:00:00.000Z"),
+        assignedAt: new Date("2001-07-10T06:00:00.000Z"),
         decision: "APPROVE_REFUND",
         decisionReason: "รูปที่ส่งยืนยันว่าสินค้าไม่ตรง",
         decidedBy: ids.admin,
-        decidedAt: new Date("2001-05-11T03:00:00.000Z"),
-        decisionDueAt: new Date("2001-05-12T05:00:00.000Z"),
-        createdAt: new Date("2001-05-10T05:00:00.000Z"),
+        decidedAt: new Date("2001-07-11T03:00:00.000Z"),
+        decisionDueAt: new Date("2001-07-12T05:00:00.000Z"),
+        createdAt: new Date("2001-07-10T05:00:00.000Z"),
       },
     });
 
@@ -149,23 +151,34 @@ test("executive dispute detail against a real database", async (t) => {
     assert.equal(res.status, 200);
     assert.deepEqual(res.body.data, {
       id: dispute.id,
+      referenceCode: dispute.referenceCode,
+      displayReferences: {
+        [dispute.id]: dispute.referenceCode,
+        [order.id]: order.referenceCode,
+      },
       reason: "ได้รับของไม่ตรงปก",
       disputeType: "ITEM_NOT_AS_DESCRIBED",
       status: "DECIDED",
       priority: "HIGH",
-      createdAt: "2001-05-10T05:00:00.000Z",
-      order: { id: ids.order, amount: 1000, orderType: "BUY_NOW" },
+      createdAt: "2001-07-10T05:00:00.000Z",
+      order: {
+        id: ids.order,
+        amount: 1000,
+        orderType: "BUY_NOW",
+        referenceCode: order.referenceCode,
+        displayReferences: { [order.id]: order.referenceCode },
+      },
       product: { id: ids.product, title: "กระเป๋าหนังวินเทจ" },
       buyer: { id: ids.buyer, name: "มาลี" },
       seller: { id: ids.seller, name: "ร้านมือสองดี" },
       assignee: { id: ids.admin, name: "แอดมินเอ", roles: ["ADMIN"] },
       assignedRole: "ADMIN",
-      assignedAt: "2001-05-10T06:00:00.000Z",
+      assignedAt: "2001-07-10T06:00:00.000Z",
       decision: "APPROVE_REFUND",
       decisionReason: "รูปที่ส่งยืนยันว่าสินค้าไม่ตรง",
       decider: { id: ids.admin, name: "แอดมินเอ", roles: ["ADMIN"] },
-      decidedAt: "2001-05-11T03:00:00.000Z",
-      decisionDueAt: "2001-05-12T05:00:00.000Z",
+      decidedAt: "2001-07-11T03:00:00.000Z",
+      decisionDueAt: "2001-07-12T05:00:00.000Z",
     });
     assert.equal(res.body.meta.namesAvailable, true);
     assert.equal(res.body.meta.productAvailable, true);

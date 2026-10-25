@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 import config from "../../../../lib/customerServiceConfig";
 
 import { useEffect, useState } from "react";
@@ -52,7 +54,7 @@ function PartyCell({ label, id, tone }) {
           {id?.slice(0, 1)?.toUpperCase() ?? label.slice(0, 1)}
         </div>
         <span className="truncate font-mono text-xs font-semibold text-slate-700">
-          {id ?? "—"}
+          {formatReferenceCode(id) || "—"}
         </span>
       </div>
     </div>
@@ -132,7 +134,7 @@ export default function DisputeDetailPanel({
             />
           </div>
           <p className="font-mono text-xs text-slate-500">
-            Order ID: {dispute.orderId}
+            Order ID: {formatReferenceCode(dispute.orderId)}
           </p>
           {/* Holding funds is an Admin-only power, so the link only exists
               for Admin — a CS agent seeing it would hit a 403. */}
@@ -214,7 +216,7 @@ export default function DisputeDetailPanel({
                       ผู้รับผิดชอบ:
                     </span>
                     <span className="font-mono text-sm font-bold text-slate-800">
-                      {details.assignedTo}
+                      {formatReferenceCode(details.assignedTo)}
                     </span>
                     <Badge
                       text={
@@ -339,7 +341,7 @@ export default function DisputeDetailPanel({
               </div>
               <div>
                 <p className="text-sm font-bold text-slate-800">
-                  ผู้ซื้อ #{(buyerId ?? "").slice(0, 12)}
+                  ผู้ซื้อ #{formatReferenceCode(buyerId)}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
                   {userRole === "CUSTOMER_SERVICE" &&
@@ -487,7 +489,7 @@ export default function DisputeDetailPanel({
                   ส่วนการตัดสินเป็นแบบอ่านอย่างเดียว (Read-only)
                 </h4>
                 <p className="mt-1 text-xs text-slate-500">
-                  เฉพาะเจ้าหน้าที่ Trust and Safety ที่รับเคส ({details.assignedTo})
+                  เฉพาะเจ้าหน้าที่ Trust and Safety ที่รับเคส ({formatReferenceCode(details.assignedTo)})
                   เท่านั้นที่สามารถบันทึกคำตัดสินได้
                 </p>
               </div>
@@ -603,7 +605,7 @@ export default function DisputeDetailPanel({
               ← ปิดรายละเอียด
             </button>
             <h3 className="mb-3 font-bold">รายละเอียดออเดอร์</h3>
-            <p className="break-all text-xs">Order ID: {dispute.orderId}</p>
+            <p className="break-all text-xs">Order ID: {formatReferenceCode(dispute.orderId)}</p>
             <p className="mt-2 text-sm">
               {dispute.order?.productTitle || "สินค้า"}
             </p>

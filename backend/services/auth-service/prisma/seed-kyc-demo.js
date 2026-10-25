@@ -23,6 +23,7 @@ async function main() {
       firstName: "ทดสอบ",
       lastName: "ผู้ขาย KYC",
       role: "SELLER",
+      emailVerifiedAt: new Date(),
       sellerProfile: { create: { shopName: "ร้านทดสอบ KYC" } },
     },
   });

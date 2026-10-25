@@ -6,6 +6,7 @@ const {
 const conversationModel = require("./conversationModel");
 const productClient = require("../../services/productClient");
 const authClient = require("../../services/authClient");
+const orderClient = require("../../services/orderClient");
 const { getCaseAccess } = require("../../services/caseAccessClient");
 
 const DUPLICATE_KEY_ERROR = "P2002";
@@ -18,8 +19,11 @@ const DUPLICATE_KEY_ERROR = "P2002";
  * who the seller is either, so a forged `sellerId` in the request body has
  * no effect at all (it's simply never read).
  */
-async function createOrOpenProductConversation({ productId, buyerId }) {
+async function createOrOpenProductConversation({ productId, buyerId, orderId }) {
   if (!productId) throw badRequest("productId is required");
+  if (orderId !== undefined && (typeof orderId !== "string" || !orderId.trim())) {
+    throw badRequest("orderId must be a non-empty string");
+  }
 
   const product = await productClient.getProduct(productId);
   if (!product) throw notFound("Product not found");
@@ -32,10 +36,24 @@ async function createOrOpenProductConversation({ productId, buyerId }) {
     throw badRequest("Cannot start a conversation about your own listing");
   }
 
+  // The order ID is only a reference: ownership and listing identity must
+  // come from order-service, never from buyer/seller fields in the request.
+  if (orderId !== undefined) {
+    const order = await orderClient.getOrder(orderId);
+    if (
+      !order ||
+      order.buyerId !== buyerId ||
+      order.productId !== productId ||
+      order.sellerId !== sellerId
+    ) {
+      throw new AppError(403, "คุณไม่มีสิทธิ์ติดต่อผู้ขายผ่านคำสั่งซื้อนี้");
+    }
+  }
+
   const contextKey = buildContextKey("PRODUCT", { productId, buyerId });
   const existing = await conversationModel.findByContextKey(contextKey);
   if (existing) return existing;
-  if (product.status === "sold") {
+  if (product.status === "sold" && orderId === undefined) {
     throw badRequest("ไม่สามารถเริ่มแชทใหม่สำหรับสินค้าที่ขายแล้ว");
   }
   const now = new Date();

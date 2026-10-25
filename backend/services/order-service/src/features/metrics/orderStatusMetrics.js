@@ -11,7 +11,16 @@ const PAID_PAYMENT_STATUS = "paid";
  */
 const STATUS_GROUPS = {
   completed: [COMPLETED_STATUS],
-  inProgress: ["confirmed", "shipped"],
+  // Paid but not finished: from waiting for the seller (paid) to waiting for
+  // the buyer to confirm receipt (delivered). See orderLifecycle.
+  inProgress: [
+    "paid",
+    "confirmed",
+    "ready_to_ship",
+    "pickup_in_progress",
+    "in_transit",
+    "delivered",
+  ],
   disputeRefund: ["disputed", "refunded"],
 };
 const COUNTED_STATUSES = Object.values(STATUS_GROUPS).flat();

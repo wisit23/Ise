@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 import Button from "../ui/Button";
+import OrderCancellationReason from "./OrderCancellationReason";
 import Alert from "../ui/Alert";
 import Skeleton from "../ui/Skeleton";
 import {
@@ -13,7 +14,12 @@ import {
   StatusPill,
   baht,
 } from "../seller/dashboard/sellerStatus";
-import { formatOrderId } from "../../lib/orders";
+import {
+  formatOrderId,
+  isValidTrackingNumber,
+  TRACKING_NUMBER_MESSAGE,
+} from "../../lib/orders";
+import OrderDeliveryTimeline from "./OrderDeliveryTimeline";
 
 export const SHIPPING_COMPANIES = [
   "Thailand Post",
@@ -130,6 +136,8 @@ export default function OrderShippingModal({
 
   if (!isOpen || !mounted) return null;
 
+  const blocked = order?.payoutHeld || order?.paymentSimulationStatus === "ON_HOLD" ||
+    (order?.dispute && !order.dispute.decision);
   const shipping =
     order?.shipping?.addressSnapshot ||
     order?.shippingAddress ||
@@ -148,7 +156,7 @@ export default function OrderShippingModal({
         token,
       });
       setOrder(updated);
-      setSuccess("ยืนยันรับออเดอร์เรียบร้อยแล้ว ตอนนี้คุณสามารถกรอกข้อมูลบริษัทขนส่งและเลขพัสดุเพื่อจัดส่งสินค้าได้");
+      setSuccess("ยืนยันรับออเดอร์เรียบร้อยแล้ว กรุณาเตรียมสินค้าให้พร้อมก่อนเรียกขนส่ง");
       onOrderUpdated?.(updated);
       onShipped?.(updated);
     } catch (err) {
@@ -158,10 +166,16 @@ export default function OrderShippingModal({
     }
   }
 
-  async function handleMarkShipped() {
-    if (!order?.id) return;
-    if (order.status !== "ready_to_ship") {
-      setError("ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องเตรียมสินค้าให้พร้อมจัดส่งก่อน");
+  async function handleShippingStep() {
+    if (!order?.id || updating || blocked) return;
+    if (!["ready_to_ship", "pickup_in_progress"].includes(order.status)) return;
+    const handoff = order.status === "pickup_in_progress";
+    if (handoff && (!company.trim() || !trackingNumber.trim())) {
+      setError("กรุณาระบุบริษัทขนส่งและเลขพัสดุก่อนส่งมอบให้ขนส่ง");
+      return;
+    }
+    if (handoff && !isValidTrackingNumber(trackingNumber)) {
+      setError(TRACKING_NUMBER_MESSAGE);
       return;
     }
     setUpdating(true);
@@ -174,14 +188,13 @@ export default function OrderShippingModal({
         method: "PATCH",
         token,
         body: {
-          status: "shipped",
-          company: company.trim(),
-          trackingNumber: trackingNumber.trim(),
+          status: handoff ? "in_transit" : "pickup_in_progress",
+          ...(handoff ? { company: company.trim(), trackingNumber: trackingNumber.trim() } : {}),
           version: order.version,
         },
       });
       setOrder(updated);
-      setSuccess("บันทึกการจัดส่งสินค้าเรียบร้อยแล้ว");
+      setSuccess(handoff ? "บันทึกการส่งมอบให้ขนส่งเรียบร้อยแล้ว" : "เรียกขนส่งแล้ว รอส่งมอบสินค้าให้ขนส่ง");
       onOrderUpdated?.(updated);
       onShipped?.(updated);
     } catch (err) {
@@ -192,7 +205,7 @@ export default function OrderShippingModal({
   }
 
   async function handleRejectOrder() {
-    if (!order?.id || rejecting || updating) return;
+    if (!order?.id || rejecting || updating || blocked) return;
     setRejecting(true);
     setError("");
     setSuccess("");
@@ -241,8 +254,8 @@ export default function OrderShippingModal({
               <h2 className="text-base font-bold text-gray-900">
                 รายละเอียดคำสั่งซื้อ & ที่อยู่จัดส่ง
               </h2>
-              <p className="font-mono text-xs text-gray-400" title={orderId}>
-                Order ID: #{formatOrderId(orderId)}
+              <p className="font-mono text-xs text-gray-400" title={formatOrderId(order || initialOrder || orderId)}>
+                Order ID: #{formatOrderId(order || initialOrder || orderId)}
               </p>
             </div>
           </div>
@@ -293,6 +306,14 @@ export default function OrderShippingModal({
               </div>
             </div>
 
+            <OrderDeliveryTimeline order={order} />
+            {(order.shipping?.company || order.shipping?.trackingNumber) && (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                <dt>บริษัทขนส่ง</dt><dd>{order.shipping.company || "-"}</dd>
+                <dt>เลขพัสดุ</dt><dd className="break-all font-mono">{order.shipping.trackingNumber || "-"}</dd>
+              </dl>
+            )}
+
             {/* Shipping Address */}
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
@@ -323,7 +344,7 @@ export default function OrderShippingModal({
               )}
             </div>
 
-            {canShip && ["paid", "pending", "pending_payment"].includes(order.status) && (
+            {canShip && ["paid", "pending_payment"].includes(order.status) && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-xs text-amber-900 shadow-xs">
                 <div className="flex items-start gap-2.5">
                   <span className="material-symbols-outlined text-[20px] text-amber-600 shrink-0 mt-0.5">
@@ -334,7 +355,7 @@ export default function OrderShippingModal({
                       ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องทำการยืนยันรับออเดอร์ก่อน
                     </p>
                     <p className="text-amber-800 leading-relaxed">
-                      คำสั่งซื้อนี้ยังไม่ได้รับการยืนยันรับออเดอร์ กรุณากดยืนยันรับออเดอร์เพื่อรับคำสั่งซื้อ จากนั้นระบบจะเปิดให้กรอกข้อมูลบริษัทขนส่งและเลขติดตามพัสดุ
+                      ยืนยันรับออเดอร์และเตรียมสินค้าให้พร้อมก่อนเรียกขนส่ง ระบุบริษัทขนส่งและเลขพัสดุเมื่อส่งมอบสินค้าให้ขนส่ง
                     </p>
                   </div>
                 </div>
@@ -347,7 +368,7 @@ export default function OrderShippingModal({
               </p>
             )}
 
-            {canShip && order.status === "ready_to_ship" && (
+            {canShip && order.status === "pickup_in_progress" && (
               <div className="grid gap-3 sm:grid-cols-2 items-start">
                 <div className="space-y-1">
                   <label
@@ -514,13 +535,20 @@ export default function OrderShippingModal({
                     aria-label="เลขติดตามพัสดุ"
                     value={trackingNumber}
                     onChange={(e) => setTrackingNumber(e.target.value)}
-                    maxLength={120}
+                    maxLength={20}
+                    aria-describedby="shipping-tracking-help"
+                    aria-invalid={Boolean(trackingNumber) && !isValidTrackingNumber(trackingNumber)}
                     placeholder="เช่น TH123456789TH"
                     className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition"
                   />
+                  <p id="shipping-tracking-help" className="text-xs text-slate-500">
+                    ยาว 8–20 ตัว ต้องมีตัวเลข ใช้ตัวเลขล้วนหรือผสมตัวอักษรอังกฤษได้ ไม่เว้นวรรค
+                  </p>
                 </div>
               </div>
             )}
+
+            <OrderCancellationReason order={order} />
 
             {/* Reject Order Reason View */}
             {showRejectForm ? (
@@ -538,7 +566,7 @@ export default function OrderShippingModal({
                     </p>
                     <p className="text-rose-800 leading-relaxed mt-0.5">
                       เมื่อปฏิเสธคำสั่งซื้อ ระบบจะทำการคืนเงินเต็มจำนวน (
-                      {baht(order.price || order.ordersAmount || 0)})
+                      {baht(order.finalPrice ?? order.ordersAmount ?? order.price ?? 0)})
                       ให้แก่ผู้ซื้อทันที และนำสินค้ากลับมาวางขายใหม่
                     </p>
                   </div>
@@ -609,7 +637,7 @@ export default function OrderShippingModal({
                   ปิด
                 </Button>
 
-                {canShip && ["paid", "pending", "pending_payment"].includes(order.status) && (
+                {canShip && ["paid", "pending_payment"].includes(order.status) && (
                   <>
                     <button
                       type="button"
@@ -637,35 +665,36 @@ export default function OrderShippingModal({
                   </>
                 )}
 
-                {canShip && order.status === "ready_to_ship" && (
-                  <>
-                    <button
-                      type="button"
-                      aria-label="ปฏิเสธ"
-                      disabled={updating || confirming || rejecting}
-                      onClick={() => setShowRejectForm(true)}
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800 transition disabled:opacity-50"
-                      title="ปฏิเสธคำสั่งซื้อนี้และคืนเงินให้ผู้ซื้อ"
-                    >
-                      <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
-                        cancel
-                      </span>
-                      <span>ปฏิเสธ</span>
-                    </button>
-                    <Button
-                      variant="primary"
-                      icon="local_shipping"
-                      loading={updating}
-                      disabled={!company.trim() || !trackingNumber.trim() || rejecting}
-                      onClick={handleMarkShipped}
-                      className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
-                    >
-                      ยืนยันการจัดส่งสินค้า
-                    </Button>
-                  </>
+                {canShip && ["confirmed", "ready_to_ship"].includes(order.status) && (
+                  <button
+                    type="button"
+                    aria-label="ปฏิเสธ"
+                    disabled={blocked || updating || confirming || rejecting}
+                    onClick={() => setShowRejectForm(true)}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800 transition disabled:opacity-50"
+                    title="ปฏิเสธคำสั่งซื้อนี้และคืนเงินให้ผู้ซื้อ"
+                  >
+                    <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                      cancel
+                    </span>
+                    <span>ปฏิเสธ</span>
+                  </button>
                 )}
 
-                {["shipped", "delivered"].includes(order.status) && (
+                {canShip && ["ready_to_ship", "pickup_in_progress"].includes(order.status) && (
+                  <Button
+                    variant="primary"
+                    icon="local_shipping"
+                    loading={updating}
+                    disabled={blocked || rejecting || (order.status === "pickup_in_progress" && (!company.trim() || !isValidTrackingNumber(trackingNumber)))}
+                    onClick={handleShippingStep}
+                    className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    {order.status === "ready_to_ship" ? "เรียกขนส่ง" : "ส่งมอบให้ขนส่งแล้ว"}
+                  </Button>
+                )}
+
+                {["in_transit", "delivered"].includes(order.status) && (
                   <span className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 border border-sky-200">
                     <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
                       check_circle

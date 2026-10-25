@@ -12,13 +12,20 @@ import ThaiIdQrStep from "../../../components/seller/onboarding/ThaiIdQrStep";
 import BankAccountStep from "../../../components/seller/onboarding/BankAccountStep";
 import { isCompleteIdCard } from "../../../components/seller/onboarding/IdCardField";
 import ErrorState from "../../../components/ui/ErrorState";
+import EmptyState from "../../../components/ui/EmptyState";
 import Skeleton from "../../../components/ui/Skeleton";
 import {
   parseBankAccount,
   validateBankAccount,
 } from "../../../components/seller/BankAccountInput";
 import { apiFetch, submitKyc } from "../../../lib/api";
-import { getAccessToken, getStoredUser } from "../../../lib/auth";
+import {
+  getAccessToken,
+  getCurrentRoles,
+  getStoredUser,
+  isCustomerAccountRoles,
+} from "../../../lib/auth";
+import useSellerLiveRefresh from "../../../lib/useSellerLiveRefresh";
 
 const STATUS_LABEL = {
   NONE: "ยังไม่ได้ยืนยันตัวตน",
@@ -102,6 +109,7 @@ export default function SellerOnboardingPage() {
   const [status, setStatus] = useState(null); // { kycStatus, sellerProfile, latestApplication }
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [staffAccount, setStaffAccount] = useState(false);
   const [error, setError] = useState("");
 
   // ---- วิธีที่ 1: ฟอร์มเดิม ----
@@ -138,6 +146,12 @@ export default function SellerOnboardingPage() {
       return;
     }
     setUser(getStoredUser());
+    // Staff accounts cannot hold a shop; the backend rejects the submission too.
+    if (!isCustomerAccountRoles(getCurrentRoles())) {
+      setStaffAccount(true);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setLoadError("");
     apiFetch("/api/auth/kyc/mine", { token })
@@ -162,6 +176,15 @@ export default function SellerOnboardingPage() {
   }, [router]);
 
   useEffect(load, [load]);
+
+  // Approval can happen while this page is open. Update the status without
+  // replacing any details the seller is currently typing into the form.
+  useSellerLiveRefresh(async () => {
+    const token = getAccessToken();
+    if (!token) return;
+    const data = await apiFetch("/api/auth/kyc/mine", { token });
+    setStatus(data);
+  }, { enabled: user?.role === "SELLER", events: ["notification:new"] });
 
   // ---- Handlers วิธีที่ 1 ----
   function handleFileSelect(e) {
@@ -291,6 +314,18 @@ export default function SellerOnboardingPage() {
         <div className="mt-6 rounded-xl border border-line bg-white p-8">
           <Skeleton.Text lines={6} />
         </div>
+      </Shell>
+    );
+  }
+
+  if (staffAccount) {
+    return (
+      <Shell>
+        <EmptyState
+          icon="badge"
+          title="บัญชีพนักงานเปิดร้านค้าไม่ได้"
+          description="การยืนยันตัวตนผู้ขายใช้ได้เฉพาะบัญชีผู้ซื้อหรือผู้ขาย หากต้องการขายสินค้า กรุณาใช้บัญชีลูกค้าแยกต่างหาก"
+        />
       </Shell>
     );
   }

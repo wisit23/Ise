@@ -15,6 +15,11 @@ const SERVICES = {
 // Routes that don't require a valid access token (register/login/refresh, public feed reads).
 const PUBLIC_PATHS = [
   /^\/api\/auth\/(register|login|refresh)/,
+  // Forgot-password must work for someone who can't sign in. auth-service
+  // rate limits these itself (per IP and per email).
+  /^\/api\/auth\/password\/(forgot|reset|reset\/verify)$/,
+  // Confirming a sign-up happens before the user has a session.
+  /^\/api\/auth\/email\/(verify|resend)$/,
   /^\/api\/auth\/users\/[^/]+\/public/,
   /^\/api\/auth\/users\/[^/]+\/auto-messages/,
   /^\/api\/products\/feed/,
@@ -58,7 +63,7 @@ function isPublic(path) {
 }
 
 const app = express();
-app.use(cors());
+app.use(cors({ exposedHeaders: ["Retry-After"] }));
 
 // Strip untrusted inbound x-user-* headers so external clients cannot spoof user identity
 app.use((req, res, next) => {
@@ -108,7 +113,9 @@ app.use((req, res, next) => {
 
 app.use(
   "/api/auth",
-  createProxyMiddleware({ target: SERVICES.auth, changeOrigin: true }),
+  // xfwd passes the caller's address on, so auth-service's login history and
+  // per-IP rate limits see the real client instead of the gateway.
+  createProxyMiddleware({ target: SERVICES.auth, changeOrigin: true, xfwd: true }),
 );
 app.use(
   "/api/products",

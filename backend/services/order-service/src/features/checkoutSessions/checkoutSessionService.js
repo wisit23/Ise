@@ -93,7 +93,7 @@ function createCheckoutSessionService(
     if (existing.length)
       throw conflict("one or more orders already have a checkout");
     for (const order of orders) {
-      if (!["pending", "pending_payment"].includes(order.status))
+      if (order.status !== "pending_payment")
         throw conflict("order is no longer awaiting payment");
       if (order.basket && order.basket.unlockAt <= now)
         throw conflict("reservation has expired");
@@ -124,7 +124,7 @@ function createCheckoutSessionService(
               buyerId,
               checkoutId: null,
               version: order.version,
-              status: { in: ["pending", "pending_payment"] },
+              status: "pending_payment",
             },
             data: { checkoutId: checkout.id, version: { increment: 1 } },
           });
@@ -177,7 +177,7 @@ function createCheckoutSessionService(
           include: INCLUDE,
         });
       for (const order of checkout.orders) {
-        if (!["pending", "pending_payment"].includes(order.status)) {
+        if (order.status !== "pending_payment") {
           if (cancelled) throw conflict("order is no longer cancellable");
           continue;
         }
@@ -185,9 +185,9 @@ function createCheckoutSessionService(
           where: {
             id: order.id,
             version: order.version,
-            status: { in: ["pending", "pending_payment"] },
+            status: "pending_payment",
           },
-          data: { status: "cancelled", version: { increment: 1 } },
+          data: { status: cancelled ? "cancelled" : "payment_expired", version: { increment: 1 } },
         });
         if (changed.count !== 1)
           throw conflict(cancelled ? "order changed during cancellation" : "order changed during checkout expiry");
@@ -227,7 +227,7 @@ function createCheckoutSessionService(
       });
     });
     for (const order of row.orders) {
-      if (order.status === "cancelled" && order.campaignId)
+      if (["cancelled", "payment_expired"].includes(order.status) && order.campaignId)
         await products.releaseVoucher(order.campaignId, {
           userId: order.buyerId,
           orderId: order.id,
@@ -277,13 +277,13 @@ function createCheckoutSessionService(
         if (claimed.count !== 1)
           throw conflict("checkout changed during payment");
         for (const order of checkout.orders) {
-          if (!["pending", "pending_payment"].includes(order.status))
+          if (order.status !== "pending_payment")
             throw conflict("order is no longer payable");
           const changed = await tx.order.updateMany({
             where: {
               id: order.id,
               version: order.version,
-              status: { in: ["pending", "pending_payment"] },
+              status: "pending_payment",
             },
             data: { status: "paid", version: { increment: 1 } },
           });
@@ -415,7 +415,7 @@ function createCheckoutSessionService(
             where: {
               id: order.id,
               version: order.version,
-              status: { in: ["pending", "pending_payment"] },
+              status: "pending_payment",
             },
             data: { version: { increment: 1 } },
           });

@@ -118,6 +118,34 @@ describe("NotificationBell", () => {
     expect(screen.getByText("มีข้อพิพาทใหม่")).toBeInTheDocument();
   });
 
+  it("shows the complete seller rejection reason outside the clamped summary", async () => {
+    const reason = "สินค้าหมดสต็อก จึงไม่สามารถจัดส่งได้ และขอคืนเงินเต็มจำนวนให้ผู้ซื้อ\nขออภัยในความไม่สะดวก";
+    getNotifications.mockResolvedValue({ items: [{
+      id: "rejected-order", type: "ORDER", title: "คำสั่งซื้อถูกปฏิเสธและคืนเงินเต็มจำนวน",
+      message: "ผู้ขายได้ปฏิเสธออเดอร์และคืนเงินเต็มจำนวนแล้ว", read: false,
+      metadata: { status: "cancelled", orderId: "order-1", reason },
+      createdAt: new Date().toISOString(),
+    }], total: 1 });
+    render(<NotificationBell user={mockUser} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /การแจ้งเตือน/i }));
+    });
+    const label = await screen.findByText("เหตุผล:");
+    const reasonBlock = label.parentElement;
+    expect(reasonBlock).toHaveTextContent(reason.replace(/\s+/g, " "));
+    expect(reasonBlock).toHaveClass("whitespace-pre-wrap", "break-words");
+    expect(reasonBlock.className).not.toMatch(/line-clamp|truncate/);
+  });
+
+  it("does not add an empty reason to ordinary notifications", async () => {
+    render(<NotificationBell user={mockUser} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /การแจ้งเตือน/i }));
+    });
+    expect(await screen.findByText("ลูกค้าสั่งซื้อสินค้า #order-101")).toBeInTheDocument();
+    expect(screen.queryByText("เหตุผล:")).not.toBeInTheDocument();
+  });
+
   it("filters notifications by unread tab", async () => {
     render(<NotificationBell user={mockUser} />);
     const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
@@ -207,7 +235,7 @@ describe("NotificationBell", () => {
     expect(screen.getByText("3")).toBeInTheDocument();
   });
 
-  it("supersedes previous notification for the same entity and does not increase unread count if already unread", async () => {
+  it("preserves earlier unread stages for the same entity and deduplicates only socket replays", async () => {
     getNotifications.mockResolvedValue({
       items: [
         {
@@ -235,10 +263,9 @@ describe("NotificationBell", () => {
     });
     expect(await screen.findByText("มีคำสั่งซื้อใหม่")).toBeInTheDocument();
 
-    // Customer completes payment: socket event arrives with updated status for the same order
-    await act(async () => {
-      socketHandler?.({
-        id: "n-order-1",
+    // Payment is a distinct notification, even for the same order.
+    const paidNotice = {
+        id: "n-order-paid",
         entityId: "order-100",
         type: "ORDER",
         title: "ผู้ซื้อชำระเงินแล้ว",
@@ -246,16 +273,22 @@ describe("NotificationBell", () => {
         link: "/seller/dashboard?orderId=order-100",
         metadata: { orderId: "order-100", status: "paid" },
         createdAt: new Date().toISOString(),
-      });
-    });
-
-    // Unread count should remain 1 (NOT 2) because it replaced the existing unread stage
-    expect(screen.getByText("1")).toBeInTheDocument();
+    };
+    await act(async () => socketHandler?.(paidNotice));
+    expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("ผู้ซื้อชำระเงินแล้ว")).toBeInTheDocument();
-    expect(screen.queryByText("มีคำสั่งซื้อใหม่")).not.toBeInTheDocument();
+    expect(screen.getByText("มีคำสั่งซื้อใหม่")).toBeInTheDocument();
+    await act(async () => socketHandler?.(paidNotice));
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getAllByText("ผู้ซื้อชำระเงินแล้ว")).toHaveLength(1);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: /อ่านทั้งหมด/i })));
+    await act(async () => socketHandler?.(paidNotice));
+    expect(screen.queryByText("2")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^ยังไม่อ่าน/ }));
+    expect(screen.queryByText("ผู้ซื้อชำระเงินแล้ว")).not.toBeInTheDocument();
   });
 
-  it("supersedes read notification for the same entity and increments unread count by 1", async () => {
+  it("retains a read notification when a new stage arrives for the same entity", async () => {
     getNotifications.mockResolvedValue({
       items: [
         {
@@ -281,10 +314,10 @@ describe("NotificationBell", () => {
     });
     expect(await screen.findByText("ผู้ซื้อชำระเงินแล้ว")).toBeInTheDocument();
 
-    // Order status changes to confirmed: socket event arrives
+    // Order confirmation has its own notification ID.
     await act(async () => {
       socketHandler?.({
-        id: "n-order-read",
+        id: "n-order-confirmed",
         entityId: "order-200",
         type: "ORDER",
         title: "ผู้ขายยืนยันคำสั่งซื้อแล้ว",
@@ -298,7 +331,7 @@ describe("NotificationBell", () => {
     // Unread count should now be 1
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("ผู้ขายยืนยันคำสั่งซื้อแล้ว")).toBeInTheDocument();
-    expect(screen.queryByText("ชำระเงินสำเร็จ #order-200")).not.toBeInTheDocument();
+    expect(screen.getByText("ชำระเงินสำเร็จ #order-200")).toBeInTheDocument();
   });
 
   it("dismisses dropdown when Escape is pressed", async () => {
@@ -418,6 +451,192 @@ describe("NotificationBell", () => {
     expect(screen.getByText("สินค้าชำรุดเสียหายจริงตามหลักฐาน")).toBeInTheDocument();
     expect(screen.getByText("คุณเป็นผู้ซื้อในคำสั่งซื้อนี้")).toBeInTheDocument();
   });
+
+  it.each([
+    ["ticket", {
+      id: "n-ticket-1", type: "SUPPORT", title: "เจ้าหน้าที่แก้ไขเรื่องของคุณแล้ว",
+      message: "เรื่อง #SUP-1 ได้รับการแก้ไขแล้ว", link: "/support/tickets/t-1",
+      metadata: { ticketId: "t-1", status: "RESOLVED" },
+    }, "/support/tickets/t-1"],
+    ["dispute status", {
+      id: "n-dispute-status", type: "DISPUTE", title: "เจ้าหน้าที่รับเรื่องข้อพิพาทแล้ว",
+      message: "คำสั่งซื้อ #ORD-1: เจ้าหน้าที่รับเรื่องแล้ว", link: "/support/cases/ORD-1",
+      metadata: { orderId: "ORD-1", disputeId: "d-1", event: "CLAIMED", statusUpdate: true },
+    }, "/support/cases/ORD-1"],
+  ])("a %s update opens the case page instead of the verdict modal", async (_label, notif, target) => {
+    getNotifications.mockResolvedValueOnce({
+      items: [{ ...notif, read: false, createdAt: new Date().toISOString() }],
+    });
+    render(<NotificationBell user={mockUser} />);
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /การแจ้งเตือน/i }));
+    });
+    const item = await screen.findByText(notif.title);
+    expect(screen.queryByText("ดูรายละเอียดผลการตัดสิน")).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(item.closest('[role="button"]') || item.closest("button"));
+    });
+    expect(mockPush).toHaveBeenCalledWith(target);
+  });
+
+  it("navigates seller directly to order tracking with highlighted order", async () => {
+    const sellerUser = { id: "seller-1", firstName: "แม่ค้า", role: "SELLER" };
+    getNotifications.mockResolvedValueOnce({
+      items: [
+        {
+          id: "n-seller-1",
+          type: "ORDER",
+          title: "ผู้ซื้อชำระเงินแล้ว",
+          message: "ผู้ซื้อชำระเงินเรียบร้อยแล้ว",
+          link: "/seller/dashboard?orderId=order-999",
+          metadata: { orderId: "order-999" },
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    });
+    render(<NotificationBell user={sellerUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    const notifItem = await screen.findByText("ผู้ซื้อชำระเงินแล้ว");
+    await act(async () => {
+      fireEvent.click(notifItem.closest('[role="button"]') || notifItem.closest("button"));
+    });
+    expect(mockPush).toHaveBeenCalledWith("/seller/dashboard?section=orders&orderId=order-999");
+  });
+
+  it("renders cancelled auction notification with gavel icon, action button and routes seller to /seller/auctions", async () => {
+    const sellerUser = { id: "seller-1", firstName: "แม่ค้า", role: "SELLER" };
+    getNotifications.mockResolvedValueOnce({
+      items: [
+        {
+          id: "n-auction-cancelled-1",
+          type: "AUCTION",
+          title: "สินค้าถูกยกเลิกการประมูล",
+          message: "สินค้าของคุณ เสื้อแจ็กเก็ต ถูกยกเลิกการประมูลเนื่องจาก: สินค้าไม่พร้อม",
+          link: "/auctions/item-cancelled-1",
+          metadata: {
+            event: "auction.item_cancelled",
+            itemId: "item-cancelled-1",
+          },
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+    });
+
+    render(<NotificationBell user={sellerUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    const notifTitle = await screen.findByText("สินค้าถูกยกเลิกการประมูล");
+    expect(notifTitle).toBeInTheDocument();
+
+    // Check that button text is "ไปที่หน้าจัดการประมูล" for seller
+    const actionBtn = screen.getByText("ไปที่หน้าจัดการประมูล");
+    expect(actionBtn).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(notifTitle.closest('[role="button"]') || notifTitle.closest("button"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/seller/auctions");
+  });
+
+  it("renders normal auction notification for buyer with ดูรายละเอียด and routes to auction link", async () => {
+    const buyerUser = { id: "buyer-1", firstName: "ผู้ซื้อ", role: "BUYER" };
+    getNotifications.mockResolvedValueOnce({
+      items: [
+        {
+          id: "n-auction-round-1",
+          type: "AUCTION",
+          title: "รอบประมูลเปิดแล้ว",
+          message: "รอบประมูลเปิดให้เสนอราคาแล้ว",
+          link: "/auctions/rounds/round-1",
+          metadata: {
+            event: "auction.round_started",
+            roundId: "round-1",
+          },
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+    });
+
+    render(<NotificationBell user={buyerUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    const notifTitle = await screen.findByText("รอบประมูลเปิดแล้ว");
+    expect(notifTitle).toBeInTheDocument();
+
+    // For buyer, action text is "ดูรายละเอียด"
+    const actionBtn = screen.getByText("ดูรายละเอียด");
+    expect(actionBtn).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(notifTitle.closest('[role="button"]') || notifTitle.closest("button"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/auctions/rounds/round-1");
+  });
+
+  it("renders dropdown with responsive fixed/max-width classes so it does not overflow mobile screen bounds", async () => {
+    render(<NotificationBell user={mockUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    const dialog = screen.getByRole("dialog", { name: "หน้าต่างการแจ้งเตือน" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveClass("fixed", "inset-x-3", "sm:absolute", "sm:right-0");
+  });
+  it("navigates buyer order notification to /orders?orderId=... and dispatches custom event", async () => {
+    const buyerUser = { id: "buyer-1", firstName: "ลูกค้า", role: "BUYER" };
+    getNotifications.mockResolvedValueOnce({
+      items: [
+        {
+          id: "n-order-paid-1",
+          type: "ORDER",
+          title: "ชำระเงินสำเร็จ",
+          message: "คุณได้ชำระเงินสำหรับสินค้า เสื้อยืดโอเวอร์ไซส์ ไซส์ XL เรียบร้อยแล้ว",
+          link: "/orders",
+          metadata: { orderId: "order-123" },
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+    });
+
+    const dispatchSpy = jest.spyOn(window, "dispatchEvent");
+
+    render(<NotificationBell user={buyerUser} />);
+    const button = await screen.findByRole("button", { name: /การแจ้งเตือน/i });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+
+    const notifItem = await screen.findByText("ชำระเงินสำเร็จ");
+    await act(async () => {
+      fireEvent.click(notifItem.closest('[role="button"]') || notifItem.closest("button"));
+    });
+
+    expect(mockPush).toHaveBeenCalledWith("/orders?orderId=order-123");
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "reloop:open-order-detail",
+        detail: { orderId: "order-123" },
+      }),
+    );
+    dispatchSpy.mockRestore();
+  });
 });
-
-

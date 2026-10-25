@@ -42,7 +42,7 @@ test("checkout persists the reservation identity returned by product-service", a
   t.mock.method(orderModel, "findByReservationId", async () => null);
   t.mock.method(orderModel, "create", async (data) => ({
     id: "order-a",
-    status: "pending",
+    status: "pending_payment",
     ...data,
   }));
   t.mock.method(orderModel, "findByReservationId", async () => null);

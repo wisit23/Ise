@@ -54,5 +54,6 @@ test("toApiShape handles null or reviews without media", () => {
     id: "r2",
     rating: 4,
     media: [],
+    removed: false,
   });
 });

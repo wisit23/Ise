@@ -47,6 +47,14 @@ const AUCTION_STATUSES = new Set([
 ]);
 const MAX_AUCTION_FILTER_VALUES = 100;
 const MAX_AUCTION_SEARCH_LENGTH = 100;
+const AUCTION_ROUND_PHASES = new Set([
+  "upcoming",
+  "submission",
+  "waiting",
+  "auction",
+  "ended",
+  "cancelled",
+]);
 
 function maskBidderDisplayName(displayName, userId) {
   const clean = typeof displayName === "string" ? displayName.trim() : "";
@@ -164,10 +172,21 @@ async function loadAuction(id) {
 async function maybeAdvance(auction, now = new Date()) {
   if(auction.product?.moderatedAt || auction.product?.status === "removed")return auction;
   if (auction.status === "scheduled" && auction.scheduledStartAt <= now) {
-    auction = await auctionRepository.updateStatus(auction.id, {
-      status: "open",
-      openedAt: now,
-    },{expectedStatus:"scheduled",requireUnmoderatedProduct:true,startDueAt:now});
+    try {
+      auction = await auctionRepository.updateStatus(auction.id, {
+        status: "open",
+        openedAt: now,
+      }, { expectedStatus: "scheduled", strictStatus: true, requireUnmoderatedProduct: true, startDueAt: now });
+    } catch (err) {
+      // A delayed job and a page visit may race; only the transition winner notifies.
+      if (err.status !== 409) throw err;
+      return loadAuction(auction.id);
+    }
+    if (auction.status === "open") {
+      await chatClient.notifyItemOpened(auction).catch((err) =>
+        console.warn("[auctionService] opening notification failed:", err.message),
+      );
+    }
   }
   if (auction.status === "open" && auction.scheduledEndAt <= now) {
     auction = await closeAuction(auction, now);
@@ -222,7 +241,9 @@ async function closeAuction(auction, now = new Date()) {
         paymentDeadlineAt: new Date(now.getTime() + AUCTION_PAYMENT_TTL_MS),
       });
       winningOrderId = order.id;
-      await auctionRepository.setProductStatus(current.productId, "reserved", tx);
+      await auctionRepository.setProductStatus(current.productId, "reserved", tx, {
+        price: winningBid.amount,
+      });
       winnerNotification = {
         auction: {
           id: current.id,
@@ -446,7 +467,9 @@ async function advanceWinnerAfterPaymentTimeout({
       { winningBidId: nextBid.id, winningOrderId: nextOrder.id },
       tx,
     );
-    await auctionRepository.setProductStatus(current.productId, "reserved", tx);
+    await auctionRepository.setProductStatus(current.productId, "reserved", tx, {
+      price: nextBid.amount,
+    });
     await recordMarketingAudit(
       {
         actorId: "SYSTEM",
@@ -789,7 +812,7 @@ async function approve({ user, auctionId }) {
       );
       return res;
     });
-    await auctionCloseQueue.scheduleClose(auctionId, auction.scheduledEndAt);
+    await auctionCloseQueue.scheduleClose(auctionId, auction.scheduledEndAt, auction.scheduledStartAt);
     return updated;
   }
 
@@ -1169,7 +1192,7 @@ async function listRoundItems(roundId, now = new Date()) {
 }
 
 /** List all auction rounds with derived phase for Marketing. */
-async function listRounds({ user, skip, take } = {}) {
+async function listRounds({ user, skip, take, phases = [], search = "" } = {}) {
   if (user?.role !== "MARKETING") {
     throw forbidden(
       "เฉพาะฝ่ายการตลาดเท่านั้นที่มีสิทธิ์ดูรายการรอบการประมูลทั้งหมด",
@@ -1177,6 +1200,44 @@ async function listRounds({ user, skip, take } = {}) {
   }
   const isPaginated = typeof skip === "number" && typeof take === "number";
   const now = new Date();
+  const effectivePhases = [...new Set(Array.isArray(phases) ? phases : [])];
+  const unknownPhase = effectivePhases.find((phase) => !AUCTION_ROUND_PHASES.has(phase));
+  if (unknownPhase) {
+    throw badRequest("สถานะรอบประมูลที่ใช้กรองไม่ถูกต้อง");
+  }
+  const cleanSearch = typeof search === "string" ? search.trim() : "";
+  if (cleanSearch.length > MAX_AUCTION_SEARCH_LENGTH) {
+    throw badRequest(`คำค้นหาต้องไม่เกิน ${MAX_AUCTION_SEARCH_LENGTH} ตัวอักษร`);
+  }
+
+  const hasFilters = effectivePhases.length > 0 || cleanSearch.length > 0;
+
+  if (hasFilters) {
+    const raw = await auctionRepository.listRounds();
+    const hydrated = await auctionRepository.addCapacityCounts(
+      Array.isArray(raw) ? raw : raw?.items || [],
+    );
+    const normalizedSearch = cleanSearch.toLocaleLowerCase("th-TH");
+    const filtered = hydrated
+      .map((round) => ({
+        ...round,
+        phase: deriveRoundPhase(round, now),
+      }))
+      .filter((round) =>
+        effectivePhases.length === 0 || effectivePhases.includes(round.phase),
+      )
+      .filter((round) =>
+        !normalizedSearch ||
+        (require("@reloop/shared").normalizeReferenceCode(cleanSearch, "RND") === round.referenceCode && Boolean(round.referenceCode)) ||
+        String(round.title || "").toLocaleLowerCase("th-TH").includes(normalizedSearch),
+      );
+
+    if (!isPaginated) return filtered;
+    return {
+      items: filtered.slice(skip, skip + take),
+      total: filtered.length,
+    };
+  }
 
   if (!isPaginated) {
     const raw = await auctionRepository.listRounds();
@@ -1249,8 +1310,8 @@ async function schedule({ user, auctionId, startsAt, endsAt }) {
     return res;
   });
 
-  // Books the exact-time close job now, not lazily — see auctionCloseQueue.js.
-  await auctionCloseQueue.scheduleClose(auctionId, end);
+  // Both boundaries must fire even when nobody visits the auction page.
+  await auctionCloseQueue.scheduleClose(auctionId, end, start);
 
   return updated;
 }
@@ -1916,7 +1977,25 @@ async function cancelRound({ user, roundId, reason }) {
   };
 }
 
+// Existing Redis schedules predate opening jobs. Rebook on startup so those
+// auctions also open without a page visit; stable job IDs replace pending jobs.
+async function restoreScheduledJobs() {
+  const take = 100;
+  const scheduled = [];
+  // Read the pages before enqueueing due openings, which remove rows from this list.
+  for (let skip = 0; ; skip += take) {
+    const { items } = await auctionRepository.list({ status: "scheduled", skip, take });
+    scheduled.push(...items);
+    if (items.length < take) break;
+  }
+  for (const item of scheduled) {
+    if (item.product?.moderatedAt || item.product?.status === "removed" || item.round?.cancelledAt) continue;
+    await auctionCloseQueue.scheduleClose(item.id, item.scheduledEndAt, item.scheduledStartAt);
+  }
+}
+
 module.exports = {
+  restoreScheduledJobs,
   canTransition,
   submit,
   approve,

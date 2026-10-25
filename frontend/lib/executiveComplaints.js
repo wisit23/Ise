@@ -9,6 +9,7 @@ import { LOCALE, TIMEZONE } from "./executive";
  *
  * @typedef {Object} ExecutiveReport
  * @property {string} id
+ * @property {string|null} [referenceCode]
  * @property {string} reason
  * @property {'OPEN'|'REVIEWED'|'ACTIONED'|'DISMISSED'} status
  * @property {string} reportedAt
@@ -16,6 +17,7 @@ import { LOCALE, TIMEZONE } from "./executive";
  * @property {ReportActionDetails|null} actionDetails
  * @property {string|null} reporterName
  * @property {string|null} targetId
+ * @property {string|null} [targetReferenceCode]
  * @property {string|null} targetName
  * @property {string|null} targetShopName
  * @property {string|null} productId
@@ -90,12 +92,14 @@ function parseReport(value) {
   /** @type {ExecutiveReport} */
   const report = {
     id: value.id,
+    ...(value.referenceCode ? { referenceCode: optionalText(value.referenceCode) } : {}),
     reason: value.reason,
     status: /** @type {ExecutiveReport['status']} */ (value.status),
     reportedAt: value.reportedAt,
     actionTaken: optionalText(value.actionTaken),
     reporterName: optionalText(value.reporterName),
     targetId: optionalText(value.targetId),
+    ...(value.targetReferenceCode ? { targetReferenceCode: optionalText(value.targetReferenceCode) } : {}),
     targetName: optionalText(value.targetName),
     targetShopName: optionalText(value.targetShopName),
     productId: optionalText(value.productId),

@@ -10,8 +10,9 @@ async function findSupportUser(db, identifier) {
     throw badRequest("user identifier is required");
   const original = identifier.trim();
   const clean = original.replace(/^#/, "").trim();
+  const referenceCode = require("@reloop/shared").normalizeReferenceCode(clean, "USR");
   const user = await db.user.findFirst({
-    where: { OR: [{ id: clean }, { email: clean }, { sellerProfile: { shopName: original } }] },
+    where: { OR: [...(referenceCode ? [{ referenceCode }] : []), { id: clean }, { email: clean }, { sellerProfile: { shopName: original } }] },
     include,
   });
   if (user) return user;

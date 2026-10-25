@@ -831,6 +831,54 @@ test("Campaign Metrics, Attribution & Conversion Suite", async (t) => {
     },
   );
 
+  await t.test(
+    "campaign comparison includes every status whose active window positively overlaps the dashboard range",
+    async () => {
+      let findManyArgs;
+      const comparisonMetrics = createCampaignMetricsService(
+        {
+          campaign: {
+            findMany: async (args) => {
+              findManyArgs = args;
+              return [{ id: "camp-overlap" }];
+            },
+            findUnique: async ({ where }) => ({
+              id: where.id,
+              code: "OVERLAP",
+              name: "Overlapping Campaign",
+              status: "draft",
+              usedCount: 0,
+            }),
+          },
+        },
+        { isTestAdapter: true },
+      );
+
+      const result = await comparisonMetrics.getCampaignComparison({
+        campaignIds: "camp-overlap,camp-outside",
+        from: "2026-06-01T00:00:00+07:00",
+        to: "2026-06-08T00:00:00+07:00",
+      });
+
+      assert.deepEqual(findManyArgs.where.id, {
+        in: ["camp-overlap", "camp-outside"],
+      });
+      assert.equal(
+        findManyArgs.where.endsAt.gt.toISOString(),
+        "2026-05-31T17:00:00.000Z",
+      );
+      assert.equal(
+        findManyArgs.where.startsAt.lt.toISOString(),
+        "2026-06-07T17:00:00.000Z",
+      );
+      assert.equal(findManyArgs.where.status, undefined);
+      assert.deepEqual(
+        result.comparisons.map((item) => item.campaignId),
+        ["camp-overlap"],
+      );
+    },
+  );
+
   await t.test("dashboard metrics propagate campaign database errors", async () => {
     const failingMetrics = createCampaignMetricsService(
       {

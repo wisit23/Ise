@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -23,6 +24,7 @@ import {
   isReadOnlyAuctionConversation,
   getCachedConversations,
   setCachedConversations,
+  sendErrorMessage,
 } from "../../../lib/chat";
 import {
   useChatSocket,
@@ -149,8 +151,11 @@ export default function ChatRoomPage() {
     selfParticipant?.displayName ||
     user?.firstName ||
     (user?.email ? user.email.split("@")[0] : "คุณ");
+  // A buyer is just chatting from their own account, so "ผู้ซื้อ" reads oddly on their own badge.
   const selfRoleLabel = conversation
-    ? participantRoleLabel(selfParticipant?.role, conversation?.contextType) || "ผู้ใช้"
+    ? selfParticipant?.role === "BUYER"
+      ? "บัญชี"
+      : participantRoleLabel(selfParticipant?.role, conversation?.contextType) || "ผู้ใช้"
     : "ผู้ใช้";
 
   const updateConversationReadLocally = useCallback(
@@ -568,6 +573,7 @@ export default function ChatRoomPage() {
 
   async function handleSend(body) {
     if (!activeRoomId) return;
+    setError("");
     const currentRoom = activeRoomId;
     const optimisticId = `optimistic-${Date.now()}`;
     const optimisticMessage = {
@@ -605,7 +611,9 @@ export default function ChatRoomPage() {
       }
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      setError(err.message);
+      setError(sendErrorMessage(err));
+      // MessageComposer catches this to keep the unsent draft in the box.
+      throw err;
     }
   }
 
@@ -729,6 +737,7 @@ export default function ChatRoomPage() {
                     >
                       {otherName || (error ? "ไม่พบการสนทนา" : "กำลังโหลด...")}
                     </h1>
+                    {conversation?.referenceCode && <ReferenceCode value={conversation} className="text-[10px] text-gray-500" />}
                     {otherRoleLabel && (
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
                         {otherRoleLabel}

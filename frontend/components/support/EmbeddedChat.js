@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../lib/referenceCodes";
+
 import config from "../../lib/customerServiceConfig";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -7,7 +9,7 @@ import MessageComposer from "../chat/MessageComposer";
 import TypingIndicator from "../chat/TypingIndicator";
 import { useChatSocket, useChatSocketEvent } from "../chat/ChatSocketProvider";
 import { mergeMessages, useSocketResync } from "../chat/messageSync";
-import { listMessages, sendMessage, markRead } from "../../lib/chat";
+import { listMessages, sendMessage, markRead, sendErrorMessage } from "../../lib/chat";
 import { uploadChatAttachment } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
 
@@ -247,6 +249,7 @@ export default function EmbeddedChat({
   async function handleSend(text) {
     if (!text?.trim() || !conversationId || readOnly || locked)
       throw new Error("ไม่สามารถส่งข้อความในห้องนี้ได้");
+    setError("");
     const token = tokenRef.current || getAccessToken();
     const optimisticId = `optimistic-${Date.now()}`;
     const optimistic = {
@@ -279,7 +282,7 @@ export default function EmbeddedChat({
         onAccessDenied?.();
       }
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      setError(`ส่งข้อความไม่สำเร็จ: ${err.message}`);
+      setError(sendErrorMessage(err));
       throw err;
     }
   }
@@ -421,7 +424,7 @@ export default function EmbeddedChat({
                         : ["AGENT", "ADMIN", "TRUST_AND_SAFETY"].includes(
                               message.senderRole,
                             )
-                          ? `เจ้าหน้าที่ #${message.senderId?.slice(0, 8) || "ไม่ระบุ"}`
+                          ? `เจ้าหน้าที่ #${formatReferenceCode(message.senderId) || "ไม่ระบุ"}`
                           : otherName
                   : undefined
               }

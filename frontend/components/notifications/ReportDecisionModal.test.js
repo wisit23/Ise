@@ -2,6 +2,15 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import ReportDecisionModal from "./ReportDecisionModal";
 
 describe("ReportDecisionModal", () => {
+  it("shows the original report reason separately from an admin decision", () => {
+    render(<ReportDecisionModal open onClose={jest.fn()} notification={{
+      type: "REPORT", title: "ความคิดเห็นของคุณถูกรายงาน", message: "อยู่ระหว่างตรวจสอบ",
+      metadata: { reportReason: "ใช้ถ้อยคำคุกคาม" },
+    }} />);
+    expect(screen.getByText("เหตุผลที่รายงานความคิดเห็น:")).toBeInTheDocument();
+    expect(screen.getByText("ใช้ถ้อยคำคุกคาม")).toBeInTheDocument();
+    expect(screen.queryByText("เหตุผล / ข้อชี้แจงจากผู้ดูแลระบบ:")).not.toBeInTheDocument();
+  });
   it("renders nothing when open is false", () => {
     const { container } = render(
       <ReportDecisionModal open={false} onClose={jest.fn()} notification={null} />,

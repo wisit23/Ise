@@ -1,72 +1,14 @@
 const attachmentService = require("../attachments/attachmentService");
 const fs = require("fs");
-const { badRequest, notFound } = require("@reloop/shared");
-const { createHash } = require("node:crypto");
-const prisma = require("../../models/prismaClient");
-const conversationModel = require("../conversations/conversationModel");
-const messageModel = require("../messages/messageModel");
-const { contextKeyForInternalContextId } = require("./internalContext");
-const broadcast = require("../../realtime/broadcast");
-const { syncSupportMessage } = require("../sync/supportSyncWorker");
-const {
-  isValidCursor,
-  buildPageQuery,
-  paginate,
-} = require("../messages/cursor");
+const { notFound } = require("@reloop/shared");
+const internalService = require("./internalService");
 
-const DUPLICATE_KEY_ERROR = "P2002";
-const VALID_STATUSES = ["ACTIVE", "ARCHIVED", "LOCKED"];
+// HTTP layer for the internal API. The rules live in internalService.js.
 
-/**
- * create-or-open for ORDER/SUPPORT contexts, callable by other services.
- * Unlike the public PRODUCT path (conversationService.js), the caller here
- * IS trusted to say who the participants are — requireInternalToken already
- * gated this route, so there's no user JWT to derive identity from the way
- * the public endpoint does with req.userId.
- */
 async function createConversation(req, res, next) {
   try {
-    const { contextType, contextId, participants, createdBy } = req.body;
-    if (!Array.isArray(participants) || participants.length === 0) {
-      throw badRequest("participants must be a non-empty array");
-    }
-    for (const p of participants) {
-      if (!p.userId || !p.role) {
-        throw badRequest("each participant needs userId and role");
-      }
-    }
-
-    const contextKey = contextKeyForInternalContextId(
-      contextType,
-      contextId,
-      participants,
-    );
-    const now = new Date();
-
-    try {
-      const conversation = await conversationModel.create({
-        contextType,
-        contextId,
-        contextKey,
-        createdBy: createdBy || "system",
-        participants: participants.map((p) => ({
-          userId: p.userId,
-          role: p.role,
-          joinedAt: now,
-          lastReadAt: null,
-          leftAt: null,
-        })),
-      });
-      return res.status(201).json(conversation);
-    } catch (err) {
-      // Same create-or-open semantics as the public path — see
-      // conversationService.js's comment on this exact pattern.
-      if (err.code === DUPLICATE_KEY_ERROR) {
-        const existing = await conversationModel.findByContextKey(contextKey);
-        if (existing) return res.status(200).json(existing);
-      }
-      throw err;
-    }
+    const { conversation, created } = await internalService.createCaseConversation(req.body);
+    res.status(created ? 201 : 200).json(conversation);
   } catch (err) {
     next(err);
   }
@@ -74,199 +16,48 @@ async function createConversation(req, res, next) {
 
 async function getByContext(req, res, next) {
   try {
-    const contextKey = contextKeyForInternalContextId(
-      req.params.type,
-      req.params.id,
-      req.query.buyerId ? [{userId:req.query.buyerId,role:"BUYER"}] : [],
-    );
-    const conversation = await conversationModel.findByContextKey(contextKey);
-    if (!conversation) throw notFound("Conversation not found");
-    res.json(conversation);
+    res.json(await internalService.getByContext({
+      type: req.params.type,
+      id: req.params.id,
+      buyerId: req.query.buyerId,
+    }));
   } catch (err) {
     next(err);
   }
 }
 
-/**
- * Sends a message on behalf of a trusted internal caller — no participant or
- * LOCKED check, unlike messageService.sendMessage. A SYSTEM notification
- * ("order shipped") must still land even in a room an Admin has locked for
- * moderation; only human-to-human replies are blocked by LOCKED.
- */
 async function sendMessage(req, res, next) {
   try {
-    const conversation = await conversationModel.findById(req.params.id);
-    if (!conversation) throw notFound("Conversation not found");
-
-    const {
-      senderId,
-      senderRole,
-      eventKey,
-      type,
-      body,
-      payload,
-      visibility,
-      idempotencyKey: bodyIdempotencyKey,
-    } = req.body;
-    if (!senderId || !senderRole) {
-      throw badRequest("senderId and senderRole are required");
-    }
-
-    if(eventKey && (typeof eventKey!=="string" || eventKey.length>128))throw badRequest("eventKey must be a string of at most 128 characters");
-    const messageId=eventKey ? createHash("sha256").update(`${conversation.id}:${eventKey}`).digest("hex").slice(0,24) : null;
-    const rawKey =
-      bodyIdempotencyKey ||
-      (payload && typeof payload === "object" ? payload.idempotencyKey : null);
-    const idempotencyKey =
-      typeof rawKey === "string" && rawKey.trim() ? rawKey.trim() : null;
-
-    const finalPayload = idempotencyKey
-      ? {
-          ...(payload && typeof payload === "object" ? payload : {}),
-          idempotencyKey,
-        }
-      : payload;
-
-    const isSupport = conversation.contextType === "SUPPORT";
-    const MAX_ATTEMPTS = 4;
-
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      try {
-        const message = await messageModel.createAndTouch({
-          messageId,
-          conversationId: conversation.id,
-          senderId,
-          senderRole,
-          type: type || "SYSTEM",
-          body: body || "",
-          payload: finalPayload,
-          visibility: visibility || "ALL",
-          syncStatus: isSupport ? "PENDING" : null,
-          ...(idempotencyKey ? { idempotencyKey } : {}),
-        });
-
-        if (isSupport) {
-          syncSupportMessage(conversation, message);
-        }
-
-        broadcast.broadcastMessage(conversation, message);
-        return res.status(201).json(message);
-      } catch (err) {
-        if(messageId && err.code==="P2002"){const existing=await prisma.message.findUnique({where:{id:messageId}});if(existing?.conversationId===conversation.id)return res.status(200).json(existing);}
-        if (
-          idempotencyKey &&
-          (err.code === DUPLICATE_KEY_ERROR || err.code === "P2034")
-        ) {
-          const existing = await messageModel.findByIdempotencyKey(
-            conversation.id,
-            idempotencyKey,
-          );
-          if (existing) {
-            return res.status(200).json(existing);
-          }
-        }
-        if (err.code === "P2034" && attempt < MAX_ATTEMPTS) {
-          await new Promise((resolve) => setTimeout(resolve, 15 * attempt));
-          continue;
-        }
-        throw err;
-      }
-    }
+    const { message, created } = await internalService.sendSystemMessage(req.params.id, req.body);
+    res.status(created ? 201 : 200).json(message);
   } catch (err) {
     next(err);
   }
 }
 
-/** Adds a participant (e.g. a CS agent joining a dispute room) — idempotent:
- * re-adding someone already active is a no-op, not a duplicate entry. */
 async function addParticipant(req, res, next) {
   try {
-    const conversation = await conversationModel.findById(req.params.id);
-    if (!conversation) throw notFound("Conversation not found");
-
-    const { userId, role } = req.body;
-    if (!userId || !role) throw badRequest("userId and role are required");
-
-    const alreadyActive = conversation.participants.some(
-      (p) => p.userId === userId && !p.leftAt,
-    );
-    if (alreadyActive) return res.json(conversation);
-
-    const updated = await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: {
-        participants: {
-          push: {
-            userId,
-            role,
-            joinedAt: new Date(),
-            lastReadAt: null,
-            leftAt: null,
-          },
-        },
-      },
-    });
-    res.json(updated);
+    res.json(await internalService.addParticipant(req.params.id, req.body));
   } catch (err) {
     next(err);
   }
 }
 
-/** Admin locking a room under moderation (CHAT-007 wires the caller side of
- * this up to an actual report/report-decision UI; this endpoint itself has
- * no opinion on why status is changing). */
 async function updateStatus(req, res, next) {
   try {
-    const { status } = req.body;
-    if (!VALID_STATUSES.includes(status)) {
-      throw badRequest(`status must be one of ${VALID_STATUSES.join(", ")}`);
-    }
-    const conversation = await conversationModel.findById(req.params.id);
-    if (!conversation) throw notFound("Conversation not found");
-
-    const updated = await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: { status },
-    });
-    broadcast.broadcastStatusChange(updated, status);
-    res.json(updated);
+    res.json(await internalService.updateStatus(req.params.id, req.body.status));
   } catch (err) {
     next(err);
   }
 }
 
-/** Bounded history for evidence gathering. `before` walks toward older IDs. */
 async function getTranscript(req, res, next) {
   try {
-    const conversation = await conversationModel.findById(req.params.id);
-    if (!conversation) throw notFound("Conversation not found");
-
-    const before = req.query.before;
-    if (before && !isValidCursor(before))
-      throw badRequest("invalid transcript cursor");
-    const requestedLimit =
-      req.query.limit === undefined ? 50 : Number(req.query.limit);
-    if (!Number.isInteger(requestedLimit) || requestedLimit < 1) {
-      throw badRequest("limit must be a positive integer");
-    }
-    const limit = Math.min(100, requestedLimit);
-    const beforeMessage = before ? await prisma.message.findUnique({ where: { id: before } }) : undefined;
-    if (before && (!beforeMessage || beforeMessage.conversationId !== conversation.id ||
-      (req.query.includeInternal !== "true" && beforeMessage.visibility === "INTERNAL"))) throw badRequest("invalid transcript cursor");
-    const query = buildPageQuery({
-      conversationId: conversation.id,
-      before,
-      beforeMessage,
-      limit,
+    res.json(await internalService.getTranscript(req.params.id, {
+      before: req.query.before,
+      limit: req.query.limit,
       includeInternal: req.query.includeInternal === "true",
-    });
-    const page = paginate(await prisma.message.findMany(query), limit);
-    res.json({
-      conversation,
-      items: [...page.items],
-      messages: [...page.items].reverse(),
-      nextCursor: page.nextCursor,
-    });
+    }));
   } catch (err) {
     next(err);
   }
@@ -292,25 +83,7 @@ async function getAttachment(req, res, next) {
 
 async function deleteByContext(req, res, next) {
   try {
-    const { type, id } = req.params;
-    const matching = await prisma.conversation.findMany({
-      where: {
-        contextId: id,
-        contextType: { in: [type, `${type}_BUYER`, `${type}_SELLER`] },
-      },
-      include: { participants: true },
-    });
-
-    for (const conv of matching) {
-      await prisma.message.deleteMany({ where: { conversationId: conv.id } });
-      await prisma.conversation.delete({ where: { id: conv.id } });
-      broadcast.broadcastConversationDeleted(
-        conv.id,
-        (conv.participants || []).map((p) => p.userId)
-      );
-    }
-
-    res.json({ deletedCount: matching.length });
+    res.json(await internalService.deleteByContext(req.params.type, req.params.id));
   } catch (err) {
     next(err);
   }
@@ -318,14 +91,7 @@ async function deleteByContext(req, res, next) {
 
 async function broadcastRealtime(req, res, next) {
   try {
-    const { event, data, rooms, broadcastGlobal } = req.body;
-    if (!event) throw badRequest("event is required");
-    broadcast.broadcastRealtime({
-      event,
-      data,
-      rooms: Array.isArray(rooms) ? rooms : [],
-      broadcastGlobal: Boolean(broadcastGlobal),
-    });
+    internalService.broadcastRealtime(req.body);
     res.json({ ok: true });
   } catch (err) {
     next(err);

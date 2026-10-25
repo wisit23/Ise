@@ -37,7 +37,9 @@ describe("ChatProductHeader", () => {
 
     expect(screen.getByText("฿1,590")).toBeInTheDocument();
     expect(screen.getByText("พร้อมขาย")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /ดูสินค้า/ })).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: /ดูรายละเอียดสินค้า/ }),
+    ).toHaveAttribute(
       "href",
       "/products/prod-1",
     );
@@ -59,7 +61,7 @@ describe("ChatProductHeader", () => {
     });
   });
 
-  it("renders auction badge and links directly to /auctions/[auctionId] when product is in auction", async () => {
+  it("renders auction badge and links to the product detail page", async () => {
     fetchProduct.mockResolvedValueOnce({
       id: "prod-3",
       title: "รองเท้าผ้าใบประมูล",
@@ -76,9 +78,9 @@ describe("ChatProductHeader", () => {
     });
 
     expect(screen.getByText("สินค้าประมูล")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /ดูสินค้าประมูล/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /ดูรายละเอียดสินค้า/ })).toHaveAttribute(
       "href",
-      "/auctions/auc-123",
+      "/products/prod-3",
     );
   });
 });

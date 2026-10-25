@@ -3,8 +3,43 @@ import { useEffect, useId, useState } from "react";
 import RadioSelect from "../../ui/RadioSelect";
 import styles from "./workspace.module.css";
 
+// Statuses each tab can actually return, so the filter never offers a choice
+// that is always empty. null hides the status filter: the tab already fixes it.
+const TAB_STATUSES = {
+  tickets: {
+    mine: ["NEW", "ASSIGNED", "IN_PROGRESS", "PENDING_USER", "RESOLVED"],
+    unassigned: ["NEW", "IN_PROGRESS", "PENDING_USER", "RESOLVED"],
+    escalated: null,
+    closed: ["RESOLVED", "CLOSED"],
+  },
+  disputes: {
+    mine: ["OPEN", "NEEDS_INFO"],
+    returned: ["OPEN", "NEEDS_INFO"],
+    unassigned: ["OPEN", "NEEDS_INFO"],
+    escalated: ["OPEN", "NEEDS_INFO"],
+    closed: null,
+  },
+};
+// The work filter only matches open cases, so it is always empty on these tabs.
+const TABS_WITHOUT_WORK = {
+  tickets: ["escalated", "closed"],
+  disputes: ["closed"],
+};
+
+/** Which filters a tab offers: allowed status codes (null = hidden) and whether work applies. */
+export function tabFilters(dispute, scope, labels) {
+  const domain = dispute ? "disputes" : "tickets";
+  const fixed = TAB_STATUSES[domain][scope];
+  const statuses =
+    fixed === undefined
+      ? Object.keys(labels).filter((key) => key !== "ESCALATED")
+      : fixed;
+  return { statuses, work: !TABS_WITHOUT_WORK[domain].includes(scope) };
+}
+
 export default function CaseFilters({
   state,
+  dispute = false,
   labels,
   priorities,
   onChange,
@@ -14,6 +49,7 @@ export default function CaseFilters({
   const [open, setOpen] = useState(false);
   const [settled, setSettled] = useState(false);
   const id = useId();
+  const allowed = tabFilters(dispute, state.scope, labels);
   useEffect(() => {
     const timer = setTimeout(() => setSettled(open), 230);
     return () => clearTimeout(timer);
@@ -39,9 +75,10 @@ export default function CaseFilters({
       "สถานะ",
       [
         { value: "", label: "สถานะทั้งหมด" },
-        ...Object.entries(labels)
-          .filter(([key]) => key !== "ESCALATED")
-          .map(([value, label]) => ({ value, label })),
+        ...(allowed.statuses || []).map((value) => ({
+          value,
+          label: labels[value],
+        })),
       ],
     ],
     [
@@ -85,7 +122,7 @@ export default function CaseFilters({
           <RadioSelect
             ariaLabel="เรียงเคส"
             value={state.sort}
-            options={groups[3][2]}
+            options={groups.find(([key]) => key === "sort")[2]}
             onChange={(value) => onChange("sort", value)}
             hoverToOpen={false}
             size="sm"
@@ -134,7 +171,11 @@ export default function CaseFilters({
                 : "ml-auto max-w-[55%] truncate font-normal text-slate-500"
             }
           >
-            {groups[2][2].find((option) => option.value === state.sort)?.label}
+            {
+              groups
+                .find(([key]) => key === "sort")[2]
+                .find((option) => option.value === state.sort)?.label
+            }
           </span>
           <span
             aria-hidden="true"
@@ -161,6 +202,8 @@ export default function CaseFilters({
           >
             {groups
               .filter(([key]) => !searchSlot || key !== "sort")
+              .filter(([key]) => key !== "status" || allowed.statuses)
+              .filter(([key]) => key !== "work" || allowed.work)
               .map(([key, label, options]) => (
                 <div key={key} className="min-w-0">
                   <p className="mb-1 text-[11px] text-slate-500">{label}</p>

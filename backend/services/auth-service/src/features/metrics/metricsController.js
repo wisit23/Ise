@@ -1,5 +1,7 @@
 const {
   resolveExecutiveRange,
+  searchQuery,
+  listSort,
   metricMeta,
   badRequest,
   METRIC_DEFINITION_VERSION,
@@ -46,13 +48,21 @@ async function getMetricsSeries(req, res, next) {
 async function getReports(req, res, next) {
   try {
     const { status } = req.query;
-    for (const name of ["status", "limit", "page"]) {
+    const search = searchQuery(req.query.q);
+    const sort = listSort(req.query.sort);
+    for (const name of ["status", "limit", "page", "targetId"]) {
       if (
         req.query[name] !== undefined &&
         typeof req.query[name] !== "string"
       ) {
         throw badRequest(`${name} must be a single string value`);
       }
+    }
+    // Who the complaints are about: how a high-risk target in the warning is
+    // opened. An id is at most 200 characters.
+    const targetId = req.query.targetId?.trim() || undefined;
+    if (targetId !== undefined && targetId.length > 200) {
+      throw badRequest("targetId must be at most 200 characters");
     }
     const page = req.query.page === undefined ? 1 : Number(req.query.page);
     if (req.query.page !== undefined && !/^\d+$/.test(req.query.page)) {
@@ -90,6 +100,9 @@ async function getReports(req, res, next) {
     const data = await executiveReports.getReportOverview({
       range: range && { from: range.from, to: range.to },
       status,
+      search,
+      targetId,
+      sort,
       limit,
       page,
     });

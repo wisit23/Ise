@@ -30,14 +30,14 @@ async function submitKyc({
   file,
 }) {
   if (verifyMethod !== "thai_id" && !file) {
-    throw badRequest("id card photo is required");
+    throw badRequest("กรุณาอัปโหลดรูปถ่ายบัตรประชาชน");
   }
-  if (!shopName?.trim()) throw badRequest("shopName is required");
-  if (!address?.trim()) throw badRequest("address is required");
+  if (!shopName?.trim()) throw badRequest("กรุณากรอกชื่อร้านค้า");
+  if (!address?.trim()) throw badRequest("กรุณากรอกที่อยู่สำหรับติดต่อ");
 
   const cleanedIdCard = (idCardNumber || "").replace(/\D/g, "");
   if (cleanedIdCard.length !== 13) {
-    throw badRequest("idCardNumber must be 13 digits");
+    throw badRequest("กรุณากรอกเลขบัตรประชาชน 13 หลักให้ถูกต้อง");
   }
 
   // idCardExpiry is optional (permanent-card holders have no expiry).
@@ -45,10 +45,10 @@ async function submitKyc({
   if (idCardExpiry) {
     parsedExpiry = new Date(idCardExpiry);
     if (isNaN(parsedExpiry.getTime())) {
-      throw badRequest("idCardExpiry must be a valid date (ISO 8601)");
+      throw badRequest("กรุณากรอกวันหมดอายุบัตรประชาชนให้ถูกต้อง");
     }
     if (parsedExpiry <= new Date()) {
-      throw badRequest("idCardExpiry must be a future date");
+      throw badRequest("วันหมดอายุบัตรประชาชนต้องเป็นวันที่ในอนาคต");
     }
   }
 
@@ -64,10 +64,10 @@ async function submitKyc({
       });
       const currentStatus = sellerProfile?.kycStatus;
       if (currentStatus === "VERIFIED") {
-        throw conflict("this account is already verified");
+        throw conflict("บัญชีนี้ยืนยันตัวตนแล้ว");
       }
       if (currentStatus === "PENDING") {
-        throw conflict("a verification application is already pending review");
+        throw conflict("คำขอยืนยันตัวตนอยู่ระหว่างรอตรวจสอบ");
       }
 
       // Role, legacy role, latest profile and immutable application history

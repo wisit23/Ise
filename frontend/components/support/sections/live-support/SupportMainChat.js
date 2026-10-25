@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 import config from "../../../../lib/customerServiceConfig";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,7 +12,7 @@ import {
   useChatSocketEvent,
 } from "../../../chat/ChatSocketProvider";
 import { mergeMessages, useSocketResync } from "../../../chat/messageSync";
-import { listMessages, sendMessage, markRead } from "../../../../lib/chat";
+import { listMessages, sendMessage, markRead, sendErrorMessage } from "../../../../lib/chat";
 import { uploadChatAttachment } from "../../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../../lib/auth";
 import {
@@ -237,7 +239,7 @@ export default function SupportMainChat({
       );
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-      setError(`ส่งข้อความไม่สำเร็จ: ${err.message}`);
+      setError(sendErrorMessage(err));
       throw err;
     }
   }
@@ -367,7 +369,7 @@ export default function SupportMainChat({
               </span>
               <span>•</span>
               <span className="truncate font-medium text-slate-600">
-                ผู้แจ้ง #{ticket.requesterId?.slice(0, 12)} ·{" "}
+                ผู้แจ้ง #{formatReferenceCode(ticket.requesterId)} ·{" "}
                 {otherOnline ? "ออนไลน์" : "ออฟไลน์"}
               </span>
             </div>

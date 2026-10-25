@@ -1,4 +1,5 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
 
 import { useState } from "react";
 
@@ -6,8 +7,7 @@ import Alert from "../../../ui/Alert";
 import Button from "../../../ui/Button";
 import CaseUserCard from "./CaseUserCard";
 import EmbeddedChat from "../../EmbeddedChat";
-
-const THAI_DATE = { year: "numeric", month: "long", day: "numeric" };
+import CaseDate from "./CaseDate";
 
 function SectionCard({ icon, title, tone = "slate", children }) {
   const heading = tone === "indigo" ? "text-indigo-500" : "text-slate-500";
@@ -57,40 +57,43 @@ export default function TicketCasePanel({
   const [manualTargetId, setManualTargetId] = useState("");
   const nextStatuses = ticket.capabilities?.allowedNextStatuses || [];
   const canModerate = ticket.capabilities?.canModerateUsers === true;
-  const openedOn = new Date(ticket.createdAt).toLocaleDateString(
-    "th-TH",
-    THAI_DATE,
-  );
 
   return (
     <>
       <div className="grid shrink-0 grid-cols-2 divide-x sm:grid-cols-4 divide-slate-100 border-b border-slate-100 bg-slate-50/70">
-        <InfoCell label="Reported User">
+        <InfoCell label="คู่กรณี (Target)">
           {ticket.targetId ? (
             <span className="font-semibold text-orange-700">
-              {ticket.targetName || `${ticket.targetId.slice(0, 10)}...`}
+              {ticket.targetName || formatReferenceCode(ticket.targetId)}
             </span>
           ) : (
             <span className="italic text-slate-400">ไม่ระบุ</span>
           )}
         </InfoCell>
-        <InfoCell label="Requester">
+        <InfoCell label="ผู้แจ้ง (Requester)">
           <span>
-            {ticket.requesterName || ticket.requesterId?.slice(0, 10) || "—"}
+            {ticket.requesterName || formatReferenceCode(ticket.requesterId) || "—"}
           </span>
         </InfoCell>
-        <InfoCell label="Assigned Agent">
+        <InfoCell label="ผู้รับผิดชอบ (Agent)">
           {ticket.assigneeId ? (
-            <span>{ticket.assigneeName || ticket.assigneeId.slice(0, 10)}</span>
+            <span>{ticket.assigneeName || formatReferenceCode(ticket.assigneeId)}</span>
           ) : (
             <span className="italic text-slate-500">ยังไม่มอบหมาย</span>
           )}
         </InfoCell>
-        <InfoCell label="Opened">{openedOn}</InfoCell>
+        <InfoCell label="วันที่แจ้งปัญหา"><CaseDate value={ticket.createdAt} /></InfoCell>
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto bg-slate-50/30 p-3 sm:p-5 lg:px-8">
-        <SectionCard icon="info" title="Case Summary">
+        <SectionCard icon="schedule" title="วันและเวลาของเคส (เวลาไทย)">
+          <dl className="grid gap-3 sm:grid-cols-3">
+            <div><dt className="mb-1 text-xs text-slate-500">วันที่ส่งต่อ T&S</dt><dd><CaseDate value={ticket.escalatedAt} /></dd></div>
+            <div><dt className="mb-1 text-xs text-slate-500">วันที่รับงาน</dt><dd><CaseDate value={ticket.assignedAt} /></dd></div>
+            <div><dt className="mb-1 text-xs text-slate-500">วันที่ปิด / แก้ไข</dt><dd><CaseDate value={ticket.closedAt || ticket.resolvedAt} /></dd></div>
+          </dl>
+        </SectionCard>
+        <SectionCard icon="info" title="สาระคำร้อง">
           <p className="text-sm font-medium leading-relaxed text-slate-800">
             {ticket.subject}
           </p>
@@ -98,18 +101,18 @@ export default function TicketCasePanel({
             <span className="text-xs text-slate-500">
               รหัส:{" "}
               <span className="font-semibold text-slate-600">
-                {ticket.ticketNumber}
+                {formatReferenceCode(ticket)}
               </span>
             </span>
             <span className="text-xs text-slate-500">
-              เปิด:{" "}
-              <span className="font-semibold text-slate-600">{openedOn}</span>
+              วันที่แจ้งปัญหา:{" "}
+              <CaseDate value={ticket.createdAt} />
             </span>
           </div>
         </SectionCard>
 
         {ticket.status === "ESCALATED" && (
-          <SectionCard icon="description" title="CS Notes">
+          <SectionCard icon="description" title="CS Memo">
             <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">
               {ticket.escalationNote || "ยังไม่มีสรุปจาก CS"}
             </p>
@@ -122,8 +125,9 @@ export default function TicketCasePanel({
         {ticket.targetId ? (
           <CaseUserCard
             userId={ticket.targetId}
+            referenceCode={ticket.targetReferenceCode}
             userName={ticket.targetName}
-            heading="Reported User"
+            heading="คู่กรณี (Target - ผู้ถูกร้องเรียน)"
             icon="gavel"
             tone="target"
             busy={actionBusy}
@@ -143,7 +147,7 @@ export default function TicketCasePanel({
               <span className="material-symbols-outlined text-[15px]">
                 gavel
               </span>
-              Reported User
+              คู่กรณี (Target - ผู้ถูกร้องเรียน)
             </div>
             <p className="text-xs text-slate-600">
               ตั๋วนี้ไม่ได้ผูกกับคำสั่งซื้ออัตโนมัติ จึงไม่มีรหัสคู่กรณีในระบบ
@@ -190,8 +194,9 @@ export default function TicketCasePanel({
             Rendered second with distinct labels and caution styling. */}
         <CaseUserCard
           userId={ticket.requesterId}
+          referenceCode={ticket.requesterReferenceCode}
           userName={ticket.requesterName}
-          heading="Requester"
+          heading="ผู้แจ้ง (Requester - ผู้ส่งคำร้อง)"
           icon="person"
           tone="requester"
           isRequester={true}
@@ -205,7 +210,7 @@ export default function TicketCasePanel({
           onRestrictSeller={onRestrictSeller ? (uid) => onRestrictSeller(uid, "ผู้แจ้ง") : undefined}
         />
 
-        <SectionCard icon="support_agent" title="Assigned Agent">
+        <SectionCard icon="support_agent" title="เจ้าหน้าที่รับผิดชอบ">
           {ticket.assigneeId ? (
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-800 text-base font-bold text-white shadow">
@@ -215,10 +220,10 @@ export default function TicketCasePanel({
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-slate-800">
-                  {ticket.assigneeName || `รหัส: ${ticket.assigneeId.slice(0, 16)}`}
+                  {ticket.assigneeName || `รหัส: ${formatReferenceCode(ticket.assigneeId)}`}
                 </p>
                 <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
-                  {ticket.assigneeId}
+                  {formatReferenceCode(ticket.assigneeId)}
                 </p>
               </div>
             </div>
@@ -234,14 +239,14 @@ export default function TicketCasePanel({
           )}
         </SectionCard>
 
-        <SectionCard icon="chat" title="Customer Conversation" tone="indigo">
+        <SectionCard icon="chat" title="สนทนากับลูกค้า" tone="indigo">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 font-bold text-white shadow">
               {(ticket.requesterName || ticket.requesterId || "U").slice(0, 1).toUpperCase()}
             </div>
             <div className="flex-1">
               <p className="text-sm font-bold text-slate-800">
-                {ticket.requesterName || `ผู้ใช้: #${ticket.requesterId?.slice(0, 12)}`}
+                {ticket.requesterName || `ผู้ใช้: #${formatReferenceCode(ticket.requesterId)}`}
               </p>
               <p className="mt-0.5 text-xs text-slate-500">
                 ประวัติการสนทนาของคำร้อง
@@ -275,7 +280,7 @@ export default function TicketCasePanel({
           ) : null}
         </SectionCard>
 
-        <SectionCard icon="build" title="Actions">
+        <SectionCard icon="build" title="จัดการคำร้อง (Actions)">
           {actionError && <Alert className="mb-3">{actionError}</Alert>}
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             {ticket.capabilities?.canTakeover && onTakeover && <Button onClick={onTakeover} disabled={actionBusy}>รับผิดชอบเคสที่ส่งต่อ</Button>}

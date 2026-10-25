@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode, formatReferenceText } from "../../../../lib/referenceCodes";
+
 
 import { useEffect, useState } from "react";
 import { fetchAuthedBlobUrl } from "../../../../lib/api";
@@ -9,7 +11,9 @@ import Button from "../../../ui/Button";
 import Select from "../../../ui/Select";
 import Textarea from "../../../ui/Textarea";
 import Modal from "../../../ui/Modal";
+import ReferenceCode from "../../../ui/ReferenceCode";
 import ReportProductDetails from "./ReportProductDetails";
+import CaseDate from "../case/CaseDate";
 import { safetyActionLabel } from "../../../../lib/supportConstants";
 
 function Row({ label, children, mono, danger }) {
@@ -34,7 +38,43 @@ function personName(person) {
   return (
     [person.firstName, person.lastName].filter(Boolean).join(" ") ||
     person.email ||
-    person.id
+    formatReferenceCode(person)
+  );
+}
+
+function ReportReason({ reason }) {
+  const original = String(reason || "");
+  const review = original.match(/^\s*\[รายงานรีวิว\s*#?([^\]]+)\]\s*([\s\S]*)$/);
+  if (!review) return <p className="whitespace-pre-wrap break-words text-sm leading-7 text-slate-800">{formatReferenceText(original) || "ไม่ได้ระบุรายละเอียด"}</p>;
+
+  // Split only the known report envelope; retain the reported text verbatim.
+  const snapshot = review[2].match(/\s*\(เนื้อหารีวิว:\s*"([\s\S]*)"\)\s*$/);
+  const explanation = snapshot ? review[2].slice(0, snapshot.index).trim() : review[2].trim();
+  return (
+    <div className="min-w-0 space-y-4">
+      <dl className="space-y-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <dt className="text-slate-500">รีวิวที่ถูกรายงาน</dt>
+          <dd className="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs text-slate-700"><ReferenceCode value={review[1].trim()} /></dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-slate-700">เหตุผลที่รายงาน</dt>
+          <dd className="mt-1 whitespace-pre-wrap break-words leading-7 text-slate-900">{formatReferenceText(explanation) || "ไม่ได้ระบุเหตุผลเพิ่มเติม"}</dd>
+        </div>
+        {snapshot && (
+          <div>
+            <dt className="text-xs text-slate-500">ข้อความรีวิว ณ วันที่รายงาน</dt>
+            <dd className="mt-2">
+              <blockquote className="whitespace-pre-wrap break-words rounded-r-lg border-l-2 border-slate-300 bg-slate-50 px-4 py-3 leading-7 text-slate-700">{formatReferenceText(snapshot[1]) || "ไม่มีข้อความรีวิว"}</blockquote>
+            </dd>
+          </div>
+        )}
+      </dl>
+      <details className="text-xs text-slate-500">
+        <summary className="w-fit cursor-pointer rounded py-1 hover:text-slate-700">ดูรายละเอียดต้นฉบับ</summary>
+        <p className="mt-2 whitespace-pre-wrap break-words leading-6">{formatReferenceText(original)}</p>
+      </details>
+    </div>
   );
 }
 
@@ -48,7 +88,7 @@ function UserCard({ label, person, fallbackId, onOpenHistory }) {
       <p className="mt-1 font-semibold text-slate-900">
         {personName(person || (fallbackId ? { id: fallbackId } : null))}
       </p>
-      {userId && <p className="mt-1 break-all font-mono text-xs">{userId}</p>}
+      {userId && <p className="mt-1 break-all font-mono text-xs">{formatReferenceCode(person || userId)}</p>}
       {person?.email && (
         <p className="mt-1 break-all text-xs text-slate-500">{person.email}</p>
       )}
@@ -112,17 +152,27 @@ export default function ReportCasePanel({
   }
 
   const decisionOptions = [
+    report.targetId &&
+      /\[รายงานรีวิว\s*#?[^\]]+\]/.test(report.reason || "") &&
+      !report.reviewDetail?.review?.removed && {
+        value: "REMOVE_REVIEW",
+        label: "ลบรีวิวที่ถูกรายงาน",
+      },
+    report.productId && !report.reviewDetail && {
+      value: "REMOVE_PRODUCT",
+      label: "ระงับสินค้า",
+    },
     report.targetId && {
       value: "SUSPEND_USER",
-      label: "Suspend Account",
+      label: "ระงับบัญชีผู้ใช้ (SUSPEND_USER)",
     },
     report.targetId && {
       value: "WARN_USER",
-      label: "Warn User",
+      label: "ตักเตือนผู้ใช้ ไม่ระงับบัญชี (WARN_USER)",
     },
-    report.targetId && { value: "RESTRICT_BUYER", label: "Restrict Buying" },
-    report.targetId && { value: "RESTRICT_SELLER", label: "Restrict Selling" },
-    { value: "DISMISS", label: "Dismiss Report" },
+    report.targetId && { value: "RESTRICT_BUYER", label: "เพิกถอนสิทธิ์ซื้อ" },
+    report.targetId && { value: "RESTRICT_SELLER", label: "เพิกถอนสิทธิ์ขาย" },
+    { value: "DISMISS", label: "ยกเลิกรายงาน / ไม่พบความผิด (DISMISS)" },
   ].filter(Boolean);
 
   return (
@@ -160,22 +210,26 @@ export default function ReportCasePanel({
         </h3>
         <div className="space-y-3">
           <Row label="ผู้รายงาน:" mono>
-            {report.reporterId}
+            {formatReferenceCode(report.reporterId)}
           </Row>
           {report.targetId && (
             <Row label="ผู้ใช้เป้าหมาย:" mono danger>
-              {report.targetId}
+              {formatReferenceCode(report.targetId)}
             </Row>
           )}
           <Row label="ประเภทปัญหา:">{reportCategoryLabel(report.category)}</Row>
+          <Row label="วันที่แจ้งรายงาน:"><CaseDate value={report.reportedAt} /></Row>
+          <Row label="วันที่รับงาน:"><CaseDate value={report.reviewedAt} /></Row>
+          {settled && <Row label="วันที่ตัดสิน:"><CaseDate value={report.decidedAt || report.decision?.decidedAt} /></Row>}
           <div className="mt-3 border-t border-slate-100 pt-3">
-            <Row label="รายละเอียด:">{report.reason}</Row>
+            <h4 className="mb-3 text-sm font-semibold text-slate-700">รายละเอียดการรายงาน</h4>
+            <ReportReason reason={report.reason} />
           </div>
         </div>
       </div>
 
       <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h4 className="font-bold text-slate-900">Report Evidence</h4>
+        <h4 className="font-bold text-slate-900">รูปหลักฐานจากผู้รายงาน</h4>
         {report.evidence?.length ? report.evidence.map((item) => (
           <button key={item.id} type="button" onClick={() => openEvidence(item.id)} className="mt-3 block rounded-lg border px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50">
             เปิดรูป: {item.originalName}
@@ -202,17 +256,16 @@ export default function ReportCasePanel({
       </div>
 
       <ReportProductDetails key={report.id} productId={report.productId} detail={report.productDetail} onRetry={onRetryDetail} />
-
       {settled ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h4 className="font-bold text-slate-900">Decision Summary</h4>
+          <h4 className="font-bold text-slate-900">ผลการพิจารณา</h4>
           {report.decision ? (
             <div className="mt-4 space-y-3">
               <Row label="คำตัดสิน:">{safetyActionLabel(report.decision.action)}</Row>
               <Row label="เหตุผล:">{report.decision.reason}</Row>
               <Row label="ผู้ตัดสิน:">
                 {personName(report.decision.decidedBy)} (
-                {report.decision.decidedBy.id})
+                {formatReferenceCode(report.decision.decidedBy)})
               </Row>
               <Row label="เวลา:">
                 {new Date(report.decision.decidedAt).toLocaleString("th-TH")}
@@ -238,10 +291,10 @@ export default function ReportCasePanel({
           onSubmit={onSubmit}
           className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
         >
-          <h4 className="font-bold text-slate-900">Review & Action</h4>
+          <h4 className="font-bold text-slate-900">พิจารณาและจัดการ</h4>
 
           <Select
-            label="Decision"
+            label="การตัดสินใจ"
             placeholder="-- เลือกการตัดสินใจ --"
             options={decisionOptions}
             value={decision}
@@ -249,12 +302,16 @@ export default function ReportCasePanel({
           />
 
           <Textarea
-            label="Reason"
+            label="หมายเหตุ (ภายใน / ส่งให้ผู้ใช้)"
             rows={3}
             placeholder="ระบุเหตุผลในการตัดสินใจ..."
             value={reason}
             onChange={(e) => onReasonChange(e.target.value)}
           />
+
+          {decision === "REMOVE_REVIEW" && (
+            <Alert tone="warning">รีวิวนี้จะถูกลบออกจากหน้าร้านและการคำนวณคะแนน โดยเก็บประวัติการดำเนินการไว้ กรุณาตรวจสอบก่อนยืนยัน</Alert>
+          )}
 
           {error && <Alert>{error}</Alert>}
 

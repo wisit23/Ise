@@ -9,7 +9,7 @@ import { getAccessToken } from "../../lib/auth";
  * navigates to it. Unauthenticated visitors go to /login instead — this
  * mirrors the existing addToCart()/handleBuyNow() guest-redirect pattern in
  * app/products/[id]/page.js rather than inventing a new convention. */
-export default function ContactSellerButton({ productId, className }) {
+export default function ContactSellerButton({ productId, orderId, className }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -23,7 +23,7 @@ export default function ContactSellerButton({ productId, className }) {
     setBusy(true);
     setError("");
     try {
-      const conversation = await contactSeller(productId, token);
+      const conversation = await contactSeller(productId, token, orderId);
       router.push(`/chat/${conversation.id}`);
     } catch (err) {
       setError(err.message);

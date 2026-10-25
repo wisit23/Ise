@@ -26,9 +26,12 @@ jest.mock(
 );
 
 const mockPush = jest.fn();
-const mockRouter = { push: mockPush };
+const mockReplace = jest.fn();
+const mockRouter = { push: mockPush, replace: mockReplace };
+const mockSearchParams = new URLSearchParams();
 jest.mock("next/navigation", () => ({
   useRouter: () => mockRouter,
+  useSearchParams: () => mockSearchParams,
 }));
 
 jest.mock("../../lib/api", () => ({
@@ -127,6 +130,7 @@ const VOUCHERS = [
 describe("ProfilePage", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSearchParams.delete("tab");
     getAccessToken.mockReturnValue("test-token");
     getStoredUser.mockReturnValue(USER);
     apiFetch.mockImplementation((path, options) => {
@@ -205,6 +209,51 @@ describe("ProfilePage", () => {
         token: "test-token",
       });
     });
+  });
+
+  it("opens the orders section directly from the profile deep link", async () => {
+    mockSearchParams.set("tab", "orders");
+    render(<ProfilePage />);
+    expect(await screen.findByRole("region", { name: "คำสั่งซื้อของฉัน" })).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("สมชาย")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /ดูประวัติทั้งหมด/ })).toHaveAttribute("href", "/profile?tab=orders");
+  });
+
+  it("opens orders when the query changes on an already mounted profile", async () => {
+    const { rerender } = render(<ProfilePage />);
+    expect(await screen.findByDisplayValue("สมชาย")).toBeInTheDocument();
+    mockSearchParams.set("tab", "orders");
+    rerender(<ProfilePage />);
+    expect(await screen.findByRole("region", { name: "คำสั่งซื้อของฉัน" })).toBeInTheDocument();
+    mockSearchParams.delete("tab");
+    rerender(<ProfilePage />);
+    expect(await screen.findByDisplayValue("สมชาย")).toBeInTheDocument();
+  });
+
+  it("keeps tab navigation URLs in sync after opening orders", async () => {
+    mockSearchParams.set("tab", "orders");
+    render(<ProfilePage />);
+    await screen.findByRole("region", { name: "คำสั่งซื้อของฉัน" });
+    fireEvent.click(screen.getByRole("button", { name: /ข้อมูลส่วนตัว/ }));
+    expect(mockReplace).toHaveBeenCalledWith("/profile?tab=profile", { scroll: false });
+    expect(await screen.findByDisplayValue("สมชาย")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /คำสั่งซื้อของฉัน/ }));
+    expect(mockReplace).toHaveBeenCalledWith("/profile?tab=orders", { scroll: false });
+    expect(await screen.findByRole("region", { name: "คำสั่งซื้อของฉัน" })).toBeInTheDocument();
+  });
+
+  it("opens personal information directly from its explicit tab URL", async () => {
+    mockSearchParams.set("tab", "profile");
+    render(<ProfilePage />);
+    expect(await screen.findByDisplayValue("สมชาย")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "คำสั่งซื้อของฉัน" })).not.toBeInTheDocument();
+  });
+
+  it("uses personal information for an unknown tab", async () => {
+    mockSearchParams.set("tab", "unknown");
+    render(<ProfilePage />);
+    expect(await screen.findByDisplayValue("สมชาย")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "คำสั่งซื้อของฉัน" })).not.toBeInTheDocument();
   });
 
   it("shows Style Profile in the personal tab and saves it separately", async () => {
@@ -313,7 +362,7 @@ describe("ProfilePage", () => {
 
   it("embeds the full orders UI with product photos and opens details without leaving profile", async () => {
     render(<ProfilePage />);
-    const ordersTab = screen.getByRole("button", { name: /สถานะสินค้า/ });
+    const ordersTab = screen.getByRole("button", { name: /คำสั่งซื้อของฉัน/ });
     expect(ordersTab.parentElement).not.toHaveClass("mb-6");
     fireEvent.click(ordersTab);
     const orders = within(
@@ -356,7 +405,7 @@ describe("ProfilePage", () => {
       return previous(path, options);
     });
     render(<ProfilePage />);
-    fireEvent.click(screen.getByRole("button", { name: /สถานะสินค้า/ }));
+    fireEvent.click(screen.getByRole("button", { name: /คำสั่งซื้อของฉัน/ }));
     const orders = within(
       screen.getByRole("region", { name: "คำสั่งซื้อของฉัน" }),
     );
@@ -409,7 +458,8 @@ describe("ProfilePage", () => {
   it.each([
     ["รอชำระเงิน", "pending_payment"],
     ["รอผู้ขายยืนยัน", "paid"],
-    ["กำลังจัดส่ง", "shipped"],
+    ["ขนส่งกำลังเข้ารับสินค้า", "pickup_in_progress"],
+    ["กำลังจัดส่ง", "in_transit"],
     ["สำเร็จ", "completed"],
   ])(
     "opens the matching shared filter from the %s shortcut",

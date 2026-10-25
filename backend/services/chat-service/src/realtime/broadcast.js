@@ -193,6 +193,9 @@ function broadcastRealtime({ event, data, rooms = [], broadcastGlobal = false })
   if (!ioInstance || !event) return;
   if (broadcastGlobal) {
     ioInstance.emit(event, data);
+    if (["product:created", "product:updated", "product:deleted"].includes(event)) {
+      ioInstance.of("/catalog").emit("catalog:changed");
+    }
   }
   for (const r of rooms) {
     if (r) {

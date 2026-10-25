@@ -118,13 +118,19 @@ test("executive tickets list against a real database", async (t) => {
     assert.deepEqual(Object.keys(day.body.items[1]).sort(), [
       "category",
       "createdAt",
+      "displayReferences",
       "id",
       "orderId",
       "priority",
+      "referenceCode",
       "status",
       "subject",
       "ticketNumber",
     ]);
+    assert.match(
+      day.body.items[1].referenceCode,
+      /^TKT-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/,
+    );
     assert.deepEqual(day.body.items[1].category, {
       code: "ORDER",
       name: "คำสั่งซื้อ",
@@ -152,8 +158,51 @@ test("executive tickets list against a real database", async (t) => {
     assert.equal(page.body.total, 3);
     assert.equal(page.body.totalPages, 2);
 
+    // Newest first by default; oldest first when asked.
+    assert.deepEqual(keys(await get({ ...range, sort: "newest" })), [
+      "C",
+      "B",
+      "A",
+    ]);
+    assert.deepEqual(keys(await get({ ...range, sort: "oldest" })), [
+      "A",
+      "B",
+      "C",
+    ]);
+    // Paging follows the order: the oldest comes on the first page.
+    assert.deepEqual(keys(await get({ ...range, sort: "oldest", limit: 2 })), [
+      "A",
+      "B",
+    ]);
+    assert.equal((await get({ ...range, sort: "latest" })).status, 400);
+
+    // Search by reference: the ticket's code, a part of it, or its number.
+    const b = await prisma.supportTicket.findUniqueOrThrow({
+      where: { id: ids[1] },
+      select: { referenceCode: true, ticketNumber: true },
+    });
+    assert.match(b.referenceCode, /^TKT-/);
+    assert.deepEqual(keys(await get({ ...range, q: b.referenceCode })), ["B"]);
+    assert.deepEqual(
+      keys(
+        await get({ ...range, q: b.referenceCode.slice(4, 8).toLowerCase() }),
+      ),
+      ["B"],
+    );
+    assert.deepEqual(keys(await get({ ...range, q: b.ticketNumber })), ["B"]);
+    assert.equal(
+      (await get({ ...range, q: "TKT-ZZZZ-ZZZZ-ZZZZ" })).body.total,
+      0,
+    );
+    // Tickets are found by code only: a shop's name, or text that is not a
+    // pattern, finds nothing.
+    for (const text of ["ร้านบี", "%", "_", "x' OR 1=1"]) {
+      assert.equal((await get({ ...range, q: text })).body.total, 0, text);
+    }
+
     // A value the page does not offer is refused, not matched against nothing.
     for (const bad of [
+      { q: "x".repeat(101) },
       { status: "DONE" },
       { category: "ANYTHING" },
       { priority: "MEH" },

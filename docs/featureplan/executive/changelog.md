@@ -1,5 +1,39 @@
 # Executive Feature Changelog
 
+## 2026-10-25 — Continued Executive audit after interrupted review
+
+- เพิ่ม paginated service-token-only `/executive/seller-search` ภายใน Auth Executive module และให้ Order อ่านครบทุกหน้า แก้ผลค้นร้านหายเมื่อเกิน 100 บัญชี โดยไม่เปลี่ยน Auth search API เดิม
+- เพิ่ม deadline เฉพาะ Executive requests, bounded Product lookup ในรายละเอียดข้อพิพาท, last-page recovery, report series validation และ unavailable ต่อ bucket ที่หาย
+- Report page/total/status counts อ่าน snapshot เดียวกัน; Executive audit อ่าน IP ผ่าน `req.ip`
+- รายละเอียด scope, tests, evidence และ deployment coupling อยู่ใน `production-audit-2026-10-25.md`; ไม่แก้ฟีเจอร์ของบทบาทอื่นและไม่เพิ่ม anomaly/PDF นอกขอบเขตที่อนุมัติไว้
+
+## 2026-10-25 — Final production audit, status counts sync, and executiveDates refactor
+
+- **ตัวเลขบนปุ่มสถานะตรงกับผลค้นหา:** ในหน้าข้อร้องเรียน (`reportSearch.js` และ `executiveReports.js`), เพิ่มฟังก์ชัน `countReportStatuses` ที่ใช้เงื่อนไขเดียวกับรายการคำร้อง (`reportPredicate({ range, status: "ALL", search, targetId })`) ส่งผลให้ตัวเลขบนปุ่มสถานะ (เช่น รอดำเนินการ, ตรวจสอบแล้ว) อัปเดตตามคำค้น `q` และ `targetId` ตรงกันทุกปุ่ม (พฤติกรรมเดียวกับ Ticket และข้อพิพาท) พร้อม regression test
+- **ลบโค้ดค้าง (Dead Code Cleanup):** นำ `usersGranularity` ที่ไม่ได้ใช้งานออกจาก `CUSTOM_MODE` ใน `frontend/lib/executive.js` (คำนวณ granularity จากความยาวของช่วงวันที่แทนแล้ว)
+- **แยกโมดูลวันที่ (Date Utility Refactoring):** แยกฟังก์ชันและค่าคงที่เกี่ยวกับปฏิทิน/วันที่/การคำนวณช่วงเวลา ออกจาก `frontend/lib/executive.js` (ซึ่งยาวกว่า 800 บรรทัด) ไปไว้ใน `frontend/lib/executiveDates.js` และทำ re-export ทั้งหมดผ่าน `export * from "./executiveDates";` เพื่อรักษา backward compatibility 100% ทำให้โค้ดมีความเป็นระเบียบ เป็นสัดส่วน ดูแลง่าย
+- **แก้ Date Collision ใน Integration Tests:** ปรับวันที่ fixture ใน `executive-ticket-detail.integration.test.js` (support-service) และ `executive-dispute-detail.integration.test.js` (order-service) ให้ไม่ชนกับช่วงวันที่ของ list test ทำให้รันการทดสอบคู่ขนานได้ผ่านฉลุย
+- **ตรวจสอบความพร้อมระดับ Production:**
+  - ไม่มี Mock data หรือ Hardcoded data ใน Production runtime
+  - การสื่อสารระหว่าง Service (เช่น order-service ค้นชื่อร้านผ่าน auth-service `/internal/users/search`, ดึง display names, top catalog ดึง product sales) ทำงานผ่าน REST API + `x-internal-token` อย่างถูกต้องตามหลัก Microservices ไม่มีการ query ข้ามฐานข้อมูลโดยตรง
+  - ผลการรันเทส: Frontend 17 suites / 223 tests ผ่าน 100%, Backend integration tests (auth, order, support) และ shared unit tests ทั้งหมด 23 tests ผ่าน 100% บนฐานข้อมูลจริง PostgreSQL
+- **Git Tracking:** เพิ่ม `sellerNameSearch.js`, `sellerNameSearch.test.js`, และ `executiveDates.js` เข้าไปใน Git staging ครบถ้วน
+
+## 2026-10-25 — Merge main (reference codes) and search by code
+
+- Merge `main` (ระบบรหัสอ้างอิง UUID → `RPT-`/`TKT-`/`DSP-`/`ORD-`/`USR-`): แก้ conflict 4 ไฟล์ โดยเก็บ `staffRoles` + `referenceCode` ใน display-names, ใช้ layout หน้าต่าง Ticket ของเราแต่แสดงรหัสอ้างอิงแทน UUID
+- กราฟสถานะคำสั่งซื้อนับ `paid` และ `delivered` เป็น "กำลังดำเนินการ" ตามวงจรคำสั่งซื้อใหม่ของ main (เดิมหายจากกราฟ)
+- ช่อง "ค้นหาด้วยรหัส" ในหน้าข้อร้องเรียน (CEO-DEC-017): `q` ใน `/executive/reports`, `/executive/tickets`, `/executive/disputes`; ค้นทั้งรหัสเต็มหรือบางส่วน
+- กดชื่อเป้าหมายในแถบเตือนสีแดง → ดูเฉพาะข้อร้องเรียนของเป้าหมายนั้น (ทุกสถานะ ทุกช่วงเวลา) มีแถบ "ล้างตัวกรอง" (`targetId` ใน `/executive/reports`)
+- เรียงรายการ "วันล่าสุด/วันเก่าสุด" (dropdown ชิดขวาหัวรายการ, "กำลังโหลด" อยู่ซ้าย): `sort` ใน `/executive/reports|tickets|disputes`
+- ค้นหาด้วย **ชื่อร้าน** ได้ด้วย (CEO-DEC-017): ข้อร้องเรียนค้นชื่อร้าน/ชื่อคน/รหัสผู้ถูกร้องเรียน, ข้อพิพาทค้นชื่อร้านที่ขายคำสั่งซื้อนั้น (order-service ถาม `/internal/users/search` ของ auth), Ticket ค้นด้วยรหัสอย่างเดียว; ค้นเป็นข้อความตรงตัว (`%`/`_` ไม่ใช่ wildcard) ไม่เกิน 100 ตัวอักษร; ช่องไม่บังคับตัวพิมพ์ใหญ่และไม่เตือนรูปแบบอีก
+- หน้าภาพรวม: การ์ด 4 ใบมีช่วงเวลาต่อท้ายชื่อ เช่น "ยอดขายจากการสั่งซื้อ (ปีนี้)", "รายได้แพลตฟอร์ม 3% (ปีนี้)" (ช่วงกำหนดเองเขียนว่า "(ช่วงที่เลือก)"); กราฟทั้งหมด (แนวโน้มยอดขาย, หมวดหมู่ที่นิยมสุด, สถานะคำสั่งซื้อ, ประเภทสินค้ายอดขายสูงสุด) ไม่มีช่วงเวลาในชื่อ; ตัดบรรทัดอธิบาย "…ในปีนี้" ใต้ชื่อกราฟสองอันออก
+- หน้าภาพรวมเปิดที่ **"วันนี้"** เป็นค่าเริ่มต้น (แทน "7 วันล่าสุด" ซึ่งตัดปุ่มออก; อยากดู 7 วันให้เลือกช่วงเอง): กราฟรายชั่วโมงถึงชั่วโมงปัจจุบัน เทียบกับ **วันเดียวกันของสัปดาห์ที่แล้ว ณ เวลาเดียวกัน** (เช่น วันอาทิตย์ถึง 20:09 เทียบกับวันอาทิตย์ที่แล้วถึง 20:09)
+- หน้าภาพรวม "กำหนดเอง" เลือก **ตั้งแต่ – ถึง** ได้ (CEO-DEC-018): 1 วัน = กราฟรายชั่วโมง, 2–92 วัน = จุดละวัน (ยิ่งห่างยิ่งมีจุดมาก), เกิน 92 วัน = จุดละเดือน; เทียบกับช่วงก่อนหน้าที่ยาวเท่ากัน; แกนตั้งชื่อประมาณ 8 วัน, จุดเล็กลงและโซน hover กว้างเท่าคอลัมน์เมื่อจุดเยอะ
+- ช่องค้นหาย้ายไปชิดขวาแถวช่วงเวลา ไม่แสดงข้อความเตือน (ขอบแดงเมื่อพิมพ์รูปแบบที่ใช้ไม่ได้); ข้อความใต้ตารางรายงานเหลือ "รายได้แพลตฟอร์มคำนวณที่ N% ของยอดขาย"
+- แถวรายการแสดงรหัสของเรื่องเป็น "รหัส:" (เดิมข้อพิพาทเขียนว่า "ออเดอร์:" ทั้งที่เป็นรหัสข้อพิพาท)
+- ฐานข้อมูลในเครื่อง: รัน `migrate:deploy` ของ auth/order/product/support และ backfill รหัสอ้างอิงตาม `docs/uuid-and-reference-id-design.md`
+
 ## 2026-10-24 — Export rescoped, case details, time indexes
 
 - **`CEO-005` rescope (CEO-DEC-016):** export = ดาวน์โหลด CSV ของรายงานที่เห็นบนหน้าจอ + บันทึก audit log `REPORT_EXPORT_CSV` ทุกครั้ง; ตัด export job/วันหมดอายุ/PDF ออกจากแผน

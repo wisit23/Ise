@@ -26,12 +26,30 @@ const buyerAuditRoutes = require("./features/buyerAudit/buyerAuditRoutes");
 const restrictionRoutes = require("./features/commerceRestrictions/restrictionRoutes");
 const marketingMetricsRoutes = require("./features/metrics/marketingMetricsRoutes");
 const marketingAudienceRoutes = require("./features/marketingAudience/marketingAudienceRoutes");
+const passwordReset = require("./features/passwordReset");
+const emailVerification = require("./features/emailVerification");
 
 const prisma = require("./models/prismaClient");
 const authService = require("./services/authService");
 
+// TRUST_PROXY accepts Express's forms: a hop count ("2"), "true"/"false",
+// or a comma-separated list of addresses/subnets/presets.
+function trustProxySetting(raw) {
+  if (!raw) return "loopback, linklocal, uniquelocal";
+  if (/^\d+$/.test(raw)) return Number(raw);
+  if (raw === "true" || raw === "false") return raw === "true";
+  return raw;
+}
+
 const app = express();
+app.use(require("@reloop/shared").referenceAliases(prisma, "auth"));
+// Requests reach this service through the frontend and gateway proxies on
+// private networks. Trusting exactly those hops makes req.ip the real client
+// address (used for login history and per-IP rate limits) while a client's
+// own X-Forwarded-For header still can't override it.
+app.set("trust proxy", trustProxySetting(process.env.TRUST_PROXY));
 app.use(express.json());
+require("@reloop/shared").installReferenceDisplay(app, require("./models/prismaClient"), "auth");
 app.locals.validateAccessSession = validateAccessSession;
 
 app.post(
@@ -69,6 +87,7 @@ app.get("/internal/users/:id", requireInternalToken, async (req, res, next) => {
     ]);
     res.json({
       id: user.id,
+      ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
       email: user.email,
       status: user.status,
       role: user.role,
@@ -93,6 +112,8 @@ app.use("/me/addresses", profileAddressRoutes);
 app.use("/me/style-profile", styleProfileRoutes);
 app.use("/", buyerAuditRoutes);
 app.use("/", restrictionRoutes);
+app.use("/password", passwordReset.router);
+app.use("/email", emailVerification.router);
 app.use("/", authRoutes);
 app.use("/admin/kyc", adminKycRoutes);
 app.use("/kyc", kycRoutes);

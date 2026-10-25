@@ -75,6 +75,18 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
+test.each([["sold", null], ["hidden", "sold"]])(
+  "%s sold product is read-only even when opening the edit URL directly",
+  async (status, previous) => {
+    setup(status, previous);
+    expect(await screen.findByText("สินค้านี้ขายแล้ว ไม่สามารถแก้ไขหรือลบได้")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "ลบสินค้า" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "กลับไปดูสินค้า" })).toHaveAttribute("href", "/products/p");
+    expect(apiFetch.mock.calls.some(([, options]) => ["PATCH", "DELETE"].includes(options?.method))).toBe(false);
+  },
+);
+
 test.each([
   ["reserved", null],
   ["hidden", "reserved"],
@@ -120,4 +132,37 @@ test("canceling in the delete pop-up does not delete product", async () => {
     apiFetch.mock.calls.some(([, options]) => options?.method === "DELETE"),
   ).toBe(false);
   expect(mockPush).not.toHaveBeenCalled();
+});
+
+test("changing price when product is reserved shows error that price cannot be changed", async () => {
+  setup("reserved");
+  expect(
+    await screen.findByText(
+      "สินค้านี้อยู่ในตะกร้าหรืออยู่ระหว่างการสั่งซื้อ ไม่สามารถเปลี่ยนราคาได้",
+    ),
+  ).toBeInTheDocument();
+
+  const priceInput = await screen.findByLabelText(/ราคา/);
+  fireEvent.change(priceInput, { target: { value: "200" } });
+  fireEvent.submit(priceInput.closest("form"));
+
+  expect(
+    await screen.findByText("ไม่สามารถเปลี่ยนราคาสินค้าที่อยู่ระหว่างการสั่งซื้อได้"),
+  ).toBeInTheDocument();
+  expect(
+    apiFetch.mock.calls.some(([, options]) => options?.method === "PATCH"),
+  ).toBe(false);
+});
+
+test("editing other fields when product is reserved shows error that product cannot be edited", async () => {
+  setup("reserved");
+  const priceInput = await screen.findByLabelText(/ราคา/);
+  fireEvent.submit(priceInput.closest("form"));
+
+  expect(
+    await screen.findByText("ไม่สามารถแก้ไขสินค้าที่อยู่ระหว่างการสั่งซื้อได้"),
+  ).toBeInTheDocument();
+  expect(
+    apiFetch.mock.calls.some(([, options]) => options?.method === "PATCH"),
+  ).toBe(false);
 });

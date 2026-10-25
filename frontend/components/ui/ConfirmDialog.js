@@ -22,6 +22,7 @@ export default function ConfirmDialog({
   reason = "none",
   reasonLabel = "เหตุผล",
   reasonHint,
+  initialReason = "",
   note,
   busy = false,
   loading,
@@ -36,10 +37,10 @@ export default function ConfirmDialog({
 
   useEffect(() => {
     if (open) {
-      setText((prev) => (prev ? "" : prev));
+      setText(initialReason);
       setError((prev) => (prev ? "" : prev));
     }
-  }, [open]);
+  }, [open, initialReason]);
 
   function handleConfirm() {
     if (reason === "required" && !text.trim()) {

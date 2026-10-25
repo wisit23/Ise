@@ -128,7 +128,7 @@ test("executive platform metrics series against a real database", async (t) => {
           originalAmount: 9000,
           ordersAmount: 9000,
           orderType: "BUY_NOW",
-          status: "pending",
+          status: "pending_payment",
           createdAt: day5,
         },
       ],

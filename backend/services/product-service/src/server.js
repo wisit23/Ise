@@ -14,9 +14,11 @@ const campaignService = require("./features/campaigns/campaignService");
 const PORT = process.env.PRODUCT_PORT || 3002;
 app.listen(PORT, () => console.log(`[product-service] listening on ${PORT}`));
 
-// Closes auctions at their exact scheduledEndAt without needing anyone to
-// visit the page — see jobs/auctionCloseQueue.js.
+// Opens and closes auctions at their scheduled boundaries without page visits.
 auctionCloseQueue.startWorker(auctionService.get);
+auctionService.restoreScheduledJobs().catch((err) =>
+  console.error("[product-service] could not restore auction boundary jobs:", err.message),
+);
 
 // Releases cart reservations whose 10-minute hold has expired.
 startReservationExpiryWorker();

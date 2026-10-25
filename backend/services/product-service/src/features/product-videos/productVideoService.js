@@ -25,12 +25,52 @@ function isBuyer(user) {
   return roles.length>0 && roles.every(role=>["BUYER","SELLER"].includes(role)) && !["SUSPENDED","RESTRICTED_BUYER","RESTRICTED_ALL_COMMERCE"].includes(user.status);
 }
 
-function listFeed({ skip, take, userId }) {
+function listFeed({ skip, take, userId, videoId }) {
   return productVideoRepository.listAvailable({
     skip,
     take,
     ...(userId ? { userId } : {}),
+    ...(videoId ? { videoId } : {}),
   });
+}
+
+function requireSeller(user) {
+  if (!user?.id || !UPLOAD_ROLES.has(user.role)) throw forbidden("seller account required");
+}
+
+function listMine({ user, skip, take }) {
+  requireSeller(user);
+  return productVideoRepository.listMine({ sellerId: user.id, skip, take });
+}
+
+async function ownedClip(user, id) {
+  requireSeller(user);
+  const clip = await productVideoRepository.findById(id);
+  if (!clip || clip.sellerId !== user.id) throw notFound("clip not found");
+  return clip;
+}
+
+async function updateClip({ user, id, input = {} }) {
+  const clip = await ownedClip(user, id);
+  const data = {};
+  if (input.title !== undefined) data.title = optionalText(input.title, "title");
+  if (input.description !== undefined) data.description = optionalText(input.description, "description");
+  if (input.videoUrl !== undefined) data.videoUrl = requiredText(input.videoUrl, "videoUrl");
+  if (input.productId !== undefined) {
+    data.productId = requiredText(input.productId, "productId");
+  }
+  const product = await productVideoRepository.findProductOwner(data.productId || clip.productId);
+  if (!product) throw notFound("product not found");
+  if (product.sellerId !== user.id) throw forbidden("you can only attach video clips to your own products");
+  if (product.moderatedAt || product.status === "removed") throw forbidden("cannot edit a video for a moderated product");
+  if (product.status === "sold") throw badRequest("cannot edit a video for a sold product");
+  return productVideoRepository.updateOwned(id, user.id, data);
+}
+
+async function deleteClip({ user, id }) {
+  await ownedClip(user, id);
+  await productVideoRepository.deleteOwned(id, user.id);
+  return { success: true };
 }
 
 /**
@@ -60,6 +100,7 @@ async function createClip({ user, input = {} }) {
   }
 
   return productVideoRepository.create({
+    ...(input.title !== undefined ? { title: optionalText(input.title, "title") } : {}),
     videoUrl,
     description,
     sellerId: user.id,
@@ -223,6 +264,9 @@ async function listComments(productVideoId) {
 }
 
 module.exports = {
+  listMine,
+  updateClip,
+  deleteClip,
   listFeed,
   createClip,
   chooseClip,

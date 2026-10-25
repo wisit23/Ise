@@ -12,6 +12,8 @@ const {
 
 const orderModel = require("../../models/orderModel");
 const disputeModel = require("./disputeModel");
+const { isSellerVisible } = require("./sellerVisibility");
+const { notifyDisputeStatus } = require("./disputeStatusNotices");
 const orderLifecycle = require("../../services/orderLifecycle");
 
 const DISPUTABLE_STATUSES = ["delivered", "completed"];
@@ -61,7 +63,8 @@ async function assertAccess({ dispute, userId, role, roles, allowWatcher = false
     throw forbidden("only the assigned agent can inspect this dispute");
   }
   const order = await orderModel.findById(dispute.orderId);
-  if (order.buyerId === userId || order.sellerId === userId) return dispute;
+  if (order.buyerId === userId) return dispute;
+  if (order.sellerId === userId && isSellerVisible(dispute)) return dispute;
   throw forbidden("you do not have access to this dispute");
 }
 
@@ -167,6 +170,7 @@ async function getById({ disputeId, userId, role, roles }) {
     const summary = order
       ? {
           id: order.id,
+          ...(order.referenceCode ? { referenceCode: order.referenceCode } : {}),
           productId: order.productId,
           buyerId: order.buyerId,
           sellerId: order.sellerId,
@@ -241,6 +245,7 @@ async function getByOrderId({ orderId, userId, role, roles }) {
     const summary = order
       ? {
           id: order.id,
+          ...(order.referenceCode ? { referenceCode: order.referenceCode } : {}),
           buyerId: order.buyerId,
           sellerId: order.sellerId,
           price: order.price,
@@ -317,6 +322,24 @@ async function joinConversation({ disputeId, userId, role, roles, side }) {
     },
     side,
   );
+  if (side === "seller" && dispute.assignedTo === userId &&
+      !dispute.capabilities?.isWatching && !isSellerVisible(dispute)) {
+    await disputeModel.auditLog({
+      disputeId: dispute.id,
+      actorId: userId,
+      action: "SELLER_CONTACTED",
+      detail: "เจ้าหน้าที่เปิดการติดต่อผู้ขายสำหรับข้อพิพาท",
+    });
+    await chatClient.sendSystemNotification({
+      userId: order.sellerId,
+      type: "DISPUTE",
+      title: "เจ้าหน้าที่ติดต่อเกี่ยวกับข้อพิพาท",
+      message: `กรุณาตรวจสอบและส่งคำชี้แจงสำหรับคำสั่งซื้อ #${order.id}`,
+      link: `/support/cases/${order.id}`,
+      entityId: order.id,
+      metadata: { orderId: order.id, disputeId: dispute.id, role: "seller" },
+    });
+  }
   return {
     conversationId,
     side,
@@ -535,6 +558,10 @@ async function claim({ disputeId, userId, role, roles, version }) {
   if (!updated) {
     throw conflict("dispute claim conflict — reload and retry");
   }
+  // Only the first pick-up tells the parties; a T&S claim after escalation
+  // is already covered by the escalation notice.
+  if (!dispute.assignedRole || dispute.assignedRole === "CUSTOMER_SERVICE")
+    await notifyDisputeStatus(updated, "CLAIMED");
   return updated;
 }
 
@@ -705,6 +732,7 @@ async function escalate({
   if (!updated) {
     throw conflict("dispute escalation conflict — reload and retry");
   }
+  await notifyDisputeStatus(updated, "ESCALATED");
   return updated;
 }
 
@@ -820,7 +848,7 @@ async function deliverVerdictNotice(dispute, order) {
           type: "DISPUTE",
           title: "ผลการตัดสินข้อพิพาท",
           message: `⚖️ สินค้าของคุณ '${title}' สำหรับคำสั่งซื้อ #${order.id} ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
-          link: "/orders",
+          link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
             orderId: order.id,
@@ -838,7 +866,7 @@ async function deliverVerdictNotice(dispute, order) {
           type: "DISPUTE",
           title: "ผลการตัดสินข้อพิพาท",
           message: `⚖️ คำสั่งซื้อ #${order.id} ('${title}') ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
-          link: "/orders",
+          link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
             orderId: order.id,
@@ -902,7 +930,7 @@ async function requestMoreEvidence({
           type: "DISPUTE",
           title: "เจ้าหน้าที่ขอหลักฐานเพิ่มเติมสำหรับข้อพิพาท",
           message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): เจ้าหน้าที่ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
-          link: "/orders",
+          link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
             orderId: order.id,
@@ -920,7 +948,7 @@ async function requestMoreEvidence({
           type: "DISPUTE",
           title: "อัปเดตข้อพิพาท: ขอหลักฐานเพิ่มเติม",
           message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): มีการขอข้อมูล/หลักฐานเพิ่มเติมสำหรับข้อพิพาท: ${reason.trim()}`,
-          link: "/orders",
+          link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
             orderId: order.id,
@@ -1201,7 +1229,7 @@ async function getDashboardMetrics({ role, roles }) {
 }
 
 
-async function acknowledge({ disputeId, userId, role, roles }) {
+async function acknowledge({ disputeId, userId }) {
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
   if (dispute.status !== "DECIDED") {

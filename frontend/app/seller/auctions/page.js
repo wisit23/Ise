@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -8,6 +9,7 @@ import Footer from "../../../components/Footer";
 import Modal from "../../../components/ui/Modal";
 import { apiFetch } from "../../../lib/api";
 import { getAccessToken, getStoredUser } from "../../../lib/auth";
+import useSellerLiveRefresh from "../../../lib/useSellerLiveRefresh";
 
 const STATUS_LABEL = {
   pending_approval: "รออนุมัติจาก Marketing",
@@ -209,36 +211,47 @@ export default function SellerAuctionsPage() {
   const [relistError, setRelistError] = useState("");
   const [viewBidsAuction, setViewBidsAuction] = useState(null);
 
-  const load = useCallback((currentUser) => {
+  const load = useCallback((currentUser, { silent = false } = {}) => {
     if (!currentUser) return;
-    setLoading(true);
-    apiFetch("/api/products/auctions?limit=100")
+    if (!silent) setLoading(true);
+    const auctionsRequest = apiFetch("/api/products/auctions?limit=100")
       .then((data) =>
         setMyAuctions(data.items.filter((a) => a.sellerId === currentUser.id)),
       )
       .catch((err) =>
-        setError(
+        !silent && setError(
           err.message ||
             "เกิดข้อผิดพลาดในการโหลดรายการประมูล กรุณาลองใหม่อีกครั้ง",
         ),
       )
-      .finally(() => setLoading(false));
+      .finally(() => { if (!silent) setLoading(false); });
 
-    setLoadingRound(true);
-    apiFetch("/api/products/auctions/rounds/current")
+    if (!silent) setLoadingRound(true);
+    const roundsRequest = apiFetch("/api/products/auctions/rounds/current")
       .then((data) => setRoundInfo(data))
       .catch((err) => console.error("โหลดข้อมูลรอบประมูลไม่สำเร็จ:", err))
-      .finally(() => setLoadingRound(false));
+      .finally(() => { if (!silent) setLoadingRound(false); });
 
     const token = getAccessToken();
+    let productsRequest;
+    let kycRequest;
     if (token) {
-      apiFetch("/api/products/mine?status=auction_action_required", { token })
+      productsRequest = apiFetch("/api/products/mine?status=auction_action_required", { token })
         .then((data) => setActionRequiredProducts(data?.items || []))
         .catch((err) =>
           console.error("โหลดสินค้าที่รอการดำเนินการไม่สำเร็จ:", err),
         );
+      kycRequest = apiFetch("/api/auth/kyc/mine", { token })
+        .then((data) => setKycStatus(data.kycStatus))
+        .catch(() => { if (!silent) setKycStatus("NONE"); });
     }
+    return Promise.allSettled([auctionsRequest, roundsRequest, productsRequest, kycRequest]);
   }, []);
+
+  useSellerLiveRefresh(() => load(user, { silent: true }), {
+    enabled: user?.role === "SELLER",
+    events: ["notification:new"],
+  });
 
   useEffect(() => {
     const token = getAccessToken();
@@ -252,9 +265,6 @@ export default function SellerAuctionsPage() {
       setLoading(false);
       return;
     }
-    apiFetch("/api/auth/kyc/mine", { token })
-      .then((data) => setKycStatus(data.kycStatus))
-      .catch(() => setKycStatus("NONE"));
     load(storedUser);
   }, [router, load]);
 
@@ -465,6 +475,7 @@ export default function SellerAuctionsPage() {
                         >
                           {a.product?.title || a.productId}
                         </Link>
+                        {a.referenceCode && <ReferenceCode value={a} className="text-xs text-gray-500" />}
                         <span
                           className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
                             STATUS_STYLE[a.status] || "bg-gray-100 text-gray-600"
@@ -675,9 +686,10 @@ export default function SellerAuctionsPage() {
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {viewBidsAuction.bids.map((b, idx) => {
                         const isHighest = idx === 0;
-                        const isWinning =
-                          viewBidsAuction.winningBidId === b.id ||
-                          (viewBidsAuction.status === "closed" && isHighest);
+                        const isWinning = Boolean(
+                          viewBidsAuction.winningBidId &&
+                            viewBidsAuction.winningBidId === b.id,
+                        );
                         return (
                           <tr key={b.id || idx} className={isHighest ? "bg-emerald-50/50" : "hover:bg-gray-50"}>
                             <td className="px-3 py-2.5 text-gray-500 font-medium">#{idx + 1}</td>
@@ -697,6 +709,10 @@ export default function SellerAuctionsPage() {
                               {isWinning ? (
                                 <span className="rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
                                   🏆 ชนะการประมูล
+                                </span>
+                              ) : isHighest && viewBidsAuction.status === "closed" ? (
+                                <span className="rounded-full bg-rose-100 border border-rose-300 px-2 py-0.5 text-[11px] font-bold text-rose-700">
+                                  เสียสิทธิ์
                                 </span>
                               ) : isHighest ? (
                                 <span className="rounded-full bg-sky-100 border border-sky-300 px-2 py-0.5 text-[11px] font-bold text-sky-800">

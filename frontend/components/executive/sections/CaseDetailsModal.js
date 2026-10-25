@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 import { useEffect, useState } from "react";
 import DetailsModal, { DetailField } from "./DetailsModal";
 import Button from "../../ui/Button";
@@ -44,7 +46,7 @@ function Person({ person, namesAvailable, role }) {
       {personLabel(person, namesAvailable)}
       {role && <span className="text-slate-500"> ({role})</span>}
       <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
-        {person.id}
+        {formatReferenceCode(person)}
       </span>
     </>
   );
@@ -80,7 +82,9 @@ function DisputeDetails({ data, meta }) {
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <DetailField label="คำสั่งซื้อ">
-          <span className="font-mono text-xs">{data.order.id}</span>
+          <span className="font-mono text-xs">
+            {formatReferenceCode(data.order)}
+          </span>
           {data.order.amount != null && (
             <span className="block">{baht(data.order.amount)}</span>
           )}
@@ -180,7 +184,7 @@ function TicketDetails({ data, meta }) {
               ? "ไม่พร้อมใช้งาน"
               : data.product?.id || "ไม่พบสินค้า")}
           <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
-            คำสั่งซื้อ {data.orderId}
+            คำสั่งซื้อ {formatReferenceCode(data.orderId)}
           </span>
         </DetailField>
       )}

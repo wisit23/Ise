@@ -103,7 +103,28 @@ function mockProviders(overrides = {}) {
 }
 
 describe("ExecutiveDashboardPage", () => {
+  // 12:00 Bangkok on 16 October 2026. Only Date is faked: timers and the
+  // renderer stay real. "Today" and the hours drawn follow this clock.
   beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date("2026-10-16T05:00:00.000Z"),
+      doNotFake: [
+        "hrtime",
+        "nextTick",
+        "performance",
+        "queueMicrotask",
+        "requestAnimationFrame",
+        "cancelAnimationFrame",
+        "requestIdleCallback",
+        "cancelIdleCallback",
+        "setImmediate",
+        "clearImmediate",
+        "setInterval",
+        "clearInterval",
+        "setTimeout",
+        "clearTimeout",
+      ],
+    });
     apiFetch.mockReset();
     getAccessToken.mockReturnValue("token");
     getStoredUser.mockReturnValue({
@@ -111,6 +132,8 @@ describe("ExecutiveDashboardPage", () => {
       firstName: "อัสนัย",
     });
   });
+
+  afterEach(() => jest.useRealTimers());
 
   it("restricts the page to Executive accounts", async () => {
     getStoredUser.mockReturnValue({ role: "BUYER", firstName: "ผู้ซื้อ" });
@@ -201,9 +224,10 @@ describe("ExecutiveDashboardPage", () => {
     });
 
     render(<ExecutiveDashboardPage />);
-    const share = (await screen.findByText("ประเภทสินค้ายอดขายสูงสุด")).closest(
-      ".rounded-xl",
-    );
+    await screen.findByText("฿70,000");
+    const share = screen
+      .getByText("ประเภทสินค้ายอดขายสูงสุด")
+      .closest(".rounded-xl");
     const slices = () => share.querySelectorAll("[data-slice]").length;
     // Five named slices and "other".
     expect(slices()).toBe(6);
@@ -221,11 +245,13 @@ describe("ExecutiveDashboardPage", () => {
 
     render(<ExecutiveDashboardPage />);
 
-    const purchase = (await screen.findByText("ยอดขายจากการสั่งซื้อ")).closest(
-      "div",
-    );
+    const purchase = (
+      await screen.findByText("ยอดขายจากการสั่งซื้อ (วันนี้)")
+    ).closest("div");
     expect(within(purchase).getByText("฿70,000")).toBeInTheDocument();
-    const auction = screen.getByText("ยอดขายจากการประมูล").closest("div");
+    const auction = screen
+      .getByText("ยอดขายจากการประมูล (วันนี้)")
+      .closest("div");
     expect(within(auction).getByText("฿30,000")).toBeInTheDocument();
     expect(screen.queryByText("ยอดขายรวม (GMV)")).toBeNull();
   });
@@ -235,7 +261,63 @@ describe("ExecutiveDashboardPage", () => {
 
     render(<ExecutiveDashboardPage />);
 
-    expect(await screen.findByText("รายได้แพลตฟอร์ม (7%)")).toBeInTheDocument();
+    expect(
+      await screen.findByText("รายได้แพลตฟอร์ม 7% (วันนี้)"),
+    ).toBeInTheDocument();
+  });
+
+  it("names the period on the cards only, not on the charts", async () => {
+    mockProviders();
+
+    render(<ExecutiveDashboardPage />);
+    await screen.findByText("฿70,000");
+
+    const cardTitles = (period) => [
+      `ยอดขายจากการสั่งซื้อ (${period})`,
+      `ยอดขายจากการประมูล (${period})`,
+      `รายได้แพลตฟอร์ม 7% (${period})`,
+      `ผู้ใช้งานเว็บ (${period})`,
+    ];
+    // The charts are named without a period, whatever is chosen.
+    const chartNames = [
+      "แนวโน้มยอดขาย",
+      "หมวดหมู่ที่นิยมสุด",
+      "สถานะคำสั่งซื้อ",
+      "ประเภทสินค้ายอดขายสูงสุด",
+    ];
+    const seen = (period) => {
+      for (const title of cardTitles(period)) {
+        expect(screen.getByText(title)).toBeVisible();
+      }
+      for (const name of chartNames) {
+        expect(screen.getByText(name)).toBeVisible();
+      }
+      expect(
+        screen.queryByText(
+          new RegExp(`^(${chartNames.slice(1).join("|")}) \\(`),
+        ),
+      ).toBeNull();
+    };
+    seen("วันนี้");
+
+    fireEvent.click(screen.getByRole("radio", { name: "ปีนี้" }));
+    await screen.findByText("ยอดขายจากการสั่งซื้อ (ปีนี้)");
+    seen("ปีนี้");
+
+    // A custom range names its dates.
+    fireEvent.click(screen.getByRole("radio", { name: "กำหนดเอง" }));
+    fireEvent.change(screen.getByLabelText("ตั้งแต่วันที่"), {
+      target: { value: "06/10/2569" },
+    });
+    fireEvent.change(screen.getByLabelText("ถึงวันที่"), {
+      target: { value: "15/10/2569" },
+    });
+    // A custom range is named in a word; its dates are in the date fields.
+    const dates = "ช่วงที่เลือก";
+    expect(
+      await screen.findByText(`ยอดขายจากการสั่งซื้อ (${dates})`),
+    ).toBeVisible();
+    seen(dates);
   });
 
   it("replaces the completed-orders card with the order status donut", async () => {
@@ -282,7 +364,7 @@ describe("ExecutiveDashboardPage", () => {
     expect(screen.getByRole("img", { name: /แนวโน้มยอดขาย/ })).toBeVisible();
   });
 
-  it("offers 7 days, this month, this year, then custom, with 7 days chosen", async () => {
+  it("offers today, this month, this year, then custom, with today chosen", async () => {
     mockProviders();
 
     render(<ExecutiveDashboardPage />);
@@ -291,7 +373,7 @@ describe("ExecutiveDashboardPage", () => {
     const group = screen.getByRole("radiogroup", { name: "ช่วงเวลา" });
     const radios = within(group).getAllByRole("radio");
     expect(radios.map((r) => r.textContent)).toEqual([
-      "7 วันล่าสุด",
+      "วันนี้",
       "เดือนนี้",
       "ปีนี้",
       "กำหนดเอง",
@@ -304,24 +386,44 @@ describe("ExecutiveDashboardPage", () => {
     ]);
   });
 
-  it("starts on the last 7 days, compared with the 7 days before", async () => {
+  it("starts on today, compared with the same weekday last week, by the hour", async () => {
     mockProviders();
 
     render(<ExecutiveDashboardPage />);
 
-    expect(await screen.findByText("ยอดรายวัน · 7 วันล่าสุด")).toBeVisible();
     expect(
-      screen.getAllByText("เทียบกับ 7 วันก่อนหน้านี้").length,
+      await screen.findByText("ยอดขายทุก 1 ชั่วโมง · วันนี้"),
+    ).toBeVisible();
+    expect(
+      screen.getAllByText("เทียบกับวันเดียวกันสัปดาห์ที่แล้ว").length,
     ).toBeGreaterThan(0);
-    const { current, previous } = overviewPeriods("week");
+    expect(screen.getByText("ผู้ใช้งานเว็บ (วันนี้)")).toBeVisible();
+    const { current, trend } = overviewPeriods("today");
+    expect(trend.granularity).toBe("hour");
     const paths = apiFetch.mock.calls.map(([path]) => path);
     expect(paths).toContain(
       `/api/orders/executive/metrics?from=${current.from}&to=${current.to}&timezone=Asia%2FBangkok`,
     );
+    // Friday 9 October, from midnight to 12:00 Bangkok, the same time a week
+    // ago, for the sales and for web usage.
     expect(paths).toContain(
-      `/api/orders/executive/metrics?from=${previous.from}&to=${previous.to}&timezone=Asia%2FBangkok`,
+      "/api/orders/executive/metrics?from=2026-10-09&to=2026-10-09T05%3A00%3A00.000Z&timezone=Asia%2FBangkok",
+    );
+    expect(paths).toContain(
+      "/api/auth/executive/metrics-series?from=2026-10-09&to=2026-10-09T05%3A00%3A00.000Z&granularity=day&timezone=Asia%2FBangkok",
+    );
+    expect(paths).toContain(
+      `/api/orders/executive/metrics-series?from=${trend.from}&to=${trend.to}&granularity=hour&timezone=Asia%2FBangkok`,
     );
   });
+
+  // Both date fields, as the page names them.
+  const fromField = () => screen.getByLabelText("ตั้งแต่วันที่");
+  const toField = () => screen.getByLabelText("ถึงวันที่");
+  const pickRange = (from, to) => {
+    fireEvent.change(fromField(), { target: { value: from } });
+    fireEvent.change(toField(), { target: { value: to } });
+  };
 
   it("shows one chosen day, charted every hour, against the day before", async () => {
     // Twenty-four hourly slots of 16 Oct 2025 in Bangkok (UTC+7).
@@ -342,9 +444,8 @@ describe("ExecutiveDashboardPage", () => {
     await screen.findByText("฿70,000");
 
     fireEvent.click(screen.getByRole("radio", { name: "กำหนดเอง" }));
-    fireEvent.change(screen.getByLabelText("เลือกวันที่"), {
-      target: { value: "16/10/2568" },
-    });
+    // Picking the first day alone keeps a one-day range.
+    fireEvent.change(fromField(), { target: { value: "16/10/2568" } });
 
     expect(await screen.findByText("00:00")).toBeInTheDocument();
     expect(screen.getByText("21:00")).toBeInTheDocument();
@@ -352,7 +453,7 @@ describe("ExecutiveDashboardPage", () => {
     // The hours between are points on the line, not named on the axis.
     expect(screen.queryByText("01:00")).toBeNull();
     expect(
-      screen.getByText("ผู้ใช้งานเว็บ (16 ต.ค. 2568)"),
+      screen.getByText("ผู้ใช้งานเว็บ (ช่วงที่เลือก)"),
     ).toBeInTheDocument();
     expect(screen.getAllByText("เทียบกับวันก่อนหน้า").length).toBeGreaterThan(
       0,
@@ -370,27 +471,99 @@ describe("ExecutiveDashboardPage", () => {
     );
   });
 
-  it("has the date field waiting beside the buttons and applies it on 'กำหนดเอง'", async () => {
+  it("shows a range of days with a point for every day, against the days before", async () => {
+    // Ten days, 6 to 15 October 2025, one row each (Bangkok midnights).
+    const days = Array.from({ length: 10 }, (_, i) => ({
+      period: new Date(Date.UTC(2025, 9, 5, 17) + i * 86400000).toISOString(),
+      gmv: (i + 1) * 100,
+      platformRevenue: i + 1,
+      completedOrders: 1,
+    }));
+    mockProviders({
+      "/api/orders/executive/metrics-series": () =>
+        Promise.resolve({ data: days, meta: META }),
+    });
+
+    render(<ExecutiveDashboardPage />);
+    await screen.findByText("฿70,000");
+
+    fireEvent.click(screen.getByRole("radio", { name: "กำหนดเอง" }));
+    pickRange("06/10/2568", "15/10/2568");
+
+    expect(
+      await screen.findByText(
+        "ยอดรายวัน · 6 ต.ค. 2568 – 15 ต.ค. 2568 (10 วัน)",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText("ผู้ใช้งานเว็บ (ช่วงที่เลือก)")).toBeVisible();
+    expect(
+      screen.getAllByText("เทียบกับช่วงก่อนหน้าที่ยาวเท่ากัน").length,
+    ).toBeGreaterThan(0);
+
+    // One point for each of the ten days, named on the axis (10 or fewer).
+    const chart = screen.getByRole("img", { name: /แนวโน้มยอดขาย/ });
+    expect(chart).toHaveAccessibleName(/6: ฿100/);
+    expect(chart).toHaveAccessibleName(/15: ฿1,000/);
+    expect(screen.queryByText("00:00")).toBeNull();
+
+    // The days asked for, and the ten just before them.
+    const paths = apiFetch.mock.calls.map(([path]) => path);
+    for (const expected of [
+      "/api/orders/executive/metrics?from=2025-10-06&to=2025-10-16&timezone=Asia%2FBangkok",
+      "/api/orders/executive/metrics?from=2025-09-26&to=2025-10-06&timezone=Asia%2FBangkok",
+      "/api/orders/executive/metrics-series?from=2025-10-06&to=2025-10-16&granularity=day&timezone=Asia%2FBangkok",
+      "/api/auth/executive/metrics-series?from=2025-10-06&to=2025-10-16&granularity=day&timezone=Asia%2FBangkok",
+    ]) {
+      expect(paths).toContain(expected);
+    }
+  });
+
+  it("charts a long range by the month, so the line stays readable", async () => {
     mockProviders();
 
     render(<ExecutiveDashboardPage />);
     await screen.findByText("฿70,000");
 
-    // The field is there before "กำหนดเอง" is chosen, after the buttons.
-    const field = screen.getByLabelText("เลือกวันที่");
-    expect(field).toBeVisible();
-    const group = screen.getByRole("radiogroup", { name: "ช่วงเวลา" });
-    expect(
-      group.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "กำหนดเอง" }));
+    // 1 June to 15 October: 137 days, over the 92 that get a point per day.
+    pickRange("01/06/2568", "15/10/2568");
 
-    // Picking a day alone changes nothing yet.
+    expect(
+      await screen.findByText(
+        "ยอดรายเดือน · 1 มิ.ย. 2568 – 15 ต.ค. 2568 (137 วัน)",
+      ),
+    ).toBeVisible();
+    const paths = apiFetch.mock.calls.map(([path]) => path);
+    expect(paths).toContain(
+      "/api/orders/executive/metrics-series?from=2025-06-01&to=2025-10-16&granularity=month&timezone=Asia%2FBangkok",
+    );
+    expect(paths).toContain(
+      "/api/auth/executive/metrics-series?from=2025-06-01&to=2025-10-16&granularity=month&timezone=Asia%2FBangkok",
+    );
+  });
+
+  it("has the date fields waiting beside the buttons and applies them on 'กำหนดเอง'", async () => {
+    mockProviders();
+
+    render(<ExecutiveDashboardPage />);
+    await screen.findByText("฿70,000");
+
+    // The fields are there before "กำหนดเอง" is chosen, after the buttons.
+    const group = screen.getByRole("radiogroup", { name: "ช่วงเวลา" });
+    for (const field of [fromField(), toField()]) {
+      expect(field).toBeVisible();
+      expect(
+        group.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+
+    // Picking days alone changes nothing yet.
     const calls = apiFetch.mock.calls.length;
-    fireEvent.change(field, { target: { value: "16/10/2568" } });
+    pickRange("16/10/2568", "16/10/2568");
     expect(apiFetch.mock.calls.length).toBe(calls);
     expect(screen.queryByText("ยอดขายทุก 1 ชั่วโมง · 16 ต.ค. 2568")).toBeNull();
 
-    // Pressing "กำหนดเอง" shows that day.
+    // Pressing "กำหนดเอง" shows them.
     fireEvent.click(screen.getByRole("radio", { name: "กำหนดเอง" }));
     expect(
       await screen.findByText("ยอดขายทุก 1 ชั่วโมง · 16 ต.ค. 2568"),
@@ -399,31 +572,43 @@ describe("ExecutiveDashboardPage", () => {
       "/api/orders/executive/metrics-series?from=2025-10-16&to=2025-10-17&granularity=hour&timezone=Asia%2FBangkok",
     );
 
-    // While it is chosen, a new day applies straight away.
-    fireEvent.change(field, { target: { value: "17/10/2568" } });
+    // While it is chosen, new days apply straight away.
+    fireEvent.change(fromField(), { target: { value: "17/10/2568" } });
     expect(
       await screen.findByText("ยอดขายทุก 1 ชั่วโมง · 17 ต.ค. 2568"),
     ).toBeVisible();
   });
 
-  it("refuses a future day and keeps the last good one", async () => {
+  it("refuses a future day or a backwards range and keeps the last good one", async () => {
     mockProviders();
 
     render(<ExecutiveDashboardPage />);
     await screen.findByText("฿70,000");
 
     fireEvent.click(screen.getByRole("radio", { name: "กำหนดเอง" }));
-    await screen.findByLabelText("เลือกวันที่");
+    await screen.findByLabelText("ตั้งแต่วันที่");
     const calls = apiFetch.mock.calls.length;
 
-    fireEvent.change(screen.getByLabelText("เลือกวันที่"), {
-      target: { value: "01/01/3542" },
-    });
-
+    fireEvent.change(toField(), { target: { value: "01/01/3542" } });
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "เลือกวันที่ในอนาคตไม่ได้",
     );
-    // Nothing was fetched for the invalid day.
+
+    // An end before the start is refused too.
+    fireEvent.change(fromField(), { target: { value: "16/10/2568" } });
+    fireEvent.change(toField(), { target: { value: "01/10/2568" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "วันที่เริ่มต้นต้องไม่หลังวันที่สิ้นสุด",
+    );
+
+    // A range over a year is refused.
+    fireEvent.change(fromField(), { target: { value: "01/01/2567" } });
+    fireEvent.change(toField(), { target: { value: "15/10/2568" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "เลือกได้ไม่เกิน 366 วัน",
+    );
+
+    // Nothing was fetched for any of them.
     expect(apiFetch.mock.calls.length).toBe(calls);
   });
 
@@ -550,7 +735,7 @@ describe("ExecutiveDashboardPage", () => {
     expect(chart).toHaveAccessibleName(/รายได้แพลตฟอร์ม ฿333/);
   });
 
-  it("switches the whole overview to this year and to the last 7 days", async () => {
+  it("switches the whole overview to this year and back to today", async () => {
     mockProviders();
 
     render(<ExecutiveDashboardPage />);
@@ -570,16 +755,18 @@ describe("ExecutiveDashboardPage", () => {
       `/api/orders/executive/metrics-series?from=${year.trend.from}&to=${year.trend.to}&granularity=month&timezone=Asia%2FBangkok`,
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: "7 วันล่าสุด" }));
+    fireEvent.click(screen.getByRole("radio", { name: "วันนี้" }));
 
-    expect(await screen.findByText("ยอดรายวัน · 7 วันล่าสุด")).toBeVisible();
     expect(
-      screen.getAllByText("เทียบกับ 7 วันก่อนหน้านี้").length,
+      await screen.findByText("ยอดขายทุก 1 ชั่วโมง · วันนี้"),
+    ).toBeVisible();
+    expect(
+      screen.getAllByText("เทียบกับวันเดียวกันสัปดาห์ที่แล้ว").length,
     ).toBeGreaterThan(0);
-    const week = overviewPeriods("week");
+    const today = overviewPeriods("today");
     await waitFor(() =>
       expect(apiFetch.mock.calls.map(([path]) => path)).toContain(
-        `/api/orders/executive/metrics-series?from=${week.trend.from}&to=${week.trend.to}&granularity=day&timezone=Asia%2FBangkok`,
+        `/api/orders/executive/metrics-series?from=${today.trend.from}&to=${today.trend.to}&granularity=hour&timezone=Asia%2FBangkok`,
       ),
     );
   });

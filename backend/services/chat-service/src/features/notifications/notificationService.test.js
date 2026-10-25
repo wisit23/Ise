@@ -158,7 +158,7 @@ test("notificationService unit tests", async (t) => {
   const countUser2 = await notificationService.unreadCount("user-2");
   assert.equal(countUser2, 1);
 
-  // 8. Update in-place across order stages using entityId
+  // 8. Each order stage retains its own notification and unread state.
   const initialOrderNotif = await notificationService.createNotification({
     userId: "seller-1",
     type: "ORDER",
@@ -169,7 +169,7 @@ test("notificationService unit tests", async (t) => {
   });
   assert.equal(initialOrderNotif.title, "ผู้ซื้อชำระเงินแล้ว");
 
-  // Advance stage to shipped: must update the SAME record, not create a new one!
+  // Shipping creates a new record without overwriting payment.
   const shippedNotif = await notificationService.createNotification({
     userId: "seller-1",
     type: "ORDER",
@@ -178,10 +178,11 @@ test("notificationService unit tests", async (t) => {
     link: "/products/p-1",
     entityId: "ORD-1",
   });
-  assert.equal(shippedNotif.id, initialOrderNotif.id);
+  assert.notEqual(shippedNotif.id, initialOrderNotif.id);
+  assert.equal(initialOrderNotif.title, "ผู้ซื้อชำระเงินแล้ว");
   assert.equal(shippedNotif.title, "จัดส่งสินค้าแล้ว");
 
-  // Advance stage to completed: must update the SAME record!
+  // Completion also retains the earlier stages.
   const completedNotif = await notificationService.createNotification({
     userId: "seller-1",
     type: "ORDER",
@@ -190,12 +191,15 @@ test("notificationService unit tests", async (t) => {
     link: "/products/p-1",
     entityId: "ORD-1",
   });
-  assert.equal(completedNotif.id, initialOrderNotif.id);
+  assert.notEqual(completedNotif.id, initialOrderNotif.id);
+  assert.notEqual(completedNotif.id, shippedNotif.id);
+  const stages = await notificationService.listNotifications("seller-1");
+  assert.equal(stages.items.filter((n) => n.entityId === "ORD-1").length, 3);
+  assert.ok(stages.items.filter((n) => n.entityId === "ORD-1").every((n) => !n.read));
+  assert.equal(await notificationService.unreadCount("seller-1"), 4);
   assert.equal(completedNotif.title, "ลูกค้าได้รับสินค้าแล้ว");
 
-  // 9. Status update replacement and unread count:
-  // When an order gets a new status (e.g. paid), it must replace the prior status notification,
-  // and the prior status is considered already read/notified so unread count does NOT combine old + new.
+  // 9. A new status increments unread count independently.
   const priorNotif = await notificationService.createNotification({
     userId: "seller-2",
     type: "ORDER",
@@ -216,12 +220,15 @@ test("notificationService unit tests", async (t) => {
     entityId: "ORD-99",
     metadata: { orderId: "ORD-99", status: "paid" },
   });
-  // Must update the existing notification in-place
-  assert.equal(paidNotif.id, priorNotif.id);
+  assert.notEqual(paidNotif.id, priorNotif.id);
   assert.equal(paidNotif.title, "ผู้ซื้อชำระเงินแล้ว");
-  // Unread count must NOT increase (does not combine old and new statuses together)!
   const unreadAfterPayment = await notificationService.unreadCount("seller-2");
-  assert.equal(unreadAfterPayment, unreadBeforePayment);
+  assert.equal(unreadAfterPayment, unreadBeforePayment + 1);
+  await notificationService.markRead(paidNotif.id, "seller-2");
+  assert.equal(priorNotif.read, false);
+  const unreadStages = await notificationService.listNotifications("seller-2", { unreadOnly: true });
+  assert.ok(unreadStages.items.some((n) => n.id === priorNotif.id));
+  assert.ok(!unreadStages.items.some((n) => n.id === paidNotif.id));
 
   // 10. deleteNotification tests
   // Can delete own notification

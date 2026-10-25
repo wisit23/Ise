@@ -16,9 +16,14 @@ const authService = require("../../services/authService");
 const reportEvidenceStorage = require("./reportEvidenceStorage");
 const chatClient = require("../../services/chatClient");
 
+function reviewIdForReport(report) {
+  return report?.reason?.match(/\[รายงานรีวิว\s*#?([^\]]+)\]/)?.[1]?.trim() || null;
+}
+
 function toPublicUser(user) {
   return {
     id: user.id,
+    ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
@@ -157,6 +162,10 @@ async function createReport({ reporterId, targetId, productId, category, reason,
     throw badRequest("invalid report category");
   }
 
+  const reasonReviewId = reviewIdForReport({ reason: trimmedReason });
+  if (reviewId && reasonReviewId && reviewId !== reasonReviewId) {
+    throw badRequest("รหัสรีวิวในข้อมูลรายงานไม่ตรงกัน");
+  }
   let extractedReviewId = reviewId || null;
   if (!extractedReviewId) {
     const match = trimmedReason.match(/\[รายงานรีวิว\s*#?([^\]]+)\]/);
@@ -168,6 +177,17 @@ async function createReport({ reporterId, targetId, productId, category, reason,
     trimmedReason.includes("[รายงานรีวิว") ||
     trimmedReason.includes("เนื้อหารีวิว")
   );
+  if (isReviewReport) {
+    if (!extractedReviewId) throw badRequest("กรุณาระบุรีวิวที่ต้องการรายงาน");
+    const review = await productModerationClient.getReview(extractedReviewId);
+    if (review.removedAt || review.removed) throw badRequest("รีวิวนี้ถูกนำออกแล้ว");
+    if (review.buyerId !== targetId || (review.productId || null) !== (productId || null)) {
+      throw badRequest("ข้อมูลรีวิว ผู้เขียน หรือสินค้าไม่ตรงกัน");
+    }
+  }
+  const storedReason = isReviewReport && !reasonReviewId
+    ? `[รายงานรีวิว #${extractedReviewId}] ${trimmedReason}`
+    : trimmedReason;
   // Review reports carry their topic in the reason; other reports need a category.
   if (!category && !isReviewReport) throw badRequest("category is required");
 
@@ -246,7 +266,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
         targetId: targetId || null,
         productId: productId || null,
         category: category || null,
-        reason: trimmedReason,
+        reason: storedReason,
         ...(file ? { evidence: { create: { storageKey, fileType: file.mimetype, originalName: file.originalname || "evidence" } } } : {}),
       },
     });
@@ -271,7 +291,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
         userId: targetId,
         type: "REPORT",
         title: "ความคิดเห็นของคุณถูกรายงาน",
-        message: `⚠️ ความคิดเห็น/รีวิวของคุณในสินค้า '${productTitle}' ถูกรายงานและอยู่ระหว่างการตรวจสอบโดยทีมงาน`,
+        message: `⚠️ ความคิดเห็น/รีวิวของคุณในสินค้า '${productTitle}' ถูกรายงานและอยู่ระหว่างการตรวจสอบโดยทีมงาน เหตุผลที่รายงาน: ${report.reason}`,
         link: productId ? `/products/${productId}` : "/orders",
         entityId: `report:review:${reviewId || report.id}`,
         metadata: {
@@ -279,6 +299,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
           targetId,
           productId,
           reviewId: reviewId || null,
+          reportReason: report.reason,
         },
       }).catch(() => {});
     } catch (notifyErr) {
@@ -292,8 +313,10 @@ async function createReport({ reporterId, targetId, productId, category, reason,
 function reportSearchWhere(search) {
   const query = search?.trim();
   if (!query) return {};
+  const referenceCode = require("@reloop/shared").normalizeReferenceCode(query, "RPT");
   return {
     OR: [
+      ...(referenceCode ? [{ referenceCode }] : []),
       { id: { contains: query, mode: "insensitive" } },
       { reporterId: { contains: query, mode: "insensitive" } },
       { targetId: { contains: query, mode: "insensitive" } },
@@ -314,7 +337,7 @@ function reportSearchWhere(search) {
   };
 }
 
-async function listReports({ page, limit, status, search, scope = "all", staffId }, db = prisma) {
+async function listReports({ page, limit, status, search, scope = "all", staffId, type = "ALL" }, db = prisma) {
   const searchWhere = reportSearchWhere(search);
   const where = {};
   if (!["all", "mine", "unassigned", "history"].includes(scope)) {
@@ -324,13 +347,32 @@ async function listReports({ page, limit, status, search, scope = "all", staffId
     if (!staffId) throw badRequest("staffId is required for mine scope");
     where.reviewedBy = staffId;
   }
-  if (scope === "unassigned") where.status = "OPEN";
+  if (scope === "unassigned") where.reviewedBy = null;
+  if (scope === "all" && staffId) {
+    where.AND = [{ OR: [{ reviewedBy: null }, { reviewedBy: staffId }] }];
+  }
   if (status === undefined || status === null) where.status = "OPEN";
   else if (status.trim() === "PENDING") where.status = { in: ["OPEN", "REVIEWED"] };
   else if (status.trim() && status.trim() !== "ALL") where.status = status.trim();
   if (scope === "unassigned") where.status = "OPEN";
   Object.assign(where, searchWhere);
   if (scope === "history") where.status = { in: ["ACTIONED", "DISMISSED"] };
+  if (!["ALL", "USER", "PRODUCT", "COMMENT"].includes(type)) {
+    throw badRequest("invalid report type");
+  }
+  // Existing review reports store their reference in the reason. Keep both
+  // legacy markers so old reports remain in the correct queue without a cutover.
+  const commentWhere = { OR: [
+    { reason: { contains: "[รายงานรีวิว" } },
+    { reason: { contains: "เนื้อหารีวิว" } },
+  ] };
+  if (type !== "ALL") {
+    const typeWhere = type === "COMMENT" ? commentWhere : {
+      NOT: commentWhere,
+      productId: type === "PRODUCT" ? { not: null } : null,
+    };
+    where.AND = [...(where.AND || []), typeWhere];
+  }
   const [items, total] = await Promise.all([
     db.report.findMany({
       where,
@@ -345,7 +387,15 @@ async function listReports({ page, limit, status, search, scope = "all", staffId
     }),
     db.report.count({ where }),
   ]);
-  return { items, total };
+  const completedIds = items.filter((item) => ["ACTIONED", "DISMISSED"].includes(item.status)).map((item) => item.id);
+  const decisions = completedIds.length ? await db.adminAudit.findMany({
+    where: { targetId: { in: completedIds }, action: { startsWith: "REPORT_", not: "REPORT_REVIEWED" } },
+    select: { targetId: true, createdAt: true },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  }) : [];
+  const decidedAt = new Map();
+  for (const decision of decisions) if (!decidedAt.has(decision.targetId)) decidedAt.set(decision.targetId, decision.createdAt);
+  return { items: items.map((item) => ({ ...item, decidedAt: decidedAt.get(item.id) || null })), total };
 }
 
 async function getReportDetail(reportId) {
@@ -392,11 +442,18 @@ async function getReportDetail(reportId) {
         .catch((error) => ({ available: false, error: error.message }))
     : Promise.resolve(null);
 
-  const [decision, target, productDetail, reporterSafety, targetSafety] =
+  const reviewId = reviewIdForReport(report);
+  const reviewPromise = reviewId
+    ? productModerationClient.getReview(reviewId)
+        .then((review) => ({ available: true, review }))
+        .catch((error) => ({ available: false, error: error.message }))
+    : Promise.resolve(null);
+  const [decision, target, productDetail, reviewDetail, reporterSafety, targetSafety] =
     await Promise.all([
       decisionPromise,
       targetPromise,
       productPromise,
+      reviewPromise,
       getUserSafetySummary(report.reporterId),
       report.targetId
         ? getUserSafetySummary(report.targetId)
@@ -419,6 +476,7 @@ async function getReportDetail(reportId) {
     reporter: { ...report.reporter, safetySummary: reporterSafety },
     target: target ? { ...target, safetySummary: targetSafety } : null,
     productDetail,
+    reviewDetail,
     decision: decision
       ? {
           action: report.actionTaken || decision.action.replace(/^REPORT_/, ""),
@@ -475,7 +533,7 @@ async function reviewReport({ reportId, adminId, staffId, requestId }) {
     const report = await tx.report.findUnique({ where: { id: reportId } });
     if (!report) throw notFound("report not found");
     const claimed = await tx.report.updateMany({
-      where: { id: reportId, status: "OPEN" },
+      where: { id: reportId, status: "OPEN", reviewedBy: null },
       data: {
         status: "REVIEWED",
         reviewedAt: new Date(),
@@ -503,6 +561,7 @@ const VALID_DECISIONS = [
   "RESTRICT_BUYER",
   "RESTRICT_SELLER",
   "REMOVE_PRODUCT",
+  "REMOVE_REVIEW",
   "DISMISS",
 ];
 
@@ -510,6 +569,7 @@ const DECISION_LABELS = {
   SUSPEND_USER: "ระงับการใช้งานบัญชีผู้ใช้",
   WARN_USER: "ตักเตือนผู้ใช้",
   REMOVE_PRODUCT: "ลบสินค้าออกจากระบบ",
+  REMOVE_REVIEW: "ลบรีวิวที่ถูกรายงาน",
   DISMISS: "ยกเลิกรายงาน / ไม่พบการกระทำผิด",
 };
 
@@ -580,6 +640,9 @@ async function sendReportDecisionNotifications({ report, decision, reason }) {
       targetMsg = isReviewReport
         ? `เนื้อหา/สินค้าที่เกี่ยวข้องถูกนำออกจากระบบโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`
         : `สินค้า '${productTitle}' ถูกลบออกจากระบบโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`;
+    } else if (decision === "REMOVE_REVIEW") {
+      targetTitle = "รีวิวของคุณถูกลบ";
+      targetMsg = `รีวิวของคุณถูกลบโดยทีม Trust & Safety เนื่องจาก: ${trimmedReason}`;
     } else if (decision === "DISMISS") {
       targetTitle = "ผลการตรวจสอบรายงาน";
       targetMsg = isReviewReport
@@ -679,7 +742,41 @@ async function actionReport({
     throw forbidden("only the staff member who claimed this report can decide it");
   }
 
+  if (decision === "REMOVE_REVIEW") {
+    const reviewId = reviewIdForReport(report);
+    if (!reviewId || !report.targetId) throw badRequest("report has no target review to remove");
+    if (report.status === "ACTIONED" && report.actionTaken === decision) return report;
+    if (report.status !== "REVIEWED") throw conflict("report must be reviewed before it can be actioned");
+    // The owner service commits an idempotent deletion first. A retry can finish
+    // the Auth transaction if the connection is lost between the two commits.
+    const actioned = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM reports WHERE id::text = ${reportId} FOR UPDATE`;
+      const latest = await tx.report.findUnique({ where: { id: reportId } });
+      if (latest?.status === "ACTIONED" && latest.actionTaken === decision) return latest;
+      if (latest?.status !== "REVIEWED" || latest.reviewedBy !== actorId) {
+        throw conflict("report was already actioned or modified");
+      }
+      await productModerationClient.removeReview(reviewId, {
+        reason: trimmedReason, targetId: report.targetId, productId: report.productId, actorId,
+      }, `report:${reportId}:REMOVE_REVIEW`);
+      const claimed = await tx.report.updateMany({
+        where: { id: reportId, status: "REVIEWED", reviewedBy: actorId },
+        data: { status: "ACTIONED", actionTaken: decision },
+      });
+      if (claimed.count !== 1) {
+        const replay = await tx.report.findUnique({ where: { id: reportId } });
+        if (replay?.status === "ACTIONED" && replay.actionTaken === decision) return replay;
+        throw conflict("report was already actioned or modified");
+      }
+      await recordAdminAction({ actorId, action: "REPORT_REMOVE_REVIEW", targetId: reportId, reason: trimmedReason, requestId, tx });
+      return tx.report.findUnique({ where: { id: reportId } });
+    }, { timeout: 15000 });
+    await sendReportDecisionNotifications({ report: actioned, decision, reason: trimmedReason });
+    return actioned;
+  }
+
   if (decision === "REMOVE_PRODUCT") {
+    if (reviewIdForReport(report)) throw badRequest("ไม่สามารถลบสินค้าจากรายงานรีวิว");
     if (!report.productId) {
       throw badRequest("report has no target product to remove");
     }

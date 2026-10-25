@@ -414,6 +414,7 @@ async function seedFixtures({ auth, order, support, chat }) {
         lastName,
         role,
         status: "ACTIVE",
+        emailVerifiedAt: new Date(),
       },
     });
     await auth.userRole.upsert({
@@ -760,8 +761,9 @@ async function createRoom(
   { contextType, contextId, participants, status, messages, messageTime },
 ) {
   const now = messageTime;
-  const room = await chat.conversation.create({
+  const room = await require("@reloop/shared").createWithReferenceCode("CHT", (referenceCode) => chat.conversation.create({
     data: {
+      referenceCode,
       contextType,
       contextId,
       contextKey: `${contextType}:${contextId}`,
@@ -775,7 +777,7 @@ async function createRoom(
         leftAt: null,
       })),
     },
-  });
+  }));
   const saved = [];
   for (const [index, message] of messages.entries()) {
     const createdAt = new Date(

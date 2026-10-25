@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 
 import { useEffect, useState } from "react";
 import Badge from "../../../panel/ui/Badge";
@@ -186,7 +188,7 @@ export default function SupportCaseDetails({
                 ผู้แจ้ง
               </span>
               <p className="font-mono text-xs font-semibold text-slate-800 truncate">
-                {ticket.requesterId}
+                {formatReferenceCode(ticket.requesterId)}
               </p>
             </div>
           </div>
@@ -201,7 +203,7 @@ export default function SupportCaseDetails({
                   คู่กรณี / ร้านค้า
                 </span>
                 <p className="font-mono text-xs font-semibold text-slate-800 truncate">
-                  {ticket.targetId}
+                  {formatReferenceCode(ticket.targetId)}
                 </p>
               </div>
             </div>
@@ -211,7 +213,7 @@ export default function SupportCaseDetails({
             <div className="border-t border-slate-100 pt-2 text-[11px]">
               <span className="text-slate-500">หมายเลขออเดอร์: </span>
               <span className="font-mono font-semibold text-indigo-600">
-                {ticket.orderId}
+                {formatReferenceCode(ticket.orderId)}
               </span>
             </div>
           )}

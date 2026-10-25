@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { matchesReference } from "../../../lib/referenceCodes";
+
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import EmptyState from "../../ui/EmptyState";
 import Modal from "../../ui/Modal";
@@ -12,6 +15,7 @@ import {
   StatusPill,
   baht,
   isOrderDisputed,
+  isSellerDisputeVisible,
 } from "./sellerStatus";
 import { formatOrderId } from "../../../lib/orders";
 import { apiFetch } from "../../../lib/api";
@@ -20,15 +24,17 @@ import { SELLER_NEXT_STEP } from "../../../lib/orderLifecycle";
 
 const ALL_STATUSES = [
   { value: "", label: "ทั้งหมด" },
-  { value: "pending", label: "รอชำระเงิน" },
-  { value: "pending_payment", label: "รอชำระเงิน (PP)" },
+  { value: "pending_payment", label: "รอชำระเงิน" },
   { value: "paid", label: "รอยืนยันคำสั่งซื้อ" },
   { value: "confirmed", label: "ต้องเตรียมสินค้า" },
-  { value: "ready_to_ship", label: "รอขนส่งมารับ" },
-  { value: "shipped", label: "อยู่ระหว่างการขนส่ง" },
+  { value: "ready_to_ship", label: "พร้อมเรียกขนส่ง" },
+  { value: "pickup_in_progress", label: "ขนส่งกำลังเข้ารับสินค้า" },
+  { value: "in_transit", label: "อยู่ระหว่างการขนส่ง" },
   { value: "delivered", label: "ส่งถึงผู้ซื้อแล้ว" },
   { value: "completed", label: "ขายสำเร็จ" },
   { value: "cancelled", label: "ยกเลิกแล้ว" },
+  { value: "payment_expired", label: "หมดเวลาชำระเงิน" },
+  { value: "seller_confirmation_expired", label: "หมดเวลายืนยันคำสั่งซื้อ" },
   { value: "disputed", label: "ข้อพิพาท" },
   { value: "refunded", label: "คืนเงินแล้ว" },
 ];
@@ -54,12 +60,32 @@ export default function SellerOrderTracker({
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState("");
 
-  const statusFilter =
+  const selectedStatusFilter =
     propStatusFilter !== undefined ? propStatusFilter : localStatusFilter;
+  const statusFilter = selectedStatusFilter;
   const setStatusFilter = onStatusFilterChange || setLocalStatusFilter;
-  const [search, setSearch] = useState(
-    highlightOrderId ? highlightOrderId.slice(0, 8) : "",
-  );
+  const highlightedOrder = orders.find((order) => order.id === highlightOrderId);
+  const highlightedReference = highlightedOrder ? formatOrderId(highlightedOrder) : "";
+  const [search, setSearch] = useState(propStatusFilter !== "disputed" ? highlightedReference : "");
+  // The search box is seeded from the highlighted order, so it has to follow
+  // that highlight when it changes or is cleared — otherwise a stale order
+  // number stays in the box and silently empties every other filter (e.g.
+  // the dispute banner's "ดูรายการข้อพิพาท" showed 0 rows).
+  useEffect(() => {
+    if (!highlightOrderId) {
+      setSearch("");
+      return undefined;
+    }
+    setSearch(propStatusFilter !== "disputed" ? highlightedReference : "");
+    if (typeof document === "undefined") return undefined;
+    const timer = setTimeout(() => {
+      const row = document.getElementById(`order-row-${highlightOrderId}`);
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [highlightOrderId, propStatusFilter, highlightedReference]);
 
   async function prepareOrder(order) {
     if (actionLoading) return;
@@ -102,10 +128,9 @@ export default function SellerOrderTracker({
 
   const filtered = orders
     .filter((o) => {
+      if (highlightOrderId && o.id === highlightOrderId) return true;
       if (!statusFilter) return true;
       if (statusFilter === "disputed") return isOrderDisputed(o);
-      if (statusFilter === "pending")
-        return o.status === "pending" || o.status === "pending_payment";
       return o.status === statusFilter;
     })
     .filter((o) => {
@@ -113,12 +138,18 @@ export default function SellerOrderTracker({
       const isAuction = Boolean(o.auctionId) || o.orderType === "AUCTION" || o.id?.startsWith("AUC-");
       return orderTypeFilter === "auction" ? isAuction : !isAuction;
     })
-    .filter(
-      (o) =>
-        !search ||
-        o.productTitle?.toLowerCase().includes(search.toLowerCase()) ||
-        o.id?.toLowerCase().includes(search.toLowerCase()),
-    )
+    .filter((o) => {
+      if (highlightOrderId && o.id === highlightOrderId) return true;
+      if (!search) return true;
+      const needle = search.trim().toLowerCase();
+      // Sellers type the number they see on screen ("ORD-C58A…"), which
+      // for most orders is formatOrderId's display form, not the raw id.
+      return (
+        o.productTitle?.toLowerCase().includes(needle) ||
+        o.id?.toLowerCase().includes(needle) ||
+        matchesReference(o, search)
+      );
+    })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const disputeCount = orders.filter(isOrderDisputed).length;
@@ -133,7 +164,7 @@ export default function SellerOrderTracker({
             </span>
             <span>
               แสดงรายละเอียดคำสั่งซื้อที่เลือก:{" "}
-              <strong className="font-mono">{highlightOrderId}</strong>
+              <strong className="font-mono">{formatOrderId(highlightedOrder || highlightOrderId)}</strong>
             </span>
           </div>
           <button
@@ -288,9 +319,10 @@ export default function SellerOrderTracker({
               {filtered.map((o) => (
                 <tr
                   key={o.id}
+                  id={`order-row-${o.id}`}
                   className={`group transition-colors ${
                     highlightOrderId === o.id
-                      ? "bg-emerald-50/90 font-medium border-l-4 border-emerald-600"
+                      ? "bg-emerald-50/90 font-medium border-l-4 border-emerald-600 shadow-xs ring-1 ring-emerald-500/30"
                       : "hover:bg-slate-50/70"
                   }`}
                 >
@@ -313,9 +345,9 @@ export default function SellerOrderTracker({
                     </div>
                     <p
                       className="truncate font-mono text-[10px] text-slate-400"
-                      title={`Order ID: ${o.id}`}
+                      title={`Order ID: ${formatOrderId(o)}`}
                     >
-                      #{formatOrderId(o.id)}
+                      #{formatOrderId(o)}
                     </p>
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-700">
@@ -330,7 +362,9 @@ export default function SellerOrderTracker({
                   </td>
                   <td className="px-4 py-3 text-center">
                     <StatusPill
-                      label={ORDER_STATUS_LABEL[o.status] || o.status}
+                      label={o.status === "disputed" && !isSellerDisputeVisible(o.dispute)
+                        ? "อยู่ระหว่างตรวจสอบ"
+                        : ORDER_STATUS_LABEL[o.status] || o.status}
                       style={ORDER_STATUS_STYLE[o.status]}
                     />
                   </td>
@@ -385,10 +419,10 @@ export default function SellerOrderTracker({
                           <span>{SELLER_NEXT_STEP.confirmed.label}</span>
                         </button>
                       )}
-                      {o.status === "ready_to_ship" && (
+                      {["ready_to_ship", "pickup_in_progress"].includes(o.status) && (
                         <button
                           type="button"
-                          aria-label="จัดส่งสินค้า"
+                          aria-label={SELLER_NEXT_STEP[o.status].label}
                           onClick={() => {
                             setSelectedOrderForShipping(o);
                             setShippingModalOpen(true);
@@ -399,7 +433,7 @@ export default function SellerOrderTracker({
                           <span className="material-symbols-outlined text-[15px]" aria-hidden="true">
                             local_shipping
                           </span>
-                          <span>จัดส่งสินค้า</span>
+                          <span>{SELLER_NEXT_STEP[o.status].label}</span>
                         </button>
                       )}
                       <button
@@ -429,7 +463,7 @@ export default function SellerOrderTracker({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {o.dispute ? (
+                    {isSellerDisputeVisible(o.dispute) ? (
                       <div className="flex flex-col items-center gap-1">
                         <span
                           className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -470,7 +504,7 @@ export default function SellerOrderTracker({
           }
         }}
         title="ปฏิเสธคำสั่งซื้อและคืนเงินเต็มจำนวน"
-        description={`คำสั่งซื้อ #${selectedOrderForReject?.id ? formatOrderId(selectedOrderForReject.id) : ""}`}
+        description={`คำสั่งซื้อ #${selectedOrderForReject?.id ? formatOrderId(selectedOrderForReject) : ""}`}
         size="md"
         footer={
           <div className="flex w-full items-center justify-end gap-2">

@@ -473,7 +473,7 @@ function createCampaignMetricsService(
   }
 
   async function getCampaignComparison({ campaignIds, from, to }) {
-    validateDateRange(from, to);
+    const { fromDate, toDate } = validateDateRange(from, to);
 
     let ids = campaignIds;
     if (typeof ids === "string") {
@@ -482,17 +482,22 @@ function createCampaignMetricsService(
         .map((s) => s.trim())
         .filter(Boolean);
     }
-    if (!Array.isArray(ids) || ids.length === 0) {
-      // If no campaign IDs given, load all campaigns
-      if (prismaClient && prismaClient.campaign) {
-        const all = await prismaClient.campaign.findMany({
-          select: { id: true },
-          take: 20,
-        });
-        ids = all.map((c) => c.id);
-      } else {
-        ids = [];
-      }
+    if (!Array.isArray(ids)) ids = [];
+
+    if (prismaClient?.campaign?.findMany) {
+      const where = {};
+      if (ids.length > 0) where.id = { in: ids };
+      // Dashboard ranges are half-open [from, to). A campaign appears when
+      // its active window overlaps the selected range by a positive duration.
+      if (fromDate) where.endsAt = { gt: fromDate };
+      if (toDate) where.startsAt = { lt: toDate };
+
+      const campaigns = await prismaClient.campaign.findMany({
+        where,
+        select: { id: true },
+        take: 20,
+      });
+      ids = campaigns.map((campaign) => campaign.id);
     }
 
     const comparisons = [];

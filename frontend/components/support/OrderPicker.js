@@ -1,4 +1,7 @@
 "use client";
+
+import { formatReferenceCode } from "../../lib/referenceCodes";
+
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../lib/api";
 import config from "../../lib/customerServiceConfig";
@@ -83,7 +86,7 @@ export default function OrderPicker({ token, value, onChange }) {
           { value: "", label: "ไม่เกี่ยวข้องกับคำสั่งซื้อ" },
           ...choices.map((order) => ({
             value: order.id,
-            label: `${order.productTitle || "คำสั่งซื้อ"} (${order.id.slice(0, 8)})`,
+            label: `${order.productTitle || "คำสั่งซื้อ"} (${formatReferenceCode(order)})`,
           })),
         ]}
         onChange={(event) => {

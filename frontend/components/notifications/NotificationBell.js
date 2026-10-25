@@ -60,6 +60,11 @@ const TYPE_CONFIG = {
     color: "bg-rose-100 text-rose-700",
     badgeLabel: "ข้อพิพาท",
   },
+  SUPPORT: {
+    icon: "support_agent",
+    color: "bg-sky-100 text-sky-700",
+    badgeLabel: "แจ้งปัญหา",
+  },
   REVIEW: {
     icon: "rate_review",
     color: "bg-teal-100 text-teal-700",
@@ -155,34 +160,9 @@ export default function NotificationBell({ user }) {
         createdAt: newNotif.createdAt || new Date().toISOString(),
       };
 
-      const isSameEntity = (n) => {
-        if (!n) return false;
-        if (newNotif.id && n.id === newNotif.id) return true;
-        const targetIds = [
-          newNotif.entityId,
-          newNotif.metadata?.orderId,
-          newNotif.metadata?.auctionId,
-        ].filter(Boolean);
-        const currentIds = [
-          n.entityId,
-          n.metadata?.orderId,
-          n.metadata?.auctionId,
-        ].filter(Boolean);
-        return targetIds.some((id) => currentIds.includes(id));
-      };
-
-      const existingIndex = prev.findIndex(isSameEntity);
-
-      if (existingIndex >= 0) {
-        const wasRead = prev[existingIndex].read;
-        if (wasRead) {
-          setUnreadCount((c) => c + 1);
-        }
-        const updated = prev.filter(
-          (n, idx) => idx !== existingIndex && !isSameEntity(n),
-        );
-        return [incoming, ...updated];
-      }
+      // Same-ID deliveries are replays, not a new stage. Preserve local read
+      // state; a new status has its own ID even when it shares an order ID.
+      if (newNotif.id && prev.some((n) => n.id === newNotif.id)) return prev;
 
       setUnreadCount((prev) => prev + 1);
       return [incoming, ...prev];
@@ -209,10 +189,12 @@ export default function NotificationBell({ user }) {
     }
     if (open) {
       document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
       document.addEventListener("keydown", handleEscape);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
   }, [open]);
@@ -228,7 +210,10 @@ export default function NotificationBell({ user }) {
       markNotificationRead(token, notif.id).catch(() => {});
     }
 
+    // Status updates (ticket or dispute progress) just open the case page.
     const isReportResult =
+      !notif.metadata?.statusUpdate &&
+      notif.type !== "SUPPORT" && (
       notif.type === "REPORT" ||
       notif.type === "DISPUTE" ||
       Boolean(notif.metadata?.decision) ||
@@ -239,7 +224,7 @@ export default function NotificationBell({ user }) {
           notif.title.includes("รายงาน") ||
           notif.title.includes("ข้อพิพาท") ||
           notif.title.includes("ระงับ") ||
-          notif.title.includes("คำเตือน")));
+          notif.title.includes("คำเตือน"))));
 
     if (isReportResult) {
       setOpen(false);
@@ -248,8 +233,51 @@ export default function NotificationBell({ user }) {
     }
 
     setOpen(false);
-    if (notif.link) {
-      router.push(notif.link);
+    const orderId = notif.metadata?.orderId || notif.entityId;
+    let targetLink = notif.link;
+
+    if (!targetLink && notif.type === "ORDER" && orderId) {
+      targetLink = `/orders?orderId=${orderId}`;
+    }
+
+    if (targetLink) {
+      if (
+        user?.role === "SELLER" &&
+        notif.type === "ORDER" &&
+        orderId &&
+        (targetLink.startsWith("/seller/dashboard") ||
+          targetLink.startsWith("/products/"))
+      ) {
+        targetLink = `/seller/dashboard?section=orders&orderId=${orderId}`;
+      } else if (
+        notif.type === "ORDER" &&
+        orderId &&
+        (targetLink === "/orders" || targetLink.startsWith("/orders?"))
+      ) {
+        targetLink = `/orders?orderId=${orderId}`;
+      }
+
+      if (user?.role === "SELLER" && notif.type === "AUCTION") {
+        const isCancellation =
+          notif.metadata?.event?.includes("cancelled") ||
+          notif.metadata?.event?.includes("rejected") ||
+          notif.title?.includes("ยกเลิก") ||
+          notif.title?.includes("ไม่อนุมัติ") ||
+          notif.title?.includes("ปฏิเสธ");
+        if (isCancellation || targetLink.startsWith("/auctions")) {
+          targetLink = "/seller/auctions";
+        }
+      }
+
+      if (notif.type === "ORDER" && orderId && typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("reloop:open-order-detail", {
+            detail: { orderId },
+          }),
+        );
+      }
+
+      router.push(targetLink);
     }
   }
 
@@ -320,7 +348,7 @@ export default function NotificationBell({ user }) {
           ref={dropdownRef}
           role="dialog"
           aria-label="หน้าต่างการแจ้งเตือน"
-          className="absolute right-0 top-full mt-2 w-[340px] sm:w-[400px] z-dropdown rounded-2xl border border-line bg-white shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+          className="fixed inset-x-3 top-[68px] max-w-[400px] mx-auto sm:inset-auto sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-[400px] sm:max-w-none sm:mx-0 z-dropdown rounded-2xl border border-line bg-white shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150 flex flex-col max-h-[calc(100dvh-80px)]"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-line px-4 py-3 bg-surface-subtle/50">
@@ -374,7 +402,7 @@ export default function NotificationBell({ user }) {
           </div>
 
           {/* Notification List */}
-          <div className="max-h-[380px] overflow-y-auto divide-y divide-line/60">
+          <div className="max-h-[380px] flex-1 overflow-y-auto divide-y divide-line/60">
             {loading && notifications.length === 0 ? (
               <div className="py-12 text-center text-xs text-ink-muted">
                 กำลังโหลดการแจ้งเตือน...
@@ -394,9 +422,14 @@ export default function NotificationBell({ user }) {
               </div>
             ) : (
               displayedNotifications.map((notif) => {
+                const orderReason = notif.type === "ORDER" && typeof notif.metadata?.reason === "string"
+                  ? notif.metadata.reason.trim()
+                  : "";
                 const config =
                   TYPE_CONFIG[notif.type] || TYPE_CONFIG.SYSTEM;
                 const isReportResult =
+                  !notif.metadata?.statusUpdate &&
+                  notif.type !== "SUPPORT" && (
                   notif.type === "REPORT" ||
                   notif.type === "DISPUTE" ||
                   Boolean(notif.metadata?.decision) ||
@@ -407,7 +440,14 @@ export default function NotificationBell({ user }) {
                       notif.title.includes("รายงาน") ||
                       notif.title.includes("ข้อพิพาท") ||
                       notif.title.includes("ระงับ") ||
-                      notif.title.includes("คำเตือน")));
+                      notif.title.includes("คำเตือน"))));
+                const isAuctionCancelled =
+                  notif.type === "AUCTION" &&
+                  (notif.metadata?.event?.includes("cancelled") ||
+                    notif.metadata?.event?.includes("rejected") ||
+                    notif.title?.includes("ยกเลิก") ||
+                    notif.title?.includes("ไม่อนุมัติ") ||
+                    notif.title?.includes("ปฏิเสธ"));
 
                 return (
                   <div
@@ -423,7 +463,9 @@ export default function NotificationBell({ user }) {
                     className={`group relative w-full text-left p-3.5 flex items-start gap-3 transition cursor-pointer hover:bg-surface-subtle/80 ${!notif.read ? "bg-brand-50/30" : "bg-white"}`}
                   >
                     <div
-                      className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center ${config.color}`}
+                      className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center ${
+                        isAuctionCancelled ? "bg-rose-100 text-rose-700" : config.color
+                      }`}
                     >
                       <span className="material-symbols-outlined text-[18px]">
                         {config.icon}
@@ -442,6 +484,12 @@ export default function NotificationBell({ user }) {
                       <p className="mt-0.5 text-xs text-ink-muted line-clamp-2 leading-relaxed">
                         {notif.message}
                       </p>
+                      {orderReason && (
+                        <p className="mt-1.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-md bg-rose-50 px-2 py-1.5 text-xs leading-relaxed text-rose-800">
+                          <span className="font-semibold">เหตุผล: </span>
+                          {orderReason}
+                        </p>
+                      )}
                       {isReportResult ? (
                         <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md hover:bg-amber-100 transition">
                           <span className="material-symbols-outlined text-[13px]">
@@ -449,9 +497,13 @@ export default function NotificationBell({ user }) {
                           </span>
                           <span>ดูรายละเอียดผลการตัดสิน</span>
                         </span>
-                      ) : notif.link ? (
+                      ) : (notif.link || (notif.type === "ORDER" && (notif.metadata?.orderId || notif.entityId))) ? (
                         <span className="mt-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-brand-600">
-                          <span>ดูรายละเอียด</span>
+                          <span>
+                            {user?.role === "SELLER" && isAuctionCancelled
+                              ? "ไปที่หน้าจัดการประมูล"
+                              : "ดูรายละเอียด"}
+                          </span>
                           <span className="material-symbols-outlined text-[13px]">
                             chevron_right
                           </span>

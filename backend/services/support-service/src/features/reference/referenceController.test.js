@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { listCategories, clientConfig } = require("./referenceController");
+const { clientConfig } = require("./referenceController");
+const { listCategories } = require("./referenceService");
 
 test("categories come from active database rows and may contain new codes", async () => {
   for (const delegate of ["ticketCategory", "helpCategory"]) {

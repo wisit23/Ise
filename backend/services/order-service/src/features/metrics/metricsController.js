@@ -1,6 +1,8 @@
 const {
   resolveExecutiveRange,
   allowedValue,
+  searchQuery,
+  listSort,
   metricMeta,
   buildSeriesPeriods,
   fillSeriesGaps,
@@ -103,6 +105,8 @@ async function getDisputes(req, res, next) {
         executiveDisputes.DISPUTE_PRIORITIES,
         "priority",
       ),
+      search: searchQuery(req.query.q),
+      sort: listSort(req.query.sort),
     };
     const { items, total, statusCounts } =
       await executiveDisputes.listExecutiveDisputes({

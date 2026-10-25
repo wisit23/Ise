@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Pagination from "../Pagination";
 import { StarInput, StarDisplay } from "../StarRating";
 import Alert from "../ui/Alert";
 import Button from "../ui/Button";
+import ConfirmDialog from "../ui/ConfirmDialog";
 import EmptyState from "../ui/EmptyState";
 import Skeleton from "../ui/Skeleton";
 import OrderLine from "../OrderLine";
@@ -21,33 +22,38 @@ import { useChatSocketEvent } from "../chat/ChatSocketProvider";
 import {
   autoCompleteAt,
   canOpenDispute,
+  canBuyerCancel,
   disputeDeadline,
 } from "../../lib/orderLifecycle";
 
-const STATUS_LABEL = {
-  pending: "อยู่ในตะกร้า",
-  pending_payment: "อยู่ในตะกร้า",
+export const STATUS_LABEL = {
+  pending_payment: "รอชำระเงิน",
   paid: "ชำระแล้ว รอผู้ขายยืนยัน",
   confirmed: "ผู้ขายกำลังเตรียมสินค้า",
-  ready_to_ship: "รอขนส่งมารับสินค้า",
-  shipped: "อยู่ระหว่างจัดส่ง",
+  ready_to_ship: "เตรียมสินค้าเสร็จแล้ว",
+  pickup_in_progress: "ขนส่งกำลังเข้ารับสินค้า",
+  in_transit: "กำลังจัดส่ง",
   delivered: "สินค้าถึงแล้ว รอยืนยันรับ",
   completed: "สำเร็จ",
   cancelled: "ยกเลิกแล้ว",
+  payment_expired: "หมดเวลาชำระเงิน",
+  seller_confirmation_expired: "หมดเวลายืนยันคำสั่งซื้อ (คืนเงินแล้ว)",
   disputed: "อยู่ระหว่างข้อพิพาท",
   refunded: "คืนเงินแล้ว",
 };
 
 const STATUS_STYLE = {
-  pending: "bg-amber-50 text-amber-700",
   pending_payment: "bg-amber-50 text-amber-700",
   paid: "bg-sky-50 text-sky-700",
   confirmed: "bg-sky-50 text-sky-700",
   ready_to_ship: "bg-sky-50 text-sky-700",
-  shipped: "bg-sky-50 text-sky-700",
+  pickup_in_progress: "bg-sky-50 text-sky-700",
+  in_transit: "bg-sky-50 text-sky-700",
   delivered: "bg-violet-50 text-violet-700",
   completed: "bg-emerald-50 text-emerald-700",
   cancelled: "bg-gray-100 text-gray-500",
+  payment_expired: "bg-gray-100 text-gray-500",
+  seller_confirmation_expired: "bg-gray-100 text-gray-500",
   disputed: "bg-red-50 text-red-700",
   refunded: "bg-emerald-50 text-emerald-700",
 };
@@ -60,18 +66,21 @@ const TABS = [
     status: "pending_payment",
   },
   { key: "paid", label: "รอผู้ขายยืนยัน", status: "paid" },
-  { key: "shipped", label: "กำลังจัดส่ง", status: "shipped" },
+  { key: "pickup_in_progress", label: "ขนส่งกำลังเข้ารับสินค้า", status: "pickup_in_progress" },
+  { key: "in_transit", label: "กำลังจัดส่ง", status: "in_transit" },
   { key: "delivered", label: "รอยืนยันรับ", status: "delivered" },
   { key: "completed", label: "สำเร็จ", status: "completed" },
   { key: "cancelled", label: "ยกเลิก", status: "cancelled" },
+  { key: "payment_expired", label: "หมดเวลาชำระเงิน", status: "payment_expired" },
+  { key: "seller_confirmation_expired", label: "หมดเวลาผู้ขายยืนยัน", status: "seller_confirmation_expired" },
 ];
 
 const PAGE_SIZE = 8;
 
-function ReviewForm({ order, onSubmitted }) {
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState("");
-  const [media, setMedia] = useState([]);
+function ReviewForm({ order, initialReview, onSubmitted, onCancel }) {
+  const [rating, setRating] = useState(initialReview?.rating ?? 5);
+  const [comment, setComment] = useState(initialReview?.comment ?? "");
+  const [media, setMedia] = useState(initialReview?.media ?? []);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -81,10 +90,13 @@ function ReviewForm({ order, onSubmitted }) {
     setSubmitting(true);
     setError("");
     try {
-      const review = await apiFetch("/api/reviews", {
-        method: "POST",
+      const path = initialReview ? `/api/reviews/${initialReview.id}` : "/api/reviews";
+      const review = await apiFetch(path, {
+        method: initialReview ? "PATCH" : "POST",
         token,
-        body: { orderId: order.id, rating, comment, media },
+        body: initialReview
+          ? { rating, comment, media }
+          : { orderId: order.id, rating, comment, media },
       });
       onSubmitted(review);
     } catch (err) {
@@ -121,8 +133,18 @@ function ReviewForm({ order, onSubmitted }) {
         disabled={submitting}
         className="self-start rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
       >
-        {submitting ? "กำลังส่ง..." : "ส่งรีวิว"}
+        {submitting ? "กำลังบันทึก..." : initialReview ? "บันทึกการแก้ไข" : "ส่งรีวิว"}
       </button>
+      {onCancel && (
+        <button
+          type="button"
+          disabled={submitting}
+          onClick={onCancel}
+          className="self-start text-sm text-ink-muted hover:underline disabled:opacity-50"
+        >
+          ยกเลิก
+        </button>
+      )}
     </form>
   );
 }
@@ -132,6 +154,13 @@ export default function MyOrders({
   headingAs: Heading = "h2",
 }) {
   const router = useRouter();
+  let searchParams = null;
+  try {
+    searchParams = typeof useSearchParams === "function" ? useSearchParams() : null;
+  } catch {
+    searchParams = null;
+  }
+  const urlOrderId = searchParams?.get("orderId");
   const [items, setItems] = useState([]);
   const [tab, setTab] = useState(initialTab);
   const [page, setPage] = useState(1);
@@ -143,8 +172,67 @@ export default function MyOrders({
   const [openDisputeFor, setOpenDisputeFor] = useState(null);
   const [justDisputedIds, setJustDisputedIds] = useState(new Set());
   const [confirmingOrderId, setConfirmingOrderId] = useState(null);
-  const [detailOrderId, setDetailOrderId] = useState(null);
-  const detailOrder = items.find((o) => o.id === detailOrderId);
+  const [detailOrderId, setDetailOrderId] = useState(() => urlOrderId || null);
+  const [cancelOrder, setCancelOrder] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+  const detailOrder =
+    items.find((o) => o.id === detailOrderId) ||
+    (detailOrderId ? { id: detailOrderId } : null);
+
+  useEffect(() => {
+    if (urlOrderId) {
+      setDetailOrderId(urlOrderId);
+    }
+  }, [urlOrderId]);
+
+  useEffect(() => {
+    function handleOpenDetail(e) {
+      if (e.detail?.orderId) {
+        setDetailOrderId(e.detail.orderId);
+      }
+    }
+    window.addEventListener("reloop:open-order-detail", handleOpenDetail);
+    return () => {
+      window.removeEventListener("reloop:open-order-detail", handleOpenDetail);
+    };
+  }, []);
+
+  function handleCloseDetail() {
+    setDetailOrderId(null);
+    if (searchParams?.get("orderId")) {
+      // Stay on whichever page hosts the list (/profile?tab=orders).
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("orderId");
+      const qs = params.toString();
+      const path = typeof window !== "undefined" ? window.location.pathname : "/profile";
+      router.replace(qs ? `${path}?${qs}` : path);
+    }
+  }
+
+  async function handleCancelOrder() {
+    if (!cancelOrder || cancelling) return;
+    setCancelling(true);
+    setError("");
+    try {
+      const updated = await apiFetch(`/api/orders/${cancelOrder.id}/status`, {
+        method: "PATCH",
+        token: getAccessToken(),
+        body: { status: "cancelled" },
+      });
+      setItems((prev) => prev.map((o) => o.id === updated.id ? { ...o, ...updated } : o));
+      setCancelOrder(null);
+    } catch (err) {
+      setError(err.message || "ยกเลิกคำสั่งซื้อไม่สำเร็จ");
+      setCancelOrder(null);
+      // The seller may have started preparation while the dialog was open.
+      try {
+        const fresh = await apiFetch(`/api/orders/${cancelOrder.id}`, { token: getAccessToken() });
+        setItems((prev) => prev.map((o) => o.id === fresh.id ? { ...o, ...fresh } : o));
+      } catch { /* Keep the original cancellation error visible. */ }
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   async function handleConfirmReceived(orderId) {
     const token = getAccessToken();
@@ -221,7 +309,7 @@ export default function MyOrders({
 
   const hasPending =
     tab === "all" &&
-    items.some((o) => ["pending", "pending_payment"].includes(o.status));
+    items.some((o) => o.status === "pending_payment");
 
   return (
     <section aria-label="คำสั่งซื้อของฉัน">
@@ -293,10 +381,12 @@ export default function MyOrders({
             >
               <OrderLine
                 order={o}
+                linkThumbnail={false}
                 actions={
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <ContactSellerButton
                       productId={o.productId}
+                      orderId={o.id}
                       className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-panel disabled:cursor-not-allowed disabled:opacity-60"
                     />
                     <button
@@ -306,7 +396,7 @@ export default function MyOrders({
                     >
                       ดูรายละเอียด
                     </button>
-                    {["pending", "pending_payment"].includes(o.status) && (
+                    {o.status === "pending_payment" && (
                       <Link
                         href={
                           o.checkoutSessionId
@@ -320,6 +410,11 @@ export default function MyOrders({
                         </span>
                         ไปชำระเงิน
                       </Link>
+                    )}
+                    {canBuyerCancel(o) && (
+                      <Button variant="secondary" size="sm" onClick={() => setCancelOrder(o)}>
+                        ยกเลิกคำสั่งซื้อ
+                      </Button>
                     )}
                     {o.status === "delivered" && (
                       <button
@@ -342,13 +437,13 @@ export default function MyOrders({
                   <span
                     className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
                       o.auctionId &&
-                      ["pending", "pending_payment"].includes(o.status)
+                      o.status === "pending_payment"
                         ? "bg-amber-100 text-amber-800"
                         : STATUS_STYLE[o.status] || "bg-gray-100 text-gray-600"
                     }`}
                   >
                     {o.auctionId &&
-                    ["pending", "pending_payment"].includes(o.status)
+                    o.status === "pending_payment"
                       ? "ชนะประมูล · รอชำระเงิน"
                       : safetyHold
                         ? "พักเงินเพื่อตรวจสอบ"
@@ -369,7 +464,21 @@ export default function MyOrders({
               {(["delivered", "completed"].includes(o.status) || disputed) && (
                 <div className="flex flex-wrap items-start gap-2 border-t border-line bg-surface-subtle px-4 py-3 [&>form]:w-full">
                   {o.status === "completed" &&
-                    (review ? (
+                    (openReviewFor === o.id ? (
+                      <ReviewForm
+                        key={o.id}
+                        order={o}
+                        initialReview={review}
+                        onCancel={() => setOpenReviewFor(null)}
+                        onSubmitted={(savedReview) => {
+                          setReviewedByOrderId((prev) => ({
+                            ...prev,
+                            [o.id]: savedReview,
+                          }));
+                          setOpenReviewFor(null);
+                        }}
+                      />
+                    ) : review ? (
                       <div className="flex w-full flex-col gap-1 text-sm text-ink-muted">
                         <div className="flex items-center gap-2">
                           <StarDisplay value={review.rating} />
@@ -382,18 +491,16 @@ export default function MyOrders({
                         {review.media && review.media.length > 0 && (
                           <ReviewMediaGallery media={review.media} />
                         )}
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon="edit"
+                          className="self-start"
+                          onClick={() => setOpenReviewFor(o.id)}
+                        >
+                          แก้ไขรีวิว
+                        </Button>
                       </div>
-                    ) : openReviewFor === o.id ? (
-                      <ReviewForm
-                        order={o}
-                        onSubmitted={(review) => {
-                          setReviewedByOrderId((prev) => ({
-                            ...prev,
-                            [o.id]: review,
-                          }));
-                          setOpenReviewFor(null);
-                        }}
-                      />
                     ) : (
                       <Button
                         variant="secondary"
@@ -467,16 +574,36 @@ export default function MyOrders({
         })}
       </ul>
 
+      <ConfirmDialog
+        open={Boolean(cancelOrder)}
+        title="ยกเลิกคำสั่งซื้อนี้?"
+        description={cancelOrder?.status === "paid"
+          ? "ยกเลิกได้ก่อนผู้ขายเริ่มเตรียมสินค้า ระบบจะบันทึกคืนเงินเต็มจำนวนตามระบบชำระเงินจำลอง"
+          : "ยืนยันยกเลิกคำสั่งซื้อก่อนผู้ขายเริ่มเตรียมสินค้า"}
+        confirmLabel="ยืนยันยกเลิกคำสั่งซื้อ"
+        cancelLabel="กลับ"
+        busy={cancelling}
+        onConfirm={handleCancelOrder}
+        onCancel={() => setCancelOrder(null)}
+      />
       <Pagination page={page} totalPages={totalPages} onChange={setPage} />
       {detailOrder && (
         <BuyerOrderDetailModal
           order={detailOrder}
-          statusLabel={STATUS_LABEL[detailOrder.status] || detailOrder.status}
-          onClose={() => setDetailOrderId(null)}
+          statusLabel={
+            detailOrder.status
+              ? STATUS_LABEL[detailOrder.status] || detailOrder.status
+              : ""
+          }
+          onClose={handleCloseDetail}
           onOrderChange={(fresh) =>
-            setItems((prev) =>
-              prev.map((o) => (o.id === fresh.id ? { ...o, ...fresh } : o)),
-            )
+            setItems((prev) => {
+              const exists = prev.some((o) => o.id === fresh.id);
+              if (exists) {
+                return prev.map((o) => (o.id === fresh.id ? { ...o, ...fresh } : o));
+              }
+              return [fresh, ...prev];
+            })
           }
         />
       )}

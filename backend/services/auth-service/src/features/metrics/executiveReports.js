@@ -12,6 +12,7 @@ function toItem(report, targetMap = new Map(), actionMap = {}) {
   const targetInfo = targetMap.get(report.targetId) || {};
   return {
     id: report.id,
+    ...(report.referenceCode ? { referenceCode: report.referenceCode } : {}),
     reason: report.reason,
     status: report.status,
     actionTaken: ["ACTIONED", "DISMISSED"].includes(report.status)
@@ -20,6 +21,9 @@ function toItem(report, targetMap = new Map(), actionMap = {}) {
     actionDetails: actionMap[report.id] || null,
     reportedAt: report.reportedAt.toISOString(),
     targetId: report.targetId,
+    ...(targetInfo.referenceCode
+      ? { targetReferenceCode: targetInfo.referenceCode }
+      : {}),
     targetName: targetInfo.name || null,
     targetShopName: targetInfo.shopName || null,
     targetReportCount: targetInfo.reportCount || 1,
@@ -88,6 +92,7 @@ async function enrichTargets(allTargetIds = []) {
         id: true,
         firstName: true,
         lastName: true,
+        referenceCode: true,
         sellerProfile: { select: { shopName: true } },
       },
     }),
@@ -109,6 +114,7 @@ async function enrichTargets(allTargetIds = []) {
         name: `${u.firstName} ${u.lastName}`.trim(),
         shopName: u.sellerProfile?.shopName || null,
         reportCount: countMap.get(u.id) || 1,
+        referenceCode: u.referenceCode,
       },
     ]),
   );
@@ -131,6 +137,10 @@ async function enrichTargets(allTargetIds = []) {
  * Complaints for the Executive complaints page (CEO-DEC-014), newest first:
  * - `status` narrows the list (default: the open queue; "ALL" for every one)
  * - `range` limits it to complaints reported in [from, to)
+ * - `sort` is "newest" (default) or "oldest", by when it was reported
+ * - `search` finds a complaint by its code, or by the code or the shop or
+ *   person name of who it is about
+ * - `targetId` lists only the complaints about one user or shop
  * - each row names its target (user or shop) and how often it was reported
  * - `anomalySummary` flags targets with at least ANOMALY_THRESHOLD open
  *   complaints (the repeat-complaint warning)
@@ -138,23 +148,22 @@ async function enrichTargets(allTargetIds = []) {
 async function getReportOverview({
   range = null,
   status,
+  search,
+  targetId,
+  sort = "newest",
   limit = DEFAULT_REPORT_LIMIT,
   page = 1,
 } = {}) {
-  const [{ reports, total }, statusGroups, targetGroups] = await Promise.all([
+  const [{ reports, total, statusGroups }, targetGroups] = await Promise.all([
     findReportPage(prisma, {
       range,
       status,
+      search,
+      targetId,
+      sort,
       page,
       limit,
       openStatuses: OPEN_STATUSES,
-    }),
-    prisma.report.groupBy({
-      by: ["status"],
-      ...(range
-        ? { where: { reportedAt: { gte: range.from, lt: range.to } } }
-        : {}),
-      _count: { _all: true },
     }),
     prisma.report.groupBy({
       by: ["targetId"],
@@ -179,7 +188,7 @@ async function getReportOverview({
   ]);
 
   const statusCounts = Object.fromEntries(
-    statusGroups.map((g) => [g.status, g._count._all]),
+    statusGroups.map((g) => [g.status, g.count ?? g._count?._all ?? 0]),
   );
 
   const items = reports.map((r) => toItem(r, targetMap, actionMap));

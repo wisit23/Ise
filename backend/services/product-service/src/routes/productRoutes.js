@@ -24,6 +24,7 @@ router.use(
 // Public browsing (gateway lets these through without a bearer token).
 router.get("/feed", productController.feed);
 router.get("/search", productController.search);
+router.use("/wishlist", require("../features/wishlist/wishlistRoutes"));
 
 // Feature routes must come before "/:id" so Express does not read "videos"/
 // "auctions"/"articles"/"campaigns"/"marketing" as a product id.

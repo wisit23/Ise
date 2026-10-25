@@ -240,7 +240,7 @@ describe("MessageList", () => {
     expect(screen.getByText("การสนทนาเริ่มต้นขึ้นแล้ว")).toBeInTheDocument();
   });
 
-  it("renders a safe auction detail link in the system chat message", () => {
+  it("routes a seller's cancelled auction notification to auction management", () => {
     render(
       <MessageList
         currentUserId="seller-1"
@@ -253,6 +253,7 @@ describe("MessageList", () => {
             createdAt: "2026-10-15T09:00:00.000Z",
             payload: {
               event: "auction.item_cancelled",
+              role: "SELLER",
               actionUrl: "/auctions/item-1",
               actionLabel: "ดูรายละเอียดรายการ",
             },
@@ -262,8 +263,8 @@ describe("MessageList", () => {
     );
 
     expect(
-      screen.getByRole("link", { name: /ดูรายละเอียดรายการ/ }),
-    ).toHaveAttribute("href", "/auctions/item-1");
+      screen.getByRole("link", { name: /จัดการสินค้าประมูล/ }),
+    ).toHaveAttribute("href", "/seller/auctions");
   });
 
   it("does not render an external action URL from a message payload", () => {

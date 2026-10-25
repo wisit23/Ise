@@ -1,0 +1,112 @@
+▶ executive audit log endpoints against real database
+  ✔ rejects unauthenticated requests with 401 (21.152ms)
+  ✔ rejects non-executive roles with 403 (7.1596ms)
+  ✔ records an allowed action, with server-owned wording (69.6705ms)
+  ✔ rejects an unknown action and bad metadata with 400 (16.6966ms)
+  ✔ refuses to record for an account that does not exist (11.4373ms)
+  ✔ queries executive audit logs via GET with pagination (13.7402ms)
+  ✔ refuses malformed audit query filters (14.2017ms)
+✔ executive audit log endpoints against real database (252.8933ms)
+✔ executive report decisions resolve the matching audit and actual actor (798.734ms)
+✔ executive complaints can be listed for a date window (606.7735ms)
+✔ executive complaint feed against a real database (294.9234ms)
+✔ executive seller search pages all sellers including suspended shops (314.9146ms)
+✔ executive user metrics series against a real database (363.7858ms)
+✔ executive user metrics against a real database (238.7673ms)
+[order-service] PLATFORM_FEE_RATE is not set; using the default 0.03. Set it in .env for production.
+✔ executive dispute detail against a real database (300.8572ms)
+[order-service] PLATFORM_FEE_RATE is not set; using the default 0.03. Set it in .env for production.
+Error: auth-service is unreachable
+    at sellerLookup (C:\Programming\Ise\backend\services\order-service\test\executive-disputes.integration.test.js:261:27)
+    at sellerNameSearch.findUserIds (C:\Programming\Ise\backend\services\order-service\test\executive-disputes.integration.test.js:97:41)
+    at Object.listExecutiveDisputes (C:\Programming\Ise\backend\services\order-service\src\features\metrics\executiveDisputes.js:63:51)
+    at getDisputes (C:\Programming\Ise\backend\services\order-service\src\features\metrics\metricsController.js:112:31)
+    at Layer.handle [as handle_request] (C:\Programming\Ise\node_modules\express\lib\router\layer.js:95:5)
+    at next (C:\Programming\Ise\node_modules\express\lib\router\route.js:149:13)
+    at C:\Programming\Ise\backend\shared\src\authMiddleware.js:66:5
+    at Layer.handle [as handle_request] (C:\Programming\Ise\node_modules\express\lib\router\layer.js:95:5)
+    at next (C:\Programming\Ise\node_modules\express\lib\router\route.js:149:13)
+    at requireAuth (C:\Programming\Ise\backend\shared\src\authMiddleware.js:58:3) {
+  status: 502
+}
+✔ executive disputes list against a real database (404.524ms)
+[order-service] PLATFORM_FEE_RATE is not set; using the default 0.03. Set it in .env for production.
+✔ executive first sale against a real database (161.0912ms)
+✔ executive platform metrics series against a real database (194.9236ms)
+✔ executive platform metrics against a real database (173.8427ms)
+[order-service] PLATFORM_FEE_RATE is not set; using the default 0.03. Set it in .env for production.
+✔ internal product sales against a real database (215.7152ms)
+✔ executive catalog metrics against a real database (206.0751ms)
+AppError: order-service returned an error
+    at Object.getProductSales (C:\Programming\Ise\backend\services\product-service\src\features\metrics\orderSalesClient.js:54:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.getCatalogRankings (C:\Programming\Ise\backend\services\product-service\src\features\metrics\topCatalog.js:32:17)
+    at async getTopCatalog (C:\Programming\Ise\backend\services\product-service\src\features\metrics\metricsController.js:33:18) {
+  status: 502
+}
+AppError: order-service returned an invalid response
+    at Object.getProductSales (C:\Programming\Ise\backend\services\product-service\src\features\metrics\orderSalesClient.js:59:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.getCatalogRankings (C:\Programming\Ise\backend\services\product-service\src\features\metrics\topCatalog.js:32:17)
+    at async getTopCatalog (C:\Programming\Ise\backend\services\product-service\src\features\metrics\metricsController.js:33:18) {
+  status: 502
+}
+AppError: order-service returned an invalid response
+    at Object.getProductSales (C:\Programming\Ise\backend\services\product-service\src\features\metrics\orderSalesClient.js:59:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.getCatalogRankings (C:\Programming\Ise\backend\services\product-service\src\features\metrics\topCatalog.js:32:17)
+    at async getTopCatalog (C:\Programming\Ise\backend\services\product-service\src\features\metrics\metricsController.js:33:18) {
+  status: 502
+}
+AppError: order-service is unreachable
+    at Object.getProductSales (C:\Programming\Ise\backend\services\product-service\src\features\metrics\orderSalesClient.js:51:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Object.getCatalogRankings (C:\Programming\Ise\backend\services\product-service\src\features\metrics\topCatalog.js:32:17)
+    at async getTopCatalog (C:\Programming\Ise\backend\services\product-service\src\features\metrics\metricsController.js:33:18) {
+  status: 502
+}
+✔ executive catalog rankings against a real database (273.588ms)
+✔ executive ticket detail against a real database (561.9135ms)
+✔ executive tickets list against a real database (684.0757ms)
+✔ Executive audit uses the proxy-validated IP instead of the raw forwarded header (2.7584ms)
+✔ builds the entry from the allowed facts and writes the wording itself (3.3091ms)
+✔ describes a yearly export (0.6509ms)
+✔ rejects an action that is not on the list (1.3283ms)
+✔ drops metadata keys that are not listed (0.7675ms)
+✔ rejects metadata with a wrong type or out-of-range value (17.3444ms)
+✔ rejects a target id that is not a short slug (1.1888ms)
+✔ still describes the export when the details are missing (0.4477ms)
+[order-service] PLATFORM_FEE_RATE is not set; using the default 0.03. Set it in .env for production.
+✔ executive in-progress metrics count preparation, pickup and transit without legacy shipped (73.7642ms)
+✔ finds the users whose shop or name matches, from auth-service (1.6978ms)
+✔ sends literal search text for the owning service to escape (0.448ms)
+✔ reads every page and shares one deadline across the complete search (0.4045ms)
+✔ refuses a repeated cursor rather than returning an incomplete result (0.7967ms)
+✔ does not ask for a whole reference code, which names a case (0.3913ms)
+✔ says it is unavailable rather than finding nothing (0.7348ms)
+✔ needs the service token (0.3795ms)
+✔ date-only bounds are local midnight in the requested zone (17.6558ms)
+✔ timezone defaults to Asia/Bangkok (0.3603ms)
+✔ full ISO instants are still accepted unchanged (0.2423ms)
+✔ the default range is the current month in the requested zone (0.2989ms)
+✔ invalid zones and dates are rejected with 400 (1.0304ms)
+✔ day series buckets start at local midnight (1.0843ms)
+✔ month series buckets start on the local first of each month (0.5531ms)
+✔ UTC remains available as an explicit zone (0.4353ms)
+✔ DST zones still land on local midnight (0.9828ms)
+✔ rows keyed by local bucket start fill the matching period (0.4286ms)
+✔ day slots start every hour from local 00:00 (1.4618ms)
+✔ day slots are refused unless the endpoint offers them (0.4097ms)
+✔ an executive range must run forwards (1.0434ms)
+✔ a filter value must be one the page offers (0.2173ms)
+✔ a search takes codes, ticket numbers and shop names as plain text (0.192ms)
+✔ a list is newest first unless oldest first is asked for (0.2421ms)
+✔ LIKE characters in a search are escaped so they match themselves (0.1597ms)
+ℹ tests 57
+ℹ suites 0
+ℹ pass 57
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19572.2308

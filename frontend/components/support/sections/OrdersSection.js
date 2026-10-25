@@ -1,8 +1,12 @@
 "use client";
 
+import { formatReferenceCode, formatReferenceText } from "../../../lib/referenceCodes";
+
+
 import { useEffect, useRef, useState } from "react";
 import Modal from "../../ui/Modal";
 import SupportOrderDetails, { orderAmount } from "./orders/SupportOrderDetails";
+import BannedAccountHistory from "./orders/BannedAccountHistory";
 import Badge from "../../panel/ui/Badge";
 import RadioSelect from "../../ui/RadioSelect";
 import ConfirmDialog from "../../ui/ConfirmDialog";
@@ -11,10 +15,10 @@ import { apiFetch } from "../../../lib/api";
 import { ORDER_STATUS_LABEL, REPORT_STATUS_LABEL, safetyActionLabel } from "../../../lib/supportConstants";
 
 const SEARCH_TYPE_OPTIONS = [
-  { value: "orderId", label: "Order ID" },
-  { value: "buyerId", label: "Buyer ID / Email" },
-  { value: "sellerId", label: "Seller / Shop / Email" },
-  { value: "userId", label: "User ID / Email" },
+  { value: "orderId", label: "รหัสคำสั่งซื้อ (Order ID)" },
+  { value: "buyerId", label: "รหัสผู้ซื้อ (Buyer ID / Email)" },
+  { value: "sellerId", label: "รหัสผู้ขาย (Seller ID / Shop Name / Email)" },
+  { value: "userId", label: "รหัสผู้ใช้ทั่วไป (User ID / Email)" },
 ];
 
 const SEARCH_PLACEHOLDERS = {
@@ -79,6 +83,7 @@ export default function OrdersSection({
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [banHistoryRefresh, setBanHistoryRefresh] = useState(0);
   const [error, setError] = useState("");
 
   // Search Results
@@ -105,6 +110,7 @@ export default function OrdersSection({
   const [previousSearch, setPreviousSearch] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const searchRequest = useRef(0);
+  const searchPanel = useRef(null);
 
   async function withPartyNames(orders) {
     const ids = [
@@ -376,6 +382,7 @@ export default function OrdersSection({
         "Trust & Safety Action",
       );
       setPendingAction(null);
+      if (type === "suspend" || type === "restore") setBanHistoryRefresh((key) => key + 1);
       await refreshUserData(targetId);
       await loadSafetyHistory(targetId, "actions", 1);
     } catch (err) {
@@ -450,6 +457,7 @@ export default function OrdersSection({
 
   return (
     <div
+      ref={searchPanel}
       className={`animate-fade-in-up flex flex-col ${
         !searched
           ? "items-center justify-center min-h-[40vh] pt-10 text-center"
@@ -472,7 +480,7 @@ export default function OrdersSection({
             manage_search
           </span>
           <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-            Trust & Safety Search
+            ศูนย์ค้นหาข้อมูล Trust & Safety
           </h2>
           <p className="mt-2 text-sm font-medium text-slate-500 max-w-md mx-auto">
             ค้นหาข้อมูลคำสั่งซื้อ ผู้ซื้อ ผู้ขาย หรือบัญชีผู้ใช้งาน
@@ -622,9 +630,9 @@ export default function OrdersSection({
                       <span className="material-symbols-outlined text-[15px] text-slate-400">
                         badge
                       </span>
-                      ID: {userResult.id}
+                      รหัส: {formatReferenceCode(userResult)}
                       <button
-                        onClick={() => copyToClipboard(userResult.id)}
+                        onClick={() => copyToClipboard(formatReferenceCode(userResult))}
                         className="ml-1 text-slate-400 hover:text-slate-600 inline-flex items-center"
                         title="คัดลอกรหัสผู้ใช้"
                       >
@@ -994,11 +1002,11 @@ export default function OrdersSection({
                               <div>
                                 <p className="font-bold text-slate-800">
                                   {kind === "reports"
-                                    ? `REP-${item.id.slice(0, 6).toUpperCase()} · ${REPORT_STATUS_LABEL[item.status] || item.status}`
+                                    ? `${formatReferenceCode(item)} · ${REPORT_STATUS_LABEL[item.status] || item.status}`
                                     : safetyActionLabel(item.action)}
                                 </p>
                                 <p className="mt-1 text-slate-600">
-                                  {item.reason || "ไม่ระบุเหตุผล"}
+                                  {formatReferenceText(item.reason) || "ไม่ระบุเหตุผล"}
                                 </p>
                                 <p className="mt-1 text-[10px] text-slate-400">
                                   {new Date(
@@ -1008,7 +1016,7 @@ export default function OrdersSection({
                               </div>
                               {reportId && (
                                 <a
-                                  href={`/workspace?section=admin_inbox&reportId=${encodeURIComponent(reportId)}`}
+                                  href={`/workspace?section=reports&reportId=${encodeURIComponent(reportId)}`}
                                   className="shrink-0 font-bold text-emerald-700 hover:underline"
                                 >
                                   เปิดเคสต้นทาง
@@ -1115,7 +1123,7 @@ export default function OrdersSection({
                   >
                     <div className="min-w-0 space-y-1">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <span className="break-words text-sm font-bold text-slate-900" title={`รหัสคำสั่งซื้อ: ${order.id}`}>
+                        <span className="break-words text-sm font-bold text-slate-900" title={`รหัสคำสั่งซื้อ: ${formatReferenceCode(order)}`}>
                           {order.productTitle}
                         </span>
                         <Badge
@@ -1127,11 +1135,11 @@ export default function OrdersSection({
                       </div>
                       <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
                         <span>
-                          ผู้ซื้อ: {order.buyer?.name || order.buyerId}
+                          ผู้ซื้อ: {order.buyer?.name || formatReferenceCode(order.buyerId)}
                         </span>
                         <span>•</span>
                         <span>
-                          ผู้ขาย: {order.seller?.name || order.sellerId}
+                          ผู้ขาย: {order.seller?.name || formatReferenceCode(order.sellerId)}
                         </span>
                       </div>
                     </div>
@@ -1217,7 +1225,7 @@ export default function OrdersSection({
                 {/* Header row */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-3">
-                    <span className="break-words text-sm font-black text-slate-900" title={`รหัสคำสั่งซื้อ: ${order.id}`}>
+                    <span className="break-words text-sm font-black text-slate-900" title={`รหัสคำสั่งซื้อ: ${formatReferenceCode(order)}`}>
                       {order.productTitle}
                     </span>
                     <Badge
@@ -1254,7 +1262,7 @@ export default function OrdersSection({
                         {order.buyer?.name || "ไม่ระบุชื่อ"}
                       </span>
                       <span className="font-mono text-[11px] text-slate-500 block truncate max-w-[200px]">
-                        {order.buyerId}
+                        {formatReferenceCode(order.buyerId)}
                       </span>
                     </div>
                     <button
@@ -1281,7 +1289,7 @@ export default function OrdersSection({
                         {order.seller?.name || "ไม่ระบุชื่อ"}
                       </span>
                       <span className="font-mono text-[11px] text-slate-500 block truncate max-w-[200px]">
-                        {order.sellerId}
+                        {formatReferenceCode(order.sellerId)}
                       </span>
                     </div>
                     <button
@@ -1303,6 +1311,11 @@ export default function OrdersSection({
           </div>
         </div>
       )}
+
+      {canModerate && <BannedAccountHistory token={token} refreshKey={banHistoryRefresh} onOpenAccount={(id) => {
+        handleQuickUserSearch("userId", id);
+        searchPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      }} />}
 
       {/* Moderation Confirmation Dialog */}
       <Modal

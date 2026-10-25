@@ -3,17 +3,48 @@ const assert = require("node:assert/strict");
 
 const { createProductVideoRepository } = require("./productVideoRepository");
 
+test("targeted feed lookup still requires an available, unmoderated product", async () => {
+  const where = {
+    id: "target-clip",
+    product: { status: "available", moderatedAt: null },
+  };
+  const repository = createProductVideoRepository({
+    productVideo: {
+      findMany: async (query) => {
+        assert.deepEqual(query.where, where);
+        return [];
+      },
+      count: async (query) => {
+        assert.deepEqual(query.where, where);
+        return 0;
+      },
+    },
+  });
+  assert.deepEqual(
+    await repository.listAvailable({
+      skip: 0,
+      take: 1,
+      videoId: "target-clip",
+    }),
+    { items: [], total: 0 },
+  );
+});
+
 test("listAvailable queries clips for available products only and sets chosen: false for guest", async () => {
   const prisma = {
     productVideo: {
       findMany: async (query) => {
-        assert.deepEqual(query.where, { product: { status: "available", moderatedAt: null } });
+        assert.deepEqual(query.where, {
+          product: { status: "available", moderatedAt: null },
+        });
         assert.equal(query.skip, 20);
         assert.equal(query.take, 10);
         return [{ id: "video-1" }];
       },
       count: async (query) => {
-        assert.deepEqual(query.where, { product: { status: "available", moderatedAt:null } });
+        assert.deepEqual(query.where, {
+          product: { status: "available", moderatedAt: null },
+        });
         return 1;
       },
     },
@@ -32,7 +63,9 @@ test("listAvailable attaches chosen flag for authenticated userId and does not l
   const prisma = {
     productVideo: {
       findMany: async (query) => {
-        assert.deepEqual(query.where, { product: { status: "available", moderatedAt:null } });
+        assert.deepEqual(query.where, {
+          product: { status: "available", moderatedAt: null },
+        });
         assert.deepEqual(query.include.choices, {
           where: { userId: "buyer-42" },
           select: { id: true },

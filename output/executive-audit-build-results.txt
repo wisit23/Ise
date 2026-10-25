@@ -1,0 +1,78 @@
+
+> @reloop/frontend@0.1.0 build
+> next build
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Programming\Ise\package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * C:\Programming\Ise\frontend\package-lock.json
+
+   ▲ Next.js 15.5.22
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 10.2s
+   Linting and checking validity of types ...
+
+ ⚠ The Next.js plugin was not detected in your ESLint configuration. See https://nextjs.org/docs/app/api-reference/config/eslint#migrating-existing-config
+   Collecting page data ...
+   Generating static pages (0/32) ...
+   Generating static pages (8/32) 
+   Generating static pages (16/32) 
+   Generating static pages (24/32) 
+ ✓ Generating static pages (32/32)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    10.3 kB         152 kB
+├ ○ /_not-found                            998 B         103 kB
+├ ○ /admin                                 132 B         102 kB
+├ ƒ /admin/disputes/[id]                 4.16 kB         141 kB
+├ ○ /articles                             4.7 kB         142 kB
+├ ƒ /articles/[id]                        4.8 kB         142 kB
+├ ○ /auctions                            2.86 kB         140 kB
+├ ƒ /auctions/[id]                       6.85 kB         144 kB
+├ ƒ /auctions/rounds/[roundId]           4.08 kB         141 kB
+├ ○ /campaigns                            6.4 kB         143 kB
+├ ○ /cart                                5.71 kB         143 kB
+├ ○ /chat                                1.35 kB         142 kB
+├ ƒ /chat/[id]                           7.58 kB         157 kB
+├ ○ /checkout                            9.19 kB         146 kB
+├ ○ /executive                           24.9 kB         166 kB
+├ ○ /forgot-password                     1.96 kB         118 kB
+├ ○ /help                                3.66 kB         141 kB
+├ ○ /login                                 139 B         119 kB
+├ ○ /marketing                           62.1 kB         203 kB
+├ ƒ /orders                                132 B         102 kB
+├ ƒ /payment/[id]                        14.8 kB         152 kB
+├ ○ /products                            5.87 kB         151 kB
+├ ƒ /products/[id]                       10.1 kB         167 kB
+├ ƒ /products/[id]/edit                  4.51 kB         149 kB
+├ ○ /profile                             22.8 kB         167 kB
+├ ○ /register                              139 B         119 kB
+├ ○ /reset-password                      1.96 kB         118 kB
+├ ○ /sell                                 2.9 kB         147 kB
+├ ○ /seller/auctions                     7.13 kB         144 kB
+├ ○ /seller/auctions/submit              4.67 kB         149 kB
+├ ○ /seller/dashboard                    24.6 kB         192 kB
+├ ○ /seller/onboarding                   11.2 kB         148 kB
+├ ○ /seller/videos/new                   4.32 kB         145 kB
+├ ƒ /store/[sellerId]                      309 B         159 kB
+├ ƒ /support/cases/[id]                  8.99 kB         158 kB
+├ ○ /support/tickets                     4.76 kB         146 kB
+├ ƒ /support/tickets/[id]                7.43 kB         157 kB
+├ ○ /swipe                               10.3 kB         121 kB
+├ ○ /verify-email                        1.53 kB         118 kB
+├ ○ /wishlist                            1.64 kB         143 kB
+└ ○ /workspace                           86.3 kB         239 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/3131-ddaa2b382e8314b7.js      45.5 kB
+  ├ chunks/c7879cf7-ce6cc72fe8fad416.js  54.2 kB
+  └ other shared chunks (total)          2.12 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

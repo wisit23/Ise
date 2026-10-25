@@ -70,6 +70,7 @@ function toTicket(row) {
         ? assignments[0].assigneeId
         : null,
     conversationId: chatLink?.conversationId ?? null,
+    assignedAt: assignments[0]?.assignedAt ?? null,
     slaDueAt: pending[0]?.dueAt ?? resolution?.dueAt ?? response?.dueAt ?? null,
     firstResponseAt: response?.achievedAt ?? null,
     resolvedAt: latest("RESOLVED")?.createdAt ?? null,

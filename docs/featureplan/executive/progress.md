@@ -1,5 +1,19 @@
 # Executive Feature Progress
 
+## 2026-10-25 — Continued scoped production audit
+
+แก้ผลค้นชื่อร้านที่ถูกจำกัด 100 บัญชีด้วย API เฉพาะ Executive แบบ cursor, timeout ฝั่ง CEO, pagination recovery, report missing/malformed buckets, status-count snapshot และ audit IP รายละเอียดและข้อจำกัดการรับรองอยู่ใน [`production-audit-2026-10-25.md`](production-audit-2026-10-25.md) สถานะ CEO-004 และขอบเขต CEO-005 เดิมไม่เปลี่ยน ยังไม่มี deployment ใหม่จาก audit นี้
+
+## 2026-10-25 — Final production audit, status counts sync, and executiveDates refactor
+
+- ตรวจสอบทั้งระบบ Executive (CEO) พบและแก้ไข:
+  1. ตัวเลขบนปุ่มสถานะในหน้าข้อร้องเรียน (`reportSearch.js` & `executiveReports.js`) อัปเดตตรงตามคำค้น `q` และ `targetId`
+  2. ลบ dead code `usersGranularity` ใน `CUSTOM_MODE`
+  3. แยก `frontend/lib/executiveDates.js` จาก `executive.js` ลดความซับซ้อนของไฟล์และคงความเข้ากันได้ 100%
+  4. แก้ date fixture collision ใน backend integration test ให้รันแบบ parallel ได้สมบูรณ์
+  5. Stage ไฟล์ใหม่ `sellerNameSearch.js`, `sellerNameSearch.test.js`, และ `executiveDates.js`
+- ผลการรันเทสล่าสุด: Frontend 17 suites / 223 tests ผ่าน 100%, Backend unit/integration tests ผ่าน 100% บน PostgreSQL
+
 ## 2026-10-10 — Pre-Git recheck
 
 แก้ last-page recovery และ safe target/actor lookup พร้อม regression checks.
@@ -57,10 +71,11 @@ awaiting Reviewer sign-off
   `meta.{definitionVersion,timezone,from,to}` identical across all three owners.
 - **`CEO-002` — dashboard.** `/executive` composes the three providers with
   `Promise.allSettled`; a provider that fails renders "ไม่พร้อมใช้งาน", never a zero.
-  Executives are redirected to `/executive` on login (`UR-27`). Period buttons: 7 วันล่าสุด
-  (default), เดือนนี้, ปีนี้ and กำหนดเอง, a date picker (วว/ดด/ปปปป, พ.ศ.) always shown on
-  the right; a chosen day is drawn by hour, 00:00–23:00 Bangkok time (order-service `hour`
-  series, CEO-DEC-013). Sales split into buy-now and auction; platform revenue uses
+  Executives are redirected to `/executive` on login (`UR-27`). Period buttons: วันนี้
+  (default, by the hour up to now, against the same weekday last week up to the same time), เดือนนี้, ปีนี้ and กำหนดเอง, with two
+  date pickers (ตั้งแต่ / ถึง, วว/ดด/ปปปป, พ.ศ.) always shown on the right; a custom range is
+  drawn by the hour for one day, by the day up to 92 days, by the month beyond (order-service
+  `hour` series, CEO-DEC-013, CEO-DEC-018). Sales split into buy-now and auction; platform revenue uses
   `PLATFORM_FEE_RATE` from order-service (`meta.platformFeeRate`), not a frontend constant.
   Order-status and popular-category donuts; the trend chart has a rounded left axis.
 - **`CEO-003` — rankings.** `GET /api/products/executive/top-catalog` returns categories and

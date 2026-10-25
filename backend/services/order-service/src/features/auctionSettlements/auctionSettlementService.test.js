@@ -6,7 +6,7 @@ const {
 
 const NOW = new Date("2026-10-16T12:00:00.000Z");
 
-test("TC_AUC10: expired winner is cancelled and the next distinct bidder receives a fresh 24-hour deadline", async () => {
+test("TC_AUC10: expired winner becomes payment_expired and the next distinct bidder receives a fresh 24-hour deadline", async () => {
   const calls = [];
   const due = {
     id: "order-1",
@@ -18,7 +18,7 @@ test("TC_AUC10: expired winner is cancelled and the next distinct bidder receive
   };
   const orders = {
     findAuctionOrdersDueForSettlement: async () => [due],
-    claimExpiredAuctionOrder: async () => ({ ...due, status: "cancelled", version: 2 }),
+    claimExpiredAuctionOrder: async () => ({ ...due, status: "payment_expired", version: 2 }),
     finalizeExpiredAuctionOrder: async (input) => {
       calls.push(input);
       return { ...due, status: "cancelled", paymentDeadlineAt: null, version: 3 };
@@ -42,7 +42,11 @@ test("TC_AUC10: expired winner is cancelled and the next distinct bidder receive
       };
     },
   };
-  const service = createAuctionSettlementService({ orders, products, now: () => NOW });
+  const notices = [];
+  const chat = {
+    notifyOrderStatusChanged: async (order, status) => notices.push([status, order.buyerId]),
+  };
+  const service = createAuctionSettlementService({ orders, products, chat, now: () => NOW });
 
   const result = await service.expireDue({ at: NOW });
 
@@ -59,6 +63,7 @@ test("TC_AUC10: expired winner is cancelled and the next distinct bidder receive
       paymentDeadlineAt: new Date("2026-10-17T12:00:00.000Z"),
     },
   });
+  assert.deepEqual(notices, [["payment_expired", "buyer-a"]]);
 });
 
 test("TC_AUC10: exhausted ranking releases the product and permanently closes settlement", async () => {

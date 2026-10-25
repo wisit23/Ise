@@ -1,17 +1,11 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import NavBar from "../../components/NavBar";
-import Footer from "../../components/Footer";
-import MyOrders from "../../components/orders/MyOrders";
-
-export default function OrdersPage() {
-  return (
-    <main className="flex min-h-screen flex-col bg-gray-50">
-      <NavBar />
-      <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
-        <MyOrders headingAs="h1" />
-      </div>
-      <Footer />
-    </main>
-  );
+// Orders live under the profile's orders tab. Keep ?orderId= so links from
+// notifications still open that order's detail.
+export default async function OrdersPage({ searchParams }) {
+  const query = (await searchParams) || {};
+  const params = new URLSearchParams({ tab: "orders" });
+  const orderId = Array.isArray(query.orderId) ? query.orderId[0] : query.orderId;
+  if (orderId) params.set("orderId", orderId);
+  redirect(`/profile?${params.toString()}`);
 }

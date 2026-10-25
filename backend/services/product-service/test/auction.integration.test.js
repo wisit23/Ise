@@ -346,19 +346,32 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
         create: { name },
       });
     }
-    const round = await auctionService.createRound({
+    // createRound refuses a submission window that already started, so create
+    // it starting a minute from now and then backdate it to the wanted window.
+    const backdate = subStartsInMs < 60_000;
+    const created = await auctionService.createRound({
       user: { id: "marketing-auction-lead-01", role: "MARKETING" },
       input: {
         title: `Test Round ${now}`,
         categories,
+        maxItems: 50,
+        submissionStartsAt: new Date(now + (backdate ? 60_000 : subStartsInMs)),
+        submissionEndsAt: new Date(now + Math.max(subEndsInMs, backdate ? 120_000 : subEndsInMs)),
+        auctionStartsAt: new Date(now + Math.max(aucStartsInMs, backdate ? 180_000 : aucStartsInMs)),
+        auctionEndsAt: new Date(now + Math.max(aucEndsInMs, backdate ? 240_000 : aucEndsInMs)),
+      },
+    });
+    createdRoundIds.push(created.id);
+    if (!backdate) return created;
+    return prisma.auctionRound.update({
+      where: { id: created.id },
+      data: {
         submissionStartsAt: new Date(now + subStartsInMs),
         submissionEndsAt: new Date(now + subEndsInMs),
         auctionStartsAt: new Date(now + aucStartsInMs),
         auctionEndsAt: new Date(now + aucEndsInMs),
       },
     });
-    createdRoundIds.push(round.id);
-    return round;
   }
 
   await t.test(
@@ -1992,7 +2005,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
       assert.equal(bid2Res.status, 201);
       createdBidIds.push(bid2Res.body.id);
 
-      // Verify GET /auctions/rounds/:roundId/items returns both open Item 2 and cancelled Item 1
+      // The public round list shows only live items: open Item 2, not cancelled Item 1
       const roundItemsRes = await request(app).get(
         `/auctions/rounds/${round.id}/items`,
       );
@@ -2000,7 +2013,7 @@ test("Auction Core, Concurrency, Soft Close & BullMQ Integration Suite", async (
       const returnedStatuses = Object.fromEntries(
         roundItemsRes.body.items.map((i) => [i.id, i.status]),
       );
-      assert.equal(returnedStatuses[sub1.body.id], "cancelled");
+      assert.equal(returnedStatuses[sub1.body.id], undefined);
       assert.equal(returnedStatuses[sub2.body.id], "open");
     },
   );

@@ -295,6 +295,7 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
           name: "Audit Test Campaign",
           discountType: "FIXED",
           discountValue: 100,
+          minOrderPrice: 1000,
           startsAt: new Date(Date.now() + 86400000).toISOString(),
           endsAt: new Date(Date.now() + 864000000).toISOString(),
         });
@@ -399,7 +400,8 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
       // Step F: End campaign -> CAMPAIGN_END
       const endRes = await request(app)
         .post(`/campaigns/${campaignId1}/end`)
-        .set("Authorization", `Bearer ${marketingToken}`);
+        .set("Authorization", `Bearer ${marketingToken}`)
+        .send({ reason: "จบแคมเปญทดสอบ" });
       assert.equal(endRes.status, 200);
 
       const endAudit = await prisma.marketingAuditLog.findFirst({
@@ -423,6 +425,7 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
           name: "Reject Test Campaign",
           discountType: "FIXED",
           discountValue: 50,
+          minOrderPrice: 500,
           startsAt: new Date(Date.now() + 86400000).toISOString(),
           endsAt: new Date(Date.now() + 864000000).toISOString(),
         });
@@ -484,6 +487,7 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
           name: "Auto Expire Campaign",
           discountType: "FIXED",
           discountValue: 100,
+          minOrderPrice: 1000,
           startsAt: new Date(Date.now() - 7200000),
           endsAt: new Date(Date.now() - 1000), // Expired 1s ago
           status: "published",
@@ -665,6 +669,7 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
                 name: "Doomed Campaign",
                 discountType: "FIXED",
                 discountValue: 100,
+                minOrderPrice: 1000,
                 startsAt: new Date(Date.now() + 86400000),
                 endsAt: new Date(Date.now() + 864000000),
                 status: "draft",

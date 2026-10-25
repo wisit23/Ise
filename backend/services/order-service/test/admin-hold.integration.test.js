@@ -65,7 +65,7 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
       originalAmount: 1200,
       ordersAmount: 1200,
       orderType: "BUY_NOW",
-      status: "shipped",
+      status: "in_transit",
     },
   });
   const dispute = await prisma.disputeCase.create({
@@ -134,7 +134,7 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
     assert.equal(holdRes.status, 200);
     assert.equal(holdRes.body.paymentSimulationStatus, "ON_HOLD");
     assert.equal(holdRes.body.status, "disputed");
-    assert.equal(holdRes.body.preDisputeStatus, "shipped");
+    assert.equal(holdRes.body.preDisputeStatus, "in_transit");
 
     // Duplicate hold on an already-held order must conflict (this doubles as
     // the "CS decision conflict" case — a second actor cannot silently
@@ -160,7 +160,7 @@ test("dispute hold/release enforce permission, version and single-hold rules", a
       .send({ reason: "resolved", version: holdRes.body.version });
     assert.equal(releaseRes.status, 200);
     assert.equal(releaseRes.body.paymentSimulationStatus, "RELEASE_PENDING");
-    assert.equal(releaseRes.body.status, "shipped");
+    assert.equal(releaseRes.body.status, "in_transit");
     assert.equal(releaseRes.body.preDisputeStatus, null);
 
     const holdAudits = await prisma.orderLog.findMany({

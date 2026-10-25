@@ -37,10 +37,11 @@ test("round capacity uses real PostgreSQL locks for both submission flows", asyn
     await prisma.$disconnect();
   });
   const createRound = async maxItems => {
-    const round = await service.createRound({ user: marketing, input: { title: marker, maxItems,
-      submissionStartsAt: at(-60), submissionEndsAt: at(60), auctionStartsAt: at(120), auctionEndsAt: at(180) } });
-    roundIds.push(round.id);
-    return round;
+    // createRound refuses a past submission start; create it ahead, then backdate.
+    const created = await service.createRound({ user: marketing, input: { title: marker, maxItems,
+      submissionStartsAt: at(1), submissionEndsAt: at(60), auctionStartsAt: at(120), auctionEndsAt: at(180) } });
+    roundIds.push(created.id);
+    return prisma.auctionRound.update({ where: { id: created.id }, data: { submissionStartsAt: at(-60) } });
   };
   for (let index = 0; index < 4; index++) {
     const product = await prisma.product.create({ data: { title: `${marker}-${index}`, sellerId: marker,

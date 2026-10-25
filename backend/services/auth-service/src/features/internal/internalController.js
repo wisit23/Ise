@@ -22,7 +22,8 @@ async function eligibleStaff(req, res, next) {
     if (!Array.isArray(excludeIds) || excludeIds.length > 20 || excludeIds.some(id => typeof id !== 'string' || !id || id.length > 128)) throw badRequest('invalid excluded staff');
     const where = { status:'ACTIVE', AND:[{ OR:[{ roles:{none:{}},role:{in:roles} },{ roles:{some:{role:{in:roles}}} }] }] };
     if (excludeIds.length) where.AND.push({id:{notIn:excludeIds}});
-    if(q) where.AND.push({OR:[{firstName:{contains:q,mode:'insensitive'}},{id:{contains:q,mode:'insensitive'}}]});
+    const staffReference = require('@reloop/shared').normalizeReferenceCode(q, 'USR');
+    if(q) where.AND.push({OR:[...(staffReference ? [{referenceCode:staffReference}] : []),{firstName:{contains:q,mode:'insensitive'}},{id:{contains:q,mode:'insensitive'}}]});
     const [rows,total] = await Promise.all([prisma.user.findMany({where,skip:pagination.skip,take:pagination.take,orderBy:[{firstName:'asc'},{id:'asc'}],select:{id:true,firstName:true,role:true,roles:{select:{role:true}}}}),prisma.user.count({where})]);
     res.json(paginatedResponse(rows.map(row=>({id:row.id,displayName:row.firstName,roles:[...new Set(row.roles.length ? row.roles.map(item=>item.role) : [row.role])].filter(role=>allowed.includes(role))})),total,pagination));
   } catch(err) { next(err); }
@@ -59,6 +60,7 @@ async function searchUsers(req, res, next) {
     const prisma = require("../../models/prismaClient");
 
     const orConditions = [
+      ...(require("@reloop/shared").normalizeReferenceCode(q, "USR") ? [{ referenceCode: require("@reloop/shared").normalizeReferenceCode(q, "USR") }] : []),
       { id: { contains: q, mode: "insensitive" } },
       { firstName: { contains: q, mode: "insensitive" } },
       { lastName: { contains: q, mode: "insensitive" } },

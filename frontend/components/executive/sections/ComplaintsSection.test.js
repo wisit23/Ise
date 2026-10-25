@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -125,6 +126,43 @@ function pick(name, option) {
 }
 
 describe("ComplaintsSection", () => {
+  it("returns to the last available page when the queue shrinks", async () => {
+    let shrunk = false;
+    serve({
+      "/api/support/executive/tickets": async (path) => {
+        const page = Number(
+          new URL(path, "http://test.local").searchParams.get("page"),
+        );
+        const response = listAnswer(shrunk ? [] : [TICKET], TICKET_OPTIONS);
+        response.total = shrunk ? 1 : 21;
+        response.totalPages = shrunk ? 1 : 2;
+        response.page = page;
+        if (page === 2) {
+          shrunk = true;
+          response.items = [];
+          response.total = 1;
+          response.totalPages = 1;
+        } else if (shrunk) {
+          response.items = [TICKET];
+        }
+        return response;
+      },
+    });
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText(TICKET.subject);
+    pick("ประเภทเรื่อง", "Ticket");
+    await screen.findByRole("button", { name: "ถัดไป" });
+    fireEvent.click(screen.getByRole("button", { name: "ถัดไป" }));
+    await waitFor(() =>
+      expect(pathsFor("/tickets").some((path) => path.includes("page=2"))).toBe(
+        true,
+      ),
+    );
+    await waitFor(() =>
+      expect(pathsFor("/tickets").at(-1)).toContain("page=1"),
+    );
+    expect(await screen.findByText(TICKET.subject)).toBeVisible();
+  });
   beforeEach(() => {
     apiFetch.mockReset();
     jest.useFakeTimers({ doNotFake: ["setTimeout", "queueMicrotask"] });
@@ -156,6 +194,74 @@ describe("ComplaintsSection", () => {
     expect(rows[1]).toContain("กระเป๋าขาด");
     expect(rows[2]).toContain("ร้านไม่ส่งของ");
     expect(screen.getByText("3 รายการ")).toBeVisible();
+  });
+
+  it("searches every kind by what is typed once typing pauses", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    const box = screen.getByLabelText("ค้นหาด้วยรหัส");
+    fireEvent.change(box, { target: { value: " rpt-8ax4 " } });
+    // Let the typing pause pass inside act, so the page has applied it.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+
+    // Sent as typed (trimmed), to all three services, after the pause.
+    await waitFor(
+      () =>
+        expect(pathsFor("/api/auth/executive/reports").at(-1)).toContain(
+          "q=rpt-8ax4",
+        ),
+      { timeout: 3000 },
+    );
+    expect(pathsFor("/api/support/executive/tickets").at(-1)).toContain(
+      "q=rpt-8ax4",
+    );
+    expect(pathsFor("/api/orders/executive/disputes").at(-1)).toContain(
+      "q=rpt-8ax4",
+    );
+
+    // Picking one kind keeps the search.
+    pick("ประเภทเรื่อง", "Ticket");
+    await waitFor(
+      () =>
+        expect(pathsFor("/api/support/executive/tickets").at(-1)).toContain(
+          "q=rpt-8ax4",
+        ),
+      { timeout: 3000 },
+    );
+  });
+
+  it("searches by a shop's name, in Thai, exactly as typed", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    const box = screen.getByLabelText("ค้นหาด้วยรหัส");
+    fireEvent.change(box, { target: { value: "ร้านยีนส์ 50%" } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+
+    await waitFor(
+      () => {
+        for (const name of [
+          "/api/auth/executive/reports",
+          "/api/support/executive/tickets",
+          "/api/orders/executive/disputes",
+        ]) {
+          const params = new URLSearchParams(
+            pathsFor(name).at(-1).split("?")[1],
+          );
+          expect(params.get("q")).toBe("ร้านยีนส์ 50%");
+        }
+      },
+      { timeout: 3000 },
+    );
+    // The box takes nothing longer than the services accept.
+    expect(box).toHaveAttribute("maxlength", "100");
   });
 
   it("offers no kind-specific filters while looking at everything", async () => {
@@ -370,6 +476,98 @@ describe("ComplaintsSection", () => {
     render(<ComplaintsSection token="t" />);
 
     expect(await screen.findByText(/ร้านสมชาย \(4 ครั้ง\)/)).toBeVisible();
+  });
+
+  it("sorts newest first by default and oldest first when asked", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    // Every kind is asked newest first, and the merged list follows.
+    for (const name of [
+      "/api/auth/executive/reports",
+      "/api/support/executive/tickets",
+      "/api/orders/executive/disputes",
+    ]) {
+      expect(pathsFor(name).at(-1)).toContain("sort=newest");
+    }
+    const order = () =>
+      screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(order()[0]).toContain("จ่ายเงินแล้วไม่ได้รับของ");
+    expect(order()[2]).toContain("ร้านไม่ส่งของ");
+
+    pick("เรียงลำดับ", "วันเก่าสุด");
+
+    await waitFor(() =>
+      expect(pathsFor("/api/auth/executive/reports").at(-1)).toContain(
+        "sort=oldest",
+      ),
+    );
+    expect(pathsFor("/api/support/executive/tickets").at(-1)).toContain(
+      "sort=oldest",
+    );
+    expect(pathsFor("/api/orders/executive/disputes").at(-1)).toContain(
+      "sort=oldest",
+    );
+    await waitFor(() => {
+      expect(order()[0]).toContain("ร้านไม่ส่งของ");
+      expect(order()[2]).toContain("จ่ายเงินแล้วไม่ได้รับของ");
+    });
+
+    // The order stays when a single kind is chosen.
+    pick("ประเภทเรื่อง", "Ticket");
+    await waitFor(() =>
+      expect(pathsFor("/api/support/executive/tickets").at(-1)).toContain(
+        "sort=oldest",
+      ),
+    );
+  });
+
+  it("opens one high-risk target's complaints from the warning, and clears it", async () => {
+    const warning = {
+      detected: true,
+      threshold: 3,
+      highRiskTargets: [
+        {
+          targetId: "target-1",
+          count: 4,
+          targetName: "สมชาย",
+          targetShopName: "ร้านสมชาย",
+        },
+      ],
+    };
+    serve({
+      "/api/auth/executive/reports": () => reportAnswer([REPORT], warning),
+    });
+    render(<ComplaintsSection token="t" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /ร้านสมชาย \(4 ครั้ง\)/ }),
+    );
+
+    // Complaints about that target only: every status, whenever reported.
+    await waitFor(() => {
+      const path = pathsFor("/api/auth/executive/reports").at(-1);
+      expect(path).toContain("targetId=target-1");
+      expect(path).toContain("status=ALL");
+      expect(path).not.toContain("from=");
+      expect(path).not.toContain("to=");
+    });
+    expect(
+      screen.getByText(/ทุกสถานะ ทุกช่วงเวลา/).closest("div"),
+    ).toHaveTextContent("ร้านสมชาย");
+    // The other kinds are not about a target, so they are not asked.
+    const ticketCalls = pathsFor("/api/support/executive/tickets").length;
+
+    fireEvent.click(screen.getByRole("button", { name: "ล้างตัวกรอง" }));
+    await waitFor(() =>
+      expect(pathsFor("/api/auth/executive/reports").at(-1)).not.toContain(
+        "targetId=",
+      ),
+    );
+    expect(pathsFor("/api/auth/executive/reports").at(-1)).toContain("from=");
+    expect(screen.queryByText(/ทุกสถานะ ทุกช่วงเวลา/)).toBeNull();
+    expect(pathsFor("/api/support/executive/tickets").length).toBe(ticketCalls);
   });
 
   it("opens the details of a complaint", async () => {

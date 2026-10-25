@@ -1,5 +1,6 @@
-const { customerServicePolicy } = require("@reloop/shared");
+const { customerServicePolicy, escapeLike } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
+const sellerNameSearch = require("./sellerNameSearch");
 
 /**
  * Disputes for the Executive complaints page: a read-only list over a date
@@ -28,6 +29,7 @@ const DISPUTE_TYPES = [
 
 const toItem = (row) => ({
   id: row.id,
+  ...(row.referenceCode ? { referenceCode: row.referenceCode } : {}),
   orderId: row.orderId,
   disputeType: row.disputeType,
   status: row.status,
@@ -38,7 +40,7 @@ const toItem = (row) => ({
 });
 
 /**
- * Cases opened in [from, to). `status`, `disputeType` and `priority` narrow
+ * Cases opened in [from, to). `status`, `disputeType`, `priority` and `search` narrow
  * the list; `statusCounts` describe the same range and the same type/priority
  * but ignore the status filter, so each status chip can show how many it would
  * give.
@@ -49,11 +51,34 @@ async function listExecutiveDisputes({
   status,
   disputeType,
   priority,
+  search,
+  sort = "newest",
   skip,
   take,
 }) {
+  // The case's code (DSP-…), its order's (ORD-…) or the name of the shop that
+  // sold it, whole or in part. Shop names belong to auth-service, which finds
+  // the sellers; here they are matched against the orders' sellers.
+  const text = search?.replace(/^#/, "");
+  const sellerIds = text ? await sellerNameSearch.findUserIds(text) : [];
+  const like = text ? escapeLike(text) : undefined;
   const base = {
     createdAt: { gte: from, lt: to },
+    ...(text
+      ? {
+          OR: [
+            { referenceCode: { contains: like, mode: "insensitive" } },
+            {
+              order: {
+                referenceCode: { contains: like, mode: "insensitive" },
+              },
+            },
+            ...(sellerIds.length > 0
+              ? [{ order: { sellerId: { in: sellerIds } } }]
+              : []),
+          ],
+        }
+      : {}),
     ...(disputeType ? { disputeType } : {}),
     ...(priority ? { priority } : {}),
   };
@@ -62,7 +87,10 @@ async function listExecutiveDisputes({
   const [rows, total, countRows] = await Promise.all([
     prisma.disputeCase.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      orderBy: [
+        { createdAt: sort === "oldest" ? "asc" : "desc" },
+        { id: "asc" },
+      ],
       skip,
       take,
     }),

@@ -15,6 +15,11 @@ data:
   SUPPORT_SERVICE_URL: http://support-service:3006
   FRONTEND_SERVICE_URL: http://frontend:3000
   NEXT_PUBLIC_API_URL: http://localhost:8080
+  # Forgot-password email: printed to the auth-service log on this local
+  # cluster. A public deployment needs MAIL_TRANSPORT=smtp plus SMTP_* secrets.
+  MAIL_TRANSPORT: log
+  APP_BASE_URL: http://localhost:3000
+  MAIL_FROM: "RE-LOOP <no-reply@localhost>"
   GATEWAY_PORT: "8080"
   AUTH_PORT: "3001"
   PRODUCT_PORT: "3002"

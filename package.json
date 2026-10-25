@@ -14,6 +14,7 @@
     "frontend"
   ],
   "scripts": {
+    "seed:review-reports": "node scripts/seed-review-reports.cjs",
     "dev": "node scripts/dev.cjs",
     "demo:cs-admin": "node scripts/demo-cs-admin.js",
     "smoke:cs-admin": "node scripts/smoke-cs-admin-demo.js",

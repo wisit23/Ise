@@ -1,6 +1,5 @@
 const { displayNames } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
-const productClient = require("../../services/productClient");
 
 /**
  * One dispute for the Executive details dialog: who opened it, which order,
@@ -23,7 +22,19 @@ async function namesFor(ids) {
 
 async function titleOf(productId) {
   try {
-    const product = await productClient.getProduct(productId);
+    const response = await fetch(
+      `${process.env.PRODUCT_SERVICE_URL || "http://product-service:3002"}/${encodeURIComponent(productId)}`,
+      { signal: AbortSignal.timeout(3000) },
+    );
+    if (response.status === 404) return { available: true, title: null };
+    if (!response.ok) throw new Error("Product lookup unavailable");
+    const product = await response.json();
+    if (
+      !product ||
+      (product.title !== null && typeof product.title !== "string")
+    ) {
+      throw new Error("Invalid product response");
+    }
     return { available: true, title: product?.title ?? null };
   } catch {
     return { available: false, title: null };

@@ -26,6 +26,22 @@ const prisma = require("../models/prismaClient");
 const shippingService =
   require("../features/shipping/shippingService").createShippingService(prisma);
 
+function forSeller(order) {
+  if (!order?.dispute || order.dispute.sellerVisible) return order;
+  return {
+    ...order,
+    dispute: null,
+    holds: [],
+    holdReason: null,
+    heldBy: null,
+    payments: order.payments?.map((payment) => {
+      const withoutHolds = { ...payment };
+      delete withoutHolds.holds;
+      return withoutHolds;
+    }),
+  };
+}
+
 async function respondAfterProductSync(res, order, event) {
   try {
     await productSyncService.processEvent(event.id);
@@ -96,7 +112,7 @@ async function selling(req, res, next) {
       skip: pagination.skip,
       take: pagination.take,
     });
-    res.json(paginatedResponse(items, total, pagination));
+    res.json(paginatedResponse(items.map(forSeller), total, pagination));
   } catch (err) {
     next(err);
   }
@@ -109,7 +125,7 @@ async function getOne(req, res, next) {
     if (order.buyerId !== req.userId && order.sellerId !== req.userId) {
       throw forbidden("you are not part of this order");
     }
-    res.json(order);
+    res.json(order.sellerId === req.userId ? forSeller(order) : order);
   } catch (err) {
     next(err);
   }
@@ -139,27 +155,34 @@ async function updateStatus(req, res, next) {
     }
 
     const { status } = req.body;
-    if (status === "cancelled" && !orderLifecycle.isRefundingCancellation(order, status))
+    const refundingCancellation = orderLifecycle.isRefundingCancellation(order, status) &&
+      (order.sellerId === req.userId ||
+        (order.buyerId === req.userId && order.status === "paid"));
+    if (status === "cancelled" && !refundingCancellation)
       orderTransitionService.assertCanCancelOrder(order);
     orderLifecycle.assertParticipantTransition(order, req.userId, status);
     // TSR-02: Prevent participant updating status while order has open dispute or hold
     orderTransitionService.assertCanParticipantUpdateStatus(order);
 
-    if (status === "shipped") {
-      if (order.sellerId !== req.userId) {
-        throw forbidden("only the seller can mark this order as shipped");
-      }
-      const shipped = await shippingService.markShipped({
+    if (["pickup_in_progress", "in_transit"].includes(status)) {
+      const updated = await shippingService.advanceShipping({
         orderId: order.id,
         actorId: req.userId,
-        version: order.version,
+        version: req.body.version ?? order.version,
+        status,
         company: req.body.company,
         trackingNumber: req.body.trackingNumber,
       });
       // Best-effort — chatClient swallows its own errors internally so a
       // chat-service outage can never fail this status update.
-      await chatClient.notifyOrderStatusChanged(order, status);
-      return res.json(shipped);
+      // Seller dashboard treats a parcel handed to the carrier as sold.
+      if (status === "in_transit" && order.productId) {
+        await productClient.setProductStatus(order.productId, "sold").catch((err) => {
+          console.warn("product status sync to sold on handoff failed:", err.message);
+        });
+      }
+      await chatClient.notifyOrderStatusChanged(updated, status);
+      return res.json(updated);
     }
 
     const { order: updated, event } = await orderLifecycleService.transition({
@@ -382,7 +405,7 @@ async function getByProductInternal(req, res, next) {
     const order = await prisma.order.findFirst({
       where: {
         productId: req.params.productId,
-        status: { notIn: ["cancelled", "refunded"] },
+        status: { notIn: ["cancelled", "refunded", "payment_expired", "seller_confirmation_expired"] },
       },
       select: {
         id: true,

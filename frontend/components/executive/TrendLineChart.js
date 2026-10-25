@@ -23,6 +23,9 @@ export function formatAxisTick(value) {
   return `${formatCount(roundMoney(value / 1_000_000))} ล้าน`;
 }
 
+// From this many points on, the chart draws small dots.
+const DENSE_POINTS = 31;
+
 // How much room to leave above the biggest value, so its point never sits on
 // the top line and the amount shown over it has space.
 const AXIS_HEADROOM = 1.1;
@@ -99,6 +102,11 @@ export default function TrendLineChart({
     const y = baselineY - ratio * drawableHeight;
     return { x, y, val, item: d, index: i };
   });
+
+  // With many points the dots shrink so they do not blur into a bar, and each
+  // point gets a hover area as wide as the gap to its neighbour.
+  const dense = count > DENSE_POINTS;
+  const hoverWidth = count > 1 ? step : chartWidth - padLeft - padRight;
 
   const lineD = getLinePath(points);
   const areaD =
@@ -197,11 +205,20 @@ export default function TrendLineChart({
                   />
                 )}
 
+                {/* The hover area: the whole column of the point. */}
+                <rect
+                  x={pt.x - hoverWidth / 2}
+                  y={padTop}
+                  width={hoverWidth}
+                  height={baselineY - padTop}
+                  fill="transparent"
+                />
+
                 {/* Outer Ring & Circle */}
                 <circle
                   cx={pt.x}
                   cy={pt.y}
-                  r={isHovered ? "4.5" : "3"}
+                  r={isHovered ? "4.5" : dense ? "1.5" : "3"}
                   fill={CHART_COLORS.pointFill}
                   stroke={isUnavail ? CHART_COLORS.unavailable : color}
                   strokeWidth={isHovered ? "2.5" : "2"}

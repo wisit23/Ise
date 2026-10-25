@@ -93,7 +93,12 @@ Order states:
 - `PATCH /internal/products/:id/reservations/:reservationId/complete` ขายได้เฉพาะ reservation ที่ยังไม่หมดอายุ
 - Product เป็น owner ของ atomic inventory lock/expiry; Order persist `reservationId` และ
   `reservationExpiresAt` โดยไม่อ่าน Product database ข้าม service
-- `pending` ยังคงอ่านได้สำหรับ legacy rows แต่ Order ใหม่เริ่มที่ `pending_payment`
+- Order ใช้ `pending_payment` (รอชำระเงิน); forward migration
+  `20261024000000_order_payment_and_expiry_states` เปลี่ยน `inbasket` รวมถึง pre-dispute snapshot
+  โดยไม่เปลี่ยนสถานะ Basket, Product, Checkout, Shipping หรือ Payment
+- หมดเวลาชำระเงินเป็น `payment_expired`; หมดเวลาผู้ขายยืนยันเป็น
+  `seller_confirmation_expired` พร้อมบันทึกคืนเงินจำลอง; `cancelled` สำหรับผู้ซื้อ/ผู้ขายยกเลิกเอง
+- deploy migration ที่ค้างทั้งหมดพร้อมโค้ดใหม่; ไม่แก้ migration เดิม, log หรือเดาสาเหตุ cancelled ในอดีต
 
 Campaign states: `draft → pending_approval → approved → published → ended` หรือ `rejected`
 

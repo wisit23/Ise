@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 
 import { useEffect, useState, useCallback } from "react";
 import { apiFetch, getMarketingUserAnalytics } from "../../../lib/api";
@@ -8,7 +10,10 @@ import TrendLineChart from "../../charts/TrendLineChart";
 import AuctionStatusBars from "./AuctionStatusBars";
 import { MARKETING_TIME_ZONE } from "../marketingConstants";
 import SalesMixChart, { formatMoney } from "./SalesMixChart";
-import UsageHeatmap from "./UsageHeatmap";
+import UsageHeatmap, {
+  getUsageHeatmapTitle,
+  resolveUsageHeatmapMode,
+} from "./UsageHeatmap";
 
 const DEFAULT_RANGE_PRESET = "week";
 const RANGE_PRESETS = [
@@ -114,10 +119,7 @@ export function getCalendarDateRange(preset, now = new Date()) {
   let to = new Date(today);
 
   if (preset === "week") {
-    const mondayOffset = (today.getUTCDay() + 6) % 7;
-    from.setUTCDate(from.getUTCDate() - mondayOffset);
-    to = new Date(from);
-    to.setUTCDate(to.getUTCDate() + 6);
+    from.setUTCDate(from.getUTCDate() - 6);
   } else if (preset === "month") {
     from = new Date(Date.UTC(year, month, 1));
     to = new Date(Date.UTC(year, month + 1, 0));
@@ -141,12 +143,16 @@ export function readDashboardFilter(search = "", now = new Date()) {
     : DEFAULT_RANGE_PRESET;
   const queryFrom = params.get("from");
   const queryTo = params.get("to");
-  const fallback = getCalendarDateRange(preset === "custom" ? DEFAULT_RANGE_PRESET : preset, now);
+  const fallback = getCalendarDateRange(
+    preset === "custom" ? DEFAULT_RANGE_PRESET : preset,
+    now,
+  );
   const fromDate = isDateInput(queryFrom) ? queryFrom : fallback.fromDate;
   const toDate = isDateInput(queryTo) ? queryTo : fallback.toDate;
-  const safePreset = preset === "custom" && (!isDateInput(queryFrom) || !isDateInput(queryTo))
-    ? DEFAULT_RANGE_PRESET
-    : preset;
+  const safePreset =
+    preset === "custom" && (!isDateInput(queryFrom) || !isDateInput(queryTo))
+      ? DEFAULT_RANGE_PRESET
+      : preset;
   return {
     preset: safePreset,
     fromDate,
@@ -161,7 +167,11 @@ function syncDashboardFilterToUrl({ preset, fromDate, toDate }) {
   url.searchParams.set("range", preset);
   url.searchParams.set("from", fromDate);
   url.searchParams.set("to", toDate);
-  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  window.history.replaceState(
+    {},
+    "",
+    `${url.pathname}${url.search}${url.hash}`,
+  );
 }
 
 function formatSelectedRange(fromDate, toDate) {
@@ -201,12 +211,23 @@ function ComparisonText({ comparison }) {
   return (
     <span className={increase ? "text-emerald-600" : "text-rose-600"}>
       {increase ? "เพิ่มขึ้น" : "ลดลง"} {formatMoney(Math.abs(difference))}
-      {percent === null ? " (ช่วงก่อนยังไม่มียอดขาย)" : ` (${Math.abs(percent)}%)`}
+      {percent === null
+        ? " (ช่วงก่อนยังไม่มียอดขาย)"
+        : ` (${Math.abs(percent)}%)`}
     </span>
   );
 }
 
-function SalesKpiCard({ label, data, icon, color, onClick, className = "", loading, error }) {
+function SalesKpiCard({
+  label,
+  data,
+  icon,
+  color,
+  onClick,
+  className = "",
+  loading,
+  error,
+}) {
   const Component = onClick ? "button" : "article";
   const colors = {
     slate: "bg-slate-100 text-slate-600",
@@ -219,7 +240,9 @@ function SalesKpiCard({ label, data, icon, color, onClick, className = "", loadi
       type={onClick ? "button" : undefined}
       onClick={onClick}
       className={`flex min-h-44 w-full flex-col rounded-xl border border-slate-200/70 bg-white p-5 text-left shadow-sm transition-all ${
-        onClick ? "hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md" : ""
+        onClick
+          ? "hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md"
+          : ""
       } ${className}`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -229,12 +252,16 @@ function SalesKpiCard({ label, data, icon, color, onClick, className = "", loadi
             {loading ? "…" : error ? "—" : formatMoney(data?.sales)}
           </p>
         </div>
-        <span className={`flex h-10 w-10 items-center justify-center rounded-full ${colors[color]}`}>
+        <span
+          className={`flex h-10 w-10 items-center justify-center rounded-full ${colors[color]}`}
+        >
           <span className="material-symbols-outlined text-[21px]">{icon}</span>
         </span>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        {loading || error ? "กำลังเตรียมข้อมูล" : `${Number(data?.completedOrders || 0).toLocaleString("th-TH")} คำสั่งซื้อสำเร็จ`}
+        {loading || error
+          ? "กำลังเตรียมข้อมูล"
+          : `${Number(data?.completedOrders || 0).toLocaleString("th-TH")} คำสั่งซื้อสำเร็จ`}
       </p>
       <p className="mt-auto pt-4 text-xs font-semibold">
         {!loading && !error && <ComparisonText comparison={data?.comparison} />}
@@ -302,6 +329,7 @@ export default function DashboardSection({ token, onNavigate }) {
 
   const [appliedFilter, setAppliedFilter] = useState(initialFilter);
   const appliedRange = appliedFilter.range;
+  const heatmapMode = resolveUsageHeatmapMode(appliedFilter);
   const [filterValidationError, setFilterValidationError] = useState(null);
 
   const loadUserAnalytics = useCallback(
@@ -507,7 +535,11 @@ export default function DashboardSection({ token, onNavigate }) {
               ))}
             </div>
             <p className="text-xs text-slate-500">
-              ข้อมูลทุกการ์ดและทุกกราฟใช้ช่วงเดียวกัน: {formatSelectedRange(appliedFilter.fromDate, appliedFilter.toDate)}
+              ข้อมูลทุกการ์ดและทุกกราฟใช้ช่วงเดียวกัน:{" "}
+              {formatSelectedRange(
+                appliedFilter.fromDate,
+                appliedFilter.toDate,
+              )}
             </p>
           </div>
           {rangePreset === "custom" && (
@@ -553,7 +585,7 @@ export default function DashboardSection({ token, onNavigate }) {
               onClick={handleResetFilters}
               className="h-10 self-start rounded-lg px-3 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 xl:self-end"
             >
-              กลับไปดูสัปดาห์นี้
+              กลับไปดู 7 วันล่าสุด
             </button>
           )}
         </div>
@@ -585,17 +617,25 @@ export default function DashboardSection({ token, onNavigate }) {
       )}
 
       {/* ── Sales overview: the primary 5-second view ── */}
-      <section className="order-2 space-y-4" aria-labelledby="sales-overview-title">
+      <section
+        className="order-2 space-y-4"
+        aria-labelledby="sales-overview-title"
+      >
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 id="sales-overview-title" className="text-base font-bold text-slate-900">
+            <h2
+              id="sales-overview-title"
+              className="text-base font-bold text-slate-900"
+            >
               ภาพรวมยอดขาย
             </h2>
             <p className="text-xs text-slate-500">
               นับเฉพาะคำสั่งซื้อสำเร็จตามเวลาชำระเงินในช่วงที่เลือก
             </p>
           </div>
-          <p className="text-[11px] text-slate-400">เทียบกับช่วงก่อนหน้าที่มีจำนวนวันเท่ากัน</p>
+          <p className="text-[11px] text-slate-400">
+            เทียบกับช่วงก่อนหน้าที่มีจำนวนวันเท่ากัน
+          </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <SalesKpiCard
@@ -738,7 +778,7 @@ export default function DashboardSection({ token, onNavigate }) {
         {/* Weekday × hour usage heatmap */}
         <div className="mt-4">
           <h3 className="mb-2 text-xs font-bold text-slate-700">
-            Heatmap การใช้งาน: วันในสัปดาห์ × ชั่วโมง
+            Heatmap การใช้งาน: {getUsageHeatmapTitle(heatmapMode)}
           </h3>
           {userAnalyticsLoading ? (
             <div className="flex h-44 items-center justify-center text-xs text-slate-400">
@@ -763,7 +803,12 @@ export default function DashboardSection({ token, onNavigate }) {
             </div>
           ) : (
             <div className="space-y-3">
-              <UsageHeatmap hourlyUsage={userAnalytics?.hourlyUsage || []} />
+              <UsageHeatmap
+                hourlyUsage={userAnalytics?.hourlyUsage || []}
+                mode={heatmapMode}
+                fromDate={appliedFilter.fromDate}
+                toDate={appliedFilter.toDate}
+              />
               <details className="text-xs text-slate-600">
                 <summary className="cursor-pointer text-violet-600 hover:text-violet-700 font-semibold select-none">
                   ดูตารางสถิติรายชั่วโมง (Accessible Table View)
@@ -807,7 +852,13 @@ export default function DashboardSection({ token, onNavigate }) {
       <div className="order-3 grid grid-cols-1 gap-3 min-[440px]:grid-cols-2 sm:gap-4 lg:grid-cols-3">
         <KpiCard
           label="คำสั่งซื้อสำเร็จทั้งหมด"
-          value={loading ? "…" : error ? "—" : salesOverview?.total?.completedOrders?.toLocaleString("th-TH")}
+          value={
+            loading
+              ? "…"
+              : error
+                ? "—"
+                : salesOverview?.total?.completedOrders?.toLocaleString("th-TH")
+          }
           icon="shopping_bag"
           color="indigo"
           sub="รวมยอดขายทั่วไป แคมเปญ และประมูล"
@@ -824,7 +875,13 @@ export default function DashboardSection({ token, onNavigate }) {
         />
         <KpiCard
           label="อัตราการใช้คูปองสำเร็จ"
-          value={loading ? "…" : error ? "—" : `${metrics?.overallConversionRate || 0}%`}
+          value={
+            loading
+              ? "…"
+              : error
+                ? "—"
+                : `${metrics?.overallConversionRate || 0}%`
+          }
           icon="trending_up"
           color="violet"
           onClick={() => onNavigate?.("campaigns")}
@@ -892,10 +949,7 @@ export default function DashboardSection({ token, onNavigate }) {
         </ChartCard>
 
         {/* Sales Trend Line Chart */}
-        <ChartCard
-          title="แนวโน้มยอดขายจากแคมเปญรายวัน"
-          icon="show_chart"
-        >
+        <ChartCard title="แนวโน้มยอดขายจากแคมเปญรายวัน" icon="show_chart">
           {loading ? (
             <div className="flex h-40 items-center justify-center text-xs text-slate-400">
               กำลังคำนวณแนวโน้มยอดขาย...
@@ -918,10 +972,7 @@ export default function DashboardSection({ token, onNavigate }) {
         </ChartCard>
 
         {/* Auction status comparison */}
-        <ChartCard
-          title="จำนวนรอบประมูลแยกตามสถานะ"
-          icon="stacked_bar_chart"
-        >
+        <ChartCard title="จำนวนรอบประมูลแยกตามสถานะ" icon="stacked_bar_chart">
           {loading ? (
             <div className="flex h-40 items-center justify-center text-xs text-slate-400">
               กำลังโหลดสถานะการประมูล...
@@ -1011,7 +1062,7 @@ export default function DashboardSection({ token, onNavigate }) {
                   >
                     <td className="px-3 py-3">
                       <div className="font-bold text-slate-900">
-                        {c.campaignCode || c.campaignId}
+                        {c.campaignCode || formatReferenceCode(c.campaignId)}
                       </div>
                       {c.campaignName && (
                         <div className="text-[11px] text-slate-500">

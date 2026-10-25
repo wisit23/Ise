@@ -59,6 +59,11 @@ test("executive ticket detail against a real database", async (t) => {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => {
+      if (req.url === "/internal/reference-codes") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end("{}");
+        return;
+      }
       asked.push({ url: req.url, body: JSON.parse(body || "{}") });
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
@@ -116,7 +121,7 @@ test("executive ticket detail against a real database", async (t) => {
           })
         ).id,
         currentStatusId: await statusId("RESOLVED"),
-        createdAt: new Date("2001-05-10T05:00:00.000Z"),
+        createdAt: new Date("2001-07-10T05:00:00.000Z"),
       },
     });
     ticketId = ticket.id;
@@ -126,8 +131,8 @@ test("executive ticket detail against a real database", async (t) => {
         ticketId,
         assigneeId: ids.agentA,
         assignedById: ids.agentA,
-        assignedAt: new Date("2001-05-10T06:00:00.000Z"),
-        endedAt: new Date("2001-05-10T07:00:00.000Z"),
+        assignedAt: new Date("2001-07-10T06:00:00.000Z"),
+        endedAt: new Date("2001-07-10T07:00:00.000Z"),
         endReason: "handover",
       },
     });
@@ -136,7 +141,7 @@ test("executive ticket detail against a real database", async (t) => {
         ticketId,
         assigneeId: ids.agentB,
         assignedById: ids.agentA,
-        assignedAt: new Date("2001-05-10T07:00:00.000Z"),
+        assignedAt: new Date("2001-07-10T07:00:00.000Z"),
       },
     });
     await prisma.ticketStatusHistory.createMany({
@@ -147,7 +152,7 @@ test("executive ticket detail against a real database", async (t) => {
           toStatusId: await statusId("IN_PROGRESS"),
           changedById: ids.agentA,
           reason: null,
-          createdAt: new Date("2001-05-10T06:30:00.000Z"),
+          createdAt: new Date("2001-07-10T06:30:00.000Z"),
         },
         {
           ticketId,
@@ -155,7 +160,7 @@ test("executive ticket detail against a real database", async (t) => {
           toStatusId: await statusId("RESOLVED"),
           changedById: ids.agentB,
           reason: "คืนเงินผ่านระบบแล้ว",
-          createdAt: new Date("2001-05-10T09:00:00.000Z"),
+          createdAt: new Date("2001-07-10T09:00:00.000Z"),
         },
       ],
     });
@@ -167,12 +172,20 @@ test("executive ticket detail against a real database", async (t) => {
 
     const res = await get(ticketId);
     assert.equal(res.status, 200);
-    assert.deepEqual(res.body.data, {
+    // Every ticket carries its reference code (TKT-XXXX-XXXX-XXXX), and the
+    // response maps the ids it shows to their codes.
+    const { referenceCode, displayReferences, ...detail } = res.body.data;
+    assert.match(
+      referenceCode,
+      /^TKT-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/,
+    );
+    assert.equal(displayReferences[ticketId], referenceCode);
+    assert.deepEqual(detail, {
       id: ticketId,
       ticketNumber: res.body.data.ticketNumber,
       subject: `exec detail ${runId}`,
       requester: { id: ids.requester, name: "มาลี" },
-      createdAt: "2001-05-10T05:00:00.000Z",
+      createdAt: "2001-07-10T05:00:00.000Z",
       orderId: `order-${runId}`,
       product: { id: `product-${runId}`, title: "กระเป๋าหนังวินเทจ" },
       status: { code: "RESOLVED", name: "RESOLVED" },
@@ -181,7 +194,7 @@ test("executive ticket detail against a real database", async (t) => {
         id: ids.agentB,
         name: "เจ้าหน้าที่บี",
         roles: ["TRUST_AND_SAFETY"],
-        assignedAt: "2001-05-10T07:00:00.000Z",
+        assignedAt: "2001-07-10T07:00:00.000Z",
         current: true,
       },
       // Who dealt with it, as what, with what outcome and why.
@@ -191,7 +204,7 @@ test("executive ticket detail against a real database", async (t) => {
           name: "เจ้าหน้าที่บี",
           roles: ["TRUST_AND_SAFETY"],
         },
-        at: "2001-05-10T09:00:00.000Z",
+        at: "2001-07-10T09:00:00.000Z",
         outcome: "RESOLVED",
         reason: "คืนเงินผ่านระบบแล้ว",
       },
@@ -262,7 +275,7 @@ test("executive ticket detail against a real database", async (t) => {
         fromStatusId: await statusId("RESOLVED"),
         toStatusId: await statusId("IN_PROGRESS"),
         changedById: ids.agentB,
-        createdAt: new Date("2001-05-11T09:00:00.000Z"),
+        createdAt: new Date("2001-07-11T09:00:00.000Z"),
       },
     });
     await prisma.supportTicket.update({

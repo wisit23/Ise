@@ -9,8 +9,78 @@ import {
   filtersFor,
   inboxRange,
   inboxRangeError,
+  cleanSearch,
+  MAX_SEARCH_LENGTH,
   statusSummary,
 } from "./executiveInbox";
+
+describe("buildInboxPath for a target", () => {
+  const range = { from: "2026-10-16", to: "2026-10-17" };
+
+  it("lists a target's complaints over all time", () => {
+    const path = buildInboxPath(
+      "report",
+      range,
+      { ...EMPTY_FILTERS, targetId: "u-1" },
+      1,
+      20,
+    );
+    const params = new URLSearchParams(path.split("?")[1]);
+    expect(params.get("targetId")).toBe("u-1");
+    expect(params.get("status")).toBe("ALL");
+    expect(params.has("from")).toBe(false);
+    expect(params.has("to")).toBe(false);
+  });
+
+  it("keeps the period for everything else", () => {
+    const path = buildInboxPath("report", range, EMPTY_FILTERS, 1, 20);
+    const params = new URLSearchParams(path.split("?")[1]);
+    expect(params.get("from")).toBe("2026-10-16");
+    expect(params.has("targetId")).toBe(false);
+    // Tickets never carry a target.
+    const ticket = buildInboxPath(
+      "ticket",
+      range,
+      { ...EMPTY_FILTERS, targetId: "u-1" },
+      1,
+      20,
+    );
+    expect(ticket).not.toContain("targetId");
+    expect(ticket).toContain("from=2026-10-16");
+  });
+});
+
+describe("buildInboxPath sort", () => {
+  const range = { from: "2026-10-16", to: "2026-10-17" };
+
+  it("asks for newest first unless told otherwise", () => {
+    for (const source of ["report", "ticket", "dispute"]) {
+      const asked = (sort) =>
+        new URLSearchParams(
+          buildInboxPath(source, range, EMPTY_FILTERS, 1, 20, sort).split(
+            "?",
+          )[1],
+        ).get("sort");
+      expect(asked(undefined)).toBe("newest");
+      expect(asked("oldest")).toBe("oldest");
+    }
+  });
+});
+
+describe("cleanSearch", () => {
+  it("trims, and keeps codes, ticket numbers and shop names as typed", () => {
+    expect(cleanSearch("")).toBe("");
+    expect(cleanSearch("   ")).toBe("");
+    expect(cleanSearch(undefined)).toBe("");
+    expect(cleanSearch(" rpt-8ax4-m8bh-8ddq ")).toBe("rpt-8ax4-m8bh-8ddq");
+    expect(cleanSearch("#CS-000002")).toBe("#CS-000002");
+    expect(cleanSearch(" ร้านยีนส์ 50% ")).toBe("ร้านยีนส์ 50%");
+  });
+
+  it("is never longer than the services accept", () => {
+    expect(cleanSearch("x".repeat(500))).toHaveLength(MAX_SEARCH_LENGTH);
+  });
+});
 
 jest.mock("./api", () => ({ apiFetch: jest.fn() }));
 
@@ -293,7 +363,7 @@ describe("fetchInbox", () => {
     expect(path).toContain("/api/support/executive/tickets?");
     expect(path).toContain("page=2");
     expect(path).toContain(`limit=${INBOX_PAGE_SIZE}`);
-    expect(init).toEqual({ token: "t" });
+    expect(init).toEqual({ token: "t", timeoutMs: 15000 });
     expect(result.total).toBe(45);
     expect(result.totalPages).toBe(3);
     expect(result.items[0]).toMatchObject({
@@ -400,6 +470,7 @@ describe("fetchInbox", () => {
       list([
         {
           ...dispute("d1", "2026-10-16T05:00:00.000Z"),
+          referenceCode: "DSP-7K3M-9X2R-4T6W",
           decision: "REJECT",
           status: "DECIDED",
         },
@@ -413,7 +484,7 @@ describe("fetchInbox", () => {
       token: "t",
     });
     expect(result.items[0]).toMatchObject({
-      reference: "order-d1",
+      reference: "DSP-7K3M-9X2R-4T6W",
       status: { label: "ตัดสินแล้ว" },
       tags: ["สินค้าชำรุดหรือเสียหาย", "ปานกลาง", "ไม่อนุมัติคำร้อง"],
     });

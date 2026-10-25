@@ -39,6 +39,10 @@ function createSocketServer(httpServer) {
   );
   io.adapter(createAdapter(pubClient, subClient));
 
+  // Public catalog invalidations only. Chat authentication and user rooms
+  // remain on the default namespace; guests never receive product payloads.
+  io.of("/catalog");
+
   // Nothing in production ever calls this (the process just exits), but an
   // open ioredis connection has no natural end on its own — without an
   // explicit close(), any test harness that spins this server up keeps two

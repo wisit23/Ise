@@ -98,6 +98,16 @@ describe("NavBar role permissions", () => {
     mockBuyer();
   });
 
+  it("links buyer orders directly to the orders section in profile", async () => {
+    await act(async () => {
+      render(<NavBar />);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "เมนูโปรไฟล์" }));
+    expect(screen.getByRole("link", { name: "คำสั่งซื้อของฉัน" })).toHaveAttribute(
+      "href", "/profile?tab=orders",
+    );
+  });
+
   it("shows an executive only their work menu and logout", () => {
     getStoredUser.mockReturnValue({
       id: "exec-1",

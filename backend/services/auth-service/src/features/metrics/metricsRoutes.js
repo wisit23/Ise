@@ -1,8 +1,15 @@
 const { Router } = require("express");
-const { requireAuth, requireRole } = require("@reloop/shared");
+const {
+  requireAuth,
+  requireRole,
+  requireInternalToken,
+} = require("@reloop/shared");
 const metricsController = require("./metricsController");
+const { searchSellers } = require("./executiveSellerSearch");
 
 const router = Router();
+
+router.post("/seller-search", requireInternalToken, searchSellers);
 
 router.get(
   "/metrics",

@@ -611,13 +611,13 @@ approved by Admin shows up here as "approved, ready to schedule" immediately.
 
 ## 2026-10-18 — Interest-score Campaign Targeting & Customer Insights Dashboard
 
-- [x] Reuse คะแนน Recommendation เดิม: profile `4/3/2/5`, search `6`, like `8`, purchase `10`, คะแนนเต็มรวม `38`
-- [x] กำหนดช่วงคะแนน `0`, `1–6`, `7–14`, `15–24`, `25–38` และปัดคะแนนรวมเป็นจำนวนเต็มก่อนจัดช่วง
+- [x] Reuse คะแนน Recommendation เดิมหลังตัด Size: profile `4/3/2`, search `6`, like `8`, purchase `10`, คะแนนเต็มรวม `33`
+- [x] กำหนดช่วงคะแนน `0`, `1–6`, `7–14`, `15–24`, `25–33` และปัดคะแนนรวมเป็นจำนวนเต็มก่อนจัดช่วง
 - [x] เพิ่ม Internal Auth audience profile API และ Internal Order paid-purchase signal API โดยไม่อ่านฐานข้อมูลข้าม service
 - [x] เพิ่ม Campaign audience preview: ต่ำสุด/สูงสุด/เฉลี่ย/ค่ากลาง/คะแนนเต็มตามมิติ/คะแนนเต็มรวม/จำนวนผู้ได้สิทธิ์/การกระจายคะแนน
 - [x] Snapshot สิทธิ์ผู้ซื้อใน transaction เดียวกับ Campaign publish และ Audit; คะแนนที่เปลี่ยนภายหลังไม่ถอนสิทธิ์เดิม
 - [x] Campaign ทั่วไปไม่ส่ง Notification; Campaign ตามคะแนนส่ง Notification รายบัญชีพร้อมลิงก์ `/campaigns`
-- [x] เพิ่มแท็บ `ความสนใจลูกค้า` พร้อมช่วงวันเวลา 7/30/90 วันและกำหนดเอง, filter หมวดหมู่/แบรนด์/สไตล์/ไซซ์/แหล่งสัญญาณ, KPI, ranking, trend และเทียบช่วงก่อนหน้า
+- [x] เพิ่มแท็บ `ความสนใจลูกค้า` พร้อมช่วงวันเวลาและกำหนดเอง, filter หมวดหมู่/แบรนด์/สไตล์/แหล่งสัญญาณ, KPI, ranking, trend และเทียบช่วงก่อนหน้า
 - [x] เชื่อม Dashboard → สร้าง Campaign พร้อม prefill มิติและช่วงข้อมูล
 - [x] เพิ่ม migration `20261024000000_campaign_interest_audience` สำหรับ criteria และ immutable audience snapshot
 - [x] เพิ่ม unit/component tests สำหรับ scoring, snapshot, service boundary, publish/notification และ Dashboard UI
@@ -633,3 +633,50 @@ approved by Admin shows up here as "approved, ready to schedule" immediately.
 - [x] จำนวนสินค้าในประวัติรอบไม่รวมรายการ `rejected`/`cancelled`; หน้าจัดการเรียงรอบ/รายการที่ยังดำเนินการได้ก่อนประวัติ และแสดงราคาสูงสุดจริง
 - [x] Docker targeted tests รอบปัจจุบัน: Product Auction repository/service 126/126 และ Frontend Auction/Marketing 69/69; `git diff --check` ผ่าน
 - [ ] ยังไม่ได้รัน browser E2E และ integration test ที่ใช้ฐานข้อมูล/เวลาเดินจริงในรอบนี้
+
+## 2026-10-21 — Marketing Dashboard date, comparison, and adaptive heatmap
+
+- [x] Campaign Comparison แสดงเฉพาะ Campaign ทุกสถานะที่ช่วงเผยแพร่ทับซ้อนช่วง Dashboard จริง (`startsAt < to` และ `endsAt > from`)
+- [x] วันที่ Campaign แสดงปี ค.ศ. ให้ตรงกับช่อง `datetime-local`
+- [x] Heatmap ใช้ช่วงเวลาหลักชุดเดียว: วัน = 24 ชั่วโมง, สัปดาห์ = 7 วัน × 24 ชั่วโมง, เดือน = รายวัน, ปี = 12 เดือน
+- [x] ช่วงกำหนดเองเลือกหน่วยอัตโนมัติ: ไม่เกิน 1 วัน = ชั่วโมง, ไม่เกิน 7 วัน = วัน × ชั่วโมง, ไม่เกิน 31 วัน = รายวัน, มากกว่า 31 วัน = รายเดือน
+- [x] เพิ่ม focused unit/component tests สำหรับ overlap, Gregorian year และ Heatmap aggregation/mode
+- [x] Verification รอบปัจจุบัน: Product Campaign Metrics 18/18, Frontend focused suites 67/67 และ Next.js production build 28/28 pages ผ่าน
+- [x] Browser acceptance ผ่าน day/week/month/year และ custom ที่ขอบเขต 1/7/8/31/32 วัน รวมถึง Campaign overlap, ปี ค.ศ. และ legacy score ที่แสดงเพดาน 33
+
+## 2026-10-21 — Auction round item details
+
+- [x] Modal `รายละเอียดรอบการประมูล` โหลดและแสดงสินค้าทุกสถานะของรอบที่เลือกโดยไม่เปิดหน้าใหม่
+- [x] เรียง `รออนุมัติ → อนุมัติ/กำลังประมูล → ปิดแล้ว → ปฏิเสธ/ยกเลิก` และใช้สีแยกสถานะจริง
+- [x] แสดงรูป ชื่อ ร้านค้า ราคาเริ่มต้น ราคาปัจจุบัน จำนวน Bid และเหตุผลปฏิเสธ/ยกเลิก
+- [x] รายการที่ปิดประมูลแสดงราคาของ `winningBidId`, ผู้ชนะ และจำนวน Bid; 0 Bid แสดง `ไม่มีผู้เสนอราคา`
+- [x] รองรับ loading, empty, error/retry และรายการจำนวนมากด้วยพื้นที่เลื่อน โดยโหลด API ทุกหน้าของรอบ
+- [x] Frontend focused tests ผ่าน 59/59, Next.js production build ผ่าน 28/28 pages และ `git diff --check` ผ่าน
+- [x] Browser acceptance ที่ 1440×900 ผ่านกับข้อมูลจริงของรอบที่ยกเลิกและมี 4 Bids; ไม่มี schema/migration/backend change
+
+## 2026-10-23 — Auction round search, filters, and history grouping
+
+- [x] เพิ่มค้นหาชื่อรอบและตัวกรองสถานะแบบหลายค่าในหน้า Marketing
+- [x] กรองที่ Product Service ก่อน pagination และตรวจ phase/search input
+- [x] แยกผลลัพธ์เป็นรอบที่ยังจัดการได้กับประวัติรอบประมูลในตารางเดียวกันอย่างชัดเจน
+- [x] เพิ่มปุ่มล้างตัวกรองและ empty state สำหรับผลค้นหาที่ไม่พบ
+- [x] Docker targeted tests ผ่าน Backend 130/130 และ Frontend 60/60
+- [ ] Live browser acceptance ยังรอผู้ใช้ตรวจหน้าเว็บหลัง Product Service rebuild
+
+## 2026-10-24 — Auction result labels by payment state
+
+- [x] รายการ `open` แสดง `ผู้เสนอราคาสูงสุดปัจจุบัน` เมื่อมี Bid
+- [x] รายการ `closed` ที่ยังรอจ่ายแสดง `ผู้ได้รับสิทธิ์` จาก `winningBidId`
+- [x] ใช้คำว่า `ผู้ชนะ` เมื่อ Product เป็น `sold` หลังชำระเงินสำเร็จ
+- [x] ถ้ามี Bid แต่หมดผู้มีสิทธิ์แล้ว แสดง `ไม่มีผู้ชนะ` โดยยังรักษาราคาและจำนวน Bid
+- [x] คง TC_AUC10 rollover, Order ใหม่, เวลา 24 ชั่วโมง และ notification เดิมทั้งหมด
+- [x] Docker focused Frontend ผ่าน 61/61; warning `act(...)` เดิมยังปรากฏแต่ suite ผ่าน
+- [ ] Live browser acceptance ยังรอผู้ใช้ตรวจหน้าเว็บ
+
+## 2026-10-24 — Auction chat navigation
+
+- [x] ปุ่มขวาบนของ Auction Chat เปิดหน้ารายละเอียดสินค้าและเปลี่ยน label เป็น `ดูรายละเอียดสินค้า`
+- [x] ปุ่มใต้ข้อความยกเลิกรายการของผู้ขายเปิดหน้าจัดการสินค้าประมูล
+- [x] รองรับข้อความเก่าที่บันทึก action URL เดิมไว้แล้ว
+- [x] Docker focused tests ผ่าน Frontend 14/14 และ Product Auction 130/130
+- [ ] Live browser acceptance ยังรอผู้ใช้กดตรวจหน้าเว็บ

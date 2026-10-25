@@ -1,4 +1,7 @@
 "use client";
+
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 import { useEffect, useRef, useState } from "react";
 import config from "../../../lib/customerServiceConfig";
 import { apiFetch } from "../../../lib/api";
@@ -213,7 +216,7 @@ export default function ProductsSection({ token }) {
               inventory_2
             </span>
             <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">
-              Product Moderation
+              จัดการสินค้า
             </h2>
             <p className="mt-2 text-sm font-medium text-slate-500">
               ค้นหาสินค้าเพื่อลบออกจากระบบ หรือกู้คืนสินค้าที่เคยลบ
@@ -289,10 +292,10 @@ export default function ProductsSection({ token }) {
                     {p.title}
                   </button>
                   <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-medium text-slate-500">
-                    <span>รหัส {p.id.slice(0, 8)}</span>
+                    <span>รหัส {formatReferenceCode(p)}</span>
                     <span>฿{p.price?.toLocaleString("th-TH")}</span>
                     <span>{p.category}</span>
-                    <span>ผู้ขาย {p.sellerId?.slice(0, 8)}</span>
+                    <span>ผู้ขาย {formatReferenceCode(p.sellerId)}</span>
                   </div>
                 </div>
                 <Badge
@@ -363,12 +366,12 @@ export default function ProductsSection({ token }) {
         )}
       </div>
 
-      <Modal open={Boolean(selectedProduct)} onClose={() => setSelectedProduct(null)} title="Product Details" size="lg">
+      <Modal open={Boolean(selectedProduct)} onClose={() => setSelectedProduct(null)} title="รายละเอียดสินค้า" size="lg">
         {selectedProduct && <div className="space-y-3 p-5 text-sm text-slate-700">
           <p><strong>ชื่อ:</strong> {selectedProduct.title}</p>
-          <p className="break-all"><strong>รหัสสินค้า:</strong> {selectedProduct.id}</p>
-          <p><strong>เจ้าของสินค้า:</strong> {selectedSeller?.sellerProfile?.shopName || [selectedSeller?.firstName, selectedSeller?.lastName].filter(Boolean).join(" ") || selectedSeller?.email || selectedProduct.sellerId || "—"}</p>
-          <p className="break-all"><strong>รหัสผู้ขาย:</strong> {selectedProduct.sellerId || "—"}</p>
+          <p className="break-all"><strong>รหัสสินค้า:</strong> {formatReferenceCode(selectedProduct)}</p>
+          <p><strong>เจ้าของสินค้า:</strong> {selectedSeller?.sellerProfile?.shopName || [selectedSeller?.firstName, selectedSeller?.lastName].filter(Boolean).join(" ") || selectedSeller?.email || formatReferenceCode(selectedProduct.sellerId) || "—"}</p>
+          <p className="break-all"><strong>รหัสผู้ขาย:</strong> {selectedSeller?.referenceCode || formatReferenceCode(selectedProduct.sellerId) || "—"}</p>
           <p><strong>สถานะ:</strong> {STATUS_LABEL[selectedProduct.status] || selectedProduct.status}</p>
           <p><strong>ราคา:</strong> ฿{selectedProduct.price?.toLocaleString("th-TH")}</p>
           <p><strong>หมวดหมู่:</strong> {selectedProduct.category || "—"}</p>

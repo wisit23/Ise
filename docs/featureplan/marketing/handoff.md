@@ -477,7 +477,7 @@ acceptance. Test fixtures were removed. No commit/push or max-round-capacity wor
 ### 2026-10-18 Handoff — Interest-score Campaigns & Customer Insights (MKT-DEC-028)
 
 - Product migration ที่ต้อง deploy: `backend/services/product-service/prisma/migrations/20261024000000_campaign_interest_audience/migration.sql`
-- Score contract: reuse Recommendation weights, integer total, bands `0`, `1–6`, `7–14`, `15–24`, `25–38`, global maximum 38
+- Score contract: reuse Recommendation weights after removing Size, integer total, bands `0`, `1–6`, `7–14`, `15–24`, `25–33`, global maximum 33
 - Campaign contract:
   - `audienceCriteria` และ legacy `targetSegment` ใช้พร้อมกันไม่ได้
   - preview คืน aggregate เท่านั้น; publish fail เมื่อกลุ่มว่าง
@@ -485,7 +485,7 @@ acceptance. Test fixtures were removed. No commit/push or max-round-capacity wor
   - หลังได้ row lock จะเทียบเกณฑ์ล่าสุดกับ snapshot; ถ้ามี concurrent edit จะตอบ conflict โดยยังไม่ publish
   - discovery/detail/claim/applicable ตรวจ snapshot membership; profile/behavior ที่เปลี่ยนหลัง publish ไม่ถอนสิทธิ์
   - universal Campaign ไม่ส่ง Notification; score-targeted Campaign ส่งรายบัญชีไป `/campaigns`
-- Dashboard contract: Marketing-only, custom date-time สูงสุด 180 วัน, shortcut 7/30/90, filter ทั้งหน้าตาม category/brand/style/size/signal, compare equal previous period, aggregate only
+- Dashboard contract: Marketing-only, custom date-time สูงสุด 180 วัน, filter ทั้งหน้าตาม category/brand/style/signal, compare equal previous period, aggregate only
 - Cross-service data: Auth profiles และ Order paid purchases ผ่าน internal-token APIs; ไม่มี cross-service database read
 - Verification status:
   - Product migration deploy บน Docker สำเร็จ
@@ -503,3 +503,47 @@ acceptance. Test fixtures were removed. No commit/push or max-round-capacity wor
 - Marketing UI: active/manageable อยู่ก่อน history, count ไม่รวม rejected/cancelled และแสดง highest Bid จริงเมื่อมี
 - Verification รอบนี้: Docker Product Auction 126/126, Frontend targeted 69/69, backend syntax checks และ `git diff --check` ผ่าน; warning `act(...)` เดิมใน AuctionScheduleSection tests ยังมีแต่ suite ผ่าน
 - ยังไม่ได้ commit/push, ไม่ได้ stage ไฟล์ และยังไม่ได้รัน browser E2E หรือ database integration suite รอบใหม่
+
+### 2026-10-21 Handoff — Marketing Dashboard follow-up (MKT-DEC-030)
+
+- Campaign Comparison ใช้ช่วงหลักเดียวกันและเลือก Campaign ทุกสถานะเมื่อ `startsAt < to` และ `endsAt > from`
+- Campaign date labels ใช้ Gregorian/ค.ศ.
+- Heatmap ใช้ตัวกรองหลักเพียงชุดเดียว: day/hour, week/weekday-hour, month/day, year/month; custom ใช้เกณฑ์ `<=1`, `<=7`, `<=31`, `>31` วัน
+- Score contract ที่ถูกต้องหลังตัด Size คือคะแนนเต็ม 33 และช่วงสูงสุด `25–33`
+- ไม่มี schema/migration ใหม่; Product Campaign Metrics 18/18, Frontend focused tests 67/67 และ Next.js production build 28/28 pages ผ่าน
+- Live browser acceptance ผ่าน preset/custom Heatmap, Campaign overlap, Gregorian dates และ legacy score display; ยังไม่ commit/push
+
+### 2026-10-21 Handoff — Auction round item details (MKT-DEC-031)
+
+- เปลี่ยนเฉพาะ `AuctionScheduleSection.js` และ tests; ไม่มี backend/schema/migration change
+- Modal รายละเอียดรอบใช้ auction list API เดิมกรอง `roundId` และโหลดครบทุกหน้า ก่อนเรียง status groups ตาม Requirement
+- Closed result อิง `winningBidId` เพื่อรองรับ TC_AUC10 payment rollover; winner name ใช้ masked `bidderName` contract เดิม
+- Loading, empty, API error/retry, rejected/cancelled reason, no-bid และ scrollable large list ถูกครอบคลุมแล้ว
+- Focused Jest ผ่าน 59/59 และ Next.js production build ผ่าน 28/28 pages; browser จริง 1440×900 แสดงรอบ `RETEST` พร้อมสินค้ายกเลิก ราคา ฿530 และ 4 Bids ถูกต้อง
+- Targeted standalone ESLint รันไม่ได้เพราะ frontend container ไม่มี root ESLint/config และ `npx` เลือก ESLint 10; อย่างไรก็ตาม Next production build ผ่านขั้น `Linting and checking validity of types`
+- `git diff --check` ผ่าน; ยังไม่ commit/push และรักษา uncommitted work เดิมทั้งหมด
+
+### 2026-10-23 Handoff — Auction round search and filters (MKT-DEC-032)
+
+- `GET /api/products/auctions/rounds` รองรับ `search` และ comma-separated `phases`; filter จาก derived phase ก่อน pagination
+- หน้า Marketing ใช้ตัวกรองเดียวกับทั้งกลุ่ม manageable และ history พร้อมปุ่มล้างตัวกรอง
+- ไม่มี schema/migration ใหม่; Product Service ถูก rebuild เพื่อให้หน้าเว็บใช้ API ใหม่
+- Docker targeted tests ผ่าน Backend 130/130 และ Frontend 60/60; warning `act(...)` เดิมยังปรากฏแต่ suite ผ่าน
+- ยังไม่ได้ commit/push และยังไม่ได้บันทึก browser acceptance ว่าผ่านจนกว่าผู้ใช้จะตรวจหน้าเว็บ
+
+### 2026-10-24 Handoff — Auction result labels (MKT-DEC-033)
+
+- เปลี่ยนเฉพาะ `AuctionScheduleSection.js`, component tests และเอกสาร Marketing; ไม่มี backend/schema/migration change
+- ระหว่างประมูลแสดงผู้เสนอราคาสูงสุดปัจจุบัน; หลังปิดรอจ่ายแสดงผู้ได้รับสิทธิ์; Product `sold` แสดงผู้ชนะ
+- ถ้ามี Bid แต่ `winningBidId` เป็น null แสดง `ไม่มีผู้ชนะ` และไม่ fallback ไปเรียกผู้เสนอราคาสูงสุดว่าเป็นผู้ชนะ
+- TC_AUC10 และ notification เดิมคงอยู่: คนเดิมหมดเวลาแล้วเลื่อนสิทธิ์/สร้าง Order ให้คนถัดไป ผู้ได้รับสิทธิ์ใหม่และผู้ขายได้รับแจ้งเตือน
+- Docker focused Frontend ผ่าน 61/61; warning `act(...)` เดิมยังมีแต่ไม่ทำให้ suite ล้มเหลว
+- ยังไม่ commit/push และยังไม่ได้ทำ live browser acceptance รอบนี้
+
+### 2026-10-24 Handoff — Auction chat navigation (MKT-DEC-034)
+
+- เปลี่ยนเฉพาะ navigation สองจุด: ส่วนหัว Auction Chat ไป `/products/:productId`; seller cancellation CTA ไป `/seller/auctions`
+- `MessageList` normalize ข้อความ `auction.item_cancelled` ที่มี `role: SELLER` จึงแก้ปลายทางของข้อความเก่าได้โดยไม่แก้ข้อมูลในฐานข้อมูล
+- notification ใหม่จาก Product Service ส่ง action URL/label ใหม่ตั้งแต่ต้น
+- ไม่เปลี่ยน TC_AUC10 rollover, Order, เวลา 24 ชั่วโมง, ผู้รับ notification, audit หรือ schema
+- Docker focused tests ผ่าน Frontend 14/14 และ Product Auction 130/130; ยังไม่ commit/push

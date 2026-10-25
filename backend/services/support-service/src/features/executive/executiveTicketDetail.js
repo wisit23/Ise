@@ -96,6 +96,7 @@ async function getExecutiveTicket(id) {
     data: {
       id: ticket.id,
       ticketNumber: ticket.ticketNumber,
+      ...(ticket.referenceCode ? { referenceCode: ticket.referenceCode } : {}),
       subject: ticket.subject,
       requester: person(ticket.requesterId),
       createdAt: iso(ticket.createdAt),

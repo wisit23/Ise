@@ -45,6 +45,7 @@ function ProductsPageInner() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState("");
+  const [priceError, setPriceError] = useState("");
   const [loading, setLoading] = useState(true);
   const [personalized, setPersonalized] = useState(false);
   const requestRef = useRef(null);
@@ -58,6 +59,15 @@ function ProductsPageInner() {
     active = { style, brand, size, condition, minPrice, maxPrice },
     recordSearch = false,
   ) {
+    if (
+      active.minPrice !== "" &&
+      active.maxPrice !== "" &&
+      Number(active.minPrice) > Number(active.maxPrice)
+    ) {
+      setPriceError("ราคาต่ำสุดต้องไม่มากกว่าราคาสูงสุด");
+      return;
+    }
+    setPriceError("");
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
@@ -344,6 +354,9 @@ function ProductsPageInner() {
                   </Button>
                 )}
               </div>
+              {priceError && (
+                <p role="alert" className="mt-2 text-sm text-danger">{priceError}</p>
+              )}
             </div>
           </div>
 

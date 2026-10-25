@@ -1,9 +1,13 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 import { useState } from "react";
 import useExecutiveInbox from "../../../lib/useExecutiveInbox";
 import {
   FILTER_LABELS,
   INBOX_PERIODS,
+  INBOX_SORTS,
+  MAX_SEARCH_LENGTH,
   INBOX_SOURCES,
   INBOX_SOURCE_CHOICES,
   filterOptions,
@@ -162,6 +166,35 @@ export default function ComplaintsSection({ token }) {
               />
             </div>
           )}
+          {/* Reference search, at the right end of the period row. */}
+          <div className="ml-auto w-full sm:w-64">
+            <label
+              htmlFor="inbox-search"
+              className="mb-1.5 block text-sm font-medium text-slate-700"
+            >
+              ค้นหาด้วยรหัส
+            </label>
+            <div className="relative">
+              <span
+                aria-hidden="true"
+                className="material-symbols-outlined pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-slate-400"
+              >
+                search
+              </span>
+              <input
+                id="inbox-search"
+                type="search"
+                value={inbox.searchText}
+                onChange={(event) => inbox.setSearchText(event.target.value)}
+                placeholder="รหัส หรือชื่อร้าน"
+                title="ค้นด้วยรหัสของเรื่อง (เต็มหรือบางส่วน) เช่น RPT-8AX4 หรือ #CS-000002 · ข้อร้องเรียนและข้อพิพาทค้นด้วยชื่อร้านได้ · Ticket ค้นด้วยรหัสเท่านั้น · ค้นในช่วงเวลาที่เลือก"
+                maxLength={MAX_SEARCH_LENGTH}
+                autoComplete="off"
+                spellCheck={false}
+                className="w-full rounded-lg border border-slate-200 py-1.5 pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -179,15 +212,59 @@ export default function ComplaintsSection({ token }) {
               ตรวจพบเป้าหมายที่มีข้อร้องเรียนสะสมสูงผิดปกติ
             </p>
             <p className="mt-0.5 text-xs text-red-700">
-              ถูกรายงานสะสมตั้งแต่ {anomaly.threshold} ครั้งขึ้นไป:{" "}
-              {anomaly.highRiskTargets
-                .map(
-                  (t) =>
-                    `${t.targetShopName || t.targetName || t.targetId.slice(0, 8)} (${t.count} ครั้ง)`,
-                )
-                .join(", ")}
+              ถูกรายงานสะสมตั้งแต่ {anomaly.threshold} ครั้งขึ้นไป ·
+              กดชื่อเพื่อดูข้อร้องเรียนของเป้าหมายนั้น
             </p>
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {anomaly.highRiskTargets.map((t) => {
+                const name =
+                  t.targetShopName ||
+                  t.targetName ||
+                  formatReferenceCode(t.targetId);
+                const selected = inbox.focus?.id === t.targetId;
+                return (
+                  <li key={t.targetId}>
+                    <button
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() =>
+                        selected
+                          ? inbox.clearFocus()
+                          : inbox.focusTarget({ id: t.targetId, label: name })
+                      }
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-red-400/40 ${
+                        selected
+                          ? "border-red-600 bg-red-600 text-white"
+                          : "border-red-300 bg-white text-red-800 hover:bg-red-100"
+                      }`}
+                    >
+                      {name} ({t.count} ครั้ง)
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
+        </div>
+      )}
+
+      {inbox.focus && (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/60 bg-white px-4 py-3 text-sm text-slate-700"
+        >
+          <span>
+            ข้อร้องเรียนของ{" "}
+            <strong className="text-slate-900">{inbox.focus.label}</strong> ·
+            ทุกสถานะ ทุกช่วงเวลา
+          </span>
+          <button
+            type="button"
+            onClick={inbox.clearFocus}
+            className="ml-auto rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            ล้างตัวกรอง
+          </button>
         </div>
       )}
 
@@ -265,11 +342,25 @@ export default function ComplaintsSection({ token }) {
               {result.total} รายการ
             </span>
           </h2>
-          {loading && (
-            <span role="status" className="text-xs text-slate-500">
-              กำลังโหลด...
-            </span>
-          )}
+          {/* Loading note to the left of the sort, which stays at the right. */}
+          <div className="ml-auto flex items-center gap-3">
+            {loading && (
+              <span role="status" className="text-xs text-slate-500">
+                กำลังโหลด...
+              </span>
+            )}
+            <RadioSelect
+              id="inbox-sort"
+              ariaLabel="เรียงลำดับ"
+              value={inbox.sort}
+              onChange={inbox.changeSort}
+              options={INBOX_SORTS}
+              size="sm"
+              variant="panel"
+              align="right"
+              hoverToOpen={false}
+            />
+          </div>
         </div>
 
         {result.failed.length > 0 && (
@@ -292,7 +383,9 @@ export default function ComplaintsSection({ token }) {
           <ErrorState detail="โหลดข้อมูลไม่สำเร็จ" onRetry={inbox.retry} />
         ) : items.length === 0 ? (
           <p className="px-5 py-8 text-sm text-slate-500">
-            ไม่มีรายการในช่วงเวลานี้
+            {filters.q
+              ? `ไม่พบ “${filters.q}” ในช่วงเวลาที่เลือก ลองขยายช่วงเวลาหรือตรวจรหัส/ชื่อร้านอีกครั้ง`
+              : "ไม่มีรายการในช่วงเวลานี้"}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">

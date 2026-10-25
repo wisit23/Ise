@@ -332,6 +332,7 @@ describe("ReportsSection", () => {
     );
     expect(auditCall[1]).toEqual({
       token: "token",
+      timeoutMs: 15000,
       method: "POST",
       body: {
         action: "REPORT_EXPORT_CSV",
@@ -373,5 +374,30 @@ describe("ReportsSection", () => {
     expect(
       screen.getByRole("button", { name: /ดาวน์โหลด CSV/ }),
     ).not.toBeDisabled();
+  });
+
+  it("marks a missing user bucket unavailable rather than crashing or summing a false zero", async () => {
+    serveSeries({ auth: AUTH_SERIES.slice(0, 1) });
+    render(<ReportsSection token="token" />);
+    const missing = (await screen.findByText("02/ส.ค./69")).closest("tr");
+    expect(within(missing).getByText("ไม่พร้อมใช้งาน")).toBeVisible();
+    const total = screen.getByText("รวมทั้งหมด").closest("tr");
+    expect(within(total).getByText("ไม่พร้อมใช้งาน")).toBeVisible();
+  });
+
+  it("keeps a date supplied only by auth and marks its sales unavailable", async () => {
+    serveSeries({ order: ORDER_SERIES.slice(0, 1) });
+    render(<ReportsSection token="token" />);
+    const missing = (await screen.findByText("02/ส.ค./69")).closest("tr");
+    expect(within(missing).getAllByText("ไม่พร้อมใช้งาน")).toHaveLength(3);
+    expect(within(missing).getByText("1")).toBeVisible();
+  });
+
+  it("treats malformed successful provider data as unavailable", async () => {
+    serveSeries({ order: { gmv: 500 } });
+    render(<ReportsSection token="token" />);
+    const row = (await screen.findByText("01/ส.ค./69")).closest("tr");
+    expect(within(row).getAllByText("ไม่พร้อมใช้งาน")).toHaveLength(3);
+    expect(within(row).getByText("3")).toBeVisible();
   });
 });
