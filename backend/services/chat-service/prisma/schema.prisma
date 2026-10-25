@@ -91,6 +91,7 @@ model Message {
 }
 
 model Notification {
+  deletedAt DateTime? @map("deleted_at")
   id        String    @id @default(auto()) @map("_id") @db.ObjectId
   userId    String    // Recipient userId, or "ALL" for broadcast
   type      String    // DISCOUNT | AUCTION | ORDER | DISPUTE | SYSTEM

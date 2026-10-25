@@ -31,8 +31,11 @@ function moderationResult(product) {
 
 async function getProduct(productId) {
   const product = await prisma.product.findUnique({
-    where: { id: productId },
-    include: { photos: true, videos: true },
+    where: { deletedAt: null, id: productId },
+    include: {
+      photos: { where: { deletedAt: null } },
+      videos: { where: { deletedAt: null } },
+    },
   });
   if (!product) throw notFound("product not found");
   const { photos, videos, ...fields } = moderationResult(product);
@@ -133,7 +136,9 @@ async function executeCommand({
     // Different moderation keys for the same product must also serialize.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"product:" + productId}))`;
 
-    const product = await tx.product.findUnique({ where: { id: productId } });
+    const product = await tx.product.findUnique({
+      where: { deletedAt: null, id: productId },
+    });
     if (!product) throw notFound("product not found");
     const updated = await mutate(tx, product);
     const result = jsonResult(updated);
@@ -194,6 +199,7 @@ async function removeProduct(productId, reason, idempotencyKey) {
       }
       const changed = await tx.product.updateMany({
         where: {
+          deletedAt: null,
           id: productId,
           status: product.status,
           moderatedAt: null,
@@ -209,7 +215,9 @@ async function removeProduct(productId, reason, idempotencyKey) {
         throw conflict("product status changed — reload and retry");
       }
       return moderationResult(
-        await tx.product.findUnique({ where: { id: productId } }),
+        await tx.product.findUnique({
+          where: { deletedAt: null, id: productId },
+        }),
       );
     },
   });
@@ -228,6 +236,7 @@ async function restoreProduct(productId, reason, idempotencyKey) {
       const restored = await restoreCommerceState(tx, product);
       const changed = await tx.product.updateMany({
         where: {
+          deletedAt: null,
           id: productId,
           status: product.status,
           moderatedAt: product.moderatedAt,
@@ -243,7 +252,9 @@ async function restoreProduct(productId, reason, idempotencyKey) {
       if (changed.count !== 1) {
         throw conflict("product status changed — reload and retry");
       }
-      return tx.product.findUnique({ where: { id: productId } });
+      return tx.product.findUnique({
+        where: { deletedAt: null, id: productId },
+      });
     },
   });
 }

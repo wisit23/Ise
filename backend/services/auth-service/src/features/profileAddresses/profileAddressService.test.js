@@ -35,7 +35,11 @@ for (const [field, value, message] of [
   ["phone", "", "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก"],
   ["phone", "12345", "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก"],
   ["phone", "abcdefghij", "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก"],
-  ["phone", "1111111111", "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก และต้องขึ้นต้นด้วย 0"],
+  [
+    "phone",
+    "1111111111",
+    "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก และต้องขึ้นต้นด้วย 0",
+  ],
   ["postalCode", "ABCDE", "รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก"],
   ["postalCode", "1234", "รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก"],
 ]) {
@@ -104,7 +108,11 @@ test("setting a default address clears the previous default", async () => {
 
   const result = await service.setDefault("user-1", "address-2");
 
-  assert.deepEqual(calls[0].where, { userId: "user-1", isDefault: true });
+  assert.deepEqual(calls[0].where, {
+    userId: "user-1",
+    isDefault: true,
+    deletedAt: null,
+  });
   assert.equal(result.isDefault, true);
 });
 
@@ -135,7 +143,11 @@ test("deleting the default address promotes the oldest remaining address", async
 
   await service.remove("user-1", "address-1");
 
-  assert.deepEqual(updates, [
+  assert.equal(updates[0].where.deletedAt, null);
+  assert.equal(updates[0].where.userId, "user-1");
+  assert.ok(updates[0].data.deletedAt instanceof Date);
+  assert.equal(updates[0].data.isDefault, false);
+  assert.deepEqual(updates.slice(1), [
     { where: { id: "address-2" }, data: { isDefault: true } },
   ]);
 });

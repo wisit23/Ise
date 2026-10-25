@@ -30,7 +30,9 @@ function validAutoMessageText(value) {
   }
   const text = value.trim();
   if (text.length > MAX_AUTO_MESSAGE_LENGTH) {
-    throw badRequest(`คำถามอัตโนมัติต้องไม่เกิน ${MAX_AUTO_MESSAGE_LENGTH} ตัวอักษร`);
+    throw badRequest(
+      `คำถามอัตโนมัติต้องไม่เกิน ${MAX_AUTO_MESSAGE_LENGTH} ตัวอักษร`,
+    );
   }
   return text;
 }
@@ -210,7 +212,14 @@ function normalizePhone(phone) {
  * response carries no session: the user signs in after confirming the
  * emailed link. With verification off, sign-up signs them straight in.
  */
-async function register({ email, password, firstName, lastName, phone, ipAddress }) {
+async function register({
+  email,
+  password,
+  firstName,
+  lastName,
+  phone,
+  ipAddress,
+}) {
   if (!email || !password || !firstName || !lastName) {
     throw badRequest("email, password, firstName, lastName are required");
   }
@@ -222,7 +231,12 @@ async function register({ email, password, firstName, lastName, phone, ipAddress
     throw conflict("email is already registered");
   }
 
-  const profile = { passwordHash: await hashPassword(password), firstName, lastName, phone };
+  const profile = {
+    passwordHash: await hashPassword(password),
+    firstName,
+    lastName,
+    phone,
+  };
   const user = existing
     ? await prisma.user.update({ where: { id: existing.id }, data: profile })
     : await prisma.user.create({ data: { email, ...profile, role: "BUYER" } });
@@ -435,24 +449,38 @@ async function decideChangeRequest(adminId, requestId, payload) {
 /** Auto Messages (FAQ / Quick questions for buyer chat initiation) */
 async function listMyAutoMessages(sellerId) {
   return prisma.autoMessage.findMany({
-    where: { userId: sellerId },
+    where: { deletedAt: null, userId: sellerId },
     orderBy: { id: "asc" },
   });
 }
 
-async function createAutoMessage(sellerId, { messageText, isActive = true } = {}) {
+async function createAutoMessage(
+  sellerId,
+  { messageText, isActive = true } = {},
+) {
   const text = validAutoMessageText(messageText);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await prisma.$transaction(async (tx) => {
-        const count = await tx.autoMessage.count({ where: { userId: sellerId } });
-        if (count >= MAX_AUTO_MESSAGES) {
-          throw conflict(`เพิ่มคำถามอัตโนมัติได้ไม่เกิน ${MAX_AUTO_MESSAGES} ข้อต่อร้าน`);
-        }
-        return tx.autoMessage.create({
-          data: { userId: sellerId, messageText: text, isActive: Boolean(isActive) },
-        });
-      }, { isolationLevel: "Serializable" });
+      return await prisma.$transaction(
+        async (tx) => {
+          const count = await tx.autoMessage.count({
+            where: { deletedAt: null, userId: sellerId },
+          });
+          if (count >= MAX_AUTO_MESSAGES) {
+            throw conflict(
+              `เพิ่มคำถามอัตโนมัติได้ไม่เกิน ${MAX_AUTO_MESSAGES} ข้อต่อร้าน`,
+            );
+          }
+          return tx.autoMessage.create({
+            data: {
+              userId: sellerId,
+              messageText: text,
+              isActive: Boolean(isActive),
+            },
+          });
+        },
+        { isolationLevel: "Serializable" },
+      );
     } catch (error) {
       if (error?.code !== "P2034") throw error;
     }
@@ -460,9 +488,13 @@ async function createAutoMessage(sellerId, { messageText, isActive = true } = {}
   throw conflict("มีการเพิ่มคำถามพร้อมกัน กรุณาลองอีกครั้ง");
 }
 
-async function updateAutoMessage(sellerId, messageId, { messageText, isActive } = {}) {
+async function updateAutoMessage(
+  sellerId,
+  messageId,
+  { messageText, isActive } = {},
+) {
   const existing = await prisma.autoMessage.findFirst({
-    where: { id: messageId, userId: sellerId },
+    where: { id: messageId, userId: sellerId, deletedAt: null },
   });
   if (!existing) throw notFound("auto message not found");
 
@@ -475,26 +507,27 @@ async function updateAutoMessage(sellerId, messageId, { messageText, isActive } 
   }
 
   return prisma.autoMessage.update({
-    where: { id: messageId },
+    where: { id: messageId, userId: sellerId, deletedAt: null },
     data,
   });
 }
 
 async function deleteAutoMessage(sellerId, messageId) {
   const existing = await prisma.autoMessage.findFirst({
-    where: { id: messageId, userId: sellerId },
+    where: { id: messageId, userId: sellerId, deletedAt: null },
   });
   if (!existing) throw notFound("auto message not found");
 
-  await prisma.autoMessage.delete({
-    where: { id: messageId },
+  await prisma.autoMessage.update({
+    data: { deletedAt: new Date(), isActive: false },
+    where: { id: messageId, userId: sellerId, deletedAt: null },
   });
   return { success: true };
 }
 
 async function getPublicAutoMessages(sellerId) {
   const messages = await prisma.autoMessage.findMany({
-    where: { userId: sellerId, isActive: true },
+    where: { deletedAt: null, userId: sellerId, isActive: true },
     orderBy: { id: "asc" },
     take: MAX_AUTO_MESSAGES,
     select: { id: true, messageText: true },

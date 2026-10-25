@@ -28,9 +28,15 @@ function createInterestAudienceRepository(db = prisma) {
   async function listLikeSignals({ from, to }) {
     const rows = await db.swipeChoice.findMany({
       where: {
+        deletedAt: null,
         createdAt: { gte: from, lte: to },
         productVideo: {
-          product: { moderatedAt: null, status: { not: "removed" } },
+          deletedAt: null,
+          product: {
+            deletedAt: null,
+            moderatedAt: null,
+            status: { not: "removed" },
+          },
         },
       },
       orderBy: [{ userId: "asc" }, { createdAt: "desc" }],
@@ -41,7 +47,10 @@ function createInterestAudienceRepository(db = prisma) {
           select: {
             product: {
               include: {
-                categoryLinks: { include: { category: true } },
+                categoryLinks: {
+                  where: { deletedAt: null },
+                  include: { category: true },
+                },
               },
             },
           },
@@ -60,11 +69,17 @@ function createInterestAudienceRepository(db = prisma) {
     const products = productIds.length
       ? await db.product.findMany({
           where: {
+            deletedAt: null,
             id: { in: productIds },
             moderatedAt: null,
             status: { not: "removed" },
           },
-          include: { categoryLinks: { include: { category: true } } },
+          include: {
+            categoryLinks: {
+              where: { deletedAt: null },
+              include: { category: true },
+            },
+          },
         })
       : [];
     const byId = new Map(products.map((product) => [product.id, product]));
@@ -79,15 +94,25 @@ function createInterestAudienceRepository(db = prisma) {
 
   async function listDimensions() {
     const [categories, products] = await Promise.all([
-      db.category.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+      db.category.findMany({
+        orderBy: { name: "asc" },
+        select: { name: true },
+      }),
       db.product.findMany({
-        where: { moderatedAt: null, status: { not: "removed" } },
+        where: {
+          deletedAt: null,
+          moderatedAt: null,
+          status: { not: "removed" },
+        },
         select: {
           brand: true,
           tags: true,
           size: true,
           category: true,
-          categoryLinks: { select: { category: { select: { name: true } } } },
+          categoryLinks: {
+            where: { deletedAt: null },
+            select: { category: { select: { name: true } } },
+          },
         },
       }),
     ]);

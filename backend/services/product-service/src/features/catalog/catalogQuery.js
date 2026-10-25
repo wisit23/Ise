@@ -55,15 +55,18 @@ function buildCatalogWhere(filters, { PrismaClient } = {}) {
       PrismaClient.sql`status NOT IN ('removed', 'hidden', 'auction_action_required') AND moderated_at IS NULL`,
     );
   }
+  clauses.push(PrismaClient.sql`AND products.deleted_at IS NULL`);
   for (const field of FILTER_FIELDS) {
     if (!filters[field]) continue;
     if (field === "category") {
       clauses.push(PrismaClient.sql`AND EXISTS (
         SELECT 1 FROM product_categories pc JOIN categories c ON c.id = pc.category_id
-        WHERE pc.product_id = products.id AND c.name = ${filters.category}
+        WHERE pc.product_id = products.id AND pc.deleted_at IS NULL AND c.name = ${filters.category}
       )`);
     } else {
-      clauses.push(PrismaClient.sql`AND ${PrismaClient.raw(field)} = ${filters[field]}`);
+      clauses.push(
+        PrismaClient.sql`AND ${PrismaClient.raw(field)} = ${filters[field]}`,
+      );
     }
   }
   if (filters.style)
@@ -73,7 +76,10 @@ function buildCatalogWhere(filters, { PrismaClient } = {}) {
   if (filters.maxPrice !== undefined)
     clauses.push(PrismaClient.sql`AND price <= ${filters.maxPrice}`);
   if (filters.q) {
-    const reference = require("@reloop/shared").normalizeReferenceCode(filters.q, "PRD");
+    const reference = require("@reloop/shared").normalizeReferenceCode(
+      filters.q,
+      "PRD",
+    );
     const shopMatch = filters.matchingSellerIds?.length
       ? PrismaClient.sql`OR products.seller_id IN (${PrismaClient.join(filters.matchingSellerIds)})`
       : PrismaClient.sql``;

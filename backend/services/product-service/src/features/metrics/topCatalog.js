@@ -32,7 +32,7 @@ async function getCatalogRankings({ from, to, timezone, limit = 10 }) {
   const sales = await orderSalesClient.getProductSales({ from, to, timezone });
 
   const products = await prisma.product.findMany({
-    where: { id: { in: sales.map((s) => s.productId) } },
+    where: { deletedAt: null, id: { in: sales.map((s) => s.productId) } },
     select: { id: true, category: true },
   });
   const categoryById = new Map(products.map((p) => [p.id, p.category]));

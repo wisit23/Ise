@@ -47,6 +47,7 @@ test("list applies multiple round/status values and search before pagination", a
   });
 
   const expectedWhere = {
+    product: { deletedAt: null },
     status: { in: ["pending_approval", "approved", "cancelled"] },
     roundId: { in: ["round-1", "round-2"] },
     OR: [
@@ -84,4 +85,3 @@ test("findActiveAuctionRounds includes an open soft-close item after the base ro
     },
   });
 });
-

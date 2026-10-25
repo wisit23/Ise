@@ -3,8 +3,18 @@ const assert = require("node:assert/strict");
 
 const calls = {};
 const mockAutoMessages = [
-  { id: "msg-1", userId: "seller-1", messageText: "สินค้ายังอยู่ไหมครับ?", isActive: true },
-  { id: "msg-2", userId: "seller-1", messageText: "ลดราคาได้ไหมครับ?", isActive: false },
+  {
+    id: "msg-1",
+    userId: "seller-1",
+    messageText: "สินค้ายังอยู่ไหมครับ?",
+    isActive: true,
+  },
+  {
+    id: "msg-2",
+    userId: "seller-1",
+    messageText: "ลดราคาได้ไหมครับ?",
+    isActive: false,
+  },
 ];
 
 const prisma = {
@@ -12,17 +22,24 @@ const prisma = {
     findMany: async (query) => {
       calls.findMany = query;
       const items = mockAutoMessages.filter((m) => {
-        if (query.where?.userId && m.userId !== query.where.userId) return false;
-        if (query.where?.isActive !== undefined && m.isActive !== query.where.isActive) return false;
+        if (query.where?.userId && m.userId !== query.where.userId)
+          return false;
+        if (
+          query.where?.isActive !== undefined &&
+          m.isActive !== query.where.isActive
+        )
+          return false;
         return true;
       });
       return query.take === undefined ? items : items.slice(0, query.take);
     },
     findFirst: async (query) => {
       calls.findFirst = query;
-      return mockAutoMessages.find(
-        (m) => m.id === query.where?.id && m.userId === query.where?.userId,
-      ) || null;
+      return (
+        mockAutoMessages.find(
+          (m) => m.id === query.where?.id && m.userId === query.where?.userId,
+        ) || null
+      );
     },
     create: async ({ data }) => {
       calls.create = data;
@@ -30,7 +47,10 @@ const prisma = {
     },
     count: async ({ where }) => {
       calls.count = where;
-      return calls.mockCount ?? mockAutoMessages.filter((m) => m.userId === where.userId).length;
+      return (
+        calls.mockCount ??
+        mockAutoMessages.filter((m) => m.userId === where.userId).length
+      );
     },
     update: async ({ where, data }) => {
       calls.update = { where, data };
@@ -70,7 +90,7 @@ test("createAutoMessage creates active auto message", async () => {
   });
   assert.equal(item.messageText, "ส่งของวันไหนครับ?");
   assert.equal(item.isActive, true);
-  assert.deepEqual(calls.count, { userId: "seller-1" });
+  assert.deepEqual(calls.count, { userId: "seller-1", deletedAt: null });
   assert.equal(calls.transactionOptions.isolationLevel, "Serializable");
 });
 
@@ -91,7 +111,10 @@ test("createAutoMessage rejects non-string and overlong text", async () => {
     /กรุณากรอกคำถามอัตโนมัติ/,
   );
   await assert.rejects(
-    () => authService.createAutoMessage("seller-1", { messageText: "ก".repeat(101) }),
+    () =>
+      authService.createAutoMessage("seller-1", {
+        messageText: "ก".repeat(101),
+      }),
     /ไม่เกิน 100 ตัวอักษร/,
   );
 });
@@ -100,7 +123,8 @@ test("createAutoMessage rejects a seller already at the limit", async () => {
   calls.mockCount = 20;
   try {
     await assert.rejects(
-      () => authService.createAutoMessage("seller-1", { messageText: "คำถามใหม่" }),
+      () =>
+        authService.createAutoMessage("seller-1", { messageText: "คำถามใหม่" }),
       /ไม่เกิน 20 ข้อต่อร้าน/,
     );
   } finally {
@@ -113,11 +137,14 @@ test("createAutoMessage retries a serialization conflict", async () => {
   let attempts = 0;
   prisma.$transaction = async (callback, options) => {
     attempts += 1;
-    if (attempts === 1) throw Object.assign(new Error("write conflict"), { code: "P2034" });
+    if (attempts === 1)
+      throw Object.assign(new Error("write conflict"), { code: "P2034" });
     return originalTransaction(callback, options);
   };
   try {
-    const item = await authService.createAutoMessage("seller-1", { messageText: "ยังอยู่ไหม" });
+    const item = await authService.createAutoMessage("seller-1", {
+      messageText: "ยังอยู่ไหม",
+    });
     assert.equal(item.messageText, "ยังอยู่ไหม");
     assert.equal(attempts, 2);
   } finally {
@@ -136,17 +163,24 @@ test("updateAutoMessage toggles isActive and edits text", async () => {
 
 test("updateAutoMessage rejects overlong text without changing activation", async () => {
   await assert.rejects(
-    () => authService.updateAutoMessage("seller-1", "msg-1", {
-      messageText: "ก".repeat(101), isActive: false,
-    }),
+    () =>
+      authService.updateAutoMessage("seller-1", "msg-1", {
+        messageText: "ก".repeat(101),
+        isActive: false,
+      }),
     /ไม่เกิน 100 ตัวอักษร/,
   );
 });
 
-test("deleteAutoMessage deletes auto message", async () => {
+test("deleteAutoMessage preserves the message and disables it", async () => {
   const result = await authService.deleteAutoMessage("seller-1", "msg-1");
   assert.equal(result.success, true);
-  assert.equal(calls.delete.id, "msg-1");
+  assert.equal(calls.update.where.id, "msg-1");
+  assert.equal(calls.update.where.userId, "seller-1");
+  assert.equal(calls.update.where.deletedAt, null);
+  assert.ok(calls.update.data.deletedAt instanceof Date);
+  assert.equal(calls.update.data.isActive, false);
+  assert.equal(calls.delete, undefined);
 });
 
 test("getPublicAutoMessages returns only active messages for public display", async () => {

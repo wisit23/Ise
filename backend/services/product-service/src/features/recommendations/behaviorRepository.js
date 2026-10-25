@@ -59,17 +59,28 @@ function createBehaviorRepository(db = prisma) {
       }),
       db.swipeChoice.findMany({
         where: {
+          deletedAt: null,
           userId,
           createdAt: { gte: since },
           productVideo: {
-            product: { moderatedAt: null, status: { not: "removed" } },
+            deletedAt: null,
+            product: {
+              deletedAt: null,
+              moderatedAt: null,
+              status: { not: "removed" },
+            },
           },
         },
         include: {
           productVideo: {
             include: {
               product: {
-                include: { categoryLinks: { include: { category: true } } },
+                include: {
+                  categoryLinks: {
+                    where: { deletedAt: null },
+                    include: { category: true },
+                  },
+                },
               },
             },
           },
@@ -94,11 +105,17 @@ function createBehaviorRepository(db = prisma) {
     const products = history.length
       ? await db.product.findMany({
           where: {
+            deletedAt: null,
             id: { in: history.map((row) => row.productId) },
             moderatedAt: null,
             status: { not: "removed" },
           },
-          include: { categoryLinks: { include: { category: true } } },
+          include: {
+            categoryLinks: {
+              where: { deletedAt: null },
+              include: { category: true },
+            },
+          },
         })
       : [];
     const byId = new Map(products.map((product) => [product.id, product]));

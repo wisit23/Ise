@@ -8,7 +8,11 @@ const prisma = require("../../models/prismaClient");
  */
 function createProductVideoRepository(prismaClient) {
   async function listMine({ sellerId, skip, take }) {
-    const where = { sellerId, product: { sellerId, status: { not: "sold" } } };
+    const where = {
+      deletedAt: null,
+      sellerId,
+      product: { deletedAt: null, sellerId, status: { not: "sold" } },
+    };
     const [items, total] = await Promise.all([
       prismaClient.productVideo.findMany({
         where,
@@ -24,19 +28,23 @@ function createProductVideoRepository(prismaClient) {
 
   function updateOwned(id, sellerId, data) {
     return prismaClient.productVideo.update({
-      where: { id, sellerId },
+      where: { id, sellerId, deletedAt: null, product: { deletedAt: null } },
       data,
       include: { product: true },
     });
   }
 
   function deleteOwned(id, sellerId) {
-    return prismaClient.productVideo.delete({ where: { id, sellerId } });
+    return prismaClient.productVideo.update({
+      where: { id, sellerId, deletedAt: null, product: { deletedAt: null } },
+      data: { deletedAt: new Date() },
+    });
   }
 
   async function listAvailable({ skip, take, userId = null, videoId }) {
     const where = {
-      product: { status: "available", moderatedAt: null },
+      deletedAt: null,
+      product: { deletedAt: null, status: "available", moderatedAt: null },
       ...(videoId ? { id: videoId } : {}),
     };
 
@@ -44,11 +52,11 @@ function createProductVideoRepository(prismaClient) {
       prismaClient.productVideo.findMany({
         where,
         include: {
-          product: { include: { photos: true } },
+          product: { include: { photos: { where: { deletedAt: null } } } },
           ...(userId
             ? {
                 choices: {
-                  where: { userId },
+                  where: { userId, deletedAt: null },
                   select: { id: true },
                 },
               }
@@ -73,14 +81,14 @@ function createProductVideoRepository(prismaClient) {
 
   function findProductOwner(productId) {
     return prismaClient.product.findUnique({
-      where: { id: productId },
+      where: { id: productId, deletedAt: null },
       select: { id: true, sellerId: true, status: true, moderatedAt: true },
     });
   }
 
   function findById(id) {
     return prismaClient.productVideo.findUnique({
-      where: { id },
+      where: { id, deletedAt: null, product: { deletedAt: null } },
       include: {
         product: {
           select: { id: true, status: true, moderatedAt: true, title: true },
@@ -99,14 +107,15 @@ function createProductVideoRepository(prismaClient) {
   function upsertChoice({ productVideoId, userId }) {
     return prismaClient.swipeChoice.upsert({
       where: { productVideoId_userId: { productVideoId, userId } },
-      update: {},
+      update: { deletedAt: null },
       create: { productVideoId, userId },
     });
   }
 
   function deleteChoice({ productVideoId, userId }) {
-    return prismaClient.swipeChoice.deleteMany({
-      where: { productVideoId, userId },
+    return prismaClient.swipeChoice.updateMany({
+      where: { productVideoId, userId, deletedAt: null },
+      data: { deletedAt: new Date() },
     });
   }
 

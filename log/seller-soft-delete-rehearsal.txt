@@ -1,0 +1,173 @@
+Environment variables loaded from .env
+Prisma schema loaded from backend\services\product-service\prisma\schema.prisma
+Datasource "db": PostgreSQL database "seller_soft_delete_product_1792937551281_34124", schema "public" at "127.0.0.1:5432"
+
+21 migrations found in prisma/migrations
+
+Applying migration `20261011000000_unified_product_baseline`
+Applying migration `20261014000000_approved_er_review_media`
+Applying migration `20261014000000_auction_soft_close_floor`
+Applying migration `20261014010000_approved_er_product_relations`
+Applying migration `20261014010000_auction_round_capacity`
+Applying migration `20261014020000_approved_er_audit_and_budget`
+Applying migration `20261014030000_approved_er_category_compatibility`
+Applying migration `20261014040000_approved_er_count_views`
+Applying migration `20261015010000_recommendation_searches`
+Applying migration `20261016000000_campaign_budget_reservations`
+Applying migration `20261016000000_operational_storage`
+Applying migration `20261017000000_article_unique_reads`
+Applying migration `20261017010000_restore_campaign_budget_balance`
+Applying migration `20261022010000_product_video_comments`
+Applying migration `20261023000000_product_favorites`
+Applying migration `20261024000000_campaign_interest_audience`
+Applying migration `20261024150000_add_reference_codes`
+Applying migration `20261025000000_review_moderation`
+Applying migration `20261026000000_product_price_positive`
+Applying migration `20261027000000_product_video_title`
+Applying migration `20261028000000_seller_soft_delete`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20261011000000_unified_product_baseline/
+    └─ migration.sql
+  └─ 20261014000000_approved_er_review_media/
+    └─ migration.sql
+  └─ 20261014000000_auction_soft_close_floor/
+    └─ migration.sql
+  └─ 20261014010000_approved_er_product_relations/
+    └─ migration.sql
+  └─ 20261014010000_auction_round_capacity/
+    └─ migration.sql
+  └─ 20261014020000_approved_er_audit_and_budget/
+    └─ migration.sql
+  └─ 20261014030000_approved_er_category_compatibility/
+    └─ migration.sql
+  └─ 20261014040000_approved_er_count_views/
+    └─ migration.sql
+  └─ 20261015010000_recommendation_searches/
+    └─ migration.sql
+  └─ 20261016000000_campaign_budget_reservations/
+    └─ migration.sql
+  └─ 20261016000000_operational_storage/
+    └─ migration.sql
+  └─ 20261017000000_article_unique_reads/
+    └─ migration.sql
+  └─ 20261017010000_restore_campaign_budget_balance/
+    └─ migration.sql
+  └─ 20261022010000_product_video_comments/
+    └─ migration.sql
+  └─ 20261023000000_product_favorites/
+    └─ migration.sql
+  └─ 20261024000000_campaign_interest_audience/
+    └─ migration.sql
+  └─ 20261024150000_add_reference_codes/
+    └─ migration.sql
+  └─ 20261025000000_review_moderation/
+    └─ migration.sql
+  └─ 20261026000000_product_price_positive/
+    └─ migration.sql
+  └─ 20261027000000_product_video_title/
+    └─ migration.sql
+  └─ 20261028000000_seller_soft_delete/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+✔ PostgreSQL ranking: category memberships, category-specific sizes, eligibility and deterministic paging (560.1045ms)
+✔ favorites persist uniquely, belong to the buyer, and count each buyer once (294.481ms)
+[shopSearch] Shop lookup failed: fetch failed
+[shopSearch] Shop lookup failed: fetch failed
+✔ seller deletion retains history, hides deleted rows, and blocks reuse (6130.5599ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7823.2123
+Environment variables loaded from .env
+Prisma schema loaded from backend\services\auth-service\prisma\schema.prisma
+Datasource "db": PostgreSQL database "seller_soft_delete_auth_1792937551281_34124", schema "public" at "127.0.0.1:5432"
+
+18 migrations found in prisma/migrations
+
+Applying migration `20260824151942_add_multi_role_foundation`
+Applying migration `20260824194716_add_kyc_applications`
+Applying migration `20260824200031_add_reports_and_admin_audit`
+Applying migration `20260824202600_add_bulk_action_runs`
+Applying migration `20260912120000_add_buyer_activity_audit`
+Applying migration `20261007125900_preserve_legacy_auth_data`
+Applying migration `20261007130000_align_auth_er_design`
+Applying migration `20261014000000_approved_er_keys_and_auto_messages`
+Applying migration `20261014010000_archive_legacy_auth_tables`
+Applying migration `20261014190000_add_report_evidence`
+Applying migration `20261015000000_multi_value_style_profile`
+Applying migration `20261015120000_add_report_category`
+Applying migration `20261021000000_add_password_reset_tokens`
+Applying migration `20261023000000_add_email_verification`
+Applying migration `20261024000000_add_reference_codes_and_verification_purpose`
+Applying migration `20261024100000_executive_time_indexes`
+Applying migration `20261024150000_add_reference_codes`
+Applying migration `20261028000000_seller_soft_delete`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260824151942_add_multi_role_foundation/
+    └─ migration.sql
+  └─ 20260824194716_add_kyc_applications/
+    └─ migration.sql
+  └─ 20260824200031_add_reports_and_admin_audit/
+    └─ migration.sql
+  └─ 20260824202600_add_bulk_action_runs/
+    └─ migration.sql
+  └─ 20260912120000_add_buyer_activity_audit/
+    └─ migration.sql
+  └─ 20261007125900_preserve_legacy_auth_data/
+    └─ migration.sql
+  └─ 20261007130000_align_auth_er_design/
+    └─ migration.sql
+  └─ 20261014000000_approved_er_keys_and_auto_messages/
+    └─ migration.sql
+  └─ 20261014010000_archive_legacy_auth_tables/
+    └─ migration.sql
+  └─ 20261014190000_add_report_evidence/
+    └─ migration.sql
+  └─ 20261015000000_multi_value_style_profile/
+    └─ migration.sql
+  └─ 20261015120000_add_report_category/
+    └─ migration.sql
+  └─ 20261021000000_add_password_reset_tokens/
+    └─ migration.sql
+  └─ 20261023000000_add_email_verification/
+    └─ migration.sql
+  └─ 20261024000000_add_reference_codes_and_verification_purpose/
+    └─ migration.sql
+  └─ 20261024100000_executive_time_indexes/
+    └─ migration.sql
+  └─ 20261024150000_add_reference_codes/
+    └─ migration.sql
+  └─ 20261028000000_seller_soft_delete/
+    └─ migration.sql
+      
+All migrations have been successfully applied.
+✔ deleted seller questions and addresses remain stored but cannot be used (225.635ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 835.3328
+✔ personal notifications soft delete while legacy Mongo documents remain visible (120.2321ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 329.5073
+Seller soft-delete migration and persistence rehearsal passed.

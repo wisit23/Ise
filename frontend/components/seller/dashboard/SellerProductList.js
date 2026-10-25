@@ -374,7 +374,7 @@ export default function SellerProductList({
         title="ยืนยันการลบสินค้า"
         description={
           deleteProductTarget
-            ? `คุณแน่ใจว่าต้องการลบสินค้า "${deleteProductTarget.title}" ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`
+            ? `คุณแน่ใจว่าต้องการลบสินค้า "${deleteProductTarget.title}" ใช่หรือไม่? สินค้านี้จะไม่แสดงในร้านและรายการขายของคุณ`
             : ""
         }
         confirmLabel="ยืนยันการลบ"

@@ -13,16 +13,16 @@ function createAuctionRepository(prismaClient) {
   // Ordered by position so the seller's chosen cover photo (index 0) is
   // always photos[0] — same convention productModel uses for listings.
   const WITH_PRODUCT = {
-    product: { include: { photos: { orderBy: { position: "asc" } } } },
+    product: { include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" } } } },
     round: true,
   };
 
   async function findProductOwner(productId, tx = prismaClient) {
     const client = tx || prismaClient;
     const product = await client.product.findUnique({
-      where: { id: productId },
+      where: { deletedAt: null, id: productId },
       select: { id: true, sellerId: true, status: true, category: true, moderatedAt: true,
-        categoryLinks: { include: { category: true } } },
+        categoryLinks: { where: { deletedAt: null }, include: { category: true } } },
     });
     if (!product) return product;
     const { categoryLinks, ...fields } = product;
@@ -37,7 +37,7 @@ function createAuctionRepository(prismaClient) {
   async function findById(id, tx = prismaClient) {
     const client = tx || prismaClient;
     return hydrateItem(client, await client.auctionItem.findUnique({
-      where: { id },
+      where: { id, product: { deletedAt: null } },
       include: {
         ...WITH_PRODUCT,
         bids: { orderBy: [{ amount: "desc" }, { createdAt: "asc" }] },
@@ -49,6 +49,7 @@ function createAuctionRepository(prismaClient) {
     const effectiveStatuses = statuses?.length ? statuses : status ? [status] : [];
     const effectiveRoundIds = roundIds?.length ? roundIds : roundId ? [roundId] : [];
     const where = {
+      product: { deletedAt: null },
       ...(effectiveStatuses.length
         ? { status: { in: effectiveStatuses } }
         : {}),
@@ -100,7 +101,7 @@ function createAuctionRepository(prismaClient) {
         const changed = await client.auctionItem.updateMany({
           where: { id, ...(options.expectedStatus ? { status: options.expectedStatus } : {}),
             ...(options.startDueAt ? { scheduledStartAt: { lte: options.startDueAt } } : {}),
-            ...(options.requireUnmoderatedProduct ? { product: { moderatedAt: null, status: { not: "removed" } } } : {}) },
+            ...(options.requireUnmoderatedProduct ? { product: { deletedAt: null, moderatedAt: null, status: { not: "removed" } } } : {}) },
           data: columns,
         });
         if (changed.count) await saveFields(client, "AUCTION_ITEM", id, erFields);
@@ -157,7 +158,7 @@ function createAuctionRepository(prismaClient) {
 
   function setProductStatus(productId, status, tx = prismaClient, extraData = {}) {
     return tx.product.update({
-      where: { id: productId },
+      where: { deletedAt: null, id: productId },
       data: { status, ...extraData },
     });
   }
@@ -274,7 +275,7 @@ function createAuctionRepository(prismaClient) {
           _count: {
             select: {
               auctions: {
-                where: { status: { notIn: ["rejected", "cancelled"] } },
+                where: { product: { deletedAt: null }, status: { notIn: ["rejected", "cancelled"] } },
               },
             },
           },
@@ -290,7 +291,7 @@ function createAuctionRepository(prismaClient) {
           _count: {
             select: {
               auctions: {
-                where: { status: { notIn: ["rejected", "cancelled"] } },
+                where: { product: { deletedAt: null }, status: { notIn: ["rejected", "cancelled"] } },
               },
             },
           },
@@ -311,7 +312,7 @@ function createAuctionRepository(prismaClient) {
     const client = tx || prismaClient;
     return hydrateRound(client, await client.auctionRound.findUnique({
       where: { id },
-      include: { auctions: { include: WITH_PRODUCT } },
+      include: { auctions: { where: { product: { deletedAt: null } }, include: WITH_PRODUCT } },
     }));
   }
 
@@ -326,6 +327,7 @@ function createAuctionRepository(prismaClient) {
       include: {
         auctions: {
           where: {
+            product: { deletedAt: null },
             status: { in: ["open", "scheduled"] },
           },
           include: WITH_PRODUCT,

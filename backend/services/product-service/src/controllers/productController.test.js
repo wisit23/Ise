@@ -25,7 +25,7 @@ function deletionFixture(t, product, deleteCount = 1) {
     deletions.push(args);
     return product;
   });
-  mockDelegate(t, prisma.product, "deleteMany", async (args) => {
+  mockDelegate(t, prisma.product, "updateMany", async (args) => {
     deletions.push(args);
     return { count: deleteCount };
   });
@@ -74,6 +74,7 @@ test("TC18: deletion is guarded atomically if a reservation wins the race", asyn
   assert.deepEqual(deletions[0].where, {
     id: "p",
     sellerId: "seller",
+    deletedAt: null,
     moderatedAt: null,
     status: { notIn: ["removed", "reserved", "auction", "sold"] },
     OR: [
@@ -94,6 +95,7 @@ test("seller can still delete an available listing", async (t) => {
   assert.equal(res.status, 204);
   assert.equal(deletions.length, 1);
   assert.equal(prisma.product.delete.mock.callCount(), 0);
+  assert.ok(deletions[0].data.deletedAt instanceof Date);
 });
 
 test("non-owner still cannot delete a listing", async (t) => {
@@ -151,7 +153,12 @@ for (const product of [
   test(`${product.status} sold listing cannot be edited or made available`, async (t) => {
     const update = t.mock.fn();
     const app = updateFixture(t, product, update);
-    for (const patch of [{ title: "Changed" }, { price: 200 }, { status: "available" }, { media: [] }]) {
+    for (const patch of [
+      { title: "Changed" },
+      { price: 200 },
+      { status: "available" },
+      { media: [] },
+    ]) {
       const res = await request(app).patch("/p").send(patch);
       assert.equal(res.status, 409);
       assert.equal(res.body.error, "ไม่สามารถแก้ไขสินค้าที่ขายแล้วได้");
@@ -161,13 +168,19 @@ for (const product of [
 
   test(`${product.status} sold listing visibility cannot change`, async (t) => {
     t.mock.method(model, "findById", async () => product);
-    const visibility = t.mock.method(model, "setVisibility", async () => product);
+    const visibility = t.mock.method(
+      model,
+      "setVisibility",
+      async () => product,
+    );
     for (const visible of [true, false]) {
       let error;
       await controller.toggleVisibility(
         { params: { id: "p" }, userId: "seller", body: { visible } },
         {},
-        (err) => { error = err; },
+        (err) => {
+          error = err;
+        },
       );
       assert.equal(error.status, 409);
     }
@@ -192,7 +205,10 @@ test("a sale winning the edit race leaves media and categories untouched", async
   mockDelegate(t, prisma.photo, "deleteMany", photos);
   mockDelegate(t, prisma.video, "deleteMany", videos);
   t.mock.method(prisma, "$transaction", async (fn) => fn(prisma));
-  assert.equal(await model.updateBySeller("p", { title: "Changed", media: [] }), null);
+  assert.equal(
+    await model.updateBySeller("p", { title: "Changed", media: [] }),
+    null,
+  );
   assert.equal(photos.mock.callCount(), 0);
   assert.equal(videos.mock.callCount(), 0);
 });
@@ -369,6 +385,7 @@ test("updateBySeller verifies product is not reserved, auction or removed before
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0].where, {
     id: "p",
+    deletedAt: null,
     moderatedAt: null,
     status: { notIn: ["removed", "reserved", "auction", "sold"] },
     OR: [

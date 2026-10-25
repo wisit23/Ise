@@ -23,7 +23,7 @@ generator client {
 // Canonical ER: database/erdesign/Product Service/ข้อ1 plus approved amendments.
 // category retains the legacy primary display value; membership is product_categories.
 // condition references the existing unique lookup value without adding an ER column.
-// Status lifecycle: available -> reserved (in a buyer's cart) -> sold, or removed by the seller.
+// Status lifecycle: available -> reserved (in a buyer's cart) -> sold, or soft deleted by the seller (deletedAt).
 model RecommendationSearch {
   userId String @map("user_id")
   query String
@@ -35,6 +35,7 @@ model RecommendationSearch {
 }
 
 model Product {
+  deletedAt DateTime? @map("deleted_at")
   referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id                   String                   @id @default(uuid())
   sellerId             String                   @map("seller_id")
@@ -81,6 +82,7 @@ model Product {
   conditionDefinition Condition @relation(fields: [condition], references: [value])
 
   @@index([sellerId])
+  @@index([sellerId, deletedAt])
   @@index([status, category])
   @@index([searchVector], type: Gin, map: "products_search_vector_idx")
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -88,8 +90,9 @@ model Product {
   @@map("products")
 }
 
-// Approved M:N amendment, with no surrogate key or extra columns.
+// Memberships retain their composite identity when soft deleted.
 model ProductFavorite {
+  deletedAt DateTime? @map("deleted_at")
   userId    String   @map("user_id")
   productId String   @map("product_id")
   createdAt DateTime @default(now()) @map("created_at")
@@ -102,6 +105,7 @@ model ProductFavorite {
 }
 
 model ProductCategory {
+  deletedAt DateTime? @map("deleted_at")
   productId String @map("product_id")
   categoryId String @map("category_id")
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -115,6 +119,7 @@ model ProductCategory {
 // position is not in the ER — added so the seller's chosen order/cover image
 // (index 0) survives being split across two separate photos/videos tables.
 model Photo {
+  deletedAt DateTime? @map("deleted_at")
   id        String   @id @default(uuid())
   productId String   @map("product_id")
   url       String
@@ -129,6 +134,7 @@ model Photo {
 
 // ER: Video { Video_ID, Caption, CreatedAt, URL, Product_ID }
 model Video {
+  deletedAt DateTime? @map("deleted_at")
   id        String   @id @default(uuid())
   productId String   @map("product_id")
   url       String
@@ -172,6 +178,7 @@ model Condition {
 // its own), this is a standalone feed item with its own caption and a
 // denormalized seller name so the feed doesn't need to join out per card.
 model ProductVideo {
+  deletedAt DateTime? @map("deleted_at")
   referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id          String   @id @default(uuid())
   title       String?
@@ -212,6 +219,7 @@ model ProductVideoComment {
 // Deliberately separate from Bid below — choosing a card just bookmarks it
 // for later, it is not itself a bid and does not require an open auction.
 model SwipeChoice {
+  deletedAt DateTime? @map("deleted_at")
   id             String   @id @default(uuid())
   productVideoId String   @map("product_video_id")
   userId         String   @map("user_id")

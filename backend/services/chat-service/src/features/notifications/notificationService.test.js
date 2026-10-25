@@ -27,7 +27,6 @@ test("notificationService unit tests", async (t) => {
     prisma.notification.delete = origDelete;
   });
 
-
   prisma.notification.create = async ({ data }) => {
     const item = {
       id: `notif-${dummyNotifs.length + 1}`,
@@ -42,8 +41,10 @@ test("notificationService unit tests", async (t) => {
 
   prisma.notification.findMany = async ({ where }) => {
     return dummyNotifs.filter((n) => {
+      if (where.AND && n.deletedAt) return false;
       if (where.userId && n.userId !== where.userId) return false;
-      if (typeof where.read === "boolean" && n.read !== where.read) return false;
+      if (typeof where.read === "boolean" && n.read !== where.read)
+        return false;
       if (where.OR) {
         return where.OR.some((clause) => n.userId === clause.userId);
       }
@@ -54,7 +55,8 @@ test("notificationService unit tests", async (t) => {
   prisma.notification.count = async ({ where }) => {
     return dummyNotifs.filter((n) => {
       if (where.userId && n.userId !== where.userId) return false;
-      if (typeof where.read === "boolean" && n.read !== where.read) return false;
+      if (typeof where.read === "boolean" && n.read !== where.read)
+        return false;
       return true;
     }).length;
   };
@@ -79,7 +81,10 @@ test("notificationService unit tests", async (t) => {
     const { readBy, ...rest } = data;
     Object.assign(item, rest);
     if (readBy?.push) {
-      item.readBy = [...(Array.isArray(item.readBy) ? item.readBy : []), readBy.push];
+      item.readBy = [
+        ...(Array.isArray(item.readBy) ? item.readBy : []),
+        readBy.push,
+      ];
     }
     return item;
   };
@@ -87,11 +92,13 @@ test("notificationService unit tests", async (t) => {
   prisma.notification.updateMany = async ({ where, data }) => {
     let count = 0;
     for (const item of dummyNotifs) {
+      if (where.AND && item.deletedAt) continue;
+      if (typeof where.id === "string" && item.id !== where.id) continue;
       if (where.userId && item.userId !== where.userId) continue;
       if (where.entityId && item.entityId !== where.entityId) continue;
       if (where.id?.not && item.id === where.id.not) continue;
       if (typeof where.read === "boolean" && item.read !== where.read) continue;
-      if (data.read !== undefined) item.read = data.read;
+      Object.assign(item, data);
       count++;
     }
     return { count };
@@ -146,7 +153,8 @@ test("notificationService unit tests", async (t) => {
 
   // 5. Mark personal read
   await notificationService.markRead(personal.id, "user-1");
-  const countAfterPersonalRead = await notificationService.unreadCount("user-1");
+  const countAfterPersonalRead =
+    await notificationService.unreadCount("user-1");
   assert.equal(countAfterPersonalRead, 1);
 
   // 6. Mark broadcast read
@@ -195,7 +203,9 @@ test("notificationService unit tests", async (t) => {
   assert.notEqual(completedNotif.id, shippedNotif.id);
   const stages = await notificationService.listNotifications("seller-1");
   assert.equal(stages.items.filter((n) => n.entityId === "ORD-1").length, 3);
-  assert.ok(stages.items.filter((n) => n.entityId === "ORD-1").every((n) => !n.read));
+  assert.ok(
+    stages.items.filter((n) => n.entityId === "ORD-1").every((n) => !n.read),
+  );
   assert.equal(await notificationService.unreadCount("seller-1"), 4);
   assert.equal(completedNotif.title, "ลูกค้าได้รับสินค้าแล้ว");
 
@@ -226,25 +236,46 @@ test("notificationService unit tests", async (t) => {
   assert.equal(unreadAfterPayment, unreadBeforePayment + 1);
   await notificationService.markRead(paidNotif.id, "seller-2");
   assert.equal(priorNotif.read, false);
-  const unreadStages = await notificationService.listNotifications("seller-2", { unreadOnly: true });
+  const unreadStages = await notificationService.listNotifications("seller-2", {
+    unreadOnly: true,
+  });
   assert.ok(unreadStages.items.some((n) => n.id === priorNotif.id));
   assert.ok(!unreadStages.items.some((n) => n.id === paidNotif.id));
 
   // 10. deleteNotification tests
   // Can delete own notification
-  const delResult = await notificationService.deleteNotification(personal.id, "user-1");
+  const delResult = await notificationService.deleteNotification(
+    personal.id,
+    "user-1",
+  );
   assert.equal(delResult.success, true);
-  const foundDeleted = await prisma.notification.findUnique({ where: { id: personal.id } });
-  assert.equal(foundDeleted, null);
+  const foundDeleted = await prisma.notification.findUnique({
+    where: { id: personal.id },
+  });
+  assert.ok(foundDeleted.deletedAt instanceof Date);
+  assert.ok(
+    !(await notificationService.listNotifications("user-1")).items.some(
+      (n) => n.id === personal.id,
+    ),
+  );
+  await assert.rejects(notificationService.markRead(personal.id, "user-1"), {
+    message: "Notification not found",
+  });
 
   // Deleting already deleted is idempotent
-  const delIdempotent = await notificationService.deleteNotification(personal.id, "user-1");
+  const delIdempotent = await notificationService.deleteNotification(
+    personal.id,
+    "user-1",
+  );
   assert.equal(delIdempotent.success, true);
 
   // Cannot delete another user's notification
   await assert.rejects(
-    () => notificationService.deleteNotification(completedNotif.id, "unauthorized-user"),
+    () =>
+      notificationService.deleteNotification(
+        completedNotif.id,
+        "unauthorized-user",
+      ),
     { message: "Access denied" },
   );
 });
-
