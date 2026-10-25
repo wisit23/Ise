@@ -3,6 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const multer = require("multer");
 const { badRequest } = require("@reloop/shared");
+const { MAX_VIDEO_BYTES } = require("../services/listingVideo");
 
 const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -38,7 +39,8 @@ const upload = multer({
 
 const videoUpload = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  // Busboy emits its limit event at equality; validation enforces <=100 MB.
+  limits: { fileSize: MAX_VIDEO_BYTES + 1, files: 1 },
   fileFilter(req, file, cb) {
     if (
       !ALLOWED_VIDEO_MIME.test(file.mimetype) ||
@@ -51,4 +53,17 @@ const videoUpload = multer({
   },
 });
 
-module.exports = { upload, videoUpload, UPLOAD_DIR };
+function handleUploadError(err, req, res, next) {
+  if (err instanceof multer.MulterError) {
+    return next(
+      badRequest(
+        err.code === "LIMIT_FILE_SIZE"
+          ? "ไฟล์ต้องมีขนาดไม่เกิน 100 MB"
+          : "จำนวนไฟล์หรือรูปแบบการอัปโหลดไม่ถูกต้อง",
+      ),
+    );
+  }
+  next(err);
+}
+
+module.exports = { upload, videoUpload, UPLOAD_DIR, handleUploadError };

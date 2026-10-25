@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const request = require("supertest");
+const sharp = require("sharp");
 
 process.env.JWT_ACCESS_SECRET = "test-access-secret";
 process.env.JWT_REFRESH_SECRET = "test-refresh-secret";
@@ -95,11 +96,12 @@ test("POST /uploads with no bearer token is rejected with 401", async () => {
   assert.equal(res.status, 401);
 });
 
-test("POST /uploads allows SELLER to upload PNG images", async () => {
-  const fakePngBuffer = Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-    "base64",
-  );
+test("POST /uploads converts seller PNG images to square WebP within all limits", async () => {
+  const fakePngBuffer = await sharp({
+    create: { width: 2000, height: 1200, channels: 3, background: "red" },
+  })
+    .png()
+    .toBuffer();
   const res = await request(app)
     .post("/uploads")
     .set("Authorization", `Bearer ${sellerToken}`)
@@ -109,7 +111,50 @@ test("POST /uploads allows SELLER to upload PNG images", async () => {
   assert.ok(Array.isArray(res.body.media));
   assert.equal(res.body.media.length, 1);
   assert.equal(res.body.media[0].type, "image");
-  assert.ok(res.body.media[0].url.endsWith(".png"));
+  assert.ok(res.body.media[0].url.endsWith(".webp"));
+  const output = fs.readFileSync(
+    path.join(UPLOAD_DIR, path.basename(res.body.media[0].url)),
+  );
+  const metadata = await sharp(output).metadata();
+  assert.equal(metadata.format, "webp");
+  assert.equal(metadata.width, 1080);
+  assert.equal(metadata.height, 1080);
+  assert.ok(output.length <= 500000);
+  removeUploadedMedia(res.body.media[0].url);
+});
+
+test("POST /uploads rejects corrupt images and cleans a partially processed batch", async () => {
+  const before = new Set(fs.readdirSync(UPLOAD_DIR));
+  const valid = await sharp({
+    create: { width: 10, height: 20, channels: 3, background: "blue" },
+  })
+    .png()
+    .toBuffer();
+  const res = await request(app)
+    .post("/uploads")
+    .set("Authorization", `Bearer ${sellerToken}`)
+    .attach("files", valid, "valid.png")
+    .attach("files", Buffer.from("invalid image"), "broken.jpg");
+  assert.equal(res.status, 400);
+  assert.deepEqual(new Set(fs.readdirSync(UPLOAD_DIR)), before);
+});
+
+test("normal listing video passes through without image conversion", async () => {
+  const clip = fs.readFileSync(
+    path.join(__dirname, "../test/fixtures/video/long.mp4"),
+  );
+  const res = await request(app)
+    .post("/uploads")
+    .set("Authorization", `Bearer ${sellerToken}`)
+    .attach("files", clip, { filename: "clip.mp4", contentType: "video/mp4" });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.media[0].type, "video");
+  assert.deepEqual(
+    fs.readFileSync(
+      path.join(UPLOAD_DIR, path.basename(res.body.media[0].url)),
+    ),
+    clip,
+  );
   removeUploadedMedia(res.body.media[0].url);
 });
 
@@ -129,10 +174,14 @@ test("POST /videos/upload stores a swipe clip in product-service uploads", async
   const res = await request(app)
     .post("/videos/upload")
     .set("Authorization", `Bearer ${sellerToken}`)
-    .attach("video", Buffer.from("fake-mp4-content"), {
-      filename: "seller-clip.mp4",
-      contentType: "video/mp4",
-    });
+    .attach(
+      "video",
+      fs.readFileSync(path.join(__dirname, "../test/fixtures/video/limit.mp4")),
+      {
+        filename: "seller-clip.mp4",
+        contentType: "video/mp4",
+      },
+    );
 
   assert.equal(res.status, 201);
   assert.equal(res.body.media.length, 1);
@@ -145,4 +194,72 @@ test("POST /videos/upload stores a swipe clip in product-service uploads", async
   );
   assert.equal(fs.existsSync(storedPath), true);
   removeUploadedMedia(res.body.media[0].url);
+});
+
+for (const [endpoint, field] of [["/videos/upload", "video"]]) {
+  for (const [filename, expected] of [
+    ["long.mp4", "60"],
+    ["wide.mp4", "1080"],
+  ]) {
+    test(`${endpoint} rejects ${filename} and removes the rejected file`, async () => {
+      const before = new Set(fs.readdirSync(UPLOAD_DIR));
+      const res = await request(app)
+        .post(endpoint)
+        .set("Authorization", `Bearer ${sellerToken}`)
+        .attach(
+          field,
+          fs.readFileSync(
+            path.join(__dirname, "../test/fixtures/video", filename),
+          ),
+          filename,
+        );
+      assert.equal(res.status, 400);
+      assert.match(res.body.error, new RegExp(expected));
+      assert.deepEqual(new Set(fs.readdirSync(UPLOAD_DIR)), before);
+    });
+  }
+  const megabytes = 100;
+  test(`${endpoint} accepts a valid ${megabytes} MB MOV`, async () => {
+    const clip = fs.readFileSync(
+      path.join(__dirname, "../test/fixtures/video/portrait.mov"),
+    );
+    const padded = Buffer.alloc(megabytes * 1024 * 1024);
+    clip.copy(padded);
+    const res = await request(app)
+      .post(endpoint)
+      .set("Authorization", `Bearer ${sellerToken}`)
+      .attach(field, padded, {
+        filename: "portrait.mov",
+        contentType: "video/quicktime",
+      });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.media[0].type, "video");
+    removeUploadedMedia(res.body.media[0].url);
+  });
+  test(`${endpoint} rejects corrupt video bytes and cleans up`, async () => {
+    const before = new Set(fs.readdirSync(UPLOAD_DIR));
+    const res = await request(app)
+      .post(endpoint)
+      .set("Authorization", `Bearer ${sellerToken}`)
+      .attach(field, Buffer.from("not a clip"), {
+        filename: "broken.mp4",
+        contentType: "video/mp4",
+      });
+    assert.equal(res.status, 400);
+    assert.deepEqual(new Set(fs.readdirSync(UPLOAD_DIR)), before);
+  });
+}
+
+test("video upload rejects files larger than 100 MB with a client error", async () => {
+  const before = new Set(fs.readdirSync(UPLOAD_DIR));
+  const res = await request(app)
+    .post("/videos/upload")
+    .set("Authorization", `Bearer ${sellerToken}`)
+    .attach("video", Buffer.alloc(100 * 1024 * 1024 + 1), {
+      filename: "large.mp4",
+      contentType: "video/mp4",
+    });
+  assert.equal(res.status, 400);
+  assert.match(res.body.error, /100 MB/);
+  assert.deepEqual(new Set(fs.readdirSync(UPLOAD_DIR)), before);
 });

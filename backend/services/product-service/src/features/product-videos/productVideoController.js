@@ -4,6 +4,8 @@ const {
   paginatedResponse,
 } = require("@reloop/shared");
 const productVideoService = require("./productVideoService");
+const fs = require("node:fs/promises");
+const { validateListingVideo } = require("../../services/listingVideo");
 
 function sellerUser(req) {
   return { id: req.userId, role: req.userRole };
@@ -68,9 +70,10 @@ async function listFeed(req, res, next) {
   }
 }
 
-function uploadClip(req, res, next) {
+async function uploadClip(req, res, next) {
   try {
     if (!req.file) throw badRequest("video file is required");
+    await validateListingVideo(req.file);
 
     res.status(201).json({
       media: [
@@ -81,6 +84,7 @@ function uploadClip(req, res, next) {
       ],
     });
   } catch (err) {
+    if (req.file) await fs.rm(req.file.path, { force: true }).catch(() => {});
     next(err);
   }
 }
