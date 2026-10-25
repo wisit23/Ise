@@ -77,7 +77,7 @@ for (const [handler, listMethod] of [["mine", "listByBuyer"], ["selling", "listB
   });
 }
 
-for (const status of ["in_transit", "completed", "refunded", "payment_expired", "seller_confirmation_expired"]) {
+for (const status of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit", "completed", "refunded", "payment_expired", "seller_confirmation_expired"]) {
   test(`TC10: direct cancellation of ${status} is rejected before any side effect`, async (t) => {
     const { app, transitions } = cancellationFixture(t, status);
     const res = await request(app)

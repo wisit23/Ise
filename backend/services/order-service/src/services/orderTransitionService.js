@@ -85,7 +85,7 @@ function assertCanCancelOrder(order) {
   }
 }
 function assertCanParticipantUpdateStatus(order) {
-  if (order.status === "disputed")
+  if (order.status === "disputed" || (order.dispute && !order.dispute.deletedAt && !order.dispute.decision))
     throw conflict("cannot update status while order has an open dispute");
   if (order.payoutHeld || order.paymentSimulationStatus === "ON_HOLD")
     throw conflict("cannot update status while order payout is on hold");

@@ -335,7 +335,7 @@ async function transitionStatusWithProductSync({
     if (!before) return { order: null, event: null };
     const refunding = isRefundingCancellation(before, status) &&
       (actorId === before.sellerId ||
-        (actorId === before.buyerId && ["paid", "confirmed"].includes(before.status)) ||
+        (actorId === before.buyerId && before.status === "paid") ||
         (actorId === "system" && before.status === "paid"));
     if (["cancelled", "payment_expired"].includes(status) && !refunding)
       assertCanCancelOrder(before);

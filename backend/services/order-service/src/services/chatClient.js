@@ -394,7 +394,7 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
   // Seller accept/reject have their own two-sided messages and realtime push.
   if (status === "confirmed" && order?.status === "paid")
     return notifyOrderConfirmed({ ...order, status });
-  if (status === "cancelled" && order && ["paid", "confirmed"].includes(order.status) && actorId === order.buyerId) {
+  if (status === "cancelled" && order?.status === "paid" && actorId === order.buyerId) {
     const amount = Number(order.ordersAmount || order.price || 0).toLocaleString("th-TH");
     await Promise.all([
       ...[order.buyerId, order.sellerId].filter(Boolean).map((userId) =>
@@ -402,7 +402,7 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
           userId,
           type: "ORDER",
           title: "ผู้ซื้อยกเลิกคำสั่งซื้อและคืนเงินแล้ว",
-          message: `คำสั่งซื้อ #${order.referenceCode || order.id} ถูกยกเลิกโดยผู้ซื้อก่อนพร้อมจัดส่ง ระบบบันทึกคืนเงินเต็มจำนวน ฿${amount} แล้ว`,
+          message: `คำสั่งซื้อ #${order.referenceCode || order.id} ถูกยกเลิกโดยผู้ซื้อก่อนผู้ขายยืนยัน ระบบบันทึกคืนเงินเต็มจำนวน ฿${amount} แล้ว`,
           link: userId === order.buyerId ? "/orders" : `/products/${order.productId}`,
           entityId: order.id,
           metadata: { orderId: order.id,

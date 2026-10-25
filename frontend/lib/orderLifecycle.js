@@ -4,10 +4,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const DISPUTE_WINDOW_DAYS = 14;
 export const AUTO_COMPLETE_DAYS = 14;
 
-/** Buyer cancellation remains available until carrier handoff. */
+/** Buyer cancellation stops when the seller confirms the order. */
 export function canBuyerCancel(order) {
   return Boolean(order) &&
-    ["pending_payment", "paid", "confirmed", "ready_to_ship", "pickup_in_progress"].includes(order.status) &&
+    ["pending_payment", "paid"].includes(order.status) &&
     !order.dispute && !order.payoutHeld && order.paymentSimulationStatus !== "ON_HOLD";
 }
 

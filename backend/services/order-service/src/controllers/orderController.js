@@ -157,7 +157,7 @@ async function updateStatus(req, res, next) {
     const { status } = req.body;
     const refundingCancellation = orderLifecycle.isRefundingCancellation(order, status) &&
       (order.sellerId === req.userId ||
-        (order.buyerId === req.userId && ["paid", "confirmed"].includes(order.status)));
+        (order.buyerId === req.userId && order.status === "paid"));
     if (status === "cancelled" && !refundingCancellation)
       orderTransitionService.assertCanCancelOrder(order);
     orderLifecycle.assertParticipantTransition(order, req.userId, status);

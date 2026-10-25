@@ -224,7 +224,7 @@ export default function MyOrders({
     } catch (err) {
       setError(err.message || "ยกเลิกคำสั่งซื้อไม่สำเร็จ");
       setCancelOrder(null);
-      // The seller may have handed the parcel to the carrier while the dialog was open.
+      // The seller may have confirmed the order while the dialog was open.
       try {
         const fresh = await apiFetch(`/api/orders/${cancelOrder.id}`, { token: getAccessToken() });
         setItems((prev) => prev.map((o) => o.id === fresh.id ? { ...o, ...fresh } : o));
@@ -577,9 +577,9 @@ export default function MyOrders({
       <ConfirmDialog
         open={Boolean(cancelOrder)}
         title="ยกเลิกคำสั่งซื้อนี้?"
-        description={["paid", "confirmed", "ready_to_ship", "pickup_in_progress"].includes(cancelOrder?.status)
-          ? "ยกเลิกได้ก่อนผู้ขายเริ่มเตรียมสินค้า ระบบจะบันทึกคืนเงินเต็มจำนวนตามระบบชำระเงินจำลอง"
-          : "ยืนยันยกเลิกคำสั่งซื้อก่อนผู้ขายเริ่มเตรียมสินค้า"}
+        description={cancelOrder?.status === "paid"
+          ? "ยกเลิกได้ก่อนผู้ขายยืนยันคำสั่งซื้อ ระบบจะบันทึกคืนเงินเต็มจำนวนตามระบบชำระเงินจำลอง"
+          : "ยืนยันยกเลิกคำสั่งซื้อก่อนผู้ขายยืนยันคำสั่งซื้อ"}
         confirmLabel="ยืนยันยกเลิกคำสั่งซื้อ"
         cancelLabel="กลับ"
         busy={cancelling}
