@@ -28,7 +28,7 @@ const PARTICIPANT_TRANSITIONS = {
   in_transit: { seller: ["pickup_in_progress"] },
   completed: { buyer: ["delivered"] },
   cancelled: {
-    buyer: ["pending_payment", "paid"],
+    buyer: ["pending_payment", "paid", "confirmed"],
     seller: ["pending_payment", "paid", "confirmed", "ready_to_ship"],
   },
 };

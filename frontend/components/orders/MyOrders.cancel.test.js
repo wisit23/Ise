@@ -75,7 +75,21 @@ test("held paid orders do not offer buyer cancellation", async () => {
   expect(screen.queryByRole("button", { name: "ยกเลิกคำสั่งซื้อ" })).not.toBeInTheDocument();
 });
 
-for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit", "payment_expired", "seller_confirmation_expired"]) {
+for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress"]) {
+  test(`buyer can cancel ${state} with a full refund before carrier handoff`, async () => {
+    order.status = state;
+    render(<MyOrders />);
+    fireEvent.click(await screen.findByRole("button", { name: "ยกเลิกคำสั่งซื้อ" }));
+    expect(screen.getByText(/ระบบจะบันทึกคืนเงินเต็มจำนวน/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "ยืนยันยกเลิกคำสั่งซื้อ" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/orders/order-1/status", {
+      method: "PATCH", token: "token", body: { status: "cancelled" },
+    }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "ยกเลิกคำสั่งซื้อ" })).not.toBeInTheDocument());
+  });
+}
+
+for (const state of ["in_transit", "delivered", "completed", "payment_expired", "seller_confirmation_expired"]) {
   test(`buyer cannot pay or cancel inactive order state (${state})`, async () => {
     order.status = state;
     render(<MyOrders />);
@@ -85,11 +99,11 @@ for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_tra
   });
 }
 
-test("seller preparation during confirmation shows conflict and reloads current status", async () => {
+test("carrier handoff during confirmation shows conflict and reloads current status", async () => {
   const original = apiFetch.getMockImplementation();
   apiFetch.mockImplementation(async (url, options) => {
     if (url.endsWith("/status")) {
-      order.status = "confirmed";
+      order.status = "in_transit";
       throw new Error("ผู้ขายเริ่มเตรียมสินค้าแล้ว");
     }
     return original(url, options);

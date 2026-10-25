@@ -38,6 +38,9 @@ const allowed = [
   ["seller", "pending_payment", "cancelled"],
   ["buyer", "pending_payment", "cancelled"],
   ["buyer", "paid", "cancelled"],
+  ["buyer", "confirmed", "cancelled"],
+  ["buyer", "ready_to_ship", "cancelled"],
+  ["buyer", "pickup_in_progress", "cancelled"],
 ];
 for (const [actor, from, to] of allowed) {
   test(`${actor} may move an order from ${from} to ${to}`, () => {
@@ -57,10 +60,7 @@ const rejected = [
   ["buyer", "paid", "completed", 409],
   ["buyer", "pending_payment", "completed", 409],
   ["buyer", "paid", "confirmed", 403],
-  ["buyer", "confirmed", "cancelled", 409],
-  ["buyer", "ready_to_ship", "cancelled", 409],
   ["buyer", "in_transit", "cancelled", 409],
-  ["buyer", "pickup_in_progress", "cancelled", 409],
   // Pickup is required; neither shipping transition belongs to buyers.
   ["seller", "paid", "in_transit", 409],
   ["seller", "confirmed", "in_transit", 409],
@@ -71,8 +71,6 @@ const rejected = [
   ["seller", "pending_payment", "confirmed", 409],
   ["seller", "shipped", "cancelled", 409],
   ["seller", "delivered", "cancelled", 409],
-  ["buyer", "confirmed", "cancelled", 409],
-  ["buyer", "ready_to_ship", "cancelled", 409],
   // System-only statuses.
   ["seller", "in_transit", "delivered", 400],
   ["buyer", "pending_payment", "paid", 400],
@@ -364,8 +362,22 @@ test("PATCH: buyer cancels a paid order before preparation using refund and reli
   assert.equal(chat.notifyOrderStatusChanged.mock.calls[0].arguments[2].actorId, "buyer");
 });
 
-for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit", "disputed"]) {
-  test(`PATCH: buyer cancellation is rejected after preparation or hold (${state})`, async (t) => {
+for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress"]) {
+  test(`PATCH: buyer cancels ${state} with refund and relisting before handoff`, async (t) => {
+    const { app, transitions } = controllerApp(t, order(state, {
+      payments: [{ paymentStatus: "paid" }],
+    }), "buyer");
+    const res = await request(app).patch("/order-1/status").send({ status: "cancelled" });
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(transitions[0].actorId, "buyer");
+    assert.deepEqual(transitions[0].expectedStatuses, [state]);
+    assert.equal(transitions[0].productSync.targetStatus, "available");
+    assert.equal(lifecycle.isRefundingCancellation(order(state), "cancelled"), true);
+  });
+}
+
+for (const state of ["in_transit", "delivered", "completed", "disputed"]) {
+  test(`PATCH: buyer cancellation is rejected after handoff or hold (${state})`, async (t) => {
     const { app, transitions } = controllerApp(t, order(state), "buyer");
     const res = await request(app).patch("/order-1/status").send({ status: "cancelled" });
     assert.equal(res.status, 409);

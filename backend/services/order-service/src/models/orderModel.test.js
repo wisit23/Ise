@@ -101,8 +101,8 @@ const cancellation = {
   },
 };
 
-test("TC10: cancellation rechecks the current paid status inside its transaction", async (t) => {
-  const { writes } = fixture(t, { status: "confirmed" });
+test("cancellation rechecks carrier handoff inside its transaction", async (t) => {
+  const { writes } = fixture(t, { status: "in_transit" });
   await assert.rejects(
     model.transitionStatusWithProductSync(cancellation),
     (err) => err.status === 409,
@@ -183,9 +183,10 @@ test("a concurrent shipment or duplicate rejection creates no refund", async (t)
   assert.equal(writes.some((w) => w.payment || w.job), false);
 });
 
-test("buyer paid cancellation records one full simulated refund with product sync and audit", async (t) => {
-  const { writes } = fixture(t, { status: "paid", payments: [{ paymentStatus: "paid" }] });
-  const result = await model.transitionStatusWithProductSync({ ...cancellation, expectedStatuses: ["paid"] });
+for (const status of ["paid", "confirmed", "ready_to_ship", "pickup_in_progress"]) {
+test(`buyer cancellation of ${status} records one full simulated refund with product sync and audit`, async (t) => {
+  const { writes } = fixture(t, { status, payments: [{ paymentStatus: "paid" }] });
+  const result = await model.transitionStatusWithProductSync({ ...cancellation, expectedStatuses: [status] });
   assert.equal(result.order.status, "cancelled");
   const refunds = writes.filter((w) => w.payment).map((w) => w.payment);
   assert.equal(refunds.length, 1);
@@ -194,6 +195,7 @@ test("buyer paid cancellation records one full simulated refund with product syn
   assert.equal(refunds[0].paymentStatus, "refunded");
   assert.equal(writes.find((w) => w.job).job.targetStatus, "available");
 });
+}
 
 test("seller confirmation winning the race prevents buyer refund or relisting", async (t) => {
   const { writes } = fixture(t, { status: "paid", claimCount: 0, payments: [{ paymentStatus: "paid" }] });
