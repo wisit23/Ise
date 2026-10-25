@@ -4,6 +4,7 @@
 Uses cold copies, not a cross-major database upgrade. Initial import is fail-closed:
 an interrupted import requires reviewed recovery, never an automatic second restore.
 """
+import codecs
 import hashlib
 import ipaddress
 import json
@@ -15,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, build_opener
@@ -56,7 +58,28 @@ def run(args, *, data=None, capture=False, output=None):
     elif capture:
         result = subprocess.run(args, input=data, stdout=subprocess.PIPE, stderr=LOG)
     else:
-        result = subprocess.run(args, input=data, stdout=LOG, stderr=LOG)
+        # Drain output continuously, including progress messages without newlines.
+        # Spool optional stdin separately so large input/output cannot deadlock.
+        with tempfile.TemporaryFile() as input_stream:
+            if data is not None:
+                input_stream.write(data)
+                input_stream.seek(0)
+            with subprocess.Popen(args, stdin=input_stream if data is not None else None,
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
+                decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+                try:
+                    while chunk := process.stdout.read1(65536):
+                        if LOG is not None:
+                            LOG.write(chunk)
+                            LOG.flush()
+                        print(decoder.decode(chunk), end="", flush=True)
+                    print(decoder.decode(b"", final=True), end="", flush=True)
+                    result = subprocess.CompletedProcess(args, process.wait())
+                except BaseException:
+                    # Match subprocess.run cleanup on interruption or output failure.
+                    process.kill()
+                    process.wait()
+                    raise
     if result.returncode:
         raise Blocked(f"{Path(args[0]).name} failed (exit {result.returncode}); inspect private run.log.")
     return result.stdout.decode() if capture else ""
