@@ -9,6 +9,11 @@ if (!["localhost", "127.0.0.1"].includes(new URL(base).hostname)) {
   throw new Error("Verdict smoke only runs against a local gateway");
 }
 
+function restoreDemo() {
+  const restored = spawnSync(process.execPath, [path.join(__dirname, "demo-cs-admin.js"), "--apply"], { stdio: "inherit" });
+  if (restored.status !== 0) throw new Error("Could not restore local CS/Admin demo data");
+}
+
 async function call(url, { token, method = "GET", body } = {}) {
   const response = await fetch(`${base}${url}`, {
     method,
@@ -58,8 +63,7 @@ async function run() {
     }
     console.log("T&S verdict smoke passed: CS denied, release applied once, both notices deduplicated, both rooms locked.");
   } finally {
-    const restored = spawnSync(process.execPath, [path.join(__dirname, "demo-cs-admin.js"), "--apply"], { stdio: "inherit" });
-    if (restored.status !== 0) throw new Error("Could not restore local CS/Admin demo data");
+    restoreDemo();
   }
 }
 

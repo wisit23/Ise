@@ -78,6 +78,12 @@ test("Marketing Audit Trail Integration Suite (PostgreSQL)", async (t) => {
     return;
   }
 
+  // This suite integrates Product's HTTP API with PostgreSQL. Auth directory
+  // behavior and its fail-closed contract have separate service tests.
+  const authClient = require("../src/features/audit/marketingAuditAuthClient");
+  t.mock.method(authClient, "searchUsers", async () => []);
+  t.mock.method(authClient, "getDisplayNames", async () => []);
+
   const runId = `aud-${Date.now()}`;
   const createdCampaignIds = [];
   const createdArticleIds = [];

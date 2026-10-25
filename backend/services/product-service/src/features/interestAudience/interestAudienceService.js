@@ -212,7 +212,8 @@ async function preview(input, dependencies = {}) {
     dependencies,
   );
   const summary = summarizeScores(scoreDataset(dataset, criteria), criteria);
-  const { eligible, ...publicSummary } = summary;
+  const publicSummary = { ...summary };
+  delete publicSummary.eligible;
   return { criteria, ...publicSummary };
 }
 

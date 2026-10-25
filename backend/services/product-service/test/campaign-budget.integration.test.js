@@ -13,7 +13,6 @@ process.env.DATABASE_URL = process.env.DATABASE_URL_PRODUCT;
 
 const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
-const campaignRepository = require("../src/features/campaigns/campaignRepository");
 const app = require("../src/app");
 app.locals.validateAccessSession = async () => {};
 

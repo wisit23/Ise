@@ -75,6 +75,8 @@ test("item, round cancellation and round update include in-chat detail links", a
     },
     round: { id: "round-2", title: "รอบกระเป๋า" },
     reason: "สินค้าไม่พร้อม",
+    wasOpen: true,
+    bidderIds: ["buyer-2"],
   });
   await chatClient.notifyRoundCancelled({
     round: {
@@ -112,7 +114,12 @@ test("item, round cancellation and round update include in-chat detail links", a
     .map(({ body }) => body.payload);
   assert.ok(
     payloads.some(
-      (payload) => payload.actionUrl === "/auctions/item-cancelled-1",
+      (payload) => payload.role === "BUYER" && payload.actionUrl === "/auctions/item-cancelled-1",
+    ),
+  );
+  assert.ok(
+    payloads.some(
+      (payload) => payload.event === "auction.item_cancelled" && payload.role === "SELLER" && payload.actionUrl === "/seller/auctions",
     ),
   );
   assert.equal(

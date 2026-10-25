@@ -27,9 +27,16 @@ module.exports = [
   },
   js.configs.recommended,
   {
-    files: ["backend/**/*.{js,cjs}", "scripts/**/*.{js,cjs}", "*.{js,cjs}"],
+    files: ["backend/**/*.{js,cjs}", "scripts/**/*.{js,cjs}", "log/evidence/**/*.cjs", "*.{js,cjs}"],
     languageOptions: {
       sourceType: "commonjs",
+      globals: { ...globals.node },
+    },
+  },
+  {
+    files: [".tmp-testcases/**/*.mjs"],
+    languageOptions: {
+      sourceType: "module",
       globals: { ...globals.node },
     },
   },
