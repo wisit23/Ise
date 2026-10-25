@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatReferenceCode, REFERENCE_UNAVAILABLE } from "../../../../lib/referenceCodes";
 
 /* The "id with a copy button" pattern appeared three times in the disputes
    table with slightly different hover behaviour each time. The copy button
@@ -14,12 +15,13 @@ export default function CopyableId({
   revealOnHover = false,
 }) {
   const [copied, setCopied] = useState(false);
+  const code = formatReferenceCode(value);
 
   async function copy(e) {
     // The row underneath may be clickable; copying an id is not "open this".
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(value);
+      await navigator.clipboard.writeText(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
@@ -29,12 +31,13 @@ export default function CopyableId({
 
   return (
     <span className={`group/id flex items-center ${className}`}>
-      {display ?? value}
+      {display ?? code}
       {suffix}
       <button
         type="button"
+        disabled={code === REFERENCE_UNAVAILABLE}
         onClick={copy}
-        aria-label={copied ? "คัดลอกแล้ว" : `คัดลอกรหัส ${value}`}
+        aria-label={copied ? "คัดลอกแล้ว" : `คัดลอกรหัส ${code}`}
         title={copied ? "คัดลอกแล้ว" : "คัดลอก"}
         className={`focus-ring ml-1 rounded text-slate-500 transition-all hover:text-emerald-600 ${
           revealOnHover

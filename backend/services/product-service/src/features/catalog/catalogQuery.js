@@ -73,11 +73,12 @@ function buildCatalogWhere(filters, { PrismaClient } = {}) {
   if (filters.maxPrice !== undefined)
     clauses.push(PrismaClient.sql`AND price <= ${filters.maxPrice}`);
   if (filters.q) {
+    const reference = require("@reloop/shared").normalizeReferenceCode(filters.q, "PRD");
     const shopMatch = filters.matchingSellerIds?.length
       ? PrismaClient.sql`OR products.seller_id IN (${PrismaClient.join(filters.matchingSellerIds)})`
       : PrismaClient.sql``;
     clauses.push(
-      PrismaClient.sql`AND (search_text ILIKE '%' || ${filters.q} || '%' OR ${filters.q} <% search_text ${shopMatch})`,
+      PrismaClient.sql`AND (products.reference_code = ${reference} OR search_text ILIKE '%' || ${filters.q} || '%' OR ${filters.q} <% search_text ${shopMatch})`,
     );
   }
   return PrismaClient.join(clauses, " ");

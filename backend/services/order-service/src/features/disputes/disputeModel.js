@@ -244,7 +244,10 @@ async function listQueue(
   }
   if (scope === "history") where.status = "DECIDED";
   if (search) {
+    const code = require("@reloop/shared").normalizeReferenceCode(search);
     where.OR = [
+      ...(code?.startsWith("DSP-") ? [{ referenceCode: code }] : []),
+      ...(code?.startsWith("ORD-") ? [{ order: { referenceCode: code } }] : []),
       { reason: { contains: search, mode: "insensitive" } },
       { orderId: { contains: search, mode: "insensitive" } },
       { id: { contains: search, mode: "insensitive" } },

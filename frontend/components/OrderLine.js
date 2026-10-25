@@ -124,7 +124,7 @@ export default function OrderLine({
         <div className="flex flex-wrap items-center gap-1.5">
           {order.id && (
             <span className="font-mono text-[11px] font-semibold text-gray-600 bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5 shrink-0">
-              #{formatOrderId(order.id)}
+              #{formatOrderId(order)}
             </span>
           )}
           <QuietLink

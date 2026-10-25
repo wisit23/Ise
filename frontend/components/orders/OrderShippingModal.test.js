@@ -136,3 +136,59 @@ it("handoff refuses tracking outside 8-20 letters/digits with a digit", async ()
   }
   expect(apiFetch.mock.calls.some(([, options]) => options?.method === "PATCH")).toBe(false);
 });
+
+it("shows the saved cancellation reason in seller order details", async () => {
+  getStoredUser.mockReturnValue({ id: "seller", role: "SELLER" });
+  apiFetch.mockResolvedValue({ ...order, status: "cancelled", cancellationReason: "สินค้าหมดสต็อก" });
+  render(<OrderShippingModal orderId="o1" initialOrder={order} isOpen onClose={() => {}} />);
+  expect(await screen.findByRole("region", { name: "เหตุผลในการยกเลิกคำสั่งซื้อ" })).toHaveTextContent("สินค้าหมดสต็อก");
+});
+
+it.each(["confirmed", "ready_to_ship"])("seller can reject %s order directly from shipping modal", async (status) => {
+  const currentOrder = { ...order, status, price: 150, finalPrice: 100 };
+  getStoredUser.mockReturnValue({ id: "seller", role: "SELLER" });
+  const cancelledOrder = { ...order, status: "cancelled" };
+  apiFetch.mockImplementation((url, options) => {
+    if (options?.method === "POST" && url === "/api/orders/o1/reject") {
+      return Promise.resolve(cancelledOrder);
+    }
+    return Promise.resolve(currentOrder);
+  });
+  const onRejected = jest.fn();
+  const onOrderUpdated = jest.fn();
+
+  render(
+    <OrderShippingModal
+      orderId="o1"
+      initialOrder={currentOrder}
+      isOpen
+      onClose={() => {}}
+      onRejected={onRejected}
+      onOrderUpdated={onOrderUpdated}
+    />,
+  );
+
+  const rejectBtn = await screen.findByRole("button", { name: "ปฏิเสธ" });
+  fireEvent.click(rejectBtn);
+
+  expect(screen.getByText("คำเตือนเกี่ยวกับการปฏิเสธออเดอร์")).toBeInTheDocument();
+  expect(screen.getByText(/เมื่อปฏิเสธคำสั่งซื้อ/)).toHaveTextContent("฿100");
+  expect(screen.getByText(/เมื่อปฏิเสธคำสั่งซื้อ/)).not.toHaveTextContent("฿150");
+  fireEvent.click(screen.getByText("สินค้าชำรุดก่อนจัดส่ง"));
+
+  const confirmReject = screen.getByRole("button", { name: "ยืนยันการปฏิเสธออเดอร์" });
+  fireEvent.click(confirmReject);
+
+  await waitFor(() =>
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/api/orders/o1/reject",
+      expect.objectContaining({
+        method: "POST",
+        body: { reason: "สินค้าชำรุดก่อนจัดส่ง" },
+      }),
+    ),
+  );
+
+  expect(onRejected).toHaveBeenCalledWith(cancelledOrder);
+  expect(onOrderUpdated).toHaveBeenCalledWith(cancelledOrder);
+});

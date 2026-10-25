@@ -1058,8 +1058,8 @@ export default function SellerDashboardCharts({
                             minute: "2-digit",
                           })}
                         </td>
-                        <td className="px-3 py-2 font-mono text-[11px] text-slate-500 whitespace-nowrap" title={o.id}>
-                          #{formatOrderId(o.id)}
+                        <td className="px-3 py-2 font-mono text-[11px] text-slate-500 whitespace-nowrap" title={formatOrderId(o)}>
+                          #{formatOrderId(o)}
                         </td>
                         <td className="px-3 py-2 font-medium text-slate-800 max-w-[220px] truncate">
                           <div className="flex items-center gap-1.5">
@@ -1171,8 +1171,8 @@ export default function SellerDashboardCharts({
                         </p>
                       </div>
                       <p className="mt-0.5 text-xs text-slate-400">
-                        <span className="font-mono text-[11px] text-slate-500 mr-1.5" title={o.id}>
-                          #{formatOrderId(o.id)}
+                        <span className="font-mono text-[11px] text-slate-500 mr-1.5" title={formatOrderId(o)}>
+                          #{formatOrderId(o)}
                         </span>
                         {" · "}
                         <span className="material-symbols-outlined align-middle text-[12px] mr-0.5">

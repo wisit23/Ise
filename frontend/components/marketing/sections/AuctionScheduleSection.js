@@ -1,4 +1,7 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
+import ReferenceCode from "../../ui/ReferenceCode";
 import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, mediaUrl } from "../../../lib/api";
@@ -247,8 +250,15 @@ async function loadAllRoundItems(roundId, token) {
 
 function getWinningBid(item) {
   const bids = Array.isArray(item?.bids) ? item.bids : [];
-  if (bids.length === 0) return null;
-  return bids.find((bid) => bid.id === item.winningBidId) || bids[0];
+  if (!item?.winningBidId || bids.length === 0) return null;
+  return bids.find((bid) => bid.id === item.winningBidId) || null;
+}
+
+function hasCompletedAuctionPayment(item) {
+  return (
+    item?.product?.status === "sold" ||
+    item?.product?.preRemovalStatus === "sold"
+  );
 }
 
 export function RoundManagementSection({ token, onRoundCreated, refreshRevision = 0 }) {
@@ -1127,6 +1137,7 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                       <span className="line-clamp-2 break-words" title={r.title}>
                         {r.title}
                       </span>
+                      {r.referenceCode && <ReferenceCode value={r} className="text-xs text-slate-500" />}
                     </td>
                     <td className="px-2 py-3">
                       <span
@@ -1289,6 +1300,7 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                       const bids = Array.isArray(item.bids) ? item.bids : [];
                       const highestBid = bids[0] || null;
                       const winningBid = getWinningBid(item);
+                      const paymentCompleted = hasCompletedAuctionPayment(item);
                       const coverUrl = item.product?.photos?.[0]?.url;
                       const reason = item.cancellationReason ||
                         (item.status === "cancelled" ? viewingRound.cancellationReason : null);
@@ -1307,10 +1319,10 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                               <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div className="min-w-0">
                                   <p className="break-words font-semibold text-slate-900">
-                                    {item.product?.title || item.productId || "ไม่พบชื่อสินค้า"}
+                                    {item.product?.title || formatReferenceCode(item.productId) || "ไม่พบชื่อสินค้า"}
                                   </p>
-                                  <p className="mt-0.5 truncate text-xs text-slate-500" title={item.sellerDisplayName || item.sellerId || "ไม่พบชื่อร้าน"}>
-                                    ร้าน: {item.sellerDisplayName || item.sellerId || "ไม่พบชื่อร้าน"}
+                                  <p className="mt-0.5 truncate text-xs text-slate-500" title={item.sellerDisplayName || formatReferenceCode(item.sellerId) || "ไม่พบชื่อร้าน"}>
+                                    ร้าน: {item.sellerDisplayName || formatReferenceCode(item.sellerId) || "ไม่พบชื่อร้าน"}
                                   </p>
                                 </div>
                                 <Badge
@@ -1324,7 +1336,9 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                                   <dd className="mt-0.5 font-semibold text-slate-800">{baht(item.startingPrice)}</dd>
                                 </div>
                                 <div className="rounded-lg bg-slate-50 px-2.5 py-2">
-                                  <dt className="text-slate-500">ราคาปัจจุบัน</dt>
+                                  <dt className="text-slate-500">
+                                    {item.status === "closed" ? "ราคาสูงสุดที่เคยมี" : "ราคาปัจจุบัน"}
+                                  </dt>
                                   <dd className="mt-0.5 font-semibold text-slate-800">
                                     {highestBid ? baht(highestBid.amount) : "ยังไม่มี Bid"}
                                   </dd>
@@ -1335,10 +1349,33 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                                 </div>
                               </dl>
 
+                              {item.status === "open" && (
+                                <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs">
+                                  {highestBid ? (
+                                    <>
+                                      <span className="text-emerald-700">ผู้เสนอราคาสูงสุดปัจจุบัน</span>
+                                      <strong className="ml-1 break-words text-emerald-900">
+                                        {highestBid.bidderName || "ไม่พบข้อมูลผู้เสนอราคา"}
+                                      </strong>
+                                    </>
+                                  ) : (
+                                    <strong className="text-emerald-800">ยังไม่มีผู้เสนอราคา</strong>
+                                  )}
+                                </div>
+                              )}
+
                               {item.status === "closed" && (
                                 <div className="mt-2 grid gap-2 rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-xs sm:grid-cols-2">
                                   {bids.length === 0 ? (
                                     <p className="font-semibold text-violet-800 sm:col-span-2">ไม่มีผู้เสนอราคา</p>
+                                  ) : !winningBid ? (
+                                    <>
+                                      <div>
+                                        <span className="text-violet-600">ราคาสูงสุดที่เสนอ</span>
+                                        <strong className="ml-1 text-violet-900">{baht(highestBid?.amount)}</strong>
+                                      </div>
+                                      <p className="font-semibold text-violet-800">ไม่มีผู้ชนะ</p>
+                                    </>
                                   ) : (
                                     <>
                                       <div>
@@ -1346,11 +1383,23 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                                         <strong className="ml-1 text-violet-900">{baht(winningBid?.amount)}</strong>
                                       </div>
                                       <div className="min-w-0">
-                                        <span className="text-violet-600">ผู้ชนะ</span>
+                                        <span className="text-violet-600">
+                                          {paymentCompleted ? "ผู้ชนะ" : "ผู้ได้รับสิทธิ์"}
+                                        </span>
                                         <strong className="ml-1 break-words text-violet-900">
-                                          {winningBid?.bidderName || "ไม่พบข้อมูลผู้ชนะ"}
+                                          {winningBid?.bidderName ||
+                                            (paymentCompleted
+                                              ? "ไม่พบข้อมูลผู้ชนะ"
+                                              : "ไม่พบข้อมูลผู้ได้รับสิทธิ์")}
                                         </strong>
                                       </div>
+                                      {highestBid && highestBid.id !== winningBid.id && (
+                                        <p className="text-violet-600 sm:col-span-2">
+                                          เคยมีผู้เสนอสูงสุด{" "}
+                                          <strong className="text-violet-900">{baht(highestBid.amount)}</strong>{" "}
+                                          (เสียสิทธิ์)
+                                        </p>
+                                      )}
                                     </>
                                   )}
                                 </div>
@@ -1943,7 +1992,7 @@ export default function AuctionScheduleSection({ token }) {
                   type="checkbox"
                   checked={selected.has(a.id)}
                   onChange={() => toggleSelected(a.id)}
-                  aria-label={`เลือก ${a.product?.title || a.productId}`}
+                  aria-label={`เลือก ${a.product?.title || formatReferenceCode(a.productId)}`}
                   className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
                 />
               )}
@@ -1954,9 +2003,9 @@ export default function AuctionScheduleSection({ token }) {
                     <Link
                       href={`/products/${a.productId}`}
                       className="line-clamp-2 break-words text-sm font-semibold leading-5 text-slate-900 hover:text-emerald-600 sm:text-base sm:leading-6"
-                      title={a.product?.title || a.productId}
+                      title={a.product?.title || formatReferenceCode(a.productId)}
                     >
-                      {a.product?.title || a.productId}
+                      {a.product?.title || formatReferenceCode(a.productId)}
                     </Link>
                     <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
                       <span
@@ -2146,7 +2195,7 @@ export default function AuctionScheduleSection({ token }) {
             <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200 text-xs text-slate-700 space-y-1.5">
               <p>
                 <strong>ชื่อสินค้า:</strong>{" "}
-                {cancellingItem.product?.title || cancellingItem.productId}
+                {cancellingItem.product?.title || formatReferenceCode(cancellingItem.productId)}
               </p>
               <p>
                 <strong>ชื่อรอบประมูล:</strong>{" "}
@@ -2225,7 +2274,7 @@ export default function AuctionScheduleSection({ token }) {
         {rejectingItem && (
           <form onSubmit={handleReject} className="space-y-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-700">
-              <p><strong>ชื่อสินค้า:</strong> {rejectingItem.product?.title || rejectingItem.productId}</p>
+              <p><strong>ชื่อสินค้า:</strong> {rejectingItem.product?.title || formatReferenceCode(rejectingItem.productId)}</p>
               <p className="mt-1"><strong>รอบประมูล:</strong> {rejectingItem.round?.title || "ไม่ระบุ"}</p>
             </div>
             <div>

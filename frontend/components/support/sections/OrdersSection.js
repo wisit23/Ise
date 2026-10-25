@@ -1,5 +1,8 @@
 "use client";
 
+import { formatReferenceCode, formatReferenceText } from "../../../lib/referenceCodes";
+
+
 import { useEffect, useRef, useState } from "react";
 import Modal from "../../ui/Modal";
 import SupportOrderDetails, { orderAmount } from "./orders/SupportOrderDetails";
@@ -627,9 +630,9 @@ export default function OrdersSection({
                       <span className="material-symbols-outlined text-[15px] text-slate-400">
                         badge
                       </span>
-                      ID: {userResult.id}
+                      รหัส: {formatReferenceCode(userResult)}
                       <button
-                        onClick={() => copyToClipboard(userResult.id)}
+                        onClick={() => copyToClipboard(formatReferenceCode(userResult))}
                         className="ml-1 text-slate-400 hover:text-slate-600 inline-flex items-center"
                         title="คัดลอกรหัสผู้ใช้"
                       >
@@ -999,11 +1002,11 @@ export default function OrdersSection({
                               <div>
                                 <p className="font-bold text-slate-800">
                                   {kind === "reports"
-                                    ? `REP-${item.id.slice(0, 6).toUpperCase()} · ${REPORT_STATUS_LABEL[item.status] || item.status}`
+                                    ? `${formatReferenceCode(item)} · ${REPORT_STATUS_LABEL[item.status] || item.status}`
                                     : safetyActionLabel(item.action)}
                                 </p>
                                 <p className="mt-1 text-slate-600">
-                                  {item.reason || "ไม่ระบุเหตุผล"}
+                                  {formatReferenceText(item.reason) || "ไม่ระบุเหตุผล"}
                                 </p>
                                 <p className="mt-1 text-[10px] text-slate-400">
                                   {new Date(
@@ -1120,7 +1123,7 @@ export default function OrdersSection({
                   >
                     <div className="min-w-0 space-y-1">
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <span className="break-words text-sm font-bold text-slate-900" title={`รหัสคำสั่งซื้อ: ${order.id}`}>
+                        <span className="break-words text-sm font-bold text-slate-900" title={`รหัสคำสั่งซื้อ: ${formatReferenceCode(order)}`}>
                           {order.productTitle}
                         </span>
                         <Badge
@@ -1132,11 +1135,11 @@ export default function OrdersSection({
                       </div>
                       <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
                         <span>
-                          ผู้ซื้อ: {order.buyer?.name || order.buyerId}
+                          ผู้ซื้อ: {order.buyer?.name || formatReferenceCode(order.buyerId)}
                         </span>
                         <span>•</span>
                         <span>
-                          ผู้ขาย: {order.seller?.name || order.sellerId}
+                          ผู้ขาย: {order.seller?.name || formatReferenceCode(order.sellerId)}
                         </span>
                       </div>
                     </div>
@@ -1222,7 +1225,7 @@ export default function OrdersSection({
                 {/* Header row */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100">
                   <div className="flex items-center gap-3">
-                    <span className="break-words text-sm font-black text-slate-900" title={`รหัสคำสั่งซื้อ: ${order.id}`}>
+                    <span className="break-words text-sm font-black text-slate-900" title={`รหัสคำสั่งซื้อ: ${formatReferenceCode(order)}`}>
                       {order.productTitle}
                     </span>
                     <Badge
@@ -1259,7 +1262,7 @@ export default function OrdersSection({
                         {order.buyer?.name || "ไม่ระบุชื่อ"}
                       </span>
                       <span className="font-mono text-[11px] text-slate-500 block truncate max-w-[200px]">
-                        {order.buyerId}
+                        {formatReferenceCode(order.buyerId)}
                       </span>
                     </div>
                     <button
@@ -1286,7 +1289,7 @@ export default function OrdersSection({
                         {order.seller?.name || "ไม่ระบุชื่อ"}
                       </span>
                       <span className="font-mono text-[11px] text-slate-500 block truncate max-w-[200px]">
-                        {order.sellerId}
+                        {formatReferenceCode(order.sellerId)}
                       </span>
                     </div>
                     <button

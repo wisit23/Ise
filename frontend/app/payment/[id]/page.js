@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -257,6 +258,7 @@ export default function PaymentPage() {
           <div className="grid items-start gap-5 md:grid-cols-[1fr_300px]">
             <section className="rounded-2xl border border-line bg-white p-4 text-center shadow-2 sm:p-8">
               <p className="text-sm font-medium text-brand-700">QR PAYMENT</p>
+              {session.referenceCode && <ReferenceCode value={session} className="mt-2 text-xs text-ink-muted" />}
               <h1 className="mt-1 text-2xl font-bold text-gray-900">
                 สแกน QR Code เพื่อชำระเงิน
               </h1>

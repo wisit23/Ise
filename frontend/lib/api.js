@@ -5,6 +5,8 @@ import {
   clearSession,
 } from "./auth";
 
+import { rememberReferenceCodes } from "./referenceCodes";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export function apiUrl(path) {
@@ -161,7 +163,7 @@ async function apiFetchRequest(path, { method = "GET", body, token, signal, head
       data,
     });
   }
-  return data;
+  return rememberReferenceCodes(data);
 }
 
 export async function createReportWithEvidence({ targetId, productId, reviewId, category, reason, file }, token) {
@@ -190,7 +192,7 @@ export async function createReportWithEvidence({ targetId, productId, reviewId, 
     const message = typeof data?.error === "object" ? data.error.message : data?.error;
     throw new Error(message || `ส่งรายงานไม่สำเร็จ (${response.status})`);
   }
-  return data;
+  return rememberReferenceCodes(data);
 }
 
 /** Uploads files as multipart/form-data. Browser sets the boundary itself, so

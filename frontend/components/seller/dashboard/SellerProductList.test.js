@@ -97,6 +97,34 @@ test("disables delete button when product is reserved in cart/order", () => {
   expect(screen.getByRole("button", { name: "ลบ" })).toBeDisabled();
 });
 
+test("disables edit for a reserved listing, including one locked in via auction win", () => {
+  render(
+    <SellerProductList
+      products={[
+        {
+          ...removedProduct,
+          id: "product-reserved-auction",
+          title: "mii",
+          price: 5580,
+          status: "reserved",
+          auctionStatus: "closed",
+          auctionWinningPrice: 5580,
+          moderationReason: null,
+        },
+      ]}
+    />,
+  );
+
+  expect(
+    screen.queryByRole("link", { name: "แก้ไข" }),
+  ).not.toBeInTheDocument();
+  const lockedEditLabel = screen.getByText("แก้ไข");
+  expect(lockedEditLabel).toHaveAttribute(
+    "title",
+    "ไม่สามารถแก้ไขสินค้าที่อยู่ระหว่างการสั่งซื้อได้",
+  );
+});
+
 test("shows the real leading bid instead of the auction starting price", () => {
   render(<SellerProductList products={[{
     id: "auction-open", title: "สินค้าประมูล", price: 69,

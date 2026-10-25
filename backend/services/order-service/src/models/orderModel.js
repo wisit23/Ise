@@ -333,10 +333,13 @@ async function transitionStatusWithProductSync({
       include: INCLUDE,
     });
     if (!before) return { order: null, event: null };
-    const refunding = isRefundingCancellation(before, status);
-    if (refunding) assertCanParticipantUpdateStatus(view(before));
+    const refunding = isRefundingCancellation(before, status) &&
+      (actorId === before.sellerId ||
+        (actorId === before.buyerId && ["paid", "confirmed"].includes(before.status)) ||
+        (actorId === "system" && before.status === "paid"));
     if (["cancelled", "payment_expired"].includes(status) && !refunding)
       assertCanCancelOrder(before);
+    if (refunding) assertCanParticipantUpdateStatus(view(before));
     const now = new Date();
     const claimed = await tx.order.updateMany({
       where: {

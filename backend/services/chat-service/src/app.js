@@ -8,7 +8,9 @@ const internalRoutes = require("./features/internal/internalRoutes");
 const attachmentRoutes = require("./features/attachments/attachmentRoutes");
 
 const app = express();
+app.use(require("@reloop/shared").referenceAliases(prisma, "chat"));
 app.use(express.json());
+require("@reloop/shared").installReferenceDisplay(app, require("./models/prismaClient"), "chat");
 
 // Pings Mongo for real (via Prisma's raw command passthrough) rather than
 // answering `{status: "ok"}` unconditionally — CHAT-001's whole point is

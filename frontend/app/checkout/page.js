@@ -1,5 +1,8 @@
 "use client";
 
+import { formatReferenceCode } from "../../lib/referenceCodes";
+
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import NavBar from "../../components/NavBar";
@@ -280,7 +283,7 @@ export default function CheckoutPage() {
               และระบบได้ดำเนินการตามลำดับผู้ประมูลถัดไปแล้ว
             </p>
             <p className="mt-3 font-mono text-xs text-ink-subtle">
-              Order ID: #{expiredAuctionOrder.id}
+              Order ID: #{formatReferenceCode(expiredAuctionOrder)}
             </p>
             <Button href="/orders" className="mt-5">
               ดูประวัติคำสั่งซื้อ

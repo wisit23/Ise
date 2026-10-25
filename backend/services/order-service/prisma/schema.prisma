@@ -10,6 +10,7 @@ generator client {
 }
 
 model Basket {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id        String   @id @default(uuid()) @map("basket_id")
   buyerId   String   @map("buyer_id")
   productId String   @map("product_id")
@@ -24,6 +25,7 @@ model Basket {
 }
 
 model Checkout {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id              String    @id @default(uuid()) @map("checkout_id")
   buyerId         String    @map("buyer_id")
   addressId       String    @map("address_id")
@@ -41,6 +43,7 @@ model Checkout {
 }
 
 model Order {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id               String                  @id @default(uuid()) @map("order_id")
   checkoutId       String?                 @map("checkout_id")
   basketId         String?                 @unique @map("basket_id")
@@ -87,6 +90,7 @@ model Order {
 }
 
 model Payment {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id            String    @id @default(uuid()) @map("payment_id")
   orderId       String    @map("order_id")
   paymentType   String    @map("payment_type")
@@ -102,6 +106,7 @@ model Payment {
 }
 
 model Shipping {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id              String   @id @default(uuid()) @map("shipping_id")
   orderId         String   @unique @map("order_id")
   addressId       String   @map("address_id")
@@ -116,6 +121,7 @@ model Shipping {
 }
 
 model Hold {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id            String    @id @default(uuid()) @map("hold_id")
   paymentId     String    @map("payment_id")
   source        String    @map("hold_type")
@@ -150,6 +156,7 @@ model OrderLog {
 }
 
 model DisputeCase {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   satisfaction CustomerSatisfaction[]
   archivedAt DateTime? @map("archived_at")
   deletedAt DateTime? @map("deleted_at")
@@ -356,4 +363,11 @@ model CustomerSatisfaction {
   @@id([caseId, respondentId])
   @@index([agentId, createdAt])
   @@map("customer_satisfaction")
+}
+
+// Allocated atomically by the reference-code triggers; never reuse deleted codes.
+model ReferenceCodeAllocation {
+  code String @id
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("_reference_codes")
 }

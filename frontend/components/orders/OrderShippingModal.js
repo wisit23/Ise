@@ -205,7 +205,7 @@ export default function OrderShippingModal({
   }
 
   async function handleRejectOrder() {
-    if (!order?.id || rejecting || updating) return;
+    if (!order?.id || rejecting || updating || blocked) return;
     setRejecting(true);
     setError("");
     setSuccess("");
@@ -254,8 +254,8 @@ export default function OrderShippingModal({
               <h2 className="text-base font-bold text-gray-900">
                 รายละเอียดคำสั่งซื้อ & ที่อยู่จัดส่ง
               </h2>
-              <p className="font-mono text-xs text-gray-400" title={orderId}>
-                Order ID: #{formatOrderId(orderId)}
+              <p className="font-mono text-xs text-gray-400" title={formatOrderId(order || initialOrder || orderId)}>
+                Order ID: #{formatOrderId(order || initialOrder || orderId)}
               </p>
             </div>
           </div>
@@ -663,6 +663,22 @@ export default function OrderShippingModal({
                       ยืนยันรับออเดอร์
                     </Button>
                   </>
+                )}
+
+                {canShip && ["confirmed", "ready_to_ship"].includes(order.status) && (
+                  <button
+                    type="button"
+                    aria-label="ปฏิเสธ"
+                    disabled={blocked || updating || confirming || rejecting}
+                    onClick={() => setShowRejectForm(true)}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:text-rose-800 transition disabled:opacity-50"
+                    title="ปฏิเสธคำสั่งซื้อนี้และคืนเงินให้ผู้ซื้อ"
+                  >
+                    <span className="material-symbols-outlined text-[16px]" aria-hidden="true">
+                      cancel
+                    </span>
+                    <span>ปฏิเสธ</span>
+                  </button>
                 )}
 
                 {canShip && ["ready_to_ship", "pickup_in_progress"].includes(order.status) && (

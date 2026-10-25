@@ -452,6 +452,33 @@ describe("NotificationBell", () => {
     expect(screen.getByText("คุณเป็นผู้ซื้อในคำสั่งซื้อนี้")).toBeInTheDocument();
   });
 
+  it.each([
+    ["ticket", {
+      id: "n-ticket-1", type: "SUPPORT", title: "เจ้าหน้าที่แก้ไขเรื่องของคุณแล้ว",
+      message: "เรื่อง #SUP-1 ได้รับการแก้ไขแล้ว", link: "/support/tickets/t-1",
+      metadata: { ticketId: "t-1", status: "RESOLVED" },
+    }, "/support/tickets/t-1"],
+    ["dispute status", {
+      id: "n-dispute-status", type: "DISPUTE", title: "เจ้าหน้าที่รับเรื่องข้อพิพาทแล้ว",
+      message: "คำสั่งซื้อ #ORD-1: เจ้าหน้าที่รับเรื่องแล้ว", link: "/support/cases/ORD-1",
+      metadata: { orderId: "ORD-1", disputeId: "d-1", event: "CLAIMED", statusUpdate: true },
+    }, "/support/cases/ORD-1"],
+  ])("a %s update opens the case page instead of the verdict modal", async (_label, notif, target) => {
+    getNotifications.mockResolvedValueOnce({
+      items: [{ ...notif, read: false, createdAt: new Date().toISOString() }],
+    });
+    render(<NotificationBell user={mockUser} />);
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /การแจ้งเตือน/i }));
+    });
+    const item = await screen.findByText(notif.title);
+    expect(screen.queryByText("ดูรายละเอียดผลการตัดสิน")).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(item.closest('[role="button"]') || item.closest("button"));
+    });
+    expect(mockPush).toHaveBeenCalledWith(target);
+  });
+
   it("navigates seller directly to order tracking with highlighted order", async () => {
     const sellerUser = { id: "seller-1", firstName: "แม่ค้า", role: "SELLER" };
     getNotifications.mockResolvedValueOnce({

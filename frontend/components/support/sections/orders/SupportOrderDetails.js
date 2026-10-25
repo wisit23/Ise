@@ -1,3 +1,4 @@
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
 import { ORDER_STATUS_LABEL } from "../../../../lib/supportConstants";
 
 export function orderAmount(order) {
@@ -8,11 +9,11 @@ export default function SupportOrderDetails({ order }) {
   const money = (value) => `฿${Number(value).toLocaleString("th-TH")}`;
   const rows = [
     ["รหัสคำสั่งซื้อ", order.id],
-    ["สินค้า", order.productTitle || order.productId || "—"],
+    ["สินค้า", order.productTitle || formatReferenceCode(order.productId) || "—"],
     ["สถานะ", ORDER_STATUS_LABEL[order.status] || order.status],
-    ["ผู้ซื้อ", order.buyer?.name || order.buyerId],
+    ["ผู้ซื้อ", order.buyer?.name || formatReferenceCode(order.buyerId)],
     ["รหัสผู้ซื้อ", order.buyerId],
-    ["ผู้ขาย", order.seller?.name || order.sellerId],
+    ["ผู้ขาย", order.seller?.name || formatReferenceCode(order.sellerId)],
     ["รหัสผู้ขาย", order.sellerId],
     ["ราคาสินค้า", money(order.price ?? order.totalAmount ?? 0)],
     ["ส่วนลด", money(order.discountAmount ?? 0)],

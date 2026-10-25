@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../lib/referenceCodes";
+
 import config from "../../lib/customerServiceConfig";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -422,7 +424,7 @@ export default function EmbeddedChat({
                         : ["AGENT", "ADMIN", "TRUST_AND_SAFETY"].includes(
                               message.senderRole,
                             )
-                          ? `เจ้าหน้าที่ #${message.senderId?.slice(0, 8) || "ไม่ระบุ"}`
+                          ? `เจ้าหน้าที่ #${formatReferenceCode(message.senderId) || "ไม่ระบุ"}`
                           : otherName
                   : undefined
               }

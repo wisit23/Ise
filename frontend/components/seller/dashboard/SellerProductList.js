@@ -1,4 +1,6 @@
 "use client";
+import { matchesReference } from "../../../lib/referenceCodes";
+import ReferenceCode from "../../ui/ReferenceCode";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -81,6 +83,7 @@ export default function SellerProductList({
     .filter(
       (p) =>
         !search ||
+        matchesReference(p, search) ||
         p.title?.toLowerCase().includes(search.toLowerCase()) ||
         (p.tags || []).some((t) =>
           t.toLowerCase().includes(search.toLowerCase()),
@@ -190,6 +193,7 @@ export default function SellerProductList({
                     >
                       {p.title}
                     </Link>
+                    {p.referenceCode && <ReferenceCode value={p} className="mt-1 text-xs text-ink-subtle" />}
                     <p className="mt-1 text-xs text-ink-subtle">รายการโปรด {p.favoriteCount || 0} คน</p>
                     {/* Tags */}
                     {Array.isArray(p.tags) && p.tags.length > 0 && (
@@ -287,12 +291,21 @@ export default function SellerProductList({
                             )
                           ) ? (
                             <div className="flex items-center justify-end gap-2.5">
-                              <Link
-                                href={`/products/${p.id}/edit`}
-                                className="focus-ring rounded text-xs font-medium text-slate-500 hover:text-emerald-700 hover:underline"
-                              >
-                                แก้ไข
-                              </Link>
+                              {p.status === "reserved" ? (
+                                <span
+                                  className="text-xs font-medium text-slate-300"
+                                  title="ไม่สามารถแก้ไขสินค้าที่อยู่ระหว่างการสั่งซื้อได้"
+                                >
+                                  แก้ไข
+                                </span>
+                              ) : (
+                                <Link
+                                  href={`/products/${p.id}/edit`}
+                                  className="focus-ring rounded text-xs font-medium text-slate-500 hover:text-emerald-700 hover:underline"
+                                >
+                                  แก้ไข
+                                </Link>
+                              )}
                               <span className="text-slate-200">|</span>
                               <button
                                 type="button"

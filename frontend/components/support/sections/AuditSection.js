@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode, formatReferenceText } from "../../../lib/referenceCodes";
+
 
 import { useEffect, useState } from "react";
 import config from "../../../lib/customerServiceConfig";
@@ -398,7 +400,7 @@ export default function AuditSection({ token }) {
                       {new Date(log.occurredAt).toLocaleString("th-TH")}
                     </td>
                     <td className="p-3.5 font-bold">{eventSourceLabel(log)}</td>
-                    <td className="p-3.5 font-mono">{log.actorId}</td>
+                    <td className="p-3.5 font-mono">{formatReferenceCode(log.actorId)}</td>
                     <td className="p-3.5">
                       <Badge
                         text={actionOptions.find((option) => option.value === log.action)?.label || log.action}
@@ -410,19 +412,19 @@ export default function AuditSection({ token }) {
                     </td>
                     <td className="p-3.5 font-mono">
                       <div>
-                        {({ USER: "บัญชี", REPORT: "รายงาน", PRODUCT: "สินค้า", ORDER: "คำสั่งซื้อ", TICKET: "คำร้อง", DISPUTE: "ข้อพิพาท", KYC_APPLICATION: "คำขอยืนยันตัวตน" })[log.targetType] || "รายการ"}: {log.targetId}
+                        {({ USER: "บัญชี", REPORT: "รายงาน", PRODUCT: "สินค้า", ORDER: "คำสั่งซื้อ", TICKET: "คำร้อง", DISPUTE: "ข้อพิพาท", KYC_APPLICATION: "คำขอยืนยันตัวตน" })[log.targetType] || "รายการ"}: {formatReferenceCode(log.targetId)}
                       </div>
                       {log.caseId && (
                         <div className="mt-1 text-[10px] text-slate-400">
-                          เคส: {log.caseNumber || log.caseId}
+                          เคส: {formatReferenceCode(log.caseId) || log.caseNumber}
                         </div>
                       )}
                     </td>
                     <td
                       className="p-3.5 max-w-xs text-slate-600"
-                      title={detail}
+                      title={formatReferenceText(detail)}
                     >
-                      {detail}
+                      {formatReferenceText(detail)}
                     </td>
                     <td className="p-3.5">
                       {link ? (

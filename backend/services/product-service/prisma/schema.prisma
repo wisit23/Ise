@@ -35,6 +35,7 @@ model RecommendationSearch {
 }
 
 model Product {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id                   String                   @id @default(uuid())
   sellerId             String                   @map("seller_id")
   title                String
@@ -171,6 +172,7 @@ model Condition {
 // its own), this is a standalone feed item with its own caption and a
 // denormalized seller name so the feed doesn't need to join out per card.
 model ProductVideo {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id          String   @id @default(uuid())
   title       String?
   videoUrl    String
@@ -239,6 +241,7 @@ enum AuctionStatus {
 }
 
 model AuctionItem {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   cancellationReason String? @map("cancellation_reason")
   cancelledAt DateTime? @map("cancelled_at")
   cancelledBy String? @map("cancelled_by")
@@ -279,6 +282,7 @@ model AuctionItem {
 }
 
 model AuctionRound {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id                 String   @id @default(uuid())
   title              String   @default("")
   // NULL preserves unlimited capacity for rounds created before this feature.
@@ -300,6 +304,7 @@ model AuctionRound {
 }
 
 model Bid {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id             String   @id @default(uuid())
   auctionId      String   @map("auction_id")
   bidderId       String   @map("bidder_id")
@@ -317,6 +322,7 @@ model Bid {
 
 // Marketing Content & Community Articles (ST-MKT-05 / UR-14 / FR-5.2.3)
 model Article {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id          String        @id @default(uuid())
   title       String
   slug        String?       @unique
@@ -387,6 +393,7 @@ enum VoucherStatus {
 }
 
 model Campaign {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id                 String         @id @default(uuid())
   code               String         @unique
   name               String
@@ -443,6 +450,7 @@ model CampaignAudience {
 
 // Buyer Voucher Wallet (Claimed vouchers per user)
 model UserVoucher {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id          String        @id @default(uuid())
   campaignId  String        @map("campaign_id")
   userId      String        @map("user_id")
@@ -477,6 +485,7 @@ model CountView {
 // order are verified through order-service's internal API before creation.
 // Approved logical product reference: keep the purchased ID after product deletion.
 model Review {
+  referenceCode String? @unique @default(dbgenerated()) @map("reference_code")
   id        String   @id @default(uuid())
   orderId   String   @unique @map("order_id")
   buyerId   String   @map("buyer_id")
@@ -563,4 +572,11 @@ model ProductModerationCommand {
   createdAt DateTime @default(now()) @map("created_at")
   @@index([productId, createdAt])
   @@map("product_moderation_commands")
+}
+
+// Allocated atomically by the reference-code triggers; never reuse deleted codes.
+model ReferenceCodeAllocation {
+  code String @id
+  createdAt DateTime @default(now()) @map("created_at")
+  @@map("_reference_codes")
 }

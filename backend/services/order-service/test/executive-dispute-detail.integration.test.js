@@ -75,6 +75,7 @@ test("executive dispute detail against a real database", async (t) => {
 
   const nameAsks = [];
   const auth = await fakeService((req, body) => {
+    if (req.url === "/internal/reference-codes") return { status: 200, json: {} };
     nameAsks.push({
       url: req.url,
       token: req.headers["x-internal-token"],
@@ -102,7 +103,7 @@ test("executive dispute detail against a real database", async (t) => {
   let closed = false;
 
   try {
-    await prisma.order.create({
+    const order = await prisma.order.create({
       data: {
         id: ids.order,
         buyerId: ids.buyer,
@@ -145,12 +146,14 @@ test("executive dispute detail against a real database", async (t) => {
     assert.equal(res.status, 200);
     assert.deepEqual(res.body.data, {
       id: dispute.id,
+      referenceCode: dispute.referenceCode,
+      displayReferences: { [dispute.id]: dispute.referenceCode, [order.id]: order.referenceCode },
       reason: "ได้รับของไม่ตรงปก",
       disputeType: "ITEM_NOT_AS_DESCRIBED",
       status: "DECIDED",
       priority: "HIGH",
       createdAt: "2001-05-10T05:00:00.000Z",
-      order: { id: ids.order, amount: 1000, orderType: "BUY_NOW" },
+      order: { id: ids.order, amount: 1000, orderType: "BUY_NOW", referenceCode: order.referenceCode, displayReferences: { [order.id]: order.referenceCode } },
       product: { id: ids.product, title: "กระเป๋าหนังวินเทจ" },
       buyer: { id: ids.buyer, name: "มาลี" },
       seller: { id: ids.seller, name: "ร้านมือสองดี" },

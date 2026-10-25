@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode, formatReferenceText } from "../../../lib/referenceCodes";
+
 import Button from "../../ui/Button";
 import {
   formatReportedAt,
@@ -19,9 +21,10 @@ export default function ComplaintRow({
     >
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
+          {report.referenceCode && <p className="mb-1 break-all font-mono text-xs text-slate-500">{report.referenceCode}</p>}
           {/* Report Reason */}
           <p className="text-sm font-semibold text-slate-900 leading-snug">
-            {report.reason}
+            {formatReferenceText(report.reason)}
           </p>
 
           {/* Meta information */}
@@ -46,7 +49,7 @@ export default function ComplaintRow({
                     ? `${report.targetShopName}`
                     : report.targetName
                       ? `${report.targetName}`
-                      : report.targetId.slice(0, 8)}
+                      : report.targetReferenceCode || formatReferenceCode(report.targetId)}
                 </span>
                 {!targetFiltered && (
                   <button
@@ -67,7 +70,7 @@ export default function ComplaintRow({
             )}
             {report.productId && (
               <span className="font-mono text-slate-400">
-                รหัสสินค้า: {report.productId.slice(0, 8)}
+                รหัสสินค้า: {formatReferenceCode(report.productId)}
               </span>
             )}
           </div>

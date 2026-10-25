@@ -28,7 +28,7 @@ const PARTICIPANT_TRANSITIONS = {
   in_transit: { seller: ["pickup_in_progress"] },
   completed: { buyer: ["delivered"] },
   cancelled: {
-    buyer: ["pending_payment", "paid", "confirmed", "ready_to_ship", "pickup_in_progress"],
+    buyer: ["pending_payment", "paid", "confirmed"],
     seller: ["pending_payment", "paid", "confirmed", "ready_to_ship"],
   },
 };
@@ -55,10 +55,13 @@ function assertParticipantTransition(order, userId, status) {
   return role;
 }
 
-/** Cancellation before carrier handoff refunds paid orders; confirmation expiry also refunds. */
+/** Cancellations before dispatch and seller-confirmation expiry can refund the buyer. */
 function isRefundingCancellation(order, status) {
-  return (status === "cancelled" && ["paid", "confirmed", "ready_to_ship", "pickup_in_progress"].includes(order.status)) ||
-    (status === "seller_confirmation_expired" && order.status === "paid");
+  return (
+    (status === "cancelled" &&
+      ["paid", "confirmed", "ready_to_ship"].includes(order.status)) ||
+    (status === "seller_confirmation_expired" && order.status === "paid")
+  );
 }
 
 /** Buyers may dispute a received order until the window after delivery closes. */

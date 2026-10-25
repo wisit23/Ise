@@ -30,7 +30,14 @@ async function executeBatch({
   }
   if (!trimmedReason) throw badRequest("reason is required");
 
-  const normalizedIds = ids.map(String);
+  const { normalizeReferenceCode } = require("@reloop/shared");
+  const userCodes = ids.map((id) => normalizeReferenceCode(String(id), "USR")).filter(Boolean);
+  const users = userCodes.length ? await prisma.user.findMany({
+    where: { referenceCode: { in: [...new Set(userCodes)] } },
+    select: { id: true, referenceCode: true },
+  }) : [];
+  const byReference = new Map(users.map((user) => [user.referenceCode, user.id]));
+  const normalizedIds = ids.map((id) => byReference.get(normalizeReferenceCode(String(id), "USR")) || String(id));
 
   function assertSameRequest(run) {
     if (

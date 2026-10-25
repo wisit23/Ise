@@ -24,7 +24,7 @@ for (const status of ["paid", "confirmed", "ready_to_ship"]) {
     await notifyOrderStatusChanged({
       id: "o1", buyerId: "buyer", sellerId: "seller", productId: "p1",
       status, originalAmount: "150", ordersAmount: "100", productTitle: "Shirt",
-    }, "cancelled", { reason: "สินค้าชำรุดก่อนจัดส่ง" });
+    }, "cancelled", { actorId: "seller", reason: "สินค้าชำรุดก่อนจัดส่ง" });
     const notice = calls.find((call) => call.userId === "buyer");
     assert.match(notice.title, /คืนเงินเต็มจำนวน/);
     assert.match(notice.message, /฿100/);

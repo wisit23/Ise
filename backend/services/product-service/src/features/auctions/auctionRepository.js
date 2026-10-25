@@ -58,6 +58,7 @@ function createAuctionRepository(prismaClient) {
       ...(search
         ? {
             OR: [
+              ...(require("@reloop/shared").normalizeReferenceCode(search, "AUC") ? [{ referenceCode: require("@reloop/shared").normalizeReferenceCode(search, "AUC") }] : []),
               {
                 product: {
                   title: { contains: search, mode: "insensitive" },
@@ -154,10 +155,10 @@ function createAuctionRepository(prismaClient) {
     });
   }
 
-  function setProductStatus(productId, status, tx = prismaClient) {
+  function setProductStatus(productId, status, tx = prismaClient, extraData = {}) {
     return tx.product.update({
       where: { id: productId },
-      data: { status },
+      data: { status, ...extraData },
     });
   }
 

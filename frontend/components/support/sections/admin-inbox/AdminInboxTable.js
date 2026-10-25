@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 
 import Pagination from "../../../Pagination";
 import Badge from "../../../panel/ui/Badge";
@@ -71,24 +73,24 @@ export default function AdminInboxTable({
           {t.targetId ? (
             <span
               className="font-semibold text-orange-700"
-              title={`คู่กรณี: ${t.targetId}`}
+              title={`คู่กรณี: ${formatReferenceCode(t.targetId)}`}
             >
               <span className="mr-1 text-[10px] font-bold uppercase text-orange-500">
                 คู่กรณี:
               </span>
-              <span>{t.targetName || `${t.targetId.slice(0, 8)}...`}</span>
+              <span>{t.targetName || formatReferenceCode(t.targetId)}</span>
             </span>
           ) : (
             <span className="text-[11px] italic text-slate-400">
               คู่กรณี: ไม่ระบุ
             </span>
           )}
-          <span className="text-slate-500" title={`ผู้แจ้ง: ${t.requesterId}`}>
+          <span className="text-slate-500" title={`ผู้แจ้ง: ${formatReferenceCode(t.requesterId)}`}>
             <span className="mr-1 text-[10px] font-medium text-slate-400">
               ผู้แจ้ง:
             </span>
             <span>
-              {t.requesterName || (t.requesterId ? `${t.requesterId.slice(0, 8)}...` : "—")}
+              {t.requesterName || (t.requesterId ? formatReferenceCode(t.requesterId) : "—")}
             </span>
           </span>
         </div>
@@ -137,7 +139,7 @@ export default function AdminInboxTable({
       className: "text-xs font-medium text-slate-500",
       render: (t) =>
         t.assigneeId ? (
-          t.assigneeName || t.assigneeId.slice(0, 12)
+          t.assigneeName || formatReferenceCode(t.assigneeId)
         ) : (
           <span className="text-slate-500">—</span>
         ),

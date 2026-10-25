@@ -662,3 +662,21 @@ approved by Admin shows up here as "approved, ready to schedule" immediately.
 - [x] เพิ่มปุ่มล้างตัวกรองและ empty state สำหรับผลค้นหาที่ไม่พบ
 - [x] Docker targeted tests ผ่าน Backend 130/130 และ Frontend 60/60
 - [ ] Live browser acceptance ยังรอผู้ใช้ตรวจหน้าเว็บหลัง Product Service rebuild
+
+## 2026-10-24 — Auction result labels by payment state
+
+- [x] รายการ `open` แสดง `ผู้เสนอราคาสูงสุดปัจจุบัน` เมื่อมี Bid
+- [x] รายการ `closed` ที่ยังรอจ่ายแสดง `ผู้ได้รับสิทธิ์` จาก `winningBidId`
+- [x] ใช้คำว่า `ผู้ชนะ` เมื่อ Product เป็น `sold` หลังชำระเงินสำเร็จ
+- [x] ถ้ามี Bid แต่หมดผู้มีสิทธิ์แล้ว แสดง `ไม่มีผู้ชนะ` โดยยังรักษาราคาและจำนวน Bid
+- [x] คง TC_AUC10 rollover, Order ใหม่, เวลา 24 ชั่วโมง และ notification เดิมทั้งหมด
+- [x] Docker focused Frontend ผ่าน 61/61; warning `act(...)` เดิมยังปรากฏแต่ suite ผ่าน
+- [ ] Live browser acceptance ยังรอผู้ใช้ตรวจหน้าเว็บ
+
+## 2026-10-24 — Auction chat navigation
+
+- [x] ปุ่มขวาบนของ Auction Chat เปิดหน้ารายละเอียดสินค้าและเปลี่ยน label เป็น `ดูรายละเอียดสินค้า`
+- [x] ปุ่มใต้ข้อความยกเลิกรายการของผู้ขายเปิดหน้าจัดการสินค้าประมูล
+- [x] รองรับข้อความเก่าที่บันทึก action URL เดิมไว้แล้ว
+- [x] Docker focused tests ผ่าน Frontend 14/14 และ Product Auction 130/130
+- [ ] Live browser acceptance ยังรอผู้ใช้กดตรวจหน้าเว็บ

@@ -494,3 +494,21 @@ async function placeBid({ eventId, bidderId, amount, idempotencyKey, now }) {
 - [x] Separate the result table into manageable and historical groups.
 - [x] Add controller/service/component regression coverage and run targeted Docker tests.
 - [ ] Complete live browser acceptance with the user.
+
+### Auction history payment-aware result labels (MKT-DEC-033)
+
+- [x] Show the current highest bidder while an item is open.
+- [x] Show the current `winningBidId` owner as the payment-right holder until payment succeeds.
+- [x] Reserve the winner label for a successfully paid (`sold`) product.
+- [x] Show no winner when bids remain in history but the settlement has cleared `winningBidId`.
+- [x] Preserve TC_AUC10 rollover, 24-hour payment windows, notifications, audit, and database contracts.
+- [x] Add component coverage and run the focused Docker suite (61/61).
+- [ ] Complete live browser acceptance with the user.
+
+### Auction chat navigation (MKT-DEC-034)
+
+- [x] Route the Auction Chat product header to the product detail page.
+- [x] Route the seller cancellation message action to Seller Auction management.
+- [x] Normalize stored seller cancellation messages in the frontend.
+- [x] Add focused frontend/backend regression coverage and run it in Docker.
+- [ ] Complete live browser acceptance with the user.

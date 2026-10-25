@@ -178,9 +178,9 @@ export default function OrderConfirmationModal({
               </h2>
               <p
                 className="font-mono text-xs text-gray-400"
-                title={currentOrder?.id || orderId}
+                title={formatOrderId(currentOrder || orderId)}
               >
-                Order ID: #{formatOrderId(currentOrder?.id || orderId)}
+                Order ID: #{formatOrderId(currentOrder || orderId)}
               </p>
             </div>
           </div>

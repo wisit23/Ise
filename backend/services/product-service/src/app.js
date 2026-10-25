@@ -13,7 +13,9 @@ const reviewUploadRoutes = require("./features/reviews/routes/uploadRoutes");
 const { REVIEW_UPLOAD_DIR } = require("./features/reviews/middleware/upload");
 
 const app = express();
+app.use(require("@reloop/shared").referenceAliases(require("./models/prismaClient"), "product"));
 app.use(express.json());
+require("@reloop/shared").installReferenceDisplay(app, require("./models/prismaClient"), "product");
 
 app.get("/health", (req, res) =>
   res.json({ status: "ok", service: "product-service" }),

@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -586,6 +587,7 @@ export default function ProductDetailPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{product.title}</h1>
+          {product.referenceCode && <ReferenceCode value={product} className="mt-2 text-xs text-ink-muted" />}
           <WishlistButton productId={product.id} title={product.title} className="mt-3" />
           {/* Price display with interactive voucher */}
           <div className="mt-3">

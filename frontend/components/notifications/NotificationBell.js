@@ -60,6 +60,11 @@ const TYPE_CONFIG = {
     color: "bg-rose-100 text-rose-700",
     badgeLabel: "ข้อพิพาท",
   },
+  SUPPORT: {
+    icon: "support_agent",
+    color: "bg-sky-100 text-sky-700",
+    badgeLabel: "แจ้งปัญหา",
+  },
   REVIEW: {
     icon: "rate_review",
     color: "bg-teal-100 text-teal-700",
@@ -205,7 +210,10 @@ export default function NotificationBell({ user }) {
       markNotificationRead(token, notif.id).catch(() => {});
     }
 
+    // Status updates (ticket or dispute progress) just open the case page.
     const isReportResult =
+      !notif.metadata?.statusUpdate &&
+      notif.type !== "SUPPORT" && (
       notif.type === "REPORT" ||
       notif.type === "DISPUTE" ||
       Boolean(notif.metadata?.decision) ||
@@ -216,7 +224,7 @@ export default function NotificationBell({ user }) {
           notif.title.includes("รายงาน") ||
           notif.title.includes("ข้อพิพาท") ||
           notif.title.includes("ระงับ") ||
-          notif.title.includes("คำเตือน")));
+          notif.title.includes("คำเตือน"))));
 
     if (isReportResult) {
       setOpen(false);
@@ -420,6 +428,8 @@ export default function NotificationBell({ user }) {
                 const config =
                   TYPE_CONFIG[notif.type] || TYPE_CONFIG.SYSTEM;
                 const isReportResult =
+                  !notif.metadata?.statusUpdate &&
+                  notif.type !== "SUPPORT" && (
                   notif.type === "REPORT" ||
                   notif.type === "DISPUTE" ||
                   Boolean(notif.metadata?.decision) ||
@@ -430,7 +440,7 @@ export default function NotificationBell({ user }) {
                       notif.title.includes("รายงาน") ||
                       notif.title.includes("ข้อพิพาท") ||
                       notif.title.includes("ระงับ") ||
-                      notif.title.includes("คำเตือน")));
+                      notif.title.includes("คำเตือน"))));
                 const isAuctionCancelled =
                   notif.type === "AUCTION" &&
                   (notif.metadata?.event?.includes("cancelled") ||

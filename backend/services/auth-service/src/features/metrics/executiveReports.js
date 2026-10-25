@@ -34,6 +34,7 @@ function toItem(report, targetMap = new Map(), actionMap = {}) {
   const targetInfo = targetMap.get(report.targetId) || {};
   return {
     id: report.id,
+    ...(report.referenceCode ? { referenceCode: report.referenceCode } : {}),
     reason: report.reason,
     category: categorizeReason(report.reason),
     status: report.status,
@@ -43,6 +44,7 @@ function toItem(report, targetMap = new Map(), actionMap = {}) {
     actionDetails: actionMap[report.id] || null,
     reportedAt: report.reportedAt.toISOString(),
     targetId: report.targetId,
+    ...(targetInfo.referenceCode ? { targetReferenceCode: targetInfo.referenceCode } : {}),
     targetName: targetInfo.name || null,
     targetShopName: targetInfo.shopName || null,
     targetReportCount: targetInfo.reportCount || 1,
@@ -111,6 +113,7 @@ async function enrichTargets(allTargetIds = []) {
         id: true,
         firstName: true,
         lastName: true,
+        referenceCode: true,
         sellerProfile: { select: { shopName: true } },
       },
     }),
@@ -132,6 +135,7 @@ async function enrichTargets(allTargetIds = []) {
         name: `${u.firstName} ${u.lastName}`.trim(),
         shopName: u.sellerProfile?.shopName || null,
         reportCount: countMap.get(u.id) || 1,
+        referenceCode: u.referenceCode,
       },
     ]),
   );

@@ -1,4 +1,5 @@
 "use client";
+import { formatReferenceCode } from "../../lib/referenceCodes";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -356,7 +357,7 @@ export default function CustomerDisputeCase({ orderId }) {
                     </div>
                     <div>
                       <dt>เลขคำร้อง</dt>
-                      <dd className={styles.identifier}>{dispute.id}</dd>
+                      <dd className={styles.identifier}>{formatReferenceCode(dispute)}</dd>
                     </div>
                   </dl>
                   <Link

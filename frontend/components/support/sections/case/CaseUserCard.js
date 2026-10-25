@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 
 import Button from "../../../ui/Button";
 
@@ -24,6 +26,7 @@ const TONES = {
 
 export default function CaseUserCard({
   userId,
+  referenceCode,
   userName,
   heading,
   icon,
@@ -115,10 +118,10 @@ export default function CaseUserCard({
         </div>
         <div className="min-w-0 break-words">
           <p className="text-sm font-bold text-slate-800">
-            {userName || `รหัส: ${userId.slice(0, 16)}`}
+            {userName || `รหัส: ${referenceCode || formatReferenceCode(userId)}`}
           </p>
           <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
-            {userId}
+            {referenceCode || formatReferenceCode(userId)}
           </p>
         </div>
       </div>

@@ -42,12 +42,14 @@ function trustProxySetting(raw) {
 }
 
 const app = express();
+app.use(require("@reloop/shared").referenceAliases(prisma, "auth"));
 // Requests reach this service through the frontend and gateway proxies on
 // private networks. Trusting exactly those hops makes req.ip the real client
 // address (used for login history and per-IP rate limits) while a client's
 // own X-Forwarded-For header still can't override it.
 app.set("trust proxy", trustProxySetting(process.env.TRUST_PROXY));
 app.use(express.json());
+require("@reloop/shared").installReferenceDisplay(app, require("./models/prismaClient"), "auth");
 app.locals.validateAccessSession = validateAccessSession;
 
 app.post(
@@ -85,6 +87,7 @@ app.get("/internal/users/:id", requireInternalToken, async (req, res, next) => {
     ]);
     res.json({
       id: user.id,
+      ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
       email: user.email,
       status: user.status,
       role: user.role,

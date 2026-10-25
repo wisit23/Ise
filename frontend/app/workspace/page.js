@@ -1,4 +1,5 @@
 "use client";
+import { formatReferenceCode } from "../../lib/referenceCodes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NavBar from "../../components/NavBar";
@@ -143,7 +144,7 @@ export default function SupportPanelPage() {
     <div
       role="group"
       aria-label="บัญชีที่เข้าสู่ระบบอยู่"
-      title={[staffName, user.email, `รหัสเจ้าหน้าที่: ${user.id}`].filter(Boolean).join("\n")}
+      title={[staffName, user.email, `รหัสเจ้าหน้าที่: ${formatReferenceCode(user)}`].filter(Boolean).join("\n")}
       className={`flex min-w-0 items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50/60 py-2 ${sidebarCollapsed ? "justify-center px-1" : "px-2.5"}`}
     >
       <span aria-hidden="true" className="material-symbols-outlined shrink-0 text-[24px] text-emerald-700">account_circle</span>

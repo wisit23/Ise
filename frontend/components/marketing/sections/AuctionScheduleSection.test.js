@@ -761,7 +761,11 @@ describe("RoundManagementSection - Round item details", () => {
         {
           id: "closed-item",
           productId: "closed-product",
-          product: { title: "สินค้าปิดประมูล", photos: [{ url: "/closed.jpg" }] },
+          product: {
+            title: "สินค้าปิดประมูล",
+            status: "sold",
+            photos: [{ url: "/closed.jpg" }],
+          },
           sellerDisplayName: "ร้านสาม",
           status: "closed",
           startingPrice: 500,
@@ -811,10 +815,123 @@ describe("RoundManagementSection - Round item details", () => {
 
     const closedCard = cards[2];
     expect(within(closedCard).getByText("฿900")).toBeInTheDocument();
+    expect(within(closedCard).getByText("ผู้ชนะ")).toBeInTheDocument();
     expect(within(closedCard).getByText("ผู้ชนะ B")).toBeInTheDocument();
     expect(within(closedCard).getByText("2")).toBeInTheDocument();
     expect(within(closedCard).getByAltText("")).toHaveAttribute("src", "/closed.jpg");
     expect(within(cards[3]).getByText(/ข้อมูลสินค้าไม่ครบ/)).toBeInTheDocument();
+  });
+
+  it("shows the current bidder, payment-right holder, and no-winner outcomes without changing bid history", async () => {
+    mockRoundDetails({
+      items: [
+        {
+          id: "open-with-bid",
+          productId: "open-product",
+          product: { title: "สินค้ากำลังประมูล", status: "auction", photos: [] },
+          status: "open",
+          startingPrice: 500,
+          bids: [
+            { id: "bid-open", amount: 650, bidderName: "ผู้เสนอ A" },
+          ],
+          createdAt: "2026-10-03T00:00:00.000Z",
+        },
+        {
+          id: "open-without-bid",
+          productId: "open-no-bid-product",
+          product: {
+            title: "สินค้ากำลังประมูลที่ยังไม่มี Bid",
+            status: "auction",
+            photos: [],
+          },
+          status: "open",
+          startingPrice: 500,
+          bids: [],
+          createdAt: "2026-10-02T12:00:00.000Z",
+        },
+        {
+          id: "closed-awaiting-payment",
+          productId: "reserved-product",
+          product: { title: "สินค้ารอชำระเงิน", status: "reserved", photos: [] },
+          status: "closed",
+          startingPrice: 500,
+          winningBidId: "bid-current-right-holder",
+          bids: [
+            { id: "bid-expired", amount: 1000, bidderName: "ผู้หมดสิทธิ์ A" },
+            { id: "bid-current-right-holder", amount: 900, bidderName: "ผู้ได้รับสิทธิ์ B" },
+          ],
+          createdAt: "2026-10-02T00:00:00.000Z",
+        },
+        {
+          id: "closed-no-winner",
+          productId: "returned-product",
+          product: {
+            title: "สินค้าคืนให้ผู้ขาย",
+            status: "auction_action_required",
+            photos: [],
+          },
+          status: "closed",
+          startingPrice: 500,
+          winningBidId: null,
+          winningOrderId: null,
+          bids: [
+            { id: "bid-unpaid", amount: 800, bidderName: "ผู้หมดสิทธิ์ C" },
+          ],
+          createdAt: "2026-10-01T00:00:00.000Z",
+        },
+      ],
+      total: 4,
+      totalPages: 1,
+    });
+
+    render(<RoundManagementSection token={token} />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "ดูรายละเอียดรอบ รอบรายละเอียดสินค้า",
+      }),
+    );
+
+    const dialog = screen.getByRole("dialog", {
+      name: "รายละเอียดรอบการประมูล",
+    });
+    const cards = await within(dialog).findAllByTestId(
+      "round-detail-auction-item",
+    );
+    const openCard = cards.find((card) =>
+      card.textContent.includes("สินค้ากำลังประมูล"),
+    );
+    const awaitingCard = cards.find((card) =>
+      card.textContent.includes("สินค้ารอชำระเงิน"),
+    );
+    const openWithoutBidCard = cards.find((card) =>
+      card.textContent.includes("สินค้ากำลังประมูลที่ยังไม่มี Bid"),
+    );
+    const noWinnerCard = cards.find((card) =>
+      card.textContent.includes("สินค้าคืนให้ผู้ขาย"),
+    );
+
+    expect(
+      within(openCard).getByText("ผู้เสนอราคาสูงสุดปัจจุบัน"),
+    ).toBeInTheDocument();
+    expect(within(openCard).getByText("ผู้เสนอ A")).toBeInTheDocument();
+    expect(
+      within(openWithoutBidCard).getByText("ยังไม่มีผู้เสนอราคา"),
+    ).toBeInTheDocument();
+
+    expect(within(awaitingCard).getByText("ผู้ได้รับสิทธิ์")).toBeInTheDocument();
+    expect(within(awaitingCard).getByText("ผู้ได้รับสิทธิ์ B")).toBeInTheDocument();
+    expect(within(awaitingCard).getByText("฿900")).toBeInTheDocument();
+    expect(within(awaitingCard).getByText(/เคยมีผู้เสนอสูงสุด/)).toBeInTheDocument();
+    expect(within(awaitingCard).getAllByText("฿1,000")).toHaveLength(2);
+    expect(within(awaitingCard).getByText(/เสียสิทธิ์/)).toBeInTheDocument();
+    expect(within(awaitingCard).getByText("ราคาสูงสุดที่เคยมี")).toBeInTheDocument();
+    expect(within(awaitingCard).queryByText("ราคาปัจจุบัน")).not.toBeInTheDocument();
+    expect(within(openCard).getByText("ราคาปัจจุบัน")).toBeInTheDocument();
+
+    expect(within(noWinnerCard).getByText("ไม่มีผู้ชนะ")).toBeInTheDocument();
+    expect(within(noWinnerCard).getByText("ราคาสูงสุดที่เสนอ")).toBeInTheDocument();
+    expect(within(noWinnerCard).getAllByText("฿800")).toHaveLength(2);
+    expect(within(noWinnerCard).queryByText("ผู้หมดสิทธิ์ C")).not.toBeInTheDocument();
   });
 
   it("shows loading and empty states inside the existing modal", async () => {

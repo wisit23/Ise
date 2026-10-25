@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 
 import { useMemo, useState } from "react";
 import Alert from "../../ui/Alert";
@@ -44,7 +46,7 @@ function Results({ result, title }) {
         <table className="w-full text-left text-xs">
           <thead className="sticky top-0 bg-slate-100 text-slate-600">
             <tr>
-              <th className="px-3 py-2">Account ID</th>
+              <th className="px-3 py-2">รหัสบัญชี</th>
               <th className="px-3 py-2">ผล</th>
               <th className="px-3 py-2">เหตุผล</th>
             </tr>
@@ -52,7 +54,7 @@ function Results({ result, title }) {
           <tbody>
             {(result.results || []).map((item) => (
               <tr key={item.id} className="border-t border-slate-100">
-                <td className="break-all px-3 py-2 font-mono">{item.id}</td>
+                <td className="break-all px-3 py-2 font-mono">{formatReferenceCode(item)}</td>
                 <td className={`px-3 py-2 font-bold ${item.ok ? "text-emerald-700" : "text-red-700"}`}>
                   {item.ok ? "ทำได้" : "ทำไม่ได้"}
                 </td>
@@ -212,7 +214,7 @@ export default function BulkActionsSection({ token }) {
           />
         </label>
         <label className="text-xs font-bold text-slate-700 lg:col-span-2">
-          Account IDs — คั่นด้วยบรรทัด ช่องว่าง หรือ comma
+          รหัสบัญชี USR — คั่นด้วยบรรทัด ช่องว่าง หรือ comma
           <textarea
             aria-label="Account IDs"
             value={rawIds}

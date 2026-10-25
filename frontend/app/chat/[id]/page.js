@@ -1,4 +1,5 @@
 "use client";
+import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -736,6 +737,7 @@ export default function ChatRoomPage() {
                     >
                       {otherName || (error ? "ไม่พบการสนทนา" : "กำลังโหลด...")}
                     </h1>
+                    {conversation?.referenceCode && <ReferenceCode value={conversation} className="text-[10px] text-gray-500" />}
                     {otherRoleLabel && (
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
                         {otherRoleLabel}

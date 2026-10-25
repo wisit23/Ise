@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../../lib/referenceCodes";
+
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../../lib/api";
@@ -111,7 +113,7 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
     return colon < 0 ? ["", ""] : [line.slice(0, colon).trim(), line.slice(colon + 1).trim()];
   }));
 
-  return <Modal open onClose={onClose} title="ตรวจสอบข้อพิพาท" description={dispute.orderId} placement="fullscreen">
+  return <Modal open onClose={onClose} title="ตรวจสอบข้อพิพาท" description={formatReferenceCode(dispute.orderId)} placement="fullscreen">
       <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
       <div className="mx-auto w-full max-w-7xl space-y-4 p-3 sm:p-5 lg:p-6">
         <section className="rounded-xl border bg-white p-4">
@@ -126,7 +128,7 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
         <div className="grid grid-cols-1 gap-3 break-words rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm sm:grid-cols-3">
           <div><span className="block text-xs text-slate-500">Escrow Hold</span><strong>{typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</strong></div>
           <div><span className="block text-xs text-slate-500">SLA</span><strong>{detail?.slaExpiresAt ? new Date(detail.slaExpiresAt).toLocaleString("th-TH") : "—"}</strong></div>
-          <div><span className="block text-xs text-slate-500">CS ผู้ส่งต่อ</span><strong className="break-all font-mono">{detail?.escalatedBy || "—"}</strong></div>
+          <div><span className="block text-xs text-slate-500">CS ผู้ส่งต่อ</span><strong className="break-all font-mono">{formatReferenceCode(detail?.escalatedBy) || "—"}</strong></div>
         </div>
         <section className="rounded-xl border bg-white p-4"><h3 className="font-bold">CS Memo</h3>
           {detail?.escalationNote?.startsWith("ตอบกลับคำขอ")
@@ -173,7 +175,7 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
                 </div>
               : <p className="mt-2 text-sm text-amber-700">รอ CS ส่งต่อเคสให้ Trust and Safety</p>)
           : !detail.assignedTo ? <button type="button" disabled={busy || !detail.capabilities?.canClaim} onClick={claim} className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">รับเคสเพื่อพิจารณา</button>
-          : detail.assignedTo !== currentUserId ? <p className="mt-2 text-sm text-slate-600">เจ้าหน้าที่ Trust and Safety คนอื่นกำลังรับผิดชอบเคสนี้ ({detail.assigneeName || detail.assignedTo})</p>
+          : detail.assignedTo !== currentUserId ? <p className="mt-2 text-sm text-slate-600">เจ้าหน้าที่ Trust and Safety คนอื่นกำลังรับผิดชอบเคสนี้ ({detail.assigneeName || formatReferenceCode(detail.assignedTo)})</p>
           : <>
             {detail.capabilities?.canDecide !== false && <>
               <textarea aria-label="เหตุผลการตัดสิน" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="ระบุเหตุผลการตัดสิน" className="mt-3 w-full rounded-lg border p-3 text-sm" />

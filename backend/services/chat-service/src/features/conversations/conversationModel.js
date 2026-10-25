@@ -1,4 +1,5 @@
 const prisma = require("../../models/prismaClient");
+const { createWithReferenceCode } = require("@reloop/shared");
 
 function findByContextKey(contextKey) {
   return prisma.conversation.findUnique({ where: { contextKey } });
@@ -16,8 +17,9 @@ function create({
   createdBy,
   participants,
 }) {
-  return prisma.conversation.create({
+  return createWithReferenceCode("CHT", (referenceCode) => prisma.conversation.create({
     data: {
+      referenceCode,
       ...(id ? { id } : {}),
       contextType,
       contextId,
@@ -26,7 +28,7 @@ function create({
       createdBy,
       participants,
     },
-  });
+  }));
 }
 
 // Ordered by lastMessageAt desc so an empty conversation (never messaged)

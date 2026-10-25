@@ -18,13 +18,17 @@ function reportPredicate(
   }
   if (targetId) clauses.push(Prisma.sql`r.target_id = ${targetId}`);
   if (search) {
+    const reference = require("@reloop/shared").normalizeReferenceCode(search);
     // STRPOS treats % and _ as literal text, not user-controlled wildcards.
     clauses.push(Prisma.sql`(
       strpos(lower(COALESCE(r.target_id, '')), lower(${search})) > 0
+      OR r.reference_code = ${reference}
       OR EXISTS (
         SELECT 1 FROM users u
         LEFT JOIN seller_profiles s ON s.user_id = u.id
         WHERE u.id = r.target_id AND (
+          u.reference_code = ${reference}
+          OR
           strpos(lower(COALESCE(s.shop_name, '')), lower(${search})) > 0
           OR strpos(lower(concat_ws(' ', u.f_name, u.l_name)), lower(${search})) > 0
         )

@@ -1,4 +1,6 @@
 "use client";
+import { formatReferenceCode } from "../../../lib/referenceCodes";
+
 
 import { useEffect, useState } from "react";
 import Modal from "../../ui/Modal";
@@ -43,7 +45,7 @@ export default function AuctionReviewModal({
     onClose?.();
   }
 
-  const title = product.title || auction.productId || "ไม่ระบุ";
+  const title = product.title || formatReferenceCode(auction.productId) || "ไม่ระบุ";
   const description =
     product.description && product.description.trim()
       ? product.description

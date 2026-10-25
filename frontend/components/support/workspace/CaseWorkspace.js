@@ -1,4 +1,7 @@
 "use client";
+
+import { formatReferenceCode, REFERENCE_UNAVAILABLE } from "../../../lib/referenceCodes";
+
 import SafetyOrderChatPanel from "../sections/disputes/SafetyOrderChatPanel";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -46,7 +49,7 @@ const ACTION_LABEL = {
   CLOSED: "ปิดเคส",
 };
 const fallback = (name, id) =>
-  name || (id ? `ผู้ใช้ #${id.slice(0, 10)}` : "ยังไม่มี");
+  name || (id ? `ผู้ใช้ #${formatReferenceCode(id)}` : "ยังไม่มี");
 const currency = (value) =>
   value != null && Number.isFinite(Number(value))
     ? `฿${Number(value).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -67,12 +70,15 @@ export default function CaseWorkspace({
   const unread = useCaseUnread(domain, token, user.id);
   const { state, detail, queue, busy } = w;
   const toast = useToast();
-  const personIdentity = (name, id) => (
+  const personIdentity = (name, internalId) => {
+    const id = formatReferenceCode(internalId);
+    return (
     <span>
       <span>{name || (id ? "ผู้ใช้" : "ยังไม่มี")}</span>
       {id && (
         <button
           type="button"
+          disabled={id === REFERENCE_UNAVAILABLE}
           className={contextStyles.personId}
           aria-label={`คัดลอกรหัสผู้ใช้เต็ม ${id}`}
           title="คัดลอกรหัสผู้ใช้เต็มสำหรับค้นหา"
@@ -91,6 +97,7 @@ export default function CaseWorkspace({
       )}
     </span>
   );
+  };
   const [context, setContext] = useState(false);
   const [memo, setMemo] = useState(false);
   const [note, setNote] = useState("");
@@ -364,20 +371,20 @@ export default function CaseWorkspace({
       render: (row) => (
         <button
           type="button"
-          aria-label={`คัดลอกเลขเคส ${row.ticketNumber || row.id}`}
-          title={`${row.ticketNumber || row.id} · คลิกเพื่อคัดลอก`}
-          className="group/id -ml-1.5 inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-md px-1.5 font-mono text-xs text-slate-600 hover:bg-slate-100 hover:text-emerald-700"
+          aria-label={`คัดลอกเลขเคส ${formatReferenceCode(row)}`}
+          title={`${formatReferenceCode(row)} · คลิกเพื่อคัดลอก`}
+          className="group/id -ml-1.5 inline-flex min-h-9 max-w-full items-center gap-1.5 break-all rounded-md px-1.5 font-mono text-xs text-slate-600 hover:bg-slate-100 hover:text-emerald-700"
           onClick={async (event) => {
             event.stopPropagation();
             try {
-              await navigator.clipboard.writeText(row.ticketNumber || row.id);
+              await navigator.clipboard.writeText(formatReferenceCode(row));
               toast.success("คัดลอกเลขเคสแล้ว");
             } catch {
               toast.error("คัดลอกไม่ได้ คุณเปิดข้อมูลเคสเพื่อดูเลขเต็มได้");
             }
           }}
         >
-          {row.ticketNumber || `#…${row.id.slice(-6)}`}
+          {formatReferenceCode(row)}
           <span
             aria-hidden="true"
             className="material-symbols-outlined text-[14px] text-slate-300 group-hover/id:text-emerald-600"
@@ -397,12 +404,12 @@ export default function CaseWorkspace({
           </p>
           <p
             className="mt-0.5 truncate text-xs text-slate-500"
-            title={dispute ? `ออเดอร์ ${row.orderId}` : undefined}
+            title={dispute ? `ออเดอร์ ${formatReferenceCode(row.orderId)}` : undefined}
           >
             {dispute && !closedView
               ? `ซื้อ ${fallback(row.buyerName, row.order?.buyerId)} · ขาย ${fallback(row.sellerName, row.order?.sellerId)}`
               : dispute
-                ? `ออเดอร์ #${String(row.orderId).slice(0, 8)}…${String(row.orderId).slice(-4)}`
+                ? `ออเดอร์ #${formatReferenceCode(row.orderId)}`
                 : fallback(row.requesterName, row.requesterId)}
           </p>
         </div>
@@ -551,7 +558,7 @@ export default function CaseWorkspace({
   const mapped = (queue.items || []).map((row) => ({
     ...row,
     ticketNumber:
-      row.ticketNumber || `#${row.id.slice(0, 8)}…${row.id.slice(-4)}`,
+      formatReferenceCode(row),
     subject: row.subject || row.reason,
     priority: row.queuePriority || row.priority,
   }));
@@ -706,8 +713,7 @@ export default function CaseWorkspace({
                     </h2>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-600">
                       <span className="font-medium">
-                        {selected.ticketNumber ||
-                          `#${selected.id.slice(0, 8)}…${selected.id.slice(-4)}`}
+                        {formatReferenceCode(selected)}
                       </span>
                       <span>{labels[selected.status] || selected.status}</span>
                       <span>
@@ -1076,7 +1082,7 @@ export default function CaseWorkspace({
                       <span className={contextStyles.caseType}>{dispute ? "ข้อพิพาท" : "Ticket"}</span>
                       <span className={contextStyles.status}>{labels[selected.status] || selected.status}</span>
                     </div>
-                    <p className={contextStyles.caseNumber}>{selected.ticketNumber || selected.id}</p>
+                    <p className={contextStyles.caseNumber}>{formatReferenceCode(selected)}</p>
                     <h3 className={contextStyles.subject}>{(dispute ? selected.reason || selected.subject : selected.subject) || "รายละเอียดเคส"}</h3>
                     {selected.description && selected.description !== selected.subject && (
                       <p className={contextStyles.description}>{selected.description}</p>
@@ -1112,7 +1118,7 @@ export default function CaseWorkspace({
                     <section className={`${contextStyles.contextSection} ${contextStyles.orderSection}`}>
                       <h3 className={contextStyles.sectionHeading}><span className="material-symbols-outlined" aria-hidden="true">shopping_bag</span>คำสั่งซื้อ</h3>
                       <p className="mt-2 break-all text-sm">
-                        {selected.orderId}
+                        {formatReferenceCode(selected.orderId)}
                       </p>
                       {dispute && (
                         <>
@@ -1335,7 +1341,7 @@ export default function CaseWorkspace({
       >
         {decisionError && <Alert>{decisionError}</Alert>}
         <p className="break-all text-sm">
-          เคส {selected?.ticketNumber || selected?.id}
+          เคส {formatReferenceCode(selected)}
         </p>
         {decision?.ticketClose ? (
           <p className="mt-3 text-sm">
