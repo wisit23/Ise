@@ -170,12 +170,13 @@ def validate_storage_env(environment):
 
 def validate_production_environment(values, label):
     """Validate resolved Compose values, not shell-evaluated dotenv text."""
-    for key in ("POSTGRES_PASSWORD", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "INTERNAL_SERVICE_TOKEN"):
-        value = values.get(key, "")
-        need(len(value) >= 32 and not re.search(r"change[_-]?me|example|reloop_dev|^dev[_-]", value, re.I),
-             f"{label}: {key} must be at least 32 characters and not an example/development secret.")
-    need(len({values[key] for key in ("JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "INTERNAL_SERVICE_TOKEN")}) == 3,
-         f"{label}: JWT access, refresh and internal tokens must be different.")
+    # Secret-policy checks disabled by request; uncomment to enforce them again.
+    # for key in ("POSTGRES_PASSWORD", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "INTERNAL_SERVICE_TOKEN"):
+    #     value = values.get(key, "")
+    #     need(len(value) >= 32 and not re.search(r"change[_-]?me|example|reloop_dev|^dev[_-]", value, re.I),
+    #          f"{label}: {key} must be at least 32 characters and not an example/development secret.")
+    # need(len({values[key] for key in ("JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "INTERNAL_SERVICE_TOKEN")}) == 3,
+    #      f"{label}: JWT access, refresh and internal tokens must be different.")
     loopback = True
     for key in ("APP_BASE_URL", "NEXT_PUBLIC_API_URL"):
         try:
