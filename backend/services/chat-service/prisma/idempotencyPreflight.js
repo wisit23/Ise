@@ -5,7 +5,7 @@ async function preflight(db,{apply=false}={}){
  const duplicateGroups=result.cursor.firstBatch[0]?.duplicateGroups || 0;
  const missingQuery={$or:[{idempotencyKey:{$exists:false}},{idempotencyKey:null}]};
  const missingCount=(await db.$runCommandRaw({count:"Message",query:missingQuery})).n;
- if(duplicateGroups){const error=new Error("Chat cutover blocked: duplicate idempotency keys require an explicit mapping; existing messages are preserved");error.summary={missingKeys:missingCount,duplicateGroups:duplicates.length};throw error;}
+ if(duplicateGroups){const error=new Error("Chat cutover blocked: duplicate idempotency keys require an explicit mapping; existing messages are preserved");error.summary={missingKeys:missingCount,duplicateGroups};throw error;}
  if(apply)await db.$runCommandRaw({update:"Message",updates:[{q:missingQuery,u:[{$set:{idempotencyKey:{$concat:["legacy-message:",{$toString:"$_id"}]}}}],multi:true}]});
  return {missingKeys:missingCount,duplicateGroups:0,applied:apply,readyForIndex:apply || missingCount===0};
 }

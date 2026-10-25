@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const request = require("supertest");
 
 if (process.env.DATABASE_URL_PRODUCT) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_PRODUCT;
@@ -8,18 +9,10 @@ if (process.env.DATABASE_URL_PRODUCT) {
 const prisma = require("../src/models/prismaClient");
 const articleModel = require("../src/models/articleModel");
 
-const baseUrl = process.env.PRODUCT_TEST_URL || "http://localhost:3002";
+const app = require("../src/app");
 
-async function post(path, body) {
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return {
-    status: response.status,
-    body: await response.json(),
-  };
+function post(path, body) {
+  return request(app).post(path).send(body);
 }
 
 test("article reads use a real database and remain unique per guest session", async (t) => {
@@ -72,9 +65,9 @@ test("article reads use a real database and remain unique per guest session", as
   assert.equal(repeated.body.counted, false);
   assert.equal(repeated.body.viewCount, 1);
 
-  const detailResponse = await fetch(`${baseUrl}/articles/${article.id}`);
+  const detailResponse = await request(app).get(`/articles/${article.id}`);
   assert.equal(detailResponse.status, 200);
-  const detail = await detailResponse.json();
+  const detail = detailResponse.body;
   assert.equal(detail.article.viewCount, 1);
 
   const marketingList = await articleModel.listAllForMarketing({

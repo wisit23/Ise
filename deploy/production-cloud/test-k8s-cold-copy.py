@@ -81,7 +81,7 @@ def main():
                 docker("volume", "create", volume)
         source = {}
         source["postgres"] = container("source-postgres", images["postgres"], VOLUMES[0], paths["postgres"],
-                                       env=("POSTGRES_PASSWORD=fixture-only",))
+                                       env=("POSTGRES_PASSWORD=ci-test-fixture-only",))
         source["mongo"] = container("source-mongo", images["mongo"], VOLUMES[2], paths["mongo"],
                                     "--replSet", "rs0", "--bind_ip_all")
         source["redis"] = container("source-redis", images["redis"], VOLUMES[4], paths["redis"])
@@ -113,7 +113,7 @@ def main():
                 docker("run", "--rm", "--pull=never", "-i", "--network", "none", "-v", volume + ":/restore",
                        images["redis"], "sh", "-c", "tar -xpf - -C /restore", stdin=archive)
             options = ("--replSet", "rs0", "--bind_ip_all") if database == "mongo" else ()
-            env = ("POSTGRES_PASSWORD=fixture-only",) if database == "postgres" else ()
+            env = ("POSTGRES_PASSWORD=ci-test-fixture-only",) if database == "postgres" else ()
             target = container("target-" + database, image, volume, paths[database], *options, env=env)
             if database == "postgres":
                 wait_for(lambda: docker("exec", target, "pg_isready", "-U", "postgres"))

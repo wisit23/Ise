@@ -16,14 +16,14 @@ $global:Mode = 'normal'
 $global:RenderedJobs = New-Object 'Collections.Generic.List[object]'
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ("reloop-test-" + [Guid]::NewGuid().ToString('N') + '.env')
 $envText = @'
-POSTGRES_PASSWORD=test-only-password
-JWT_ACCESS_SECRET=test-only-access
-JWT_REFRESH_SECRET=test-only-refresh
-INTERNAL_SERVICE_TOKEN=test-only-internal
-DATABASE_URL_AUTH=postgresql://reloop:test-only-password@postgres:5432/reloop_auth
-DATABASE_URL_PRODUCT=postgresql://reloop:test-only-password@postgres:5432/reloop_product
-DATABASE_URL_ORDER=postgresql://reloop:test-only-password@postgres:5432/reloop_order
-DATABASE_URL_SUPPORT=postgresql://reloop:test-only-password@postgres:5432/reloop_support
+POSTGRES_PASSWORD=ci-test-only-password
+JWT_ACCESS_SECRET=ci-test-only-access
+JWT_REFRESH_SECRET=ci-test-only-refresh
+INTERNAL_SERVICE_TOKEN=ci-test-only-internal
+DATABASE_URL_AUTH=postgresql://reloop:ci-test-only-password@postgres:5432/reloop_auth
+DATABASE_URL_PRODUCT=postgresql://reloop:ci-test-only-password@postgres:5432/reloop_product
+DATABASE_URL_ORDER=postgresql://reloop:ci-test-only-password@postgres:5432/reloop_order
+DATABASE_URL_SUPPORT=postgresql://reloop:ci-test-only-password@postgres:5432/reloop_support
 DATABASE_URL_CHAT=mongodb://mongo:27017/reloop_chat?replicaSet=rs0&directConnection=true
 '@
 [IO.File]::WriteAllText($fixture, $envText)

@@ -3,7 +3,8 @@ const repository = require("./marketingAudienceRepository");
 const { profileView: styleProfileView } = require("../styleProfile/styleProfileService");
 
 function profileView(preferences = []) {
-  const { unassignedSizes, ...profile } = styleProfileView({ preferences });
+  const profile = { ...styleProfileView({ preferences }) };
+  delete profile.unassignedSizes;
   return profile;
 }
 

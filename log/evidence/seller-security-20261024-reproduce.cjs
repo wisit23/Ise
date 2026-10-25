@@ -43,7 +43,7 @@ test('R3: socket handshake does not validate a live session', t => {
   const shared = require(path.join(root, 'backend/shared'));
   t.mock.method(process, 'emitWarning', () => {});
   const previous = process.env.JWT_ACCESS_SECRET;
-  process.env.JWT_ACCESS_SECRET = 'audit-only-not-an-application-secret';
+  process.env.JWT_ACCESS_SECRET = 'ci-test-audit-only-not-an-application-secret';
   try {
     const { verifySocketAuth } = fromRoot('backend/services/chat-service/src/realtime/socketAuth');
     // Token is cryptographically valid, but deliberately has no session ID.
@@ -174,7 +174,7 @@ test('R9: inactivity worker overwrites activity recorded after its initial scan'
 test('R10: live session state does not replace stale KYC claims', async () => {
   const shared = require(path.join(root, 'backend/shared'));
   const previous = process.env.JWT_ACCESS_SECRET;
-  process.env.JWT_ACCESS_SECRET = 'audit-only-not-an-application-secret';
+  process.env.JWT_ACCESS_SECRET = 'ci-test-audit-only-not-an-application-secret';
   try {
     const token = shared.signAccessToken({ sub: 's1', sid: 'session1', role: 'SELLER',
       roles: ['SELLER'], kycVerified: true, kycStatus: 'VERIFIED' });

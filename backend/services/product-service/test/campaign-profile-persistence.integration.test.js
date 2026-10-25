@@ -2,18 +2,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const request = require("supertest");
 
-const prisma = require("../src/models/prismaClient");
-const app = require("../src/app");
-
-app.locals.validateAccessSession = async () => {};
-
-const authBaseUrl =
-  process.env.AUTH_SERVICE_INTERNAL_URL ||
-  process.env.AUTH_SERVICE_URL ||
-  "http://auth-service:3001";
-
-async function authRequest(path, { token, method = "GET", body } = {}) {
-  const response = await fetch(new URL(path, authBaseUrl), {
+async function authRequest(
+  baseUrl,
+  path,
+  { token, method = "GET", body } = {},
+) {
+  const response = await fetch(new URL(path, baseUrl), {
     method,
     headers: {
       ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -26,44 +20,84 @@ async function authRequest(path, { token, method = "GET", body } = {}) {
   return payload;
 }
 
-async function login(email) {
-  return authRequest("/login", {
-    method: "POST",
-    body: { email, password: "password123" },
-  });
-}
-
 test("UR-13 uses Auth's persisted buyer profile end-to-end", async (t) => {
   if (process.env.REQUIRE_INTEGRATION !== "1") {
     t.skip("set REQUIRE_INTEGRATION=1 to run cross-service persistence test");
     return;
   }
 
-  const [buyer, marketing] = await Promise.all([
-    login("buyer.demo@example.com"),
-    login("marketing@example.com"),
-  ]);
-  const buyerToken = buyer.accessToken;
-  const marketingToken = marketing.accessToken;
-  const originalProfile = await authRequest("/me/style-profile", {
-    token: buyerToken,
-  });
+  assert.ok(process.env.DATABASE_URL_AUTH, "DATABASE_URL_AUTH is required");
+  assert.ok(
+    process.env.DATABASE_URL_PRODUCT,
+    "DATABASE_URL_PRODUCT is required",
+  );
+  const { once } = require("node:events");
+  const { randomUUID } = require("node:crypto");
+  const { signAccessToken } = require("@reloop/shared");
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  const previousAuthUrl = process.env.AUTH_SERVICE_INTERNAL_URL;
+  process.env.DATABASE_URL = process.env.DATABASE_URL_AUTH;
+  const authPrisma = require("../../auth-service/src/models/prismaClient");
+  const authApp = require("../../auth-service/src/app");
+  // Signed fixture identities keep this focused on real cross-service profile
+  // persistence, not login/session behavior (covered by the Auth suites).
+  authApp.locals.validateAccessSession = async () => {};
+  const buyerId = randomUUID();
+  let prisma;
   let campaignId;
-
+  const server = authApp.listen(0, "127.0.0.1");
   t.after(async () => {
-    if (campaignId) {
-      await prisma.userVoucher.deleteMany({ where: { campaignId } });
-      await prisma.campaign.deleteMany({ where: { id: campaignId } });
+    try {
+      if (campaignId) {
+        await prisma.userVoucher.deleteMany({ where: { campaignId } });
+        await prisma.marketingAuditLog.deleteMany({
+          where: { entityId: campaignId },
+        });
+        await prisma.campaign.deleteMany({ where: { id: campaignId } });
+      }
+      await authPrisma.buyerProfile.deleteMany({ where: { userId: buyerId } });
+      await authPrisma.user.deleteMany({ where: { id: buyerId } });
+    } finally {
+      await new Promise((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      await Promise.all([authPrisma.$disconnect(), prisma?.$disconnect()]);
+      if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = previousDatabaseUrl;
+      if (previousAuthUrl === undefined)
+        delete process.env.AUTH_SERVICE_INTERNAL_URL;
+      else process.env.AUTH_SERVICE_INTERNAL_URL = previousAuthUrl;
     }
-    await authRequest("/me/style-profile", {
-      token: buyerToken,
-      method: "PATCH",
-      body: originalProfile,
-    });
-    await prisma.$disconnect();
+  });
+  await once(server, "listening");
+  await authPrisma.$connect();
+  const authBaseUrl = `http://127.0.0.1:${server.address().port}`;
+  process.env.AUTH_SERVICE_INTERNAL_URL = authBaseUrl;
+  process.env.DATABASE_URL = process.env.DATABASE_URL_PRODUCT;
+  prisma = require("../src/models/prismaClient");
+  const app = require("../src/app");
+  app.locals.validateAccessSession = async () => {};
+  const marketingId = randomUUID();
+  const buyerToken = signAccessToken({ sub: buyerId, role: "BUYER" });
+  const marketingToken = signAccessToken({
+    sub: marketingId,
+    role: "MARKETING",
+  });
+  await authPrisma.user.create({
+    data: {
+      id: buyerId,
+      email: `campaign-profile-${buyerId}@example.test`,
+      passwordHash: "unused-signed-fixture",
+      firstName: "Campaign",
+      lastName: "Buyer",
+      role: "BUYER",
+      emailVerifiedAt: new Date(),
+    },
   });
 
-  await authRequest("/me/style-profile", {
+  const profileRequest = (path, options) =>
+    authRequest(authBaseUrl, path, options);
+  await profileRequest("/me/style-profile", {
     token: buyerToken,
     method: "PATCH",
     body: {
@@ -117,7 +151,7 @@ test("UR-13 uses Auth's persisted buyer profile end-to-end", async (t) => {
     true,
   );
 
-  await authRequest("/me/style-profile", {
+  await profileRequest("/me/style-profile", {
     token: buyerToken,
     method: "PATCH",
     body: { styles: ["Minimal"] },
@@ -148,7 +182,7 @@ test("UR-13 uses Auth's persisted buyer profile end-to-end", async (t) => {
     .send({ profile: { styles: ["Vintage"] } });
   assert.equal(rejectedClaim.status, 403);
 
-  await authRequest("/me/style-profile", {
+  await profileRequest("/me/style-profile", {
     token: buyerToken,
     method: "PATCH",
     body: { styles: ["Vintage"] },

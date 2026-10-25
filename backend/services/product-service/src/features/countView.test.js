@@ -74,7 +74,7 @@ test("Product view counting logic (count_views)", async (t) => {
     return item;
   };
 
-  prisma.countView.aggregate = async ({ where, _sum }) => {
+  prisma.countView.aggregate = async ({ where }) => {
     const filtered = dummyCountViews.filter((cv) => cv.productId === where.productId);
     const sum = filtered.reduce((acc, cv) => acc + (cv.count || 0), 0);
     return {
