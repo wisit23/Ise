@@ -20,6 +20,7 @@ export default function Alert({
   tone = "error",
   title,
   children,
+  showIcon = true,
   className = "",
 }) {
   const t = TONES[tone] ?? TONES.info;
@@ -28,12 +29,14 @@ export default function Alert({
       role={tone === "error" ? "alert" : "status"}
       className={`animate-slide-up flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${t.cls} ${className}`}
     >
-      <span
-        className="material-symbols-outlined shrink-0 text-[20px] leading-none"
-        aria-hidden="true"
-      >
-        {t.icon}
-      </span>
+      {showIcon && (
+        <span
+          className="material-symbols-outlined shrink-0 text-[20px] leading-none"
+          aria-hidden="true"
+        >
+          {t.icon}
+        </span>
+      )}
       <div className="flex-1">
         {title && <p className="font-semibold">{title}</p>}
         {children && <div className={title ? "mt-0.5" : ""}>{children}</div>}

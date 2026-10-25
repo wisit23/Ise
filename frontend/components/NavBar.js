@@ -134,6 +134,19 @@ export default function NavBar() {
   const { connected: socketConnected } = useChatSocket();
 
   useEffect(() => {
+    const sync = () => {
+      setUser(getStoredUser());
+      setKycStatus(getAccessTokenClaims()?.kycStatus || null);
+    };
+    window.addEventListener("reloop:auth", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("reloop:auth", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!mobileMenuOpen) return;
     const positionMenu = () => {
       const trigger = discoveryTrigger.current;

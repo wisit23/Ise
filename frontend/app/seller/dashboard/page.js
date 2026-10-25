@@ -482,7 +482,7 @@ function SellerDashboardContent() {
 
             {/* ── Dispute alert banner for seller ── */}
             {disputedOrders.length > 0 && (
-              <Alert tone="danger" className="mb-6 border-red-300 bg-red-50/80 shadow-sm">
+              <Alert tone="error" showIcon={false} className="mb-6 border-red-300 bg-red-50/80 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5">
                     <span className="material-symbols-outlined text-[24px] text-red-600 shrink-0">
