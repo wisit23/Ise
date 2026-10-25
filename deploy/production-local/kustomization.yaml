@@ -1,0 +1,118 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: reloop-production-local
+resources:
+  - ../k8s
+  - namespace.yaml
+  - auth-storage.yaml
+# Fail closed if someone applies this overlay without the deployment script.
+images:
+  - name: reloop/gateway
+    newName: reloop/production-local-gateway
+    newTag: unbuilt
+  - name: reloop/auth-service
+    newName: reloop/production-local-auth-service
+    newTag: unbuilt
+  - name: reloop/product-service
+    newName: reloop/production-local-product-service
+    newTag: unbuilt
+  - name: reloop/order-service
+    newName: reloop/production-local-order-service
+    newTag: unbuilt
+  - name: reloop/chat-service
+    newName: reloop/production-local-chat-service
+    newTag: unbuilt
+  - name: reloop/support-service
+    newName: reloop/production-local-support-service
+    newTag: unbuilt
+  - name: reloop/frontend
+    newName: reloop/production-local-frontend
+    newTag: unbuilt
+patches:
+  # Keep the development namespace untouched.
+  - patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: reloop
+      $patch: delete
+  - patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: reloop-config
+      data:
+        NODE_ENV: production
+  - target:
+      kind: Deployment
+      name: gateway|frontend|(auth|product|order|chat|support)-service
+    patch: |-
+      - op: add
+        path: /spec/template/spec/securityContext
+        value:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          fsGroup: 1000
+  - target:
+      kind: Deployment
+      name: (auth|product|order|chat|support)-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/command
+        value: [node, src/server.js]
+      - op: replace
+        path: /spec/template/spec/containers/0/args
+        value: []
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/command
+        value: [npm, run, start]
+      - op: replace
+        path: /spec/template/spec/containers/0/args
+        value: [--, --hostname, 0.0.0.0]
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: auth-service
+      spec:
+        template:
+          spec:
+            containers:
+              - name: auth-service
+                volumeMounts:
+                  - name: private-kyc
+                    mountPath: /app/backend/services/auth-service/private-kyc-documents
+            volumes:
+              - name: private-kyc
+                persistentVolumeClaim:
+                  claimName: auth-service-private-kyc
+  # New images retain monorepo paths; adjust the original volume mount paths.
+  - target:
+      kind: Deployment
+      name: product-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/0/mountPath
+        value: /app/backend/services/product-service/uploads
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/1/mountPath
+        value: /app/backend/services/product-service/review-uploads
+  - target:
+      kind: Deployment
+      name: order-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/0/mountPath
+        value: /app/backend/services/order-service/private-evidence
+  - target:
+      kind: Deployment
+      name: chat-service
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/0/mountPath
+        value: /app/backend/services/chat-service/private-attachments
