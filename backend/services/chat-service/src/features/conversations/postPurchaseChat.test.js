@@ -15,6 +15,7 @@ app.post("/conversations", requireAuth, controller.create);
 app.use(errorHandler);
 
 function fixture(t) {
+  t.mock.method(model, "restoreForParticipant", async () => ({ count: 0 }));
   t.mock.method(global, "fetch", async (url) => {
     if (String(url).endsWith("/order-1/internal")) return {
       ok: true,
@@ -56,6 +57,38 @@ test("purchaser opens a sold listing chat and repeated clicks reuse the same roo
 test("another buyer cannot use the purchaser's order", async (t) => {
   fixture(t);
   assert.equal((await send("stranger")).status, 403);
+  assert.equal(model.create.mock.callCount(), 0);
+});
+
+test("seller opens the order buyer's room and both parties reuse it", async (t) => {
+  fixture(t);
+  const seller = await send("seller", { ...body, buyerId: "forged" });
+  assert.equal(seller.status, 201);
+  assert.equal(seller.body.contextKey, "PRODUCT:product:buyer");
+  assert.equal(seller.body.createdBy, "seller");
+  assert.deepEqual(seller.body.participants.map((p) => [p.userId, p.role]), [
+    ["buyer", "BUYER"], ["seller", "SELLER"],
+  ]);
+  assert.equal((await send("buyer")).body.id, seller.body.id);
+  assert.equal((await send("seller")).body.id, seller.body.id);
+  assert.equal(model.create.mock.callCount(), 1);
+});
+
+test("seller cannot start a chat on their listing without a verified order", async (t) => {
+  fixture(t);
+  assert.equal((await send("seller", { contextType: "PRODUCT", productId: "product" })).status, 400);
+  assert.equal(model.create.mock.callCount(), 0);
+});
+
+test("seller cannot substitute another product for an order", async (t) => {
+  fixture(t);
+  t.mock.method(global, "fetch", async (url) => {
+    if (String(url).endsWith("/order-1/internal")) return {
+      ok: true, json: async () => ({ buyerId: "buyer", sellerId: "seller", productId: "other" }),
+    };
+    return { ok: true, json: async () => ({ sellerId: "seller", status: "sold" }) };
+  });
+  assert.equal((await send("seller")).status, 403);
   assert.equal(model.create.mock.callCount(), 0);
 });
 

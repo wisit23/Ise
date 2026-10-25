@@ -77,6 +77,7 @@ export default function MessageList({
   messages,
   currentUserId,
   otherName = "ผู้ใช้",
+  currentUserRole,
   resolveSenderName,
   onPromptClick,
   activeRoomId,
@@ -125,7 +126,7 @@ export default function MessageList({
           ทักทาย สอบถามข้อมูลสินค้า หรือต่อรองราคากับคู่สนทนา
         </p>
 
-        {onPromptClick && (
+        {onPromptClick && currentUserRole === "BUYER" && (
           <div className="mt-6 flex max-w-md flex-col items-center gap-2">
             <span className="text-[11px] font-semibold text-slate-500">
               คำถามด่วน (คลิกเพื่อส่งทันที):

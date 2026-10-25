@@ -14,5 +14,6 @@ router.post(
 );
 router.get("/conversations", requireAuth, conversationController.list);
 router.get("/conversations/:id", requireAuth, conversationController.getOne);
+router.post("/conversations/:id/hide", requireAuth, conversationController.hide);
 
 module.exports = router;

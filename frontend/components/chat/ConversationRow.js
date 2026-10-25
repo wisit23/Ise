@@ -37,6 +37,8 @@ export default function ConversationRow({
   isActive = false,
   isOnline = false,
   onSelect,
+  onHide,
+  hiding = false,
 }) {
   const other = otherParticipant(conversation, currentUserId);
   const otherName = conversationDisplayName(conversation, currentUserId);
@@ -63,12 +65,12 @@ export default function ConversationRow({
   }
 
   return (
-    <li className="list-none" data-conversation-id={conversation.id}>
+    <li className="relative list-none" data-conversation-id={conversation.id}>
       <Link
         href={`/chat/${conversation.id}`}
         aria-current={isActive ? "page" : undefined}
         onClick={handleClick}
-        className={`group relative flex items-center gap-3.5 px-4 py-3.5 transition-colors duration-200 ${
+        className={`group relative flex items-center gap-3.5 px-4 py-3.5 pr-12 transition-colors duration-200 ${
           isActive
             ? "bg-emerald-50/80 text-emerald-950 font-medium"
             : "hover:bg-slate-50/80 text-slate-700"
@@ -154,6 +156,18 @@ export default function ConversationRow({
           </p>
         </div>
       </Link>
+      {onHide && (
+        <button
+          type="button"
+          aria-label={`ซ่อนแชท ${otherName}`}
+          title="ซ่อนแชท เมื่อคู่สนทนาส่งข้อความใหม่ แชทจะกลับมา"
+          disabled={hiding}
+          onClick={() => onHide(conversation.id)}
+          className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 hover:bg-red-50 hover:text-red-600 focus-visible:outline-emerald-600 disabled:opacity-40"
+        >
+          <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      )}
     </li>
   );
 }

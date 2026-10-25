@@ -2,12 +2,19 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import MessageList from "./MessageList";
 
 describe("MessageList", () => {
+  it.each(["SELLER", "AGENT", undefined])("does not offer buyer questions to %s", (role) => {
+    render(<MessageList messages={[]} currentUserId="seller" currentUserRole={role}
+      onPromptClick={jest.fn()} prompts={[{ id: "q", messageText: "คำถามของร้าน" }]} />);
+    expect(screen.queryByText("คำถามของร้าน")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
   it("renders empty state and responds to quick prompt click", () => {
     const onPromptClick = jest.fn();
     render(
       <MessageList
         messages={[]}
         currentUserId="user-1"
+        currentUserRole="BUYER"
         onPromptClick={onPromptClick}
       />,
     );
@@ -30,6 +37,7 @@ describe("MessageList", () => {
       <MessageList
         messages={[]}
         currentUserId="user-1"
+        currentUserRole="BUYER"
         onPromptClick={onPromptClick}
         prompts={customPrompts}
       />,

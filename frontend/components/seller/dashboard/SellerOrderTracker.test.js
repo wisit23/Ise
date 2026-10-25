@@ -2,6 +2,9 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import SellerOrderTracker from "./SellerOrderTracker";
 import { apiFetch } from "../../../lib/api";
 
+const mockPush = jest.fn();
+jest.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
+
 jest.mock("../../../lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock("../../../lib/auth", () => ({
   getAccessToken: () => "token",
@@ -29,6 +32,25 @@ const mockOrders = [
 ];
 
 describe("SellerOrderTracker", () => {
+  it("opens the selected order buyer's chat directly", async () => {
+    apiFetch.mockResolvedValue({ id: "buyer-room" });
+    render(<SellerOrderTracker orders={[{ ...mockOrders[0], productId: "product-1" }]} />);
+    fireEvent.click(screen.getByRole("button", { name: /แชท/ }));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/chat/buyer-room"));
+    expect(apiFetch).toHaveBeenCalledWith("/api/chat/conversations", {
+      method: "POST", token: "token",
+      body: { contextType: "PRODUCT", productId: "product-1", orderId: mockOrders[0].id },
+    });
+  });
+
+  it("shows chat failures and lets the seller retry", async () => {
+    apiFetch.mockRejectedValueOnce(new Error("ไม่สามารถตรวจสอบคำสั่งซื้อได้"));
+    render(<SellerOrderTracker orders={[{ ...mockOrders[0], productId: "product-1" }]} />);
+    fireEvent.click(screen.getByRole("button", { name: /แชท/ }));
+    expect(await screen.findByText("ไม่สามารถตรวจสอบคำสั่งซื้อได้")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /แชท/ })).toBeEnabled();
+  });
+
   it("renders order list with regular and auction badges", () => {
     render(<SellerOrderTracker orders={mockOrders} />);
 

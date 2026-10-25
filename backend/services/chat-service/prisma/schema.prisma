@@ -41,6 +41,14 @@ model Conversation {
 // Embedded document (Mongo-native), not a separate collection — a
 // conversation's participant list is always read/written together with the
 // conversation itself, never queried independently.
+// Per-user inbox preference; messages and room membership remain intact.
+model InboxDismissal {
+  id             String   @id @map("_id")
+  conversationId String
+  userId         String
+  hiddenAt       DateTime
+}
+
 type Participant {
   userId     String
   role       String // BUYER | SELLER | AGENT | ADMIN | SYSTEM

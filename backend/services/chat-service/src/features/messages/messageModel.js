@@ -114,6 +114,14 @@ async function createAndTouch({
       );
     }
 
+    // Only an incoming public message restores a dismissed room. Keep this
+    // in the message transaction so a failed send cannot restore the inbox.
+    if (!isInternal && senderRole !== "SYSTEM") {
+      txOperations.push(prisma.inboxDismissal.deleteMany({
+        where: { conversationId, userId: { not: senderId }, hiddenAt: { lte: now } },
+      }));
+    }
+
     return txOperations;
   };
 

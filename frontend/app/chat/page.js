@@ -21,6 +21,12 @@ export default function ChatInboxPage() {
   const [error, setError] = useState("");
   const { connected: socketConnected } = useChatSocket();
 
+  function handleConversationHidden({ conversationId }) {
+    setConversations((prev) => (prev || []).filter((c) => c.id !== conversationId));
+    setCachedConversations((prev) => (prev || []).filter((c) => c.id !== conversationId));
+  }
+  useChatSocketEvent("conversation:hidden", handleConversationHidden);
+
   useEffect(() => {
     const token = getAccessToken();
     if (!token) {
@@ -115,6 +121,7 @@ export default function ChatInboxPage() {
               conversations={conversations}
               currentUserId={user?.id}
               activeId={null}
+              onConversationHidden={handleConversationHidden}
               loading={conversations === null}
               error={error}
             />

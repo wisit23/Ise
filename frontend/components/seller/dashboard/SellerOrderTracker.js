@@ -5,6 +5,7 @@ import { matchesReference } from "../../../lib/referenceCodes";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ContactSellerButton from "../../chat/ContactSellerButton";
 import EmptyState from "../../ui/EmptyState";
 import Modal from "../../ui/Modal";
 import OrderShippingModal from "../../orders/OrderShippingModal";
@@ -450,16 +451,12 @@ export default function SellerOrderTracker({
                         </span>
                         <span>ที่อยู่</span>
                       </button>
-                      <Link
-                        href="/chat"
+                      <ContactSellerButton
+                        productId={o.productId}
+                        orderId={o.id}
+                        label="แชท"
                         className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-700 transition"
-                        title="เปิดหน้าต่างแชท"
-                      >
-                        <span className="material-symbols-outlined text-[15px] text-emerald-600">
-                          chat
-                        </span>
-                        <span>แชท</span>
-                      </Link>
+                      />
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">
