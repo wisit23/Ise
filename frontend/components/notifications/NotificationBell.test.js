@@ -6,7 +6,15 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   deleteNotification,
+  notificationText,
 } from "../../lib/notifications";
+
+test("legacy notification decoration is hidden while the message and quoted content stay intact", () => {
+  expect(notificationText("\u26A0\uFE0F คำสั่งซื้อถูกยกเลิก")).toBe("คำสั่งซื้อถูกยกเลิก");
+  expect(notificationText("\u{1F9D1}\u200D\u{1F4BC} เจ้าหน้าที่รับงานแล้ว")).toBe("เจ้าหน้าที่รับงานแล้ว");
+  expect(notificationText("เหตุผล: ลูกค้าเขียน \u{1F389} ในข้อความ")).toBe("เหตุผล: ลูกค้าเขียน \u{1F389} ในข้อความ");
+  expect(notificationText(null)).toBe("");
+});
 
 import { getAccessToken } from "../../lib/auth";
 
@@ -20,6 +28,7 @@ jest.mock("../../lib/auth", () => ({
 }));
 
 jest.mock("../../lib/notifications", () => ({
+  ...jest.requireActual("../../lib/notifications"),
   getNotifications: jest.fn(),
   getUnreadNotificationCount: jest.fn(),
   markNotificationRead: jest.fn(),
@@ -404,7 +413,7 @@ describe("NotificationBell", () => {
     });
 
     // ReportDecisionModal should pop up!
-    expect(await screen.findByText("รายละเอียดผลการตัดสินจากผู้ดูแลระบบ")).toBeInTheDocument();
+    expect(await screen.findByText("รายละเอียดผลการตัดสินจาก Trust and Safety")).toBeInTheDocument();
     expect(screen.getByText("ตักเตือนผู้ใช้")).toBeInTheDocument();
     expect(screen.getByText("แสดงความเห็นไม่สุภาพและก่อกวน")).toBeInTheDocument();
     expect(screen.getByText("คุณเป็นผู้รายงาน")).toBeInTheDocument();

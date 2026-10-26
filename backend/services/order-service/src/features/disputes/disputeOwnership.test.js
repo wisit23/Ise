@@ -293,7 +293,7 @@ test("disputeService.decide and addEvidence enforce single ownership", async (t)
         file: { filename: "ev.jpg", mimetype: "image/jpeg" },
       }),
     (err) =>
-      err.status === 403 && err.message.includes("Admin queue"),
+      err.status === 403 && err.message.includes("Trust and Safety queue"),
   );
 
   // Assigned agent can decide
@@ -430,7 +430,7 @@ test("disputeService prevents non-assignee from escalating and prevents CS from 
         role: "CUSTOMER_SERVICE",
         version: 2,
       }),
-    (err) => err.status === 403 && err.message.includes("only Admin"),
+    (err) => err.status === 403 && err.message.includes("only authorized Trust and Safety staff"),
   );
 
   // CS agent cannot decide it
@@ -456,6 +456,6 @@ test("disputeService prevents non-assignee from escalating and prevents CS from 
         role: "CUSTOMER_SERVICE",
         file: { filename: "test.jpg", mimetype: "image/jpeg" },
       }),
-    (err) => err.status === 403 && err.message.includes("Admin queue"),
+    (err) => err.status === 403 && err.message.includes("Trust and Safety queue"),
   );
 });

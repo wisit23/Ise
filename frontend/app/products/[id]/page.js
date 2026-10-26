@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../components/ui/Icon";
+
 import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useEffect, useState, useRef } from "react";
@@ -752,7 +754,7 @@ export default function ProductDetailPage() {
             </span>
             {product.location && (
               <span className="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600">
-                📍 {product.location}
+                <Icon name="location_on" /> {product.location}
               </span>
             )}
             <span
@@ -883,16 +885,16 @@ export default function ProductDetailPage() {
                 <div>
                   <p className="font-bold">
                     {sellerActiveOrder.status === "paid"
-                      ? "🛒 สินค้านี้มีคำสั่งซื้อใหม่ รอคุณยืนยันภายใน 1 วัน"
+                      ? <><Icon name="shopping_cart" /> สินค้านี้มีคำสั่งซื้อใหม่ รอคุณยืนยันภายใน 1 วัน</>
                       : sellerActiveOrder.status === "confirmed"
-                        ? "📦 กรุณาเตรียมสินค้าสำหรับคำสั่งซื้อนี้"
+                        ? <><Icon name="package_2" /> กรุณาเตรียมสินค้าสำหรับคำสั่งซื้อนี้</>
                         : sellerActiveOrder.status === "ready_to_ship"
-                          ? "📦 สินค้าพร้อมเรียกขนส่ง"
+                          ? <><Icon name="package_2" /> สินค้าพร้อมเรียกขนส่ง</>
                           : sellerActiveOrder.status === "pickup_in_progress"
-                            ? "📦 ขนส่งกำลังเข้ารับสินค้า"
+                            ? <><Icon name="package_2" /> ขนส่งกำลังเข้ารับสินค้า</>
                             : ["delivered", "completed"].includes(sellerActiveOrder.status)
-                              ? "✅ จัดส่งสินค้าเสร็จเรียบร้อยแล้ว (สินค้าหมด)"
-                              : "🚚 สินค้านี้อยู่ระหว่างการขนส่ง"}
+                              ? <><Icon name="check_circle" /> จัดส่งสินค้าเสร็จเรียบร้อยแล้ว (สินค้าหมด)</>
+                              : <><Icon name="local_shipping" /> สินค้านี้อยู่ระหว่างการขนส่ง</>}
                   </p>
                   <p className="text-xs text-emerald-700 font-mono mt-0.5">
                     Order ID: #{sellerActiveOrder.id}
@@ -990,7 +992,7 @@ export default function ProductDetailPage() {
                 <div>
                   <p className="font-bold text-emerald-900">
                     {myPendingOrder.auctionId
-                      ? "🎉 คุณเป็นผู้ชนะการประมูลสินค้านี้!"
+                      ? <><Icon name="celebration" /> คุณเป็นผู้ชนะการประมูลสินค้านี้!</>
                       : "สินค้านี้อยู่ในตะกร้าของคุณแล้ว"}
                   </p>
                   <p className="text-xs text-emerald-700 mt-0.5">
@@ -1018,7 +1020,7 @@ export default function ProductDetailPage() {
                   href="/cart"
                   className="flex-1 rounded-md bg-emerald-600 py-3 text-center font-bold text-white shadow-sm hover:bg-emerald-700 transition"
                 >
-                  💳 ไปชำระเงินที่ตะกร้าสินค้า ({baht(myPendingOrder.price)})
+                  <Icon name="payments" /> ไปชำระเงินที่ตะกร้าสินค้า ({baht(myPendingOrder.price)})
                 </Link>
               ) : (
                 <>

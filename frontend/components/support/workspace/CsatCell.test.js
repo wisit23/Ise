@@ -12,8 +12,8 @@ test("shows the average and each party's stars for a dispute", () => {
   );
   expect(screen.getByLabelText("คะแนนเฉลี่ย 4.0 จาก 5 ดาว")).toBeInTheDocument();
   expect(screen.getByText("ผู้ซื้อ")).toBeInTheDocument();
-  expect(screen.getByText("★ 5")).toBeInTheDocument();
-  expect(screen.getByText("★ 3")).toBeInTheDocument();
+  expect(screen.getByText("5")).toBeInTheDocument();
+  expect(screen.getByText("3")).toBeInTheDocument();
   expect(screen.getByText("“ตอบไวมาก”")).toBeInTheDocument();
 });
 

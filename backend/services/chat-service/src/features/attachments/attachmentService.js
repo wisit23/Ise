@@ -17,8 +17,8 @@ function messageTypeFor(mimeType) {
  * server-side so every surface (inbox list, push payload, notification)
  * agrees on the wording instead of each inventing its own placeholder. */
 function previewFor(type, filename) {
-  if (type === "IMAGE") return "📷 รูปภาพ";
-  return `📎 ${filename}`;
+  if (type === "IMAGE") return "รูปภาพ";
+  return `ไฟล์: ${filename}`;
 }
 
 /**

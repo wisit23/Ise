@@ -66,7 +66,8 @@ export default function CaseWorkspace({
   const [safetyChat,setSafetyChat] = useState(null);
   const user = currentUser || getStoredUser() || {};
   const dispute = domain === "disputes";
-  const w = useCaseWorkspace(domain, token, user.id);
+  const [chatBusy, setChatBusy] = useState(false);
+  const w = useCaseWorkspace(domain, token, user.id, { pauseRefresh: chatBusy });
   const unread = useCaseUnread(domain, token, user.id);
   const { state, detail, queue, busy } = w;
   const toast = useToast();
@@ -105,7 +106,6 @@ export default function CaseWorkspace({
   const [room, setRoom] = useState(null);
   const [joining, setJoining] = useState(false);
   const [roomError, setRoomError] = useState("");
-  const [chatBusy, setChatBusy] = useState(false);
   const [reassign, setReassign] = useState(false);
   const [decision, setDecision] = useState(null);
   const [reason, setReason] = useState("");
@@ -227,6 +227,7 @@ export default function CaseWorkspace({
       !dispute ||
       caps.canReply ||
       caps.isWatching ||
+      caps.isHistoryViewer ||
       (selected.status === "DECIDED" && selected.assignedTo === user.id) ||
       elevated
     ) {
@@ -245,6 +246,8 @@ export default function CaseWorkspace({
     user.id,
     user.role,
     caps.canReply,
+    caps.isWatching,
+    caps.isHistoryViewer,
     state.side,
     room?.id,
     room?.side,
@@ -361,7 +364,7 @@ export default function CaseWorkspace({
     value
       ? new Date(value).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" })
       : "—";
-  const TEAM_SHORT = { CUSTOMER_SERVICE: "ทีม CS", TRUST_AND_SAFETY: "ทีม T&S", ADMIN: "Admin" };
+  const TEAM_SHORT = { CUSTOMER_SERVICE: "ทีม CS", TRUST_AND_SAFETY: "ทีม T&S", ADMIN: "Trust and Safety" };
   const statusStyle = dispute ? DISPUTE_STATUS_STYLE : TICKET_STATUS_STYLE;
   const pill = "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium";
   const columns = [

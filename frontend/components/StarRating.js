@@ -1,4 +1,6 @@
 "use client";
+import Icon from "./ui/Icon";
+
 
 import { useState } from "react";
 
@@ -21,13 +23,13 @@ export function StarDisplay({ value, size = 16 }) {
               className="absolute inset-0 text-gray-200"
               style={{ fontSize: size }}
             >
-              ★
+              <Icon name="star" filled />
             </span>
             <span
               className="absolute inset-0 overflow-hidden text-amber-400"
               style={{ width: `${fill * 100}%`, fontSize: size }}
             >
-              ★
+              <Icon name="star" filled />
             </span>
           </span>
         );
@@ -53,7 +55,7 @@ export function StarInput({ value, onChange, size = 28 }) {
           className={n <= display ? "text-amber-400" : "text-gray-200"}
           style={{ fontSize: size, lineHeight: 1 }}
         >
-          ★
+          <Icon name="star" filled />
         </button>
       ))}
     </div>

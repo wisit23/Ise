@@ -35,7 +35,7 @@ function campaignUnavailableMessage(campaign, { checkout = false } = {}) {
       : CAMPAIGN_BUDGET_EXHAUSTED_MESSAGE;
   }
   if (campaign?.endReason === "ADMIN_CLOSED") {
-    return "คูปองถูกปิดโดยผู้ดูแล";
+    return "คูปองถูกปิดโดย Trust and Safety";
   }
   if (campaign?.endReason === "USAGE_LIMIT_REACHED") {
     return "สิทธิ์คูปองถูกใช้ครบแล้ว";

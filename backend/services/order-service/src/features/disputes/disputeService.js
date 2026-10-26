@@ -55,10 +55,14 @@ async function assertAccess({ dispute, userId, role, roles, allowWatcher = false
   if (hasRole(role, roles, "ADMIN") || hasRole(role, roles, "TRUST_AND_SAFETY"))
     return dispute;
   if (hasRole(role, roles, "CUSTOMER_SERVICE")) {
-    if (allowWatcher && disputeCapabilities(dispute, userId, role, roles).isWatching)
-      return dispute;
+    if (allowWatcher) {
+      const caps = disputeCapabilities(dispute, userId, role, roles);
+      if (caps.isWatching || caps.isHistoryViewer) return dispute;
+    }
+    if (dispute.status === "DECIDED")
+      throw forbidden("only staff who handled this dispute can read its completed history");
     if (["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole))
-      throw forbidden(`this dispute is in the ${dispute.assignedRole === "ADMIN" ? "Admin" : "Trust & Safety"} queue`);
+      throw forbidden("this dispute is in the Trust and Safety queue");
     if (!dispute.assignedTo || dispute.assignedTo === userId) return dispute;
     throw forbidden("only the assigned agent can inspect this dispute");
   }
@@ -239,7 +243,7 @@ async function getById({ disputeId, userId, role, roles }) {
 async function getByOrderId({ orderId, userId, role, roles }) {
   const dispute = await disputeModel.findByOrderId(orderId);
   if (!dispute) throw notFound("this order has no dispute");
-  await assertAccess({ dispute, userId, role, roles });
+  await assertAccess({ dispute, userId, role, roles, allowWatcher: true });
   if (isAgent(role, roles)) {
     const order = await orderModel.findById(dispute.orderId);
     const summary = order
@@ -297,7 +301,7 @@ async function joinConversation({ disputeId, userId, role, roles, side }) {
     hasRole(role, roles, "TRUST_AND_SAFETY")
   ) {
     chatRole = "ADMIN";
-  } else if (dispute.capabilities?.isWatching) {
+  } else if (dispute.capabilities?.isWatching || dispute.capabilities?.isHistoryViewer) {
     chatRole = "AGENT";
   } else if (hasRole(role, roles, "CUSTOMER_SERVICE")) {
     if (
@@ -443,7 +447,7 @@ async function listQueue({
 async function addEvidence({ disputeId, userId, role, roles, file }) {
   if (!file) throw badRequest("a file is required");
   if (hasRole(role, roles, "ADMIN"))
-    throw forbidden("Admin can review evidence but cannot submit it");
+    throw forbidden("Trust and Safety can review evidence but cannot submit it");
   const dispute = await disputeModel.findById(disputeId);
   if (!dispute) throw notFound("dispute not found");
   await assertAccess({ dispute, userId, role, roles });
@@ -531,10 +535,10 @@ async function claim({ disputeId, userId, role, roles, version }) {
     throw conflict(`dispute is already claimed by ${dispute.assignedTo}`);
   }
   if (hasRole(role, roles, "ADMIN") && !["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole)) {
-    throw forbidden("Admin can claim only escalated disputes");
+    throw forbidden("Trust and Safety can claim only escalated disputes");
   }
   if (dispute.assignedRole === "ADMIN" && !hasRole(role, roles, "ADMIN")) {
-    throw forbidden("only Admin can claim this escalated dispute");
+    throw forbidden("only authorized Trust and Safety staff can claim this escalated dispute");
   }
   if (
     dispute.assignedRole === "TRUST_AND_SAFETY" &&
@@ -608,7 +612,7 @@ async function reassign({
     );
   }
   if (dispute.assignedRole === "ADMIN" && !isAdmin) {
-    throw forbidden("only Admin can reassign this escalated dispute");
+    throw forbidden("only authorized Trust and Safety staff can reassign this escalated dispute");
   }
 
   if (dispute.version !== version) {
@@ -634,7 +638,7 @@ async function reassign({
     !isTargetCS &&
     !isTargetTS
   ) {
-    throw forbidden("escalate to Admin before assigning an Admin");
+    throw forbidden("escalate to Trust and Safety before assigning this staff member");
   }
 
   const targetRole =
@@ -652,7 +656,7 @@ async function reassign({
     );
   }
   if (dispute.assignedRole === "ADMIN" && !isTargetAdmin) {
-    throw forbidden("only Admin can be assigned to this escalated dispute");
+    throw forbidden("only authorized Trust and Safety staff can be assigned to this escalated dispute");
   }
 
   const updated = await disputeModel.reassign({
@@ -847,7 +851,7 @@ async function deliverVerdictNotice(dispute, order) {
           userId: order.sellerId,
           type: "DISPUTE",
           title: "ผลการตัดสินข้อพิพาท",
-          message: `⚖️ สินค้าของคุณ '${title}' สำหรับคำสั่งซื้อ #${order.id} ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
+          message: `สินค้าของคุณ '${title}' สำหรับคำสั่งซื้อ #${order.id} ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
           link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
@@ -865,7 +869,7 @@ async function deliverVerdictNotice(dispute, order) {
           userId: order.buyerId,
           type: "DISPUTE",
           title: "ผลการตัดสินข้อพิพาท",
-          message: `⚖️ คำสั่งซื้อ #${order.id} ('${title}') ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
+          message: `คำสั่งซื้อ #${order.id} ('${title}') ได้รับผลตัดสิน: ${outcome} (${dispute.decisionReason})`,
           link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
@@ -929,7 +933,7 @@ async function requestMoreEvidence({
           userId: order.buyerId,
           type: "DISPUTE",
           title: "เจ้าหน้าที่ขอหลักฐานเพิ่มเติมสำหรับข้อพิพาท",
-          message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): เจ้าหน้าที่ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
+          message: `คำสั่งซื้อ #${order.id} ('${title}'): เจ้าหน้าที่ขอหลักฐานเพิ่มเติม: ${reason.trim()}`,
           link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {
@@ -947,7 +951,7 @@ async function requestMoreEvidence({
           userId: order.sellerId,
           type: "DISPUTE",
           title: "อัปเดตข้อพิพาท: ขอหลักฐานเพิ่มเติม",
-          message: `📋 คำสั่งซื้อ #${order.id} ('${title}'): มีการขอข้อมูล/หลักฐานเพิ่มเติมสำหรับข้อพิพาท: ${reason.trim()}`,
+          message: `คำสั่งซื้อ #${order.id} ('${title}'): มีการขอข้อมูล/หลักฐานเพิ่มเติมสำหรับข้อพิพาท: ${reason.trim()}`,
           link: `/support/cases/${order.id}`,
           entityId: order.id,
           metadata: {

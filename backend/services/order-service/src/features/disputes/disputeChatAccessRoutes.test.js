@@ -57,7 +57,7 @@ test("escalating CS reads but cannot write while T&S reviews", async (t) => {
   process.env.INTERNAL_SERVICE_TOKEN = "unit-internal-token";
   let status = "OPEN";
   disputeModel.findById = async () => ({
-    orderId: "order-1", assignedTo: "ts-1", assignedRole: "TRUST_AND_SAFETY", escalatedBy: "cs-1", status,
+    orderId: "order-1", assignedTo: "ts-1", assignedRole: "TRUST_AND_SAFETY", escalatedBy: "cs-1", status, auditLog: [{ toAssignedTo: "previous-cs" }],
   });
   orderModel.findById = async () => ({ buyerId: "buyer-1", sellerId: "seller-1" });
   const app = express().use("/internal", router);
@@ -66,6 +66,9 @@ test("escalating CS reads but cannot write while T&S reviews", async (t) => {
     .set("x-internal-token", "unit-internal-token");
   assert.deepEqual((await call("cs-1")).body, { allowed: true, writable: false });
   assert.deepEqual((await call("cs-2")).body, { allowed: false, writable: false });
+  assert.deepEqual((await call("previous-cs")).body, { allowed: false, writable: false });
   status = "DECIDED";
-  assert.deepEqual((await call("cs-1")).body, { allowed: false, writable: false });
+  assert.deepEqual((await call("cs-1")).body, { allowed: true, writable: false });
+  assert.deepEqual((await call("previous-cs")).body, { allowed: true, writable: false });
+  assert.deepEqual((await call("cs-2")).body, { allowed: false, writable: false });
 });

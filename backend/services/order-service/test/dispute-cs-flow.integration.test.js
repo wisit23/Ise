@@ -76,6 +76,14 @@ test("CS investigates, T&S requests information and decides, expired disputes ar
       .post(`${path}/${action}`)
       .set("Authorization", `Bearer ${access}`)
       .send(data);
+  async function expectQueue(access, scope, expected, assignedRole = "TRUST_AND_SAFETY") {
+    const res = await request(app).get("/disputes/queue")
+      .query({ q: order.id, scope, assignedRole, ...(scope === "history" ? { status: "DECIDED", sort: "newest" } : { work: "open" }) })
+      .set("Authorization", `Bearer ${access}`);
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.body.items.some((item) => item.id === opened.body.id), expected, `${assignedRole}/${scope}`);
+    assert.equal(res.body.total, expected ? 1 : 0);
+  }
   const claimed = await post("claim", csToken, {
     version: opened.body.version,
   });
@@ -108,6 +116,9 @@ test("CS investigates, T&S requests information and decides, expired disputes ar
   });
   assert.equal(escalated.status, 200, escalated.text);
   assert.equal(escalated.body.assignedRole, "TRUST_AND_SAFETY");
+  assert.equal(escalated.body.escalationNote, memo.trim());
+  await expectQueue(tsToken, "unassigned", true);
+  await expectQueue(tsToken, "mine", false);
   // After escalation CS keeps watching the case but can no longer decide it.
   const watched = await request(app).get(path).set("Authorization", `Bearer ${csToken}`);
   assert.equal(watched.status, 200, watched.text);
@@ -116,6 +127,8 @@ test("CS investigates, T&S requests information and decides, expired disputes ar
     version: escalated.body.version,
   });
   assert.equal(safety.status, 200, safety.text);
+  await expectQueue(tsToken, "unassigned", false);
+  await expectQueue(tsToken, "mine", true);
   const detail = await request(app)
     .get(path)
     .set("Authorization", `Bearer ${tsToken}`);
@@ -123,14 +136,26 @@ test("CS investigates, T&S requests information and decides, expired disputes ar
   const returned = await post("request-evidence", tsToken, {
     version: safety.body.version,
     reason: "Need receipt",
+    tasks: ["ขอใบเสร็จ", "ตรวจสอบรูปสินค้า"],
   });
   assert.equal(returned.status, 200, returned.text);
   assert.equal(returned.body.assignedTo, cs);
+  assert.equal(returned.body.returnTasks.length, 2);
+  await expectQueue(tsToken, "mine", false);
+  await expectQueue(csToken, "mine", true, "CUSTOMER_SERVICE");
+  const task = await request(app).patch(`${path}/return-tasks/${returned.body.returnTasks[0].id}`)
+    .set("Authorization", `Bearer ${csToken}`).send({ done: true, note: "ได้รับใบเสร็จแล้ว" });
+  assert.equal(task.status, 200, task.text);
+  assert.equal(task.body.returnTasks[0].done, true);
   const again = await post("escalate", csToken, {
     version: returned.body.version,
     reason: memo,
   });
   assert.equal(again.status, 200, again.text);
+  assert.equal(again.body.returnedAt, null);
+  assert.equal(again.body.returnTasks[0].done, true);
+  assert.equal(again.body.returnTasks[0].note, "ได้รับใบเสร็จแล้ว");
+  await expectQueue(tsToken, "unassigned", true);
   safety = await post("claim", tsToken, { version: again.body.version });
   assert.equal(safety.status, 200, safety.text);
   const verdict = {
@@ -142,6 +167,22 @@ test("CS investigates, T&S requests information and decides, expired disputes ar
   const decided = await post("decision", tsToken, verdict);
   assert.equal(decided.status, 200, decided.text);
   assert.equal(decided.body.status, "DECIDED");
+  const closedQueue = await request(app).get("/disputes/queue").query({ scope: "closed", q: order.id }).set("Authorization", `Bearer ${csToken}`);
+  assert.equal(closedQueue.status, 200, closedQueue.text);
+  assert.equal(closedQueue.body.items[0].capabilities.canViewDetail, true);
+  const csHistory = await request(app).get(path).set("Authorization", `Bearer ${csToken}`);
+  assert.equal(csHistory.status, 200, csHistory.text);
+  assert.equal(csHistory.body.capabilities.isHistoryViewer, true);
+  assert.equal(csHistory.body.capabilities.canReply, false);
+  t.mock.method(chat, "joinDisputeConversation", async () => "history-room");
+  const historyRoom = await post("conversation", csToken, { side: "buyer" });
+  assert.equal(historyRoom.status, 200, historyRoom.text);
+  assert.equal(historyRoom.body.readOnly, true);
+  const otherCsToken = token(`other-cs-${suffix}`, "CUSTOMER_SERVICE");
+  assert.equal((await request(app).get(path).set("Authorization", `Bearer ${otherCsToken}`)).status, 403);
+  assert.equal((await post("request-evidence", csToken, { version: decided.body.version, reason: "not allowed" })).status, 403);
+  await expectQueue(tsToken, "mine", false);
+  await expectQueue(tsToken, "history", true);
   assert.equal(
     (await post("decision", tsToken, verdict)).status,
     200,

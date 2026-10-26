@@ -599,7 +599,7 @@ function createCampaignRepository(prismaClient) {
           camp?.endReason === "BUDGET_EXHAUSTED"
             ? "วงเงินส่วนลดของคูปองนี้ถูกใช้ครบแล้ว"
             : camp?.endReason === "ADMIN_CLOSED"
-              ? "คูปองถูกปิดโดยผู้ดูแล"
+              ? "คูปองถูกปิดโดย Trust and Safety"
               : "คูปองหมดอายุแล้ว",
         );
         err.statusCode = 409;

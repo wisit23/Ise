@@ -58,7 +58,7 @@ it("uses the real USER_WARNED action and links back to user history", async () =
   render(<AuditSection token="token" />);
 
   expect((await screen.findAllByText("ตักเตือนผู้ใช้")).length).toBeGreaterThan(0);
-  expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "ดูข้อมูลที่เกี่ยวข้อง" })).toHaveAttribute(
     "href",
     "/workspace?section=orders&userId=user-1",
   );
@@ -174,14 +174,14 @@ it("links Order and Support audit rows back to their owner records", async () =>
   render(<AuditSection token="token" />);
   fireEvent.click(screen.getByRole("tab", { name: "Hold / Release" }));
   expect((await screen.findAllByText("พักเงิน")).length).toBeGreaterThan(0);
-  expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "ดูข้อมูลที่เกี่ยวข้อง" })).toHaveAttribute(
     "href",
     "/workspace?section=orders&orderId=order-1",
   );
 
   fireEvent.click(screen.getByRole("tab", { name: "สถานะ Ticket" }));
   expect((await screen.findAllByText("เปลี่ยนสถานะ Ticket")).length).toBeGreaterThan(0);
-  expect(screen.getByRole("link", { name: "เปิดต้นทาง" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "ดูข้อมูลที่เกี่ยวข้อง" })).toHaveAttribute(
     "href",
     "/workspace?section=tickets&case=ticket-1",
   );

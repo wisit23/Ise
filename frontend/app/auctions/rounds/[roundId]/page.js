@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../../components/ui/Icon";
+
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -255,10 +257,10 @@ export default function RoundDetailPage() {
                       }`}
                     >
                       {round.phase === "cancelled" || round.cancelledAt
-                        ? "🛑 ยกเลิกแล้ว"
+                        ? <><Icon name="cancel" /> ยกเลิกแล้ว</>
                         : round.phase === "auction"
-                          ? "🟢 กำลังประมูล"
-                          : "🗓️ เร็วๆ นี้"}
+                          ? <><Icon name="circle" filled /> กำลังประมูล</>
+                          : <><Icon name="calendar_month" /> เร็วๆ นี้</>}
                     </span>
                   </div>
 
@@ -293,7 +295,7 @@ export default function RoundDetailPage() {
                   {(round.phase === "cancelled" || round.cancelledAt) && (
                     <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800">
                       <p className="font-bold text-rose-900">
-                        🛑 รอบการประมูลนี้ถูกยกเลิกแล้ว
+                        <Icon name="cancel" /> รอบการประมูลนี้ถูกยกเลิกแล้ว
                       </p>
                       <p className="mt-1">
                         เหตุผล:{" "}
@@ -331,7 +333,7 @@ export default function RoundDetailPage() {
                           onClick={() => setIsSwitcherOpen(false)}
                           className="text-gray-400 hover:text-gray-600 text-sm"
                         >
-                          ✕
+                          <Icon name="close" />
                         </button>
                       </div>
 

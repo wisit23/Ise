@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../ui/Icon";
+
 import { useEffect, useMemo, useState } from "react";
 import { toCsv, downloadCsv } from "../../../lib/csv";
 import RadioSelect from "../../ui/RadioSelect";
@@ -256,7 +258,7 @@ export default function ReportsSection({ token }) {
           disabled={loading || rows.length === 0}
           className="ml-auto rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          ⬇ ดาวน์โหลด CSV
+          <Icon name="download" /> ดาวน์โหลด CSV
         </button>
       </div>
 

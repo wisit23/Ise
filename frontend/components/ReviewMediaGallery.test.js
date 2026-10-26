@@ -22,7 +22,7 @@ test("renders thumbnails for all media items with video indicator", () => {
   expect(buttons).toHaveLength(3);
 
   // Video item contains the play indicator
-  expect(screen.getByText("▶")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "เปิดดูวิดีโอที่ 2" })).toBeInTheDocument();
 });
 
 test("clicking a thumbnail opens lightbox modal, cycles items, and closes on escape or close button", () => {

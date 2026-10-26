@@ -68,7 +68,7 @@ export default function OrderDisputeForm({ order, onSubmitted }) {
         </h3>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
           บอกปัญหาและแนบหลักฐาน CS
-          จะรวบรวมข้อมูลจากทั้งสองฝ่ายก่อนส่งผู้ดูแลพิจารณา
+          จะรวบรวมข้อมูลจากทั้งสองฝ่ายก่อนส่งTrust and Safety พิจารณา
         </p>
       </div>
       <Select

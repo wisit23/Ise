@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../components/ui/Icon";
+
 import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useEffect, useState, useCallback } from "react";
@@ -365,7 +367,7 @@ export default function SellerAuctionsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <p className="font-semibold text-amber-900 text-base">
-                  ⚠️ บัญชีผู้ขายยังไม่ผ่านการยืนยันตัวตน (KYC)
+                  <Icon name="warning" /> บัญชีผู้ขายยังไม่ผ่านการยืนยันตัวตน (KYC)
                 </p>
                 <p className="mt-1 text-sm text-amber-800">
                   {kycStatus === "PENDING"
@@ -708,7 +710,7 @@ export default function SellerAuctionsPage() {
                             <td className="px-3 py-2.5 text-center">
                               {isWinning ? (
                                 <span className="rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
-                                  🏆 ชนะการประมูล
+                                  <Icon name="emoji_events" /> ชนะการประมูล
                                 </span>
                               ) : isHighest && viewBidsAuction.status === "closed" ? (
                                 <span className="rounded-full bg-rose-100 border border-rose-300 px-2 py-0.5 text-[11px] font-bold text-rose-700">

@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../ui/Icon";
+
 import CsatGauge from "./CsatGauge";
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "../../../lib/api";
@@ -486,7 +488,7 @@ export default function AgentDashboard({ token, currentUserId }) {
                     </p>
 
                     <span className={styles.cardArrow} aria-hidden="true">
-                      ↗
+                      <Icon name="open_in_new" />
                     </span>
                   </div>
                 </button>

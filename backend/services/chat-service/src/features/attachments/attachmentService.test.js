@@ -23,9 +23,9 @@ test("an image preview reads as a photo, not a raw type tag", () => {
   // This string lands in Conversation.lastMessagePreview and is shown
   // verbatim in the inbox, so "[IMAGE]" would leak an internal enum into
   // the UI.
-  assert.equal(previewFor("IMAGE", "anything.png"), "📷 รูปภาพ");
+  assert.equal(previewFor("IMAGE", "anything.png"), "รูปภาพ");
 });
 
 test("a file preview names the file so the inbox row is meaningful", () => {
-  assert.equal(previewFor("FILE", "receipt.pdf"), "📎 receipt.pdf");
+  assert.equal(previewFor("FILE", "receipt.pdf"), "ไฟล์: receipt.pdf");
 });

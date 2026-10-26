@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../ui/Icon";
+
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "../../../lib/api";
@@ -333,7 +335,7 @@ export default function SellerAutoMessages() {
                                   : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
                               }`}
                             >
-                              {item.isActive ? "✓ เปิดใช้งาน" : "✕ ปิดใช้งาน"}
+                              {item.isActive ? <><Icon name="check" /> เปิดใช้งาน</> : <><Icon name="close" /> ปิดใช้งาน</>}
                             </button>
 
                             {/* Edit button */}

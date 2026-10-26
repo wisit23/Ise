@@ -94,7 +94,7 @@ describe("RoundDetailPage - Buyer Round Items & Round Switcher", () => {
     expect(
       await screen.findByText("รอบประมูลของสะสมวินเทจ"),
     ).toBeInTheDocument();
-    expect(screen.getByText("🟢 กำลังประมูล")).toBeInTheDocument();
+    expect(screen.getByText("กำลังประมูล")).toBeInTheDocument();
     expect(screen.getByText("ของสะสม")).toBeInTheDocument();
     expect(screen.getByText("← กลับหน้ารวมรอบประมูล")).toBeInTheDocument();
 

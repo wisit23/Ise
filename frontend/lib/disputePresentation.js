@@ -34,7 +34,7 @@ export function caseStage(dispute) {
       step: 2,
       tone: "review",
       description:
-        "CS ส่งเรื่องให้ผู้ดูแลพิจารณาแล้ว คุณยังแนบหลักฐานเพิ่มเติมได้จนกว่าจะตัดสิน",
+        "CS ส่งเรื่องให้ Trust and Safety พิจารณาแล้ว คุณยังแนบหลักฐานเพิ่มเติมได้จนกว่าจะตัดสิน",
     };
   if (dispute.assignedTo)
     return {

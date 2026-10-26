@@ -143,7 +143,7 @@ async function chooseClip({ user, productVideoId }) {
         userId: clip.sellerId,
         type: "LIKE",
         title: "มีคนถูกใจคลิปรีวิวของคุณ",
-        message: `❤️ คุณ ${likerName} ได้ถูกใจคลิปรีวิวสินค้า "${productTitle}"`,
+        message: `คุณ ${likerName} ได้ถูกใจคลิปรีวิวสินค้า "${productTitle}"`,
         link: `/swipe?videoId=${clip.id}`,
         metadata: {
           event: "video.liked",
@@ -229,7 +229,7 @@ async function createComment({ user, productVideoId, input = {} }) {
         userId: clip.sellerId,
         type: "REVIEW",
         title: "มีความคิดเห็นใหม่บนคลิปรีวิวของคุณ",
-        message: `💬 คุณ ${commenterName} ได้แสดงความคิดเห็นบนคลิปรีวิวสินค้า "${productTitle}": "${snippet}"`,
+        message: `คุณ ${commenterName} ได้แสดงความคิดเห็นบนคลิปรีวิวสินค้า "${productTitle}": "${snippet}"`,
         link: `/swipe?videoId=${clip.id}`,
         metadata: {
           event: "video.commented",

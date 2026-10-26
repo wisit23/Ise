@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../ui/Icon";
+
 import { Stars } from "./CsatCell";
 import styles from "./CsatSummary.module.css";
 
@@ -40,7 +42,7 @@ export default function CsatSummary({ rows = [] }) {
             <li key={star} className={styles.barRow}>
               <span className={styles.barLabel}>
                 {star}
-                <span aria-hidden="true" className={styles.barStar}>★</span>
+                <span aria-hidden="true" className={styles.barStar}><Icon name="star" filled /></span>
               </span>
               <span className={styles.track} aria-hidden="true">
                 <span className={styles.fill} style={{ width: `${scores.length ? (count / scores.length) * 100 : 0}%` }} />

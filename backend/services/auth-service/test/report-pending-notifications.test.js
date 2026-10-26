@@ -363,7 +363,7 @@ test("Requirement 1: admin decision notifies all relevant parties (reporter, tar
   // 2) Target user must be notified
   const targetNotif = sentNotifications.find((n) => n.userId === "target-user-2");
   assert.ok(targetNotif, "Target user must receive warning notification");
-  assert.equal(targetNotif.title, "แจ้งเตือนคำเตือนจากผู้ดูแลระบบ");
+  assert.equal(targetNotif.title, "แจ้งเตือนคำเตือนจาก Trust and Safety");
   assert.ok(targetNotif.message.includes("พบการใช้ถ้อยคำไม่เหมาะสมในรีวิวจริง"));
 
   // 3) Product seller must be notified
@@ -396,7 +396,7 @@ test("Requirement 1: direct admin actions (suspend, warn, restore) notify target
   });
   const warnNotif = sentNotifications.find((n) => n.userId === "user-to-warn");
   assert.ok(warnNotif, "Warned user must be notified");
-  assert.equal(warnNotif.title, "แจ้งเตือนคำเตือนจากผู้ดูแลระบบ");
+  assert.equal(warnNotif.title, "แจ้งเตือนคำเตือนจาก Trust and Safety");
   assert.ok(warnNotif.message.includes("โพสต์ภาพไม่ตรงกับสินค้าจริง"));
 });
 

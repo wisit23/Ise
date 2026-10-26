@@ -1,4 +1,6 @@
 "use client";
+import Icon from "./ui/Icon";
+
 
 import { useRef, useState } from "react";
 import { uploadReviewFiles, mediaUrl } from "../lib/api";
@@ -94,7 +96,7 @@ export default function ReviewMediaUploader({
                     muted
                   />
                   <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-xs text-white">
-                    ▶
+                    <Icon name="play_arrow" />
                   </span>
                 </div>
               ) : (

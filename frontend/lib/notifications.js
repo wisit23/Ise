@@ -1,5 +1,10 @@
 import { apiFetch } from "./api";
 
+/** Old generated notices may retain a decorative prefix in stored data. */
+export function notificationText(value) {
+  return String(value || "").replace(/^(?:[\p{Extended_Pictographic}\uFE0F\u200D]+\s*)+/u, "");
+}
+
 /**
  * Fetches recent notifications for the current authenticated user.
  */

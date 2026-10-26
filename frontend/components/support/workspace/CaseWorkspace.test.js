@@ -82,6 +82,18 @@ beforeEach(() => {
   apiFetch.mockReset().mockImplementation(defaultApi);
 });
 
+test("the CS who handled a completed dispute can open its chat read-only", async () => {
+  window.history.replaceState(null, "", "/workspace?section=disputes&case=d-a");
+  const completed = { ...dispute, status: "DECIDED", assignedRole: "TRUST_AND_SAFETY", assignedTo: "ts", escalatedBy: "cs", capabilities: { canViewDetail: true, isHistoryViewer: true, canReply: false } };
+  apiFetch.mockImplementation((url, options) => {
+    if (url.includes("/queue?")) return Promise.resolve({ items: [completed], total: 1, totalPages: 1 });
+    if (url.endsWith("/conversation")) return Promise.resolve({ conversationId: "history-room", side: options.body.side, readOnly: true });
+    return Promise.resolve(completed);
+  });
+  render(<CaseWorkspace domain="disputes" token="token" currentUser={{ id: "cs", role: "CUSTOMER_SERVICE" }} />);
+  expect(await screen.findByText("history-room:true")).toBeInTheDocument();
+});
+
 test.each([
   ["tickets", /Ticket A/, "ticket-room:false"],
   ["disputes", /Dispute A/, "buyer-room:false"],

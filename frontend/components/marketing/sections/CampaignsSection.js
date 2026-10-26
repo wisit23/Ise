@@ -157,7 +157,7 @@ function campaignEndLabel(campaign, isExpired) {
     return "สิ้นสุดแล้ว (สิทธิ์หมด)";
   }
   if (campaign.endReason === "ADMIN_CLOSED") {
-    return "สิ้นสุดแล้ว (ปิดโดยผู้ดูแล)";
+    return "สิ้นสุดแล้ว (ปิดโดย Trust and Safety)";
   }
   return "สิ้นสุดแล้ว";
 }

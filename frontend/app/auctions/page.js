@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../components/ui/Icon";
+
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -88,8 +90,8 @@ export default function AuctionsBrowsePage() {
               {isCancelled
                 ? "ยกเลิกแล้ว"
                 : isActive
-                  ? "🟢 กำลังประมูล"
-                  : "🗓️ เร็วๆ นี้"}
+                  ? <><Icon name="circle" filled /> กำลังประมูล</>
+                  : <><Icon name="calendar_month" /> เร็วๆ นี้</>}
             </span>
           </div>
 
@@ -129,7 +131,7 @@ export default function AuctionsBrowsePage() {
 
             {round.isSoftCloseActive && (
               <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs font-semibold text-amber-800">
-                ⏱️ มีสินค้าที่ยังประมูลต่อในช่วงต่อเวลา 5 นาที
+                <Icon name="timer" /> มีสินค้าที่ยังประมูลต่อในช่วงต่อเวลา 5 นาที
               </div>
             )}
 
@@ -181,7 +183,7 @@ export default function AuctionsBrowsePage() {
 
         {error && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            ⚠️ {error}
+            <Icon name="warning" /> {error}
           </div>
         )}
 

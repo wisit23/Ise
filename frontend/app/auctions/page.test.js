@@ -58,8 +58,8 @@ describe("AuctionsBrowsePage - Buyer Round Browsing", () => {
       await screen.findByText("รอบประมูลเสื้อผ้าวินเทจ"),
     ).toBeInTheDocument();
     expect(screen.getByText("รอบประมูลกระเป๋าแบรนด์เนม")).toBeInTheDocument();
-    expect(screen.getByText("🟢 กำลังประมูล")).toBeInTheDocument();
-    expect(screen.getByText("🗓️ เร็วๆ นี้")).toBeInTheDocument();
+    expect(screen.getByText("กำลังประมูล")).toBeInTheDocument();
+    expect(screen.getByText("เร็วๆ นี้")).toBeInTheDocument();
 
     const viewButtons = screen.getAllByRole("link", {
       name: "ดูสินค้าประมูลในรอบนี้",
@@ -108,7 +108,7 @@ describe("AuctionsBrowsePage - Buyer Round Browsing", () => {
     render(<AuctionsBrowsePage />);
 
     expect(
-      await screen.findByText("⏱️ มีสินค้าที่ยังประมูลต่อในช่วงต่อเวลา 5 นาที"),
+      await screen.findByText("มีสินค้าที่ยังประมูลต่อในช่วงต่อเวลา 5 นาที"),
     ).toBeInTheDocument();
   });
 

@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../../components/ui/Icon";
+
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -195,7 +197,7 @@ export default function AdminDisputeDetailPage() {
             </div>
             {disputeCase.status !== "DECIDED" && (
               <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                ⚠ เคสนี้ยังไม่ถูกตัดสินโดยฝ่าย CS — หากกด &quot;ปล่อยเงิน&quot;
+                <Icon name="warning" /> เคสนี้ยังไม่ถูกตัดสินโดยฝ่าย CS — หากกด &quot;ปล่อยเงิน&quot;
                 ระบบจะยกเลิกเฉพาะการระงับที่ฝ่าย Trust & Safety สั่งเอง
                 แต่เงินจะยังถูกพักไว้ต่อจนกว่า CS จะตัดสินใจ
               </p>

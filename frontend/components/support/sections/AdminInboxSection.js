@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../ui/Icon";
+
 
 import { formatReferenceCode } from "../../../lib/referenceCodes";
 
@@ -90,6 +92,7 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
   const [pendingReportDecision, setPendingReportDecision] = useState(false);
 
   function showTicketDetail(detail, request = selectionRequest.current) {
+    if (request !== selectionRequest.current) return;
     setSelectedTicket(detail);
     ticketPartyNames(detail, token).then((names) => {
       if (request !== selectionRequest.current) return;
@@ -113,17 +116,22 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
 
   async function selectCase(item) {
     setPendingReportDecision(false);
+    const request = ++selectionRequest.current;
     if (item._type === "DISPUTE") {
+      setSelectedTicket(null);
+      setConversationId(null);
       setSelectedDispute(item);
       return;
     }
-    const request = ++selectionRequest.current;
+    setSelectedDispute(null);
     setSelectedTicket(item);
     setConversationId(null);
     setActionError("");
     setReportReason("");
     setReportDecision("");
     if (item._type === "REPORT") {
+      // Queue snapshots cannot authorize actions while fresh detail is pending.
+      setSelectedTicket({ ...item, rawReport: null });
       try {
         const report=await apiFetch(`/api/auth/admin/reports/${item.id}`,{token});
         if(request===selectionRequest.current) {
@@ -158,7 +166,6 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
     if(initialReportId)selectCase({id:initialReportId,_type:"REPORT"});
   },[initialReportId,token]);
   useEffect(() => {
-    if (!reportsOnly) return;
     const refresh = () => setRefreshKey((key) => key + 1);
     const interval = window.setInterval(refresh, 15000);
     window.addEventListener("focus", refresh);
@@ -166,7 +173,7 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
       window.clearInterval(interval);
       window.removeEventListener("focus", refresh);
     };
-  }, [reportsOnly]);
+  }, []);
   useEffect(() => {
     setLoading(true);
 
@@ -256,16 +263,16 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
     };
   }, [page, q, statusFilter, ticketStatus, workScope, source, token, refreshKey, userRole, reportsOnly, reportType]);
 
-  function refreshAfterAction() {
+  function refreshAfterAction(request) {
     setPage(1);
     setItems([]);
     setRefreshKey((k) => k + 1);
-    if (selectedTicket) {
+    if (selectedTicket && request === selectionRequest.current) {
       if (selectedTicket._type === "REPORT") {
         closeTicket();
       } else {
         apiFetch(`/api/support/tickets/${selectedTicket.id}`, { token })
-          .then((detail) => showTicketDetail(detail))
+          .then((detail) => showTicketDetail(detail, request))
           // A failed *refresh* is not a failed action. Admin can act on a
           // ticket from this inbox but cannot always re-read its detail
           // (the queue returns it, GET /tickets/:id can still 403), which
@@ -283,14 +290,15 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
   /* Every action below shares the same busy/error/refresh shape, so they run
      through one runner instead of repeating try/catch/finally six times. */
   async function runAction(fn, successMessage) {
+    const request = selectionRequest.current;
     setActionBusy(true);
     setActionError("");
     try {
       await fn();
       if (successMessage) toast.success(successMessage);
-      refreshAfterAction();
+      refreshAfterAction(request);
     } catch (err) {
-      setActionError(err.message);
+      if (request === selectionRequest.current) setActionError(err.message);
       toast.error(err.message);
     } finally {
       setActionBusy(false);
@@ -346,12 +354,14 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
   async function handleClaimReport() {
     if (!selectedTicket || selectedTicket._type !== "REPORT") return;
     const reportId = selectedTicket.id;
+    const request = selectionRequest.current;
     setActionBusy(true);
     setActionError("");
     try {
       await apiFetch(`/api/auth/admin/reports/${reportId}/review`, { method: "POST", token });
       const report = await apiFetch(`/api/auth/admin/reports/${reportId}`, { token });
-      setSelectedTicket((current) => current?.id === reportId ? { ...current, rawReport: report } : current);
+      if (request !== selectionRequest.current) return;
+      setSelectedTicket((current) => current?.id === reportId ? { ...current, rawReport: report, assigneeId: report.reviewedBy, status: "IN_PROGRESS" } : current);
       if (reportsOnly) {
         setWorkScope("mine");
         setStatusFilter("PENDING");
@@ -411,7 +421,7 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
     {
       ban: isRequester
         ? {
-            title: "⚠️ ยืนยันการระงับบัญชีผู้แจ้งปัญหา?",
+            title: <><Icon name="warning" /> ยืนยันการระงับบัญชีผู้แจ้งปัญหา?</>,
             description: `คุณกำลังจะระงับบัญชี ของ "${roleLabel}" (รหัส: ${formatReferenceCode(targetUserId)}) ซึ่งเป็นผู้ส่งคำร้องเข้ามา ไม่ใช่คู่กรณี บัญชีนี้จะไม่สามารถเข้าใช้งานระบบได้ทันที`,
             confirmLabel: "ยืนยันระงับบัญชีผู้แจ้ง",
             tone: "danger",
@@ -621,7 +631,7 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
           ))}
       </CaseDrawer>
 
-      {selectedDispute && <AdminDisputeAuditPanel dispute={selectedDispute} token={token} currentUserId={currentUserId} onClose={() => setSelectedDispute(null)} onUpdated={() => { setPage(1); setItems([]); setRefreshKey((k) => k + 1); }} />}
+      {selectedDispute && <AdminDisputeAuditPanel key={selectedDispute.id} dispute={selectedDispute} token={token} currentUserId={currentUserId} onClose={() => setSelectedDispute(null)} onUpdated={() => { setPage(1); setItems([]); setRefreshKey((k) => k + 1); }} />}
 
       <ConfirmDialog
         open={pendingReportDecision}

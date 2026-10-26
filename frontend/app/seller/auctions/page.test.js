@@ -506,7 +506,7 @@ describe("SellerAuctionsPage - Bid history modal winner badge", () => {
     fireEvent.click(openBidsButton);
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getAllByText("🏆 ชนะการประมูล")).toHaveLength(1);
+    expect(within(dialog).getAllByText("ชนะการประมูล")).toHaveLength(1);
     expect(within(dialog).getByText("เสียสิทธิ์")).toBeInTheDocument();
     expect(
       within(dialog).queryByText("สูงสุดตอนนี้"),

@@ -3,6 +3,7 @@ const { requireInternalToken } = require("@reloop/shared");
 const disputeModel = require("./disputeModel");
 const orderModel = require("../../models/orderModel");
 const { isSellerVisible } = require("./sellerVisibility");
+const { canReadCompletedDispute } = require("./workspacePolicy");
 
 const router = Router();
 router.use(requireInternalToken);
@@ -31,7 +32,8 @@ router.get("/disputes/:id/chat-access/:userId", async (req, res, next) => {
       ["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) &&
       dispute.status !== "DECIDED";
     const admin = role === "ADMIN";
-    const allowed = validRoom && (party || agent || admin || watcher);
+    const historyViewer = role === "AGENT" && canReadCompletedDispute(dispute, userId);
+    const allowed = validRoom && (party || agent || admin || watcher || historyViewer);
     res.json({ allowed, writable: allowed && !admin && !watcher && !isLegacyRoom && dispute.status !== "DECIDED" });
   } catch (err) {
     next(err);

@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../ui/Icon";
+
 
 import { useEffect, useId, useState } from "react";
 import { apiFetch } from "../../lib/api";
@@ -76,8 +78,9 @@ export default function CsatRating({ endpoint, caseLabel = "เรื่อง�
       ) : survey?.response ? (
         <div role="status" className={styles.success}>
           <span aria-hidden="true" className={styles.savedStars}>
-            {"★".repeat(survey.response.rating)}
-            {"☆".repeat(5 - survey.response.rating)}
+            {[1, 2, 3, 4, 5].map((star) => (
+              <Icon key={star} name="star" filled={star <= survey.response.rating} />
+            ))}
           </span>
           <strong>ขอบคุณสำหรับคะแนน {survey.response.rating}/5 ดาว</strong>
           <p>บันทึกความคิดเห็นของคุณแล้ว</p>
@@ -105,7 +108,7 @@ export default function CsatRating({ endpoint, caseLabel = "เรื่อง�
                     aria-hidden="true"
                     className={index < rating ? styles.selected : ""}
                   >
-                    ★
+                    <Icon name="star" filled />
                   </span>
                 </label>
               ))}

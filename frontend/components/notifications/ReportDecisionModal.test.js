@@ -9,7 +9,7 @@ describe("ReportDecisionModal", () => {
     }} />);
     expect(screen.getByText("เหตุผลที่รายงานความคิดเห็น:")).toBeInTheDocument();
     expect(screen.getByText("ใช้ถ้อยคำคุกคาม")).toBeInTheDocument();
-    expect(screen.queryByText("เหตุผล / ข้อชี้แจงจากผู้ดูแลระบบ:")).not.toBeInTheDocument();
+    expect(screen.queryByText("เหตุผล / ข้อชี้แจงจาก Trust and Safety:")).not.toBeInTheDocument();
   });
   it("renders nothing when open is false", () => {
     const { container } = render(
@@ -48,7 +48,7 @@ describe("ReportDecisionModal", () => {
       />,
     );
 
-    expect(screen.getByText("รายละเอียดผลการตัดสินจากผู้ดูแลระบบ")).toBeInTheDocument();
+    expect(screen.getByText("รายละเอียดผลการตัดสินจาก Trust and Safety")).toBeInTheDocument();
     expect(screen.getByText("ระงับการใช้งานบัญชีผู้ใช้")).toBeInTheDocument();
     expect(screen.getByText("คุณเป็นผู้ถูกรายงาน")).toBeInTheDocument();
     expect(screen.getByText("มีพฤติกรรมหลอกลวงผู้ซื้อ")).toBeInTheDocument();

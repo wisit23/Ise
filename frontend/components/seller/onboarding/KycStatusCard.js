@@ -2,9 +2,7 @@
 
 import Button from "../../ui/Button";
 
-/* Shown once KYC has been submitted: either waiting on review, or approved.
-   Both used an emoji as the status glyph (⏳ / ✓) — the rest of the app moved
-   to Material Symbols in d98e8a1 and these were missed. */
+/* Shows pending or approved KYC status with a Material Symbols icon. */
 export default function KycStatusCard({ status, statusLabel }) {
   const kycStatus = status?.kycStatus;
   const pending = kycStatus === "PENDING";

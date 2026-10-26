@@ -1,4 +1,6 @@
 "use client";
+import Icon from "./ui/Icon";
+
 
 import { useState } from "react";
 import { mediaUrl } from "../lib/api";
@@ -36,6 +38,8 @@ export default function MediaGallery({ media, alt }) {
           {items.map((item, index) => (
             <button
               key={item.url + index}
+              type="button"
+              aria-label={`เปิดดู${item.type === "video" ? "วิดีโอ" : "รูปภาพ"}ที่ ${index + 1}`}
               onClick={() => setActive(index)}
               className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-md border-2 ${
                 index === active ? "border-emerald-600" : "border-transparent"
@@ -49,7 +53,7 @@ export default function MediaGallery({ media, alt }) {
                     muted
                   />
                   <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white text-xs">
-                    ▶
+                    <Icon name="play_arrow" />
                   </span>
                 </>
               ) : (

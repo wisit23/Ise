@@ -291,7 +291,7 @@ export default function ReportModal({
                   pending
                 </span>
                 <div>
-                  <p className="font-semibold text-amber-900">อยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ</p>
+                  <p className="font-semibold text-amber-900">อยู่ระหว่างรอผลการตัดสินจาก Trust and Safety</p>
                   <p className="mt-0.5">{pendingWarning}</p>
                 </div>
               </div>

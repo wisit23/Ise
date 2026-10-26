@@ -125,7 +125,7 @@ const ENTITY_LABELS_THAI = {
 
 const ROLE_LABELS_THAI = {
   MARKETING: "ฝ่ายการตลาด",
-  ADMIN: "ผู้ดูแลระบบ",
+  ADMIN: "Trust and Safety",
   SYSTEM: "ระบบอัตโนมัติ",
   SELLER: "ผู้ขาย",
   BUYER: "ผู้ซื้อ",

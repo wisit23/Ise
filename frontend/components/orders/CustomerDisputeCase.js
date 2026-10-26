@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../ui/Icon";
+
 import { formatReferenceCode } from "../../lib/referenceCodes";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -196,14 +198,14 @@ export default function CustomerDisputeCase({ orderId }) {
               </Alert>
             )}
             <ol className={styles.steps} aria-label="ขั้นตอนการพิจารณา">
-              {["เปิดคำร้อง", "รวบรวมหลักฐาน", "ผู้ดูแลพิจารณา", "แจ้งผล"].map(
+              {["เปิดคำร้อง", "รวบรวมหลักฐาน", "Trust and Safety พิจารณา", "แจ้งผล"].map(
                 (label, index) => (
                   <li
                     key={label}
                     className={index <= stage.step ? styles.reached : ""}
                     aria-current={index === stage.step ? "step" : undefined}
                   >
-                    <span>{index < stage.step ? "✓" : index + 1}</span>
+                    <span>{index < stage.step ? <><Icon name="check" /></> : index + 1}</span>
                     <strong>{label}</strong>
                   </li>
                 ),
@@ -270,7 +272,7 @@ export default function CustomerDisputeCase({ orderId }) {
                   </div>
                   <p className={styles.muted}>
                     บทสนทนานี้แยกจากอีกฝ่าย CS
-                    จะรวบรวมคำชี้แจงก่อนส่งให้ผู้ดูแลพิจารณา
+                    จะรวบรวมคำชี้แจงก่อนส่งให้ Trust and Safety พิจารณา
                   </p>
                   {chatError ? (
                     <Alert tone="error">
@@ -364,7 +366,7 @@ export default function CustomerDisputeCase({ orderId }) {
                     href={`/products/${order.productId}`}
                     className={styles.detailLink}
                   >
-                    ดูรายละเอียดสินค้า ↗
+                    ดูรายละเอียดสินค้า <Icon name="open_in_new" />
                   </Link>
                 </section>
                 <section className={styles.card}>
@@ -382,7 +384,7 @@ export default function CustomerDisputeCase({ orderId }) {
                     )}
                     {["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) && (
                       <li>
-                        <strong>ส่งต่อให้ผู้ดูแลพิจารณา</strong>
+                        <strong>ส่งต่อให้ Trust and Safety พิจารณา</strong>
                       </li>
                     )}
                     {decided && (

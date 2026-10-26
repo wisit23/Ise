@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../ui/Icon";
+
 import AgentDashboard from "./AgentDashboard";
 import { useState, useEffect } from "react";
 import styles from "./SafetyDashboard.module.css";
@@ -30,7 +32,7 @@ function KpiCard({ label, value, sub, icon, color, onClick }) {
       </strong>
       <span className={styles.metricHint}>
         {sub}
-        {onClick && <span aria-hidden="true"> ↗</span>}
+        {onClick && <span aria-hidden="true"> <Icon name="open_in_new" /></span>}
       </span>
     </>
   );
