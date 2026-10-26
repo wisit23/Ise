@@ -581,7 +581,7 @@ describe("RoundManagementSection - Focused Round Management & Phase Visualizatio
       screen.getByRole("button", { name: "ตรวจสอบสินค้า" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "✓ อนุมัติสินค้าเข้าประมูล" }),
+      screen.getByRole("button", { name: "อนุมัติสินค้าเข้าประมูลจากรายการ" }),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: "ปฏิเสธสินค้า" }),
@@ -1447,7 +1447,7 @@ describe("AuctionReviewModal & Pending Approval UX Improvements", () => {
     render(<AuctionScheduleSection token={mockToken} />);
 
     const listApproveBtn = await screen.findByRole("button", {
-      name: "✓ อนุมัติสินค้าเข้าประมูล",
+      name: "อนุมัติสินค้าเข้าประมูลจากรายการ",
     });
     fireEvent.click(listApproveBtn);
 

@@ -115,7 +115,7 @@ function RankingList({ rows = [] }) {
           </span>
           <div className="h-2 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-indigo-500"
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500"
               style={{ width: `${(row.interestedCustomers / maximum) * 100}%` }}
             />
           </div>
@@ -474,7 +474,7 @@ export default function CustomerInsightsSection({ token, onCreateCampaign }) {
                 ))}
               </div>
               <div className="mt-4 flex justify-end">
-                <button type="button" onClick={() => onCreateCampaign?.({ ...selected.criteria, from: data.filters.from, to: data.filters.to })} className="rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-indigo-700">
+                <button type="button" onClick={() => onCreateCampaign?.({ ...selected.criteria, from: data.filters.from, to: data.filters.to })} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700">
                   สร้างแคมเปญสำหรับกลุ่มนี้
                 </button>
               </div>

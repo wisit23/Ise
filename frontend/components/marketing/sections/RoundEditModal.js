@@ -56,7 +56,7 @@ export default function RoundEditModal({ round, token, onClose, onSaved }) {
 
   return (
     <Modal open onClose={busy ? () => {} : onClose} title={`แก้ไขเวลารอบ ${round.title}`} size="lg"
-      description="เวลาแสดงตามเขตเวลาของเครื่อง รอบที่เริ่มแล้วแก้ได้เฉพาะเวลาที่ยังไม่สิ้นสุด Backend จะตรวจซ้ำก่อนบันทึก">
+      description="เวลาแสดงตามเขตเวลาของเครื่อง รอบที่เริ่มแล้วแก้ได้เฉพาะเวลาที่ยังไม่สิ้นสุด ระบบจะตรวจสอบความถูกต้องของเวลาอีกครั้งก่อนบันทึก">
       <form onSubmit={save} className="space-y-4 pt-3">
         {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         {warnings.length > 0 && <div role="status" className="text-sm text-amber-700">บันทึกเวลาแล้ว แต่ยังดำเนินการไม่ครบ กรุณากดส่งซ้ำ: {warnings.join(" · ")}</div>}

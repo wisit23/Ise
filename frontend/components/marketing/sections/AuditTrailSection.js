@@ -64,17 +64,17 @@ const ENTITY_TYPE_OPTIONS = [
 ];
 
 const ACTION_BADGES = {
-  AUCTION_ROUND_UPDATE: "bg-purple-50 text-purple-700 border-purple-200",
+  AUCTION_ROUND_UPDATE: "bg-emerald-50 text-emerald-700 border-emerald-200",
   // Campaign
   CAMPAIGN_CREATE: "bg-blue-50 text-blue-700 border-blue-200",
-  CAMPAIGN_UPDATE: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  CAMPAIGN_UPDATE: "bg-teal-50 text-teal-700 border-teal-200",
   CAMPAIGN_SUBMIT: "bg-amber-50 text-amber-700 border-amber-200",
   CAMPAIGN_APPROVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
   CAMPAIGN_REJECT: "bg-rose-50 text-rose-700 border-rose-200",
   CAMPAIGN_PUBLISH: "bg-teal-50 text-teal-700 border-teal-200",
   CAMPAIGN_END: "bg-slate-100 text-slate-700 border-slate-300",
   // Auction
-  AUCTION_ROUND_CREATE: "bg-purple-50 text-purple-700 border-purple-200",
+  AUCTION_ROUND_CREATE: "bg-emerald-50 text-emerald-700 border-emerald-200",
   AUCTION_ITEM_APPROVE: "bg-emerald-50 text-emerald-700 border-emerald-200",
   AUCTION_ITEM_REJECT: "bg-rose-50 text-rose-700 border-rose-200",
   AUCTION_ITEM_SCHEDULE: "bg-cyan-50 text-cyan-700 border-cyan-200",
@@ -82,7 +82,7 @@ const ACTION_BADGES = {
   AUCTION_ITEM_CLOSE: "bg-gray-100 text-gray-700 border-gray-300",
   // Article
   ARTICLE_CREATE: "bg-blue-50 text-blue-700 border-blue-200",
-  ARTICLE_UPDATE: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  ARTICLE_UPDATE: "bg-teal-50 text-teal-700 border-teal-200",
   ARTICLE_PUBLISH: "bg-emerald-50 text-emerald-700 border-emerald-200",
   ARTICLE_ARCHIVE: "bg-amber-50 text-amber-700 border-amber-200",
   ARTICLE_DELETE: "bg-red-50 text-red-700 border-red-200",
@@ -304,7 +304,7 @@ function ExpandableText({ text }) {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-800 transition-colors"
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 hover:text-emerald-800 transition-colors"
       >
         <span className="material-symbols-outlined text-[14px]">
           {expanded ? "expand_less" : "expand_more"}
@@ -744,7 +744,7 @@ export default function AuditTrailSection({ token }) {
                   setActorIdFilter(e.target.value);
                   setPage(1);
                 }}
-                className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-xs focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                className="w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 py-2 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
             </div>
           </div>
@@ -761,7 +761,7 @@ export default function AuditTrailSection({ token }) {
               type="date"
               value={fromDateFilter}
               onChange={(e) => setFromDateFilter(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
           </div>
 
@@ -777,7 +777,7 @@ export default function AuditTrailSection({ token }) {
               type="date"
               value={toDateFilter}
               onChange={(e) => setToDateFilter(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
           </div>
 
@@ -806,7 +806,7 @@ export default function AuditTrailSection({ token }) {
       {/* Main Content Area */}
       {loading ? (
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">
-          <span className="material-symbols-outlined animate-spin text-3xl text-violet-600 mb-2">
+          <span className="material-symbols-outlined animate-spin text-3xl text-emerald-600 mb-2">
             progress_activity
           </span>
           <p className="text-sm">กำลังโหลดประวัติการดำเนินงาน...</p>
@@ -966,7 +966,7 @@ export default function AuditTrailSection({ token }) {
                               {formatReferenceText(entityDisplayName)}
                             </span>
                             {isRenamed && (
-                              <span className="text-[10px] text-violet-600 font-medium">
+                              <span className="text-[10px] text-emerald-600 font-medium">
                                 มีการเปลี่ยนชื่อรายการ
                               </span>
                             )}
@@ -1023,8 +1023,8 @@ export default function AuditTrailSection({ token }) {
         >
           <div className="space-y-4 text-xs">
             {/* 1. Summary Overview Card */}
-            <div className="rounded-xl border border-violet-100 bg-gradient-to-br from-violet-50/60 to-slate-50 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-100/80 pb-3">
+            <div className="rounded-xl border border-emerald-100 bg-gradient-to-br from-emerald-50/60 to-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100/80 pb-3">
                 <div className="flex items-center gap-2">
                   <span
                     className={`inline-block rounded-md px-2.5 py-1 text-xs font-semibold border ${
@@ -1058,7 +1058,7 @@ export default function AuditTrailSection({ token }) {
                     selectedLog.newEntityName &&
                     selectedLog.previousEntityName !==
                       selectedLog.newEntityName && (
-                      <div className="text-[11px] text-violet-700 mt-0.5">
+                      <div className="text-[11px] text-emerald-700 mt-0.5">
                         <span className="text-slate-400">เปลี่ยนจาก: </span>
                         <span>{selectedLog.previousEntityName}</span>
                       </div>
@@ -1127,7 +1127,7 @@ export default function AuditTrailSection({ token }) {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-semibold text-slate-800 flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px] text-violet-600">
+                  <span className="material-symbols-outlined text-[16px] text-emerald-600">
                     difference
                   </span>
                   <span>ข้อมูลที่เปลี่ยนแปลง</span>
@@ -1174,7 +1174,7 @@ export default function AuditTrailSection({ token }) {
                               key={row.key}
                               className={
                                 row.isChanged
-                                  ? "bg-violet-50/25 hover:bg-violet-50/50 transition-colors"
+                                  ? "bg-emerald-50/25 hover:bg-emerald-50/50 transition-colors"
                                   : "hover:bg-slate-50/50 transition-colors"
                               }
                             >

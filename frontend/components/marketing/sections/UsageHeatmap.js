@@ -148,11 +148,11 @@ export function buildCalendarHeatmap(
 function intensityClass(value, maxValue) {
   if (!value || !maxValue) return "bg-slate-100 text-slate-400";
   const ratio = value / maxValue;
-  if (ratio >= 0.8) return "bg-violet-700 text-white";
-  if (ratio >= 0.6) return "bg-violet-500 text-white";
-  if (ratio >= 0.4) return "bg-violet-300 text-violet-950";
-  if (ratio >= 0.2) return "bg-violet-200 text-violet-900";
-  return "bg-violet-100 text-violet-800";
+  if (ratio >= 0.8) return "bg-emerald-700 text-white";
+  if (ratio >= 0.6) return "bg-emerald-500 text-white";
+  if (ratio >= 0.4) return "bg-emerald-300 text-emerald-950";
+  if (ratio >= 0.2) return "bg-emerald-200 text-emerald-900";
+  return "bg-emerald-100 text-emerald-800";
 }
 
 function LinearHeatmap({ buckets, mode, onActivate }) {
@@ -182,7 +182,7 @@ function LinearHeatmap({ buckets, mode, onActivate }) {
               onPointerEnter={() => onActivate(label)}
               onFocus={() => onActivate(label)}
               onClick={() => onActivate(label)}
-              className={`min-h-12 rounded-md px-1 py-2 text-[10px] font-semibold outline-none ring-violet-500 transition hover:ring-2 focus:ring-2 ${intensityClass(bucket.value, maxValue)}`}
+              className={`min-h-12 rounded-md px-1 py-2 text-[10px] font-semibold outline-none ring-emerald-500 transition hover:ring-2 focus:ring-2 ${intensityClass(bucket.value, maxValue)}`}
             >
               {bucket.label}
             </button>
@@ -230,7 +230,7 @@ function WeekdayHourHeatmap({ matrix, onActivate }) {
                   onPointerEnter={() => onActivate(label)}
                   onFocus={() => onActivate(label)}
                   onClick={() => onActivate(label)}
-                  className={`h-7 rounded-sm outline-none ring-violet-500 transition hover:ring-2 focus:ring-2 ${intensityClass(value, maxValue)}`}
+                  className={`h-7 rounded-sm outline-none ring-emerald-500 transition hover:ring-2 focus:ring-2 ${intensityClass(value, maxValue)}`}
                 >
                   <span className="sr-only">{label}</span>
                 </button>
@@ -295,7 +295,7 @@ export default function UsageHeatmap({
               key={item.hour}
               className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
             >
-              <div className="text-[10px] font-semibold text-violet-600">
+              <div className="text-[10px] font-semibold text-emerald-600">
                 อันดับ {index + 1}
               </div>
               <div className="text-xs font-semibold text-slate-800">

@@ -100,7 +100,7 @@ export default function MarketingPanelPage() {
         <aside className="hidden min-h-0 w-60 shrink-0 flex-col overflow-y-auto border-r border-slate-200/60 bg-white lg:flex shadow-[2px_0_10px_-3px_rgba(6,81,237,0.03)] z-10">
           <div className="flex h-16 shrink-0 items-center border-b border-slate-200/60 px-4 bg-white">
             <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-violet-50 text-violet-600">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-emerald-50 text-emerald-600">
                 <span className="material-symbols-outlined text-[19px]">
                   campaign
                 </span>
@@ -109,7 +109,7 @@ export default function MarketingPanelPage() {
                 <span className="text-xs font-bold tracking-tight text-slate-800">
                   Re-loop panel
                 </span>
-                <span className="text-[10px] font-semibold tracking-wider text-violet-600 uppercase">
+                <span className="text-[10px] font-semibold tracking-wider text-emerald-600 uppercase">
                   Marketing
                 </span>
               </div>
@@ -127,7 +127,7 @@ export default function MarketingPanelPage() {
                   onClick={() => handleSectionChange(s.key)}
                   className={`group flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-xs transition-colors ${
                     active
-                      ? "bg-violet-600 text-white font-semibold shadow-sm"
+                      ? "bg-emerald-600 text-white font-semibold shadow-sm"
                       : "text-slate-600 font-medium hover:bg-slate-100/70 hover:text-slate-900"
                   }`}
                 >

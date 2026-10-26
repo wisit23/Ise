@@ -34,8 +34,8 @@ const STATUS_FILTER_OPTIONS = [
 ];
 
 const ARTICLE_STATUS_OPTIONS = [
-  { value: "published", label: "🟢 เผยแพร่ทันที (Published)" },
-  { value: "draft", label: "⚪ บันทึกเป็นฉบับร่าง (Draft)" },
+  { value: "published", label: "เผยแพร่ทันที (Published)", icon: "publish" },
+  { value: "draft", label: "บันทึกเป็นฉบับร่าง (Draft)", icon: "draft" },
 ];
 
 const CATEGORY_MAP = {
@@ -45,7 +45,7 @@ const CATEGORY_MAP = {
   },
   styling: {
     label: "เคล็ดลับการแต่งตัว",
-    color: "bg-purple-50 text-purple-700 border-purple-200",
+    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
   },
   sustainability: {
     label: "แฟชั่นยั่งยืน",
