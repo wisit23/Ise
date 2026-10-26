@@ -49,7 +49,7 @@ export const ORDER_STATUS_LABEL = {
   pending_payment: "รอชำระเงิน",
   paid: "ชำระแล้ว รอผู้ขายยืนยัน",
   confirmed: "ยืนยันแล้ว",
-  ready_to_ship: "พร้อมเรียกขนส่ง",
+  ready_to_ship: "ผู้ขายกำลังเตรียมสินค้า",
   pickup_in_progress: "ขนส่งกำลังเข้ารับสินค้า",
   in_transit: "อยู่ระหว่างการขนส่ง",
   delivered: "ส่งถึงแล้ว",

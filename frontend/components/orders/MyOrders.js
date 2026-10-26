@@ -30,7 +30,7 @@ export const STATUS_LABEL = {
   pending_payment: "รอชำระเงิน",
   paid: "ชำระแล้ว รอผู้ขายยืนยัน",
   confirmed: "ผู้ขายกำลังเตรียมสินค้า",
-  ready_to_ship: "เตรียมสินค้าเสร็จแล้ว",
+  ready_to_ship: "ผู้ขายกำลังเตรียมสินค้า",
   pickup_in_progress: "ขนส่งกำลังเข้ารับสินค้า",
   in_transit: "กำลังจัดส่ง",
   delivered: "สินค้าถึงแล้ว รอยืนยันรับ",

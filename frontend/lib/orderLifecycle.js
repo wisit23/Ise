@@ -14,7 +14,7 @@ export function canBuyerCancel(order) {
 /** Seller action that moves an order to its next step, if any. */
 export const SELLER_NEXT_STEP = {
   paid: { status: "confirmed", label: "ยอมรับคำสั่งซื้อ" },
-  confirmed: { status: "ready_to_ship", label: "เตรียมสินค้าเรียบร้อย" },
+  confirmed: { status: "pickup_in_progress", label: "เรียกขนส่ง" },
   ready_to_ship: { status: "pickup_in_progress", label: "เรียกขนส่ง" },
   pickup_in_progress: { status: "in_transit", label: "ส่งมอบให้ขนส่งแล้ว" },
 };

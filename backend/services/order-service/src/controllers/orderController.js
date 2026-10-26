@@ -146,6 +146,21 @@ function rejectOrder(req, res, next) {
   req.body = { ...req.body, status: "cancelled" };
   return updateStatus(req, res, next);
 }
+async function updateShippingDetails(req, res, next) {
+  try {
+    const updated = await shippingService.updateDetails({
+      orderId: req.params.id,
+      actorId: req.userId,
+      version: req.body.version,
+      company: req.body.company,
+      trackingNumber: req.body.trackingNumber,
+    });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function updateStatus(req, res, next) {
   try {
     const order = await orderModel.findById(req.params.id);
@@ -433,4 +448,5 @@ module.exports = {
   pay,
   createFromAuction,
   updateShippingAddress,
+  updateShippingDetails,
 };

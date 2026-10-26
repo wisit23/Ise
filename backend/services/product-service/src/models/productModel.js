@@ -292,9 +292,18 @@ async function list({
             }),
     ...(category
       ? {
-          categoryLinks: {
-            some: { deletedAt: null, category: { name: category } },
-          },
+          AND: [
+            {
+              OR: [
+                {
+                  categoryLinks: {
+                    some: { deletedAt: null, category: { name: category } },
+                  },
+                },
+                { category, categoryLinks: { none: {} } },
+              ],
+            },
+          ],
         }
       : {}),
   };

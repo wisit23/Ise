@@ -203,7 +203,7 @@ export default function BuyerOrderDetailModal({
         <OrderDeliveryTimeline
           order={order}
           statusLabels={{
-            ready_to_ship: "เตรียมสินค้าเสร็จแล้ว",
+            confirmed: "ผู้ขายกำลังเตรียมสินค้า",
             pickup_in_progress: "ขนส่งกำลังเข้ารับสินค้า",
             in_transit: "กำลังจัดส่ง",
           }}

@@ -70,6 +70,11 @@ export default function OrderShippingModal({
   }, [orderId]);
 
   useEffect(() => {
+    setCompany(order?.shipping?.company || "");
+    setTrackingNumber(order?.shipping?.trackingNumber || "");
+  }, [order?.id, order?.shipping?.company, order?.shipping?.trackingNumber]);
+
+  useEffect(() => {
     if (!isOpen || !orderId) return;
     setError("");
     setSuccess("");
@@ -138,6 +143,12 @@ export default function OrderShippingModal({
 
   const blocked = order?.payoutHeld || order?.paymentSimulationStatus === "ON_HOLD" ||
     (order?.dispute && !order.dispute.decision);
+  const shippingDetailsChanged = company.trim() !== (order?.shipping?.company || "").trim() ||
+    trackingNumber.trim() !== (order?.shipping?.trackingNumber || "").trim();
+  const canEditShipping = ["confirmed", "ready_to_ship", "pickup_in_progress"].includes(order?.status);
+  const needsShippingDetails = shippingDetailsChanged || ["confirmed", "ready_to_ship"].includes(order?.status) ||
+    (order?.status === "pickup_in_progress" &&
+      (!order.shipping?.company?.trim() || !isValidTrackingNumber(order.shipping?.trackingNumber || "")));
   const shipping =
     order?.shipping?.addressSnapshot ||
     order?.shippingAddress ||
@@ -168,13 +179,13 @@ export default function OrderShippingModal({
 
   async function handleShippingStep() {
     if (!order?.id || updating || blocked) return;
-    if (!["ready_to_ship", "pickup_in_progress"].includes(order.status)) return;
+    if (!["confirmed", "ready_to_ship", "pickup_in_progress"].includes(order.status)) return;
     const handoff = order.status === "pickup_in_progress";
-    if (handoff && (!company.trim() || !trackingNumber.trim())) {
-      setError("กรุณาระบุบริษัทขนส่งและเลขพัสดุก่อนส่งมอบให้ขนส่ง");
+    if (!company.trim() || !trackingNumber.trim()) {
+      setError("กรุณาระบุบริษัทขนส่งและเลขพัสดุให้ครบก่อนดำเนินการ");
       return;
     }
-    if (handoff && !isValidTrackingNumber(trackingNumber)) {
+    if (!isValidTrackingNumber(trackingNumber)) {
       setError(TRACKING_NUMBER_MESSAGE);
       return;
     }
@@ -189,7 +200,7 @@ export default function OrderShippingModal({
         token,
         body: {
           status: handoff ? "in_transit" : "pickup_in_progress",
-          ...(handoff ? { company: company.trim(), trackingNumber: trackingNumber.trim() } : {}),
+          ...(needsShippingDetails ? { company: company.trim(), trackingNumber: trackingNumber.trim() } : {}),
           version: order.version,
         },
       });
@@ -199,6 +210,31 @@ export default function OrderShippingModal({
       onShipped?.(updated);
     } catch (err) {
       setError(err.message || "อัปเดตสถานะการจัดส่งไม่สำเร็จ");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function handleSaveShippingDetails() {
+    if (!order?.id || order.status !== "pickup_in_progress" || updating || blocked) return;
+    if (!company.trim() || !isValidTrackingNumber(trackingNumber)) {
+      setError("กรุณาระบุบริษัทขนส่งและเลขพัสดุให้ถูกต้อง");
+      return;
+    }
+    setUpdating(true);
+    setError("");
+    setSuccess("");
+    try {
+      const updated = await apiFetch(`/api/orders/${order.id}/shipping-details`, {
+        method: "PATCH",
+        token: getAccessToken(),
+        body: { company: company.trim(), trackingNumber: trackingNumber.trim(), version: order.version },
+      });
+      setOrder(updated);
+      setSuccess("บันทึกข้อมูลขนส่งเรียบร้อยแล้ว");
+      onOrderUpdated?.(updated);
+    } catch (err) {
+      setError(err.message || "บันทึกข้อมูลขนส่งไม่สำเร็จ");
     } finally {
       setUpdating(false);
     }
@@ -355,7 +391,7 @@ export default function OrderShippingModal({
                       ก่อนผู้ขายจะกดจัดส่งสินค้าได้ ต้องทำการยืนยันรับออเดอร์ก่อน
                     </p>
                     <p className="text-amber-800 leading-relaxed">
-                      ยืนยันรับออเดอร์และเตรียมสินค้าให้พร้อมก่อนเรียกขนส่ง ระบุบริษัทขนส่งและเลขพัสดุเมื่อส่งมอบสินค้าให้ขนส่ง
+                      ยืนยันรับออเดอร์ เตรียมสินค้า และระบุบริษัทขนส่งกับเลขพัสดุให้ครบก่อนเรียกขนส่ง
                     </p>
                   </div>
                 </div>
@@ -364,11 +400,11 @@ export default function OrderShippingModal({
 
             {canShip && order.status === "confirmed" && (
               <p className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-xs text-amber-900">
-                เตรียมสินค้าให้พร้อม แล้วกด “เตรียมสินค้าเรียบร้อย” ในแดชบอร์ดผู้ขายก่อนจึงจะกรอกข้อมูลจัดส่งได้
+                เตรียมสินค้าให้พร้อม ระบุบริษัทขนส่งและเลขพัสดุ แล้วกด “เรียกขนส่ง”
               </p>
             )}
 
-            {canShip && order.status === "pickup_in_progress" && (
+            {canShip && canEditShipping && (
               <div className="grid gap-3 sm:grid-cols-2 items-start">
                 <div className="space-y-1">
                   <label
@@ -681,16 +717,26 @@ export default function OrderShippingModal({
                   </button>
                 )}
 
-                {canShip && ["ready_to_ship", "pickup_in_progress"].includes(order.status) && (
+                {canShip && order.status === "pickup_in_progress" && (
+                  <Button
+                    variant="secondary"
+                    disabled={blocked || updating || rejecting || !shippingDetailsChanged || !company.trim() || !isValidTrackingNumber(trackingNumber)}
+                    onClick={handleSaveShippingDetails}
+                  >
+                    บันทึกการแก้ไข
+                  </Button>
+                )}
+
+                {canShip && canEditShipping && (
                   <Button
                     variant="primary"
                     icon="local_shipping"
                     loading={updating}
-                    disabled={blocked || rejecting || (order.status === "pickup_in_progress" && (!company.trim() || !isValidTrackingNumber(trackingNumber)))}
+                    disabled={blocked || rejecting || !company.trim() || !isValidTrackingNumber(trackingNumber)}
                     onClick={handleShippingStep}
                     className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
                   >
-                    {order.status === "ready_to_ship" ? "เรียกขนส่ง" : "ส่งมอบให้ขนส่งแล้ว"}
+                    {order.status === "pickup_in_progress" ? "ส่งมอบให้ขนส่งแล้ว" : "เรียกขนส่ง"}
                   </Button>
                 )}
 

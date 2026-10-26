@@ -1,5 +1,5 @@
 module.exports = function utilities(ctx) {
-  const { step, request, token, state, label } = ctx;
+  const { step, request, token, state } = ctx;
   const photos = ["front", "back", "seam", "label"].map((view) => ({
     url: "/demo/denim-" + view + ".svg",
     type: "image",
@@ -98,12 +98,12 @@ module.exports = function utilities(ctx) {
       );
     // Carrier handoff follows preparation and a separate pickup request.
     if (["in_transit", "completed"].includes(stage))
-      for (const status of ["confirmed", "ready_to_ship", "pickup_in_progress"])
+      for (const status of ["confirmed", "pickup_in_progress"])
         await step("full-" + key + "-" + status, () =>
           request(
             "/api/orders/" + order.id + "/status",
             token(seller),
-            { status },
+            { status, ...(status === "pickup_in_progress" ? { company: "Demo Express", trackingNumber: "DEMO12345678" } : {}) },
             "PATCH",
           ),
         );
@@ -116,8 +116,6 @@ module.exports = function utilities(ctx) {
           {
             status: "in_transit",
             version: current.version,
-            company: "Demo Express",
-            trackingNumber: "DEMO-" + label + "-" + key,
           },
           "PATCH",
         );

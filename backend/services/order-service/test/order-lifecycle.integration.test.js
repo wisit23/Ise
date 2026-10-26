@@ -99,26 +99,23 @@ test("order lifecycle: seller steps, simulated delivery, buyer receipt", async (
   assert.equal((await patch(order.id, buyer, { status: "completed" })).status, 409);
   assert.equal((await patch(order.id, seller, { status: "completed" })).status, 403);
 
-  for (const status of ["confirmed", "ready_to_ship"]) {
+  for (const status of ["confirmed"]) {
     const res = await patch(order.id, seller, { status });
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.equal(res.body.status, status);
   }
   assert.equal((await patch(order.id, seller, { status: "in_transit", company: "K", trackingNumber: "TH12345678" })).status, 409);
   assert.equal((await patch(order.id, buyer, { status: "pickup_in_progress" })).status, 403);
-  const pickup = await patch(order.id, seller, { status: "pickup_in_progress" });
+  assert.equal((await patch(order.id, seller, { status: "ready_to_ship" })).status, 400);
+  assert.equal((await patch(order.id, seller, { status: "pickup_in_progress" })).status, 400);
+  const pickup = await patch(order.id, seller, { status: "pickup_in_progress", company: "Kerry", trackingNumber: "TH123456789TH" });
   assert.equal(pickup.status, 200, JSON.stringify(pickup.body));
   assert.equal(pickup.body.status, "pickup_in_progress");
   assert.equal(pickup.body.shipping.status, "pickup_in_progress");
   assert.equal(pickup.body.shippedAt, null);
   await lifecycle.deliverInTransitOrders(new Date(Date.now() + 60_000), scope);
   assert.equal((await prisma.order.findUnique({ where: { id: order.id } })).status, "pickup_in_progress");
-  assert.equal((await patch(order.id, seller, { status: "in_transit" })).status, 400);
-  const shipped = await patch(order.id, seller, {
-    status: "in_transit",
-    company: "Kerry",
-    trackingNumber: "TH123456789TH",
-  });
+  const shipped = await patch(order.id, seller, { status: "in_transit" });
   assert.equal(shipped.status, 200, JSON.stringify(shipped.body));
   assert.equal(shipped.body.status, "in_transit");
   assert.equal(shipped.body.shipping.status, "in_transit");

@@ -59,6 +59,7 @@ router.post("/:id/confirm", requireAuth, orderController.confirmOrder);
 router.patch("/:id/reject", requireAuth, orderController.rejectOrder);
 router.post("/:id/reject", requireAuth, orderController.rejectOrder);
 router.patch("/:id/status", requireAuth, orderController.updateStatus);
+router.patch("/:id/shipping-details", requireAuth, orderController.updateShippingDetails);
 router.patch(
   "/:id/shipping-address",
   requireAuth,

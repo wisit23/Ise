@@ -117,7 +117,8 @@ describe("SellerOrderTracker", () => {
 
     expect(screen.queryByText("ยืนยันรับออเดอร์")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "จัดส่งสินค้า" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /เตรียมสินค้าเรียบร้อย/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "เรียกขนส่ง" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /เตรียมสินค้าเรียบร้อย/ })).not.toBeInTheDocument();
 
     rerender(<SellerOrderTracker orders={[{ ...paidOrder[0], status: "ready_to_ship" }]} />);
     expect(screen.getByRole("button", { name: "เรียกขนส่ง" })).toBeInTheDocument();
@@ -126,8 +127,8 @@ describe("SellerOrderTracker", () => {
     expect(screen.queryByRole("button", { name: "เรียกขนส่ง" })).not.toBeInTheDocument();
   });
 
-  it("marks a confirmed order as packed through the lifecycle status", async () => {
-    apiFetch.mockResolvedValue({ id: "o2", status: "ready_to_ship" });
+  it("opens shipping details from confirmed without making a status-only request", async () => {
+    apiFetch.mockResolvedValue({ id: "o2", sellerId: "seller", status: "confirmed" });
     const onOrderUpdated = jest.fn();
     render(
       <SellerOrderTracker
@@ -135,14 +136,11 @@ describe("SellerOrderTracker", () => {
         onOrderUpdated={onOrderUpdated}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /เตรียมสินค้าเรียบร้อย/ }));
-    await waitFor(() =>
-      expect(apiFetch).toHaveBeenCalledWith(
-        "/api/orders/o2/status",
-        expect.objectContaining({ method: "PATCH", body: { status: "ready_to_ship" } }),
-      ),
-    );
-    expect(onOrderUpdated).toHaveBeenCalledWith({ id: "o2", status: "ready_to_ship" });
+    fireEvent.click(screen.getByRole("button", { name: "เรียกขนส่ง" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByLabelText("บริษัทขนส่ง")).toBeInTheDocument();
+    expect(apiFetch.mock.calls.some(([, options]) => options?.method === "PATCH")).toBe(false);
+    expect(onOrderUpdated).not.toHaveBeenCalled();
   });
 
   it("nothing offers completion to the seller", () => {

@@ -59,10 +59,14 @@ function buildCatalogWhere(filters, { PrismaClient } = {}) {
   for (const field of FILTER_FIELDS) {
     if (!filters[field]) continue;
     if (field === "category") {
-      clauses.push(PrismaClient.sql`AND EXISTS (
+      // Old imports can predate category memberships. Only fall back when no
+      // membership ever existed, so removed links cannot reappear in filters.
+      clauses.push(PrismaClient.sql`AND (EXISTS (
         SELECT 1 FROM product_categories pc JOIN categories c ON c.id = pc.category_id
         WHERE pc.product_id = products.id AND pc.deleted_at IS NULL AND c.name = ${filters.category}
-      )`);
+      ) OR (products.category = ${filters.category} AND NOT EXISTS (
+        SELECT 1 FROM product_categories pc WHERE pc.product_id = products.id
+      )))`);
     } else {
       clauses.push(
         PrismaClient.sql`AND ${PrismaClient.raw(field)} = ${filters[field]}`,

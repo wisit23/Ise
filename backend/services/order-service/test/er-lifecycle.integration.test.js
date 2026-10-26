@@ -160,7 +160,7 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
       .addressId,
     "address2",
   );
-  // Shipping waits for the seller: paid -> confirmed -> ready_to_ship.
+  // Pickup follows preparation in confirmed and saves the carrier details.
   let order = await prisma.order.findUnique({ where: { id: first.id } });
   await assert.rejects(
     shippingService.advanceShipping({
@@ -173,11 +173,11 @@ test("ER checkout API: multiple sellers, exact totals, immutable paidAt, address
     }),
     (err) => err.status === 409,
   );
-  for (const status of ["confirmed", "ready_to_ship", "pickup_in_progress"]) {
+  for (const status of ["confirmed", "pickup_in_progress"]) {
     res = await request(app)
       .patch(`/${first.id}/status`)
       .set("Authorization", `Bearer ${token("seller1", "BUYER")}`)
-      .send({ status });
+      .send({ status, ...(status === "pickup_in_progress" ? { company: "Carrier", trackingNumber: "TRACK0001" } : {}) });
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.equal(res.body.status, status);
   }
