@@ -356,15 +356,21 @@ def manifests(config, images, state, *, apps_enabled):
 
 
 class Deployment:
-    def __init__(self, root, state, migrate):
+    def __init__(self, root, state, migrate, *, resume=False):
         self.root, self.state, self.migrate = root, state, migrate
         self.journal_path = state / "journal.json"
         self.journal = json.loads(self.journal_path.read_text()) if self.journal_path.exists() else {}
-        need(self.journal.get("status") in (None, "ready"),
+        need(self.journal.get("status") in (None, "ready") or
+             (resume and self.journal.get("status") == "incomplete" and
+              self.journal.get("fresh_version") == 1),
              "Previous run is incomplete. Read its run.log and recovery guide; automatic re-import is blocked.")
         self.first = not self.journal
-        self.run_dir = state / (time.strftime("run-%Y%m%dT%H%M%SZ", time.gmtime()) + f"-{os.getpid()}")
-        self.run_dir.mkdir(mode=0o700)
+        if resume:
+            self.run_dir = Path(self.journal.get("run", "")).resolve()
+            need(self.run_dir.parent == state.resolve() and self.run_dir.is_dir(), "Invalid fresh run directory.")
+        else:
+            self.run_dir = state / (time.strftime("run-%Y%m%dT%H%M%SZ", time.gmtime()) + f"-{os.getpid()}")
+            self.run_dir.mkdir(mode=0o700)
         self.compose = ["docker", "compose", "--env-file", str(root / ".env"), "-f", str(root / "docker-compose.yml")]
         if (root / "docker-compose.override.yml").exists():
             self.compose += ["-f", str(root / "docker-compose.override.yml")]
@@ -517,9 +523,7 @@ class Deployment:
         self.phase("build-and-import")
         tag = self.run_dir.name.lower()
         self.images = {name: f"docker.io/reloop-production/{name}:{tag}" for name in APPS}
-        override = self.run_dir / "build-images.json"
-        write_json(override, {"services": {name: {"image": image} for name, image in self.images.items()}})
-        run(self.compose + ["-f", str(override), "build", *APPS])
+        self.build_apps()
         for name in DATABASES:
             if self.first:
                 source = self.containers[name]["image"]
@@ -528,9 +532,57 @@ class Deployment:
                 self.images[name] = target
             else:
                 self.images[name] = self.journal["images"][name]
-        archive = self.run_dir / "images.tar"
-        run(["docker", "save", "-o", str(archive), *[self.images[name] for name in APPS + (DATABASES if self.first else ())]])
-        run(["k3s", "ctr", "-n", "k8s.io", "images", "import", str(archive)])
+        self.import_images(APPS + (DATABASES if self.first else ()))
+
+    def build_apps(self):
+        # The named context contains only Prisma engine binaries, never application credentials.
+        cache = self.state / "build-cache" / "prisma"
+        override = self.run_dir / "build-images.json"
+        for name in APPS:
+            service = {"image": self.images[name]}
+            if name in APPS[:5] and cache.is_dir():
+                build = self.config["services"][name]["build"]
+                dockerfile = Path(build.get("context", self.root)) / build["dockerfile"]
+                text = dockerfile.read_text()
+                if "RUN npm install" in text:
+                    text = text.replace("RUN npm install", "COPY --from=prisma-cache / /root/.cache/prisma/\nRUN npm install", 1)
+                    target = self.run_dir / (name + ".Dockerfile")
+                    target.write_text(text)
+                    service["build"] = {"dockerfile": str(target), "additional_contexts": {"prisma-cache": str(cache)}}
+            write_json(override, {"services": {name: service}})
+            print(f"BUILD_SERVICE {name}", flush=True)
+            run(self.compose + ["-f", str(override), "build", name])
+            if name == "auth-service" and not cache.exists():
+                cache.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                temporary = cache.with_name("prisma-pending")
+                if temporary.exists():
+                    shutil.rmtree(temporary)
+                cid = run(["docker", "create", self.images[name]], capture=True).strip()
+                try:
+                    run(["docker", "cp", cid + ":/root/.cache/prisma", str(temporary)])
+                    temporary.rename(cache)
+                finally:
+                    run(["docker", "rm", cid])
+
+    def import_images(self, names):
+        # Avoid a second multi-GB images.tar on small VMs. Never print image contents.
+        for name in names:
+            print(f"IMPORT_SERVICE {name}", flush=True)
+            producer = subprocess.Popen(["docker", "image", "save", self.images[name]], stdout=subprocess.PIPE, stderr=LOG)
+            consumer = None
+            try:
+                consumer = subprocess.Popen(["k3s", "ctr", "-n", "k8s.io", "images", "import", "-"],
+                                            stdin=producer.stdout, stdout=LOG, stderr=LOG)
+                producer.stdout.close()
+                code = consumer.wait()
+                if code:
+                    producer.kill()
+                need(producer.wait() == 0 and code == 0, f"{name}: streaming image import failed.")
+            finally:
+                for process in (consumer, producer):
+                    if process is not None and process.poll() is None:
+                        process.kill()
+                        process.wait()
 
     def mark_pending(self):
         self.journal.update(status="incomplete", root=str(self.root), run=str(self.run_dir),
@@ -698,11 +750,19 @@ class Deployment:
 
 def main():
     global LOG
-    need(len(sys.argv) in (3, 4) and (len(sys.argv) == 3 or sys.argv[3] == "--migrate"),
-         "Usage: bash deploy/production-cloud/deploy-k8s.sh [--migrate]")
+    arguments = sys.argv[3:]
+    fresh = arguments in (["--fresh", "--confirm-delete-test-data"], ["--resume-fresh"])
+    need(len(sys.argv) >= 3 and (fresh or arguments in ([], ["--migrate"])),
+         "Usage: deploy-k8s.sh [--migrate | --fresh --confirm-delete-test-data | --resume-fresh]")
     root, state = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
     need(not state.is_relative_to(root), "State/backups must be outside the checkout.")
-    deployment = Deployment(root, state, len(sys.argv) == 4)
+    if fresh:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("k8s_fresh", Path(__file__).with_name("k8s-fresh.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.execute(sys.modules[__name__], root, state, resume=arguments == ["--resume-fresh"])
+    deployment = Deployment(root, state, arguments == ["--migrate"])
     with (deployment.run_dir / "run.log").open("ab", buffering=0) as log:
         LOG = log
         try:

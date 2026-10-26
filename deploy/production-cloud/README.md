@@ -1,14 +1,19 @@
 # Production Kubernetes on the existing Cloud VM
 
-Entry point: **`bash deploy/production-cloud/deploy-k8s.sh [--migrate]`**, from the repository root.
+Entry point: **`bash deploy/production-cloud/deploy-k8s.sh`**, from the repository root.
+The `.sh` entry point calls the Python helpers beside it; transfer the entire
+`deploy/production-cloud/` directory with the application checkout, not just the shell file.
 This is separate from the Compose-only `deploy.sh`. It installs a single-node K3s
 server if missing, builds the current checkout's production images with Docker
 Compose, imports them into K3s containerd, and deploys using `k3s kubectl` with the
 explicit **local** `/etc/rancher/k3s/k3s.yaml`. It never uses your current kubectl
-context and never pulls Git or installs Docker/Python automatically.
+context and does not install Docker/Python automatically. Normal and fresh deploys
+first update a clean `main` from `origin/main` using fetch and fast-forward only.
+`--resume-fresh` keeps the original checkout unchanged.
 
 This implementation is for **the existing re-loop VM**, not managed Kubernetes,
-a second server, multi-node Kubernetes, HA or a new empty installation. A single
+a second server, multi-node Kubernetes or HA. The default preserves/imports existing
+data; the explicit fresh TEST mode below also supports an empty installation. A single
 VM and its local disks remain single points of failure. Copy backups off the VM
 before a real cutover; local backup files do not protect against VM/disk loss.
 
@@ -34,6 +39,9 @@ Before build/cutover, the resolved configuration is now checked for:
 - Frontend `NEXT_PUBLIC_API_URL` build argument must match runtime configuration.
   Public settings are embedded during build: changing `.env` requires rebuilding.
 
+The current code has secret length/distinctness checks commented out by prior request;
+the secret-policy bullets above describe those checks when enabled. URL, mail,
+database consistency and frontend build configuration checks remain active.
 Validation errors name the setting, not its secret value. No credentials are
 created/rotated automatically. For an existing database with a weak password,
 rotate the database role password and update the matching URLs/configuration in a
@@ -43,9 +51,20 @@ existing login sessions. Offline tests do not validate actual SMTP/TLS access.
 
 ## Before running on re-loop
 
-1. Commit/review the scripts and transfer that reviewed revision to the server.
-   Reconcile existing local code changes; do not reset them. This script deploys
-   the current checkout and does **not** fetch/update it.
+1. Commit/push the deploy entry point and helpers to `origin/main`, then transfer
+   that revision to the server once. The running script must already contain the
+   auto-update feature; older copies do not gain it until updated. Subsequent runs
+   fetch and fast-forward `main` automatically. Review the remote revision before
+   invoking a deployment. Git authentication must work for the root account used
+   by `sudo`; noninteractive HTTPS prompts are disabled. `.env` stays machine-local.
+   Tracked edits, staged changes and non-ignored untracked files block deployment.
+   Local commits ahead of or diverging from `origin/main`, detached HEAD and other
+   branches also block; the script never stashes, resets or removes local work.
+   Fetch/merge failure stops before build or workload changes. Both deployment locks
+   cover updating and building. After pulling a new commit, the wrapper re-executes
+   its updated version with those same locks and without fetching a second time.
+   Existing incomplete journals block automatic source updates so recovery inputs
+   remain available. `--resume-fresh` never pulls and checks its saved input fingerprint.
 2. Review pending Prisma/schema changes before choosing `--migrate`. Arrange a
    maintenance window and stop any external writers/administration jobs too.
 3. Take an independently verified off-VM backup of databases and uploaded files.
@@ -88,6 +107,86 @@ bash deploy/production-cloud/deploy-k8s.sh --migrate
 ```
 
 No changes to a live server are made merely by adding these files to Git.
+
+## Command choices and fresh TEST installation
+
+```bash
+# Normal update: preserve the existing Kubernetes data.
+sudo bash deploy/production-cloud/deploy-k8s.sh
+# Reviewed schema changes, with the existing backup/migration procedure.
+sudo bash deploy/production-cloud/deploy-k8s.sh --migrate
+# FIRST TEST install only: permanently remove recorded Compose test data, without backup.
+sudo bash deploy/production-cloud/deploy-k8s.sh --fresh --confirm-delete-test-data
+# Continue this script's incomplete fresh run after inspecting/fixing its failure.
+sudo bash deploy/production-cloud/deploy-k8s.sh --resume-fresh
+```
+
+Fresh mode (`k8s-fresh.py`) is separate from the default data-preserving workflow.
+Both fresh flags are required. It refuses any existing Kubernetes deployment journal,
+application namespace or target data directory. It cannot reset an already deployed
+Kubernetes database. On the already deployed re-loop VM, use the normal command.
+
+Fresh mode validates the current checkout and root `.env`, checks local single-node
+K3s, records a private reset plan, then stops application writers before databases.
+It deletes only recorded Compose project containers and their unshared named volumes,
+including the project's optional pgAdmin/mongo-init containers when present.
+Bind-mounted application data layouts, unexpected containers and shared volumes block
+the reset. A complete Compose stack or no project containers is supported; partial
+stacks require review. `reloop-tunnel`, unrelated containers, code and `.env` are
+preserved. No global image/volume/builder prune or runtime-directory wipe is performed.
+Only unused, recorded application images' project/service tags can be removed.
+Leftover volumes not mounted by recorded containers are not deleted.
+
+Existing Compose database images are retained and tagged before reset. An empty
+install pulls database images from the resolved Compose configuration. At least
+20 GiB must remain after scoped cleanup and 2 GiB after import; insufficient capacity
+stops the script instead of broadening cleanup. Fresh mode requires Git for an input
+fingerprint, plus the existing Linux/root/systemd, Docker, Python and networking
+prerequisites. Engine-cache builds require Docker Compose/BuildKit support for named
+`additional_contexts`.
+
+Application builds run sequentially. Prisma engine cache is copied from the built
+Auth image to private state and supplied as a named context for subsequent backend
+builds. Temporary Dockerfiles stay outside the checkout; repository Dockerfiles and
+schema binary targets are unchanged. Images stream directly from Docker into K3s,
+without an additional multi-GB `images.tar`. Normal deployments use the same build
+and import helpers. Network access is still needed for uncached dependencies and
+engine versions. The first Auth build can still take several minutes.
+
+Fresh mode creates empty storage, initializes SQL databases and MongoDB `rs0` at
+`mongo:27017`, runs guarded SQL migrations and Mongo schema push without
+`--accept-data-loss`, then starts and checks apps. It does not seed users/products
+or configure DNS, TLS, mail or reverse proxies. Check public HTTPS, WebSockets and
+application flows separately after internal checks pass.
+
+The versioned journal records the next unfinished stage, original target identities,
+image tags, namespace UID, source/config fingerprint and completed jobs.
+`--resume-fresh` accepts only this script's incomplete versioned fresh journal with
+unchanged source/config and the same namespace. Completed destructive stages are
+skipped. Partial reset/build/import and database initialization can continue without
+erasing initialized Kubernetes storage. Failed migration Jobs are retained and block
+automatic retries; inspect logs and reconcile migration history before deliberate
+manual recovery. Interruption between namespace creation and recording its UID also
+requires manual review. Historical one-off scripts and ordinary interrupted imports
+or updates are not resumable by this flag. Never delete the journal/namespace to
+bypass a recovery guard.
+
+Run the selected command inside `tmux` to survive Web SSH disconnects:
+
+```bash
+sudo -i
+cd /root/Ise
+tmux new -s reloop-deploy
+bash deploy/production-cloud/deploy-k8s.sh
+# After reconnecting Web SSH: sudo tmux attach -t reloop-deploy
+```
+
+Offline checks (no Docker or cluster mutations):
+
+```bash
+python -B -m unittest discover -s deploy/production-cloud -p 'test_k8s*.py'
+bash -n deploy/production-cloud/deploy-k8s.sh
+```
 
 ## First run: cold-copy import, not a database version upgrade
 
@@ -181,7 +280,7 @@ storage migration. No horizontal scaling of the writers is performed.
 
 ```bash
 cd /root/Ise
-# Update/review source separately, then:
+# Review what is on origin/main; this command fetches and fast-forwards automatically:
 bash deploy/production-cloud/deploy-k8s.sh
 # Only for reviewed database/schema changes:
 bash deploy/production-cloud/deploy-k8s.sh --migrate
@@ -198,7 +297,7 @@ be inferred by SQL migration checks; review Mongo changes explicitly.
 
 Image tags are unique per run; imagePullPolicy is Never because this is one local
 K3s containerd node. No registry or public push is required. No unattended database
-or application rollback occurs. The script does not use `git reset`, `docker compose
+or application rollback occurs. The default/update modes do not use `git reset`, `docker compose
 down`, `down -v`, volume deletion, database seeds or destructive Prisma flags.
 
 ## Diagnostics and recovery — read before the maintenance window
@@ -207,11 +306,11 @@ Private state: **`/var/lib/reloop-deploy-k8s/`**, outside the checkout/build con
 The wrapper locks both this deployment and the existing Compose deployment state
 (`DEPLOY_STATE_DIR`, or the checkout's `.deploy-state`) to prevent concurrent runs.
 `journal.json` records ready/incomplete state, current image references, schema
-fingerprint and current/previous successful run directories. Each run retains:
+fingerprint and current/previous successful run directories. Default migration/import runs retain:
 
 - `run.log`, resolved `compose.json`, `.env` backup and generated manifests;
 - source container IDs/images/restart policies on first import;
-- uniquely tagged application/database images in `images.tar` as applicable;
+- unique application/database image tags in Docker/K3s (images are streamed, not archived);
 - first-import logical PostgreSQL/Mongo backups;
 - cold `.tar` snapshots for every data/file directory and `SHA256SUMS`.
 
