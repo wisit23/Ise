@@ -82,6 +82,9 @@ export default function MessageList({
   onPromptClick,
   activeRoomId,
   prompts,
+  // ISO time the other participants have read up to (see useReadUpTo);
+  // own messages sent at or before it show the "read" double tick.
+  readUpTo,
 }) {
   const animatedIdsRef = useRef(new Set());
   const initialIdsRef = useRef(null);
@@ -113,7 +116,10 @@ export default function MessageList({
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center py-12 px-4 text-center">
+      <div
+        data-chat-messages
+        className="flex flex-1 flex-col items-center justify-center py-12 px-4 text-center"
+      >
         <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 shadow-xs mb-3 animate-fade-in">
           <span className="material-symbols-outlined text-[32px]">
             chat_bubble
@@ -150,7 +156,9 @@ export default function MessageList({
   }
 
   return (
-    <ul className="flex flex-col py-3 px-1">
+    // data-chat-messages lets MessageComposer find the chat panel it shares
+    // with this list and accept file drops anywhere inside it.
+    <ul data-chat-messages className="flex flex-col py-3 px-1">
       {messages.map((m, index) => {
         const showDate =
           index === 0 ||
@@ -238,6 +246,36 @@ export default function MessageList({
           shouldAnimate = true;
         }
 
+        // Photos sit in a thin frame of the bubble colour: the bubble keeps
+        // only a hairline of padding and the image rounds just inside it.
+        const isImage = m.type === "IMAGE";
+        const isRead =
+          !isOptimistic &&
+          Boolean(readUpTo) &&
+          new Date(readUpTo) >= new Date(m.createdAt);
+        const tickLabel = isOptimistic ? "กำลังส่ง..." : isRead ? "อ่านแล้ว" : "ส่งแล้ว";
+        const timeMeta = (
+          <>
+            <span>
+              {new Date(m.createdAt).toLocaleTimeString("th-TH", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+
+            {own && (
+              <span
+                className="material-symbols-outlined text-[13px] leading-none"
+                title={tickLabel}
+                aria-label={tickLabel}
+                role="img"
+              >
+                {isOptimistic ? "schedule" : isRead ? "done_all" : "check"}
+              </span>
+            )}
+          </>
+        );
+
         return (
           <Fragment key={m.clientId || m.id}>
             {showDate && <DateDivider value={m.createdAt} />}
@@ -266,7 +304,9 @@ export default function MessageList({
               <div
                 data-testid="message-bubble"
                 data-animate={shouldAnimate ? "pop" : "none"}
-                className={`relative max-w-[78%] sm:max-w-[70%] px-4 py-2.5 text-sm transition-all duration-150 ${
+                className={`relative max-w-[78%] sm:max-w-[70%] text-sm transition-all duration-150 ${
+                  isImage ? "p-1" : "px-4 py-2.5"
+                } ${
                   shouldAnimate ? "animate-message-pop" : ""
                 } ${
                   own
@@ -280,42 +320,37 @@ export default function MessageList({
                         : "rounded-2xl rounded-l-md")
                 }`}
               >
-                {!own && resolveSenderName?.(m)?.startsWith('เจ้าหน้าที่') && <p className="mb-1 text-xs font-medium text-slate-500">{resolveSenderName(m)}</p>}
+                {!own && resolveSenderName?.(m)?.startsWith('เจ้าหน้าที่') && <p className={`mb-1 text-xs font-medium text-slate-500 ${isImage ? "px-2 pt-1" : ""}`}>{resolveSenderName(m)}</p>}
                 {(m.type === "IMAGE" || m.type === "FILE") && (
-                  <div className={m.body ? "mb-2" : ""}>
+                  <div className={!isImage && m.body ? "mb-2" : ""}>
                     <MessageAttachment message={m} own={own} />
                   </div>
                 )}
 
-                {m.body && (
-                  <p className="whitespace-pre-line leading-relaxed selection:bg-emerald-200 selection:text-emerald-950">
-                    {m.body}
-                  </p>
-                )}
+                {/* A bare photo carries its time as a pill on the image, the
+                    way chat apps do; a captioned one pads the text below. */}
+                {isImage && !m.body ? (
+                  <div className="pointer-events-none absolute bottom-2.5 right-2.5 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
+                    {timeMeta}
+                  </div>
+                ) : (
+                  <div className={isImage ? "px-3 pb-1.5 pt-1.5" : ""}>
+                    {m.body && (
+                      <p className="whitespace-pre-line leading-relaxed selection:bg-emerald-200 selection:text-emerald-950">
+                        {m.body}
+                      </p>
+                    )}
 
-                {/* Timestamp & Status */}
-                <div
-                  className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
-                    own ? "text-emerald-100/90" : "text-gray-400"
-                  }`}
-                >
-                  <span>
-                    {new Date(m.createdAt).toLocaleTimeString("th-TH", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-
-                  {own && (
-                    <span
-                      className="material-symbols-outlined text-[13px] leading-none"
-                      title={isOptimistic ? "กำลังส่ง..." : "ส่งแล้ว"}
-                      aria-hidden="true"
+                    {/* Timestamp & Status */}
+                    <div
+                      className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${
+                        own ? "text-emerald-100/90" : "text-gray-400"
+                      }`}
                     >
-                      {isOptimistic ? "schedule" : "done_all"}
-                    </span>
-                  )}
-                </div>
+                      {timeMeta}
+                    </div>
+                  </div>
+                )}
               </div>
             </li>
           </Fragment>

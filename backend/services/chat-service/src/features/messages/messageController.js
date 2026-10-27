@@ -42,12 +42,16 @@ async function send(req, res, next) {
 
 async function markRead(req, res, next) {
   try {
-    const result = await messageService.markRead(req.params.id, req.userId);
+    const { lastReadAt, conversation } = await messageService.markRead(
+      req.params.id,
+      req.userId,
+    );
     broadcast.broadcastActivity(req.userId, {
       conversationId: req.params.id,
       type: "READ",
     });
-    res.json(result);
+    broadcast.broadcastRead(conversation, req.userId, lastReadAt);
+    res.json({ lastReadAt });
   } catch (err) {
     next(err);
   }

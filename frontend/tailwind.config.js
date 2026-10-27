@@ -159,6 +159,20 @@ module.exports = {
           "85%": { transform: "scale(0.98)" },
           "100%": { opacity: "1", transform: "scale(1)" },
         },
+        // Chat drop zone: the panel eases in, its dot rings breathe outward
+        // one after another, and the upload icon drifts gently.
+        "drop-zone-in": {
+          "0%": { opacity: "0", transform: "scale(0.96)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        "halo-ripple": {
+          "0%,100%": { opacity: "0.35", transform: "scale(0.97)" },
+          "50%": { opacity: "1", transform: "scale(1.03)" },
+        },
+        "float-soft": {
+          "0%,100%": { transform: "translateY(1px)" },
+          "50%": { transform: "translateY(-2px)" },
+        },
       },
       animation: {
         bob: "bob 5s ease-in-out infinite",
@@ -168,6 +182,9 @@ module.exports = {
         "slide-up": "slide-up 0.3s cubic-bezier(.16,1,.3,1) forwards",
         "scale-in": "scale-in 0.25s cubic-bezier(.16,1,.3,1) forwards",
         "message-pop": "message-pop 0.35s cubic-bezier(.16,1,.3,1) both",
+        "drop-zone-in": "drop-zone-in 0.35s cubic-bezier(.22,1,.36,1) both",
+        "halo-ripple": "halo-ripple 2.4s ease-in-out infinite both",
+        "float-soft": "float-soft 3s ease-in-out infinite",
         "slide-in-right": "slide-in-right 0.3s ease-out forwards",
         "slide-out-right": "slide-out-right 0.3s ease-out forwards",
         "slide-in-left": "slide-in-left 0.3s ease-out forwards",

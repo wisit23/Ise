@@ -5,6 +5,7 @@ import config from "../../lib/customerServiceConfig";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import MessageList from "../chat/MessageList";
+import useReadUpTo from "../chat/useReadUpTo";
 import MessageComposer from "../chat/MessageComposer";
 import TypingIndicator from "../chat/TypingIndicator";
 import { useChatSocket, useChatSocketEvent } from "../chat/ChatSocketProvider";
@@ -69,6 +70,7 @@ export default function EmbeddedChat({
   }, [conversationId]);
 
   const { socket, connected } = useChatSocket();
+  const readUpTo = useReadUpTo(conversationId, user?.id);
   useEffect(() => {
     setPeerOnline(null);
     setPeerTyping(false);
@@ -415,6 +417,7 @@ export default function EmbeddedChat({
             <MessageList
               messages={messages}
               currentUserId={user?.id}
+              readUpTo={readUpTo}
               otherName={otherName}
               resolveSenderName={
                 recipientId

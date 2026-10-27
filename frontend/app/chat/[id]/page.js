@@ -9,6 +9,7 @@ import Link from "next/link";
 import NavBar from "../../../components/NavBar";
 import Alert from "../../../components/ui/Alert";
 import MessageList from "../../../components/chat/MessageList";
+import useReadUpTo from "../../../components/chat/useReadUpTo";
 import MessageComposer from "../../../components/chat/MessageComposer";
 import TypingIndicator from "../../../components/chat/TypingIndicator";
 import ChatSidebar from "../../../components/chat/ChatSidebar";
@@ -70,6 +71,11 @@ export default function ChatRoomPage() {
   }, [activeRoomId]);
   const [otherOnline, setOtherOnline] = useState(false);
   const { socket, connected: socketConnected } = useChatSocket();
+  const readUpTo = useReadUpTo(
+    activeRoomId,
+    user?.id,
+    conversation?.id === activeRoomId ? conversation.participants : null,
+  );
 
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -878,6 +884,7 @@ export default function ChatRoomPage() {
                       onPromptClick={canUseBuyerPrompts ? handleSend : undefined}
                       activeRoomId={activeRoomId}
                       prompts={autoPrompts}
+                      readUpTo={readUpTo}
                     />
 
                     <TypingIndicator typing={otherTyping && !locked} name={otherName} />

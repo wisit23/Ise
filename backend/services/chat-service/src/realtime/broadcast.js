@@ -170,6 +170,39 @@ function broadcastStatusChange(conversation, newStatus) {
   });
 }
 
+/** Tells the other participants that `userId` has read the conversation up
+ * to `lastReadAt`, so the sender's ticks turn into "read" without a reload.
+ * Case conversations go only to participants who still have case access,
+ * the same gate as their status changes. */
+function broadcastRead(conversation, userId, lastReadAt) {
+  if (!ioInstance) return;
+  const payload = {
+    conversationId: conversation.id,
+    userId,
+    lastReadAt,
+  };
+  if (["SUPPORT", "DISPUTE", "DISPUTE_BUYER", "DISPUTE_SELLER"].includes(conversation.contextType)) {
+    const others = (conversation.participants || []).filter(
+      (p) => !p.leftAt && p.userId !== userId,
+    );
+    Promise.allSettled(others.map(async (p) => ({
+      participant: p,
+      access: await getCaseAccess(conversation, p.userId, p.role),
+    }))).then((checked) => {
+      const seen = new Set();
+      for (const result of checked) {
+        if (result.status !== "fulfilled") continue;
+        const { participant, access } = result.value;
+        if (!access.allowed || seen.has(participant.userId)) continue;
+        seen.add(participant.userId);
+        ioInstance.to(userRoomName(participant.userId)).emit("conversation:read", payload);
+      }
+    }).catch((err) => console.error(`[chat-service] case read broadcast failed: ${err.message}`));
+    return;
+  }
+  ioInstance.to(roomName(conversation.id)).emit("conversation:read", payload);
+}
+
 function broadcastNotification(notification) {
   if (!ioInstance) return;
   if (!notification.userId || notification.userId === "ALL") {
@@ -212,6 +245,7 @@ module.exports = {
   broadcastActivity,
   broadcastCaseTyping,
   broadcastStatusChange,
+  broadcastRead,
   broadcastNotification,
   broadcastConversationDeleted,
   broadcastRealtime,

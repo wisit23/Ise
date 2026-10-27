@@ -30,6 +30,7 @@ export default function MessageAttachment({ message, own }) {
   const [expanded, setExpanded] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const isImage = type === "IMAGE";
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function MessageAttachment({ message, own }) {
     setBlobUrl(null);
     setFailed(false);
     setExpanded(false);
+    setImageLoaded(false);
     fetchAuthedBlobUrl(attachmentUrl(conversationId, id))
       .then((url) => {
         if (cancelled) {
@@ -85,14 +87,22 @@ export default function MessageAttachment({ message, own }) {
   }
 
   if (isImage) {
+    // MessageList gives an image bubble only a hairline of padding, so each
+    // state below fills that frame (or pads itself).
     if (failed) {
       return (
-        <div>
-          <p className="text-xs italic opacity-70">โหลดรูปภาพไม่สำเร็จ</p>
+        <div className="flex w-60 max-w-full flex-col items-center gap-1 px-4 pb-8 pt-6 text-center">
+          <span
+            aria-hidden="true"
+            className="material-symbols-outlined text-[28px] opacity-70"
+          >
+            broken_image
+          </span>
+          <p className="text-xs opacity-80">โหลดรูปภาพไม่สำเร็จ</p>
           <button
             type="button"
             onClick={() => setRetry((value) => value + 1)}
-            className="min-h-11 text-xs underline"
+            className="min-h-11 text-xs font-medium underline underline-offset-2"
           >
             ลองโหลดรูปอีกครั้ง
           </button>
@@ -102,7 +112,7 @@ export default function MessageAttachment({ message, own }) {
     if (!blobUrl) {
       return (
         <div
-          className="h-40 w-40 animate-pulse rounded-lg bg-black/10"
+          className={`h-48 w-72 max-w-full animate-pulse rounded-[14px] ${own ? "bg-white/15" : "bg-slate-100"}`}
           role="status"
           aria-label="กำลังโหลดรูปภาพ"
         />
@@ -114,65 +124,43 @@ export default function MessageAttachment({ message, own }) {
       // blob: URL, and these bytes only exist client-side after an
       // authenticated fetch (see this file's header comment).
       <>
-        <div className="w-72 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800">
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            aria-label={`ขยายรูป ${payload?.filename || "รูปภาพ"}`}
-            className="group relative flex w-full items-center justify-center bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-600"
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          aria-label={`ขยายรูป ${payload?.filename || "รูปภาพ"}`}
+          className={`group relative block w-72 max-w-full overflow-hidden rounded-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/80 ${
+            own ? "bg-white/10" : "bg-slate-100"
+          }`}
+        >
+          <img
+            src={blobUrl}
+            alt={payload?.filename || "รูปภาพที่แนบมา"}
+            onLoad={() => setImageLoaded(true)}
+            className={`block max-h-80 w-full object-cover transition-[opacity,transform] duration-500 ease-out group-hover:scale-[1.02] ${
+              imageLoaded ? "opacity-100" : "opacity-0"
+            }`}
+          />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 transition-colors duration-200 group-hover:bg-black/10"
+          />
+          <span
+            aria-hidden="true"
+            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
           >
-            <img
-              src={blobUrl}
-              alt={payload?.filename || "รูปภาพที่แนบมา"}
-              className="max-h-56 w-full object-contain"
-            />
-            <span
-              aria-hidden="true"
-              className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg bg-black/45 text-white transition-colors group-hover:bg-black/65"
-            >
-              <span className="material-symbols-outlined text-[18px]">
-                open_in_full
-              </span>
+            <span className="material-symbols-outlined text-[18px]">
+              open_in_full
             </span>
-          </button>
-          <div className="flex items-center gap-2 border-t border-slate-100 py-1 pl-3 pr-1">
-            <div className="min-w-0 flex-1">
-              <p
-                className="truncate text-xs font-medium"
-                title={payload?.filename}
-              >
-                {payload?.filename || "รูปภาพ"}
-              </p>
-              <p className="text-[11px] text-slate-500">
-                {formatSize(payload?.size)}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleDownload}
-              disabled={downloading}
-              aria-label="ดาวน์โหลดรูป"
-              title="ดาวน์โหลดรูป"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-600 disabled:opacity-60"
-            >
-              <span
-                aria-hidden="true"
-                className={`material-symbols-outlined text-[20px] ${downloading ? "animate-spin" : ""}`}
-              >
-                {downloading ? "progress_activity" : "download"}
-              </span>
-            </button>
-          </div>
-        </div>
-        {downloadError && (
-          <p role="alert" className="text-xs">
-            ดาวน์โหลดไม่สำเร็จ กรุณาลองอีกครั้ง
-          </p>
-        )}
+          </span>
+        </button>
         <Modal
           open={expanded}
           onClose={() => setExpanded(false)}
-          title={payload?.filename || "รูปภาพที่แนบมา"}
+          title={
+            [payload?.filename || "รูปภาพที่แนบมา", formatSize(payload?.size)]
+              .filter(Boolean)
+              .join(" · ")
+          }
           size="xl"
           footer={
             <Button

@@ -124,3 +124,48 @@ test("guest sockets receive product invalidations while the chat namespace stays
     assert.deepEqual(await received, []);
   }
 });
+
+test("read receipts reach the conversation room, and only current case participants", async (t) => {
+  const originalFetch = global.fetch;
+  const events = [];
+  t.after(() => {
+    global.fetch = originalFetch;
+    broadcast.setIo(null);
+  });
+  global.fetch = async (url) => ({
+    ok: true,
+    json: async () => ({ allowed: !url.includes("old-agent"), writable: true }),
+  });
+  broadcast.setIo({
+    to: (room) => ({ emit: (event, payload) => events.push({ room, event, payload }) }),
+  });
+  const readAt = new Date("2026-10-28T04:40:00.000Z");
+
+  broadcast.broadcastRead(
+    { id: "dm-1", contextType: "PRODUCT", participants: [] },
+    "seller-1",
+    readAt,
+  );
+  assert.deepEqual(events, [{
+    room: "conversation:dm-1",
+    event: "conversation:read",
+    payload: { conversationId: "dm-1", userId: "seller-1", lastReadAt: readAt },
+  }]);
+
+  events.length = 0;
+  broadcast.broadcastRead({
+    id: "case-room",
+    contextType: "SUPPORT",
+    contextId: "case-1",
+    participants: [
+      { userId: "buyer-1", role: "BUYER" },
+      { userId: "agent-now", role: "AGENT" },
+      { userId: "old-agent", role: "AGENT" },
+      { userId: "gone", role: "AGENT", leftAt: new Date() },
+    ],
+  }, "agent-now", readAt);
+  await new Promise((resolve) => setImmediate(resolve));
+  // The reader is skipped, a former agent is denied, a departed one ignored.
+  assert.deepEqual(events.map((e) => e.room), ["user:buyer-1"]);
+  assert.equal(events[0].event, "conversation:read");
+});

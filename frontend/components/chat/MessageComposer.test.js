@@ -164,6 +164,199 @@ describe("MessageComposer", () => {
     expect(onAttach).not.toHaveBeenCalled();
   });
 
+  describe("pasting an image", () => {
+    function pasteFiles(target, files) {
+      fireEvent.paste(target, {
+        clipboardData: {
+          items: files.map((file) => ({
+            kind: "file",
+            type: file.type,
+            getAsFile: () => file,
+          })),
+        },
+      });
+    }
+
+    it("attaches a pasted screenshot and sends it with the typed caption", async () => {
+      const onAttach = jest.fn().mockResolvedValue(undefined);
+      render(<MessageComposer onSend={jest.fn()} onAttach={onAttach} />);
+      const textarea = screen.getByLabelText("พิมพ์ข้อความ");
+      fireEvent.change(textarea, { target: { value: "รอยตรงนี้" } });
+
+      const file = new File(["bytes"], "image.png", { type: "image/png" });
+      pasteFiles(textarea, [file]);
+
+      expect(screen.getByText("image.png")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
+      await waitFor(() =>
+        expect(onAttach).toHaveBeenCalledWith(file, "รอยตรงนี้"),
+      );
+    });
+
+    it("ignores pasted images when the caller doesn't support attachments", () => {
+      render(<MessageComposer onSend={jest.fn()} />);
+      const textarea = screen.getByLabelText("พิมพ์ข้อความ");
+
+      pasteFiles(textarea, [
+        new File(["bytes"], "image.png", { type: "image/png" }),
+      ]);
+
+      expect(screen.queryByText("image.png")).not.toBeInTheDocument();
+    });
+
+    it("rejects a pasted image that is too large", () => {
+      const onAttach = jest.fn();
+      render(<MessageComposer onSend={jest.fn()} onAttach={onAttach} />);
+      const file = new File(["bytes"], "huge.png", { type: "image/png" });
+      Object.defineProperty(file, "size", { value: 1024 * 1024 * 1024 });
+
+      pasteFiles(screen.getByLabelText("พิมพ์ข้อความ"), [file]);
+
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.queryByText("huge.png")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("dragging a file onto the composer", () => {
+    function dataTransfer(files) {
+      return {
+        types: ["Files"],
+        items: files.map((f) => ({ kind: "file", type: f.type })),
+        files,
+        dropEffect: "none",
+      };
+    }
+    const composerRoot = () =>
+      screen.getByLabelText("พิมพ์ข้อความ").closest("div.relative.bg-white\\/95");
+
+    it("shows the drop panel and attaches the dropped image", async () => {
+      const onAttach = jest.fn().mockResolvedValue(undefined);
+      render(<MessageComposer onSend={jest.fn()} onAttach={onAttach} />);
+      const file = new File(["bytes"], "dropped.png", { type: "image/png" });
+      const root = composerRoot();
+
+      fireEvent.dragEnter(root, { dataTransfer: dataTransfer([file]) });
+      expect(screen.getByRole("status")).toHaveTextContent("วางไฟล์เพื่อแนบ");
+
+      fireEvent.drop(root, { dataTransfer: dataTransfer([file]) });
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(screen.getByText("dropped.png")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
+      await waitFor(() => expect(onAttach).toHaveBeenCalledWith(file, ""));
+    });
+
+    it("hides the panel only once the drag has left the whole composer", () => {
+      render(<MessageComposer onSend={jest.fn()} onAttach={jest.fn()} />);
+      const file = new File(["bytes"], "x.png", { type: "image/png" });
+      const root = composerRoot();
+      const textarea = screen.getByLabelText("พิมพ์ข้อความ");
+
+      fireEvent.dragEnter(root, { dataTransfer: dataTransfer([file]) });
+      fireEvent.dragEnter(textarea, { dataTransfer: dataTransfer([file]) });
+      fireEvent.dragLeave(textarea, { dataTransfer: dataTransfer([file]) });
+      expect(screen.getByRole("status")).toBeInTheDocument();
+
+      fireEvent.dragLeave(root, { dataTransfer: dataTransfer([file]) });
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+
+    it("warns while an unsupported file is dragged over", () => {
+      render(<MessageComposer onSend={jest.fn()} onAttach={jest.fn()} />);
+      const file = new File(["bytes"], "app.exe", {
+        type: "application/x-msdownload",
+      });
+
+      fireEvent.dragEnter(composerRoot(), { dataTransfer: dataTransfer([file]) });
+
+      expect(screen.getByRole("status")).toHaveTextContent("ไฟล์ชนิดนี้แนบไม่ได้");
+    });
+
+    describe("inside a chat panel with a message list", () => {
+      function renderPanel(onAttach) {
+        render(
+          <div>
+            <div data-testid="outside" />
+            <div data-testid="panel">
+              <ul data-chat-messages>
+                <li data-testid="bubble">สวัสดี</li>
+              </ul>
+              <MessageComposer onSend={jest.fn()} onAttach={onAttach} />
+            </div>
+          </div>,
+        );
+      }
+
+      it("accepts a file dropped on the message list, not just the composer", async () => {
+        const onAttach = jest.fn().mockResolvedValue(undefined);
+        renderPanel(onAttach);
+        const file = new File(["bytes"], "panel.png", { type: "image/png" });
+        const bubble = screen.getByTestId("bubble");
+
+        fireEvent.dragEnter(bubble, { dataTransfer: dataTransfer([file]) });
+        expect(screen.getByRole("status")).toHaveTextContent("วางไฟล์เพื่อแนบ");
+
+        fireEvent.drop(bubble, { dataTransfer: dataTransfer([file]) });
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "ส่งข้อความ" }));
+        await waitFor(() => expect(onAttach).toHaveBeenCalledWith(file, ""));
+      });
+
+      it("ignores a photo dragged from inside the page, e.g. a chat image", () => {
+        const onAttach = jest.fn();
+        renderPanel(onAttach);
+        const file = new File(["bytes"], "chat-photo.png", { type: "image/png" });
+        const bubble = screen.getByTestId("bubble");
+
+        fireEvent.dragStart(bubble);
+        fireEvent.dragEnter(bubble, { dataTransfer: dataTransfer([file]) });
+        fireEvent.drop(bubble, { dataTransfer: dataTransfer([file]) });
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+        expect(screen.queryByText("chat-photo.png")).not.toBeInTheDocument();
+
+        // Once that drag ends, files from the desktop work again.
+        fireEvent.dragEnd(bubble);
+        fireEvent.dragEnter(bubble, { dataTransfer: dataTransfer([file]) });
+        expect(screen.getByRole("status")).toBeInTheDocument();
+      });
+
+      it("leaves drags outside the chat panel alone", () => {
+        renderPanel(jest.fn());
+        const file = new File(["bytes"], "x.png", { type: "image/png" });
+
+        fireEvent.dragEnter(screen.getByTestId("outside"), {
+          dataTransfer: dataTransfer([file]),
+        });
+
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      });
+
+      it("hides the overlay once the drag leaves the panel", () => {
+        renderPanel(jest.fn());
+        const file = new File(["bytes"], "x.png", { type: "image/png" });
+        const panel = screen.getByTestId("panel");
+        const bubble = screen.getByTestId("bubble");
+
+        fireEvent.dragEnter(panel, { dataTransfer: dataTransfer([file]) });
+        fireEvent.dragEnter(bubble, { dataTransfer: dataTransfer([file]) });
+        fireEvent.dragLeave(panel, { dataTransfer: dataTransfer([file]) });
+        expect(screen.getByRole("status")).toBeInTheDocument();
+
+        fireEvent.dragLeave(bubble, { dataTransfer: dataTransfer([file]) });
+        expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      });
+    });
+
+    it("ignores drags when the caller doesn't support attachments", () => {
+      render(<MessageComposer onSend={jest.fn()} />);
+      const file = new File(["bytes"], "x.png", { type: "image/png" });
+
+      fireEvent.dragEnter(composerRoot(), { dataTransfer: dataTransfer([file]) });
+
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+  });
+
   describe("message length limit", () => {
     it("caps the textarea at the same limit the server enforces", () => {
       render(<MessageComposer onSend={jest.fn()} />);

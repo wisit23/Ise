@@ -105,6 +105,22 @@ describe("MessageAttachment", () => {
     unmount();
     expect(global.URL.revokeObjectURL).toHaveBeenCalledWith("blob:image-bytes");
   });
+  it("shows a photo as just the photo, keeping name and size for the enlarged view", async () => {
+    fetchAuthedBlobUrl.mockResolvedValue("blob:image-bytes");
+    render(<MessageAttachment message={IMAGE_MESSAGE} own={false} />);
+    await screen.findByAltText("item.png");
+
+    // A photo bubble isn't a file row: no filename line or download button
+    // until the user opens it.
+    expect(screen.queryByText("item.png")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "ดาวน์โหลดรูป" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "ขยายรูป item.png" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("item.png · 2 KB");
+  });
+
   it("opens an accessible enlarged image and downloads the authenticated bytes", async () => {
     fetchAuthedBlobUrl.mockResolvedValue("blob:image-bytes");
     render(<MessageAttachment message={IMAGE_MESSAGE} own={false} />);

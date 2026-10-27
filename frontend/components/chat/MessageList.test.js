@@ -1,6 +1,10 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import MessageList from "./MessageList";
 
+jest.mock("../../lib/api", () => ({
+  fetchAuthedBlobUrl: jest.fn(() => new Promise(() => {})),
+}));
+
 describe("MessageList", () => {
   it.each(["SELLER", "AGENT", undefined])("does not offer buyer questions to %s", (role) => {
     render(<MessageList messages={[]} currentUserId="seller" currentUserRole={role}
@@ -324,5 +328,83 @@ describe("MessageList", () => {
     );
 
     expect(screen.getAllByRole("separator")).toHaveLength(2);
+  });
+
+  describe("photo bubbles", () => {
+    const photo = (body) => ({
+      id: "m-photo",
+      conversationId: "c-1",
+      senderId: "user-1",
+      type: "IMAGE",
+      body,
+      payload: { filename: "shot.png", mimeType: "image/png", size: 1024 },
+      createdAt: "2026-10-28T04:33:00.000Z",
+    });
+
+    it("frames a bare photo thinly and puts the time on top of it", () => {
+      render(<MessageList messages={[photo("")]} currentUserId="user-1" />);
+      const bubble = screen.getByTestId("message-bubble");
+
+      expect(bubble).not.toHaveClass("px-4");
+      expect(bubble).toHaveClass("p-1");
+      expect(bubble.querySelector(".absolute.rounded-full")).toHaveTextContent(
+        /\d{2}:\d{2}/,
+      );
+    });
+
+    it("pads a photo's caption below the image", () => {
+      render(
+        <MessageList messages={[photo("ดูรอยตรงนี้")]} currentUserId="user-1" />,
+      );
+
+      expect(screen.getByText("ดูรอยตรงนี้").parentElement).toHaveClass("px-3");
+      expect(
+        screen.getByTestId("message-bubble").querySelector(".absolute.rounded-full"),
+      ).toBeNull();
+    });
+  });
+
+  describe("read ticks on own messages", () => {
+    const sent = (id, createdAt) => ({
+      id,
+      conversationId: "c-1",
+      senderId: "me",
+      type: "TEXT",
+      body: `msg ${id}`,
+      createdAt,
+    });
+    const messages = [
+      sent("m-1", "2026-10-28T04:30:00.000Z"),
+      sent("m-2", "2026-10-28T04:35:00.000Z"),
+    ];
+
+    it("shows a single tick until the other side has read the message", () => {
+      render(<MessageList messages={messages} currentUserId="me" />);
+      expect(screen.getAllByRole("img", { name: "ส่งแล้ว" })).toHaveLength(2);
+      expect(screen.queryByRole("img", { name: "อ่านแล้ว" })).not.toBeInTheDocument();
+    });
+
+    it("double-ticks only messages sent at or before the other side's read time", () => {
+      render(
+        <MessageList
+          messages={messages}
+          currentUserId="me"
+          readUpTo="2026-10-28T04:32:00.000Z"
+        />,
+      );
+      expect(screen.getByRole("img", { name: "อ่านแล้ว" })).toHaveTextContent("done_all");
+      expect(screen.getByRole("img", { name: "ส่งแล้ว" })).toHaveTextContent("check");
+    });
+
+    it("never marks a message that is still sending as read", () => {
+      render(
+        <MessageList
+          messages={[sent("optimistic-1", "2026-10-28T04:30:00.000Z")]}
+          currentUserId="me"
+          readUpTo="2026-10-28T05:00:00.000Z"
+        />,
+      );
+      expect(screen.getByRole("img", { name: "กำลังส่ง..." })).toHaveTextContent("schedule");
+    });
   });
 });

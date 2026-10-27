@@ -7,6 +7,7 @@ import config from "../../../../lib/customerServiceConfig";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import MessageList from "../../../chat/MessageList";
+import useReadUpTo from "../../../chat/useReadUpTo";
 import MessageComposer from "../../../chat/MessageComposer";
 import TypingIndicator from "../../../chat/TypingIndicator";
 import {
@@ -51,6 +52,7 @@ export default function SupportMainChat({
 
   const { socket, connected } = useChatSocket();
   const conversationId = ticket?.conversationId;
+  const readUpTo = useReadUpTo(conversationId, user?.id);
   const activeRoom = useRef(conversationId);
   activeRoom.current = conversationId;
   const messagesRef = useRef(messages);
@@ -462,6 +464,7 @@ export default function SupportMainChat({
             <MessageList
               messages={messages}
               currentUserId={user?.id}
+              readUpTo={readUpTo}
               otherName="ลูกค้า"
               activeRoomId={conversationId}
             />

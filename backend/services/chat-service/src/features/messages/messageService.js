@@ -112,7 +112,10 @@ async function markRead(conversationId, userId) {
     where: { id: conversationId },
     data: { participants: { set: updatedParticipants } },
   });
-  return { lastReadAt: now };
+  // The conversation rides along so the controller can tell the other
+  // participants (their read ticks) without a second lookup; it is not sent
+  // back to the client.
+  return { lastReadAt: now, conversation };
 }
 
 /**
