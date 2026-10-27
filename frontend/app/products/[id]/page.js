@@ -590,22 +590,24 @@ export default function ProductDetailPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{product.title}</h1>
           {product.referenceCode && <ReferenceCode value={product} className="mt-2 text-xs text-ink-muted" />}
-          <WishlistButton productId={product.id} title={product.title} className="mt-3" />
           {/* Price display with interactive voucher */}
           <div className="mt-3">
             {activeVoucher ? (
               <div>
-                <div className="flex items-baseline gap-2.5">
-                  <span className="text-3xl font-bold text-emerald-600">
-                    ฿{activeVoucher.finalPrice.toLocaleString("th-TH")}
-                  </span>
-                  <span className="text-base text-gray-400 line-through">
-                    ฿{product.price.toLocaleString("th-TH")}
-                  </span>
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                    ลดไป ฿
-                    {activeVoucher.estimatedDiscount.toLocaleString("th-TH")}
-                  </span>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-2.5">
+                    <span className="text-3xl font-bold text-emerald-600">
+                      ฿{activeVoucher.finalPrice.toLocaleString("th-TH")}
+                    </span>
+                    <span className="text-base text-gray-400 line-through">
+                      ฿{product.price.toLocaleString("th-TH")}
+                    </span>
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                      ลดไป ฿
+                      {activeVoucher.estimatedDiscount.toLocaleString("th-TH")}
+                    </span>
+                  </div>
+                  <WishlistButton productId={product.id} title={product.title} className="shrink-0" />
                 </div>
 
                 <div className="mt-2.5 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 shadow-xs">
@@ -655,9 +657,12 @@ export default function ProductDetailPage() {
               </div>
             ) : (
               <div>
-                <p className="text-3xl font-bold text-emerald-600">
-                  ฿{product.price.toLocaleString("th-TH")}
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-3xl font-bold text-emerald-600">
+                    ฿{product.price.toLocaleString("th-TH")}
+                  </p>
+                  <WishlistButton productId={product.id} title={product.title} className="shrink-0" />
+                </div>
 
                 {showCouponUI && applicableVouchers.length > 0 ? (
                   <div className="mt-2.5 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-xs">

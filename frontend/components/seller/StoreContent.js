@@ -172,13 +172,13 @@ export default function StoreContent({ sellerId, embedded = false }) {
               </ShopHeading>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-500">
                 {reviewSummary.total > 0 ? (
-                  <>
+                  <span className="inline-flex items-center gap-2 whitespace-nowrap">
                     <StarDisplay value={reviewSummary.averageRating} />
                     <span className="font-medium text-gray-700">
                       {reviewSummary.averageRating.toFixed(1)}
                     </span>
                     <span>({reviewSummary.total} รีวิว)</span>
-                  </>
+                  </span>
                 ) : (
                   <span>ยังไม่มีรีวิว</span>
                 )}

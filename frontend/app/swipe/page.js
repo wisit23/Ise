@@ -76,24 +76,24 @@ export default function SwipeFeed() {
   }
 
   return (
-    <div className="relative flex h-screen h-dvh w-full overflow-hidden bg-zinc-950 text-white font-sans">
+    <div className="relative flex h-screen h-dvh w-full overflow-hidden bg-white text-slate-900 font-sans">
       {/* Left Rail / Desktop Sidebar */}
       <aside
         aria-label="เมนูหลัก RELOOP"
-        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col justify-between border-r border-zinc-800/80 bg-zinc-950 p-5 lg:p-6 overflow-y-auto overscroll-contain z-30 select-none"
+        className="hidden lg:flex w-64 xl:w-72 shrink-0 flex-col justify-between border-r border-slate-200 bg-white p-5 lg:p-6 overflow-y-auto overscroll-contain z-30 select-none"
       >
         <div className="flex flex-col">
           {/* RELOOP Logo */}
-          <BrandLogo inverse className="mb-6" />
+          <BrandLogo className="mb-6" />
 
           {/* Main Navigation Links */}
           <nav aria-label="แถบนำทางหลัก" className="flex flex-col gap-1.5">
             <Link
               href="/"
-              className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+              className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
             >
               <span
-                className="material-symbols-outlined text-[20px] text-zinc-400"
+                className="material-symbols-outlined text-[20px] text-slate-500"
                 aria-hidden="true"
               >
                 home
@@ -103,10 +103,10 @@ export default function SwipeFeed() {
             <Link
               href="/swipe"
               aria-current="page"
-              className="focus-ring flex items-center gap-3.5 rounded-xl bg-brand-600/15 px-3.5 py-2.5 text-sm font-semibold text-brand-400 transition"
+              className="focus-ring flex items-center gap-3.5 rounded-xl bg-emerald-50 px-3.5 py-2.5 text-sm font-semibold text-emerald-600 transition"
             >
               <span
-                className="material-symbols-outlined text-[20px] text-brand-400"
+                className="material-symbols-outlined text-[20px] text-emerald-600"
                 aria-hidden="true"
               >
                 swipe
@@ -115,10 +115,10 @@ export default function SwipeFeed() {
             </Link>
             <Link
               href="/products"
-              className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+              className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
             >
               <span
-                className="material-symbols-outlined text-[20px] text-zinc-400"
+                className="material-symbols-outlined text-[20px] text-slate-500"
                 aria-hidden="true"
               >
                 storefront
@@ -127,10 +127,10 @@ export default function SwipeFeed() {
             </Link>
             <Link
               href="/auctions"
-              className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+              className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
             >
               <span
-                className="material-symbols-outlined text-[20px] text-zinc-400"
+                className="material-symbols-outlined text-[20px] text-slate-500"
                 aria-hidden="true"
               >
                 gavel
@@ -139,10 +139,10 @@ export default function SwipeFeed() {
             </Link>
             <Link
               href="/articles"
-              className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+              className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
             >
               <span
-                className="material-symbols-outlined text-[20px] text-zinc-400"
+                className="material-symbols-outlined text-[20px] text-slate-500"
                 aria-hidden="true"
               >
                 menu_book
@@ -151,7 +151,7 @@ export default function SwipeFeed() {
             </Link>
           </nav>
 
-          <div className="my-5 border-t border-zinc-800/80" />
+          <div className="my-5 border-t border-slate-200" />
 
           {/* User / Auth section */}
           {user ? (
@@ -161,7 +161,7 @@ export default function SwipeFeed() {
                 <>
                 <Link
                   href="/sell"
-                  className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-brand-400 transition hover:bg-zinc-900"
+                  className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-emerald-600 transition hover:bg-slate-100"
                 >
                   <span
                     className="material-symbols-outlined text-[20px]"
@@ -173,10 +173,10 @@ export default function SwipeFeed() {
                 </Link>
                 <Link
                   href="/chat"
-                  className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+                  className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
                 >
                   <span
-                    className="material-symbols-outlined text-[20px] text-zinc-400"
+                    className="material-symbols-outlined text-[20px] text-slate-500"
                     aria-hidden="true"
                   >
                     chat_bubble
@@ -185,10 +185,10 @@ export default function SwipeFeed() {
                 </Link>
                 <Link
                   href="/orders"
-                  className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-zinc-900 hover:text-white"
+                  className="focus-ring flex items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
                 >
                   <span
-                    className="material-symbols-outlined text-[20px] text-zinc-400"
+                    className="material-symbols-outlined text-[20px] text-slate-500"
                     aria-hidden="true"
                   >
                     receipt_long
@@ -198,18 +198,18 @@ export default function SwipeFeed() {
                 </>
               )}
 
-              <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="flex items-center gap-2.5">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 font-semibold text-xs text-white">
                     {user.firstName?.[0] || user.displayName?.[0] || "U"}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-white">
+                    <p className="truncate text-xs font-semibold text-slate-900">
                       {user.firstName
                         ? `${user.firstName} ${user.lastName || ""}`
                         : user.displayName || "ผู้ใช้งาน"}
                     </p>
-                    <p className="text-[11px] text-zinc-400 capitalize">
+                    <p className="text-[11px] text-slate-500 capitalize">
                       {user.role?.toLowerCase() || "ผู้ซื้อ"}
                     </p>
                   </div>
@@ -217,7 +217,7 @@ export default function SwipeFeed() {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="focus-ring mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-800 py-1 text-xs text-zinc-400 transition hover:bg-zinc-800 hover:text-rose-400"
+                  className="focus-ring mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-1 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-rose-600"
                 >
                   <span
                     className="material-symbols-outlined text-[15px]"
@@ -230,8 +230,8 @@ export default function SwipeFeed() {
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-4">
-              <p className="text-xs leading-relaxed text-zinc-400">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs leading-relaxed text-slate-500">
                 เข้าสู่ระบบเพื่อกดถูกใจและบันทึกคลิปสินค้ามือสอง
               </p>
               <div className="mt-3.5 flex flex-col gap-2">
@@ -245,7 +245,7 @@ export default function SwipeFeed() {
                 </Button>
                 <Link
                   href="/register"
-                  className="focus-ring block rounded-lg py-1 text-center text-xs font-medium text-zinc-400 transition hover:text-white"
+                  className="focus-ring block rounded-lg py-1 text-center text-xs font-medium text-slate-500 transition hover:text-slate-900"
                 >
                   สมัครสมาชิกใหม่
                 </Link>
@@ -255,17 +255,17 @@ export default function SwipeFeed() {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="pt-6 text-[11px] text-zinc-500 space-y-2">
+        <div className="pt-6 text-[11px] text-slate-500 space-y-2">
           <div className="flex flex-wrap gap-x-3 gap-y-1">
-            <Link href="/products" className="hover:text-zinc-300 transition">
+            <Link href="/products" className="hover:text-slate-900 transition">
               สินค้า
             </Link>
-            <Link href="/articles" className="hover:text-zinc-300 transition">
+            <Link href="/articles" className="hover:text-slate-900 transition">
               บทความ
             </Link>
             <Link
               href="/support/tickets"
-              className="hover:text-zinc-300 transition"
+              className="hover:text-slate-900 transition"
             >
               ศูนย์ช่วยเหลือ
             </Link>
@@ -275,12 +275,12 @@ export default function SwipeFeed() {
       </aside>
 
       {/* Center Stage & Main Feed */}
-      <div className="relative flex min-w-0 flex-1 flex-col h-full overflow-hidden bg-black">
+      <div className="relative flex min-w-0 flex-1 flex-col h-full overflow-hidden bg-slate-50">
         {/* Floating Mobile Header (visible on mobile / small screens) */}
-        <header className="lg:hidden absolute top-0 left-0 right-0 z-40 flex items-center justify-between pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 px-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] bg-gradient-to-b from-black/85 via-black/50 to-transparent pointer-events-none">
+        <header className="lg:hidden absolute top-0 left-0 right-0 z-40 flex items-center justify-between pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 px-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] bg-gradient-to-b from-white via-white/90 to-transparent pointer-events-none">
           <Link
             href="/"
-            className="focus-ring pointer-events-auto flex min-h-[44px] items-center gap-2 rounded-full bg-black/50 px-3.5 py-2 text-xs font-semibold text-white/90 backdrop-blur-md border border-white/10 transition hover:bg-black/80 hover:text-white"
+            className="focus-ring pointer-events-auto flex min-h-[44px] items-center gap-2 rounded-full bg-white/95 px-3.5 py-2 text-xs font-semibold text-slate-700 backdrop-blur-md border border-slate-200 transition hover:bg-slate-100 hover:text-slate-900"
           >
             <svg
               className="h-4 w-4 stroke-current stroke-2 fill-none"
@@ -297,7 +297,7 @@ export default function SwipeFeed() {
           </Link>
 
           <div className="pointer-events-auto flex items-center gap-2">
-            <span className="text-sm font-black tracking-wider text-brand-400 drop-shadow">
+            <span className="text-sm font-black tracking-wider text-emerald-600 drop-shadow">
               RELOOP FEED
             </span>
           </div>
@@ -305,7 +305,7 @@ export default function SwipeFeed() {
           <Link
             href="/products"
             aria-label="ค้นหาสินค้า"
-            className="focus-ring pointer-events-auto flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-black/50 text-white/90 backdrop-blur-md border border-white/10 transition hover:bg-black/80 hover:text-white"
+            className="focus-ring pointer-events-auto flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white/95 text-slate-700 backdrop-blur-md border border-slate-200 transition hover:bg-slate-100 hover:text-slate-900"
           >
             <svg
               className="h-5 w-5 stroke-current stroke-2 fill-none"
@@ -330,14 +330,14 @@ export default function SwipeFeed() {
               aria-live="polite"
             >
               <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
-              <p className="animate-pulse text-sm font-medium text-zinc-400">
+              <p className="animate-pulse text-sm font-medium text-slate-500">
                 กำลังโหลดคลิปรีวิวสินค้า...
               </p>
             </div>
           ) : error ? (
             <div
               role="alert"
-              className="max-w-md mx-4 rounded-2xl border border-danger/30 bg-zinc-900/90 p-6 text-center backdrop-blur-md shadow-2xl"
+              className="max-w-md mx-4 rounded-2xl border border-danger/30 bg-white p-6 text-center backdrop-blur-md shadow-2xl"
             >
               <div
                 className="mb-3 flex justify-center text-danger"
@@ -357,7 +357,7 @@ export default function SwipeFeed() {
               <p className="text-base font-semibold text-danger">
                 เกิดข้อผิดพลาดในการโหลดข้อมูล
               </p>
-              <p className="mt-1.5 text-xs text-zinc-400">{error}</p>
+              <p className="mt-1.5 text-xs text-slate-500">{error}</p>
             </div>
           ) : videos.length === 0 ? (
             <EmptyState
@@ -369,7 +369,7 @@ export default function SwipeFeed() {
                   เลือกดูสินค้าทั้งหมด
                 </Button>
               }
-              className="max-w-sm mx-4 border-zinc-800 bg-zinc-900/90 shadow-2xl backdrop-blur-md [&>span]:text-zinc-400 [&>p.text-gray-800]:text-white [&>p.text-ink-muted]:text-zinc-400"
+              className="max-w-sm mx-4 border-slate-200 bg-white shadow-sm"
             />
           ) : (
             <SwipeFeedViewer videos={videos} initialVideoId={initialVideoId} />
