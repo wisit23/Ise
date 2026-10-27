@@ -527,6 +527,8 @@ async function transitionTx(
     where: { id, version },
     data: { currentStatusId: next.id, version: { increment: 1 },
       ...(status === "CLOSED" ? { closedAt: at } : { closedAt: null, archivedAt: null, deletedAt: null, retentionUntil: null }),
+      // Answering a return closes it; the checklist stays for T&S to review.
+      ...(status === "ESCALATED" ? { returnedAt: null } : {}),
     },
   });
   if (!count) return false;
@@ -602,6 +604,118 @@ async function transitionTx(
 }
 function transitionStatus(args, client = prisma) {
   return transaction((db) => transitionTx(db, args), client);
+}
+
+/** T&S sends an escalated ticket back to the CS agent who escalated it. */
+function returnToCs(
+  { id, version, actorId, csAgentId = null, reason, tasks, at = new Date() },
+  client = prisma,
+) {
+  return transaction(async (db) => {
+    const current = await db.supportTicket.findUnique({
+      where: { id },
+      include: { currentStatus: true },
+    });
+    if (
+      !current ||
+      current.version !== version ||
+      current.currentStatus.code !== "ESCALATED"
+    )
+      return false;
+    const next = await db.ticketStatus.findUnique({
+      where: { code: "IN_PROGRESS" },
+    });
+    const { count } = await db.supportTicket.updateMany({
+      where: { id, version },
+      data: {
+        currentStatusId: next.id,
+        version: { increment: 1 },
+        returnReason: reason,
+        returnTasks: tasks,
+        returnedBy: actorId,
+        returnedAt: at,
+      },
+    });
+    if (!count) return false;
+    await db.ticketAssignment.updateMany({
+      where: { ticketId: id, endedAt: null },
+      data: { endedAt: at, endReason: "RETURNED_TO_CS" },
+    });
+    if (csAgentId)
+      await db.ticketAssignment.create({
+        data: {
+          ticketId: id,
+          assigneeId: csAgentId,
+          assignedById: actorId,
+          assignedAt: at,
+        },
+      });
+    await db.ticketStatusHistory.create({
+      data: {
+        ticketId: id,
+        fromStatusId: current.currentStatusId,
+        toStatusId: next.id,
+        changedById: actorId,
+        reason,
+        createdAt: at,
+      },
+    });
+    await audit.record(
+      {
+        ticketId: id,
+        actorId,
+        action: "RETURN_TO_CS",
+        fromValue: actorId,
+        toValue: csAgentId,
+        reason,
+        createdAt: at,
+      },
+      db,
+    );
+    return true;
+  }, client);
+}
+
+/** The CS owner ticks or annotates one returned task. */
+function updateReturnTask({ id, taskId, actorId, done, note }, client = prisma) {
+  return transaction(async (db) => {
+    // Lock the row: two quick ticks must not overwrite each other's list.
+    await db.$queryRaw`SELECT 1 FROM support_tickets WHERE ticket_id = ${id} FOR UPDATE`;
+    const before = await db.supportTicket.findUnique({ where: { id } });
+    if (!before?.returnedAt) return null;
+    const tasks = Array.isArray(before.returnTasks) ? before.returnTasks : [];
+    const index = tasks.findIndex((task) => task.id === taskId);
+    if (index < 0) return null;
+    const current = tasks[index];
+    const nextDone = done ?? current.done;
+    const returnTasks = tasks.map((task, i) =>
+      i === index
+        ? {
+            ...current,
+            done: nextDone,
+            note: note ?? current.note,
+            doneBy: nextDone ? current.doneBy || actorId : null,
+            doneAt: nextDone ? current.doneAt || new Date().toISOString() : null,
+          }
+        : task,
+    );
+    const changed = await db.supportTicket.updateMany({
+      where: { id, returnedAt: before.returnedAt },
+      data: { returnTasks },
+    });
+    if (changed.count !== 1) return null;
+    await audit.record(
+      {
+        ticketId: id,
+        actorId,
+        action: "RETURN_TASK",
+        toValue: taskId,
+        reason: `${returnTasks[index].done ? "done" : "open"}: ${returnTasks[index].text}`,
+      },
+      db,
+    );
+    return { returnTasks, returnedAt: before.returnedAt };
+  }, client);
 }
 
 async function setConversationId(ticketId, conversationId, db = prisma) {
@@ -900,6 +1014,8 @@ module.exports = {
   listQueue,
   assign,
   transitionStatus,
+  returnToCs,
+  updateReturnTask,
   setConversationId,
   recordChatMessage,
   markOverdue,

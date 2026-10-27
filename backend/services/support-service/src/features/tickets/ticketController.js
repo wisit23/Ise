@@ -127,6 +127,40 @@ async function takeover(req, res, next) {
   }
 }
 
+async function requestMoreEvidence(req, res, next) {
+  try {
+    res.json(
+      await ticketService.requestMoreEvidence({
+        ticketId: req.params.id,
+        userId: req.userId,
+        role: effectiveStaffRole(req),
+        version: req.body?.version,
+        reason: req.body?.reason,
+        tasks: req.body?.tasks,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function updateReturnTask(req, res, next) {
+  try {
+    res.json(
+      await ticketService.updateReturnTask({
+        ticketId: req.params.id,
+        taskId: req.params.taskId,
+        userId: req.userId,
+        role: effectiveStaffRole(req),
+        done: req.body?.done,
+        note: req.body?.note,
+      }),
+    );
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function changeStatus(req, res, next) {
   try {
     const ticket = await ticketService.changeStatus({
@@ -190,6 +224,8 @@ module.exports = {
   reply,
   assign,
   takeover,
+  requestMoreEvidence,
+  updateReturnTask,
   changeStatus,
   getConversation,
   joinChat,

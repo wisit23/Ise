@@ -22,6 +22,12 @@ function ticketCapabilities(ticket, userId, role) {
     allowedNextStatuses: mutable && owner
       ? (TRANSITIONS[ticket.status] || []).filter((s) => s !== "ASSIGNED")
       : [],
+    // T&S owner of an escalated ticket can hand it back to CS with a checklist.
+    canRequestEvidence:
+      elevated && owner && ticket.status === "ESCALATED",
+    // A returned ticket sits with the CS owner until they escalate it again.
+    isReturned:
+      !closed && ticket.status !== "ESCALATED" && Boolean(ticket.returnedAt),
     canEscalate:
       mutable && owner && (TRANSITIONS[ticket.status] || []).includes("ESCALATED"),
     readOnlyReason: closed

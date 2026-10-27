@@ -43,3 +43,19 @@ it.each([false, true])(
     expect(onBanUser).toHaveBeenCalledTimes(allowed ? 1 : 0);
   },
 );
+
+it.each([false, true])("offers send-back to CS only to the T&S owner (allowed=%s)", (allowed) => {
+  const onReturnToCs = jest.fn();
+  render(<TicketCasePanel ticket={{ id: "t-1", requesterId: "buyer", assigneeId: "ts-1", status: "ESCALATED", createdAt: "2026-10-14T00:00:00Z", capabilities: { canRequestEvidence: allowed } }} onReturnToCs={onReturnToCs} />);
+  const button = screen.queryByRole("button", { name: "ตีกลับให้ CS" });
+  if (!allowed) return expect(button).not.toBeInTheDocument();
+  fireEvent.click(button);
+  expect(onReturnToCs).toHaveBeenCalledTimes(1);
+});
+
+it("shows what CS did for a previous return once the ticket is escalated again", () => {
+  render(<TicketCasePanel ticket={{ id: "t-1", requesterId: "buyer", assigneeId: "ts-1", status: "ESCALATED", createdAt: "2026-10-14T00:00:00Z", returnedAt: null, returnReason: "ขาดรูปพัสดุ", returnTasks: [{ id: "a", text: "ขอรูปพัสดุ", done: true, note: "ได้แล้ว" }], capabilities: {} }} />);
+  expect(screen.getByText("ผลจาก CS ตามที่ขอไว้")).toBeInTheDocument();
+  expect(screen.getByText(/ขาดรูปพัสดุ/)).toBeInTheDocument();
+  expect(screen.getByText("ได้แล้ว")).toBeInTheDocument();
+});

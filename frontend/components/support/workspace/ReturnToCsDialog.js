@@ -7,8 +7,9 @@ import Alert from "../../ui/Alert";
 
 const MAX_TASKS = 10;
 
-/** T&S returns an escalated dispute to the CS agent with explicit to-dos. */
-export default function ReturnToCsDialog({ open, onClose, onSubmit }) {
+/** T&S returns an escalated dispute or ticket to the CS agent with explicit to-dos. */
+export default function ReturnToCsDialog({ open, onClose, onSubmit, subject = "dispute" }) {
+  const ticket = subject === "ticket";
   const [reason, setReason] = useState("");
   const [tasks, setTasks] = useState([""]);
   const [busy, setBusy] = useState(false);
@@ -54,8 +55,12 @@ export default function ReturnToCsDialog({ open, onClose, onSubmit }) {
       {error && <Alert>{error}</Alert>}
       <div className="space-y-4">
         <Textarea
-          label="เหตุผลที่ยังตัดสินไม่ได้"
-          hint="ข้อความนี้จะแจ้งผู้ซื้อและร้านค้าในแชทด้วย"
+          label={ticket ? "เหตุผลที่ส่งกลับ" : "เหตุผลที่ยังตัดสินไม่ได้"}
+          hint={
+            ticket
+              ? "เห็นเฉพาะเจ้าหน้าที่ ผู้แจ้งจะไม่เห็นข้อความนี้"
+              : "ข้อความนี้จะแจ้งผู้ซื้อและร้านค้าในแชทด้วย"
+          }
           rows={2}
           required
           value={reason}

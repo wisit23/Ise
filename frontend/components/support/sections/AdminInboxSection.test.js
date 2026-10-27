@@ -17,7 +17,7 @@ jest.mock("./admin-inbox/ReportCasePanel", () => ({
 }));
 jest.mock("./case/TicketCasePanel", () => ({
   __esModule: true,
-  default: ({ ticket, onTakeover }) => <div><span>ticket detail: {ticket.requesterName || ticket.requesterId} / {ticket.assigneeName || ticket.assigneeId}</span><button onClick={onTakeover}>takeover test</button></div>,
+  default: ({ ticket, onTakeover, onReturnToCs }) => <div><span>ticket detail: {ticket.requesterName || ticket.requesterId} / {ticket.assigneeName || ticket.assigneeId}</span><button onClick={onTakeover}>takeover test</button><button onClick={onReturnToCs}>return test</button></div>,
 }));
 
 function report(id, reason) {
@@ -232,4 +232,26 @@ it.each(["refresh", "mutation"])("does not let a delayed takeover %s replace the
   await act(async () => (stage === "mutation" ? finishMutation : finishRefresh)(a));
   expect(screen.getByText(/ticket detail: Buyer B/)).toBeInTheDocument();
   expect(screen.queryByText(/ticket detail: Buyer A/)).not.toBeInTheDocument();
+});
+
+it("sends an escalated ticket back to CS with the reason and checklist, then refreshes the queue", async () => {
+  const a = { id: "a", ticketNumber: "TKT-A", subject: "Case A", requesterName: "Buyer A", version: 3 };
+  apiFetch.mockImplementation((url, options) => {
+    if (url.includes("/queue?")) return Promise.resolve({ items: [a], totalPages: 1 });
+    if (url.endsWith("/join")) return Promise.resolve({ conversationId: "room" });
+    if (url.endsWith("/request-evidence")) return Promise.resolve({ ...a, status: "IN_PROGRESS" });
+    return Promise.resolve(a);
+  });
+  render(<AdminInboxSection token="token" />);
+  fireEvent.click(screen.getByRole("tab", { name: "ทิกเก็ต" }));
+  fireEvent.click(await screen.findByText("Case A"));
+  fireEvent.click(await screen.findByRole("button", { name: "return test" }));
+  fireEvent.change(await screen.findByRole("textbox", { name: /เหตุผลที่ส่งกลับ/ }), { target: { value: "ขาดรูปพัสดุ" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "สิ่งที่ต้องทำข้อ 1" }), { target: { value: "ขอรูปพัสดุจากผู้แจ้ง" } });
+  fireEvent.click(screen.getByRole("button", { name: "ส่งกลับให้ CS" }));
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/support/tickets/a/request-evidence", expect.objectContaining({
+    method: "POST",
+    body: { version: 3, reason: "ขาดรูปพัสดุ", tasks: ["ขอรูปพัสดุจากผู้แจ้ง"] },
+  })));
+  await waitFor(() => expect(apiFetch.mock.calls.filter(([url]) => url.includes("/queue?")).length).toBeGreaterThan(1));
 });

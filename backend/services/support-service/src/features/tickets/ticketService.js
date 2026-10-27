@@ -670,6 +670,90 @@ async function getDashboardMetrics({role,days}) {
  const count=Number(days || 8);if(!Number.isInteger(count)||count<1||count>31)throw badRequest("days must be an integer between 1 and 31");
  return ticketModel.dashboardMetrics({includeEscalated:["ADMIN","TRUST_AND_SAFETY"].includes(role),days:count});
 }
+function normalizeReturnTasks(tasks) {
+  if (tasks === undefined || tasks === null) return [];
+  if (!Array.isArray(tasks) || tasks.some((task) => typeof task !== "string"))
+    throw badRequest("tasks must be a list of text items");
+  const items = tasks.map((task) => task.trim()).filter(Boolean);
+  if (items.length > 10) throw badRequest("tasks must not exceed 10 items");
+  if (items.some((task) => task.length > 300))
+    throw badRequest("each task must not exceed 300 characters");
+  return items;
+}
+
+/** T&S hands an escalated ticket back to the CS agent who escalated it. */
+async function requestMoreEvidence({ ticketId, userId, role, version, reason, tasks }) {
+  if (!["ADMIN", "TRUST_AND_SAFETY"].includes(role))
+    throw forbidden("only Trust & Safety can send a ticket back to CS");
+  if (!reason?.trim()) throw badRequest("reason is required");
+  const checklist = normalizeReturnTasks(tasks);
+  if (!Number.isInteger(version)) throw badRequest("version is required");
+  const ticket = await ticketModel.findById(ticketId);
+  if (!ticket) throw notFound("ticket not found");
+  if (ticket.status !== "ESCALATED")
+    throw badRequest("only escalated tickets can be sent back to CS");
+  if (ticket.assigneeId !== userId)
+    throw forbidden("only the assigned safety officer can return this ticket");
+  if (version !== ticket.version)
+    throw conflict("ticket was modified, reload before returning it");
+  const ok = await ticketModel.returnToCs({
+    id: ticketId,
+    version: ticket.version,
+    actorId: userId,
+    csAgentId: ticket.chatResponderId || null,
+    reason: reason.trim(),
+    tasks: checklist.map((text) => ({
+      id: require("node:crypto").randomUUID(),
+      text,
+      done: false,
+      note: "",
+      doneBy: null,
+      doneAt: null,
+    })),
+  });
+  if (!ok) throw conflict("ticket was modified concurrently, reload and retry");
+  const updated = await ticketModel.findById(ticketId);
+  if (updated?.conversationId) {
+    try {
+      await chatClient.sendSystemMessage(
+        updated.conversationId,
+        "Trust and Safety ส่งเคสกลับให้ CS ดำเนินการเพิ่มเติมแล้ว",
+        { event: "ticket.returned", ticketId },
+      );
+    } catch (err) {
+      console.error(`[ticketService] return notice failed: ${err.message}`);
+      return { ...updated, chatNoticeError: err.message };
+    }
+  }
+  return updated;
+}
+
+/** The CS owner records progress on a task T&S asked for. */
+async function updateReturnTask({ ticketId, taskId, userId, role, done, note }) {
+  if (done !== undefined && typeof done !== "boolean")
+    throw badRequest("done must be true or false");
+  if (note !== undefined && typeof note !== "string")
+    throw badRequest("note must be text");
+  if (note && note.trim().length > 500)
+    throw badRequest("note must not exceed 500 characters");
+  const ticket = await ticketModel.findById(ticketId);
+  if (!ticket) throw notFound("ticket not found");
+  if (
+    role !== "CUSTOMER_SERVICE" ||
+    ticket.assigneeId !== userId ||
+    !ticketCapabilities(ticket, userId, role).isReturned
+  )
+    throw forbidden("only the assigned CS agent can update returned tasks");
+  const updated = await ticketModel.updateReturnTask({
+    id: ticketId,
+    taskId,
+    actorId: userId,
+    done,
+    note: note === undefined ? undefined : note.trim(),
+  });
+  if (!updated) throw conflict("task not found or ticket changed; reload and retry");
+  return updated;
+}
 async function takeoverTicket({ticketId,userId,role,version,reason}) {
  if(!["ADMIN","TRUST_AND_SAFETY"].includes(role))throw forbidden("only trust & safety can take over an assigned ticket");
  if(!Number.isInteger(version))throw badRequest("version is required");
@@ -680,7 +764,7 @@ async function takeoverTicket({ticketId,userId,role,version,reason}) {
  return getTicket({ticketId,userId,role});
 }
 module.exports = {
- getDashboardMetrics,takeoverTicket,
+ getDashboardMetrics,takeoverTicket,requestMoreEvidence,updateReturnTask,
   createTicket,
   getTicket,
   listMine,

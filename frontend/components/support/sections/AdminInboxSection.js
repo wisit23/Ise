@@ -8,18 +8,32 @@ import { formatReferenceCode } from "../../../lib/referenceCodes";
 import { useEffect, useRef, useState } from "react";
 
 import Alert from "../../ui/Alert";
+import Input from "../../ui/Input";
+import Button from "../../ui/Button";
 import ConfirmDialog from "../../ui/ConfirmDialog";
 import { useToast } from "../../ui/ToastProvider";
 import AdminInboxTable from "./admin-inbox/AdminInboxTable";
 import CaseDrawer from "./case/CaseDrawer";
 import ReportCasePanel from "./admin-inbox/ReportCasePanel";
 import TicketCasePanel from "./case/TicketCasePanel";
+import ReturnToCsDialog from "../workspace/ReturnToCsDialog";
+import SegmentedControl from "./admin-inbox/SegmentedControl";
 import AdminDisputeAuditPanel from "./admin-inbox/AdminDisputeAuditPanel";
 import CaseDate from "./case/CaseDate";
 import { PAGE_SIZE } from "../../../lib/supportConstants";
 import { apiFetch } from "../../../lib/api";
 
 const DRAWER_EXIT_MS = 280;
+
+/* One labelled fact on a queue card: small caption above, value below. */
+function CaseMeta({ label, children }) {
+  return (
+    <span className="flex min-w-0 flex-col gap-1">
+      <span className="text-[11px] font-medium text-slate-500">{label}</span>
+      <span className="min-w-0 break-words text-xs font-medium text-slate-800">{children}</span>
+    </span>
+  );
+}
 const REPORT_ACTION_LABEL = {
   SUSPEND_USER: "ระงับบัญชีผู้ใช้",
   WARN_USER: "ตักเตือนผู้ใช้",
@@ -79,6 +93,7 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
   const selectionRequest = useRef(0);
   const [closingTicket, setClosingTicket] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [returningTicket, setReturningTicket] = useState(false);
   const [actionError, setActionError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -319,6 +334,17 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
     if(!selectedTicket)return;
     return runAction(()=>apiFetch(`/api/support/tickets/${selectedTicket.id}/takeover`,{method:"POST",token,body:{version:selectedTicket.version,reason:"รับผิดชอบการตรวจสอบเคสที่ส่งต่อ"}}));
   }
+  async function handleReturnToCs({ reason, tasks }) {
+    // The dialog shows failures inline, so only a success refreshes the inbox.
+    const request = selectionRequest.current;
+    await apiFetch(`/api/support/tickets/${selectedTicket.id}/request-evidence`, {
+      method: "POST",
+      token,
+      body: { version: selectedTicket.version, reason, tasks },
+    });
+    toast.success("ส่งกลับให้ CS แล้ว");
+    refreshAfterAction(request);
+  }
   function handleStatusChange(status, reason) {
     if (!selectedTicket) return;
     // Escalation is the one transition that wants a note, so it goes through
@@ -474,57 +500,55 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
   return (
     <>
       <div className="animate-fade-in-up flex min-h-full min-w-0 flex-col">
-        {reportsOnly ? <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="ประเภทรายงาน">
-          {[["ALL", "ทั้งหมด"], ["USER", "รายงานร้านค้า"], ["PRODUCT", "รายงานสินค้า"], ["COMMENT", "รายงานรีวิว"]].map(([value, label]) => (
-            <button key={value} type="button" role="tab" aria-selected={reportType === value} onClick={() => {
-              selectionRequest.current += 1;
-              setSelectedTicket(null);
-              setReportType(value);
-              setPage(1);
-              setItems([]);
-            }} className={`rounded-lg px-4 py-2 text-sm font-semibold ${reportType === value ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700"}`}>{label}</button>
-          ))}
-        </div> : <div
-          className="mb-4 flex flex-wrap gap-2"
-          role="tablist"
-          aria-label="ประเภทเคส Trust and Safety"
-        >
-          {[
-            ["disputes", "ข้อพิพาท"],
-            ["tickets", "ทิกเก็ต"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={source === key}
-              onClick={() => {
-                selectionRequest.current += 1;
-                setSelectedTicket(null);
-                setSelectedDispute(null);
-                setConversationId(null);
-                savedPages.current[source]=page;
-                setSource(key);
-                setPage(savedPages.current[key] || 1);
-                setItems([]);
-              }}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold ${source === key ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>}
-        <div className="mb-4 flex flex-wrap items-center gap-2" aria-label="กรองเจ้าของงาน">
-          <span className="text-sm text-slate-600">งาน:</span>
-          {(reportsOnly ? [["unassigned", "ยังไม่มีคนรับ"], ["mine", "งานของฉัน"], ["history", "ประวัติงานของฉัน"]] : [["mine", "งานของฉัน"], ["unassigned", "ยังไม่มีคนรับ"], ["history", "ประวัติงานของฉัน"]]).map(([value, label]) => (
-            <button key={value} type="button" aria-pressed={workScope === value} onClick={() => { selectionRequest.current += 1; setSelectedTicket(null); setSelectedDispute(null); setConversationId(null); savedPages.current = {all:1,tickets:1,reports:1,disputes:1}; setWorkScope(value); setPage(1); setItems([]); }} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${workScope === value ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700"}`}>{label}</button>
-          ))}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        {reportsOnly ? <SegmentedControl
+          tabs
+          label="ประเภทรายงาน"
+          value={reportType}
+          items={[["ALL", "ทั้งหมด"], ["USER", "รายงานร้านค้า"], ["PRODUCT", "รายงานสินค้า"], ["COMMENT", "รายงานรีวิว"]]}
+          onChange={(value) => {
+            selectionRequest.current += 1;
+            setSelectedTicket(null);
+            setReportType(value);
+            setPage(1);
+            setItems([]);
+          }}
+        /> : <SegmentedControl
+          tabs
+          label="ประเภทเคส Trust and Safety"
+          value={source}
+          items={[["disputes", "ข้อพิพาท"], ["tickets", "ทิกเก็ต"]]}
+          onChange={(key) => {
+            selectionRequest.current += 1;
+            setSelectedTicket(null);
+            setSelectedDispute(null);
+            setConversationId(null);
+            savedPages.current[source]=page;
+            setSource(key);
+            setPage(savedPages.current[key] || 1);
+            setItems([]);
+          }}
+        />}
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto" role="group" aria-label="กรองเจ้าของงาน">
+          <span className="text-xs font-medium text-slate-500">แสดงงาน</span>
+          <SegmentedControl
+            tone="light"
+            label="เจ้าของงาน"
+            className="w-full sm:w-auto"
+            value={workScope}
+            items={reportsOnly ? [["unassigned", "ยังไม่มีคนรับ"], ["mine", "งานของฉัน"], ["history", "ประวัติงานของฉัน"]] : [["mine", "งานของฉัน"], ["unassigned", "ยังไม่มีคนรับ"], ["history", "ประวัติงานของฉัน"]]}
+            onChange={(value) => { selectionRequest.current += 1; setSelectedTicket(null); setSelectedDispute(null); setConversationId(null); savedPages.current = {all:1,tickets:1,reports:1,disputes:1}; setWorkScope(value); setPage(1); setItems([]); }}
+          />
+        </div>
         </div>
         {error && <Alert className="mb-3">{source === "reports" && <span>โหลดรายงานไม่สำเร็จ</span>} {error} <button type="button" className="ml-2 font-semibold underline" onClick={() => setRefreshKey((k) => k + 1)}>ลองใหม่</button></Alert>}
 
         {showHistory && <p className="mb-3 text-sm text-slate-500">แสดงเคสของคุณที่ตัดสิน แก้ไข ปิดงาน หรือจัดการรายงานเสร็จแล้ว คลิกเคสเพื่อดูรายละเอียด</p>}
         {(source === "all" || source === "disputes") ? <div className="space-y-2">
-          <form onSubmit={(e) => { e.preventDefault(); setQ(qInput.trim()); setPage(1); setItems([]); }} className="mb-3 flex gap-2"><input value={qInput} onChange={(e) => setQInput(e.target.value)} aria-label="ค้นหาเคส Trust and Safety" placeholder="ค้นหาเลขออเดอร์หรือเหตุผล" className="min-w-0 flex-1 rounded-lg border bg-white px-3 py-2 text-sm" /><button type="submit" className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white">ค้นหา</button></form>
+          <form onSubmit={(e) => { e.preventDefault(); setQ(qInput.trim()); setPage(1); setItems([]); }} className="mb-3 flex items-center gap-2">
+            <div className="min-w-0 flex-1"><Input icon="search" value={qInput} onChange={(e) => setQInput(e.target.value)} aria-label="ค้นหาเคส Trust and Safety" placeholder="ค้นหาเลขออเดอร์หรือเหตุผล" /></div>
+            <Button type="submit">ค้นหา</Button>
+          </form>
           {loading && <p className="text-sm text-slate-500">กำลังโหลดคิวงาน...</p>}
           {!loading && !error && items.length === 0 && <p className="rounded-xl border bg-white p-6 text-sm text-slate-500">{showHistory ? "ยังไม่มีประวัติงานที่คุณดำเนินการเสร็จแล้ว" : "ไม่มีเคสที่รอทีม Trust & Safety"}</p>}
           <p className="text-xs text-slate-500">วันและเวลาแสดงตามเวลาไทย (UTC+7) · วันที่แจ้งปัญหาแยกจากกำหนด SLA</p>
@@ -533,18 +557,25 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
             const isReport = item._type === "REPORT";
             const amount = item.order?.finalPrice ?? item.order?.price;
             const deadline = item.slaExpiresAt || item.slaDueAt;
-            return <button type="button" key={`${item._type || "TICKET"}-${item.id}`} onClick={() => selectCase(item)} className={`grid w-full grid-cols-1 gap-2 rounded-xl border bg-white p-4 text-left shadow-sm hover:border-indigo-300 ${showHistory ? "xl:grid-cols-6" : "xl:grid-cols-5"}`}>
-              <span className="text-sm font-bold"><span className={`mr-2 rounded px-2 py-1 text-[10px] ${isDispute ? "bg-amber-100 text-amber-800" : isReport ? "bg-red-100 text-red-800" : "bg-indigo-100 text-indigo-800"}`}>{isDispute ? "ข้อพิพาท" : isReport ? "รายงาน" : "คำร้อง"}</span>{isDispute ? formatReferenceCode(item.orderId) : item.ticketNumber}</span>
-              <span className="min-w-0 break-words text-sm">{isDispute ? item.reason : item.subject}</span>
-              {showHistory && <span className="text-xs font-semibold text-emerald-700">{isDispute ? "ตัดสินแล้ว" : isReport ? item.rawReport?.status === "DISMISSED" ? "ยกเลิกรายงานแล้ว" : "จัดการรายงานแล้ว" : item.status === "CLOSED" ? "ปิดแล้ว" : "แก้ไขแล้ว"}</span>}
-              <span className="text-xs">Hold: {isDispute && typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</span>
-              <span className="flex flex-col gap-1 text-xs"><span className="text-slate-500">กำหนด SLA</span><CaseDate value={deadline} /></span>
-              <span className="min-w-0 break-words text-xs">ผู้รับผิดชอบ: {item.assigneeName || formatReferenceCode(item.assigneeId || item.assignedTo) || "ยังไม่มีคนรับ"}</span>
-              <span className="col-span-full grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
-                <span className="flex flex-col gap-1"><span className="text-slate-500">วันที่แจ้งปัญหา</span><CaseDate value={item.createdAt} /></span>
-                {item.escalatedAt && <span className="flex flex-col gap-1"><span className="text-slate-500">วันที่ส่งต่อ T&S</span><CaseDate value={item.escalatedAt} /></span>}
-                {(item.assignedTo || item.assigneeId || showHistory) && <span className="flex flex-col gap-1"><span className="text-slate-500">วันที่รับงาน</span><CaseDate value={item.assignedAt} /></span>}
-                {showHistory && <span className="flex flex-col gap-1"><span className="text-slate-500">{isDispute ? "วันที่ตัดสิน" : "วันที่ปิด / แก้ไข"}</span><CaseDate value={item.decidedAt || item.closedAt || item.resolvedAt} /></span>}
+            const assignee = item.assigneeName || formatReferenceCode(item.assigneeId || item.assignedTo);
+            const doneLabel = isDispute ? "ตัดสินแล้ว" : isReport ? item.rawReport?.status === "DISMISSED" ? "ยกเลิกรายงานแล้ว" : "จัดการรายงานแล้ว" : item.status === "CLOSED" ? "ปิดแล้ว" : "แก้ไขแล้ว";
+            return <button type="button" key={`${item._type || "TICKET"}-${item.id}`} onClick={() => selectCase(item)} className="focus-ring group block w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-300 hover:shadow-md sm:p-5">
+              <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${isDispute ? "bg-amber-100 text-amber-800" : isReport ? "bg-red-100 text-red-800" : "bg-indigo-100 text-indigo-800"}`}>{isDispute ? "ข้อพิพาท" : isReport ? "รายงาน" : "คำร้อง"}</span>
+                  <span className="min-w-0 break-words text-sm font-bold text-slate-900">{isDispute ? formatReferenceCode(item.orderId) : item.ticketNumber}</span>
+                </span>
+                {showHistory && <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><Icon name="check_circle" />{doneLabel}</span>}
+              </span>
+              <span className="mt-2 block break-words text-sm leading-relaxed text-slate-700">{isDispute ? item.reason : item.subject}</span>
+              <span className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-x-4 gap-y-4 border-t border-slate-100 pt-4">
+                {isDispute && <CaseMeta label="ยอดเงินที่ถูกพักไว้ (Hold)">{typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</CaseMeta>}
+                <CaseMeta label="กำหนด SLA"><CaseDate value={deadline} /></CaseMeta>
+                <CaseMeta label="ผู้รับผิดชอบ">{assignee ? assignee : <span className="font-semibold text-amber-700">ยังไม่มีคนรับ</span>}</CaseMeta>
+                <CaseMeta label="วันที่แจ้งปัญหา"><CaseDate value={item.createdAt} /></CaseMeta>
+                {item.escalatedAt && <CaseMeta label="วันที่ส่งต่อ T&S"><CaseDate value={item.escalatedAt} /></CaseMeta>}
+                {(item.assignedTo || item.assigneeId || showHistory) && <CaseMeta label="วันที่รับงาน"><CaseDate value={item.assignedAt} /></CaseMeta>}
+                {showHistory && <CaseMeta label={isDispute ? "วันที่ตัดสิน" : "วันที่ปิด / แก้ไข"}><CaseDate value={item.decidedAt || item.closedAt || item.resolvedAt} /></CaseMeta>}
               </span>
             </button>;
           })}
@@ -608,6 +639,7 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
               actionError={actionError}
               onAssign={handleAssign}
               onTakeover={handleTakeover}
+              onReturnToCs={() => setReturningTicket(true)}
               onStatusChange={handleStatusChange}
               onWarnUser={(userId, rLabel) =>
                 setPendingAction({
@@ -630,6 +662,13 @@ export default function AdminInboxSection({ token, currentUserId, userRole = "AD
             />
           ))}
       </CaseDrawer>
+
+      <ReturnToCsDialog
+        open={returningTicket}
+        onClose={() => setReturningTicket(false)}
+        onSubmit={handleReturnToCs}
+        subject="ticket"
+      />
 
       {selectedDispute && <AdminDisputeAuditPanel key={selectedDispute.id} dispute={selectedDispute} token={token} currentUserId={currentUserId} onClose={() => setSelectedDispute(null)} onUpdated={() => { setPage(1); setItems([]); setRefreshKey((k) => k + 1); }} />}
 

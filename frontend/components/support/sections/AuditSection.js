@@ -8,6 +8,8 @@ import { apiFetch } from "../../../lib/api";
 import Pagination from "../../Pagination";
 import Badge from "../../panel/ui/Badge";
 import DropdownFilter from "../../panel/ui/DropdownFilter";
+import Button from "../../ui/Button";
+import SegmentedControl from "./admin-inbox/SegmentedControl";
 
 const SOURCES = [
   { value: "auth", label: "บัญชี / KYC / Report", owner: "บัญชีผู้ใช้" },
@@ -233,7 +235,7 @@ export default function AuditSection({ token }) {
   return (
     <div className="animate-fade-in-up flex min-h-full flex-col">
       <div className="mb-5">
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">
+        <h1 className="text-lg font-bold tracking-tight text-slate-900">
           Audit Log ของ Trust & Safety
         </h1>
         <p className="mt-1 text-sm font-medium text-slate-500">
@@ -241,67 +243,70 @@ export default function AuditSection({ token }) {
         </p>
       </div>
 
-      <div
-        className="mb-4 flex flex-wrap gap-2"
-        role="tablist"
-        aria-label="ประเภทประวัติ"
-      >
-        {SOURCES.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            role="tab"
-            aria-selected={source === item.value}
-            onClick={() => changeSource(item.value)}
-            className={`rounded-lg border px-3 py-2 text-xs font-bold ${
-              source === item.value
-                ? "border-emerald-500 bg-emerald-50 text-emerald-800"
-                : "border-slate-200 bg-white text-slate-600"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="scrollbar-none mb-4 max-w-full overflow-x-auto">
+        <SegmentedControl
+          tabs
+          className="min-w-max"
+          label="ประเภทประวัติ"
+          value={source}
+          items={SOURCES.map((item) => [item.value, item.label])}
+          onChange={changeSource}
+        />
       </div>
 
       <form
         onSubmit={submitFilters}
-        className="mb-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-3 xl:grid-cols-6"
+        className="mb-5 grid gap-x-3 gap-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-3 xl:grid-cols-[repeat(5,minmax(0,1fr))_auto] xl:items-end"
       >
-        <input
-          aria-label="รหัสผู้ดำเนินการ"
-          value={draft.actorId}
-          onChange={(e) =>
-            setDraft((value) => ({ ...value, actorId: e.target.value }))
-          }
-          placeholder="รหัสผู้ดำเนินการ"
-          className="rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs"
-        />
-        <input
-          aria-label="รหัสรายการที่เกี่ยวข้อง"
-          value={draft.targetId}
-          onChange={(e) =>
-            setDraft((value) => ({ ...value, targetId: e.target.value }))
-          }
-          placeholder="รหัสบัญชี คำสั่งซื้อ หรือคำร้อง"
-          className="rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs"
-        />
-        <input
-          aria-label="รหัสอ้างอิง"
-          value={draft.requestId}
-          disabled={!["auth", "support"].includes(source)}
-          onChange={(e) =>
-            setDraft((value) => ({ ...value, requestId: e.target.value }))
-          }
-          placeholder={
-            source === "auth"
-              ? "รหัสอ้างอิง"
-              : source === "support"
-                ? "รหัสอ้างอิงการดำเนินการ"
-                : "ไม่มีรหัสอ้างอิงสำหรับประเภทนี้"
-          }
-          className="rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs disabled:bg-slate-100 disabled:text-slate-400"
-        />
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">
+            ผู้ดำเนินการ
+          </span>
+          <input
+            aria-label="รหัสผู้ดำเนินการ"
+            value={draft.actorId}
+            onChange={(e) =>
+              setDraft((value) => ({ ...value, actorId: e.target.value }))
+            }
+            placeholder="รหัสผู้ดำเนินการ"
+            className="h-10 w-full min-w-0 rounded-sm border border-slate-300 px-3 font-mono text-xs"
+          />
+        </div>
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">
+            รายการที่เกี่ยวข้อง
+          </span>
+          <input
+            aria-label="รหัสรายการที่เกี่ยวข้อง"
+            value={draft.targetId}
+            onChange={(e) =>
+              setDraft((value) => ({ ...value, targetId: e.target.value }))
+            }
+            placeholder="บัญชี / คำสั่งซื้อ / คำร้อง"
+            className="h-10 w-full min-w-0 rounded-sm border border-slate-300 px-3 font-mono text-xs"
+          />
+        </div>
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">
+            รหัสอ้างอิง
+          </span>
+          <input
+            aria-label="รหัสอ้างอิง"
+            value={draft.requestId}
+            disabled={!["auth", "support"].includes(source)}
+            onChange={(e) =>
+              setDraft((value) => ({ ...value, requestId: e.target.value }))
+            }
+            placeholder={
+              source === "auth"
+                ? "รหัสอ้างอิง"
+                : source === "support"
+                  ? "รหัสอ้างอิงการดำเนินการ"
+                  : "ไม่มีสำหรับประเภทนี้"
+            }
+            className="h-10 w-full min-w-0 rounded-sm border border-slate-300 px-3 font-mono text-xs disabled:bg-slate-100 disabled:text-slate-400"
+          />
+        </div>
         <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600">
           วันที่เริ่มต้น
           <input
@@ -310,7 +315,7 @@ export default function AuditSection({ token }) {
             onChange={(e) =>
               setDraft((value) => ({ ...value, from: e.target.value }))
             }
-            className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-xs"
+            className="h-10 w-full min-w-0 rounded-sm border border-slate-300 px-3 text-xs"
           />
         </label>
         <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-600">
@@ -321,15 +326,16 @@ export default function AuditSection({ token }) {
             onChange={(e) =>
               setDraft((value) => ({ ...value, to: e.target.value }))
             }
-            className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-xs"
+            className="h-10 w-full min-w-0 rounded-sm border border-slate-300 px-3 text-xs"
           />
         </label>
-        <button
+        <Button
           type="submit"
-          className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white"
+          icon="search"
+          className="h-10 w-full md:col-span-3 xl:col-span-1 xl:w-auto"
         >
           ค้นหา
-        </button>
+        </Button>
       </form>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

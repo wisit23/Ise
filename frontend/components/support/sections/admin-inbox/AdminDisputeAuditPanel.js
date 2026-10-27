@@ -8,12 +8,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import config from "../../../../lib/customerServiceConfig";
 import { apiFetch } from "../../../../lib/api";
 import ConfirmDialog from "../../../ui/ConfirmDialog";
+import Button from "../../../ui/Button";
 import ReturnToCsDialog from "../../workspace/ReturnToCsDialog";
 import ReturnTaskResults from "../../workspace/ReturnTaskResults";
 import AuditChatMessages from "./AuditChatMessages";
 import CaseDate from "../case/CaseDate";
 import Modal from "../../../ui/Modal";
 import { PrivateFile } from "../../workspace/EvidenceInspector";
+
+/* One labelled fact in the case summary strip. */
+function Fact({ label, children, className = "" }) {
+  return <div className={`min-w-0 ${className}`}><dt className="mb-1 text-xs font-medium text-slate-500">{label}</dt><dd className="min-w-0 break-words text-sm font-semibold text-slate-900">{children}</dd></div>;
+}
+function Card({ title, icon, children, tone = "default" }) {
+  return <section className={`rounded-2xl border bg-white p-4 shadow-sm sm:p-5 ${tone === "success" ? "border-emerald-200" : "border-slate-200"}`}>
+    <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">{icon && <Icon name={icon} className="text-slate-500" />}{title}</h3>
+    {children}
+  </section>;
+}
 
 const SIDES = [["buyer", "ผู้ซื้อ"], ["seller", "ผู้ขาย"], ["legacy", "บทสนทนาเดิม"]];
 
@@ -171,79 +183,82 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
   return <Modal open onClose={onClose} title="ตรวจสอบข้อพิพาท" description={formatReferenceCode(dispute.orderId)} placement="fullscreen">
       <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
       <div className="mx-auto w-full max-w-7xl space-y-4 p-3 sm:p-5 lg:p-6">
-        <section className="rounded-xl border bg-white p-4">
-          <h3 className="mb-3 font-bold">วันและเวลาของข้อพิพาท (เวลาไทย)</h3>
-          <dl className="grid gap-3 sm:grid-cols-3">
-            <div><dt className="mb-1 text-xs text-slate-500">วันที่แจ้งปัญหา</dt><dd><CaseDate value={detail?.createdAt || dispute.createdAt} /></dd></div>
-            <div><dt className="mb-1 text-xs text-slate-500">วันที่รับงาน</dt><dd><CaseDate value={detail?.assignedAt} /></dd></div>
-            <div><dt className="mb-1 text-xs text-slate-500">วันที่ตัดสิน</dt><dd><CaseDate value={detail?.decidedAt} /></dd></div>
+        {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        {refreshError && <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">โหลดข้อมูลล่าสุดไม่สำเร็จ: {refreshError} ระบบจะลองใหม่อัตโนมัติ</p>}
+        {pendingDelivery && <Button variant="secondary" disabled={busy} onClick={() => action(pendingDelivery.decision, pendingDelivery)}>ลองส่งผลการตัดสินอีกครั้ง</Button>}
+        <section aria-label="สรุปเคส" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <dl className="grid grid-cols-[repeat(auto-fit,minmax(9.5rem,1fr))] gap-x-6 gap-y-4">
+            <Fact label="Escrow Hold"><span className="text-lg font-bold text-amber-700">{typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</span></Fact>
+            <Fact label="SLA"><CaseDate value={detail?.slaExpiresAt} /></Fact>
+            <Fact label="CS ผู้ส่งต่อ"><span className="break-all font-mono text-xs">{formatReferenceCode(detail?.escalatedBy) || "—"}</span></Fact>
+            <Fact label="วันที่แจ้งปัญหา"><CaseDate value={detail?.createdAt || dispute.createdAt} /></Fact>
+            <Fact label="วันที่รับงาน"><CaseDate value={detail?.assignedAt} /></Fact>
+            <Fact label="วันที่ตัดสิน"><CaseDate value={detail?.decidedAt} /></Fact>
           </dl>
+          <p className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500">วันและเวลาแสดงตามเวลาไทย (UTC+7)</p>
         </section>
-        {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        {refreshError && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">โหลดข้อมูลล่าสุดไม่สำเร็จ: {refreshError} ระบบจะลองใหม่อัตโนมัติ</p>}
-        {pendingDelivery && <button type="button" disabled={busy} onClick={() => action(pendingDelivery.decision, pendingDelivery)} className="rounded-lg border px-3 py-2 text-sm font-bold disabled:opacity-50">ลองส่งผลการตัดสินอีกครั้ง</button>}
-        <div className="grid grid-cols-1 gap-3 break-words rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm sm:grid-cols-3">
-          <div><span className="block text-xs text-slate-500">Escrow Hold</span><strong>{typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</strong></div>
-          <div><span className="block text-xs text-slate-500">SLA</span><strong>{detail?.slaExpiresAt ? new Date(detail.slaExpiresAt).toLocaleString("th-TH") : "—"}</strong></div>
-          <div><span className="block text-xs text-slate-500">CS ผู้ส่งต่อ</span><strong className="break-all font-mono">{formatReferenceCode(detail?.escalatedBy) || "—"}</strong></div>
-        </div>
-        <section className="rounded-xl border bg-white p-4"><h3 className="font-bold">CS Memo</h3>
-          {detail?.escalationNote?.startsWith("ตอบกลับคำขอ")
-            // A follow-up memo is a checklist summary, not problem/authority fields.
-            ? <p className="mt-2 whitespace-pre-line text-sm">{detail.escalationNote}</p>
-            : <>
-              <p className="mt-2 text-sm"><b>ปัญหา:</b> {memo["ปัญหา"] || detail?.reason || dispute.reason}</p>
-              <p className="mt-1 text-sm"><b>ขาดอำนาจ:</b> {memo["ขาดอำนาจ"] || detail?.escalationNote || "ยังไม่มีสรุปจาก CS"}</p>
-              <p className="mt-1 text-sm"><b>ข้อเสนอแนะ:</b> {memo["ข้อเสนอแนะ"] || "ยังไม่มีข้อเสนอแนะ"}</p>
-            </>}
-        </section>
-        <section className="rounded-xl border bg-white p-4"><h3 className="mb-3 font-bold">หลักฐานเปรียบเทียบ</h3>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{parties.map(([id, label, border]) => <div key={label} className={`min-h-28 rounded-lg border p-3 ${border}`}><h4 className="mb-2 text-sm font-bold">{label}</h4>
-            {(detail?.evidence || []).filter((ev) => ev.uploaderId === id).map((ev) => <button type="button" key={ev.id} onClick={() => setSelectedEvidence(ev)} className="mb-2 block w-full rounded border p-2 text-left text-xs hover:bg-slate-50">{ev.fileType?.startsWith("video/") ? <><Icon name="play_arrow" /> วิดีโอ</> : <><Icon name="image" /> รูปภาพ</>} · {new Date(ev.createdAt).toLocaleString("th-TH")}</button>)}
-            {!(detail?.evidence || []).some((ev) => ev.uploaderId === id) && <p className="text-xs text-slate-500">ยังไม่มีหลักฐาน</p>}
-          </div>)}</div>
-        </section>
-        <section className="rounded-xl border bg-white p-4"><button type="button" onClick={() => setShowLogs((v) => !v)} className="font-bold text-indigo-700">{showLogs ? "ซ่อน" : "คลี่ดู"} Log แชทย้อนหลัง</button>
-          {showLogs && <div className="mt-3"><div role="tablist" className="flex gap-2">{SIDES.map(([value, label]) => <button type="button" role="tab" aria-selected={side === value} key={value} onClick={() => setSide(value)} className={`rounded-lg px-3 py-1 text-xs ${side === value ? "bg-indigo-600 text-white" : "bg-slate-100"}`}>{label}</button>)}</div>
-            {cursor && <button type="button" onClick={loadOlder} disabled={logsLoading} className="mt-3 text-xs font-bold text-indigo-700">โหลดข้อความเก่ากว่า</button>}
-            {logsLoading && <p className="mt-2 text-xs">กำลังโหลด...</p>}
-            {!logsLoading && messages.length === 0 && <p className="mt-3 text-xs text-slate-500">ไม่มีข้อความในห้องนี้</p>}
-            <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/30">
-              <div className="max-h-[420px] overflow-y-auto"><AuditChatMessages messages={messages} /></div>
-              <p className="border-t border-slate-200 bg-white px-3 py-2 text-center text-[11px] text-slate-400">ดูประวัติแบบอ่านอย่างเดียว</p>
-            </div>
-          </div>}
-        </section>
-        {detail && !detail.returnedAt && detail.returnTasks?.length > 0 && detail.status !== "DECIDED" && (
-          <section className="rounded-xl border border-emerald-200 bg-white p-4">
-            <h3 className="font-bold">ผลจาก CS ตามที่ขอไว้</h3>
-            <p className="mt-1 text-xs text-slate-500">เหตุผลที่ตีกลับ: {detail.returnReason}</p>
-            <ReturnTaskResults tasks={detail.returnTasks} />
-          </section>
-        )}
-        <section className="rounded-xl border bg-white p-4"><h3 className="font-bold">Verdict Console</h3>
-          {detail?.status === "DECIDED" ? <p className="mt-2 text-sm">{detail.decision === "APPROVE_REFUND" ? "คืนเงินผู้ซื้อ" : "ปล่อยเงินให้ผู้ขาย"}: {detail.decisionReason}</p>
-          : !detail ? <p className="mt-2 text-sm text-slate-500">กำลังโหลด…</p>
-          : !["ADMIN", "TRUST_AND_SAFETY"].includes(detail.assignedRole) ? (
-            detail.returnedAt
-              ? <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                  <p className="font-semibold">ส่งกลับให้ CS แล้ว · รอ CS ส่งต่อกลับมา</p>
-                  <ReturnTaskResults tasks={detail.returnTasks} />
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]">
+          <div className="min-w-0 space-y-4">
+            <Card title="CS Memo" icon="description">
+              {detail?.escalationNote?.startsWith("ตอบกลับคำขอ")
+                // A follow-up memo is a checklist summary, not problem/authority fields.
+                ? <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">{detail.escalationNote}</p>
+                : <dl className="space-y-3 text-sm">
+                  {[["ปัญหา", memo["ปัญหา"] || detail?.reason || dispute.reason], ["ขาดอำนาจ", memo["ขาดอำนาจ"] || detail?.escalationNote || "ยังไม่มีสรุปจาก CS"], ["ข้อเสนอแนะ", memo["ข้อเสนอแนะ"] || "ยังไม่มีข้อเสนอแนะ"]].map(([label, value]) => <div key={label} className="grid gap-1 sm:grid-cols-[6.5rem_minmax(0,1fr)] sm:gap-3"><dt className="font-semibold text-slate-500">{label}</dt><dd className="min-w-0 break-words text-slate-800">{value}</dd></div>)}
+                </dl>}
+            </Card>
+            <Card title="หลักฐานเปรียบเทียบ" icon="photo_library">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{parties.map(([id, label, border]) => {
+                const files = (detail?.evidence || []).filter((ev) => ev.uploaderId === id);
+                return <div key={label} className={`rounded-xl border p-3 ${border}`}><h4 className="mb-2 flex items-center justify-between text-sm font-bold">{label}<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{files.length} ไฟล์</span></h4>
+                  {files.map((ev) => <button type="button" key={ev.id} onClick={() => setSelectedEvidence(ev)} className="focus-ring mb-2 flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white p-2.5 text-left text-xs transition hover:border-emerald-300 hover:bg-emerald-50/40">{ev.fileType?.startsWith("video/") ? <><Icon name="play_arrow" /> วิดีโอ</> : <><Icon name="image" /> รูปภาพ</>}<span className="text-slate-500">· {new Date(ev.createdAt).toLocaleString("th-TH")}</span></button>)}
+                  {files.length === 0 && <p className="text-xs text-slate-500">ยังไม่มีหลักฐาน</p>}
+                </div>;
+              })}</div>
+            </Card>
+            {detail && !detail.returnedAt && detail.returnTasks?.length > 0 && detail.status !== "DECIDED" && (
+              <Card title="ผลจาก CS ตามที่ขอไว้" icon="task_alt" tone="success">
+                <p className="text-xs text-slate-500">เหตุผลที่ตีกลับ: {detail.returnReason}</p>
+                <ReturnTaskResults tasks={detail.returnTasks} />
+              </Card>
+            )}
+            <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><button type="button" aria-expanded={showLogs} onClick={() => setShowLogs((v) => !v)} className="focus-ring flex w-full items-center justify-between gap-2 rounded-lg text-sm font-bold text-slate-900"><span className="flex items-center gap-2"><Icon name="forum" className="text-slate-500" />{showLogs ? "ซ่อน" : "คลี่ดู"} Log แชทย้อนหลัง</span><Icon name={showLogs ? "expand_less" : "expand_more"} className="text-slate-500" /></button>
+              {showLogs && <div className="mt-3"><div role="tablist" className="flex flex-wrap gap-2">{SIDES.map(([value, label]) => <button type="button" role="tab" aria-selected={side === value} key={value} onClick={() => setSide(value)} className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${side === value ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}>{label}</button>)}</div>
+                {cursor && <button type="button" onClick={loadOlder} disabled={logsLoading} className="mt-3 text-xs font-bold text-emerald-700">โหลดข้อความเก่ากว่า</button>}
+                {logsLoading && <p className="mt-2 text-xs">กำลังโหลด...</p>}
+                {!logsLoading && messages.length === 0 && <p className="mt-3 text-xs text-slate-500">ไม่มีข้อความในห้องนี้</p>}
+                <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/30">
+                  <div className="max-h-[420px] overflow-y-auto"><AuditChatMessages messages={messages} /></div>
+                  <p className="border-t border-slate-200 bg-white px-3 py-2 text-center text-[11px] text-slate-400">ดูประวัติแบบอ่านอย่างเดียว</p>
                 </div>
-              : <p className="mt-2 text-sm text-amber-700">รอ CS ส่งต่อเคสให้ Trust and Safety</p>)
-          : !detail.assignedTo ? <button type="button" disabled={busy || !detail.capabilities?.canClaim} onClick={claim} className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">รับเคสเพื่อพิจารณา</button>
-          : detail.assignedTo !== currentUserId ? <p className="mt-2 text-sm text-slate-600">เจ้าหน้าที่ Trust and Safety คนอื่นกำลังรับผิดชอบเคสนี้ ({detail.assigneeName || formatReferenceCode(detail.assignedTo)})</p>
-          : <>
-            {detail.capabilities?.canDecide !== false && <>
-              <textarea aria-label="เหตุผลการตัดสิน" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="ระบุเหตุผลการตัดสิน" className="mt-3 w-full rounded-lg border p-3 text-sm" />
-              <div className="mt-2 flex flex-wrap gap-2">{[["APPROVE_REFUND", "คืนเงินผู้ซื้อ"], ["RELEASE_ESCROW", "ปล่อยเงินให้ผู้ขาย"]].map(([value, label]) => <button key={value} type="button" disabled={busy || !reason.trim()} onClick={() => setPendingAction(value)} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">{label}</button>)}</div>
-            </>}
-            {detail.capabilities?.canRequestEvidence !== false && <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3">
-              <p className="text-xs text-slate-600">ข้อมูลยังไม่พอตัดสิน? ส่งกลับให้ CS พร้อมระบุสิ่งที่ต้องทำ</p>
-              <button type="button" disabled={busy} onClick={() => setReturning(true)} className="shrink-0 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-50">ตีกลับให้ CS</button>
+              </div>}
+            </section>
+          </div>
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:sticky lg:top-4"><h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900"><Icon name="gavel" className="text-slate-500" />Verdict Console</h3>
+            {detail?.status === "DECIDED" ? <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900"><p className="font-semibold">{detail.decision === "APPROVE_REFUND" ? "คืนเงินผู้ซื้อ" : "ปล่อยเงินให้ผู้ขาย"}</p><p className="mt-1 whitespace-pre-wrap text-emerald-800">{detail.decisionReason}</p></div>
+            : !detail ? <p className="text-sm text-slate-500">กำลังโหลด…</p>
+            : !["ADMIN", "TRUST_AND_SAFETY"].includes(detail.assignedRole) ? (
+              detail.returnedAt
+                ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <p className="font-semibold">ส่งกลับให้ CS แล้ว · รอ CS ส่งต่อกลับมา</p>
+                    <ReturnTaskResults tasks={detail.returnTasks} />
+                  </div>
+                : <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">รอ CS ส่งต่อเคสให้ Trust and Safety</p>)
+            : !detail.assignedTo ? <div className="space-y-3"><p className="text-sm text-slate-600">รับเคสนี้ก่อน จึงจะตัดสินหรือส่งกลับให้ CS ได้</p><Button className="w-full" icon="assignment_ind" disabled={busy || !detail.capabilities?.canClaim} onClick={claim}>รับเคสเพื่อพิจารณา</Button></div>
+            : detail.assignedTo !== currentUserId ? <p className="rounded-xl bg-slate-100 p-3 text-sm text-slate-700">เจ้าหน้าที่ Trust and Safety คนอื่นกำลังรับผิดชอบเคสนี้ ({detail.assigneeName || formatReferenceCode(detail.assignedTo)})</p>
+            : <div className="space-y-4">
+              {detail.capabilities?.canDecide !== false && <div className="space-y-3">
+                <textarea aria-label="เหตุผลการตัดสิน" value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="ระบุเหตุผลการตัดสิน (จำเป็น)" className="w-full resize-y rounded-xl border border-slate-300 p-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15" />
+                <div className="grid gap-2">{[["APPROVE_REFUND", "คืนเงินผู้ซื้อ", "undo"], ["RELEASE_ESCROW", "ปล่อยเงินให้ผู้ขาย", "storefront"]].map(([value, label, icon]) => <Button key={value} variant="secondary" className="w-full" icon={icon} disabled={busy || !reason.trim()} onClick={() => setPendingAction(value)}>{label}</Button>)}</div>
+                {!reason.trim() && <p className="text-xs text-slate-500">กรอกเหตุผลก่อน ปุ่มตัดสินจึงจะกดได้</p>}
+              </div>}
+              {detail.capabilities?.canRequestEvidence !== false && <div className={`space-y-2 ${detail.capabilities?.canDecide !== false ? "border-t border-slate-100 pt-4" : ""}`}>
+                <p className="text-xs text-slate-600">ข้อมูลยังไม่พอตัดสิน? ส่งกลับให้ CS พร้อมระบุสิ่งที่ต้องทำ</p>
+                <Button variant="secondary" className="w-full border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100" icon="assignment_return" disabled={busy} onClick={() => setReturning(true)}>ตีกลับให้ CS</Button>
+              </div>}
             </div>}
-          </>}
-        </section>
+          </section>
+        </div>
       </div>
       </div>
       <ConfirmDialog open={Boolean(pendingAction)} busy={busy} onCancel={() => setPendingAction(null)} onConfirm={() => action(pendingAction)} title={pendingAction === "APPROVE_REFUND" ? "ยืนยันคืนเงินผู้ซื้อ" : "ยืนยันปล่อยเงินให้ผู้ขาย"} description={reason} confirmLabel="ยืนยันคำสั่ง" tone="danger" />

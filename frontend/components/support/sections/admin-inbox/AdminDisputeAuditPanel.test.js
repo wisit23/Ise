@@ -150,3 +150,35 @@ it("does not append an old buyer transcript page after switching to the seller",
   expect(screen.queryByText("Buyer old")).not.toBeInTheDocument();
   expect(screen.getByText("Seller current")).toBeInTheDocument();
 });
+
+it("keeps every verdict action in the console, gated by ownership and a written reason", async () => {
+  const owned = { ...dispute, version: 4, status: "OPEN", assignedRole: "TRUST_AND_SAFETY", assignedTo: "ts", capabilities: { canDecide: true, canRequestEvidence: true } };
+  apiFetch.mockImplementation(() => Promise.resolve(owned));
+  render(<AdminDisputeAuditPanel dispute={dispute} token="token" currentUserId="ts" />);
+  const refund = await screen.findByRole("button", { name: "คืนเงินผู้ซื้อ" });
+  const release = screen.getByRole("button", { name: "ปล่อยเงินให้ผู้ขาย" });
+  expect(refund).toBeDisabled();
+  expect(release).toBeDisabled();
+  expect(screen.getByRole("button", { name: "ตีกลับให้ CS" })).toBeEnabled();
+  fireEvent.change(screen.getByRole("textbox", { name: "เหตุผลการตัดสิน" }), { target: { value: "หลักฐานชัดเจน" } });
+  expect(refund).toBeEnabled();
+  expect(release).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "ตีกลับให้ CS" }));
+  expect(await screen.findByRole("dialog", { name: "ส่งกลับให้ CS ดำเนินการเพิ่ม" })).toBeInTheDocument();
+});
+
+it("shows the claim button to an unassigned case and nobody else's verdict controls", async () => {
+  apiFetch.mockImplementation(() => Promise.resolve({ ...dispute, version: 2, status: "OPEN", assignedRole: "TRUST_AND_SAFETY", assignedTo: "other-ts", assigneeName: "T&S อีกคน", capabilities: {} }));
+  render(<AdminDisputeAuditPanel dispute={dispute} token="token" currentUserId="ts" />);
+  expect(await screen.findByText(/T&S อีกคน/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "คืนเงินผู้ซื้อ" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "ตีกลับให้ CS" })).not.toBeInTheDocument();
+});
+
+it("shows the recorded verdict instead of controls once decided", async () => {
+  apiFetch.mockImplementation(() => Promise.resolve({ ...dispute, version: 6, status: "DECIDED", decision: "APPROVE_REFUND", decisionReason: "ผู้ซื้อมีหลักฐาน", assignedRole: "TRUST_AND_SAFETY", assignedTo: "ts", capabilities: {} }));
+  render(<AdminDisputeAuditPanel dispute={dispute} token="token" currentUserId="ts" />);
+  expect(await screen.findByText("ผู้ซื้อมีหลักฐาน")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "ตีกลับให้ CS" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "เหตุผลการตัดสิน" })).not.toBeInTheDocument();
+});

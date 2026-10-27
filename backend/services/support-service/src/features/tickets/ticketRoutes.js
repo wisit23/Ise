@@ -32,6 +32,8 @@ router.post("/:id/continue", requireAuth, ticketController.joinChat);
 router.post("/:id/messages", requireAuth, ticketController.reply);
 router.post("/:id/assign", requireAuth, ticketController.assign);
 router.post("/:id/takeover", requireAuth, ticketController.takeover);
+router.post("/:id/request-evidence", requireAuth, ticketController.requestMoreEvidence);
+router.patch("/:id/return-tasks/:taskId", requireAuth, ticketController.updateReturnTask);
 router.post("/:id/moderation", requireAuth, ticketController.moderate);
 router.patch("/:id/status", requireAuth, ticketController.changeStatus);
 
