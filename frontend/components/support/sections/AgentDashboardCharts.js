@@ -73,9 +73,12 @@ export function ChartLegend({
   visible = { tickets: true, disputes: true },
   onToggle,
 }) {
+  const shown = onToggle
+    ? CASE_SERIES
+    : CASE_SERIES.filter((series) => visible[series.key]);
   return (
     <div className="mb-2 flex flex-wrap gap-2" aria-label="เส้นข้อมูล">
-      {CASE_SERIES.map((series) =>
+      {shown.map((series) =>
         onToggle ? (
           <button
             key={series.key}

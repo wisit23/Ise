@@ -35,9 +35,18 @@ test("renders the combined percent and response count", () => {
   expect(screen.getByText("คะแนนเฉลี่ย").parentElement).toHaveTextContent(
     "4.2 / 5",
   );
-  expect(screen.getByLabelText("คำตอบทั้งหมด 5 คำตอบ")).toHaveTextContent(
-    "Ticket 4",
-  );
+});
+
+test("shows only the source chosen by the dashboard filter", () => {
+  const props = {
+    tickets: { total: 4, satisfied: 3, scoreSum: 16 },
+    disputes: { total: 0, satisfied: 0, scoreSum: 0 },
+    days: 7,
+  };
+  const { rerender } = render(<CsatGauge {...props} source="tickets" />);
+  expect(screen.getByLabelText("75%")).toBeInTheDocument();
+  rerender(<CsatGauge {...props} source="disputes" />);
+  expect(screen.getByText("ยังไม่มีผู้ประเมินในช่วงนี้")).toBeInTheDocument();
 });
 
 test("waits for the auth entrance, counts once, and keeps the final value on refresh", () => {

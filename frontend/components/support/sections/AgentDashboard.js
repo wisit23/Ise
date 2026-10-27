@@ -29,6 +29,7 @@ const SOURCES = [
     base: "/api/orders/disputes",
   },
 ];
+const DOMAINS = [{ key: "all", label: "รวม" }, ...SOURCES];
 const CARDS = [
   {
     key: "mine_overdue",
@@ -196,7 +197,15 @@ export default function AgentDashboard({ token, currentUserId }) {
   const [loading, setLoading] = useState(true);
   const [showLoadingHint, setShowLoadingHint] = useState(false);
   const [error, setError] = useState("");
-  const [visible, setVisible] = useState({ tickets: true, disputes: true });
+  const [domain, setDomain] = useState("all");
+  const shownSources =
+    domain === "all"
+      ? SOURCES
+      : SOURCES.filter((source) => source.key === domain);
+  const visible = {
+    tickets: domain !== "disputes",
+    disputes: domain !== "tickets",
+  };
   const query = `${days}:${focus}:${priority}`;
   const data =
     snapshot?.account === currentUserId && snapshot?.token === token
@@ -278,12 +287,9 @@ export default function AgentDashboard({ token, currentUserId }) {
       if (!document.hidden) void refresh();
     };
     refresh();
-    const timer = setInterval(
-      () => {
-        if (!document.hidden) refresh();
-      },
-      config.timing.dashboardRefreshMs,
-    );
+    const timer = setInterval(() => {
+      if (!document.hidden) refresh();
+    }, config.timing.dashboardRefreshMs);
     const onVisible = () => {
       if (!document.hidden) refresh();
     };
@@ -321,6 +327,8 @@ export default function AgentDashboard({ token, currentUserId }) {
     )
       ? null
       : cardCount("tickets", card) + cardCount("disputes", card);
+  const shownCount = (card) =>
+    domain === "all" ? sumCard(card) : cardCount(domain, card);
   function goToTable(domain, selection) {
     navigateWorkspaceSection(domain, currentUserId, "", {
       view: "table",
@@ -342,6 +350,7 @@ export default function AgentDashboard({ token, currentUserId }) {
   }
   function visit(key, selectedPriority = "") {
     const selection = { key, priority: selectedPriority };
+    if (domain !== "all") return goToTable(domain, selection);
     const counts = SOURCES.map((source) => ({
       ...source,
       value:
@@ -447,20 +456,49 @@ export default function AgentDashboard({ token, currentUserId }) {
         </div>
       ) : (
         <>
+          <div className={styles.toolbar}>
+            <div
+              className={`${styles.periodControl} ${styles.typeControl}`}
+              role="group"
+              aria-label="ประเภทเคสที่แสดง"
+              style={{
+                gridTemplateColumns: `repeat(${DOMAINS.length}, minmax(0,1fr))`,
+              }}
+            >
+              <span
+                className={styles.periodIndicator}
+                aria-hidden="true"
+                style={{
+                  width: `calc((100% - 8px) / ${DOMAINS.length})`,
+                  transform: `translateX(${DOMAINS.findIndex((item) => item.key === domain) * 100}%)`,
+                }}
+              />
+              {DOMAINS.map((item) => (
+                <button
+                  type="button"
+                  key={item.key}
+                  aria-pressed={domain === item.key}
+                  onClick={() => setDomain(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className={styles.summaryRow}>
             <div className={styles.metrics}>
               {CARDS.map((card) => (
                 <button
                   type="button"
                   key={card.key}
-                  disabled={sumCard(card) === null}
+                  disabled={shownCount(card) === null}
                   title={
-                    sumCard(card) === null
+                    shownCount(card) === null
                       ? "ยังโหลดข้อความที่รอตอบไม่ได้ ระบบจะลองอัปเดตให้อัตโนมัติ"
                       : undefined
                   }
                   onClick={() => visit(card.key)}
-                  className={`${styles.metric} ${card.key === "mine_reply" ? styles.replyCard : card.key === "mine_overdue" && sumCard(card) > 0 ? styles.attentionCard : ""}`}
+                  className={`${styles.metric} ${card.key === "mine_reply" ? styles.replyCard : card.key === "mine_overdue" && shownCount(card) > 0 ? styles.attentionCard : ""}`}
                 >
                   <div className={styles.metricHeading}>
                     <span>{card.label}</span>
@@ -469,22 +507,28 @@ export default function AgentDashboard({ token, currentUserId }) {
                     </span>
                   </div>
                   <p
-                    className={`${styles.metricValue} ${card.key === "mine_overdue" && sumCard(card) > 0 ? styles.overdue : card.key === "mine_soon" && sumCard(card) > 0 ? styles.soon : ""}`}
+                    className={`${styles.metricValue} ${card.key === "mine_overdue" && shownCount(card) > 0 ? styles.overdue : card.key === "mine_soon" && shownCount(card) > 0 ? styles.soon : ""}`}
                   >
                     <AnimatedNumber
-                      value={sumCard(card)}
+                      value={shownCount(card)}
                       animate={entrance && phase === "idle"}
                     />
                     <span> เคส</span>
                   </p>
                   <div className={styles.metricFooter}>
                     <p className={styles.metricSources}>
-                      <span className={styles.ticketSource}>
-                        Ticket {fmt(cardCount("tickets", card))}
-                      </span>{" "}
-                      <span className={styles.disputeSource}>
-                        Dispute {fmt(cardCount("disputes", card))}
-                      </span>
+                      {shownSources.map((source) => (
+                        <span
+                          key={source.key}
+                          className={
+                            source.key === "tickets"
+                              ? styles.ticketSource
+                              : styles.disputeSource
+                          }
+                        >
+                          {source.label} {fmt(cardCount(source.key, card))}
+                        </span>
+                      ))}
                     </p>
 
                     <span className={styles.cardArrow} aria-hidden="true">
@@ -533,13 +577,7 @@ export default function AgentDashboard({ token, currentUserId }) {
                 </div>
               }
             >
-              <ChartLegend
-                rows={trend}
-                visible={visible}
-                onToggle={(key) =>
-                  setVisible((value) => ({ ...value, [key]: !value[key] }))
-                }
-              />
+              <ChartLegend rows={trend} visible={visible} />
               <ComparisonChart
                 rows={trend}
                 kind="line"
@@ -551,7 +589,7 @@ export default function AgentDashboard({ token, currentUserId }) {
             <Panel title="ความสำคัญของงานฉัน" className={styles.priorityPanel}>
               <PersonalPriorityDonut
                 animate={entrance && phase === "idle"}
-                rows={SOURCES.flatMap(
+                rows={shownSources.flatMap(
                   (source) => data[source.key].personal.priorities,
                 )}
                 onSelect={(code) => visit("mine", code)}
@@ -565,6 +603,7 @@ export default function AgentDashboard({ token, currentUserId }) {
               headerClassName={styles.widgetHeader}
               tickets={data.tickets.csat}
               disputes={data.disputes.csat}
+              source={domain}
               days={displayDays}
             />
           </div>
