@@ -15,6 +15,7 @@ test("GET /health returns 200 ok without needing auth", async () => {
   assert.equal(res.status, 200);
   assert.equal(res.body.status, "ok");
   assert.equal(res.body.service, "gateway");
+  assert.ok(res.headers["access-control-expose-headers"].includes("X-Server-Time"));
 });
 
 test("public review media is not blocked by the auth check", async () => {

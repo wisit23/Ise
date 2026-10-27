@@ -24,6 +24,11 @@ class FreshTests(unittest.TestCase):
         self.instance = fresh.deployment_class(m, resume=False)(self.root, self.state, True)
         self.instance.config = fixture()
         self.instance.images = {name: "image-" + name for name in m.APPS + m.DATABASES}
+        self.instance._build_storage_paths = [self.state]
+        self.instance._build_disk_reserve = m.DISK_RESERVE
+        disk = patch.object(m.shutil, "disk_usage")
+        disk.start().return_value.free = 100 * 1024**3
+        self.addCleanup(disk.stop)
 
     def test_fresh_resources_initialize_sql_and_mongo_without_enabling_apps(self):
         resources = fresh.fresh_resources(m, fixture(), self.instance.images, self.state, False)["items"]
@@ -169,7 +174,8 @@ class FreshTests(unittest.TestCase):
         consumer.wait.return_value = 0
         producer.poll.return_value = 1
         consumer.poll.return_value = 0
-        with patch.object(m.subprocess, "Popen", side_effect=[producer, consumer]) as spawn:
+        with patch.object(self.instance, "check_import_disk_space"), \
+             patch.object(m.subprocess, "Popen", side_effect=[producer, consumer]) as spawn:
             with self.assertRaisesRegex(m.Blocked, "streaming image import failed"):
                 self.instance.import_images(["auth-service"])
         self.assertIs(spawn.call_args_list[1].kwargs["stdin"], producer.stdout)
@@ -179,7 +185,8 @@ class FreshTests(unittest.TestCase):
     def test_import_startup_failure_stops_producer(self):
         producer = MagicMock()
         producer.poll.return_value = None
-        with patch.object(m.subprocess, "Popen", side_effect=[producer, OSError("cannot start consumer")]):
+        with patch.object(self.instance, "check_import_disk_space"), \
+             patch.object(m.subprocess, "Popen", side_effect=[producer, OSError("cannot start consumer")]):
             with self.assertRaises(OSError):
                 self.instance.import_images(["auth-service"])
         producer.kill.assert_called_once()

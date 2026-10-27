@@ -448,6 +448,8 @@ class FlowTests(unittest.TestCase):
         events = []
         def kubectl(*args, **kwargs):
             events.append(args)
+            if args[:2] == ("get", "pods"):
+                return json.dumps({"items": []})
             return "OK" if args[-1] == "SAVE" else ""
         with patch.object(instance, "k", side_effect=kubectl), \
              patch.object(instance, "mongo_shell", side_effect=lambda *a: events.append(("mongo-fsync",))), \

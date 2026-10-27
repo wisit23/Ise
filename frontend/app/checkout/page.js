@@ -14,6 +14,7 @@ import Skeleton from "../../components/ui/Skeleton";
 import AddressManagerModal from "../../components/checkout/AddressManagerModal";
 import VoucherPickerModal from "../../components/checkout/VoucherPickerModal";
 import { apiFetch } from "../../lib/api";
+import { serverNow } from "../../lib/serverClock";
 import { getAccessToken } from "../../lib/auth";
 import { formatCheckoutCountdown, remainingSeconds } from "../../lib/checkout";
 
@@ -30,7 +31,7 @@ export default function CheckoutPage() {
   const [orders, setOrders] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(serverNow);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -116,6 +117,7 @@ export default function CheckoutPage() {
       apiFetch("/api/auth/me/addresses", { token }),
     ])
       .then(([savedOrders, savedAddresses]) => {
+        setNow(serverNow());
         // Already confirmed once: the payment session is still open, so go
         // straight back to its QR page instead of asking to confirm again.
         const openSession = savedOrders.find(
@@ -143,7 +145,7 @@ export default function CheckoutPage() {
   }, [router]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const timer = setInterval(() => setNow(serverNow()), 1000);
     return () => clearInterval(timer);
   }, []);
 

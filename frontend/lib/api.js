@@ -6,6 +6,7 @@ import {
 } from "./auth";
 
 import { rememberReferenceCodes } from "./referenceCodes";
+import { syncServerClock } from "./serverClock";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -141,6 +142,9 @@ async function apiFetchRequest(path, { method = "GET", body, token, signal, head
     }
   }
 
+  if (path === "/api/orders" || path.startsWith("/api/orders/")) {
+    syncServerClock(res.headers?.get("X-Server-Time"));
+  }
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   rejectSuspended(data);
   if (!res.ok) {

@@ -4,9 +4,10 @@ set -Eeuo pipefail
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 case "${1:-}" in
   --help|-h)
-    printf '%s\n' 'Usage: bash deploy/production-cloud/deploy-k8s.sh [--migrate | --fresh --confirm-delete-test-data | --resume-fresh]' \
+    printf '%s\n' 'Usage: bash deploy/production-cloud/deploy-k8s.sh [--keep-service product-service | --migrate | --fresh --confirm-delete-test-data | --resume-fresh]' \
       'First run: installs K3s and cold-copies the existing Compose installation.' \
       '--migrate: run reviewed database migrations during downtime.' \
+      '--keep-service product-service: keep the recorded working Product image on ordinary updates.' \
       '--fresh --confirm-delete-test-data: FIRST TEST install; deletes scoped Compose test data WITHOUT backup.' \
       '--resume-fresh: continue the recorded fresh run; never reset an existing Kubernetes installation.' \
       'Normal/fresh deploys update clean main from origin/main (fast-forward only) before building.' \
@@ -17,8 +18,8 @@ case "${1:-}" in
 esac
 # Reject incomplete/ambiguous destructive flags before creating state or taking locks.
 case "$*" in
-  ''|'--migrate'|'--fresh --confirm-delete-test-data'|'--resume-fresh') ;;
-  *) echo 'Invalid arguments. Use --help. Fresh reset requires --fresh --confirm-delete-test-data.' >&2; exit 1 ;;
+  ''|'--migrate'|'--keep-service product-service'|'--fresh --confirm-delete-test-data'|'--resume-fresh') ;;
+  *) echo 'Invalid arguments. Use --help; keep-service cannot combine with migration/fresh modes. Fresh reset requires both fresh flags.' >&2; exit 1 ;;
 esac
 [[ $(uname -s) == Linux ]] || { echo 'Run on the Linux server, not a workstation.' >&2; exit 1; }
 [[ $EUID == 0 ]] || { echo 'Run as root (sudo -i), from the existing checkout.' >&2; exit 1; }

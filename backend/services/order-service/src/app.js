@@ -8,6 +8,14 @@ const internalMetricsRoutes = require("./features/metrics/internalMetricsRoutes"
 const disputeChatAccessRoutes = require("./features/disputes/disputeChatAccessRoutes");
 
 const app = express();
+app.use((req, res, next) => {
+  const json = res.json;
+  res.json = function (body) {
+    res.set("X-Server-Time", new Date().toISOString());
+    return json.call(this, body);
+  };
+  next();
+});
 app.use(require("@reloop/shared").referenceAliases(require("./models/prismaClient"), "order"));
 app.use(express.json());
 require("@reloop/shared").installReferenceDisplay(app, require("./models/prismaClient"), "order");

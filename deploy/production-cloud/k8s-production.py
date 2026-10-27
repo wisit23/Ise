@@ -5,6 +5,7 @@ Uses cold copies, not a cross-major database upgrade. Initial import is fail-clo
 an interrupted import requires reviewed recovery, never an automatic second restore.
 """
 import codecs
+from contextlib import contextmanager
 import hashlib
 import ipaddress
 import json
@@ -13,10 +14,12 @@ import re
 import posixpath
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
 from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, build_opener
@@ -39,6 +42,10 @@ FILES = {
 NAMESPACE = "reloop-production"
 OWNER = "reloop-deploy-k8s"
 LOG = None
+GIB = 1024**3
+DISK_RESERVE = 10 * GIB
+BUILD_HEADROOM = 4 * GIB
+DISK_POLL_SECONDS = 1
 
 
 class Blocked(RuntimeError):
@@ -50,8 +57,68 @@ def need(condition, message):
         raise Blocked(message)
 
 
-def run(args, *, data=None, capture=False, output=None):
+def validate_node_pressure(node):
+    pressure = [item["type"] for item in node.get("status", {}).get("conditions", [])
+                if item["type"] in ("DiskPressure", "MemoryPressure", "PIDPressure") and item["status"] != "False"]
+    need(not pressure, "Node resource pressure must be resolved before building: " + ", ".join(pressure))
+
+
+def stop_processes(processes, *, force=False):
+    """Only signal process groups explicitly created for guarded operations."""
+    for process in processes:
+        if process is None or process.poll() is not None:
+            continue
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGKILL if force else signal.SIGINT)
+            elif force:
+                process.kill()
+            else:
+                process.terminate()
+        except ProcessLookupError:
+            pass
+
+
+@contextmanager
+def monitor_disk_space(check, processes):
+    if check is None:
+        yield
+        return
+    stopped, failures = threading.Event(), []
+    def watch():
+        while not stopped.wait(DISK_POLL_SECONDS):
+            try:
+                check()
+            except Exception as error:
+                failures.append(error)
+                stop_processes(processes)
+                for process in processes:
+                    if process is not None:
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            stop_processes(processes, force=True)
+                return
+    worker = threading.Thread(target=watch, daemon=True)
+    worker.start()
+    try:
+        yield
+    except BaseException:
+        if failures:
+            raise failures[0]
+        raise
+    finally:
+        stopped.set()
+        worker.join()
+    if failures:
+        raise failures[0]
+
+
+def run(args, *, data=None, capture=False, output=None, check_space=None):
     """Never echo argv: a command may contain configuration/secrets."""
+    if check_space is not None:
+        need(not capture and output is None, "Disk monitoring requires streaming command output.")
+        check_space()
     if output is not None:
         with open(output, "wb") as stream:
             result = subprocess.run(args, input=data, stdout=stream, stderr=LOG)
@@ -65,18 +132,22 @@ def run(args, *, data=None, capture=False, output=None):
                 input_stream.write(data)
                 input_stream.seek(0)
             with subprocess.Popen(args, stdin=input_stream if data is not None else None,
-                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  start_new_session=check_space is not None and os.name == "posix") as process:
                 decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
                 try:
-                    while chunk := process.stdout.read1(65536):
-                        if LOG is not None:
-                            LOG.write(chunk)
-                            LOG.flush()
-                        print(decoder.decode(chunk), end="", flush=True)
-                    print(decoder.decode(b"", final=True), end="", flush=True)
-                    result = subprocess.CompletedProcess(args, process.wait())
+                    with monitor_disk_space(check_space, [process]):
+                        while chunk := process.stdout.read1(65536):
+                            if LOG is not None:
+                                LOG.write(chunk)
+                                LOG.flush()
+                            print(decoder.decode(chunk), end="", flush=True)
+                        print(decoder.decode(b"", final=True), end="", flush=True)
+                        result = subprocess.CompletedProcess(args, process.wait())
                 except BaseException:
                     # Match subprocess.run cleanup on interruption or output failure.
+                    if check_space is not None:
+                        stop_processes([process], force=True)
                     process.kill()
                     process.wait()
                     raise
@@ -316,7 +387,8 @@ def manifests(config, images, state, *, apps_enabled):
                               stringData=environment(name, service)))
         port = PORTS.get(name, {"postgres": 5432, "mongo": 27017, "redis": 6379}.get(name))
         items.append(resource("Service", name, {"selector": {"app": name},
-                     "ports": [{"name": "tcp", "port": port, "targetPort": port}]}))
+                     "ports": [{"name": "tcp", "port": port, "targetPort": port}],
+                     **({"publishNotReadyAddresses": True} if name == "mongo" else {})}))
         container = {"name": name, "image": images[name], "imagePullPolicy": "Never",
                      "envFrom": [{"secretRef": {"name": name + "-env"}}],
                      "ports": [{"containerPort": port}], "volumeMounts": []}
@@ -360,7 +432,7 @@ def manifests(config, images, state, *, apps_enabled):
 
 
 class Deployment:
-    def __init__(self, root, state, migrate, *, resume=False):
+    def __init__(self, root, state, migrate, *, resume=False, keep_services=()):
         self.root, self.state, self.migrate = root, state, migrate
         self.journal_path = state / "journal.json"
         self.journal = json.loads(self.journal_path.read_text()) if self.journal_path.exists() else {}
@@ -369,6 +441,10 @@ class Deployment:
               self.journal.get("fresh_version") == 1),
              "Previous run is incomplete. Read its run.log and recovery guide; automatic re-import is blocked.")
         self.first = not self.journal
+        self.keep_services = tuple(keep_services)
+        need(not self.keep_services or (self.keep_services == ("product-service",) and
+             not self.first and not migrate and not resume and self.journal.get("status") == "ready"),
+             "Keeping Product requires an ordinary update with a ready journal; no migration/fresh mode.")
         if resume:
             self.run_dir = Path(self.journal.get("run", "")).resolve()
             need(self.run_dir.parent == state.resolve() and self.run_dir.is_dir(), "Invalid fresh run directory.")
@@ -514,6 +590,7 @@ class Deployment:
         run(self.kubectl + ["wait", "node", "--all", "--for=condition=Ready", "--timeout=180s"])
         nodes = json.loads(run(self.kubectl + ["get", "nodes", "-o", "json"], capture=True))["items"]
         need(len(nodes) == 1, "This script supports exactly one local K3s node.")
+        validate_node_pressure(nodes[0])
         self.config["node"] = nodes[0]["metadata"]["labels"]["kubernetes.io/hostname"]
         namespaces = json.loads(run(self.kubectl + ["get", "namespaces", "-o", "json"], capture=True))["items"]
         existing = next((item for item in namespaces if item["metadata"]["name"] == NAMESPACE), None)
@@ -527,6 +604,13 @@ class Deployment:
         self.phase("build-and-import")
         tag = self.run_dir.name.lower()
         self.images = {name: f"docker.io/reloop-production/{name}:{tag}" for name in APPS}
+        for name in self.keep_services:
+            live = json.loads(self.k("get", "deployment", name, "-o", "json", capture=True))
+            previous = self.journal["images"][name]
+            need(live["status"].get("readyReplicas") == 1 and
+                 live["spec"]["template"]["spec"]["containers"][0]["image"] == previous,
+                 "Kept Product must be ready and match the recorded image.")
+            self.images[name] = previous
         self.build_apps()
         for name in DATABASES:
             if self.first:
@@ -536,13 +620,153 @@ class Deployment:
                 self.images[name] = target
             else:
                 self.images[name] = self.journal["images"][name]
-        self.import_images(APPS + (DATABASES if self.first else ()))
+        self.import_images(tuple(name for name in APPS if name not in self.keep_services) +
+                           (DATABASES if self.first else ()))
+        self.verify_built_images()
+
+    def configure_build_storage(self):
+        if hasattr(self, "_build_storage_paths"):
+            return
+        info = json.loads(run(["docker", "info", "--format", "{{json .}}"], capture=True))
+        need(isinstance(info.get("DockerRootDir"), str) and info["DockerRootDir"], "Cannot locate local Docker storage.")
+        docker_root = Path(info["DockerRootDir"])
+        need(docker_root.is_absolute() and docker_root.is_dir(), "Cannot locate local Docker storage.")
+        paths = [self.state, docker_root, Path("/var/lib/rancher/k3s/agent/containerd")]
+        # Docker's containerd image store can live outside DockerRootDir.
+        if Path("/var/lib/containerd").is_dir():
+            paths.append(Path("/var/lib/containerd"))
+        if os.environ.get("RELOOP_DOCKER_IMAGE_STORE"):
+            extra = Path(os.environ["RELOOP_DOCKER_IMAGE_STORE"])
+            need(extra.is_absolute() and extra.is_dir(), "RELOOP_DOCKER_IMAGE_STORE must be an existing absolute directory.")
+            paths.append(extra)
+        self._build_storage_paths = []
+        devices = set()
+        for path in paths:
+            while not path.exists():
+                path = path.parent
+            if path.stat().st_dev not in devices:
+                devices.add(path.stat().st_dev)
+                self._build_storage_paths.append(path)
+        snapshot_bytes = 2 * getattr(self, "copy_bytes", 0) if self.first else 0
+        if not self.first and self.migrate and (self.state / "data").is_dir():
+            snapshot_bytes = int(run(["du", "-sb", str(self.state / "data")], capture=True).split()[0])
+        self._build_disk_reserve = max(DISK_RESERVE, snapshot_bytes + 2 * GIB)
+
+    def check_build_disk_space(self, *, extra=0):
+        self.configure_build_storage()
+        for path in self._build_storage_paths:
+            reserve = self._build_disk_reserve if path.stat().st_dev == self.state.stat().st_dev else DISK_RESERVE
+            free = shutil.disk_usage(path).free
+            need(free >= reserve + extra,
+                 f"Insufficient disk space at {path}: {free / GIB:.2f} GiB free, "
+                 f"{(reserve + extra) / GIB:.2f} GiB required. Build/import stopped; "
+                 "no automatic volume, data or backup deletion is performed.")
+
+    def cleanup_unused_docker_images(self):
+        # Fresh/resume keeps its source images for the documented recovery path.
+        if self.first or self.journal.get("status") != "ready":
+            return
+        protected = set(self.journal.get("images", {}).values()) | set(self.images.values())
+        previous = self.journal.get("previous_run")
+        if previous:
+            previous = Path(previous)
+            if previous.resolve().parent != self.state.resolve() or not re.fullmatch(
+                    r"run-\d{8}t\d{6}z-\d+", previous.name.lower()):
+                print("Skipping image cleanup: cannot establish the previous successful run.", flush=True)
+                return
+            protected.update(f"docker.io/reloop-production/{name}:{previous.name.lower()}" for name in APPS)
+        pods = json.loads(run(self.kubectl + ["get", "pods", "--all-namespaces", "-o", "json"], capture=True))
+        for pod in pods["items"]:
+            for key in ("containers", "initContainers", "ephemeralContainers"):
+                protected.update(c["image"] for c in pod["spec"].get(key, []))
+        def canonical(image):
+            return "docker.io/" + image if image.startswith("reloop-production/") else image
+        protected = {canonical(image) for image in protected}
+        rows = [json.loads(line) for line in run(
+            ["docker", "image", "ls", "--no-trunc", "--format", "{{json .}}"], capture=True).splitlines() if line]
+        protected_ids = {row["ID"] for row in rows if canonical(row["Repository"] + ":" + row["Tag"]) in protected}
+        containers = run(["docker", "ps", "-a", "-q"], capture=True).split()
+        if containers:
+            protected_ids.update(run(["docker", "inspect", "--format", "{{.Image}}", *containers], capture=True).split())
+        pattern = r"docker\.io/reloop-production/(?:" + "|".join(APPS) + r"):run-\d{8}t\d{6}z-\d+"
+        for row in rows:
+            image = canonical(row["Repository"] + ":" + row["Tag"])
+            if re.fullmatch(pattern, image) and image not in protected and row["ID"] not in protected_ids:
+                try:
+                    run(["docker", "image", "rm", image])
+                except Blocked:
+                    print("Docker retained a candidate image; continuing without forced removal.", flush=True)
+
+    def check_import_disk_space(self, name):
+        info = json.loads(run(["docker", "image", "inspect", self.images[name]], capture=True))
+        # Streaming still needs compressed content and unpacked layers in containerd.
+        self.check_build_disk_space(extra=2 * int(info[0]["Size"]))
+
+    def cleanup_imported_docker_copy(self, name):
+        if self.first or self.journal.get("status") != "ready" or name not in APPS:
+            return
+        image = self.images[name]
+        if image != f"docker.io/reloop-production/{name}:{self.run_dir.name.lower()}":
+            return
+        available = run(["k3s", "ctr", "-n", "k8s.io", "images", "ls", "-q"], capture=True).splitlines()
+        need(image in available, f"{name}: imported image is not registered in K3s; retaining Docker copy.")
+        try:
+            run(["docker", "image", "rm", image])
+        except Blocked:
+            print(f"{name}: Docker retained its copy; the disk reserve still applies.", flush=True)
+
+    def verify_built_images(self):
+        self.phase("image-runtime-checks")
+        for name in APPS:
+            if name in self.keep_services:
+                continue
+            command = 'require("next")' if name == "frontend" else 'require("@reloop/shared")'
+            if name == "product-service":
+                command += (';require("sharp")({create:{width:1,height:1,channels:3,background:"black"}})'
+                            '.png().toBuffer().catch(e=>{console.error(e.message);process.exit(1)})')
+            if self.first:
+                # The application namespace is intentionally not created before first cutover.
+                sandbox = f"reloop-runtime-{name}-{self.run_dir.name.lower()}"
+                deadline = time.monotonic() + 90
+                def check():
+                    self.check_build_disk_space()
+                    need(time.monotonic() < deadline, f"{name}: runtime check timed out.")
+                try:
+                    run(["docker", "run", "--rm", "--name", sandbox, "--network", "none", "--read-only",
+                         "--tmpfs", "/tmp:rw,nosuid,size=16m", "--memory", "512m", "--cpus", "1",
+                         "--env", "NODE_ENV=production", "--entrypoint", "node", self.images[name], "-e", command],
+                        check_space=check)
+                finally:
+                    # This name belongs only to this run's no-data sandbox, never an app container.
+                    subprocess.run(["docker", "container", "rm", "-f", sandbox],
+                                   stdout=subprocess.DEVNULL, stderr=LOG)
+                continue
+            job_name = f"{name}-runtime-{self.run_dir.name.lower()}"
+            container = {"name": "runtime-check", "image": self.images[name], "imagePullPolicy": "Never",
+                         "command": ["node", "-e", command],
+                         "env": [{"name": "NODE_ENV", "value": "production"}],
+                         "resources": {"requests": {"cpu": "10m", "memory": "64Mi"},
+                                       "limits": {"cpu": "1", "memory": "512Mi"}}}
+            self.apply(resource("Job", job_name, {"backoffLimit": 0, "activeDeadlineSeconds": 90,
+                "template": {"spec": {"automountServiceAccountToken": False, "restartPolicy": "Never",
+                    "nodeSelector": {"kubernetes.io/hostname": self.config["node"]}, "containers": [container]}}}))
+            try:
+                self.k("wait", "--for=condition=complete", "job/" + job_name, "--timeout=110s")
+            finally:
+                self.k("logs", "job/" + job_name)
+            self.k("delete", "job", job_name)
 
     def build_apps(self):
+        self.configure_build_storage()
+        self.cleanup_unused_docker_images()
+        self.check_build_disk_space(extra=BUILD_HEADROOM)
         # The named context contains only Prisma engine binaries, never application credentials.
         cache = self.state / "build-cache" / "prisma"
         override = self.run_dir / "build-images.json"
         for name in APPS:
+            if name in self.keep_services:
+                print(f"KEEP_SERVICE {name}: retaining recorded working image.", flush=True)
+                continue
             service = {"image": self.images[name]}
             if name in APPS[:5] and cache.is_dir():
                 build = self.config["services"][name]["build"]
@@ -555,7 +779,8 @@ class Deployment:
                     service["build"] = {"dockerfile": str(target), "additional_contexts": {"prisma-cache": str(cache)}}
             write_json(override, {"services": {name: service}})
             print(f"BUILD_SERVICE {name}", flush=True)
-            run(self.compose + ["-f", str(override), "build", name])
+            run(self.compose + ["-f", str(override), "build", name], check_space=self.check_build_disk_space)
+            self.check_build_disk_space()
             if name == "auth-service" and not cache.exists():
                 cache.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
                 temporary = cache.with_name("prisma-pending")
@@ -571,22 +796,27 @@ class Deployment:
     def import_images(self, names):
         # Avoid a second multi-GB images.tar on small VMs. Never print image contents.
         for name in names:
+            self.check_import_disk_space(name)
             print(f"IMPORT_SERVICE {name}", flush=True)
-            producer = subprocess.Popen(["docker", "image", "save", self.images[name]], stdout=subprocess.PIPE, stderr=LOG)
+            producer = subprocess.Popen(["docker", "image", "save", self.images[name]], stdout=subprocess.PIPE,
+                                        stderr=LOG, start_new_session=os.name == "posix")
             consumer = None
             try:
                 consumer = subprocess.Popen(["k3s", "ctr", "-n", "k8s.io", "images", "import", "-"],
-                                            stdin=producer.stdout, stdout=LOG, stderr=LOG)
+                                            stdin=producer.stdout, stdout=LOG, stderr=LOG, start_new_session=os.name == "posix")
                 producer.stdout.close()
-                code = consumer.wait()
-                if code:
-                    producer.kill()
-                need(producer.wait() == 0 and code == 0, f"{name}: streaming image import failed.")
+                with monitor_disk_space(self.check_build_disk_space, [producer, consumer]):
+                    code = consumer.wait()
+                    if code:
+                        producer.kill()
+                    need(producer.wait() == 0 and code == 0, f"{name}: streaming image import failed.")
             finally:
                 for process in (consumer, producer):
                     if process is not None and process.poll() is None:
                         process.kill()
                         process.wait()
+            self.cleanup_imported_docker_copy(name)
+            self.check_build_disk_space()
 
     def mark_pending(self):
         self.journal.update(status="incomplete", root=str(self.root), run=str(self.run_dir),
@@ -602,7 +832,15 @@ class Deployment:
         else:
             self.k("scale", "deployment", *APPS, "--replicas=0")
             for app in APPS:
-                self.k("wait", "pod", "-l", f"app={app}", "--for=delete", "--timeout=180s")
+                self.wait_for_stopped_pods(app, timeout=180)
+
+    def wait_for_stopped_pods(self, app, *, timeout):
+        pods = json.loads(self.k("get", "pods", "-l", f"app={app}", "-o", "json", capture=True))["items"]
+        # Failed/Evicted and completed history is retained by Kubernetes after scale-down.
+        active = ["pod/" + pod["metadata"]["name"] for pod in pods
+                  if pod.get("status", {}).get("phase") not in ("Failed", "Succeeded")]
+        if active:
+            self.k("wait", *active, "--for=delete", f"--timeout={timeout}s")
 
     def copy_from_compose(self):
         self.phase("backup-and-cold-copy")
@@ -660,7 +898,7 @@ class Deployment:
              "Redis SAVE failed; refusing an incomplete queue backup.")
         self.k("scale", "deployment", *DATABASES, "--replicas=0")
         for name in DATABASES:
-            self.k("wait", "pod", "-l", f"app={name}", "--for=delete", "--timeout=240s")
+            self.wait_for_stopped_pods(name, timeout=240)
         self.snapshot(restore=False)
         self.k("scale", "deployment", *DATABASES, "--replicas=1")
         self.wait_databases()
@@ -748,6 +986,11 @@ class Deployment:
             self.journal["release"] = self.release
         else:
             self.journal.pop("release", None)
+        if self.keep_services:
+            self.journal["component_overrides"] = {
+                name: {"image": self.images[name], "reason": "Kept by --keep-service"} for name in self.keep_services}
+        else:
+            self.journal.pop("component_overrides", None)
         save_journal(self.journal_path, self.journal)
         self.k("get", "pods", "-o", "wide")
         print(f"Deploy OK (Kubernetes): {NAMESPACE}. Private backups/logs: {self.run_dir}")
@@ -766,9 +1009,12 @@ class Deployment:
 def main():
     global LOG
     arguments = sys.argv[3:]
+    keep_services = ()
+    if arguments == ["--keep-service", "product-service"]:
+        keep_services, arguments = ("product-service",), []
     fresh = arguments in (["--fresh", "--confirm-delete-test-data"], ["--resume-fresh"])
     need(len(sys.argv) >= 3 and (fresh or arguments in ([], ["--migrate"])),
-         "Usage: deploy-k8s.sh [--migrate | --fresh --confirm-delete-test-data | --resume-fresh]")
+         "Usage: deploy-k8s.sh [--keep-service product-service | --migrate | --fresh --confirm-delete-test-data | --resume-fresh]")
     root, state = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
     need(not state.is_relative_to(root), "State/backups must be outside the checkout.")
     if fresh:
@@ -777,15 +1023,18 @@ def main():
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module.execute(sys.modules[__name__], root, state, resume=arguments == ["--resume-fresh"])
-    deployment = Deployment(root, state, arguments == ["--migrate"])
+    deployment = Deployment(root, state, arguments == ["--migrate"], keep_services=keep_services)
     with (deployment.run_dir / "run.log").open("ab", buffering=0) as log:
         LOG = log
         try:
             deployment.deploy()
         except (Blocked, OSError, ValueError, KeyError, tarfile.TarError, KeyboardInterrupt) as error:
             print(f"Deploy FAILED during {deployment.stage}: {error}", file=sys.stderr)
-            print(f"Inspect {deployment.run_dir}. Nothing was deleted; no automatic rollback was attempted.", file=sys.stderr)
-            print("Services may be stopped. Read deploy/production-cloud/README.md before recovery.", file=sys.stderr)
+            print(f"Inspect {deployment.run_dir}. Data/volumes were not deleted; image cleanup may have run. No automatic rollback was attempted.", file=sys.stderr)
+            if deployment.journal.get("status") in (None, "ready"):
+                print("Existing workloads were not scaled down. Correct the failure before rerunning.", file=sys.stderr)
+            else:
+                print("Maintenance began; workloads may be stopped. Read the recovery guide before retrying.", file=sys.stderr)
             return 1
     return 0
 

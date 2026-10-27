@@ -12,6 +12,7 @@ import Skeleton from "../../../components/ui/Skeleton";
 import Modal from "../../../components/ui/Modal";
 import ConfirmDialog from "../../../components/ui/ConfirmDialog";
 import { apiFetch } from "../../../lib/api";
+import { serverNow } from "../../../lib/serverClock";
 import { getAccessToken } from "../../../lib/auth";
 import {
   formatCheckoutCountdown,
@@ -24,7 +25,7 @@ export default function PaymentPage() {
   const expiryChecked = useRef(false);
   const [session, setSession] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(serverNow);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
@@ -49,6 +50,7 @@ export default function PaymentPage() {
         token,
       });
       setSession(data);
+      setNow(serverNow());
     } catch (err) {
       setError(err.message || "โหลดรายการชำระเงินไม่สำเร็จ");
     } finally {
@@ -61,7 +63,7 @@ export default function PaymentPage() {
   }, [id]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const timer = setInterval(() => setNow(serverNow()), 1000);
     return () => clearInterval(timer);
   }, []);
 

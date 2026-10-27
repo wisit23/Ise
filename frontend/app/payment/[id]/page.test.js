@@ -1,6 +1,25 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import PaymentPage from "./page";
 import { apiFetch } from "../../../lib/api";
+import * as serverClock from "../../../lib/serverClock";
+
+jest.mock("../../../lib/serverClock", () => ({
+  serverNow: jest.fn(() => Date.now()),
+}));
+
+test("payment uses server time when the browser clock is three seconds behind", async () => {
+  const start = Date.parse(SESSION.expiresAt) - 600000;
+  const localClock = jest.spyOn(Date, "now").mockReturnValue(start - 3000);
+  const clock = serverClock.serverNow.mockReturnValue(start);
+  try {
+    render(<PaymentPage />);
+    expect(await screen.findByText("10:00")).toBeInTheDocument();
+    expect(screen.queryByText("10:03")).not.toBeInTheDocument();
+  } finally {
+    clock.mockImplementation(() => Date.now());
+    localClock.mockRestore();
+  }
+});
 
 jest.mock(
   "../../../components/NavBar",

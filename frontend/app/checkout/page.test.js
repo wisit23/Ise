@@ -7,6 +7,25 @@ import {
 } from "@testing-library/react";
 import CheckoutPage from "./page";
 import { apiFetch } from "../../lib/api";
+import * as serverClock from "../../lib/serverClock";
+
+jest.mock("../../lib/serverClock", () => ({
+  serverNow: jest.fn(() => Date.now()),
+}));
+
+test("checkout uses server time when the browser clock is three seconds behind", async () => {
+  const start = Date.parse(ORDER.reservationExpiresAt) - 600000;
+  const localClock = jest.spyOn(Date, "now").mockReturnValue(start - 3000);
+  const clock = serverClock.serverNow.mockReturnValue(start);
+  try {
+    render(<CheckoutPage />);
+    expect(await screen.findByText("10:00")).toBeInTheDocument();
+    expect(screen.queryByText("10:03")).not.toBeInTheDocument();
+  } finally {
+    clock.mockImplementation(() => Date.now());
+    localClock.mockRestore();
+  }
+});
 
 jest.mock(
   "../../components/NavBar",

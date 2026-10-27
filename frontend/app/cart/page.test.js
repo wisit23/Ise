@@ -1,6 +1,26 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import CartPage, { isReservationExpired, reservationCountdown } from "./page";
 import { apiFetch } from "../../lib/api";
+import * as serverClock from "../../lib/serverClock";
+
+jest.mock("../../lib/serverClock", () => ({
+  serverNow: jest.fn(() => Date.now()),
+}));
+
+test("cart uses server time when the browser clock is three seconds behind", async () => {
+  const start = Date.parse(CART_ITEM.reservationExpiresAt) - 600000;
+  const localClock = jest.spyOn(Date, "now").mockReturnValue(start - 3000);
+  const clock = serverClock.serverNow.mockReturnValue(start);
+  try {
+    apiFetch.mockResolvedValue({ items: [CART_ITEM] });
+    render(<CartPage />);
+    expect(await screen.findByText(/10:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/10:03/)).not.toBeInTheDocument();
+  } finally {
+    clock.mockImplementation(() => Date.now());
+    localClock.mockRestore();
+  }
+});
 
 const mockRouter = { push: jest.fn() };
 jest.mock("next/navigation", () => ({ useRouter: () => mockRouter }));
@@ -27,11 +47,12 @@ jest.mock(
 jest.mock(
   "../../components/OrderLine",
   () =>
-    function Line({ order, lead, actions }) {
+    function Line({ order, lead, note, actions }) {
       return (
         <div>
           {order.productTitle}
           {lead}
+          {note}
           {actions}
         </div>
       );

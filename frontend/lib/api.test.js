@@ -8,6 +8,8 @@ import {
   refreshAccessToken,
 } from "./api";
 import { saveSession, clearSession, getAccessToken, getRefreshToken } from "./auth";
+import { serverNow } from "./serverClock";
+import { remainingSeconds } from "./checkout";
 
 function response(status, data) {
   return { status, ok: status < 400, json: async () => data };
@@ -34,6 +36,20 @@ beforeEach(() => {
 });
 
 afterEach(() => jest.restoreAllMocks());
+
+test("order API synchronizes checkout time from the server response", async () => {
+  const start = Date.parse("2026-10-28T12:00:00.000Z");
+  jest.spyOn(Date, "now").mockReturnValue(start - 3000);
+  jest.spyOn(performance, "now").mockReturnValue(100);
+  const session = { expiresAt: new Date(start + 600000).toISOString() };
+  expect(remainingSeconds(session.expiresAt, Date.now())).toBe(603);
+  const res = response(200, session);
+  res.headers = new Headers({ "X-Server-Time": new Date(start).toISOString() });
+  fetch.mockResolvedValue(res);
+  const saved = await apiFetch("/api/orders/checkout-sessions/session-1");
+  expect(saved).toEqual(session);
+  expect(remainingSeconds(saved.expiresAt, serverNow())).toBe(600);
+});
 
 test("a background refresh cannot restore a session after logout", async () => {
   let complete;

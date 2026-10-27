@@ -53,6 +53,7 @@ test("checkout persists the reservation identity returned by product-service", a
     .send({ productId: "product-a" });
 
   assert.equal(response.status, 201);
+  assert.ok(Number.isFinite(Date.parse(response.headers["x-server-time"])));
   assert.equal(response.body.reservationId, "reservation-a");
   assert.equal(response.body.reservationExpiresAt, expiresAt);
 });

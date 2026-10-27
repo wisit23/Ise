@@ -282,6 +282,8 @@ storage migration. No horizontal scaling of the writers is performed.
 cd /root/Ise
 # Review what is on origin/main; this command fetches and fast-forwards automatically:
 bash deploy/production-cloud/deploy-k8s.sh
+# Update the other apps while deliberately retaining the recorded working Product image:
+bash deploy/production-cloud/deploy-k8s.sh --keep-service product-service
 # Only for reviewed database/schema changes:
 bash deploy/production-cloud/deploy-k8s.sh --migrate
 ```
@@ -294,6 +296,71 @@ CHECKPOINT, Mongo fsync and Redis SAVE, then stops database pods and takes a col
 snapshot of all current data before the guarded migrations. Neither mode re-imports
 stale Compose volumes. Mongo schema history cannot
 be inferred by SQL migration checks; review Mongo changes explicitly.
+
+### Disk safety on ordinary updates
+
+The update checks node pressure and available space **before building**, not only
+after import. A Ready node with DiskPressure, MemoryPressure or PIDPressure is
+rejected. The build requires a 10 GiB reserve plus 4 GiB initial build headroom.
+Each image import requires the reserve plus twice that image's reported Docker
+size for compressed content and unpacked layers. These are admission budgets,
+not a promise that an arbitrarily large build fits.
+
+Available space is checked every second while builds/imports run, including quiet
+commands. If the reserve is crossed, the script interrupts the guarded command
+and its process group (both sides of the streaming import). Ordinary updates have
+not entered maintenance at that point, so the running apps are left alone.
+Logs and partial build/import artifacts remain for diagnosis. Concurrent writers
+outside this script can still consume disk; the monitor is not a filesystem quota.
+
+Checks cover deployment state, DockerRootDir, the standard Docker containerd
+store at `/var/lib/containerd` when present, and K3s containerd storage, deduplicated
+by filesystem. Set `RELOOP_DOCKER_IMAGE_STORE` to an existing absolute directory
+when Docker uses a nonstandard image filesystem; this checks that filesystem too.
+Migration snapshot reserve is included before building.
+
+Automatic cleanup is limited to this project's application tags matching
+`docker.io/reloop-production/<app>:run-<timestamp>-<pid>`. It preserves journal
+images, the previous successful application set, Kubernetes pod references,
+Docker container images and aliases sharing protected image IDs. Unknown tags,
+database images, volumes, uploads, snapshots and backups are not cleanup targets.
+No global image/builder/volume prune is run. If safe cleanup cannot provide the
+budget, deployment refuses before build and reports free/required space.
+
+On ordinary updates, the current run's Docker copy is removed only after both
+streaming processes succeed and its tag is verified in K3s. The K3s image remains.
+Fresh/resume retains Docker sources for its existing recovery procedure.
+
+### Runtime compatibility and keeping Product
+
+New ordinary-update images run short, bounded Jobs on the real VM before
+maintenance. These Jobs mount no application data, receive no Secrets or
+service-account token, and check runtime imports. Product additionally converts
+a one-pixel image with Sharp, catching unsupported CPU/native binaries before
+the working apps are stopped. Failed Jobs/logs remain for diagnosis; successful
+Jobs are deleted. This does not replace full application or migration tests.
+During a first Compose-to-K3s cutover, before the namespace exists, equivalent
+checks use bounded Docker sandboxes with no network, no application mounts and
+a read-only root filesystem; only those run-specific sandboxes are cleaned up.
+
+For the current VM's Sharp CPU incompatibility, use:
+
+```bash
+sudo bash deploy/production-cloud/deploy-k8s.sh --keep-service product-service
+```
+
+This explicitly keeps the ready Product image recorded in the journal, skipping
+its build/import/runtime Job while updating the other six apps. It cannot be
+combined with `--migrate`, fresh install or fresh resume, and the normal schema
+fingerprint guard still applies. The journal records `component_overrides` so
+the mixed component versions are visible. Omit the option only after resolving
+Product compatibility. A normal update will test the new Sharp binary and refuse
+before maintenance if this VM cannot execute it.
+
+Scale-down waits only for nonterminal pods captured by name. Historical
+Failed/Evicted/Succeeded pods do not hold maintenance open and are not deleted
+automatically. Mongo's internal Service publishes not-ready addresses so the
+single replica-set member can reach `mongo:27017` while electing its primary.
 
 Image tags are unique per run; imagePullPolicy is Never because this is one local
 K3s containerd node. No registry or public push is required. No unattended database
@@ -310,7 +377,8 @@ fingerprint and current/previous successful run directories. Default migration/i
 
 - `run.log`, resolved `compose.json`, `.env` backup and generated manifests;
 - source container IDs/images/restart policies on first import;
-- unique application/database image tags in Docker/K3s (images are streamed, not archived);
+- unique image tags in K3s (streamed, not archived); ordinary-update Docker build
+  copies can be removed after verified import, while fresh/resume sources remain;
 - first-import logical PostgreSQL/Mongo backups;
 - cold `.tar` snapshots for every data/file directory and `SHA256SUMS`.
 

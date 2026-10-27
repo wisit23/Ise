@@ -10,6 +10,7 @@ import EmptyState from "../../components/ui/EmptyState";
 import Skeleton from "../../components/ui/Skeleton";
 import OrderLine from "../../components/OrderLine";
 import { apiFetch } from "../../lib/api";
+import { serverNow } from "../../lib/serverClock";
 import {
   getAccessToken,
   getCurrentRoles,
@@ -58,7 +59,7 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [paying, setPaying] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(serverNow);
 
   async function load() {
     const token = getAccessToken();
@@ -73,11 +74,12 @@ export default function CartPage() {
     setLoading(true);
     try {
       const data = await apiFetch("/api/orders/cart", { token });
+      setNow(serverNow());
       setItems(data.items);
       setSelected(
         new Set(
           data.items
-            .filter((order) => !isReservationExpired(order, Date.now()))
+            .filter((order) => !isReservationExpired(order, serverNow()))
             .map((order) => order.id),
         ),
       );
@@ -93,7 +95,7 @@ export default function CartPage() {
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const timer = setInterval(() => setNow(serverNow()), 1000);
     return () => clearInterval(timer);
   }, []);
 
