@@ -205,7 +205,13 @@ export default function CustomerDisputeCase({ orderId }) {
                     className={index <= stage.step ? styles.reached : ""}
                     aria-current={index === stage.step ? "step" : undefined}
                   >
-                    <span>{index < stage.step ? <><Icon name="check" /></> : index + 1}</span>
+                    <span>
+                      {index < stage.step || decided ? (
+                        <Icon name="check" />
+                      ) : (
+                        index + 1
+                      )}
+                    </span>
                     <strong>{label}</strong>
                   </li>
                 ),

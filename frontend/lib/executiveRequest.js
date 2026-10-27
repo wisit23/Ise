@@ -1,6 +1,7 @@
 import { apiFetch } from "./api";
 
-export const EXECUTIVE_REQUEST_TIMEOUT_MS = 15000;
+import { EXECUTIVE_REQUEST_TIMEOUT_MS } from "./executiveConfig";
+export { EXECUTIVE_REQUEST_TIMEOUT_MS } from "./executiveConfig";
 
 export function executiveFetch(path, options = {}) {
   return apiFetch(path, {

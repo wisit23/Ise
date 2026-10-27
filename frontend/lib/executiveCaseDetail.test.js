@@ -8,11 +8,29 @@ import {
 
 jest.mock("./api", () => ({ apiFetch: jest.fn() }));
 
+const disputeDetail = {
+  id: "d/1",
+  createdAt: "2026-10-20T05:00:00Z",
+  reason: "ของชำรุด",
+  status: "OPEN",
+  disputeType: "DAMAGED_ITEM",
+  priority: "HIGH",
+  order: { id: "order-1", amount: 500, orderType: "BUY_NOW" },
+};
+const ticketDetail = {
+  id: "t1",
+  createdAt: "2026-10-20T05:00:00Z",
+  ticketNumber: "TK-1",
+  subject: "ขอความช่วยเหลือ",
+  status: { code: "NEW", name: "NEW" },
+  handling: null,
+};
+
 describe("fetchCaseDetail", () => {
   beforeEach(() => apiFetch.mockReset());
 
   it("asks the service that owns the case, through the gateway", async () => {
-    apiFetch.mockResolvedValue({ data: { id: "d/1" }, meta: {} });
+    apiFetch.mockResolvedValue({ data: disputeDetail, meta: {} });
     await fetchCaseDetail("dispute", "d/1", "t");
     expect(apiFetch).toHaveBeenCalledWith(
       "/api/orders/executive/disputes/d%2F1",
@@ -20,7 +38,7 @@ describe("fetchCaseDetail", () => {
     );
 
     apiFetch.mockResolvedValue({
-      data: { id: "t1", handling: null },
+      data: ticketDetail,
       meta: {},
     });
     await fetchCaseDetail("ticket", "t1", "t");
@@ -42,6 +60,32 @@ describe("fetchCaseDetail", () => {
     expect(hasCaseDetail("dispute")).toBe(true);
     expect(hasCaseDetail("report")).toBe(false);
     expect(hasCaseDetail("toString")).toBe(false);
+  });
+
+  it.each([
+    { ...disputeDetail, order: null },
+    { ...disputeDetail, order: { id: "order-1", amount: "500" } },
+    { ...disputeDetail, reason: {} },
+    { ...disputeDetail, assignee: { id: "staff", name: [] } },
+    { ...disputeDetail, buyer: { id: "user", roles: [123] } },
+    { ...disputeDetail, createdAt: "invalid" },
+    { ...disputeDetail, id: "another-case" },
+  ])("rejects malformed dispute details before rendering", async (data) => {
+    apiFetch.mockResolvedValue({ data });
+    await expect(fetchCaseDetail("dispute", "d/1", "t")).rejects.toThrow(
+      "ข้อมูลรายละเอียด",
+    );
+  });
+
+  it("rejects malformed ticket handling and unsupported case kinds", async () => {
+    apiFetch.mockResolvedValue({
+      data: { ...ticketDetail, handling: { at: "invalid" } },
+    });
+    await expect(fetchCaseDetail("ticket", "t1", "t")).rejects.toThrow();
+    apiFetch.mockClear();
+    await expect(fetchCaseDetail("constructor", "t1", "t")).rejects.toThrow();
+    await expect(fetchCaseDetail("dispute", " ", "t")).rejects.toThrow();
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 });
 

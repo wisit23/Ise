@@ -37,12 +37,14 @@ test("executive product names against a real database", async (t) => {
 
   const runId = Date.now();
   const sellerId = `mock-exec-names-seller-${runId}`;
+  const condition = `exec-names-condition-${runId}`;
   const make = (key, extra) => ({
     id: `exec-names-${key}-${runId}`,
     sellerId,
     title: `สินค้า ${key}`,
     price: 100,
     category: "test",
+    condition,
     ...extra,
   });
   const products = {
@@ -59,6 +61,7 @@ test("executive product names against a real database", async (t) => {
       .send(body);
 
   try {
+    await prisma.condition.create({ data: { value: condition, label: "Test condition" } });
     await prisma.product.createMany({ data: Object.values(products) });
 
     const res = await ask({ ids: [...ids, `exec-names-never-${runId}`] });
@@ -108,6 +111,7 @@ test("executive product names against a real database", async (t) => {
     );
   } finally {
     await prisma.product.deleteMany({ where: { id: { in: ids } } });
+    await prisma.condition.deleteMany({ where: { value: condition } });
     await prisma.$disconnect();
   }
 });

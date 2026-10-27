@@ -1,6 +1,8 @@
 const { badRequest, conflict, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 const chatClient = require("../../services/chatClient");
+const { assignRole } = require("../../services/authService");
+const { lockUser } = require("../../services/sessionService");
 
 const ALLOWED_DECISIONS = ["VERIFIED", "REJECTED"];
 
@@ -64,10 +66,13 @@ async function decideKyc({
   if (!ALLOWED_DECISIONS.includes(decision)) {
     throw badRequest("decision must be VERIFIED or REJECTED");
   }
-  if (reason != null && typeof reason !== "string") throw badRequest("reason must be a string");
+  if (reason != null && typeof reason !== "string")
+    throw badRequest("reason must be a string");
   const trimmedReason = reason?.trim() || "";
-  if (decision === "REJECTED" && !trimmedReason) throw badRequest("reason is required");
-  if (typeof version !== "number") throw badRequest("version is required");
+  if (decision === "REJECTED" && !trimmedReason)
+    throw badRequest("reason is required");
+  if (!Number.isSafeInteger(version) || version < 0)
+    throw badRequest("version must be a non-negative integer");
 
   const outcome = await prisma.$transaction(async (tx) => {
     const application = await tx.kycApplication.findUnique({
@@ -87,6 +92,18 @@ async function decideKyc({
     });
     if (claimed.count !== 1) {
       throw conflict("KYC application was already decided or modified");
+    }
+
+    if (decision === "VERIFIED") {
+      const user = await lockUser(tx, application.userId);
+      if (!user) throw notFound("user not found");
+      await assignRole(application.userId, "SELLER", tx);
+      if (user.role !== "SELLER") {
+        await tx.user.update({
+          where: { id: application.userId },
+          data: { role: "SELLER" },
+        });
+      }
     }
 
     const sellerProfile = await tx.sellerProfile.update({
@@ -120,25 +137,29 @@ async function decideKyc({
   });
 
   if (decision === "VERIFIED") {
-    chatClient.sendSystemNotification({
-      userId: outcome.application.userId,
-      type: "SYSTEM",
-      title: "การยืนยันตัวตน (KYC) ได้รับการอนุมัติ",
-      message: `การยืนยันตัวตนผู้ขายของคุณได้รับการอนุมัติเรียบร้อยแล้ว${trimmedReason ? ` (หมายเหตุ: ${trimmedReason})` : ""}`,
-      link: "/seller/dashboard",
-      entityId: `kyc:decision:${applicationId}`,
-      metadata: { applicationId, decision, reason: trimmedReason },
-    }).catch(() => {});
+    chatClient
+      .sendSystemNotification({
+        userId: outcome.application.userId,
+        type: "SYSTEM",
+        title: "การยืนยันตัวตน (KYC) ได้รับการอนุมัติ",
+        message: `การยืนยันตัวตนผู้ขายของคุณได้รับการอนุมัติเรียบร้อยแล้ว${trimmedReason ? ` (หมายเหตุ: ${trimmedReason})` : ""}`,
+        link: "/seller/dashboard",
+        entityId: `kyc:decision:${applicationId}`,
+        metadata: { applicationId, decision, reason: trimmedReason },
+      })
+      .catch(() => {});
   } else if (decision === "REJECTED") {
-    chatClient.sendSystemNotification({
-      userId: outcome.application.userId,
-      type: "SYSTEM",
-      title: "การยืนยันตัวตน (KYC) ไม่ผ่านการอนุมัติ",
-      message: `การยืนยันตัวตนผู้ขายของคุณถูกปฏิเสธ เนื่องจาก: ${trimmedReason}`,
-      link: "/seller/onboarding",
-      entityId: `kyc:decision:${applicationId}`,
-      metadata: { applicationId, decision, reason: trimmedReason },
-    }).catch(() => {});
+    chatClient
+      .sendSystemNotification({
+        userId: outcome.application.userId,
+        type: "SYSTEM",
+        title: "การยืนยันตัวตน (KYC) ไม่ผ่านการอนุมัติ",
+        message: `การยืนยันตัวตนผู้ขายของคุณถูกปฏิเสธ เนื่องจาก: ${trimmedReason}`,
+        link: "/seller/onboarding",
+        entityId: `kyc:decision:${applicationId}`,
+        metadata: { applicationId, decision, reason: trimmedReason },
+      })
+      .catch(() => {});
   }
 
   return outcome;

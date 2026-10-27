@@ -870,7 +870,7 @@ export default function ProductDetailPage() {
               onClick={() => setShowReport(true)}
               className="mt-3 text-xs font-medium text-gray-500 hover:text-red-600 hover:underline"
             >
-              รายงานผู้ขายรายนี้
+              รายงานสินค้า
             </button>
           )}
 
@@ -1355,8 +1355,11 @@ export default function ProductDetailPage() {
       <ReportModal
         open={showReport}
         onClose={() => setShowReport(false)}
+        title="รายงานสินค้า"
         targetId={product.sellerId}
         targetLabel={sellerName}
+        productId={product.id}
+        productLabel={product.title}
       />
 
       <ReportModal
