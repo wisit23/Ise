@@ -106,7 +106,7 @@ function toApiShape(product) {
   if (categoryLinks)
     rest.categories = categoryLinks.map((link) => link.category.name).sort();
   const viewCount = Array.isArray(countViews)
-    ? countViews.reduce((acc, cv) => acc + (cv.count || 0), 0)
+    ? countViews.length
     : product.viewCount || 0;
   rest.viewCount = viewCount;
   const moderationActive = Boolean(
@@ -698,7 +698,8 @@ async function listFilterOptions() {
  * - Do NOT count the seller of the product (viewerId === product.sellerId).
  * - Do NOT count the buyer of the product (viewerId === product.reservedBy or viewer is order.buyerId).
  * - Do NOT count if there is an active order in order-service.
- * Returns true if a view was counted/incremented, false otherwise.
+ * Each viewer counts once per product, including concurrent requests.
+ * Returns true only when a new viewer/product pair was recorded.
  */
 async function recordView(productId, viewerId, { tx = null } = {}) {
   if (!productId || !viewerId) return false;
@@ -721,33 +722,19 @@ async function recordView(productId, viewerId, { tx = null } = {}) {
     return false;
   }
 
-  await client.countView.upsert({
-    where: {
-      viewerId_productId: {
-        viewerId,
-        productId,
-      },
-    },
-    update: {
-      count: { increment: 1 },
-    },
-    create: {
-      viewerId,
-      productId,
-      count: 1,
-    },
+  const result = await client.countView.createMany({
+    data: [{ viewerId, productId, count: 1 }],
+    skipDuplicates: true,
   });
 
-  return true;
+  return result.count > 0;
 }
 
 async function getViewCount(productId, { tx = null } = {}) {
   const client = tx || prisma;
-  const sumResult = await client.countView.aggregate({
+  return client.countView.count({
     where: { productId },
-    _sum: { count: true },
   });
-  return sumResult._sum.count || 0;
 }
 
 module.exports = {

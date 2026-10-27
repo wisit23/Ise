@@ -135,7 +135,6 @@ test("both domains contribute to totals on first load without domain navigation"
   expect(card).toHaveTextContent("Ticket 1");
   expect(card).toHaveTextContent("Dispute 2");
   expect(apiFetch).toHaveBeenCalledTimes(2);
-  expect(screen.queryByLabelText("ประเภทเคส")).not.toBeInTheDocument();
   expect(document.querySelector("details")).toBeNull();
 });
 
@@ -169,19 +168,34 @@ test("unassigned overdue work stays in the receive-more queue and never inflates
   ).toBeInTheDocument();
 });
 
-test("legend toggles only the trend, preserving combined KPI", async () => {
+test("case type filter narrows every widget to one source", async () => {
   view();
   await screen.findByRole("heading", { name: "รับงานรายวัน · 14 วัน" });
-  const toggle = screen.getByRole("button", { name: "Dispute 3" });
-  fireEvent.click(toggle);
-  expect(toggle).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(screen.getByRole("button", { name: "Ticket", exact: true }));
+  expect(
+    screen.getByRole("button", { name: "Ticket", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  const card = screen.getByRole("button", { name: /เกินกำหนด/ });
+  expect(card).toHaveTextContent("Ticket 1");
+  expect(card).not.toHaveTextContent("Dispute");
   expect(
     screen.getByRole("img", { name: "แนวโน้มรับงาน Ticket" }),
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /เกินกำหนด/ })).toHaveTextContent(
-    "Dispute 2",
-  );
   expect(apiFetch).toHaveBeenCalledTimes(2);
+});
+
+test("a filtered card opens its table without asking for the case type", async () => {
+  view();
+  await screen.findByRole("button", { name: /งานของฉันเกินกำหนด/ });
+  fireEvent.click(screen.getByRole("button", { name: "Dispute", exact: true }));
+  fireEvent.click(screen.getByRole("button", { name: /งานของฉันเกินกำหนด/ }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(navigateWorkspaceSection).toHaveBeenCalledWith(
+    "disputes",
+    "agent-a",
+    "",
+    expect.objectContaining({ scope: "mine", work: "overdue" }),
+  );
 });
 
 test("one failed source never displays a false total and retry recovers", async () => {
@@ -243,20 +257,6 @@ test("socket reconnect reloads the coherent dashboard snapshot", async () => {
   apiFetch.mockClear();
   await act(async () => { mockSocketHandlers.connect(); });
   expect(apiFetch).toHaveBeenCalledTimes(2);
-});
-
-test("all hidden lines have a visible explanation and can be restored", async () => {
-  view();
-  await screen.findByRole("heading", { name: "รับงานรายวัน · 14 วัน" });
-  fireEvent.click(screen.getByRole("button", { name: "Ticket 2" }));
-  fireEvent.click(screen.getByRole("button", { name: "Dispute 3" }));
-  expect(
-    screen.getByRole("status", { name: "การแสดงเส้นแนวโน้ม" }),
-  ).toHaveTextContent("เลือก Ticket หรือ Dispute เพื่อแสดงเส้น");
-  fireEvent.click(screen.getByRole("button", { name: "Ticket 2" }));
-  expect(
-    screen.getByRole("img", { name: "แนวโน้มรับงาน Ticket" }),
-  ).toBeInTheDocument();
 });
 
 test("a new period labels the previous chart accurately while it refreshes", async () => {

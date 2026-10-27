@@ -70,22 +70,27 @@ export function ToastProvider({ children }) {
           return (
             <div
               key={t.id}
-              className={`animate-slide-in-right pointer-events-auto flex items-start gap-2 rounded-lg border px-4 py-3 text-sm font-medium shadow-lg ${tone.cls}`}
+              className={`animate-slide-in-right pointer-events-auto flex items-start gap-2.5 rounded-lg border py-2.5 pl-3.5 pr-2.5 text-sm font-medium shadow-lg ${tone.cls}`}
             >
-              <span
-                className="material-symbols-outlined text-[20px] leading-none"
-                aria-hidden="true"
-              >
-                {tone.icon}
+              <span className="grid h-6 w-6 shrink-0 place-items-center">
+                <span
+                  className="material-symbols-outlined text-[20px] leading-none"
+                  aria-hidden="true"
+                >
+                  {tone.icon}
+                </span>
               </span>
-              <p className="flex-1">{t.message}</p>
+              <p className="min-w-0 flex-1 py-px leading-6">{t.message}</p>
               <button
                 type="button"
                 onClick={() => dismiss(t.id)}
                 aria-label="ปิดข้อความแจ้งเตือน"
-                className="focus-ring -mr-1 rounded p-0.5 opacity-60 transition hover:opacity-100"
+                className="focus-ring grid h-6 w-6 shrink-0 place-items-center rounded opacity-60 transition hover:opacity-100"
               >
-                <span className="material-symbols-outlined text-[18px] leading-none">
+                <span
+                  className="material-symbols-outlined text-[18px] leading-none"
+                  aria-hidden="true"
+                >
                   close
                 </span>
               </button>

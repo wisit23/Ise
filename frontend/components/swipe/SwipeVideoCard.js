@@ -502,11 +502,11 @@ export default function SwipeVideoCard({ video, isActive }) {
     null;
 
   return (
-    <article className="relative isolate flex h-full min-h-full w-full shrink-0 snap-start snap-always items-center justify-center overflow-hidden bg-black select-none outline-none focus:outline-none [-webkit-tap-highlight-color:transparent]">
+    <article className="relative isolate flex h-full min-h-full w-full shrink-0 snap-start snap-always items-center justify-center overflow-hidden bg-white select-none outline-none focus:outline-none [-webkit-tap-highlight-color:transparent]">
       {/* Center Stage Container: holds the centered vertical video frame and action rail */}
       <div className="relative flex h-full sm:h-[min(calc(100dvh-1.5rem),960px)] w-full items-center justify-center">
         {/* 9:16 Vertical Video Frame */}
-        <div className="relative h-full w-full sm:w-auto sm:aspect-[9/16] overflow-hidden rounded-none sm:rounded-3xl border-0 sm:border sm:border-zinc-800/80 bg-black shadow-2xl flex items-center justify-center outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]">
+        <div className="relative h-full w-full sm:w-auto sm:aspect-[9/16] overflow-hidden rounded-none sm:rounded-3xl border-0 sm:border sm:border-slate-200 bg-black shadow-2xl flex items-center justify-center outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]">
           {/* Main Video Stream */}
           <video
             ref={videoRef}
@@ -732,7 +732,7 @@ export default function SwipeVideoCard({ video, isActive }) {
               className={`focus-ring flex h-12 w-12 min-h-[44px] min-w-[44px] items-center justify-center rounded-full backdrop-blur-md shadow-xl transition-all duration-200 active:scale-90 ${
                 chosen
                   ? "bg-rose-600 text-white drop-shadow-[0_4px_12px_rgba(225,29,72,0.6)]"
-                  : "bg-zinc-900/80 text-white hover:bg-zinc-800 border border-white/15"
+                  : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
               }`}
             >
               <svg
@@ -747,7 +747,7 @@ export default function SwipeVideoCard({ video, isActive }) {
                 />
               </svg>
             </button>
-            <span className="text-[11px] font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+            <span className="text-[11px] font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] sm:text-slate-700 sm:drop-shadow-none">
               {chosen ? "ถูกใจแล้ว" : "ถูกใจ"}
             </span>
           </div>
@@ -764,7 +764,7 @@ export default function SwipeVideoCard({ video, isActive }) {
               aria-label="ความคิดเห็น"
               aria-haspopup="dialog"
               aria-expanded={commentOpen}
-              className="focus-ring flex h-12 w-12 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-zinc-900/80 text-white backdrop-blur-md border border-white/15 shadow-xl transition-all hover:bg-zinc-800 active:scale-95"
+              className="focus-ring flex h-12 w-12 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white text-slate-700 backdrop-blur-md border border-slate-200 shadow-xl transition-all hover:bg-slate-100 active:scale-95"
             >
               <svg
                 className="h-5 w-5 fill-current"
@@ -774,7 +774,7 @@ export default function SwipeVideoCard({ video, isActive }) {
                 <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z" />
               </svg>
             </button>
-            <span className="text-[11px] font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+            <span className="text-[11px] font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] sm:text-slate-700 sm:drop-shadow-none">
               ความคิดเห็น
             </span>
           </div>
@@ -798,7 +798,7 @@ export default function SwipeVideoCard({ video, isActive }) {
                     ? "ไม่สามารถคัดลอกลิงก์ได้"
                     : "แชร์คลิปนี้"
               }
-              className="focus-ring flex h-12 w-12 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-zinc-900/80 text-white backdrop-blur-md border border-white/15 shadow-xl transition-all hover:bg-zinc-800 active:scale-95"
+              className="focus-ring flex h-12 w-12 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white text-slate-700 backdrop-blur-md border border-slate-200 shadow-xl transition-all hover:bg-slate-100 active:scale-95"
             >
               {shareStatus === "success" ? (
                 <svg
@@ -835,12 +835,12 @@ export default function SwipeVideoCard({ video, isActive }) {
               )}
             </button>
             <span
-              className={`text-[11px] font-semibold drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] ${
+              className={`text-[11px] font-semibold drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] sm:drop-shadow-none ${
                 shareStatus === "success"
                   ? "text-brand-400"
                   : shareStatus === "error"
                     ? "text-rose-400"
-                    : "text-white"
+                    : "text-white sm:text-slate-700"
               }`}
             >
               {shareStatus === "success"
@@ -866,20 +866,20 @@ export default function SwipeVideoCard({ video, isActive }) {
           <div
             ref={dialogRef}
             tabIndex={-1}
-            className="relative flex flex-col w-full max-w-md max-h-[85vh] sm:max-h-[80vh] rounded-t-3xl sm:rounded-2xl border border-zinc-800 bg-zinc-900 p-4 sm:p-6 shadow-2xl animate-fade-in-up focus:outline-none"
+            className="relative flex flex-col w-full max-w-md max-h-[85vh] sm:max-h-[80vh] rounded-t-3xl sm:rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 shadow-2xl animate-fade-in-up focus:outline-none"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 <span
-                  className="material-symbols-outlined text-brand-400"
+                  className="material-symbols-outlined text-emerald-600"
                   aria-hidden="true"
                 >
                   chat_bubble
                 </span>
                 <h3
                   id={`comment-title-${video.id}`}
-                  className="text-base font-bold text-white"
+                  className="text-base font-bold text-slate-900"
                 >
                   ความคิดเห็น {comments.length > 0 && `(${comments.length})`}
                 </h3>
@@ -888,7 +888,7 @@ export default function SwipeVideoCard({ video, isActive }) {
                 type="button"
                 onClick={handleCloseComment}
                 aria-label="ปิดหน้าต่างความคิดเห็น"
-                className="focus-ring flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                className="focus-ring flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900"
               >
                 <svg
                   className="h-5 w-5"
@@ -914,12 +914,12 @@ export default function SwipeVideoCard({ video, isActive }) {
             {/* Comments List */}
             <div className="my-3 flex-1 overflow-y-auto max-h-[40vh] sm:max-h-[45vh] space-y-3 pr-1">
               {loadingComments ? (
-                <div className="py-8 text-center text-xs text-zinc-400">
+                <div className="py-8 text-center text-xs text-slate-500">
                   กำลังโหลดความคิดเห็น...
                 </div>
               ) : comments.length === 0 ? (
                 <div className="py-8 flex flex-col items-center text-center">
-                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-800 text-zinc-400">
+                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                     <span
                       className="material-symbols-outlined text-2xl"
                       aria-hidden="true"
@@ -927,10 +927,10 @@ export default function SwipeVideoCard({ video, isActive }) {
                       chat_bubble_outline
                     </span>
                   </div>
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold text-slate-900">
                     ยังไม่มีความคิดเห็น
                   </p>
-                  <p className="mt-1 text-xs text-zinc-400">
+                  <p className="mt-1 text-xs text-slate-500">
                     เป็นคนแรกที่แสดงความคิดเห็นบนคลิปรีวิวนี้!
                   </p>
                 </div>
@@ -942,18 +942,18 @@ export default function SwipeVideoCard({ video, isActive }) {
                   return (
                     <div
                       key={c.id || c.createdAt}
-                      className="flex items-start gap-3 rounded-lg bg-zinc-800/40 p-2.5"
+                      className="flex items-start gap-3 rounded-lg bg-slate-50 p-2.5"
                     >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600/30 text-xs font-bold text-brand-400 border border-brand-500/30">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600/30 text-xs font-bold text-emerald-600 border border-brand-500/30">
                         {commenterInitial}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-zinc-200 truncate">
+                          <span className="text-xs font-semibold text-slate-900 truncate">
                             {c.userName || "ผู้ใช้"}
                           </span>
                           {c.createdAt && (
-                            <span className="text-[10px] text-zinc-500 shrink-0">
+                            <span className="text-[10px] text-slate-500 shrink-0">
                               {new Date(c.createdAt).toLocaleDateString("th-TH", {
                                 day: "numeric",
                                 month: "short",
@@ -963,7 +963,7 @@ export default function SwipeVideoCard({ video, isActive }) {
                             </span>
                           )}
                         </div>
-                        <p className="mt-1 text-xs text-zinc-300 break-words whitespace-pre-wrap">
+                        <p className="mt-1 text-xs text-slate-700 break-words whitespace-pre-wrap">
                           {c.comment}
                         </p>
                       </div>
@@ -976,7 +976,7 @@ export default function SwipeVideoCard({ video, isActive }) {
             {/* Input Box to submit comment */}
             <form
               onSubmit={handleSubmitComment}
-              className="mt-2 border-t border-zinc-800 pt-3"
+              className="mt-2 border-t border-slate-200 pt-3"
             >
               {commentError && (
                 <p className="mb-2 text-xs text-rose-400">{commentError}</p>
@@ -988,7 +988,7 @@ export default function SwipeVideoCard({ video, isActive }) {
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   maxLength={500}
-                  className="flex-1 rounded-full border border-zinc-700 bg-zinc-800 px-4 py-2 text-xs text-white placeholder-zinc-500 focus:border-brand-500 focus:outline-none"
+                  className="flex-1 rounded-full border border-slate-300 bg-slate-100 px-4 py-2 text-xs text-slate-900 placeholder-zinc-500 focus:border-brand-500 focus:outline-none"
                 />
                 <button
                   type="submit"
@@ -1017,7 +1017,7 @@ export default function SwipeVideoCard({ video, isActive }) {
                 variant="secondary"
                 size="sm"
                 onClick={handleCloseComment}
-                className="flex-1 justify-center !border-zinc-700 !bg-zinc-800 !text-white hover:!bg-zinc-700 text-xs"
+                className="flex-1 justify-center !border-slate-300 !bg-slate-100 !text-slate-700 hover:!bg-slate-200 text-xs"
               >
                 ปิด
               </Button>
