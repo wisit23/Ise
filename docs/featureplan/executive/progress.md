@@ -71,8 +71,7 @@ awaiting Reviewer sign-off
   `meta.{definitionVersion,timezone,from,to}` identical across all three owners.
 - **`CEO-002` — dashboard.** `/executive` composes the three providers with
   `Promise.allSettled`; a provider that fails renders "ไม่พร้อมใช้งาน", never a zero.
-  Executives are redirected to `/executive` on login (`UR-27`). Period buttons: วันนี้
-  (default, by the hour up to now, against the same weekday last week up to the same time), เดือนนี้, ปีนี้ and กำหนดเอง, with two
+  Executives are redirected to `/executive` on login (`UR-27`). Period buttons: 7 วันล่าสุด (default, against the 7 days before), เดือนนี้, ปีนี้ and กำหนดเอง, with two
   date pickers (ตั้งแต่ / ถึง, วว/ดด/ปปปป, พ.ศ.) always shown on the right; a custom range is
   drawn by the hour for one day, by the day up to 92 days, by the month beyond (order-service
   `hour` series, CEO-DEC-013, CEO-DEC-018). Sales split into buy-now and auction; platform revenue uses

@@ -1,4 +1,5 @@
 const prisma = require("../../models/prismaClient");
+const productNameClient = require("./productNameClient");
 const { DEFAULT_REPORT_LIMIT, ANOMALY_THRESHOLD } = require("./reportConfig");
 const { findReportPage } = require("./reportSearch");
 
@@ -8,8 +9,47 @@ const OPEN_STATUSES = ["OPEN", "REVIEWED"];
 // warning (a target is listed in topReported once it has more than one).
 const MOST_REPORTED_LIMIT = 10;
 
-function toItem(report, targetMap = new Map(), actionMap = {}) {
+/**
+ * The names of the products a page of complaints is about, asked of
+ * product-service in one request (it owns them; this service never reads its
+ * tables). A product that was sold or that its seller deleted still has its
+ * name (the deleted one is flagged); an id that was never a product has none.
+ * When product-service cannot be asked, every product is marked unavailable,
+ * so the page can tell "no such product" from "cannot say". Never throws: a
+ * complaint is shown without its product name rather than not at all.
+ *
+ * @returns {Promise<Map<string, {title: string|null, deleted: boolean, unavailable: boolean}>>}
+ */
+async function lookUpProducts(reports) {
+  const ids = [...new Set(reports.map((r) => r.productId).filter(Boolean))];
+  const found = new Map();
+  if (ids.length === 0) return found;
+  try {
+    const names = await productNameClient.getNames(ids);
+    for (const id of ids) {
+      const known = names.get(id);
+      found.set(id, {
+        title: known?.title ?? null,
+        deleted: known?.deleted ?? false,
+        unavailable: false,
+      });
+    }
+  } catch {
+    for (const id of ids) {
+      found.set(id, { title: null, deleted: false, unavailable: true });
+    }
+  }
+  return found;
+}
+
+function toItem(
+  report,
+  targetMap = new Map(),
+  actionMap = {},
+  productMap = new Map(),
+) {
   const targetInfo = targetMap.get(report.targetId) || {};
+  const product = productMap.get(report.productId);
   return {
     id: report.id,
     ...(report.referenceCode ? { referenceCode: report.referenceCode } : {}),
@@ -28,6 +68,13 @@ function toItem(report, targetMap = new Map(), actionMap = {}) {
     targetShopName: targetInfo.shopName || null,
     targetReportCount: targetInfo.reportCount || 1,
     productId: report.productId,
+    ...(report.productId
+      ? {
+          productTitle: product?.title ?? null,
+          ...(product?.deleted ? { productDeleted: true } : {}),
+          ...(product?.unavailable ? { productUnavailable: true } : {}),
+        }
+      : {}),
     reporterName: report.reporter
       ? `${report.reporter.firstName} ${report.reporter.lastName}`.trim()
       : null,
@@ -182,16 +229,17 @@ async function getReportOverview({
     ]),
   ];
 
-  const [targetMap, actionMap] = await Promise.all([
+  const [targetMap, actionMap, productMap] = await Promise.all([
     enrichTargets(allTargetIds),
     enrichReportActions(reports),
+    lookUpProducts(reports),
   ]);
 
   const statusCounts = Object.fromEntries(
     statusGroups.map((g) => [g.status, g.count ?? g._count?._all ?? 0]),
   );
 
-  const items = reports.map((r) => toItem(r, targetMap, actionMap));
+  const items = reports.map((r) => toItem(r, targetMap, actionMap, productMap));
 
   const topReported = targetGroups
     .filter((g) => g._count._all > 1)

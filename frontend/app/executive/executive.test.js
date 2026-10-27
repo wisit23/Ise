@@ -246,11 +246,11 @@ describe("ExecutiveDashboardPage", () => {
     render(<ExecutiveDashboardPage />);
 
     const purchase = (
-      await screen.findByText("ยอดขายจากการสั่งซื้อ (วันนี้)")
+      await screen.findByText("ยอดขายจากการสั่งซื้อ (7 วันล่าสุด)")
     ).closest("div");
     expect(within(purchase).getByText("฿70,000")).toBeInTheDocument();
     const auction = screen
-      .getByText("ยอดขายจากการประมูล (วันนี้)")
+      .getByText("ยอดขายจากการประมูล (7 วันล่าสุด)")
       .closest("div");
     expect(within(auction).getByText("฿30,000")).toBeInTheDocument();
     expect(screen.queryByText("ยอดขายรวม (GMV)")).toBeNull();
@@ -262,7 +262,7 @@ describe("ExecutiveDashboardPage", () => {
     render(<ExecutiveDashboardPage />);
 
     expect(
-      await screen.findByText("รายได้แพลตฟอร์ม 7% (วันนี้)"),
+      await screen.findByText("รายได้แพลตฟอร์ม 7% (7 วันล่าสุด)"),
     ).toBeInTheDocument();
   });
 
@@ -298,7 +298,7 @@ describe("ExecutiveDashboardPage", () => {
         ),
       ).toBeNull();
     };
-    seen("วันนี้");
+    seen("7 วันล่าสุด");
 
     fireEvent.click(screen.getByRole("radio", { name: "ปีนี้" }));
     await screen.findByText("ยอดขายจากการสั่งซื้อ (ปีนี้)");
@@ -364,7 +364,7 @@ describe("ExecutiveDashboardPage", () => {
     expect(screen.getByRole("img", { name: /แนวโน้มยอดขาย/ })).toBeVisible();
   });
 
-  it("offers today, this month, this year, then custom, with today chosen", async () => {
+  it("offers 7 days, this month, this year, then custom, with 7 days chosen", async () => {
     mockProviders();
 
     render(<ExecutiveDashboardPage />);
@@ -373,7 +373,7 @@ describe("ExecutiveDashboardPage", () => {
     const group = screen.getByRole("radiogroup", { name: "ช่วงเวลา" });
     const radios = within(group).getAllByRole("radio");
     expect(radios.map((r) => r.textContent)).toEqual([
-      "วันนี้",
+      "7 วันล่าสุด",
       "เดือนนี้",
       "ปีนี้",
       "กำหนดเอง",
@@ -386,34 +386,23 @@ describe("ExecutiveDashboardPage", () => {
     ]);
   });
 
-  it("starts on today, compared with the same weekday last week, by the hour", async () => {
+  it("starts on the last 7 days, compared with the 7 days before", async () => {
     mockProviders();
 
     render(<ExecutiveDashboardPage />);
 
+    expect(await screen.findByText("ยอดรายวัน · 7 วันล่าสุด")).toBeVisible();
     expect(
-      await screen.findByText("ยอดขายทุก 1 ชั่วโมง · วันนี้"),
-    ).toBeVisible();
-    expect(
-      screen.getAllByText("เทียบกับวันเดียวกันสัปดาห์ที่แล้ว").length,
+      screen.getAllByText("เทียบกับ 7 วันก่อนหน้านี้").length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText("ผู้ใช้งานเว็บ (วันนี้)")).toBeVisible();
-    const { current, trend } = overviewPeriods("today");
-    expect(trend.granularity).toBe("hour");
+    expect(screen.getByText("ผู้ใช้งานเว็บ (7 วันล่าสุด)")).toBeVisible();
+    const { current, previous } = overviewPeriods("week");
     const paths = apiFetch.mock.calls.map(([path]) => path);
     expect(paths).toContain(
       `/api/orders/executive/metrics?from=${current.from}&to=${current.to}&timezone=Asia%2FBangkok`,
     );
-    // Friday 9 October, from midnight to 12:00 Bangkok, the same time a week
-    // ago, for the sales and for web usage.
     expect(paths).toContain(
-      "/api/orders/executive/metrics?from=2026-10-09&to=2026-10-09T05%3A00%3A00.000Z&timezone=Asia%2FBangkok",
-    );
-    expect(paths).toContain(
-      "/api/auth/executive/metrics-series?from=2026-10-09&to=2026-10-09T05%3A00%3A00.000Z&granularity=day&timezone=Asia%2FBangkok",
-    );
-    expect(paths).toContain(
-      `/api/orders/executive/metrics-series?from=${trend.from}&to=${trend.to}&granularity=hour&timezone=Asia%2FBangkok`,
+      `/api/orders/executive/metrics?from=${previous.from}&to=${previous.to}&timezone=Asia%2FBangkok`,
     );
   });
 
@@ -735,7 +724,7 @@ describe("ExecutiveDashboardPage", () => {
     expect(chart).toHaveAccessibleName(/รายได้แพลตฟอร์ม ฿333/);
   });
 
-  it("switches the whole overview to this year and back to today", async () => {
+  it("switches the whole overview to this year and back to the last 7 days", async () => {
     mockProviders();
 
     render(<ExecutiveDashboardPage />);
@@ -755,18 +744,16 @@ describe("ExecutiveDashboardPage", () => {
       `/api/orders/executive/metrics-series?from=${year.trend.from}&to=${year.trend.to}&granularity=month&timezone=Asia%2FBangkok`,
     );
 
-    fireEvent.click(screen.getByRole("radio", { name: "วันนี้" }));
+    fireEvent.click(screen.getByRole("radio", { name: "7 วันล่าสุด" }));
 
+    expect(await screen.findByText("ยอดรายวัน · 7 วันล่าสุด")).toBeVisible();
     expect(
-      await screen.findByText("ยอดขายทุก 1 ชั่วโมง · วันนี้"),
-    ).toBeVisible();
-    expect(
-      screen.getAllByText("เทียบกับวันเดียวกันสัปดาห์ที่แล้ว").length,
+      screen.getAllByText("เทียบกับ 7 วันก่อนหน้านี้").length,
     ).toBeGreaterThan(0);
-    const today = overviewPeriods("today");
+    const week = overviewPeriods("week");
     await waitFor(() =>
       expect(apiFetch.mock.calls.map(([path]) => path)).toContain(
-        `/api/orders/executive/metrics-series?from=${today.trend.from}&to=${today.trend.to}&granularity=hour&timezone=Asia%2FBangkok`,
+        `/api/orders/executive/metrics-series?from=${week.trend.from}&to=${week.trend.to}&granularity=day&timezone=Asia%2FBangkok`,
       ),
     );
   });

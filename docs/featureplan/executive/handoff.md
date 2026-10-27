@@ -54,7 +54,7 @@
 - `CEO-001`–`CEO-003` มี implementation + PostgreSQL integration test ที่รันผ่านจริงแล้ว
   (`REQUIRE_INTEGRATION=1`) — หลักฐานล่าสุด 2026-10-24 ใน [`progress.md`](progress.md)
 - หน้าข้อร้องเรียนรวมข้อร้องเรียน/Ticket/ข้อพิพาท พร้อมตัวกรองและหน้าต่างรายละเอียด
-  (CEO-DEC-014, CEO-DEC-015); หน้าภาพรวมมีช่วงเวลา วันนี้ (ค่าเริ่มต้น)/เดือนนี้/ปีนี้/กำหนดเอง (ตั้งแต่–ถึง, CEO-DEC-018)
+  (CEO-DEC-014, CEO-DEC-015); หน้าภาพรวมมีช่วงเวลา 7 วันล่าสุด (ค่าเริ่มต้น)/เดือนนี้/ปีนี้/กำหนดเอง (ตั้งแต่–ถึง, CEO-DEC-018)
 - Index ตามเวลา: auth `20261024100000_executive_time_indexes` (`login_logs.login_at`, `users.created_at`, `reports.reported_at`), order `20261024100000_executive_order_time_index` (`orders(created_at, status)`), support `20261024100000_executive_ticket_time_index` (`support_tickets.created_at`) — ต้องรัน
   `prisma migrate deploy` ของ 3 service นี้ตอน deploy
 - `CEO-004` ยังอยู่ใน scope แต่ไม่ได้ส่งมอบทันกำหนด (CEO-DEC-011): มีแค่คำเตือนร้องเรียนซ้ำที่คำนวณตอนเรียก

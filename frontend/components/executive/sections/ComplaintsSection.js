@@ -139,7 +139,10 @@ export default function ComplaintsSection({ token }) {
             />
           </div>
           {period === "custom" && (
-            <div className="flex flex-wrap items-start gap-3 pt-6">
+            /* Level with the buttons: down past the "ช่วงเวลา" label above
+               them (28px) and 4px more, as the buttons are 8px taller than a
+               date field. */
+            <div className="flex flex-wrap items-start gap-3 pt-8">
               <DayField
                 caption="ตั้งแต่"
                 label="ตั้งแต่วันที่"
@@ -174,7 +177,10 @@ export default function ComplaintsSection({ token }) {
             >
               ค้นหาด้วยรหัส
             </label>
-            <div className="relative">
+            {/* Level with the buttons, which are 8px taller than the box: 4px
+                down. The label's own 6px margin below merges with this one,
+                so the margin here is the whole 10px. */}
+            <div className="relative mt-2.5">
               <span
                 aria-hidden="true"
                 className="material-symbols-outlined pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-slate-400"

@@ -117,6 +117,7 @@ test("getDisplayNames against a real database", async (t) => {
   await t.test("a buyer resolves to their first name only", async () => {
     const [entry] = await authService.getDisplayNames([buyer.id]);
     assert.equal(entry.displayName, "สมชาย");
+    assert.equal(entry.userName, "สมชาย");
     // NFR-SP-02: the surname must never leave the service.
     assert.ok(!JSON.stringify(entry).includes("นามสกุลจริง"));
   });
@@ -124,6 +125,7 @@ test("getDisplayNames against a real database", async (t) => {
   await t.test("a shop owner resolves to the shop name", async () => {
     const [entry] = await authService.getDisplayNames([seller.id]);
     assert.equal(entry.displayName, "ร้านทดสอบ");
+    assert.equal(entry.userName, "สมหญิง");
   });
 
   await t.test(

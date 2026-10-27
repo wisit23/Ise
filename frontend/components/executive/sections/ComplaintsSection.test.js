@@ -28,6 +28,21 @@ const REPORT = {
   productId: null,
   reporterName: "มาลี ใจดี",
 };
+// A seller's report of a customer's review, as auth-service stores it: in the
+// same table, told apart only by the marker at the start of the reason. The
+// customer who wrote it also runs a shop.
+const REVIEW_REPORT = {
+  ...REPORT,
+  id: "r2",
+  reason:
+    '[รายงานรีวิว #9ecc319c-9d52-4f5e-8139-135c4da709ba] [รีวิวเท็จ / ข้อมูลไม่ตรงกับความจริง] มั่วละ (เนื้อหารีวิว: "ของดีมาก")',
+  targetId: "writer-1",
+  targetName: "นักซื้อ ตัวยง",
+  targetShopName: "GG SHOP",
+  reporterName: "มานพ เดนิม",
+  productId: "p37",
+  productTitle: "กางเกงยีนส์ไม่เคยใส่ เอว 36",
+};
 const TICKET = {
   id: "t1",
   ticketNumber: "TK-0001",
@@ -568,6 +583,153 @@ describe("ComplaintsSection", () => {
     expect(pathsFor("/api/auth/executive/reports").at(-1)).toContain("from=");
     expect(screen.queryByText(/ทุกสถานะ ทุกช่วงเวลา/)).toBeNull();
     expect(pathsFor("/api/support/executive/tickets").length).toBe(ticketCalls);
+  });
+
+  it("names a report of a review as one, and a report of a shop as before", async () => {
+    serve({
+      "/api/auth/executive/reports": () =>
+        reportAnswer([REVIEW_REPORT, REPORT]),
+    });
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("ร้านไม่ส่งของ");
+
+    // The ordinary report is untouched: its reason, "เป้าหมาย" and its shop.
+    const plain = screen.getByText("ร้านไม่ส่งของ").closest("li");
+    expect(plain).toHaveTextContent("เป้าหมาย: ร้านสมชาย");
+    expect(plain).not.toHaveTextContent("รายงานรีวิว");
+
+    // The review report: a plain grey label like a ticket's, and the topic;
+    // what the seller wrote and the review itself are in the details. The
+    // person who wrote the review, not their shop, and no raw
+    // "[รายงานรีวิว #…]" text or review id.
+    const label = screen.getByText("รายงานรีวิว");
+    expect(label).toHaveClass("bg-slate-100", "text-slate-600");
+    const review = label.closest("li");
+    expect(review).toHaveTextContent("รีวิวเท็จ / ข้อมูลไม่ตรงกับความจริง");
+    expect(review).not.toHaveTextContent("มั่วละ");
+    expect(review).not.toHaveTextContent("ของดีมาก");
+    expect(review).toHaveTextContent("ผู้เขียนรีวิว: นักซื้อ ตัวยง");
+    expect(review).not.toHaveTextContent("GG SHOP");
+    expect(review).not.toHaveTextContent("เป้าหมาย:");
+    expect(review).not.toHaveTextContent("9ecc319c");
+    expect(review).not.toHaveTextContent("รหัสอ้างอิงไม่พร้อมใช้งาน");
+  });
+
+  it("opens the details of a report of a review, split into its parts", async () => {
+    serve({
+      "/api/auth/executive/reports": () => reportAnswer([REVIEW_REPORT]),
+    });
+    render(<ComplaintsSection token="t" />);
+    const row = (await screen.findByText("รายงานรีวิว")).closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("ประเภทคำร้อง")).toBeVisible();
+    expect(
+      within(dialog).getByText("รีวิวเท็จ / ข้อมูลไม่ตรงกับความจริง"),
+    ).toBeVisible();
+    expect(within(dialog).getByText("มั่วละ")).toBeVisible();
+    expect(within(dialog).getByText("“ของดีมาก”")).toBeVisible();
+    // The person who wrote it; the shop they also run is not shown.
+    expect(within(dialog).getByText("ผู้เขียนรีวิวที่ถูกรายงาน")).toBeVisible();
+    expect(within(dialog).getByText("ชื่อผู้ใช้: นักซื้อ ตัวยง")).toBeVisible();
+    expect(dialog).not.toHaveTextContent("GG SHOP");
+    expect(dialog).not.toHaveTextContent("ร้านของผู้ใช้นี้");
+    expect(dialog).not.toHaveTextContent("9ecc319c");
+  });
+
+  it("puts the date beside the topic and names the product in the details of a review report", async () => {
+    serve({
+      "/api/auth/executive/reports": () => reportAnswer([REVIEW_REPORT]),
+    });
+    render(<ComplaintsSection token="t" />);
+    const row = (await screen.findByText("รายงานรีวิว")).closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // "วันเวลาที่แจ้ง" is the neighbour of "หัวข้อปัญหา", in one row.
+    const topic = within(dialog).getByText("หัวข้อปัญหา").parentElement;
+    const date = within(dialog).getByText("วันเวลาที่แจ้ง").parentElement;
+    expect(topic.parentElement).toBe(date.parentElement);
+    // The reporter is on a row of their own.
+    const reporter = within(dialog).getByText("ผู้ส่งคำร้อง").parentElement;
+    expect(reporter.parentElement).not.toBe(date.parentElement);
+
+    // A product that is still listed is not marked as deleted.
+    expect(dialog).not.toHaveTextContent("สินค้าถูกลบแล้ว");
+    // The product has its own heading: its name, then its code beneath.
+    const product = within(dialog).getByText("สินค้า").parentElement;
+    const lines = [...product.querySelectorAll("dd p")].map(
+      (line) => line.textContent,
+    );
+    expect(lines).toEqual([
+      "กางเกงยีนส์ไม่เคยใส่ เอว 36",
+      expect.stringMatching(/^รหัสสินค้า: /),
+    ]);
+    // And no longer under who was reported.
+    const target = within(dialog).getByText(
+      "ผู้เขียนรีวิวที่ถูกรายงาน",
+    ).parentElement;
+    expect(target).not.toHaveTextContent("รหัสสินค้า");
+  });
+
+  it("names a product its seller deleted, and says it is deleted", async () => {
+    serve({
+      "/api/auth/executive/reports": () =>
+        reportAnswer([
+          {
+            ...REPORT,
+            productId: "p9",
+            productTitle: "เสื้อที่ลบแล้ว",
+            productDeleted: true,
+          },
+        ]),
+    });
+    render(<ComplaintsSection token="t" />);
+    const row = (await screen.findByText("ร้านไม่ส่งของ")).closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+    const dialog = await screen.findByRole("dialog");
+    const product = within(dialog).getByText("สินค้า").parentElement;
+    expect(product).toHaveTextContent("เสื้อที่ลบแล้ว");
+    expect(product).toHaveTextContent("สินค้าถูกลบแล้ว");
+    expect(product).not.toHaveTextContent("ไม่พบสินค้า");
+  });
+
+  it("says so when a product's name is not known", async () => {
+    const open = async (extra) => {
+      serve({
+        "/api/auth/executive/reports": () =>
+          reportAnswer([{ ...REPORT, productId: "p9", ...extra }]),
+      });
+      const view = render(<ComplaintsSection token="t" />);
+      const row = (await screen.findByText("ร้านไม่ส่งของ")).closest("li");
+      fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+      const dialog = await screen.findByRole("dialog");
+      const product = within(dialog).getByText("สินค้า").parentElement;
+      const text = product.textContent;
+      view.unmount();
+      return text;
+    };
+    // The product is gone, or product-service could not be asked.
+    expect(await open({ productTitle: null })).toContain("ไม่พบสินค้า");
+    expect(
+      await open({ productTitle: null, productUnavailable: true }),
+    ).toContain("ไม่พร้อมใช้งาน");
+  });
+
+  it("keeps the date beside the reporter for a report that is not of a review", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("ร้านไม่ส่งของ");
+    const row = screen.getByText("ร้านไม่ส่งของ").closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+    const dialog = await screen.findByRole("dialog");
+
+    const reporter = within(dialog).getByText("ผู้ส่งคำร้อง").parentElement;
+    const date = within(dialog).getByText("วันเวลาที่แจ้ง").parentElement;
+    expect(reporter.parentElement).toBe(date.parentElement);
+    // No product on this one: no product heading.
+    expect(within(dialog).queryByText("สินค้า")).toBeNull();
   });
 
   it("opens the details of a complaint", async () => {

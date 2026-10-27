@@ -85,7 +85,7 @@ test("executive dispute detail against a real database", async (t) => {
     return {
       status: 200,
       json: [
-        { userId: ids.buyer, displayName: "มาลี" },
+        { userId: ids.buyer, displayName: "ร้านของมาลี", userName: "มาลี" },
         { userId: ids.seller, displayName: "ร้านมือสองดี" },
         {
           userId: ids.admin,

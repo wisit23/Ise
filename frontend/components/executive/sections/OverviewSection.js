@@ -25,13 +25,13 @@ import {
 } from "../../../lib/executive";
 
 // ─── Overview Section ───────────────────────────────────────────────────────
-// One period picker (today / this month / this year / custom) drives everything:
+// One period picker (last 7 days / this month / this year / custom) drives everything:
 // Row 1: KPI cards, compared with an equally long previous period
 // Row 2: a sales trend of whole periods beside the paid orders by status
 // Row 3: the rankings
 
 export default function OverviewSection({ token }) {
-  const [mode, setMode] = useState("today");
+  const [mode, setMode] = useState("week");
   // The two dates picked in the date fields, which are always on the page. They
   // only take effect when "กำหนดเอง" is the chosen period: pressing that button
   // applies them, and while it is chosen new dates apply at once. A half-typed
@@ -132,30 +132,34 @@ export default function OverviewSection({ token }) {
     <div className="animate-fade-in-up space-y-4">
       <div className="flex flex-wrap items-start justify-end gap-3">
         <PeriodTabs options={PERIOD_MODES} value={mode} onChange={setMode} />
-        <DayField
-          caption="ตั้งแต่"
-          label="ตั้งแต่วันที่"
-          value={draft.from}
-          max={defaultCustomDay()}
-          error={draftError}
-          onChange={(from) =>
-            setDraft((previous) => ({
-              from,
-              // Picking the first day alone keeps a one-day range.
-              to:
-                previous.from === previous.to || previous.to < from
-                  ? from
-                  : previous.to,
-            }))
-          }
-        />
-        <DayField
-          caption="ถึง"
-          label="ถึงวันที่"
-          value={draft.to}
-          max={defaultCustomDay()}
-          onChange={(to) => setDraft((previous) => ({ ...previous, to }))}
-        />
+        {/* The buttons are 8px taller than a date field, so the fields sit 4px
+            down to be level with them; a message under a field flows below. */}
+        <div className="flex items-start gap-3 pt-1">
+          <DayField
+            caption="ตั้งแต่"
+            label="ตั้งแต่วันที่"
+            value={draft.from}
+            max={defaultCustomDay()}
+            error={draftError}
+            onChange={(from) =>
+              setDraft((previous) => ({
+                from,
+                // Picking the first day alone keeps a one-day range.
+                to:
+                  previous.from === previous.to || previous.to < from
+                    ? from
+                    : previous.to,
+              }))
+            }
+          />
+          <DayField
+            caption="ถึง"
+            label="ถึงวันที่"
+            value={draft.to}
+            max={defaultCustomDay()}
+            onChange={(to) => setDraft((previous) => ({ ...previous, to }))}
+          />
+        </div>
       </div>
 
       {loading ? (

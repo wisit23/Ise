@@ -63,12 +63,16 @@ async function getExecutiveDispute(id) {
       ? titleOf(order.productId)
       : { available: true, title: null },
   ]);
-  const person = (userId, { withRoles = false } = {}) => {
+  const person = (userId, { withRoles = false, userName = false } = {}) => {
     if (!userId) return null;
     const found = names?.get(userId);
     return {
       id: userId,
-      name: found?.displayName ?? null,
+      name: userName
+        ? typeof found?.userName === "string" && found.userName.trim()
+          ? found.userName.trim()
+          : null
+        : found?.displayName ?? null,
       // Staff roles say which team acted (CS, Trust & Safety, Admin).
       ...(withRoles ? { roles: found?.staffRoles ?? [] } : {}),
     };
@@ -93,7 +97,7 @@ async function getExecutiveDispute(id) {
       product: order?.productId
         ? { id: order.productId, title: product.title }
         : null,
-      buyer: person(people.buyer),
+      buyer: person(people.buyer, { userName: true }),
       seller: person(people.seller),
       assignee: person(people.assignee, { withRoles: true }),
       assignedRole: row.assignedRole ?? null,

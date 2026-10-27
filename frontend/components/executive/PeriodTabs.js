@@ -1,7 +1,7 @@
 /**
  * The overview's period choices as a row of buttons, one always selected.
  * Radio semantics: the group has one value and each button says whether it is
- * the chosen one, so a screen reader hears "วันนี้, selected, 1 of 4".
+ * the chosen one, so a screen reader hears "7 วันล่าสุด, selected, 1 of 4".
  */
 export default function PeriodTabs({ options, value, onChange }) {
   return (

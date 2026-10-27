@@ -1,5 +1,6 @@
 // @ts-check
 import { LOCALE, TIMEZONE } from "./executive";
+import { SAFETY_ACTION_LABEL } from "./supportConstants";
 
 /**
  * @typedef {Object} ReportActionDetails
@@ -21,6 +22,9 @@ import { LOCALE, TIMEZONE } from "./executive";
  * @property {string|null} targetName
  * @property {string|null} targetShopName
  * @property {string|null} productId
+ * @property {string|null} [productTitle]
+ * @property {boolean} [productDeleted]
+ * @property {boolean} [productUnavailable]
  * @property {number|undefined} targetReportCount
  *
  * @typedef {Object} RiskTarget
@@ -107,6 +111,13 @@ function parseReport(value) {
     targetName: optionalText(value.targetName),
     targetShopName: optionalText(value.targetShopName),
     productId: optionalText(value.productId),
+    // The product's name, from product-service; absent when no product.
+    ...(value.productTitle !== undefined
+      ? { productTitle: optionalText(value.productTitle) }
+      : {}),
+    // Sold products keep their name; a deleted one has it too, flagged.
+    ...(value.productDeleted === true ? { productDeleted: true } : {}),
+    ...(value.productUnavailable === true ? { productUnavailable: true } : {}),
     targetReportCount: optionalCount(value.targetReportCount),
     actionDetails: null,
   };
@@ -227,12 +238,65 @@ export function formatReportedAt(value) {
   });
 }
 
+// How a seller's report of a customer's review is written into `reason` by
+// auth-service: "[รายงานรีวิว #<id>] [<topic>] <comment> (เนื้อหารีวิว: "<review>")".
+const REVIEW_REPORT = /^\s*\[รายงานรีวิว\s*#?[^\]]*\]\s*([\s\S]*)$/;
+const REVIEW_TOPIC = /^\[([^\]]+)\]\s*([\s\S]*)$/;
+const REVIEW_CONTENT = /\s*\(เนื้อหารีวิว:\s*([\s\S]*)\)\s*$/;
+const QUOTES = /^["“”']+|["“”']+$/g;
+
+/**
+ * What a complaint is about. Reports of a review are kept in the same table as
+ * reports of a user and are told apart only by the marker at the start of the
+ * reason, so this reads it: the topic the seller picked, what they added, and
+ * the review as it was. Any other report is returned as it is.
+ *
+ * @param {Pick<ExecutiveReport, 'reason'>} report
+ * @returns {{kind: 'review', topic: string|null, comment: string, reviewText: string|null}
+ *   | {kind: 'user', comment: string}}
+ */
+export function describeReport(report) {
+  const reason = String(report?.reason ?? "");
+  const review = REVIEW_REPORT.exec(reason);
+  if (!review) return { kind: "user", comment: reason };
+
+  let rest = review[1];
+  let reviewText = null;
+  const content = REVIEW_CONTENT.exec(rest);
+  if (content) {
+    reviewText = content[1].replace(QUOTES, "").trim() || null;
+    rest = rest.slice(0, content.index);
+  }
+  let topic = null;
+  const withTopic = REVIEW_TOPIC.exec(rest.trim());
+  if (withTopic) {
+    topic = withTopic[1].trim();
+    rest = withTopic[2];
+  }
+  return { kind: "review", topic, comment: rest.trim(), reviewText };
+}
+
+/**
+ * Who a complaint is about, as the page names them. For a review it is the
+ * person who wrote it, by name; their shop, if they also run one, is not who
+ * was reported. For anything else it is the shop, else the person.
+ *
+ * @param {ExecutiveReport} report
+ */
+export function reportedPartyName(report) {
+  if (describeReport(report).kind === "review") {
+    return report.targetName || report.targetShopName || null;
+  }
+  return report.targetShopName || report.targetName || null;
+}
+
 /** @param {ExecutiveReport} report */
 export function actionLabel(report) {
   if (!["ACTIONED", "DISMISSED"].includes(report.status)) return "-";
   // UI translations of persisted domain codes, not fabricated decision data.
   /** @type {Record<string, string>} */
   const labels = {
+    ...SAFETY_ACTION_LABEL,
     WARN_USER: report.targetShopName ? "เตือนร้านค้า" : "เตือนผู้ใช้",
     DISMISS: "ไม่ดำเนินการ",
     SUSPEND_USER: "ระงับบัญชีผู้ใช้",

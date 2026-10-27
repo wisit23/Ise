@@ -177,14 +177,13 @@ export function reportYears(firstSaleYear, instant = new Date()) {
 
 export const OVERVIEW_MODES = [
   {
-    value: "today",
-    label: "วันนี้",
-    // Up to the same time of day (see overviewPeriods).
-    compareLabel: "เทียบกับวันเดียวกันสัปดาห์ที่แล้ว",
-    baselineName: "วันเดียวกันสัปดาห์ที่แล้ว",
-    trendCaption: "ยอดขายทุก 1 ชั่วโมง · วันนี้",
+    value: "week",
+    label: "7 วันล่าสุด",
+    compareLabel: "เทียบกับ 7 วันก่อนหน้านี้",
+    baselineName: "7 วันก่อนหน้านี้",
+    trendCaption: "ยอดรายวัน · 7 วันล่าสุด",
     usersGranularity: "day",
-    periodName: "วันนี้",
+    periodName: "7 วันล่าสุด",
   },
   {
     value: "month",
@@ -247,9 +246,6 @@ export function describeMode(mode, custom) {
   };
 }
 
-// A week, for comparing a day with the same weekday before it.
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
 /** Most calendar years the yearly trend reaches back (NFR-SC-02 keeps five). */
 export const MAX_TREND_YEARS = 5;
 const TREND_MONTHS = 6;
@@ -303,20 +299,17 @@ export function overviewPeriods(mode, instant = new Date(), custom) {
     };
   }
 
-  if (mode === "today") {
-    // Today so far, against the same weekday last week up to the same time:
-    // half a day of sales is never set against a whole day. Charted by the
-    // hour.
+  if (mode === "week") {
     return {
-      current: { from: isoDate(year, monthIndex, day), to: end },
+      current: { from: isoDate(year, monthIndex, day - 6), to: end },
       previous: {
-        from: isoDate(year, monthIndex, day - 7),
-        to: new Date(instant.getTime() - WEEK_MS).toISOString(),
+        from: isoDate(year, monthIndex, day - 13),
+        to: isoDate(year, monthIndex, day - 6),
       },
       trend: {
-        from: isoDate(year, monthIndex, day),
+        from: isoDate(year, monthIndex, day - 6),
         to: end,
-        granularity: "hour",
+        granularity: "day",
       },
     };
   }
@@ -473,13 +466,18 @@ export function buildTrendPoints(mode, rows, instant = new Date(), custom) {
 
   if (mode === "custom") return hourlyPoints(rows, detailOf);
 
-  if (mode === "today") {
-    // The hours still to come are not sales yet: the line stops at this hour
-    // instead of falling to zero for the rest of the day.
-    return hourlyPoints(
-      rows.filter((row) => new Date(row.period) <= instant),
-      detailOf,
-    );
+  if (mode === "week") {
+    return rows.map((row) => {
+      const at = new Date(row.period);
+      const d = currentDate(at);
+      return {
+        label: String(d.day),
+        subLabel: MONTH_SHORT[d.monthIndex],
+        fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${String(buddhistYear(d.year) % 100).padStart(2, "0")}`,
+        value: row.gmv,
+        detail: detailOf(row.gmv, row.platformRevenue),
+      };
+    });
   }
 
   return rows.map((row, i) => {

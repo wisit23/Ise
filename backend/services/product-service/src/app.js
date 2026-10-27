@@ -4,6 +4,7 @@ const productRoutes = require("./routes/productRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const moderationRoutes = require("./features/moderation/moderationRoutes");
 const metricsRoutes = require("./features/metrics/metricsRoutes");
+const productNameRoutes = require("./features/metrics/productNames");
 const reservationRoutes = require("./features/reservations/reservationRoutes");
 const internalCampaignRoutes = require("./features/campaigns/internalCampaignRoutes");
 const internalAuctionRoutes = require("./features/auctions/internalAuctionRoutes");
@@ -33,6 +34,7 @@ app.use("/reviews/uploads", reviewUploadRoutes);
 app.use("/reviews", reviewRoutes);
 
 app.use("/internal/products", reservationRoutes);
+app.use("/internal/executive", productNameRoutes);
 app.use("/internal/campaigns", internalCampaignRoutes);
 app.use("/internal/auctions", internalAuctionRoutes);
 app.use("/", productRoutes);

@@ -399,6 +399,8 @@ async function getDisplayNames(userIds) {
     return {
       userId: user.id,
       displayName: user.sellerProfile?.shopName || user.firstName,
+      // A person's name remains distinct from their shop's display name.
+      userName: user.firstName,
       ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
       staffRoles: STAFF_ROLES.filter((role) => held.includes(role)),
     };
