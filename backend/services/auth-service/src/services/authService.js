@@ -11,6 +11,7 @@ const {
   badRequest,
   conflict,
   notFound,
+  STAFF_ROLES,
 } = require("@reloop/shared");
 const prisma = require("../models/prismaClient");
 const { assertActive, revokedSession, lockUser } = require("./sessionService");
@@ -381,15 +382,29 @@ async function getDisplayNames(userIds) {
       id: true,
       firstName: true,
       referenceCode: true,
+      role: true,
+      roles: { select: { role: true } },
       sellerProfile: { select: { shopName: true } },
     },
   });
 
-  return users.map((user) => ({
-    userId: user.id,
-    displayName: user.sellerProfile?.shopName || user.firstName,
-    ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
-  }));
+  // `staffRoles` lists only staff roles (ADMIN, TRUST_AND_SAFETY,
+  // CUSTOMER_SERVICE) and is empty for customers, so a screen can say which
+  // team acted on a case without learning anything about a buyer or seller.
+  return users.map((user) => {
+    // Role rows win over the legacy column, as everywhere else in auth.
+    const held = user.roles.length
+      ? user.roles.map((row) => row.role)
+      : [user.role];
+    return {
+      userId: user.id,
+      displayName: user.sellerProfile?.shopName || user.firstName,
+      // A person's name remains distinct from their shop's display name.
+      userName: user.firstName,
+      ...(user.referenceCode ? { referenceCode: user.referenceCode } : {}),
+      staffRoles: STAFF_ROLES.filter((role) => held.includes(role)),
+    };
+  });
 }
 
 /** Public store-front info for a seller — no email/phone, only what a buyer needs to see. */

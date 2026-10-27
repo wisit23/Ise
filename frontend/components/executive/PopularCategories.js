@@ -1,11 +1,8 @@
-import { categoryName } from "../../lib/executive";
+import { baht, categoryName, formatCount } from "../../lib/executive";
 // One template for the header and every row keeps the columns aligned: a wide
 // name column, then three equal columns whose figures sit under their headings.
 const GRID =
   "grid grid-cols-[1.5rem_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)] items-baseline gap-x-3";
-
-const count = (n) => n.toLocaleString("th-TH");
-const baht = (n) => `฿${n.toLocaleString("th-TH")}`;
 
 /**
  * The most popular categories: how many pieces each sold, its share of all
@@ -46,7 +43,7 @@ export default function PopularCategories({ rows, total, emptyText }) {
               {categoryName(row)}
             </span>
             <span className="text-center font-semibold">
-              {count(row.count)} ชิ้น
+              {formatCount(row.count)} ชิ้น
             </span>
             <span className="text-center">
               {Math.round((row.count / whole) * 100)}%

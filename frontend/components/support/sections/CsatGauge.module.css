@@ -32,7 +32,7 @@
   flex-shrink: 0;
 }
 .chart {
-  flex: 1 1 0;
+  flex: 1 0 auto;
   min-height: 200px;
   display: grid;
   place-items: center;
@@ -64,107 +64,81 @@
   color: rgb(var(--color-ink-muted));
   font-size: 12px;
 }
-.stats {
-  flex-shrink: 0;
-  padding: 0 12px;
-  margin-inline: 0;
-  border-radius: 14px;
-  background: rgb(var(--color-brand-600) / 0.035);
-}
-.stats > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 52px;
-  border-top: 1px solid rgb(var(--color-brand-600) / 0.08);
-}
-.stats > div:first-child {
-  border-top: 0;
-}
-.stats dt {
+.side {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  color: rgb(var(--color-ink-muted));
-  font-size: 13px;
-}
-.stats dt small {
-  font-size: 10px;
-}
-.stats dd {
-  display: grid;
-  grid-template-columns: minmax(3ch, auto) 6px minmax(1ch, auto);
-  align-items: baseline;
-  column-gap: 4px;
-  white-space: nowrap;
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.5px;
-}
-.stats dd > span {
-  text-align: right;
-}
-.stats dd > small {
-  text-align: center;
-}
-.stats dd small {
-  font-size: 12px;
-  font-weight: 400;
-  color: rgb(var(--color-ink-muted));
-  letter-spacing: 0;
-}
-.dot,
-.averageDot,
-.ticketDot,
-.disputeDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: rgb(var(--color-brand-600));
+  flex-direction: column;
+  gap: 10px;
   flex-shrink: 0;
+  min-width: 0;
 }
-.averageDot {
-  background: rgb(var(--color-ink-subtle));
-}
-.sources {
+.stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  padding-top: 0;
-  margin-top: 8px;
-  flex-shrink: 0;
 }
-.sources > span {
-  display: grid;
-  grid-template-columns: 7px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  color: rgb(var(--color-ink-muted));
-  font-size: 12px;
-  line-height: 20px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgb(var(--color-brand-600) / 0.035);
+.stats > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgb(var(--color-brand-600) / 0.07);
+  border: 1px solid rgb(var(--color-brand-600) / 0.1);
 }
-.sources strong {
-  font-variant-numeric: tabular-nums;
+.stats dt {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   color: rgb(var(--color-ink));
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 550;
+  font-size: 13px;
+  line-height: 1.35;
 }
-.ticketDot {
-  background: rgb(var(--color-brand-900));
+.stats dt small {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgb(var(--color-ink-muted));
 }
-.disputeDot {
-  background: rgb(var(--color-brand-400));
+.stats dd {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.stats dd > span {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+.stats dd small {
+  font-size: 12px;
+  color: rgb(var(--color-ink-muted));
+}
+.stars {
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  line-height: 1;
+  background: linear-gradient(
+    90deg,
+    #f5a524 var(--stars),
+    rgb(var(--color-line-strong)) var(--stars)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .empty {
-  padding: 18px 0;
+  padding: 18px 12px;
   text-align: center;
   color: rgb(var(--color-ink-muted));
   font-size: 13px;
-  border-top: 1px solid rgb(var(--color-line));
+  border-radius: 14px;
+  background: rgb(var(--color-brand-600) / 0.035);
 }
 @media (min-width: 1024px) and (max-height: 850px) {
   .heading h2 {
@@ -178,15 +152,7 @@
     max-width: 190px;
   }
   .stats > div {
-    min-height: 44px;
-  }
-  .stats dt {
-    gap: 6px;
-    font-size: 12px;
-    flex-wrap: wrap;
-  }
-  .stats dt small {
-    display: none;
+    padding: 10px 12px;
   }
   .value {
     font-size: 36px;
@@ -201,15 +167,11 @@
 
 /* Use the dashboard entrance clock; polling and date changes do not replay it. */
 .entering .chartInner,
-.entering .stats > div,
-.entering .sources > span {
+.entering .stats > div {
   animation: csat-content-in 650ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 .entering .stats > div:nth-child(2) {
   animation-delay: 60ms;
-}
-.entering .sources > span {
-  animation-delay: 120ms;
 }
 .entering .arc {
   animation: csat-arc-in 1250ms 80ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
@@ -223,7 +185,6 @@
 }
 .paused .chartInner,
 .paused .stats > div,
-.paused .sources > span,
 .paused .arc,
 .paused .needle {
   animation-play-state: paused;
@@ -261,7 +222,6 @@
 @media (prefers-reduced-motion: reduce) {
   .entering .chartInner,
   .entering .stats > div,
-  .entering .sources > span,
   .entering .arc,
   .entering .needle {
     animation: none;
@@ -297,55 +257,37 @@
     font-size: 10px;
     margin-top: 8px;
   }
-  .compact .stats {
+  .compact .side {
     grid-column: 2;
-    grid-row: 2;
-    align-self: end;
+    grid-row: 2 / 4;
+    align-self: center;
     margin-top: 12px;
-    padding-inline: 10px;
   }
-  .compact .stats > div {
-    min-height: 44px;
-  }
-  .compact .stats dt {
-    font-size: 11px;
+  .compact .stats {
+    grid-template-columns: 1fr;
     gap: 6px;
   }
-  .compact .stats dt small {
-    display: none;
+  .compact .stats > div {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 14px;
   }
-  .compact .stats dd {
-    font-size: 18px;
-    column-gap: 2px;
-  }
-  .compact .stats dd small {
-    font-size: 10px;
-  }
-  .compact .sources {
-    grid-column: 2;
-    grid-row: 3;
-    grid-template-columns: 1fr;
-    gap: 4px;
-    margin-top: 8px;
-  }
-  .compact .sources > span {
-    font-size: 11px;
-    padding: 3px 10px;
-    line-height: 18px;
-  }
-  .compact .sources strong {
+  .compact .stats dt {
     font-size: 12px;
   }
-  .compact .empty {
-    grid-column: 2;
-    grid-row: 2;
-    align-self: center;
+  .compact .stats dd > span {
+    font-size: 26px;
+  }
+  .compact .stats dd small {
+    font-size: 12px;
   }
 }
 
-@media (min-width: 1280px) and (min-height: 700px) and (max-height: 850px) {
+@media (min-width: 1280px) and (min-height: 700px) and (max-height: 949px) {
   .compact .chart {
-    min-height: 130px;
+    min-height: 122px;
     padding-block: 4px;
   }
   .compact .chartInner {
@@ -355,15 +297,13 @@
     font-size: 28px;
   }
   .compact .chartCaption {
-    margin-top: 6px;
+    display: none;
   }
-  .compact .stats {
+  .compact .side {
     margin-top: 8px;
+    gap: 6px;
   }
   .compact .stats > div {
-    min-height: 40px;
-  }
-  .compact .sources > span {
-    line-height: 16px;
+    padding: 7px 10px;
   }
 }

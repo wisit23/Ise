@@ -1,5 +1,8 @@
 const {
-  resolveMetricRange,
+  resolveExecutiveRange,
+  allowedValue,
+  searchQuery,
+  listSort,
   metricMeta,
   buildSeriesPeriods,
   fillSeriesGaps,
@@ -8,7 +11,6 @@ const {
   SLOT_GRANULARITY,
   parsePagination,
   paginatedResponse,
-  badRequest,
   notFound,
 } = require("@reloop/shared");
 const platformMetrics = require("./platformMetrics");
@@ -19,7 +21,7 @@ const { getExecutiveDispute } = require("./executiveDisputeDetail");
 
 async function getMetrics(req, res, next) {
   try {
-    const { from, to, timezone } = resolveMetricRange(req.query);
+    const { from, to, timezone } = resolveExecutiveRange(req.query);
     const data = await platformMetrics.getPlatformMetrics({ from, to });
 
     res.json({
@@ -36,7 +38,7 @@ async function getMetrics(req, res, next) {
 
 async function getMetricsSeries(req, res, next) {
   try {
-    const { from, to, timezone } = resolveMetricRange(req.query);
+    const { from, to, timezone } = resolveExecutiveRange(req.query);
     const granularity = req.query.granularity;
     // Day and month like every series endpoint, plus hourly slots for
     // looking inside one day.
@@ -74,7 +76,7 @@ async function getMetricsSeries(req, res, next) {
 
 async function getOrderStatus(req, res, next) {
   try {
-    const { from, to, timezone } = resolveMetricRange(req.query);
+    const { from, to, timezone } = resolveExecutiveRange(req.query);
     const data = await orderStatusMetrics.getOrderStatusBreakdown({ from, to });
 
     res.json({ data, meta: metricMeta({ from, to, timezone }) });
@@ -83,36 +85,28 @@ async function getOrderStatus(req, res, next) {
   }
 }
 
-// A filter value must be one the page offers, or the request is refused: an
-// unknown status silently matching nothing would read as "no disputes".
-function oneOf(value, allowed, name) {
-  if (value === undefined || value === "") return undefined;
-  if (typeof value !== "string" || !allowed.includes(value)) {
-    throw badRequest(`${name} must be one of ${allowed.join(", ")}`);
-  }
-  return value;
-}
-
 async function getDisputes(req, res, next) {
   try {
-    const { from, to, timezone } = resolveMetricRange(req.query);
+    const { from, to, timezone } = resolveExecutiveRange(req.query);
     const pagination = parsePagination(req.query, 20);
     const filters = {
-      status: oneOf(
+      status: allowedValue(
         req.query.status,
         executiveDisputes.DISPUTE_STATUSES,
         "status",
       ),
-      disputeType: oneOf(
+      disputeType: allowedValue(
         req.query.disputeType,
         executiveDisputes.DISPUTE_TYPES,
         "disputeType",
       ),
-      priority: oneOf(
+      priority: allowedValue(
         req.query.priority,
         executiveDisputes.DISPUTE_PRIORITIES,
         "priority",
       ),
+      search: searchQuery(req.query.q),
+      sort: listSort(req.query.sort),
     };
     const { items, total, statusCounts } =
       await executiveDisputes.listExecutiveDisputes({

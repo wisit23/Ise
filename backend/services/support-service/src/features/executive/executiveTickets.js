@@ -1,3 +1,4 @@
+const { escapeLike } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
 
 /**
@@ -56,11 +57,32 @@ async function listExecutiveTickets({
   status,
   category,
   priority,
+  search,
+  sort = "newest",
   skip,
   take,
 }) {
   const base = {
     createdAt: { gte: from, lt: to },
+    // Its code (TKT-…) or its number (#CS-000002), whole or in part.
+    ...(search
+      ? {
+          OR: [
+            {
+              referenceCode: {
+                contains: escapeLike(search.replace(/^#/, "")),
+                mode: "insensitive",
+              },
+            },
+            {
+              ticketNumber: {
+                contains: escapeLike(search),
+                mode: "insensitive",
+              },
+            },
+          ],
+        }
+      : {}),
     ...(category ? { category: { code: category } } : {}),
     ...(priority ? { priority: { code: priority } } : {}),
   };
@@ -72,7 +94,10 @@ async function listExecutiveTickets({
   const [rows, total, grouped, statuses] = await Promise.all([
     prisma.supportTicket.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      orderBy: [
+        { createdAt: sort === "oldest" ? "asc" : "desc" },
+        { id: "asc" },
+      ],
       skip,
       take,
       include: { category: true, priority: true, currentStatus: true },

@@ -16,14 +16,17 @@ describe("fetchCaseDetail", () => {
     await fetchCaseDetail("dispute", "d/1", "t");
     expect(apiFetch).toHaveBeenCalledWith(
       "/api/orders/executive/disputes/d%2F1",
-      { token: "t" },
+      { token: "t", timeoutMs: 15000 },
     );
 
-    apiFetch.mockResolvedValue({ data: { id: "t1", actions: [] }, meta: {} });
+    apiFetch.mockResolvedValue({
+      data: { id: "t1", handling: null },
+      meta: {},
+    });
     await fetchCaseDetail("ticket", "t1", "t");
     expect(apiFetch).toHaveBeenLastCalledWith(
       "/api/support/executive/tickets/t1",
-      { token: "t" },
+      { token: "t", timeoutMs: 15000 },
     );
   });
 

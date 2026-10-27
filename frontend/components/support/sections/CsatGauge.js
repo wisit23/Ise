@@ -32,6 +32,7 @@ export function combineCsat(sources) {
 export default function CsatGauge({
   tickets,
   disputes,
+  source = "all",
   days,
   className = "",
   headerClassName = "",
@@ -39,7 +40,11 @@ export default function CsatGauge({
   paused = false,
   compact = false,
 }) {
-  const data = combineCsat([tickets, disputes]);
+  const data = combineCsat(
+    source === "all"
+      ? [tickets, disputes]
+      : [source === "tickets" ? tickets : disputes],
+  );
   const percent = data?.percent;
   const animateNumber =
     entering &&
@@ -156,51 +161,41 @@ export default function CsatGauge({
           <p className={styles.chartCaption}>ความพึงพอใจต่อบริการ</p>
         </div>
       </div>
-      {data?.total ? (
-        <dl className={styles.stats}>
-          <div title="คะแนน 4–5 ดาว ÷ คะแนนทั้งหมด × 100">
-            <dt>
-              <span className={styles.dot} />
-              พึงพอใจ <small>(4–5 ดาว)</small>
-            </dt>
-            <dd>
-              <span>{data.satisfied}</span>
-              <small> / </small>
-              <small>{data.total}</small>
-            </dd>
-          </div>
-          <div>
-            <dt>
-              <span className={styles.averageDot} />
-              คะแนนเฉลี่ย
-            </dt>
-            <dd>
-              <span>{data.average}</span>
-              <small> / </small>
-              <small>5</small>
-            </dd>
-          </div>
-        </dl>
-      ) : (
-        <p className={styles.empty}>
-          {data ? "ยังไม่มีผู้ประเมินในช่วงนี้" : "ยังโหลดคะแนนไม่ได้"}
-        </p>
-      )}
-      {data && (
-        <div
-          className={styles.sources}
-          aria-label={`คำตอบทั้งหมด ${data.total} คำตอบ`}
-        >
-          <span>
-            <i className={styles.ticketDot} aria-hidden="true" />
-            Ticket <strong>{tickets.total}</strong>
-          </span>
-          <span>
-            <i className={styles.disputeDot} aria-hidden="true" />
-            Dispute <strong>{disputes.total}</strong>
-          </span>
-        </div>
-      )}
+      <div className={styles.side}>
+        {data?.total ? (
+          <dl className={styles.stats}>
+            <div title="คะแนน 4–5 ดาว ÷ คะแนนทั้งหมด × 100">
+              <dt>
+                พึงพอใจ <small>4–5 ดาว</small>
+              </dt>
+              <dd>
+                <span>{data.satisfied}</span>
+                <small> / {data.total}</small>
+              </dd>
+            </div>
+            <div>
+              <dt>
+                คะแนนเฉลี่ย
+                <span
+                  className={styles.stars}
+                  style={{ "--stars": `${(data.average / 5) * 100}%` }}
+                  aria-hidden="true"
+                >
+                  ★★★★★
+                </span>
+              </dt>
+              <dd>
+                <span>{data.average}</span>
+                <small> / 5</small>
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className={styles.empty}>
+            {data ? "ยังไม่มีผู้ประเมินในช่วงนี้" : "ยังโหลดคะแนนไม่ได้"}
+          </p>
+        )}
+      </div>
     </section>
   );
 }

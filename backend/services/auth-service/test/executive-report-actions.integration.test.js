@@ -40,6 +40,16 @@ test("executive report decisions resolve the matching audit and actual actor", a
     users.push(row.id);
     return row;
   }
+  // Every complaint below is reported from now on, so a window from here
+  // keeps other suites' rows out of the counts.
+  const since = new Date(Date.now() - 1000);
+  const until = () => new Date(Date.now() + 60_000);
+  const inWindow = (filters = {}) =>
+    getReportOverview({
+      range: { from: since, to: until() },
+      limit: 100,
+      ...filters,
+    });
   const reporter = await user("Reporter");
   const reviewer = await user("Reviewer");
   const decider = await user("Decider");
@@ -75,7 +85,7 @@ test("executive report decisions resolve the matching audit and actual actor", a
         audits.push(audit.id);
       }
     }
-    const result = await getReportOverview({ status, targetId: reporter.id });
+    const result = await inWindow({ status });
     const item = result.items.find((item) => item.id === row.id);
     assert.equal(item.reason, "Reporter reason");
     assert.equal(item.actionTaken, actionTaken);
@@ -125,51 +135,69 @@ test("executive report decisions resolve the matching audit and actual actor", a
     },
   });
   reports.push(other.id);
-  const first = await getReportOverview({
-    search: "search shop a",
-    limit: 2,
-    page: 1,
-  });
-  const second = await getReportOverview({
-    search: "Search Shop A",
-    limit: 2,
-    page: 2,
-  });
-  assert.equal(first.total, 4);
-  assert.equal(first.totalPages, 2);
+  // Only Shop A and Shop B's complaints from here on.
+  const shopRows = new Set(reports.slice(-7));
+  const shopItems = (result) =>
+    result.items.filter((item) => shopRows.has(item.id));
+
+  // The open queue (OPEN + REVIEWED) pages newest first without overlaps.
+  const openQueue = shopItems(await inWindow());
+  assert.equal(openQueue.length, 5);
+  const page1 = await inWindow({ limit: 2, page: 1 });
+  const page2 = await inWindow({ limit: 2, page: 2 });
+  assert.equal(page1.totalPages, Math.ceil(page1.total / 2));
   assert.equal(
-    new Set([...first.items, ...second.items].map((item) => item.id)).size,
+    new Set([...page1.items, ...page2.items].map((item) => item.id)).size,
     4,
   );
-  assert.ok(
-    [...first.items, ...second.items].every(
-      (item) => item.targetId === shopA.id,
-    ),
-  );
   for (const status of ["ACTIONED", "DISMISSED"]) {
-    const found = await getReportOverview({ search: "Shop A", status });
-    assert.equal(found.total, 1);
-    assert.equal(found.items[0].status, status);
+    const found = shopItems(await inWindow({ status }));
+    assert.equal(found.length, 1);
+    assert.equal(found[0].status, status);
   }
-  assert.equal((await getReportOverview({ search: "Alice Tester" })).total, 4);
-  const all = await getReportOverview({ search: "Shop A", status: "ALL" });
-  assert.equal(all.total, 6);
-  assert.deepEqual([...new Set(all.items.map((item) => item.status))].sort(), [
+  const all = shopItems(await inWindow({ status: "ALL" }));
+  assert.equal(all.length, 7);
+  assert.deepEqual([...new Set(all.map((item) => item.status))].sort(), [
     "ACTIONED",
     "DISMISSED",
     "OPEN",
     "REVIEWED",
   ]);
-  assert.equal((await getReportOverview({ search: shopA.id })).total, 4);
-  assert.equal((await getReportOverview({ search: "%' OR true --" })).total, 0);
-  assert.equal((await getReportOverview({ search: "missing shop" })).total, 0);
-  const ranked = await getReportOverview({
-    search: "Search Shop",
-    sortBy: "most_reported",
-    limit: 1,
+  // Names come with each row; Shop A was reported 6 times.
+  const shopA1 = all.find((item) => item.targetId === shopA.id);
+  assert.equal(shopA1.targetShopName, "Search Shop A");
+  assert.equal(shopA1.targetReportCount, 6);
+
+  // Search by who the complaint is about: shop name (any case, in part), the
+  // person's name, or their user code. All 6 of Shop A's, none of Shop B's.
+  const byShop = (search, status = "ALL") =>
+    inWindow({ search, status }).then(shopItems);
+  for (const search of ["search shop a", "SHOP A", "Alice Tester", "alice"]) {
+    const found = await byShop(search);
+    assert.equal(found.length, 6, search);
+    assert.ok(
+      found.every((item) => item.targetId === shopA.id),
+      search,
+    );
+  }
+  const alice = await prisma.user.findUniqueOrThrow({
+    where: { id: shopA.id },
+    select: { referenceCode: true },
   });
-  assert.equal(ranked.total, 5);
-  assert.equal(ranked.items[0].targetId, shopA.id);
+  assert.equal((await byShop(alice.referenceCode)).length, 6);
+  assert.equal((await byShop(alice.referenceCode.slice(4, 8))).length, 6);
+  assert.equal((await byShop("Search Shop B")).length, 1);
+  // The same box finds a complaint by its own code.
+  const aComplaint = all.find((item) => item.targetId === shopA.id);
+  const own = await byShop(aComplaint.referenceCode.toLowerCase());
+  assert.deepEqual(
+    own.map((item) => item.id),
+    [aComplaint.id],
+  );
+  // Text is read literally: no pattern matches everything.
+  for (const text of ["%", "_", "' OR 1=1 --", "no such shop"]) {
+    assert.equal((await byShop(text)).length, 0, text);
+  }
 
   for (const targetId of ["constructor", "__proto__"]) {
     const row = await prisma.report.create({
@@ -181,9 +209,9 @@ test("executive report decisions resolve the matching audit and actual actor", a
       },
     });
     reports.push(row.id);
-    const result = await getReportOverview({ targetId });
-    assert.equal(result.items[0].targetName, null);
-    assert.equal(result.items[0].targetShopName, null);
-    assert.equal(result.items[0].targetReportCount, 1);
+    const item = (await inWindow()).items.find((i) => i.id === row.id);
+    assert.equal(item.targetName, null);
+    assert.equal(item.targetShopName, null);
+    assert.equal(item.targetReportCount, 1);
   }
 });

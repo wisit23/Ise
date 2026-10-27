@@ -18,7 +18,8 @@ export default function InboxItemRow({ item, onDetails }) {
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
             <span>
-              {item.source === "ticket" ? "หมายเลข" : "ออเดอร์"}:{" "}
+              {/* Each case's own reference code (TKT-…, DSP-…). */}
+              รหัส:{" "}
               <strong className="font-medium text-slate-700">
                 {item.reference}
               </strong>

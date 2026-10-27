@@ -8,6 +8,7 @@ const request = require("supertest");
 
 process.env.JWT_ACCESS_SECRET ||= "test-access-secret";
 process.env.JWT_REFRESH_SECRET ||= "test-refresh-secret";
+process.env.INTERNAL_SERVICE_TOKEN ||= "disputes-list-internal-token";
 if (process.env.DATABASE_URL_ORDER) {
   process.env.DATABASE_URL = process.env.DATABASE_URL_ORDER;
 }
@@ -15,6 +16,7 @@ if (process.env.DATABASE_URL_ORDER) {
 const { signAccessToken } = require("@reloop/shared");
 const prisma = require("../src/models/prismaClient");
 const app = require("../src/app");
+const sellerNameSearch = require("../src/features/metrics/sellerNameSearch");
 // This feature suite uses signed identity fixtures; live session enforcement
 // is covered separately by account-suspension.integration.test.js.
 app.locals.validateAccessSession = async () => {};
@@ -85,12 +87,21 @@ test("executive disputes list against a real database", async (t) => {
     decision,
   }));
 
+  // auth-service finds shops by name; here it answers from a fixed list.
+  const asked = [];
+  let sellerLookup = async (q) => {
+    asked.push(q);
+    return q === "ร้านบี" ? [`seller-B-${runId}`] : [];
+  };
+  const realFind = sellerNameSearch.findUserIds;
+  sellerNameSearch.findUserIds = (q) => sellerLookup(q);
+
   try {
     await prisma.order.createMany({
       data: cases.map((c) => ({
         id: c.orderId,
         buyerId,
-        sellerId: "s1",
+        sellerId: `seller-${c.key}-${runId}`,
         productId: `p-${c.key}`,
         originalAmount: 100,
         ordersAmount: 100,
@@ -159,7 +170,10 @@ test("executive disputes list against a real database", async (t) => {
       "referenceCode",
       "status",
     ]);
-    assert.match(first.referenceCode, /^DSP-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/);
+    assert.match(
+      first.referenceCode,
+      /^DSP-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{4}$/,
+    );
     assert.equal(first.createdAt, "2001-05-10T05:00:00.000Z");
 
     // A wider range, then each filter on its own.
@@ -190,8 +204,69 @@ test("executive disputes list against a real database", async (t) => {
     assert.equal(page.body.total, 3);
     assert.equal(page.body.totalPages, 2);
 
+    // Newest first by default; oldest first when asked.
+    assert.deepEqual(ids(await get({ ...range, sort: "newest" })), [
+      "C",
+      "B",
+      "A",
+    ]);
+    assert.deepEqual(ids(await get({ ...range, sort: "oldest" })), [
+      "A",
+      "B",
+      "C",
+    ]);
+    assert.deepEqual(ids(await get({ ...range, sort: "oldest", limit: 2 })), [
+      "A",
+      "B",
+    ]);
+    assert.equal((await get({ ...range, sort: "latest" })).status, 400);
+
+    // Search by reference: the case's code, a part of it, or its order's code.
+    const b = await prisma.disputeCase.findUniqueOrThrow({
+      where: { id: `d-${cases[1].orderId}` },
+      select: { referenceCode: true },
+    });
+    const bOrder = await prisma.order.findUniqueOrThrow({
+      where: { id: cases[1].orderId },
+      select: { referenceCode: true },
+    });
+    assert.match(b.referenceCode, /^DSP-/);
+    assert.match(bOrder.referenceCode, /^ORD-/);
+    assert.deepEqual(ids(await get({ ...range, q: b.referenceCode })), ["B"]);
+    assert.deepEqual(
+      ids(
+        await get({ ...range, q: b.referenceCode.slice(4, 8).toLowerCase() }),
+      ),
+      ["B"],
+    );
+    assert.deepEqual(ids(await get({ ...range, q: bOrder.referenceCode })), [
+      "B",
+    ]);
+    assert.equal(
+      (await get({ ...range, q: "DSP-ZZZZ-ZZZZ-ZZZZ" })).body.total,
+      0,
+    );
+
+    // Search by a shop's name: auth-service says which users match, and the
+    // disputes of orders they sold come back.
+    asked.length = 0;
+    assert.deepEqual(ids(await get({ ...range, q: "ร้านบี" })), ["B"]);
+    assert.deepEqual(asked, ["ร้านบี"]);
+    // A name nobody has, and text that is not a pattern, find nothing.
+    assert.equal((await get({ ...range, q: "ร้านไม่มี" })).body.total, 0);
+    assert.equal((await get({ ...range, q: "%" })).body.total, 0);
+    assert.equal((await get({ ...range, q: "x' OR 1=1" })).body.total, 0);
+    // auth-service cannot answer: unavailable, not "none found".
+    sellerLookup = async () => {
+      throw Object.assign(new Error("auth-service is unreachable"), {
+        status: 502,
+      });
+    };
+    assert.equal((await get({ ...range, q: "ร้านบี" })).status, 502);
+
     // A value the page does not offer is refused, not matched against nothing.
     for (const bad of [
+      { q: "x".repeat(101) },
       { status: "RESOLVED" },
       { disputeType: "ANYTHING" },
       { priority: "MEH" },
@@ -205,6 +280,7 @@ test("executive disputes list against a real database", async (t) => {
     assert.equal(forbidden.status, 403);
     assert.equal((await request(app).get("/executive/disputes")).status, 401);
   } finally {
+    sellerNameSearch.findUserIds = realFind;
     const orderIds = cases.map((c) => c.orderId);
     await prisma.disputeCase.deleteMany({
       where: { orderId: { in: orderIds } },

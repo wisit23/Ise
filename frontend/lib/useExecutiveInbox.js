@@ -3,12 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { defaultCustomDay } from "./executive";
 import {
+  DEFAULT_SORT,
   EMPTY_FILTERS,
   INBOX_PAGE_SIZE,
   fetchInbox,
   inboxRange,
   inboxRangeError,
+  cleanSearch,
 } from "./executiveInbox";
+
+// How long typing has to pause before the search is sent.
+const SEARCH_DELAY_MS = 300;
 
 /**
  * State of the Executive complaints page: what to look at, over which period,
@@ -24,6 +29,7 @@ export default function useExecutiveInbox(token) {
     to: defaultCustomDay(),
   }));
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [sort, setSort] = useState(DEFAULT_SORT);
   const [page, setPage] = useState(1);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +37,22 @@ export default function useExecutiveInbox(token) {
   // ones so a dropdown does not empty while the next answer loads.
   const [options, setOptions] = useState({});
   const [attempt, setAttempt] = useState(0);
+  // The high-risk target whose complaints are listed, with the name to show.
+  const [focus, setFocus] = useState(null);
+  // What is typed in the search box; it reaches `filters.q` once typing
+  // pauses.
+  const [searchText, setSearchText] = useState("");
+  const search = cleanSearch(searchText);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters((previous) =>
+        previous.q === search ? previous : { ...previous, q: search },
+      );
+      setPage(1);
+    }, SEARCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const draftError = period === "custom" ? inboxRangeError(draft) : "";
   const lastValid = useRef(draft);
@@ -49,6 +71,7 @@ export default function useExecutiveInbox(token) {
       range: { from: range.from, to: range.to },
       filters: JSON.parse(filterKey),
       page: serverPage,
+      sort,
       token,
     })
       .then((answer) => {
@@ -68,11 +91,42 @@ export default function useExecutiveInbox(token) {
     return () => {
       cancelled = true;
     };
-  }, [token, source, range.from, range.to, filterKey, serverPage, attempt]);
+  }, [
+    token,
+    source,
+    range.from,
+    range.to,
+    filterKey,
+    serverPage,
+    sort,
+    attempt,
+  ]);
 
   const changeSource = (next) => {
     setSource(next);
-    setFilters(EMPTY_FILTERS);
+    // A kind's own filters do not carry over; the search does.
+    setFilters((previous) => ({ ...EMPTY_FILTERS, q: previous.q }));
+    setFocus(null);
+    setPage(1);
+  };
+  // Opens one high-risk target: its complaints, every status, any date.
+  const focusTarget = (target) => {
+    setSource("report");
+    setFilters((previous) => ({
+      ...EMPTY_FILTERS,
+      q: previous.q,
+      targetId: target.id,
+    }));
+    setFocus(target);
+    setPage(1);
+  };
+  const clearFocus = () => {
+    setFilters((previous) => ({ ...previous, targetId: "" }));
+    setFocus(null);
+    setPage(1);
+  };
+  const changeSort = (next) => {
+    setSort(next);
     setPage(1);
   };
   const changePeriod = (next) => {
@@ -94,6 +148,12 @@ export default function useExecutiveInbox(token) {
       ? result.items.slice((page - 1) * INBOX_PAGE_SIZE, page * INBOX_PAGE_SIZE)
       : result.items;
 
+  useEffect(() => {
+    if (!loading && result && result.failed.length === 0) {
+      setPage((current) => Math.min(current, Math.max(1, result.totalPages)));
+    }
+  }, [loading, result]);
+
   return {
     source,
     changeSource,
@@ -104,6 +164,13 @@ export default function useExecutiveInbox(token) {
     draftError,
     filters,
     changeFilter,
+    sort,
+    changeSort,
+    focus,
+    focusTarget,
+    clearFocus,
+    searchText,
+    setSearchText,
     page,
     setPage,
     result,

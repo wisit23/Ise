@@ -130,6 +130,71 @@ function resolveMetricRange(query = {}) {
   return { from, to, timezone };
 }
 
+/**
+ * resolveMetricRange for the Executive endpoints, which also refuse an empty
+ * or backwards window: it would come back as zeros that look like real
+ * figures. Kept separate so other callers of resolveMetricRange keep their
+ * current behaviour.
+ */
+function resolveExecutiveRange(query = {}) {
+  const range = resolveMetricRange(query);
+  if (range.from >= range.to) {
+    throw badRequest("from must be earlier than to");
+  }
+  return range;
+}
+
+/**
+ * One filter value from a query string, checked against the values the page
+ * offers. Missing or empty means "no filter"; anything else unknown is a 400,
+ * because a value that silently matched nothing would read as "no cases".
+ */
+// The longest search an Executive list takes.
+const MAX_SEARCH_LENGTH = 100;
+
+/**
+ * The `q` of an Executive list: a reference code (whole or in part), a ticket
+ * number or a shop's name, trimmed. Empty means no search; more than one
+ * value, or more than MAX_SEARCH_LENGTH characters, is refused with 400. What
+ * it is matched against is each list's own business, and every list matches
+ * it as plain text (never as a pattern).
+ */
+function searchQuery(value) {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw badRequest("q must be a single value");
+  const text = value.trim();
+  if (!text) return undefined;
+  if (text.length > MAX_SEARCH_LENGTH) {
+    throw badRequest(`q must be at most ${MAX_SEARCH_LENGTH} characters`);
+  }
+  return text;
+}
+
+/**
+ * `text` made safe to put inside a `contains` filter: %, _ and \ are escaped,
+ * so they match themselves instead of acting as LIKE patterns (Prisma passes
+ * them through as they are).
+ */
+function escapeLike(text) {
+  return text.replace(/[\\%_]/g, "\\$&");
+}
+
+// How an Executive list is ordered: by when the case was opened.
+const LIST_SORTS = ["newest", "oldest"];
+
+/** The `sort` of an Executive list: "newest" (the default) or "oldest". */
+function listSort(value) {
+  return allowedValue(value, LIST_SORTS, "sort") ?? "newest";
+}
+
+function allowedValue(value, allowed, name) {
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    throw badRequest(`${name} must be one of ${allowed.join(", ")}`);
+  }
+  return value;
+}
+
 function metricMeta({ from, to, timezone }) {
   return {
     definitionVersion: METRIC_DEFINITION_VERSION,
@@ -226,6 +291,13 @@ module.exports = {
   SLOT_MINUTES,
   MAX_SERIES_POINTS,
   resolveMetricRange,
+  resolveExecutiveRange,
+  allowedValue,
+  listSort,
+  LIST_SORTS,
+  searchQuery,
+  escapeLike,
+  MAX_SEARCH_LENGTH,
   metricMeta,
   buildSeriesPeriods,
   fillSeriesGaps,

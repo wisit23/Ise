@@ -1,5 +1,8 @@
 const { AppError } = require("@reloop/shared");
 
+// How long a dashboard request waits for order-service before giving up.
+const ORDER_SERVICE_TIMEOUT_MS = 5000;
+
 const isSale = (item) =>
   item !== null &&
   typeof item === "object" &&
@@ -42,7 +45,7 @@ function createOrderSalesClient({ fetchImpl = globalThis.fetch } = {}) {
           headers: {
             "x-internal-token": token,
           },
-          signal: AbortSignal.timeout(5000),
+          signal: AbortSignal.timeout(ORDER_SERVICE_TIMEOUT_MS),
         });
       } catch {
         throw new AppError(502, "order-service is unreachable");

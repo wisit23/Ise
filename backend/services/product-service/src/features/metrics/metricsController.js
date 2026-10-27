@@ -1,5 +1,5 @@
 const {
-  resolveMetricRange,
+  resolveExecutiveRange,
   metricMeta,
   badRequest,
 } = require("@reloop/shared");
@@ -10,7 +10,7 @@ const MAX_RANKING_LIMIT = 50;
 
 async function getMetrics(req, res, next) {
   try {
-    const { from, to, timezone } = resolveMetricRange(req.query);
+    const { from, to, timezone } = resolveExecutiveRange(req.query);
     const data = await catalogMetrics.getCatalogMetrics({ from, to });
 
     res.json({ data, meta: metricMeta({ from, to, timezone }) });
@@ -21,7 +21,7 @@ async function getMetrics(req, res, next) {
 
 async function getTopCatalog(req, res, next) {
   try {
-    const { from, to, timezone } = resolveMetricRange(req.query);
+    const { from, to, timezone } = resolveExecutiveRange(req.query);
 
     const limit = req.query.limit ? Number(req.query.limit) : 10;
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RANKING_LIMIT) {

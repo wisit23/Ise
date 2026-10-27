@@ -1,42 +1,59 @@
 const prisma = require("../../models/prismaClient");
+const productNameClient = require("./productNameClient");
 const { DEFAULT_REPORT_LIMIT, ANOMALY_THRESHOLD } = require("./reportConfig");
 const { findReportPage } = require("./reportSearch");
 
+// The queue a complaint sits in until Trust & Safety closes it.
 const OPEN_STATUSES = ["OPEN", "REVIEWED"];
-const DEFAULT_ANOMALY_THRESHOLD = ANOMALY_THRESHOLD;
+// How many of the most-reported targets are checked for the repeat-complaint
+// warning (a target is listed in topReported once it has more than one).
+const MOST_REPORTED_LIMIT = 10;
 
-const CATEGORY_KEYWORDS = {
-  FRAUD: [
-    "ฉ้อโกง",
-    "หลอก",
-    "โกง",
-    "สลิปปลอม",
-    "ไม่ส่งของ",
-    "ไม่ส่งสินค้า",
-    "ไม่จัดส่ง",
-    "ไม่ส่ง",
-    "มัดจำ",
-  ],
-  COUNTERFEIT: ["ลิขสิทธิ์", "กฎหมาย", "ปลอม", "ละเมิด"],
-  MISMATCH: ["ไม่ตรงปก", "ชำรุด", "เสียหาย", "ผิดขนาด"],
-};
-
-function categorizeReason(reason = "") {
-  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some((kw) => reason.includes(kw))) {
-      return cat;
+/**
+ * The names of the products a page of complaints is about, asked of
+ * product-service in one request (it owns them; this service never reads its
+ * tables). A product that was sold or that its seller deleted still has its
+ * name (the deleted one is flagged); an id that was never a product has none.
+ * When product-service cannot be asked, every product is marked unavailable,
+ * so the page can tell "no such product" from "cannot say". Never throws: a
+ * complaint is shown without its product name rather than not at all.
+ *
+ * @returns {Promise<Map<string, {title: string|null, deleted: boolean, unavailable: boolean}>>}
+ */
+async function lookUpProducts(reports) {
+  const ids = [...new Set(reports.map((r) => r.productId).filter(Boolean))];
+  const found = new Map();
+  if (ids.length === 0) return found;
+  try {
+    const names = await productNameClient.getNames(ids);
+    for (const id of ids) {
+      const known = names.get(id);
+      found.set(id, {
+        title: known?.title ?? null,
+        deleted: known?.deleted ?? false,
+        unavailable: false,
+      });
+    }
+  } catch {
+    for (const id of ids) {
+      found.set(id, { title: null, deleted: false, unavailable: true });
     }
   }
-  return "OTHER";
+  return found;
 }
 
-function toItem(report, targetMap = new Map(), actionMap = {}) {
+function toItem(
+  report,
+  targetMap = new Map(),
+  actionMap = {},
+  productMap = new Map(),
+) {
   const targetInfo = targetMap.get(report.targetId) || {};
+  const product = productMap.get(report.productId);
   return {
     id: report.id,
     ...(report.referenceCode ? { referenceCode: report.referenceCode } : {}),
     reason: report.reason,
-    category: categorizeReason(report.reason),
     status: report.status,
     actionTaken: ["ACTIONED", "DISMISSED"].includes(report.status)
       ? report.actionTaken
@@ -44,11 +61,20 @@ function toItem(report, targetMap = new Map(), actionMap = {}) {
     actionDetails: actionMap[report.id] || null,
     reportedAt: report.reportedAt.toISOString(),
     targetId: report.targetId,
-    ...(targetInfo.referenceCode ? { targetReferenceCode: targetInfo.referenceCode } : {}),
+    ...(targetInfo.referenceCode
+      ? { targetReferenceCode: targetInfo.referenceCode }
+      : {}),
     targetName: targetInfo.name || null,
     targetShopName: targetInfo.shopName || null,
     targetReportCount: targetInfo.reportCount || 1,
     productId: report.productId,
+    ...(report.productId
+      ? {
+          productTitle: product?.title ?? null,
+          ...(product?.deleted ? { productDeleted: true } : {}),
+          ...(product?.unavailable ? { productUnavailable: true } : {}),
+        }
+      : {}),
     reporterName: report.reporter
       ? `${report.reporter.firstName} ${report.reporter.lastName}`.trim()
       : null,
@@ -155,44 +181,43 @@ async function enrichTargets(allTargetIds = []) {
 }
 
 /**
- * `getReportOverview` serves the Executive complaints & risk monitoring tab.
- * Supports:
- * - Status filtering (OPEN, REVIEWED, ACTIONED, DISMISSED)
- * - Reason category filtering (FRAUD, COUNTERFEIT, MISMATCH)
- * - Target filtering (targetId)
- * - Sorting by `most_reported` (puts high-complaint targets at the top) or `newest`/`oldest`
- * - Target enrichment with shop/user name and total report frequency
- * - Anomaly detection flag when a target breaches the risk threshold (>= 3 complaints)
+ * Complaints for the Executive complaints page (CEO-DEC-014), newest first:
+ * - `status` narrows the list (default: the open queue; "ALL" for every one)
+ * - `range` limits it to complaints reported in [from, to)
+ * - `sort` is "newest" (default) or "oldest", by when it was reported
+ * - `search` finds a complaint by its code, or by the code or the shop or
+ *   person name of who it is about
+ * - `targetId` lists only the complaints about one user or shop
+ * - each row names its target (user or shop) and how often it was reported
+ * - `anomalySummary` flags targets with at least ANOMALY_THRESHOLD open
+ *   complaints (the repeat-complaint warning)
  */
 async function getReportOverview({
   range = null,
   status,
-  limit = DEFAULT_REPORT_LIMIT,
-  sortBy = "newest",
-  reasonCategory,
-  targetId,
   search,
+  targetId,
+  sort = "newest",
+  limit = DEFAULT_REPORT_LIMIT,
   page = 1,
 } = {}) {
-  const [{ reports, total }, statusGroups, targetGroups] = await Promise.all([
-    findReportPage(
-      prisma,
-      { range, status, targetId, search, page, limit, sortBy, reasonCategory },
-      { openStatuses: OPEN_STATUSES, categoryKeywords: CATEGORY_KEYWORDS },
-    ),
-    prisma.report.groupBy({
-      by: ["status"],
-      ...(range
-        ? { where: { reportedAt: { gte: range.from, lt: range.to } } }
-        : {}),
-      _count: { _all: true },
+  const [{ reports, total, statusGroups }, targetGroups] = await Promise.all([
+    findReportPage(prisma, {
+      range,
+      status,
+      search,
+      targetId,
+      sort,
+      page,
+      limit,
+      openStatuses: OPEN_STATUSES,
     }),
     prisma.report.groupBy({
       by: ["targetId"],
       where: { targetId: { not: null }, status: { in: OPEN_STATUSES } },
       _count: { _all: true },
       orderBy: { _count: { targetId: "desc" } },
-      take: 10,
+      take: MOST_REPORTED_LIMIT,
     }),
   ]);
 
@@ -204,16 +229,17 @@ async function getReportOverview({
     ]),
   ];
 
-  const [targetMap, actionMap] = await Promise.all([
+  const [targetMap, actionMap, productMap] = await Promise.all([
     enrichTargets(allTargetIds),
     enrichReportActions(reports),
+    lookUpProducts(reports),
   ]);
 
   const statusCounts = Object.fromEntries(
-    statusGroups.map((g) => [g.status, g._count._all]),
+    statusGroups.map((g) => [g.status, g.count ?? g._count?._all ?? 0]),
   );
 
-  const items = reports.map((r) => toItem(r, targetMap, actionMap));
+  const items = reports.map((r) => toItem(r, targetMap, actionMap, productMap));
 
   const topReported = targetGroups
     .filter((g) => g._count._all > 1)
@@ -225,7 +251,7 @@ async function getReportOverview({
     }));
 
   const highRiskTargets = topReported.filter(
-    (t) => t.count >= DEFAULT_ANOMALY_THRESHOLD,
+    (t) => t.count >= ANOMALY_THRESHOLD,
   );
 
   return {
@@ -239,17 +265,10 @@ async function getReportOverview({
     topReported,
     anomalySummary: {
       detected: highRiskTargets.length > 0,
-      threshold: DEFAULT_ANOMALY_THRESHOLD,
+      threshold: ANOMALY_THRESHOLD,
       highRiskTargets,
     },
   };
 }
 
-module.exports = {
-  getReportOverview,
-  enrichTargets,
-  OPEN_STATUSES,
-  CATEGORY_KEYWORDS,
-  categorizeReason,
-  DEFAULT_ANOMALY_THRESHOLD,
-};
+module.exports = { getReportOverview, OPEN_STATUSES };

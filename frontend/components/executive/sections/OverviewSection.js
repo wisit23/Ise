@@ -16,7 +16,7 @@ import PeriodTabs from "../PeriodTabs";
 import {
   baht,
   fetchOverview,
-  customDayError,
+  dayRangeError,
   defaultCustomDay,
   describeMode,
   PERIOD_MODES,
@@ -25,20 +25,24 @@ import {
 } from "../../../lib/executive";
 
 // ─── Overview Section ───────────────────────────────────────────────────────
-// One period picker (this month / this year / last 7 days) drives everything:
+// One period picker (last 7 days / this month / this year / custom) drives everything:
 // Row 1: KPI cards, compared with an equally long previous period
 // Row 2: a sales trend of whole periods beside the paid orders by status
 // Row 3: the rankings
 
 export default function OverviewSection({ token }) {
   const [mode, setMode] = useState("week");
-  // The day picked in the date field, which is always on the page. It only
-  // takes effect when "กำหนดเอง" is the chosen period: pressing that button
-  // applies it, and while it is chosen a new day applies at once. A half-typed
+  // The two dates picked in the date fields, which are always on the page. They
+  // only take effect when "กำหนดเอง" is the chosen period: pressing that button
+  // applies them, and while it is chosen new dates apply at once. A half-typed
   // or invalid date never blanks the page or refetches; the overview keeps the
-  // last good day.
-  const [draft, setDraft] = useState(() => defaultCustomDay());
-  const draftError = customDayError(draft);
+  // last good range. One day is charted by the hour; the further apart the two
+  // days are, the more points the chart has.
+  const [draft, setDraft] = useState(() => ({
+    from: defaultCustomDay(),
+    to: defaultCustomDay(),
+  }));
+  const draftError = dayRangeError(draft);
   const lastValid = useRef(draft);
   if (mode === "custom" && !draftError) lastValid.current = draft;
   const custom = lastValid.current;
@@ -65,7 +69,7 @@ export default function OverviewSection({ token }) {
     return () => {
       cancelled = true;
     };
-  }, [mode, token, custom]);
+  }, [mode, token, custom.from, custom.to]);
 
   const modeInfo = describeMode(mode, custom);
   const popular = overview?.rankings?.popularCategories;
@@ -85,7 +89,7 @@ export default function OverviewSection({ token }) {
     return [
       {
         key: "gmvPurchase",
-        label: "ยอดขายจากการสั่งซื้อ",
+        label: `ยอดขายจากการสั่งซื้อ (${modeInfo.periodName})`,
         value: o?.gmvPurchase,
         unavailable: !order || o?.gmvPurchase === undefined,
         delta: growthPct(o?.gmvPurchase, po?.gmvPurchase),
@@ -94,7 +98,7 @@ export default function OverviewSection({ token }) {
       },
       {
         key: "gmvAuction",
-        label: "ยอดขายจากการประมูล",
+        label: `ยอดขายจากการประมูล (${modeInfo.periodName})`,
         value: o?.gmvAuction,
         unavailable: !order || o?.gmvAuction === undefined,
         delta: growthPct(o?.gmvAuction, po?.gmvAuction),
@@ -103,7 +107,10 @@ export default function OverviewSection({ token }) {
       },
       {
         key: "platformRevenue",
-        label: fee === null ? "รายได้แพลตฟอร์ม" : `รายได้แพลตฟอร์ม (${fee}%)`,
+        label:
+          fee === null
+            ? `รายได้แพลตฟอร์ม (${modeInfo.periodName})`
+            : `รายได้แพลตฟอร์ม ${fee}% (${modeInfo.periodName})`,
         value: o?.platformRevenue,
         unavailable: !order,
         delta: growthPct(o?.platformRevenue, po?.platformRevenue),
@@ -125,13 +132,34 @@ export default function OverviewSection({ token }) {
     <div className="animate-fade-in-up space-y-4">
       <div className="flex flex-wrap items-start justify-end gap-3">
         <PeriodTabs options={PERIOD_MODES} value={mode} onChange={setMode} />
-        <DayField
-          value={draft}
-          onChange={setDraft}
-          max={defaultCustomDay()}
-          label="เลือกวันที่"
-          error={draftError}
-        />
+        {/* The buttons are 8px taller than a date field, so the fields sit 4px
+            down to be level with them; a message under a field flows below. */}
+        <div className="flex items-start gap-3 pt-1">
+          <DayField
+            caption="ตั้งแต่"
+            label="ตั้งแต่วันที่"
+            value={draft.from}
+            max={defaultCustomDay()}
+            error={draftError}
+            onChange={(from) =>
+              setDraft((previous) => ({
+                from,
+                // Picking the first day alone keeps a one-day range.
+                to:
+                  previous.from === previous.to || previous.to < from
+                    ? from
+                    : previous.to,
+              }))
+            }
+          />
+          <DayField
+            caption="ถึง"
+            label="ถึงวันที่"
+            value={draft.to}
+            max={defaultCustomDay()}
+            onChange={(to) => setDraft((previous) => ({ ...previous, to }))}
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -196,9 +224,6 @@ export default function OverviewSection({ token }) {
                   />
                 }
               >
-                <p className="mb-2 -mt-2 text-xs text-slate-500">
-                  หมวดหมู่ที่นิยมสุด{modeInfo.inPeriod}
-                </p>
                 <PopularCategories
                   rows={popularRows}
                   total={overview.rankings?.categoryTotal}
@@ -229,9 +254,6 @@ export default function OverviewSection({ token }) {
                   />
                 }
               >
-                <p className="mb-2 -mt-2 text-xs text-slate-500">
-                  ประเภทสินค้าที่ยอดขายสูงสุด{modeInfo.inPeriod}
-                </p>
                 <CategoryDonut
                   rows={overview.rankings?.categories ?? null}
                   expanded={shareOpen}

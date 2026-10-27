@@ -6,7 +6,7 @@
 
 **Architecture:** แต่ละ owner service เปิด read-only aggregate endpoint; Executive UI compose ผลผ่าน Gateway ไม่มี cross-database query และแสดง partial/unavailable แยกจากค่าศูนย์
 
-**Tech Stack:** Express, Prisma aggregates, Next.js charts, CSV/PDF export, Node/Jest tests
+**Tech Stack:** Express, Prisma aggregates, Next.js charts, CSV export, Node/Jest tests
 
 ## Global Constraints
 
@@ -28,7 +28,7 @@
 | `UR-28` | `FR-6.1.2`             | `NFR-SC-02`, `NFR-BR-02`, `NFR-BR-03`                                          | `WF-12`  | `CEO-001`, `CEO-002` / Core |
 | `UR-29` | `FR-6.1.3`             | `NFR-U-01`                                                                     | `WF-12`  | `CEO-003` / Core            |
 | `UR-30` | `FR-6.2.1`             | `NFR-M-02`; `NFR-SP-03` (Security Phase)                                       | `WF-12`  | `CEO-004` / Not delivered   |
-| `UR-31` | `FR-6.1.4`             | `NFR-P-06`                                                                     | `WF-12`  | `CEO-005` / Extended        |
+| `UR-31` | `FR-6.1.4`             | `NFR-P-06`                                                                     | `WF-12`  | `CEO-005` / Rescoped        |
 
 ### PostgreSQL acceptance for Executive
 
@@ -36,7 +36,8 @@
 - `CEO-002`: dashboard fixtures are created through APIs/Prisma and partial state is not a fake zero
 - `CEO-003`: rankings rebuild from completed Order/Product facts with deterministic ties
 - `CEO-004`: alert fingerprint/status persists in the provider database (not delivered, see CEO-DEC-011)
-- `CEO-005`: export job/status/expiry persists and export content derives from database facts
+- `CEO-005`: CSV content derives from database facts via the owners' series APIs, and each
+  download is persisted as an Executive audit entry (rescoped, CEO-DEC-016)
 - Database tests run with `REQUIRE_INTEGRATION=1`; an unavailable database must fail, not skip
 
 ### Task CEO-001: Metric Definitions and Provider Endpoints
@@ -161,32 +162,28 @@ function alertFingerprint({ ruleId, bucketStart }) {
 - [ ] **Step 4: Verify replay, quiet period, false zero and permission**
 - [ ] **Step 5: Update docs and commit `feat(executive): add anomaly alerts`**
 
-### Task CEO-005: Extended CSV/PDF Export
+### Task CEO-005: CSV Export with Audit Log (rescoped, CEO-DEC-016)
+
+Rescoped on 2026-10-24 (CEO-DEC-016). The earlier plan (persisted `ExportJob`, async worker,
+expiry, PDF) is withdrawn: the Owner wants a CSV of the report on screen and a record of who
+exported what in the Executive audit log.
 
 **Files:**
 
-- Create: `backend/services/auth-service/src/features/exports/exportRoutes.js`
-- Create: `backend/services/auth-service/src/features/exports/exportService.js`
-- Create: `backend/services/auth-service/src/features/exports/exportWorker.js`
-- Modify: `backend/services/auth-service/prisma/schema.prisma`
-- Test: `backend/services/auth-service/test/executive-export.integration.test.js`
+- `frontend/components/executive/sections/ReportsSection.js` (download button, CSV rows)
+- `frontend/lib/executive.js` (`logExecutiveAction`)
+- `backend/services/auth-service/src/features/executiveAudit/` (`POST /executive/audit`,
+  `executiveAuditPolicy.js` action `REPORT_EXPORT_CSV`)
 
 **Interfaces:**
 
-- Produces: `POST /api/auth/executive/exports {format, from, to, category}`
-- Produces: `runExportJob({exportJobId})` which claims one persisted `PENDING` job and writes
-  `COMPLETED` or `FAILED`
+- Uses: `GET /api/orders/executive/metrics-series`, `GET /api/auth/executive/metrics-series`
+  (the same figures the report table shows, from each owner's database)
+- Uses: `POST /api/auth/executive/audit {action: "REPORT_EXPORT_CSV", targetId, metadata}`
 
-- [ ] **Step 1: Write failing format/date-range/job-persistence tests**
-- [ ] **Step 2: Run integration test; confirm export route absent**
-- [ ] **Step 3: Implement bounded async export backed by persisted ExportJob**
-
-```js
-const exportJob = await prisma.exportJob.create({
-  data: { requestedBy, format, from, to, category, status: "PENDING" },
-});
-return { id: exportJob.id, status: exportJob.status };
-```
-
-- [ ] **Step 4: Verify expiry, audit, 10-second target on agreed fixture and cleanup**
-- [ ] **Step 5: Update docs and commit `feat(executive): add governed exports`**
+- [x] **Step 1: CSV of the month/year breakdown** (UTF-8 with BOM, one row per period, one
+      column per metric, each column one unit)
+- [x] **Step 2: Record each download in the audit log** (`REPORT_EXPORT_CSV`; actor from the
+      token, wording and allowed metadata set by the server, CEO-DEC-012)
+- [x] **Step 3: Tests** (`ReportsSection.test.js` and `lib/csv.test.js` for the file; auth
+      `executive-audit.integration.test.js` for the audit entry the server stores)

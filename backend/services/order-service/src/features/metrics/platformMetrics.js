@@ -1,11 +1,17 @@
 const { SLOT_GRANULARITY, SLOT_MINUTES } = require("@reloop/shared");
 const { Prisma } = require("../../generated/prisma-client");
 const prisma = require("../../models/prismaClient");
-
+const { money } = require("../../models/money");
 const { getPlatformFeeRate } = require("./feeConfig");
 
 // orders.order_type of an order won at auction; every other order is a purchase.
 const AUCTION_ORDER_TYPE = "AUCTION";
+// The only order status that counts as a sale in every Executive figure.
+const COMPLETED_STATUS = "completed";
+
+/** The platform's cut of a paid amount, to the satang. */
+const feeOf = (amount, feeRate) =>
+  Number(money(amount).times(feeRate).toFixed(2));
 
 /**
  * GMV/revenue/completed-order count for orders placed in [from, to).
@@ -21,7 +27,7 @@ const AUCTION_ORDER_TYPE = "AUCTION";
  */
 async function getPlatformMetrics({ from, to }) {
   const where = {
-    status: "completed",
+    status: COMPLETED_STATUS,
     createdAt: { gte: from, lt: to },
   };
 
@@ -35,7 +41,6 @@ async function getPlatformMetrics({ from, to }) {
   // Sales split by how they were made: an auction win, or everything else
   // bought directly. Purchases are the remainder, so the two always add up to
   // the GMV even if another order type appears later (CEO-DEC-010).
-  const { money } = require("../../models/money");
   const total = groups.reduce(
     (sum, g) => sum.plus(g._sum.ordersAmount || 0),
     money(0),
@@ -49,7 +54,7 @@ async function getPlatformMetrics({ from, to }) {
     gmv: Number(total),
     gmvPurchase: Number(total.minus(auction)),
     gmvAuction: Number(auction),
-    platformRevenue: Number(total.times(getPlatformFeeRate()).toFixed(2)),
+    platformRevenue: feeOf(total, getPlatformFeeRate()),
     completedOrders,
   };
 }
@@ -79,10 +84,11 @@ async function getPlatformMetricsSeries({ from, to, granularity, timezone }) {
       : Prisma.sql`date_trunc(${granularity}, ${local})`;
   const rows = await prisma.$queryRaw`
     SELECT (${bucket}) AT TIME ZONE ${timezone} AS period,
-           COALESCE(SUM(orders_amount) FILTER (WHERE status = 'completed'), 0) AS gmv,
-           COUNT(*) FILTER (WHERE status = 'completed')::int AS "completedOrders"
+           COALESCE(SUM(orders_amount), 0) AS gmv,
+           COUNT(*)::int AS "completedOrders"
     FROM orders
-    WHERE created_at >= ${from} AND created_at < ${to}
+    WHERE status = ${COMPLETED_STATUS}
+      AND created_at >= ${from} AND created_at < ${to}
     GROUP BY period
     ORDER BY period
   `;
@@ -90,9 +96,7 @@ async function getPlatformMetricsSeries({ from, to, granularity, timezone }) {
   return rows.map((row) => ({
     period: row.period,
     gmv: Number(row.gmv),
-    platformRevenue: Number(
-      require("../../models/money").money(row.gmv).times(feeRate).toFixed(2),
-    ),
+    platformRevenue: feeOf(row.gmv, feeRate),
     completedOrders: row.completedOrders,
   }));
 }
@@ -105,7 +109,7 @@ async function getPlatformMetricsSeries({ from, to, granularity, timezone }) {
  */
 async function getFirstSaleAt() {
   const result = await prisma.order.aggregate({
-    where: { status: "completed" },
+    where: { status: COMPLETED_STATUS },
     _min: { createdAt: true },
   });
   return result._min.createdAt;
@@ -115,4 +119,5 @@ module.exports = {
   getPlatformMetrics,
   getFirstSaleAt,
   getPlatformMetricsSeries,
+  COMPLETED_STATUS,
 };

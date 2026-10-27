@@ -7,7 +7,7 @@ import {
   CHART_COLORS,
   CHART_INK,
 } from "../charts/palette";
-import { categoryName } from "../../lib/executive";
+import { baht, categoryName, roundMoney } from "../../lib/executive";
 
 // Collapsed, the top five categories are named; expanded, the top ten. Every
 // other category is one grey "other" slice.
@@ -21,8 +21,6 @@ const SIZE = 180;
 const STROKE = 26;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-const baht = (n) => `฿${n.toLocaleString("th-TH")}`;
 
 /**
  * The slices to draw: the top categories by what buyers paid, then one "other"
@@ -41,8 +39,7 @@ export function buildCategorySlices(rows, total, max = COLLAPSED_SLICES) {
     typeof total?.gmv === "number"
       ? total.gmv
       : rows.reduce((sum, r) => sum + r.gmv, 0);
-  const rest =
-    Math.round((whole - named.reduce((s, r) => s + r.gmv, 0)) * 100) / 100;
+  const rest = roundMoney(whole - named.reduce((s, r) => s + r.gmv, 0));
   if (rest > 0) {
     named.push({
       key: "__other",
