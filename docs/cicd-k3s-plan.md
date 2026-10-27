@@ -158,6 +158,15 @@ Ise เป็น public repository การเปิดใช้งาน runne
 - ระหว่างตรวจพบ mapping frontend อ้าง workspace ที่ไม่มีอยู่ จึงแก้ทั้ง CI และ release แล้วตรวจใหม่ผ่าน; ไม่เปลี่ยนโค้ด frontend เพื่อให้ build ผ่าน
 - ไม่มีการรัน GitHub Actions จริง, publish image, ติดตั้ง runner หรือเปลี่ยน workload บน Cloud VM ผล tests ที่ใช้ mocks ไม่แทน staging/production rehearsal
 
+## บันทึกแก้ CI วันที่ 2026-10-28
+
+- [CI run 40541080064 / product-service](https://github.com/wisit23/Ise/actions/runs/40541080064/job/122319309632) ล้มที่ `swipe-choose.integration.test.js:300` เพราะคาดว่า unchoose จะลบแถวออก แต่ migration `20261028000000_seller_soft_delete` และ repository ปัจจุบันตั้ง `deletedAt` เพื่อเก็บประวัติ
+- จำลอง assertion failure เดียวกันได้บน PostgreSQL 16 และ Redis ทดสอบใน containers แยกที่สร้างสำหรับงานนี้ ใช้ real migrations และ `REQUIRE_INTEGRATION=1`; ไม่ใช้ฐานข้อมูลบน VM หรือฐานข้อมูลพัฒนาของผู้ใช้
+- แก้เฉพาะ integration test ให้ตรวจว่า DELETE/POST unchoose เก็บแถวเดิมพร้อม `deletedAt` และ feed แสดง `chosen: false`; เพิ่มการเลือกซ้ำให้ตรวจ ID/createdAt เดิม, `deletedAt: null` และ feed กลับเป็น `chosen: true`
+- ชุดทดสอบ swipe integration พร้อม repository/seller tests ที่เกี่ยวข้องผ่าน 10 ข้อ ไม่มี skip; ไม่เปลี่ยน app logic หรือข้าม test เพื่อให้ CI ผ่าน
+- ก่อนทดสอบต้อง regenerate Prisma client ฝั่งเครื่องให้ตรง schema เนื่องจาก generated client เดิมในเครื่องยังไม่มี `deletedAt`; CI เดิม generate client ถูกต้องแล้ว ปัญหานี้จึงไม่ใช่สาเหตุของ CI failure
+- ผลนี้ยืนยันการแก้ test ในเครื่อง ส่วน CI บน GitHub ต้องดูผล run ของ commit แก้ไขใหม่
+
 ## เอกสารทางการประกอบการออกแบบ
 
 - [GitHub: publish Docker images](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images) — publish registry images ผ่าน workflow
