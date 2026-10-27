@@ -236,7 +236,7 @@ it.each(["refresh", "mutation"])("does not let a delayed takeover %s replace the
 
 it("sends an escalated ticket back to CS with the reason and checklist, then refreshes the queue", async () => {
   const a = { id: "a", ticketNumber: "TKT-A", subject: "Case A", requesterName: "Buyer A", version: 3 };
-  apiFetch.mockImplementation((url, options) => {
+  apiFetch.mockImplementation((url) => {
     if (url.includes("/queue?")) return Promise.resolve({ items: [a], totalPages: 1 });
     if (url.endsWith("/join")) return Promise.resolve({ conversationId: "room" });
     if (url.endsWith("/request-evidence")) return Promise.resolve({ ...a, status: "IN_PROGRESS" });
