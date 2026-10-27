@@ -1,8 +1,9 @@
-import { apiFetch } from "./api";
+import { executiveFetch as apiFetch } from "./executiveRequest";
 import {
+  MAX_RANGE_DAYS,
   TIMEZONE,
   addDays,
-  customDayError,
+  dayRangeError,
   defaultCustomDay,
 } from "./executive";
 import {
@@ -73,33 +74,14 @@ export const INBOX_PERIODS = [
   { value: "custom", label: "กำหนดเอง" },
 ];
 
-/** The longest custom range, in days. */
-export const MAX_INBOX_DAYS = 366;
+/** The longest custom range, in days (the same as the overview's). */
+export const MAX_INBOX_DAYS = MAX_RANGE_DAYS;
 
-const PRIORITY_NAMES = { ...PRIORITY_LABEL, CRITICAL: "วิกฤต" };
+// Case priorities in Thai. CRITICAL is only ever on an escalated dispute.
+export const PRIORITY_NAMES = { ...PRIORITY_LABEL, CRITICAL: "วิกฤต" };
 
-/** Calendar days `from` to `to` inclusive. */
-function spanDays(from, to) {
-  const a = new Date(`${from}T00:00:00Z`).getTime();
-  const b = new Date(`${to}T00:00:00Z`).getTime();
-  return Math.round((b - a) / 86400000) + 1;
-}
-
-/**
- * Why a custom range cannot be used, in Thai, or "" when it can. Both ends are
- * days to include; neither may be in the future.
- */
-export function inboxRangeError(custom, instant = new Date()) {
-  const error =
-    customDayError(custom?.from, instant) ||
-    customDayError(custom?.to, instant);
-  if (error) return error;
-  if (custom.from > custom.to) return "วันที่เริ่มต้นต้องไม่หลังวันที่สิ้นสุด";
-  if (spanDays(custom.from, custom.to) > MAX_INBOX_DAYS) {
-    return `เลือกได้ไม่เกิน ${MAX_INBOX_DAYS} วัน`;
-  }
-  return "";
-}
+/** Why a custom range cannot be used, in Thai, or "" when it can. */
+export const inboxRangeError = dayRangeError;
 
 /** The window for a period as local dates with an exclusive end, which the
  * services read as midnight in the report time zone. */
@@ -112,35 +94,73 @@ export function inboxRange(period, custom, instant = new Date()) {
   return { from: addDays(today, -(days - 1)), to: addDays(today, 1) };
 }
 
-/** What the person picked, with nothing chosen. */
+/** What the person picked, with nothing chosen. `q` is the reference search. */
 export const EMPTY_FILTERS = {
   status: "",
   category: "",
   type: "",
   priority: "",
+  q: "",
+  // Who the complaints are about; set by opening a high-risk target.
+  targetId: "",
 };
+
+// The longest search the services take (they refuse more).
+export const MAX_SEARCH_LENGTH = 100;
+
+/** The search text as it is sent: trimmed, "" when empty. It is a reference
+ * code (whole or in part), a ticket number or a shop's name; each service
+ * matches it as plain text, whatever its characters. */
+export function cleanSearch(text) {
+  return String(text ?? "")
+    .trim()
+    .slice(0, MAX_SEARCH_LENGTH);
+}
 
 // The query name each filter has in each service's API.
 const QUERY_NAMES = { dispute: { type: "disputeType" } };
+
+/** How the list is ordered, by when each case was opened. */
+export const INBOX_SORTS = [
+  { value: "newest", label: "วันล่าสุด" },
+  { value: "oldest", label: "วันเก่าสุด" },
+];
+export const DEFAULT_SORT = "newest";
 
 export const INBOX_PAGE_SIZE = 20;
 // Reading "all" takes the newest cases of each kind, up to what one request
 // may return, and merges them; the page says when that is not everything.
 export const MERGED_PER_SOURCE = 50;
 
-export function buildInboxPath(source, range, filters, page, limit) {
+export function buildInboxPath(
+  source,
+  range,
+  filters,
+  page,
+  limit,
+  sort = DEFAULT_SORT,
+) {
   const { path } = INBOX_SOURCES[source];
   const query = new URLSearchParams({
-    from: range.from,
-    to: range.to,
     timezone: TIMEZONE,
     page: String(page),
     limit: String(limit),
   });
+  // A target's complaints are listed whenever they were reported, because the
+  // warning counts them over all time; every other list follows the period.
+  const wholeHistory = source === "report" && Boolean(filters.targetId);
+  if (wholeHistory) {
+    query.set("targetId", filters.targetId);
+  } else {
+    query.set("from", range.from);
+    query.set("to", range.to);
+  }
+  query.set("sort", sort);
+  // Each kind finds its own codes: RPT-/USR-, TKT-/ticket number, DSP-/ORD-.
+  if (filters.q) query.set("q", filters.q);
   if (source === "report") {
     // Complaints default to the open queue; this page lists every status.
     query.set("status", filters.status || "ALL");
-    query.set("sortBy", "newest");
   } else {
     for (const name of INBOX_SOURCES[source].filters) {
       if (filters[name]) {
@@ -206,7 +226,7 @@ function ticketItem(ticket) {
   };
 }
 
-const DISPUTE_TYPE_NAMES = Object.fromEntries(DISPUTE_TYPES);
+export const DISPUTE_TYPE_NAMES = Object.fromEntries(DISPUTE_TYPES);
 
 function disputeItem(dispute) {
   return {
@@ -297,10 +317,10 @@ export function statusSummary(source, statusCounts = {}, options = {}) {
 
 /** One kind's answer for the window, or { ok: false } when its service did not
  * give a usable one (an outage is shown as such, never as an empty list). */
-async function fetchSource(source, range, filters, page, limit, token) {
+async function fetchSource(source, range, filters, page, limit, sort, token) {
   try {
     const response = await apiFetch(
-      buildInboxPath(source, range, filters, page, limit),
+      buildInboxPath(source, range, filters, page, limit, sort),
       { token },
     );
     if (source === "report") {
@@ -339,7 +359,14 @@ async function fetchSource(source, range, filters, page, limit, token) {
  * `truncated` when a kind has more than was taken. A kind that fails comes
  * back in `failed` so the others still show.
  */
-export async function fetchInbox({ source, range, filters, page, token }) {
+export async function fetchInbox({
+  source,
+  range,
+  filters,
+  page,
+  sort = DEFAULT_SORT,
+  token,
+}) {
   if (source !== "all") {
     const result = await fetchSource(
       source,
@@ -347,6 +374,7 @@ export async function fetchInbox({ source, range, filters, page, token }) {
       filters,
       page,
       INBOX_PAGE_SIZE,
+      sort,
       token,
     );
     if (!result.ok) {
@@ -372,7 +400,15 @@ export async function fetchInbox({ source, range, filters, page, token }) {
   const kinds = Object.keys(INBOX_SOURCES);
   const answers = await Promise.all(
     kinds.map((kind) =>
-      fetchSource(kind, range, EMPTY_FILTERS, 1, MERGED_PER_SOURCE, token),
+      fetchSource(
+        kind,
+        range,
+        { ...EMPTY_FILTERS, q: filters.q },
+        1,
+        MERGED_PER_SOURCE,
+        sort,
+        token,
+      ),
     ),
   );
   const good = answers.filter((a) => a.ok);
@@ -380,7 +416,10 @@ export async function fetchInbox({ source, range, filters, page, token }) {
     .flatMap((a) => a.items)
     .sort(
       (a, b) =>
-        dateOf(b.createdAt) - dateOf(a.createdAt) || (a.key < b.key ? -1 : 1),
+        (sort === "oldest"
+          ? dateOf(a.createdAt) - dateOf(b.createdAt)
+          : dateOf(b.createdAt) - dateOf(a.createdAt)) ||
+        (a.key < b.key ? -1 : 1),
     );
   return {
     results: Object.fromEntries(good.map((a) => [a.source, a])),

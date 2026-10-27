@@ -1,4 +1,8 @@
 const prisma = require("../../models/prismaClient");
+const { COMPLETED_STATUS } = require("./platformMetrics");
+
+// A payment row in this state means the buyer actually paid.
+const PAID_PAYMENT_STATUS = "paid";
 
 /**
  * How the Executive reads a paid order's status. Orders that were never paid
@@ -6,8 +10,17 @@ const prisma = require("../../models/prismaClient");
  * purpose: they are carts abandoned at the payment step, not sales.
  */
 const STATUS_GROUPS = {
-  completed: ["completed"],
-  inProgress: ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit"],
+  completed: [COMPLETED_STATUS],
+  // Paid but not finished: from waiting for the seller (paid) to waiting for
+  // the buyer to confirm receipt (delivered). See orderLifecycle.
+  inProgress: [
+    "paid",
+    "confirmed",
+    "ready_to_ship",
+    "pickup_in_progress",
+    "in_transit",
+    "delivered",
+  ],
   disputeRefund: ["disputed", "refunded"],
 };
 const COUNTED_STATUSES = Object.values(STATUS_GROUPS).flat();
@@ -25,7 +38,7 @@ async function getOrderStatusBreakdown({ from, to }) {
       AND o.status = ANY(${COUNTED_STATUSES})
       AND EXISTS (
         SELECT 1 FROM payment p
-        WHERE p.order_id = o.order_id AND p.payment_status = 'paid'
+        WHERE p.order_id = o.order_id AND p.payment_status = ${PAID_PAYMENT_STATUS}
       )
     GROUP BY o.status
   `;

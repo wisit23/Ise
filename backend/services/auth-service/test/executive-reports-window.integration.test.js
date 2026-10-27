@@ -110,10 +110,76 @@ test("executive complaints can be listed for a date window", async (t) => {
     assert.deepEqual(keys(await get(range)), ["C", "B", "A"]);
     assert.deepEqual(keys(await get({ ...range, status: "DISMISSED" })), ["C"]);
 
+    // Newest first by default; oldest first when asked.
+    assert.deepEqual(keys(await get(range)), ["C", "B", "A"]);
+    assert.deepEqual(keys(await get({ ...range, sort: "oldest" })), [
+      "A",
+      "B",
+      "C",
+    ]);
+    assert.equal((await get({ ...range, sort: "latest" })).status, 400);
+
+    // Search by the complaint's reference code, whole or in part.
+    const idOf = (key) => [...created].find(([, k]) => k === key)[0];
+    const b = await prisma.report.findUniqueOrThrow({
+      where: { id: idOf("B") },
+      select: { referenceCode: true },
+    });
+    assert.match(b.referenceCode, /^RPT-/);
+    const all = { ...range, status: "ALL" };
+    const searchMatch = await get({ ...all, q: b.referenceCode });
+    assert.deepEqual(keys(searchMatch), ["B"]);
+    assert.deepEqual(searchMatch.body.data.statusCounts, { ACTIONED: 1 });
+    assert.deepEqual(
+      keys(
+        await get({ ...all, q: b.referenceCode.slice(9, 13).toLowerCase() }),
+      ),
+      ["B"],
+    );
+    assert.equal(
+      (await get({ ...all, q: "RPT-ZZZZ-ZZZZ-ZZZZ" })).body.data.total,
+      0,
+    );
+    assert.equal((await get({ ...all, q: "x".repeat(101) })).status, 400);
+    // Text is read literally: % and _ are not patterns.
+    for (const text of ["%", "_", "x' OR 1=1"]) {
+      assert.equal((await get({ ...all, q: text })).body.data.total, 0, text);
+    }
+
+    // By target, with no window: every complaint about that one, whenever it
+    // was reported (D is a month before the others), counts and all.
+    const target = `window-target-${runId}`;
+    const byTarget = await request(app)
+      .get("/executive/reports")
+      .query({ targetId: target, status: "ALL", limit: "100" })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(byTarget.status, 200);
+    assert.deepEqual(keys(byTarget).sort(), ["A", "B", "C", "D"]);
+    assert.equal(byTarget.body.meta.from, undefined);
+    assert.equal(
+      Object.values(byTarget.body.data.statusCounts).reduce((a, b) => a + b, 0),
+      4,
+    );
+    const nobody = await request(app)
+      .get("/executive/reports")
+      .query({ targetId: "no-such-target", status: "ALL" })
+      .set("Authorization", `Bearer ${executiveToken}`);
+    assert.equal(nobody.body.data.total, 0);
+    for (const bad of [
+      { targetId: ["a", "b"] },
+      { targetId: "x".repeat(201) },
+    ]) {
+      const res = await request(app)
+        .get("/executive/reports")
+        .query(bad)
+        .set("Authorization", `Bearer ${executiveToken}`);
+      assert.equal(res.status, 400);
+    }
+
     // Without a window it is still the live queue, as before.
     const live = await request(app)
       .get("/executive/reports")
-      .query({ status: "ALL", search: `window-target-${runId}` })
+      .query({ status: "ALL", limit: "100" })
       .set("Authorization", `Bearer ${executiveToken}`);
     assert.equal(live.status, 200);
     assert.equal(live.body.meta.from, undefined);

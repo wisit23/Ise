@@ -1,7 +1,32 @@
-import { apiFetch } from "./api";
+export * from "./executiveDates";
 
-export const TIMEZONE =
-  process.env.NEXT_PUBLIC_REPORT_TIMEZONE || "Asia/Bangkok";
+import { executiveFetch as apiFetch } from "./executiveRequest";
+import {
+  TIMEZONE,
+  LOCALE,
+  MONTH_NAMES,
+  MONTH_SHORT,
+  buddhistYear,
+  currentDate,
+  currentYearMonth,
+  daysInMonth,
+  isoDate,
+  parseIsoDate,
+  addDays,
+  spanDays,
+  customTrendGranularity,
+  thaiDate,
+} from "./executiveDates";
+
+/** A count with Thai digit grouping: 1,234. */
+export function formatCount(n) {
+  return n.toLocaleString(LOCALE);
+}
+
+/** Baht rounded to the satang, so float error never shows up on screen. */
+export function roundMoney(n) {
+  return Math.round(n * 100) / 100;
+}
 
 /**
  * The fee as a percentage for a label ("3", "2.5"), from the fraction the
@@ -19,167 +44,8 @@ export function categoryName(row) {
   return row.label ?? "ไม่ระบุหมวดหมู่";
 }
 
-export const MONTH_NAMES = [
-  "มกราคม",
-  "กุมภาพันธ์",
-  "มีนาคม",
-  "เมษายน",
-  "พฤษภาคม",
-  "มิถุนายน",
-  "กรกฎาคม",
-  "สิงหาคม",
-  "กันยายน",
-  "ตุลาคม",
-  "พฤศจิกายน",
-  "ธันวาคม",
-];
-
-export const MONTH_SHORT = [
-  "ม.ค.",
-  "ก.พ.",
-  "มี.ค.",
-  "เม.ย.",
-  "พ.ค.",
-  "มิ.ย.",
-  "ก.ค.",
-  "ส.ค.",
-  "ก.ย.",
-  "ต.ค.",
-  "พ.ย.",
-  "ธ.ค.",
-];
-
 export function baht(v) {
-  return `฿${v.toLocaleString("th-TH")}`;
-}
-
-/** Calendar date of `instant` in the report time zone — "today" for a Bangkok
- * executive changes at Bangkok midnight, not UTC's. */
-export function currentDate(instant = new Date()) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: TIMEZONE,
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-    })
-      .formatToParts(instant)
-      .map(({ type, value }) => [type, value]),
-  );
-  return {
-    year: Number(parts.year),
-    monthIndex: Number(parts.month) - 1,
-    day: Number(parts.day),
-  };
-}
-
-/** Calendar year and month of `instant` in the report time zone. */
-export function currentYearMonth(instant = new Date()) {
-  const { year, monthIndex } = currentDate(instant);
-  return { year, monthIndex };
-}
-
-function daysInMonth(year, monthIndex) {
-  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
-}
-
-/** "YYYY-MM-DD" for a calendar date; month/day overflow rolls like Date.UTC. */
-export function isoDate(year, monthIndex, day) {
-  return new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
-}
-
-const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-/** A real calendar date from "YYYY-MM-DD" as { year, monthIndex, day }, or
- * null when it is not one (a typed 2025-02-30, an empty field). */
-export function parseIsoDate(value) {
-  const match = typeof value === "string" ? ISO_DATE.exec(value) : null;
-  if (!match) return null;
-  const [, year, month, day] = match.map(Number);
-  const check = new Date(Date.UTC(year, month - 1, day));
-  if (check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) {
-    return null;
-  }
-  return { year, monthIndex: month - 1, day };
-}
-
-/** "YYYY-MM-DD" `days` after (or before, if negative) another such date. */
-export function addDays(value, days) {
-  const { year, monthIndex, day } = parseIsoDate(value);
-  return isoDate(year, monthIndex, day + days);
-}
-
-/** "16 ต.ค. 2568" for a calendar date. */
-export function thaiDate(value) {
-  const { year, monthIndex, day } = parseIsoDate(value);
-  return `${day} ${MONTH_SHORT[monthIndex]} ${year + 543}`;
-}
-
-/** "16/10/2569" (day/month/Buddhist year) for a "YYYY-MM-DD" date. */
-export function formatDayField(value) {
-  const parsed = parseIsoDate(value);
-  if (!parsed) return "";
-  const dd = String(parsed.day).padStart(2, "0");
-  const mm = String(parsed.monthIndex + 1).padStart(2, "0");
-  return `${dd}/${mm}/${parsed.year + 543}`;
-}
-
-/** Keeps what is typed into the day field to digits laid out as dd/mm/yyyy. */
-export function maskDayField(text) {
-  const digits = String(text).replace(/\D/g, "").slice(0, 8);
-  return [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)]
-    .filter(Boolean)
-    .join("/");
-}
-
-/** "YYYY-MM-DD" from a complete "dd/mm/yyyy" in the Buddhist era, or null
- * while it is unfinished or not a real date (31/02/2569). */
-export function parseDayField(text) {
-  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
-  if (!match) return null;
-  const [, day, month, buddhistYear] = match.map(Number);
-  const iso = isoDate(buddhistYear - 543, month - 1, day);
-  return parseIsoDate(iso) && formatDayField(iso) === text ? iso : null;
-}
-
-/** Calendar month [from, to) as local dates, plus a short display label.
- * The backend reads date-only bounds as midnight in TIMEZONE. */
-export function monthWindow(year, monthIndex) {
-  const start = new Date(Date.UTC(year, monthIndex, 1));
-  return {
-    from: isoDate(year, monthIndex, 1),
-    to: isoDate(year, monthIndex + 1, 1),
-    // A calendar label, not an instant, so it is formatted in UTC on purpose.
-    label: start.toLocaleDateString("th-TH", {
-      month: "short",
-      year: "2-digit",
-      timeZone: "UTC",
-    }),
-    longLabel: `${MONTH_NAMES[start.getUTCMonth()]} ${start.getUTCFullYear() + 543}`,
-  };
-}
-
-export function yearWindow(year) {
-  return {
-    from: isoDate(year, 0, 1),
-    to: isoDate(year + 1, 0, 1),
-    label: String(year),
-    longLabel: `ปี ${year + 543}`,
-  };
-}
-
-/** N most recent windows ending with the current one, oldest first. */
-export function lastNWindows(granularity, n, instant = new Date()) {
-  const now = currentYearMonth(instant);
-  const windows = [];
-  for (let i = n - 1; i >= 0; i--) {
-    windows.push(
-      granularity === "year"
-        ? yearWindow(now.year - i)
-        : monthWindow(now.year, now.monthIndex - i),
-    );
-  }
-  return windows;
+  return `฿${v.toLocaleString(LOCALE)}`;
 }
 
 export function buildPath(base, win) {
@@ -199,32 +65,6 @@ export function buildSeriesPath(base, win, granularity) {
     timezone: TIMEZONE,
   });
   return `${base}?${q.toString()}`;
-}
-
-/** "01/ส.ค./69" for one day-bucket ISO period. Periods are the instants at
- * which a TIMEZONE day begins, so they are read back in TIMEZONE.
- *
- * Month and year must be formatted in the same toLocaleDateString call: th-TH
- * spells out "พ.ศ. 69" when year is requested alone, but drops the era prefix
- * down to a bare "69" once month is formatted alongside it — so a separate
- * year-only call here would silently produce "01/ส.ค./พ.ศ. 69". */
-export function dayLabel(isoPeriod) {
-  const d = new Date(isoPeriod);
-  const day = d.toLocaleDateString("en-US", {
-    day: "2-digit",
-    timeZone: TIMEZONE,
-  });
-  const monthYear = d.toLocaleDateString("th-TH", {
-    month: "short",
-    year: "2-digit",
-    timeZone: TIMEZONE,
-  });
-  return `${day}/${monthYear.replace(" ", "/")}`;
-}
-
-/** Full Thai month name for one month-bucket ISO period. */
-export function monthLabel(isoPeriod) {
-  return MONTH_NAMES[currentYearMonth(new Date(isoPeriod)).monthIndex];
 }
 
 /** Unwraps one Promise.allSettled entry; null means that provider failed and
@@ -258,6 +98,23 @@ export const SERIES_PROVIDERS = {
   order: "/api/orders/executive/metrics-series",
 };
 
+function metricSeries(response, fields) {
+  const rows = response?.data;
+  if (!Array.isArray(rows)) return null;
+  const periods = new Set();
+  for (const row of rows) {
+    if (
+      typeof row?.period !== "string" ||
+      Number.isNaN(Date.parse(row.period)) ||
+      periods.has(row.period) ||
+      fields.some((field) => !Number.isFinite(row[field]) || row[field] < 0)
+    )
+      return null;
+    periods.add(row.period);
+  }
+  return rows;
+}
+
 /** Fetches the order + auth day/month breakdown for one window in parallel.
  * Never rejects: a failed provider comes back as null so the caller can
  * render "ไม่พร้อมใช้งาน" for that whole column instead of a fake zero. */
@@ -271,8 +128,12 @@ export async function fetchMetricsSeries(win, granularity, token) {
     }),
   ]);
   return {
-    order: fulfilled(results[0])?.data ?? null,
-    auth: fulfilled(results[1])?.data ?? null,
+    order: metricSeries(fulfilled(results[0]), [
+      "gmv",
+      "platformRevenue",
+      "completedOrders",
+    ]),
+    auth: metricSeries(fulfilled(results[1]), ["activeUsers"]),
     feeRate: fulfilled(results[0])?.meta?.platformFeeRate ?? null,
   };
 }
@@ -323,7 +184,6 @@ export const OVERVIEW_MODES = [
     trendCaption: "ยอดรายวัน · 7 วันล่าสุด",
     usersGranularity: "day",
     periodName: "7 วันล่าสุด",
-    inPeriod: "ใน 7 วันล่าสุด",
   },
   {
     value: "month",
@@ -333,7 +193,6 @@ export const OVERVIEW_MODES = [
     trendCaption: "ยอดรวมรายเดือน · 6 เดือนล่าสุด",
     usersGranularity: "day",
     periodName: "เดือนนี้",
-    inPeriod: "ในเดือนนี้",
   },
   {
     value: "year",
@@ -343,7 +202,6 @@ export const OVERVIEW_MODES = [
     trendCaption: "ยอดรวมรายปี · เฉพาะปีที่มีข้อมูล",
     usersGranularity: "month",
     periodName: "ปีนี้",
-    inPeriod: "ในปีนี้",
   },
 ];
 
@@ -352,40 +210,39 @@ export const OVERVIEW_MODES = [
 export const CUSTOM_MODE = {
   value: "custom",
   label: "กำหนดเอง",
-  usersGranularity: "day",
 };
 
 /** Every choice in the overview's period picker. */
 export const PERIOD_MODES = [...OVERVIEW_MODES, CUSTOM_MODE];
 
-/** Today as "YYYY-MM-DD" in the report time zone, the first day offered. */
-export function defaultCustomDay(instant = new Date()) {
-  const { year, monthIndex, day } = currentDate(instant);
-  return isoDate(year, monthIndex, day);
-}
-
-/** Why a custom day cannot be used, in Thai, or "" when it can. */
-export function customDayError(day, instant = new Date()) {
-  if (!parseIsoDate(day)) return "กรุณาเลือกวันที่";
-  if (day > defaultCustomDay(instant)) return "เลือกวันที่ในอนาคตไม่ได้";
-  return "";
-}
-
 /**
  * Wording for the overview in one mode. The fixed modes read it from
- * OVERVIEW_MODES; a custom day names its own date and is compared with the
- * day before.
+ * OVERVIEW_MODES; a custom range names its own dates and is compared with the
+ * stretch of the same length just before it.
  */
-export function describeMode(mode, customDay) {
+export function describeMode(mode, custom) {
   if (mode !== "custom") return OVERVIEW_MODES.find((m) => m.value === mode);
-  const date = thaiDate(customDay);
+  const { from, to } = custom;
+  const granularity = customTrendGranularity(custom);
+  if (granularity === "hour") {
+    const date = thaiDate(from);
+    return {
+      ...CUSTOM_MODE,
+      compareLabel: "เทียบกับวันก่อนหน้า",
+      baselineName: "วันก่อนหน้า",
+      trendCaption: `ยอดขายทุก 1 ชั่วโมง · ${date}`,
+      periodName: "ช่วงที่เลือก",
+    };
+  }
+  const dates = `${thaiDate(from)} – ${thaiDate(to)}`;
   return {
     ...CUSTOM_MODE,
-    compareLabel: "เทียบกับวันก่อนหน้า",
-    baselineName: "วันก่อนหน้า",
-    trendCaption: `ยอดขายทุก 1 ชั่วโมง · ${date}`,
-    periodName: date,
-    inPeriod: `ในวันที่ ${date}`,
+    compareLabel: "เทียบกับช่วงก่อนหน้าที่ยาวเท่ากัน",
+    baselineName: "ช่วงก่อนหน้าที่ยาวเท่ากัน",
+    trendCaption: `${
+      granularity === "day" ? "ยอดรายวัน" : "ยอดรายเดือน"
+    } · ${dates} (${spanDays(from, to)} วัน)`,
+    periodName: "ช่วงที่เลือก",
   };
 }
 
@@ -406,13 +263,19 @@ export function overviewPeriods(mode, instant = new Date(), custom) {
   const end = isoDate(year, monthIndex, day + 1);
 
   if (mode === "custom") {
-    // The chosen day, the day before it for the comparison, and the chosen
-    // day again in hourly slots for the chart.
-    const to = addDays(custom, 1);
+    // The chosen days (both included), the stretch of the same length right
+    // before them for the comparison, and the chosen days again for the
+    // chart, by the hour, the day or the month depending on how long they are.
+    const days = spanDays(custom.from, custom.to);
+    const to = addDays(custom.to, 1);
     return {
-      current: { from: custom, to },
-      previous: { from: addDays(custom, -1), to: custom },
-      trend: { from: custom, to, granularity: "hour" },
+      current: { from: custom.from, to },
+      previous: { from: addDays(custom.from, -days), to: custom.from },
+      trend: {
+        from: custom.from,
+        to,
+        granularity: customTrendGranularity(custom),
+      },
     };
   }
 
@@ -467,13 +330,90 @@ export function overviewPeriods(mode, instant = new Date(), custom) {
   };
 }
 
+// Reads the hour (0–23) of an instant on the report clock.
+const hourFormat = new Intl.DateTimeFormat("en-US", {
+  timeZone: TIMEZONE,
+  hour: "numeric",
+  hourCycle: "h23",
+});
+
+/** One day by the hour. The axis names every third hour (00:00, 03:00 …
+ * 21:00) and the last one shown; the points between are unnamed on the axis
+ * but read in full when pointed at. */
+function hourlyPoints(rows, detailOf) {
+  return rows.map((row, i) => {
+    const at = new Date(row.period);
+    const d = currentDate(at);
+    const hour = Number(hourFormat.format(at));
+    const start = `${String(hour).padStart(2, "0")}:00`;
+    const end = `${String(hour).padStart(2, "0")}:59`;
+    const named = i % 3 === 0 || i === rows.length - 1;
+    return {
+      label: start,
+      axisLabel: named ? start : "",
+      fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${buddhistYear(d.year)} · ${start}–${end}`,
+      value: row.gmv,
+      detail: detailOf(row.gmv, row.platformRevenue),
+    };
+  });
+}
+
+// The most days named on the axis of a daily chart; the points between stay
+// unnamed there but read in full when pointed at.
+const MAX_AXIS_NAMES = 8;
+
+/** A point for every day of a custom range. The axis names about eight of
+ * them (always the first and the last), each with its month beneath. */
+function dailyPoints(rows, detailOf) {
+  const every = Math.ceil(rows.length / MAX_AXIS_NAMES);
+  return rows.map((row, i) => {
+    const d = currentDate(new Date(row.period));
+    const named = i % every === 0 || i === rows.length - 1;
+    return {
+      label: String(d.day),
+      axisLabel: named ? String(d.day) : "",
+      subLabel: named ? MONTH_SHORT[d.monthIndex] : undefined,
+      fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${buddhistYear(d.year)}`,
+      value: row.gmv,
+      detail: detailOf(row.gmv, row.platformRevenue),
+    };
+  });
+}
+
+/** A point for every month a custom range touches. The first and the last may
+ * cover only part of the month, and say so when pointed at. */
+function monthlyPoints(rows, custom, detailOf) {
+  const first = parseIsoDate(custom.from);
+  const last = parseIsoDate(custom.to);
+  const lastDay = daysInMonth(last.year, last.monthIndex);
+  return rows.map((row, i) => {
+    const { year, monthIndex } = currentYearMonth(new Date(row.period));
+    const partial =
+      (i === 0 && first.day !== 1) ||
+      (i === rows.length - 1 && last.day !== lastDay);
+    return {
+      label: MONTH_SHORT[monthIndex],
+      // The year goes under the first month and under every January.
+      subLabel:
+        i === 0 || monthIndex === 0
+          ? String(buddhistYear(year) % 100).padStart(2, "0")
+          : undefined,
+      fullLabel: `${MONTH_NAMES[monthIndex]} ${buddhistYear(year)}${
+        partial ? " · เฉพาะวันที่อยู่ในช่วงที่เลือก" : ""
+      }`,
+      value: row.gmv,
+      detail: detailOf(row.gmv, row.platformRevenue),
+    };
+  });
+}
+
 /**
  * Chart points for one overview mode from the order provider's series rows
  * (each `period` is the instant a TIMEZONE bucket starts). The last point of
  * the month and year modes is the period still in progress, so it is named
  * "(ถึง …)" rather than drawn as if it were a full period.
  */
-export function buildTrendPoints(mode, rows, instant = new Date()) {
+export function buildTrendPoints(mode, rows, instant = new Date(), custom) {
   const today = currentDate(instant);
   const throughText = `${today.day} ${MONTH_SHORT[today.monthIndex]}`;
   const detailOf = (gmv, revenue) =>
@@ -507,41 +447,24 @@ export function buildTrendPoints(mode, rows, instant = new Date()) {
       const t = byYear.get(y);
       const partial = y === today.year;
       return {
-        label: String(y + 543),
+        label: String(buddhistYear(y)),
         subLabel: partial ? `(ถึง ${throughText})` : undefined,
-        fullLabel: `ปี ${y + 543}${partial ? ` · ถึงวันที่ ${throughText}` : " · ทั้งปี"}`,
-        value: Math.round(t.gmv * 100) / 100,
-        detail: detailOf(t.gmv, Math.round(t.platformRevenue * 100) / 100),
+        fullLabel: `ปี ${buddhistYear(y)}${partial ? ` · ถึงวันที่ ${throughText}` : " · ทั้งปี"}`,
+        value: roundMoney(t.gmv),
+        detail: detailOf(t.gmv, roundMoney(t.platformRevenue)),
       };
     });
   }
 
-  if (mode === "custom") {
-    // One day by the hour. The axis names every third hour (00:00, 03:00 …
-    // 21:00) and the last, 23:00; the points between are unnamed on the axis
-    // but read in full when pointed at.
-    return rows.map((row, i) => {
-      const at = new Date(row.period);
-      const d = currentDate(at);
-      const hour = Number(
-        new Intl.DateTimeFormat("en-US", {
-          timeZone: TIMEZONE,
-          hour: "numeric",
-          hourCycle: "h23",
-        }).format(at),
-      );
-      const start = `${String(hour).padStart(2, "0")}:00`;
-      const end = `${String(hour).padStart(2, "0")}:59`;
-      const named = i % 3 === 0 || i === rows.length - 1;
-      return {
-        label: start,
-        axisLabel: named ? start : "",
-        fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${d.year + 543} · ${start}–${end}`,
-        value: row.gmv,
-        detail: detailOf(row.gmv, row.platformRevenue),
-      };
-    });
+  if (mode === "custom" && customTrendGranularity(custom) === "day") {
+    return dailyPoints(rows, detailOf);
   }
+
+  if (mode === "custom" && customTrendGranularity(custom) === "month") {
+    return monthlyPoints(rows, custom, detailOf);
+  }
+
+  if (mode === "custom") return hourlyPoints(rows, detailOf);
 
   if (mode === "week") {
     return rows.map((row) => {
@@ -550,7 +473,7 @@ export function buildTrendPoints(mode, rows, instant = new Date()) {
       return {
         label: String(d.day),
         subLabel: MONTH_SHORT[d.monthIndex],
-        fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${String((d.year + 543) % 100).padStart(2, "0")}`,
+        fullLabel: `${d.day} ${MONTH_SHORT[d.monthIndex]} ${String(buddhistYear(d.year) % 100).padStart(2, "0")}`,
         value: row.gmv,
         detail: detailOf(row.gmv, row.platformRevenue),
       };
@@ -563,7 +486,7 @@ export function buildTrendPoints(mode, rows, instant = new Date()) {
     return {
       label: MONTH_SHORT[monthIndex],
       subLabel: partial ? `(ถึง ${today.day})` : undefined,
-      fullLabel: `${MONTH_NAMES[monthIndex]} ${year + 543}${partial ? ` · ถึงวันที่ ${throughText}` : " · ทั้งเดือน"}`,
+      fullLabel: `${MONTH_NAMES[monthIndex]} ${buddhistYear(year)}${partial ? ` · ถึงวันที่ ${throughText}` : " · ทั้งเดือน"}`,
       value: row.gmv,
       detail: detailOf(row.gmv, row.platformRevenue),
     };
@@ -592,8 +515,15 @@ function sumActiveUsers(response) {
 export async function fetchOverview(mode, token, instant = new Date(), custom) {
   const periods = overviewPeriods(mode, instant, custom);
   const get = (path) => apiFetch(path, { token });
+  // Web usage is asked by the day, or by the month where the period is long
+  // enough that the chart is by the month (a month is the sum of its days).
   const usersGranularity =
-    OVERVIEW_MODES.find((m) => m.value === mode)?.usersGranularity ?? "day";
+    mode === "custom"
+      ? periods.trend.granularity === "month"
+        ? "month"
+        : "day"
+      : (OVERVIEW_MODES.find((m) => m.value === mode)?.usersGranularity ??
+        "day");
   const settled = await Promise.allSettled([
     get(buildPath(PROVIDERS.order, periods.current)),
     get(buildPath(PROVIDERS.order, periods.previous)),
@@ -619,7 +549,7 @@ export async function fetchOverview(mode, token, instant = new Date(), custom) {
   ]);
   const [order, orderPrev, auth, authPrev, series, rankings, orderStatus] =
     settled.map(fulfilled);
-  const rows = Array.isArray(series?.data) ? series.data : null;
+  const rows = metricSeries(series, ["gmv", "platformRevenue"]);
   const users = sumActiveUsers(auth);
   const usersPrevious = sumActiveUsers(authPrev);
 
@@ -635,29 +565,36 @@ export async function fetchOverview(mode, token, instant = new Date(), custom) {
             previous:
               usersPrevious === null ? null : { activeUsers: usersPrevious },
           },
-    trend: rows && buildTrendPoints(mode, rows, instant),
+    trend: rows && buildTrendPoints(mode, rows, instant, custom),
     rankings: rankings?.data ?? null,
     orderStatus: orderStatus?.data ?? null,
   };
 }
 
-/** Records an append-only executive audit log entry (e.g. on export CSV or moderation). */
-export async function logExecutiveAction(actionData, token) {
-  try {
-    return await apiFetch("/api/auth/executive/audit", {
-      token,
-      method: "POST",
-      body: actionData,
-    });
-  } catch (err) {
-    console.warn("Failed to record executive audit log:", err);
-    return null;
-  }
-}
+export const AUDIT_PATH = "/api/auth/executive/audit";
 
-/** Queries executive audit logs with pagination and filters. */
-export async function fetchExecutiveAuditLogs(params = {}, token) {
-  const query = new URLSearchParams(params).toString();
-  const path = `/api/auth/executive/audit${query ? `?${query}` : ""}`;
-  return apiFetch(path, { token });
+/**
+ * Records a report export in the Executive audit log (CEO-DEC-016). Called
+ * before the file is handed over, and it throws when the entry was not
+ * stored, so no export leaves without a record. The server decides the
+ * category and wording (CEO-DEC-012); only the facts are sent.
+ */
+export async function recordReportExport(
+  { granularity, year, monthIndex, rowCount, slug },
+  token,
+) {
+  return apiFetch(AUDIT_PATH, {
+    token,
+    method: "POST",
+    body: {
+      action: "REPORT_EXPORT_CSV",
+      targetId: slug,
+      metadata: {
+        granularity,
+        year,
+        ...(granularity === "month" ? { monthIndex } : {}),
+        rowCount,
+      },
+    },
+  });
 }

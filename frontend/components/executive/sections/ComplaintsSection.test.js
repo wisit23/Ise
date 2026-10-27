@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -26,6 +27,21 @@ const REPORT = {
   targetReportCount: 1,
   productId: null,
   reporterName: "มาลี ใจดี",
+};
+// A seller's report of a customer's review, as auth-service stores it: in the
+// same table, told apart only by the marker at the start of the reason. The
+// customer who wrote it also runs a shop.
+const REVIEW_REPORT = {
+  ...REPORT,
+  id: "r2",
+  reason:
+    '[รายงานรีวิว #9ecc319c-9d52-4f5e-8139-135c4da709ba] [รีวิวเท็จ / ข้อมูลไม่ตรงกับความจริง] มั่วละ (เนื้อหารีวิว: "ของดีมาก")',
+  targetId: "writer-1",
+  targetName: "นักซื้อ ตัวยง",
+  targetShopName: "GG SHOP",
+  reporterName: "มานพ เดนิม",
+  productId: "p37",
+  productTitle: "กางเกงยีนส์ไม่เคยใส่ เอว 36",
 };
 const TICKET = {
   id: "t1",
@@ -125,6 +141,43 @@ function pick(name, option) {
 }
 
 describe("ComplaintsSection", () => {
+  it("returns to the last available page when the queue shrinks", async () => {
+    let shrunk = false;
+    serve({
+      "/api/support/executive/tickets": async (path) => {
+        const page = Number(
+          new URL(path, "http://test.local").searchParams.get("page"),
+        );
+        const response = listAnswer(shrunk ? [] : [TICKET], TICKET_OPTIONS);
+        response.total = shrunk ? 1 : 21;
+        response.totalPages = shrunk ? 1 : 2;
+        response.page = page;
+        if (page === 2) {
+          shrunk = true;
+          response.items = [];
+          response.total = 1;
+          response.totalPages = 1;
+        } else if (shrunk) {
+          response.items = [TICKET];
+        }
+        return response;
+      },
+    });
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText(TICKET.subject);
+    pick("ประเภทเรื่อง", "Ticket");
+    await screen.findByRole("button", { name: "ถัดไป" });
+    fireEvent.click(screen.getByRole("button", { name: "ถัดไป" }));
+    await waitFor(() =>
+      expect(pathsFor("/tickets").some((path) => path.includes("page=2"))).toBe(
+        true,
+      ),
+    );
+    await waitFor(() =>
+      expect(pathsFor("/tickets").at(-1)).toContain("page=1"),
+    );
+    expect(await screen.findByText(TICKET.subject)).toBeVisible();
+  });
   beforeEach(() => {
     apiFetch.mockReset();
     jest.useFakeTimers({ doNotFake: ["setTimeout", "queueMicrotask"] });
@@ -156,6 +209,74 @@ describe("ComplaintsSection", () => {
     expect(rows[1]).toContain("กระเป๋าขาด");
     expect(rows[2]).toContain("ร้านไม่ส่งของ");
     expect(screen.getByText("3 รายการ")).toBeVisible();
+  });
+
+  it("searches every kind by what is typed once typing pauses", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    const box = screen.getByLabelText("ค้นหาด้วยรหัส");
+    fireEvent.change(box, { target: { value: " rpt-8ax4 " } });
+    // Let the typing pause pass inside act, so the page has applied it.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+
+    // Sent as typed (trimmed), to all three services, after the pause.
+    await waitFor(
+      () =>
+        expect(pathsFor("/api/auth/executive/reports").at(-1)).toContain(
+          "q=rpt-8ax4",
+        ),
+      { timeout: 3000 },
+    );
+    expect(pathsFor("/api/support/executive/tickets").at(-1)).toContain(
+      "q=rpt-8ax4",
+    );
+    expect(pathsFor("/api/orders/executive/disputes").at(-1)).toContain(
+      "q=rpt-8ax4",
+    );
+
+    // Picking one kind keeps the search.
+    pick("ประเภทเรื่อง", "Ticket");
+    await waitFor(
+      () =>
+        expect(pathsFor("/api/support/executive/tickets").at(-1)).toContain(
+          "q=rpt-8ax4",
+        ),
+      { timeout: 3000 },
+    );
+  });
+
+  it("searches by a shop's name, in Thai, exactly as typed", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    const box = screen.getByLabelText("ค้นหาด้วยรหัส");
+    fireEvent.change(box, { target: { value: "ร้านยีนส์ 50%" } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+
+    await waitFor(
+      () => {
+        for (const name of [
+          "/api/auth/executive/reports",
+          "/api/support/executive/tickets",
+          "/api/orders/executive/disputes",
+        ]) {
+          const params = new URLSearchParams(
+            pathsFor(name).at(-1).split("?")[1],
+          );
+          expect(params.get("q")).toBe("ร้านยีนส์ 50%");
+        }
+      },
+      { timeout: 3000 },
+    );
+    // The box takes nothing longer than the services accept.
+    expect(box).toHaveAttribute("maxlength", "100");
   });
 
   it("offers no kind-specific filters while looking at everything", async () => {
@@ -372,6 +493,245 @@ describe("ComplaintsSection", () => {
     expect(await screen.findByText(/ร้านสมชาย \(4 ครั้ง\)/)).toBeVisible();
   });
 
+  it("sorts newest first by default and oldest first when asked", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("จ่ายเงินแล้วไม่ได้รับของ");
+
+    // Every kind is asked newest first, and the merged list follows.
+    for (const name of [
+      "/api/auth/executive/reports",
+      "/api/support/executive/tickets",
+      "/api/orders/executive/disputes",
+    ]) {
+      expect(pathsFor(name).at(-1)).toContain("sort=newest");
+    }
+    const order = () =>
+      screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(order()[0]).toContain("จ่ายเงินแล้วไม่ได้รับของ");
+    expect(order()[2]).toContain("ร้านไม่ส่งของ");
+
+    pick("เรียงลำดับ", "วันเก่าสุด");
+
+    await waitFor(() =>
+      expect(pathsFor("/api/auth/executive/reports").at(-1)).toContain(
+        "sort=oldest",
+      ),
+    );
+    expect(pathsFor("/api/support/executive/tickets").at(-1)).toContain(
+      "sort=oldest",
+    );
+    expect(pathsFor("/api/orders/executive/disputes").at(-1)).toContain(
+      "sort=oldest",
+    );
+    await waitFor(() => {
+      expect(order()[0]).toContain("ร้านไม่ส่งของ");
+      expect(order()[2]).toContain("จ่ายเงินแล้วไม่ได้รับของ");
+    });
+
+    // The order stays when a single kind is chosen.
+    pick("ประเภทเรื่อง", "Ticket");
+    await waitFor(() =>
+      expect(pathsFor("/api/support/executive/tickets").at(-1)).toContain(
+        "sort=oldest",
+      ),
+    );
+  });
+
+  it("opens one high-risk target's complaints from the warning, and clears it", async () => {
+    const warning = {
+      detected: true,
+      threshold: 3,
+      highRiskTargets: [
+        {
+          targetId: "target-1",
+          count: 4,
+          targetName: "สมชาย",
+          targetShopName: "ร้านสมชาย",
+        },
+      ],
+    };
+    serve({
+      "/api/auth/executive/reports": () => reportAnswer([REPORT], warning),
+    });
+    render(<ComplaintsSection token="t" />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /ร้านสมชาย \(4 ครั้ง\)/ }),
+    );
+
+    // Complaints about that target only: every status, whenever reported.
+    await waitFor(() => {
+      const path = pathsFor("/api/auth/executive/reports").at(-1);
+      expect(path).toContain("targetId=target-1");
+      expect(path).toContain("status=ALL");
+      expect(path).not.toContain("from=");
+      expect(path).not.toContain("to=");
+    });
+    expect(
+      screen.getByText(/ทุกสถานะ ทุกช่วงเวลา/).closest("div"),
+    ).toHaveTextContent("ร้านสมชาย");
+    // The other kinds are not about a target, so they are not asked.
+    const ticketCalls = pathsFor("/api/support/executive/tickets").length;
+
+    fireEvent.click(screen.getByRole("button", { name: "ล้างตัวกรอง" }));
+    await waitFor(() =>
+      expect(pathsFor("/api/auth/executive/reports").at(-1)).not.toContain(
+        "targetId=",
+      ),
+    );
+    expect(pathsFor("/api/auth/executive/reports").at(-1)).toContain("from=");
+    expect(screen.queryByText(/ทุกสถานะ ทุกช่วงเวลา/)).toBeNull();
+    expect(pathsFor("/api/support/executive/tickets").length).toBe(ticketCalls);
+  });
+
+  it("names a report of a review as one, and a report of a shop as before", async () => {
+    serve({
+      "/api/auth/executive/reports": () =>
+        reportAnswer([REVIEW_REPORT, REPORT]),
+    });
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("ร้านไม่ส่งของ");
+
+    // The ordinary report is untouched: its reason, "เป้าหมาย" and its shop.
+    const plain = screen.getByText("ร้านไม่ส่งของ").closest("li");
+    expect(plain).toHaveTextContent("เป้าหมาย: ร้านสมชาย");
+    expect(plain).not.toHaveTextContent("รายงานรีวิว");
+
+    // The review report: a plain grey label like a ticket's, and the topic;
+    // what the seller wrote and the review itself are in the details. The
+    // person who wrote the review, not their shop, and no raw
+    // "[รายงานรีวิว #…]" text or review id.
+    const label = screen.getByText("รายงานรีวิว");
+    expect(label).toHaveClass("bg-slate-100", "text-slate-600");
+    const review = label.closest("li");
+    expect(review).toHaveTextContent("รีวิวเท็จ / ข้อมูลไม่ตรงกับความจริง");
+    expect(review).not.toHaveTextContent("มั่วละ");
+    expect(review).not.toHaveTextContent("ของดีมาก");
+    expect(review).toHaveTextContent("ผู้เขียนรีวิว: นักซื้อ ตัวยง");
+    expect(review).not.toHaveTextContent("GG SHOP");
+    expect(review).not.toHaveTextContent("เป้าหมาย:");
+    expect(review).not.toHaveTextContent("9ecc319c");
+    expect(review).not.toHaveTextContent("รหัสอ้างอิงไม่พร้อมใช้งาน");
+  });
+
+  it("opens the details of a report of a review, split into its parts", async () => {
+    serve({
+      "/api/auth/executive/reports": () => reportAnswer([REVIEW_REPORT]),
+    });
+    render(<ComplaintsSection token="t" />);
+    const row = (await screen.findByText("รายงานรีวิว")).closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("ประเภทคำร้อง")).toBeVisible();
+    expect(
+      within(dialog).getByText("รีวิวเท็จ / ข้อมูลไม่ตรงกับความจริง"),
+    ).toBeVisible();
+    expect(within(dialog).getByText("มั่วละ")).toBeVisible();
+    expect(within(dialog).getByText("“ของดีมาก”")).toBeVisible();
+    // The person who wrote it; the shop they also run is not shown.
+    expect(within(dialog).getByText("ผู้เขียนรีวิวที่ถูกรายงาน")).toBeVisible();
+    expect(within(dialog).getByText("ชื่อผู้ใช้: นักซื้อ ตัวยง")).toBeVisible();
+    expect(dialog).not.toHaveTextContent("GG SHOP");
+    expect(dialog).not.toHaveTextContent("ร้านของผู้ใช้นี้");
+    expect(dialog).not.toHaveTextContent("9ecc319c");
+  });
+
+  it("puts the date beside the topic and names the product in the details of a review report", async () => {
+    serve({
+      "/api/auth/executive/reports": () => reportAnswer([REVIEW_REPORT]),
+    });
+    render(<ComplaintsSection token="t" />);
+    const row = (await screen.findByText("รายงานรีวิว")).closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+    const dialog = await screen.findByRole("dialog");
+
+    // "วันเวลาที่แจ้ง" is the neighbour of "หัวข้อปัญหา", in one row.
+    const topic = within(dialog).getByText("หัวข้อปัญหา").parentElement;
+    const date = within(dialog).getByText("วันเวลาที่แจ้ง").parentElement;
+    expect(topic.parentElement).toBe(date.parentElement);
+    // The reporter is on a row of their own.
+    const reporter = within(dialog).getByText("ผู้ส่งคำร้อง").parentElement;
+    expect(reporter.parentElement).not.toBe(date.parentElement);
+
+    // A product that is still listed is not marked as deleted.
+    expect(dialog).not.toHaveTextContent("สินค้าถูกลบแล้ว");
+    // The product has its own heading: its name, then its code beneath.
+    const product = within(dialog).getByText("สินค้า").parentElement;
+    const lines = [...product.querySelectorAll("dd p")].map(
+      (line) => line.textContent,
+    );
+    expect(lines).toEqual([
+      "กางเกงยีนส์ไม่เคยใส่ เอว 36",
+      expect.stringMatching(/^รหัสสินค้า: /),
+    ]);
+    // And no longer under who was reported.
+    const target = within(dialog).getByText(
+      "ผู้เขียนรีวิวที่ถูกรายงาน",
+    ).parentElement;
+    expect(target).not.toHaveTextContent("รหัสสินค้า");
+  });
+
+  it("names a product its seller deleted, and says it is deleted", async () => {
+    serve({
+      "/api/auth/executive/reports": () =>
+        reportAnswer([
+          {
+            ...REPORT,
+            productId: "p9",
+            productTitle: "เสื้อที่ลบแล้ว",
+            productDeleted: true,
+          },
+        ]),
+    });
+    render(<ComplaintsSection token="t" />);
+    const row = (await screen.findByText("ร้านไม่ส่งของ")).closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+    const dialog = await screen.findByRole("dialog");
+    const product = within(dialog).getByText("สินค้า").parentElement;
+    expect(product).toHaveTextContent("เสื้อที่ลบแล้ว");
+    expect(product).toHaveTextContent("สินค้าถูกลบแล้ว");
+    expect(product).not.toHaveTextContent("ไม่พบสินค้า");
+  });
+
+  it("says so when a product's name is not known", async () => {
+    const open = async (extra) => {
+      serve({
+        "/api/auth/executive/reports": () =>
+          reportAnswer([{ ...REPORT, productId: "p9", ...extra }]),
+      });
+      const view = render(<ComplaintsSection token="t" />);
+      const row = (await screen.findByText("ร้านไม่ส่งของ")).closest("li");
+      fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+      const dialog = await screen.findByRole("dialog");
+      const product = within(dialog).getByText("สินค้า").parentElement;
+      const text = product.textContent;
+      view.unmount();
+      return text;
+    };
+    // The product is gone, or product-service could not be asked.
+    expect(await open({ productTitle: null })).toContain("ไม่พบสินค้า");
+    expect(
+      await open({ productTitle: null, productUnavailable: true }),
+    ).toContain("ไม่พร้อมใช้งาน");
+  });
+
+  it("keeps the date beside the reporter for a report that is not of a review", async () => {
+    serve();
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText("ร้านไม่ส่งของ");
+    const row = screen.getByText("ร้านไม่ส่งของ").closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+    const dialog = await screen.findByRole("dialog");
+
+    const reporter = within(dialog).getByText("ผู้ส่งคำร้อง").parentElement;
+    const date = within(dialog).getByText("วันเวลาที่แจ้ง").parentElement;
+    expect(reporter.parentElement).toBe(date.parentElement);
+    // No product on this one: no product heading.
+    expect(within(dialog).queryByText("สินค้า")).toBeNull();
+  });
+
   it("opens the details of a complaint", async () => {
     serve();
     render(<ComplaintsSection token="t" />);
@@ -423,37 +783,37 @@ describe("ComplaintsSection", () => {
     expect(within(dialog).getByText("กระเป๋าหนัง")).toBeVisible();
   });
 
-  it("opens a ticket's details with who handled it and why", async () => {
+  it("opens a ticket's details: who opened it, the product, who handled it, as what, and why", async () => {
     serve({
       "/api/support/executive/tickets/t1": async () => ({
         data: {
           id: "t1",
           ticketNumber: "TK-0001",
           subject: TICKET.subject,
-          description: "โอนเงินแล้ว",
           requester: { id: "u-buyer", name: "สมหญิง" },
-          category: { code: "PAYMENT", name: "การชำระเงิน" },
-          priority: { code: "HIGH", name: "HIGH" },
-          status: { code: "RESOLVED", name: "RESOLVED", isTerminal: false },
-          orderId: null,
           createdAt: TICKET.createdAt,
+          orderId: "order-1",
+          product: { id: "p1", title: "กระเป๋าหนังวินเทจ" },
+          status: { code: "RESOLVED", name: "RESOLVED" },
           assignee: {
-            id: "u-agent",
-            name: "เจ้าหน้าที่บี",
+            id: "u-agent-a",
+            name: "เจ้าหน้าที่เอ",
+            roles: ["CUSTOMER_SERVICE"],
             assignedAt: "2026-10-16T06:10:00.000Z",
             current: true,
           },
-          actions: [
-            {
-              at: "2026-10-16T07:00:00.000Z",
-              by: { id: "u-agent", name: "เจ้าหน้าที่บี" },
-              from: "IN_PROGRESS",
-              to: "RESOLVED",
-              reason: "คืนเงินแล้ว",
+          handling: {
+            by: {
+              id: "u-agent-b",
+              name: "เจ้าหน้าที่บี",
+              roles: ["TRUST_AND_SAFETY"],
             },
-          ],
+            at: "2026-10-16T07:00:00.000Z",
+            outcome: "RESOLVED",
+            reason: "คืนเงินแล้ว",
+          },
         },
-        meta: { namesAvailable: true },
+        meta: { namesAvailable: true, productAvailable: true },
       }),
     });
     render(<ComplaintsSection token="t" />);
@@ -465,14 +825,47 @@ describe("ComplaintsSection", () => {
     const dialog = await screen.findByRole("dialog");
     expect(await within(dialog).findByText("สมหญิง")).toBeVisible();
     expect(within(dialog).getByText("รายละเอียด Ticket")).toBeVisible();
-    // No order: a dash, not an empty space.
-    expect(
-      within(dialog).getByText("คำสั่งซื้อที่เกี่ยวข้อง").nextSibling,
-    ).toHaveTextContent("-");
-    expect(
-      within(dialog).getByText("กำลังดำเนินการ → แก้ไขสำเร็จ"),
-    ).toBeVisible();
-    expect(within(dialog).getByText("เหตุผล: คืนเงินแล้ว")).toBeVisible();
+    expect(within(dialog).getByText("ผู้เปิด Ticket")).toBeVisible();
+    expect(within(dialog).getByText("กระเป๋าหนังวินเทจ")).toBeVisible();
+    expect(within(dialog).getByText("ผู้รับเคส")).toBeVisible();
+    // Name and, in brackets, the team they act for.
+    expect(within(dialog).getByText("(Trust and Safety)")).toBeVisible();
+    expect(within(dialog).getByText("(Customer Service)")).toBeVisible();
+    expect(within(dialog).getByText("ผู้ดำเนินการ")).toBeVisible();
+    // The status and the action taken both read "แก้ไขสำเร็จ".
+    expect(within(dialog).getAllByText("แก้ไขสำเร็จ")).toHaveLength(2);
+    expect(within(dialog).getByText("คืนเงินแล้ว")).toBeVisible();
+  });
+
+  it("says a ticket has not been handled yet", async () => {
+    serve({
+      "/api/support/executive/tickets/t1": async () => ({
+        data: {
+          id: "t1",
+          ticketNumber: "TK-0001",
+          subject: TICKET.subject,
+          requester: { id: "u-buyer", name: "สมหญิง" },
+          createdAt: TICKET.createdAt,
+          orderId: null,
+          product: null,
+          status: { code: "NEW", name: "NEW" },
+          assignee: null,
+          handling: null,
+        },
+        meta: { namesAvailable: true },
+      }),
+    });
+    render(<ComplaintsSection token="t" />);
+    await screen.findByText(TICKET.subject);
+
+    const row = screen.getByText(TICKET.subject).closest("li");
+    fireEvent.click(within(row).getByRole("button", { name: "รายละเอียด" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("ยังไม่ได้ดำเนินการ")).toBeVisible();
+    expect(within(dialog).getByText("ยังไม่มีผู้รับเคส")).toBeVisible();
+    // Not about an order: no product line at all.
+    expect(within(dialog).queryByText("สินค้า")).toBeNull();
   });
 
   it("says when a case's details cannot be loaded and can try again", async () => {

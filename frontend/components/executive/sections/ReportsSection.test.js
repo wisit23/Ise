@@ -46,6 +46,7 @@ function serveSeries({
   order = ORDER_SERIES,
   auth = AUTH_SERIES,
   firstSaleAt = "2024-03-10T00:00:00.000Z",
+  audit = { status: "ok" },
 } = {}) {
   apiFetch.mockImplementation((path) => {
     if (path.startsWith("/api/orders/executive/first-sale")) {
@@ -61,7 +62,8 @@ function serveSeries({
       return Promise.resolve({ data: auth, meta: META });
     }
     if (path.startsWith("/api/auth/executive/audit")) {
-      return Promise.resolve({ status: "ok" });
+      if (audit instanceof Error) return Promise.reject(audit);
+      return Promise.resolve(audit);
     }
     return Promise.reject(new Error(`unexpected path ${path}`));
   });
@@ -322,7 +324,27 @@ describe("ReportsSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /ดาวน์โหลด CSV/ }));
 
-    expect(downloadCsv).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(downloadCsv).toHaveBeenCalledTimes(1));
+    // The export was recorded first, with only the facts: the server writes
+    // the category and wording.
+    const auditCall = apiFetch.mock.calls.find(([path]) =>
+      path.startsWith("/api/auth/executive/audit"),
+    );
+    expect(auditCall[1]).toEqual({
+      token: "token",
+      timeoutMs: 15000,
+      method: "POST",
+      body: {
+        action: "REPORT_EXPORT_CSV",
+        targetId: "2026-08",
+        metadata: {
+          granularity: "month",
+          year: 2026,
+          monthIndex: 7,
+          rowCount: 2,
+        },
+      },
+    });
     const [filename, content] = downloadCsv.mock.calls[0];
     expect(filename).toBe("reloop-executive-report-2026-08.csv");
 
@@ -334,5 +356,48 @@ describe("ReportsSection", () => {
     expect(lines[1]).toBe("01/ส.ค./69,500,50,2,3");
     expect(lines[2]).toBe("02/ส.ค./69,0,0,0,1");
     expect(lines[3]).toBe("รวมทั้งหมด,500,50,2,4");
+  });
+
+  it("does not hand over the file when the export could not be recorded", async () => {
+    serveSeries({ audit: new Error("auth-service unreachable") });
+
+    render(<ReportsSection token="token" />);
+    await screen.findByText("01/ส.ค./69");
+
+    fireEvent.click(screen.getByRole("button", { name: /ดาวน์โหลด CSV/ }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "บันทึกประวัติการส่งออกไม่สำเร็จ",
+    );
+    expect(downloadCsv).not.toHaveBeenCalled();
+    // The button is usable again for a retry.
+    expect(
+      screen.getByRole("button", { name: /ดาวน์โหลด CSV/ }),
+    ).not.toBeDisabled();
+  });
+
+  it("marks a missing user bucket unavailable rather than crashing or summing a false zero", async () => {
+    serveSeries({ auth: AUTH_SERIES.slice(0, 1) });
+    render(<ReportsSection token="token" />);
+    const missing = (await screen.findByText("02/ส.ค./69")).closest("tr");
+    expect(within(missing).getByText("ไม่พร้อมใช้งาน")).toBeVisible();
+    const total = screen.getByText("รวมทั้งหมด").closest("tr");
+    expect(within(total).getByText("ไม่พร้อมใช้งาน")).toBeVisible();
+  });
+
+  it("keeps a date supplied only by auth and marks its sales unavailable", async () => {
+    serveSeries({ order: ORDER_SERIES.slice(0, 1) });
+    render(<ReportsSection token="token" />);
+    const missing = (await screen.findByText("02/ส.ค./69")).closest("tr");
+    expect(within(missing).getAllByText("ไม่พร้อมใช้งาน")).toHaveLength(3);
+    expect(within(missing).getByText("1")).toBeVisible();
+  });
+
+  it("treats malformed successful provider data as unavailable", async () => {
+    serveSeries({ order: { gmv: 500 } });
+    render(<ReportsSection token="token" />);
+    const row = (await screen.findByText("01/ส.ค./69")).closest("tr");
+    expect(within(row).getAllByText("ไม่พร้อมใช้งาน")).toHaveLength(3);
+    expect(within(row).getByText("3")).toBeVisible();
   });
 });

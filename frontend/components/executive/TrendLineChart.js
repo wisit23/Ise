@@ -2,10 +2,7 @@
 
 import { useId, useState } from "react";
 import { CHART_COLORS } from "../charts/palette";
-
-function baht(v) {
-  return `฿${v.toLocaleString("th-TH")}`;
-}
+import { baht, formatCount, roundMoney } from "../../lib/executive";
 
 /** The line through the points: straight segments, so a rise or a fall shows
  * as a sharp angle and a run of equal values is exactly flat. */
@@ -22,10 +19,12 @@ export function getLinePath(points) {
  * outgrows the room beside the lines.
  */
 export function formatAxisTick(value) {
-  if (Math.abs(value) < 1_000_000) return value.toLocaleString("th-TH");
-  const millions = Math.round((value / 1_000_000) * 100) / 100;
-  return `${millions.toLocaleString("th-TH")} ล้าน`;
+  if (Math.abs(value) < 1_000_000) return formatCount(value);
+  return `${formatCount(roundMoney(value / 1_000_000))} ล้าน`;
 }
+
+// From this many points on, the chart draws small dots.
+const DENSE_POINTS = 31;
 
 // How much room to leave above the biggest value, so its point never sits on
 // the top line and the amount shown over it has space.
@@ -103,6 +102,11 @@ export default function TrendLineChart({
     const y = baselineY - ratio * drawableHeight;
     return { x, y, val, item: d, index: i };
   });
+
+  // With many points the dots shrink so they do not blur into a bar, and each
+  // point gets a hover area as wide as the gap to its neighbour.
+  const dense = count > DENSE_POINTS;
+  const hoverWidth = count > 1 ? step : chartWidth - padLeft - padRight;
 
   const lineD = getLinePath(points);
   const areaD =
@@ -201,11 +205,20 @@ export default function TrendLineChart({
                   />
                 )}
 
+                {/* The hover area: the whole column of the point. */}
+                <rect
+                  x={pt.x - hoverWidth / 2}
+                  y={padTop}
+                  width={hoverWidth}
+                  height={baselineY - padTop}
+                  fill="transparent"
+                />
+
                 {/* Outer Ring & Circle */}
                 <circle
                   cx={pt.x}
                   cy={pt.y}
-                  r={isHovered ? "4.5" : "3"}
+                  r={isHovered ? "4.5" : dense ? "1.5" : "3"}
                   fill={CHART_COLORS.pointFill}
                   stroke={isUnavail ? CHART_COLORS.unavailable : color}
                   strokeWidth={isHovered ? "2.5" : "2"}

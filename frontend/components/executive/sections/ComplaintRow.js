@@ -1,9 +1,14 @@
 "use client";
-import { formatReferenceCode, formatReferenceText } from "../../../lib/referenceCodes";
+import {
+  formatReferenceCode,
+  formatReferenceText,
+} from "../../../lib/referenceCodes";
 
 import Button from "../../ui/Button";
 import {
+  describeReport,
   formatReportedAt,
+  reportedPartyName,
   REPORT_STATUS_LABELS,
 } from "../../../lib/executiveComplaints";
 
@@ -14,6 +19,12 @@ export default function ComplaintRow({
   onDetails,
   onSelectTarget,
 }) {
+  const about = describeReport(report);
+  const isReview = about.kind === "review";
+  const party =
+    reportedPartyName(report) ||
+    report.targetReferenceCode ||
+    formatReferenceCode(report.targetId);
   return (
     <li
       key={report.id}
@@ -21,14 +32,30 @@ export default function ComplaintRow({
     >
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          {report.referenceCode && <p className="mb-1 break-all font-mono text-xs text-slate-500">{report.referenceCode}</p>}
-          {/* Report Reason */}
-          <p className="text-sm font-semibold text-slate-900 leading-snug">
-            {formatReferenceText(report.reason)}
+          {/* Report Reason. A report of a review is named as one, with the
+              topic only; what the seller wrote and the review are in the
+              details. The label is the same as a ticket's or a dispute's. */}
+          <p className="flex flex-wrap items-center gap-2 text-sm font-semibold leading-snug text-slate-900">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+              {isReview ? "รายงานรีวิว" : "ข้อร้องเรียน"}
+            </span>
+            <span className="min-w-0 break-words">
+              {formatReferenceText(
+                isReview ? about.topic || "รายงานรีวิว" : report.reason,
+              )}
+            </span>
           </p>
 
           {/* Meta information */}
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+            {report.referenceCode && (
+              <span>
+                รหัส:{" "}
+                <strong className="break-all font-medium text-slate-700">
+                  {report.referenceCode}
+                </strong>
+              </span>
+            )}
             <span>
               โดย:{" "}
               <strong className="text-slate-700 font-medium">
@@ -43,14 +70,8 @@ export default function ComplaintRow({
             </span>
             {report.targetId && (
               <span className="flex flex-wrap items-center gap-1">
-                เป้าหมาย:{" "}
-                <span className="font-semibold text-slate-800">
-                  {report.targetShopName
-                    ? `${report.targetShopName}`
-                    : report.targetName
-                      ? `${report.targetName}`
-                      : report.targetReferenceCode || formatReferenceCode(report.targetId)}
-                </span>
+                {isReview ? "ผู้เขียนรีวิว:" : "เป้าหมาย:"}{" "}
+                <span className="font-semibold text-slate-800">{party}</span>
                 {!targetFiltered && (
                   <button
                     type="button"

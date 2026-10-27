@@ -94,17 +94,30 @@ test("getDisplayNames against a real database", async (t) => {
       sellerProfile: { create: { shopName: "ร้านทดสอบ" } },
     },
   });
+  // A staff member whose role rows (not the legacy column) say what they do.
+  const agent = await prisma.user.create({
+    data: {
+      email: `display-agent-${stamp}@test.local`,
+      passwordHash: "x",
+      firstName: "น่าน",
+      lastName: "นามสกุลจริง",
+      role: "CUSTOMER_SERVICE",
+      roles: { create: [{ role: "TRUST_AND_SAFETY" }] },
+    },
+  });
 
   t.after(async () => {
     await prisma.sellerProfile.deleteMany({ where: { userId: seller.id } });
+    await prisma.userRole.deleteMany({ where: { userId: agent.id } });
     await prisma.user.deleteMany({
-      where: { id: { in: [buyer.id, seller.id] } },
+      where: { id: { in: [buyer.id, seller.id, agent.id] } },
     });
   });
 
   await t.test("a buyer resolves to their first name only", async () => {
     const [entry] = await authService.getDisplayNames([buyer.id]);
     assert.equal(entry.displayName, "สมชาย");
+    assert.equal(entry.userName, "สมชาย");
     // NFR-SP-02: the surname must never leave the service.
     assert.ok(!JSON.stringify(entry).includes("นามสกุลจริง"));
   });
@@ -112,7 +125,22 @@ test("getDisplayNames against a real database", async (t) => {
   await t.test("a shop owner resolves to the shop name", async () => {
     const [entry] = await authService.getDisplayNames([seller.id]);
     assert.equal(entry.displayName, "ร้านทดสอบ");
+    assert.equal(entry.userName, "สมหญิง");
   });
+
+  await t.test(
+    "only staff roles come back, and none for customers",
+    async () => {
+      const [buyerEntry] = await authService.getDisplayNames([buyer.id]);
+      assert.deepEqual(buyerEntry.staffRoles, []);
+      const [sellerEntry] = await authService.getDisplayNames([seller.id]);
+      assert.deepEqual(sellerEntry.staffRoles, []);
+      // Role rows win over the legacy column.
+      const [agentEntry] = await authService.getDisplayNames([agent.id]);
+      assert.equal(agentEntry.displayName, "น่าน");
+      assert.deepEqual(agentEntry.staffRoles, ["TRUST_AND_SAFETY"]);
+    },
+  );
 
   await t.test("unknown ids are omitted rather than throwing", async () => {
     const result = await authService.getDisplayNames([

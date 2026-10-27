@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CATEGORICAL, CHART_COLORS, CHART_INK } from "../charts/palette";
+import { formatCount as count } from "../../lib/executive";
 
 /** Executive reading of a paid order's status (see order-service's
  * orderStatusMetrics). The array order is the order the groups are drawn in. */
@@ -19,8 +20,6 @@ const SIZE = 180;
 const STROKE = 26;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-const count = (n) => n.toLocaleString("th-TH");
 
 /**
  * Donut of paid orders by status with the total in the middle. The slices are

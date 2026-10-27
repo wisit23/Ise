@@ -158,6 +158,15 @@ Ise เป็น public repository การเปิดใช้งาน runne
 - ระหว่างตรวจพบ mapping frontend อ้าง workspace ที่ไม่มีอยู่ จึงแก้ทั้ง CI และ release แล้วตรวจใหม่ผ่าน; ไม่เปลี่ยนโค้ด frontend เพื่อให้ build ผ่าน
 - ไม่มีการรัน GitHub Actions จริง, publish image, ติดตั้ง runner หรือเปลี่ยน workload บน Cloud VM ผล tests ที่ใช้ mocks ไม่แทน staging/production rehearsal
 
+## บันทึกแก้ CI วันที่ 2026-10-28
+
+- [CI run 40541080064 / product-service](https://github.com/wisit23/Ise/actions/runs/40541080064/job/122319309632) ล้มที่ `swipe-choose.integration.test.js:300` เพราะคาดว่า unchoose จะลบแถวออก แต่ migration `20261028000000_seller_soft_delete` และ repository ปัจจุบันตั้ง `deletedAt` เพื่อเก็บประวัติ
+- จำลอง assertion failure เดียวกันได้บน PostgreSQL 16 และ Redis ทดสอบใน containers แยกที่สร้างสำหรับงานนี้ ใช้ real migrations และ `REQUIRE_INTEGRATION=1`; ไม่ใช้ฐานข้อมูลบน VM หรือฐานข้อมูลพัฒนาของผู้ใช้
+- แก้เฉพาะ integration test ให้ตรวจว่า DELETE/POST unchoose เก็บแถวเดิมพร้อม `deletedAt` และ feed แสดง `chosen: false`; เพิ่มการเลือกซ้ำให้ตรวจ ID/createdAt เดิม, `deletedAt: null` และ feed กลับเป็น `chosen: true`
+- ชุดทดสอบ swipe integration พร้อม repository/seller tests ที่เกี่ยวข้องผ่าน 10 ข้อ ไม่มี skip; ไม่เปลี่ยน app logic หรือข้าม test เพื่อให้ CI ผ่าน
+- ก่อนทดสอบต้อง regenerate Prisma client ฝั่งเครื่องให้ตรง schema เนื่องจาก generated client เดิมในเครื่องยังไม่มี `deletedAt`; CI เดิม generate client ถูกต้องแล้ว ปัญหานี้จึงไม่ใช่สาเหตุของ CI failure
+- ผลนี้ยืนยันการแก้ test ในเครื่อง ส่วน CI บน GitHub ต้องดูผล run ของ commit แก้ไขใหม่
+
 ## เอกสารทางการประกอบการออกแบบ
 
 - [GitHub: publish Docker images](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images) — publish registry images ผ่าน workflow
@@ -165,3 +174,17 @@ Ise เป็น public repository การเปิดใช้งาน runne
 - [Kubernetes: images](https://kubernetes.io/docs/concepts/containers/images/) — digests, pull policy และ registry authentication
 - [Kubernetes: Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/) — completion, retry และ deadline ของ migration Jobs
 - [Kubernetes: Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) — rollout และ rollback ของ workload ซึ่งไม่ย้อน database
+
+
+### Release dependency audit fix (2026-10-28)
+
+- Approved in chat: update vulnerable dependencies, test/build, and push to main; keep the release audit gate enabled.
+- Reproduced release failure with `npm audit --omit=dev`: 12 findings (3 moderate, 7 high, 2 critical).
+- Next.js stays on major 15, minimum 15.5.28; Sharp minimum 0.35.5; Nodemailer pinned to 10.1.4. Refresh affected transitive packages within their existing compatible ranges.
+- Next.js 15.5.28 still pins PostCSS 8.4.31. A root override limited to Next.js selects patched PostCSS 8.x; frontend tests and the production image build must validate this compatibility. Revisit this override when upgrading Next.js.
+- Verified: `npm audit --omit=dev --audit-level=high` reports 0 vulnerabilities; lint and tracked-file secret scan pass. All seven images build with the production Dockerfile. Frontend `/` and gateway `/health` return HTTP 200 in temporary containers; the gateway root needs upstream frontend and is not its standalone health endpoint.
+- Windows clean `npm ci` hit a transient Prisma engine download ECONNRESET. Retried `npm ci --ignore-scripts` successfully, then generated all five Prisma clients successfully. Linux Docker npm ci/build succeeds with install scripts enabled.
+- Component suites: shared, gateway, scripts, auth, order, chat and support pass. Product unit run: 460 pass; category SQL test initially failed because the isolated database endpoint was intentionally unavailable, then passes against a temporary PostgreSQL 16 database with session-local tables. Production Linux Sharp image conversion tests: 7/7 pass. Full service integration suites remain for GitHub CI.
+- Frontend tests: 177 suites / 1,277 tests pass. Runtime image checks confirm all seven use Node 24; all six backend images resolve Express 4.22.3; frontend resolves Next.js 15.5.28 and patched PostCSS 8.5.32. Temporary smoke/SQL containers and their private volumes were removed.
+- Push this dependency fix to main, then inspect the new CI run. Release images starts only after successful push CI; no deployment to the VM is performed by this fix.
+- Upstream references: [Next.js 15.5.28](https://github.com/vercel/next.js/releases/tag/v15.5.28), [Sharp 0.35 migration notes](https://github.com/lovell/sharp/releases/tag/v0.35.0), [Sharp 0.35.5](https://github.com/lovell/sharp/releases/tag/v0.35.5).

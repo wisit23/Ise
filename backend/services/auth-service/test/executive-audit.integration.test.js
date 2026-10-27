@@ -172,4 +172,17 @@ test("executive audit log endpoints against real database", async (t) => {
       assert.equal(res.body.meta.total, 1);
     },
   );
+
+  await t.test("refuses malformed audit query filters", async () => {
+    for (const query of [
+      "from=not-a-date",
+      "to=2026-99-99",
+      "action=A&action=B",
+    ]) {
+      const res = await request(app)
+        .get(`/executive/audit?${query}`)
+        .set("Authorization", `Bearer ${executiveToken}`);
+      assert.equal(res.status, 400, query);
+    }
+  });
 });

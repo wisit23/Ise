@@ -1,5 +1,6 @@
 const prisma = require("../../models/prismaClient");
 const { money } = require("../../models/money");
+const { COMPLETED_STATUS } = require("./platformMetrics");
 
 /**
  * Sales per product for orders placed in [from, to), counted exactly like
@@ -13,7 +14,7 @@ async function getProductSales({ from, to }) {
            COUNT(*)::int AS count,
            COALESCE(SUM(orders_amount), 0) AS gmv
     FROM orders
-    WHERE status = 'completed'
+    WHERE status = ${COMPLETED_STATUS}
       AND created_at >= ${from} AND created_at < ${to}
     GROUP BY product_id
     ORDER BY gmv DESC, product_id

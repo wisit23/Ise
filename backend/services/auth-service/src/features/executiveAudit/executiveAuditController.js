@@ -1,4 +1,8 @@
-const { parsePagination, paginatedResponse } = require("@reloop/shared");
+const {
+  parsePagination,
+  paginatedResponse,
+  badRequest,
+} = require("@reloop/shared");
 const {
   recordExecutiveAudit,
   queryExecutiveAudit,
@@ -11,10 +15,7 @@ const { buildAuditEntry } = require("./executiveAuditPolicy");
  * client could set; the email is read from the users table when recording.
  */
 function extractActor(req) {
-  const ipAddress =
-    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-    req.socket?.remoteAddress ||
-    null;
+  const ipAddress = req.ip || req.socket?.remoteAddress || null;
   const userAgent = req.headers["user-agent"] || null;
 
   return {
@@ -45,17 +46,32 @@ async function createAuditLog(req, res, next) {
  * GET /executive/audit
  * Query executive audit logs with pagination and filters.
  */
+const AUDIT_FILTERS = ["actorId", "action", "category", "targetType"];
+
+/** The filters of GET /executive/audit, each a single string, dates valid. */
+function auditFilters(query) {
+  const filters = {};
+  for (const name of [...AUDIT_FILTERS, "from", "to"]) {
+    const value = query[name];
+    if (value === undefined || value === "") continue;
+    if (typeof value !== "string") {
+      throw badRequest(`${name} must be a single value`);
+    }
+    if ((name === "from" || name === "to") && Number.isNaN(Date.parse(value))) {
+      throw badRequest(`${name} must be a valid date`);
+    }
+    filters[name] = value;
+  }
+  return filters;
+}
+
 async function getAuditLogs(req, res, next) {
   try {
+    const filters = auditFilters(req.query);
     const pagination = parsePagination(req.query);
     const { items, total } = await queryExecutiveAudit({
       ...pagination,
-      actorId: req.query.actorId,
-      action: req.query.action,
-      category: req.query.category,
-      targetType: req.query.targetType,
-      from: req.query.from,
-      to: req.query.to,
+      ...filters,
     });
 
     const paginated = paginatedResponse(items, total, pagination);

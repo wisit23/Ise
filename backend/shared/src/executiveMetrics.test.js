@@ -2,6 +2,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   resolveMetricRange,
+  resolveExecutiveRange,
+  allowedValue,
+  searchQuery,
+  escapeLike,
+  listSort,
   buildSeriesPeriods,
   fillSeriesGaps,
 } = require("./executiveMetrics");
@@ -169,5 +174,78 @@ test("day slots are refused unless the endpoint offers them", () => {
   assert.throws(
     () => buildSeriesPeriods({ from, to, granularity: "hour" }),
     (err) => err.status === 400,
+  );
+});
+
+test("an executive range must run forwards", () => {
+  for (const query of [
+    { from: "2025-10-16", to: "2025-10-16" },
+    { from: "2025-10-17", to: "2025-10-16" },
+  ]) {
+    assert.throws(
+      () => resolveExecutiveRange(query),
+      (err) => err.status === 400,
+    );
+    // Other callers of resolveMetricRange keep their behaviour.
+    assert.doesNotThrow(() => resolveMetricRange(query));
+  }
+  const { from, to } = resolveExecutiveRange({
+    from: "2025-10-16",
+    to: "2025-10-17",
+  });
+  assert.ok(from < to);
+});
+
+test("a filter value must be one the page offers", () => {
+  const allowed = ["OPEN", "DECIDED"];
+  assert.equal(allowedValue(undefined, allowed, "status"), undefined);
+  assert.equal(allowedValue("", allowed, "status"), undefined);
+  assert.equal(allowedValue("OPEN", allowed, "status"), "OPEN");
+  for (const bad of ["open", "NOPE", ["OPEN"], {}]) {
+    assert.throws(
+      () => allowedValue(bad, allowed, "status"),
+      (err) => err.status === 400,
+    );
+  }
+});
+
+test("a search takes codes, ticket numbers and shop names as plain text", () => {
+  assert.equal(searchQuery(undefined), undefined);
+  assert.equal(searchQuery(""), undefined);
+  assert.equal(searchQuery("   "), undefined);
+  assert.equal(searchQuery(" RPT-8AX4-M8BH-8DDQ "), "RPT-8AX4-M8BH-8DDQ");
+  assert.equal(searchQuery("#CS-000002"), "#CS-000002");
+  assert.equal(searchQuery(" ร้านยีนส์ 50% "), "ร้านยีนส์ 50%");
+  assert.equal(searchQuery("x".repeat(100)).length, 100);
+  for (const bad of [["a"], {}, 5, "x".repeat(101)]) {
+    assert.throws(
+      () => searchQuery(bad),
+      (err) => err.status === 400,
+    );
+  }
+});
+
+test("a list is newest first unless oldest first is asked for", () => {
+  assert.equal(listSort(undefined), "newest");
+  assert.equal(listSort(""), "newest");
+  assert.equal(listSort("newest"), "newest");
+  assert.equal(listSort("oldest"), "oldest");
+  for (const bad of ["latest", "OLDEST", ["oldest"], {}]) {
+    assert.throws(
+      () => listSort(bad),
+      (err) => err.status === 400,
+    );
+  }
+});
+
+test("LIKE characters in a search are escaped so they match themselves", () => {
+  assert.equal(escapeLike("plain text"), "plain text");
+  const backslash = String.fromCharCode(92);
+  assert.equal(escapeLike("50%"), `50${backslash}%`);
+  assert.equal(escapeLike("a_b"), `a${backslash}_b`);
+  assert.equal(escapeLike(`a${backslash}b`), `a${backslash}${backslash}b`);
+  assert.equal(
+    escapeLike(`%_${backslash}`),
+    `${backslash}%${backslash}_${backslash}${backslash}`,
   );
 });

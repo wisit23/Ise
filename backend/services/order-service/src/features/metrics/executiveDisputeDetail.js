@@ -1,6 +1,5 @@
 const { displayNames } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
-const productClient = require("../../services/productClient");
 
 /**
  * One dispute for the Executive details dialog: who opened it, which order,
@@ -15,7 +14,7 @@ const productClient = require("../../services/productClient");
 async function namesFor(ids) {
   try {
     const rows = await displayNames(ids);
-    return new Map(rows.map((row) => [row.userId, row.displayName]));
+    return new Map(rows.map((row) => [row.userId, row]));
   } catch {
     return null;
   }
@@ -23,7 +22,19 @@ async function namesFor(ids) {
 
 async function titleOf(productId) {
   try {
-    const product = await productClient.getProduct(productId);
+    const response = await fetch(
+      `${process.env.PRODUCT_SERVICE_URL || "http://product-service:3002"}/${encodeURIComponent(productId)}`,
+      { signal: AbortSignal.timeout(3000) },
+    );
+    if (response.status === 404) return { available: true, title: null };
+    if (!response.ok) throw new Error("Product lookup unavailable");
+    const product = await response.json();
+    if (
+      !product ||
+      (product.title !== null && typeof product.title !== "string")
+    ) {
+      throw new Error("Invalid product response");
+    }
     return { available: true, title: product?.title ?? null };
   } catch {
     return { available: false, title: null };
@@ -52,8 +63,20 @@ async function getExecutiveDispute(id) {
       ? titleOf(order.productId)
       : { available: true, title: null },
   ]);
-  const person = (userId) =>
-    userId ? { id: userId, name: names?.get(userId) ?? null } : null;
+  const person = (userId, { withRoles = false, userName = false } = {}) => {
+    if (!userId) return null;
+    const found = names?.get(userId);
+    return {
+      id: userId,
+      name: userName
+        ? typeof found?.userName === "string" && found.userName.trim()
+          ? found.userName.trim()
+          : null
+        : (found?.displayName ?? null),
+      // Staff roles say which team acted (CS, Trust & Safety, Admin).
+      ...(withRoles ? { roles: found?.staffRoles ?? [] } : {}),
+    };
+  };
 
   return {
     data: {
@@ -74,14 +97,14 @@ async function getExecutiveDispute(id) {
       product: order?.productId
         ? { id: order.productId, title: product.title }
         : null,
-      buyer: person(people.buyer),
+      buyer: person(people.buyer, { userName: true }),
       seller: person(people.seller),
-      assignee: person(people.assignee),
+      assignee: person(people.assignee, { withRoles: true }),
       assignedRole: row.assignedRole ?? null,
       assignedAt: toIso(row.assignedAt),
       decision: row.decision ?? null,
       decisionReason: row.decisionReason ?? null,
-      decider: person(people.decider),
+      decider: person(people.decider, { withRoles: true }),
       decidedAt: toIso(row.decidedAt),
       decisionDueAt: toIso(row.decisionDueAt),
     },

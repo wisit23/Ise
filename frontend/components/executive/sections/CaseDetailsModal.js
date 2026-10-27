@@ -7,24 +7,36 @@ import Button from "../../ui/Button";
 import { baht } from "../../../lib/executive";
 import { formatReportedAt } from "../../../lib/executiveComplaints";
 import {
+  DISPUTE_TYPE_NAMES,
+  PRIORITY_NAMES,
+} from "../../../lib/executiveInbox";
+import {
   fetchCaseDetail,
   isOverdue,
   personLabel,
 } from "../../../lib/executiveCaseDetail";
-import {
-  DECISION_LABELS,
-  DISPUTE_TYPES,
-} from "../../../lib/disputePresentation";
+import { DECISION_LABELS } from "../../../lib/disputePresentation";
 import {
   DISPUTE_STATUS_LABEL,
-  PRIORITY_LABEL,
   STAFF_ROLE_LABEL,
   TICKET_STATUS_LABEL,
 } from "../../../lib/supportConstants";
 
-const DISPUTE_TYPE_NAMES = Object.fromEntries(DISPUTE_TYPES);
-const PRIORITY_NAMES = { ...PRIORITY_LABEL, CRITICAL: "วิกฤต" };
 const ticketStatus = (code) => TICKET_STATUS_LABEL[code] || code;
+
+/** A staff member's team(s) as shown after their name: "Customer Service". */
+function roleText(person, fallbackRole) {
+  // ADMIN and TRUST_AND_SAFETY share a label, so show each label once.
+  const labels = [
+    ...new Set(
+      (person?.roles || [])
+        .map((role) => STAFF_ROLE_LABEL[role])
+        .filter(Boolean),
+    ),
+  ];
+  if (labels.length > 0) return labels.join(", ");
+  return STAFF_ROLE_LABEL[fallbackRole] || null;
+}
 
 /** A person as a name, with their id underneath so they can be looked up. */
 function Person({ person, namesAvailable, role }) {
@@ -70,7 +82,9 @@ function DisputeDetails({ data, meta }) {
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <DetailField label="คำสั่งซื้อ">
-          <span className="font-mono text-xs">{formatReferenceCode(data.order)}</span>
+          <span className="font-mono text-xs">
+            {formatReferenceCode(data.order)}
+          </span>
           {data.order.amount != null && (
             <span className="block">{baht(data.order.amount)}</span>
           )}
@@ -92,7 +106,7 @@ function DisputeDetails({ data, meta }) {
           <Person
             person={data.assignee}
             namesAvailable={names}
-            role={STAFF_ROLE_LABEL[data.assignedRole]}
+            role={roleText(data.assignee, data.assignedRole)}
           />
         ) : (
           "ยังไม่มีผู้รับเรื่อง"
@@ -102,7 +116,11 @@ function DisputeDetails({ data, meta }) {
         {decided ? (
           <>
             <DetailField label="ผู้ตัดสิน">
-              <Person person={data.decider} namesAvailable={names} />
+              <Person
+                person={data.decider}
+                namesAvailable={names}
+                role={roleText(data.decider)}
+              />
             </DetailField>
             <DetailField label="ผลการตัดสิน">
               {DECISION_LABELS[data.decision] || data.decision}
@@ -144,79 +162,73 @@ function DisputeDetails({ data, meta }) {
 
 function TicketDetails({ data, meta }) {
   const names = meta.namesAvailable;
+  const { assignee, handling } = data;
   return (
     <dl className="space-y-4 text-sm">
-      <DetailField label="หัวข้อ">
+      <DetailField label="เรื่อง">
         {data.ticketNumber} · {data.subject}
       </DetailField>
-      {data.description && (
-        <DetailField label="รายละเอียดที่แจ้ง">{data.description}</DetailField>
-      )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <DetailField label="ผู้แจ้ง">
+        <DetailField label="ผู้เปิด Ticket">
           <Person person={data.requester} namesAvailable={names} />
         </DetailField>
-        <DetailField label="วันเวลาที่แจ้ง">
+        <DetailField label="วันเวลาที่เปิด">
           {formatReportedAt(data.createdAt)}
         </DetailField>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <DetailField label="หมวดหมู่">{data.category.name}</DetailField>
-        <DetailField label="คำสั่งซื้อที่เกี่ยวข้อง">
-          {data.orderId ? (
-            <span className="font-mono text-xs">{formatReferenceCode(data.orderId)}</span>
-          ) : (
-            "-"
-          )}
+      {/* Only a ticket about an order is about a product. */}
+      {data.orderId && (
+        <DetailField label="สินค้า">
+          {data.product?.title ||
+            (meta.productAvailable === false
+              ? "ไม่พร้อมใช้งาน"
+              : data.product?.id || "ไม่พบสินค้า")}
+          <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
+            คำสั่งซื้อ {formatReferenceCode(data.orderId)}
+          </span>
         </DetailField>
-      </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <DetailField label="สถานะ">
-          {ticketStatus(data.status.code)}
-        </DetailField>
         <DetailField
           label={
-            data.assignee && !data.assignee.current
-              ? "ผู้รับเคสล่าสุด"
-              : "ผู้รับเคส"
+            assignee && !assignee.current ? "ผู้รับเคสล่าสุด" : "ผู้รับเคส"
           }
         >
-          {data.assignee ? (
-            <Person person={data.assignee} namesAvailable={names} />
+          {assignee ? (
+            <Person
+              person={assignee}
+              namesAvailable={names}
+              role={roleText(assignee)}
+            />
           ) : (
             "ยังไม่มีผู้รับเคส"
           )}
         </DetailField>
+        <DetailField label="สถานะ">
+          {ticketStatus(data.status.code)}
+        </DetailField>
       </div>
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <dt className="font-medium text-slate-500">การดำเนินการ</dt>
-        <dd className="mt-2">
-          {data.actions.length === 0 ? (
-            <p className="text-slate-900">ยังไม่มีการดำเนินการ</p>
-          ) : (
-            <ol className="space-y-3">
-              {data.actions.map((action) => (
-                <li
-                  key={`${action.at}-${action.to}`}
-                  className="border-l-2 border-slate-300 pl-3"
-                >
-                  <p className="font-medium text-slate-900">
-                    {action.from
-                      ? `${ticketStatus(action.from)} → ${ticketStatus(action.to)}`
-                      : ticketStatus(action.to)}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {formatReportedAt(action.at)} · โดย{" "}
-                    {personLabel(action.by, names)}
-                  </p>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-slate-700">
-                    เหตุผล: {action.reason || "-"}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          )}
-        </dd>
+      <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        {handling ? (
+          <>
+            <DetailField label="ผู้ดำเนินการ">
+              <Person
+                person={handling.by}
+                namesAvailable={names}
+                role={roleText(handling.by)}
+              />
+            </DetailField>
+            <DetailField label="การดำเนินการ">
+              {ticketStatus(handling.outcome)}
+              <span className="mt-0.5 block text-xs text-slate-500">
+                เมื่อ {formatReportedAt(handling.at)}
+              </span>
+            </DetailField>
+            <DetailField label="เหตุผล">{handling.reason || "-"}</DetailField>
+          </>
+        ) : (
+          <DetailField label="ผู้ดำเนินการ">ยังไม่ได้ดำเนินการ</DetailField>
+        )}
       </div>
     </dl>
   );

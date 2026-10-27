@@ -1,5 +1,7 @@
 const {
-  resolveMetricRange,
+  resolveExecutiveRange,
+  searchQuery,
+  listSort,
   metricMeta,
   badRequest,
   METRIC_DEFINITION_VERSION,
@@ -14,7 +16,7 @@ const REPORT_STATUSES = ["OPEN", "REVIEWED", "ACTIONED", "DISMISSED", "ALL"];
 
 async function getMetrics(req, res, next) {
   try {
-    const { from, to, timezone } = resolveMetricRange(req.query);
+    const { from, to, timezone } = resolveExecutiveRange(req.query);
     const data = await userMetrics.getUserMetrics({ from, to });
 
     res.json({ data, meta: metricMeta({ from, to, timezone }) });
@@ -25,7 +27,7 @@ async function getMetrics(req, res, next) {
 
 async function getMetricsSeries(req, res, next) {
   try {
-    const { from, to, timezone } = resolveMetricRange(req.query);
+    const { from, to, timezone } = resolveExecutiveRange(req.query);
     const granularity = req.query.granularity;
     const periods = buildSeriesPeriods({ from, to, granularity, timezone });
 
@@ -43,21 +45,12 @@ async function getMetricsSeries(req, res, next) {
   }
 }
 
-const VALID_SORT_OPTIONS = ["newest", "oldest", "most_reported"];
-const VALID_REASON_CATEGORIES = ["FRAUD", "COUNTERFEIT", "MISMATCH", "OTHER"];
-
 async function getReports(req, res, next) {
   try {
-    const { status, sortBy, reasonCategory, targetId, search } = req.query;
-    for (const name of [
-      "status",
-      "sortBy",
-      "reasonCategory",
-      "targetId",
-      "limit",
-      "search",
-      "page",
-    ]) {
+    const { status } = req.query;
+    const search = searchQuery(req.query.q);
+    const sort = listSort(req.query.sort);
+    for (const name of ["status", "limit", "page", "targetId"]) {
       if (
         req.query[name] !== undefined &&
         typeof req.query[name] !== "string"
@@ -65,8 +58,11 @@ async function getReports(req, res, next) {
         throw badRequest(`${name} must be a single string value`);
       }
     }
-    if (search !== undefined && search.length > 100) {
-      throw badRequest("search must not exceed 100 characters");
+    // Who the complaints are about: how a high-risk target in the warning is
+    // opened. An id is at most 200 characters.
+    const targetId = req.query.targetId?.trim() || undefined;
+    if (targetId !== undefined && targetId.length > 200) {
+      throw badRequest("targetId must be at most 200 characters");
     }
     const page = req.query.page === undefined ? 1 : Number(req.query.page);
     if (req.query.page !== undefined && !/^\d+$/.test(req.query.page)) {
@@ -79,23 +75,8 @@ async function getReports(req, res, next) {
     ) {
       throw badRequest("page must be a valid positive integer");
     }
-    if (targetId !== undefined && (!targetId.trim() || targetId.length > 200)) {
-      throw badRequest(
-        "targetId must be a non-empty identifier of at most 200 characters",
-      );
-    }
     if (status && !REPORT_STATUSES.includes(status)) {
       throw badRequest(`status must be one of ${REPORT_STATUSES.join(", ")}`);
-    }
-    if (sortBy && !VALID_SORT_OPTIONS.includes(sortBy)) {
-      throw badRequest(
-        `sortBy must be one of ${VALID_SORT_OPTIONS.join(", ")}`,
-      );
-    }
-    if (reasonCategory && !VALID_REASON_CATEGORIES.includes(reasonCategory)) {
-      throw badRequest(
-        `reasonCategory must be one of ${VALID_REASON_CATEGORIES.join(", ")}`,
-      );
     }
 
     if (req.query.limit !== undefined && !/^\d+$/.test(req.query.limit)) {
@@ -114,16 +95,15 @@ async function getReports(req, res, next) {
     // A window is optional: without one this is the live queue it always was;
     // with one, only complaints reported in [from, to) are listed and counted.
     const windowed = req.query.from !== undefined || req.query.to !== undefined;
-    const range = windowed ? resolveMetricRange(req.query) : null;
+    const range = windowed ? resolveExecutiveRange(req.query) : null;
 
     const data = await executiveReports.getReportOverview({
       range: range && { from: range.from, to: range.to },
       status,
+      search,
+      targetId,
+      sort,
       limit,
-      sortBy: sortBy || "newest",
-      reasonCategory,
-      targetId: targetId?.trim(),
-      search: search?.trim(),
       page,
     });
 

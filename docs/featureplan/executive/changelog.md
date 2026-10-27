@@ -1,5 +1,57 @@
 # Executive Feature Changelog
 
+## 2026-10-25 — Continued Executive audit after interrupted review
+
+- เพิ่ม paginated service-token-only `/executive/seller-search` ภายใน Auth Executive module และให้ Order อ่านครบทุกหน้า แก้ผลค้นร้านหายเมื่อเกิน 100 บัญชี โดยไม่เปลี่ยน Auth search API เดิม
+- เพิ่ม deadline เฉพาะ Executive requests, bounded Product lookup ในรายละเอียดข้อพิพาท, last-page recovery, report series validation และ unavailable ต่อ bucket ที่หาย
+- Report page/total/status counts อ่าน snapshot เดียวกัน; Executive audit อ่าน IP ผ่าน `req.ip`
+- รายละเอียด scope, tests, evidence และ deployment coupling อยู่ใน `production-audit-2026-10-25.md`; ไม่แก้ฟีเจอร์ของบทบาทอื่นและไม่เพิ่ม anomaly/PDF นอกขอบเขตที่อนุมัติไว้
+
+## 2026-10-25 — Final production audit, status counts sync, and executiveDates refactor
+
+- **ตัวเลขบนปุ่มสถานะตรงกับผลค้นหา:** ในหน้าข้อร้องเรียน (`reportSearch.js` และ `executiveReports.js`), เพิ่มฟังก์ชัน `countReportStatuses` ที่ใช้เงื่อนไขเดียวกับรายการคำร้อง (`reportPredicate({ range, status: "ALL", search, targetId })`) ส่งผลให้ตัวเลขบนปุ่มสถานะ (เช่น รอดำเนินการ, ตรวจสอบแล้ว) อัปเดตตามคำค้น `q` และ `targetId` ตรงกันทุกปุ่ม (พฤติกรรมเดียวกับ Ticket และข้อพิพาท) พร้อม regression test
+- **ลบโค้ดค้าง (Dead Code Cleanup):** นำ `usersGranularity` ที่ไม่ได้ใช้งานออกจาก `CUSTOM_MODE` ใน `frontend/lib/executive.js` (คำนวณ granularity จากความยาวของช่วงวันที่แทนแล้ว)
+- **แยกโมดูลวันที่ (Date Utility Refactoring):** แยกฟังก์ชันและค่าคงที่เกี่ยวกับปฏิทิน/วันที่/การคำนวณช่วงเวลา ออกจาก `frontend/lib/executive.js` (ซึ่งยาวกว่า 800 บรรทัด) ไปไว้ใน `frontend/lib/executiveDates.js` และทำ re-export ทั้งหมดผ่าน `export * from "./executiveDates";` เพื่อรักษา backward compatibility 100% ทำให้โค้ดมีความเป็นระเบียบ เป็นสัดส่วน ดูแลง่าย
+- **แก้ Date Collision ใน Integration Tests:** ปรับวันที่ fixture ใน `executive-ticket-detail.integration.test.js` (support-service) และ `executive-dispute-detail.integration.test.js` (order-service) ให้ไม่ชนกับช่วงวันที่ของ list test ทำให้รันการทดสอบคู่ขนานได้ผ่านฉลุย
+- **ตรวจสอบความพร้อมระดับ Production:**
+  - ไม่มี Mock data หรือ Hardcoded data ใน Production runtime
+  - การสื่อสารระหว่าง Service (เช่น order-service ค้นชื่อร้านผ่าน auth-service `/internal/users/search`, ดึง display names, top catalog ดึง product sales) ทำงานผ่าน REST API + `x-internal-token` อย่างถูกต้องตามหลัก Microservices ไม่มีการ query ข้ามฐานข้อมูลโดยตรง
+  - ผลการรันเทส: Frontend 17 suites / 223 tests ผ่าน 100%, Backend integration tests (auth, order, support) และ shared unit tests ทั้งหมด 23 tests ผ่าน 100% บนฐานข้อมูลจริง PostgreSQL
+- **Git Tracking:** เพิ่ม `sellerNameSearch.js`, `sellerNameSearch.test.js`, และ `executiveDates.js` เข้าไปใน Git staging ครบถ้วน
+
+## 2026-10-25 — Merge main (reference codes) and search by code
+
+- Merge `main` (ระบบรหัสอ้างอิง UUID → `RPT-`/`TKT-`/`DSP-`/`ORD-`/`USR-`): แก้ conflict 4 ไฟล์ โดยเก็บ `staffRoles` + `referenceCode` ใน display-names, ใช้ layout หน้าต่าง Ticket ของเราแต่แสดงรหัสอ้างอิงแทน UUID
+- กราฟสถานะคำสั่งซื้อนับ `paid` และ `delivered` เป็น "กำลังดำเนินการ" ตามวงจรคำสั่งซื้อใหม่ของ main (เดิมหายจากกราฟ)
+- ช่อง "ค้นหาด้วยรหัส" ในหน้าข้อร้องเรียน (CEO-DEC-017): `q` ใน `/executive/reports`, `/executive/tickets`, `/executive/disputes`; ค้นทั้งรหัสเต็มหรือบางส่วน
+- กดชื่อเป้าหมายในแถบเตือนสีแดง → ดูเฉพาะข้อร้องเรียนของเป้าหมายนั้น (ทุกสถานะ ทุกช่วงเวลา) มีแถบ "ล้างตัวกรอง" (`targetId` ใน `/executive/reports`)
+- เรียงรายการ "วันล่าสุด/วันเก่าสุด" (dropdown ชิดขวาหัวรายการ, "กำลังโหลด" อยู่ซ้าย): `sort` ใน `/executive/reports|tickets|disputes`
+- ค้นหาด้วย **ชื่อร้าน** ได้ด้วย (CEO-DEC-017): ข้อร้องเรียนค้นชื่อร้าน/ชื่อคน/รหัสผู้ถูกร้องเรียน, ข้อพิพาทค้นชื่อร้านที่ขายคำสั่งซื้อนั้น (order-service ถาม `/internal/users/search` ของ auth), Ticket ค้นด้วยรหัสอย่างเดียว; ค้นเป็นข้อความตรงตัว (`%`/`_` ไม่ใช่ wildcard) ไม่เกิน 100 ตัวอักษร; ช่องไม่บังคับตัวพิมพ์ใหญ่และไม่เตือนรูปแบบอีก
+- **รายงานรีวิว (CEO-DEC-019):** รายงานที่ร้านค้ากดรายงานรีวิวของลูกค้าถูกเก็บในตาราง `reports` เดียวกับรายงานผู้ใช้ (แยกด้วยข้อความ `[รายงานรีวิว #…]` ต้นเหตุผล) หน้าข้อร้องเรียนแสดงป้ายเทา "รายงานรีวิว" (แบบเดียวกับ Ticket/ข้อพิพาท) + หัวข้อปัญหา และเรียกคนที่ถูกรายงานว่า "ผู้เขียนรีวิว" ด้วยชื่อของเขา; ความเห็นของร้านและเนื้อหารีวิวดูในหน้ารายละเอียด (ซึ่งไม่แสดงชื่อร้านของผู้เขียนรีวิว); รายงานปกติแสดงเหมือนเดิม
+- หน้ารายละเอียดคำร้อง: รายงานรีวิวแสดง "วันเวลาที่แจ้ง" ข้างหัวข้อปัญหา; มีหัวข้อ "สินค้า" แสดงชื่อสินค้า (ดึงจาก product-service ผ่าน API โดย auth-service, `productTitle` ใน `/executive/reports`) และรหัสสินค้าไว้ข้างล่าง; สินค้าที่ขายแล้วยังมีชื่อ, สินค้าที่ผู้ขายลบ (soft delete) ยังมีชื่อพร้อมป้าย "สินค้าถูกลบแล้ว", รหัสที่ไม่เคยเป็นสินค้าขึ้น "ไม่พบสินค้า", ถามไม่ได้ขึ้น "ไม่พร้อมใช้งาน"; product-service เพิ่ม `POST /internal/executive/product-names` (ถามครั้งเดียวต่อหน้า)
+- หน้าภาพรวม: การ์ด 4 ใบมีช่วงเวลาต่อท้ายชื่อ เช่น "ยอดขายจากการสั่งซื้อ (ปีนี้)", "รายได้แพลตฟอร์ม 3% (ปีนี้)" (ช่วงกำหนดเองเขียนว่า "(ช่วงที่เลือก)"); กราฟทั้งหมด (แนวโน้มยอดขาย, หมวดหมู่ที่นิยมสุด, สถานะคำสั่งซื้อ, ประเภทสินค้ายอดขายสูงสุด) ไม่มีช่วงเวลาในชื่อ; ตัดบรรทัดอธิบาย "…ในปีนี้" ใต้ชื่อกราฟสองอันออก
+- หน้าภาพรวมเปิดที่ **"7 วันล่าสุด"** เป็นค่าเริ่มต้น เทียบกับ 7 วันก่อนหน้า (ปุ่ม: 7 วันล่าสุด / เดือนนี้ / ปีนี้ / กำหนดเอง); เคยลองปุ่ม "วันนี้" แล้วเอาออก
+- หน้าภาพรวม "กำหนดเอง" เลือก **ตั้งแต่ – ถึง** ได้ (CEO-DEC-018): 1 วัน = กราฟรายชั่วโมง, 2–92 วัน = จุดละวัน (ยิ่งห่างยิ่งมีจุดมาก), เกิน 92 วัน = จุดละเดือน; เทียบกับช่วงก่อนหน้าที่ยาวเท่ากัน; แกนตั้งชื่อประมาณ 8 วัน, จุดเล็กลงและโซน hover กว้างเท่าคอลัมน์เมื่อจุดเยอะ
+- ช่องค้นหาย้ายไปชิดขวาแถวช่วงเวลา ไม่แสดงข้อความเตือน (ขอบแดงเมื่อพิมพ์รูปแบบที่ใช้ไม่ได้); ข้อความใต้ตารางรายงานเหลือ "รายได้แพลตฟอร์มคำนวณที่ N% ของยอดขาย"
+- แถวรายการแสดงรหัสของเรื่องเป็น "รหัส:" (เดิมข้อพิพาทเขียนว่า "ออเดอร์:" ทั้งที่เป็นรหัสข้อพิพาท)
+- ฐานข้อมูลในเครื่อง: รัน `migrate:deploy` ของ auth/order/product/support และ backfill รหัสอ้างอิงตาม `docs/uuid-and-reference-id-design.md`
+
+## 2026-10-24 — Export rescoped, case details, time indexes
+
+- **`CEO-005` rescope (CEO-DEC-016):** export = ดาวน์โหลด CSV ของรายงานที่เห็นบนหน้าจอ + บันทึก audit log `REPORT_EXPORT_CSV` ทุกครั้ง; ตัด export job/วันหมดอายุ/PDF ออกจากแผน
+- **รายละเอียด Ticket/ข้อพิพาท (CEO-DEC-015):** ปุ่ม "รายละเอียด" ทุกแถว; Ticket แสดงผู้เปิด วันที่เปิด สินค้า (เฉพาะที่ผูกคำสั่งซื้อ) สถานะ ผู้รับเคส ผู้ดำเนินการ การดำเนินการ เหตุผล; ชื่อเจ้าหน้าที่มีทีมในวงเล็บจาก `staffRoles` ที่ auth-service ส่งเพิ่มใน display-names; Ticket ที่ถูกเปิดใหม่ไม่แสดงผลการดำเนินการเก่า
+- **Index ตามเวลา:** auth `20261024100000_executive_time_indexes` (`login_logs.login_at`, `users.created_at`, `reports.reported_at`), order `20261024100000_executive_order_time_index` (`orders(created_at, status)`), support `20261024100000_executive_ticket_time_index` (`support_tickets.created_at`) — ปิดข้อจำกัดเรื่อง index ของรอบ 2026-10-17
+- **ตรวจความพร้อม production + refactor (เฉพาะโค้ด Executive):**
+  - ไม่พบการอ่านฐานข้อมูลข้าม service: ทุก query อ่านตารางของ service ตัวเอง; ข้อมูลข้าม service ผ่าน API + `x-internal-token` (ชื่อ/role จาก auth, สินค้าจาก order/product, ยอดขายรายสินค้าจาก order)
+  - ไม่พบ mock หรือข้อมูลตัวอย่างใน runtime; ค่าธรรมเนียมมาจาก `PLATFORM_FEE_RATE` ของ order-service (ถ้าไม่ตั้ง จะเตือนใน log ตอนเริ่ม)
+  - Export CSV: บันทึก audit log ก่อน แล้วจึงให้ไฟล์ — บันทึกไม่ได้ = ไม่มีไฟล์ (CEO-DEC-016); ส่งเฉพาะ action/targetId/metadata
+  - ทุก endpoint ของ Executive ปฏิเสธช่วงเวลาว่างหรือย้อนกลับ (`resolveExecutiveRange`); ตัวกรองที่ไม่รู้จักตอบ 400 ผ่าน `allowedValue` ตัวเดียวกัน
+  - `GET /executive/audit` ตอบ 400 เมื่อวันที่ผิดหรือส่งค่าซ้ำ แทนการข้ามเงียบหรือ 500
+  - API ข้อร้องเรียนตัด search/targetId/reasonCategory/sortBy และหมวดหมู่เดาจากคำ (ไม่มีหน้าไหนใช้แล้ว, CEO-DEC-014)
+  - order-service: สถานะ `completed`/`paid` เป็นค่าคงที่ที่เดียว, series กรอง status ใน WHERE ให้ใช้ index `orders(created_at, status)`, ระดับความเร่งด่วนข้อพิพาทอ่านจาก `customerServicePolicy`
+  - frontend: `LOCALE`, `buddhistYear`, `formatCount`, `roundMoney`, `baht` ใช้ร่วมกัน แทนการเขียนซ้ำในแต่ละ component; ยอดรวมรายงานปัดเป็นสตางค์; ลบ `fetchExecutiveAuditLogs` ที่ไม่ได้ใช้
+- **ยังเปิดอยู่:** gateway ยังไม่ปฏิเสธ `/internal/` (มี token ภายในกันอยู่); ยังไม่ได้ตรวจหน้าจอมือถือ; IP ใน audit log มาจาก `x-forwarded-for` ซึ่ง gateway ไม่ได้ตั้งให้ (ต้องแก้ที่ gateway); `NEXT_PUBLIC_REPORT_SEARCH_DEBOUNCE_MS`/`NEXT_PUBLIC_REPORT_REQUEST_TIMEOUT_MS` ไม่มีโค้ดใช้แล้ว แต่ยังอยู่ใน `.env.example`, `frontend/Dockerfile.prod`, `docker-compose.prod.yml` (ไฟล์กลาง ไม่ได้แก้)
+
 ## 2026-10-17 — Overview redesign, complaints inbox, hardening
 
 ตัดสินใจทั้งหมดอยู่ใน `decision.md` (CEO-DEC-005 ถึง CEO-DEC-014)
@@ -17,7 +69,7 @@
 
 **ข้อจำกัดที่ทราบก่อนใช้งานข้อมูลจริง:**
 
-- ไม่มี index รองรับ `orders(status, created_at)`, `login_logs(login_at)`, `users(created_at)`, `reports(reported_at)`, `support_tickets(created_at)`; ต้องเพิ่ม migration เมื่อข้อมูลมีมาก (ต้องให้เจ้าของบริการเห็นชอบ)
+- ~~ไม่มี index รองรับ `orders(status, created_at)`, `login_logs(login_at)`, `users(created_at)`, `reports(reported_at)`, `support_tickets(created_at)`~~ — เพิ่มแล้ว 2026-10-24
 - gateway ส่งต่อทุกเส้นทางใต้ `/api/orders/*` รวม `/internal/*` (ถูกกันด้วย token ภายใน แต่ควรให้ gateway ปฏิเสธ `/internal/`)
 - Audit log ยังถูกส่งจากเบราว์เซอร์หลังดาวน์โหลด CSV และใช้ IP จาก `x-forwarded-for`
 
