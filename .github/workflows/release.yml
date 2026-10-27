@@ -1,0 +1,137 @@
+name: Release images
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # CI's historical advisory exception must not silently authorize a release.
+      - run: npm audit --omit=dev --audit-level=high
+
+  images:
+    needs: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [auth-service, product-service, order-service, chat-service, support-service, gateway, frontend]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Select build target
+        id: config
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          target=backend
+          workspace="backend/services/$COMPONENT"
+          runtime="services/$COMPONENT"
+          if [ "$COMPONENT" = gateway ]; then workspace=backend/gateway; runtime=gateway; fi
+          if [ "$COMPONENT" = frontend ]; then target=frontend; workspace=frontend; runtime=frontend; fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
+          echo "runtime=$runtime" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: deploy/cicd/Dockerfile
+          target: ${{ steps.config.outputs.target }}
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/wisit23/ise-${{ matrix.component }}:${{ github.event.workflow_run.head_sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
+            org.opencontainers.image.source=https://github.com/wisit23/Ise
+          build-args: |
+            WORKSPACE=${{ steps.config.outputs.workspace }}
+            RUNTIME_PATH=${{ steps.config.outputs.runtime }}
+          cache-from: type=gha,scope=release-${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=release-${{ matrix.component }}
+      - name: Record immutable image
+        env:
+          COMPONENT: ${{ matrix.component }}
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          c = os.environ['COMPONENT']
+          Path(c + '.json').write_text(json.dumps({'component': c, 'commit': os.environ['COMMIT'],
+            'image': 'ghcr.io/wisit23/ise-' + c + '@' + os.environ['DIGEST']}))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.component }}
+          overwrite: true
+          path: ${{ matrix.component }}.json
+          retention-days: 30
+
+  manifest:
+    needs: images
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: image-records
+      - name: Assemble release
+        env:
+          COMMIT: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          python3 deploy/cicd/release.py create --records image-records
+          --commit "$COMMIT" --run-url "$RUN_URL" --output release.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          overwrite: true
+          path: release.json
+          retention-days: 90
+      - name: Release summary
+        run: |
+          echo '### Release ready (not deployed)' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Download the release artifact or run Deploy release with this run ID.' >> "$GITHUB_STEP_SUMMARY"
+          cat release.json >> "$GITHUB_STEP_SUMMARY"

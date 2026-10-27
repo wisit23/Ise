@@ -30,6 +30,13 @@ spec:
       containers:
         - name: mongo
           image: mongo:7
+          # On node reboot, Mongo can start before CoreDNS. Wait for its own
+          # replica-set hostname before Mongo validates the persisted config.
+          command:
+            - sh
+            - -c
+            - 'until getent hosts "$(hostname).mongo" >/dev/null; do sleep 2; done; exec docker-entrypoint.sh "$@"'
+            - '--'
           args: ["--replSet", "rs0", "--bind_ip_all"]
           ports:
             - containerPort: 27017
