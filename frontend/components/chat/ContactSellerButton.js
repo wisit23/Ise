@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { contactSeller } from "../../lib/chat";
 import { getAccessToken } from "../../lib/auth";
 
-/** Opens (or re-opens) the Buyer↔Seller conversation for one product, then
+/** Opens (or re-opens) the buyer/seller conversation for one product, then
  * navigates to it. Unauthenticated visitors go to /login instead — this
  * mirrors the existing addToCart()/handleBuyNow() guest-redirect pattern in
  * app/products/[id]/page.js rather than inventing a new convention. */

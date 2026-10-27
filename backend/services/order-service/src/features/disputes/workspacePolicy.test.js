@@ -84,3 +84,16 @@ test("a dispute returned by T&S is flagged for the CS owner", () => {
   assert.equal(caps.canEscalate, true);
   assert.equal(disputeCapabilities({ ...returned, returnedAt: null }, "cs", "CUSTOMER_SERVICE").isReturned, false);
 });
+
+test("completed history is read-only for the escalating CS and prior assignees only", () => {
+  const row = { status: "DECIDED", assignedRole: "TRUST_AND_SAFETY", assignedTo: "ts", escalatedBy: "cs", auditLog: [{ toAssignedTo: "previous-cs" }] };
+  for (const id of ["cs", "previous-cs"]) {
+    const caps = disputeCapabilities(row, id, "CUSTOMER_SERVICE");
+    assert.equal(caps.canViewDetail, true);
+    assert.equal(caps.isHistoryViewer, true);
+    for (const action of ["canReply", "canClaim", "canEscalate", "canReassign", "canDecide", "canRequestEvidence"]) assert.equal(caps[action], false, action);
+  }
+  assert.equal(disputeCapabilities(row, "stranger", "CUSTOMER_SERVICE").canViewDetail, false);
+  assert.equal(disputeCapabilities({ ...row, assignedRole: null, assignedTo: null }, "stranger", "CUSTOMER_SERVICE").canViewDetail, false);
+  assert.equal(disputeCapabilities({ ...row, status: "OPEN" }, "previous-cs", "CUSTOMER_SERVICE").canViewDetail, false);
+});

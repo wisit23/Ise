@@ -290,6 +290,30 @@ test("Trust & Safety can take over an escalated ticket with versioned handoff au
     .send({ status: "ESCALATED", version: assigned.body.version, reason: "safety review" });
   assert.equal(escalated.status, 200);
 
+  const adminToken = signAccessToken({ sub: `int-test-admin-${Date.now()}`, role: "ADMIN" });
+  async function expectQueue(token, scope, expected, status = "ESCALATED") {
+    const params = new URLSearchParams({ scope, q: created.body.ticketNumber });
+    if (status) params.set("status", status);
+    const res = await request(app)
+      .get(`/tickets/queue?${params}`)
+      .set("Authorization", `Bearer ${token}`);
+    assert.equal(res.status, 200);
+    assert.equal(res.body.items.some((ticket) => ticket.id === created.body.id), expected,
+      `${scope}/${status || "ALL"} should ${expected ? "include" : "exclude"} the handed-off ticket`);
+    assert.equal(res.body.total, expected ? 1 : 0);
+  }
+  // The CS assignment stays open while the escalation awaits Safety acceptance.
+  assert.equal(escalated.body.assigneeId, agentAId);
+  assert.equal(escalated.body.chatResponderId, agentAId);
+  for (const token of [safetyToken, adminToken]) {
+    await expectQueue(token, "unassigned", true);
+    await expectQueue(token, "unassigned", true, "");
+    await expectQueue(token, "unassigned", false, "ASSIGNED");
+    await expectQueue(token, "mine", false);
+  }
+  await expectQueue(agentAToken, "unassigned", false);
+  await expectQueue(agentBToken, "unassigned", false, "");
+
   const takeover = await request(app)
     .post(`/tickets/${created.body.id}/takeover`)
     .set("Authorization", `Bearer ${safetyToken}`)
@@ -297,6 +321,11 @@ test("Trust & Safety can take over an escalated ticket with versioned handoff au
   assert.equal(takeover.status, 200);
   assert.equal(takeover.body.assigneeId, safetyId);
   assert.equal(takeover.body.chatResponderId,agentAId);
+  await expectQueue(safetyToken, "unassigned", false);
+  await expectQueue(adminToken, "unassigned", false);
+  await expectQueue(safetyToken, "mine", true);
+  await expectQueue(safetyToken, "mine", true, "");
+  await expectQueue(adminToken, "mine", false);
   const csDetail=await request(app).get(`/tickets/${created.body.id}`).set("Authorization",`Bearer ${agentAToken}`);
   assert.equal(csDetail.status,200);assert.equal(csDetail.body.capabilities.canReply,true);assert.equal(csDetail.body.capabilities.canChangeStatus,false);
   const csReply=await request(app).post(`/tickets/${created.body.id}/messages`).set("Authorization",`Bearer ${agentAToken}`).send({body:"CS customer update"});

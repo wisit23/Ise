@@ -39,6 +39,8 @@ jobs:
         run: |
           cp .env.example .env
           docker compose config --quiet
+      - name: Deployment contract and helper tests
+        run: python3 -B -m unittest discover -s deploy/cicd -p 'test_*.py' -v
 
   core-tests:
     name: Tests / ${{ matrix.component }}
@@ -203,28 +205,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - component: auth-service
-            dockerfile: backend/services/auth-service/Dockerfile
-          - component: product-service
-            dockerfile: backend/services/product-service/Dockerfile
-          - component: order-service
-            dockerfile: backend/services/order-service/Dockerfile
-          - component: chat-service
-            dockerfile: backend/services/chat-service/Dockerfile
-          - component: support-service
-            dockerfile: backend/services/support-service/Dockerfile
-          - component: gateway
-            dockerfile: backend/gateway/Dockerfile
-          - component: frontend
-            dockerfile: frontend/Dockerfile.prod
+        component: [auth-service, product-service, order-service, chat-service, support-service, gateway, frontend]
     steps:
       - uses: actions/checkout@v4
       - name: Build image only (no publish or deployment)
         env:
-          DOCKERFILE: ${{ matrix.dockerfile }}
           COMPONENT: ${{ matrix.component }}
-        run: docker build --progress=plain --file "$DOCKERFILE" --tag "reloop-ci:$COMPONENT" .
+        run: |
+          target=backend
+          workspace="backend/services/$COMPONENT"
+          runtime="services/$COMPONENT"
+          if [ "$COMPONENT" = gateway ]; then workspace=backend/gateway; runtime=gateway; fi
+          if [ "$COMPONENT" = frontend ]; then target=frontend; workspace=frontend; runtime=frontend; fi
+          docker build --progress=plain --file deploy/cicd/Dockerfile --target "$target" \
+            --build-arg "WORKSPACE=$workspace" --build-arg "RUNTIME_PATH=$runtime" \
+            --tag "reloop-ci:$COMPONENT" .
+          package=@reloop/shared
+          if [ "$COMPONENT" = frontend ]; then package=next; fi
+          docker run --rm --entrypoint node "reloop-ci:$COMPONENT" -e \
+            'if (process.versions.node.split(".")[0] !== "24") process.exit(1); require.resolve(process.argv[1]);' "$package"
+          if [ "$COMPONENT" = product-service ]; then
+            docker run --rm --entrypoint ffprobe "reloop-ci:$COMPONENT" -version
+          fi
 
   ci-result:
     name: CI result

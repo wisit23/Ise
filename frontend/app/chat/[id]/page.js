@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../components/ui/Icon";
+
 import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -762,7 +764,7 @@ export default function ChatRoomPage() {
                         {otherRoleLabel}
                       </span>
                     )}
-                    <span className="text-gray-300 text-xs font-semibold">↔</span>
+                    <span className="text-gray-300 text-xs font-semibold"><Icon name="swap_horiz" /></span>
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 border border-emerald-200">
                       <span className="text-gray-400 font-normal">คุณ:</span>
                       <span className="font-semibold">{selfName}</span>

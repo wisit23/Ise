@@ -1,5 +1,9 @@
 # Kubernetes สำหรับ RE-LOOP (ฝึกบนเครื่อง)
 
+**เปิด localhost แบบถาวรโดยไม่ใช้ port-forward:** ดู [kind-local.md](kind-local.md)
+และรัน `powershell -NoProfile -ExecutionPolicy Bypass -File deploy/kind-local.ps1`
+สำหรับเครื่องที่ย้ายแล้ว; ย้ายจาก cluster `reloop-local` ครั้งแรกใช้ `-Migrate` ตามคู่มือ
+
 หน้านี้เป็นคู่มือชุด **development** ใน `deploy/k8s`.
 สำหรับ **production images บนเครื่องเดียวผ่าน kind** ให้ใช้
 [production-local](production-local/README.md); สำหรับ K3s บน Cloud VM เดิมให้ใช้

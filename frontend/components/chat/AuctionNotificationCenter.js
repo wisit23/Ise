@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
+import { notificationText } from "../../lib/notifications";
 import {
   getConversation,
   hasUnread,
@@ -23,7 +24,7 @@ const FALLBACK_POLL_INTERVAL_MS = 15000;
 
 function notificationSummary(message) {
   if (typeof message?.payload?.summary === "string") {
-    return message.payload.summary;
+    return notificationText(message.payload.summary);
   }
 
   const labels = {

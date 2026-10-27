@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../ui/Icon";
+
 import { useEffect, useRef, useState } from "react";
 import { fetchAuthedBlobUrl, uploadDisputeEvidence } from "../../lib/api";
 import { getAccessToken } from "../../lib/auth";
@@ -69,7 +71,7 @@ function EvidenceCard({ file, disputeId, party, index }) {
           ) : video ? (
             <>
               <video src={url} preload="metadata" muted aria-hidden="true" />
-              <span className={styles.play}>▶</span>
+              <span className={styles.play}><Icon name="play_arrow" /></span>
             </>
           ) : (
             <img src={url} alt={label} />

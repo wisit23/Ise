@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { apiFetch } from "../../../lib/api";
 import AdminInboxSection from "./AdminInboxSection";
@@ -17,7 +17,7 @@ jest.mock("./admin-inbox/ReportCasePanel", () => ({
 }));
 jest.mock("./case/TicketCasePanel", () => ({
   __esModule: true,
-  default: ({ ticket }) => <div>ticket detail: {ticket.requesterName || ticket.requesterId} / {ticket.assigneeName || ticket.assigneeId}</div>,
+  default: ({ ticket, onTakeover }) => <div><span>ticket detail: {ticket.requesterName || ticket.requesterId} / {ticket.assigneeName || ticket.assigneeId}</span><button onClick={onTakeover}>takeover test</button></div>,
 }));
 
 function report(id, reason) {
@@ -195,4 +195,41 @@ it("shows account names on an escalated ticket instead of only IDs", async () =>
   expect(await screen.findByText("ticket detail: สมชาย ใจดี / มาลี ผู้ดูแล")).toBeInTheDocument();
   expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/users/buyer-1", { token: "token" });
   expect(apiFetch).toHaveBeenCalledWith("/api/auth/admin/users/staff-1", { token: "token" });
+});
+
+it("refreshes the handoff queue when the staff returns to the window", async () => {
+  apiFetch.mockResolvedValue({ items: [], totalPages: 1 });
+  render(<AdminInboxSection token="token" userRole="TRUST_AND_SAFETY" />);
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+  fireEvent(window, new Event("focus"));
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
+  expect(apiFetch.mock.calls[1][0]).toContain("assignedRole=TRUST_AND_SAFETY&scope=unassigned");
+});
+
+it.each(["refresh", "mutation"])("does not let a delayed takeover %s replace the next selected ticket", async (stage) => {
+  const a = { id: "a", ticketNumber: "TKT-A", subject: "Case A", requesterName: "Buyer A", version: 3 };
+  const b = { id: "b", ticketNumber: "TKT-B", subject: "Case B", requesterName: "Buyer B" };
+  let reads = 0, finishRefresh, finishMutation;
+  apiFetch.mockImplementation((url) => {
+    if (url.includes("/queue?")) return Promise.resolve({ items: [a, b], totalPages: 1 });
+    if (url.endsWith("/join")) return Promise.resolve({ conversationId: "room" });
+    if (url.endsWith("/takeover")) return stage === "mutation" ? new Promise((resolve) => { finishMutation = resolve; }) : Promise.resolve(a);
+    if (url === "/api/support/tickets/a") {
+      if (++reads === 1) return Promise.resolve(a);
+      return new Promise((resolve) => { finishRefresh = resolve; });
+    }
+    if (url === "/api/support/tickets/b") return Promise.resolve(b);
+    return Promise.resolve({});
+  });
+  render(<AdminInboxSection token="token" />);
+  fireEvent.click(screen.getByRole("tab", { name: "ทิกเก็ต" }));
+  fireEvent.click(await screen.findByText("Case A"));
+  fireEvent.click(await screen.findByRole("button", { name: "takeover test" }));
+  await waitFor(() => expect(stage === "mutation" ? finishMutation : finishRefresh).toEqual(expect.any(Function)));
+  expect(apiFetch).toHaveBeenCalledWith("/api/support/tickets/a/takeover", expect.objectContaining({ body: { version: 3, reason: "รับผิดชอบการตรวจสอบเคสที่ส่งต่อ" } }));
+  fireEvent.click(await screen.findByText("Case B"));
+  expect(await screen.findByText(/ticket detail: Buyer B/)).toBeInTheDocument();
+  await act(async () => (stage === "mutation" ? finishMutation : finishRefresh)(a));
+  expect(screen.getByText(/ticket detail: Buyer B/)).toBeInTheDocument();
+  expect(screen.queryByText(/ticket detail: Buyer A/)).not.toBeInTheDocument();
 });

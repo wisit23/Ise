@@ -1,0 +1,14 @@
+[Unit]
+Description=Ise public frontend/API/chat health check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+ExecStart=/usr/bin/python3 -I -B /opt/ise-cicd/cicd/monitor_entrypoint.py
+TimeoutStartSec=100
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes

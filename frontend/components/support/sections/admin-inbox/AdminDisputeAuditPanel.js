@@ -1,8 +1,11 @@
 "use client";
+import Icon from "../../../ui/Icon";
+
 import { formatReferenceCode } from "../../../../lib/referenceCodes";
 
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import config from "../../../../lib/customerServiceConfig";
 import { apiFetch } from "../../../../lib/api";
 import ConfirmDialog from "../../../ui/ConfirmDialog";
 import ReturnToCsDialog from "../../workspace/ReturnToCsDialog";
@@ -27,18 +30,56 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
   const [pendingAction, setPendingAction] = useState(null);
   const [returning, setReturning] = useState(false);
   const [selectedEvidence, setSelectedEvidence] = useState(null);
+  const [pendingDelivery, setPendingDelivery] = useState(null);
+  const transcriptRequest = useRef(0);
+  const detailRequest = useRef(0);
+  const latestDetail = useRef(null);
+  const alive = useRef(false);
+  const panelState = useRef({});
+  panelState.current = { busy, returning, pendingAction };
+  const [refreshError, setRefreshError] = useState("");
+  const applyDetail = useCallback((data) => {
+    if (!alive.current || data.id !== dispute.id || (latestDetail.current?.version ?? -1) > (data.version ?? -1)) return;
+    if (!panelState.current.busy && panelState.current.pendingAction && latestDetail.current?.version !== data.version) {
+      setPendingAction(null);
+      setError("เคสมีข้อมูลใหม่ กรุณาตรวจสอบก่อนยืนยันอีกครั้ง");
+    }
+    latestDetail.current = data;
+    setDetail(data);
+  }, [dispute.id]);
 
   useEffect(() => {
-    let cancelled = false;
+    alive.current = true;
+    latestDetail.current = null;
     setDetail(null);
     setSelectedEvidence(null);
-    apiFetch(`/api/orders/disputes/${dispute.id}`, { token })
-      .then((data) => { if (!cancelled) setDetail(data); })
-      .catch((err) => { if (!cancelled) setError(err.message); });
-    return () => { cancelled = true; };
-  }, [dispute.id, token]);
+    const refresh = async () => {
+      if (panelState.current.busy || panelState.current.returning || document.visibilityState === "hidden") return;
+      const request = ++detailRequest.current;
+      try {
+        const data = await apiFetch(`/api/orders/disputes/${dispute.id}`, { token });
+        if (!alive.current || request !== detailRequest.current || panelState.current.busy || panelState.current.returning) return;
+        applyDetail(data);
+        setRefreshError("");
+      } catch (err) {
+        if (alive.current && request === detailRequest.current) setRefreshError(err.message);
+      }
+    };
+    refresh();
+    const timer = setInterval(refresh, config.timing.dashboardRefreshMs);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      alive.current = false;
+      detailRequest.current++;
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [dispute.id, token, applyDetail]);
 
   useEffect(() => {
+    const request = ++transcriptRequest.current;
     if (!showLogs) return;
     let cancelled = false;
     setLogsLoading(true);
@@ -48,61 +89,75 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
       .then((page) => { if (!cancelled) { setMessages(page.messages || []); setCursor(page.nextCursor || null); } })
       .catch((err) => { if (!cancelled) setError(err.message); })
       .finally(() => { if (!cancelled) setLogsLoading(false); });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; if (transcriptRequest.current === request) transcriptRequest.current++; };
   }, [showLogs, side, dispute.id, token]);
 
   async function loadOlder() {
     if (!cursor || logsLoading) return;
+    const request = transcriptRequest.current;
     setLogsLoading(true);
     try {
       const page = await apiFetch(`/api/orders/disputes/${dispute.id}/audit-transcript?side=${side}&before=${encodeURIComponent(cursor)}`, { token });
+      if (request !== transcriptRequest.current) return;
       setMessages((current) => [...(page.messages || []), ...current]);
       setCursor(page.nextCursor || null);
-    } catch (err) { setError(err.message); }
-    finally { setLogsLoading(false); }
+    } catch (err) { if (request === transcriptRequest.current) setError(err.message); }
+    finally { if (request === transcriptRequest.current) setLogsLoading(false); }
   }
 
   async function returnToCs({ reason: text, tasks }) {
-    const updated = await apiFetch(`/api/orders/disputes/${detail.id}/request-evidence`, {
-      method: "POST", token, body: { reason: text, tasks, version: detail.version },
-    });
-    setDetail(updated);
-    onUpdated?.();
-    if (updated.chatNoticeError) setError("ส่งกลับให้ CS แล้ว แต่ส่งประกาศเข้าแชทไม่สำเร็จ");
+    panelState.current.busy = true;
+    detailRequest.current++;
+    setBusy(true);
+    try {
+      const updated = await apiFetch(`/api/orders/disputes/${detail.id}/request-evidence`, {
+        method: "POST", token, body: { reason: text, tasks, version: detail.version },
+      });
+      applyDetail(updated);
+      onUpdated?.();
+      if (updated.chatNoticeError) setError("ส่งกลับให้ CS แล้ว แต่ส่งประกาศเข้าแชทไม่สำเร็จ");
+    } finally { panelState.current.busy = false; setBusy(false); }
   }
 
-  async function action(kind) {
-    if (!detail || busy || !reason.trim()) return;
+  async function action(kind, retryBody) {
+    if (!detail || busy || (!retryBody && !reason.trim())) return;
+    panelState.current.busy = true;
+    detailRequest.current++;
     setBusy(true);
     setError("");
     try {
       const url = "decision";
-      const body = {
+      const body = retryBody || {
         reason: reason.trim(),
         version: detail.version,
         decision: kind,
         idempotencyKey: `${detail.id}:${detail.version}:${kind}`,
       };
       const updated = await apiFetch(`/api/orders/disputes/${detail.id}/${url}`, { method: "POST", token, body });
-      setDetail(updated);
-      apiFetch(`/api/orders/disputes/${detail.id}`, { token }).then(setDetail).catch((err) => console.error("Could not refresh dispute after action:", err));
+      applyDetail(updated);
+      apiFetch(`/api/orders/disputes/${detail.id}`, { token }).then(applyDetail).catch((err) => console.error("Could not refresh dispute after action:", err));
       setReason("");
       setPendingAction(null);
       onUpdated?.();
-      if (updated.chatLockError || updated.chatNoticeError) setError("บันทึกผลแล้ว แต่ส่งประกาศเข้าแชทไม่ครบ กรุณาลองยืนยันคำสั่งเดิมอีกครั้ง");
-    } catch (err) { setError(err.message); }
-    finally { setBusy(false); }
+      if (updated.chatLockError || updated.chatNoticeError) {
+        setPendingDelivery(body);
+        setError("บันทึกผลแล้ว แต่ส่งประกาศหรือปิดแชทยังไม่ครบ กรุณาลองส่งผลอีกครั้ง");
+      } else setPendingDelivery(null);
+    } catch (err) { if (err.status === 409) setPendingAction(null); setError(err.message); }
+    finally { panelState.current.busy = false; setBusy(false); }
   }
 
   async function claim() {
+    panelState.current.busy = true;
+    detailRequest.current++;
     setBusy(true);
     setError("");
     try {
       const updated = await apiFetch(`/api/orders/disputes/${detail.id}/claim`, { method: "POST", token, body: { version: detail.version } });
-      setDetail(updated);
+      applyDetail(updated);
       onUpdated?.();
     } catch (err) { setError(err.message); }
-    finally { setBusy(false); }
+    finally { panelState.current.busy = false; setBusy(false); }
   }
 
   const order = dispute.order || {};
@@ -125,6 +180,8 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
           </dl>
         </section>
         {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        {refreshError && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">โหลดข้อมูลล่าสุดไม่สำเร็จ: {refreshError} ระบบจะลองใหม่อัตโนมัติ</p>}
+        {pendingDelivery && <button type="button" disabled={busy} onClick={() => action(pendingDelivery.decision, pendingDelivery)} className="rounded-lg border px-3 py-2 text-sm font-bold disabled:opacity-50">ลองส่งผลการตัดสินอีกครั้ง</button>}
         <div className="grid grid-cols-1 gap-3 break-words rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm sm:grid-cols-3">
           <div><span className="block text-xs text-slate-500">Escrow Hold</span><strong>{typeof amount === "number" ? `฿${amount.toLocaleString("th-TH")}` : "—"}</strong></div>
           <div><span className="block text-xs text-slate-500">SLA</span><strong>{detail?.slaExpiresAt ? new Date(detail.slaExpiresAt).toLocaleString("th-TH") : "—"}</strong></div>
@@ -142,7 +199,7 @@ export default function AdminDisputeAuditPanel({ dispute, token, currentUserId, 
         </section>
         <section className="rounded-xl border bg-white p-4"><h3 className="mb-3 font-bold">หลักฐานเปรียบเทียบ</h3>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{parties.map(([id, label, border]) => <div key={label} className={`min-h-28 rounded-lg border p-3 ${border}`}><h4 className="mb-2 text-sm font-bold">{label}</h4>
-            {(detail?.evidence || []).filter((ev) => ev.uploaderId === id).map((ev) => <button type="button" key={ev.id} onClick={() => setSelectedEvidence(ev)} className="mb-2 block w-full rounded border p-2 text-left text-xs hover:bg-slate-50">{ev.fileType?.startsWith("video/") ? "▶ วิดีโอ" : "▣ รูปภาพ"} · {new Date(ev.createdAt).toLocaleString("th-TH")}</button>)}
+            {(detail?.evidence || []).filter((ev) => ev.uploaderId === id).map((ev) => <button type="button" key={ev.id} onClick={() => setSelectedEvidence(ev)} className="mb-2 block w-full rounded border p-2 text-left text-xs hover:bg-slate-50">{ev.fileType?.startsWith("video/") ? <><Icon name="play_arrow" /> วิดีโอ</> : <><Icon name="image" /> รูปภาพ</>} · {new Date(ev.createdAt).toLocaleString("th-TH")}</button>)}
             {!(detail?.evidence || []).some((ev) => ev.uploaderId === id) && <p className="text-xs text-slate-500">ยังไม่มีหลักฐาน</p>}
           </div>)}</div>
         </section>

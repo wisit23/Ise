@@ -111,7 +111,6 @@ async function create(req, res, next) {
           // ignore product lookup failure
         }
       }
-      const stars = "⭐".repeat(rating);
       const commentSnippet = reviewComment
         ? ` "${reviewComment.slice(0, 50)}${reviewComment.length > 50 ? "..." : ""}"`
         : "";
@@ -120,7 +119,7 @@ async function create(req, res, next) {
         userId: order.sellerId,
         type: "REVIEW",
         title: "มีคนคอมเมนต์สินค้าของคุณ",
-        message: `💬 มีลูกค้าแสดงความคิดเห็น/รีวิวสินค้า '${productTitle}' ให้คะแนน ${stars} (${rating}/5)${commentSnippet ? `: ${commentSnippet}` : ""}`,
+        message: `มีลูกค้าแสดงความคิดเห็น/รีวิวสินค้า '${productTitle}' ให้คะแนน ${rating}/5${commentSnippet ? `: ${commentSnippet}` : ""}`,
         link: order.productId ? `/products/${order.productId}` : "/orders",
         entityId: `review:${review.id}`,
         metadata: {

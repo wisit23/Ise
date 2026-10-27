@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../components/ui/Icon";
+
 import ReferenceCode from "../../../components/ui/ReferenceCode";
 
 import { useEffect, useState, useCallback } from "react";
@@ -310,7 +312,7 @@ export default function AuctionDetailPage() {
                 {auction.status === "open" && (
                   <p className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 border border-amber-200/60">
                     <span>
-                      ⏱️ หากมีผู้เสนอราคาใน 5 นาทีสุดท้าย ระบบจะต่อเวลาออกไปอีก
+                      <Icon name="timer" /> หากมีผู้เสนอราคาใน 5 นาทีสุดท้าย ระบบจะต่อเวลาออกไปอีก
                       5 นาทีอัตโนมัติ
                     </span>
                   </p>
@@ -349,7 +351,7 @@ export default function AuctionDetailPage() {
             {isCancelled && (
               <div className="mb-4 rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-sm">
                 <div className="flex items-center gap-2 text-rose-900 font-bold text-base">
-                  <span>🛑 การประมูลนี้ถูกยกเลิกแล้ว</span>
+                  <span><Icon name="cancel" /> การประมูลนี้ถูกยกเลิกแล้ว</span>
                 </div>
                 {(auction.cancellationReason ||
                   auction.round?.cancellationReason) && (
@@ -369,7 +371,7 @@ export default function AuctionDetailPage() {
                     <div>
                       <div className="flex items-center gap-2 text-emerald-900 font-bold text-base">
                         <span>
-                          🎉 ยินดีด้วย! คุณเป็นผู้ชนะการประมูลสินค้านี้
+                          <Icon name="celebration" /> ยินดีด้วย! คุณเป็นผู้ชนะการประมูลสินค้านี้
                         </span>
                       </div>
                       <p className="mt-1 text-sm text-emerald-800">
@@ -383,12 +385,12 @@ export default function AuctionDetailPage() {
                         <span className="material-symbols-outlined text-[18px]">
                           shopping_cart_checkout
                         </span>
-                        💳 ไปชำระเงินที่ตะกร้าสินค้า
+                        <Icon name="payments" /> ไปชำระเงินที่ตะกร้าสินค้า
                       </Link>
                     </div>
                   ) : (
                     <p className="text-sm font-semibold text-emerald-800">
-                      🏆 การประมูลปิดแล้ว (มีผู้ชนะการประมูลที่ราคา{" "}
+                      <Icon name="emoji_events" /> การประมูลปิดแล้ว (มีผู้ชนะการประมูลที่ราคา{" "}
                       {baht(winningBid?.amount)})
                     </p>
                   )
@@ -522,7 +524,7 @@ export default function AuctionDetailPage() {
                                 </span>
                                 {isWinningRow && (
                                   <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                                    🏆 ผู้ชนะ
+                                    <Icon name="emoji_events" /> ผู้ชนะ
                                   </span>
                                 )}
                                 {isForfeitedHighest && (

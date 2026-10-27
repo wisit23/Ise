@@ -392,7 +392,7 @@ async function notifyBidPlaced({ auction, bid, bidder }) {
       userId: auction.sellerId,
       type: "AUCTION",
       title: "มีการเสนอราคาประมูลใหม่",
-      message: `🔨 มีการเสนอราคาประมูลสินค้า "${productTitle}" ล่าสุดที่ ฿${bidAmount.toLocaleString("th-TH")} (โดย ${bidderName})`,
+      message: `มีการเสนอราคาประมูลสินค้า "${productTitle}" ล่าสุดที่ ฿${bidAmount.toLocaleString("th-TH")} (โดย ${bidderName})`,
       link: `/auctions/${auction.id}`,
       metadata: {
         auctionId: auction.id,
@@ -445,7 +445,7 @@ async function notifyItemOpened(item) {
     userId: "ALL",
     type: "AUCTION",
     title: "เริ่มประมูลสินค้าแล้ว",
-    message: `🔨 '${item.product?.title || "สินค้า"}' เปิดให้เสนอราคาแล้ว`,
+    message: `'${item.product?.title || "สินค้า"}' เปิดให้เสนอราคาแล้ว`,
     link: auctionItemUrl(item.id),
     entityId: item.id,
     metadata: { auctionId: item.id, roundId: item.roundId, status: "open" },
@@ -458,7 +458,7 @@ async function notifyRoundOpened(round) {
     userId: "ALL",
     type: "AUCTION",
     title: "เปิดรอบการประมูลใหม่",
-    message: `🔨 รอบประมูล "${round.title}" เปิดให้เสนอราคาแล้ว เข้าร่วมประมูลสินค้าเลย!`,
+    message: `รอบประมูล "${round.title}" เปิดให้เสนอราคาแล้ว เข้าร่วมประมูลสินค้าเลย!`,
     link: "/auctions",
     metadata: { roundId: round.id, roundTitle: round.title },
   });

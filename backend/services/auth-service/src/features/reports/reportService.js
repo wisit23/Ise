@@ -63,7 +63,7 @@ async function checkPendingReport({ reporterId, productId, reviewId, targetId })
         hasPendingReport: true,
         type: "review",
         message:
-          "คุณได้รายงานความคิดเห็นนี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+          "คุณได้รายงานความคิดเห็นนี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจาก Trust and Safety",
         report: existing,
       };
     }
@@ -86,7 +86,7 @@ async function checkPendingReport({ reporterId, productId, reviewId, targetId })
         hasPendingReport: true,
         type: "product",
         message:
-          "คุณได้รายงานสินค้านี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+          "คุณได้รายงานสินค้านี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจาก Trust and Safety",
         report: existing,
       };
     }
@@ -110,7 +110,7 @@ async function checkPendingReport({ reporterId, productId, reviewId, targetId })
         hasPendingReport: true,
         type: "user",
         message:
-          "คุณได้รายงานผู้ใช้นี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+          "คุณได้รายงานผู้ใช้นี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจาก Trust and Safety",
         report: existing,
       };
     }
@@ -217,7 +217,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
       });
       if (existing) {
         throw conflict(
-          "คุณได้รายงานความคิดเห็นนี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+          "คุณได้รายงานความคิดเห็นนี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจาก Trust and Safety",
         );
       }
     }
@@ -234,7 +234,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
     });
     if (existing) {
       throw conflict(
-        "คุณได้รายงานสินค้านี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+        "คุณได้รายงานสินค้านี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจาก Trust and Safety",
       );
     }
   } else {
@@ -251,7 +251,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
     });
     if (existing) {
       throw conflict(
-        "คุณได้รายงานผู้ใช้นี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจากผู้ดูแลระบบ",
+        "คุณได้รายงานผู้ใช้นี้ไปแล้ว และอยู่ระหว่างรอผลการตัดสินจาก Trust and Safety",
       );
     }
   }
@@ -291,7 +291,7 @@ async function createReport({ reporterId, targetId, productId, category, reason,
         userId: targetId,
         type: "REPORT",
         title: "ความคิดเห็นของคุณถูกรายงาน",
-        message: `⚠️ ความคิดเห็น/รีวิวของคุณในสินค้า '${productTitle}' ถูกรายงานและอยู่ระหว่างการตรวจสอบโดยทีมงาน เหตุผลที่รายงาน: ${report.reason}`,
+        message: `ความคิดเห็น/รีวิวของคุณในสินค้า '${productTitle}' ถูกรายงานและอยู่ระหว่างการตรวจสอบโดยทีมงาน เหตุผลที่รายงาน: ${report.reason}`,
         link: productId ? `/products/${productId}` : "/orders",
         entityId: `report:review:${reviewId || report.id}`,
         metadata: {
@@ -631,23 +631,23 @@ async function sendReportDecisionNotifications({ report, decision, reason }) {
 
     if (decision === "SUSPEND_USER") {
       targetTitle = "บัญชีของคุณถูกระงับการใช้งาน";
-      targetMsg = `⚠️ ผู้ดูแลระบบได้ระงับการใช้งานบัญชีของคุณ เนื่องจาก: ${trimmedReason}`;
+      targetMsg = `Trust and Safety ได้ระงับการใช้งานบัญชีของคุณ เนื่องจาก: ${trimmedReason}`;
     } else if (decision === "WARN_USER") {
-      targetTitle = "แจ้งเตือนคำเตือนจากผู้ดูแลระบบ";
-      targetMsg = `⚠️ คุณได้รับการตักเตือนจากผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`;
+      targetTitle = "แจ้งเตือนคำเตือนจาก Trust and Safety";
+      targetMsg = `คุณได้รับการตักเตือนจาก Trust and Safety เนื่องจาก: ${trimmedReason}`;
     } else if (decision === "REMOVE_PRODUCT") {
       targetTitle = "ผลการพิจารณารายงาน";
       targetMsg = isReviewReport
-        ? `เนื้อหา/สินค้าที่เกี่ยวข้องถูกนำออกจากระบบโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`
-        : `สินค้า '${productTitle}' ถูกลบออกจากระบบโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`;
+        ? `เนื้อหา/สินค้าที่เกี่ยวข้องถูกนำออกจากระบบโดย Trust and Safety เนื่องจาก: ${trimmedReason}`
+        : `สินค้า '${productTitle}' ถูกลบออกจากระบบโดย Trust and Safety เนื่องจาก: ${trimmedReason}`;
     } else if (decision === "REMOVE_REVIEW") {
       targetTitle = "รีวิวของคุณถูกลบ";
       targetMsg = `รีวิวของคุณถูกลบโดยทีม Trust & Safety เนื่องจาก: ${trimmedReason}`;
     } else if (decision === "DISMISS") {
       targetTitle = "ผลการตรวจสอบรายงาน";
       targetMsg = isReviewReport
-        ? `รายงานต่อความคิดเห็นของคุณได้รับการตรวจสอบแล้ว และผู้ดูแลระบบได้ยกเลิกรายงาน/ไม่พบการกระทำผิด (เหตุผล: ${trimmedReason})`
-        : `รายงานที่เกี่ยวข้องกับคุณได้รับการตรวจสอบแล้ว และผู้ดูแลระบบได้ยกเลิกรายงาน (เหตุผล: ${trimmedReason})`;
+        ? `รายงานต่อความคิดเห็นของคุณได้รับการตรวจสอบแล้ว และ Trust and Safety ได้ยกเลิกรายงาน/ไม่พบการกระทำผิด (เหตุผล: ${trimmedReason})`
+        : `รายงานที่เกี่ยวข้องกับคุณได้รับการตรวจสอบแล้ว และ Trust and Safety ได้ยกเลิกรายงาน (เหตุผล: ${trimmedReason})`;
     }
 
     notifications.push({
@@ -676,11 +676,11 @@ async function sendReportDecisionNotifications({ report, decision, reason }) {
     let sellerMsg = "";
 
     if (decision === "REMOVE_PRODUCT") {
-      sellerTitle = "สินค้าของคุณถูกลบโดยผู้ดูแลระบบ";
-      sellerMsg = `⚠️ สินค้า '${productTitle}' ของคุณถูกลบออกจากระบบโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`;
+      sellerTitle = "สินค้าของคุณถูกลบโดย Trust and Safety";
+      sellerMsg = `สินค้า '${productTitle}' ของคุณถูกลบออกจากระบบโดย Trust and Safety เนื่องจาก: ${trimmedReason}`;
     } else if (decision === "DISMISS") {
       sellerTitle = "ผลการตรวจสอบรายงานสินค้า";
-      sellerMsg = `รายงานต่อสินค้า '${productTitle}' ได้รับการตรวจสอบแล้ว และผู้ดูแลระบบได้ยกเลิกรายงาน (เหตุผล: ${trimmedReason})`;
+      sellerMsg = `รายงานต่อสินค้า '${productTitle}' ได้รับการตรวจสอบแล้ว และ Trust and Safety ได้ยกเลิกรายงาน (เหตุผล: ${trimmedReason})`;
     } else {
       sellerTitle = "ผลการพิจารณารายงานในสินค้าของคุณ";
       sellerMsg = `รายงานที่เกี่ยวข้องกับสินค้า '${productTitle}' ได้รับการพิจารณาแล้ว โดยมีผลการตัดสิน: ${decisionLabel} (เหตุผล: ${trimmedReason})`;
@@ -1004,7 +1004,7 @@ async function suspendUser({ targetId, adminId, staffId, reason, requestId }) {
       userId: targetId,
       type: "REPORT",
       title: "บัญชีของคุณถูกระงับการใช้งาน",
-      message: `⚠️ บัญชีของคุณถูกระงับการใช้งานโดยผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`,
+      message: `บัญชีของคุณถูกระงับการใช้งานโดย Trust and Safety เนื่องจาก: ${trimmedReason}`,
       link: "/login",
       entityId: `admin:suspend:${targetId}:${Date.now()}`,
       metadata: { targetId, reason: trimmedReason, action: "USER_SUSPENDED" },
@@ -1042,8 +1042,8 @@ async function warnUser({ targetId, adminId, staffId, reason, requestId }) {
     await chatClient.sendSystemNotification({
       userId: targetId,
       type: "REPORT",
-      title: "แจ้งเตือนคำเตือนจากผู้ดูแลระบบ",
-      message: `⚠️ คุณได้รับการตักเตือนจากผู้ดูแลระบบ เนื่องจาก: ${trimmedReason}`,
+      title: "แจ้งเตือนคำเตือนจาก Trust and Safety",
+      message: `คุณได้รับการตักเตือนจาก Trust and Safety เนื่องจาก: ${trimmedReason}`,
       link: "/profile",
       entityId: `admin:warn:${targetId}:${Date.now()}`,
       metadata: { targetId, reason: trimmedReason, action: "USER_WARNED" },
@@ -1091,7 +1091,7 @@ async function restoreUser({ targetId, adminId, staffId, reason, requestId }) {
       userId: targetId,
       type: "REPORT",
       title: "บัญชีของคุณได้รับการคืนสถานะ",
-      message: `✅ บัญชีของคุณได้รับการปลดระงับและคืนสถานะการใช้งานแล้ว (เหตุผล: ${trimmedReason})`,
+      message: `บัญชีของคุณได้รับการปลดระงับและคืนสถานะการใช้งานแล้ว (เหตุผล: ${trimmedReason})`,
       link: "/profile",
       entityId: `admin:restore:${targetId}:${Date.now()}`,
       metadata: { targetId, reason: trimmedReason, action: "USER_RESTORED" },

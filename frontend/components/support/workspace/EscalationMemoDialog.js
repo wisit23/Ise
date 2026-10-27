@@ -9,7 +9,7 @@ import Alert from "../../ui/Alert";
 export function followUpSummary(tasks, reasons = {}, recommendation = "") {
   const lines = tasks.map((task) => {
     const detail = task.done ? task.note || "ทำแล้ว" : reasons[task.id]?.trim() || task.note || "";
-    return `${task.done ? "✓" : "✗"} ${task.text}${detail ? ` — ${detail}` : ""}`;
+    return `${task.done ? "[ทำแล้ว]" : "[ยังไม่เสร็จ]"} ${task.text}${detail ? ` — ${detail}` : ""}`;
   });
   return [
     "ตอบกลับคำขอ Trust & Safety:",

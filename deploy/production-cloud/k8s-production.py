@@ -320,6 +320,8 @@ def manifests(config, images, state, *, apps_enabled):
         container = {"name": name, "image": images[name], "imagePullPolicy": "Never",
                      "envFrom": [{"secretRef": {"name": name + "-env"}}],
                      "ports": [{"containerPort": port}], "volumeMounts": []}
+        if name in config.get("registry_apps", ()):
+            container["imagePullPolicy"] = "IfNotPresent"
         if name in bindings:
             container["ports"][0]["hostPort"] = bindings[name]
         volumes = []
@@ -349,6 +351,8 @@ def manifests(config, images, state, *, apps_enabled):
                "nodeSelector": {"kubernetes.io/hostname": config["node"]},
                "terminationGracePeriodSeconds": 180 if name in DATABASES else 60,
                "containers": [container], "volumes": volumes}
+        if name in config.get("registry_apps", ()) and config.get("registry_pull_secret"):
+            pod["imagePullSecrets"] = [{"name": config["registry_pull_secret"]}]
         items.append(resource("Deployment", name, {"replicas": int(apps_enabled or name in DATABASES),
                      "strategy": {"type": "Recreate"}, "selector": {"matchLabels": {"app": name}},
                      "template": {"metadata": {"labels": {"app": name}}, "spec": pod}}))
@@ -668,9 +672,13 @@ class Deployment:
                             stringData=environment(name, self.config["services"][name])))
         container = {"name": "migration", "image": self.images[name], "imagePullPolicy": "Never",
                      "command": command, "envFrom": [{"secretRef": {"name": secret_name}}]}
+        if name in self.config.get("registry_apps", ()):
+            container["imagePullPolicy"] = "IfNotPresent"
         job = resource("Job", job_name, {"backoffLimit": 0, "activeDeadlineSeconds": 600,
             "template": {"spec": {"automountServiceAccountToken": False, "restartPolicy": "Never",
             "nodeSelector": {"kubernetes.io/hostname": self.config["node"]}, "containers": [container]}}})
+        if name in self.config.get("registry_apps", ()) and self.config.get("registry_pull_secret"):
+            job["spec"]["template"]["spec"]["imagePullSecrets"] = [{"name": self.config["registry_pull_secret"]}]
         self.apply(job)
         try:
             self.k("wait", "--for=condition=complete", "job/" + job_name, "--timeout=620s")
@@ -733,6 +741,18 @@ class Deployment:
         self.apply(manifests(self.config, self.images, self.state, apps_enabled=True))
         for name in APPS:
             self.k("rollout", "status", "deployment/" + name, "--timeout=600s")
+        self.verify_deployment()
+        self.journal.update(status="ready", images=self.images, schema=fingerprint,
+                            previous_run=self.journal.get("last_success"), last_success=str(self.run_dir))
+        if getattr(self, "release", None):
+            self.journal["release"] = self.release
+        else:
+            self.journal.pop("release", None)
+        save_journal(self.journal_path, self.journal)
+        self.k("get", "pods", "-o", "wide")
+        print(f"Deploy OK (Kubernetes): {NAMESPACE}. Private backups/logs: {self.run_dir}")
+
+    def verify_deployment(self):
         script = ('fetch("http://127.0.0.1:8080/api/products/feed?limit=1",{signal:AbortSignal.timeout(10000)})'
                   '.then(async r=>{if(!r.ok)throw Error("HTTP "+r.status);'
                   'if(!Array.isArray((await r.json()).items))throw Error("Invalid feed")})'
@@ -741,11 +761,6 @@ class Deployment:
         self.k("exec", "deployment/frontend", "--", "node", "-e",
                'if(process.env.NODE_ENV!=="production")process.exit(1)')
         check_host_ports(self.config)
-        self.journal.update(status="ready", images=self.images, schema=fingerprint,
-                            previous_run=self.journal.get("last_success"), last_success=str(self.run_dir))
-        save_journal(self.journal_path, self.journal)
-        self.k("get", "pods", "-o", "wide")
-        print(f"Deploy OK (Kubernetes): {NAMESPACE}. Private backups/logs: {self.run_dir}")
 
 
 def main():

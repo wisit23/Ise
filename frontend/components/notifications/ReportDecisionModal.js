@@ -2,6 +2,7 @@
 
 import Modal from "../ui/Modal";
 import Link from "next/link";
+import { notificationText } from "../../lib/notifications";
 
 const DECISION_CONFIG = {
   SUSPEND_USER: {
@@ -74,7 +75,7 @@ export default function ReportDecisionModal({ open, onClose, notification }) {
   const decisionKey = metadata.decision;
   const config =
     DECISION_CONFIG[decisionKey] || {
-      label: metadata.decisionLabel || "มีผลสรุปจากผู้ดูแลระบบ",
+      label: metadata.decisionLabel || "มีผลสรุปจาก Trust and Safety",
       icon: "gavel",
       color: "bg-blue-100 text-blue-800 border-blue-200",
       badgeColor: "bg-blue-600 text-white",
@@ -104,12 +105,12 @@ export default function ReportDecisionModal({ open, onClose, notification }) {
       title={
         isDispute
           ? "รายละเอียดข้อพิพาทและผลการตัดสิน"
-          : "รายละเอียดผลการตัดสินจากผู้ดูแลระบบ"
+          : "รายละเอียดผลการตัดสินจาก Trust and Safety"
       }
       description={
         isDispute
-          ? "ข้อมูลความคืบหน้าข้อพิพาทและผลการพิจารณาตัดสินจากผู้ดูแลระบบ"
-          : "ผลการพิจารณาตรวจสอบรายงานโดยทีมงานผู้ดูแลระบบ"
+          ? "ข้อมูลความคืบหน้าข้อพิพาทและผลการพิจารณาตัดสินจาก Trust and Safety"
+          : "ผลการพิจารณาตรวจสอบรายงานโดยทีม Trust and Safety"
       }
       size="md"
       footer={
@@ -175,7 +176,7 @@ export default function ReportDecisionModal({ open, onClose, notification }) {
               <span className="material-symbols-outlined text-[16px] text-slate-500">
                 assignment
               </span>
-              <span>เหตุผล / ข้อชี้แจงจากผู้ดูแลระบบ:</span>
+              <span>เหตุผล / ข้อชี้แจงจาก Trust and Safety:</span>
             </div>
             <p className="mt-2 text-xs leading-relaxed text-slate-800 whitespace-pre-wrap bg-white p-3 rounded-lg border border-slate-200">
               {adminReason}
@@ -186,10 +187,10 @@ export default function ReportDecisionModal({ open, onClose, notification }) {
         {/* Notification Message Detail */}
         <div className="rounded-xl border border-slate-100 bg-white p-3.5 text-xs text-slate-600 space-y-1.5">
           <div className="font-semibold text-slate-800">
-            {notification.title}
+            {notificationText(notification.title)}
           </div>
           <p className="leading-relaxed text-slate-600">
-            {notification.message}
+            {notificationText(notification.message)}
           </p>
           {formattedDate && (
             <div className="pt-2 text-[11px] text-slate-400 flex items-center gap-1 border-t border-slate-100">

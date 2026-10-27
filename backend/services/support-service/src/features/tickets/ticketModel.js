@@ -292,6 +292,7 @@ function queueFilter({
   retention = "active",
   now = new Date(),
 }) {
+  const safetyQueue = ["ADMIN", "TRUST_AND_SAFETY"].includes(role);
   const clauses = retention === "all" ? [] : retention === "deleted"
     ? [Prisma.sql`t.deleted_at IS NOT NULL`]
     : [Prisma.sql`t.deleted_at IS NULL`, retention === "archived" ? Prisma.sql`t.archived_at IS NOT NULL` : Prisma.sql`t.archived_at IS NULL`];
@@ -311,7 +312,11 @@ function queueFilter({
         Prisma.sql`${deadline} > ${now}::timestamptz AND ${deadline} <= ${new Date(+now + require("@reloop/shared").customerServiceClientConfig.dashboard.warningMinutes * 60000)}::timestamptz`,
       );
   }
-  if (scope === "unassigned") clauses.push(Prisma.sql`a.assignment_id IS NULL`);
+  if (scope === "unassigned")
+    // CS keeps answering chat until Safety accepts the handoff by taking over.
+    clauses.push(safetyQueue
+      ? Prisma.sql`(a.assignment_id IS NULL OR (s.code = 'ESCALATED' AND a.assignee_id = t.chat_responder_id))`
+      : Prisma.sql`a.assignment_id IS NULL`);
   else if (scope === "mine" || scope === "history")
     clauses.push(
       Prisma.sql`(a.assignee_id = ${assigneeId} OR t.chat_responder_id = ${assigneeId})`,
@@ -338,10 +343,14 @@ function queueFilter({
   if (scope === "history") clauses.push(Prisma.sql`s.code IN ('RESOLVED', 'CLOSED')`);
   else if (status) clauses.push(Prisma.sql`s.code = ${status}`);
   else if (scope === "mine")
-    clauses.push(Prisma.sql`s.code NOT IN ('CLOSED', 'ESCALATED')`);
+    clauses.push(safetyQueue
+      ? Prisma.sql`s.code NOT IN ('CLOSED', 'RESOLVED')`
+      : Prisma.sql`s.code NOT IN ('CLOSED', 'ESCALATED')`);
   else if (scope === "escalated" || scope === "closed") {
     // already constrained above
-  } else if (scope !== "all")
+  } else if (scope === "unassigned" && safetyQueue)
+    clauses.push(Prisma.sql`s.code <> 'CLOSED'`);
+  else if (scope !== "all")
     clauses.push(
       Prisma.sql`(s.code NOT IN ('CLOSED', 'ESCALATED') OR (s.code='ESCALATED' AND t.chat_responder_id=${assigneeId}))`,
     );
@@ -747,7 +756,7 @@ async function recordChatMessage(
   }
 }
 
-async function escalateOverdue(ticketId, now) {
+async function markOverdue(ticketId, now) {
   return transaction(async (db) => {
     const ticket = await db.supportTicket.findUnique({
       where: { id: ticketId },
@@ -759,7 +768,7 @@ async function escalateOverdue(ticketId, now) {
       .effectiveTargets(ticket.slaTargets, ticket.auditLog)
       .filter((t) => !t.achievedAt && !t.breachedAt && t.dueAt <= now);
     if (!overdue.length) return false;
-    await db.ticketSlaTarget.updateMany({
+    const marked = await db.ticketSlaTarget.updateMany({
       where: {
         id: { in: overdue.map((t) => t.id) },
         achievedAt: null,
@@ -767,29 +776,19 @@ async function escalateOverdue(ticketId, now) {
       },
       data: { breachedAt: now },
     });
-    if (ticket.currentStatus.code === "ESCALATED") return false;
-    const changed = await transitionTx(db, {
-      id: ticket.id,
-      version: ticket.version,
-      status: "ESCALATED",
-      actorId: "system:sla",
-      reason: "SLA breached",
-      at: now,
-      systemEscalation: true,
-    });
-    if (changed)
+    if (marked.count)
       await audit.record(
         {
           ticketId,
           actorId: "system:sla",
-          action: "ESCALATE",
+          action: "SLA_BREACH",
           reason: "SLA breached",
           payload: { metricTypes: overdue.map((t) => t.metricType) },
           createdAt: now,
         },
         db,
       );
-    return changed;
+    return marked.count > 0;
   });
 }
 async function reassign({
@@ -903,6 +902,6 @@ module.exports = {
   transitionStatus,
   setConversationId,
   recordChatMessage,
-  escalateOverdue,
+  markOverdue,
   queueFilter,
 };

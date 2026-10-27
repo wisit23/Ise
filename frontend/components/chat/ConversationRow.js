@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Icon from "../ui/Icon";
 import {
   conversationDisplayName,
   hasUnread,
@@ -49,6 +50,9 @@ export default function ConversationRow({
   const unread = !isActive && hasUnread(conversation, currentUserId);
 
   const timeFormatted = formatConversationTime(conversation.lastMessageAt);
+  const preview = conversation.lastMessagePreview || "เริ่มการสนทนา";
+  const imagePreview = /^(?:\u{1F4F7} )?รูปภาพ$/u.test(preview);
+  const filePreview = preview.match(/^(?:\u{1F4CE} |ไฟล์: )(.+)$/u);
 
   function handleClick(e) {
     if (onSelect) {
@@ -152,7 +156,8 @@ export default function ConversationRow({
                 : "text-gray-400 group-hover:text-gray-600"
             }`}
           >
-            {conversation.lastMessagePreview || "เริ่มการสนทนา"}
+            {(imagePreview || filePreview) && <><Icon name={imagePreview ? "image" : "attach_file"} />{" "}</>}
+            {imagePreview ? "รูปภาพ" : filePreview ? filePreview[1] : preview}
           </p>
         </div>
       </Link>

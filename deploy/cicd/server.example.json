@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "environment": "production",
+  "root": "/root/Ise",
+  "state": "/var/lib/reloop-deploy-k8s",
+  "image_store": "/var/lib/rancher/k3s/agent/containerd",
+  "image_pull_budget_gib": 4,
+  "namespace": "reloop-production",
+  "public_url": "https://your-verified-frontend-origin.example",
+  "same_origin_verified": false,
+  "pull_secret": "ghcr-read",
+  "migration_backup_verified": false
+}

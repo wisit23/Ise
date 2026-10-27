@@ -282,7 +282,7 @@ export default function ReportCasePanel({
           <h4 className="font-bold text-slate-900">รอเจ้าหน้าที่รับงาน</h4>
           <p className="mt-2 text-sm text-slate-600">รับรายงานนี้ก่อน จึงจะตัดสินหรือใช้คำสั่งกับผู้ใช้ได้</p>
           {error && <Alert className="mt-3">{error}</Alert>}
-          <Button type="button" onClick={onClaim} loading={busy} className="mt-4">รับงานนี้</Button>
+          <Button type="button" onClick={onClaim} loading={busy} disabled={detailLoading || Boolean(detailError)} className="mt-4">รับงานนี้</Button>
         </div>
       ) : report.reviewedBy !== currentUserId ? (
         <Alert tone="info">รายงานนี้มีเจ้าหน้าที่คนอื่นรับผิดชอบแล้ว</Alert>

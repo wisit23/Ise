@@ -1,0 +1,4 @@
+#!/bin/sh
+# Install this root-owned file at /usr/local/sbin/ise-deploy.
+set -eu
+exec /usr/bin/python3 -I -B /opt/ise-cicd/cicd/entrypoint.py "$@"

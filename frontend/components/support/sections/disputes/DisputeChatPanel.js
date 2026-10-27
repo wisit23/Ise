@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../ui/Icon";
+
 import { formatReferenceCode } from "../../../../lib/referenceCodes";
 
 
@@ -56,8 +58,8 @@ export default function DisputeChatPanel({
         className="grid grid-cols-2 gap-2 border-b border-slate-100 p-3"
       >
         {[
-          ["buyer", "🟢 ผู้ซื้อ"],
-          ["seller", "🔵 ผู้ขาย"],
+          ["buyer", <><Icon name="circle" filled /> ผู้ซื้อ</>],
+          ["seller", <><Icon name="circle" filled /> ผู้ขาย</>],
         ].map(([value, label]) => (
           <button
             key={value}

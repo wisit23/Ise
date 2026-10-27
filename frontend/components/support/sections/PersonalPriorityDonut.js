@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../ui/Icon";
+
 import { useId, useState } from "react";
 import styles from "./AgentOverview.module.css";
 import AnimatedNumber from "./AnimatedNumber";
@@ -163,7 +165,7 @@ export default function PersonalPriorityDonut({
               <small> เคส</small>
             </strong>
             <span className={styles.priorityArrow} aria-hidden="true">
-              ↗
+              <Icon name="open_in_new" />
             </span>
           </button>
         ))}

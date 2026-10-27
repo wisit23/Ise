@@ -198,9 +198,9 @@ const ROUND_DETAIL_STATUS_STYLE = {
   draft: "border border-slate-200 bg-slate-100 text-slate-700",
   pending_approval: "border border-amber-200 bg-amber-50 text-amber-800",
   approved: "border border-sky-200 bg-sky-50 text-sky-700",
-  scheduled: "border border-indigo-200 bg-indigo-50 text-indigo-700",
+  scheduled: "border border-sky-200 bg-sky-50 text-sky-700",
   open: "border border-emerald-200 bg-emerald-50 text-emerald-700",
-  closed: "border border-violet-200 bg-violet-50 text-violet-700",
+  closed: "border border-slate-200 bg-slate-50 text-slate-700",
   rejected: "border border-red-200 bg-red-50 text-red-700",
   cancelled: "border border-rose-200 bg-rose-50 text-rose-700",
 };
@@ -625,10 +625,15 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
           role="alert"
           className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-medium text-amber-900"
         >
-          <span>
-            ⚠️ ยกเลิกรอบประมูล &ldquo;{roundCancelWarning.roundTitle}&rdquo;
-            เรียบร้อยแล้ว แต่พบคำเตือนการแจ้งเตือน:{" "}
-            {roundCancelWarning.warnings.join(", ")}
+          <span className="flex min-w-0 items-start gap-2">
+            <span className="material-symbols-outlined mt-[-1px] shrink-0 text-[17px] leading-none" aria-hidden="true">
+              warning
+            </span>
+            <span>
+              ยกเลิกรอบประมูล &ldquo;{roundCancelWarning.roundTitle}&rdquo;
+              เรียบร้อยแล้ว แต่พบคำเตือนการแจ้งเตือน:{" "}
+              {roundCancelWarning.warnings.join(", ")}
+            </span>
           </span>
           <button
             type="button"
@@ -644,8 +649,11 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
       )}
 
       {roundCancelFeedback && !roundCancelWarning && (
-        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-800">
-          ✓ {roundCancelFeedback}
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-800">
+          <span className="material-symbols-outlined shrink-0 text-[17px] leading-none" aria-hidden="true">
+            check_circle
+          </span>
+          <span>{roundCancelFeedback}</span>
         </div>
       )}
 
@@ -658,8 +666,11 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
             เปิดรอบประมูลใหม่
           </h4>
           {formError && (
-            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 font-medium">
-              ⚠️ {formError}
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-700">
+              <span className="material-symbols-outlined mt-[-1px] shrink-0 text-[17px] leading-none" aria-hidden="true">
+                error
+              </span>
+              <span>{formError}</span>
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -685,8 +696,11 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
               <p className="mt-1 text-slate-500">นับตั้งแต่ส่งสำเร็จ รวมรายการรออนุมัติ ปฏิเสธหรือยกเลิกแล้วคืนช่องว่าง</p>
             </div>
             <div className="space-y-3 rounded-lg bg-white p-3 border border-emerald-100">
-              <span className="font-semibold text-emerald-800 block text-xs">
-                📅 ช่วงเวลารับสินค้าจากผู้ขาย
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800">
+                <span className="material-symbols-outlined text-[17px] leading-none" aria-hidden="true">
+                  calendar_month
+                </span>
+                ช่วงเวลารับสินค้าจากผู้ขาย
               </span>
               <div>
                 <label
@@ -724,8 +738,11 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
             </div>
 
             <div className="md:col-span-2 rounded-lg bg-white p-3 border border-emerald-100">
-              <span className="font-semibold text-emerald-800 block text-xs mb-2">
-                🏷️ หมวดหมู่สินค้าที่เปิดรับ
+              <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-800">
+                <span className="material-symbols-outlined text-[17px] leading-none" aria-hidden="true">
+                  sell
+                </span>
+                หมวดหมู่สินค้าที่เปิดรับ
               </span>
               <div className="flex flex-wrap items-center gap-4 mb-2">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
@@ -802,8 +819,11 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
             </div>
 
             <div className="space-y-3 rounded-lg bg-white p-3 border border-emerald-100">
-              <span className="font-semibold text-emerald-800 block text-xs">
-                🔨 ช่วงเวลาประมูลจริง
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800">
+                <span className="material-symbols-outlined text-[17px] leading-none" aria-hidden="true">
+                  gavel
+                </span>
+                ช่วงเวลาประมูลจริง
               </span>
               <div>
                 <label
@@ -1269,7 +1289,7 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                   <div className="flex flex-wrap gap-1 text-[10px] font-semibold">
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">รออนุมัติ</span>
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700">อนุมัติ/กำลังประมูล</span>
-                    <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-violet-700">ปิดแล้ว</span>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-700">ปิดแล้ว</span>
                     <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-700">ปฏิเสธ/ยกเลิก</span>
                   </div>
                 </div>
@@ -1365,28 +1385,28 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                               )}
 
                               {item.status === "closed" && (
-                                <div className="mt-2 grid gap-2 rounded-lg border border-violet-200 bg-violet-50 p-2.5 text-xs sm:grid-cols-2">
+                                <div className="mt-2 grid gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-xs sm:grid-cols-2">
                                   {bids.length === 0 ? (
-                                    <p className="font-semibold text-violet-800 sm:col-span-2">ไม่มีผู้เสนอราคา</p>
+                                    <p className="font-semibold text-emerald-800 sm:col-span-2">ไม่มีผู้เสนอราคา</p>
                                   ) : !winningBid ? (
                                     <>
                                       <div>
-                                        <span className="text-violet-600">ราคาสูงสุดที่เสนอ</span>
-                                        <strong className="ml-1 text-violet-900">{baht(highestBid?.amount)}</strong>
+                                        <span className="text-emerald-600">ราคาสูงสุดที่เสนอ</span>
+                                        <strong className="ml-1 text-emerald-900">{baht(highestBid?.amount)}</strong>
                                       </div>
-                                      <p className="font-semibold text-violet-800">ไม่มีผู้ชนะ</p>
+                                      <p className="font-semibold text-emerald-800">ไม่มีผู้ชนะ</p>
                                     </>
                                   ) : (
                                     <>
                                       <div>
-                                        <span className="text-violet-600">ราคาสุดท้าย</span>
-                                        <strong className="ml-1 text-violet-900">{baht(winningBid?.amount)}</strong>
+                                        <span className="text-emerald-600">ราคาสุดท้าย</span>
+                                        <strong className="ml-1 text-emerald-900">{baht(winningBid?.amount)}</strong>
                                       </div>
                                       <div className="min-w-0">
-                                        <span className="text-violet-600">
+                                        <span className="text-emerald-600">
                                           {paymentCompleted ? "ผู้ชนะ" : "ผู้ได้รับสิทธิ์"}
                                         </span>
-                                        <strong className="ml-1 break-words text-violet-900">
+                                        <strong className="ml-1 break-words text-emerald-900">
                                           {winningBid?.bidderName ||
                                             (paymentCompleted
                                               ? "ไม่พบข้อมูลผู้ชนะ"
@@ -1394,9 +1414,9 @@ export function RoundManagementSection({ token, onRoundCreated, refreshRevision 
                                         </strong>
                                       </div>
                                       {highestBid && highestBid.id !== winningBid.id && (
-                                        <p className="text-violet-600 sm:col-span-2">
+                                        <p className="text-emerald-600 sm:col-span-2">
                                           เคยมีผู้เสนอสูงสุด{" "}
-                                          <strong className="text-violet-900">{baht(highestBid.amount)}</strong>{" "}
+                                          <strong className="text-emerald-900">{baht(highestBid.amount)}</strong>{" "}
                                           (เสียสิทธิ์)
                                         </p>
                                       )}
@@ -1948,9 +1968,11 @@ export default function AuctionScheduleSection({ token }) {
               : "border-emerald-200 bg-emerald-50 text-emerald-800"
           }`}
         >
-          <span>
-            {itemCancelWarning ? "⚠️ " : "✓ "}
-            {itemCancelFeedback}
+          <span className="flex min-w-0 items-start gap-2">
+            <span className="material-symbols-outlined mt-[-1px] shrink-0 text-[17px] leading-none" aria-hidden="true">
+              {itemCancelWarning ? "warning" : "check_circle"}
+            </span>
+            <span>{itemCancelFeedback}</span>
           </span>
           {itemCancelWarning && (
             <button
@@ -2098,6 +2120,7 @@ export default function AuctionScheduleSection({ token }) {
                     </button>
                     <button
                       type="button"
+                      aria-label="อนุมัติสินค้าเข้าประมูลจากรายการ"
                       onClick={() => handleApprove(a.id)}
                       disabled={
                         Boolean(actionState.id) ||
@@ -2113,9 +2136,16 @@ export default function AuctionScheduleSection({ token }) {
                       }
                       className="flex-1 sm:flex-initial rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm transition text-center disabled:opacity-50"
                     >
-                      {actionState.id === a.id && actionState.type === "approve"
-                        ? "กำลังอนุมัติ..."
-                        : "✓ อนุมัติสินค้าเข้าประมูล"}
+                      {actionState.id === a.id && actionState.type === "approve" ? (
+                        "กำลังอนุมัติ..."
+                      ) : (
+                        <span className="inline-flex items-center justify-center gap-1.5">
+                          <span className="material-symbols-outlined text-[16px] leading-none" aria-hidden="true">
+                            check_circle
+                          </span>
+                          อนุมัติสินค้าเข้าประมูล
+                        </span>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -2209,10 +2239,15 @@ export default function AuctionScheduleSection({ token }) {
             </div>
 
             {cancellingItem.status === "open" && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 font-medium">
-                ⚠️ <strong>คำเตือน:</strong>{" "}
-                รายการประมูลนี้กำลังเปิดเคาะราคาอยู่
-                ระบบจะแจ้งเตือนผู้ขายและผู้ซื้อที่เคยเสนอราคาในรายการนี้ทันที
+              <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs font-medium text-amber-900">
+                <span className="material-symbols-outlined mt-[-1px] shrink-0 text-[17px] leading-none" aria-hidden="true">
+                  warning
+                </span>
+                <span>
+                  <strong>คำเตือน:</strong>{" "}
+                  รายการประมูลนี้กำลังเปิดเคาะราคาอยู่
+                  ระบบจะแจ้งเตือนผู้ขายและผู้ซื้อที่เคยเสนอราคาในรายการนี้ทันที
+                </span>
               </div>
             )}
 

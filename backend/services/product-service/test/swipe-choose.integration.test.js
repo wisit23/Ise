@@ -188,6 +188,7 @@ test("UR-11 Swipe-to-Choose Hardening: Buyer authorization, idempotency, feed st
       },
     });
     assert.ok(dbChoice, "SwipeChoice record must be persisted in database");
+    assert.equal(dbChoice.deletedAt, null);
 
     // 4. Repeated choose on the same video is idempotent and does not create duplicate rows
     const repeatedChooseRes = await request(app)
@@ -288,7 +289,7 @@ test("UR-11 Swipe-to-Choose Hardening: Buyer authorization, idempotency, feed st
     assert.equal(deleteRes.status, 200);
     assert.equal(deleteRes.body.chosen, false);
 
-    // Verify DB record is deleted
+    // Unchoose preserves the row for history and marks it inactive.
     const dbChoiceAfterDelete = await prisma.swipeChoice.findUnique({
       where: {
         productVideoId_userId: {
@@ -297,7 +298,10 @@ test("UR-11 Swipe-to-Choose Hardening: Buyer authorization, idempotency, feed st
         },
       },
     });
-    assert.equal(dbChoiceAfterDelete, null);
+    assert.ok(dbChoiceAfterDelete, "Unchoose must retain the original choice");
+    assert.equal(dbChoiceAfterDelete.id, dbChoice.id);
+    assert.equal(dbChoiceAfterDelete.createdAt.getTime(), dbChoice.createdAt.getTime());
+    assert.ok(dbChoiceAfterDelete.deletedAt instanceof Date);
 
     // Verify feed reflects unchosen state
     const buyerAFeedAfterUnchoose = await request(app)
@@ -307,6 +311,29 @@ test("UR-11 Swipe-to-Choose Hardening: Buyer authorization, idempotency, feed st
       (item) => item.id === video1.id,
     );
     assert.equal(unchosenItem1.chosen, false);
+
+    // Choosing again restores the same row rather than replacing its history.
+    const restoredChooseRes = await request(app)
+      .post(`/videos/${video1.id}/choose`)
+      .set("Authorization", `Bearer ${buyerAToken}`);
+    assert.equal(restoredChooseRes.status, 200);
+    assert.equal(restoredChooseRes.body.chosen, true);
+    const restoredChoice = await prisma.swipeChoice.findUnique({
+      where: {
+        productVideoId_userId: {
+          productVideoId: video1.id,
+          userId: "ur11-buyer-a",
+        },
+      },
+    });
+    assert.equal(restoredChoice.id, dbChoice.id);
+    assert.equal(restoredChoice.createdAt.getTime(), dbChoice.createdAt.getTime());
+    assert.equal(restoredChoice.deletedAt, null);
+    const restoredFeed = await request(app)
+      .get("/videos/feed")
+      .set("Authorization", `Bearer ${buyerAToken}`);
+    assert.equal(restoredFeed.status, 200);
+    assert.equal(restoredFeed.body.items.find((item) => item.id === video1.id).chosen, true);
 
     // 8. Test alternative route POST /videos/:id/unchoose
     // Buyer A chooses video2 first
@@ -338,7 +365,14 @@ test("UR-11 Swipe-to-Choose Hardening: Buyer authorization, idempotency, feed st
         },
       },
     });
-    assert.equal(choice2AfterPostUnchoose, null);
+    assert.ok(choice2AfterPostUnchoose, "POST unchoose must retain the original choice");
+    assert.equal(choice2AfterPostUnchoose.id, choice2InDb.id);
+    assert.ok(choice2AfterPostUnchoose.deletedAt instanceof Date);
+    const feedAfterPostUnchoose = await request(app)
+      .get("/videos/feed")
+      .set("Authorization", `Bearer ${buyerAToken}`);
+    assert.equal(feedAfterPostUnchoose.status, 200);
+    assert.equal(feedAfterPostUnchoose.body.items.find((item) => item.id === video2.id).chosen, false);
   } finally {
     // Teardown test data
     await prisma.swipeChoice.deleteMany({

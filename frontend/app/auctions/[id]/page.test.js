@@ -303,7 +303,7 @@ describe("AuctionDetailPage - Closed auction after payment-rollover", () => {
 
     expect(await screen.findByText("เสื้อแจ็คเก็ต")).toBeInTheDocument();
     expect(
-      screen.getByText("🎉 ยินดีด้วย! คุณเป็นผู้ชนะการประมูลสินค้านี้"),
+      screen.getByText("ยินดีด้วย! คุณเป็นผู้ชนะการประมูลสินค้านี้"),
     ).toBeInTheDocument();
     expect(screen.getByText(/ที่ราคา ฿5,580/)).toBeInTheDocument();
   });
@@ -316,7 +316,7 @@ describe("AuctionDetailPage - Closed auction after payment-rollover", () => {
 
     expect(await screen.findByText("เสื้อแจ็คเก็ต")).toBeInTheDocument();
     expect(
-      screen.queryByText("🎉 ยินดีด้วย! คุณเป็นผู้ชนะการประมูลสินค้านี้"),
+      screen.queryByText("ยินดีด้วย! คุณเป็นผู้ชนะการประมูลสินค้านี้"),
     ).not.toBeInTheDocument();
     expect(screen.getByText(/มีผู้ชนะการประมูลที่ราคา ฿5,580/)).toBeInTheDocument();
   });
@@ -341,11 +341,11 @@ describe("AuctionDetailPage - Closed auction after payment-rollover", () => {
 
     await screen.findByText("เสื้อแจ็คเก็ต");
 
-    expect(screen.getByText("🏆 ผู้ชนะ")).toBeInTheDocument();
+    expect(screen.getByText("ผู้ชนะ")).toBeInTheDocument();
     expect(screen.getByText("เสียสิทธิ์")).toBeInTheDocument();
     expect(screen.queryByText("สูงสุด")).not.toBeInTheDocument();
 
-    const winningRow = screen.getByText("🏆 ผู้ชนะ").closest("tr");
+    const winningRow = screen.getByText("ผู้ชนะ").closest("tr");
     expect(within(winningRow).getByText("ผู้ใช้ omoted")).toBeInTheDocument();
 
     const forfeitedRow = screen.getByText("เสียสิทธิ์").closest("tr");

@@ -232,7 +232,6 @@ function SalesKpiCard({
   const colors = {
     slate: "bg-slate-100 text-slate-600",
     sky: "bg-sky-50 text-sky-600",
-    violet: "bg-violet-50 text-violet-600",
     emerald: "bg-emerald-50 text-emerald-600",
   };
   return (
@@ -241,7 +240,7 @@ function SalesKpiCard({
       onClick={onClick}
       className={`flex min-h-44 w-full flex-col rounded-xl border border-slate-200/70 bg-white p-5 text-left shadow-sm transition-all ${
         onClick
-          ? "hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-md"
+          ? "hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
           : ""
       } ${className}`}
     >
@@ -267,7 +266,7 @@ function SalesKpiCard({
         {!loading && !error && <ComparisonText comparison={data?.comparison} />}
       </p>
       {onClick && (
-        <span className="mt-2 text-[11px] font-semibold text-violet-600">
+        <span className="mt-2 text-[11px] font-semibold text-emerald-600">
           ไปยังหน้าที่เกี่ยวข้อง →
         </span>
       )}
@@ -501,7 +500,7 @@ export default function DashboardSection({ token, onNavigate }) {
       <div className="order-0 space-y-4 rounded-xl border border-slate-200/70 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2 text-slate-800">
-            <span className="material-symbols-outlined shrink-0 text-[20px] text-violet-600">
+            <span className="material-symbols-outlined shrink-0 text-[20px] text-emerald-600">
               calendar_today
             </span>
             <span className="text-sm font-semibold">
@@ -526,8 +525,8 @@ export default function DashboardSection({ token, onNavigate }) {
                   onClick={() => handlePresetChange(preset.key)}
                   className={`h-10 rounded-lg border px-4 text-sm font-semibold transition-colors ${
                     rangePreset === preset.key
-                      ? "border-violet-600 bg-violet-600 text-white shadow-sm"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-violet-300 hover:text-violet-700"
+                      ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-700"
                   }`}
                 >
                   {preset.label}
@@ -554,7 +553,7 @@ export default function DashboardSection({ token, onNavigate }) {
                     setFromDate(event.target.value);
                     setFilterValidationError(null);
                   }}
-                  className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 focus:border-violet-500 focus:outline-none"
+                  className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 focus:border-emerald-500 focus:outline-none"
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs font-medium text-slate-600">
@@ -567,13 +566,13 @@ export default function DashboardSection({ token, onNavigate }) {
                     setToDate(event.target.value);
                     setFilterValidationError(null);
                   }}
-                  className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 focus:border-violet-500 focus:outline-none"
+                  className="h-10 rounded-lg border border-slate-200 px-3 text-sm text-slate-800 focus:border-emerald-500 focus:outline-none"
                 />
               </label>
               <button
                 type="button"
                 onClick={handleApplyFilter}
-                className="h-10 rounded-lg bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-700"
+                className="h-10 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
               >
                 ใช้ช่วงเวลานี้
               </button>
@@ -659,7 +658,7 @@ export default function DashboardSection({ token, onNavigate }) {
             label="ยอดขายจากแคมเปญ"
             data={salesOverview?.byType?.campaign}
             icon="confirmation_number"
-            color="violet"
+            color="emerald"
             onClick={() => onNavigate?.("campaigns")}
             loading={loading}
             error={error}
@@ -680,7 +679,7 @@ export default function DashboardSection({ token, onNavigate }) {
       <div className="order-6 space-y-4 rounded-xl border border-slate-200/70 bg-white p-4 sm:p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[22px] text-violet-600">
+            <span className="material-symbols-outlined text-[22px] text-emerald-600">
               insights
             </span>
             <div>
@@ -732,7 +731,7 @@ export default function DashboardSection({ token, onNavigate }) {
                   : (userAnalytics?.activeUsers ?? 0).toLocaleString()
             }
             icon="group"
-            color="indigo"
+            color="emerald"
             sub={
               userAnalyticsError
                 ? "ไม่พร้อมใช้งาน"
@@ -810,7 +809,7 @@ export default function DashboardSection({ token, onNavigate }) {
                 toDate={appliedFilter.toDate}
               />
               <details className="text-xs text-slate-600">
-                <summary className="cursor-pointer text-violet-600 hover:text-violet-700 font-semibold select-none">
+                <summary className="cursor-pointer text-emerald-600 hover:text-emerald-700 font-semibold select-none">
                   ดูตารางสถิติรายชั่วโมง (Accessible Table View)
                 </summary>
                 <div className="mt-2 max-h-48 overflow-y-auto border border-slate-200 rounded-lg">
@@ -860,7 +859,7 @@ export default function DashboardSection({ token, onNavigate }) {
                 : salesOverview?.total?.completedOrders?.toLocaleString("th-TH")
           }
           icon="shopping_bag"
-          color="indigo"
+          color="emerald"
           sub="รวมยอดขายทั่วไป แคมเปญ และประมูล"
         />
         <KpiCard
@@ -883,7 +882,7 @@ export default function DashboardSection({ token, onNavigate }) {
                 : `${metrics?.overallConversionRate || 0}%`
           }
           icon="trending_up"
-          color="violet"
+          color="emerald"
           onClick={() => onNavigate?.("campaigns")}
           sub="สิทธิ์ที่ใช้สำเร็จเทียบกับสิทธิ์ที่เก็บ"
         />
@@ -911,7 +910,7 @@ export default function DashboardSection({ token, onNavigate }) {
                 : (auctionActivity?.distinctBidders || 0).toLocaleString()
           }
           icon="groups"
-          color="violet"
+          color="emerald"
           sub="ผู้เสนอราคาไม่ซ้ำในช่วงที่เลือก"
         />
         <KpiCard
@@ -995,7 +994,7 @@ export default function DashboardSection({ token, onNavigate }) {
       <div className="order-5 rounded-xl border border-slate-200/70 bg-white p-4 sm:p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-800 min-w-0">
-            <span className="material-symbols-outlined text-[20px] text-violet-600 shrink-0">
+            <span className="material-symbols-outlined text-[20px] text-emerald-600 shrink-0">
               table_chart
             </span>
             <span className="truncate">
@@ -1005,7 +1004,7 @@ export default function DashboardSection({ token, onNavigate }) {
           {onNavigate && (
             <button
               onClick={() => onNavigate("campaigns")}
-              className="text-xs font-semibold text-violet-600 hover:text-violet-700 hover:underline shrink-0 text-left sm:text-right"
+              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline shrink-0 text-left sm:text-right"
             >
               จัดการแคมเปญทั้งหมด &rarr;
             </button>
@@ -1049,7 +1048,7 @@ export default function DashboardSection({ token, onNavigate }) {
                   <th className="px-3 py-2.5 text-right">ยอดขายรวม (Gross)</th>
                   <th className="px-3 py-2.5 text-right">ส่วนลด (Discount)</th>
                   <th className="px-3 py-2.5 text-right">ยอดสุทธิ (Net)</th>
-                  <th className="px-3 py-2.5 text-center font-bold text-violet-700">
+                  <th className="px-3 py-2.5 text-center font-bold text-emerald-700">
                     Conversion %
                   </th>
                 </tr>
@@ -1088,7 +1087,7 @@ export default function DashboardSection({ token, onNavigate }) {
                     <td className="px-3 py-3 text-right font-bold text-emerald-600">
                       ฿{(c.netRevenue || 0).toLocaleString()}
                     </td>
-                    <td className="px-3 py-3 text-center font-bold text-violet-700">
+                    <td className="px-3 py-3 text-center font-bold text-emerald-700">
                       {c.conversionRate ?? 0}%
                     </td>
                   </tr>
@@ -1125,7 +1124,7 @@ export default function DashboardSection({ token, onNavigate }) {
             label="ตั้งเวลาแล้ว"
             value={error ? "—" : auctionStats.scheduled}
             icon="schedule"
-            color="indigo"
+            color="emerald"
             onClick={() => onNavigate?.("auctions")}
             sub="รอเปิดตามเวลา"
           />

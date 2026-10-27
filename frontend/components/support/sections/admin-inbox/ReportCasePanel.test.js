@@ -2,6 +2,14 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import ReportCasePanel from "./ReportCasePanel";
 import { rememberReferenceCodes } from "../../../../lib/referenceCodes";
 
+test.each([{ detailLoading: true }, { detailError: "detail unavailable" }])("blocks claiming a report until fresh detail is available (%j)", (state) => {
+  const onClaim = jest.fn();
+  render(<ReportCasePanel report={{ id: "pending", status: "OPEN" }} onClaim={onClaim} {...state} />);
+  expect(screen.getByRole("button", { name: "รับงานนี้" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "รับงานนี้" }));
+  expect(onClaim).not.toHaveBeenCalled();
+});
+
 test("report identities and embedded review references use readable codes, while history actions retain internal IDs", () => {
   const reporterId = "65b9f696-6fef-49d7-8047-4f7647d45dde";
   const targetId = "7cfea9d6-2d6e-438b-a36a-f5b5a193cdb7";

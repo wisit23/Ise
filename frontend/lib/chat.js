@@ -165,7 +165,7 @@ const ROLE_LABELS = {
   BUYER: "ผู้ซื้อ",
   SELLER: "ร้านค้า",
   AGENT: "ฝ่ายบริการลูกค้า",
-  ADMIN: "ผู้ดูแลระบบ",
+  ADMIN: "Trust and Safety",
   SYSTEM: "ระบบ",
 };
 

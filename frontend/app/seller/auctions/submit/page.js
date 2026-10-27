@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../../components/ui/Icon";
+
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -311,7 +313,7 @@ function SellerAuctionSubmitContent() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <p className="font-semibold text-amber-900 text-base">
-                  ⚠️ บัญชีผู้ขายยังไม่ผ่านการยืนยันตัวตน (KYC)
+                  <Icon name="warning" /> บัญชีผู้ขายยังไม่ผ่านการยืนยันตัวตน (KYC)
                 </p>
                 <p className="mt-1 text-sm text-amber-800">
                   {kycStatus === "PENDING"
@@ -587,7 +589,7 @@ function SellerAuctionSubmitContent() {
 
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                ⚠️ {error}
+                <Icon name="warning" /> {error}
               </div>
             )}
 

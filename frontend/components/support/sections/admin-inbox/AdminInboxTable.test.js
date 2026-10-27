@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import AdminInboxTable from "./AdminInboxTable";
 import CaseDate from "../case/CaseDate";
 
@@ -33,4 +33,12 @@ it("keeps missing and invalid timestamps unknown instead of inventing dates", ()
   render(<><CaseDate /><CaseDate value="invalid" /></>);
   expect(screen.getAllByText("—")).toHaveLength(2);
   expect(screen.queryByText(/Invalid Date|2513/)).not.toBeInTheDocument();
+});
+
+it("uses the API status PENDING_USER for the waiting-customer filter", () => {
+  const onTicketStatusChange = jest.fn();
+  render(<AdminInboxTable {...props} source="tickets" ticketStatus="ALL" onTicketStatusChange={onTicketStatusChange} />);
+  fireEvent.click(screen.getByRole("button", { name: /ทุกสถานะ/ }));
+  fireEvent.click(screen.getByRole("radio", { name: /รอ.*ลูกค้า|รอ.*ผู้ใช้/ }));
+  expect(onTicketStatusChange).toHaveBeenCalledWith("PENDING_USER");
 });

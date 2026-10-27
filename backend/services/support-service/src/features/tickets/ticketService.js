@@ -158,7 +158,7 @@ async function getTicket({ ticketId, userId, role, before, limit }) {
     ticket.requesterId !== userId && ticket.chatResponderId !== userId
   )
     throw forbidden(
-      "only admin or trust & safety can access an escalated ticket",
+      "only Trust and Safety staff can access an escalated ticket",
     );
   const includeInternal = isAgent(role) && ticket.requesterId !== userId;
   try {
@@ -263,7 +263,7 @@ async function reply({ ticketId, userId, role, body, isInternal, eventKey }) {
   if (typeof body !== "string" || !body.trim())
     throw badRequest("body is required");
   if (["ADMIN","TRUST_AND_SAFETY"].includes(role) && !isInternal) {
-    throw forbidden("Admin audit is read-only for customer conversations");
+    throw forbidden("Trust and Safety audit is read-only for customer conversations");
   }
   const ticket = await assertAccess({ ticketId, userId, role });
 
@@ -303,7 +303,7 @@ async function assignToSelf({ ticketId, userId, role, version }) {
   if (ticket.assigneeId) throw conflict("ticket already has an assignee");
   if (ticket.status === "ESCALATED" && role === "CUSTOMER_SERVICE")
     throw forbidden(
-      "only admin or trust & safety can claim an escalated ticket",
+      "only Trust and Safety staff can claim an escalated ticket",
     );
 
   const ok = await ticketModel.assign({
@@ -416,7 +416,7 @@ async function changeStatus({
       try {
         await chatClient.sendSystemMessage(
           updated.conversationId,
-          "เคสถูกส่งต่อให้ผู้ดูแลระดับสูงแล้ว",
+          "เคสถูกส่งต่อให้Trust and Safetyแล้ว",
           { event: "ticket.escalated", ticketId },
         );
       } catch (err) {
@@ -451,7 +451,7 @@ async function joinTicketChat({ ticketId, userId, role }) {
       !(role === "CUSTOMER_SERVICE" && ticket.chatResponderId === userId)
     ) {
       throw forbidden(
-        "only admin or trust & safety can access an escalated ticket",
+        "only Trust and Safety staff can access an escalated ticket",
       );
     }
   } else {
@@ -562,7 +562,7 @@ async function getTicketConversation({ ticketId, userId, role }) {
   const ticket = await assertAccess({ ticketId, userId, role });
   if (ticket.status === "ESCALATED" && role === "CUSTOMER_SERVICE" && ticket.chatResponderId !== userId) {
     throw forbidden(
-      "only admin or trust & safety can access an escalated ticket",
+      "only Trust and Safety staff can access an escalated ticket",
     );
   }
 

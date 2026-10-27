@@ -6,7 +6,7 @@
  We detected multiple lockfiles and selected the directory of C:\Programming\Ise\package-lock.json as the root directory.
  To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
    See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
- Detected additional lockfiles: 
+ Detected additional lockfiles:
    * C:\Programming\Ise\frontend\package-lock.json
 
    ▲ Next.js 15.5.22
@@ -18,9 +18,9 @@
  ⚠ The Next.js plugin was not detected in your ESLint configuration. See https://nextjs.org/docs/app/api-reference/config/eslint#migrating-existing-config
    Collecting page data ...
    Generating static pages (0/32) ...
-   Generating static pages (8/32) 
-   Generating static pages (16/32) 
-   Generating static pages (24/32) 
+   Generating static pages (8/32)
+   Generating static pages (16/32)
+   Generating static pages (24/32)
  ✓ Generating static pages (32/32)
    Finalizing page optimization ...
    Collecting build traces ...
@@ -75,4 +75,3 @@ Route (app)                                 Size  First Load JS
 
 ○  (Static)   prerendered as static content
 ƒ  (Dynamic)  server-rendered on demand
-

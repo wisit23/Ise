@@ -26,7 +26,7 @@ const STATUS_OPTIONS = [
 ];
 const TICKET_OPTIONS = [
   { value: "ALL", label: "ทุกสถานะ" },
-  ...["NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_CUSTOMER", "ESCALATED", "RESOLVED", "CLOSED"]
+  ...["NEW", "ASSIGNED", "IN_PROGRESS", "PENDING_USER", "ESCALATED", "RESOLVED", "CLOSED"]
     .map((value) => ({ value, label: TICKET_STATUS_LABEL[value] || value })),
 ];
 

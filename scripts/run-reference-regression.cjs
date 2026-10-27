@@ -119,7 +119,7 @@ async function main() {
     );
     const summary = result.output
       .split(/\r?\n/)
-      .filter((line) => /^ℹ (tests|pass|fail|skipped)/.test(line));
+      .filter((line) => /^\u2139 (tests|pass|fail|skipped)/.test(line));
     console.log(
       group,
       result.status === 0 ? "PASS" : "FAIL",

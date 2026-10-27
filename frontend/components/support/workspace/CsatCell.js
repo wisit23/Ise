@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../ui/Icon";
+
 import styles from "./CsatCell.module.css";
 
 const SIDE_LABEL = { REQUESTER: "ผู้แจ้ง", BUYER: "ผู้ซื้อ", SELLER: "ร้านค้า" };
@@ -10,9 +12,9 @@ export function Stars({ value, size = "md" }) {
         const fill = Math.max(0, Math.min(1, value - (n - 1)));
         return (
           <span key={n} className={styles.star}>
-            <span className={styles.starBase}>★</span>
+            <span className={styles.starBase}><Icon name="star" filled /></span>
             <span className={styles.starFill} style={{ width: `${fill * 100}%` }}>
-              ★
+              <Icon name="star" filled />
             </span>
           </span>
         );
@@ -48,7 +50,7 @@ export default function CsatCell({ ratings = [] }) {
               title={row.comment || undefined}
             >
               {SIDE_LABEL[row.respondentSide] || row.respondentSide}
-              <span className={styles.chipScore}>★ {row.rating}</span>
+              <span className={styles.chipScore}><Icon name="star" filled /> {row.rating}</span>
               {row.comment && (
                 <span aria-hidden="true" className={`material-symbols-outlined ${styles.commentIcon}`}>
                   chat_bubble

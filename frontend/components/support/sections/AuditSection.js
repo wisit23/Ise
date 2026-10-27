@@ -64,7 +64,8 @@ const ACTION_OPTIONS = {
     ["REPLY", "ตอบ Ticket"],
     ["JOIN", "เข้าร่วมบทสนทนา"],
     ["HANDOFF", "รับช่วงบทสนทนา"],
-    ["ESCALATE", "SLA ส่งต่อ"],
+    ["ESCALATE", "ส่งต่อ"],
+    ["SLA_BREACH", "เกินกำหนด SLA"],
   ],
 };
 
@@ -432,16 +433,11 @@ export default function AuditSection({ token }) {
                           href={link}
                           className="font-bold text-emerald-700 hover:underline"
                         >
-                          เปิดต้นทาง
+                          ดูข้อมูลที่เกี่ยวข้อง
                         </a>
                       ) : (
                         <span className="text-slate-400">unavailable</span>
                       )}
-                      <div className="mt-1 font-mono text-[10px] text-slate-400">
-                        {log.requestId ||
-                          log.operationId ||
-                          "ไม่มี request/operation ID"}
-                      </div>
                     </td>
                   </tr>
                 );

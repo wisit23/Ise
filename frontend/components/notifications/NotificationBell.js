@@ -9,6 +9,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   deleteNotification,
+  notificationText,
 } from "../../lib/notifications";
 import { useChatSocket, useChatSocketEvent } from "../chat/ChatSocketProvider";
 import ReportDecisionModal from "./ReportDecisionModal";
@@ -475,14 +476,14 @@ export default function NotificationBell({ user }) {
                     <div className="min-w-0 flex-1 pr-6">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-semibold text-ink line-clamp-1">
-                          {notif.title}
+                          {notificationText(notif.title)}
                         </span>
                         <span className="text-[10px] text-ink-subtle shrink-0">
                           {formatRelativeTime(notif.createdAt)}
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs text-ink-muted line-clamp-2 leading-relaxed">
-                        {notif.message}
+                        {notificationText(notif.message)}
                       </p>
                       {orderReason && (
                         <p className="mt-1.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] rounded-md bg-rose-50 px-2 py-1.5 text-xs leading-relaxed text-rose-800">

@@ -115,10 +115,15 @@ export default function AuctionReviewModal({
       }
     >
       {isRoundCancelled && (
-        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-800 font-medium">
-          ⚠️ รอบประมูลนี้ถูกยกเลิกแล้ว (
-          {auction.round?.cancellationReason || "ฝ่ายการตลาดยกเลิกรอบ"})
-          ไม่สามารถอนุมัติสินค้าเข้ารอบนี้ได้
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-800">
+          <span className="material-symbols-outlined mt-[-1px] shrink-0 text-[17px] leading-none" aria-hidden="true">
+            warning
+          </span>
+          <span>
+            รอบประมูลนี้ถูกยกเลิกแล้ว (
+            {auction.round?.cancellationReason || "ฝ่ายการตลาดยกเลิกรอบ"})
+            ไม่สามารถอนุมัติสินค้าเข้ารอบนี้ได้
+          </span>
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">

@@ -130,7 +130,7 @@ function parseState(domain, account) {
   result.selectedId = params.get("case") || null;
   return result;
 }
-export default function useCaseWorkspace(domain, token, account) {
+export default function useCaseWorkspace(domain, token, account, { pauseRefresh = false } = {}) {
   const base =
     domain === "tickets" ? "/api/support/tickets" : "/api/orders/disputes";
   const [state, setState] = useState(() => parseState(domain, account));
@@ -145,6 +145,10 @@ export default function useCaseWorkspace(domain, token, account) {
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [notesError, setNotesError] = useState("");
   const [busy, setBusy] = useState(false);
+  const refreshPaused = useRef(false);
+  const uploadPaused = useRef(pauseRefresh);
+  uploadPaused.current = pauseRefresh;
+  refreshPaused.current = busy || pauseRefresh;
   const [revision, setRevision] = useState(0);
   const generation = useRef(0);
   const alive = useRef(true);
@@ -234,6 +238,7 @@ export default function useCaseWorkspace(domain, token, account) {
   ]);
   const loadDetail = useCallback(
     async (id, preserveCommitted = false, silent = false) => {
+      if (silent && refreshPaused.current) return;
       const request = ++generation.current;
       if (!id) {
         setDetail(null);
@@ -249,11 +254,13 @@ export default function useCaseWorkspace(domain, token, account) {
         const data = await apiFetch(`${base}/${encodeURIComponent(id)}`, {
           token,
         });
-        if (request === generation.current && selected.current === id)
+        if (request === generation.current && selected.current === id && !(silent && refreshPaused.current))
           setDetail(data);
       } catch (err) {
         if (request === generation.current && selected.current === id) {
-          if (preserveCommitted && ![403, 404].includes(err.status)) {
+          if (silent && ![403, 404].includes(err.status)) {
+            setRefreshError("โหลดข้อมูลล่าสุดไม่สำเร็จ ระบบจะลองใหม่อัตโนมัติ");
+          } else if (preserveCommitted && ![403, 404].includes(err.status)) {
             setDetail((old) => ({ ...old, capabilities: undefined }));
             setRefreshError(
               "บันทึกแล้ว แต่โหลดข้อมูลล่าสุดไม่สำเร็จ กรุณาลองใหม่",
@@ -286,6 +293,21 @@ export default function useCaseWorkspace(domain, token, account) {
   const refresh = useCallback(() => {
     setRevision((value) => value + 1);
     if (selected.current) loadDetail(selected.current);
+  }, [loadDetail]);
+  useEffect(() => {
+    const reconcile = () => {
+      if (!alive.current || refreshPaused.current || document.visibilityState === "hidden") return;
+      setRevision((value) => value + 1);
+      if (selected.current) loadDetail(selected.current, true, true);
+    };
+    const timer = setInterval(reconcile, config.timing.dashboardRefreshMs);
+    window.addEventListener("focus", reconcile);
+    document.addEventListener("visibilitychange", reconcile);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", reconcile);
+      document.removeEventListener("visibilitychange", reconcile);
+    };
   }, [loadDetail]);
   const refreshAfterReply = useCallback(() => {
     const id = selected.current;
@@ -335,6 +357,8 @@ export default function useCaseWorkspace(domain, token, account) {
   async function mutate(action, body, method = "POST") {
     if (!detail?.id || busy) throw new Error("ยังไม่พร้อมทำรายการ");
     const id = detail.id;
+    refreshPaused.current = true;
+    generation.current++;
     setBusy(true);
     try {
       const result = await apiFetch(
@@ -355,6 +379,7 @@ export default function useCaseWorkspace(domain, token, account) {
       }
       throw err;
     } finally {
+      refreshPaused.current = uploadPaused.current;
       if (alive.current) setBusy(false);
     }
   }

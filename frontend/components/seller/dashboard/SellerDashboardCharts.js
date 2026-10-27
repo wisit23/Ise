@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../ui/Icon";
+
 
 import { useMemo, useState } from "react";
 import TrendBarChart from "../../charts/TrendBarChart";
@@ -312,7 +314,7 @@ function CustomDateToolbar({
                 : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
             }`}
           >
-            {isSingle ? "วันเดียว ✓" : "เลือกวันเดียว"}
+            {isSingle ? <>วันเดียว <Icon name="check" /></> : "เลือกวันเดียว"}
           </button>
         </div>
 

@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../ui/Icon";
+
 
 import { useState } from "react";
 import { mediaUrl } from "../../../../lib/api";
@@ -47,7 +49,7 @@ export default function ReportProductDetails({ productId, detail, onRetry }) {
           rel="noopener noreferrer"
           className="text-sm font-semibold text-emerald-700 underline"
         >
-          View Product ↗
+          View Product <Icon name="open_in_new" />
         </a>
       </div>
       {product ? (

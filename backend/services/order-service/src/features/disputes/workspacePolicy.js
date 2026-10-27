@@ -1,3 +1,10 @@
+function canReadCompletedDispute(dispute, userId) {
+  return Boolean(userId && !dispute.deletedAt && dispute.status === "DECIDED" && (
+    dispute.assignedTo === userId || dispute.escalatedBy === userId ||
+    (dispute.auditLog || dispute.caseLog || []).some((log) => log.toAssignedTo === userId)
+  ));
+}
+
 function disputeCapabilities(dispute, userId, role, roles = []) {
   const heldRoles = new Set([role, ...roles]);
   const admin = heldRoles.has("ADMIN");
@@ -8,16 +15,18 @@ function disputeCapabilities(dispute, userId, role, roles = []) {
   const accessible =
     admin ||
     ts ||
-    (cs && !["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) && (!dispute.assignedTo || owner));
+    (cs && (live || canReadCompletedDispute(dispute, userId)) && !["ADMIN", "TRUST_AND_SAFETY"].includes(dispute.assignedRole) && (!dispute.assignedTo || owner));
   const team = dispute.assignedRole;
   // The CS agent who escalated keeps a read-only view while T&S reviews.
   const watching =
     cs && !admin && !ts && live &&
     dispute.escalatedBy === userId &&
     ["ADMIN", "TRUST_AND_SAFETY"].includes(team);
+  const historyViewer = cs && !admin && !ts && canReadCompletedDispute(dispute, userId);
   return {
-    canViewDetail: accessible || watching,
+    canViewDetail: accessible || watching || historyViewer,
     isWatching: watching,
+    isHistoryViewer: historyViewer,
     isReturned:
       live && team === "CUSTOMER_SERVICE" && Boolean(dispute.returnedAt),
     canClaim:
@@ -55,4 +64,4 @@ function disputeCapabilities(dispute, userId, role, roles = []) {
           : null,
   };
 }
-module.exports = { disputeCapabilities };
+module.exports = { disputeCapabilities, canReadCompletedDispute };

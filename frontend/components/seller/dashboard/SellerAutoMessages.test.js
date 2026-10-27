@@ -33,8 +33,8 @@ describe("SellerAutoMessages", () => {
     });
 
     expect(screen.getByText("เปิดใช้งานอยู่ 1 / 2 ข้อ (สูงสุด 20 ข้อ)")).toBeInTheDocument();
-    expect(screen.getByText("✓ เปิดใช้งาน")).toBeInTheDocument();
-    expect(screen.getByText("✕ ปิดใช้งาน")).toBeInTheDocument();
+    expect(screen.getByText("เปิดใช้งาน")).toBeInTheDocument();
+    expect(screen.getByText("ปิดใช้งาน")).toBeInTheDocument();
 
     // Buyer preview section
     expect(screen.getByText("ตัวอย่างมุมมองของผู้ซื้อ (Buyer Preview)")).toBeInTheDocument();
@@ -96,10 +96,10 @@ describe("SellerAutoMessages", () => {
     render(<SellerAutoMessages />);
 
     await waitFor(() => {
-      expect(screen.getByText("✕ ปิดใช้งาน")).toBeInTheDocument();
+      expect(screen.getByText("ปิดใช้งาน")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("✕ ปิดใช้งาน"));
+    fireEvent.click(screen.getByText("ปิดใช้งาน"));
 
     await waitFor(() => {
       expect(apiFetch).toHaveBeenCalledWith("/api/auth/shop/auto-messages/msg-2", {

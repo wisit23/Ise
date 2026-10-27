@@ -179,7 +179,7 @@ test("chat attachments against a real MongoDB replica set + real disk", async (t
       const reloaded = await prisma.conversation.findUnique({
         where: { id: conversation.id },
       });
-      assert.equal(reloaded.lastMessagePreview, "📷 รูปภาพ");
+      assert.equal(reloaded.lastMessagePreview, "รูปภาพ");
       assert.ok(reloaded.lastMessageAt);
     },
   );

@@ -72,7 +72,7 @@ async function getExecutiveDispute(id) {
         ? typeof found?.userName === "string" && found.userName.trim()
           ? found.userName.trim()
           : null
-        : found?.displayName ?? null,
+        : (found?.displayName ?? null),
       // Staff roles say which team acted (CS, Trust & Safety, Admin).
       ...(withRoles ? { roles: found?.staffRoles ?? [] } : {}),
     };

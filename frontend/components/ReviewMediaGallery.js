@@ -1,4 +1,6 @@
 "use client";
+import Icon from "./ui/Icon";
+
 
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
@@ -85,7 +87,7 @@ export default function ReviewMediaGallery({ media = [] }) {
                   muted
                 />
                 <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-sm text-white group-hover:scale-110 transition-transform">
-                  ▶
+                  <Icon name="play_arrow" />
                 </span>
               </div>
             ) : (
@@ -176,6 +178,7 @@ export default function ReviewMediaGallery({ media = [] }) {
                 <button
                   key={item.url + idx}
                   type="button"
+                  aria-label={`เปิดดู${item.type === "video" ? "วิดีโอ" : "รูปภาพ"}ที่ ${idx + 1}`}
                   onClick={() => setActiveIndex(idx)}
                   className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-md border-2 transition ${
                     idx === activeIndex
@@ -191,7 +194,7 @@ export default function ReviewMediaGallery({ media = [] }) {
                         muted
                       />
                       <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white">
-                        ▶
+                        <Icon name="play_arrow" />
                       </span>
                     </div>
                   ) : (

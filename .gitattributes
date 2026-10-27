@@ -2,3 +2,6 @@
 /deploy/test-deploy.sh text eol=lf
 /deploy/production-cloud/deploy-k8s.sh text eol=lf
 /deploy/production-cloud/git-update.sh text eol=lf
+/deploy/cicd/ise-deploy text eol=lf
+/deploy/cicd/*.service text eol=lf
+/deploy/cicd/*.timer text eol=lf

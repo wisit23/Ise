@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Ise public routes every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=20s
+Unit=ise-smoke.service
+
+[Install]
+WantedBy=timers.target

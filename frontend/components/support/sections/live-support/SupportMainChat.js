@@ -1,4 +1,6 @@
 "use client";
+import Icon from "../../../ui/Icon";
+
 import { formatReferenceCode } from "../../../../lib/referenceCodes";
 
 import config from "../../../../lib/customerServiceConfig";
@@ -474,7 +476,7 @@ export default function SupportMainChat({
       <div className="shrink-0 border-t border-slate-200 bg-white">
         {locked ? (
           <div className="bg-slate-50/90 px-4 py-3.5 text-center text-xs font-medium text-slate-500">
-            🔒 เคสนี้ปิดแล้ว คุณดูประวัติได้ แต่ส่งข้อความไม่ได้
+            <Icon name="lock" /> เคสนี้ปิดแล้ว คุณดูประวัติได้ แต่ส่งข้อความไม่ได้
           </div>
         ) : !isAssigned ? (
           <div className="flex flex-col items-stretch gap-3 border-t border-amber-200 bg-amber-50/90 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">

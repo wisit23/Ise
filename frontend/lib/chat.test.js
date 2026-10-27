@@ -18,7 +18,7 @@ describe("participantRoleLabel", () => {
     expect(participantRoleLabel("BUYER")).toBe("ผู้ซื้อ");
     expect(participantRoleLabel("SELLER")).toBe("ร้านค้า");
     expect(participantRoleLabel("AGENT")).toBe("ฝ่ายบริการลูกค้า");
-    expect(participantRoleLabel("ADMIN")).toBe("ผู้ดูแลระบบ");
+    expect(participantRoleLabel("ADMIN")).toBe("Trust and Safety");
     expect(participantRoleLabel("SYSTEM")).toBe("ระบบ");
   });
 

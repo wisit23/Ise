@@ -65,6 +65,6 @@ test("follow-up memo is built from the checklist and needs a reason for unfinish
   await act(async () => fireEvent.click(button));
   expect(onTaskChange).toHaveBeenCalledWith("t2", { note: "ร้านยังไม่ตอบ" });
   expect(submit).toHaveBeenCalledWith(
-    "ตอบกลับคำขอ Trust & Safety:\n✓ ขอวิดีโอ — ได้แล้ว\n✗ ยืนยันเลขพัสดุ — ร้านยังไม่ตอบ",
+    "ตอบกลับคำขอ Trust & Safety:\n[ทำแล้ว] ขอวิดีโอ — ได้แล้ว\n[ยังไม่เสร็จ] ยืนยันเลขพัสดุ — ร้านยังไม่ตอบ",
   );
 });
