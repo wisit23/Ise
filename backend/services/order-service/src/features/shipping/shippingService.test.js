@@ -145,7 +145,7 @@ test("stale client version and incomplete selected addresses are rejected before
   await assert.rejects(f.service.updateAddress(f.request), (e) => e.status === 400);
   assert.equal(f.writes.length, 0);
 });
-for (const [from, to] of [["paid", "pickup_in_progress"], ["confirmed", "pickup_in_progress"], ["ready_to_ship", "in_transit"], ["pickup_in_progress", "pickup_in_progress"]]) {
+for (const [from, to] of [["paid", "pickup_in_progress"], ["confirmed", "in_transit"], ["ready_to_ship", "in_transit"], ["pickup_in_progress", "pickup_in_progress"]]) {
   test(`reject shipping skip/repeat ${from} -> ${to}`, async () => {
     const f = fixture({ status: from });
     await assert.rejects(f.service.advanceShipping(handoff({ status: to })), (e) => e.status === 409);
@@ -167,14 +167,34 @@ for (const status of ["pickup_in_progress", "in_transit"]) {
     });
   }
 }
-test("pickup requires no carrier/tracking, stamps no handoff time and retains shipping facts", async () => {
-  const f = fixture({ status: "ready_to_ship" });
+for (const status of ["confirmed", "ready_to_ship"]) {
+test(`pickup from ${status} saves carrier/tracking without a handoff timestamp`, async () => {
+  const f = fixture({ status });
   const before = structuredClone(f.getOrder().shipping);
-  const updated = await f.service.advanceShipping(step("pickup_in_progress"));
+  const updated = await f.service.advanceShipping(handoff({ status: "pickup_in_progress" }));
   assert.equal(updated.status, "pickup_in_progress");
   assert.equal(updated.shippedAt, undefined);
-  assert.deepEqual(updated.shipping, { ...before, status: "pickup_in_progress" });
+  assert.deepEqual(updated.shipping, { ...before, status: "pickup_in_progress", company: "Flash Express", trackingNumber: "TH123456789TH" });
   assert.equal(updated.version, 4);
+  assert.equal(JSON.parse(f.writes.find((w) => w.table === "log").data.detail).from, status);
+});
+}
+
+for (const details of [{}, { company: "Carrier" }, { company: "Carrier", trackingNumber: "LETTERS" }]) {
+  test(`pickup requires valid shipping details: ${JSON.stringify(details)}`, async () => {
+    const f = fixture();
+    await assert.rejects(f.service.advanceShipping(step("pickup_in_progress", details)), (e) => e.status === 400);
+    assert.equal(f.writes.length, 0);
+  });
+}
+
+test("handoff reuses saved carrier and tracking after reopening the order", async () => {
+  const f = fixture();
+  const pickup = await f.service.advanceShipping(handoff({ status: "pickup_in_progress" }));
+  const shipped = await f.service.advanceShipping(step("in_transit", { version: pickup.version }));
+  assert.equal(shipped.shipping.company, "Flash Express");
+  assert.equal(shipped.shipping.trackingNumber, "TH123456789TH");
+  assert.ok(shipped.shippedAt);
 });
 test("handoff updates both statuses, trims tracking, stamps shippedAt and retains address facts", async () => {
   const f = fixture({ status: "pickup_in_progress" });
@@ -204,4 +224,48 @@ test("legacy shipped is not accepted as an API shipping transition", async () =>
   const f = fixture({ status: "ready_to_ship" });
   await assert.rejects(f.service.advanceShipping(step("shipped")), (e) => e.status === 400);
   assert.equal(f.writes.length, 0);
+});
+
+test("seller edits pickup details, keeps status/address/timestamps and audits the previous values", async () => {
+  const f = fixture({ status: "pickup_in_progress", shipping: { status: "pickup_in_progress", addressSnapshot: ADDRESS, company: "Old Carrier", trackingNumber: "OLD12345" } });
+  const updated = await f.service.updateDetails(handoff());
+  assert.equal(updated.status, "pickup_in_progress");
+  assert.equal(updated.shipping.status, "pickup_in_progress");
+  assert.equal(updated.shipping.trackingNumber, "TH123456789TH");
+  assert.equal(updated.shipping.company, "Flash Express");
+  assert.deepEqual(updated.shipping.addressSnapshot, ADDRESS);
+  assert.equal(updated.shippedAt, undefined);
+  assert.equal(updated.version, 4);
+  const audit = f.writes.find(w => w.table === "log").data;
+  assert.equal(audit.action, "SHIPPING_DETAILS_CHANGED");
+  assert.deepEqual(JSON.parse(audit.detail).before, { company: "Old Carrier", trackingNumber: "OLD12345" });
+  const shipped = await f.service.advanceShipping(step("in_transit", { version: updated.version }));
+  assert.equal(shipped.shipping.trackingNumber, "TH123456789TH");
+});
+
+for (const status of ["paid", "confirmed", "in_transit", "delivered", "completed"]) {
+  test(`cannot edit saved shipping details at ${status}`, async () => {
+    const f = fixture({ status });
+    await assert.rejects(f.service.updateDetails(handoff()), e => e.status === 409);
+    assert.equal(f.writes.length, 0);
+  });
+}
+for (const [overrides, input, error] of [
+  [{}, { actorId: "buyer-1" }, 403],
+  [{}, { version: 2 }, 409],
+  [{}, { trackingNumber: "INVALID" }, 400],
+  [{}, { company: "" }, 400],
+  [{ payments: [{ holds: [{ releaseAt: null }] }] }, {}, 409],
+  [{ dispute: { decision: null } }, {}, 409],
+]) {
+  test(`shipping edit rejects invalid or blocked request ${JSON.stringify([overrides, input])}`, async () => {
+    const f = fixture({ status: "pickup_in_progress", ...overrides });
+    await assert.rejects(f.service.updateDetails(handoff(input)), e => e.status === error);
+    assert.equal(f.writes.length, 0);
+  });
+}
+test("a concurrent handoff prevents a shipping edit", async () => {
+  const f = fixture({ status: "pickup_in_progress" }, 0);
+  await assert.rejects(f.service.updateDetails(handoff()), e => e.status === 409);
+  assert.equal(f.writes.filter(w => w.table === "shipping_update").length, 0);
 });

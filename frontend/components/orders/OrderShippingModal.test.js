@@ -6,7 +6,7 @@ import OrderShippingModal from "./OrderShippingModal";
 jest.mock("../../lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock("../../lib/auth", () => ({ getAccessToken: () => "token", getStoredUser: jest.fn() }));
 const order = {
-  id: "o1", sellerId: "seller", status: "ready_to_ship", version: 7, price: 100,
+  id: "o1", sellerId: "seller", status: "confirmed", version: 7, price: 100,
   shipping: { addressSnapshot: { recipientName: "Buyer", phone: "0812345678", addressLine: "Test Road", postalCode: "10110" } },
 };
 let current;
@@ -16,8 +16,8 @@ beforeEach(() => {
   getStoredUser.mockReturnValue({ id: "seller", role: "SELLER" });
   apiFetch.mockImplementation((url, options) => {
     if (options?.method === "PATCH") {
-      current = { ...current, status: options.body.status, version: current.version + 1,
-        shipping: { ...current.shipping, ...(options.body.status === "in_transit" ? { company: options.body.company, trackingNumber: options.body.trackingNumber } : {}) } };
+      current = { ...current, status: options.body.status || current.status, version: current.version + 1,
+        shipping: { ...current.shipping, ...(options.body.company ? { company: options.body.company, trackingNumber: options.body.trackingNumber } : {}) } };
     }
     return Promise.resolve(current);
   });
@@ -25,33 +25,87 @@ beforeEach(() => {
 function open(props = {}) {
   return render(<OrderShippingModal orderId="o1" initialOrder={current} isOpen onClose={() => {}} {...props} />);
 }
-async function pickup() {
-  fireEvent.click(await screen.findByRole("button", { name: "เรียกขนส่ง" }));
-  return screen.findByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" });
-}
-it("seller requests pickup without tracking, then must enter carrier/tracking at handoff", async () => {
+it("seller prepares shipping details at confirmed and reuses them at handoff", async () => {
   const onOrderUpdated = jest.fn();
   open({ onOrderUpdated });
-  expect(screen.queryByLabelText("บริษัทขนส่ง")).not.toBeInTheDocument();
-  const submit = await pickup();
+  const pickup = await screen.findByRole("button", { name: "เรียกขนส่ง" });
+  expect(pickup).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("บริษัทขนส่ง"), { target: { value: "Kerry Express" } });
+  expect(pickup).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("เลขติดตามพัสดุ"), { target: { value: " TRACK123 " } });
+  fireEvent.click(pickup);
+  const submit = await screen.findByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" });
   expect(apiFetch).toHaveBeenCalledWith("/api/orders/o1/status", expect.objectContaining({
-    method: "PATCH", body: { status: "pickup_in_progress", version: 7 },
+    method: "PATCH", body: { status: "pickup_in_progress", company: "Kerry Express", trackingNumber: "TRACK123", version: 7 },
   }));
   expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: "pickup_in_progress" }));
-  expect(submit).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("บริษัทขนส่ง"), { target: { value: "Kerry Express" } });
-  expect(submit).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("เลขติดตามพัสดุ"), { target: { value: " TRACK123 " } });
+  expect(screen.getByLabelText("บริษัทขนส่ง")).toHaveValue("Kerry Express");
+  expect(submit).toBeEnabled();
   fireEvent.click(submit);
   await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/orders/o1/status", expect.objectContaining({
-    method: "PATCH", body: { status: "in_transit", company: "Kerry Express", trackingNumber: "TRACK123", version: 8 },
+    method: "PATCH", body: { status: "in_transit", version: 8 },
   })));
   expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: "in_transit" }));
   expect(screen.getByText("TRACK123")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" })).not.toBeInTheDocument();
 });
-it("provides required company options only during pickup", async () => {
-  current = { ...order, status: "pickup_in_progress" };
+it("reopens pickup with saved details and hands off without re-entry", async () => {
+  current = { ...order, status: "pickup_in_progress", shipping: { ...order.shipping, company: "Flash Express", trackingNumber: "TRACK123" } };
+  open();
+  const handoff = await screen.findByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" });
+  expect(screen.getByText("TRACK123")).toBeInTheDocument();
+  expect(screen.getByLabelText("เลขติดตามพัสดุ")).toHaveValue("TRACK123");
+  fireEvent.click(handoff);
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/orders/o1/status", expect.objectContaining({
+    method: "PATCH", body: { status: "in_transit", version: 7 },
+  })));
+});
+it("older ready_to_ship orders can still request pickup with shipping details", async () => {
+  current = { ...order, status: "ready_to_ship" };
+  open();
+  const pickup = await screen.findByRole("button", { name: "เรียกขนส่ง" });
+  expect(pickup).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("บริษัทขนส่ง"), { target: { value: "Flash Express" } });
+  fireEvent.change(screen.getByLabelText("เลขติดตามพัสดุ"), { target: { value: "TRACK123" } });
+  fireEvent.click(pickup);
+  expect(await screen.findByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" })).toBeEnabled();
+});
+it("edits saved pickup details without handing over the parcel", async () => {
+  current = { ...order, status: "pickup_in_progress", shipping: { ...order.shipping, company: "Flash Express", trackingNumber: "TRACK123" } };
+  const onOrderUpdated = jest.fn();
+  open({ onOrderUpdated });
+  const save = await screen.findByRole("button", { name: "บันทึกการแก้ไข" });
+  expect(save).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("บริษัทขนส่ง"), { target: { value: "J&T Express" } });
+  fireEvent.change(screen.getByLabelText("เลขติดตามพัสดุ"), { target: { value: " EDIT12345 " } });
+  fireEvent.click(save);
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/orders/o1/shipping-details", expect.objectContaining({
+    method: "PATCH", body: { company: "J&T Express", trackingNumber: "EDIT12345", version: 7 },
+  })));
+  expect(await screen.findByText("บันทึกข้อมูลขนส่งเรียบร้อยแล้ว")).toBeInTheDocument();
+  expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: "pickup_in_progress", version: 8 }));
+  expect(screen.getByLabelText("เลขติดตามพัสดุ")).toHaveValue("EDIT12345");
+  expect(save).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" }));
+  await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/orders/o1/status", expect.objectContaining({
+    method: "PATCH", body: { status: "in_transit", version: 8 },
+  })));
+});
+it("invalid edited tracking disables saving and carrier handoff", async () => {
+  current = { ...order, status: "pickup_in_progress", shipping: { ...order.shipping, company: "Flash Express", trackingNumber: "TRACK123" } };
+  open();
+  fireEvent.change(await screen.findByLabelText("เลขติดตามพัสดุ"), { target: { value: "INVALID" } });
+  expect(screen.getByRole("button", { name: "บันทึกการแก้ไข" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "ส่งมอบให้ขนส่งแล้ว" })).toBeDisabled();
+});
+it.each(["in_transit", "delivered", "completed"])("shipping details are read-only after handoff (%s)", async (status) => {
+  current = { ...order, status, shipping: { ...order.shipping, company: "Flash Express", trackingNumber: "TRACK123" } };
+  open();
+  expect(await screen.findByText("TRACK123")).toBeInTheDocument();
+  expect(screen.queryByLabelText("เลขติดตามพัสดุ")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "บันทึกการแก้ไข" })).not.toBeInTheDocument();
+});
+it("provides carrier options while preparing a confirmed order", async () => {
   open();
   const select = await screen.findByLabelText("บริษัทขนส่ง");
   expect(Array.from(select.querySelectorAll("option")).map((o) => o.value)).toEqual([
@@ -70,7 +124,7 @@ it("allows selecting a carrier from the scrollable dropdown", async () => {
   expect(screen.queryByTestId("shipping-company-menu")).not.toBeInTheDocument();
   expect(screen.getByLabelText("บริษัทขนส่ง")).toHaveValue("Flash Express");
 });
-it.each(["ready_to_ship", "pickup_in_progress"])("buyer has no seller controls at %s", async (status) => {
+it.each(["confirmed", "ready_to_ship", "pickup_in_progress"])("buyer has no seller controls at %s", async (status) => {
   current = { ...order, status };
   getStoredUser.mockReturnValue({ id: "buyer", role: "BUYER" });
   open();
@@ -89,6 +143,8 @@ it.each(["ready_to_ship", "pickup_in_progress"])("hold blocks the seller action 
 it("failed pickup remains ready and reports the API error", async () => {
   apiFetch.mockImplementation((url, options) => options?.method ? Promise.reject(new Error("order changed")) : Promise.resolve(current));
   open();
+  fireEvent.change(await screen.findByLabelText("บริษัทขนส่ง"), { target: { value: "Kerry Express" } });
+  fireEvent.change(screen.getByLabelText("เลขติดตามพัสดุ"), { target: { value: "TRACK123" } });
   fireEvent.click(await screen.findByRole("button", { name: "เรียกขนส่ง" }));
   expect(await screen.findByText("order changed")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "เรียกขนส่ง" })).toBeEnabled();
@@ -102,9 +158,8 @@ it("paid orders still require confirmation and preparation before pickup", async
   const onOrderUpdated = jest.fn();
   open({ onOrderUpdated });
   fireEvent.click(await screen.findByRole("button", { name: "ยืนยันรับออเดอร์" }));
-  expect(await screen.findByText(/เตรียมสินค้าเรียบร้อย/)).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "เรียกขนส่ง" })).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("บริษัทขนส่ง")).not.toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "เรียกขนส่ง" })).toBeDisabled();
+  expect(screen.getByLabelText("บริษัทขนส่ง")).toBeInTheDocument();
   expect(onOrderUpdated).toHaveBeenCalledWith(expect.objectContaining({ status: "confirmed" }));
 });
 it("paid-order rejection remains available with a reason", async () => {

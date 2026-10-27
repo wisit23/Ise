@@ -30,7 +30,7 @@ export const STATUS_LABEL = {
   pending_payment: "รอชำระเงิน",
   paid: "ชำระแล้ว รอผู้ขายยืนยัน",
   confirmed: "ผู้ขายกำลังเตรียมสินค้า",
-  ready_to_ship: "เตรียมสินค้าเสร็จแล้ว",
+  ready_to_ship: "ผู้ขายกำลังเตรียมสินค้า",
   pickup_in_progress: "ขนส่งกำลังเข้ารับสินค้า",
   in_transit: "กำลังจัดส่ง",
   delivered: "สินค้าถึงแล้ว รอยืนยันรับ",
@@ -224,7 +224,7 @@ export default function MyOrders({
     } catch (err) {
       setError(err.message || "ยกเลิกคำสั่งซื้อไม่สำเร็จ");
       setCancelOrder(null);
-      // The seller may have started preparation while the dialog was open.
+      // The seller may have confirmed the order while the dialog was open.
       try {
         const fresh = await apiFetch(`/api/orders/${cancelOrder.id}`, { token: getAccessToken() });
         setItems((prev) => prev.map((o) => o.id === fresh.id ? { ...o, ...fresh } : o));
@@ -578,8 +578,8 @@ export default function MyOrders({
         open={Boolean(cancelOrder)}
         title="ยกเลิกคำสั่งซื้อนี้?"
         description={cancelOrder?.status === "paid"
-          ? "ยกเลิกได้ก่อนผู้ขายเริ่มเตรียมสินค้า ระบบจะบันทึกคืนเงินเต็มจำนวนตามระบบชำระเงินจำลอง"
-          : "ยืนยันยกเลิกคำสั่งซื้อก่อนผู้ขายเริ่มเตรียมสินค้า"}
+          ? "ยกเลิกได้ก่อนผู้ขายยืนยันคำสั่งซื้อ ระบบจะบันทึกคืนเงินเต็มจำนวนตามระบบชำระเงินจำลอง"
+          : "ยืนยันยกเลิกคำสั่งซื้อก่อนผู้ขายยืนยันคำสั่งซื้อ"}
         confirmLabel="ยืนยันยกเลิกคำสั่งซื้อ"
         cancelLabel="กลับ"
         busy={cancelling}

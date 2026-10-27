@@ -9,11 +9,17 @@ const prisma = require("../../models/prismaClient");
  */
 async function getCatalogMetrics({ from, to }) {
   const [newListings, soldListings, activeListings] = await Promise.all([
-    prisma.product.count({ where: { createdAt: { gte: from, lt: to } } }),
     prisma.product.count({
-      where: { status: "sold", updatedAt: { gte: from, lt: to } },
+      where: { deletedAt: null, createdAt: { gte: from, lt: to } },
     }),
-    prisma.product.count({ where: { status: "available" } }),
+    prisma.product.count({
+      where: {
+        deletedAt: null,
+        status: "sold",
+        updatedAt: { gte: from, lt: to },
+      },
+    }),
+    prisma.product.count({ where: { deletedAt: null, status: "available" } }),
   ]);
 
   return { newListings, soldListings, activeListings };

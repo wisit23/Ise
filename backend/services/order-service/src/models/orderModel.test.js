@@ -101,14 +101,16 @@ const cancellation = {
   },
 };
 
-test("TC10: cancellation rechecks the current paid status inside its transaction", async (t) => {
-  const { writes } = fixture(t, { status: "confirmed" });
+for (const status of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit"]) {
+test(`buyer cancellation rechecks ${status} inside its transaction`, async (t) => {
+  const { writes } = fixture(t, { status });
   await assert.rejects(
     model.transitionStatusWithProductSync(cancellation),
     (err) => err.status === 409,
   );
   assert.equal(writes.length, 0);
 });
+}
 
 test("TC10: successful payment history also blocks the transactional cancellation", async (t) => {
   const { writes } = fixture(t, { payments: [{ paymentStatus: "paid" }] });
@@ -200,6 +202,15 @@ test("seller confirmation winning the race prevents buyer refund or relisting", 
   await assert.rejects(model.transitionStatusWithProductSync({ ...cancellation, expectedStatuses: ["paid"] }), { status: 409 });
   assert.equal(writes.some((w) => w.payment || w.job), false);
 });
+
+for (const blocked of ["hold", "dispute"]) {
+  test(`paid buyer cancellation rechecks ${blocked} before any writes`, async (t) => {
+    const { writes, order } = fixture(t, { status: "paid", payments: [{ paymentStatus: "paid", holds: blocked === "hold" ? [{ releaseAt: null }] : [] }] });
+    if (blocked === "dispute") order.dispute = { id: "case-1", decision: null };
+    await assert.rejects(model.transitionStatusWithProductSync({ ...cancellation, expectedStatuses: ["paid"] }), (err) => err.status === 409);
+    assert.equal(writes.length, 0);
+  });
+}
 
 test("delivered and completed transitions stamp their time and need no product sync", async (t) => {
   const { writes } = fixture(t, { status: "in_transit" });

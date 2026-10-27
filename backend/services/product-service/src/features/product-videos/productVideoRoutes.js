@@ -5,7 +5,7 @@ const {
   requireCommerceCapability,
   CAPABILITY,
 } = require("@reloop/shared");
-const { videoUpload } = require("../../middleware/upload");
+const { videoUpload, handleUploadError } = require("../../middleware/upload");
 const productVideoController = require("./productVideoController");
 
 const router = Router();
@@ -44,6 +44,7 @@ router.post(
   requireRole("SELLER", "ADMIN"),
   requireCommerceCapability(CAPABILITY.SELLER),
   videoUpload.single("video"),
+  handleUploadError,
   productVideoController.uploadClip,
 );
 

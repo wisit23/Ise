@@ -402,7 +402,7 @@ async function notifyOrderStatusChanged(order, status, { reason, actorId } = {})
           userId,
           type: "ORDER",
           title: "ผู้ซื้อยกเลิกคำสั่งซื้อและคืนเงินแล้ว",
-          message: `คำสั่งซื้อ #${order.referenceCode || order.id} ถูกยกเลิกโดยผู้ซื้อก่อนผู้ขายเริ่มเตรียมสินค้า ระบบบันทึกคืนเงินเต็มจำนวน ฿${amount} แล้ว`,
+          message: `คำสั่งซื้อ #${order.referenceCode || order.id} ถูกยกเลิกโดยผู้ซื้อก่อนผู้ขายยืนยัน ระบบบันทึกคืนเงินเต็มจำนวน ฿${amount} แล้ว`,
           link: userId === order.buyerId ? "/orders" : `/products/${order.productId}`,
           entityId: order.id,
           metadata: { orderId: order.id,
@@ -587,4 +587,3 @@ async function broadcastOrderRealtime(order, action = "updated") {
     console.warn("[chatClient] broadcastOrderRealtime warning:", err.message);
   }
 }
-

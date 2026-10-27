@@ -40,7 +40,7 @@ async function getDisplayNames(userIds) {
         names.set(entry.userId, entry.displayName);
       }
     }
-  } catch (err) {
+  } catch {
     // Non-fatal, gracefully fall back
   }
 

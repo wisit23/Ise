@@ -195,9 +195,8 @@ export default function ChatRoomPage() {
         // If current user is buyer chatting with a seller, fetch seller's auto messages
         const sellerParticipant = conv.participants?.find((p) => p.role === "SELLER");
         const myParticipant = conv.participants?.find((p) => p.userId === currentUser.id);
-        const isBuyerUser =
-          myParticipant?.role === "BUYER" ||
-          (sellerParticipant && sellerParticipant.userId !== currentUser.id);
+        const isBuyerUser = myParticipant?.role === "BUYER" &&
+          sellerParticipant?.userId !== currentUser.id;
         if (isBuyerUser && sellerParticipant?.userId) {
           apiFetch(`/api/auth/users/${sellerParticipant.userId}/auto-messages`, { token })
             .then((items) => {
@@ -511,6 +510,13 @@ export default function ChatRoomPage() {
       .catch(() => {});
   });
 
+  function handleConversationHidden({ conversationId }) {
+    setSidebarConversations((prev) => (prev || []).filter((c) => c.id !== conversationId));
+    setCachedConversations((prev) => (prev || []).filter((c) => c.id !== conversationId));
+    if (conversationId === activeRoomId) router.push("/chat");
+  }
+  useChatSocketEvent("conversation:hidden", handleConversationHidden);
+
   useChatSocketEvent("conversation:deleted", ({ conversationId }) => {
     if (conversationId === activeRoomId) {
       alert("ผลการตัดสินได้รับการรับทราบจากทั้งสองฝ่ายแล้ว ห้องสนทนาข้อพิพาทนี้ถูกปิดและลบออกจากระบบ");
@@ -552,6 +558,15 @@ export default function ChatRoomPage() {
   const resyncLatest = useCallback(async () => {
     const room = activeRoomRef.current;
     if (!room) return;
+    // Recover inbox changes too: hidden/restored rooms may have changed in
+    // another tab while this socket was disconnected.
+    listConversations(tokenRef.current).then((data) => {
+      const items = (data?.items || []).filter((c) =>
+        c.contextType !== "SUPPORT" && !c.contextType?.startsWith("DISPUTE"),
+      );
+      setSidebarConversations(items);
+      setCachedConversations(items);
+    }).catch(() => {});
     try {
       const page = await listMessages(
         room,
@@ -667,6 +682,9 @@ export default function ChatRoomPage() {
   }
 
   const locked = conversation?.status === "LOCKED";
+  const canUseBuyerPrompts = !locked &&
+    conversation?.participants?.some((p) => p.userId === user?.id && p.role === "BUYER") &&
+    conversation?.participants?.some((p) => p.role === "SELLER" && p.userId !== user?.id);
   const productId =
     conversation?.contextType === "PRODUCT"
       ? conversation.contextId
@@ -692,6 +710,7 @@ export default function ChatRoomPage() {
               currentUserId={user?.id}
               activeId={activeRoomId}
               onSelectConversation={handleSelectConversation}
+              onConversationHidden={handleConversationHidden}
               loading={sidebarConversations.length === 0 && !error}
             />
           </div>
@@ -854,7 +873,7 @@ export default function ChatRoomPage() {
                         )?.role
                       }
                       otherName={otherName}
-                      onPromptClick={handleSend}
+                      onPromptClick={canUseBuyerPrompts ? handleSend : undefined}
                       activeRoomId={activeRoomId}
                       prompts={autoPrompts}
                     />
@@ -871,13 +890,7 @@ export default function ChatRoomPage() {
             </div>
 
             {/* Quick Prompts Bar for Buyer (if seller has automated questions) */}
-            {autoPrompts.length > 0 &&
-              !locked &&
-              (conversation?.participants?.find((p) => p.userId === user?.id)?.role ===
-                "BUYER" ||
-                conversation?.participants?.some(
-                  (p) => p.role === "SELLER" && p.userId !== user?.id,
-                )) && (
+            {autoPrompts.length > 0 && canUseBuyerPrompts && (
                 <div className="border-t border-slate-100 bg-emerald-50/50 px-4 py-2">
                   <div className="mx-auto flex max-w-4xl items-center gap-2 overflow-x-auto text-xs">
                     <span className="shrink-0 text-[11px] font-semibold text-emerald-800 flex items-center gap-1">

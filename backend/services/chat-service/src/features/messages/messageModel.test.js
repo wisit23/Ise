@@ -3,6 +3,29 @@ const assert = require("node:assert/strict");
 const prisma = require("../../models/prismaClient");
 const { createAndTouch, countUnread } = require("./messageModel");
 
+test.beforeEach((t) => {
+  const original = prisma.inboxDismissal.deleteMany;
+  prisma.inboxDismissal.deleteMany = t.mock.fn(async () => ({ count: 0 }));
+  t.after(() => { prisma.inboxDismissal.deleteMany = original; });
+});
+
+test("incoming public messages restore only other users' hidden inbox entries", async (t) => {
+  const originalCreate = prisma.message.create;
+  const originalUpdate = prisma.conversation.update;
+  prisma.message.create = async () => ({ id: "message" });
+  prisma.conversation.update = async () => ({});
+  t.after(() => { prisma.message.create = originalCreate; prisma.conversation.update = originalUpdate; });
+  t.mock.method(prisma, "$transaction", async (ops) => Promise.all(ops));
+  await createAndTouch({ conversationId: "room", senderId: "sender", senderRole: "BUYER", type: "TEXT", body: "hello" });
+  const where = prisma.inboxDismissal.deleteMany.mock.calls[0].arguments[0].where;
+  assert.equal(where.conversationId, "room");
+  assert.deepEqual(where.userId, { not: "sender" });
+  assert.ok(where.hiddenAt.lte instanceof Date);
+  await createAndTouch({ conversationId: "room", senderId: "sender", senderRole: "BUYER", type: "TEXT", body: "note", visibility: "INTERNAL" });
+  await createAndTouch({ conversationId: "room", senderId: "system", senderRole: "SYSTEM", type: "SYSTEM", body: "status" });
+  assert.equal(prisma.inboxDismissal.deleteMany.mock.callCount(), 1);
+});
+
 test("createAndTouch updates preview and lastMessageAt for public messages", async () => {
   const origTransaction = prisma.$transaction;
   const origMessageCreate = prisma.message.create;

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ConversationRow from "./ConversationRow";
 import Alert from "../ui/Alert";
-import { otherParticipant, hasUnread } from "../../lib/chat";
+import { otherParticipant, hasUnread, hideConversation } from "../../lib/chat";
+import { getAccessToken } from "../../lib/auth";
 import { useChatSocket, useChatSocketEvent } from "./ChatSocketProvider";
 
 export default function ChatSidebar({
@@ -11,10 +12,28 @@ export default function ChatSidebar({
   currentUserId,
   activeId,
   onSelectConversation,
+  onConversationHidden,
   loading = false,
   error = "",
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [hidingId, setHidingId] = useState(null);
+  const [hideError, setHideError] = useState("");
+
+  async function handleHide(conversationId) {
+    if (hidingId) return;
+    setHidingId(conversationId);
+    setHideError("");
+    try {
+      await hideConversation(conversationId, getAccessToken());
+      onConversationHidden?.({ conversationId });
+      window.dispatchEvent(new CustomEvent("case-chat:read"));
+    } catch (err) {
+      setHideError(err.message || "ซ่อนแชทไม่สำเร็จ กรุณาลองอีกครั้ง");
+    } finally {
+      setHidingId(null);
+    }
+  }
   const [onlineUsers, setOnlineUsers] = useState({});
   const { socket, connected: socketConnected } = useChatSocket();
   const listRef = useRef(null);
@@ -163,9 +182,9 @@ export default function ChatSidebar({
 
       {/* Error / Loading / Content */}
       <div className="flex-1 overflow-y-auto">
-        {error && (
+        {(error || hideError) && (
           <div className="p-4">
-            <Alert tone="error">{error}</Alert>
+            <Alert tone="error">{error || hideError}</Alert>
           </div>
         )}
 
@@ -239,6 +258,8 @@ export default function ChatSidebar({
                     isActive={c.id === activeId}
                     isOnline={isOnline}
                     onSelect={onSelectConversation}
+                    onHide={onConversationHidden ? handleHide : undefined}
+                    hiding={hidingId !== null}
                   />
                 );
               })}

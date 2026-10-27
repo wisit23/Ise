@@ -554,8 +554,8 @@ function createCampaignRepository(prismaClient) {
 
   async function findProduct(productId) {
     const product = await prismaClient.product.findUnique({
-      where: { id: productId },
-      include: { categoryLinks: { include: { category: true } } },
+      where: { deletedAt: null, id: productId },
+      include: { categoryLinks: { where: { deletedAt: null }, include: { category: true } } },
     });
     if (!product) return product;
     const { categoryLinks, ...fields } = product;

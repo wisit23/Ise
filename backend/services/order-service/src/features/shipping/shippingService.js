@@ -133,30 +133,17 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
       return tx.shipping.findUnique({ where: { orderId } });
     });
   }
-  async function advanceShipping({
+  async function saveShipping({
     orderId,
     actorId,
     version,
     status,
     company,
     trackingNumber,
-  }) {
+  }, editing = false) {
     if (!["pickup_in_progress", "in_transit"].includes(status))
       throw badRequest("invalid shipping transition");
     const handoff = status === "in_transit";
-    if (handoff && (
-      typeof company !== "string" ||
-      !company.trim() ||
-      typeof trackingNumber !== "string" ||
-      !trackingNumber.trim()
-    )) {
-      throw badRequest(
-        "company and trackingNumber are required at carrier handoff",
-      );
-    }
-    if (handoff && !TRACKING_NUMBER_PATTERN.test(trackingNumber.trim())) {
-      throw badRequest(TRACKING_NUMBER_MESSAGE);
-    }
     return db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
@@ -170,22 +157,33 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
       if (order.dispute && !order.dispute.deletedAt && !order.dispute.decision)
         throw conflict("cannot update status while order has an open dispute");
       if (!order.shipping) throw conflict("shipping address is missing");
-      const expectedStatus = handoff ? "pickup_in_progress" : "ready_to_ship";
-      if (order.status !== expectedStatus)
+      const expectedStatuses = editing || handoff ? ["pickup_in_progress"] : ["confirmed", "ready_to_ship"];
+      if (!expectedStatuses.includes(order.status))
         throw conflict(`cannot change order from ${order.status} to ${status}`);
+      // Reuse saved details at handoff; legacy pickup orders can fill missing data.
+      const carrier = company ?? (handoff ? order.shipping.company : undefined);
+      const tracking = trackingNumber ?? (handoff ? order.shipping.trackingNumber : undefined);
+      if (typeof carrier !== "string" || !carrier.trim() ||
+          typeof tracking !== "string" || !tracking.trim()) {
+        throw badRequest("company and trackingNumber are required before requesting pickup or handing over the parcel");
+      }
+      if (!TRACKING_NUMBER_PATTERN.test(tracking.trim())) {
+        throw badRequest(TRACKING_NUMBER_MESSAGE);
+      }
+      const shippingDetails = { company: carrier.trim(), trackingNumber: tracking.trim() };
       if (version !== undefined && version !== order.version)
         throw conflict("order was modified — reload and retry");
       const changed = await tx.order.updateMany({
-        where: { id: orderId, version: order.version, status: expectedStatus },
-        data: { status, ...(handoff ? { shippedAt: new Date() } : {}), version: { increment: 1 } },
+        where: { id: orderId, version: order.version, status: order.status },
+        data: { ...(!editing ? { status } : {}), ...(handoff ? { shippedAt: new Date() } : {}), version: { increment: 1 } },
       });
       if (changed.count !== 1)
         throw conflict("order changed or is not awaiting shipment");
       await tx.shipping.update({
         where: { orderId },
         data: {
-          status,
-          ...(handoff ? { company: company.trim(), trackingNumber: trackingNumber.trim() } : {}),
+          ...(!editing ? { status } : {}),
+          ...shippingDetails,
         },
       });
       await tx.orderLog.create({
@@ -194,11 +192,12 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
           buyerId: order.buyerId,
           sellerId: order.sellerId,
           actorId,
-          action: handoff ? "IN_TRANSIT" : "PICKUP_REQUESTED",
+          action: editing ? "SHIPPING_DETAILS_CHANGED" : handoff ? "IN_TRANSIT" : "PICKUP_REQUESTED",
           detail: JSON.stringify({
-            from: expectedStatus,
+            from: order.status,
             to: status,
-            ...(handoff ? { company: company.trim(), trackingNumber: trackingNumber.trim() } : {}),
+            ...shippingDetails,
+            ...(editing ? { before: { company: order.shipping.company, trackingNumber: order.shipping.trackingNumber } } : {}),
           }),
         },
       });
@@ -210,7 +209,11 @@ function createShippingService(db, addresses = resolveSelectedAddress) {
       );
     });
   }
-  return { updateAddress, advanceShipping };
+  return {
+    updateAddress,
+    advanceShipping: (input) => saveShipping(input),
+    updateDetails: (input) => saveShipping({ ...input, status: "pickup_in_progress" }, true),
+  };
 }
 
 module.exports = { createShippingService, normalizeAddress, resolveSelectedAddress };

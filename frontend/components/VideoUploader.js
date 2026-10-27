@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { uploadProductClip, mediaUrl } from "../lib/api";
+import { validateListingVideo } from "../lib/listingVideo";
 
 /** Single-video dropzone for swipe-feed clips. Files are uploaded through the
  * product-video endpoint so product-service owns and persists them. */
@@ -18,6 +19,7 @@ export default function VideoUploader({ value, onChange, token }) {
     setError("");
     setUploading(true);
     try {
+      await validateListingVideo(file);
       const uploaded = await uploadProductClip(file, token);
       onChange(uploaded.url);
     } catch (err) {
@@ -83,7 +85,10 @@ export default function VideoUploader({ value, onChange, token }) {
             ? "กำลังอัปโหลด..."
             : "ลากไฟล์วิดีโอมาวาง หรือคลิกเพื่อเลือกจากเครื่อง"}
         </p>
-        <p className="mt-1 text-xs text-gray-500">MP4, MOV — สูงสุด 20MB</p>
+        <p className="mt-1 text-xs text-gray-500">
+          MP4, MOV — ไม่เกิน 60 วินาที, 100 MB และกว้าง × สูงไม่เกิน 1080 × 1080
+          พิกเซล
+        </p>
       </div>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </div>

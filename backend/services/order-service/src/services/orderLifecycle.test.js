@@ -31,7 +31,7 @@ const allowed = [
   ["seller", "paid", "cancelled"],
   ["seller", "confirmed", "cancelled"],
   ["seller", "ready_to_ship", "cancelled"],
-  ["seller", "confirmed", "ready_to_ship"],
+  ["seller", "confirmed", "pickup_in_progress"],
   ["seller", "ready_to_ship", "pickup_in_progress"],
   ["seller", "pickup_in_progress", "in_transit"],
   ["buyer", "delivered", "completed"],
@@ -49,6 +49,7 @@ for (const [actor, from, to] of allowed) {
 }
 
 const rejected = [
+  ["seller", "confirmed", "ready_to_ship", 400],
   // The seller can never close the sale on the buyer's behalf.
   ["seller", "delivered", "completed", 403],
   ["seller", "in_transit", "completed", 403],
@@ -285,7 +286,7 @@ test("PATCH: buyer cannot complete an order that was never paid", async (t) => {
 });
 
 test("PATCH: seller requests pickup then hands off through the transactional shipping service", async (t) => {
-  const current = order("ready_to_ship", { shipping: { status: "pending", addressId: "addr", addressSnapshot: { recipientName: "Buyer" } } });
+  const current = order("confirmed", { shipping: { status: "pending", addressId: "addr", addressSnapshot: { recipientName: "Buyer" } } });
   const { app, transitions } = controllerApp(t, current, "seller");
   const logs = [];
   let transactions = 0;
@@ -307,14 +308,14 @@ test("PATCH: seller requests pickup then hands off through the transactional shi
       orderLog: { create: async ({ data }) => logs.push(data) },
     });
   });
-  const pickup = await request(app).patch("/order-1/status").send({ status: "pickup_in_progress", version: 4 });
+  const missingTracking = await request(app).patch("/order-1/status").send({ status: "pickup_in_progress", version: 4 });
+  assert.equal(missingTracking.status, 400);
+  const pickup = await request(app).patch("/order-1/status").send({ status: "pickup_in_progress", version: 4, company: " Carrier ", trackingNumber: " TRK12345 " });
   assert.equal(pickup.status, 200, JSON.stringify(pickup.body));
   assert.equal(pickup.body.shipping.status, "pickup_in_progress");
   assert.equal(pickup.body.shippedAt, undefined);
-  const missingTracking = await request(app).patch("/order-1/status").send({ status: "in_transit", version: 5 });
-  assert.equal(missingTracking.status, 400);
-  assert.equal(transactions, 1);
-  const handoff = await request(app).patch("/order-1/status").send({ status: "in_transit", version: 5, company: " Carrier ", trackingNumber: " TRK12345 " });
+  assert.equal(pickup.body.shipping.trackingNumber, "TRK12345");
+  const handoff = await request(app).patch("/order-1/status").send({ status: "in_transit", version: 5 });
   assert.equal(handoff.status, 200, JSON.stringify(handoff.body));
   assert.equal(handoff.body.status, "in_transit");
   assert.equal(handoff.body.shipping.status, "in_transit");
@@ -322,7 +323,7 @@ test("PATCH: seller requests pickup then hands off through the transactional shi
   assert.equal(handoff.body.shipping.trackingNumber, "TRK12345");
   assert.deepEqual(handoff.body.shipping.addressSnapshot, { recipientName: "Buyer" });
   assert.ok(handoff.body.shippedAt);
-  assert.equal(transactions, 2);
+  assert.equal(transactions, 3);
   assert.deepEqual(logs.map((log) => log.action), ["PICKUP_REQUESTED", "IN_TRANSIT"]);
   assert.equal(transitions.length, 0, "shipping uses its atomic service, not a status-only update");
   assert.equal(chat.notifyOrderStatusChanged.mock.calls[1].arguments[0].shipping.trackingNumber, "TRK12345");
@@ -364,7 +365,7 @@ test("PATCH: buyer cancels a paid order before preparation using refund and reli
   assert.equal(chat.notifyOrderStatusChanged.mock.calls[0].arguments[2].actorId, "buyer");
 });
 
-for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit", "disputed"]) {
+for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit", "delivered", "completed", "disputed"]) {
   test(`PATCH: buyer cancellation is rejected after preparation or hold (${state})`, async (t) => {
     const { app, transitions } = controllerApp(t, order(state), "buyer");
     const res = await request(app).patch("/order-1/status").send({ status: "cancelled" });
@@ -373,12 +374,14 @@ for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_tra
   });
 }
 
-test("PATCH: a held paid order cannot be cancelled by the buyer", async (t) => {
-  const { app, transitions } = controllerApp(t, order("paid", { payoutHeld: true }), "buyer");
+for (const extra of [{ payoutHeld: true }, { paymentSimulationStatus: "ON_HOLD" }, { dispute: { id: "case-1", decision: null } }]) {
+test(`PATCH: buyer cancellation respects hold or dispute ${JSON.stringify(extra)}`, async (t) => {
+  const { app, transitions } = controllerApp(t, order("paid", extra), "buyer");
   const res = await request(app).patch("/order-1/status").send({ status: "cancelled" });
   assert.equal(res.status, 409);
   assert.equal(transitions.length, 0);
 });
+}
 
 test("PATCH: a held order cannot be accepted", async (t) => {
   const { app, transitions } = controllerApp(t, order("paid", { payoutHeld: true }), "seller");

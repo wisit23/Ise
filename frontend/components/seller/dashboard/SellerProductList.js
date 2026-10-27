@@ -242,7 +242,7 @@ export default function SellerProductList({
                   </td>
                   {(() => {
                     const awaitingOrder = (orders || []).find(
-                      (o) => o.productId === p.id && ["ready_to_ship", "pickup_in_progress"].includes(o.status),
+                      (o) => o.productId === p.id && ["confirmed", "ready_to_ship", "pickup_in_progress"].includes(o.status),
                     );
                     const paidOrder = (orders || []).find(
                       (o) => o.productId === p.id && o.status === "paid",
@@ -254,7 +254,7 @@ export default function SellerProductList({
                           {awaitingOrder && p.status !== "removed" && (
                             <button
                               type="button"
-                              aria-label={awaitingOrder.status === "ready_to_ship" ? "เรียกขนส่ง" : "ส่งมอบให้ขนส่งแล้ว"}
+                              aria-label={awaitingOrder.status === "pickup_in_progress" ? "ส่งมอบให้ขนส่งแล้ว" : "เรียกขนส่ง"}
                               onClick={() => {
                                 setSelectedOrderForShipping(awaitingOrder);
                                 setShippingModalOpen(true);
@@ -265,7 +265,7 @@ export default function SellerProductList({
                               <span className="material-symbols-outlined text-[15px]">
                                 local_shipping
                               </span>
-                              <span>{awaitingOrder.status === "ready_to_ship" ? "เรียกขนส่ง" : "ส่งมอบให้ขนส่งแล้ว"}</span>
+                              <span>{awaitingOrder.status === "pickup_in_progress" ? "ส่งมอบให้ขนส่งแล้ว" : "เรียกขนส่ง"}</span>
                             </button>
                           )}
                           {!awaitingOrder && paidOrder && p.status !== "removed" && (
@@ -374,7 +374,7 @@ export default function SellerProductList({
         title="ยืนยันการลบสินค้า"
         description={
           deleteProductTarget
-            ? `คุณแน่ใจว่าต้องการลบสินค้า "${deleteProductTarget.title}" ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`
+            ? `คุณแน่ใจว่าต้องการลบสินค้า "${deleteProductTarget.title}" ใช่หรือไม่? สินค้านี้จะไม่แสดงในร้านและรายการขายของคุณ`
             : ""
         }
         confirmLabel="ยืนยันการลบ"

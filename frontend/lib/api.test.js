@@ -5,8 +5,9 @@ import {
   submitKyc,
   fetchAuthedBlobUrl,
   getMarketingUserAnalytics,
+  refreshAccessToken,
 } from "./api";
-import { saveSession, getAccessToken, getRefreshToken } from "./auth";
+import { saveSession, clearSession, getAccessToken, getRefreshToken } from "./auth";
 
 function response(status, data) {
   return { status, ok: status < 400, json: async () => data };
@@ -33,6 +34,16 @@ beforeEach(() => {
 });
 
 afterEach(() => jest.restoreAllMocks());
+
+test("a background refresh cannot restore a session after logout", async () => {
+  let complete;
+  fetch.mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
+  const pending = refreshAccessToken();
+  clearSession();
+  complete(response(200, { accessToken: "late-token" }));
+  await expect(pending).resolves.toBeNull();
+  expect(getAccessToken()).toBeNull();
+});
 
 test('HTTP conflict retains machine-readable status and code', async () => {
   fetch.mockResolvedValue(response(409,{error:'Case changed',code:'CASE_CONFLICT'}));

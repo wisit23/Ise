@@ -41,6 +41,14 @@ model Conversation {
 // Embedded document (Mongo-native), not a separate collection — a
 // conversation's participant list is always read/written together with the
 // conversation itself, never queried independently.
+// Per-user inbox preference; messages and room membership remain intact.
+model InboxDismissal {
+  id             String   @id @map("_id")
+  conversationId String
+  userId         String
+  hiddenAt       DateTime
+}
+
 type Participant {
   userId     String
   role       String // BUYER | SELLER | AGENT | ADMIN | SYSTEM
@@ -83,6 +91,7 @@ model Message {
 }
 
 model Notification {
+  deletedAt DateTime? @map("deleted_at")
   id        String    @id @default(auto()) @map("_id") @db.ObjectId
   userId    String    // Recipient userId, or "ALL" for broadcast
   type      String    // DISCOUNT | AUCTION | ORDER | DISPUTE | SYSTEM

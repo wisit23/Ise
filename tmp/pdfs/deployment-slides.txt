@@ -1,0 +1,292 @@
+--- PAGE 1 ---
+Design Part: 
+Deployment Diagram
+05506235
+Digital Innovation and Technology 
+Management in Disruptive Era
+รศ.ดร.วรางคณา กิ้มปาน
+ภาควิชาวิทยาการคอมพิวเตอร์ สจล.
+
+--- PAGE 2 ---
+2
+Unified Modeling Language: UML
+•
+https://www.visual-paradigm.com/guide/uml-unified-modeling-
+language/behavior-vs-structural-diagram/
+
+--- PAGE 3 ---
+3
+❖Deployment diagrams are crucial for modern system 
+design. 
+They 
+provide 
+a 
+clear, 
+concise 
+visual 
+representation 
+of 
+your 
+system's 
+physical 
+architecture, ensuring everyone understands where 
+components live and how they interact.
+❖Deployment 
+diagrams 
+model 
+the 
+physical 
+architecture of a system. It shows the relationships 
+between the software and hardware components in 
+the system and the physical distribution of the 
+processing.
+Deployment Diagrams
+
+--- PAGE 4 ---
+4
+Deployment Diagrams (2)
+Clearly visualize how components 
+interact in a live environment.
+Structure of 
+Run-Time System
+Map hardware elements and 
+communication links.
+Hardware 
+Implementation
+Essential for strategic system 
+design and evolution.
+Architecture Planning
+
+--- PAGE 5 ---
+5
+Deployment Diagrams (3)
+❑Deployment diagrams focus on the configuration of 
+the runtime processing nodes and their components 
+and artifacts, we can use this type of diagram to 
+assess the implications of distribution and resource 
+allocations.
+❑Deployment diagrams are distinct from component 
+diagrams. A deployment diagram shows components 
+and artifacts in relation to where they are used in 
+the deployed system. A component diagram defines 
+the composition of components and artifacts in the 
+system.
+
+--- PAGE 6 ---
+6
+Example
+https://www.uml-diagrams.org/deployment-diagrams-overview.htm
+
+--- PAGE 7 ---
+7
+Specification Level Deployment Diagram
+https://www.uml-diagrams.org/deployment-diagrams-overview.html
+❖Specification level (also called type level) deployment diagram shows 
+some overview of deployment of artifacts to deployment targets, 
+without referencing specific instances of artifacts or nodes.
+
+--- PAGE 8 ---
+8
+Instance Level Deployment Diagram
+https://www.uml-diagrams.org/deployment-diagrams-overview.html
+❖Instance level deployment diagram shows deployment of instances 
+of artifacts to specific instances of deployment targets. 
+❖It could be used for example to show differences in deployments 
+to development, staging or production environments with the 
+names/ids of specific deployment servers or devices.
+❖In the example below, web application is deployed to the 
+application server wsrv-01 and several database schemas - to the 
+database server dbsrv-14.
+
+--- PAGE 9 ---
+9
+Instance Level Deployment Diagram (2)
+https://www.uml-diagrams.org/deployment-diagrams-overview.html
+
+--- PAGE 10 ---
+10
+Model Elements in Deployment Diagrams
+❖Nodes
+  
+In UML models, nodes are model elements that 
+represent the computational resources of a system, 
+such as personal computers, sensors, printing devices, 
+or servers. Nodes can be connected by communication 
+paths to describe network structures.
+https://www.ibm.com/docs/en/rational-soft-arch/9.7.0?topic=diagrams-
+deployment
+
+--- PAGE 11 ---
+11
+Model Elements in Deployment Diagrams (2)
+❖Stereotyped nodes
+  
+  A node can be stereotyped to represent a specific 
+   type of hardware. Assigning a stereotype to a node and   
+   replaces the default cube shape with a shape that 
+   resembles the system component.
+
+--- PAGE 12 ---
+12
+Model Elements in Deployment Diagrams (3)
+❖Node instances
+       In UML modeling, a node 
+instance is a model element that 
+represents an instantiation, or 
+actual occurrence, of a node. 
+Node instances are based on 
+existing nodes.
+❖Nested nodes
+  
+  Nest nodes within nodes to 
+   represent the hardware and 
+   software components in a system 
+   that contains other components.
+
+--- PAGE 13 ---
+13
+Model Elements in Deployment Diagrams (4)
+❖Component
+ 
+    Represent software modules or artifacts that are deployed 
+    onto nodes, including executable files, libraries, databases, and 
+    configuration files.
+https://www.geeksforgeeks.org/software-engineering/component-based-diagram/
+
+--- PAGE 14 ---
+14
+Model Elements in Deployment Diagrams (5)
+❖Artifacts
+ 
+    Physical files that 
+are placed on nodes 
+represent the actual    
+implementation of 
+software components. 
+These can include 
+executable files, scripts, 
+databases, and more.
+https://www.uml-diagrams.org/artifact.htm
+
+--- PAGE 15 ---
+15
+Model Elements in Deployment Diagrams (6)
+❖Associations
+ 
+ 
+Show relationships between nodes and components, signifying
+    that a component is deployed on a particular node, thus mapping   
+    software components to physical nodes.
+
+--- PAGE 16 ---
+16
+Model Elements in Deployment Diagrams (7)
+❖Deployment Specification 
+ 
+ This outlines the setup and characteristics of nodes and 
+    components, including hardware specifications, software settings, 
+    and communication protocols.
+https://sparxsystems.com/enterprise_architect_user_guide/17.1/modeling_languages/d
+eploymentspec.html
+o A Deployment Specification specifies 
+parameters guiding deployment of an 
+artifact, as is necessary with most 
+hardware and software technologies. 
+o An instance of this specification 
+specifies the values for the 
+parameters; a single specification can 
+be instantiated for multiple artifacts.
+
+--- PAGE 17 ---
+17
+Model Elements in Deployment Diagrams (8)
+❖Communication Paths
+      
+ Represent channels or connections facilitating 
+    communication between nodes and components and includes 
+    network connections, communication protocols, etc.
+
+--- PAGE 18 ---
+18
+Model Elements in Deployment Diagrams (9)
+❖Manifestation
+      An abstraction relationship which represents concrete physical 
+    rendering (implementation) of one or more model elements by 
+    an artifact or utilization of the model elements in the construction 
+    or generation of the artifact. An artifact manifests one or more 
+    model elements.
+      
+https://www.uml-diagrams.org/deployment-diagrams.html#google_vignette
+❑In UML 1.x, the concept of manifestation was referred to 
+as implementation and annotated as «implement». Since this 
+was one of the many uses of the word "implementation" this 
+has been replaced in UML 2.x by «manifest».
+
+--- PAGE 19 ---
+19
+Model Elements in Deployment Diagrams (10)
+EJB component UserService and skeleton of web services
+are manifested (implemented) by EJB module user-
+service.jar artifact
+https://www.uml-diagrams.org/deployment-diagrams.html#google_vignette
+
+--- PAGE 20 ---
+20
+Deployment Patterns
+Client-Server Deployment: Illustrates the connection between client 
+applications and server nodes in a client-server architecture.
+https://guides.visual-paradigm.com/modeling-a-client-server-system-using-uml-
+packages-and-deployment-diagram/
+
+--- PAGE 21 ---
+21
+Deployment Patterns (2)
+https://www.geeksforgeeks.org/computer-networks/three-tier-client-server-
+architecture-in-distributed-system
+Three-Tier Architecture: Shows the distribution of presentation, 
+application logic, and data storage components across different nodes.
+
+--- PAGE 22 ---
+22
+Deployment Patterns (3)
+Microservices Architecture: Depicts how individual microservices are 
+deployed on separate nodes or containers.
+https://www.geeksforgeeks.org/system-design/microservices/
+
+--- PAGE 23 ---
+23
+Deployment Patterns (4)
+https://www.geeksforgeeks.org/system-design/microservices/
+
+--- PAGE 24 ---
+24
+Deployment Patterns (5)
+Containerization: Displays the deployment of different containers on host 
+machines using technologies like Docker.
+https://www.geeksforgeeks.org/system-design/containerization-
+architecture-in-system-design/
+
+--- PAGE 25 ---
+25
+Deployment Patterns (6)
+Cloud Deployment: Illustrates the distribution of components across 
+various cloud services or regions in a cloud environment.
+https://dev.to/simonbrown/cloud-architecture-diagrams-3pbm
+
+--- PAGE 26 ---
+26
+Example (2)
+❖One node represents the client’s Android device. The components represent the 
+software installed on these devices, with the banking application being the 
+specific component on the Android device.
+❖
+The diagram also shows how the user connects to the banking server through 
+the web.
+❖This means the user opens the banking app on their Android device, which then 
+talks to the application server online to carry out tasks like checking account 
+balances or transferring money.
+https://www.geeksforgeeks.org/system-design/deployment-
+diagram-unified-modeling-languageuml
+
+--- PAGE 27 ---
+Let’s Practice

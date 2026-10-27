@@ -74,6 +74,7 @@ model User {
 // Delivery addresses shown on the authenticated profile page. They live in
 // auth-service because they are private user profile data, not order data.
 model UserAddress {
+  deletedAt DateTime? @map("deleted_at")
   id            String   @id @default(uuid())
   userId        String   @map("user_id")
   recipientName String   @map("recipient_name")
@@ -91,6 +92,7 @@ model UserAddress {
 
   @@index([userId])
   @@index([userId, isDefault])
+  @@index([userId, deletedAt])
   @@map("user_addresses")
 }
 
@@ -442,6 +444,7 @@ model ShopChangeRequestItem {
 }
 
 model AutoMessage {
+  deletedAt DateTime? @map("deleted_at")
   id          String        @id @default(uuid()) @map("message_id")
   userId      String        @map("user_id")
   messageText String        @map("message_text")

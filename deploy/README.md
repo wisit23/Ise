@@ -1,5 +1,12 @@
 # Kubernetes สำหรับ RE-LOOP (ฝึกบนเครื่อง)
 
+หน้านี้เป็นคู่มือชุด **development** ใน `deploy/k8s`.
+สำหรับ **production images บนเครื่องเดียวผ่าน kind** ให้ใช้
+[production-local](production-local/README.md); สำหรับ K3s บน Cloud VM เดิมให้ใช้
+[production-cloud](production-cloud/README.md). ทั้งสองชุดอ่าน `.env` ที่ root และแยก migration จาก startup
+ตรวจข้อจำกัดด้าน storage, HTTPS และ backup ในคู่มือก่อนใช้งานจริง ไม่ใช้ขั้นตอน development ด้านล่างแทน
+เส้นทาง Docker Compose production เดิมยังใช้ `deploy.sh` ที่ root ตาม [production.md](production.md).
+
 ชุดนี้เตรียมไฟล์ไว้เท่านั้น ยังไม่ได้ build image, สร้าง cluster หรือ deploy
 คำสั่งด้านล่างเป็นบทเรียนให้คุณเลือกทำเมื่อพร้อม จาก PowerShell ที่โฟลเดอร์ราก repo `C:\ise\Ise`
 

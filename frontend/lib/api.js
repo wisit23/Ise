@@ -19,7 +19,7 @@ export function apiUrl(path) {
 // refresh rejects the session, log out; keep it during temporary Auth outages.
 let refreshPromise = null;
 
-async function refreshAccessToken() {
+export async function refreshAccessToken() {
   if (!refreshPromise) {
     refreshPromise = doRefresh().finally(() => {
       refreshPromise = null;
@@ -47,6 +47,8 @@ async function doRefresh() {
       );
     }
     if (!res.ok) return null;
+    // A refresh started by a live update must not restore a logged-out session.
+    if (getRefreshToken() !== refreshToken) return null;
     setAccessToken(data.accessToken);
     return data.accessToken;
   } catch (error) {

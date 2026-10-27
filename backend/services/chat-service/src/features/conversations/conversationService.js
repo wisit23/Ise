@@ -13,13 +13,15 @@ const DUPLICATE_KEY_ERROR = "P2002";
 
 /**
  * create-or-open for a PRODUCT-context conversation (Buyer contacting a
- * Seller about a listing). The buyer is always the caller (`req.userId`) —
- * the client never gets to say who the buyer is. The seller is always
+ * Seller about a listing). With an order, either party can open the room;
+ * the buyer is resolved from order-service. Otherwise the caller is the buyer.
+ * The client never gets to say who the buyer is. The seller is always
  * resolved server-side from product-service — the client never gets to say
  * who the seller is either, so a forged `sellerId` in the request body has
  * no effect at all (it's simply never read).
  */
-async function createOrOpenProductConversation({ productId, buyerId, orderId }) {
+async function createOrOpenProductConversation({ productId, buyerId: callerId, orderId }) {
+  let buyerId = callerId;
   if (!productId) throw badRequest("productId is required");
   if (orderId !== undefined && (typeof orderId !== "string" || !orderId.trim())) {
     throw badRequest("orderId must be a non-empty string");
@@ -32,7 +34,7 @@ async function createOrOpenProductConversation({ productId, buyerId, orderId }) 
   if (!sellerId) {
     throw new AppError(502, "product-service returned no sellerId");
   }
-  if (sellerId === buyerId) {
+  if (sellerId === callerId && orderId === undefined) {
     throw badRequest("Cannot start a conversation about your own listing");
   }
 
@@ -42,12 +44,14 @@ async function createOrOpenProductConversation({ productId, buyerId, orderId }) 
     const order = await orderClient.getOrder(orderId);
     if (
       !order ||
-      order.buyerId !== buyerId ||
+      !order.buyerId ||
+      (order.buyerId !== callerId && order.sellerId !== callerId) ||
       order.productId !== productId ||
       order.sellerId !== sellerId
     ) {
-      throw new AppError(403, "คุณไม่มีสิทธิ์ติดต่อผู้ขายผ่านคำสั่งซื้อนี้");
+      throw new AppError(403, "คุณไม่มีสิทธิ์เปิดแชทผ่านคำสั่งซื้อนี้");
     }
+    buyerId = order.buyerId;
   }
 
   const contextKey = buildContextKey("PRODUCT", { productId, buyerId });
@@ -64,7 +68,7 @@ async function createOrOpenProductConversation({ productId, buyerId, orderId }) 
       contextType: "PRODUCT",
       contextId: productId,
       contextKey,
-      createdBy: buyerId,
+      createdBy: callerId,
       participants: [
         {
           userId: buyerId,

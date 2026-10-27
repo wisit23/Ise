@@ -2,6 +2,9 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import SellerOrderTracker from "./SellerOrderTracker";
 import { apiFetch } from "../../../lib/api";
 
+const mockPush = jest.fn();
+jest.mock("next/navigation", () => ({ useRouter: () => ({ push: mockPush }) }));
+
 jest.mock("../../../lib/api", () => ({ apiFetch: jest.fn() }));
 jest.mock("../../../lib/auth", () => ({
   getAccessToken: () => "token",
@@ -29,6 +32,25 @@ const mockOrders = [
 ];
 
 describe("SellerOrderTracker", () => {
+  it("opens the selected order buyer's chat directly", async () => {
+    apiFetch.mockResolvedValue({ id: "buyer-room" });
+    render(<SellerOrderTracker orders={[{ ...mockOrders[0], productId: "product-1" }]} />);
+    fireEvent.click(screen.getByRole("button", { name: /แชท/ }));
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/chat/buyer-room"));
+    expect(apiFetch).toHaveBeenCalledWith("/api/chat/conversations", {
+      method: "POST", token: "token",
+      body: { contextType: "PRODUCT", productId: "product-1", orderId: mockOrders[0].id },
+    });
+  });
+
+  it("shows chat failures and lets the seller retry", async () => {
+    apiFetch.mockRejectedValueOnce(new Error("ไม่สามารถตรวจสอบคำสั่งซื้อได้"));
+    render(<SellerOrderTracker orders={[{ ...mockOrders[0], productId: "product-1" }]} />);
+    fireEvent.click(screen.getByRole("button", { name: /แชท/ }));
+    expect(await screen.findByText("ไม่สามารถตรวจสอบคำสั่งซื้อได้")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /แชท/ })).toBeEnabled();
+  });
+
   it("renders order list with regular and auction badges", () => {
     render(<SellerOrderTracker orders={mockOrders} />);
 
@@ -95,7 +117,8 @@ describe("SellerOrderTracker", () => {
 
     expect(screen.queryByText("ยืนยันรับออเดอร์")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "จัดส่งสินค้า" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /เตรียมสินค้าเรียบร้อย/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "เรียกขนส่ง" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /เตรียมสินค้าเรียบร้อย/ })).not.toBeInTheDocument();
 
     rerender(<SellerOrderTracker orders={[{ ...paidOrder[0], status: "ready_to_ship" }]} />);
     expect(screen.getByRole("button", { name: "เรียกขนส่ง" })).toBeInTheDocument();
@@ -104,8 +127,8 @@ describe("SellerOrderTracker", () => {
     expect(screen.queryByRole("button", { name: "เรียกขนส่ง" })).not.toBeInTheDocument();
   });
 
-  it("marks a confirmed order as packed through the lifecycle status", async () => {
-    apiFetch.mockResolvedValue({ id: "o2", status: "ready_to_ship" });
+  it("opens shipping details from confirmed without making a status-only request", async () => {
+    apiFetch.mockResolvedValue({ id: "o2", sellerId: "seller", status: "confirmed" });
     const onOrderUpdated = jest.fn();
     render(
       <SellerOrderTracker
@@ -113,14 +136,11 @@ describe("SellerOrderTracker", () => {
         onOrderUpdated={onOrderUpdated}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /เตรียมสินค้าเรียบร้อย/ }));
-    await waitFor(() =>
-      expect(apiFetch).toHaveBeenCalledWith(
-        "/api/orders/o2/status",
-        expect.objectContaining({ method: "PATCH", body: { status: "ready_to_ship" } }),
-      ),
-    );
-    expect(onOrderUpdated).toHaveBeenCalledWith({ id: "o2", status: "ready_to_ship" });
+    fireEvent.click(screen.getByRole("button", { name: "เรียกขนส่ง" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByLabelText("บริษัทขนส่ง")).toBeInTheDocument();
+    expect(apiFetch.mock.calls.some(([, options]) => options?.method === "PATCH")).toBe(false);
+    expect(onOrderUpdated).not.toHaveBeenCalled();
   });
 
   it("nothing offers completion to the seller", () => {

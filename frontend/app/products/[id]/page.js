@@ -914,21 +914,15 @@ export default function ProductDetailPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={() =>
-                    sellerActiveOrder.status === "confirmed"
-                      ? router.push("/seller/dashboard")
-                      : setShippingModalOpen(true)
-                  }
+                  onClick={() => setShippingModalOpen(true)}
                   className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold text-xs shadow-sm transition active:scale-95"
                 >
                   <span className="material-symbols-outlined text-[16px]">
                     local_shipping
                   </span>
                   <span>
-                    {sellerActiveOrder.status === "confirmed"
-                      ? "จัดการคำสั่งซื้อ"
-                      : sellerActiveOrder.status === "ready_to_ship"
-                        ? "เรียกขนส่ง"
+                    {["confirmed", "ready_to_ship"].includes(sellerActiveOrder.status)
+                      ? "เรียกขนส่ง"
                         : sellerActiveOrder.status === "pickup_in_progress"
                           ? "ส่งมอบให้ขนส่งแล้ว"
                           : "ดูรายละเอียดการจัดส่ง"}

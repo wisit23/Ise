@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
 import ChatInboxPage from "./page";
 import { apiFetch } from "../../lib/api";
 import { getAccessToken, getStoredUser } from "../../lib/auth";
@@ -71,6 +71,31 @@ function createFakeSocket() {
 }
 
 describe("ChatInboxPage", () => {
+  it("hides a chat with the cross and restores it on incoming real-time activity", async () => {
+    getAccessToken.mockReturnValue("token");
+    getStoredUser.mockReturnValue({ id: "me" });
+    const socket = createFakeSocket();
+    mockSocketState.socket = socket;
+    mockSocketState.connected = true;
+    const room = { id: "room", contextType: "PRODUCT", participants: [
+      { userId: "me", role: "BUYER" }, { userId: "seller", role: "SELLER", displayName: "ร้านทดสอบ" },
+    ] };
+    let hidden = false;
+    apiFetch.mockImplementation(async (path) => {
+      if (path.endsWith("/hide")) { hidden = true; return {}; }
+      return { items: hidden ? [] : [room] };
+    });
+    render(<ChatInboxPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "ซ่อนแชท ร้านทดสอบ" }));
+    await waitFor(() => expect(screen.queryByText("ร้านทดสอบ")).not.toBeInTheDocument());
+    expect(apiFetch).toHaveBeenCalledWith("/api/chat/conversations/room/hide", { method: "POST", token: "token" });
+    hidden = false;
+    act(() => socket._trigger("conversation:activity", { conversationId: "room" }));
+    expect(await screen.findByText("ร้านทดสอบ")).toBeInTheDocument();
+    act(() => socket._trigger("conversation:hidden", { conversationId: "room" }));
+    expect(screen.queryByText("ร้านทดสอบ")).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     apiFetch.mockReset();
     getAccessToken.mockReset();

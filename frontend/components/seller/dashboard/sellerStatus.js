@@ -23,8 +23,8 @@ export const PRODUCT_STATUS_STYLE = {
 export const ORDER_STATUS_LABEL = {
   pending_payment: "รอลูกค้าชำระเงิน",
   paid: "รอยืนยันคำสั่งซื้อ",
-  confirmed: "ต้องเตรียมสินค้า",
-  ready_to_ship: "พร้อมเรียกขนส่ง",
+  confirmed: "ผู้ขายกำลังเตรียมสินค้า",
+  ready_to_ship: "ผู้ขายกำลังเตรียมสินค้า",
   pickup_in_progress: "ขนส่งกำลังเข้ารับสินค้า",
   in_transit: "อยู่ระหว่างการขนส่ง",
   delivered: "ส่งถึงผู้ซื้อแล้ว",

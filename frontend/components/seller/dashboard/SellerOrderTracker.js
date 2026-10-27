@@ -5,6 +5,7 @@ import { matchesReference } from "../../../lib/referenceCodes";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ContactSellerButton from "../../chat/ContactSellerButton";
 import EmptyState from "../../ui/EmptyState";
 import Modal from "../../ui/Modal";
 import OrderShippingModal from "../../orders/OrderShippingModal";
@@ -27,7 +28,6 @@ const ALL_STATUSES = [
   { value: "pending_payment", label: "รอชำระเงิน" },
   { value: "paid", label: "รอยืนยันคำสั่งซื้อ" },
   { value: "confirmed", label: "ต้องเตรียมสินค้า" },
-  { value: "ready_to_ship", label: "พร้อมเรียกขนส่ง" },
   { value: "pickup_in_progress", label: "ขนส่งกำลังเข้ารับสินค้า" },
   { value: "in_transit", label: "อยู่ระหว่างการขนส่ง" },
   { value: "delivered", label: "ส่งถึงผู้ซื้อแล้ว" },
@@ -87,23 +87,6 @@ export default function SellerOrderTracker({
     return () => clearTimeout(timer);
   }, [highlightOrderId, propStatusFilter, highlightedReference]);
 
-  async function prepareOrder(order) {
-    if (actionLoading) return;
-    setActionLoading(true);
-    try {
-      const updated = await apiFetch(`/api/orders/${order.id}/status`, {
-        method: "PATCH",
-        token: getAccessToken(),
-        body: { status: SELLER_NEXT_STEP.confirmed.status },
-      });
-      onOrderUpdated?.(updated);
-    } catch (err) {
-      alert(err.message || "อัปเดตคำสั่งซื้อไม่สำเร็จ");
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
   async function handleRejectOrder() {
     if (!selectedOrderForReject || actionLoading) return;
     setActionLoading(true);
@@ -131,7 +114,7 @@ export default function SellerOrderTracker({
       if (highlightOrderId && o.id === highlightOrderId) return true;
       if (!statusFilter) return true;
       if (statusFilter === "disputed") return isOrderDisputed(o);
-      return o.status === statusFilter;
+      return o.status === statusFilter || (statusFilter === "confirmed" && o.status === "ready_to_ship");
     })
     .filter((o) => {
       if (orderTypeFilter === "all") return true;
@@ -406,20 +389,7 @@ export default function SellerOrderTracker({
                           </button>
                         </>
                       )}
-                      {o.status === "confirmed" && (
-                        <button
-                          type="button"
-                          disabled={actionLoading}
-                          onClick={() => prepareOrder(o)}
-                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-2xs hover:bg-emerald-700 disabled:opacity-50"
-                        >
-                          <span className="material-symbols-outlined text-[15px]" aria-hidden="true">
-                            inventory_2
-                          </span>
-                          <span>{SELLER_NEXT_STEP.confirmed.label}</span>
-                        </button>
-                      )}
-                      {["ready_to_ship", "pickup_in_progress"].includes(o.status) && (
+                      {["confirmed", "ready_to_ship", "pickup_in_progress"].includes(o.status) && (
                         <button
                           type="button"
                           aria-label={SELLER_NEXT_STEP[o.status].label}
@@ -450,16 +420,12 @@ export default function SellerOrderTracker({
                         </span>
                         <span>ที่อยู่</span>
                       </button>
-                      <Link
-                        href="/chat"
+                      <ContactSellerButton
+                        productId={o.productId}
+                        orderId={o.id}
+                        label="แชท"
                         className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-700 transition"
-                        title="เปิดหน้าต่างแชท"
-                      >
-                        <span className="material-symbols-outlined text-[15px] text-emerald-600">
-                          chat
-                        </span>
-                        <span>แชท</span>
-                      </Link>
+                      />
                     </div>
                   </td>
                   <td className="px-4 py-3 text-center">

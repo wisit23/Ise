@@ -23,7 +23,9 @@ function normalizeAddressInput(input = {}, { partial = false } = {}) {
       throw badRequest("เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก");
     }
     if (field === "phone" && !value.startsWith("0")) {
-      throw badRequest("เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก และต้องขึ้นต้นด้วย 0");
+      throw badRequest(
+        "เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก และต้องขึ้นต้นด้วย 0",
+      );
     }
     if (field === "postalCode" && !/^[0-9]{5}$/.test(value)) {
       throw badRequest("รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก");
@@ -45,7 +47,7 @@ function normalizeAddressInput(input = {}, { partial = false } = {}) {
 function createProfileAddressService(prismaClient) {
   function list(userId) {
     return prismaClient.userAddress.findMany({
-      where: { userId },
+      where: { deletedAt: null, userId },
       orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
     });
   }
@@ -54,12 +56,14 @@ function createProfileAddressService(prismaClient) {
     const data = normalizeAddressInput(input);
 
     return prismaClient.$transaction(async (tx) => {
-      const existingCount = await tx.userAddress.count({ where: { userId } });
+      const existingCount = await tx.userAddress.count({
+        where: { deletedAt: null, userId },
+      });
       const isDefault = data.isDefault === true || existingCount === 0;
 
       if (isDefault) {
         await tx.userAddress.updateMany({
-          where: { userId, isDefault: true },
+          where: { deletedAt: null, userId, isDefault: true },
           data: { isDefault: false },
         });
       }
@@ -72,7 +76,7 @@ function createProfileAddressService(prismaClient) {
 
   async function update(userId, addressId, input) {
     const existing = await prismaClient.userAddress.findFirst({
-      where: { id: addressId, userId },
+      where: { id: addressId, userId, deletedAt: null },
     });
     if (!existing) throw notFound("address not found");
 
@@ -84,13 +88,13 @@ function createProfileAddressService(prismaClient) {
     return prismaClient.$transaction(async (tx) => {
       if (data.isDefault === true) {
         await tx.userAddress.updateMany({
-          where: { userId, isDefault: true },
+          where: { deletedAt: null, userId, isDefault: true },
           data: { isDefault: false },
         });
       }
 
       return tx.userAddress.update({
-        where: { id: addressId },
+        where: { id: addressId, userId, deletedAt: null },
         data,
       });
     });
@@ -98,17 +102,17 @@ function createProfileAddressService(prismaClient) {
 
   async function setDefault(userId, addressId) {
     const existing = await prismaClient.userAddress.findFirst({
-      where: { id: addressId, userId },
+      where: { id: addressId, userId, deletedAt: null },
     });
     if (!existing) throw notFound("address not found");
 
     return prismaClient.$transaction(async (tx) => {
       await tx.userAddress.updateMany({
-        where: { userId, isDefault: true },
+        where: { deletedAt: null, userId, isDefault: true },
         data: { isDefault: false },
       });
       return tx.userAddress.update({
-        where: { id: addressId },
+        where: { id: addressId, userId, deletedAt: null },
         data: { isDefault: true },
       });
     });
@@ -116,16 +120,19 @@ function createProfileAddressService(prismaClient) {
 
   async function remove(userId, addressId) {
     const existing = await prismaClient.userAddress.findFirst({
-      where: { id: addressId, userId },
+      where: { id: addressId, userId, deletedAt: null },
     });
     if (!existing) throw notFound("address not found");
 
     await prismaClient.$transaction(async (tx) => {
-      await tx.userAddress.delete({ where: { id: addressId } });
+      await tx.userAddress.update({
+        where: { id: addressId, userId, deletedAt: null },
+        data: { deletedAt: new Date(), isDefault: false },
+      });
 
       if (existing.isDefault) {
         const nextAddress = await tx.userAddress.findFirst({
-          where: { userId },
+          where: { deletedAt: null, userId },
           orderBy: { createdAt: "asc" },
         });
         if (nextAddress) {

@@ -16,3 +16,12 @@ uploads
 .DS_Store
 docs
 log
+# Never send local cluster credentials, backups, or user files to image builds.
+**/secrets*.env
+.deploy-state
+**/.state
+**/private-kyc-documents
+**/private-evidence
+**/private-attachments
+**/review-uploads
+**/uploads

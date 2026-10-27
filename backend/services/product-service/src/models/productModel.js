@@ -4,10 +4,10 @@ const { buildCatalogWhere } = require("../features/catalog/catalogQuery");
 const shopSearchClient = require("../services/shopSearchClient");
 
 const WITH_MEDIA = {
-  _count: { select: { favorites: true } },
-  photos: true,
-  videos: true,
-  categoryLinks: { include: { category: true } },
+  _count: { select: { favorites: { where: { deletedAt: null } } } },
+  photos: { where: { deletedAt: null } },
+  videos: { where: { deletedAt: null } },
+  categoryLinks: { where: { deletedAt: null }, include: { category: true } },
   countViews: { select: { count: true } },
   auctions: {
     where: {
@@ -58,10 +58,13 @@ async function categoryNames(client, id, fields, categories) {
     ];
   }
   const current = await client.product.findUnique({
-    where: { id },
+    where: { id, deletedAt: null },
     select: {
       category: true,
-      categoryLinks: { select: { category: { select: { name: true } } } },
+      categoryLinks: {
+        where: { deletedAt: null },
+        select: { category: { select: { name: true } } },
+      },
     },
   });
   const kept = (current?.categoryLinks || [])
@@ -70,7 +73,7 @@ async function categoryNames(client, id, fields, categories) {
   return [...new Set([...kept, fields.category])];
 }
 
-async function categoryData(client, names) {
+async function categoryData(client, names, id = null) {
   if (!names) return {};
   const links = [];
   for (const name of names) {
@@ -81,7 +84,16 @@ async function categoryData(client, names) {
     });
     links.push({ categoryId: category.id });
   }
-  return { categoryLinks: { create: links } };
+  if (!id) return { categoryLinks: { create: links } };
+  return {
+    categoryLinks: {
+      upsert: links.map(({ categoryId }) => ({
+        where: { productId_categoryId: { productId: id, categoryId } },
+        update: { deletedAt: null },
+        create: { categoryId },
+      })),
+    },
+  };
 }
 
 /** Merges the photos/videos relations back into the { url, type } media array
@@ -91,7 +103,8 @@ function toApiShape(product) {
   const { photos, videos, categoryLinks, countViews, ...rest } = product;
   rest.favoriteCount = product._count?.favorites || 0;
   delete rest._count;
-  if (categoryLinks) rest.categories = categoryLinks.map((link) => link.category.name).sort();
+  if (categoryLinks)
+    rest.categories = categoryLinks.map((link) => link.category.name).sort();
   const viewCount = Array.isArray(countViews)
     ? countViews.reduce((acc, cv) => acc + (cv.count || 0), 0)
     : product.viewCount || 0;
@@ -207,7 +220,7 @@ async function searchProducts(filters) {
   // `id IN (...)` makes no ordering guarantee of its own.
   const ids = rows.map((r) => r.id);
   const products = await prisma.product.findMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, deletedAt: null },
     include: WITH_MEDIA,
   });
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -264,6 +277,7 @@ async function list({
   }
 
   const where = {
+    deletedAt: null,
     ...(moderatedOnly
       ? { OR: [{ moderatedAt: { not: null } }, { status: "removed" }] }
       : status
@@ -277,7 +291,20 @@ async function list({
               moderatedAt: null,
             }),
     ...(category
-      ? { categoryLinks: { some: { category: { name: category } } } }
+      ? {
+          AND: [
+            {
+              OR: [
+                {
+                  categoryLinks: {
+                    some: { deletedAt: null, category: { name: category } },
+                  },
+                },
+                { category, categoryLinks: { none: {} } },
+              ],
+            },
+          ],
+        }
       : {}),
   };
   const [items, total] = await Promise.all([
@@ -303,7 +330,7 @@ async function listBySeller(
   } else if (status) {
     statusFilter = { status };
   }
-  const where = { sellerId, ...statusFilter };
+  const where = { sellerId, deletedAt: null, ...statusFilter };
   if (!includeModerated) {
     where.moderatedAt = null;
     if (!status) where.status = { not: "removed" };
@@ -349,7 +376,7 @@ async function listBySeller(
 async function findById(id, tx = prisma) {
   const client = tx?.product ? tx : prisma;
   const product = await client.product.findUnique({
-    where: { id },
+    where: { id, deletedAt: null },
     include: WITH_MEDIA,
   });
   return toApiShape(product);
@@ -380,8 +407,14 @@ async function update(id, patch, tx = null) {
   try {
     const run = async (client) => {
       if (media !== undefined) {
-        await client.photo.deleteMany({ where: { productId: id } });
-        await client.video.deleteMany({ where: { productId: id } });
+        await client.photo.updateMany({
+          where: { productId: id, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        await client.video.updateMany({
+          where: { productId: id, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
       }
       const changesCategories =
         fields.category !== undefined || categories !== undefined;
@@ -389,11 +422,15 @@ async function update(id, patch, tx = null) {
       const links = await categoryData(
         client,
         await categoryNames(client, id, fields, categories),
+        id,
       );
       if (links.categoryLinks)
-        await client.productCategory.deleteMany({ where: { productId: id } });
+        await client.productCategory.updateMany({
+          where: { productId: id, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
       return client.product.update({
-        where: { id },
+        where: { id, deletedAt: null },
         data: {
           ...fields,
           ...links,
@@ -423,6 +460,7 @@ async function updateBySeller(id, patch) {
     const claimed = await tx.product.updateMany({
       where: {
         id,
+        deletedAt: null,
         moderatedAt: null,
         status: { notIn: ["removed", "reserved", "auction", "sold"] },
         OR: [
@@ -435,29 +473,44 @@ async function updateBySeller(id, patch) {
     });
     if (claimed.count !== 1) return null;
 
-    const links = await categoryData(tx, names);
+    const links = await categoryData(tx, names, id);
     if (links.categoryLinks) {
-      await tx.productCategory.deleteMany({ where: { productId: id } });
-      await tx.product.update({ where: { id }, data: links });
+      await tx.productCategory.updateMany({
+        where: { productId: id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+      await tx.product.update({ where: { id, deletedAt: null }, data: links });
     }
     if (media !== undefined) {
-      await tx.photo.deleteMany({ where: { productId: id } });
-      await tx.video.deleteMany({ where: { productId: id } });
+      await tx.photo.updateMany({
+        where: { productId: id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+      await tx.video.updateMany({
+        where: { productId: id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
       await tx.product.update({
-        where: { id },
+        where: { id, deletedAt: null },
         data: mediaToNestedCreate(media),
       });
     }
 
     return toApiShape(
-      await tx.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+      await tx.product.findUnique({
+        where: { id, deletedAt: null },
+        include: WITH_MEDIA,
+      }),
     );
   });
 }
 
 async function remove(id) {
   try {
-    await prisma.product.delete({ where: { id } });
+    await prisma.product.update({
+      where: { id, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
     return true;
   } catch (err) {
     if (err.code === "P2025") return false;
@@ -466,10 +519,12 @@ async function remove(id) {
 }
 
 async function removeBySeller(id, sellerId) {
-  const removed = await prisma.product.deleteMany({
+  const removed = await prisma.product.updateMany({
+    data: { deletedAt: new Date() },
     where: {
       id,
       sellerId,
+      deletedAt: null,
       moderatedAt: null,
       status: { notIn: ["removed", "reserved", "auction", "sold"] },
       OR: [
@@ -492,27 +547,45 @@ async function removeBySeller(id, sellerId) {
 async function setVisibility(id, visible) {
   if (visible) {
     // Restore to whatever status it had before hiding (default: available).
-    const product = await prisma.product.findUnique({ where: { id } });
+    const product = await prisma.product.findUnique({
+      where: { id, deletedAt: null },
+    });
     if (!product) return null;
     if (
-      product.moderatedAt || product.status === "removed" ||
-      product.status === "sold" || product.preRemovalStatus === "sold"
+      product.moderatedAt ||
+      product.status === "removed" ||
+      product.status === "sold" ||
+      product.preRemovalStatus === "sold"
     ) {
       return toApiShape(
-        await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+        await prisma.product.findUnique({
+          where: { id, deletedAt: null },
+          include: WITH_MEDIA,
+        }),
       );
     }
     const restored = product.preRemovalStatus || "available";
     await prisma.product.updateMany({
-      where: { id, status: product.status, preRemovalStatus: product.preRemovalStatus || null, moderatedAt: null },
+      where: {
+        id,
+        deletedAt: null,
+        status: product.status,
+        preRemovalStatus: product.preRemovalStatus || null,
+        moderatedAt: null,
+      },
       data: { status: restored, preRemovalStatus: null },
     });
     return toApiShape(
-      await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+      await prisma.product.findUnique({
+        where: { id, deletedAt: null },
+        include: WITH_MEDIA,
+      }),
     );
   } else {
     // Only hide if currently browsable (available or reserved).
-    const product = await prisma.product.findUnique({ where: { id } });
+    const product = await prisma.product.findUnique({
+      where: { id, deletedAt: null },
+    });
     if (!product) return null;
     if (
       product.moderatedAt ||
@@ -522,15 +595,27 @@ async function setVisibility(id, visible) {
       product.preRemovalStatus === "sold"
     ) {
       return toApiShape(
-        await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+        await prisma.product.findUnique({
+          where: { id, deletedAt: null },
+          include: WITH_MEDIA,
+        }),
       );
     }
     await prisma.product.updateMany({
-      where: { id, status: product.status, preRemovalStatus: product.preRemovalStatus || null, moderatedAt: null },
+      where: {
+        id,
+        deletedAt: null,
+        status: product.status,
+        preRemovalStatus: product.preRemovalStatus || null,
+        moderatedAt: null,
+      },
       data: { status: "hidden", preRemovalStatus: product.status },
     });
     return toApiShape(
-      await prisma.product.findUnique({ where: { id }, include: WITH_MEDIA }),
+      await prisma.product.findUnique({
+        where: { id, deletedAt: null },
+        include: WITH_MEDIA,
+      }),
     );
   }
 }
@@ -560,6 +645,7 @@ async function listFilterOptions() {
       prisma.product.findMany({
         where: {
           status: "available",
+          deletedAt: null,
           moderatedAt: null,
           brand: { not: "" },
         },
@@ -567,19 +653,27 @@ async function listFilterOptions() {
         select: { brand: true },
         orderBy: { brand: "asc" },
       }),
-      prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS value FROM products WHERE status = 'available' AND moderated_at IS NULL ORDER BY value`,
+      prisma.$queryRaw`SELECT DISTINCT unnest(tags) AS value FROM products WHERE deleted_at IS NULL AND status = 'available' AND moderated_at IS NULL ORDER BY value`,
       prisma.product.findMany({
-        where: { status: "available", moderatedAt: null },
+        where: { deletedAt: null, status: "available", moderatedAt: null },
         distinct: ["size"],
         select: { size: true },
         orderBy: { size: "asc" },
       }),
       prisma.product.findMany({
-        where: { status: "available", moderatedAt: null, size: { not: "" } },
+        where: {
+          deletedAt: null,
+          status: "available",
+          moderatedAt: null,
+          size: { not: "" },
+        },
         select: {
           size: true,
           category: true,
-          categoryLinks: { select: { category: { select: { name: true } } } },
+          categoryLinks: {
+            where: { deletedAt: null },
+            select: { category: { select: { name: true } } },
+          },
         },
       }),
     ]);
@@ -611,7 +705,7 @@ async function recordView(productId, viewerId, { tx = null } = {}) {
   const client = tx || prisma;
 
   const product = await client.product.findUnique({
-    where: { id: productId },
+    where: { id: productId, deletedAt: null },
     select: { id: true, sellerId: true, status: true, reservedBy: true },
   });
 

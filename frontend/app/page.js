@@ -103,6 +103,8 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState("");
+  const [categoriesRevision, setCategoriesRevision] = useState(0);
   const railRef = useRef(null);
   const entranceRef = useRef(null);
   const requestRef = useRef(null);
@@ -144,13 +146,23 @@ export default function HomePage() {
   }, [load]);
 
   useEffect(() => {
-    // Secondary to the product grid: if this fails the rail just stays
-    // empty rather than taking the whole page down with it.
+    let active = true;
+    setCategoriesLoading(true);
+    setCategoriesError("");
     fetchActiveCategories()
-      .then(setCategories)
-      .catch((err) => console.error("โหลดหมวดหมู่ไม่สำเร็จ:", err))
-      .finally(() => setCategoriesLoading(false));
-  }, []);
+      .then((rows) => {
+        if (active) setCategories(rows);
+      })
+      .catch((err) => {
+        if (active) setCategoriesError(err.message || "โหลดหมวดหมู่ไม่สำเร็จ");
+      })
+      .finally(() => {
+        if (active) setCategoriesLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [categoriesRevision]);
 
   const scrollRail = (dir) => {
     const rail = railRef.current;
@@ -269,6 +281,8 @@ export default function HomePage() {
                 </span>
                 {categoriesLoading ? (
                   <Skeleton className="h-3.5 w-20" />
+                ) : categoriesError ? (
+                  <span>โหลดหมวดหมู่ไม่สำเร็จ</span>
                 ) : (
                   <span>
                     <b className="font-bold text-slate-900">
@@ -332,72 +346,80 @@ export default function HomePage() {
               action={<MoreLink href="/products">ดูทั้งหมด</MoreLink>}
             />
 
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => scrollRail(-1)}
-                aria-label="เลื่อนซ้าย"
-                className="focus-ring absolute -left-3.5 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
-              >
-                <span
-                  className="material-symbols-outlined text-[19px]"
-                  aria-hidden="true"
+            {categoriesError ? (
+              <ErrorState
+                title="โหลดหมวดหมู่ไม่สำเร็จ"
+                description="ไม่สามารถโหลดหมวดหมู่ได้ในขณะนี้"
+                onRetry={() => setCategoriesRevision((value) => value + 1)}
+              />
+            ) : (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => scrollRail(-1)}
+                  aria-label="เลื่อนซ้าย"
+                  className="focus-ring absolute -left-3.5 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
                 >
-                  chevron_left
-                </span>
-              </button>
+                  <span
+                    className="material-symbols-outlined text-[19px]"
+                    aria-hidden="true"
+                  >
+                    chevron_left
+                  </span>
+                </button>
 
-              <div
-                ref={railRef}
-                className="scrollbar-none flex snap-x snap-mandatory gap-3.5 overflow-x-auto scroll-smooth py-2.5 -my-2.5 px-1 -mx-1"
-              >
-                {categoriesLoading
-                  ? Array.from({ length: 6 }).map((_, i) => (
-                      <Skeleton
-                        key={i}
-                        className="h-[150px] w-[150px] shrink-0 rounded-md"
-                      />
-                    ))
-                  : categories.map((c, index) => (
-                      <Link
-                        key={c.name}
-                        data-home-card
-                        data-home-drop={Math.min(index, 5) * 50}
-                        href={`/products?category=${encodeURIComponent(c.name)}`}
-                        className="focus-ring group/cat w-[150px] shrink-0 snap-start rounded-md border border-line bg-white px-4 py-[1.35rem] text-center transition-all duration-200 ease-out hover:border-brand-400 hover:shadow-2"
-                      >
-                        <span className="mx-auto mb-[.7rem] grid h-[50px] w-[50px] place-items-center rounded-[14px] bg-surface-subtle text-brand-600 transition-colors duration-[250ms] group-hover/cat:bg-brand-50">
-                          <span
-                            className="material-symbols-outlined text-[24px]"
-                            aria-hidden="true"
-                          >
-                            {CATEGORY_ICON[c.name] || "sell"}
+                <div
+                  ref={railRef}
+                  className="scrollbar-none flex snap-x snap-mandatory gap-3.5 overflow-x-auto scroll-smooth py-2.5 -my-2.5 px-1 -mx-1"
+                >
+                  {categoriesLoading
+                    ? Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton
+                          key={i}
+                          className="h-[150px] w-[150px] shrink-0 rounded-md"
+                        />
+                      ))
+                    : categories.map((c, index) => (
+                        <Link
+                          key={c.name}
+                          data-home-card
+                          data-home-drop={Math.min(index, 5) * 50}
+                          href={`/products?category=${encodeURIComponent(c.name)}`}
+                          className="focus-ring group/cat w-[150px] shrink-0 snap-start rounded-md border border-line bg-white px-4 py-[1.35rem] text-center transition-all duration-200 ease-out hover:border-brand-400 hover:shadow-2"
+                        >
+                          <span className="mx-auto mb-[.7rem] grid h-[50px] w-[50px] place-items-center rounded-[14px] bg-surface-subtle text-brand-600 transition-colors duration-[250ms] group-hover/cat:bg-brand-50">
+                            <span
+                              className="material-symbols-outlined text-[24px]"
+                              aria-hidden="true"
+                            >
+                              {CATEGORY_ICON[c.name] || "sell"}
+                            </span>
                           </span>
-                        </span>
-                        <b className="block truncate text-sm font-semibold text-ink">
-                          {c.name}
-                        </b>
-                        <small className="text-xs text-ink-subtle">
-                          {c.count.toLocaleString("th-TH")} ชิ้น
-                        </small>
-                      </Link>
-                    ))}
-              </div>
+                          <b className="block truncate text-sm font-semibold text-ink">
+                            {c.name}
+                          </b>
+                          <small className="text-xs text-ink-subtle">
+                            {c.count.toLocaleString("th-TH")} ชิ้น
+                          </small>
+                        </Link>
+                      ))}
+                </div>
 
-              <button
-                type="button"
-                onClick={() => scrollRail(1)}
-                aria-label="เลื่อนขวา"
-                className="focus-ring absolute -right-3.5 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
-              >
-                <span
-                  className="material-symbols-outlined text-[19px]"
-                  aria-hidden="true"
+                <button
+                  type="button"
+                  onClick={() => scrollRail(1)}
+                  aria-label="เลื่อนขวา"
+                  className="focus-ring absolute -right-3.5 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-2 transition hover:scale-105 hover:bg-surface-subtle lg:grid"
                 >
-                  chevron_right
-                </span>
-              </button>
-            </div>
+                  <span
+                    className="material-symbols-outlined text-[19px]"
+                    aria-hidden="true"
+                  >
+                    chevron_right
+                  </span>
+                </button>
+              </div>
+            )}
           </section>
 
           {/* ── New arrivals ───────────────────────────────────── */}

@@ -438,7 +438,7 @@ function createCampaignMetricsService(
           select: { bidderId: true },
         }),
         prismaClient.product.findMany({
-          where: hasWindow ? { createdAt: activityWindow } : {},
+          where: { deletedAt: null, ...(hasWindow ? { createdAt: activityWindow } : {}) },
           distinct: ["sellerId"],
           select: { sellerId: true },
         }),

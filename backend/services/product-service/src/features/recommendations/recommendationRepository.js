@@ -16,7 +16,7 @@ function createRecommendationRepository(db, sql = Prisma) {
     if (!values.length) return sql.sql`FALSE`;
     return sql.sql`(${oneOf(sql.sql`lower(btrim(products.category))`, values)} OR EXISTS (
       SELECT 1 FROM product_categories pc JOIN categories c ON c.id = pc.category_id
-      WHERE pc.product_id = products.id AND ${oneOf(sql.sql`lower(btrim(c.name))`, values)}
+      WHERE pc.product_id = products.id AND pc.deleted_at IS NULL AND ${oneOf(sql.sql`lower(btrim(c.name))`, values)}
     ))`;
   }
 
@@ -162,15 +162,19 @@ function createRecommendationRepository(db, sql = Prisma) {
       ? await db.product.findMany({
           // Recheck eligibility: a product may be sold/moderated after ranking.
           where: {
+            deletedAt: null,
             id: { in: rows.map((row) => row.id) },
             status: "available",
             moderatedAt: null,
             ...(userId ? { sellerId: { not: userId } } : {}),
           },
           include: {
-            photos: true,
-            videos: true,
-            categoryLinks: { include: { category: true } },
+            photos: { where: { deletedAt: null } },
+            videos: { where: { deletedAt: null } },
+            categoryLinks: {
+              where: { deletedAt: null },
+              include: { category: true },
+            },
           },
         })
       : [];

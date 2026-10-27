@@ -49,7 +49,7 @@ async function reserveProduct(
   if (!buyerId) throw badRequest("buyerId is required");
 
   const product = await prisma.product.findUnique({
-    where: { id: productId },
+    where: { deletedAt: null, id: productId },
     select: RESERVATION_SELECT,
   });
   if (!product) throw notFound("product not found");
@@ -66,6 +66,7 @@ async function reserveProduct(
   const expiresAt = new Date(now.getTime() + RESERVATION_TTL_MS);
   const claimed = await prisma.product.updateMany({
     where: {
+      deletedAt: null,
       id: productId,
       moderatedAt: null,
       OR: [
@@ -85,7 +86,7 @@ async function reserveProduct(
   });
 
   const current = await prisma.product.findUnique({
-    where: { id: productId },
+    where: { deletedAt: null, id: productId },
     select: RESERVATION_SELECT,
   });
   if (!current) throw notFound("product not found");
@@ -99,6 +100,7 @@ async function reserveProduct(
 async function releaseProductReservation(productId, reservationId) {
   const released = await prisma.product.updateMany({
     where: {
+      deletedAt: null,
       id: productId,
       status: "reserved",
       reservationId,
@@ -126,6 +128,7 @@ async function extendProductReservation(
 
   const extended = await prisma.product.updateMany({
     where: {
+      deletedAt: null,
       id: productId,
       status: "reserved",
       reservationId,
@@ -147,6 +150,7 @@ async function completeProductReservation(
 ) {
   const completed = await prisma.product.updateMany({
     where: {
+      deletedAt: null,
       id: productId,
       status: "reserved",
       reservationId,
@@ -166,7 +170,7 @@ async function completeProductReservation(
     // the HTTP acknowledgement was lost. Treat an already-sold product as an
     // idempotent success; no other transition can make a sold item available.
     const current = await prisma.product.findUnique({
-      where: { id: productId },
+      where: { deletedAt: null, id: productId },
       select: { status: true, reservationId: true },
     });
     if (current?.status === "sold" && current.reservationId === reservationId) {
@@ -180,6 +184,7 @@ async function completeProductReservation(
 async function releaseExpiredReservations({ now = new Date() } = {}) {
   const released = await prisma.product.updateMany({
     where: {
+      deletedAt: null,
       status: "reserved",
       reservationExpiresAt: { lte: now },
     },

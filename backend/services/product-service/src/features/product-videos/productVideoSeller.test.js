@@ -22,7 +22,8 @@ test("seller list scopes both clip and unsold product to authenticated seller, n
   const result = await repo.listMine({ sellerId: user.id, skip: 12, take: 12 });
   assert.deepEqual(query.where, {
     sellerId: user.id,
-    product: { sellerId: user.id, status: { not: "sold" } },
+    deletedAt: null,
+    product: { deletedAt: null, sellerId: user.id, status: { not: "sold" } },
   });
   assert.deepEqual(query.orderBy, [{ createdAt: "desc" }, { id: "desc" }]);
   assert.equal(query.skip, 12);

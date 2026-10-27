@@ -207,7 +207,7 @@ async function closeAuction(auction, now = new Date()) {
       current = await hydrateItem(tx, await tx.auctionItem.findUnique({
         where: { id: auctionId },
         include: {
-          product: { include: { photos: { orderBy: { position: "asc" } } } },
+          product: { include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" } } } },
           round: true,
         },
       }));
@@ -1883,7 +1883,7 @@ async function cancelRound({ user, roundId, reason }) {
       ];
       if (productIds.length > 0) {
         await tx.product.updateMany({
-          where: { id: { in: productIds } },
+          where: { deletedAt: null, id: { in: productIds } },
           data: { status: "auction_action_required" },
         });
       }

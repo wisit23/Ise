@@ -46,6 +46,11 @@ export function getAccessToken() {
 
 export function setAccessToken(accessToken) {
   localStorage.setItem(ACCESS_KEY, accessToken);
+  const claims = decodeJwtPayload(accessToken);
+  const user = getStoredUser();
+  if (user && claims?.sub === user.id && claims.role) {
+    localStorage.setItem(USER_KEY, JSON.stringify({ ...user, role: claims.role }));
+  }
   notifyAuthChange();
 }
 

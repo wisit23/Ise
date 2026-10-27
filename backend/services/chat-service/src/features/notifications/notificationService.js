@@ -4,6 +4,8 @@ const { AppError } = require("@reloop/shared");
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
+// MongoDB records created before this field existed have no deleted_at key.
+const ACTIVE = { OR: [{ deletedAt: null }, { deletedAt: { isSet: false } }] };
 
 function clampLimit(raw) {
   const n = parseInt(raw, 10);
@@ -25,7 +27,8 @@ async function createNotification({
     throw new AppError(400, "Title and message are required for notification");
   }
 
-  const targetEntityId = entityId || metadata?.orderId || metadata?.auctionId || null;
+  const targetEntityId =
+    entityId || metadata?.orderId || metadata?.auctionId || null;
 
   const created = await prisma.notification.create({
     data: {
@@ -49,14 +52,15 @@ async function createNotification({
  * Lists notifications for a given user, including platform broadcast notifications.
  * Read state belongs to each notification, independent of later entity updates.
  */
-async function listNotifications(userId, { limit = DEFAULT_LIMIT, unreadOnly = false } = {}) {
+async function listNotifications(
+  userId,
+  { limit = DEFAULT_LIMIT, unreadOnly = false } = {},
+) {
   const take = clampLimit(limit);
   const notifications = await prisma.notification.findMany({
     where: {
-      OR: [
-        { userId },
-        { userId: "ALL" },
-      ],
+      AND: [ACTIVE],
+      OR: [{ userId }, { userId: "ALL" }],
     },
     orderBy: { createdAt: "desc" },
     take: take * 2,
@@ -65,7 +69,8 @@ async function listNotifications(userId, { limit = DEFAULT_LIMIT, unreadOnly = f
   const mapped = [];
 
   for (const n of notifications) {
-    const isRead = n.userId === "ALL" ? (n.readBy || []).includes(userId) : Boolean(n.read);
+    const isRead =
+      n.userId === "ALL" ? (n.readBy || []).includes(userId) : Boolean(n.read);
 
     mapped.push({
       id: n.id,
@@ -81,7 +86,10 @@ async function listNotifications(userId, { limit = DEFAULT_LIMIT, unreadOnly = f
     });
   }
 
-  const items = (unreadOnly ? mapped.filter((n) => !n.read) : mapped).slice(0, take);
+  const items = (unreadOnly ? mapped.filter((n) => !n.read) : mapped).slice(
+    0,
+    take,
+  );
   return { items, total: items.length };
 }
 
@@ -91,14 +99,14 @@ async function listNotifications(userId, { limit = DEFAULT_LIMIT, unreadOnly = f
  */
 async function unreadCount(userId) {
   const userUnreadNotifs = await prisma.notification.findMany({
-    where: { userId, read: false },
+    where: { AND: [ACTIVE], userId, read: false },
     select: { id: true, entityId: true },
   });
 
   const userUnread = userUnreadNotifs.length;
 
   const broadcastNotifications = await prisma.notification.findMany({
-    where: { userId: "ALL" },
+    where: { AND: [ACTIVE], userId: "ALL" },
     select: { readBy: true },
   });
 
@@ -117,7 +125,7 @@ async function markRead(notificationId, userId) {
     where: { id: notificationId },
   });
 
-  if (!notif) {
+  if (!notif || notif.deletedAt) {
     throw new AppError(404, "Notification not found");
   }
 
@@ -146,12 +154,12 @@ async function markRead(notificationId, userId) {
  */
 async function markAllRead(userId) {
   await prisma.notification.updateMany({
-    where: { userId, read: false },
+    where: { AND: [ACTIVE], userId, read: false },
     data: { read: true, readAt: new Date() },
   });
 
   const broadcastUnread = await prisma.notification.findMany({
-    where: { userId: "ALL" },
+    where: { AND: [ACTIVE], userId: "ALL" },
   });
 
   await Promise.all(
@@ -170,14 +178,14 @@ async function markAllRead(userId) {
 }
 
 /**
- * Deletes a notification by id for a user.
+ * Soft deletes a personal notification by id for its recipient.
  */
 async function deleteNotification(notificationId, userId) {
   const notif = await prisma.notification.findUnique({
     where: { id: notificationId },
   });
 
-  if (!notif) {
+  if (!notif || notif.deletedAt) {
     return { success: true };
   }
 
@@ -189,8 +197,9 @@ async function deleteNotification(notificationId, userId) {
     return { success: true };
   }
 
-  await prisma.notification.delete({
-    where: { id: notificationId },
+  await prisma.notification.updateMany({
+    where: { id: notificationId, userId, AND: [ACTIVE] },
+    data: { deletedAt: new Date() },
   });
 
   return { success: true };
@@ -204,4 +213,3 @@ module.exports = {
   markAllRead,
   deleteNotification,
 };
-

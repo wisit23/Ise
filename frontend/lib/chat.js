@@ -12,7 +12,7 @@ export function getCachedConversations() {
 }
 
 export function setCachedConversations(items) {
-  conversationCache = items;
+  conversationCache = typeof items === "function" ? items(conversationCache) : items;
 }
 
 export const MAX_MESSAGE_LENGTH = config.chat.maxMessageLength;
@@ -21,7 +21,8 @@ export const MAX_MESSAGE_LENGTH = config.chat.maxMessageLength;
  * never sends sellerId (see backend chat-service's conversationService.js:
  * a client-supplied sellerId would simply be ignored, but not sending it at
  * all keeps that contract obvious from the call site too). An optional orderId
- * lets the server verify purchase ownership before opening a sold listing. */
+ * lets the server verify the buyer or seller and resolve the order's buyer
+ * before opening a sold listing. */
 export function contactSeller(productId, token, orderId) {
   return apiFetch("/api/chat/conversations", {
     method: "POST",
@@ -44,6 +45,12 @@ export function listConversations(token, options = {}) {
 
 export function getConversation(conversationId, token) {
   return apiFetch(`/api/chat/conversations/${conversationId}`, { token });
+}
+
+export function hideConversation(conversationId, token) {
+  return apiFetch(`/api/chat/conversations/${conversationId}/hide`, {
+    method: "POST", token,
+  });
 }
 
 /** Newest-first, per the backend contract — callers that render

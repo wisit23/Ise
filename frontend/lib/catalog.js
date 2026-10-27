@@ -49,9 +49,7 @@ export function fetchActiveCategories() {
           categories.map((name) =>
             apiFetch(
               `/api/products/feed?category=${encodeURIComponent(name)}&limit=1`,
-            )
-              .then((data) => ({ name, count: data.total }))
-              .catch(() => ({ name, count: 0 })),
+            ).then((data) => ({ name, count: data.total })),
           ),
         ),
       )

@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import VideoUploader from "./VideoUploader";
 import { uploadProductClip } from "../lib/api";
+import { validateListingVideo } from "../lib/listingVideo";
+
+jest.mock("../lib/listingVideo", () => ({
+  validateListingVideo: jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock("../lib/api", () => ({
   uploadProductClip: jest.fn(),
@@ -43,4 +48,23 @@ test("renders the persisted clip URL returned by product-service", () => {
     "src",
     "/uploads/saved-clip.mp4",
   );
+});
+
+test("does not upload a clip that fails validation", async () => {
+  uploadProductClip.mockClear();
+  validateListingVideo.mockRejectedValueOnce(
+    new Error("คลิปต้องยาวไม่เกิน 60 วินาที"),
+  );
+  const onChange = jest.fn();
+  const { container } = render(
+    <VideoUploader value="" onChange={onChange} token="seller-token" />,
+  );
+  fireEvent.change(container.querySelector('input[type="file"]'), {
+    target: { files: [new File(["video"], "long.mp4", { type: "video/mp4" })] },
+  });
+  expect(
+    await screen.findByText("คลิปต้องยาวไม่เกิน 60 วินาที"),
+  ).toBeInTheDocument();
+  expect(uploadProductClip).not.toHaveBeenCalled();
+  expect(onChange).not.toHaveBeenCalled();
 });

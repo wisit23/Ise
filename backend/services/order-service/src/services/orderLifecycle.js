@@ -23,8 +23,8 @@ const timing = {
  */
 const PARTICIPANT_TRANSITIONS = {
   confirmed: { seller: ["paid"] },
-  ready_to_ship: { seller: ["confirmed"] },
-  pickup_in_progress: { seller: ["ready_to_ship"] },
+  // Older ready_to_ship orders can continue, but new orders skip that step.
+  pickup_in_progress: { seller: ["confirmed", "ready_to_ship"] },
   in_transit: { seller: ["pickup_in_progress"] },
   completed: { buyer: ["delivered"] },
   cancelled: {

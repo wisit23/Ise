@@ -1,2 +1,4 @@
 /deploy.sh text eol=lf
 /deploy/test-deploy.sh text eol=lf
+/deploy/production-cloud/deploy-k8s.sh text eol=lf
+/deploy/production-cloud/git-update.sh text eol=lf

@@ -166,6 +166,20 @@ describe("ChatRoomPage — live delivery vs. REST response race", () => {
     expect(screen.queryByText("ผู้ซื้อ")).not.toBeInTheDocument();
   });
 
+  it("does not show buyer quick questions to the seller of this listing", async () => {
+    getStoredUser.mockReturnValue({ id: "seller-1", role: "SELLER" });
+    render(<ChatRoomPage />);
+    await screen.findByLabelText("พิมพ์ข้อความ");
+    expect(screen.queryByText("สินค้ายังอยู่ไหมครับ?")).not.toBeInTheDocument();
+    expect(screen.queryByText(/คำถามด่วน/)).not.toBeInTheDocument();
+  });
+
+  it("offers buyer questions based on room role even if the account is a seller", async () => {
+    getStoredUser.mockReturnValue({ id: "buyer-1", role: "SELLER" });
+    render(<ChatRoomPage />);
+    expect(await screen.findByText("สินค้ายังอยู่ไหมครับ?")).toBeInTheDocument();
+  });
+
   it("subscribes to the shared socket's message:new (guards against the subscription silently going missing)", async () => {
     sendMessage.mockResolvedValue({});
     render(<ChatRoomPage />);

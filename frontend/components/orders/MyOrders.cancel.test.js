@@ -68,14 +68,16 @@ test.each([
   expect(screen.queryByRole("button", { name: "ยกเลิกคำสั่งซื้อ" })).not.toBeInTheDocument();
 });
 
-test("held paid orders do not offer buyer cancellation", async () => {
-  order.payoutHeld = true;
+for (const extra of [{ payoutHeld: true }, { paymentSimulationStatus: "ON_HOLD" }, { dispute: { id: "case-1", decision: null } }]) {
+test(`paid orders with hold or dispute do not offer cancellation ${JSON.stringify(extra)}`, async () => {
+  Object.assign(order, extra);
   render(<MyOrders />);
   await screen.findByRole("button", { name: "ดูรายละเอียด" });
   expect(screen.queryByRole("button", { name: "ยกเลิกคำสั่งซื้อ" })).not.toBeInTheDocument();
 });
+}
 
-for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit", "payment_expired", "seller_confirmation_expired"]) {
+for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit", "delivered", "completed", "payment_expired", "seller_confirmation_expired"]) {
   test(`buyer cannot pay or cancel inactive order state (${state})`, async () => {
     order.status = state;
     render(<MyOrders />);
@@ -85,18 +87,18 @@ for (const state of ["confirmed", "ready_to_ship", "pickup_in_progress", "in_tra
   });
 }
 
-test("seller preparation during confirmation shows conflict and reloads current status", async () => {
+test("seller acceptance during cancellation shows conflict and reloads confirmed status", async () => {
   const original = apiFetch.getMockImplementation();
   apiFetch.mockImplementation(async (url, options) => {
     if (url.endsWith("/status")) {
       order.status = "confirmed";
-      throw new Error("ผู้ขายเริ่มเตรียมสินค้าแล้ว");
+      throw new Error("ผู้ขายยืนยันคำสั่งซื้อแล้ว");
     }
     return original(url, options);
   });
   render(<MyOrders />);
   fireEvent.click(await screen.findByRole("button", { name: "ยกเลิกคำสั่งซื้อ" }));
   fireEvent.click(screen.getByRole("button", { name: "ยืนยันยกเลิกคำสั่งซื้อ" }));
-  expect(await screen.findByText("ผู้ขายเริ่มเตรียมสินค้าแล้ว")).toBeInTheDocument();
+  expect(await screen.findByText("ผู้ขายยืนยันคำสั่งซื้อแล้ว")).toBeInTheDocument();
   await waitFor(() => expect(screen.queryByRole("button", { name: "ยกเลิกคำสั่งซื้อ" })).not.toBeInTheDocument());
 });

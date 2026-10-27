@@ -5,84 +5,6 @@ import { uploadFiles, mediaUrl } from "../lib/api";
 
 const MAX_FILES = 8;
 
-/** Center-crops an image file to a square so every listing's gallery reads
- * as one consistent grid, regardless of what aspect ratio a seller's photo
- * came in at. Videos pass through untouched (can't crop those with Canvas). */
-function cropImageToSquare(file, maxSide = 2400) {
-  if (!file || !file.type?.startsWith("image/")) {
-    return Promise.resolve(file);
-  }
-
-  // Guard against Array.prototype.map passing (element, index) where index becomes maxSide
-  const targetMaxSide =
-    typeof maxSide === "number" && maxSide >= 100 ? maxSide : 1600;
-
-  return new Promise((resolve) => {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-
-      const width = img.naturalWidth || img.width;
-      const height = img.naturalHeight || img.height;
-      const side = Math.min(width, height, targetMaxSide);
-
-      const canvas = document.createElement("canvas");
-      canvas.width = side;
-      canvas.height = side;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        resolve(file);
-        return;
-      }
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-
-      const sx = (width - Math.min(width, height)) / 2;
-      const sy = (height - Math.min(width, height)) / 2;
-      ctx.drawImage(
-        img,
-        sx,
-        sy,
-        Math.min(width, height),
-        Math.min(width, height),
-        0,
-        0,
-        side,
-        side,
-      );
-
-      // Use PNG for PNG files to preserve quality; JPEG with 0.97 quality for
-      // everything else — high enough that compression artefacts are invisible.
-      const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            resolve(file);
-            return;
-          }
-          resolve(
-            new File([blob], file.name, {
-              type: mimeType,
-              lastModified: Date.now(),
-            }),
-          );
-        },
-        mimeType,
-        mimeType === "image/jpeg" ? 0.97 : undefined,
-      );
-    };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      resolve(file);
-    };
-
-    img.src = objectUrl;
-  });
-}
-
 const MAX_FILE_SIZE_MB = 20;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
@@ -121,10 +43,7 @@ export default function MediaUploader({ value, onChange, token }) {
 
     setUploading(true);
     try {
-      const processed = await Promise.all(
-        files.map((file) => cropImageToSquare(file)),
-      );
-      const uploaded = await uploadFiles(processed, token);
+      const uploaded = await uploadFiles(files, token);
       onChange([...value, ...uploaded]);
     } catch (err) {
       setError(err.message);
@@ -181,9 +100,16 @@ export default function MediaUploader({ value, onChange, token }) {
         </p>
         <p className="mt-1 text-xs text-gray-500">
           JPG, PNG, WEBP, MP4, MOV — สูงสุด {MAX_FILES} ไฟล์ ไฟล์ละไม่เกิน{" "}
-          {MAX_FILE_SIZE_MB} MB (รูปภาพจะถูกครอบเป็นสี่เหลี่ยมจัตุรัสอัตโนมัติ)
+          {MAX_FILE_SIZE_MB} MB ก่อนประมวลผล —
+          รูปภาพจะถูกครอปตรงกลางเป็นจัตุรัสไม่เกิน 1080 × 1080 พิกเซล
+          และแปลงเป็น WebP ไม่เกิน 500 KB
         </p>
       </div>
+
+      <p className="mt-2 text-xs text-gray-500">
+        ถ่ายตำหนิระยะใกล้ให้ชัดและวางไว้กลางภาพ
+        ตรวจภาพหลังอัปโหลดเพื่อให้แน่ใจว่าตำหนิไม่ถูกครอปออก
+      </p>
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 

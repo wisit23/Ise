@@ -134,6 +134,19 @@ export default function NavBar() {
   const { connected: socketConnected } = useChatSocket();
 
   useEffect(() => {
+    const sync = () => {
+      setUser(getStoredUser());
+      setKycStatus(getAccessTokenClaims()?.kycStatus || null);
+    };
+    window.addEventListener("reloop:auth", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("reloop:auth", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!mobileMenuOpen) return;
     const positionMenu = () => {
       const trigger = discoveryTrigger.current;
@@ -194,13 +207,15 @@ export default function NavBar() {
   // chat room is open. The nudge deliberately carries no count; the
   // authoritative total is re-read here, because a server-computed number
   // would race this user's own concurrent mark-read calls.
-  useChatSocketEvent("conversation:activity", () => {
+  function refreshChatUnread() {
     const token = getAccessToken();
     if (!token || !isCustomerAccountRoles(getCurrentRoles())) return;
     getUnreadCount(token)
       .then((data) => setUnreadCount(data.total))
       .catch(() => {});
-  });
+  }
+  useChatSocketEvent("conversation:activity", refreshChatUnread);
+  useChatSocketEvent("conversation:hidden", refreshChatUnread);
 
   // Fallback path: only runs while the socket ISN'T connected (blocked by a
   // strict network, dropped mid-session, still connecting). Without this

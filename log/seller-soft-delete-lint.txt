@@ -1,0 +1,3 @@
+PASS: ESLint on modified JavaScript files and new integration/rehearsal scripts.
+PASS: ESLint on SellerProductList.js and the final rehearsal script.
+PASS: git diff --check.

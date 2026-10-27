@@ -6,7 +6,8 @@ const { createProductVideoRepository } = require("./productVideoRepository");
 test("targeted feed lookup still requires an available, unmoderated product", async () => {
   const where = {
     id: "target-clip",
-    product: { status: "available", moderatedAt: null },
+    deletedAt: null,
+    product: { deletedAt: null, status: "available", moderatedAt: null },
   };
   const repository = createProductVideoRepository({
     productVideo: {
@@ -35,7 +36,8 @@ test("listAvailable queries clips for available products only and sets chosen: f
     productVideo: {
       findMany: async (query) => {
         assert.deepEqual(query.where, {
-          product: { status: "available", moderatedAt: null },
+          deletedAt: null,
+          product: { deletedAt: null, status: "available", moderatedAt: null },
         });
         assert.equal(query.skip, 20);
         assert.equal(query.take, 10);
@@ -43,7 +45,8 @@ test("listAvailable queries clips for available products only and sets chosen: f
       },
       count: async (query) => {
         assert.deepEqual(query.where, {
-          product: { status: "available", moderatedAt: null },
+          deletedAt: null,
+          product: { deletedAt: null, status: "available", moderatedAt: null },
         });
         return 1;
       },
@@ -64,10 +67,11 @@ test("listAvailable attaches chosen flag for authenticated userId and does not l
     productVideo: {
       findMany: async (query) => {
         assert.deepEqual(query.where, {
-          product: { status: "available", moderatedAt: null },
+          deletedAt: null,
+          product: { deletedAt: null, status: "available", moderatedAt: null },
         });
         assert.deepEqual(query.include.choices, {
-          where: { userId: "buyer-42" },
+          where: { userId: "buyer-42", deletedAt: null },
           select: { id: true },
         });
         return [
