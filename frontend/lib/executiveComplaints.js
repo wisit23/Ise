@@ -92,14 +92,18 @@ function parseReport(value) {
   /** @type {ExecutiveReport} */
   const report = {
     id: value.id,
-    ...(value.referenceCode ? { referenceCode: optionalText(value.referenceCode) } : {}),
+    ...(value.referenceCode
+      ? { referenceCode: optionalText(value.referenceCode) }
+      : {}),
     reason: value.reason,
     status: /** @type {ExecutiveReport['status']} */ (value.status),
     reportedAt: value.reportedAt,
     actionTaken: optionalText(value.actionTaken),
     reporterName: optionalText(value.reporterName),
     targetId: optionalText(value.targetId),
-    ...(value.targetReferenceCode ? { targetReferenceCode: optionalText(value.targetReferenceCode) } : {}),
+    ...(value.targetReferenceCode
+      ? { targetReferenceCode: optionalText(value.targetReferenceCode) }
+      : {}),
     targetName: optionalText(value.targetName),
     targetShopName: optionalText(value.targetShopName),
     productId: optionalText(value.productId),
