@@ -72,15 +72,14 @@ test("KYC decisions enforce permission, version and single-decision rules", asyn
         role: "ADMIN",
       },
     });
-    // Seed a Seller with a pending Synthetic KYC application directly —
-    // submission is Seller/SEL-001's job, not Admin's (ADM-DEC-001 ownership).
+    // A first-time applicant remains a buyer until T&S approves.
     seller = await prisma.user.create({
       data: {
         email,
         passwordHash: await bcrypt.hash("irrelevant-password", 10),
         firstName: "Test",
         lastName: "Seller",
-        role: "SELLER",
+        role: "BUYER",
         sellerProfile: { create: { shopName: "Test Shop" } },
       },
     });
@@ -149,6 +148,16 @@ test("KYC decisions enforce permission, version and single-decision rules", asyn
         version: application.version + 1,
       });
     assert.equal(staleRes.status, 409);
+    assert.equal(
+      (await prisma.user.findUnique({ where: { id: seller.id } })).role,
+      "BUYER",
+    );
+    assert.equal(
+      await prisma.userRole.count({
+        where: { userId: seller.id, role: "SELLER" },
+      }),
+      0,
+    );
 
     // Correct version approves and updates the Seller's status in the same call.
     const approveRes = await request(app)
@@ -163,6 +172,16 @@ test("KYC decisions enforce permission, version and single-decision rules", asyn
     assert.equal(approveRes.body.application.status, "VERIFIED");
     assert.equal(approveRes.body.sellerStatus.kycStatus, "VERIFIED");
     assert.ok(approveRes.body.sellerStatus.verifiedAt);
+    assert.equal(
+      (await prisma.user.findUnique({ where: { id: seller.id } })).role,
+      "SELLER",
+    );
+    assert.equal(
+      await prisma.userRole.count({
+        where: { userId: seller.id, role: "SELLER" },
+      }),
+      1,
+    );
 
     const persisted = await prisma.kycApplication.findUnique({
       where: { id: application.id },
@@ -233,6 +252,7 @@ test("KYC decisions enforce permission, version and single-decision rules", asyn
     }
     if (seller) {
       await prisma.sellerProfile.deleteMany({ where: { userId: seller.id } });
+      await prisma.userRole.deleteMany({ where: { userId: seller.id } });
       await prisma.user.deleteMany({ where: { id: seller.id } });
     }
     if (admin) await prisma.user.deleteMany({ where: { id: admin.id } });

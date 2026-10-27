@@ -40,46 +40,35 @@ test("Product view counting logic (count_views)", async (t) => {
 
   const dummyCountViews = [];
 
-  const origFindUnique = prisma.product.findUnique;
-  const origCountViewUpsert = prisma.countView.upsert;
-  const origCountViewAggregate = prisma.countView.aggregate;
-
+  const originalFindUnique = prisma.product.findUnique;
+  const originalCreateMany = prisma.countView.createMany;
+  const originalCount = prisma.countView.count;
   t.after(() => {
-    prisma.product.findUnique = origFindUnique;
-    prisma.countView.upsert = origCountViewUpsert;
-    prisma.countView.aggregate = origCountViewAggregate;
+    prisma.product.findUnique = originalFindUnique;
+    prisma.countView.createMany = originalCreateMany;
+    prisma.countView.count = originalCount;
   });
 
   prisma.product.findUnique = async ({ where }) => {
     return dummyProducts.find((p) => p.id === where.id) || null;
   };
 
-  prisma.countView.upsert = async ({ where, update, create }) => {
-    const { viewerId, productId } = where.viewerId_productId;
-    const existing = dummyCountViews.find(
-      (cv) => cv.viewerId === viewerId && cv.productId === productId,
-    );
-    if (existing) {
-      if (update.count?.increment) {
-        existing.count += update.count.increment;
+  prisma.countView.createMany = async ({ data, skipDuplicates }) => {
+    assert.equal(skipDuplicates, true);
+    let count = 0;
+    for (const view of data) {
+      if (!dummyCountViews.some(
+        (cv) => cv.viewerId === view.viewerId && cv.productId === view.productId,
+      )) {
+        dummyCountViews.push({ ...view });
+        count += 1;
       }
-      return existing;
     }
-    const item = {
-      viewerId,
-      productId,
-      count: create.count || 1,
-    };
-    dummyCountViews.push(item);
-    return item;
+    return { count };
   };
 
-  prisma.countView.aggregate = async ({ where }) => {
-    const filtered = dummyCountViews.filter((cv) => cv.productId === where.productId);
-    const sum = filtered.reduce((acc, cv) => acc + (cv.count || 0), 0);
-    return {
-      _sum: { count: sum || null },
-    };
+  prisma.countView.count = async ({ where }) => {
+    return dummyCountViews.filter((cv) => cv.productId === where.productId).length;
   };
 
   // 1. Initial count for available product should be 0
@@ -91,24 +80,24 @@ test("Product view counting logic (count_views)", async (t) => {
   assert.equal(buyer1Counted, true);
   assert.equal(await productModel.getViewCount("prod-avail-1"), 1);
 
-  // 3. Same buyer views again -> count increments
-  await productModel.recordView("prod-avail-1", "buyer-1");
-  assert.equal(await productModel.getViewCount("prod-avail-1"), 2);
+  // 3. Repeat visits from the same buyer must not count again.
+  assert.equal(await productModel.recordView("prod-avail-1", "buyer-1"), false);
+  assert.equal(await productModel.getViewCount("prod-avail-1"), 1);
 
   // 4. Another buyer views -> count increments
   await productModel.recordView("prod-avail-1", "buyer-2");
-  assert.equal(await productModel.getViewCount("prod-avail-1"), 3);
+  assert.equal(await productModel.getViewCount("prod-avail-1"), 2);
 
   // 5. Guest visitor views -> MUST count!
   const guestCounted = await productModel.recordView("prod-avail-1", "guest-session-123");
   assert.equal(guestCounted, true);
-  assert.equal(await productModel.getViewCount("prod-avail-1"), 4);
+  assert.equal(await productModel.getViewCount("prod-avail-1"), 3);
 
   // 6. SELLER views their own product -> MUST NOT count!
   const sellerCounted = await productModel.recordView("prod-avail-1", "seller-1");
   assert.equal(sellerCounted, false);
-  // View count must remain unchanged at 4!
-  assert.equal(await productModel.getViewCount("prod-avail-1"), 4);
+  // View count must remain unchanged at 3!
+  assert.equal(await productModel.getViewCount("prod-avail-1"), 3);
 
   // 7. Any user (buyer/guest) views a SOLD product -> MUST NOT count (already bought)!
   const soldCounted = await productModel.recordView("prod-sold-1", "buyer-1");
@@ -150,11 +139,24 @@ test("Product view counting logic (count_views)", async (t) => {
       query: {},
     },
     mockRes,
-    () => {},
+    (err) => { throw err; },
   );
   assert.equal(responseData.id, "prod-avail-1");
-  // Total was 4, buyer-99 made it 5
-  assert.equal(responseData.viewCount, 5);
+  // Total was 3, buyer-99 made it 4
+  assert.equal(responseData.viewCount, 4);
+
+  // The account identity takes priority over a different browser visitor ID.
+  await productController.getOne(
+    {
+      params: { id: "prod-avail-1" },
+      userId: "buyer-99",
+      headers: { "x-visitor-id": "another-browser" },
+      query: {},
+    },
+    mockRes,
+    (err) => { throw err; },
+  );
+  assert.equal(responseData.viewCount, 4);
 
   // Seller viewing available product via getOne -> view count should NOT increase
   await productController.getOne(
@@ -165,11 +167,11 @@ test("Product view counting logic (count_views)", async (t) => {
       query: {},
     },
     mockRes,
-    () => {},
+    (err) => { throw err; },
   );
   assert.equal(responseData.id, "prod-avail-1");
-  // Total should stay 5 (seller was excluded)
-  assert.equal(responseData.viewCount, 5);
+  // Total should stay 4 (seller was excluded)
+  assert.equal(responseData.viewCount, 4);
 
   // Viewing sold product via getOne -> view count should NOT increase
   await productController.getOne(
@@ -180,7 +182,7 @@ test("Product view counting logic (count_views)", async (t) => {
       query: {},
     },
     mockRes,
-    () => {},
+    (err) => { throw err; },
   );
   assert.equal(responseData.id, "prod-sold-1");
   // Sold product count remains 0
@@ -195,9 +197,9 @@ test("Product view counting logic (count_views)", async (t) => {
       query: { noTrack: "1" },
     },
     mockRes,
-    () => {},
+    (err) => { throw err; },
   );
-  assert.equal(responseData.viewCount, 5);
+  assert.equal(responseData.viewCount, 4);
 
   // Test productController.recordView endpoint
   let recordViewRes = null;
@@ -215,11 +217,29 @@ test("Product view counting logic (count_views)", async (t) => {
       headers: {},
     },
     mockRecordRes,
-    () => {},
+    (err) => { throw err; },
   );
   assert.equal(recordViewRes.success, true);
   assert.equal(recordViewRes.counted, true);
-  assert.equal(recordViewRes.viewCount, 6);
+  assert.equal(recordViewRes.viewCount, 5);
+
+  // GET then POST for the same account must share the same unique view.
+  await productController.recordView(
+    { params: { id: "prod-avail-1" }, userId: "buyer-99", headers: {} },
+    mockRecordRes,
+    (err) => { throw err; },
+  );
+  assert.equal(recordViewRes.counted, false);
+  assert.equal(recordViewRes.viewCount, 5);
+
+  // A stable guest identity is also counted once.
+  await productController.recordView(
+    { params: { id: "prod-avail-1" }, headers: { "x-visitor-id": "guest-session-123" } },
+    mockRecordRes,
+    (err) => { throw err; },
+  );
+  assert.equal(recordViewRes.counted, false);
+  assert.equal(recordViewRes.viewCount, 5);
 
   // Seller calls recordView on own product
   await productController.recordView(
@@ -229,11 +249,11 @@ test("Product view counting logic (count_views)", async (t) => {
       headers: {},
     },
     mockRecordRes,
-    () => {},
+    (err) => { throw err; },
   );
   assert.equal(recordViewRes.success, true);
   assert.equal(recordViewRes.counted, false);
-  assert.equal(recordViewRes.viewCount, 6);
+  assert.equal(recordViewRes.viewCount, 5);
 
   // Buyer calls recordView on sold product
   await productController.recordView(
@@ -243,9 +263,23 @@ test("Product view counting logic (count_views)", async (t) => {
       headers: {},
     },
     mockRecordRes,
-    () => {},
+    (err) => { throw err; },
   );
   assert.equal(recordViewRes.success, true);
   assert.equal(recordViewRes.counted, false);
   assert.equal(recordViewRes.viewCount, 0);
+  const concurrent = await Promise.all(
+    Array.from({ length: 5 }, () => productModel.recordView("prod-avail-1", "concurrent-buyer")),
+  );
+  assert.equal(concurrent.filter(Boolean).length, 1);
+  assert.equal(await productModel.getViewCount("prod-avail-1"), 6);
+
+  // Old rows can have inflated counts; both reads still count unique viewers.
+  dummyCountViews[0].count = 100;
+  assert.equal(await productModel.getViewCount("prod-avail-1"), 6);
+  assert.equal(productModel.toApiShape({
+    ...dummyProducts[0],
+    countViews: dummyCountViews.filter((cv) => cv.productId === "prod-avail-1"),
+  }).viewCount, 6);
+
 });

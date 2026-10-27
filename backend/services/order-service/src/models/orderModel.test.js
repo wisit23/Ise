@@ -173,6 +173,35 @@ test("legacy cancellation details without a reason remain readable", () => {
   assert.equal(result.cancellationReason, null);
 });
 
+test("order details project the first recorded time of each delivery milestone without exposing raw logs", () => {
+  const log = (action, from, to, createdAt) => ({ action, detail: JSON.stringify({ from, to, actorNote: "private" }), createdAt });
+  const result = model.view({
+    status: "completed", originalAmount: "100", ordersAmount: "100",
+    logs: [
+      log("STATUS_CHANGED", "disputed", "confirmed", "2026-10-23T01:00:00Z"),
+      log("STATUS_CHANGED", "delivered", "completed", "2026-10-22T05:00:00Z"),
+      log("STATUS_CHANGED", "in_transit", "delivered", "2026-10-21T04:00:00Z"),
+      log("IN_TRANSIT", "pickup_in_progress", "in_transit", "2026-10-20T03:00:00Z"),
+      log("PICKUP_REQUESTED", "confirmed", "pickup_in_progress", "2026-10-20T02:00:00Z"),
+      log("STATUS_CHANGED", "paid", "confirmed", "2026-10-20T01:00:00Z"),
+      log("SHIPPING_DETAILS_CHANGED", "confirmed", "in_transit", "2026-10-19T01:00:00Z"),
+      log("STATUS_CHANGED", "confirmed", "ready_to_ship", "2026-10-20T01:30:00Z"),
+      log("STATUS_CHANGED", "paid", "confirmed", "invalid"),
+      { action: "STATUS_CHANGED", detail: "legacy", createdAt: new Date() },
+      { action: "STATUS_CHANGED", detail: "null", createdAt: new Date() },
+    ],
+  });
+  assert.deepEqual(result.deliveryTimeline, {
+    confirmed: "2026-10-20T01:00:00.000Z",
+    pickup_in_progress: "2026-10-20T02:00:00.000Z",
+    in_transit: "2026-10-20T03:00:00.000Z",
+    delivered: "2026-10-21T04:00:00.000Z",
+    completed: "2026-10-22T05:00:00.000Z",
+  });
+  assert.equal(result.logs, undefined);
+  assert.ok(!JSON.stringify(result).includes("private"));
+});
+
 test("a hold appearing before the transaction blocks seller refund and relisting", async (t) => {
   const { writes } = fixture(t, { status: "ready_to_ship", payments: [{ paymentStatus: "paid", holds: [{ releaseAt: null }] }] });
   await assert.rejects(model.transitionStatusWithProductSync({ ...cancellation, actorId: "seller", expectedStatuses: ["ready_to_ship"] }), (err) => err.status === 409);

@@ -129,10 +129,8 @@ async function getOne(req, res, next) {
     // Record view: count only when product is not yet sold, and exclude seller
     if (req.query?.noTrack !== "1") {
       const viewerId = getViewerId(req);
-      const counted = await productModel.recordView(product.id, viewerId);
-      if (counted) {
-        product.viewCount = (product.viewCount || 0) + 1;
-      }
+      await productModel.recordView(product.id, viewerId);
+      product.viewCount = await productModel.getViewCount(product.id);
     }
 
     res.json(product);

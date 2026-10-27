@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { defaultCustomDay } from "./executive";
+import { EXECUTIVE_SEARCH_DELAY_MS } from "./executiveConfig";
 import {
   DEFAULT_SORT,
   EMPTY_FILTERS,
@@ -13,7 +14,7 @@ import {
 } from "./executiveInbox";
 
 // How long typing has to pause before the search is sent.
-const SEARCH_DELAY_MS = 300;
+const SEARCH_DELAY_MS = EXECUTIVE_SEARCH_DELAY_MS;
 
 /**
  * State of the Executive complaints page: what to look at, over which period,

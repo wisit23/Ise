@@ -2,6 +2,11 @@ export * from "./executiveDates";
 
 import { executiveFetch as apiFetch } from "./executiveRequest";
 import {
+  parseOverviewMetrics,
+  parseRankings,
+  parseOrderStatusCounts,
+} from "./executiveMetricsPayload";
+import {
   TIMEZONE,
   LOCALE,
   MONTH_NAMES,
@@ -107,7 +112,12 @@ function metricSeries(response, fields) {
       typeof row?.period !== "string" ||
       Number.isNaN(Date.parse(row.period)) ||
       periods.has(row.period) ||
-      fields.some((field) => !Number.isFinite(row[field]) || row[field] < 0)
+      fields.some((field) => !Number.isFinite(row[field]) || row[field] < 0) ||
+      fields.some(
+        (field) =>
+          ["completedOrders", "activeUsers"].includes(field) &&
+          !Number.isSafeInteger(row[field]),
+      )
     )
       return null;
     periods.add(row.period);
@@ -501,9 +511,8 @@ export function buildTrendPoints(mode, rows, instant = new Date(), custom) {
  * malformed, so an outage is never shown as zero.
  */
 function sumActiveUsers(response) {
-  const rows = response?.data;
-  if (!Array.isArray(rows)) return null;
-  if (!rows.every((row) => Number.isFinite(row?.activeUsers))) return null;
+  const rows = metricSeries(response, ["activeUsers"]);
+  if (!rows) return null;
   return rows.reduce((total, row) => total + row.activeUsers, 0);
 }
 
@@ -552,11 +561,16 @@ export async function fetchOverview(mode, token, instant = new Date(), custom) {
   const rows = metricSeries(series, ["gmv", "platformRevenue"]);
   const users = sumActiveUsers(auth);
   const usersPrevious = sumActiveUsers(authPrev);
+  const currentMetrics = parseOverviewMetrics(order?.data);
+  const previousMetrics = parseOverviewMetrics(orderPrev?.data);
 
   return {
     periods,
     feeRate: order?.meta?.platformFeeRate ?? null,
-    order: order && { current: order.data, previous: orderPrev?.data ?? null },
+    order: currentMetrics && {
+      current: currentMetrics,
+      previous: previousMetrics,
+    },
     auth:
       users === null
         ? null
@@ -566,8 +580,8 @@ export async function fetchOverview(mode, token, instant = new Date(), custom) {
               usersPrevious === null ? null : { activeUsers: usersPrevious },
           },
     trend: rows && buildTrendPoints(mode, rows, instant, custom),
-    rankings: rankings?.data ?? null,
-    orderStatus: orderStatus?.data ?? null,
+    rankings: parseRankings(rankings?.data),
+    orderStatus: parseOrderStatusCounts(orderStatus?.data),
   };
 }
 

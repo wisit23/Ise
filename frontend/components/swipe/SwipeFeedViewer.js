@@ -127,7 +127,7 @@ export default function SwipeFeedViewer({ videos, initialVideoId }) {
         tabIndex={0}
         role="region"
         aria-label="ฟีดวิดีโอสินค้า ปัดขึ้นหรือลงเพื่อเปลี่ยนคลิป"
-        className="scrollbar-none relative h-full w-full snap-y snap-mandatory scroll-smooth overflow-y-auto overscroll-contain bg-black shadow-2xl outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 sm:w-auto"
+        className="scrollbar-none relative h-full w-full snap-y snap-mandatory scroll-smooth overflow-y-auto overscroll-contain bg-white shadow-sm outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 sm:w-auto"
       >
         {videos.map((video, index) => (
           <SwipeVideoCard
@@ -145,7 +145,7 @@ export default function SwipeFeedViewer({ videos, initialVideoId }) {
           onClick={() => moveTo(activeIndex - 1)}
           disabled={activeIndex === 0}
           aria-label="คลิปก่อนหน้า"
-          className="focus-ring flex h-12 w-12 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-zinc-900/90 text-white backdrop-blur-md border border-zinc-700/60 shadow-xl transition hover:bg-brand-600 hover:border-brand-500 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-zinc-900 disabled:hover:scale-100"
+          className="focus-ring flex h-12 w-12 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white text-slate-700 backdrop-blur-md border border-slate-200 shadow-xl transition hover:bg-emerald-50 hover:border-brand-500 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-white disabled:hover:scale-100"
         >
           <svg
             className="h-6 w-6 stroke-current stroke-2 fill-none"
@@ -165,7 +165,7 @@ export default function SwipeFeedViewer({ videos, initialVideoId }) {
           onClick={() => moveTo(activeIndex + 1)}
           disabled={activeIndex === videos.length - 1}
           aria-label="คลิปถัดไป"
-          className="focus-ring flex h-12 w-12 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-zinc-900/90 text-white backdrop-blur-md border border-zinc-700/60 shadow-xl transition hover:bg-brand-600 hover:border-brand-500 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-zinc-900 disabled:hover:scale-100"
+          className="focus-ring flex h-12 w-12 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-white text-slate-700 backdrop-blur-md border border-slate-200 shadow-xl transition hover:bg-emerald-50 hover:border-brand-500 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-white disabled:hover:scale-100"
         >
           <svg
             className="h-6 w-6 stroke-current stroke-2 fill-none"

@@ -41,8 +41,17 @@ jest.mock(
 jest.mock(
   "../../../components/ReportModal",
   () =>
-    function Report() {
-      return null;
+    function Report({ open, title, targetId, productId, productLabel }) {
+      return open ? (
+        <div
+          role="dialog"
+          aria-label={title}
+          data-target-id={targetId}
+          data-product-id={productId}
+        >
+          {productLabel}
+        </div>
+      ) : null;
     },
 );
 jest.mock(
@@ -150,6 +159,18 @@ test("seller cannot edit or delete a sold product from the board", async () => {
   expect(await screen.findByText("สินค้านี้ขายแล้ว ไม่สามารถแก้ไขหรือลบได้")).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "แก้ไขสินค้านี้" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "ลบสินค้านี้" })).not.toBeInTheDocument();
+});
+
+test("reports the current product with its seller so it enters the product report queue", async () => {
+  mockApiResponses({ productId: "p-report", sellerId: "seller-report" });
+  currentRouteId = "p-report";
+  render(<ProductDetailPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "รายงานสินค้า" }));
+  const dialog = screen.getByRole("dialog", { name: "รายงานสินค้า" });
+  expect(dialog).toHaveAttribute("data-product-id", "p-report");
+  expect(dialog).toHaveAttribute("data-target-id", "seller-report");
+  expect(dialog).toHaveTextContent("Listing p-report");
+  expect(screen.queryByRole("button", { name: "รายงานผู้ขายรายนี้" })).toBeNull();
 });
 
 test("available listing still offers contact seller", async () => {

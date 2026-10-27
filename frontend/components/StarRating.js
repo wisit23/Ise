@@ -8,7 +8,7 @@ import { useState } from "react";
 export function StarDisplay({ value, size = 16 }) {
   return (
     <span
-      className="inline-flex items-center"
+      className="inline-flex shrink-0 items-center leading-none"
       aria-label={`${value.toFixed(1)} จาก 5 ดาว`}
     >
       {[1, 2, 3, 4, 5].map((n) => {
@@ -16,17 +16,17 @@ export function StarDisplay({ value, size = 16 }) {
         return (
           <span
             key={n}
-            className="relative inline-block"
+            className="relative block shrink-0"
             style={{ width: size, height: size }}
           >
             <span
-              className="absolute inset-0 text-gray-200"
+              className="absolute inset-0 flex items-center text-gray-200"
               style={{ fontSize: size }}
             >
               <Icon name="star" filled />
             </span>
             <span
-              className="absolute inset-0 overflow-hidden text-amber-400"
+              className="absolute inset-0 flex items-center overflow-hidden text-amber-400"
               style={{ width: `${fill * 100}%`, fontSize: size }}
             >
               <Icon name="star" filled />

@@ -1,5 +1,5 @@
-export const TIMEZONE =
-  process.env.NEXT_PUBLIC_REPORT_TIMEZONE || "Asia/Bangkok";
+export { EXECUTIVE_TIMEZONE as TIMEZONE } from "./executiveConfig";
+import { EXECUTIVE_TIMEZONE as TIMEZONE } from "./executiveConfig";
 
 // Numbers and dates on the Executive pages are written the Thai way.
 export const LOCALE = "th-TH";

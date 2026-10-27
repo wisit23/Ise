@@ -26,8 +26,33 @@ const INCLUDE = {
   shipping: true,
   dispute: { include: { evidence: { include: evidenceModel.INCLUDE }, caseLog: true } },
   payments: { include: { holds: true } },
-  logs: { where: { action: "STATUS_CHANGED" }, orderBy: { createdAt: "desc" }, take: 1, select: { detail: true } },
+  logs: {
+    where: { action: { in: ["STATUS_CHANGED", "PICKUP_REQUESTED", "IN_TRANSIT"] } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { action: true, detail: true, createdAt: true },
+  },
 };
+
+// Expose only delivery milestones, never raw audit details or actor identities.
+function deliveryTimeline(logs = []) {
+  const timestamps = {};
+  const steps = new Set(["confirmed", "ready_to_ship", "pickup_in_progress", "in_transit", "delivered", "completed"]);
+  for (const log of logs) {
+    if (!log.createdAt || !["STATUS_CHANGED", "PICKUP_REQUESTED", "IN_TRANSIT"].includes(log.action)) continue;
+    try {
+      const detail = JSON.parse(log.detail);
+      if (!detail || !steps.has(detail.to) || detail.from === detail.to) continue;
+      const at = new Date(log.createdAt);
+      if (!Number.isFinite(at.getTime())) continue;
+      const step = detail.to === "ready_to_ship" ? "confirmed" : detail.to;
+      // A resumed order must retain when the milestone was first reached.
+      if (!timestamps[step] || at < new Date(timestamps[step])) timestamps[step] = at.toISOString();
+    } catch {
+      // Older entries can contain plain text rather than structured history.
+    }
+  }
+  return timestamps;
+}
 function disputeView(row) {
   if (!row) return null;
   const fields = { ...row };
@@ -49,13 +74,17 @@ function view(row) {
   if (!row) return null;
   const { logs, ...fields } = row;
   let cancellationReason = null;
-  if (row.status === "cancelled" && logs?.[0]?.detail) {
-    try {
-      const detail = JSON.parse(logs[0].detail);
-      if (detail.to === "cancelled" && typeof detail.reason === "string")
-        cancellationReason = detail.reason.trim() || null;
-    } catch {
-      // Legacy audit entries may not contain structured cancellation details.
+  if (row.status === "cancelled") {
+    for (const log of logs || []) {
+      try {
+        const detail = JSON.parse(log.detail);
+        if (detail?.to === "cancelled" && typeof detail.reason === "string") {
+          cancellationReason = detail.reason.trim() || null;
+          break;
+        }
+      } catch {
+        // Legacy audit entries may not contain structured cancellation details.
+      }
     }
   }
   const holds = (row.payments || []).flatMap((p) => p.holds || []);
@@ -63,6 +92,7 @@ function view(row) {
   return {
     ...fields,
     cancellationReason,
+    deliveryTimeline: deliveryTimeline(logs),
     price: Number(row.originalAmount),
     finalPrice: Number(row.ordersAmount),
     discountAmount: Number(money(row.originalAmount).minus(row.ordersAmount)),

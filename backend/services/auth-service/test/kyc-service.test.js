@@ -3,9 +3,10 @@ const assert = require("node:assert/strict");
 
 const calls = { removed: [], audits: [] };
 let failTransaction = false;
+let profileStatus = "REJECTED";
 const tx = {
   sellerProfile: {
-    findUnique: async () => ({ kycStatus: "REJECTED" }),
+    findUnique: async () => ({ kycStatus: profileStatus }),
     upsert: async (query) => {
       calls.profile = query;
       return query.create;
@@ -111,14 +112,22 @@ test("KYC reports expired and malformed ID card dates in Thai without writing da
   }
 });
 
-test("KYC submission commits role, profile and application in one transaction", async () => {
+test("malformed KYC input is rejected as 400 before writing documents or granting roles", async () => {
+  for (const fields of [{ shopName: [] }, { idCardNumber: 123 }, { address: {} }, { bankAccount: [] }, { verifyMethod: "unknown" }]) {
+    await assert.rejects(service.submitKyc({ ...validSubmission, ...fields }), (error) => error.status === 400);
+  }
+});
+
+test("KYC submission saves the pending profile and application without granting seller access", async () => {
   failTransaction = false;
   const result = await service.submitKyc(validSubmission);
   assert.deepEqual(result, {
     kycStatus: "PENDING",
     applicationId: "application-2",
   });
-  assert.equal(calls.role.db, tx);
+  assert.equal(calls.role, undefined);
+  assert.equal(calls.userUpdate, undefined);
+  assert.equal(calls.profile.create.kycStatus, "PENDING");
   assert.equal(calls.profile.create.kycStorageKey, "document.png");
   assert.equal(calls.application.data.storageKey, "document.png");
   assert.deepEqual(calls.removed, []);
@@ -132,6 +141,18 @@ test("KYC submission removes the newly persisted file when DB work fails", async
   );
   assert.deepEqual(calls.removed, ["document.png"]);
   failTransaction = false;
+});
+
+test("a first-time applicant remains a buyer while awaiting approval", async () => {
+  profileStatus = "NONE";
+  try {
+    await service.submitKyc(validSubmission);
+    assert.equal(calls.profile.create.kycStatus, "PENDING");
+    assert.equal(calls.role, undefined);
+    assert.equal(calls.userUpdate, undefined);
+  } finally {
+    profileStatus = "REJECTED";
+  }
 });
 
 test("authorized document reads create an audit record", async () => {

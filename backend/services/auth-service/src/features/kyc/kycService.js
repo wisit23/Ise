@@ -1,6 +1,5 @@
 const { badRequest, conflict, forbidden, notFound } = require("@reloop/shared");
 const prisma = require("../../models/prismaClient");
-const { assignRole } = require("../../services/authService");
 const { lockUser } = require("../../services/sessionService");
 const {
   persistDocument,
@@ -29,11 +28,16 @@ async function submitKyc({
   verifyMethod,
   file,
 }) {
+  for (const [field, value] of Object.entries({ shopName, idCardNumber, address })) {
+    if (typeof value !== "string") throw badRequest(`${field} must be a string`);
+  }
+  if (bankAccount != null && typeof bankAccount !== "string") throw badRequest("bankAccount must be a string");
+  if (verifyMethod !== undefined && !["manual", "thai_id"].includes(verifyMethod)) throw badRequest("invalid verifyMethod");
   if (verifyMethod !== "thai_id" && !file) {
     throw badRequest("กรุณาอัปโหลดรูปถ่ายบัตรประชาชน");
   }
-  if (!shopName?.trim()) throw badRequest("กรุณากรอกชื่อร้านค้า");
-  if (!address?.trim()) throw badRequest("กรุณากรอกที่อยู่สำหรับติดต่อ");
+  if (!shopName.trim()) throw badRequest("กรุณากรอกชื่อร้านค้า");
+  if (!address.trim()) throw badRequest("กรุณากรอกที่อยู่สำหรับติดต่อ");
 
   const cleanedIdCard = (idCardNumber || "").replace(/\D/g, "");
   if (cleanedIdCard.length !== 13) {
@@ -70,16 +74,8 @@ async function submitKyc({
         throw conflict("คำขอยืนยันตัวตนอยู่ระหว่างรอตรวจสอบ");
       }
 
-      // Role, legacy role, latest profile and immutable application history
-      // commit together. A failure leaves none of these partially updated.
-      await assignRole(userId, "SELLER", tx);
-      if (user.role !== "SELLER") {
-        await tx.user.update({
-          where: { id: userId },
-          data: { role: "SELLER" },
-        });
-      }
-
+      // Filing an application does not grant seller access. T&S approval
+      // grants the role together with the VERIFIED status in one transaction.
       const profileFields = {
         shopName: shopName.trim(),
         idCardNumber: cleanedIdCard,
