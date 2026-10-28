@@ -167,6 +167,52 @@ describe("SellerAuctionSubmitPage - Explicit roundId submission and category val
     ).toBeInTheDocument();
   });
 
+  it("locks existing product details during seller recovery but keeps auction prices editable", async () => {
+    useSearchParams.mockReturnValue(
+      new URLSearchParams("roundId=round-shoes&productId=product-recovery"),
+    );
+    apiFetch.mockImplementation((url) => {
+      if (url.includes("/api/auth/kyc/mine")) {
+        return Promise.resolve({ kycStatus: "VERIFIED" });
+      }
+      if (url.includes("/api/products/auctions/rounds/round-shoes")) {
+        return Promise.resolve(sampleRoundShoesOnly);
+      }
+      if (url === "/api/products/product-recovery") {
+        return Promise.resolve({
+          id: "product-recovery",
+          title: "รองเท้าประมูลเดิม",
+          description: "รายละเอียดเดิม",
+          category: "รองเท้า",
+          condition: "like_new",
+          size: "42",
+          location: "กรุงเทพฯ",
+          styleTags: ["street"],
+          media: ["https://example.com/original.jpg"],
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<SellerAuctionSubmitPage />);
+
+    expect(
+      await screen.findByText(/ข้อมูลสินค้าเดิมถูกล็อก/),
+    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue("รองเท้าประมูลเดิม")).toBeDisabled();
+    expect(screen.getByDisplayValue("รายละเอียดเดิม")).toBeDisabled();
+    expect(
+      screen.getByLabelText(/หมวดหมู่/, { selector: "select" }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText(/สภาพสินค้า/)).toBeDisabled();
+    expect(screen.getByDisplayValue("42")).toBeDisabled();
+    expect(screen.getByDisplayValue("กรุงเทพฯ")).toBeDisabled();
+    expect(screen.getByText("Add 4 Media")).toBeDisabled();
+    expect(screen.getByTestId("mock-tag-input")).toBeDisabled();
+    expect(screen.getByLabelText(/ราคาเริ่มต้น/)).toBeEnabled();
+    expect(screen.getByLabelText(/เพิ่มขั้นต่ำต่อครั้ง/)).toBeEnabled();
+  });
+
   it("rejects client submission when category is not accepted by selected round", async () => {
     render(<SellerAuctionSubmitPage />);
 

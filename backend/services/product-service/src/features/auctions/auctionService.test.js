@@ -1336,7 +1336,7 @@ test("submit accepts a product already created with 'auction' status without re-
   assert.equal(setCalled, false);
 });
 
-test("reject requires and records a reason before resetting product status", async (t) => {
+test("reject requires a reason and leaves the product for seller recovery", async (t) => {
   let revertedStatus = null;
   let updatedData = null;
   t.mock.method(repository, "findById", async () => ({
@@ -1370,7 +1370,7 @@ test("reject requires and records a reason before resetting product status", asy
   assert.equal(result.status, "rejected");
   assert.equal(result.cancellationReason, "รูปภาพไม่ชัดเจน");
   assert.equal(updatedData.cancellationReason, "รูปภาพไม่ชัดเจน");
-  assert.equal(revertedStatus, "available");
+  assert.equal(revertedStatus, "auction_action_required");
 });
 
 test("reject rejects non-Marketing callers (including ADMIN)", async () => {

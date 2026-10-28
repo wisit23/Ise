@@ -434,6 +434,25 @@ function SellerAuctionSubmitContent() {
               disabled={isKycLocked || submitting}
               className="flex flex-col gap-5"
             >
+              {productId && (
+                <div
+                  id="existing-product-lock-notice"
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                >
+                  ข้อมูลสินค้าเดิมถูกล็อกสำหรับการส่งเข้าประมูลอีกครั้ง
+                  คุณสามารถเปลี่ยนได้เฉพาะราคาเริ่มต้นและราคาเสนอเพิ่มขั้นต่ำ
+                </div>
+              )}
+
+              <fieldset
+                disabled={Boolean(productId)}
+                aria-describedby={
+                  productId ? "existing-product-lock-notice" : undefined
+                }
+                className={`flex flex-col gap-5 ${
+                  productId ? "pointer-events-none opacity-60" : ""
+                }`}
+              >
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">
                   รูปภาพ / วิดีโอสินค้า
@@ -544,6 +563,7 @@ function SellerAuctionSubmitContent() {
                   placeholder="พิมพ์แท็กแล้วกด Enter เช่น vintage, denim"
                 />
               </div>
+              </fieldset>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100 pt-5">
                 <div>

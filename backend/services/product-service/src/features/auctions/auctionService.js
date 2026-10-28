@@ -878,7 +878,7 @@ async function reject({ user, auctionId, reason }) {
   const updated = await runInTransaction(async (tx) => {
     await auctionRepository.setProductStatus(
       auction.productId,
-      "available",
+      "auction_action_required",
       tx,
     );
     const updated = await auctionRepository.updateStatus(
