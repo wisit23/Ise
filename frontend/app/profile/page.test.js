@@ -460,6 +460,7 @@ describe("ProfilePage", () => {
     ["รอผู้ขายยืนยัน", "paid"],
     ["ขนส่งกำลังเข้ารับสินค้า", "pickup_in_progress"],
     ["กำลังจัดส่ง", "in_transit"],
+    ["รอยืนยันรับ", "delivered"],
     ["สำเร็จ", "completed"],
   ])(
     "opens the matching shared filter from the %s shortcut",

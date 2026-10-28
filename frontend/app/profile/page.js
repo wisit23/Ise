@@ -65,6 +65,13 @@ const ORDER_STATUSES = [
     badgeColor: "bg-indigo-100 text-indigo-800",
   },
   {
+    key: "delivered",
+    statuses: ["delivered"],
+    label: "รอยืนยันรับ",
+    icon: "inventory",
+    badgeColor: "bg-violet-100 text-violet-800",
+  },
+  {
     key: "completed",
     statuses: ["completed"],
     label: "สำเร็จ",
