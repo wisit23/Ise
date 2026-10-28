@@ -16,6 +16,7 @@ import ConfirmDialog from "../../components/ui/ConfirmDialog";
 import StyleProfileForm from "../../components/profile/StyleProfileForm";
 import MyOrders from "../../components/orders/MyOrders";
 import { apiFetch } from "../../lib/api";
+import useSellerLiveRefresh from "../../lib/useSellerLiveRefresh";
 import { validateAddressContact } from "../../lib/addressValidation";
 import { PHONE_HINT, PHONE_MAX_LENGTH, PHONE_PATTERN, phoneDigits } from "../../lib/phone";
 import {
@@ -207,6 +208,17 @@ function ProfileContent() {
         setError(err.message || "โหลดข้อมูลโปรไฟล์ไม่สำเร็จ");
       });
   }, [router]);
+
+  // Keep the order status summary current when an order changes elsewhere.
+  useSellerLiveRefresh(
+    async () => {
+      const token = getAccessToken();
+      if (!token) return;
+      const data = await apiFetch("/api/orders/mine?limit=50", { token });
+      setOrders(Array.isArray(data?.items) ? data.items : []);
+    },
+    { events: ["order:updated"] },
+  );
 
   function update(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });
